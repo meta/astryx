@@ -11,7 +11,7 @@ import {
 export default function SegmentedControlFillLayout() {
   const [value, setValue] = useState('weekly');
   return (
-    <div style={{width: 400}}>
+    <div style={{width: 400, maxWidth: '100%'}}>
       <SegmentedControl
         value={value}
         onChange={setValue}

@@ -15,6 +15,7 @@ verified_by:
     .github/visual-baseline/manifest.json,
     packages/core/src/Text/Text.test.tsx,
     packages/core/src/Text/useTruncation.test.tsx,
+    packages/core/src/Text/cutTextOnKeyboardFocus.exports.test.ts,
     packages/core/src/Text/__tests__/TextReflow.a11y.chromium.spec.ts,
     scripts/text-overflow-wrap-anywhere.test.mjs,
     packages/core/src/theme/themingTargets.test.ts,
@@ -82,6 +83,11 @@ Consumer migration instructions belong in consumer docs and release notes.
 - Type-based size, weight, and default color; size, color, and weight
   overrides; and the text layout controls on that element.
 - Measuring truncation and deciding when to compose the truncation Tooltip.
+- The internal hook that shows a component's cut text in an undescribed
+  tooltip on keyboard focus (`useCutTextOnKeyboardFocus` in
+  `Text/TruncationTooltip.tsx`), which `component:Button` FR18 and
+  `component:TableHeaderCell` FR2 use. It is not part of the package's public
+  exports.
 - The clamp it provides to its content. A Link inside a clamped Text lays out
   inline so the clamp truncates it, and keeps its visible focus ring as an
   inset ring (`component:Link` FR6); Text provides that clamp through an
@@ -100,12 +106,13 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Public concepts
 
-| Concept    | Closed values or states                                                                                           | Meaning                                               | Availability by variant/orientation/state | Default                                                               | Owner            | Stability | Invalid-value behavior                                                            |
-| ---------- | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------- | --------------------------------------------------------------------- | ---------------- | --------- | --------------------------------------------------------------------------------- |
-| Type       | `body`, `large`, `label`, `supporting`, `code`, `display-1`, `display-2`, `display-3`, `inherit`; theme additions | Selects size, weight, line height, and default color. | Always                                    | `body`                                                                | `component:Text` | Stable    | A theme-added type is reflected on `text` and renders with body baseline styles.  |
-| Color      | built-in text colors; theme additions                                                                             | Text color.                                           | Always                                    | `secondary` for `supporting`, `inherit` for `inherit`, else `primary` | `component:Text` | Stable    | A theme-added color is reflected on `text` and renders with the primary baseline. |
-| Element    | `span`, `p`, `div`, `label`, `h1`, `h2`, `h3`                                                                     | The rendered element.                                 | Always                                    | `span`                                                                | `component:Text` | Stable    | TypeScript rejects other values.                                                  |
-| Truncation | `maxLines` 0 (none), 1, or more; tooltip on, off, or at a placement                                               | Clamps lines and offers the full text in a Tooltip.   | Always                                    | 0; tooltip on                                                         | `component:Text` | Stable    | —                                                                                 |
+| Concept         | Closed values or states                                                                                           | Meaning                                                                                                               | Availability by variant/orientation/state | Default                                                               | Owner            | Stability | Invalid-value behavior                                                            |
+| --------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- | --------------------------------------------------------------------- | ---------------- | --------- | --------------------------------------------------------------------------------- |
+| Type            | `body`, `large`, `label`, `supporting`, `code`, `display-1`, `display-2`, `display-3`, `inherit`; theme additions | Selects size, weight, line height, and default color.                                                                 | Always                                    | `body`                                                                | `component:Text` | Stable    | A theme-added type is reflected on `text` and renders with body baseline styles.  |
+| Color           | built-in text colors; theme additions                                                                             | Text color.                                                                                                           | Always                                    | `secondary` for `supporting`, `inherit` for `inherit`, else `primary` | `component:Text` | Stable    | A theme-added color is reflected on `text` and renders with the primary baseline. |
+| Element         | `span`, `p`, `div`, `label`, `h1`, `h2`, `h3`                                                                     | The rendered element.                                                                                                 | Always                                    | `span`                                                                | `component:Text` | Stable    | TypeScript rejects other values.                                                  |
+| Truncation      | `maxLines` 0 (none), 1, or more; tooltip on, off, or at a placement                                               | Clamps lines and offers the full text in a Tooltip.                                                                   | Always                                    | 0; tooltip on                                                         | `component:Text` | Stable    | —                                                                                 |
+| Truncation hook | `useTruncation` options: `maxLines`, and `isExpanded` true or false                                               | `isExpanded`: pass true while the text is shown in full; the hook keeps reporting whether it is cut off when clamped. | Always                                    | `isExpanded` false                                                    | `component:Text` | Stable    | —                                                                                 |
 
 ## Behavioral and layout contract
 

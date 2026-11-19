@@ -4,8 +4,8 @@
  * @file Docsite homepage route.
  * @input The client homepage and the build-time preview snapshots.
  * @output The homepage. Its decorative previews are static HTML.
- * @position Server entry for "/". The previews render here: a client module
- *   that imported them would put their snapshots in its bundle.
+ * @position Server entry for "/". FrozenPreview sends each preview's markup
+ *   once, as server HTML.
  */
 
 import {FrozenPreview} from './_landing/FrozenPreview';

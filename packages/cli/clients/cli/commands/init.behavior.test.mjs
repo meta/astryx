@@ -351,7 +351,7 @@ describe('astryx init --remove-agents', () => {
     expect(JSON.parse(json.stdout)).toEqual({
       apiVersion: 1,
       type: 'init.remove',
-      data: {removed: true},
+      data: {removed: true, from: ['agents-md'], skills: [], user: null},
       meta: {answeredBy: expect.any(Object)},
     });
   });

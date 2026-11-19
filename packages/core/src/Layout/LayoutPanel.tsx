@@ -48,6 +48,7 @@ import {
   containerPaddingBlockStartVarStyles,
   containerPaddingBlockEndVarStyles,
 } from './padding.stylex';
+import {containerBlockBleedStyles} from './containerBlockBleed.stylex';
 
 const styles = stylex.create({
   panel: {
@@ -396,6 +397,7 @@ export function LayoutPanel({
           hasDivider && dividerStyle,
           shouldCollapseSpacing && collapseStyle,
           isZeroWidth && styles.zeroWidth,
+          containerBlockBleedStyles.publish,
           xstyle,
         ),
         className,

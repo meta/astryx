@@ -2,23 +2,29 @@
 
 /**
  * @file swipeLayerLoaded.ts
- * @input Item's lazily loaded swipe layer (ItemSwipeLayer.tsx) and a row that
- *   renders it
+ *
+ * @input The swipe layer Item's deprecated path loads
+ *   (Swipe/SwipeActionsLayer.tsx), and optionally a row that renders it
  * @output swipeLayerLoaded, which resolves once that layer has loaded and React
- *   has committed its panel in the row
- * @position Test helper for Item's and List's swipe tests
+ *   has committed its panel (in `row`, when one is given)
+ * @position Test helper for Item's and List's tests of the deprecated swipe
+ *   props
  *
  * On a loaded machine the load can outlast any fixed wait, so this awaits the
  * module inside `act`, with no clock. React can commit the panel after that
- * `act` returns, so the helper then waits for the panel itself.
+ * `act` returns, so the helper then waits for the panel itself. A row given
+ * `swipe` needs no wait: `createSwipe` brings its layer.
  */
 
 import {act, waitFor} from '@testing-library/react';
 
-export async function swipeLayerLoaded(row: Element): Promise<void> {
+export async function swipeLayerLoaded(row?: Element): Promise<void> {
   await act(async () => {
-    await import('../ItemSwipeLayer');
+    await import('../../Swipe/SwipeActionsLayer');
   });
+  if (row == null) {
+    return;
+  }
   await waitFor(() => {
     if (row.querySelector('[data-swipe-panel]') == null) {
       throw new Error(

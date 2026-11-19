@@ -11,7 +11,7 @@ import {Text} from '@astryxdesign/core/Text';
 export default function DividerVariants() {
   return (
     <Section variant="transparent" width="100%">
-      <Card width={400}>
+      <Card width={400} maxWidth="100%">
         <VStack gap={3}>
           <VStack gap={1}>
             <Text type="label">Sign in with email</Text>

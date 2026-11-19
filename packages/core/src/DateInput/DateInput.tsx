@@ -4,8 +4,8 @@
 
 /**
  * @file DateInput.tsx
- * @input Uses React, useId, useCallback, useRef, useTypedDateField, Field, Icon, Calendar, usePopover, InputGroupContext
- * @output Exports DateInput component, DateInputProps, and DateInputEntryError
+ * @input Uses React, useId, useCallback, useRef, useTypedDateField, useEntryErrorBehavior, Field, Icon, Calendar, usePopover, InputGroupContext
+ * @output Exports DateInput component, DateInputProps, DateInputEntryError, and EntryErrorBehavior
  * @position Core implementation; consumed by index.ts, tested by DateInput.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -26,6 +26,8 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
+import {useEntryErrorBehavior} from '../Field/useEntryErrorBehavior';
+import type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
 import {
   colorVars,
   sizeVars,
@@ -194,6 +196,7 @@ export type {
   InputStatusType as DateInputStatusType,
 } from '../Field';
 export type {DateInputEntryError} from './useTypedDate';
+export type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
 import {mergeProps, isFocusDetached} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
 import {
@@ -379,6 +382,29 @@ export interface DateInputProps extends Omit<
    * ```
    */
   onEntryErrorChange?: (error: DateInputEntryError | null) => void;
+
+  /**
+   * When the field shows its own entry error: a typed date that it rejects,
+   * which `onEntryErrorChange` reports. It sets when the error shows, not when
+   * validation runs, so it is not React Aria's `validationBehavior` (native
+   * versus ARIA validation). It does not change a caller's `status`.
+   *
+   * - `'complete'` — a date the calendar does not have, or one outside `min`,
+   *   `max`, or `dateConstraints`, shows as soon as the typed date is
+   *   complete. Unreadable or unfinished text shows at Enter or blur.
+   * - `'blur-or-enter'` — every rejection waits for Enter or blur. The
+   *   message, `aria-invalid`, the invalid styling, the announcement, and the
+   *   `onEntryErrorChange` report then appear together. An edit that makes
+   *   the text a date or empties it clears the error at once. An edit that
+   *   leaves the text wrong keeps the shown error until the next Enter or
+   *   blur.
+   *
+   * A date that the native control refuses shows at Enter or blur under both
+   * values.
+   *
+   * @default the nearest FormLayout's `defaultEntryErrorBehavior`, else `'complete'`
+   */
+  entryErrorBehavior?: EntryErrorBehavior;
 
   /**
    * How the status message is placed relative to the input.
@@ -591,6 +617,7 @@ function PointerDateField({
   size: sizeProp,
   status,
   onEntryErrorChange,
+  entryErrorBehavior,
   statusVariant = 'attached',
   labelTooltip,
   hasClear = false,
@@ -701,6 +728,7 @@ function PointerDateField({
   const navigateToTypedDate = useCallback((date: ISODateString) => {
     calendarRef.current?.navigateTo(date);
   }, []);
+  const resolvedEntryErrorBehavior = useEntryErrorBehavior(entryErrorBehavior);
   const {
     typedDate,
     displayValue,
@@ -732,6 +760,7 @@ function PointerDateField({
     isStatusAnnounced: !inputGroup,
     onEntryErrorChange,
     hasPlaceholder: placeholderFromProps != null,
+    entryErrorBehavior: resolvedEntryErrorBehavior,
   });
 
   const {statusIcon, describedBy: statusTooltipDescribedBy} =
@@ -1181,8 +1210,10 @@ export function DateInput(props: DateInputProps) {
     nativePicker: _nativePicker,
     calendar: _calendar,
     // Only the pointer field takes typed text. The native field reads only
-    // whether the callback is set.
+    // whether the callback is set. Its refused dates wait for Enter or blur
+    // under every entry error behavior.
     onEntryErrorChange,
+    entryErrorBehavior,
     ...rest
   } = props;
   switch (surface) {
@@ -1211,6 +1242,7 @@ export function DateInput(props: DateInputProps) {
           calendar={calendar}
           isDisabled={isDisabled}
           onEntryErrorChange={onEntryErrorChange}
+          entryErrorBehavior={entryErrorBehavior}
         />
       );
   }

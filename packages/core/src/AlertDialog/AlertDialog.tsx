@@ -4,10 +4,10 @@
 
 /**
  * @file AlertDialog.tsx
- * @input Uses React, StyleX, Dialog, Layout, Heading, Text, Button, the
+ * @input Uses React, StyleX, Dialog, Layout, Text's type styles, Button, the
  *   action-group tracking (hooks/useActionGroupTracking), the press-group
- *   context (hooks/pressGroupContext) and the group pointers
- *   (hooks/useGroupPressTracking)
+ *   context (hooks/pressGroupContext), the group pointers
+ *   (hooks/useGroupPressTracking) and the touch motion (useAlertMotion)
  * @output Exports AlertDialog component, AlertDialogProps type
  * @position Core implementation; consumed by index.ts, tested by AlertDialog.test.tsx
  *
@@ -16,6 +16,7 @@
  * - /packages/core/src/AlertDialog/AlertDialog.test.tsx (tests for new/changed behavior)
  * - /packages/core/src/AlertDialog/index.ts (exports if types change)
  * - /packages/core/src/AlertDialog/__tests__/AlertDialog.interaction.browser.spec.ts (touch tracking)
+ * - /packages/core/src/AlertDialog/__tests__/AlertDialog.motion.interaction.browser.spec.ts (touch motion)
  * - /apps/storybook/stories/AlertDialog.stories.tsx (storybook stories)
  * - /packages/cli/assets/templates/blocks/components/AlertDialog/ (showcase blocks)
  */
@@ -27,14 +28,20 @@ import {Layout} from '../Layout/Layout';
 import {LayoutContent} from '../Layout/LayoutContent';
 import {LayoutFooter} from '../Layout/LayoutFooter';
 import {Stack} from '../Stack/Stack';
-import {Heading} from '../Heading/Heading';
-import {Text} from '../Text/Text';
+import {
+  colorStyles,
+  defaultWeightByTypeStyles,
+  displayStyles,
+  sizeByLevelStyles,
+  sizeByTypeStyles,
+} from '../Text/text.stylex';
 import {Button} from '../Button/Button';
 import type {ButtonVariant} from '../Button';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
 import {useMediaQuery} from '../hooks/useMediaQuery';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useTouchPresentation} from '../utils/touchPresentation';
 import {
   registerEnglishFallback,
@@ -45,10 +52,14 @@ import {useActionGroupTracking} from '../hooks/useActionGroupTracking';
 import {PressGroupContext} from '../hooks/pressGroupContext';
 import {GROUP_PRESS_POINTERS} from '../hooks/useGroupPressTracking';
 import {alertController} from '../motion/uikit/alert';
+import {useAlertMotion} from './useAlertMotion';
 
 registerEnglishFallback(english);
 
 const SMALL_SCREEN_QUERY = '(max-width: 640px)';
+
+/** iOS's alert is 320 px wide on a phone, in every theme. */
+const PHONE_WIDTH = 320;
 
 const styles = stylex.create({
   // The browser may pinch-zoom on the actions but never pans there. Chrome on
@@ -56,6 +67,16 @@ const styles = stylex.create({
   // The gesture host keeps an author's narrower touch-action.
   trackingRow: {
     touchAction: 'pinch-zoom',
+  },
+  // The touch motion drives the dialog, so the theme's entrance keyframes do
+  // not play. The animator promotes the dimming through this custom property
+  // on the dialog. Without it, Mobile Safari keeps an unlayered backdrop's
+  // animation on the main thread at its first commit.
+  touchMotion: {
+    animationName: 'none',
+    '::backdrop': {
+      willChange: 'var(--astryx-motion-will-change-backdrop, auto)',
+    },
   },
   action: {
     maxWidth: '100%',
@@ -128,7 +149,9 @@ export interface AlertDialogProps extends BaseProps<HTMLDialogElement> {
 
   /**
    * The width of the dialog.
-   * Numbers are treated as pixels, strings are used as-is.
+   * Numbers are treated as pixels, strings are used as-is. On a phone (a
+   * compact window under a coarse primary pointer) the default is iOS's alert
+   * width, 320, in every theme. A width set here wins there too.
    * @default 400
    */
   width?: number | string;
@@ -172,7 +195,7 @@ export function AlertDialog({
   actionVariant = 'destructive',
   isActionLoading,
   onAction,
-  width = 400,
+  width: widthProp,
   xstyle,
   className,
   style,
@@ -188,6 +211,29 @@ export function AlertDialog({
   // semantics without coupling action order to pointer or hover capability.
   const isSmallScreen = useMediaQuery(SMALL_SCREEN_QUERY);
 
+  // Only under the touch presentation does a press slide across the
+  // actions, and does the alert scale in and fade out. A desktop press stays
+  // the native button's, and a mouse keeps the theme's entrance.
+  const {isTouch, isCompact} = useTouchPresentation();
+  const width = widthProp ?? (isTouch && isCompact ? PHONE_WIDTH : 400);
+  const motion = useAlertMotion({
+    isOpen,
+    isEnabled: isTouch && isInline !== true,
+  });
+  // While the alert fades out, its content is inert. The dialog's own Escape
+  // still fires (inert content does not stop its cancel event), so it is
+  // ignored here until the alert is hidden.
+  const isLeaving = motion.isDriving && motion.isPresented && !isOpen;
+  const handleOpenChange = useCallback(
+    (next: boolean) => {
+      if (!isLeaving) {
+        onOpenChange(next);
+      }
+    },
+    [isLeaving, onOpenChange],
+  );
+  const mergedRef = useMergedRefs(ref, motion.ref);
+
   const handleCancel = useCallback(() => {
     onOpenChange(false);
   }, [onOpenChange]);
@@ -195,9 +241,6 @@ export function AlertDialog({
   // Through the group's context, each action's Button writes the press-group
   // marker from its first render. So the tracker is its only painter.
   const actionsRef = useRef<HTMLElement>(null);
-  // Only under the touch presentation does a press slide across the
-  // actions. A desktop press stays the native button's.
-  const {isTouch} = useTouchPresentation();
   const isTracking = isOpen && isInline !== true && isTouch;
   useActionGroupTracking(actionsRef, {
     // The actions row holds only the two buttons.
@@ -241,10 +284,10 @@ export function AlertDialog({
   return (
     <Dialog
       {...rest}
-      ref={ref}
-      isOpen={isOpen}
+      ref={mergedRef}
+      isOpen={motion.isPresented}
       isInline={isInline}
-      onOpenChange={onOpenChange}
+      onOpenChange={handleOpenChange}
       width={width}
       purpose="form"
       // `alertdialog` is a modal role: it promises an interruption the user
@@ -256,17 +299,39 @@ export function AlertDialog({
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
       {...mergeProps(themeProps('alert-dialog'), {className, style})}
-      xstyle={xstyle}
+      xstyle={[motion.isDriving && styles.touchMotion, xstyle]}
       data-testid={testId}>
       <Layout
         content={
           <LayoutContent>
-            <Heading level={2} id={titleId}>
+            {/* The title and description draw as a level-2 heading and
+                secondary body text, but carry only their own targets: a
+                theme rule on a heading or text state never outranks them. */}
+            <h2
+              id={titleId}
+              {...mergeProps(
+                themeProps('alert-dialog-title'),
+                stylex.props(
+                  colorStyles.primary,
+                  sizeByLevelStyles[2],
+                  displayStyles.block,
+                ),
+              )}>
               {title}
-            </Heading>
-            <Text type="body" color="secondary" id={descriptionId}>
+            </h2>
+            <span
+              id={descriptionId}
+              {...mergeProps(
+                themeProps('alert-dialog-description'),
+                stylex.props(
+                  colorStyles.secondary,
+                  sizeByTypeStyles.body,
+                  defaultWeightByTypeStyles.body,
+                  displayStyles.inline,
+                ),
+              )}>
               {description}
-            </Text>
+            </span>
           </LayoutContent>
         }
         footer={

@@ -44,6 +44,7 @@
 import {isHapticSwitch} from '../privateAttributes/hapticSwitch.stylex';
 import {subscribeInput} from './inputStream';
 import {realmValue, sharedKey} from './sharedRealm';
+import {markTouchEndCancelled} from './touchEndMark';
 
 /**
  * How long after a release the browser's click is still swallowed, in ms.
@@ -153,6 +154,8 @@ export function armClickGuard(
     }
   }
   if (cancelsTouchEnd) {
+    // The release of the gesture in flight then brings no light dismiss.
+    markTouchEndCancelled();
     // A touch sends its pointerup before its touchend, so without an
     // identifier the next touchend counts as that touch's own. The next
     // pointerdown disarms the guard first.

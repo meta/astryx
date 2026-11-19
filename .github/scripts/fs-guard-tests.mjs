@@ -205,15 +205,20 @@ const RECORD_ROOTS = [
   'docs/families/',
   'docs/design/',
   'packages/themes/',
+  // Only the recorded Node test times: RECORD_LITERAL names no other path
+  // under scripts/.
+  'scripts/',
 ];
 /** A path literal into a record root, relative (`../…/docs/specs/…`) or from the root. */
 const RECORD_LITERAL =
-  /(['"`])((?:\.\.?\/)*(?:docs\/(?:specs|families|design)|packages\/themes)(?:\/[^'"`\n]*)?)\1/g;
+  /(['"`])((?:\.\.?\/)*(?:docs\/(?:specs|families|design)|packages\/themes|scripts\/vitest-node-durations[^/'"`\n]*\.json)(?:\/[^'"`\n]*)?)\1/g;
 /** `path.join(root, 'docs', 'specs', …)` and the like: the whole root. */
 const RECORD_SEGMENTS =
   /(['"])(docs|packages)\1\s*,\s*(['"])(specs|families|design|themes)\3/g;
+// A changed record: a spec record, or the recorded Node test times, whose
+// readers run for a change only to them (spec:AST-030 FR13).
 const RECORD_PATH =
-  /^(?:docs\/(?:specs|families|design)\/|packages\/themes\/[^/]+\/[^/]+\.spec\.md$)/;
+  /^(?:docs\/(?:specs|families|design)\/|packages\/themes\/[^/]+\/[^/]+\.spec\.md$|scripts\/vitest-node-durations[^/]*\.json$)/;
 
 /** The source without block comments and whole-line `//` comments, where prose names records. */
 function code(source) {

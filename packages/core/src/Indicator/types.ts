@@ -56,6 +56,10 @@ export interface IndicatorFamilyMap {
   singleSelection: 'unchecked' | 'checked';
   /** Which of these are chosen? Checkboxes, including the partial state. */
   multiSelection: 'unchecked' | 'checked' | 'indeterminate';
+  /** Is work in progress? A busy indicator has one state. */
+  activity: 'busy';
+  /** Is this branch open? The `aria-expanded` words. */
+  disclosure: 'collapsed' | 'expanded';
 }
 
 export type IndicatorFamily = keyof IndicatorFamilyMap & string;
@@ -176,6 +180,16 @@ export interface IndicatorMap {
   radio: 'singleSelection';
   /** The box of a checkbox control, including its partial state. */
   checkbox: 'multiSelection';
+  /**
+   * The picture a Spinner turns. No built-in: with no theme entry, Spinner
+   * draws its own ring.
+   */
+  spinner: 'activity';
+  /**
+   * The open/closed mark of a TreeList branch. No built-in: with no theme
+   * entry, the row draws its rotating chevron.
+   */
+  'tree-disclosure': 'disclosure';
 }
 
 export type IndicatorName = keyof IndicatorMap & string;

@@ -52,11 +52,13 @@
  * @property {string} data.template
  * @property {string} data.description
  * @property {'page' | 'block'} data.type
- * @property {string[]} data.components
+ * @property {string[]} data.components A sorted summary of the component names the source composes, without the components almost every template uses (such as Text and Button).
+ * @property {string[]} data.componentsToRead The components the returned source uses that `astryx component` answers in this project (Core's and each configured integration's), in the order the source first renders them, each once, in the form `astryx component` takes: the bare name in a project with no integration, else `<package>/<Name>` for the package the import names, which reads exactly that package's doc. One `astryx component` call with these reads them all. Empty when there are none.
  * @property {string} data.source
  * @property {number} data.demoMediaReplaced Astryx demo media references (images, posters, videos) replaced in the returned source: images with a neutral placeholder, videos with an empty source. Swap in your own media at those points; no media is installed. 0 when the template carried none.
  * @property {number} data.demoContentReplaced Astryx docs-only demo content elements (such as a playing card's face in a motion example) replaced in the returned source with a `<Text>Card content</Text>` placeholder. Put your own content there. 0 when the template carried none.
  * @property {TemplateIconsReport} [data.icons] Experimental, present only when the project sets `experimental.iconSet`: how the template's icons follow the project's icon set, each icon `mapped` (source and target), a `placeholder`, or `kept`, the sets used with their licenses, and the icon-set state. It may change or be removed in a patch release.
+ * @property {boolean} data.isReady Whether the template is ready, as its doc's `isReady` says (`true` when the doc leaves it out).
  */
 
 /**
@@ -69,6 +71,7 @@
  * @property {string} data.description
  * @property {string[]} data.components
  * @property {string} data.skeleton
+ * @property {boolean} data.isReady Whether the template is ready, as its doc's `isReady` says (`true` when the doc leaves it out).
  */
 
 /**
@@ -78,15 +81,19 @@
  * @property {string} package The npm package that owns the template.
  * @property {object} data
  * @property {string} data.template
- * @property {string} data.outputDir
+ * @property {string} data.outputDir The folder written: relative to the project, or absolute for a scratch copy in the system temp folder.
  * @property {string} data.fileName
  * @property {number} data.filesCopied
  * @property {number} data.demoMediaReplaced Astryx demo media references (images, posters, videos) replaced in the written file: images with a neutral placeholder, videos with an empty source. Swap in your own media at those points; no media is installed. 0 when the template carried none.
  * @property {number} data.demoContentReplaced Astryx docs-only demo content elements (such as a playing card's face in a motion example) replaced in the written file with a `<Text>Card content</Text>` placeholder. Put your own content there. 0 when the template carried none.
  * @property {string[]} data.notes Setup notes: what the template needs that the project lacks (missing packages, missing StyleX compiler). Each note is one actionable line. Empty when the template needs nothing the project lacks.
  * @property {string[]} data.missingPackages External package names the template imports that are not in the project's dependencies. Empty when none are missing.
- * @property {string | null} data.installCommand A ready-to-run install command for the missing packages, using the project's package manager and the CLI workspace's version ranges. Null when no packages are missing, or when several lockfiles leave the package manager undetermined; missingPackages still names the packages.
+ * @property {string[]} data.components The components the written file uses that `astryx component` answers in this project (Core's and each configured integration's), in the order the file first renders them, each once, in the form `astryx component` takes: the bare name in a project with no integration, else `<package>/<Name>` for the package the import names, which reads exactly that package's doc. One `astryx component` call with these reads them all. Empty when there are none.
+ * @property {string | null} data.installCommand A ready-to-run install command for the missing packages, using the project's package manager and the CLI workspace's version ranges. Null when no packages are missing, when several lockfiles leave the package manager undetermined, or when no package.json holds the folder, where an install would make the folder a project; missingPackages still names the packages.
+ * @property {string} [data.installGuidance] How to add the missing packages in this project, from the `installGuidance` of a loaded integration; present only when one gives it, and then followed instead of installCommand.
+ * @property {string} [data.givenPath] The absolute path as given, present only when it named a place inside the project root. The write is the same as for its relative path: `outputDir` for a folder, or `outputDir` and `fileName` for a file.
  * @property {TemplateIconsReport} [data.icons] Experimental, present only when the project sets `experimental.iconSet`: how the written file's icons follow the project's icon set, each icon `mapped` (source and target), a `placeholder`, or `kept`, the sets used with their licenses, and the icon-set state. It may change or be removed in a patch release.
+ * @property {boolean} data.isReady Whether the template is ready, as its doc's `isReady` says (`true` when the doc leaves it out).
  */
 
 /**
@@ -98,8 +105,9 @@
  * @property {'selected' | 'none' | 'ambiguous' | 'missing' | 'withdrawn'} status The project's icon-set state.
  * @property {string | null} set The project's main icon set as `<package>/<set>`, when selected.
  * @property {string[]} [order] The main set and each backup set as `<package>/<set>`, in the order icons are looked up; present when the project lists backups.
+ * @property {string} [variant] The look the project's icons draw, as `experimental.iconVariant` names it; present when it is set.
  * @property {string} reason Why the project has that set, or none.
- * @property {Array<{source: {module: string, export: string}, target: {set: string, package: string, id: string, module: string, export: string}, by: 'match' | 'definition', dropped?: string[], variant?: {asked: string, used: string | null}}>} mapped Icons rewritten to the first set in the project's list that has them, and the rule that chose each one: a reviewed `exact` or `strong` match, or the icon the set's `map` names for the icon definition the template declares. `target.set` names the set used. `dropped` names the library's sizing props (`size`, `strokeWidth`, `absoluteStrokeWidth`) removed from the icon's elements: an icon set's icons take their size from CSS. `variant` is present when the template's icon draws a look the set's icon does not have: the look asked for and the set's default look used instead.
+ * @property {Array<{source: {module: string, export: string}, target: {set: string, package: string, id: string, module: string, export: string}, by: 'match' | 'definition' | 'variant', dropped?: string[], variant?: {asked: string, used: string | null}}>} mapped Icons rewritten to the first set in the project's list that has them, and the rule that chose each one: a reviewed `exact` or `strong` match, the icon the set's `map` names for the icon definition the template declares, or `variant`, an icon the template already imports from a set in the list, moved to its export for the project's variant. `target.set` names the set used. `dropped` names the library's sizing props (`size`, `strokeWidth`, `absoluteStrokeWidth`) removed from the icon's elements: an icon set's icons take their size from CSS. `variant` is present when the look asked for, the project's variant or else the look the template's icon draws, is one the set's icon does not have: that look and the set's default look used instead.
  * @property {Array<{source: {module: string, export: string}, target: {local: string}, definitions: string[], fixes: string[], dropped?: string[], suggestion?: {set: string, id: string, module: string, export: string, confidence: 'likely'}}>} placeholder Icons with a meaning that no set in the project's list has. The template's original import is removed. The written code declares a small placeholder component once (`target.local`, `MissingIcon` unless the file already uses that name), and each use of the icon renders it, with a comment that names the meaning. It needs no package. `fixes` are the commands that give it a real icon: map the definition in the main set, or add a backup set that has it.
  * @property {Array<{module: string | null, export: string, reason: string, suggestion?: {set: string, id: string, module: string, export: string, confidence: 'likely'}}>} kept Icons left as the template wrote them, with why, and a `likely` reviewed match as a suggestion when the project set has one. Every declared key is mapped, a placeholder, or kept; `module` is null for a key the template does not import, and `export` is `default` for a default import and `*` for a namespace import.
  * @property {Array<{set: string, license: string, icons: number}>} sets Each set the mapped icons come from, as `<package>/<set>`, with its license and how many icons it gave.

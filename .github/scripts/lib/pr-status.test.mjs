@@ -301,6 +301,45 @@ describe('buildVisualDeltas', () => {
     diffPixels,
   });
 
+  it('marks a change that came from main as inherited, keeps an unproven match apart from one not found, and counts the reports read', () => {
+    const verdict = {
+      status: 'changed',
+      changes: [
+        {...change('a', 30), inherited: {from: 'main'}},
+        {...change('b', 20), inherited: {found: false}},
+        {...change('d', 15), inherited: {found: true}},
+        change('c', 10),
+      ],
+      inheritedChecked: 11,
+    };
+    const section = buildVisualDeltas({verdict});
+    expect(section).toContain(
+      '| Card · a (neutral, light) · inherited from main |',
+    );
+    expect(section).toContain(
+      '| Card · b (neutral, light) · inheritance unknown: not found in the 11 newest reports of other pull requests |',
+    );
+    expect(section).toContain(
+      '| Card · d (neutral, light) · same image also changed on another pull request, not proven from main |',
+    );
+    expect(section).toContain('| Card · c (neutral, light) | changed');
+    expect(section).toContain(
+      'Inheritance checked against the 11 newest reports of other pull requests.',
+    );
+    expect(section).not.toMatch(/introduc/);
+  });
+
+  it('says when the inheritance lookup failed, so a broken lookup is never silent', () => {
+    const section = buildVisualDeltas({
+      verdict: {
+        status: 'changed',
+        changes: [change('a', 30)],
+        inheritedLookupFailed: 'HTTP 403',
+      },
+    });
+    expect(section).toContain('Inheritance lookup failed: HTTP 403.');
+  });
+
   it('collapses the changed shots under their count, largest change first', () => {
     const verdict = {
       status: 'changed',
@@ -594,7 +633,7 @@ describe('notRunLine', () => {
           {name: 'pr-a11y', conclusion: 'success'},
         ],
       }),
-    ).toBe('Not run on this PR: add `ci:run-rtl` to run it.\n\n');
+    ).toBe('Not run on this PR: add `ci:run-rtl` for RTL.\n\n');
   });
 
   it('names several suites in one line', () => {
@@ -609,7 +648,7 @@ describe('notRunLine', () => {
         ],
       }),
     ).toBe(
-      'Not run on this PR: add `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` to run them.\n\n',
+      'Not run on this PR: add `ci:run-visual` for Visual, `ci:run-a11y` for Accessibility, `ci:run-rtl` for RTL.\n\n',
     );
   });
 
@@ -625,7 +664,7 @@ describe('notRunLine', () => {
         touched: wide,
       }),
     ).toBe(
-      'Wide change (60 components): add `ci:run-visual` or `ci:run-rtl` to run them.\n\n',
+      'Wide change (60 components): add `ci:run-visual` for Visual, `ci:run-rtl` for RTL.\n\n',
     );
     expect(notRunLine({jobs: [], touched: wide})).toBe('');
   });
@@ -640,7 +679,7 @@ describe('notRunLine', () => {
           {name: 'pr-rtl', conclusion: 'success'},
         ],
       }),
-    ).toBe('Not run on this PR: add `ci:run-visual` to run it.\n\n');
+    ).toBe('Not run on this PR: add `ci:run-visual` for Visual.\n\n');
   });
 
   it('says the touched components were checked on a narrow change', () => {
@@ -663,7 +702,7 @@ describe('notRunLine', () => {
         },
       }),
     ).toBe(
-      'Touched components checked; add `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` to run the full suites.\n\n',
+      'Touched components checked; for the full suites, add `ci:run-visual` for Visual, `ci:run-a11y` for Accessibility, `ci:run-rtl` for RTL.\n\n',
     );
     // Every result not-run: never claim a check that did not happen.
     expect(
@@ -685,7 +724,7 @@ describe('notRunLine', () => {
         },
       }),
     ).toBe(
-      'Touched components identified; checks did not run. Add `ci:run-rtl` to run it.\n\n',
+      'Touched components identified; checks did not run. Add `ci:run-rtl` for RTL.\n\n',
     );
   });
 
@@ -705,7 +744,7 @@ describe('notRunLine', () => {
         },
       }),
     ).toBe(
-      'Wide change (shared styles: packages/core/src/theme/tokens.stylex.ts): add `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` to run them.\n\n',
+      'Wide change (shared styles: packages/core/src/theme/tokens.stylex.ts): add `ci:run-visual` for Visual, `ci:run-a11y` for Accessibility, `ci:run-rtl` for RTL.\n\n',
     );
   });
 
@@ -724,7 +763,7 @@ describe('notRunLine', () => {
   it('says nothing when every suite ran, and falls back to the reports without a job list', () => {
     expect(notRunLine({jobs: []})).toBe('');
     expect(notRunLine({jobs: null, a11yReport: {components: {}}})).toBe(
-      'Not run on this PR: add `ci:run-visual` to run it.\n\n',
+      'Not run on this PR: add `ci:run-visual` for Visual.\n\n',
     );
   });
 });

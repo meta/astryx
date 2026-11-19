@@ -23,7 +23,7 @@ export default function ResizableSidebar() {
   });
 
   return (
-    <Card variant="muted" height={240} width={500}>
+    <Card variant="muted" height={240} width={500} maxWidth="100%">
       <Layout
         height="fill"
         start={

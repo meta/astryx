@@ -129,7 +129,7 @@ export const docs = {
       name: 'hasMarkdownShortcuts',
       type: 'boolean',
       description:
-        'Enable Markdown shortcut typing (e.g. "# " for a heading). Uses the transformers prop (defaults to thematic breaks, the standard @lexical/markdown transformers, hard line breaks, and GFM tables).',
+        'Enable Markdown shortcut typing (e.g. "# " for a heading). Uses the transformers prop (defaults to thematic breaks, the standard @lexical/markdown transformers, hard line breaks, and GFM tables). The same markers work at the start of a list item: "- ", "1. ", or "[ ] " switches its list between bullets, numbers, and tasks (so "- [ ] " typed in a paragraph makes a task item), and "# " or "> " takes a top-level item out of its list as a heading or a quote, the rest of the list continuing after it. Each change is one undo step, back to the marker as typed.',
       default: 'true',
     },
     {
@@ -281,7 +281,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Links: the toolbar Link button (on by default; disable with hasLink={false}) and Cmd/Ctrl+K open an Astryx Dialog. The form preserves the Lexical selection while focus moves into the URL input and supports add, update, remove, Escape, and focus return. Pass promptForUrl only when integrating an existing synchronous URL flow. Entered URLs are sanitized (only http/https/mailto/tel are written; javascript:/data: are rejected). Links open in a new tab by default: target=_blank and rel=noopener noreferrer are written into the link node data; set hasNewTabLinks={false} for same-tab links. The toolbar takes base props and passes them to the Astryx Toolbar it renders: ref, className, style and xstyle on its root; data-*, other aria-* attributes and DOM handlers on the toolbar element (name it with label, not aria-label).',
+          'Links: the toolbar Link button (on by default; disable with hasLink={false}) and Cmd/Ctrl+K open a non-modal Astryx Popover anchored to the button. It holds one URL field, applied with Enter, and Apply, Remove (when the selection is in a link), and Cancel icon buttons with tooltips. It keeps the Lexical selection while focus is in the field: Escape or Cancel closes it and returns focus and the selection to the editor, and a URL that cannot be linked shows an error under the field, which keeps focus. Pass promptForUrl only when integrating an existing synchronous URL flow; it replaces the popover. Entered URLs are sanitized (only http/https/mailto/tel are written; javascript:/data: are rejected). Links open in a new tab by default: target=_blank and rel=noopener noreferrer are written into the link node data; set hasNewTabLinks={false} for same-tab links. The toolbar takes base props and passes them to the Astryx Toolbar it renders: ref, className, style and xstyle on its root; data-*, other aria-* attributes and DOM handlers on the toolbar element (name it with label, not aria-label).',
       },
       {
         guidance: true,

@@ -8,7 +8,8 @@
  *   rejection while the year is typed, Enter shows the rejection, and blur
  *   restores the committed date and keeps the message; on the typed
  *   surfaces, text that is not a date shows nothing while typed, and Enter or
- *   blur keeps it with its message.
+ *   blur keeps it with its message; under entryErrorBehavior="blur-or-enter",
+ *   a date the calendar does not have shows nothing until Enter or blur.
  * @position DateInput and DateTimeInput rejected-entry evidence; jsdom has no
  *   native date control and no real focus order.
  */
@@ -31,6 +32,7 @@ test.use({
 });
 
 const INVALID = 'Invalid date';
+const NONEXISTENT = 'Enter a real date';
 
 /** Blurs the field with a press on empty page space, as a person does. */
 async function pressOutside(page: Page) {
@@ -140,6 +142,35 @@ for (const {name, story} of [
       await expect(control).toHaveValue('tomorrowish');
       await expect(control).toHaveAttribute('aria-invalid', 'true');
       expect(await describedText(control)).toContain(INVALID);
+    });
+  }
+}
+
+for (const {name, story} of [
+  {name: 'DateInput', story: 'core-dateinput--default'},
+  {name: 'DateTimeInput date segment', story: 'core-datetimeinput--default'},
+] as const) {
+  for (const commit of ['Enter', 'blur'] as const) {
+    test(`${name}: under blur-or-enter, a date the calendar does not have shows nothing until ${commit}`, async ({
+      page,
+    }) => {
+      await openStory(page, storybook(), story, {
+        presentation: 'popover',
+        entryErrorBehavior: 'blur-or-enter',
+      });
+      const control = page.getByRole('combobox').first();
+      await control.focus();
+      await typeWithoutRejection(page, control, '02/31/2026', NONEXISTENT);
+
+      if (commit === 'Enter') {
+        await page.keyboard.press('Enter');
+      } else {
+        await pressOutside(page);
+        await expect(control).not.toBeFocused();
+      }
+      await expect(control).toHaveValue('02/31/2026');
+      await expect(control).toHaveAttribute('aria-invalid', 'true');
+      expect(await describedText(control)).toContain(NONEXISTENT);
     });
   }
 }

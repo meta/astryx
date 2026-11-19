@@ -31,6 +31,7 @@ import {
   PRESSED_ATTRIBUTE,
   pressFadeMs,
 } from './pressFeedback';
+import {setPressHeld} from '../privateAttributes/pressHeld.stylex';
 import {
   isTrackedByGroup,
   pressGroupItemProps,
@@ -419,6 +420,35 @@ describe('the press reaches the surface the finger landed on', () => {
     press(ariaDisabled, 'pointerdown', 10, 10);
     vi.advanceTimersByTime(PRESS_ONSET_MS);
     expect(document.querySelectorAll(`[${PRESSED_ATTRIBUTE}]`)).toHaveLength(0);
+  });
+
+  it('paints nothing on a held surface, and does not light the row around it, until the hold goes (spec:AST-057 FR7)', () => {
+    // An open swipe row's root: it takes the dismissing tap and paints no
+    // press, while it stays a pressable surface.
+    const label = rows[1].firstElementChild;
+    if (label == null) {
+      throw new Error('the row has no label to press');
+    }
+    setPressHeld(rows[1], true);
+    press(label, 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    press(label, 'pointerup', 10, 10);
+    expect(document.querySelectorAll(`[${PRESSED_ATTRIBUTE}]`)).toHaveLength(0);
+    // Innermost still wins: an action inside the held row keeps its own
+    // press.
+    const action = pressable('button');
+    rows[1].appendChild(action);
+    press(action, 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(action.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    expect(rows[1].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    press(action, 'pointerup', 10, 10);
+    vi.advanceTimersByTime(PRESS_FADE_MS * 2);
+    // The hold gone, the row presses again.
+    setPressHeld(rows[1], false);
+    press(label, 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(pressedRow()).toBe(1);
   });
 });
 
@@ -1290,6 +1320,36 @@ describe('a phone or tablet paints a mouse or Space press itself', () => {
     expect(action.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
     key(action, 'keyup');
     expect(action.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+  });
+
+  it('paints nothing for a mouse press on a held surface (spec:AST-057 FR7)', () => {
+    setPressHeld(rows[1], true);
+    press(rows[1], 'pointerdown', 10, 100, 'mouse');
+    expect(rows[1].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    press(rows[1], 'pointerup', 10, 100, 'mouse');
+    expect(document.querySelectorAll(`[${PRESSED_ATTRIBUTE}]`)).toHaveLength(0);
+    setPressHeld(rows[1], false);
+    press(rows[1], 'pointerdown', 10, 100, 'mouse');
+    expect(rows[1].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it("paints nothing for a pen press on a held surface's content, and paints once the hold goes (spec:AST-057 FR7)", () => {
+    const label = rows[1].firstElementChild;
+    if (label == null) {
+      throw new Error('the row has no label to press');
+    }
+    setPressHeld(rows[1], true);
+    press(label, 'pointerdown', 10, 100, 'pen');
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(rows[1].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    press(label, 'pointerup', 10, 100, 'pen');
+    vi.advanceTimersByTime(PRESS_FADE_MS * 2);
+    expect(document.querySelectorAll(`[${PRESSED_ATTRIBUTE}]`)).toHaveLength(0);
+    setPressHeld(rows[1], false);
+    press(label, 'pointerdown', 10, 100, 'pen');
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(rows[1].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    press(label, 'pointerup', 10, 100, 'pen');
   });
 
   it('keeps the paint while the mouse is dragged off the surface, as `:active` does', () => {

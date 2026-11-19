@@ -37,12 +37,28 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function createCodeElement(lines: string[]): HTMLElement {
+// The released line shape: text directly inside each [data-line] element.
+function createPlainCodeElement(lines: string[]): HTMLElement {
   const code = document.createElement('code');
   for (let i = 0; i < lines.length; i++) {
     const div = document.createElement('div');
     div.setAttribute('data-line', String(i + 1));
     div.textContent = lines[i] || '\u200b';
+    code.appendChild(div);
+  }
+  return code;
+}
+
+function createCodeElement(lines: string[]): HTMLElement {
+  const code = document.createElement('code');
+  for (let i = 0; i < lines.length; i++) {
+    // Range-mode line: one dir="auto" content span holding the line's text.
+    const div = document.createElement('div');
+    div.setAttribute('data-line', String(i + 1));
+    const content = document.createElement('span');
+    content.setAttribute('dir', 'auto');
+    content.textContent = lines[i] || '\u200b';
+    div.appendChild(content);
     code.appendChild(div);
   }
   return code;
@@ -57,7 +73,17 @@ function dynamicRules(): CSSStyleRule[] {
   const dynamicSheet = document.querySelector<HTMLStyleElement>(
     'style[data-astryx-highlight-dynamic]',
   );
-  return Array.from(dynamicSheet?.sheet?.cssRules ?? []) as CSSStyleRule[];
+  // Each rule sits in its own `@layer astryx-base` block.
+  return Array.from(dynamicSheet?.sheet?.cssRules ?? []).flatMap(rule =>
+    'cssRules' in rule
+      ? Array.from((rule as CSSGroupingRule).cssRules)
+      : [rule],
+  ) as CSSStyleRule[];
+}
+
+/** The rule text as handed to the engine, inside the astryx-base layer. */
+function inBaseLayer(rule: string): string {
+  return `@layer astryx-base { ${rule} }`;
 }
 
 /**
@@ -95,6 +121,24 @@ describe('applyHighlightRangesChunked', () => {
     expect(kwHighlight!.size).toBe(0);
   });
 
+  it('creates ranges when the text sits directly in each line element', () => {
+    const codeEl = createPlainCodeElement(['const x = 1;', 'let y = 2;']);
+    const tokenLines: TokenLine[] = [
+      [{type: 'keyword', start: 0, end: 5}],
+      [{type: 'keyword', start: 0, end: 3}],
+    ];
+    const mockStyle = document.createElement('style');
+    mockStyle.setAttribute('data-astryx-highlight-styles', '');
+    document.head.appendChild(mockStyle);
+
+    const cleanup = applyHighlightRangesChunked(codeEl, tokenLines);
+
+    const kwHighlight = mockHighlightsMap.get('astryx-keyword');
+    expect(kwHighlight).toBeDefined();
+    expect(kwHighlight!.size).toBe(2);
+    cleanup();
+  });
+
   it('keeps every parser-accepted tokenizer type coloured under its raw name', () => {
     // The dotted type that crashed the block, plus names a narrow allowlist
     // would wrongly reject even though the CSS parser accepts them all.
@@ -119,10 +163,18 @@ describe('applyHighlightRangesChunked', () => {
 
     // One rule per type, with only the characters that need it escaped.
     expect(insertRule.mock.calls.map(([rule]) => rule)).toEqual([
-      `${highlightRule('astryx-keyword\\.control\\.sql')} { color: var(--color-syntax-keyword\\.control\\.sql, currentColor); }`,
-      `${highlightRule('astryx-_private')} { color: var(--color-syntax-_private, currentColor); }`,
-      `${highlightRule('astryx-キーワード')} { color: var(--color-syntax-キーワード, currentColor); }`,
-      `${highlightRule('astryx-9start')} { color: var(--color-syntax-9start, currentColor); }`,
+      inBaseLayer(
+        `${highlightRule('astryx-keyword\\.control\\.sql')} { color: var(--color-syntax-keyword\\.control\\.sql, currentColor); }`,
+      ),
+      inBaseLayer(
+        `${highlightRule('astryx-_private')} { color: var(--color-syntax-_private, currentColor); }`,
+      ),
+      inBaseLayer(
+        `${highlightRule('astryx-キーワード')} { color: var(--color-syntax-キーワード, currentColor); }`,
+      ),
+      inBaseLayer(
+        `${highlightRule('astryx-9start')} { color: var(--color-syntax-9start, currentColor); }`,
+      ),
     ]);
 
     cleanup();
@@ -152,7 +204,9 @@ describe('applyHighlightRangesChunked', () => {
     // escaped, one colour declaration, nothing of the payload's making.
     expect(insertRule).toHaveBeenCalledTimes(1);
     expect(insertRule).toHaveBeenCalledWith(
-      `${highlightRule(escapedName)} { color: var(--color-syntax-sel\\)\\,\\ body\\ \\{\\ background\\:\\ red\\ \\}\\ \\/\\*, currentColor); }`,
+      inBaseLayer(
+        `${highlightRule(escapedName)} { color: var(--color-syntax-sel\\)\\,\\ body\\ \\{\\ background\\:\\ red\\ \\}\\ \\/\\*, currentColor); }`,
+      ),
     );
 
     // And as parsed: the rule for this type keeps the payload inside the
@@ -190,7 +244,7 @@ describe('applyHighlightRangesChunked', () => {
 
     expect(insertRule).toHaveBeenCalledTimes(1);
     expect(insertRule).toHaveBeenCalledWith(
-      `${highlightRule(escapedName)} { color: ${escapedColor}; }`,
+      inBaseLayer(`${highlightRule(escapedName)} { color: ${escapedColor}; }`),
     );
 
     // As parsed: exactly one declaration, `color`, whose value is the
@@ -205,6 +259,26 @@ describe('applyHighlightRangesChunked', () => {
     expect(rule!.style.getPropertyValue('color')).toBe(escapedColor);
     expect(rule!.style.getPropertyValue('background')).toBe('');
     expect(rule!.style.getPropertyValue('--x')).toBe('');
+
+    cleanup();
+  });
+
+  it('adds the rule for an unknown token type inside the astryx-base layer', () => {
+    const type = 'layered-type';
+    const codeEl = createCodeElement(['line']);
+    const tokenLines: TokenLine[] = [[{type, start: 0, end: 4}]];
+
+    const mockStyle = document.createElement('style');
+    mockStyle.setAttribute('data-astryx-highlight-styles', '');
+    document.head.appendChild(mockStyle);
+    const insertRule = vi.spyOn(CSSStyleSheet.prototype, 'insertRule');
+
+    const cleanup = applyHighlightRangesChunked(codeEl, tokenLines);
+
+    expect(insertRule).toHaveBeenCalledTimes(1);
+    expect(insertRule).toHaveBeenCalledWith(
+      `@layer astryx-base { ${highlightRule('astryx-layered-type')} { color: var(--color-syntax-layered-type, currentColor); } }`,
+    );
 
     cleanup();
   });

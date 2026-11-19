@@ -28,22 +28,14 @@
    every page a definite preview-sized containing block, then normalize its
    first rendered root. The scoped !important declarations intentionally beat
    template inline height/min-height values such as 100dvh. Overflow remains
-   on `.frame`, so genuinely taller auto-height pages are still reachable.
-   The build-time homepage snapshots (FrozenPreview) keep the same wrapper
-   as a plain `preview-viewport` class inside their Theme wrapper, which has
-   no box. */
-.viewport,
-.snapshotHost > [data-astryx-theme] > :global(.preview-viewport) {
+   on `.frame`, so genuinely taller auto-height pages are still reachable. */
+.viewport {
   width: 100%;
   height: 100%;
   min-height: 0;
 }
 
-.viewport > :first-child,
-.snapshotHost
-  > [data-astryx-theme]
-  > :global(.preview-viewport)
-  > :first-child {
+.viewport > :first-child {
   height: 100% !important;
   min-height: 100% !important;
 }

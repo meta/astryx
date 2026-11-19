@@ -809,7 +809,13 @@ for (const viewport of [PHONE, DESKTOP, {width: 2200, height: 900}] as const) {
       {
         markdownSurface: MARKDOWN,
         richTextSurface: RICH_TEXT,
-        keys: ['code-fence', 'code-plain', 'code-unknown', 'code-long'],
+        keys: [
+          'code-fence',
+          'code-plain',
+          'code-unknown',
+          'code-long',
+          'code-long-label',
+        ],
       },
     );
     // The editor's frame is 18px narrower than the reader's at every width
@@ -819,7 +825,7 @@ for (const viewport of [PHONE, DESKTOP, {width: 2200, height: 900}] as const) {
     // line in the editor: the known editor-frame gap that AST-061's
     // Current-state impact records, so the check skips that width.
     if (viewport.width !== PHONE.width) {
-      for (const key of ['code-fence', 'code-long']) {
+      for (const key of ['code-fence', 'code-long', 'code-long-label']) {
         const block = (geometry: SurfaceGeometry) =>
           geometry.blocks.find(candidate => candidate.key === key);
         expect(
@@ -831,8 +837,9 @@ for (const viewport of [PHONE, DESKTOP, {width: 2200, height: 900}] as const) {
       }
     }
     for (const frame of frames) {
-      if (frame.key === 'code-long') {
-        // A long line widens the frame past the measure, up to the room.
+      if (frame.key === 'code-long' || frame.key === 'code-long-label') {
+        // A long line, or a long language label, widens the frame past the
+        // measure, up to the room.
         const markdownWide = Math.min(frame.markdownRoom, frame.markdown);
         expect(frame.markdown, frame.key).toBeGreaterThan(
           Math.min(680, frame.markdownRoom) - 1,
@@ -873,7 +880,7 @@ for (const viewport of [PHONE, DESKTOP, {width: 2200, height: 900}] as const) {
     // One header per fenced block; the first is the `ts` block's.
     await expect(
       page.locator(`${RICH_TEXT} [data-richtext-code-header]`),
-    ).toHaveCount(7);
+    ).toHaveCount(8);
     const header = page
       .locator(`${RICH_TEXT} [data-richtext-code-header]`)
       .first();
@@ -897,6 +904,70 @@ for (const viewport of [PHONE, DESKTOP, {width: 2200, height: 900}] as const) {
     expect(errors).toEqual([]);
   });
 }
+
+// A page font setting the `font` shorthand cannot hold (tabular figures, no
+// kerning) leaves the computed shorthand empty in Chromium, so the label's
+// one-line width is read from the font longhands; the long-label fence keeps
+// core's frame width on a wide screen.
+test("side by side: a long-label fence keeps core's frame width under page font settings", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    document.addEventListener('DOMContentLoaded', () => {
+      const style = document.createElement('style');
+      style.textContent =
+        'html { font-variant-numeric: tabular-nums; font-kerning: none; }';
+      document.head.append(style);
+    });
+  });
+  const errors = await openStory(page, STORY.sideBySide, {
+    width: 2200,
+    height: 900,
+  });
+  await waitForDocument(page, MARKDOWN);
+  await waitForDocument(page, RICH_TEXT);
+  const widths = await page.evaluate(
+    ({markdownSurface, richTextSurface}) => {
+      const markdownBlock = document.querySelector<HTMLElement>(
+        `${markdownSurface} [data-parity-block="code-long-label"]`,
+      );
+      const markdownFrame = [
+        markdownBlock,
+        ...(markdownBlock?.querySelectorAll<HTMLElement>('*') ?? []),
+      ].find(element => {
+        const style = element == null ? null : getComputedStyle(element);
+        return (
+          style != null &&
+          style.borderTopStyle !== 'none' &&
+          parseFloat(style.borderTopWidth) > 0
+        );
+      });
+      const richTextFrame = document.querySelector<HTMLElement>(
+        `${richTextSurface} [data-parity-block="code-long-label"]`,
+      );
+      const title = [
+        ...document.querySelectorAll<HTMLElement>(
+          `${richTextSurface} [data-richtext-code-header] *`,
+        ),
+      ].find(
+        element =>
+          element.childElementCount === 0 &&
+          (element.textContent ?? '').includes('alonglanguagename'),
+      );
+      return {
+        shorthand: title == null ? null : getComputedStyle(title).font,
+        markdown: markdownFrame?.getBoundingClientRect().width ?? 0,
+        richText: richTextFrame?.getBoundingClientRect().width ?? 0,
+      };
+    },
+    {markdownSurface: MARKDOWN, richTextSurface: RICH_TEXT},
+  );
+  // The setting does reach the label: Chromium's shorthand is empty.
+  expect(widths.shorthand).toBe('');
+  expect(widths.markdown).toBeGreaterThan(680);
+  expect(Math.abs(widths.richText - widths.markdown)).toBeLessThanOrEqual(2);
+  expect(errors).toEqual([]);
+});
 
 // A long unbroken line wraps inside the code frame at phone width instead of
 // widening the page, and the copy button copies the block from the keyboard,
@@ -946,6 +1017,17 @@ for (const globals of [
   test(`side by side: fences without a language have no label row (${globals})`, async ({
     page,
   }) => {
+    // A header that writes its height on its block while the browser
+    // delivers resize notifications would report a ResizeObserver loop.
+    await page.addInitScript(() => {
+      const seen: string[] = [];
+      Object.assign(window, {resizeObserverErrors: seen});
+      window.addEventListener('error', event => {
+        if (String(event.message).includes('ResizeObserver')) {
+          seen.push(event.message);
+        }
+      });
+    });
     const errors = await openStory(page, STORY.sideBySide, DESKTOP, globals);
     await waitForDocument(page, MARKDOWN);
     await waitForDocument(page, RICH_TEXT);
@@ -956,6 +1038,8 @@ for (const globals of [
       'code-plaintext': '',
       'code-unknown': 'notalanguage',
       'code-long': 'sh',
+      'code-long-label':
+        'alonglanguagenamethatwrapsintheheaderofthecodeblockoneverysurfaceandinbothmodesofthedocumentsurface',
       'code-plain-long': '',
     } as const;
     const markdown = await surfaceGeometry(page, MARKDOWN);
@@ -1017,9 +1101,13 @@ for (const globals of [
           const label = [...(block?.querySelectorAll('*') ?? [])].find(
             element =>
               element.childElementCount === 0 &&
-              ['ts', 'notalanguage', 'plaintext', 'sh'].includes(
-                element.textContent?.trim() ?? '',
-              ),
+              [
+                'ts',
+                'notalanguage',
+                'plaintext',
+                'sh',
+                'alonglanguagenamethatwrapsintheheaderofthecodeblockoneverysurfaceandinbothmodesofthedocumentsurface',
+              ].includes(element.textContent?.trim() ?? ''),
           );
           return label?.textContent?.trim() ?? '';
         }),
@@ -1029,14 +1117,31 @@ for (const globals of [
     // RichText draws one header per fence, in order, each with a copy button
     // and the same label.
     const headers = page.locator(`${RICH_TEXT} [data-richtext-code-header]`);
-    await expect(headers).toHaveCount(7);
+    await expect(headers).toHaveCount(8);
     const richTextLabels = await headers.evaluateAll(elements =>
       elements.map(element =>
         (element.textContent ?? '').replace('Copy code', '').trim(),
       ),
     );
     expect(richTextLabels).toEqual(Object.values(fences));
-    for (const index of [0, 1, 2, 3, 4, 5, 6]) {
+    // The long label wraps: its header is taller than the one-row `ts`
+    // header, and the fence is as tall in RichText as in core Markdown
+    // (checked above with every fence).
+    const headerHeight = (index: number) =>
+      headers
+        .nth(index)
+        .evaluate(element => element.getBoundingClientRect().height);
+    expect(
+      await headerHeight(Object.keys(fences).indexOf('code-long-label')),
+    ).toBeGreaterThan((await headerHeight(0)) + 4);
+    expect(
+      await page.evaluate(
+        () =>
+          (window as unknown as {resizeObserverErrors: string[]})
+            .resizeObserverErrors,
+      ),
+    ).toEqual([]);
+    for (const index of [0, 1, 2, 3, 4, 5, 6, 7]) {
       await expect(
         headers.nth(index).getByRole('button', {name: 'Copy code'}),
       ).toBeVisible();
@@ -1955,11 +2060,10 @@ for (const [viewport, colorMode] of [
   });
 }
 
-// RichText blocks take the direction of the surface around them, whatever
-// their first strong character. Markdown blocks take the direction of their
-// own text, and the provider's when their text has no strong character.
+// Every surface gives a prose block the direction of its own text, and the
+// provider's when that text has no strongly directional character.
 for (const direction of ['ltr', 'rtl'] as const) {
-  test(`blocks take their surface's direction rule (${direction})`, async ({
+  test(`blocks take their own text's direction (${direction})`, async ({
     page,
   }) => {
     const errors = await openStory(
@@ -1971,30 +2075,39 @@ for (const direction of ['ltr', 'rtl'] as const) {
     await waitForDocument(page, MARKDOWN);
     await waitForDocument(page, RICH_TEXT);
     for (const surface of [MARKDOWN, RICH_TEXT]) {
-      const ownText = surface === MARKDOWN;
-      // RichText: every block, and inside blocks too: table rows and cells,
-      // list items, and paragraphs. Markdown: every prose block and table
-      // cell, read against its own text; a container or wrapper is not
-      // checked, because it takes its parent's direction.
+      // Every prose block reads its own text on both surfaces. A table cell
+      // orders with its table, so the cell carries the direction only where
+      // the surface puts no block inside it: Markdown's cells hold their
+      // text directly, RichText's hold a paragraph.
       const mismatched = await page.evaluate(
-        ({selector, provider, isOwnText}) => {
+        ({selector, provider}) => {
           const strong =
             /[A-Za-z\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u3040-\u9FFF\uAC00-\uD7AF]|([\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF])/u;
-          const expectedFor = (element: Element): string => {
-            if (!isOwnText) {
-              return provider;
-            }
+          const ownTextOf = (element: Element): string => {
             const match = strong.exec(element.textContent ?? '');
             return match == null ? provider : match[1] != null ? 'rtl' : 'ltr';
           };
-          const targets = isOwnText
-            ? ':is([role="paragraph"], p, h1, h2, h3, h4, h5, h6, blockquote, li, th, td)'
-            : ':is([data-parity-block], tr, th, td, li, p)';
-          return [
-            ...document.querySelectorAll(
-              `${selector} [data-parity-body] ${targets}`,
-            ),
-          ]
+          const isCellHoldingABlock = (element: Element): boolean =>
+            /^T[HD]$/.test(element.tagName) &&
+            element.querySelector('p, [role="paragraph"]') !== null;
+          const expectedFor = (element: Element): string =>
+            isCellHoldingABlock(element) ? provider : ownTextOf(element);
+          const targets =
+            ':is([role="paragraph"], p, h1, h2, h3, h4, h5, h6, blockquote, li, th, td)';
+          // Document blocks only. RichText keeps its content inside the
+          // editable element, so a toolbar dialog's own heading — chrome,
+          // which follows the provider like the rest of the furniture — is
+          // outside it. Markdown renders its blocks into the body directly.
+          const body = document.querySelector(`${selector} [data-parity-body]`);
+          const roots = body?.querySelectorAll('[data-lexical-editor]');
+          const scopes =
+            roots != null && roots.length > 0
+              ? [...roots]
+              : body != null
+                ? [body]
+                : [];
+          return scopes
+            .flatMap(scope => [...scope.querySelectorAll(targets)])
             .filter(
               element =>
                 getComputedStyle(element).direction !== expectedFor(element),
@@ -2005,16 +2118,248 @@ for (const direction of ['ltr', 'rtl'] as const) {
                 `${element.tagName} ${(element.textContent ?? '').slice(0, 24)}`,
             );
         },
-        {selector: surface, provider: direction, isOwnText: ownText},
+        {selector: surface, provider: direction},
       );
       expect(mismatched, surface).toEqual([]);
     }
     expect(errors).toEqual([]);
   });
 
-  // Mixed English and Hebrew cells take the document's direction, so each
-  // cell's text starts at the document's start edge, whatever its script.
-  test(`table cells take the provider direction with mixed scripts (${direction})`, async ({
+  // A cell orders with its table, and its text reads its own way, so a
+  // Hebrew cell starts at its own start edge in an English document.
+  // A table cell's paragraph is classified by the same first-strong rule, and
+  // its direction is stored, so a leading combining mark or a letter number
+  // has to be read the way the algorithm reads it on both paths into the
+  // document: the import below, and the editing path the second half drives.
+  test(`a cell reads past a combining mark and reads a letter number (${direction})`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(DESKTOP);
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=richtext-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:${direction}`,
+      {waitUntil: 'load'},
+    );
+    // U+05B0 is a Hebrew point: Script=Hebrew, but Bidi_Class NSM, so it
+    // takes its base character's side and decides nothing on its own.
+    // U+2160 is ROMAN NUMERAL ONE: Bidi_Class L, General_Category Nl, which
+    // `\p{Letter}` does not cover.
+    await page
+      .locator('textarea')
+      .fill(
+        '| A | B |\n| --- | --- |\n| \u05b0Annual report | \u2160\u05e9\u05dc\u05d5\u05dd |\n| \u05b0 | \u2160 |\n',
+      );
+    await expect(page.locator('table:visible')).toHaveCount(2);
+    const read = async (): Promise<Array<string | null>> =>
+      page.evaluate(() =>
+        [...document.querySelectorAll('[data-lexical-editor]')].flatMap(
+          editor =>
+            [...editor.querySelectorAll('tr')]
+              // Each surface has its own header row to skip.
+              .slice(1)
+              .flatMap(row => [...row.querySelectorAll('th, td')])
+              .map(cell => {
+                const prose = cell.querySelector('p') ?? cell;
+                return getComputedStyle(prose).direction;
+              }),
+        ),
+      );
+    const imported = await read();
+    // Two surfaces, four body cells each.
+    expect(imported).toHaveLength(8);
+    for (let index = 0; index < imported.length; index += 4) {
+      // A point before English reads left-to-right, not right-to-left.
+      expect(imported[index]).toBe('ltr');
+      // A Roman numeral before Hebrew is the first strong character.
+      expect(imported[index + 1]).toBe('ltr');
+      // A point alone carries no direction, so the document decides.
+      expect(imported[index + 2]).toBe(direction);
+      // A Roman numeral alone is strong on its own.
+      expect(imported[index + 3]).toBe('ltr');
+    }
+
+    // The editing path: retype that cell's text and it classifies the same.
+    // The cell's own text is the click target; the cell box around it is not
+    // reliably hit-testable while the table lays out.
+    await page.getByText('\u05b0Annual report', {exact: true}).first().click();
+    await page.keyboard.press('ControlOrMeta+a');
+    await page.keyboard.press('Backspace');
+    await page.keyboard.type('\u05b0Annual report');
+    await expect.poll(async () => (await read())[0]).toBe('ltr');
+  });
+
+  // FR6 verification: a nested list holding items that read both ways, and a
+  // neutral item among them.
+  test(`a nested list reads each item its own way and keeps a neutral one on the document (${direction})`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(PHONE);
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=richtext-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:${direction}`,
+      {waitUntil: 'load'},
+    );
+    await page
+      .locator('textarea')
+      .fill(
+        '- Parent item\n  - \u05e9\u05dc\u05d5\u05dd\n  - English\n  - 123\n',
+      );
+    // Both surfaces have to have run the transform before anything is read.
+    await expect(
+      page.locator('[data-lexical-editor] li[dir="rtl"]'),
+    ).toHaveCount(2);
+    const rows = await page.evaluate(() =>
+      [...document.querySelectorAll('[data-lexical-editor]')].map(editor => {
+        const list = editor.querySelector('ul');
+        if (list === null) {
+          return [];
+        }
+        const listBox = list.getBoundingClientRect();
+        return [...editor.querySelectorAll('li')]
+          .filter(
+            item =>
+              (item.textContent ?? '').trim() !== '' &&
+              item.querySelector('ul, ol') === null,
+          )
+          .map(item => {
+            const range = document.createRange();
+            range.selectNodeContents(item);
+            const text = range.getBoundingClientRect();
+            const resolved = getComputedStyle(item).direction;
+            return {
+              text: (item.textContent ?? '').trim(),
+              written: item.getAttribute('dir'),
+              resolved,
+              start:
+                resolved === 'rtl'
+                  ? Math.round(listBox.right - text.right)
+                  : Math.round(text.left - listBox.left),
+            };
+          });
+      }),
+    );
+    for (const surface of rows.filter(list => list.length > 0)) {
+      const byText = new Map(surface.map(row => [row.text, row]));
+      // Each item reads the way its own text reads.
+      expect(byText.get('\u05e9\u05dc\u05d5\u05dd')?.resolved).toBe('rtl');
+      expect(byText.get('English')?.resolved).toBe('ltr');
+      // A neutral item carries no written direction, so nothing its text
+      // does not say is stored, and it reads the way the document reads
+      // (FR6) rather than taking the direction of the list it sits in or of
+      // whichever language its neighbours happen to use. `Markdown`
+      // resolves such a block against the provider, so the two agree.
+      expect(byText.get('123')?.written).toBeNull();
+      expect(byText.get('123')?.resolved).toBe(direction);
+      // The nested list anchors on its parent item, so an item that agrees
+      // with the document still steps in one inset past it.
+      expect(byText.get('Parent item')?.start).toBe(
+        byText.get('English')!.start - 24,
+      );
+    }
+  });
+
+  // FR6 verification: each fenced-code line takes its own direction, and the
+  // caret walks a right-to-left line the way the arrow key points.
+  test(`a fenced code line reads its own way and the caret follows the key (${direction})`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(PHONE);
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=richtext-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:${direction}`,
+      {waitUntil: 'load'},
+    );
+    await page
+      .locator('textarea')
+      .fill(
+        '```\n// \u05d4\u05e2\u05e8\u05d4 \u05d1\u05e2\u05d1\u05e8\u05d9\u05ea\nconst x = 1;\n```\n',
+      );
+    await expect(page.locator('[data-lexical-editor] code')).toHaveCount(2);
+    // `unicode-bidi: plaintext` puts each line in its own bidi paragraph, so
+    // the Hebrew comment starts at the right while the code line keeps its
+    // semicolon at the end.
+    const lines = await page.evaluate(() => {
+      const block = document.querySelector('[data-lexical-editor] code');
+      if (block === null) {
+        return [];
+      }
+      const box = block.getBoundingClientRect();
+      // Lexical keeps a fence's lines in one text run separated by newlines,
+      // so a line is a character range inside it, not a node of its own.
+      const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+      const runs: Array<{node: Text; start: number}> = [];
+      let consumed = 0;
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        runs.push({node: node as Text, start: consumed});
+        consumed += (node.textContent ?? '').length;
+      }
+      const whole = runs.map(run => run.node.textContent ?? '').join('');
+      const locate = (at: number): {node: Text; offset: number} | null => {
+        for (const run of runs) {
+          const length = (run.node.textContent ?? '').length;
+          if (at <= run.start + length) {
+            return {node: run.node, offset: at - run.start};
+          }
+        }
+        return null;
+      };
+      const out: Array<{text: string; fromStart: number; fromEnd: number}> = [];
+      let offset = 0;
+      for (const line of whole.split('\n')) {
+        const from = offset;
+        const to = offset + line.length;
+        offset = to + 1;
+        if (line.trim() === '') {
+          continue;
+        }
+        const head = locate(from);
+        const tail = locate(to);
+        if (head === null || tail === null) {
+          continue;
+        }
+        const range = document.createRange();
+        range.setStart(head.node, head.offset);
+        range.setEnd(tail.node, tail.offset);
+        const text = range.getBoundingClientRect();
+        out.push({
+          text: line.trim().slice(0, 8),
+          fromStart: Math.round(text.left - box.left),
+          fromEnd: Math.round(box.right - text.right),
+        });
+      }
+      return out;
+    });
+    expect(lines.length).toBeGreaterThanOrEqual(2);
+    const [comment, code] = lines;
+    // The two lines hug opposite edges, whichever way the document reads.
+    expect(comment.fromEnd).toBeLessThan(comment.fromStart);
+    expect(code.fromStart).toBeLessThan(code.fromEnd);
+
+    // The caret moves the way the arrow points on the right-to-left line:
+    // Home puts it at that line's start, which is its right edge, and one
+    // ArrowRight walks it further right, never left.
+    const editor = page.locator('[data-lexical-editor]').first();
+    await editor.click();
+    await page
+      .getByText('\u05d4\u05e2\u05e8\u05d4', {exact: false})
+      .first()
+      .click();
+    await page.keyboard.press('Home');
+    const at = async (): Promise<number> =>
+      page.evaluate(() => {
+        const selection = window.getSelection();
+        if (selection === null || selection.rangeCount === 0) {
+          return Number.NaN;
+        }
+        const range = selection.getRangeAt(0).cloneRange();
+        range.collapse(true);
+        return Math.round(range.getBoundingClientRect().left);
+      });
+    const before = await at();
+    await page.keyboard.press('ArrowRight');
+    const after = await at();
+    expect(Number.isNaN(before) || Number.isNaN(after)).toBe(false);
+    expect(after).toBeGreaterThanOrEqual(before);
+  });
+
+  test(`table cells read their own text with mixed scripts (${direction})`, async ({
     page,
   }) => {
     await page.setViewportSize(DESKTOP);
@@ -2041,8 +2386,18 @@ for (const direction of ['ltr', 'rtl'] as const) {
             column: (cell as HTMLTableCellElement).cellIndex,
             direction: style.direction,
             paragraphDirection: getComputedStyle(paragraph).direction,
+            // Hebrew is the only strong right-to-left script in the fixture.
+            textDirection: /^[^A-Za-z\u0590-\u05ff]*[\u0590-\u05ff]/.test(
+              (paragraph.textContent ?? '').trim(),
+            )
+              ? 'rtl'
+              : /^[^A-Za-z\u0590-\u05ff]*[A-Za-z]/.test(
+                    (paragraph.textContent ?? '').trim(),
+                  )
+                ? 'ltr'
+                : null,
             startGap:
-              style.direction === 'rtl'
+              getComputedStyle(paragraph).direction === 'rtl'
                 ? box.right - parseFloat(style.paddingRight) - text.right
                 : text.left - box.left - parseFloat(style.paddingLeft),
           };
@@ -2052,10 +2407,13 @@ for (const direction of ['ltr', 'rtl'] as const) {
     // Editor and view, three rows of two cells each.
     expect(cells).toHaveLength(12);
     for (const cell of cells) {
+      // The cell box, and so the column it sits in, orders with the table.
       expect(cell.direction).toBe(direction);
-      expect(cell.paragraphDirection).toBe(direction);
+      // Its prose reads the way the cell's own text reads.
+      expect(cell.paragraphDirection).toBe(cell.textDirection ?? direction);
       if (cell.column === 0) {
-        // The first column is start-aligned: its text touches the start edge.
+        // The first column is start-aligned: its text touches the start edge
+        // of its own paragraph's direction.
         expect(Math.abs(cell.startGap)).toBeLessThanOrEqual(1);
       }
     }

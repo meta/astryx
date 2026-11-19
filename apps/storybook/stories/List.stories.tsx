@@ -12,6 +12,7 @@ import * as stylex from '@stylexjs/stylex';
 import type {Meta, StoryObj} from '@storybook/react';
 import {List, ListItem} from '@astryxdesign/core/List';
 import {createReorderable} from '@astryxdesign/core';
+import {createSwipe} from '@astryxdesign/core/Swipe';
 import {Avatar} from '@astryxdesign/core/Avatar';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Button} from '@astryxdesign/core/Button';
@@ -510,6 +511,11 @@ export const Links: Story = {
   ),
 };
 
+/** One definition at module scope serves every row it is given to. */
+const forgetSwipe = createSwipe({
+  trailing: [{id: 'forget', label: 'Forget', onActivate: () => {}}],
+});
+
 function EndControlsDemo() {
   const [isWifiOn, setIsWifiOn] = useState(true);
   return (
@@ -537,7 +543,7 @@ function EndControlsDemo() {
           endContent={
             <Icon icon={ChevronRightIcon} xstyle={rtlStyles.mirror} />
           }
-          swipeActions={{trailing: [{label: 'Forget', onActivate: () => {}}]}}
+          swipe={forgetSwipe}
         />
         <ListItem
           label="Wi-Fi"
@@ -850,6 +856,23 @@ function AnimatedChangesSwipeDemo() {
     'Archive',
     PLAIN_ROW,
   ]);
+  // One swipe for every row: the handler reads the row from its key.
+  const deleteSwipe = useMemo(
+    () =>
+      createSwipe({
+        trailing: [
+          {
+            id: 'delete',
+            label: 'Delete',
+            variant: 'destructive',
+            hasRemoval: true,
+            onActivate: ({itemKey}) =>
+              setRows(current => current.filter(row => row !== itemKey)),
+          },
+        ],
+      }),
+    [],
+  );
   const containerRef = useRef<HTMLDivElement>(null);
   const animatedLayout = useAnimatedLayout({containerRef});
   const moveFirst = (label: string) =>
@@ -867,23 +890,7 @@ function AnimatedChangesSwipeDemo() {
             itemKey={label}
             label={label}
             onClick={() => {}}
-            swipeActions={
-              label === PLAIN_ROW
-                ? undefined
-                : {
-                    trailing: [
-                      {
-                        label: 'Delete',
-                        variant: 'destructive',
-                        hasRemoval: true,
-                        onActivate: () =>
-                          setRows(current =>
-                            current.filter(row => row !== label),
-                          ),
-                      },
-                    ],
-                  }
-            }
+            swipe={label === PLAIN_ROW ? undefined : deleteSwipe}
           />
         ))}
       </List>

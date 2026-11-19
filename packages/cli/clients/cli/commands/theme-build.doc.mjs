@@ -20,17 +20,29 @@ export const doc = {
     'standard ESM, and type declarations. Ordinary mode writes one complete set per ' +
     'theme. --family combines one selected extension tree into the three files named by ' +
     'the required --family-key, ready for one CSS load and identity-only switching. ' +
+    'A local module the built module imports (an icon registry, a slot value, ' +
+    'the helpers they import) that is TypeScript or JSX is compiled to JavaScript ' +
+    'named after its source (icons.tsx → icons.tsx.js) in a folder beside the ' +
+    "built module named for it (w98.modules beside w98.js), mirroring each source's " +
+    'place under the folder that holds the theme and its compiled sources. Each ' +
+    'local import names its file with its extension, ' +
+    'so the built module loads in any bundler and in plain Node; package imports ' +
+    'stay as they are. ' +
     'With --check it writes nothing and reports source drift. --icons-specifier keeps ' +
     'its existing generated-module behavior. It prints one line per built theme and ' +
     'one line naming fonts the themes do not load; --detail full adds the install ' +
-    'example and the font recipe, once for a batch.',
+    'example and the font recipe, once for a batch. A source that also exports ' +
+    "`colorModes` (`['light']` or `['dark']`) for a theme with one color mode gets " +
+    'the same export in its built module, which `theme add` reads to wire the theme ' +
+    'in that mode; any other value is ignored without a warning, and a --family ' +
+    'build never writes the export.',
   fn: 'themeBuild',
   args: [{name: 'files', param: 'file', required: true, variadic: true}],
   options: [
     {
       flag: '--family',
       description:
-        'Build the selected extension family into one keyed CSS, JS, and declaration set, written beside the family root theme file, which must be inside the working directory to build (ERR_PATH_TRAVERSAL); --check only reads, so it compares outputs anywhere. Requires --family-key; refused with --out or --watch (ERR_THEME_INVALID)',
+        'Build the selected extension family into one keyed CSS, JS, and declaration set, written beside the family root theme file, which must be inside the working directory to build (ERR_PATH_TRAVERSAL); --check only reads, so it compares outputs anywhere. The selected themes form one extends tree with one root: the base of every other member is selected, and the root may extend a theme the family does not select (such as an installed theme package), which its outputs carry as its standalone build does; a member whose base is missing is refused naming that base (ERR_THEME_INVALID). Requires --family-key; refused with --out or --watch (ERR_THEME_INVALID)',
     },
     {
       flag: '--family-key <key>',
@@ -41,7 +53,7 @@ export const doc = {
       flag: '-o, --out <path>',
       param: 'options.out',
       description:
-        'Output CSS file path, relative or absolute; the .js and .d.ts are written beside it (default: <theme name>.css next to the source). A folder, or a path ending in /, writes <theme name>.css into it. The path should end in .css; another name still builds, with a warning. A build never replaces the theme source (ERR_THEME_INVALID). At a path --out names, it replaces its own earlier outputs, and the output of another theme source with a warning that names both sources; any other existing file fails with ERR_FILE_EXISTS and nothing is written. Into a folder the theme editor made (folder <slug>/ holds <slug>.settings.json), a source outside that folder builds there too, with a warning; to keep the editor folder to its own theme, build beside the source, or pass an --out outside it. A build writes only inside the working directory, the defaults beside the source too (ERR_PATH_TRAVERSAL); --check writes nothing, so it compares outputs anywhere and refuses only a relative path that escapes the working directory. Single theme only: refused with more than one file or with --family (ERR_THEME_INVALID)',
+        'Output CSS file path, relative or absolute; the .js and .d.ts are written beside it (default: <theme name>.css next to the source). A folder, or a path ending in /, writes <theme name>.css into it. The path should end in .css: a TypeScript declaration file (.d.ts) or a stylesheet source map (.css.map) is refused with the .css path to give (ERR_INVALID_ARGUMENT), and nothing is written; any other name still builds, with a warning naming the .css path meant. A build never replaces the theme source (ERR_THEME_INVALID). Beside the source and at a path --out names, it replaces its own earlier outputs (beside the source, those of the CLI before it was named Astryx too), and the output of another theme source with a warning that names both sources; any other existing file, such as your own brand.css beside brand.ts, fails with ERR_FILE_EXISTS naming it, and nothing is written: build with --out, or move or rename the file. Into a folder the theme editor made (folder <slug>/ holds <slug>.settings.json), a source outside that folder builds there too, with a warning; to keep the editor folder to its own theme, build beside the source, or pass an --out outside it. A build writes only inside the working directory, the defaults beside the source too (ERR_PATH_TRAVERSAL); --check writes nothing, so it compares outputs anywhere and refuses only a relative path that escapes the working directory. Single theme only: refused with more than one file or with --family (ERR_THEME_INVALID)',
     },
     {
       flag: '--icons-specifier <specifier>',
@@ -84,6 +96,7 @@ export const doc = {
     },
   ],
   outsideProject: 'same',
+  requires: ['themes.compile'],
   exitCodes: [
     {
       code: 0,

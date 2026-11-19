@@ -21,6 +21,7 @@ import {
   declaredTimingTokens,
   easedProgress,
   readThemeTiming,
+  readThemeTimingOrInstant,
   readThemeTokens,
   resolveTiming,
   type ThemeTimingTokens,
@@ -182,6 +183,33 @@ describe('readThemeTiming', () => {
       null,
     );
     expect(readThemeTiming(element({'transition-duration': '0s'}))).toBe(null);
+  });
+});
+
+describe('readThemeTimingOrInstant', () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
+  it('reads the timing as readThemeTiming does', () => {
+    const timing = readThemeTimingOrInstant(
+      element({'--duration-fast': '200ms'}),
+      FAST,
+    );
+    const read = readThemeTiming(element({'--duration-fast': '200ms'}), FAST)!;
+    expect(timing.duration).toBeCloseTo(read.duration, 6);
+    expect(timing.at(0.1)).toBeCloseTo(read.at(0.1), 6);
+  });
+
+  it('plays no motion when the timing does not resolve, or with no element', () => {
+    for (const timing of [
+      readThemeTimingOrInstant(element({'--duration-fast': '0ms'}), FAST),
+      readThemeTimingOrInstant(null, FAST),
+    ]) {
+      expect(timing.duration).toBe(0);
+      expect(timing.at(0)).toBe(1);
+      expect(timing.velocity(0)).toBe(0);
+    }
   });
 });
 

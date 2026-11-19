@@ -12,6 +12,7 @@
 export const ALERT_DIALOG_CASES = [
   'alert-over-a-toast',
   'dialog-closed-after-save',
+  'interruptions',
 ] as const;
 
 export type AlertDialogCaseId = (typeof ALERT_DIALOG_CASES)[number];
@@ -23,6 +24,8 @@ export const ALERT_DIALOG_CASE_LABELS: Readonly<
     'An alert over a toast: Delete raises a toast as the alert closes',
   'dialog-closed-after-save':
     'A dialog closed after a save: Save raises a toast, and the dialog closes when the save is done',
+  interruptions:
+    'Interruptions: the program closes the alert while it enters, or reopens it while it leaves',
 };
 
 export function parseAlertDialogCase(value: string | null): AlertDialogCaseId {

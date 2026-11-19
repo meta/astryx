@@ -167,4 +167,47 @@ describe('template assets when npm gives no answer', () => {
     expect(out).toContain('Template assets not checked: 1');
     expect(out).toContain('templates/img/hero.png');
   });
+
+  it('notes a relative import whose file no `files` entry reaches, and lists the others as not checked', async () => {
+    write({
+      'package.json': JSON.stringify({
+        name: '@acme/kit',
+        version: '1.0.0',
+        type: 'module',
+        exports: {'.': './dist/index.js'},
+        files: ['dist', 'astryx.integration.mjs'],
+      }),
+      'astryx.integration.mjs': 'export default {};\n',
+      'dist/index.js':
+        "export * from './icons';\nexport * from '../src/extra.js';\n",
+      'dist/icons/index.js': 'export const Check = 1;\n',
+      'src/extra.js': 'export const extra = 1;\n',
+    });
+
+    const {data} = await validateIntegration(undefined, {cwd: dir});
+
+    expect(
+      (data.notes ?? [])
+        .filter(note => note.code === 'relative_import_not_shipped')
+        .map(note => note.message),
+    ).toEqual([
+      expect.stringContaining(
+        'dist/index.js:2: imports "../src/extra.js", which names src/extra.js, a file npm leaves out of the package',
+      ),
+    ]);
+    expect(data.shippedImports).toEqual({
+      status: 'checked',
+      findings: [],
+      unchecked: [
+        {
+          file: 'dist/index.js',
+          specifier: './icons',
+          reason:
+            'npm was not found, and a `files` entry may reach dist/icons/index.js',
+        },
+      ],
+    });
+    const check = await integrationCheck({cwd: dir});
+    expect(check.data.unchecked).toBeGreaterThanOrEqual(1);
+  });
 });
