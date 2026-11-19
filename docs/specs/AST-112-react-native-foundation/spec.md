@@ -42,12 +42,12 @@ shared icon names under FR17.
 
 ## Non-goals
 
-- Push notifications and background work are out of scope for v0; apps get
-  them from their host platform or a third-party SDK.
+- Push notifications and background work are out of scope; apps get them
+  from their host platform or a third-party SDK.
 - Astryx Stage and Preview in the Astryx app are separate tools outside Astryx;
   Astryx specs, releases and docs don't require them.
 - Adding Astryx React Native screens to an existing native iOS or Android app
-  (brownfield) is not a v0 target.
+  (brownfield) is out of scope.
 - Equivalent internal implementations remain valid when they satisfy this
   contract.
 - Internal modules, files, function names, algorithms, data structures, storage
@@ -639,7 +639,11 @@ shared icon names under FR17.
     choice made per call site, whatever the button's `render` value: each use
     picks the surface that fits where the button sits. A drawn button draws
     that surface, and a system-drawn button shows it as the platform's
-    matching button style.
+    matching button style: on a system-drawn button the platform's style is
+    the look, and the theme's `material` member decides only drawn surfaces.
+    The controls group record (`spec:AST-126`) maps each `surface` value to a
+    platform button style and draws the button itself for a value the
+    platform's button cannot show.
   - The public API expresses glass and materials through component props
     (`surface` and presentation) and through native theme intent in
     `defineNativeTheme`, with `platforms.ios` and `platforms.android`
@@ -751,10 +755,9 @@ record depends on an ask whose owner has not agreed to it.
 - `spec:AST-082` FR10's `defineNativeTheme` configuration gains one member,
   `render.default: 'auto' | 'system' | 'drawn'`; `auto` keeps each
   component's own per-platform default (FR21).
-- `spec:AST-082` DEC-2 gains one sentence, with **Decider:** cixzhang,
-  2026-11-18: `surface` on `Button` and `IconButton` is a situational,
-  per-call-site appearance choice, and the look of that surface stays the
-  native theme's `material` member (FR21).
+- Relies on `spec:AST-082` DEC-2 as amended: `surface` on `Button` and
+  `IconButton` is a situational, per-call-site appearance choice, and the look
+  of a drawn surface stays the native theme's `material` member (FR21).
 - `spec:AST-082` DEC-2 also gains, as a proposal of this record: a component's
   `render` prop is a presentation choice under its DEC-6, not a visual
   (FR21).
@@ -772,14 +775,14 @@ record depends on an ask whose owner has not agreed to it.
   carries the public type conditions and the other non-contract parts after
   the deprecation is OQ8.
 - The package-boundary check gains the FR2 rules: no import from the library layer in
-  the platform layer, no import of Expo or of `@astryxdesign/react-native-expo` in `@astryxdesign/react-native`, no import of a capability from the platform's core outside its loader or from another capability, no third-party native or navigation dependency, no peer dependency outside Astryx other than React and React Native, and no dependency on these packages from core or the CLI.
+  the platform layer, no import of Expo or of `@astryxdesign/react-native-expo` in `@astryxdesign/react-native`, no import of a capability from the platform's core outside its loader or from another capability, no third-party native or navigation dependency in `@astryxdesign/react-native`, no peer dependency outside Astryx other than React and React Native, and `expo` for `@astryxdesign/react-native-expo`, and no dependency on these packages from core or the CLI.
 
 ## Verification
 
 | Contract | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                      | Representative states                                                                                                                                                                                                                                                                                                                                          | Mutation or failure expectation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | FR1      | Package manifest check of names, entries, and dependencies; the canary release's package list; a source check of `@astryxdesign/react-native` for Expo code                                                                                                                                                                                                                                                                                       | each package in the public set; each capability entry; `@astryxdesign/react-native-expo`'s peers                                                                                                                                                                                                                                                               | A package missing from the set, a set package missing from the canary release, a capability without its entry, Expo code in `@astryxdesign/react-native`, or an Expo package that carries native code or whose peers are other than `@astryxdesign/react-native` and `expo`                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| FR2      | Package-boundary, source, and dependency check; a compatibility test of Astryx components beside third-party libraries on iOS and Android                                                                                                                                                                                                                                                                                                         | the platform's source and tests; the library and platform layers; the core and each capability; the package's dependencies; `@astryxdesign/react-native-expo`; an app that uses react-native-gesture-handler, Reanimated, react-native-screens, react-native-safe-area-context, and a haptics library; an app with and without another inset provider          | An import from the library in the platform, a capability import in the core outside its loader, an import between capabilities, a third-party native or navigation dependency in `@astryxdesign/react-native`, a third-party dependency of `@astryxdesign/react-native-expo` other than `expo`, a peer dependency outside Astryx other than React and React Native, an import of Expo or of `@astryxdesign/react-native-expo` in `@astryxdesign/react-native`, a conflict beside a third-party library, a release that ships with a failing compatibility test, or Astryx insets that disagree with another inset provider the app uses                                                                                                              |
+| FR2      | Package-boundary, source, and dependency check; a compatibility test of Astryx components beside third-party libraries on iOS and Android                                                                                                                                                                                                                                                                                                         | the platform's source and tests; the library and platform layers; the core and each capability; the package's dependencies; `@astryxdesign/react-native-expo`; an app that uses react-native-gesture-handler, Reanimated, react-native-screens, react-native-safe-area-context, and a haptics library; an app with and without another inset provider          | An import from the library in the platform, a capability import in the core outside its loader, an import between capabilities, a third-party native or navigation dependency in `@astryxdesign/react-native`, a third-party dependency of `@astryxdesign/react-native-expo` other than `expo`, a peer dependency outside Astryx other than React and React Native, and `expo` for `@astryxdesign/react-native-expo`, an import of Expo or of `@astryxdesign/react-native-expo` in `@astryxdesign/react-native`, a conflict beside a third-party library, a release that ships with a failing compatibility test, or Astryx insets that disagree with another inset provider the app uses                                                            |
 | FR3      | Built app with the core only, compared with one per opted-in capability: binary symbols and the merged manifest; unit tests of each capability's `isAvailable()` and a call's reason                                                                                                                                                                                                                                                              | the native half of each library component; a capability's native module, frameworks, dependencies, permissions; an opted-out capability; a missing module of an opted-in one; a binary that records no list                                                                                                                                                    | A core-only app that lacks a library component's native half, an app that did not opt a capability in links any of its native code or declarations, `isAvailable()` answers true for it, a call resolves a reason other than `not-linked`, or a missing module of an opted-in capability, or one on a binary that records no list, resolves a reason other than `no-module`                                                                                                                                                                                                                                                                                                                                                                          |
 | FR4      | `npm pack` file list; a sample app's projects generated by `astryx rn shell` and by Expo's prebuild from configuration with a capability list; an existing app's own projects after `astryx rn apply` with the same list; a source check of the platform's native calls; the contracts drift check; a dependency check of every published package; a web page's bundle size; a source check of the core for framework-specific names and branches | the package's files; the sample's iOS and Android projects from each generator; an app's own projects before and after `astryx rn apply`; a default and an overridden usage description; a call outside public platform API; the committed Swift and Kotlin against `packages/contracts`                                                                       | Native code outside the platform layer, the package manifests declare a permission, the sample needs a manual native edit, `astryx rn shell`, Expo's prebuild, and `astryx rn apply` write different declarations or opt-ins, `astryx rn apply` writes Astryx native code into the app, the generated project lacks the core's declarations, it writes a usage description other than the default or the app's override, a call outside public platform API with no exception named in its record, committed Swift or Kotlin that differs from what the contracts generate, a published package that depends on `packages/contracts`, a web page that gains bytes from it, or an Expo-named symbol or an Expo-specific branch in the core            |
 | FR5      | `exports` map and public-entry name check; package-boundary check of `./unstable/*` imports; source check of global reads                                                                                                                                                                                                                                                                                                                         | `.`, `./storage`, `./theme`, `./styles`, `./i18n`, each capability entry, `./testing`, `./testing/jest-setup`, `./unstable/*`, `./declarations/*`, the Expo package's `./app.plugin.js`                                                                                                                                                                        | A private name on `.`, a deep import resolving, an entry outside the three tiers, an `./unstable/*` name without `@experimental` in its declaration or `stability: 'experimental'` in its docs, a public addition without review, a router or optional capability exported from `.`, a `./navigation-legacy` entry, a router, `NavigationStack`, `Screen`, or stack navigator in a stable entry while web's `NavigationStack` is in Lab, a `./app.plugin.js` in `@astryxdesign/react-native`, a module with side effects other than the Jest setup, an import other than the Jest setup that installs a global, package code that reads the global `crypto`, package code that depends on `fetch`'s redirect modes, or an entry that changes `fetch` |
@@ -834,7 +837,10 @@ opt-in and the declarations, so an app never edits a native project by hand.
 The platform brings all of Astryx's native code, and generated native projects
 are the default path, so an Astryx upgrade reaches every app through its
 dependencies and no app carries Astryx native code that drifts from the
-platform. An existing app that keeps its own native projects receives the same
+platform. Astryx writes that native code itself so that it follows the design
+system: theme tokens reach native controls, a component keeps one API in every
+presentation, and the package takes no third-party native dependency, as on
+the web. An existing app that keeps its own native projects receives the same
 declarations through `astryx rn apply`. An app's own native code and
 third-party native packages are the app's: a declared tier that upgrades carry
 through, so a JavaScript-only app stays the recommended path without being the
@@ -917,7 +923,7 @@ platform's native code reaches JavaScript is `spec:AST-140/FR1`'s.
 ### DEC-11 — The Expo package is a lightweight wrapper
 
 **Reference:** `spec:AST-112/DEC-11`
-**Decider:** cixzhang, 2026-11-18
+**Decider:** cixzhang, 2026-11-18 13:13 Pacific
 
 The Expo piece stays a thin wrapper, so the main package owns lifecycle
 hookup through one neutral app-lifecycle entry that any native project calls.
@@ -978,7 +984,7 @@ implementation or an open-source library for it (FR20).
 ### DEC-17 — Push notifications and background work are out of scope for v0
 
 **Reference:** `spec:AST-112/DEC-17`
-**Decider:** cixzhang, 2026-11-18
+**Decider:** cixzhang, 2026-11-18 12:59 Pacific
 
 Astryx React Native v0 covers the app's interface and its device features, so
 push notifications and background work are out of scope for v0, and an app
@@ -987,7 +993,7 @@ gets them from its host platform or a third-party SDK.
 ### DEC-18 — Astryx Stage and Preview are separate tools
 
 **Reference:** `spec:AST-112/DEC-18`
-**Decider:** cixzhang, 2026-11-18
+**Decider:** cixzhang, 2026-11-18 12:54 Pacific
 
 Astryx Stage and Preview in the Astryx app are separate tools outside Astryx,
 and Astryx specs, releases and docs don't require them.
@@ -995,7 +1001,7 @@ and Astryx specs, releases and docs don't require them.
 ### DEC-19 — The contracts are internal and built into each package
 
 **Reference:** `spec:AST-112/DEC-19`
-**Decider:** cixzhang, 2026-11-18
+**Decider:** cixzhang, 2026-11-18 13:23 Pacific
 
 Each package stays self-contained while every platform derives from one
 contract. The contracts are a private workspace package, `packages/contracts`,
@@ -1007,7 +1013,7 @@ deprecated, since the shared contracts replace it.
 ### DEC-20 — NavigationStack starts in the React Native lab
 
 **Reference:** `spec:AST-112/DEC-20`
-**Decider:** cixzhang, 2026-11-18
+**Decider:** cixzhang, 2026-11-18 13:06 Pacific
 
 Web's `NavigationStack` is still in Lab, so the React Native `NavigationStack`,
 with `Screen`, `useScreenScrollProps()`, and the stack navigator, starts in the
@@ -1059,8 +1065,8 @@ React Native lab under `./unstable/*` and moves to `./navigation` when web's
   contract first.
 - **OQ8 — Where do `@astryxdesign/native`'s non-contract parts live after its
   deprecation?** (`human-api`) The native theme definition
-  (`defineNativeTheme`), the Swift binding, and the public `ios`, `android`,
-  and `shared` type conditions that consumer configuration depends on
-  (`spec:AST-082` FR5) need a published home once the contracts move into
+  (`defineNativeTheme`), the Swift binding, the public `ios`, `android`,
+  `macos`, and `windows` type conditions that consumer configuration depends
+  on (`spec:AST-082` FR5), and the `shared` condition (`spec:AST-082` FR6) need a published home once the contracts move into
   `packages/contracts` (DEC-19). Options: a new
   published native package; `@astryxdesign/core`; or each platform package.
