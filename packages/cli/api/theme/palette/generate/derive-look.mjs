@@ -22,11 +22,14 @@
 import {
   compositeOver,
   contrastRatio,
+  hexToRgbTriple as rgbOf,
+  rgbTripleToHex as hexOf,
   hexToLinearRgb,
   hexToOklch,
   linearRgbToOklab,
   maxOklchChroma,
   oklchClampedHex,
+  ratioDown,
 } from './color.mjs';
 import {perceptualDelta} from './generator.mjs';
 
@@ -111,9 +114,11 @@ import {perceptualDelta} from './generator.mjs';
  * @property {ReadonlyArray<number>} stops
  * @property {ReadonlyArray<Mode>} modes
  * @property {(m: Mode) => string[]} grounds The page colors code sits on, opaque hex.
+ * @property {(m: Mode) => string | null} [codeGround] The code background the theme sets itself in a mode (opaque hex), which code colors read on instead of the neutral's.
  * @property {(token: string) => boolean} [wanted]
  */
 
+export {ratioDown};
 /** A shade of a family: its stop and color. */
 /**
  * The stops a category fill may take, by mode: it is also a card's tint, so
@@ -289,15 +294,6 @@ function hueLean(accent, neutral) {
   const a = toward(accent, 0.15, LEAN_TO_ACCENT);
   const n = toward(neutral, 0.1, LEAN_TO_NEUTRAL);
   return hue => (Math.round(hue + a(hue) + n(hue)) + 360) % 360;
-}
-/**
- * A contrast ratio to two decimals, cut down and never rounded up, so a
- * pair just under the bar never prints as meeting it.
- * @param {number} ratio
- * @returns {number}
- */
-export function ratioDown(ratio) {
-  return Math.floor(ratio * 100 + 1e-9) / 100;
 }
 /**
  * Where a look's card tints start, `[light, dark]`: a strong or dark
@@ -890,10 +886,12 @@ export function deriveStatusColors({
       m =>
         muted[m].alpha
           ? grounds(m).map(g =>
-              compositeOver(
-                muted[m].color.slice(0, 7),
-                muted[m].alpha ?? 'ff',
-                g,
+              hexOf(
+                compositeOver(
+                  rgbOf(muted[m].color.slice(0, 7)),
+                  parseInt(muted[m].alpha ?? 'ff', 16) / 255,
+                  rgbOf(g),
+                ),
               ),
             )
           : [muted[m].color];
@@ -992,6 +990,7 @@ export function deriveCodeColors({
   stops,
   modes,
   grounds,
+  codeGround = () => null,
   wanted = () => true,
 }) {
   /**
@@ -1054,7 +1053,12 @@ export function deriveCodeColors({
     const refs = /** @type {Record<Mode, Stop>} */ ({});
     let ok = true;
     for (const m of modes) {
-      const on = [...(ground[m] ? [ground[m].color] : []), ...grounds(m)];
+      // A code background the theme sets itself is the one code shows on.
+      const own = codeGround(m);
+      const on = [
+        ...(own ? [own] : ground[m] ? [ground[m].color] : []),
+        ...grounds(m),
+      ];
       const s0 = near(m === 'light' ? light : dark);
       const order = [...sorted].sort(
         (a, b) =>
