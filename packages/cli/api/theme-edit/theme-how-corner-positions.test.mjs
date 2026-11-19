@@ -396,4 +396,48 @@ describe('the corners an ask names', () => {
       });
     }
   }, 240_000);
+
+  it('reads a sizeless squaring or pill ask by its words, and a new look after "side"', async ctx => {
+    if (needBases(ctx)) return;
+    for (const q of [
+      'top corners of tabs to 0',
+      'take the rounding off the top corners of tabs',
+    ])
+      expect(await writes(q), q).toEqual([
+        'border-start-start-radius 0 --on tab',
+        'border-start-end-radius 0 --on tab',
+      ]);
+    expect(await writes('pill top corners on tabs')).toEqual([
+      "border-start-start-radius 'var(--radius-full)' --on tab",
+      "border-start-end-radius 'var(--radius-full)' --on tab",
+    ]);
+    const all = async (/** @type {string} */ q) =>
+      /** @type {Array<{commands: string[]}>} */ (
+        (await themeEditHow(q, {cwd, theme: 'k'})).data.results ?? []
+      )
+        .flatMap(r => r.commands)
+        .filter(c => / editor set /.test(c))
+        .map(c => c.replace(/^.*? editor set k /, ''));
+    // (After "side", a new look is its own ask, never the corner clause's.)
+    const pad = await all(
+      'cards rounded at the bottom and right side padding 12px',
+    );
+    expect(pad).toContain('padding-right 12px --on card');
+    expect(pad.some(c => /^padding-bottom\b/.test(c))).toBe(false);
+    const border = await all('tabs rounded on top and left side border blue');
+    expect(border.some(c => /^border-left\b/.test(c))).toBe(true);
+    expect(border.some(c => /^border-top\b/.test(c))).toBe(false);
+    // (A scope word after the second side keeps both sides.)
+    for (const q of [
+      'tabs square on top and bottom in dark mode',
+      'cards rounded on top and bottom too',
+      'tabs square on the left and right too',
+    ])
+      expect(cornersNamed(q, q.split(' ')[0])?.corners, q).toEqual([
+        'start-start',
+        'start-end',
+        'end-start',
+        'end-end',
+      ]);
+  }, 240_000);
 });
