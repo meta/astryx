@@ -58,8 +58,10 @@ const unreadable = (ts, type) => (type.flags & ts.TypeFlags.Any) !== 0;
 /**
  * The module-path options of a config, as TypeScript's own config reader
  * resolves them through `extends`: `paths`, `baseUrl`, and the folder that
- * `paths` without a `baseUrl` resolve from. Empty with no config, or one
- * TypeScript cannot read.
+ * `paths` without a `baseUrl` resolve from. The read hands them to
+ * TypeScript's program, so they come from the reader that program trusts,
+ * which alone sets that folder. Empty with no config, or one TypeScript
+ * cannot read.
  * @param {any} ts
  * @param {string | undefined} configFile
  * @returns {Record<string, unknown>}

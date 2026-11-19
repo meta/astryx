@@ -135,6 +135,11 @@ describe('doctor core-props', () => {
         'apps/web/node_modules/@acme/theme/index.d.ts': "import '@astryxdesign/core';\ndeclare module '@astryxdesign/core' {\n  interface TabListProps {\n    selectedID?: string;\n  }\n}\n",
       });
       expect((await check(root))?.status).toBe('pass');
+      // A css-prop transform installed only in the member, read from the root.
+      write({'apps/web/node_modules/babel-plugin-styled-components/package.json': JSON.stringify({name: 'babel-plugin-styled-components', version: '2.0.0'})});
+      const memberTransform = await check(root);
+      expect(memberTransform?.status).toBe('info');
+      expect(memberTransform?.message).toMatch(/^Not checked: `babel-plugin-styled-components` is installed/);
     },
     SLOW,
   );
