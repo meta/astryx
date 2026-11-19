@@ -49,6 +49,10 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Table/Table.generated';
 import {createSharedContext} from '../utils/sharedContext';
+import {
+  NOT_BODY_ROW,
+  TableRowPlacementContext,
+} from './TableRowPlacementContext';
 
 registerEnglishFallback(english);
 
@@ -387,18 +391,21 @@ function TableInner<T extends Record<string, unknown>>({
 
   return (
     <TableContext value={contextValue}>
-      <TableNameContext value={tableName}>
-        <BaseTable<T>
-          ref={ref}
-          data={data}
-          columns={columns}
-          plugins={mergedPlugins}
-          textOverflow={textOverflowProp}
-          virtualization={virtualization}
-          scrollWrapper={TableScrollWrapper}
-          {...rest}
-        />
-      </TableNameContext>
+      {/* A table nested in a body cell starts outside any body again. */}
+      <TableRowPlacementContext value={NOT_BODY_ROW}>
+        <TableNameContext value={tableName}>
+          <BaseTable<T>
+            ref={ref}
+            data={data}
+            columns={columns}
+            plugins={mergedPlugins}
+            textOverflow={textOverflowProp}
+            virtualization={virtualization}
+            scrollWrapper={TableScrollWrapper}
+            {...rest}
+          />
+        </TableNameContext>
+      </TableRowPlacementContext>
     </TableContext>
   );
 }
