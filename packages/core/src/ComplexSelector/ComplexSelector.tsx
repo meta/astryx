@@ -72,6 +72,11 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/ComplexSelector/ComplexSelector.generated';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 
@@ -609,6 +614,13 @@ export function ComplexSelector<Value>({
   'aria-describedby': ariaDescribedByProp,
   ...restProps
 }: ComplexSelectorProps<Value>) {
+  if (process.env.NODE_ENV !== 'production' && typeof children !== 'function') {
+    throw devPropError(
+      'ComplexSelector',
+      'children',
+      'must be a function that renders the picker, for example {(value, onChange, close) => <MyPicker value={value} onChange={onChange} />}.',
+    );
+  }
   const {rest, container} = useFieldInputStyling('ComplexSelector', restProps, {
     containerXstyle,
     containerClassName,
