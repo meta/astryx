@@ -283,8 +283,8 @@ const officialStops = (token: string): [number, number] =>
   (OFFICIAL_NEUTRAL_STOPS[token] ?? []).map(x => x.stop) as [number, number];
 
 /**
- * The tokens the neutral color sets at the official theme's stops, the
- * page background with the surfaces on it, so a warm or cool gray reaches
+ * The tokens the neutral color sets at the official theme's stops: the
+ * page background and the surfaces on it. A warm or cool gray so reaches
  * the page as it reaches the cards. The inverted surface (tooltips,
  * toasts) is the card surface of the other mode, inside the ramp (never
  * the white or black end every ramp shares), so it carries the neutral

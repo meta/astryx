@@ -108,7 +108,7 @@
  * @property {string} [danger] The danger status color (the error tokens).
  * @property {string} [info] The info status color.
  * @property {number} [vibrancy] Chroma from 0 (most muted) through 50 (default) to 100 (most vivid).
- * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} [recipe] The recipe: `astryx-oklch-v1` when none is named, so the colors never move with an upgrade.
+ * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} [recipe] The recipe: `astryx-oklch-v1` when none is named. With a `neutral` seed it fixes the generated stops across upgrades; without one, stops picked against Core's default surfaces follow them.
  */
 
 /**

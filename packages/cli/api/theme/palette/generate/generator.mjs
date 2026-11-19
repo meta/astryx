@@ -301,10 +301,10 @@ const V2_SHARED_FROM = 1.3;
 const V2_SHARED_ABOVE = 50;
 const V2_SHARED_FULL = 2;
 /**
- * The share of its chroma a v2 gray family keeps at a lightness: all of it
- * up to GRAY_FADE_FROM, then less, linearly, to GRAY_FADE_LEAST at
- * GRAY_FADE_TO and above, as gray scales fade their tint toward white (a
- * slate's palest grays keep about a sixth of its color).
+ * The share of its chroma a v2 gray family keeps at a lightness. It keeps
+ * all of it up to GRAY_FADE_FROM. Above that the share falls linearly to
+ * GRAY_FADE_LEAST at GRAY_FADE_TO, as gray scales fade their tint toward
+ * white: a slate's palest grays keep about a sixth of its color.
  * @param lightness OKLab lightness
  * @param {number} lightness
  */

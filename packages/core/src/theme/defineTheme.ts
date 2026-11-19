@@ -422,8 +422,10 @@ export interface DefineThemeInput<
   tokens?: Partial<Record<TokenName, TokenValue>>;
   /**
    * Colors made from a few seeds by `themePalette()` from
-   * `@astryxdesign/core/palette`: every color token, and the part styles
-   * that keep secondary text readable on the accent tint. `tokens` and
+   * `@astryxdesign/core/palette`: the color tokens the theme editor maps for
+   * its color settings, and the part styles that keep secondary text
+   * readable on the accent tint, the neutral track and the colored cards.
+   * `tokens` and
    * `components` still win, one by one.
    *
    * @example
