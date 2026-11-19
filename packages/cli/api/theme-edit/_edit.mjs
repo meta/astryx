@@ -7137,8 +7137,8 @@ async function changeOnce(
               : sidesChanged.length
                 ? `takes back ${sidesChanged.map(x => x.thing).join(' and ')}, the ${sidesChanged.length === 1 ? 'side' : 'sides'} this changes or moves`
                 : null,
-            typedBefore.length
-              ? `brings back ${typedBefore.map(describe).join(', ')}`
+            [...typedBefore, ...longhands, ...alsoReplaced].length
+              ? `brings back ${[...new Set([...typedBefore, ...longhands, ...alsoReplaced])].map(describe).join(', ')}`
               : null,
           ]
             .filter(Boolean)
@@ -7888,7 +7888,9 @@ async function changeOnce(
       // A plain value that replaced per-mode ones names the first of them;
       // the notes name them all.
       replaced:
-        sub === 'set' ? (prev ?? covered[0] ?? longhands[0] ?? null) : null,
+        sub === 'set'
+          ? (prev ?? typedBefore[0] ?? covered[0] ?? longhands[0] ?? null)
+          : null,
       // A whole-theme dial names the value it replaced, as base and mode do.
       was:
         sub === 'set' && prev && prev.source === 'dial' && !prev.on

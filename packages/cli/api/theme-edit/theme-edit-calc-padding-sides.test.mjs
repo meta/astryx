@@ -257,4 +257,24 @@ describe('a padding of several lengths where only one works', () => {
     },
     T,
   );
+
+  it(
+    'names what a repeat takes away when no side moves',
+    async () => {
+      await set('5px 0');
+      await themeEditSet('t', 'padding-top', '9px', {
+        cwd,
+        on: 'dropdown-menu',
+      });
+      const notes = (await set('5px 0')).join('\n');
+      expect(notes).toContain(
+        'undo t brings back padding-top = 9px on dropdown-menu',
+      );
+      await themeEditUndo('t', {cwd});
+      await themeEditUndo('t', {cwd});
+      await themeEditUndo('t', {cwd});
+      expect(saved()).toEqual([]);
+    },
+    T,
+  );
 });
