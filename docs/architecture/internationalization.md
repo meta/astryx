@@ -232,18 +232,18 @@ for all 30 shipped locales plus `pseudo`.
   an empty-search message or a confirm, cancel, or dismiss action, the
   component takes a flat optional prop for that string, named with the suffix
   Core already uses (`cancelLabel`, `dismissLabel`, `closeButtonLabel`,
-  `emptySearchText`, `placeholder`). The component's record decides which of
-  its strings callers reword; a string it does not name, such as a navigation
-  word, a count, or an assistive status, stays catalog-only. The component
-  resolves the string as the prop, else the catalog message: an absent prop
-  gives the catalog message, translated under a provider and English without
-  one; a given prop replaces it in every locale. A string that belongs to one
-  entry of a config list, such as a chat trigger's `emptySearchText` or
-  `menuLabel`, takes that entry's own field in place of a component prop,
-  resolved the same way. A component takes no `labels` object, which is the
-  factory shape (INV3a). The prop rewords a catalog message for a part the
-  component renders in its own anatomy; it does not pass a caller's value
-  through to a child the caller composes, which
+  `emptySearchText`, `placeholder`). Which of its strings callers reword is
+  decided by the component's record or by a prop the component ships; a string
+  with neither, such as a navigation word, a count, or an assistive status,
+  stays catalog-only. The component resolves the string as the prop, else the
+  catalog message: an absent prop gives the catalog message, translated under
+  a provider and English without one; a given prop replaces it in every
+  locale. A string that belongs to one entry of a config list, such as a chat
+  trigger's `emptySearchText` or `menuLabel`, takes that entry's own field in
+  place of a component prop, resolved the same way. A component takes no
+  `labels` object, which is the factory shape (INV3a). The prop rewords a
+  catalog message for a part the component renders in its own anatomy; it does
+  not pass a caller's value through to a child the caller composes, which
   `architecture:public-component-api` INV18 governs. The provider's
   `overrides` change Astryx wording for a whole subtree. They are an escape
   hatch for an application that rewords Astryx everywhere, not the way to
