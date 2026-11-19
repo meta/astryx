@@ -14,13 +14,13 @@ import {NavIcon} from '@astryxdesign/core/NavIcon';
 import {Button} from '@astryxdesign/core/Button';
 import {Icon} from '@astryxdesign/core/Icon';
 import {
-  CubeIcon,
-  ChartBarIcon,
-  ShieldCheckIcon,
+  PackageIcon,
+  ChartIcon,
+  ShieldIcon,
   BoltIcon,
-  CodeBracketIcon,
-  GlobeAltIcon,
-} from '@heroicons/react/24/outline';
+  CodeIcon,
+  GlobeIcon,
+} from '@astryxdesign/template-icons';
 
 export default function TopNavMegaMenuBlock() {
   return (
@@ -29,7 +29,7 @@ export default function TopNavMegaMenuBlock() {
       heading={
         <TopNavHeading
           heading="My App"
-          logo={<NavIcon icon={<Icon icon={CubeIcon} size="sm" />} />}
+          logo={<NavIcon icon={<Icon icon={PackageIcon} size="sm" />} />}
           headingHref="#"
         />
       }
@@ -42,13 +42,13 @@ export default function TopNavMegaMenuBlock() {
                 <TopNavMegaMenuItem
                   title="Analytics"
                   description="Track and analyze user behavior across your apps"
-                  icon={<ChartBarIcon />}
+                  icon={<ChartIcon />}
                   href="#analytics"
                 />
                 <TopNavMegaMenuItem
                   title="Security"
                   description="Enterprise-grade protection for your data"
-                  icon={<ShieldCheckIcon />}
+                  icon={<ShieldIcon />}
                   href="#security"
                 />
                 <TopNavMegaMenuItem
@@ -60,13 +60,13 @@ export default function TopNavMegaMenuBlock() {
                 <TopNavMegaMenuItem
                   title="Developer Tools"
                   description="APIs, SDKs, and CLI for integration"
-                  icon={<CodeBracketIcon />}
+                  icon={<CodeIcon />}
                   href="#dev-tools"
                 />
                 <TopNavMegaMenuItem
                   title="Global Network"
                   description="Low-latency edge infra in 40+ regions"
-                  icon={<GlobeAltIcon />}
+                  icon={<GlobeIcon />}
                   href="#network"
                 />
               </>
