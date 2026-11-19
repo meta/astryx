@@ -4,9 +4,9 @@
  * @file How a searcher orders the lexical ranker's matches. Search answers
  * only with what the lexical ranker matched, each with its own score and
  * reason. A match never moves past one of another score band (BANDS below)
- * or another kind, doc or not; between runs the lexical order holds. A
- * family's root that the lexical ranker marks as leading its part counts in
- * the part's run. A band
+ * or another kind, doc or not; between runs the lexical order holds. The one
+ * exception is a family's root that the lexical ranker marks as leading its
+ * part: it moves directly before the part. A band
  * can be wide: 55–99 holds keyword matches beside one-word description hits,
  * and a synonym name match can score under 55, so inside a band a weaker match
  * can lead a stronger one when the weights favor it. Inside such a
@@ -19,7 +19,7 @@
  * first result on score and on the query words they matched, the one whose
  * own name holds more query words leads (tieByOwnName). Last, a family's root
  * that the lexical ranker marks as leading a part of its own family
- * (rootLeadsOf) joins the part's run and moves just ahead of the part
+ * (rootLeadsOf) moves directly before the part when it sits below it
  * (rootsFirst), after the part's tie is ordered as one block.
  */
 
@@ -71,8 +71,8 @@ export function orderMatches(table, order, lexical, query, limit, families) {
   // Runs of consecutive lexical matches in one band and of one kind (doc or
   // not) are the only places the learned order acts: a match never crosses
   // into another band, or past a doc or a non-doc the lexical ranker placed.
-  // A family's root that the lexical ranker marks as leading its part is the
-  // one match that counts in another run: its part's (below).
+  // A family's root that the lexical ranker marks as leading its part keeps
+  // its own run here and moves to its part last (rootsFirst).
   let run = -1;
   /** @type {string} */
   let last = '';
@@ -92,19 +92,7 @@ export function orderMatches(table, order, lexical, query, limit, families) {
       learned: k === undefined ? Infinity : (place.get(k) ?? Infinity),
     };
   });
-  // A family's root the lexical ranker marks as leading its part
-  // (rootLeadsOf) joins the part's run, its highest part's when it leads
-  // several.
   const roots = rootLeadsOf.get(lexical);
-  if (roots) {
-    /** @type {Map<object, Item>} */
-    const itemOf = new Map(items.map(it => [it.res, it]));
-    for (const it of items) {
-      const lead = roots.get(it.res);
-      const root = lead && itemOf.get(lead);
-      if (root && root.band > it.band) root.band = it.band;
-    }
-  }
   // An entry the query names: by a name match, or by a name of two or more
   // words the lexical ranker put first (namedLeadsOf).
   const leads = namedLeadsOf.get(lexical);
@@ -148,8 +136,7 @@ export function orderMatches(table, order, lexical, query, limit, families) {
   // the roots move: a part's root, when the part comes first.
   const head = ranked[0];
   const headRoot = head && roots?.get(head.res);
-  const lead =
-    ranked.find(it => it.res === headRoot && it.band === head.band) ?? head;
+  const lead = ranked.find(it => it.res === headRoot) ?? head;
   ranked = tiesByFit(ranked, table, blockOf, lead);
   if (roots) ranked = rootsFirst(ranked, roots);
   const shown = ranked.slice(0, limit);
@@ -159,6 +146,7 @@ export function orderMatches(table, order, lexical, query, limit, families) {
   };
   const searched = searchedComponentsOf.get(lexical);
   if (searched) searchedComponentsOf.set(response, searched);
+  if (roots) rootLeadsOf.set(response, roots);
   return /** @type {import('./search.type.mjs').SearchResponse} */ (response);
 }
 
@@ -357,10 +345,11 @@ function answered(it) {
 }
 
 /**
- * A family's root leads a part of its own family in their run: the lexical
- * ranker names the root of each part it leads (rootLeadsOf), and the root
- * moves just ahead of that part when the order placed it after the part.
- * Nothing else moves, and nothing crosses a run.
+ * A family's root leads a part of its own family: the lexical ranker names
+ * the root of each part it leads (rootLeadsOf), and a root placed below that
+ * part moves directly before it, whatever its band; before its highest part
+ * when it leads several. A root already above its part keeps its place.
+ * Nothing else moves.
  * @param {Item[]} ranked
  * @param {Map<object, object>} roots each part's result, mapped to its
  *   root's result
@@ -369,12 +358,9 @@ function answered(it) {
 export function rootsFirst(ranked, roots) {
   const out = [...ranked];
   for (let a = 0; a < out.length; a++) {
-    const part = out[a];
-    const root = roots.get(part.res);
+    const root = roots.get(out[a].res);
     if (!root) continue;
-    const b = out.findIndex(
-      (it, n) => n > a && it.band === part.band && it.res === root,
-    );
+    const b = out.findIndex((it, n) => n > a && it.res === root);
     if (b >= 0) out.splice(a, 0, ...out.splice(b, 1));
   }
   return out;

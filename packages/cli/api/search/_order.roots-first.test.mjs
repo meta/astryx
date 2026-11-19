@@ -271,7 +271,7 @@ const items = rows =>
 const names = out => out.map(it => it.res.name);
 
 describe('rootsFirst', () => {
-  it('moves the root just ahead of its part in their run', () => {
+  it('moves the root directly before its part in their run', () => {
     const rows = items([
       ['Fizz', 0],
       ['Zorb', 0],
@@ -287,13 +287,20 @@ describe('rootsFirst', () => {
     ]);
   });
 
-  it('never moves the root out of its run', () => {
+  it('moves the root directly before its part from another run', () => {
     const rows = items([
+      ['Fizz', 0],
       ['Zorb', 0],
-      ['ZorbList', 1],
+      ['Glim', 1],
+      ['ZorbList', 2],
     ]);
-    const roots = new Map([[rows[0].res, rows[1].res]]);
-    expect(names(rootsFirst(rows, roots))).toEqual(['Zorb', 'ZorbList']);
+    const roots = new Map([[rows[1].res, rows[3].res]]);
+    expect(names(rootsFirst(rows, roots))).toEqual([
+      'Fizz',
+      'ZorbList',
+      'Zorb',
+      'Glim',
+    ]);
   });
 
   it('leaves a root already ahead of its part in place', () => {

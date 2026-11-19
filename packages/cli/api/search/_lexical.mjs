@@ -602,8 +602,7 @@ export function rankLexical(query, options, catalog) {
   // its Code, whatever their scores; a query holding
   // "item" keeps ListItem before List, and `breadcrumbitm` keeps
   // BreadcrumbItem first. The scores and this order stay as they are: the
-  // order of matches places the root just ahead of its part, in the part's
-  // run (rootLeadsOf).
+  // order of matches moves the root directly before its part (rootLeadsOf).
   /** @type {Map<object, object>} */
   const rootLeads = new Map();
   if (ranked.some(r => r.candidate._family)) {

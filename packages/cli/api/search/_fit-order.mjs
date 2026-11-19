@@ -23,7 +23,7 @@ import {
   wordsOf,
 } from '../build/blocks/blocks.mjs';
 import {bandOf} from './_order.mjs';
-import {searchedComponentsOf} from './_result.mjs';
+import {rootLeadsOf, searchedComponentsOf} from './_result.mjs';
 
 /** An entry stays in place when its fit is at least this times the median. */
 export const FIT_BAR = 1.7;
@@ -137,18 +137,20 @@ const runOf = r => `${bandOf(r.score ?? 0)}:${r.domain === 'doc'}`;
  * The results with the first kept. Entries #2 to #10 split into runs of one
  * band and kind. Inside a run, the entries that fit the query under FIT_BAR
  * times the run's median fit move, in order, after the others, unless their
- * name spells NAME_WORDS or more of the query's words. A run whose
- * median fit is zero or less keeps its order. Nothing crosses a run, and
- * nothing is added or dropped.
+ * name spells NAME_WORDS or more of the query's words, or they are held. A
+ * run whose median fit is zero or less keeps its order. Nothing crosses a
+ * run, and nothing is added or dropped.
  * @param {any[]} results
  * @param {any[]} candidates
  * @param {string} query
  * @param {Weights | (() => Weights | null | undefined) | null | undefined} weights
  *   the block picker's weights, or a function that reads them; the function
  *   runs only when a run can change. Without weights the order stays
+ * @param {Set<any>} [held] results that never move down: a family root
+ *   directly before its part, and that part
  * @returns {any[]}
  */
-export function orderByFit(results, candidates, query, weights) {
+export function orderByFit(results, candidates, query, weights, held) {
   if (!weights || results.length < 3) return results;
   const end = Math.min(FIT_PLACES, results.length);
   /** @type {[number, number][]} */
@@ -168,6 +170,7 @@ export function orderByFit(results, candidates, query, weights) {
   const queryWords = new Set(termsOf(query).filter(t => !t.includes('_')));
   /** @param {any} r */
   const named = r =>
+    (held?.has(r) ?? false) ||
     new Set(
       wordsOf(r.name)
         .map(stemOf)
@@ -231,7 +234,17 @@ export function withFitOrder(response, candidates, query, weights) {
   const r = /** @type {any} */ (response);
   const results = r?.data?.results;
   if (!Array.isArray(results)) return response;
-  const ordered = orderByFit(results, candidates, query, weights);
+  // A family root the order moved directly before its part (rootLeadsOf)
+  // stays there: neither the root nor the part moves down.
+  const roots = rootLeadsOf.get(r);
+  /** @type {Set<any>} */
+  const held = new Set();
+  results.forEach((part, k) => {
+    if (k > 0 && roots?.get(part) === results[k - 1]) {
+      held.add(part).add(results[k - 1]);
+    }
+  });
+  const ordered = orderByFit(results, candidates, query, weights, held);
   if (ordered === results) return response;
   const out = {...r, data: {...r.data, results: ordered}};
   const searched = searchedComponentsOf.get(r);
