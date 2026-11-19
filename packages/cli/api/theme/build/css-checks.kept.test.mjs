@@ -9,7 +9,8 @@
  *   css-tree loaded, while the keys and css-tree's files are unchanged; the
  *   problems equal a fresh check's; a theme with nothing to ask css-tree
  *   keeps nothing; a check that throws keeps nothing; a theme's [light,
- *   dark] pairs are judged from a kept answer, with no css-tree loaded
+ *   dark] pairs are judged from a kept answer, with no css-tree loaded;
+ *   the settings check reads a theme's rules back, with no css-tree loaded
  */
 
 import {
@@ -96,6 +97,8 @@ vi.mock('../../../foundation/runtime/css-tree.mjs', async importOriginal => {
 let styleKeys;
 /** @type {typeof import('./written-values.mjs')} */
 let writtenValues;
+/** @type {typeof import('./setting-effects.mjs')} */
+let settingEffects;
 const savedCache = process.env.XDG_CACHE_HOME;
 const STORE = path.join(TEMP_ROOT, 'cache', 'astryx', 'catalogs');
 
@@ -174,6 +177,7 @@ beforeAll(async () => {
   fs.chmodSync(path.join(TEMP_ROOT, 'cache', 'astryx'), 0o700);
   styleKeys = await import('./style-keys.mjs');
   writtenValues = await import('./written-values.mjs');
+  settingEffects = await import('./setting-effects.mjs');
   // css-tree's files were stamped long ago; the store keeps an answer only
   // once every stamp has settled.
   await sleep(SETTLE_WAIT_MS);
@@ -430,5 +434,80 @@ describe("theme build's check of a theme's [light, dark] pairs", () => {
     const again = checkValues(theme);
     expect(again.asked).toBe(0);
     expect(again.problems).toEqual(first.problems);
+  });
+});
+
+/** The kept declarations of theme rules in the store. */
+const keptDeclarations = () =>
+  fs
+    .readdirSync(STORE)
+    .filter(name => name.endsWith('.json'))
+    .filter(name =>
+      String(
+        JSON.parse(fs.readFileSync(path.join(STORE, name), 'utf8')).key,
+      ).includes('theme-rule-declarations'),
+    );
+
+/**
+ * What `work` gives, how many times it asked for css-tree, and what it gives
+ * with no store.
+ * @template T
+ * @param {() => T} work
+ */
+const measure = work => {
+  const before = cssTreeAsked.count;
+  const value = work();
+  const asked = cssTreeAsked.count - before;
+  const saved = process.env.XDG_CACHE_HOME;
+  process.env.XDG_CACHE_HOME = path.join(TEMP_ROOT, 'no-store');
+  try {
+    return {value, asked, fresh: work()};
+  } finally {
+    process.env.XDG_CACHE_HOME = saved;
+  }
+};
+
+describe("theme build's check of settings that do not show as written", () => {
+  // A longhand a later shorthand of its own rule resets, a variant's color,
+  // and a later rule of the same part.
+  const rules = [
+    '.astryx-button{padding-top:4px;padding:8px}',
+    '.astryx-button[data-size="sm"]{color:red}',
+    '.astryx-button{color:blue}',
+  ];
+  /** @param {import('./setting-effects.mjs').RuleSide} at */
+  const writtenAt = at => ({
+    path: ['components', at.part, at.key, at.property],
+    layer: 0,
+  });
+
+  it("reads a theme's rules back without css-tree, the same as a fresh check", () => {
+    const issues = () => settingEffects.settingEffectIssues(rules, writtenAt);
+    const first = measure(issues);
+    expect(first.asked).toBeGreaterThan(0);
+    expect(first.value.length).toBeGreaterThan(0);
+    expect(first.value).toEqual(first.fresh);
+    expect(keptDeclarations()).toHaveLength(1);
+    const again = measure(issues);
+    expect(again.asked).toBe(0);
+    expect(again.value).toEqual(first.value);
+  });
+
+  it('reads back which block writes each declaration without css-tree, the same as a fresh read', () => {
+    const components = {button: {base: {paddingTop: '4px'}}};
+    /** @param {Record<string, Record<string, any>>} parts */
+    const generate = parts => [
+      `.astryx-button{padding-top:4px;--astryx-setting-probe:${parts.button.base['--astryx-setting-probe']}}`,
+    ];
+    const blocks = () => [
+      ...settingEffects.blockPaths(components, generate).entries(),
+    ];
+    const first = measure(blocks);
+    expect(first.asked).toBeGreaterThan(0);
+    expect(first.value).toEqual(first.fresh);
+    expect(first.value.length).toBe(1);
+    const again = measure(blocks);
+    expect(again.asked).toBe(0);
+    expect(again.value).toEqual(first.value);
   });
 });

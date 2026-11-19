@@ -281,6 +281,27 @@ function isRelativeFormat(
 // Component
 // =============================================================================
 
+/** Controls whose accessible name comes from their content. */
+const NAMED_FROM_CONTENT =
+  'button,summary,a[href],[role=button],[role=link],[role=tab],[role^=menuitem],[role=option],[role=radio],[role=checkbox],[role=switch],[role=treeitem]';
+
+/**
+ * Whether `focused` is the time, or a control whose name the time helps form:
+ * a control named from its content with no name of its own, or the control
+ * of a label that holds the time. A focused region that only holds the time,
+ * such as a log, is neither.
+ */
+function focusIsNamedBy(time: HTMLElement, focused: Element | null): boolean {
+  return (
+    focused === time ||
+    (focused != null &&
+      focused.contains(time) &&
+      focused.matches(NAMED_FROM_CONTENT) &&
+      !focused.matches('[aria-label],[aria-labelledby]')) ||
+    (focused != null && time.closest('label')?.control === focused)
+  );
+}
+
 /**
  * Displays a formatted timestamp as human-readable text.
  *
@@ -401,27 +422,69 @@ export function Timestamp({
   const fullAbsoluteText = isValidDate
     ? formatInstant(date, 'full', locale, {timeZone: undefined, calendar})
     : '';
-  const ariaLabelText = isValidDate
+  const fullAbsoluteSpokenText = isValidDate
     ? formatInstant(date, 'full', locale, {
         timeZone: undefined,
         timeZoneNameStyle: 'long',
         calendar,
       })
     : '';
+  // A relative name starts with the words the timestamp shows, then the full
+  // date. A control named from its content then keeps its visible words in its
+  // name, so voice control can find it (WCAG 2.5.3).
+  const ariaLabelText =
+    fullAbsoluteSpokenText === ''
+      ? ''
+      : t('@astryx.timestamp.relativeLabel', {
+          relative: displayText,
+          date: fullAbsoluteSpokenText,
+        });
+
+  // Syncs with the document's focus events. A focused control that the time
+  // names keeps its words and name through a refresh. Both update when focus
+  // leaves.
+  const isLiveRelative =
+    isLive && isValidDate && isRelativeFormat(effectiveFormat);
+  const holdsRefreshRef = useRef(false);
+  useEffect(() => {
+    const doc = timeRef.current?.ownerDocument;
+    if (!isLiveRelative || doc == null) {
+      return;
+    }
+    const syncHold = () => {
+      const time = timeRef.current;
+      const holds = time != null && focusIsNamedBy(time, doc.activeElement);
+      if (holdsRefreshRef.current && !holds) {
+        // Focus left: catch up with the refreshes that waited.
+        setNow(new Date());
+      }
+      holdsRefreshRef.current = holds;
+    };
+    syncHold();
+    doc.addEventListener('focusin', syncHold);
+    doc.addEventListener('focusout', syncHold);
+    return () => {
+      doc.removeEventListener('focusin', syncHold);
+      doc.removeEventListener('focusout', syncHold);
+      holdsRefreshRef.current = false;
+    };
+  }, [isLiveRelative]);
 
   // Syncs the relative time with an interval timer while the timestamp is live.
   useEffect(() => {
-    if (!isLive || !isValidDate || !isRelativeFormat(effectiveFormat)) {
+    if (!isLiveRelative) {
       return;
     }
 
     const interval = getLiveInterval(diffSeconds);
     const timer = setInterval(() => {
-      setNow(new Date());
+      if (!holdsRefreshRef.current) {
+        setNow(new Date());
+      }
     }, interval);
 
     return () => clearInterval(timer);
-  }, [isLive, isValidDate, effectiveFormat, diffSeconds]);
+  }, [isLiveRelative, diffSeconds]);
 
   useDevWarning(
     'Timestamp',

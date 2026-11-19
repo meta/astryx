@@ -61,7 +61,7 @@ function FileRow({name}: {name: string}) {
 
 export default function UseContainerRevealHookUsage() {
   return (
-    <Card width={420} padding={2}>
+    <Card width={420} maxWidth="100%" padding={2}>
       <Stack gap={0}>
         <Text type="supporting" color="secondary" xstyle={styles.intro}>
           Hover a row — or Tab into it — to reveal its actions. Under a coarse

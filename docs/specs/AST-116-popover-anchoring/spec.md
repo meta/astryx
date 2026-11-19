@@ -403,6 +403,9 @@ Rejected: a separate focus-region input with a value that cycles through the
 popover and its anchor, which would be a second name for modality and a trap
 the platform does not have.
 
+Amended: `spec:AST-119` DEC-6 makes a tour step with a backdrop modal. The
+tour step this decision calls non-modal is a step without a backdrop.
+
 ### DEC-6 — One focus return rule for Popover, Dialog and DropdownMenu, with no off switch
 
 **Reference:** `spec:AST-116/DEC-6`

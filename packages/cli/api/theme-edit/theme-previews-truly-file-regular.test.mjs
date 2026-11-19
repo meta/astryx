@@ -122,6 +122,7 @@ describe('theme images the previews cannot show', () => {
         for (const [on, ref] of [
           ['card', 'url(https://example.com/paper.png)'],
           ['button', 'url(./grain.png)'],
+          ['banner', 'url(/pics/paper.png)'],
           ['badge', 'url(./hero.png)'],
           ...(process.platform !== 'win32'
             ? [['avatar', 'url(./logo.woff2)']]
@@ -136,13 +137,17 @@ describe('theme images the previews cannot show', () => {
           'https://example.com/paper.png is loaded from the network',
         );
         expect(notes).toContain('./grain.png was not found beside the theme');
+        // A path from the site's root is read from public/ only.
+        expect(notes).toContain(
+          "/pics/paper.png was not found in public/, where a path from the site's root is read",
+        );
         expect(notes).toMatch(
           /themes\/t\/hero\.png is 8\.0 MB, more than the 8 MB/,
         );
         if (process.platform !== 'win32')
           expect(notes).toContain('./logo.woff2 is not a regular file');
       } finally {
-        for (const on of ['card', 'button', 'badge', 'avatar'])
+        for (const on of ['card', 'button', 'banner', 'badge', 'avatar'])
           await runCli(
             [
               'experimental',

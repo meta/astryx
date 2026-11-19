@@ -1060,7 +1060,7 @@ function ItemCell({
 }) {
   const thumbnailSrc = row.imageKey ? images[row.imageKey] : undefined;
   return (
-    <HStack gap={3} vAlign="center">
+    <HStack gap={3} vAlign="center" wrap="wrap">
       <StackItem>
         <VStack width={40}>
           {thumbnailSrc ? (
@@ -1076,7 +1076,9 @@ function ItemCell({
           )}
         </VStack>
       </StackItem>
-      <StackItem size="fill">
+      {/* The basis holds the longest product word, so in a narrow column the
+          name moves under the thumbnail instead of breaking inside a word. */}
+      <StackItem size="fill" style={{flexBasis: '7em'}}>
         <VStack gap={0}>
           <Text type="body" weight="bold">
             {row.name}
@@ -1342,7 +1344,7 @@ function InventoryCard({
               {
                 key: 'item',
                 header: 'Item',
-                width: proportional(3, {minWidth: 80}),
+                width: proportional(3, {minWidth: 160}),
                 renderCell: row => <ItemCell row={row} images={images} />,
               },
               {

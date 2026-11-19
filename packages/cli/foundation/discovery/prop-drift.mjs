@@ -939,6 +939,24 @@ function documentedProps(raw) {
 }
 
 /**
+ * Whether a props type takes a prop of this name, as JSX checks a prop: a
+ * member of its union has the property, or one of its index signatures takes
+ * the name.
+ * @param {any} ts
+ * @param {any} checker
+ * @param {any} type
+ * @param {string} name
+ * @returns {boolean}
+ */
+export function propsTypeTakes(ts, checker, type, name) {
+  const members = holders(ts, checker, type);
+  return (
+    members.some(member => checker.getPropertyOfType(member, name) !== undefined) ||
+    indexesFor(ts, checker, members, name).length > 0
+  );
+}
+
+/**
  * The types a field can sit on: each member of a union, through arrays and
  * tuples at any depth (`grid[][].id`).
  * @param {any} ts

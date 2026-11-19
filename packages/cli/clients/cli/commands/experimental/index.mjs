@@ -4,7 +4,9 @@
  * @file `astryx experimental` — the command group every experimental CLI
  * command lives under (spec:AST-017 FR27). It has no behavior of its own:
  * bare, it prints its help; an unknown word is an unknown subcommand. Each
- * experiment registers its own subcommand here.
+ * experiment registers its own subcommand here. A run that names one
+ * subcommand loads only that one, as the root loads only the command a run
+ * names.
  */
 
 import {NO_RESULT_SET} from '../../../../foundation/debug/index.mjs';
@@ -13,15 +15,69 @@ import {ERROR_CODES} from '../../../../foundation/response/error-codes.mjs';
 import {cliError, themeGroupUnknownSubcommand} from '../../lib/cli-error.mjs';
 import {defineCommand} from '../../lib/define-command.mjs';
 import {doc as experimentalGroup} from '../experimental.doc.mjs';
-import {registerExperimentalIcon} from './icon.mjs';
-import {registerExperimentalExport} from './export.mjs';
-import {registerExperimentalImport} from './import.mjs';
-import {registerExperimentalTheme} from './theme.mjs';
 import {servedSubcommands} from '../../lib/base-gate.mjs';
+import {scanRootArgs} from '../../lib/root-args.mjs';
 import {RENAMED_EXPERIMENTAL} from '../../lib/renamed-commands.mjs';
 
-/** @param {import('commander').Command} program */
-export function registerExperimental(program) {
+/**
+ * The group's subcommands, in help order, each loaded only when a run needs
+ * it.
+ * @type {ReadonlyArray<{name: string, load: () => Promise<(group: import('commander').Command, program: import('commander').Command) => void>}>}
+ */
+const SUBCOMMANDS = Object.freeze([
+  {
+    name: 'icon',
+    load: async () => (await import('./icon.mjs')).registerExperimentalIcon,
+  },
+  {
+    name: 'export',
+    load: async () => (await import('./export.mjs')).registerExperimentalExport,
+  },
+  {
+    name: 'import',
+    load: async () => (await import('./import.mjs')).registerExperimentalImport,
+  },
+  {
+    name: 'theme',
+    load: async () => (await import('./theme.mjs')).registerExperimentalTheme,
+  },
+]);
+
+/**
+ * The one subcommand a run names, or null when the run needs them all: no
+ * arguments given, or the word after `experimental` is a flag, `help` or a
+ * word that names no subcommand. Commander dispatches the group's run to
+ * that word.
+ * @param {import('commander').Command} program the root, with its options
+ * @param {string[] | undefined} argv the arguments after `astryx`
+ * @returns {string | null}
+ */
+export function experimentalSubcommandOf(program, argv) {
+  if (argv == null) return null;
+  const root = scanRootArgs(argv, program.options);
+  if (root.stopped || root.operand !== 'experimental') return null;
+  const sub = scanRootArgs(argv.slice(root.operandAt + 1), []);
+  if (sub.stopped) return null;
+  return SUBCOMMANDS.some(command => command.name === sub.operand)
+    ? /** @type {string} */ (sub.operand)
+    : null;
+}
+
+/**
+ * @param {import('commander').Command} program
+ * @param {{argv?: string[]}} [options] `argv`, the arguments after `astryx`
+ *   of a run of this group alone: load only the subcommand they name
+ */
+export async function registerExperimental(program, {argv} = {}) {
+  // Each subcommand's module loads before the group is defined: a module
+  // that fails to load then fails the whole group, and the root registers
+  // its stand-in, as it does for a command that fails to load.
+  const only = experimentalSubcommandOf(program, argv);
+  const registrars = [];
+  for (const command of SUBCOMMANDS) {
+    if (only == null || command.name === only)
+      registrars.push(await command.load());
+  }
   /** @type {import('commander').Command} */
   const experimental = defineCommand(program, experimentalGroup, {
     action: (
@@ -45,10 +101,7 @@ export function registerExperimental(program) {
       return NO_RESULT_SET;
     },
   });
-  registerExperimentalIcon(experimental, program);
-  registerExperimentalExport(experimental, program);
-  registerExperimentalImport(experimental, program);
-  registerExperimentalTheme(experimental, program);
+  for (const register of registrars) register(experimental, program);
   for (const [old, renamed] of Object.entries(RENAMED_EXPERIMENTAL)) {
     // Hidden, and never runs the command: the old name's line, and its help,
     // fail and name the new one, whatever options follow it, in text and in

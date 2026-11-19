@@ -34,11 +34,13 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
+  MARKER_END,
   MARKER_START,
   PROJECT_SKILL_FOLDERS,
   PROJECT_SKILL_NAME,
 } from './agent-doc-state.mjs';
 import {withHash} from './managed-skill-file.mjs';
+import {absoluteFolder, folderScope, inside} from './folder-scope.mjs';
 import {PROJECT_PLACE_KEYWORDS} from '../../authoring/config/skill-places.mjs';
 
 /**
@@ -89,36 +91,7 @@ export class SkillPlaceError extends Error {
  *   | {scope: 'project' | 'computer', kind: 'folder', dir: string, saved: string}} SkillPlace
  */
 
-/**
- * Whether `value` is written as a path rather than a word.
- * @param {string} value
- * @returns {boolean}
- */
-function writtenAsPath(value) {
-  return (
-    value.startsWith('.') ||
-    value.startsWith('~') ||
-    value.includes('/') ||
-    value.includes('\\') ||
-    path.isAbsolute(value)
-  );
-}
 
-/**
- * `value` as an absolute path: `~` is the home folder, a relative path is
- * from `cwd`.
- * @param {string} value
- * @param {string} cwd
- * @param {string} home
- * @returns {string}
- */
-function absoluteFolder(value, cwd, home) {
-  if (value === '~') return home;
-  if (value.startsWith('~/') || value.startsWith('~\\')) {
-    return path.join(home, value.slice(2));
-  }
-  return path.resolve(cwd, value);
-}
 
 /**
  * How a computer folder is saved: `~/` and its path in the home folder, else
@@ -144,16 +117,6 @@ export function savedComputerFolderSkillFile(saved, home = os.homedir()) {
   return path.join(absoluteFolder(saved, home, home), COMPUTER_SKILL_NAME, 'SKILL.md');
 }
 
-/**
- * Whether `dir` is `root` or inside it.
- * @param {string} dir
- * @param {string} root
- * @returns {boolean}
- */
-function inside(dir, root) {
-  const rel = path.relative(root, dir);
-  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
-}
 
 /**
  * Split a `--to` value (a comma list, or several) into its names.
@@ -193,9 +156,11 @@ export function parsePlaces(names, {cwd, projectRoot, home = os.homedir()}) {
         );
       }
       place = {scope: 'project', kind: /** @type {'agents-md' | 'skills'} */ (name)};
-    } else if (writtenAsPath(name)) {
-      const dir = absoluteFolder(name, cwd, home);
-      if (projectRoot != null && inside(dir, projectRoot)) {
+    } else if (folderScope(name, {cwd, projectRoot, home})) {
+      const {dir, scope} = /** @type {{dir: string, scope: 'project' | 'computer'}} */ (
+        folderScope(name, {cwd, projectRoot, home})
+      );
+      if (scope === 'project' && projectRoot != null) {
         const rel = path.relative(projectRoot, dir).split(path.sep).join('/');
         place = {
           scope: 'project',
@@ -276,24 +241,21 @@ export function projectPlacesValue(projectPlaces) {
 }
 
 /**
- * The skill files a place holds, absolute. `agents-md` holds none: its files
- * are the agent docs. `user` holds the computer-level skill, which
- * `computer-agent-text.mjs` writes with its links.
+ * The files one skill has in a place, absolute: `<folder>/<name>/SKILL.md`
+ * in each of its skills folders. Without `skill`, the Astryx skill: the
+ * project skill in a project place, the computer-level skill in a folder
+ * outside the project. `agents-md` holds none: its files are the agent docs.
+ * `user` holds the computer-level skill, which `computer-agent-text.mjs`
+ * writes with its links.
  * @param {SkillPlace} place
  * @param {string | null} projectRoot
+ * @param {string} [skill] an integration skill's name
  * @returns {string[]}
  */
-export function placeSkillFiles(place, projectRoot) {
-  if (place.kind === 'skills' && projectRoot != null) {
-    return PROJECT_SKILL_FOLDERS.map(folder =>
-      path.join(projectRoot, folder, PROJECT_SKILL_NAME, 'SKILL.md'),
-    );
-  }
-  if (place.kind === 'folder') {
-    const name = place.scope === 'project' ? PROJECT_SKILL_NAME : COMPUTER_SKILL_NAME;
-    return [path.join(place.dir, name, 'SKILL.md')];
-  }
-  return [];
+export function placeSkillFiles(place, projectRoot, skill) {
+  const name =
+    skill ?? (place.scope === 'computer' ? COMPUTER_SKILL_NAME : PROJECT_SKILL_NAME);
+  return placeFolders(place, projectRoot).map(folder => path.join(folder, name, 'SKILL.md'));
 }
 
 /**
@@ -316,6 +278,44 @@ export function renderProjectSkill(block) {
       '---',
       '',
       block,
+      '',
+    ].join('\n'),
+  );
+}
+
+/**
+ * The skills folders a place holds: both project skills folders for
+ * `skills`, the folder itself for a folder place, none for the others.
+ * @param {SkillPlace} place
+ * @param {string | null} projectRoot
+ * @returns {string[]}
+ */
+export function placeFolders(place, projectRoot) {
+  if (place.kind === 'skills' && projectRoot != null) {
+    return PROJECT_SKILL_FOLDERS.map(folder => path.join(projectRoot, folder));
+  }
+  if (place.kind === 'folder') return [place.dir];
+  return [];
+}
+
+/**
+ * An integration's skill: its doc as text under skill frontmatter, inside the
+ * Astryx markers, with the hash line that tells an edited file from an older
+ * rendering.
+ * @param {{name: string, description: string, body: string}} skill
+ * @returns {string}
+ */
+export function renderIntegrationSkill({name, description, body}) {
+  return withHash(
+    [
+      '---',
+      `name: ${name}`,
+      `description: ${JSON.stringify(description)}`,
+      '---',
+      '',
+      MARKER_START,
+      body.trimEnd(),
+      MARKER_END,
       '',
     ].join('\n'),
   );
