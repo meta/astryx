@@ -65,6 +65,69 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
   );
 
   it.skipIf(!hasModuleHooks)(
+    'drops an unready mark on the next warm run once the template is ready',
+    async () => {
+      const tmp = keptTmp('ready-flip');
+      const doc = path.join(widgets, 'templates', 'tally.doc.mjs');
+      const source = path.join(widgets, 'templates', 'tally.tsx');
+      /** @param {string} readiness */
+      const writeTally = readiness =>
+        fs.writeFileSync(
+          doc,
+          `export default {type: 'page', name: 'tally', description: 'Running totals, tallied.', ${readiness}};\n`,
+        );
+      fs.writeFileSync(
+        source,
+        'export default function Page() { return null; }\n',
+      );
+      const ask = ['search', 'running totals tallied', '--type', 'template'];
+      /**
+       * The tally template's own text record.
+       * @param {{stdout: string}} answer
+       */
+      const tallyRecord = answer =>
+        answer.stdout
+          .split('\n\n')
+          .find(r => r.includes('name:        tally\n')) ?? '';
+      /** @param {{stdout: string}} answer */
+      const tally = answer =>
+        JSON.parse(answer.stdout).data.results.find(
+          (/** @type {any} */ r) => r.name === 'tally',
+        );
+      try {
+        writeTally('isReady: false,');
+        // The first runs keep the catalog and the entries it builds on.
+        run(ask, {tmp});
+        run(ask, {tmp, json: false});
+        const [unready] = expectWarmHit(tmp, [ask]);
+        expect(tally(unready).isReady).toBe(false);
+        const [unreadyText] = expectWarmHit(tmp, [ask], {json: false});
+        expect(tallyRecord(unreadyText)).toContain(
+          'kind:        page (not ready)\n',
+        );
+        // Same size and times, other text: only a content check sees it.
+        const {atime, mtime} = fs.statSync(doc);
+        writeTally('isReady: true, ');
+        fs.utimesSync(doc, atime, mtime);
+        const kept = allInodes(tmp);
+        const cold = run(ask, {tmp});
+        expect(allInodes(tmp)).not.toEqual(kept);
+        expect(tally(cold).isReady).toBe(true);
+        expect(cold).toEqual(run(ask, {tmp: freshTmp()}));
+        run(ask, {tmp, json: false});
+        const [ready] = expectWarmHit(tmp, [ask]);
+        expect(tally(ready).isReady).toBe(true);
+        const [readyText] = expectWarmHit(tmp, [ask], {json: false});
+        expect(tallyRecord(readyText)).toContain('kind:        page\n');
+      } finally {
+        fs.rmSync(doc, {force: true});
+        fs.rmSync(source, {force: true});
+      }
+    },
+    300_000,
+  );
+
+  it.skipIf(!hasModuleHooks)(
     'is not used by another project, another CLI, or another environment',
     async () => {
       const tmp = keptTmp('other');
@@ -79,6 +142,21 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
         expect(entries(tmp).size).toBe(2);
       } finally {
         fs.rmSync(other.dir, {recursive: true, force: true});
+      }
+      // The same CLI installed in another folder, as a package manager's
+      // patch installs one, keeps its own entries.
+      const copy = path.join(path.dirname(packed), 'cli-copy');
+      fs.cpSync(packed, copy, {recursive: true});
+      try {
+        const before = entries(tmp);
+        const kept = run(QUERIES[0], {tmp, cli: copy});
+        expect(kept).toEqual(run(QUERIES[0], {tmp: freshTmp(), cli: copy}));
+        const added = [...entries(tmp).keys()].filter(
+          name => !before.has(name),
+        );
+        expect(added.length).toBeGreaterThan(0);
+      } finally {
+        fs.rmSync(copy, {recursive: true, force: true});
       }
       fs.writeFileSync(
         path.join(packed, BUILD_ID),

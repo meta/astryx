@@ -19,6 +19,13 @@ const RELEASE_OUTPUT_PATTERNS = [
   /^pnpm-lock\.yaml$/,
 ];
 
+const CODEMOD_PROMOTION_APPLICABILITY_PATH =
+  'docs/specs/AST-057-row-actions/spec.md';
+
+function isCodemodPromotionApplicabilityPath(file) {
+  return file === CODEMOD_PROMOTION_APPLICABILITY_PATH;
+}
+
 const RELEASE_TEST_REPAIR_PATTERNS = [
   /(?:^|\/)__tests__\//,
   /\.(?:spec|test)\.[cm]?[jt]sx?$/,
@@ -56,7 +63,10 @@ function classifyReleaseDiff(entries) {
   if (paths.every(isReleaseTestRepairPath)) return 'test-repair';
   if (
     paths.every(
-      file => file.startsWith('.changeset/') || isReleaseOutputPath(file),
+      file =>
+        file.startsWith('.changeset/') ||
+        isReleaseOutputPath(file) ||
+        isCodemodPromotionApplicabilityPath(file),
     )
   ) {
     return 'version-bump';
@@ -75,6 +85,7 @@ if (process.argv.includes('--classify')) {
 export {
   classifyReleaseDiff,
   diffEntryFiles,
+  isCodemodPromotionApplicabilityPath,
   isReleaseOutputPath,
   isReleaseTestRepairPath,
 };

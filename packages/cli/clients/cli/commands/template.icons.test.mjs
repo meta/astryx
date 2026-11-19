@@ -141,10 +141,10 @@ describe('template icon mapping', () => {
     expect(text.stderr).toContain('icons: unchanged (ambiguous)');
   });
 
-  it('a set installed but experimental.iconSet not set: no report, and the output it always had', async () => {
+  it('no icon-set package and no experimental.iconSet: no report, and the output it always had', async () => {
     // Icon sets are experimental (spec:AST-017 FR27): nothing changes
-    // until the project opts in.
-    const cwd = writeIconSetProject(path.join(tmp, 'none'));
+    // until the icon feature gate is on.
+    const cwd = writeIconSetProject(path.join(tmp, 'none'), {packages: []});
     const res = await runCli(['template', TEMPLATE, '--json'], cwd);
     const data = JSON.parse(res.stdout).data;
     expect(data).not.toHaveProperty('icons');
@@ -155,6 +155,24 @@ describe('template icon mapping', () => {
     expect(JSON.parse(copied.stdout).data).not.toHaveProperty('icons');
     const copiedText = await runCli(['template', TEMPLATE, 'out2'], cwd);
     expect(`${copiedText.stdout}${copiedText.stderr}`).not.toContain('icons:');
+  });
+
+  it('icon-set packages installed but no experimental.iconSet: no report, and the output it always had', async () => {
+    // Copied templates follow an icon set only once the project names it.
+    for (const [name, packages] of /** @type {const} */ ([
+      ['one', [{}]],
+      ['two', [{}, {name: '@acme/lines'}]],
+    ])) {
+      const cwd = writeIconSetProject(path.join(tmp, name), {
+        packages: [...packages],
+      });
+      const res = await runCli(['template', TEMPLATE, '--json'], cwd);
+      const data = JSON.parse(res.stdout).data;
+      expect(data).not.toHaveProperty('icons');
+      expect(data.source).toMatch(/\bXMarkIcon\b/);
+      const copied = await runCli(['template', TEMPLATE, 'out', '--json'], cwd);
+      expect(JSON.parse(copied.stdout).data).not.toHaveProperty('icons');
+    }
   });
 
   it('a configured set that is installed but withdrawn says so, with why, and maps nothing', async () => {

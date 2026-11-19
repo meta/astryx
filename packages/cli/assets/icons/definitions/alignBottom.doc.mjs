@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'alignBottom',
+  group: 'alignment',
   description: 'Align items to the bottom edge.',
   words: ['bottom align', 'align end vertical'],
 };

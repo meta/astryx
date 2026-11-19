@@ -103,13 +103,16 @@ export function linkifyComponents(
   return out + linkify(markdown.slice(lastIndex));
 }
 
+/** The version heading that starts each release in a package's changelog. */
+export const RELEASE_HEADING = /^#\s+\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+
 /** Add a visible note to release sections that contain only a version heading. */
 export function addEmptyReleasePlaceholders(markdown: string): string {
   return markdown
     .split(/\n+---\n+/)
     .map(section => {
       const trimmed = section.trim();
-      return /^#\s+\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(trimmed)
+      return RELEASE_HEADING.test(trimmed)
         ? `${trimmed}\n\n_No changes in this release._`
         : trimmed;
     })

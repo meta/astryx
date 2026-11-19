@@ -80,11 +80,14 @@ export interface ComponentBaseDoc extends AuthoredDocGraphFields {
    *  search` results and `astryx build` kit entries carry the field. Omit for
    *  a component that is not deprecated. */
   deprecated?: ComponentDeprecation;
-  /** Search keywords for CLI discovery. Terms a developer might type when
-   *  looking for this component: synonyms, related UI concepts, and common
-   *  names from other design systems (MUI, Chakra, Radix, and others).
-   *  Lowercase only. Used by `astryx component <term>` for fuzzy matching.
-   *  e.g. `['accordion', 'expand', 'toggle', 'disclosure']` for Collapsible */
+  /** Words to find the component by: each is a word or short phrase a
+   *  person would type when they need this component and not another,
+   *  before they know its name. Use another name for the same whole
+   *  component, such as another library's name, or the job in the person's
+   *  words. Lowercase, best first. `astryx search` ranks a match on them.
+   *  `astryx component <term>` never opens a component by a keyword; it
+   *  gives that component first in its answer.
+   *  e.g. `['glimmer flange', 'flarp a quandle']` for a made-up Zorblet */
   keywords?: string[];
   /** Sub-component names to hide from human-facing UI (CLI listings,
    *  docs catalogs). The components stay public and importable — agents
