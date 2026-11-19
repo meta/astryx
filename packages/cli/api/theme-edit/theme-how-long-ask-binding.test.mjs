@@ -163,6 +163,17 @@ const ROWS = [
       says: /tab holds no link/,
     },
   ],
+  [
+    'a white fill with link colors only stays light mode, the body text unchanged',
+    {
+      q: 'dialogs: white background, blue links',
+      has: [
+        "background-color '#ffffff' --on dialog --mode light",
+        "--color-text-accent '#2563eb' --on dialog",
+      ],
+      never: /background-color '#ffffff' --on dialog$/,
+    },
+  ],
 ];
 
 describe('long asks bind each clause to its own part', () => {

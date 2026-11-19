@@ -28744,7 +28744,11 @@ export function draftAnswer(ctx, env, question) {
     const ownText = (x, st) =>
       x !== st &&
       x.on === st.on &&
-      (x.thing === 'color' || /^--color-text-/.test(x.thing));
+      // (The part's own text: its color, or a text token other than the
+      // accent's. Blue links on a white dialog leave its body text as the
+      // mode draws it, light on the dark page.)
+      (x.thing === 'color' ||
+        (/^--color-text-/.test(x.thing) && x.thing !== '--color-text-accent'));
     /** A color typed in the question, never a color word read. */
     const typed = (/** @type {string} */ v) =>
       question.toLowerCase().includes(String(v).toLowerCase());
