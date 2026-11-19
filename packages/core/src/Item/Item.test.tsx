@@ -980,6 +980,64 @@ describe('Item', () => {
       expect(screen.getByRole('button', {current: 'page'})).toBeInTheDocument();
     });
 
+    it('treats a caller marker with the row’s value as the row’s', () => {
+      function Row({
+        isSelected,
+        controlCurrent,
+      }: {
+        isSelected: boolean;
+        controlCurrent?: 'true';
+      }) {
+        const ref = useRef<HTMLButtonElement>(null);
+        return (
+          <Item
+            label="Billing"
+            isSelected={isSelected}
+            interactiveRef={ref}
+            endContent={
+              <button type="button" ref={ref} aria-current={controlCurrent}>
+                Open
+              </button>
+            }
+          />
+        );
+      }
+      const {rerender} = render(<Row isSelected />);
+      rerender(<Row isSelected controlCurrent="true" />);
+      expect(screen.getByRole('button', {current: true})).toBeInTheDocument();
+      // The caller should not mark a control the row marks: on deselect the
+      // row removes the "true" it cannot tell from its own.
+      rerender(<Row isSelected={false} controlCurrent="true" />);
+      expect(screen.getByRole('button', {name: 'Open'})).not.toHaveAttribute(
+        'aria-current',
+      );
+    });
+
+    it('marks only the root of a delegated row with a parent role', () => {
+      function Row() {
+        const ref = useRef<HTMLButtonElement>(null);
+        return (
+          <Item
+            label="Billing"
+            role="menuitem"
+            isSelected
+            interactiveRef={ref}
+            data-testid="row"
+            endContent={
+              <button type="button" ref={ref}>
+                Open
+              </button>
+            }
+          />
+        );
+      }
+      render(<Row />);
+      expect(screen.getByTestId('row')).toHaveAttribute('aria-current', 'true');
+      expect(screen.getByRole('button', {name: 'Open'})).not.toHaveAttribute(
+        'aria-current',
+      );
+    });
+
     it('keeps the marker on the root of a row with a parent role', () => {
       render(
         <Item

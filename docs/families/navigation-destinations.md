@@ -65,7 +65,8 @@ deciding_specs: [spec:AST-005/DEC-1, spec:AST-005/DEC-2, spec:AST-005/DEC-3]
 {
   "scope": "global",
   "triggers": {
-    "navigation": ["FR1", "FR3", "FR4", "FR5"]
+    "navigation": ["FR1", "FR3", "FR4", "FR5"],
+    "accessibility": ["FR9"]
   }
 }
 ```
@@ -179,7 +180,7 @@ must be added here even when it delegates to an existing member or shared hook.
   to image URLs too (`spec:AST-005/DEC-3`).
 - **FR9 — The current marker sits on the focusable element.** On an
   interactive row (an `onClick`, `href` or delegated row), the current marker
-  (`aria-current`) sits on the row's focusable element, not its list item, so a
+  (`aria-current`) sits on the row's focusable element, not the row's root, so a
   screen reader announces it when that element takes focus. A row whose root
   takes focus (a parent-supplied role or a link root) keeps it on the root
   (`family:navigation-destinations/DEC-1`).
@@ -262,9 +263,9 @@ delegates to. A screen reader then announces "current" when that element
 takes focus. A row whose root takes focus keeps the marker on the root, and a
 row that is not interactive keeps it on its list item. A selected row keeps
 `data-selected` on its root for styling. A caller's `aria-current` on an
-interactive row moves with the marker, which narrows `component:ListItem` FR1
-for that one prop. In server-rendered HTML a delegated row's control carries
-the marker only after hydration.
+interactive row moves with the marker. In server-rendered HTML a delegated
+row's control carries the marker only after hydration, and a delegated row
+whose control is not mounted carries none.
 
 Rejected: the marker on the list item of an interactive row, which a screen
 reader does not announce on focus.

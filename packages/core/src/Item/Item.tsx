@@ -788,16 +788,17 @@ export function Item({
     !hasParentRole &&
     !isLinkRoot &&
     (isDelegate || href != null || onClick != null);
-  // A delegated control is the caller's element, so the row marks it while
-  // the row is current, unless the caller marks it already. The sync runs on
-  // every commit, so a control that mounts late or is replaced is marked too,
-  // and the cleanup removes only the value the row wrote.
+  // The caller owns the delegated control, so the row marks it only while the
+  // control has no marker. The sync runs on every commit of the row. Cleanup
+  // removes the marker only if it still has the row's value, so a caller
+  // marker with another value stays.
   const controlCurrent =
     ariaCurrent === false || ariaCurrent === 'false' ? undefined : ariaCurrent;
   useIsomorphicLayoutEffect(() => {
     const control = interactiveRef?.current;
     if (
       !isDelegate ||
+      !currentOnFocusTarget ||
       control == null ||
       controlCurrent === undefined ||
       control.hasAttribute('aria-current')
