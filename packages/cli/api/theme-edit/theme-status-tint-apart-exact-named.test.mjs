@@ -90,6 +90,17 @@ const contrast = (a, b) =>
 
 const T = 300_000;
 
+/** The warning of a fresh neutral theme, made once for the file. @type {string | undefined} */
+let plainWarning;
+/** The base theme's own warning, before any accent. */
+const ownWarning = async () => {
+  if (plainWarning === undefined) {
+    await themeEditNew('plain', {cwd, like: 'neutral'});
+    plainWarning = String(light('plain', '--color-warning'));
+  }
+  return plainWarning;
+};
+
 describe('status colors the look grows', () => {
   for (const [slug, accent] of [
     ['w', '#0052cc'],
@@ -119,8 +130,7 @@ describe('status colors the look grows', () => {
           `${fill} on ${page}`,
         ).toBeGreaterThanOrEqual(1.2);
         // (Both keep the warning's own hue, whatever the accent.)
-        await themeEditNew(`${slug}-plain`, {cwd, like: 'neutral'});
-        const own = String(light(`${slug}-plain`, '--color-warning'));
+        const own = await ownWarning();
         for (const c of [fill, tint])
           expect(hueDifference(String(c), own), `${c} hue`).toBeLessThan(
             HUE_BAR,
