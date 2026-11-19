@@ -18,7 +18,8 @@
  * @property {string} [when] - `<prop>:<value>`: only that variant.
  * @property {string} [state] - Only that state.
  * @property {'light' | 'dark'} [mode] - Only that color mode.
- * @property {boolean} [only] - One member of an always-alike group, not the whole group.
+ * @property {boolean} [only] - On that part alone, not the group or family a setting on it reaches.
+ * @property {string[]} [keep] - Members of the group or family it reaches that keep their own look, because it would make their text unreadable; the editor writes it.
  * @property {string} [axis] - For the `headings` dial: `weight` or `tracking`.
  * @property {string} [note] - What the check found worth saying (what the token feeds, parts it misses).
  */
@@ -103,8 +104,9 @@
  * @property {ThemeEditSetting[]} [alsoRemoved] - On `undo` of a setting listed more than once by hand: the other entries, removed with it.
  * @property {ThemeEditSetting | null} replaced - The setting this one replaced.
  * @property {string | null} was - For `base`, `mode` and a whole-theme dial: the value before.
- * @property {string[]} parts - The parts it styles (a group's members when it spread).
- * @property {{name: string, members: string[], onlyHint: boolean} | null} group - The group it spread to; `onlyHint` when `--only` would style one member.
+ * @property {string[]} parts - The parts it writes: a group's members, or, set on one member of a family, the members that draw it alike; less the members that keep a setting of their own.
+ * @property {{name: string, members: string[], kept: string[], onlyHint: boolean, only?: string} | null} group - The group or family it reached: `members` the parts written, `kept` the members that keep their own setting of the same thing (a part's own setting wins over its group's or family's, whatever the order) or that it would make unreadable (the setting keeps them out, `keep`); set on one member, `onlyHint` and `only`, the line that styles that member alone.
+ * @property {Array<{part: string, as: string, keep: string}>} [embedded] - The parts drawn as one of the parts written, inside other components (a calendar's nav arrow and a pagination cell are buttons): a rule on the part reaches them too. Each with the part it is drawn as and the line that keeps it as Core draws it (its own entry wins). Left out when none.
  * @property {string[]} changedTokens - Resolved token changes, `name (mode): before -> after`. The category colors (badges, tokens, card tints) and chart colors that moved with the look are counted in one line each.
  * @property {string[]} [changedPartTokens] - Changes to the custom properties the built stylesheet sets on parts, `name on <rule> (mode): before -> after` (a readable text color on a selected row). With `changedTokens`, every custom property whose built value moved.
  * @property {string[]} styled - Part styles and typography the change wrote.
@@ -151,7 +153,7 @@
  * @property {string} data.theme
  * @property {string | null} data.like
  * @property {string} data.mode
- * @property {Array<ThemeEditSetting & {parts: string[], masked?: string}>} data.settings - Each setting with the parts it styles; `masked` says what a later or stronger setting hides of it.
+ * @property {Array<ThemeEditSetting & {parts: string[], reach?: {family: string, parts?: string[], kept?: string[], drillIn?: boolean, over?: string | null}, kept?: string[], masked?: string}>} data.settings - Each setting with the parts it writes; `reach`, for a setting on one member of a family: the family, and either the parts it reaches and the members keeping their own, or `drillIn` (kept to the member with --only) and `over`, the family setting it drills into; `kept`, for a group setting, the members keeping their own; `masked` says what a later or stronger setting hides of it.
  * @property {Record<string, Record<string, string | null> | string | null>} data.resolved - Key tokens: colors and shadows per mode; sizes, numbers and fonts, which are the same in both modes, as one value.
  * @property {string[]} data.partValues - Each corners or spacing setting on a part or group, with what its parts get and the whole-theme value beside it.
  * @property {Array<{part: string, state?: string, why: string, line: string}>} data.missed - The parts the theme's own changes should have reached and did not, most flagged first, each with why and the line that reaches it (its steps joined with &&, the text on a fill changed with it): with the accent changed, a disabled variant drawn as the accent at reduced opacity, a selected look on the base's fill, a status fill whose color is not generated; with the page surfaces changed, an inverted surface that no longer stands out from the page; with the corners changed, a pill; with the border width changed, a borderless surface. A setting that covers the aspect takes a part off.

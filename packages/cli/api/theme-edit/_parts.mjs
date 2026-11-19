@@ -107,6 +107,8 @@ const LIFECYCLE_FLAGS = new Set([
  * @property {string[]} [listed] - the parts inside it drawn more than once in one of its elements (a menu's items), unlike a part drawn there once (a header's nav)
  * @property {Record<string, string[]>} [holdsVariants] - for a part rendered inside it, the variants it is drawn in there (a toast's close button: ghost)
  * @property {string[]} [tags] - the elements it is rendered as (`tr` for a table row)
+ * @property {string[]} [drawnAs] - the other targets its element carries where the census drew it (a calendar's nav arrow is a `button` too): a rule on one of them reaches this part
+ * @property {boolean} [alone] - the census drew it on an element carrying no other target too (a Button); a part never drawn alone rides on the parts it is drawn as
  * @property {string} [underInput] - drawn under an invisible native input
  *   laid over it (a checkbox's box), which takes its pointer and focus: the
  *   part that holds that input (empty when none is themed)
@@ -1402,7 +1404,7 @@ function resolvePrivate(v, env, tokens, depth = 0) {
  * @returns {{map: Record<string, PartRecord>, pairs: TextPair[]}}
  */
 export function walkMarkup(html, decls, tokens, targets = new Map()) {
-  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, repeats: Set<string>, holdsVariants?: Record<string, Set<string>>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>, alone?: boolean, borrowed?: Record<string, Set<string>>, listed?: Set<string>, innerSets?: Record<string, Set<string>>, underInput?: string}>} */
+  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, repeats: Set<string>, holdsVariants?: Record<string, Set<string>>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>, drawnAs?: Set<string>, alone?: boolean, borrowed?: Record<string, Set<string>>, listed?: Set<string>, innerSets?: Record<string, Set<string>>, underInput?: string}>} */
   const map = {};
   /** @type {Array<{env: Record<string, string>, target: string | null, all?: string[], fg: PaintSide | null, bg: PaintSide | null, cond: string, kids?: string[], input?: boolean, owns?: boolean, seenParts?: Record<string, number>, seen?: Map<string, number>}>} */
   const stack = [{env: {}, target: null, fg: null, bg: null, cond: ''}];
@@ -1563,6 +1565,11 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         innerCorners: new Set(),
         media: false,
       });
+      // (The other targets the same element carries: a calendar's nav arrow
+      // is a Button too, so a button rule reaches it.)
+      if (ownsTarget && named.length > 1)
+        for (const c of named)
+          if (c.slice(7) !== t) (T.drawnAs ??= new Set()).add(c.slice(7));
       // A data attribute another target on the element declares is this
       // part's only when the part rides on that one: a part always drawn
       // together with another (a list item on its Item) takes that one's
@@ -1860,6 +1867,8 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
           }
         : {}),
       tags: [...v.tags],
+      ...(v.drawnAs?.size ? {drawnAs: [...v.drawnAs].sort()} : {}),
+      ...(v.alone ? {alone: true} : {}),
       ...(v.underInput != null ? {underInput: v.underInput} : {}),
       innerCorners: [...v.innerCorners],
       ...(v.media ? {media: true} : {}),
