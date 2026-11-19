@@ -3243,6 +3243,78 @@ describe('render(): a page outside a project', () => {
     expect(back.json.data).toMatchObject({mode: 'embedded', output: 'page-restored/page.tsx'});
   }, 60_000);
 
+  describe('a served package whose subpath exports one condition', () => {
+    /** @type {string} */
+    let set;
+    /** @type {string} */
+    let page;
+    beforeAll(() => {
+      set = path.join(away, 'served-conditions');
+      const nm = path.join(set, 'node_modules');
+      for (const name of ['react', 'react-dom']) {
+        const target = path.dirname(createRequire(path.join(CLI_DIR, '../core/package.json')).resolve(`${name}/package.json`));
+        fs.mkdirSync(nm, {recursive: true});
+        fs.cpSync(target, path.join(nm, name), {recursive: true, dereference: true});
+      }
+      const pkg = path.join(nm, 'demo-conditions');
+      fs.mkdirSync(path.join(pkg, 'themes'), {recursive: true});
+      fs.writeFileSync(
+        path.join(pkg, 'package.json'),
+        JSON.stringify({
+          name: 'demo-conditions',
+          type: 'module',
+          exports: {
+            './themes/demo': {import: './themes/demo.js'},
+            './legacy': {require: './legacy.cjs'},
+          },
+        }),
+      );
+      fs.writeFileSync(path.join(pkg, 'themes', 'demo.js'), "export const label = 'from the import condition';\n");
+      fs.writeFileSync(path.join(pkg, 'legacy.cjs'), "exports.label = 'from the require condition';\n");
+      fs.mkdirSync(path.join(set, 'core'), {recursive: true});
+      fs.writeFileSync(path.join(set, 'core', 'package.json'), '{"name":"@astryxdesign/core"}');
+      page = path.join(away, 'served-conditions-page');
+      fs.mkdirSync(page, {recursive: true});
+    });
+    /** @param {string} name @param {string} spec */
+    const exportOf = async (name, spec) => {
+      fs.writeFileSync(
+        path.join(page, `${name}.jsx`),
+        `import {label} from '${spec}';\nexport default function Page() {\n  return <p>{label}</p>;\n}\n`,
+      );
+      const {renderPage} = await import('../../foundation/render/render-page.mjs');
+      try {
+        const rendered = await renderPage(path.join(page, `${name}.jsx`), {
+          served: {dir: path.join(set, 'core'), integrations: ['demo-conditions']},
+          markupOnly: true,
+        });
+        return {html: rendered.html};
+      } catch (e) {
+        return {code: /** @type {any} */ (e).code, message: /** @type {any} */ (e).message};
+      }
+    };
+
+    it('loads a subpath exported only under import', async () => {
+      const result = /** @type {any} */ (await exportOf('import-only', 'demo-conditions/themes/demo'));
+      expect(result.code, JSON.stringify(result)).toBeUndefined();
+      expect(result.html).toContain('from the import condition');
+    }, 60_000);
+
+    it('loads a subpath exported only under require as before', async () => {
+      const result = /** @type {any} */ (await exportOf('require-only', 'demo-conditions/legacy'));
+      expect(result.code, JSON.stringify(result)).toBeUndefined();
+      expect(result.html).toContain('from the require condition');
+    }, 60_000);
+
+    it('keeps the answer for a subpath the package does not export', async () => {
+      const result = /** @type {any} */ (await exportOf('missing', 'demo-conditions/themes/none'));
+      expect(result).toEqual({
+        code: 'ERR_RENDER_MISSING_DEPENDENCY',
+        message: 'The page imports demo-conditions, which is not installed',
+      });
+    }, 60_000);
+  });
+
   it('loads one React outside a project, even when the folder holds its own copy', () => {
     const sub = path.join(away, 'own-react');
     for (const name of ['react', 'react-dom']) {
