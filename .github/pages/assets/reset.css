@@ -236,6 +236,26 @@
   }
 
   /*
+   * A file input's button is a pseudo-element, so the element selectors above
+   * miss it. It keeps its padding and margin to stay apart from the file name.
+   * A browser that does not know `::file-selector-button` drops the whole rule,
+   * so the rule stands alone.
+   */
+  :where(*)::file-selector-button {
+    box-sizing: border-box;
+    border-width: 0;
+    border-style: solid;
+    border-color: currentColor;
+    font: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+    -webkit-appearance: button;
+    appearance: button;
+    background-color: transparent;
+    background-image: none;
+  }
+
+  /*
    * Pointer cursor for interactive elements.
    */
   :where(button, [role='button']) {
