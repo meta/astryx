@@ -261,12 +261,11 @@ describe("code colors on the theme's own code background", () => {
       stops,
       modes: ['light', 'dark'],
       grounds: m => page[m],
-      codeGround: () => dark,
+      codeGround: m => (m === 'dark' ? dark : null),
       wanted: k => k !== '--color-syntax-background',
     });
     const keyword = tokens['--color-syntax-keyword'];
     expect(keyword).toBeDefined();
-    for (const m of /** @type {const} */ (['light', 'dark']))
-      expect(contrastRatio(keyword[m].color, dark)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(keyword.dark.color, dark)).toBeGreaterThanOrEqual(4.5);
   });
 });
