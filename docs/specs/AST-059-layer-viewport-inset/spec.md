@@ -201,9 +201,10 @@ the app reaches every layer instead of the components that happen to read it.
   the placement axis that positional bound is the larger of the axis's two
   gutters, applied to both edges, so a bar declared on one block edge keeps a
   layer the same distance from the opposite edge (the size cap still
-  subtracts each edge's own gutter). Every option bounds the layer by the
-  viewport itself, also when the anchor runs past a viewport edge (an anchor
-  in a panel that scrolls sideways): an aligned edge meets its anchor's edge
+  subtracts each edge's own gutter). While its anchor is in view, every
+  option bounds the layer by the viewport itself, also when the anchor runs
+  partly past a viewport edge (an anchor in a panel that scrolls sideways): an
+  aligned edge meets its anchor's edge
   but never comes closer to the viewport edge than the gutter, and no option
   fits where the layer would leave the viewport. Content taller than either side can hold
   is capped to the viewport and shifted into it, keeping its anchor clearance

@@ -58,7 +58,7 @@ export const LAYER_CLEARANCE_PROPERTY = '--_astryx-layer-clearance';
 /**
  * The custom property a layer writes its software-keyboard lift to. Every
  * block-start inset subtracts it and every block-end inset adds it, so the
- * lift moves the layer toward the block-start in every option. useLayer.tsx
+ * lift moves the layer toward the block-start in every declared option. useLayer.tsx
  * names it in its own styles (`LIFT`), because StyleX resolves only constants
  * defined in the same file.
  */

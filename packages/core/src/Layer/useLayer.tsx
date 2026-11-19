@@ -618,6 +618,13 @@ interface InternalContextLayerOptions extends ContextLayerOptions {
    * runtime's read.
    */
   writesEntranceSide?: boolean;
+  /**
+   * Called after a scroll stop places the open layer afresh, so the browser
+   * may have picked another option. A component that measures the layer
+   * against its anchor (a Selector's list over its selected option) measures
+   * again here.
+   */
+  onPlacedAfresh?: () => void;
 }
 
 function toCssLength(value: number | string): string {
@@ -918,6 +925,7 @@ function observeAnchorClearance(
   anchor: HTMLElement,
   isCurrent: () => boolean,
   isAnchorInView: () => boolean,
+  onPlacedAfresh: () => void,
 ): () => void {
   const view = layer.ownerDocument.defaultView;
   if (!view) {
@@ -946,6 +954,7 @@ function observeAnchorClearance(
     }
     if (isAnchorInView() && layer.hasAttribute(LAYER_ANCHORED_ATTRIBUTE)) {
       placeAfresh(layer);
+      onPlacedAfresh();
     } else {
       keepAnchorClear(layer, anchor);
     }
@@ -1359,6 +1368,9 @@ function useLayerImplementation(
     mode === 'context' ? options.watchesOutsidePans : undefined;
   const writesEntranceSide =
     mode === 'context' ? (options.writesEntranceSide ?? false) : false;
+  const onPlacedAfreshRef = useCommittedRef(
+    mode === 'context' ? options.onPlacedAfresh : undefined,
+  );
   const onCloseStart = mode === 'context' ? options.onCloseStart : undefined;
   const onOpenPendingChange =
     mode === 'context' ? options.onOpenPendingChange : undefined;
@@ -2133,6 +2145,7 @@ function useLayerImplementation(
             el,
             () => popoverRef.current === layer && triggerRef.current === el,
             () => isAnchorInViewRef.current,
+            () => onPlacedAfreshRef.current?.(),
           );
           keepAnchorClear(layer, el);
         }
@@ -2157,7 +2170,7 @@ function useLayerImplementation(
         });
       }
     },
-    [anchorId, cancelPendingAnchorWait, keepsAnchorClear],
+    [anchorId, cancelPendingAnchorWait, keepsAnchorClear, onPlacedAfreshRef],
   );
 
   // Arm only when the dismissing gesture's click is still ahead of us. Some
@@ -2506,6 +2519,7 @@ function useLayerImplementation(
       anchor,
       () => popoverRef.current === layer && triggerRef.current === anchor,
       () => isAnchorInViewRef.current,
+      () => onPlacedAfreshRef.current?.(),
     );
     return () => {
       clearObserversRef.current?.();
@@ -2513,17 +2527,16 @@ function useLayerImplementation(
     };
   }, [keepsAnchorClear, isOpen, mode, mountGeneration]);
 
-  // An anchored layer's `anchor()` insets are resolved against the scroll
-  // offsets the browser recorded when it last placed the layer, and a scroll
-  // only translates the result. While the anchor is out of view the aligned
-  // inset follows the anchor, which a translation keeps right. While the
-  // anchor is in view the aligned inset can hold a gutter and the browser can
-  // pick another try option, and a translation updates neither. So a layer
-  // whose anchor is in view when a scroll stops is placed afresh
-  // (`observeScrollStop`). Nothing reads or forces layout during the scroll
-  // itself. A layer that keeps its anchor clear has its own scroll-stop
-  // listener (`observeAnchorClearance`), which places it afresh in the same
-  // way, so it is not placed twice.
+  // A scroll only moves an anchored layer by the scroll distance. The browser
+  // keeps the insets it resolved at the last placement. While the anchor is
+  // out of view, the aligned inset follows the anchor, which the move keeps
+  // right. While the anchor is in view, the aligned inset can hold a gutter,
+  // and the browser can pick another option. A move updates neither. So a
+  // layer whose anchor is in view when a scroll stops is placed afresh
+  // (`observeScrollStop`). Nothing reads or forces layout during the scroll.
+  // A layer that keeps its anchor clear has its own scroll-stop listener
+  // (`observeAnchorClearance`), which places it afresh in the same way, so it
+  // is not placed twice.
   // Effect: syncs the browser's last placement of the layer with the scroll
   // position at each scroll stop. The scroll-stop listeners are bound while
   // the layer is open and removed when it closes, unmounts or is remounted by
@@ -2545,9 +2558,10 @@ function useLayerImplementation(
         layer.hasAttribute(LAYER_ANCHORED_ATTRIBUTE)
       ) {
         placeAfresh(layer);
+        onPlacedAfreshRef.current?.();
       }
     });
-  }, [isOpen, mode, keepsAnchorClear, mountGeneration]);
+  }, [isOpen, mode, keepsAnchorClear, mountGeneration, onPlacedAfreshRef]);
 
   // Render function for context mode
   const renderContext = useCallback(
