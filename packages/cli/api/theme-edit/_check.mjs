@@ -999,7 +999,15 @@ export function storedProblems(ctx, slug, data, skip = '') {
         },
         s.thing,
         s.value,
-        {on: s.on, when: s.when, state: s.state, mode: s.mode, only: s.only},
+        {
+          on: s.on,
+          when: s.when,
+          state: s.state,
+          mode: s.mode,
+          // (A saved only that set would save without, on a part styled on
+          // its own, is read as without it, as the reader reads it.)
+          only: s.only && onlyFits(s) ? s.only : undefined,
+        },
       );
     } catch (e) {
       if (!(e instanceof AstryxError)) throw e;

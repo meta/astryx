@@ -1708,8 +1708,8 @@ export function settingsProblem(
       return `${s.thing} has mode ${s.mode}, but a dial is the same in light and dark, so set takes no --mode for it`;
     if (s.only != null && s.only !== true)
       return `${s.thing} has only ${JSON.stringify(s.only)}, not true or false`;
-    if (s.only === true && !onlyFits(s))
-      return `${describe({...s, only: undefined, value: '?'}).replace(' = ?', '')} has only, which is for one member of a group (${s.on ? `not the ${s.on} group itself` : 'it names no part'})`;
+    if (s.only === true && !onlyReads(s))
+      return `${describe({...s, only: undefined, value: '?'}).replace(' = ?', '')} has only, which is for one member of a group, not a group itself`;
     const key = keyOf(s);
     // The command that changes or removes a setting listed twice keeps one
     // value, or none, so it fixes the list. An entry with a twin is named
@@ -2325,6 +2325,19 @@ function readEntryWords(data, early = /** @type {string[]} */ ([])) {
       if (read) s.only = true;
       else delete s.only;
     } else if (s.only === false) delete s.only;
+    // An `only` on a part styled on its own (an editor that took --only
+    // there saved it): kept as saved, and built as without it, which is
+    // what it means there; said once.
+    if (
+      s.only === true &&
+      typeof s.on === 'string' &&
+      typeof s.thing === 'string' &&
+      onlyMeans(s.on) === 'own' &&
+      !onlyFits(s)
+    )
+      notes.push(
+        `${describe({...s, only: undefined, value: '?'}).replace(' = ?', '')} was saved with only, which changes nothing there (${s.on} is styled on its own already; only ${AUTO_SPREAD.join(' and ')} spread to their group), so it is built as without it`,
+      );
     if (!['dial', 'token', 'property'].includes(s.source)) {
       const typed = typeof s.source === 'string' ? s.source.trim() : '';
       const read = typed
@@ -2438,7 +2451,7 @@ export function entryDamage(s) {
   if (s.mode != null && s.mode !== 'light' && s.mode !== 'dark') return 'mode';
   // A dial is the same in light and dark: a mode on it means nothing.
   if (s.mode != null && s.source === 'dial') return 'mode';
-  if (s.only != null && (s.only !== true || !onlyFits(s))) return 'only';
+  if (s.only != null && (s.only !== true || !onlyReads(s))) return 'only';
   return null;
 }
 
@@ -2451,6 +2464,18 @@ export function entryDamage(s) {
  */
 export function onlyFits(s) {
   return onlyMeans(typeof s?.on === 'string' ? s.on : undefined) === 'member';
+}
+
+/**
+ * Whether a saved `only` reads, by the rule `set --only` follows (onlyFits):
+ * on a part where it does something, it is kept; on a part styled on its
+ * own, set saves the change without it, so a saved one there (as another
+ * editor saved it) is read as without it, and said; only on a group
+ * itself, or with no part, does it mean nothing at all.
+ * @param {any} s
+ */
+function onlyReads(s) {
+  return typeof s.on === 'string' && onlyMeans(s.on) !== 'group';
 }
 
 /**
