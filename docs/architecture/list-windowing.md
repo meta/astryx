@@ -124,7 +124,7 @@ row-position accuracy (DEC-3).
 - **INV4 gap:** Table windows only inside its own bounded viewport; when the
   page or an outer container is its scroller, it renders every row.
 - **INV5 gap:** Table's adapter (its virtualization plugin and column
-  windowing, with their wiring) measures about 2.4 KB.
+  windowing, with their wiring) measures over 2 KB.
 - **INV5 gap:** Lab's `ChatVirtualizer` measures about 5 KB in its own code. It
   does not use the shared engine, so it has no split between engine and chat
   adapter.
@@ -173,10 +173,10 @@ Rejected: a caller-provided scroll ref.
 **Reference:** `architecture:list-windowing/DEC-3`
 **Decider:** `cixzhang`, `2026-11-09 05:51 PT`
 
-The owner set three requirements for the shared virtualizer: anchoring is
-configurable, scroll positions hold while data streams in, and the engine is
-the candidate with the best performance and row-position accuracy for rows of
-variable height. The shared windowing engine meets FR1–FR4. The
+The shared virtualizer has configurable anchoring and holds scroll positions
+while data streams in. Its engine is the candidate with the best performance
+and row-position accuracy for rows of variable height. The shared windowing
+engine meets FR1–FR4. The
 engine is chosen by a measured comparison of candidates on performance and
 row-position accuracy.
 
@@ -185,17 +185,17 @@ row-position accuracy.
 **Reference:** `architecture:list-windowing/DEC-4`
 **Decider:** `cixzhang`, `2026-11-09 06:35 PT`
 
-The owner approved the budget in INV5. It is set from the 2026-11-09 measurement of virtua's Virtualizer plus WindowVirtualizer, 4.9 KB with the same build settings.
+INV5's budget is set from the 2026-11-09 measurement of virtua's Virtualizer plus WindowVirtualizer, 4.9 KB with the same build settings.
 
 ### DEC-6 — Table's public windowing API changes only one name
 
 **Reference:** `architecture:list-windowing/DEC-6`
 **Decider:** `cixzhang`, `2026-11-09 06:52 PT`
 
-The owner decided that Table's public windowing API needs only the
-`initialViewportHeight` rename. `useTableRowsVirtualization` keeps `rowHeight` and renames `viewportHeight` to
-`initialViewportHeight`, which Table reads for the first frame only. Other
-options the owner's card described for later (a callback scroll target, exact
+Table's public windowing API changes only by the `initialViewportHeight`
+rename. `useTableRowsVirtualization` keeps `rowHeight` and renames
+`viewportHeight` to `initialViewportHeight`, which Table reads for the first frame only. Other
+options described for later (a callback scroll target, exact
 or estimated item sizes, an anchor) reach Table's public API only through a
 later owner decision.
 
