@@ -2336,7 +2336,7 @@ export function mappingRows(dial) {
         .filter(([g]) => !g.startsWith('--color-background-'))
         .map(
           ([, g]) =>
-            `--color-text-secondary on ${g.parts}: the shade nearest the secondary text's that reads at ${TEXT}:1 on ${g.what} and under a hover, as the official theme lifts it`,
+            `--color-text-secondary on ${g.parts}: the shade nearest the secondary text's that reads at ${TEXT}:1 on ${g.what}${g.pressed ? '' : ' and under a hover'}, as the official theme lifts it`,
         ),
       ...(Object.keys(LIFT_GROUNDS).some(g =>
         g.startsWith('--color-background-'),
