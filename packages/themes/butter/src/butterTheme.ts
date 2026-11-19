@@ -761,6 +761,20 @@ export const butterTheme = defineTheme({
       },
     },
 
+    // A status fill is the status color, so its mark takes that status's
+    // on-color.
+    'progress-bar-mark': {
+      'placement:fill+variant:success': {
+        backgroundColor: 'var(--color-on-success)',
+      },
+      'placement:fill+variant:warning': {
+        backgroundColor: 'var(--color-on-warning)',
+      },
+      'placement:fill+variant:error': {
+        backgroundColor: 'var(--color-on-error)',
+      },
+    },
+
     // Field status bubble — match the corresponding banner colors so the
     // helper text below an input reads as the same "this is a warning /
     // error / success" surface as the standalone banner.

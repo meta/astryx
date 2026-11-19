@@ -404,19 +404,20 @@ export const stoneTheme = defineTheme({
     },
 
     // A mark on a fill is light ink on the dark light-mode fills (stops 30 and
-    // 40) and dark ink on the pale dark-mode fills.
+    // 40) and dark ink on the pale dark-mode fills. A status fill is the
+    // status color, so its mark takes that status's on-color.
     'progress-bar-mark': {
       'placement:fill+variant:accent': {
         backgroundColor: lightDark(neutral.light[100], 'var(--color-on-light)'),
       },
       'placement:fill+variant:success': {
-        backgroundColor: lightDark(neutral.light[100], 'var(--color-on-light)'),
+        backgroundColor: 'var(--color-on-success)',
       },
       'placement:fill+variant:warning': {
-        backgroundColor: lightDark(neutral.light[100], 'var(--color-on-light)'),
+        backgroundColor: 'var(--color-on-warning)',
       },
       'placement:fill+variant:error': {
-        backgroundColor: lightDark(neutral.light[100], 'var(--color-on-light)'),
+        backgroundColor: 'var(--color-on-error)',
       },
     },
 

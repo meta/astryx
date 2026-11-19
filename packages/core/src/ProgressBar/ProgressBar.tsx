@@ -462,10 +462,10 @@ const variantStyles = stylex.create({
   error: {
     backgroundColor: colorVars['--color-text-error'],
   },
-  // The secondary text role reaches 3:1 on the track in every bundled theme
-  // and mode. The disabled text role does not: it is the track's own color in
-  // some themes. A disabled bar takes the same fill and dims its track
-  // (`trackDisabled`).
+  // The secondary text role reaches 3:1 on the default track. A theme whose
+  // dark track sits closer to it maps a lighter stop. The disabled text role
+  // does not reach 3:1: it is the track's own color in some themes. A
+  // disabled bar takes the same fill and dims its track (`trackDisabled`).
   neutral: {
     backgroundColor: colorVars['--color-text-secondary'],
   },
@@ -515,9 +515,8 @@ const markOnTrackStyles = stylex.create({
   track: {
     backgroundColor: colorVars['--color-text-primary'],
   },
-  // A disabled bar dims everything it draws, so its track marks step down to
-  // the secondary foreground for the same reason the disabled on-fill mark
-  // does — matching the muted label and value text.
+  // A disabled bar reads quieter, so a mark on its track steps down to the
+  // secondary foreground.
   trackDisabled: {
     backgroundColor: colorVars['--color-text-secondary'],
   },

@@ -108,10 +108,30 @@ describe('stone strong status contrast', () => {
 
   it('uses light ink on light-mode progress fills and dark ink on dark-mode ones', () => {
     const mark = stoneTheme.components!['progress-bar-mark'];
-    for (const variant of ['accent', 'success', 'warning', 'error']) {
+    const {blue, green, neutral, red, yellow} = stoneModePalettes;
+    expect(mark['placement:fill+variant:accent']).toMatchObject({
+      backgroundColor: `light-dark(${neutral.light[100]}, var(--color-on-light))`,
+    });
+    expect(contrast(neutral.light[100], blue.light[40])).toBeGreaterThanOrEqual(
+      3,
+    );
+    expect(stoneTheme.tokens['--color-on-light']).toBe(
+      `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+    );
+    expect(contrast(neutral.dark[15], blue.dark[80])).toBeGreaterThanOrEqual(3);
+    // A status fill is the status color, so its mark is that status's
+    // on-color: stop 100 in light mode and stop 10 in dark mode.
+    const fills = {success: green, warning: yellow, error: red};
+    for (const [variant, palette] of Object.entries(fills)) {
       expect(mark[`placement:fill+variant:${variant}`]).toMatchObject({
-        backgroundColor: `light-dark(${stoneModePalettes.neutral.light[100]}, var(--color-on-light))`,
+        backgroundColor: `var(--color-on-${variant})`,
       });
+      expect(
+        contrast(neutral.light[100], palette.light[30]),
+      ).toBeGreaterThanOrEqual(3);
+      expect(
+        contrast(neutral.dark[10], palette.dark[80]),
+      ).toBeGreaterThanOrEqual(3);
     }
   });
 

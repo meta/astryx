@@ -213,6 +213,29 @@ describe('butter progress fills', () => {
     },
   );
 
+  const marks = {
+    success: {light: green.light[85], dark: green.dark[15]},
+    warning: {light: yellow.light[95], dark: yellow.dark[15]},
+    error: {light: red.light[95], dark: red.dark[15]},
+  };
+
+  it.each(Object.entries(marks))(
+    'draws a mark on a %s fill in that status on-color, at 3:1 on the fill',
+    (variant, mark) => {
+      expect(
+        butterTheme.components?.['progress-bar-mark']?.[
+          `placement:fill+variant:${variant}`
+        ],
+      ).toMatchObject({backgroundColor: `var(--color-on-${variant})`});
+      expect(butterTheme.tokens[`--color-on-${variant}`]).toBe(
+        `light-dark(${mark.light}, ${mark.dark})`,
+      );
+      const fill = fills[variant as keyof typeof fills];
+      expect(contrast(mark.light, fill.light)).toBeGreaterThanOrEqual(3);
+      expect(contrast(mark.dark, fill.dark)).toBeGreaterThanOrEqual(3);
+    },
+  );
+
   it.each(['neutral', 'disabled'])(
     'keeps a %s fill at 3:1 on the track: secondary text in light, stop 80 in dark',
     variant => {
