@@ -34,9 +34,12 @@ test.afterAll(async () => {
   await storybook?.close();
 });
 
-async function overflowingTable(page: Page): Promise<Locator> {
+async function overflowingTable(
+  page: Page,
+  direction: 'ltr' | 'rtl' = 'ltr',
+): Promise<Locator> {
   await page.goto(
-    `${storybook.origin}/iframe.html?id=core-table--responsive-scroll&viewMode=story`,
+    `${storybook.origin}/iframe.html?id=core-table--responsive-scroll&viewMode=story&globals=direction:${direction}`,
   );
   const viewport = page.locator('.astryx-table-scroll-wrapper').first();
   await expect(viewport).toHaveAttribute('data-scrollable-inline', 'true');
@@ -58,11 +61,10 @@ async function scrollTo(viewport: Locator, edge: 'start' | 'middle' | 'end') {
 
 for (const dir of ['ltr', 'rtl'] as const) {
   test(`${dir}: an edge fades only while it hides content`, async ({page}) => {
-    const viewport = await overflowingTable(page);
-    await page.evaluate(
-      d => document.documentElement.setAttribute('dir', d),
-      dir,
-    );
+    const viewport = await overflowingTable(page, dir);
+    expect(
+      await viewport.evaluate(element => getComputedStyle(element).direction),
+    ).toBe(dir);
 
     await scrollTo(viewport, 'start');
     await expect(viewport).toHaveAttribute('data-scroll-inline-start', 'true');
@@ -80,11 +82,10 @@ for (const dir of ['ltr', 'rtl'] as const) {
   test(`${dir}: a keyboard-focused viewport shows its ring unmasked`, async ({
     page,
   }) => {
-    const viewport = await overflowingTable(page);
-    await page.evaluate(
-      d => document.documentElement.setAttribute('dir', d),
-      dir,
-    );
+    const viewport = await overflowingTable(page, dir);
+    expect(
+      await viewport.evaluate(element => getComputedStyle(element).direction),
+    ).toBe(dir);
     await scrollTo(viewport, 'middle');
     await expect
       .poll(async () => maskOf(viewport))
