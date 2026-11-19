@@ -18,6 +18,11 @@ export const docs = {
   keywords: [
     'icon',
     'svg',
+    'built-in meaning',
+    'semantic icon',
+    'semantic icon name',
+    'icon registry',
+    'theme icons',
     'glyph',
     'symbol',
     'pictogram',

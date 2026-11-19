@@ -9,6 +9,7 @@ export const docs = {
   name: 'icons',
   title: 'Icons',
   category: 'foundations',
+  keywords: ['built-in meaning', 'icon names', 'semantic icon', 'semantic icon names', 'icon registry', 'theme icons', 'IconName'],
   description:
     "Built-in icon meanings: the icon names every Astryx component can draw. The active theme's icons draw them, and a theme can replace any of them.",
 
