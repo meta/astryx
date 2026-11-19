@@ -1560,8 +1560,19 @@ export function apply(ctx, slug, d, st) {
         ERROR_CODES.ERR_THEME_NOT_SET,
       );
     d.settings.splice(i, 1);
-  } else if (i >= 0) d.settings[i] = s;
-  else d.settings.push(s);
+  } else if (i >= 0) {
+    // (The same setting again keeps the members the saved one keeps out,
+    // as set does.)
+    const was = d.settings[i];
+    if (
+      was.keep &&
+      !s.keep &&
+      JSON.stringify({...was, keep: undefined}) ===
+        JSON.stringify({...s, keep: undefined})
+    )
+      s.keep = was.keep;
+    d.settings[i] = s;
+  } else d.settings.push(s);
 }
 
 /**

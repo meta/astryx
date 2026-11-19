@@ -162,6 +162,9 @@ import {
   notGrowingWhens,
   sharedControlHeight,
   controlHeightValue,
+  reachGroupOf,
+  spreads,
+  describe,
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
 import {
@@ -3432,6 +3435,22 @@ export function dividerParts(C) {
 }
 
 /**
+ * The parts a property's checks judge: the part named, for a setting that
+ * reaches its family role (the members that take it come along; one that
+ * cannot take it on the part named is refused, as with --only), else every
+ * part it styles (a group's members, an always-alike group's).
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').Setting} s
+ * @returns {string[]}
+ */
+function checkedParts(ctx, s) {
+  const family = s.on && !s.only ? reachGroupOf(ctx, s) : null;
+  return family && !AUTO_SPREAD.includes(family)
+    ? partsOf(ctx, {...s, only: true})
+    : partsOf(ctx, s);
+}
+
+/**
  * Refuses a property the part data records from a line inside the part
  * with no target of its own (a divider's line): written on the part's own
  * element, it paints under the line and never shows. The lines offered set
@@ -3443,7 +3462,7 @@ export function dividerParts(C) {
  * @param {string} v
  */
 function lineRefusal(ctx, slug, s, prop, v) {
-  const parts = partsOf(ctx, s);
+  const parts = checkedParts(ctx, s);
   // A border's color or width on a part whose line an element inside it
   // draws, and whose own element draws no border (a divider): there is no
   // border for it to color or widen. The line's own token is what reaches
@@ -3830,9 +3849,13 @@ export function borderFor(ctx, slug, data, s) {
       {...s, when: s.when ?? defaultLook(ctx, t)},
       t,
     );
+  // (Decided on the part named: a family the color reaches beyond it, a
+  // button's, keeps the members' own borders, and the border brought for
+  // the named part reaches them as the color does.)
+  const named = parts.includes(String(s.on)) ? [String(s.on)] : parts;
   if (
-    !parts.length ||
-    parts.some(
+    !named.length ||
+    named.some(
       t =>
         draws(t) ||
         // (Every side the color is on turned off: set refuses it.)
@@ -3943,7 +3966,7 @@ function borderNoneRefusal(ctx, slug, data, s, prop) {
  * @param {string} v
  */
 function noOutlineRefusal(ctx, slug, data, s, prop, v) {
-  const parts = partsOf(ctx, s);
+  const parts = checkedParts(ctx, s);
   /** @param {string} t */
   const drawsNone = t => {
     const at = ctx.C.MAP[t]?.at ?? {};
@@ -4002,7 +4025,7 @@ function mediaTextRefusal(ctx, slug, s, v) {
   // (A `color` on the part is its text color: written into the two colors
   // the surface gives its text, on the part alone.)
   if (s.source === 'property' && s.thing === 'color') return;
-  const parts = partsOf(ctx, s);
+  const parts = checkedParts(ctx, s);
   const held = parts.filter(
     t => ctx.C.MAP[t]?.media && !ctx.C.MAP[t]?.own?.color,
   );
@@ -5534,12 +5557,42 @@ function checkOne(
         '--only is for one member of a group, such as text-input (how --list groups).',
         {run: [`${HOW} --list groups`]},
       );
-    // (One predicate with the settings reader: a member of a group that
-    // spreads.)
-    if (!onlyFits(s, ctx)) {
+    // (A member of a family keeps --only: it keeps the setting off the
+    // rest of the family; so does a member of a group that spreads, and a
+    // control's own height. On any other part it changes nothing.)
+    if (!reachGroupOf(ctx, s) && !onlyFits(s, ctx)) {
       s.only = undefined;
       if (!unset)
-        s.note = `${s.on} is styled on its own already (only the ${AUTO_SPREAD.join(' and ')} groups spread), so --only changes nothing: it is saved without it`;
+        s.note = `${s.on} is styled on its own already (it is in no family a setting on it spreads to; how --list groups), so --only changes nothing: it is saved without it`;
+    }
+  }
+  // A later setting on one member of a thing its family already carries
+  // from another member or from the family group (a gradient on
+  // icon-button after the one on button reached it): a drill-in, kept to
+  // that member, so the family keeps its look; the note gives the lines
+  // that change the whole family: take the drill-in back, then set the
+  // member the family look comes from (its own setting wins over a group
+  // setting, so a line on the family would leave it as it was).
+  if (!unset && s.on && !s.only && TARGET.has(s.on)) {
+    const fam = reachGroupOf(ctx, s);
+    const carried = fam
+      ? [...(Array.isArray(data.settings) ? data.settings : [])]
+          .reverse()
+          .find(
+            x =>
+              x.on &&
+              x.on !== s.on &&
+              kebab(String(x.thing)) === kebab(String(thing)) &&
+              (x.when ?? '') === (s.when ?? '') &&
+              (x.state ?? '') === (s.state ?? '') &&
+              (x.mode ?? '') === (s.mode ?? '') &&
+              spreads(ctx, x) &&
+              partsOf(ctx, x).includes(s.on ?? ''),
+          )
+      : undefined;
+    if (fam && carried) {
+      s.only = true;
+      s.note = `${s.on} keeps this on its own (saved with --only): ${describe(carried)} already reaches the ${fam} family, which keeps that look; to change the whole family instead, take this back and set it where the family look comes from: ${P} undo ${slug} && ${P} set ${slug} ${quoteCommandArgument(String(thing))} ${quoteCommandArgument(String(value))} --on ${carried.on}${s.state ? ` --state ${s.state}` : ''}${s.when ? ` --when ${s.when}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`;
     }
   }
   // A control that grows with its content takes its top and bottom padding
@@ -6144,7 +6197,7 @@ function checkOne(
       s.state,
     )
   ) {
-    const parts = partsOf(ctx, s);
+    const parts = checkedParts(ctx, s);
     const own = (/** @type {string} */ t) => ctx.C.MAP[t]?.own ?? {};
     const keys = (/** @type {string} */ t, /** @type {string} */ st) =>
       JSON.stringify(own(t)).includes(`:${st}`);
@@ -6662,9 +6715,6 @@ function checkOne(
             Boolean(x.only) === (on === s.on ? Boolean(s.only) : false),
         );
       const own = (/** @type {string} */ on) => latest(on)?.value;
-      // A member covered by a later group setting shows the group's value
-      // (the later one wins, as the build applies them).
-      const fam = s.on ? familyOf(s.on) : null;
       // For a variant or state with no setting of its own, the part's
       // plain setting applies there too.
       const plainOn = (/** @type {string} */ on) =>
@@ -6681,18 +6731,32 @@ function checkOne(
       const mine =
         latest(s.on ?? '') ??
         (s.on && (s.when || s.state) ? plainOn(s.on) : undefined);
-      // With --only too: the member shows its group's value until it has one
-      // of its own, as corners step.
-      const group =
-        fam && fam !== s.on
-          ? (latest(fam) ?? (s.when || s.state ? plainOn(fam) : undefined))
+      // With --only too: the member shows what its group or family gives it
+      // (the latest setting that reaches it) until it has one of its own,
+      // which it keeps whatever the order, as the build does.
+      /** @param {(x: import('./_settings.mjs').Setting) => boolean} scoped */
+      const reaching = scoped =>
+        s.on
+          ? [...data.settings]
+              .reverse()
+              .find(
+                x =>
+                  x.thing === thing &&
+                  x.on &&
+                  x.on !== s.on &&
+                  spreads(ctx, x) &&
+                  partsOf(ctx, x).includes(s.on ?? '') &&
+                  scoped(x),
+              )
           : undefined;
-      const shown =
-        mine && group
-          ? data.settings.indexOf(group) > data.settings.indexOf(mine)
-            ? group
-            : mine
-          : (mine ?? group);
+      const group =
+        reaching(
+          x =>
+            (x.when ?? '') === (s.when ?? '') &&
+            (x.state ?? '') === (s.state ?? ''),
+        ) ??
+        (s.when || s.state ? reaching(x => !x.when && !x.state) : undefined);
+      const shown = mine ?? group;
       // A value the step reads: a rung or a size. A saved value it cannot
       // read (a step word saved by hand) steps from what applies without
       // it, never from the first rung.
@@ -6828,37 +6892,48 @@ function checkOne(
           light: /** @type {Record<string, string>} */ ({}),
           dark: /** @type {Record<string, string>} */ ({}),
         };
+        // (The part named leads, never another member of the family its
+        // setting reaches; a group's first member leads the group.)
+        const leadPart = s.on
+          ? groupsOf(ctx)[s.on]
+            ? partsOf(ctx, s)[0]
+            : partsOf(ctx, {...s, only: true})[0]
+          : undefined;
         const token = s.on
-          ? radiusTokenOf(ctx, partsOf(ctx, s)[0] ?? s.on, s.when)
+          ? radiusTokenOf(ctx, leadPart ?? s.on, s.when)
           : '--radius-element';
-        // What the part shows: a setting on it or on its group (the later
-        // one wins), else a whole-theme setting, else the base theme.
-        const fam = s.on ? familyOf(s.on) : null;
-        // A setting reaches the part when it is on the part itself, on its
-        // group, or spread from a member (pill on text-input reaches the
-        // whole inputs group). One for the same variant and state wins,
-        // else the part's plain one (it applies there too).
-        const part = partsOf(ctx, s)[0] ?? s.on;
-        const reaches = (/** @type {import('./_settings.mjs').Setting} */ x) =>
-          x.thing === 'corners' &&
-          x.on &&
-          (x.on === s.on ||
-            (fam && fam !== s.on && x.on === fam && !x.only) ||
-            (!x.only && partsOf(ctx, x).includes(part)));
+        // What the part shows: a setting on it (it keeps its own whatever
+        // the order), else the latest on its group or spread from a member
+        // of its family (pill on text-input reaches the whole inputs
+        // group), else a whole-theme setting, else the base theme. One for
+        // the same variant and state wins, else the part's plain one (it
+        // applies there too).
+        const part = leadPart ?? String(s.on ?? '');
+        /** @param {(x: import('./_settings.mjs').Setting) => boolean} reaches */
+        const scopedFind = reaches =>
+          [...data.settings]
+            .reverse()
+            .find(
+              x =>
+                reaches(x) &&
+                (x.when ?? '') === (s.when ?? '') &&
+                (x.state ?? '') === (s.state ?? ''),
+            ) ??
+          (s.when || s.state
+            ? [...data.settings]
+                .reverse()
+                .find(x => reaches(x) && !x.when && !x.state)
+            : undefined);
         const onPart = s.on
-          ? ([...data.settings]
-              .reverse()
-              .find(
-                x =>
-                  reaches(x) &&
-                  (x.when ?? '') === (s.when ?? '') &&
-                  (x.state ?? '') === (s.state ?? ''),
-              ) ??
-            (s.when || s.state
-              ? [...data.settings]
-                  .reverse()
-                  .find(x => reaches(x) && !x.when && !x.state)
-              : undefined))
+          ? (scopedFind(x => x.thing === 'corners' && x.on === s.on) ??
+            scopedFind(
+              x =>
+                x.thing === 'corners' &&
+                !!x.on &&
+                x.on !== s.on &&
+                spreads(ctx, x) &&
+                partsOf(ctx, x).includes(part),
+            ))
           : undefined;
         // A step on a member set alone stays on that member alone.
         if (onPart && onPart.on === s.on && onPart.only && !s.only)
@@ -7997,11 +8072,11 @@ function checkOne(
       const recorded = results.filter(([, r]) => !r?.soft);
       const hard = recorded.filter(([, r]) => r);
       const spread = Boolean(
-        groupsOf(ctx)[s.on ?? ''] || (familyOf(s.on ?? '') && parts.length > 1),
+        groupsOf(ctx)[s.on ?? ''] || (reachGroupOf(ctx, s) && parts.length > 1),
       );
       // A part with no record is judged by its group: refused when no
       // member that has a record reads the token, as the group form is.
-      const fam = s.on ? familyOf(s.on) : null;
+      const fam = s.on ? (reachGroupOf(ctx, s) ?? familyOf(s.on)) : null;
       if (!recorded.length && fam && !spread) {
         const siblings = groupsOf(ctx)[fam].filter(t => C.MAP[t]);
         const famResults = siblings.map(
@@ -8231,7 +8306,7 @@ function checkOne(
         splitTop(v.trim(), ' ').every(
           x => oneLength(x) || /^[+-]?0+(?:\.0+)?$/.test(x.trim()),
         );
-      const hit = partsOf(ctx, s).find(t =>
+      const hit = checkedParts(ctx, s).find(t =>
         (ctx.derived?.[t] ?? []).some(
           d =>
             d.property === camel(prop) &&
@@ -8349,7 +8424,7 @@ function checkOne(
         prop === 'background' || prop === 'background-color'
           ? 'background-color'
           : prop;
-      const inline = partsOf(ctx, s)
+      const inline = checkedParts(ctx, s)
         .map(t => {
           const at = ctx.C.MAP[t]?.inline ?? {};
           const tok =
@@ -8379,9 +8454,9 @@ function checkOne(
     if (
       !unset &&
       /^border(?!.*radius)(-|$)/.test(prop) &&
-      partsOf(ctx, s).length === 1
+      checkedParts(ctx, s).length === 1
     ) {
-      const part = partsOf(ctx, s)[0];
+      const part = checkedParts(ctx, s)[0];
       const inner = borderParts(ctx, part).filter(t => t !== part);
       if (inner.length)
         refuse(
@@ -8400,9 +8475,9 @@ function checkOne(
       !unset &&
       /^padding(-|$)/.test(prop) &&
       !s.state &&
-      partsOf(ctx, s).length === 1
+      checkedParts(ctx, s).length === 1
     ) {
-      const part = partsOf(ctx, s)[0];
+      const part = checkedParts(ctx, s)[0];
       const inner = paddedParts(ctx, part).filter(t => t !== part);
       if (inner.length)
         refuse(
@@ -8449,7 +8524,7 @@ function checkOne(
         'color',
       ].includes(prop)
     ) {
-      const inner = partsOf(ctx, s)
+      const inner = checkedParts(ctx, s)
         .map(t => /** @type {const} */ ([t, innerPropTokens(ctx.C, t, prop)]))
         .filter(([, toks]) => toks.length);
       // One token for each part (a banner's text size, --text-label-size):
@@ -8474,7 +8549,11 @@ function checkOne(
         inner.every(
           ([t, toks]) => toks.length === 1 || column(t, toks) || main(t),
         );
-      if (inner.length && inner.length === partsOf(ctx, s).length && oneEach) {
+      if (
+        inner.length &&
+        inner.length === checkedParts(ctx, s).length &&
+        oneEach
+      ) {
         const said = inner
           .map(([part, toks]) =>
             toks.length === 1
@@ -8485,7 +8564,7 @@ function checkOne(
           )
           .join('; ');
         s.note = s.note ? `${s.note}; ${said}` : said;
-      } else if (inner.length && inner.length === partsOf(ctx, s).length) {
+      } else if (inner.length && inner.length === checkedParts(ctx, s).length) {
         const [part, toks] = inner[0];
         refuse(
           E.ERR_THEME_NO_EFFECT,
@@ -8534,7 +8613,7 @@ function checkOne(
     const textParts = COLOR_PROP_PARTS;
     // A text, heading or link color is written as the text color tokens
     // its color prop reads, on that part alone (compileTheme), so it shows.
-    const propTokens = partsOf(ctx, s).map(t =>
+    const propTokens = checkedParts(ctx, s).map(t =>
       colorPropTokens(ctx, t, s.when),
     );
     // (A value that is no color is refused below, with the nearest color.)
@@ -8543,7 +8622,7 @@ function checkOne(
       isColorValue(v) &&
       propTokens.length > 0 &&
       propTokens.every(k => k.length);
-    if (propColor && partsOf(ctx, s).some(t => t !== 'heading')) {
+    if (propColor && checkedParts(ctx, s).some(t => t !== 'heading')) {
       const toks = [...new Set(propTokens.flat())];
       const said = `the color goes into ${toks.join(' and ')} on ${s.on}, the ${toks.length > 1 ? 'tokens' : 'token'} its color prop reads (Core sets that prop after part styles)`;
       s.note = s.note ? `${s.note}; ${said}` : said;
@@ -8553,9 +8632,9 @@ function checkOne(
       // (A value that is no color, "12px", is refused below as no color.)
       (unset || !v || isColorValue(v)) &&
       (prop === 'color' || prop === '-webkit-text-fill-color') &&
-      partsOf(ctx, s).some(t => textParts.includes(t))
+      checkedParts(ctx, s).some(t => textParts.includes(t))
     ) {
-      if (partsOf(ctx, s).every(t => textParts.includes(t))) {
+      if (checkedParts(ctx, s).every(t => textParts.includes(t))) {
         const named = /^color:([\w-]+)$/.exec(s.when ?? '')?.[1];
         // The typed value goes into the token only when it is a plain color;
         // else the nearest color name, else an example.
@@ -8733,7 +8812,7 @@ function checkOne(
         prop,
       );
       const undrawn =
-        lined && !drawsLine(C, partsOf(ctx, s), prop, s.state ?? null);
+        lined && !drawsLine(C, checkedParts(ctx, s), prop, s.state ?? null);
       // On a part whose variants each have their own color, the color per
       // mode is set for one variant at a time (as that refusal says): the
       // step names the default one, or the first.
@@ -8742,7 +8821,7 @@ function checkOne(
         const g = C.groupOfProp(alt);
         const variants = [
           ...new Set(
-            partsOf(ctx, s).flatMap(t =>
+            checkedParts(ctx, s).flatMap(t =>
               (g ? C.partReads(t, g) : [])
                 .filter(r => r.props.includes(alt))
                 .flatMap(r => r.when)
@@ -8751,7 +8830,7 @@ function checkOne(
             ),
           ),
         ];
-        const plain = partsOf(ctx, s).some(t =>
+        const plain = checkedParts(ctx, s).some(t =>
           (g ? C.partReads(t, g) : []).some(
             r => r.props.includes(alt) && r.when.includes(''),
           ),
@@ -8785,7 +8864,9 @@ function checkOne(
       // A color with no longhand of its own (a shadow's) goes per mode in
       // the value: light-dark() holds each mode's color, and a part with
       // no such property of its own shows none in the other mode.
-      const ownShadow = partsOf(ctx, s).some(t => ctx.C.MAP[t]?.own?.[prop]);
+      const ownShadow = checkedParts(ctx, s).some(
+        t => ctx.C.MAP[t]?.own?.[prop],
+      );
       const inValue =
         !alt &&
         colorWord &&
@@ -9044,7 +9125,7 @@ function refuseRadioCorners(ctx, slug, s, data) {
  */
 function refuseInvisibleCorners(ctx, slug, s, data) {
   if (ctx.unchecked) return;
-  const parts = partsOf(ctx, s);
+  const parts = checkedParts(ctx, s);
   if (!parts.length || parts.some(t => ctx.C.showsCorners(t))) return;
   // The corners dial on a part whose corners are drawn by parts of its own
   // inside it (a date-time input's date and time boxes) rounds those.

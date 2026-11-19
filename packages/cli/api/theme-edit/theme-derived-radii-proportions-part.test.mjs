@@ -83,15 +83,15 @@ describe('corners', () => {
     await themeEditUndo('z', {cwd});
   }, 240_000);
 
-  it('a group setting after a part setting says so, and show names the part as covered', async () => {
+  it('a group setting after a part setting leaves the part its own, and says so', async () => {
     await themeEditSet('z', 'corners', '6px', {cwd, on: 'card'});
     const g = await themeEditSet('z', 'corners', 'round', {
       cwd,
       on: 'containers',
     });
-    expect(g.data.notes.join(' ')).toContain('card shows this value now');
+    expect(g.data.notes.join(' ')).toContain('card keeps its own corners');
     const show = await themeEditShow('z', {cwd});
-    expect(show.data.partValues.join(' ')).toContain('not shown');
+    expect(show.data.partValues.join(' ')).not.toContain('not shown');
     await themeEditUndo('z', {cwd});
     await themeEditUndo('z', {cwd});
   }, 240_000);

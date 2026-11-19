@@ -79,7 +79,11 @@ describe('a state named by its ARIA attribute', () => {
           state: typed,
         });
         expect(r.data.setting).toMatchObject({state: 'isPressed'});
-        expect(saved()).toEqual([PRESSED]);
+        // (Less the family members it keeps out where its text would not
+        // read: the editor's, not the state's.)
+        expect(saved().map((/** @type {any} */ {keep, ...x}) => x)).toEqual([
+          PRESSED,
+        ]);
       },
       T,
     );

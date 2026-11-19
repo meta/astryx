@@ -452,7 +452,7 @@ describe('groups', () => {
     });
   });
 
-  it('a container styles only itself unless --on names the group', async () => {
+  it('a container styles only itself unless --on names the group, and keeps its own against it', async () => {
     const card = await themeEditSet('t', 'box-shadow', 'none', {
       cwd,
       on: 'card',
@@ -463,9 +463,11 @@ describe('groups', () => {
       cwd,
       on: 'containers',
     });
+    // (The card keeps its own setting, set before the group's.)
     expect(all.data.parts).toEqual(
-      expect.arrayContaining(['card', 'dialog', 'popover']),
+      expect.arrayContaining(['dialog', 'popover']),
     );
+    expect(all.data.group?.kept).toEqual(['card']);
     await themeEditUndo('t', {thing: 'box-shadow', cwd, on: 'card'});
     await themeEditUndo('t', {thing: 'box-shadow', cwd, on: 'containers'});
   });
