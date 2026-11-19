@@ -57,7 +57,7 @@ import {outsideRequests, roundTrip} from '../../foundation/render/share-checks.m
 import {hostedPagePackages, recordResolved} from '../../foundation/runtime/package-root.mjs';
 import {installCommandFor} from '../../foundation/discovery/template-needs.mjs';
 import {COMPONENT_BATCH_SELECTOR_LIMIT, component} from '../component/component.mjs';
-import {projectAugmentations, propWideningInterfaces} from '../../foundation/discovery/core-augmentation-points.mjs';
+import {projectAugmentations, propValueKinds, propWideningInterfaces, unacceptedKind} from '../../foundation/discovery/core-augmentation-points.mjs';
 
 export {PAGE_EXTENSIONS, embeddedPathProblem};
 
@@ -499,20 +499,58 @@ function servedSet(input) {
 /** A prop type that is a closed union of string literals, as a doc writes it: `'sm' | 'md'`. */
 const CLOSED_UNION = /^\s*'[^']*'(?:\s*\|\s*'[^']*')*\s*$/;
 
+/** A documented type that is only string literals, or `string` itself. */
+const STRING_TYPE = /^\s*(?:string|'[^']*'(?:\s*\|\s*'[^']*')*)\s*$/;
+
 /**
- * A warning for each string a page gives a Core component's prop that the
- * prop's closed union does not hold (`<Button variant="danger">`): the
- * component draws its default look, and nothing else says so. The union
- * comes from Core's own docs for the component in the page's Core, the props
- * `astryx component <Name> --package @astryxdesign/core` reads, so an
- * integration that replaces the component does not change it. Where the
- * prop's type takes the keys of an interface a theme can widen by declaration
- * merging (`interface ButtonVariantMap`, `interface TextColorMap` for Link's
- * `color`), the keys the page's project adds to it are values the prop has
- * too; when the project cannot be read in full, or the prop's type cannot be
- * followed, such a prop is not checked. A component or prop with no doc
- * entry, and a prop whose type is not a closed union, are not checked.
- * @param {{component: string, prop: string, value: string, file: string, line: number}[]} values
+ * Whether a prop's documented type (as `astryx component` shows it) plainly
+ * takes every written kind: strings for a string union or `string`, numbers
+ * for `number`, true or false for `boolean`. Only a yes skips the read of
+ * Core's source; any other type is read there.
+ * @param {unknown} docType
+ * @param {string[]} kinds
+ * @returns {boolean}
+ */
+function docTypeTakes(docType, kinds) {
+  if (typeof docType !== 'string') return false;
+  const type = docType.trim();
+  return kinds.every(kind =>
+    kind === 'string' ? STRING_TYPE.test(type) : kind === 'number' ? type === 'number' : kind === 'boolean' && type === 'boolean',
+  );
+}
+
+/** How a warning names each kind of value. */
+const KIND_WORDS = /** @type {Record<import('../../foundation/discovery/core-augmentation-points.mjs').ValueKind, string>} */ ({
+  string: 'a string',
+  number: 'a number',
+  boolean: 'true or false',
+  object: 'an object',
+  array: 'an array',
+  Date: 'a Date',
+  function: 'a function',
+});
+
+/**
+ * A warning for each value a page certainly gives a Core component's prop
+ * that the prop does not take.
+ * - A value of the wrong kind for the prop's declared type in the page's
+ *   Core (`<TextInput status="error">`, where status takes an object): both
+ *   the written value and the declared type must be certain, else the prop
+ *   is not checked.
+ * - A string the prop's closed union does not hold (`<Button
+ *   variant="danger">`), each branch of a literal-only conditional included:
+ *   the component draws no look for it, and nothing else says so. The union
+ *   comes from Core's own docs for the component in the page's Core, the
+ *   props `astryx component <Name> --package @astryxdesign/core` reads, so an
+ *   integration that replaces the component does not change it. Where the
+ *   prop's type takes the keys of an interface a theme can widen by
+ *   declaration merging (`interface ButtonVariantMap`, `interface
+ *   TextColorMap` for Link's `color`), the keys the page's project adds to it
+ *   are values the prop has too; when the project cannot be read in full, or
+ *   the prop's type cannot be followed, such a prop is not checked. A
+ *   component or prop with no doc entry, and a prop whose type is not a
+ *   closed union, are not checked.
+ * @param {NonNullable<import('../../foundation/render/render-page.mjs').RenderedPage['propValues']>} values
  * @param {string} page the page file; its folder's Core gives the docs
  * @param {(name: string) => Promise<any[] | null>} docsOf the documented
  *   props of a Core component, read once for both prop checks
@@ -523,14 +561,54 @@ async function propValueWarnings(values, page, docsOf) {
   /** @type {import('../../foundation/render/render-page.mjs').RenderWarning[]} */
   const warnings = [];
   const seen = new Set();
+  /** @param {string} key @param {string} message */
+  const warn = (key, message) => {
+    if (seen.has(key)) return;
+    seen.add(key);
+    warnings.push({code: 'unknown-prop-value', message});
+  };
   const coreDir = values.length ? findCoreDir(dir) : null;
   /** @type {ReturnType<typeof projectAugmentations> | undefined} */
   let added;
+  /** @type {Map<string, ReturnType<typeof propValueKinds>>} */
+  const declaredKinds = new Map();
+  // The same wrong kind for one prop on several lines of a file is one
+  // warning that names every line.
+  /** @type {Map<string, {file: string, said: string, lines: number[], at: number}>} */
+  const kindGroups = new Map();
   for (const v of values) {
+    const docType = (await docsOf(v.component))?.find(p => p?.name === v.prop)?.type;
+    const kindKey = `${v.component}.${v.prop}`;
+    // A documented string union, `string`, `number` or `boolean` that takes
+    // every written kind decides the prop without Core's source, which costs
+    // a parse per component.
+    if (!declaredKinds.has(kindKey) && !docTypeTakes(docType, v.kinds)) {
+      declaredKinds.set(kindKey, propValueKinds(coreDir, v.component, v.prop));
+    }
+    const declared = declaredKinds.get(kindKey) ?? null;
+    const wrong = declared ? unacceptedKind(v.kinds, declared) : null;
+    if (declared && wrong) {
+      const fields = declared.fields ? ` {${declared.fields.join(', ')}}` : '';
+      const numbers =
+        !declared.anyNumber && declared.numbers.size > 0 ? `one of ${[...declared.numbers].join(', ')}` : null;
+      const expected = [...declared.kinds].map(kind =>
+        kind === 'object' ? KIND_WORDS.object + fields : kind === 'number' && numbers ? numbers : KIND_WORDS[kind],
+      );
+      const said = `${v.component} ${v.prop} expects ${expected.join(' or ')}; got ${KIND_WORDS[wrong]}`;
+      const group = kindGroups.get(`${v.file}\0${said}`) ?? {file: v.file, said, lines: [], at: warnings.length};
+      if (group.lines.length === 0) {
+        kindGroups.set(`${v.file}\0${said}`, group);
+        warnings.push({code: 'unknown-prop-value', message: ''});
+      }
+      if (!group.lines.includes(v.line)) group.lines.push(v.line);
+      continue;
+    }
+    if (!v.strings || v.strings.length === 0) continue;
     const prop = (await docsOf(v.component))?.find(p => p?.name === v.prop);
     if (typeof prop?.type !== 'string' || !CLOSED_UNION.test(prop.type)) continue;
     const allowed = [...prop.type.matchAll(/'([^']*)'/g)].map(m => m[1]);
-    if (allowed.includes(v.value)) continue;
+    const unknown = v.strings.filter(value => !allowed.includes(value));
+    if (unknown.length === 0) continue;
     // The project read can walk a large tree; only a value the docs lack needs it.
     const widening = await propWideningInterfaces(coreDir, v.component, v.prop);
     if (widening === null) continue;
@@ -541,15 +619,18 @@ async function propValueWarnings(values, page, docsOf) {
         for (const key of added.keys.get(name) ?? []) if (!allowed.includes(key)) allowed.push(key);
       }
     }
-    if (allowed.includes(v.value)) continue;
-    const key = `${v.file}:${v.line}:${v.component}:${v.prop}:${v.value}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
     const kinds = v.prop.endsWith('s') ? `${v.prop} values` : `${v.prop}s`;
-    warnings.push({
-      code: 'unknown-prop-value',
-      message: `${v.file}:${v.line}: ${v.component} has no ${v.prop} "${v.value}"; its ${kinds} are ${allowed.join(', ')}.`,
-    });
+    for (const value of unknown) {
+      if (allowed.includes(value)) continue;
+      warn(
+        `${v.file}:${v.line}:${v.component}:${v.prop}:${value}`,
+        `${v.file}:${v.line}: ${v.component} has no ${v.prop} "${value}"; its ${kinds} are ${allowed.join(', ')}.`,
+      );
+    }
+  }
+  for (const {file, said, lines, at} of kindGroups.values()) {
+    warnings[at].message =
+      lines.length === 1 ? `${file}:${lines[0]}: ${said}.` : `${file}: ${said} on ${lines.length} lines (${lines.join(', ')}).`;
   }
   return warnings;
 }

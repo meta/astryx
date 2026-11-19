@@ -57,7 +57,7 @@ import {BundleError, CARRIED_MODULE, bundleForBrowser} from './client-bundle.mjs
 import {droppedImports, importUses} from './value-uses.mjs';
 import {OTHER_JSX_RUNTIME, coreComponentOf} from '../discovery/core-elements.mjs';
 import {corePropUsesOf} from '../discovery/core-props.mjs';
-import {writtenStrings} from '../discovery/written-prop-values.mjs';
+import {writtenValue} from '../discovery/written-prop-values.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates, separateIds} from './charts.mjs';
 import {LAYER_GLOBAL, LAYER_PLACEHOLDER, countQueuedImmediates, layerDocument, layerPlaceholder, openLayerMarkup, settled} from './layers.mjs';
 
@@ -185,10 +185,11 @@ const texts = [];
 /** @type {Record<string, string[]>} */
 const fnTexts = {};
 /**
- * Each string a page's own file certainly gives a Core component's prop
- * (`<Button variant="danger">`, or each branch of
- * `variant={busy ? 'ghost' : 'danger'}`), for the unknown-prop-value warning.
- * @type {{component: string, prop: string, value: string, file: string, line: number}[]}
+ * What a page's own file certainly gives a Core component's prop
+ * (`<Button variant="danger">`, each branch of
+ * `variant={busy ? 'ghost' : 'danger'}`, `status="error"`), for the
+ * unknown-prop-value warning.
+ * @type {(import('../discovery/written-prop-values.mjs').WrittenValue & {component: string, prop: string, file: string, line: number})[]}
  */
 const propValues = [];
 /**
@@ -1332,11 +1333,13 @@ function pagePlugin(filename, browser = false, reactJsx = true) {
         if (browser) return;
         const component = coreComponentOf(p.node.name, p.scope);
         if (!component) return;
-        for (const attr of p.node.attributes) {
+        const attrs = p.node.attributes;
+        // A spread after an attribute can replace its value.
+        const lastSpread = attrs.findLastIndex((/** @type {any} */ a) => a.type === 'JSXSpreadAttribute');
+        for (const attr of attrs.slice(lastSpread + 1)) {
           if (attr.type !== 'JSXAttribute' || attr.name.type !== 'JSXIdentifier') continue;
-          for (const value of writtenStrings(attr, p.scope) ?? []) {
-            propValues.push({component, prop: attr.name.name, value, file: filename, line: attr.loc?.start.line ?? 0});
-          }
+          const written = writtenValue(attr, p.scope);
+          if (written) propValues.push({component, prop: attr.name.name, ...written, file: filename, line: attr.loc?.start.line ?? 0});
         }
         if (reactJsx) {
           const element = {line: p.node.loc?.start.line ?? 0, column: (p.node.loc?.start.column ?? 0) + 1};

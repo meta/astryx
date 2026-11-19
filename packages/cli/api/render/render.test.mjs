@@ -322,7 +322,47 @@ export default function Page() {
     const unknown = answer.data.warnings.filter((/** @type {any} */ w) => w.code === 'unknown-prop-value');
     expect(unknown.map((/** @type {any} */ w) => w.message)).toEqual([
       'values.tsx:9: Button has no size "huge"; its sizes are sm, md, lg.',
+      'values.tsx:11: Button has no size "huge"; its sizes are sm, md, lg.',
       'values.tsx:12: Button has no variant "danger"; its variants are primary, secondary, ghost, destructive.',
+    ]);
+  });
+
+  it('warns for a value of a kind the prop does not take, and only when both sides are certain', async () => {
+    put(
+      'kinds.tsx',
+      `import {useState} from 'react';
+import {Button} from '@astryxdesign/core/Button';
+import {DateInput} from '@astryxdesign/core/DateInput';
+import {Grid} from '@astryxdesign/core/Grid';
+import {TextInput} from '@astryxdesign/core/TextInput';
+import {VStack} from '@astryxdesign/core/Stack';
+const columns = 3;
+export default function Page({valid = true, note}: {valid?: boolean; note?: string}) {
+  const [born, setBorn] = useState<Date | null>(new Date(1990, 5, 15));
+  return (
+    <main>
+      <DateInput label="Born" value={born} onChange={setBorn} />
+      <TextInput label="Hook" status={valid ? undefined : 'error'} />
+      <Grid columns="3"><span /></Grid>
+      <TextInput label="Name" status={valid ? undefined : {type: 'error', message: 'Required'}} />
+      <TextInput label="Note" status={note} />
+      <Grid columns={columns}><span /></Grid>
+      <Button label="Off" isDisabled onClick={() => {}} />
+      <VStack gap="md"><span /></VStack>
+      <VStack gap="3"><span /></VStack>
+      <TextInput label="Spread" status="error" {...{status: undefined}} />
+    </main>
+  );
+}
+`,
+    );
+    const answer = /** @type {any} */ (await render('kinds.tsx', {cwd: dir, out: 'kinds.html'}));
+    const unknown = answer.data.warnings.filter((/** @type {any} */ w) => w.code === 'unknown-prop-value');
+    expect(unknown.map((/** @type {any} */ w) => w.message)).toEqual([
+      'kinds.tsx:12: DateInput value expects a string; got a Date.',
+      'kinds.tsx:13: TextInput status expects an object {type, message}; got a string.',
+      'kinds.tsx:14: Grid columns expects a number or an object {minWidth, max, repeat}; got a string.',
+      'kinds.tsx: VStack gap expects one of 0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10; got a string on 2 lines (19, 20).',
     ]);
   });
 
