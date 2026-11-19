@@ -1691,28 +1691,17 @@ export function integrationRecordHold(record) {
 function findDocumentedComponent(integration, componentsDir, name) {
   if (!COMPONENT_NAME_RE.test(name)) return null;
   const literals = [`'${name}'`, `"${name}"`, `\`${name}\``];
-  /** @type {Set<string>} */
-  const stems = new Set();
   /** @type {Array<{docPath: string, stem: string, names: string[], hasMembers: boolean, replaces: string | null, sourcePath: string|null}>} */
   const candidates = [];
-  forEachIntegrationDoc(componentsDir, (docPath, stem) => {
-    let text;
-    try {
-      text = fs.readFileSync(docPath, 'utf-8');
-    } catch {
-      return;
-    }
-    // The docs discovery records: the first visible doc for each stem.
-    if (HIDDEN_RE.test(text) || stems.has(stem)) return;
-    stems.add(stem);
-    if (!literals.some(literal => text.includes(literal))) return;
+  for (const {docPath, stem, text} of recordedIntegrationDocs(componentsDir)) {
+    if (!literals.some(literal => text.includes(literal))) continue;
     candidates.push({
       docPath,
       stem,
       ...scanDocText(text),
       sourcePath: integrationSourceForDoc(docPath),
     });
-  });
+  }
   // A Core name a doc in the package replaces is the replacement's to answer.
   if (candidates.some(candidate => candidate.replaces === name)) return null;
   candidates.sort((a, b) => byCodeUnit(a.docPath, b.docPath));
@@ -1730,6 +1719,36 @@ function findDocumentedComponent(integration, componentsDir, name) {
     }
   }
   return null;
+}
+
+/**
+ * The docs discovery records under an integration's components root, with
+ * their text, in discovery order: the first visible doc for each stem. A doc
+ * that cannot be read is left out. Read once per operation
+ * (`withListingCache`), so a caller that looks up many names reads each doc
+ * once.
+ * @param {string} componentsDir
+ * @returns {Array<{docPath: string, stem: string, text: string}>}
+ */
+function recordedIntegrationDocs(componentsDir) {
+  return oncePerListing(`recorded-docs\0${componentsDir}`, () => {
+    /** @type {Set<string>} */
+    const stems = new Set();
+    /** @type {Array<{docPath: string, stem: string, text: string}>} */
+    const docs = [];
+    forEachIntegrationDoc(componentsDir, (docPath, stem) => {
+      let text;
+      try {
+        text = fs.readFileSync(docPath, 'utf-8');
+      } catch {
+        return;
+      }
+      if (HIDDEN_RE.test(text) || stems.has(stem)) return;
+      stems.add(stem);
+      docs.push({docPath, stem, text});
+    });
+    return docs;
+  });
 }
 
 /**
@@ -1804,6 +1823,27 @@ export function findIntegrationComponentDoc(integration, name) {
   return findIntegrationComponent(integration, name)?.docPath ?? null;
 }
 
+const ASCII_RE = /^[\x20-\x7e]*$/;
+
+/**
+ * A folder's entry names in lower case, once per operation
+ * (`withListingCache`): an ASCII name with none of them, in any case, does not
+ * exist there on any file system, so a lookup of many names skips its probe.
+ * Null outside an operation, or when an entry name is not ASCII (a file
+ * system that folds case may match it to an ASCII name).
+ * @param {string} dirPath
+ * @param {fs.Dirent[]} entries
+ * @returns {Set<string> | null}
+ */
+function foldedEntryNames(dirPath, entries) {
+  if (!listingCacheActive()) return null;
+  return oncePerListing(`folded-names\0${dirPath}`, () =>
+    entries.every(entry => ASCII_RE.test(entry.name))
+      ? new Set(entries.map(entry => entry.name.toLowerCase()))
+      : null,
+  );
+}
+
 /**
  * The first `{Name}.doc.{ts,mjs,js}` under `componentsDir`, shallowest first.
  * @param {string} componentsDir
@@ -1817,9 +1857,13 @@ function findSameStemDoc(componentsDir, name) {
    */
   function scanDir(dirPath) {
     const entries = listDirEntries(dirPath);
+    const listed = foldedEntryNames(dirPath, entries);
     // Exact same-stem match (precedence order) first in this dir.
     for (const suffix of INTEGRATION_DOC_SUFFIXES) {
-      const candidate = path.join(dirPath, `${name}${suffix}`);
+      const file = `${name}${suffix}`;
+      if (listed && ASCII_RE.test(file) && !listed.has(file.toLowerCase()))
+        continue;
+      const candidate = path.join(dirPath, file);
       if (pathExists(candidate)) return candidate;
     }
     for (const entry of entries) {
