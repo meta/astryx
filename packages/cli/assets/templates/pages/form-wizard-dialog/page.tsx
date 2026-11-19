@@ -384,7 +384,9 @@ export default function FormWizardDialogPage() {
                           key={section.value}
                           value={section.value}
                           label={section.label}
-                          description={section.description}
+                          // A node description wraps on a narrow screen; a
+                          // string description truncates to one line.
+                          description={<>{section.description}</>}
                         />
                       ))}
                     </CheckboxList>

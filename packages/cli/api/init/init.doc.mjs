@@ -127,6 +127,10 @@ export const doc = {
             when: '--remove-agents is combined with --features, --all, --agent, or --agent-docs-path; --user is combined with --features, --all, --agent, or --agent-docs-path; or --all is combined with --features; or `to` names an unknown place, `skills` outside a project, or no place, is combined with `user` or `removeAgents`, is `user` alone with `features`, `all`, `agent`, or `agentDocsPath`, leaves out `agents-md` while `agent` or `agentDocsPath` is set, or comes with `features` that leave out agents',
     },
     {
+      code: 'ERR_WRITE_FAILED',
+      when: 'with `user`, the file system refuses a write or removal of the computer-level agent text (as a `~/.agents/skills` the user cannot write); the message names the path, the errno, and what to change',
+    },
+    {
       code: 'ERR_UNKNOWN_AGENT',
             when: 'the agents feature runs (default mode, features includes agents, or all) and `agent` is not one of claude, cursor, codex, hermes, muse, all',
     },

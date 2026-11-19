@@ -428,7 +428,8 @@ works on is `spec:AST-040` FR9's.
     not-found hint, integrations' theme records, what `theme build` checks a theme
     against in Core's component docs, the JavaScript `theme build` compiles
     from a theme's local TypeScript or JSX modules, what `theme build` finds
-    when it checks a theme's pseudo-class keys and token names, the lookup
+    when it checks a theme's pseudo-class keys, token names and settings
+    the browser won't show as written, the lookup
     commands'
     not-found hint's name summaries of folder trees, npm's list of the files an integration
     package packs (for `integration check` and `doctor integration validate`
@@ -450,7 +451,7 @@ works on is `spec:AST-040` FR9's.
     create it to keep npm's list; used only while it is
     a real folder the user owns and others cannot open, never where the
     system has no user ids), each
-    kept value used only while every input its gather read is unchanged. For the installed CLI's own files, the CLI's build id and the folder the CLI runs from stand for their contents (an upgrade, a reinstall or a copy installed in another folder, such as a patched one, changes them; in-place edits to an installed CLI aren't supported, and deleting the per-user `astryx/catalogs` folder clears what was kept); for the same reason, a run that keeps catalogs loads the installed CLI's own modules by their path in that folder, without Node first checking that each file exists and where it really lives. A
+    kept value used only while every input its gather read is unchanged. For the installed CLI's own files, the CLI's build id and the folder the CLI runs from stand for their contents (an upgrade, a reinstall or a copy installed in another folder, such as a patched one, changes them; in-place edits to an installed CLI aren't supported, and deleting the per-user `astryx/catalogs` folder clears what was kept); for the same reason, a run that keeps catalogs loads the installed CLI's own modules by their path in that folder, without Node first checking that each file exists and where it really lives. One kept value depends on neither the build id nor the folder the CLI runs from: the JavaScript `theme build` compiles from a theme's local TypeScript or JSX module. It is named for the module's source text, the compile options, the import rewrites, the content of the CLI module that compiles it and the files the CLI loads Babel and its plugins from, and it is used only while every file of Babel's code that compiled it keeps its size, modification time, change time and inode, and each package folder Babel's code found another package in keeps its real path; and it is kept only when none of those files changed during the run that made it. A CLI upgrade that leaves Babel's installed files in place reuses it, wherever the new CLI is installed; a reinstall or change of Babel, a CLI that finds Babel in another place, or a change to the compiling module compiles again. A
     run under Yarn Plug'n'Play's loader, such as `yarn astryx`, keeps and
     uses no catalog; `doctor` lists that folder and its size in an info row,
     which also names the size limit it shares with the transpile cache below
@@ -499,7 +500,18 @@ works on is `spec:AST-040` FR9's.
     `<folder>/astryx-project/SKILL.md` (the project skill) when the folder is
     in the project, else `<folder>/astryx/SKILL.md` (the computer-level
     text). The project skills folders `--to skills` writes sit in the folder
-    where `init` writes agent docs.
+    where `init` writes agent docs. `astryx upgrade --apply` refreshes the
+    project places astryx.config `skills.to` saves under the same rules as
+    `init`: the copies of a place are written together or not at all, an
+    edited file or one Astryx did not write is kept, nothing is written
+    through a folder linked out of the project, and none is written in the
+    home folder or a settings folder. An Astryx block is refreshed wherever
+    it is; only the advice to add one is left out where `skills.to` saves no
+    `agents-md`. `astryx doctor`'s `skill-places` check reports each saved
+    file (current, missing, from another release, or kept), copies of a
+    place that differ, the block and the skill both present without both
+    being saved, and a project skill named `astryx`, and scans no skill
+    folder in the home folder or a settings folder.
 
   No run writes a project's agent docs into the home folder or a settings folder
   in it (`architecture:cli-surface` INV31); the computer-level agent text above
@@ -549,7 +561,9 @@ works on is `spec:AST-040` FR9's.
     own: the global copy refreshes `<folder>/astryx/SKILL.md` on the same
     schedule while the file is there, an edited file kept, and never writes
     it again once it is deleted; `astryx init --to <folder>` writes it
-    again.
+    again. Doctor's computer-level text check names these folders, which
+    are missing and which are from another release, also while the
+    computer-level text is turned off.
   - The settings file is `astryx/settings.json` in the per-user configuration
     directory (FR7): `computerAgentText.install`, `true` or `false`, and
     `computerAgentText.links`, the links the CLI made, so removal removes
@@ -590,8 +604,10 @@ works on is `spec:AST-040` FR9's.
     Starting again is not a hand-off: the same copy runs, with the same
     arguments, folder, and standard streams.
   - A command that acts on the computer rather than the folder it runs in,
-    `astryx init --user` (FR8) and `astryx docs global` with its pages, the
-    docs of global mode itself, is never handed to a project's release: it is
+    `astryx init --user` (FR8), `astryx init --to` naming only places outside
+    the project (`user`, or folders outside it) with no feature beyond the
+    agent docs (FR8), and `astryx docs global` with its pages, the docs of
+    global mode itself, is never handed to a project's release: it is
     answered as outside a project wherever it runs, so those docs read the same
     inside a project whose release predates them, and its standard-error line
     says it answered for the computer.

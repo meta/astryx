@@ -24,11 +24,7 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {AstryxError} from '../error.mjs';
 import {currentNonCoreBase} from '../../foundation/bases/state.mjs';
 
-export {
-  planCopy,
-  relativeSpecifierBetween,
-  renderFile,
-} from './_moduleGraph.mjs';
+export {planCopy, renderFile} from './_moduleGraph.mjs';
 
 /**
  * Whether an executable `gh` is on `PATH` (with a `PATHEXT` extension on

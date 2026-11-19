@@ -44,7 +44,7 @@ export const docs = {
           items: [
             'Use components for everything they cover',
             'Page layout is frame-first: pick the shell and budget regions before writing content (see {@link namespace:layout})',
-            'Dense data renders as rows (Table, List/Item), edge-to-edge with dividers; Card is for widgets, galleries, and settings groups',
+            'Dense data renders as rows (Table, List/Item), edge-to-edge with dividers; Card is for widgets, galleries, and discrete items; settings groups use Section',
             'StyleX or Tailwind for custom styling; both are first-class (see {@link namespace:styling})',
             'Semantic tokens, not hardcoded values (see {@link namespace:tokens})',
             'CSS custom properties for colors, not hex values',

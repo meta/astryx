@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'trendDown',
+  group: 'trends',
   description: 'Show a value going down.',
   words: [
     'decrease',

@@ -111,7 +111,7 @@ export const doc = {
     },
     {
       code: 1,
-      when: 'an unknown --agent (ERR_UNKNOWN_AGENT) or feature, an --agent-docs-path outside the project, or options that cannot be combined (ERR_INVALID_ARGUMENT); at the project root, an agent file 0.7.1 also wrote there that resolves outside the project (ERR_PATH_TRAVERSAL, nothing written)',
+      when: 'an unknown --agent (ERR_UNKNOWN_AGENT) or feature, an --agent-docs-path outside the project, or options that cannot be combined (ERR_INVALID_ARGUMENT); at the project root, an agent file 0.7.1 also wrote there that resolves outside the project (ERR_PATH_TRAVERSAL, nothing written); with --user, a folder of the computer-level agent text the user cannot write (ERR_WRITE_FAILED)',
     },
   ],
   related: ['doctor', 'upgrade', 'build', 'theme'],

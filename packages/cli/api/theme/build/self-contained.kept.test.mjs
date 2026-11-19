@@ -8,7 +8,10 @@
  * @output The JavaScript a build compiles is read back, with no Babel loaded,
  *   while the source, the rewrites, Babel's environment and Babel's own files
  *   are unchanged; it equals a fresh compile byte for byte; any change to one
- *   of those compiles again; a failed compile keeps nothing
+ *   of those compiles again; a failed compile keeps nothing; it is read back
+ *   after a CLI upgrade that leaves the compiling module and Babel's files as
+ *   they are, and compiled again after one that changes either; no browserslist
+ *   setting changes or breaks it; no file of the CLI's own is stamped
  */
 
 import {
@@ -50,6 +53,19 @@ const reinstalled = vi.hoisted(() => ({now: false, at: 0}));
 /** Whether a reinstall pointed @babel/core at another copy of @babel/generator. */
 const relinked = vi.hoisted(() => ({now: false}));
 
+/**
+ * Whether Babel's files were written again with their sizes and modification
+ * times as before, as an unpacker that sets fixed dates leaves them: the
+ * file system gives each a new change time and inode.
+ */
+const rewritten = vi.hoisted(() => ({now: false}));
+
+/** Whether an upgrade changed the code of the module that compiles. */
+const compilerChanged = vi.hoisted(() => ({now: false}));
+
+/** Whether an upgrade brought another copy of Babel where the CLI finds it. */
+const babelMoved = vi.hoisted(() => ({now: false}));
+
 vi.mock('../../../foundation/fs/read-record.mjs', async importOriginal => {
   const real = /** @type {any} */ (await importOriginal());
   return {
@@ -58,9 +74,11 @@ vi.mock('../../../foundation/fs/read-record.mjs', async importOriginal => {
     // started.
     fileStamp: (/** @type {string} */ file) => {
       const stamp = real.fileStamp(file);
-      if (!reinstalled.now || !file.includes(`${path.sep}@babel${path.sep}`))
-        return stamp;
-      const [size, , , ino] = stamp.split(':');
+      if (!file.includes(`${path.sep}@babel${path.sep}`)) return stamp;
+      const [size, mtime, ctime, ino] = stamp.split(':');
+      if (rewritten.now)
+        return `${size}:${mtime}:${Number(ctime) + 1}:${Number(ino) + 1}`;
+      if (!reinstalled.now) return stamp;
       return `${size}:${reinstalled.at}:${reinstalled.at}:${ino}`;
     },
     // The old copy stays on disk; only the folder the lookup takes points
@@ -70,6 +88,17 @@ vi.mock('../../../foundation/fs/read-record.mjs', async importOriginal => {
       file.endsWith(path.join('node_modules', '@babel', 'generator'))
         ? `real:${path.join(path.sep, 'another', '@babel', 'generator')}`
         : real.resolvedNow(file),
+  };
+});
+
+vi.mock('../../../foundation/fs/loaded-files.mjs', async importOriginal => {
+  const real = /** @type {any} */ (await importOriginal());
+  return {
+    ...real,
+    codeDigest: (/** @type {string} */ file) => {
+      const digest = real.codeDigest(file);
+      return compilerChanged.now && digest ? `changed-${digest}` : digest;
+    },
   };
 });
 
@@ -83,6 +112,10 @@ vi.mock(
         babelAsked.count++;
         return real.babelCore();
       },
+      babelCorePath: () =>
+        babelMoved.now
+          ? path.join(path.sep, 'another', '@babel', 'core', 'lib', 'index.js')
+          : real.babelCorePath(),
     };
   },
 );
@@ -93,8 +126,23 @@ let selfContained;
 let files;
 const savedCache = process.env.XDG_CACHE_HOME;
 const savedBabelEnv = process.env.BABEL_ENV;
+const savedBrowserslist = process.env.BROWSERSLIST;
+/** The CLI's own folder, as this checkout holds it. */
+const CLI_SOURCE = path.resolve(import.meta.dirname, '../../..');
 const STORE = path.join(TEMP_ROOT, 'cache', 'astryx', 'catalogs');
 const THEME = path.join(TEMP_ROOT, 'theme');
+const BUILD_ID = path.join(
+  TEMP_ROOT,
+  'node_modules',
+  '@astryxdesign',
+  'cli',
+  'clients',
+  'cli',
+  'build-id.generated.json',
+);
+
+/** @param {string} id */
+const setBuildId = id => fs.writeFileSync(BUILD_ID, JSON.stringify({id}));
 
 /** The time a stamp needs to settle before a summary is stored, plus margin. */
 const SETTLE_WAIT_MS = 2200;
@@ -177,12 +225,8 @@ const fresh = (modulesName = 'theme.modules') => {
 };
 
 beforeAll(async () => {
-  const cli = path.join(TEMP_ROOT, 'node_modules', '@astryxdesign', 'cli');
-  fs.mkdirSync(path.join(cli, 'clients', 'cli'), {recursive: true});
-  fs.writeFileSync(
-    path.join(cli, 'clients', 'cli', 'build-id.generated.json'),
-    JSON.stringify({id: 'kept-compile-test'}),
-  );
+  fs.mkdirSync(path.dirname(BUILD_ID), {recursive: true});
+  setBuildId('kept-compile-test');
   process.env.XDG_CACHE_HOME = path.join(TEMP_ROOT, 'cache');
   fs.mkdirSync(STORE, {recursive: true, mode: 0o700});
   fs.chmodSync(path.join(TEMP_ROOT, 'cache', 'astryx'), 0o700);
@@ -202,8 +246,14 @@ beforeEach(() => {
   for (const name of fs.readdirSync(STORE)) fs.rmSync(path.join(STORE, name));
   if (savedBabelEnv === undefined) delete process.env.BABEL_ENV;
   else process.env.BABEL_ENV = savedBabelEnv;
+  if (savedBrowserslist === undefined) delete process.env.BROWSERSLIST;
+  else process.env.BROWSERSLIST = savedBrowserslist;
   reinstalled.now = false;
   relinked.now = false;
+  rewritten.now = false;
+  compilerChanged.now = false;
+  babelMoved.now = false;
+  setBuildId('kept-compile-test');
 });
 
 afterAll(() => {
@@ -231,13 +281,15 @@ describe('the JavaScript a theme build compiles', () => {
     expect(again.modules).toEqual(fresh());
   }, 60_000);
 
-  it("is read back the same with a project's own Babel config beside it", async () => {
-    // Never read: the compile passes no config file and no .babelrc.
+  it("is read back the same with a project's own Babel config and browserslist file beside it", async () => {
+    // Never read: the compile reads no config file, no .babelrc and no
+    // browserslist file.
     fs.writeFileSync(
       path.join(THEME, 'babel.config.json'),
       JSON.stringify({plugins: ['@babel/plugin-transform-arrow-functions']}),
     );
     fs.writeFileSync(path.join(THEME, '.babelrc'), '{"comments": false}');
+    fs.writeFileSync(path.join(THEME, '.browserslistrc'), 'ie 11\n');
     await sleep(SETTLE_WAIT_MS);
     const first = build();
     const again = build();
@@ -400,5 +452,98 @@ describe('the JavaScript a theme build compiles', () => {
     expect(first.asked).toBe(2);
     expect(keptCompiles()).toHaveLength(0);
     expect(build().asked).toBe(2);
+  }, 60_000);
+
+  it('is read back after a CLI upgrade that leaves the compiling module and Babel’s files as they are, the same bytes', async () => {
+    await sleep(SETTLE_WAIT_MS);
+    const first = build();
+    expect(first.asked).toBe(2);
+    setBuildId('kept-compile-test-upgraded');
+    const after = build();
+    expect(after.asked).toBe(0);
+    expect(after.modules).toEqual(first.modules);
+    expect(after.modules).toEqual(fresh());
+    // Nothing more is kept: the upgrade reads the same entries.
+    expect(keptCompiles()).toHaveLength(2);
+  }, 60_000);
+
+  it('compiles again after a CLI upgrade that changes the compiling module, Babel’s version, or Babel’s files with their sizes and dates kept', async () => {
+    await sleep(SETTLE_WAIT_MS);
+    /** @type {Array<[string, () => void]>} */
+    const upgrades = [
+      [
+        "the compiling module's code, its import rewrites included",
+        () => {
+          compilerChanged.now = true;
+        },
+      ],
+      [
+        "Babel's files written again with their sizes and modification times",
+        () => {
+          rewritten.now = true;
+        },
+      ],
+      [
+        'another version of Babel',
+        () => {
+          reinstalled.now = true;
+          reinstalled.at = performance.timeOrigin - 60_000;
+        },
+      ],
+      [
+        'another copy of Babel where the CLI finds it, the old copy left as it was',
+        () => {
+          babelMoved.now = true;
+        },
+      ],
+    ];
+    for (const [i, [what, upgrade]] of upgrades.entries()) {
+      // JavaScript kept by the build before the upgrade.
+      for (const name of fs.readdirSync(STORE))
+        fs.rmSync(path.join(STORE, name));
+      expect({what, kept: build().asked}).toEqual({what, kept: 2});
+      expect({what, entries: keptCompiles().length}).toEqual({
+        what,
+        entries: 2,
+      });
+      setBuildId(`kept-compile-test-upgrade-${i}`);
+      upgrade();
+      const after = build();
+      expect({what, asked: after.asked}).toEqual({what, asked: 2});
+      expect(after.modules).toEqual(fresh());
+      compilerChanged.now = false;
+      rewritten.now = false;
+      reinstalled.now = false;
+      babelMoved.now = false;
+      setBuildId('kept-compile-test');
+    }
+  }, 60_000);
+
+  it('compiles the same bytes whatever browserslist setting the project has, an invalid one included', async () => {
+    await sleep(SETTLE_WAIT_MS);
+    const plain = fresh();
+    // Read by browserslist wherever it is asked for a project's setting.
+    process.env.BROWSERSLIST = 'this is not a valid query';
+    const first = build();
+    expect(first.modules).toEqual(plain);
+    expect(build().asked).toBe(0);
+  }, 60_000);
+
+  it("stamps no file of the CLI's own, so an upgrade that leaves Babel as it is reads it back", async () => {
+    await sleep(SETTLE_WAIT_MS);
+    build();
+    for (const name of keptCompiles()) {
+      const {stamps} = JSON.parse(
+        fs.readFileSync(path.join(STORE, name), 'utf8'),
+      );
+      const own = stamps
+        .map((/** @type {[string, string]} */ [file]) => file)
+        .filter(
+          (/** @type {string} */ file) =>
+            file.startsWith(CLI_SOURCE + path.sep) &&
+            !file.includes(`${path.sep}node_modules${path.sep}`),
+        );
+      expect(own).toEqual([]);
+    }
   }, 60_000);
 });

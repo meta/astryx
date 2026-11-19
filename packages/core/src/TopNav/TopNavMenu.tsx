@@ -239,6 +239,7 @@ const drawerStyles = stylex.create({
   },
   itemDescription: {
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
     color: colorVars['--color-text-secondary'],
     fontWeight: fontWeightVars['--font-weight-normal'],
   },
