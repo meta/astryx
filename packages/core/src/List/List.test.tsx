@@ -794,6 +794,24 @@ describe('List', () => {
     );
   });
 
+  it("moves a caller's aria-current to the row's focusable element", () => {
+    const {container} = render(
+      <List>
+        <ListItem label="Inbox" aria-current="page" href="/inbox" />
+        <ListItem label="Drafts" aria-current="page" onClick={() => {}} />
+      </List>,
+    );
+    for (const item of container.querySelectorAll('.astryx-item')) {
+      expect(item).not.toHaveAttribute('aria-current');
+    }
+    expect(screen.getByRole('link', {current: 'page'})).toHaveTextContent(
+      'Inbox',
+    );
+    expect(screen.getByRole('button', {current: 'page'})).toHaveTextContent(
+      'Drafts',
+    );
+  });
+
   it('applies neither aria-selected nor aria-current when not selected', () => {
     const {container} = render(
       <List>
