@@ -303,7 +303,7 @@ states how that component lays out against the insets and the keyboard.
   library's plural rules as `Intl.PluralRules` where the engine has none.
 - FR16 gap: the package depends on a FormatJS package for CLDR plural data.
 - **FR17 — Native code uses only public platform API.** This group's native
-  code follows the public-API rule of `spec:AST-112/FR4`.
+  code follows the public-API rule of `spec:AST-140/FR9`.
 
 ### Native contract
 
@@ -353,8 +353,8 @@ it. A platform-only prop says so in its documentation (`spec:AST-140/FR1`).
   the platform's core.
 - Relies on `spec:AST-112` FR3 (amended): the core links in every app by
   default.
-- Relies on `spec:AST-112` FR4 (amended): native code calls public platform
-  API only.
+- Relies on `spec:AST-140/FR9` and `spec:AST-140/DEC-9`: native code calls
+  public platform API only.
 - Relies on `spec:AST-112` FR2 and FR5 (amended): the package declares no
   react-native-safe-area-context, and Astryx measures its own insets beside it
   (FR5).
