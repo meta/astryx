@@ -138,10 +138,13 @@ the [Component Lifecycle](https://github.com/meta/astryx/wiki/Component-Lifecycl
 the [Contributing Templates](https://github.com/meta/astryx/wiki/Contributing-Templates),
 and the [Blog Review Rubric](https://github.com/meta/astryx/wiki/Blog-Review-Rubric#three-required-scored-criteria). Read the relevant rubric before opening a PR.
 
-Quick start for contributors: this repo uses **Node 22+ on an active LTS line**
-and **pnpm 11**. Install pnpm directly, or enable
-[Corepack](https://nodejs.org/api/corepack.html) once so the pinned pnpm version
-installs automatically:
+For local development, install the Node.js version pinned in [`.nvmrc`](.nvmrc)
+and use **pnpm 11**. If you use nvm, run `nvm install` from the repository root.
+The [CLI package](packages/cli/package.json) supports Node.js 22.13.0 and later
+when run in consumer projects.
+
+Install pnpm directly, or enable [Corepack](https://nodejs.org/api/corepack.html)
+so the pinned pnpm version installs automatically:
 
 ```bash
 corepack enable
