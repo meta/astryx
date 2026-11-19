@@ -454,10 +454,11 @@ describe('the corners an ask names', () => {
         .flatMap(r => r.commands)
         .filter(c => / editor set /.test(c))
         .map(c => c.replace(/^.*? editor set k /, ''));
-    // (The 2px is the border's, never the corners' radius.)
+    // (The 2px is the whole border's, never the corners' radius nor one
+    // side's border: the corner ask ends at its second side.)
     const border = await all('cards rounded on top and bottom 2px border');
     expect(border.some(c => /radius 2px/.test(c))).toBe(false);
-    expect(border.some(c => /^border(?:-bottom)? '2px/.test(c))).toBe(true);
+    expect(border).toContain('border-width 2px --on card');
     // ("right-click menus" is the context menu: "right" names no corner.)
     expect(
       cornersNamed('square corners on right-click menus', 'context-menu', [

@@ -3666,6 +3666,13 @@ function clausesOf(q, partWords, words = null) {
         /([a-z#0-9]+)(\s*),(?=\s*(?:serif|sans-serif|monospace|system-ui|cursive|fantasy)\b)/gi,
         (m, prev, sp) => (colorsIn(String(prev)).length ? `${prev}${sp};` : m),
       )
+      // (Two sides of a corner ask and then a length of another look,
+      // "cards rounded on top and bottom 2px border": the corner ask ends at
+      // the second side, and the length is the look's own ask.)
+      .replace(
+        /(\b(?:corners?|round\w*|radius|radii|square\w*|sharp\w*)\b[^;.,]*\b(?:on|at)\s+(?:the\s+)?(?:top|bottom|left|right)\s+(?:and|&)\s+(?:(?:on|at)\s+)?(?:the\s+)?(?:top|bottom|left|right))\s+(?=\d*\.?\d+(?:px|rem|em|%)?\s*(?:borders?|outlines?|rings?|shadows?|padding|margins?|gaps?)\b)/gi,
+        '$1; ',
+      )
       .split(
         // A font stack ("Georgia, serif") is one value, not two asks.
         // Two sides of a corner ask joined by "and" ("rounded on top and
