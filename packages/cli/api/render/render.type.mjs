@@ -55,6 +55,9 @@
  * @property {string[]} [data.notCarried] - Files the page uses that the file does not carry, so experimental import cannot give them back: a name that reads as a tool's configuration, a file a test or story runner would run, a file outside the carried folder (imported by a relative path or a path alias), an image it cannot carry, or a Sass or Less stylesheet, which a render does not compile. Each also has a warning. Present only when there are some.
  * @property {number} data.scriptBytes - Size of the page's script, which `bytes` includes.
  * @property {number} data.scriptModules - How many modules the page's script holds (the page's own, its packages', React's).
+ * @property {object} data.checks - Checks run on the written file.
+ * @property {string[]} data.checks.outside - Every reference the file's markup and stylesheets load from outside the file when it opens (a remote address, or a file beside it the render did not carry); empty when the file stands alone.
+ * @property {{exact: boolean, files: number, differs: string[]}} data.checks.roundTrip - Whether the embedded source gives back every carried file byte for byte, how many files it carries, and the carried paths whose embedded copy differs from the file on disk or is missing on either side.
  */
 
 /**
