@@ -14,7 +14,13 @@
 
 import {expect, test} from '@playwright/test';
 
-type LineFrames = {withLine: number; partlyDrawn: number; longest: number};
+type LineFrames = {
+  withLine: number;
+  partlyDrawn: number;
+  longest: number;
+  // The frames in a row, up to now, where no line had a draw-in in progress.
+  settled: number;
+};
 
 declare global {
   interface Window {
@@ -30,7 +36,12 @@ test('the Dashboard tile shows complete chart lines on every frame', async ({
 }) => {
   await page.setViewportSize({width: 1440, height: 900});
   await page.addInitScript(series => {
-    const frames: LineFrames = {withLine: 0, partlyDrawn: 0, longest: 0};
+    const frames: LineFrames = {
+      withLine: 0,
+      partlyDrawn: 0,
+      longest: 0,
+      settled: 0,
+    };
     window.galleryLineFrames = frames;
     const watch = () => {
       // A gallery tile is inert. Recharts draws a line in with a dash
@@ -51,6 +62,13 @@ test('the Dashboard tile shows complete chart lines on every frame', async ({
         ) {
           frames.partlyDrawn += 1;
         }
+        // Recharts keeps the attribute on a line for as long as it draws the
+        // line in. These three series set no pattern of their own.
+        frames.settled = lines.some(line =>
+          line.hasAttribute('stroke-dasharray'),
+        )
+          ? 0
+          : frames.settled + 1;
       }
       requestAnimationFrame(watch);
     };
@@ -59,13 +77,15 @@ test('the Dashboard tile shows complete chart lines on every frame', async ({
 
   await page.goto('/templates');
 
-  // The animation starts on the chart's first frame. The gallery renders its
-  // tiles one at a time in idle time, so a slow machine shows this tile late.
+  // The draw-in starts on the chart's first frame. The read waits until the
+  // draw-in has ended, so the counts hold every frame of it. The gallery
+  // renders its tiles one at a time in idle time, so a slow machine shows
+  // this tile late.
   await expect
-    .poll(() => page.evaluate(() => window.galleryLineFrames.withLine), {
+    .poll(() => page.evaluate(() => window.galleryLineFrames.settled), {
       timeout: 60_000,
     })
-    .toBeGreaterThanOrEqual(30);
+    .toBeGreaterThanOrEqual(10);
   const frames = await page.evaluate(() => window.galleryLineFrames);
 
   expect(frames.longest).toBeGreaterThan(0);
