@@ -36,7 +36,7 @@ export const docs = {
         '`xstyle` takes only styles made with `stylex.create()`: never an inline object or a class string',
         'Put every hover style behind `@media (hover: hover)`, so a touch screen does not keep it after a tap',
         'Take spacing, color, radius and shadow values from token vars, never from raw px or hex',
-        'Style a state with a conditional style, `stylex.props(isActive && styles.active)`, not by toggling class names; external CSS targets a component by its class and data attributes, such as `.astryx-button[data-variant="primary"]`',
+        'Style a state with a conditional style, `xstyle={[styles.tile, isActive && styles.active]}`, not by toggling class names; external CSS targets a component by its class and data attributes, such as `.astryx-button[data-variant="primary"]`',
         'To restyle a component everywhere, use component overrides in defineTheme instead of page-level selectors',
       ],
     },

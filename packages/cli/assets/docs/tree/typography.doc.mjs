@@ -27,15 +27,15 @@ export const docs = {
   blocks: [
     {
       type: 'prose',
-      text: 'Use Heading for headings and Text for all other text. Both read the type scale, so never set a font size, line height or font weight by hand.',
+      text: 'Use Heading for headings and Text for all other text. Both read the type scale, so never set raw font sizes, line heights or numeric weights: use `type` and the named `weight` values.',
     },
     {
       type: 'list',
       style: 'unordered',
       items: [
-        'Keep heading levels in order; when a heading must look smaller than its place in the outline, set `accessibilityLevel`',
+        "Choose each heading's `level` from the document outline, never for its size; change how it looks with a visual `type` or `weight`",
         'Put timestamps, helper text and captions in `type="supporting"`',
-        'Keep display types for a hero or a large data callout, never for body text: `<Heading level={1} type="display-1">`',
+        'Keep display types for a hero or a large data callout, never for body text: `<Heading level={1} type="display-1">` for a page title, `<Text type="display-2">` for a big number',
         'To make all text denser or roomier, change the base and ratio of the scale in defineTheme (base 12 with ratio 1.125 suits dense screens), not one size token',
       ],
     },
@@ -45,7 +45,7 @@ export const docs = {
       label: 'Text by role',
       code: `<Heading level={1}>Usage</Heading>
 <Text>Requests this week, by team.</Text>
-<Text type="supporting" color="secondary">Updated 5 minutes ago</Text>`,
+<Text type="supporting">Updated 5 minutes ago</Text>`,
     },
     {
       type: 'prose',
