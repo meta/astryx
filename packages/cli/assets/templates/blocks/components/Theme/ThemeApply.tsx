@@ -8,6 +8,7 @@ import {Button} from '@astryxdesign/core/Button';
 import {Section} from '@astryxdesign/core/Section';
 import {Stack} from '@astryxdesign/core/Layout';
 import {Heading, Text} from '@astryxdesign/core/Text';
+import {useToast} from '@astryxdesign/core/Toast';
 
 const forestTheme = defineTheme({
   name: 'forest-docs',
@@ -21,6 +22,7 @@ const forestTheme = defineTheme({
 });
 
 export default function ThemeApply() {
+  const showToast = useToast();
   return (
     <Section variant="muted" padding={4} maxWidth={420}>
       <Theme theme={forestTheme}>
@@ -30,7 +32,12 @@ export default function ThemeApply() {
             <Text type="body" color="secondary">
               Wrap any subtree to apply a theme locally.
             </Text>
-            <Button label="Create project" />
+            <Button
+              label="Create project"
+              onClick={() =>
+                showToast({body: 'Demo: a new project would be created here'})
+              }
+            />
           </Stack>
         </Card>
       </Theme>
