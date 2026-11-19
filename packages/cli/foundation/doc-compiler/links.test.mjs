@@ -335,6 +335,37 @@ describe("renderTokens in the reader's project", () => {
     ).toBe('npm install -E @astryxdesign/core@0.7.10 @astryxdesign/cli@0.7.10');
   });
 
+  it('names a placeholder theme package at the release too', () => {
+    const pinned = app({'@astryxdesign/core': '0.7.10'});
+    expect(
+      runWithDocPackageManager(
+        'npm',
+        () =>
+          renderTokens(
+            'Install it with {@pm install @astryxdesign/theme-<name>}.',
+          ),
+        pinned,
+      ),
+    ).toBe(
+      'Install it with `npm install -E @astryxdesign/theme-<name>@0.7.10`.',
+    );
+    expect(
+      runWithDocPackageManager(
+        'npm',
+        () => renderTokens('{@pm install @acme/<name>}', 'bash'),
+        pinned,
+      ),
+    ).toBe('npm install @acme/<name>');
+    // It also fills to packages that Astryx does not release with Core.
+    expect(
+      runWithDocPackageManager(
+        'npm',
+        () => renderTokens('{@pm install @astryxdesign/<name>}', 'bash'),
+        pinned,
+      ),
+    ).toBe('npm install @astryxdesign/<name>');
+  });
+
   it('leaves the package bare in a project that names no Core, or no plain Core range', () => {
     for (const dependencies of [{}, {'@astryxdesign/core': 'workspace:*'}]) {
       expect(
@@ -361,5 +392,9 @@ describe("renderTokens in the reader's project", () => {
         ),
       ),
     ).toBe(`pnpm add ${theme}`);
+  });
+
+  it('leaves it bare outside any scope, where a read is about no one project', () => {
+    expect(renderTokens(step, 'bash')).toMatch(new RegExp(` ${theme}$`, 'u'));
   });
 });

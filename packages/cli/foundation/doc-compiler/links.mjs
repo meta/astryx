@@ -145,12 +145,14 @@ export function unlinkText(text) {
  * Text with its doc tokens rendered (doc-syntax.mjs): `{@command …}` as the
  * bare `astryx …` command, which text output then starts with the reader's
  * runner the way it starts every command, and `{@pm …}` in the package
- * manager of the project the CLI runs in. An install names Core and each
+ * manager of the project the CLI runs in. In a read for one project (a docs,
+ * component or template read), an install names Core, the CLI and each
  * package Astryx releases with Core at the Core release that project names,
- * as `theme add` and `doctor` do: each such package names Core's exact
- * release as its peer, so the newest one does not install beside an older
- * Core. JSON readers get runnable commands, the way they did before docs
- * wrote tokens.
+ * as `theme add` and `doctor` do: each package released with Core names
+ * Core's exact release as its peer, so the newest one does not install
+ * beside an older Core. Search and build rank over the text as written, so
+ * they render no release. JSON readers get runnable commands, the way they
+ * did before docs wrote tokens.
  * @param {unknown} text
  * @param {string | null} [lang] the code block's language for a block's body
  * @returns {any}

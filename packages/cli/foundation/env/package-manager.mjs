@@ -712,13 +712,12 @@ export function runWithDocPackageManager(pm, fn, dir = null) {
 
 /**
  * The project folder doc steps render for: the one a scope names
- * ({@link runWithDocPackageManager}), none in a scope for every reader, and
- * the working directory outside any scope.
+ * ({@link runWithDocPackageManager}); none in a scope for every reader, and
+ * none outside any scope, where a read is about no one project.
  * @returns {string | null}
  */
 export function docProjectDir() {
-  const store = docPackageManagerScope.getStore();
-  return store ? store.dir : process.cwd();
+  return docPackageManagerScope.getStore()?.dir ?? null;
 }
 
 /**

@@ -64,11 +64,9 @@ export {componentKeywords} from './_adapter.mjs';
  */
 export async function search(query, options = {}) {
   checkSearchArgs(query, options);
-  const dir = options.cwd ?? process.cwd();
   return runWithDocPackageManager(
-    docPackageManager(dir),
+    docPackageManager(options.cwd ?? process.cwd()),
     () => searchRead(query, options),
-    dir,
   );
 }
 
@@ -179,11 +177,9 @@ async function searchCatalog(options) {
  */
 export async function searchCore(query, options = {}) {
   checkSearchArgs(query, options);
-  const dir = options.cwd ?? process.cwd();
   return runWithDocPackageManager(
-    docPackageManager(dir),
+    docPackageManager(options.cwd ?? process.cwd()),
     () => searchCoreRead(query, options),
-    dir,
   );
 }
 

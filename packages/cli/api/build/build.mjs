@@ -59,9 +59,8 @@ export async function build(query, options = {}) {
   // The kit resolves every candidate's source and docs by walking the same
   // tree; read each directory once for this call. Doc `{@pm}` steps render
   // for the project the call names, as search's do.
-  const dir = options.cwd ?? process.cwd();
   return runWithDocPackageManager(
-    docPackageManager(dir),
+    docPackageManager(options.cwd ?? process.cwd()),
     () =>
       withListingCache(
         async () =>
@@ -77,6 +76,5 @@ export async function build(query, options = {}) {
             )
           ),
       ),
-    dir,
   );
 }

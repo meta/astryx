@@ -459,16 +459,15 @@ export function exactAddFlag(pm) {
 }
 
 /**
- * The packages Astryx releases with Core, such as its themes, as the official
- * package list this CLI carries marks them. Each names Core's exact release
- * as its peer. Empty when the CLI carries no readable list.
- * @returns {Set<string>}
+ * The official packages this CLI carries a list of, which `discover` reads,
+ * each with whether Astryx releases it with Core. Empty when the CLI carries
+ * no readable list.
+ * @returns {Array<{name: string, withCore: boolean}>}
  */
-function releasedWithCorePackages() {
+function officialPackages() {
   /** @type {any} */
   let list;
   try {
-    // The official package list this CLI carries, which `discover` reads.
     // Built here, not at load: paths.mjs and this module load each other.
     const file = path.join(
       CLI_ROOT,
@@ -478,12 +477,27 @@ function releasedWithCorePackages() {
     );
     list = JSON.parse(fs.readFileSync(file, 'utf8'));
   } catch {
-    return new Set();
+    return [];
   }
+  return (Array.isArray(list?.packages) ? list.packages : [])
+    .filter((/** @type {any} */ pkg) => typeof pkg?.package === 'string')
+    .map((/** @type {any} */ pkg) => ({
+      name: pkg.package,
+      withCore: pkg.releasedWithCore === true,
+    }));
+}
+
+/**
+ * The packages Astryx releases with Core, such as its themes, as the official
+ * package list this CLI carries marks them. Each names Core's exact release
+ * as its peer.
+ * @returns {Set<string>}
+ */
+function releasedWithCorePackages() {
   return new Set(
-    (Array.isArray(list?.packages) ? list.packages : [])
-      .filter((/** @type {any} */ pkg) => pkg?.releasedWithCore === true)
-      .map((/** @type {any} */ pkg) => pkg.package),
+    officialPackages()
+      .filter(pkg => pkg.withCore)
+      .map(pkg => pkg.name),
   );
 }
 
@@ -581,12 +595,22 @@ function projectCoreRelease(facts) {
  * @returns {boolean}
  */
 function movesWithCore(name) {
-  return (
-    name === CORE_PACKAGE_NAME ||
-    name === CLI_PACKAGE ||
-    releasedWithCorePackages().has(name)
-  );
+  if (name === CORE_PACKAGE_NAME || name === CLI_PACKAGE) return true;
+  if (!PLACEHOLDER.test(name)) return releasedWithCorePackages().has(name);
+  // A name with a placeholder, as `@astryxdesign/theme-<name>`, stands for
+  // the official packages a reader can fill it with. It moves with Core only
+  // when each of them does.
+  const pattern = name
+    .split(PLACEHOLDER)
+    .map(part => part.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'))
+    .join('[a-z0-9][a-z0-9.-]*');
+  const filled = new RegExp(`^${pattern}$`, 'u');
+  const fills = officialPackages().filter(pkg => filled.test(pkg.name));
+  return fills.length > 0 && fills.every(pkg => pkg.withCore);
 }
+
+/** A placeholder in a package name a doc writes, as `<name>`. */
+const PLACEHOLDER = /<[\w-]+>/u;
 
 /**
  * The release at which the project a run in `cwd` belongs to adds `name`, and
