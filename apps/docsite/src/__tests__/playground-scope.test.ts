@@ -19,6 +19,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {describe, it, expect, beforeAll} from 'vitest';
 import docsiteConfig from '../../astryx.config.mjs';
+import {fillTemplatePlaceholders} from '../../../../packages/cli/foundation/discovery/template-placeholders.mjs';
 import {blocks} from '../generated/blockRegistry';
 
 const GENERATED_SCOPE_PATH = path.resolve(
@@ -409,7 +410,10 @@ describe('playground-scope', () => {
       if (!fs.existsSync(page)) {
         continue;
       }
-      const source = fs.readFileSync(page, 'utf-8');
+      // The playground runs the source a copy writes: placeholders filled.
+      const source = fillTemplatePlaceholders(
+        fs.readFileSync(page, 'utf-8'),
+      ).source;
       for (const match of source.matchAll(IMPORT_RE)) {
         const id = match[1];
         // Relative paths resolve within the template, and assets are stubbed

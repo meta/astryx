@@ -36,31 +36,31 @@ import {TextArea} from '@astryxdesign/core/TextArea';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Toolbar} from '@astryxdesign/core/Toolbar';
 import {
-  Squares2X2Icon,
-  DocumentTextIcon,
-  PhotoIcon,
-  CursorArrowRaysIcon,
+  GridViewIcon,
+  DocumentIcon,
+  ImageIcon,
+  ClickIcon,
   ViewColumnsIcon,
   SparklesIcon,
-  MegaphoneIcon,
-  TrashIcon,
+  AnnouncementIcon,
+  DeleteIcon,
   ChevronUpIcon,
   ChevronDownIcon,
-  ComputerDesktopIcon,
-  DeviceTabletIcon,
-  DevicePhoneMobileIcon,
+  DesktopIcon,
+  TabletIcon,
+  MobileIcon,
   EyeIcon,
-  AdjustmentsHorizontalIcon,
-  XMarkIcon,
-  PlusCircleIcon,
+  AdjustmentsIcon,
+  CloseIcon,
+  CreateIcon,
   ShoppingBagIcon,
-  ShoppingCartIcon,
-  BanknotesIcon,
-  ChatBubbleLeftIcon,
-  PlayCircleIcon,
-  EllipsisHorizontalIcon,
-  LockClosedIcon,
-} from '@heroicons/react/24/outline';
+  CartIcon,
+  MoneyIcon,
+  MessageIcon,
+  MediaIcon,
+  MoreHorizontalIcon,
+  LockIcon,
+} from '@astryxdesign/template-icons';
 import {Spinner} from '@astryxdesign/core/Spinner';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 
@@ -79,13 +79,13 @@ type SidebarTab = 'blocks' | 'properties';
 type IconComponent = React.ComponentType<React.SVGProps<SVGSVGElement>>;
 
 const BLOCK_META: Record<BlockType, {label: string; icon: IconComponent}> = {
-  hero: {label: 'Hero', icon: Squares2X2Icon},
-  text: {label: 'Text', icon: DocumentTextIcon},
-  image: {label: 'Image', icon: PhotoIcon},
-  button: {label: 'Button', icon: CursorArrowRaysIcon},
+  hero: {label: 'Hero', icon: GridViewIcon},
+  text: {label: 'Text', icon: DocumentIcon},
+  image: {label: 'Image', icon: ImageIcon},
+  button: {label: 'Button', icon: ClickIcon},
   cards: {label: 'Cards', icon: ViewColumnsIcon},
   features: {label: 'Features', icon: SparklesIcon},
-  cta: {label: 'CTA', icon: MegaphoneIcon},
+  cta: {label: 'CTA', icon: AnnouncementIcon},
 };
 
 type Transaction = {
@@ -99,10 +99,10 @@ type Transaction = {
 
 const CATEGORY_ICONS: Record<string, IconComponent> = {
   'Food & Drink': ShoppingBagIcon,
-  Groceries: ShoppingCartIcon,
-  Income: BanknotesIcon,
-  Transport: ChatBubbleLeftIcon,
-  Entertainment: PlayCircleIcon,
+  Groceries: CartIcon,
+  Income: MoneyIcon,
+  Transport: MessageIcon,
+  Entertainment: MediaIcon,
 };
 
 const TRANSACTION_COLUMNS: TableColumn<Transaction>[] = [
@@ -155,7 +155,7 @@ const TRANSACTION_COLUMNS: TableColumn<Transaction>[] = [
     renderCell: () => (
       <Button
         label="More"
-        icon={<Icon icon={EllipsisHorizontalIcon} size="sm" />}
+        icon={<Icon icon={MoreHorizontalIcon} size="sm" />}
         variant="ghost"
         size="sm"
         isIconOnly
@@ -523,7 +523,7 @@ function BlockPreview({
           <EmptyState
             title="Image Block"
             description="Drop an image or enter a URL"
-            icon={<Icon icon={PhotoIcon} />}
+            icon={<Icon icon={ImageIcon} />}
             isCompact
           />
         </Card>
@@ -603,7 +603,7 @@ function BlockPreview({
         <Card padding={6} style={cardStyle} onClick={onSelect}>
           <HStack gap={4} vAlign="start">
             <Center width={40} height={40} style={iconCircle}>
-              <Icon icon={LockClosedIcon} color="secondary" />
+              <Icon icon={LockIcon} color="secondary" />
             </Center>
             <VStack gap={1}>
               <Text type="label" weight="semibold">
@@ -775,7 +775,7 @@ export default function EditorPage() {
                   />
                   <Button
                     label="Delete"
-                    icon={<Icon icon={TrashIcon} size="sm" />}
+                    icon={<Icon icon={DeleteIcon} size="sm" />}
                     variant="ghost"
                     size="sm"
                     onClick={(e: React.MouseEvent) => {
@@ -844,7 +844,7 @@ export default function EditorPage() {
               <HStack gap={2} vAlign="center">
                 <Button
                   label="Edit"
-                  icon={<Icon icon={AdjustmentsHorizontalIcon} size="sm" />}
+                  icon={<Icon icon={AdjustmentsIcon} size="sm" />}
                   variant="ghost"
                   isIconOnly
                   onClick={() => setIsCustomizeOpen(true)}
@@ -884,19 +884,19 @@ export default function EditorPage() {
                     <SegmentedControlItem
                       value="desktop"
                       label="Desktop"
-                      icon={<Icon icon={ComputerDesktopIcon} size="sm" />}
+                      icon={<Icon icon={DesktopIcon} size="sm" />}
                       isLabelHidden
                     />
                     <SegmentedControlItem
                       value="tablet"
                       label="Tablet"
-                      icon={<Icon icon={DeviceTabletIcon} size="sm" />}
+                      icon={<Icon icon={TabletIcon} size="sm" />}
                       isLabelHidden
                     />
                     <SegmentedControlItem
                       value="phone"
                       label="Phone"
-                      icon={<Icon icon={DevicePhoneMobileIcon} size="sm" />}
+                      icon={<Icon icon={MobileIcon} size="sm" />}
                       isLabelHidden
                     />
                   </SegmentedControl>
@@ -956,7 +956,7 @@ export default function EditorPage() {
                 <EmptyState
                   title="No blocks yet"
                   description="Add blocks from the sidebar to start building your page"
-                  icon={<Icon icon={PlusCircleIcon} />}
+                  icon={<Icon icon={CreateIcon} />}
                 />
               )}
             </VStack>
@@ -979,7 +979,7 @@ export default function EditorPage() {
                 <Heading level={3}>Customize</Heading>
                 <Button
                   label="Close"
-                  icon={<Icon icon={XMarkIcon} size="sm" />}
+                  icon={<Icon icon={CloseIcon} size="sm" />}
                   variant="ghost"
                   isIconOnly
                   onClick={() => setIsCustomizeOpen(false)}
