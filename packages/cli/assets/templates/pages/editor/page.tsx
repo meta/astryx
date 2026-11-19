@@ -18,6 +18,7 @@ import {
   LayoutContent,
   LayoutHeader,
   LayoutPanel,
+  StackItem,
 } from '@astryxdesign/core/Layout';
 import {Icon} from '@astryxdesign/core/Icon';
 import {List, ListItem} from '@astryxdesign/core/List';
@@ -559,7 +560,9 @@ function BlockPreview({
                 </Text>
               )}
             </VStack>
-            <Button label="View All" variant="secondary" size="sm" />
+            <StackItem>
+              <Button label="View All" variant="secondary" size="sm" />
+            </StackItem>
           </HStack>
           <Table
             data={items}

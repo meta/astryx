@@ -1192,6 +1192,8 @@ export interface DerivedVar {
   expand?: 'container';
   /** Emit only the vars, dropping the source property from the rule. */
   replaces?: boolean;
+  /** Also write each corner of a radius to its own corner variable. */
+  corners?: boolean;
 }
 
 export interface ComponentIconSlotState {

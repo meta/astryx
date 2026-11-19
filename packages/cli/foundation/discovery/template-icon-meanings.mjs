@@ -21,7 +21,10 @@
  */
 
 import {discoverCoreTemplates} from './template-adapter.mjs';
-import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
+import {
+  astryxDefinitionsByName,
+  currentDefinitionName,
+} from './icon-definition-discovery.mjs';
 
 /**
  * One icon definition templates use.
@@ -46,11 +49,18 @@ export function countTemplateMeanings(templates, known) {
   for (const template of templates) {
     const icons = template.icons;
     if (icons == null || typeof icons !== 'object') continue;
+    // A declared definition that another one replaced counts as its successor.
     const used = new Set(
-      Object.values(icons).filter(
-        /** @returns {value is string} */
-        value => typeof value === 'string' && known.has(value),
-      ),
+      Object.values(icons)
+        .filter(
+          /** @returns {value is string} */
+          value => typeof value === 'string',
+        )
+        .map(value => (known.has(value) ? value : currentDefinitionName(value)))
+        .filter(
+          /** @returns {value is string} */
+          value => value != null && known.has(value),
+        ),
     );
     for (const definition of used) {
       counts.set(definition, (counts.get(definition) ?? 0) + 1);

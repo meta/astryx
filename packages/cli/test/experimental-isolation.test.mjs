@@ -12,7 +12,8 @@
  *   without the icon-set feature, so a result, field, section, count, or
  *   `stability` that an experimental surface adds to search, the docs, a
  *   template copy, doctor, or an integration's verify report fails here, as
- *   does any sentence that names an experimental surface. They hold no prose
+ *   does any sentence that names an experimental surface, apart from the
+ *   shareable-page guides spec:AST-017 FR27 lets search return. They hold no prose
  *   (titles, summaries, descriptions, snippets), so main's ordinary doc and
  *   command wording edits rewrite none of them. Help, the
  *   manifest, and the `astryx docs cli` listing gain only the experimental
@@ -42,7 +43,8 @@
  * output runs `vitest run packages/cli/test/experimental-isolation.test.mjs
  * --update` in the branch itself, then reviews
  * the diff of `__golden__/no-icon-set/`: a diff that names an icon set, an
- * icon definition, or `experimental` is the leak this test exists to catch.
+ * icon definition, or `experimental` (other than the two shareable-page
+ * guides) is the leak this test exists to catch.
  */
 
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
@@ -56,6 +58,16 @@ import {CLI_ROOT} from '../foundation/fs/paths.mjs';
 import {runCli} from '../test-utils/run-cli.mjs';
 import {startCliSequence} from '../test-utils/run-cli-sequence.mjs';
 import {writeIconSetProject} from '../test-utils/icon-set-fixture.mjs';
+
+/**
+ * The only docs that may set `searchable: true` (spec:AST-017 FR27, the
+ * shareable-page exception): search returns them while they are
+ * experimental.
+ */
+const SHAREABLE_PAGE_GUIDES = new Set([
+  'cli/experimental/share-a-page',
+  'cli/experimental/export-pages',
+]);
 
 const REPO_ROOT = path.resolve(CLI_ROOT, '..', '..');
 // Goldens come from the CLI without the feature: point these at a checkout of
@@ -493,6 +505,8 @@ async function searchGolden(query, cwd, run = cliRun) {
   );
   body.data.matchCount -= added.length;
   for (const result of body.data.results) {
+    // The shareable-page guides are FR27's named search exception.
+    if (SHAREABLE_PAGE_GUIDES.has(result.name)) continue;
     expect(result).not.toHaveProperty('stability');
     expect(['icon', 'icon-set', 'icon-definition']).not.toContain(
       result.domain,
@@ -573,6 +587,37 @@ beforeAll(() => {
 
 afterAll(() => {
   fs.rmSync(project, {recursive: true, force: true});
+});
+
+describe('searchable experimental docs (spec:AST-017 FR27)', () => {
+  it('only the shareable-page guides set searchable: true', async () => {
+    const files = spawnSync('git', ['ls-files', '*.doc.mjs'], {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+    })
+      .stdout.split('\n')
+      .filter(Boolean);
+    expect(files.length).toBeGreaterThan(100);
+    /** @type {string[]} */
+    const marked = [];
+    for (const rel of files) {
+      if (
+        !/\bsearchable\b/u.test(
+          fs.readFileSync(path.join(REPO_ROOT, rel), 'utf8'),
+        )
+      )
+        continue;
+      const mod = await import(pathToFileURL(path.join(REPO_ROOT, rel)).href);
+      for (const value of Object.values(mod))
+        if (value && typeof value === 'object' && value.searchable === true)
+          marked.push(
+            value.placement?.parent === 'namespace:experimental'
+              ? `cli/experimental/${value.name}`
+              : rel,
+          );
+    }
+    expect(new Set(marked)).toEqual(SHAREABLE_PAGE_GUIDES);
+  });
 });
 
 describe('with no icon set, stable output is unchanged', () => {

@@ -56,7 +56,8 @@ if (stateDir) {
     // the same text, under the same rules: an edited file is kept. Each is
     // its own choice, so turning the computer-level text off leaves them
     // (spec AST-081 FR8). A deleted copy is the person's choice too: it is
-    // refreshed only while it is there.
+    // refreshed only while it is there; `init --remove --to <folder>` forgets
+    // the folder.
     if (folders.length > 0) {
       const text = renderComputerAgentText({
         command: COMPUTER_COMMAND,

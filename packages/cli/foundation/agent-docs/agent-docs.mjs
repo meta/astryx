@@ -625,7 +625,7 @@ export const ICON_FINDER_LINE =
  * one; where it is off, the block has no icon line.
  *
  * @param {string | null} version the Core version
- * @param {{coreDir?: string|null, invocation?: string, stylingSystem?: 'stylex'|'tailwind'|'css', zh?: boolean, lang?: string, topics?: string[], agentDocs?: Array<{package: string, append: readonly string[]}>, builtCheck?: boolean, iconFeatures?: boolean}} [options]
+ * @param {{coreDir?: string|null, invocation?: string, stylingSystem?: 'stylex'|'tailwind'|'css', zh?: boolean, lang?: string, topics?: string[], agentDocs?: Array<{package: string, append: readonly string[]}>, skills?: ReadonlyArray<{package: string, name: string, description: string}>, builtCheck?: boolean, iconFeatures?: boolean}} [options]
  * @returns {string}
  */
 export function generateCompressedIndex(
@@ -636,6 +636,7 @@ export function generateCompressedIndex(
     stylingSystem = 'css',
     topics,
     agentDocs = [],
+    skills = [],
     builtCheck = false,
     iconFeatures = false,
   } = {},
@@ -687,7 +688,7 @@ export function generateCompressedIndex(
   // template it names. build/template/component are covered here, so they are
   // intentionally omitted from the command reference below.
   lines.push(WORKFLOW_TITLE, ...WORKFLOW_STEPS);
-  lines.push('Changing an existing page? Keep it: skip step 2 and add blocks/components inside its sections.');
+  lines.push('Changing an existing page? Keep it: skip step 2 and add components inside its sections; read a block example when it helps.');
   // Only for a project whose recorded releases have `doctor --built`
   // (projectHasBuiltCheck): a newer copy may write this block in a project
   // whose install then brings an older CLI, which rejects the option. The computer-level
@@ -759,7 +760,7 @@ export function generateCompressedIndex(
     (count, contribution) => count + contribution.append.length,
     0,
   );
-  if (appendCount > 0) {
+  if (appendCount > 0 || skills.length > 0) {
     lines.push('');
     lines.push('INTEGRATIONS:');
     for (const contribution of agentDocs) {
@@ -767,6 +768,9 @@ export function generateCompressedIndex(
         lines.push(`- \`${contribution.package}\`: ${line}`);
       }
     }
+    // One line per integration skill; its whole text is in the skill places
+    // and `astryx docs skills/<name>`.
+    for (const each of skills) lines.push(skillPointerLine(each));
   }
   // Last, so it follows any integration lines. Without it, an agent asked to
   // take Astryx's text out deletes whole agent files or cuts one copy by hand
@@ -778,18 +782,30 @@ export function generateCompressedIndex(
 }
 
 /**
+ * The block's line for one integration skill: who ships it, when to use it,
+ * and the command that reads it.
+ * @param {{package: string, name: string, description: string}} skill
+ * @returns {string}
+ */
+export function skillPointerLine({package: pkg, name, description}) {
+  return `- \`${pkg}\` skill \`${name}\`: ${description} Read it with \`astryx docs skills/${name}\`.`;
+}
+
+/**
  * Resolve the complete expected block for one installed project.
  *
  * Config and integration modules load once through the existing Project seam.
  * The returned bytes are reused for every target file.
  *
  * @param {string} targetDir
- * @param {{installedVersion?: string, fresh?: boolean}} [options]
+ * @param {{installedVersion?: string, fresh?: boolean, skills?: ReadonlyArray<{package: string, name: string, description: string}>}} [options]
+ *   `skills`: the integration skills the block points to, as the docs tree
+ *   keeps them (api/docs `projectIntegrationSkills`); none without it
  * @returns {Promise<string>}
  */
 export async function renderAgentDocsBlock(
   targetDir,
-  {installedVersion, fresh = false} = {},
+  {installedVersion, fresh = false, skills = []} = {},
 ) {
   const coreDir = findCoreDir(targetDir);
   const version = installedVersion ?? agentDocsVersion(targetDir);
@@ -848,6 +864,11 @@ export async function renderAgentDocsBlock(
 
   return generateCompressedIndex(version, {
     coreDir,
+    skills: skills.map(({package: pkg, name, description}) => ({
+      package: validateIntegrationLabel(pkg),
+      name,
+      description,
+    })),
     builtCheck: projectHasBuiltCheck(targetDir),
     invocation: getCliInvocation(targetDir),
     stylingSystem: detectStylingSystem(targetDir),
