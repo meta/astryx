@@ -251,14 +251,14 @@ describe('visualization palette and styling guides', () => {
     ]);
     expect(table.rows[4]).toEqual([
       'Plot and hover region',
-      '0',
+      '--radius-none',
       'Keep the data area and highlight rectangular.',
     ]);
     expect(JSON.stringify(section)).toContain(
       'not the value, scale, or baseline',
     );
     expect(JSON.stringify(section)).toContain(
-      'one quarter of its smaller dimension',
+      'one quarter of the bar’s width or height',
     );
   });
 

@@ -82,8 +82,12 @@ describe('color-set presentation', () => {
     );
     expect(source).toContain('borderTopLeftRadius: `min(${radiusVars');
     expect(source).toContain('borderTopRightRadius: `min(${radiusVars');
-    expect(source).toContain('borderBottomLeftRadius: 0');
-    expect(source).toContain('borderBottomRightRadius: 0');
+    expect(source).toContain(
+      "borderBottomLeftRadius: radiusVars['--radius-none']",
+    );
+    expect(source).toContain(
+      "borderBottomRightRadius: radiusVars['--radius-none']",
+    );
     expect(source).toContain(
       '<ChartRadiusReference sections={stylingSections} />',
     );

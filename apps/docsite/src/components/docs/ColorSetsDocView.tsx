@@ -103,10 +103,10 @@ const styles = stylex.create({
     height: `${((value * 1.2) / 300) * 100}%`,
     padding: 0,
     borderWidth: 0,
-    borderTopLeftRadius: `min(${radiusVars['--radius-element']}, calc(100cqw * 64 / 420 / 4))`,
-    borderTopRightRadius: `min(${radiusVars['--radius-element']}, calc(100cqw * 64 / 420 / 4))`,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
+    borderTopLeftRadius: `min(${radiusVars['--radius-element']}, calc(100cqw * 64 / 420 / 4), calc(100cqw * ${value * 1.2} / 420 / 4))`,
+    borderTopRightRadius: `min(${radiusVars['--radius-element']}, calc(100cqw * 64 / 420 / 4), calc(100cqw * ${value * 1.2} / 420 / 4))`,
+    borderBottomLeftRadius: radiusVars['--radius-none'],
+    borderBottomRightRadius: radiusVars['--radius-none'],
     backgroundColor: dataVars['--color-data-categorical-blue'],
     zIndex: 1,
     ':focus-visible': {
@@ -562,9 +562,11 @@ function ChartRadiusReference({sections}: {sections: DocSection[]}) {
   if (!section) {
     return null;
   }
-  const description = section.content.find(
-    block => block.type === 'prose',
-  )?.text;
+  const plainText = (text: string) =>
+    text.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/`/g, '');
+  const description = plainText(
+    section.content.find(block => block.type === 'prose')?.text ?? '',
+  );
   const rows = section.content.flatMap(block =>
     block.type === 'table' ? (block.rows ?? []) : [],
   );
@@ -579,14 +581,14 @@ function ChartRadiusReference({sections}: {sections: DocSection[]}) {
       <Card>
         <Table
           data={rows.map(row => ({
-            part: row[0],
-            radius: row[1],
-            treatment: row[2],
+            part: plainText(row[0]),
+            radius: plainText(row[1]),
+            treatment: plainText(row[2]),
           }))}
           columns={[
-            {key: 'part', header: 'Chart part', width: proportional(1)},
-            {key: 'radius', header: 'Radius', width: proportional(1)},
-            {key: 'treatment', header: 'Treatment', width: proportional(2)},
+            {key: 'part', header: 'Chart part', width: pixel(192)},
+            {key: 'radius', header: 'Radius', width: pixel(192)},
+            {key: 'treatment', header: 'Treatment', width: proportional(1)},
           ]}
           density="spacious"
           dividers="rows"

@@ -129,16 +129,16 @@ export const docs = {
             [
               'Bars',
               '--radius-element',
-              'Round the exposed ends. Keep the ends at the baseline square; limit rounding to fit short or narrow bars.',
+              'Round the exposed ends. Cap the radius at the smaller of --radius-element and one quarter of the bar’s width or height. Use --radius-none at the baseline.',
             ],
             [
               'Filled legend keys',
               '--radius-element',
-              'Keep the key rectangular. Limit the radius to one quarter of its smaller dimension.',
+              'Use the same bound: the smaller of --radius-element and one quarter of the key’s width or height, so filled keys stay rectangular.',
             ],
             [
               'Plot and hover region',
-              '0',
+              '--radius-none',
               'Keep the data area and highlight rectangular.',
             ],
             [
