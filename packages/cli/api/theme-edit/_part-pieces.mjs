@@ -49,10 +49,20 @@ export function oneAnswerPerFamily(drafts, clauseOf, clauses, families, sizeOf) 
     const fam = families.find(
       f => c.parts.filter(p => p.on === f.on && f.whens.includes(p.when ?? '')).length > 1,
     );
-    const mine = fam ? drafts.filter(d => clauseOf(d) === c && d.options.length) : [];
-    if (!fam || mine.length < 2) continue;
+    if (!fam) continue;
+    // (Each draft's look, from its own lines; a look with no draft that
+    // writes anything, "bigger" from a clamp() size, is left out and said.)
+    const lookOf = (/** @type {D} */ d) =>
+      /** @type {any[]} */ (d.options[0] ?? []).find(st => fam.whens.includes(st?.when))?.when;
+    const kept = fam.whens.filter(w =>
+      drafts.some(d => clauseOf(d) === c && d.options.length && lookOf(d) === w),
+    );
+    const mine = kept.map(
+      w => /** @type {D} */ (drafts.find(d => clauseOf(d) === c && d.options.length && lookOf(d) === w)),
+    );
+    if (mine.length < 2) continue;
     const [head, ...rest] = mine;
-    const scaled = scaleFamilySizes(mine, fam.whens, w => sizeOf(w, fam.on));
+    const scaled = scaleFamilySizes(mine, kept, w => sizeOf(w, fam.on));
     const seen = new Set();
     head.options = [
       mine
@@ -60,12 +70,18 @@ export function oneAnswerPerFamily(drafts, clauseOf, clauses, families, sizeOf) 
         .filter(st => !seen.has(JSON.stringify(st)) && seen.add(JSON.stringify(st))),
     ];
     head.sequence = true;
-    const [attr] = fam.whens[0].split(':');
+    const [attr] = kept[0].split(':');
+    const level = (/** @type {string} */ w) => w.split(':')[1];
     head.text = head.text.replace(
-      `(${fam.whens[0].replace(':', ' ')})`,
-      `(${attr} ${fam.whens.map(w => w.split(':')[1]).join(', ')})`,
+      `(${kept[0].replace(':', ' ')})`,
+      `(${attr} ${kept.map(level).join(', ')})`,
     );
     if (scaled) head.text += `; ${scaled}`;
+    const left = fam.whens.filter(w => !kept.includes(w));
+    if (left.length) {
+      const noLength = left.every(w => !sizeOf(w, fam.on));
+      head.text += `; ${left.map(level).join(', ')} not changed${noLength ? `: ${left.length > 1 ? 'their sizes are' : 'its size is'} no length now (a clamp() or calc() size), so no step can be taken from ${left.length > 1 ? 'them' : 'it'}` : ''}`;
+    }
     drafts.splice(0, drafts.length, ...drafts.filter(d => !rest.includes(d)));
   }
 }

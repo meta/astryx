@@ -616,6 +616,28 @@ describe('a plural display size after one look is set to a clamp()', () => {
   );
 });
 
+describe('a plural display step when one look\'s size is a clamp()', () => {
+  it(
+    'names only the looks it writes, and says the one it leaves out',
+    async () => {
+      await themeEditSet('t', '--text-display-1-size', 'clamp(40px, 6vw, 72px)', {cwd});
+      try {
+        const data = await answer('display headings bigger');
+        const lines = first(data).join('\n');
+        expect(lines).not.toMatch(/--when type:display-1\b/);
+        expect(lines).toMatch(/--when type:display-2\b/);
+        expect(lines).toMatch(/--when type:display-3\b/);
+        const text = JSON.stringify(data.results);
+        expect(text).toMatch(/\(type display-2, display-3\)/);
+        expect(text).toMatch(/display-1 not changed: its size is no length now/);
+      } finally {
+        await themeEditUndo('t', {cwd, thing: '--text-display-1-size'});
+      }
+    },
+    T,
+  );
+});
+
 describe('a display heading', () => {
   it(
     'sizes from the display size token',
