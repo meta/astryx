@@ -77,6 +77,20 @@ export const docs = {
     targets: [{className: 'astryx-rating', visualProps: ['size']}],
   },
   usage: {
+    anatomy: [
+      {
+        name: 'Star group',
+        required: true,
+        description:
+          'The root. As an input it is a radio group with one tab stop; with isReadOnly it is one image named by the label and the rating text. It reflects size for themes.',
+      },
+      {
+        name: 'Star glyph',
+        required: true,
+        description:
+          'One star per step up to max, 16, 24, or 32 pixels by size. A filled star uses the rating color; an empty star shows only its outline. In the read-only image, the last star may fill partway from the inline start. Glyphs are hidden from assistive technology.',
+      },
+    ],
     description:
       'A star rating. As an input it is a radio group: one tab stop, the arrow keys move the choice. Down advances and Up retreats; horizontal arrows follow text direction. Home and End pick the first and last star without clearing an already-selected boundary. Under the touch presentation, slide a finger or pen across the stars and lift to choose; leaving the group or cancelling chooses nothing. Coarse-pointer targets expand toward 44 pixels without enlarging the glyphs. With isReadOnly it shows a rating, such as a product average, as one image with a text name.',
     bestPractices: [
