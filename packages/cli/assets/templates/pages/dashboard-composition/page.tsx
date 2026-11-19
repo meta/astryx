@@ -394,7 +394,7 @@ function PortfolioChart() {
           tickFormatter={(v: number) => xAxisLabels[v] ?? ''}
           tick={{
             fontSize: 'var(--font-size-sm, 12px)',
-            fill: 'var(--color-text-secondary, #4E606F)',
+            fill: 'var(--color-text-secondary, #445564)',
           }}
           axisLine={false}
           tickLine={false}
@@ -405,7 +405,7 @@ function PortfolioChart() {
           tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`}
           tick={{
             fontSize: 'var(--font-size-sm, 12px)',
-            fill: 'var(--color-text-secondary, #4E606F)',
+            fill: 'var(--color-text-secondary, #445564)',
           }}
           axisLine={false}
           tickLine={false}

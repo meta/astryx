@@ -510,7 +510,7 @@ function ActiveUsersChart() {
             tickFormatter={(v: number) => xAxisLabels[v] ?? ''}
             tick={{
               fontSize: 'var(--font-size-sm, 12px)',
-              fill: 'var(--color-text-secondary, #4E606F)',
+              fill: 'var(--color-text-secondary, #445564)',
             }}
             axisLine={false}
             tickLine={false}
@@ -520,7 +520,7 @@ function ActiveUsersChart() {
             ticks={[0, 20, 40, 60, 80, 100, 120]}
             tick={{
               fontSize: 'var(--font-size-sm, 12px)',
-              fill: 'var(--color-text-secondary, #4E606F)',
+              fill: 'var(--color-text-secondary, #445564)',
             }}
             axisLine={false}
             tickLine={false}

@@ -2,8 +2,9 @@
 
 import {describe, it, expect} from 'vitest';
 import {relativeLuminance, compositeOver, contrastRatio} from './contrast';
-import {parseColor} from '../utils/color';
+import {parseColor, formatColor} from '../utils/color';
 import {resolveThemeToken} from './tokens';
+import {colorDefaults} from './tokens.stylex';
 
 describe('relativeLuminance', () => {
   it('is 0 for black and 1 for white', () => {
@@ -102,4 +103,45 @@ describe('the stock accent pair', () => {
     const onAccent = resolveThemeToken(null, '--color-on-accent', {mode});
     expect(contrastRatio(onAccent, accent)).toBeGreaterThanOrEqual(4.5);
   });
+});
+
+describe('secondary text on the stock palette tints', () => {
+  // A palette tint (Card's `gray` variant, for one) is translucent and sits
+  // on the surface or the page body. Secondary text is body-size text there
+  // (WCAG 1.4.3: 4.5:1).
+  const tints = Object.keys(colorDefaults).filter(name =>
+    /^--color-background-(blue|cyan|gray|green|orange|pink|purple|red|teal|yellow)$/.test(
+      name,
+    ),
+  );
+
+  it('covers every palette hue', () => {
+    expect(tints).toHaveLength(10);
+  });
+
+  it.each(['light', 'dark'] as const)(
+    'meets 4.5:1 over the surface and the body in the %s theme',
+    mode => {
+      const text = resolveThemeToken(null, '--color-text-secondary', {mode});
+      for (const backdropName of [
+        '--color-background-surface',
+        '--color-background-body',
+      ] as const) {
+        const backdrop = parseColor(
+          resolveThemeToken(null, backdropName, {mode}),
+        );
+        for (const tint of tints) {
+          const fill = parseColor(resolveThemeToken(null, tint, {mode}));
+          if (fill === null || backdrop === null) {
+            throw new Error(`${tint} or ${backdropName} must parse`);
+          }
+          const painted = formatColor(compositeOver(fill, backdrop));
+          expect(
+            contrastRatio(text, painted),
+            `${tint} over ${backdropName}`,
+          ).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+    },
+  );
 });

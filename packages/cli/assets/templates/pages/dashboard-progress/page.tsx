@@ -162,7 +162,7 @@ const RAG_FILL: Record<Rag, string> = {
 // vars rather than the hook because page templates depend only on core +
 // recharts. CHART_NEUTRAL is the reference-line / not-started tone.
 const CHART_GRID = 'var(--color-border, rgba(5, 54, 89, 0.1))';
-const CHART_LABEL = 'var(--color-text-secondary, #4E606F)';
+const CHART_LABEL = 'var(--color-text-secondary, #445564)';
 const CHART_NEUTRAL = 'var(--color-data-neutral, #8494A3)';
 
 const IDEAL_COLOR = CHART_NEUTRAL;
