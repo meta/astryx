@@ -70,12 +70,22 @@ describe('per-corner radius on a menu', () => {
     expect(rule).toMatch(/border-top-left-radius: 0;/);
     expect(rule).toMatch(/border-bottom-right-radius: 6px;/);
     expect(rule).toMatch(/border-bottom-left-radius: 6px;/);
-    // (Five lengths are no radius.)
+    // (Five lengths are no radius anywhere: the value's CSS grammar refuses
+    // them, and names the one to four corners a radius takes. "Only one
+    // length works" is no longer true of this part, which takes two to four
+    // corners.)
     await expect(
       themeEditSet('m', 'border-radius', '1px 2px 3px 4px 5px', {
         cwd,
         on: 'dropdown-menu',
       }),
+    ).rejects.toThrow(
+      /border-radius takes a value its CSS grammar takes \(<length-percentage \[0,∞\]>\{1,4\}/,
+    );
+    // (A value its grammar takes but the menu's calc() cannot, a percent
+    // corner, still gets the one-length answer and its line.)
+    await expect(
+      themeEditSet('m', 'border-radius', '10% 20%', {cwd, on: 'dropdown-menu'}),
     ).rejects.toThrow(/only one length works/);
     expect(
       (await answer('dropdown menu corners 0 0 6px 6px', 'm')).writes,
