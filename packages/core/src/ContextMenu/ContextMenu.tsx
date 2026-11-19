@@ -891,8 +891,8 @@ export function ContextMenu({
   );
   // Syncs the menu's side with the browser's layout of the shown menu: its
   // whole size picks its side, slide and any cap, before the frame paints.
-  // The size is read once per open, before a cap holds the menu, so a cap
-  // never feeds back into its own size and a later pass reads no layout.
+  // Read the size once per open, before a cap holds the menu. A cap then
+  // never feeds back into its own size, and a later pass reads no layout.
   useIsomorphicLayoutEffect(() => {
     const lifted = liftRef.current;
     const menu = listRef.current?.closest<HTMLElement>('[popover]');
