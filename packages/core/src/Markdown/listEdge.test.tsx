@@ -14,7 +14,7 @@
 import {render} from '@testing-library/react';
 import {describe, expect, it} from 'vitest';
 import {List} from '../List/List';
-import {ListStaticScope} from '../List/ListContext';
+import {ListStaticContext, listStaticMark} from '../List/ListContext';
 import {ListItem} from '../List/ListItem';
 import {Markdown} from './Markdown';
 
@@ -64,7 +64,7 @@ describe('Markdown lists drop the inline clip through one scope', () => {
 
   it('keeps the inline clip on a List inside a static list row', () => {
     const {container} = render(
-      <ListStaticScope>
+      <ListStaticContext value={listStaticMark()}>
         <List>
           <ListItem
             label={
@@ -74,7 +74,7 @@ describe('Markdown lists drop the inline clip through one scope', () => {
             }
           />
         </List>
-      </ListStaticScope>,
+      </ListStaticContext>,
     );
     const [outer, inner] = container.querySelectorAll('ul');
     expect(outer?.className).toMatch(/noInlineClip/);

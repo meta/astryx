@@ -389,7 +389,9 @@ export function List({
   const edge: ListEdge =
     edgeProp ?? (edgeCompensation === 'inline' ? 'outset' : 'padded');
   const reachesContainerPadding = edge === 'outset' || edge === 'bleed';
-  const isStatic = use(ListStaticContext);
+  const staticMark = use(ListStaticContext);
+  const parentList = use(ListContext);
+  const isStatic = staticMark != null && parentList?.staticMark !== staticMark;
 
   const contextValue = useMemo(
     () => ({
@@ -403,6 +405,7 @@ export function List({
         session: reorderSession,
         options: reorderOptions as ListReorderOptions,
       },
+      staticMark,
     }),
     [
       density,
@@ -412,6 +415,7 @@ export function List({
       animatedLayout,
       reorderSession,
       reorderOptions,
+      staticMark,
     ],
   );
 
@@ -458,13 +462,7 @@ export function List({
         className,
         style,
       )}>
-      {isStatic ? (
-        // The scope marks only this List. A List a caller draws in a row
-        // keeps its own clip unless its own scope marks it.
-        <ListStaticContext value={false}>{children}</ListStaticContext>
-      ) : (
-        children
-      )}
+      {children}
     </Tag>
   );
 

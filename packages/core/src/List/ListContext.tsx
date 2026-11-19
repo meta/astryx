@@ -11,7 +11,7 @@
  *   it, or a task item's checkbox in its place. It also says whether their
  *   List has a marker gutter whose outside counters keep the themed inset.
  *   ListEdgeScope sets the row edge treatment for the items inside it.
- *   ListStaticScope marks the next List inside it as static, without the
+ *   ListStaticContext marks the next List inside it as static, without the
  *   inline clip that swiped rows need
  * @position Internal context. Consumed by List.tsx and ListItem.tsx
  */
@@ -85,6 +85,11 @@ export interface ListContextValue {
    * with the handle it carries (List/listReorderContext.ts).
    */
   reorder?: ListReorderContextValue | null;
+  /**
+   * The static mark the List read (ListStaticContext); internal. A List under
+   * the same mark is in a row, not the marked List.
+   */
+  staticMark?: ListStaticMark | null;
 }
 
 export const ListContext = createLayerScopedContext<ListContextValue | null>(
@@ -157,27 +162,27 @@ export function ListEdgeScope({
 }
 
 /**
- * Whether the next List is static, set by ListStaticScope; internal. List
- * reads it for its own inline clip and resets it for its rows.
+ * A mark that makes the next List inside it static; internal. Make a new mark
+ * for each List with `listStaticMark()`.
  */
-export const ListStaticContext = createLayerScopedContext<boolean>(
-  'ListStaticContext',
-  1,
-  false,
-);
-ListStaticContext.displayName = 'ListStaticContext';
+export interface ListStaticMark {
+  readonly isStatic: true;
+}
+
+/** A new mark for one static List. */
+export function listStaticMark(): ListStaticMark {
+  return {isStatic: true};
+}
 
 /**
- * Marks the next List inside it as static; internal. Its rows never swipe
- * aside, so the List paints without its inline clip. A focus ring or an
- * outside counter on the list's edge then draws whole. The List resets the
- * mark for its rows, so a List nested in a row keeps its clip. Markdown wraps
- * each of its lists, task lists included, in this scope.
+ * The static mark for the next List; internal. Provide it only around a List
+ * whose rows never swipe aside. That List paints without its inline clip, so
+ * a focus ring or an outside counter on its edge draws whole. Each List
+ * passes the mark it read to its rows through ListContext, and a List that
+ * reads the same mark as its parent List is not static, so a List nested in a
+ * row keeps its clip. Markdown gives each of its lists, task lists included,
+ * its own mark.
  */
-export function ListStaticScope({
-  children,
-}: {
-  readonly children: ReactNode;
-}): ReactNode {
-  return <ListStaticContext value={true}>{children}</ListStaticContext>;
-}
+export const ListStaticContext =
+  createLayerScopedContext<ListStaticMark | null>('ListStaticContext', 1, null);
+ListStaticContext.displayName = 'ListStaticContext';

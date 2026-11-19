@@ -41,7 +41,8 @@ import {List} from '../List/List';
 import {ListItem} from '../List/ListItem';
 import {
   ListEdgeScope,
-  ListStaticScope,
+  ListStaticContext,
+  listStaticMark,
   ListMarkerScope,
   type ListMarker,
 } from '../List/ListContext';
@@ -1804,7 +1805,7 @@ function renderBlock(
             )}>
             {/* Task rows never swipe, so each checkbox's focus ring draws
                 whole on the column edge. */}
-            <ListStaticScope>
+            <ListStaticContext value={listStaticMark()}>
               <CheckboxList
                 label={t('@astryx.markdown.taskList')}
                 isLabelHidden
@@ -1879,7 +1880,7 @@ function renderBlock(
                   })}
                 </ListEdgeScope>
               </CheckboxList>
-            </ListStaticScope>
+            </ListStaticContext>
           </div>
         );
       }
@@ -1903,7 +1904,7 @@ function renderBlock(
           )}>
           {/* Static Markdown lists never host swipe actions, so outside
               counter ink paints through the list's inline edge. */}
-          <ListStaticScope>
+          <ListStaticContext value={listStaticMark()}>
             <List
               listStyle={node.ordered ? 'decimal' : 'disc'}
               density="compact"
@@ -2019,7 +2020,7 @@ function renderBlock(
                 );
               })}
             </List>
-          </ListStaticScope>
+          </ListStaticContext>
         </div>
       );
     }
