@@ -48,6 +48,12 @@ function buildSchemas() {
           'group must be camelCase starting with a lower-case letter',
         )
         .optional(),
+      replaces: nonBlank('replaces')
+        .regex(
+          ICON_DEFINITION_NAME_RE,
+          'replaces must name a definition in camelCase',
+        )
+        .optional(),
       stability: z.literal('experimental').optional(),
     })
     .strict();

@@ -200,6 +200,7 @@
  * @property {Array<{definition: string, icon: string, previous: string | null, changed: boolean}>} data.entries - Each pair, in order, and what it replaced.
  * @property {boolean} data.changed - Whether the file was written.
  * @property {{previous: string, module: string}} [data.moduleUpdate] - The data file's `module` before and after this command, when the package was renamed and the command wrote its new name.
+ * @property {Array<{key: string, definition: string}>} [data.replacedKeys] - Each `map` key that named a replaced icon definition; the command wrote it under the definition that replaced it.
  * @property {string[]} [data.files] - The generated module and its types, when its theme map was rewritten.
  * @property {IconTemplateMeanings} [data.templateMeanings] - After a write: the icon definitions the bundled templates use that the set's `map` does not name. A copied template renders a placeholder for each in a project that uses this set.
  */
@@ -218,6 +219,7 @@
  * @property {string | null} data.previous - The icon id it replaced.
  * @property {boolean} data.changed - Whether the file was written.
  * @property {{previous: string, module: string}} [data.moduleUpdate] - The data file's `module` before and after this command, when the package was renamed and the command wrote its new name.
+ * @property {Array<{key: string, definition: string}>} [data.replacedKeys] - Each `map` key that named a replaced icon definition; the command wrote it under the definition that replaced it.
  * @property {string[]} [data.files] - The generated module and its types, when its theme map was rewritten.
  * @property {IconTemplateMeanings} [data.templateMeanings] - After a write: the icon definitions the bundled templates use that the set's `map` does not name. A copied template renders a placeholder for each in a project that uses this set.
  */
@@ -322,7 +324,7 @@
  * @property {'icon.definitions'} type
  * @property {object} data
  * @property {string | null} data.set - The set `mapped` describes, as `<package>/<set>`: the one `set` names, else the project's main set, else the only set of the icon-set package the command runs in; null when there is none.
- * @property {Array<{name: string, builtIn: boolean, description: string, words: string[], group?: string, templates: number, mapped?: boolean}>} data.definitions - Every Astryx icon definition, by name; `builtIn` ones every set maps. `group`: the family of related definitions it belongs to, present when it names one. `templates`: how many bundled templates use it. `mapped`: whether the set's `map` names it, present when `set` is not null.
+ * @property {Array<{name: string, builtIn: boolean, description: string, words: string[], group?: string, replaces?: string, templates: number, mapped?: boolean}>} data.definitions - Every Astryx icon definition, by name; `builtIn` ones every set maps. `group`: the family of related definitions it belongs to, present when it names one. `replaces`: the older definition it took the place of, whose name answers with it. `templates`: how many bundled templates use it. `mapped`: whether the set's `map` names it, present when `set` is not null.
  */
 
 /**
@@ -427,6 +429,7 @@
  * @property {string} package - The integration package that ships the set.
  * @property {import('../../authoring/doctypes/icon-set/type').IconSetData} data - The set's data file.
  * @property {Array<{doc: Record<string, unknown>}>} definitions - The set's own icon definitions.
+ * @property {Array<{name: string, definition: string}>} [replacedDefinitions] - The old names of the set's own definitions, each with the current definition it answers with.
  * @property {string} [look] - The look the folder's project draws the set in (`experimental.iconVariant`), when the set is in its list.
  */
 

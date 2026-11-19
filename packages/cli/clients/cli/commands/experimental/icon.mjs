@@ -90,6 +90,18 @@ const moduleUpdateLines = data =>
     : [];
 
 /**
+ * The receipt lines for `map` keys a write renamed: each named a replaced
+ * definition, and the data file now names the definition that replaced it.
+ * @param {{replacedKeys?: Array<{key: string, definition: string}>}} data
+ */
+const replacedKeyLines = data =>
+  (data.replacedKeys ?? []).map(each =>
+    text(
+      `[ok] Renamed map key "${each.key}" to "${each.definition}": "${each.definition}" replaced that definition.`,
+    ),
+  );
+
+/**
  * The receipt's last line when the set leaves template meanings unmapped.
  * @param {{templateMeanings?: {unmapped: Array<{definition: string, templates: number}>}}} data
  * @param {string} set the set's name
@@ -191,6 +203,7 @@ export function registerExperimentalIcon(group, program) {
               ...(each.mapped == null
                 ? []
                 : [each.mapped ? 'mapped' : 'not mapped']),
+              ...(each.replaces ? [`replaces ${each.replaces}`] : []),
             ];
             return `${each.name} [${marks.join(', ')}]: ${each.description} Words: ${each.words.join(', ')}.`;
           }),
@@ -650,6 +663,7 @@ export function registerExperimentalIcon(group, program) {
                   ),
                 ),
                 ...moduleUpdateLines(data),
+                ...replacedKeyLines(data),
                 ...templateMeaningsLines(data, data.set),
               )
             : emit(
@@ -665,6 +679,7 @@ export function registerExperimentalIcon(group, program) {
                       : `[ok] map.${data.definition} is already "${data.icon}".`,
                 ),
                 ...moduleUpdateLines(data),
+                ...replacedKeyLines(data),
                 ...templateMeaningsLines(data, data.set),
               ),
       ),

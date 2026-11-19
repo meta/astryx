@@ -21,6 +21,7 @@ verified_by:
     packages/cli/foundation/discovery/template-icons-variant.test.mjs,
     packages/cli/foundation/integrations/icon-features.test.mjs,
     packages/cli/api/search/search.icons.test.mjs,
+    packages/cli/foundation/discovery/icon-definition-replaces.test.mjs,
     packages/cli/foundation/agent-docs/agent-docs.test.mjs,
   ]
 ---
@@ -205,7 +206,8 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     and `themeMap` (FR12).
 
   A data file that fails this shape, repeats an `id`, maps a name that is
-  neither an Astryx definition nor one of the set's own, maps to a missing
+  neither an Astryx definition nor one of the set's own (nor a name one of
+  those replaced, FR4), maps to a missing
   icon, or names a variant the set does not declare is invalid, and the set
   is withdrawn from every surface.
 
@@ -226,6 +228,23 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   its own. Every Astryx group has two or more members. A group is information
   only: no ranking reads it. A definition's docs page names its group and the
   group's other members, each with the route that opens it.
+  A definition may also declare
+  `replaces`, the name of an older definition it takes the place of, within
+  its own folder. The old name is then not a definition, and it answers with
+  the definition that replaced it, through every later replacement, the way
+  a replaced docs topic's name answers with its replacement (one shared alias
+  chain). A replaced definition's file may stay, so the old names it carries
+  keep answering. One name has one successor, a built-in definition is never
+  replaced, a set's own definition never replaces an Astryx definition's
+  name, and every chain ends at a current definition. A set whose folder
+  breaks one of these is invalid; in Astryx's own folder the definitions
+  that break one are reported and the others read. `experimental icon
+--definitions` gives a definition that declares one its `replaces`, and its
+  docs page names it in a Replaces row. A set's `map` key that names a replaced definition
+  maps its successor (an entry the map has for the successor wins), and the
+  next `experimental icon map` write stores the successor's name, listing
+  each renamed key as `replacedKeys`; a template's `icons` value and a
+  definition named to `map` or `add` resolve the same way.
 - **FR5 — The directory is the boundary.** Discovery reads the descriptor,
   data file, and definitions statically, never runs the icon module, and
   rejects a path that escapes the package (`spec:AST-039/FR5`, FR6).
@@ -268,7 +287,9 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   word names, then by `id`. Suggestions for a missing `<set>/<id>` (FR7) and
   the definitions that fit an icon (FR13) never include word matches. An
   icon also answers to
-  the name and words of every definition it draws. Equal scores are ordered by
+  the name and words of every definition it draws, and to the name of a
+  definition one of those replaced (FR4) as to its successor's name, with a
+  reason naming both. Equal scores are ordered by
   set order (FR8), so the project's set leads; then, within a set, an exact
   name match on the whole id, then on its plural or singular, before one on
   an id part, and an exact meaning
@@ -650,6 +671,7 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
   | `icon_builtin_definition_missing` | error    | a built-in definition is not in `map`                                              |
   | `icon_definition_unused`          | warning  | a definition the set declares is not in `map`                                      |
   | `icon_definition_shadowed`        | warning  | a definition the set declares has an Astryx definition's name                      |
+  | `icon_definition_replaced`        | warning  | a `map` key names a replaced definition; the message names the key to rename       |
   | `icon_module_not_public`          | error    | an icon is read from outside the package's public entry                            |
   | `icon_export_name`                | warning  | an export is not named `<Name>Icon`                                                |
   | `icon_not_component`              | error    | an export is a literal, not a component or adapter call                            |
@@ -731,7 +753,8 @@ message}`) names each template or namespace doc that sets `stability`, and
   leaves one out, with the `use` command that adds it. With no list, it
   passes and names the installed sets and whether one is the project's set.
   It warns when another
-  installed set is withdrawn. Its pass message names the project's look.
+  installed set is withdrawn, and when an installed set's `map` keys a
+  replaced definition (FR4), naming the set, the key, and its successor. Its pass message names the project's look.
   Doctor's `icon-placeholders` check runs only where icon features are on
   and a main set is decided (named by `experimental.iconSet`, or the only
   installed set); with no main set there is no check and no scan. It reads
