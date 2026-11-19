@@ -19,9 +19,7 @@ describe('color-set presentation', () => {
     expect(source).toContain('mode="dark"');
     expect(source.match(/width: pixel\(152\)/g)).toHaveLength(4);
     expect(source).toContain('width: proportional(1)');
-    expect(source).toContain(
-      '<DocPageLayout title={title} description={description}>',
-    );
+    expect(source).toContain('titleDescriptionGap={1}');
     expect(source).not.toContain('Example combination');
   });
 
@@ -36,10 +34,10 @@ describe('color-set presentation', () => {
     expect(source).toContain("isCopied ? 'check' : 'copy'");
     expect(source).toContain('sets.map(section =>');
     expect(source).toContain('groups.map((group, index) =>');
-    expect(source).toContain("section.id !== 'readable-chart-details'");
-    expect(source).toContain('id="chart-styling"');
-    expect(source).toContain('trigger="Implementation details"');
-    expect(source).toContain('defaultIsOpen={false}');
+    expect(source).not.toContain('Implementation details');
+    expect(source).toContain('Switch preview to dark mode');
+    expect(source).not.toContain('SegmentedControl');
+    expect(source).toContain('mode={mode}');
     const setSection = source.slice(
       source.indexOf('function SetSection'),
       source.indexOf('export function ColorSetsDocView'),
@@ -53,15 +51,30 @@ describe('color-set presentation', () => {
     expect(source).toContain(
       '<ChartStylingTable sections={stylingSections} />',
     );
-    expect(source).toContain('Tooltip for Q2');
+    expect(source).not.toContain('Tooltip for Q2');
+    expect(source).toContain('<HoverCard');
+    expect(source).toContain('delay={0}');
+    expect(source).toContain('touchTrigger="tap"');
+    expect(source).toContain('const target = 150');
+    expect(source).toContain('Target: {money(target)}');
+    expect(source).toContain(
+      'Compare sales by quarter against a $150k target.',
+    );
+    const chart = source.slice(
+      source.indexOf('function ChartStylingPreview'),
+      source.indexOf('function ChartStylingTable'),
+    );
+    expect(chart).not.toContain('type="display-3"');
+    expect(chart).not.toContain('<text');
+    expect(chart).toContain('type="body"');
+    expect(chart).toContain('styles.chartLabel');
+    expect(source).not.toContain('styles.chartText');
+    expect(source).toContain(".replace(/`/g, '')");
     expect(source).toContain("stroke={colorVars['--color-border']}");
     expect(source).toContain("stroke={colorVars['--color-border-emphasized']}");
     expect(source).toContain("stroke={dataVars['--color-data-neutral']}");
     expect(source).toContain(
       "fill={dataVars['--color-data-categorical-blue']}",
-    );
-    expect(source).toContain(
-      "backgroundColor: colorVars['--color-background-surface']",
     );
     expect(source).toContain("fill={colorVars['--color-overlay-hover']}");
   });

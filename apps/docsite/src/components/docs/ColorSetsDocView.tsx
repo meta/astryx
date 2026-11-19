@@ -14,8 +14,12 @@ import * as stylex from '@stylexjs/stylex';
 import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {useClipboard} from '@astryxdesign/core/hooks';
+import {Button} from '@astryxdesign/core/Button';
+import {Moon, Sun} from 'lucide-react';
+import {Theme} from '@astryxdesign/core/theme';
+import '@astryxdesign/theme-neutral/theme.css';
+import {HoverCard} from '@astryxdesign/core/HoverCard';
 import {Card} from '@astryxdesign/core/Card';
-import {Collapsible} from '@astryxdesign/core/Collapsible';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {Table, pixel, proportional} from '@astryxdesign/core/Table';
@@ -23,14 +27,13 @@ import {resolveThemeTokens} from '@astryxdesign/core/theme/tokens';
 import {dataVars} from '@astryxdesign/core/theme/dataTokens.stylex';
 import {
   colorVars,
+  focusVars,
   radiusVars,
-  shadowVars,
   spacingVars,
   typographyVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
 import {neutralTheme} from '@astryxdesign/theme-neutral/built';
 import type {DocSection} from '../../generated/docsRegistry';
-import {ContentBlockRenderer} from './ContentBlockRenderer';
 import {DocPageLayout} from './DocPageLayout';
 
 const modeTokens = {
@@ -56,30 +59,54 @@ const styles = stylex.create({
     backgroundColor: color,
     opacity: strength,
   }),
-  chartLayout: {
-    display: 'grid',
-    gridTemplateColumns: {
-      default: 'minmax(0, 1fr) 180px',
-      '@media (max-width: 768px)': 'minmax(0, 1fr)',
-    },
-    gap: spacingVars['--spacing-4'],
-    alignItems: 'start',
+  chartFrame: {
+    paddingInline: `calc(${spacingVars['--spacing-12']} + ${spacingVars['--spacing-2']})`,
   },
+  chartLayout: {
+    position: 'relative',
+  },
+  chartLabel: (x: number, y: number) => ({
+    position: 'absolute',
+    left: `${(x / 420) * 100}%`,
+    top: `${(y / 300) * 100}%`,
+    pointerEvents: 'none',
+    whiteSpace: 'nowrap',
+  }),
+  axisLabel: {
+    transform: 'translate(-100%, -50%)',
+    marginInlineStart: `calc(-1 * ${spacingVars['--spacing-2']})`,
+  },
+  valueLabel: {
+    transform: 'translate(-50%, -100%)',
+    marginTop: `calc(-1 * ${spacingVars['--spacing-4']})`,
+  },
+  quarterLabel: {
+    transform: 'translate(-50%, 0)',
+    marginTop: spacingVars['--spacing-2'],
+  },
+  barTrigger: (index: number, value: number) => ({
+    position: 'absolute',
+    left: `${((20.5 + index * 105) / 420) * 100}%`,
+    top: `${((264 - value * 1.2) / 300) * 100}%`,
+    width: `${(64 / 420) * 100}%`,
+    height: `${((value * 1.2) / 300) * 100}%`,
+    padding: 0,
+    borderWidth: 0,
+    borderRadius: 2,
+    backgroundColor: 'transparent',
+    ':focus-visible': {
+      outlineWidth: focusVars['--focus-outline-width'],
+      outlineStyle: focusVars['--focus-outline-style'],
+      outlineColor: focusVars['--focus-outline-color'],
+      outlineOffset: focusVars['--focus-outline-offset'],
+    },
+  }),
   chart: {
     width: '100%',
     height: 'auto',
     display: 'block',
     fontFamily: typographyVars['--font-family-body'],
     overflow: 'visible',
-  },
-  tooltip: {
-    padding: spacingVars['--spacing-3'],
-    backgroundColor: colorVars['--color-background-surface'],
-    borderWidth: 1,
-    borderStyle: 'solid',
-    borderColor: colorVars['--color-border'],
-    borderRadius: radiusVars['--radius-container'],
-    boxShadow: shadowVars['--shadow-med'],
   },
   plot: {
     backgroundColor: colorVars['--color-background-card'],
@@ -88,7 +115,7 @@ const styles = stylex.create({
   marker: {
     width: 12,
     height: 12,
-    borderRadius: radiusVars['--radius-element'],
+    borderRadius: 2,
     backgroundColor: dataVars['--color-data-categorical-blue'],
   },
   preview: {
@@ -253,144 +280,200 @@ function Palette({
 }
 
 function ChartStylingPreview() {
+  const [mode, setMode] = useState<'light' | 'dark'>('light');
+  const [activeQuarter, setActiveQuarter] = useState<number | null>(null);
   const values = [120, 160, 140, 180];
+  const target = 150;
+  const money = (value: number) => `$${value}k`;
   return (
-    <Card>
-      <VStack gap={4} xstyle={styles.plot}>
-        <VStack gap={1}>
-          <Heading level={3}>Quarterly sales</Heading>
-          <Text color="secondary">Illustrative values in $ thousands</Text>
-        </VStack>
-        <HStack gap={6} vAlign="center" wrap="wrap">
-          <HStack gap={2} vAlign="center">
-            <div {...stylex.props(styles.marker)} />
-            <Text color="secondary">Actual sales</Text>
-          </HStack>
-          <HStack gap={2} vAlign="center">
-            <svg aria-hidden="true" width="28" height="12">
-              <line
-                x1="0"
-                y1="6"
-                x2="28"
-                y2="6"
-                stroke={dataVars['--color-data-neutral']}
-                strokeWidth="2"
-                strokeDasharray="5 3"
-              />
-            </svg>
-            <Text color="secondary">Target: 150</Text>
-          </HStack>
-        </HStack>
-        <div {...stylex.props(styles.chartLayout)}>
-          <svg
-            role="img"
-            aria-label="Quarterly sales: Q1 120, Q2 160, Q3 140, Q4 180. Target 150. Q2 is highlighted with a sample tooltip."
-            viewBox="0 0 540 300"
-            {...stylex.props(styles.chart)}>
-            <title>Quarterly sales against a target</title>
-            <rect
-              x="36"
-              y="24"
-              width="496"
-              height="240"
-              fill={colorVars['--color-background-card']}
-            />
-            <rect
-              x="164"
-              y="24"
-              width="110"
-              height="240"
-              fill={colorVars['--color-overlay-hover']}
-            />
-            {[50, 100, 150, 200].map(value => (
-              <g key={value}>
-                <line
-                  x1="36"
-                  x2="532"
-                  y1={264 - value * 1.2}
-                  y2={264 - value * 1.2}
-                  stroke={colorVars['--color-border']}
-                />
-                <text
-                  x="27"
-                  y={268 - value * 1.2}
-                  textAnchor="end"
-                  fontSize="14"
-                  fill={colorVars['--color-text-secondary']}>
-                  {value}
-                </text>
-              </g>
-            ))}
-            {values.map((value, i) => (
-              <g key={i}>
-                <rect
-                  x={64 + i * 124}
-                  y={264 - value * 1.2}
-                  width="64"
-                  height={value * 1.2}
-                  rx="2"
-                  fill={dataVars['--color-data-categorical-blue']}
-                />
-                <text
-                  x={96 + i * 124}
-                  y={248 - value * 1.2}
-                  textAnchor="middle"
-                  fontSize="14"
-                  fill={colorVars['--color-text-primary']}>
-                  {value}
-                </text>
-                <text
-                  x={96 + i * 124}
-                  y="288"
-                  textAnchor="middle"
-                  fontSize="14"
-                  fill={colorVars['--color-text-secondary']}>
-                  Q{i + 1}
-                </text>
-              </g>
-            ))}
-            <line
-              x1="36"
-              x2="532"
-              y1="84"
-              y2="84"
-              stroke={dataVars['--color-data-neutral']}
-              strokeWidth="2"
-              strokeDasharray="6 4"
-            />
-            <line
-              x1="36"
-              x2="532"
-              y1="264"
-              y2="264"
-              stroke={colorVars['--color-border-emphasized']}
-            />
-            <text
-              x="27"
-              y="268"
-              textAnchor="end"
-              fontSize="14"
-              fill={colorVars['--color-text-secondary']}>
-              0
-            </text>
-          </svg>
-          <VStack gap={2}>
-            <Text color="secondary">Tooltip for Q2</Text>
-            <VStack gap={2} xstyle={styles.tooltip}>
-              <Text weight="bold">Q2</Text>
-              <HStack hAlign="between" gap={2}>
-                <Text color="secondary">Sales</Text>
-                <Text weight="bold">$160k</Text>
-              </HStack>
-              <HStack hAlign="between" gap={2}>
-                <Text color="secondary">Target</Text>
-                <Text weight="bold">$150k</Text>
-              </HStack>
+    <Theme theme={neutralTheme} mode={mode}>
+      <Card>
+        <VStack gap={4} xstyle={styles.plot}>
+          <HStack hAlign="between" vAlign="start" gap={4} wrap="wrap">
+            <VStack gap={1}>
+              <Heading level={3}>Quarterly sales</Heading>
+              <Text color="secondary">
+                Compare sales by quarter against a $150k target.
+              </Text>
             </VStack>
-          </VStack>
-        </div>
-      </VStack>
-    </Card>
+            <Button
+              variant="ghost"
+              size="lg"
+              isIconOnly
+              label={
+                mode === 'dark'
+                  ? 'Switch preview to light mode'
+                  : 'Switch preview to dark mode'
+              }
+              tooltip={
+                mode === 'dark'
+                  ? 'Switch preview to light mode'
+                  : 'Switch preview to dark mode'
+              }
+              icon={mode === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+              onClick={() =>
+                setMode(current => (current === 'dark' ? 'light' : 'dark'))
+              }
+            />
+          </HStack>
+          <HStack gap={6} vAlign="center" wrap="wrap">
+            <HStack gap={2} vAlign="center">
+              <div {...stylex.props(styles.marker)} />
+              <Text color="secondary">Actual sales</Text>
+            </HStack>
+            <HStack gap={2} vAlign="center">
+              <svg aria-hidden="true" width="28" height="12">
+                <line
+                  x1="0"
+                  y1="6"
+                  x2="28"
+                  y2="6"
+                  stroke={dataVars['--color-data-neutral']}
+                  strokeWidth="2"
+                  strokeDasharray="6 4"
+                />
+              </svg>
+              <Text color="secondary">Target: {money(target)}</Text>
+            </HStack>
+          </HStack>
+          <div {...stylex.props(styles.chartFrame)}>
+            <div {...stylex.props(styles.chartLayout)}>
+              <svg
+                role="img"
+                aria-label="Quarterly sales in US dollars: Q1 $120k, Q2 $160k, Q3 $140k, Q4 $180k. Target $150k per quarter. Hover or focus a bar for details."
+                viewBox="0 0 420 300"
+                {...stylex.props(styles.chart)}>
+                <title>Quarterly sales against a $150k target</title>
+                <rect
+                  x="0"
+                  y="24"
+                  width="420"
+                  height="240"
+                  fill={colorVars['--color-background-card']}
+                />
+                {activeQuarter !== null && (
+                  <rect
+                    x={activeQuarter * 105}
+                    y="24"
+                    width="105"
+                    height="240"
+                    fill={colorVars['--color-overlay-hover']}
+                  />
+                )}
+                {[50, 100, 150, 200].map(value => (
+                  <line
+                    key={value}
+                    x1="0"
+                    x2="420"
+                    y1={264 - value * 1.2}
+                    y2={264 - value * 1.2}
+                    stroke={colorVars['--color-border']}
+                  />
+                ))}
+                {values.map((value, i) => (
+                  <rect
+                    key={i}
+                    x={20.5 + i * 105}
+                    y={264 - value * 1.2}
+                    width="64"
+                    height={value * 1.2}
+                    rx="2"
+                    fill={dataVars['--color-data-categorical-blue']}
+                  />
+                ))}
+                <line
+                  x1="0"
+                  x2="420"
+                  y1={264 - target * 1.2}
+                  y2={264 - target * 1.2}
+                  stroke={dataVars['--color-data-neutral']}
+                  strokeWidth="2"
+                  strokeDasharray="6 4"
+                />
+                <line
+                  x1="0"
+                  x2="420"
+                  y1="264"
+                  y2="264"
+                  stroke={colorVars['--color-border-emphasized']}
+                />
+              </svg>
+              {[0, 50, 100, 150, 200].map(value => (
+                <Text
+                  key={value}
+                  type="body"
+                  color="secondary"
+                  hasTabularNumbers
+                  xstyle={[
+                    styles.chartLabel(0, 264 - value * 1.2),
+                    styles.axisLabel,
+                  ]}>
+                  {value === 0 ? '$0' : money(value)}
+                </Text>
+              ))}
+              {values.map((value, i) => (
+                <Text
+                  key={`value-${i}`}
+                  type="body"
+                  hasTabularNumbers
+                  xstyle={[
+                    styles.chartLabel(52.5 + i * 105, 264 - value * 1.2),
+                    styles.valueLabel,
+                  ]}>
+                  {money(value)}
+                </Text>
+              ))}
+              {values.map((_, i) => (
+                <Text
+                  key={`quarter-${i}`}
+                  type="body"
+                  color="secondary"
+                  xstyle={[
+                    styles.chartLabel(52.5 + i * 105, 264),
+                    styles.quarterLabel,
+                  ]}>
+                  Q{i + 1}
+                </Text>
+              ))}
+              {values.map((value, i) => (
+                <HoverCard
+                  key={i}
+                  label={`Q${i + 1} sales details`}
+                  delay={0}
+                  hideDelay={0}
+                  placement="above"
+                  focusTrigger="always"
+                  touchTrigger="tap"
+                  onOpenChange={isOpen =>
+                    setActiveQuarter(current =>
+                      isOpen ? i : current === i ? null : current,
+                    )
+                  }
+                  content={
+                    <VStack gap={2}>
+                      <Text weight="bold">Q{i + 1}</Text>
+                      <HStack hAlign="between" gap={6}>
+                        <Text color="secondary">Sales</Text>
+                        <Text weight="bold">{money(value)}</Text>
+                      </HStack>
+                      <HStack hAlign="between" gap={6}>
+                        <Text color="secondary">Target</Text>
+                        <Text weight="bold">{money(target)}</Text>
+                      </HStack>
+                    </VStack>
+                  }>
+                  <button
+                    type="button"
+                    aria-label={`Q${i + 1}: sales ${money(value)}, target ${money(target)}`}
+                    {...stylex.props(styles.barTrigger(i, value))}
+                  />
+                </HoverCard>
+              ))}
+            </div>
+          </div>
+        </VStack>
+      </Card>
+    </Theme>
   );
 }
 
@@ -404,20 +487,23 @@ function ChartStylingTable({sections}: {sections: DocSection[]}) {
     )
     .flatMap<{part: string; token: string | null}>(row => {
       const tokens = row[1].match(/--color-[a-z0-9-]+/g) ?? [];
+      const part = row[0]
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+        .replace(/`/g, '');
       return tokens.length > 0
-        ? tokens.map(token => ({part: row[0], token}))
-        : [{part: row[0], token: null}];
+        ? tokens.map(token => ({part, token}))
+        : [{part, token: null}];
     });
   return (
     <Card>
       <Table
         data={data}
         columns={[
-          {key: 'part', header: 'Chart part', width: proportional(1)},
+          {key: 'part', header: 'Chart part', width: pixel(192)},
           {
             key: 'token',
             header: 'Token',
-            width: proportional(2),
+            width: proportional(1),
             renderCell: row => (
               <Text>{row.token ?? 'Same token as the plotted series'}</Text>
             ),
@@ -497,13 +583,15 @@ function SetSection({section}: {section: DocSection}) {
   const groups = colorGroups(section);
   return (
     <VStack gap={4}>
-      <HStack hAlign="between" vAlign="center" gap={3}>
-        <Heading id={section.title.toLowerCase()} level={2}>
-          {section.title}
-        </Heading>
-        {groups.length === 1 && <CopyTokensButton rows={groups[0].rows} />}
-      </HStack>
-      <Text>{PURPOSE[section.title]}</Text>
+      <VStack gap={1}>
+        <HStack hAlign="between" vAlign="center" gap={3}>
+          <Heading id={section.title.toLowerCase()} level={2}>
+            {section.title}
+          </Heading>
+          {groups.length === 1 && <CopyTokensButton rows={groups[0].rows} />}
+        </HStack>
+        <Text>{PURPOSE[section.title]}</Text>
+      </VStack>
       {groups.map((group, index) => (
         <VStack key={index} gap={3}>
           {groups.length > 1 && (
@@ -541,43 +629,26 @@ export function ColorSetsDocView({
 }) {
   const sets = sections.filter(section => section.previewType === 'swatch');
   return (
-    <DocPageLayout title={title} description={description}>
+    <DocPageLayout
+      title={title}
+      description={description}
+      titleDescriptionGap={1}>
       <VStack gap={10}>
         {sets.map(section => (
           <SetSection key={section.id} section={section} />
         ))}
         <VStack gap={6}>
-          <Heading id="chart-styling" level={2}>
-            Chart styling
-          </Heading>
-          <Text>
-            Use data colors for series and reference lines, and text, border,
-            and surface colors for the parts around them. The mappings below are
-            examples you can apply to your chart; they do not change component
-            defaults.
-          </Text>
+          <VStack gap={1}>
+            <Heading id="chart-styling" level={2}>
+              Chart styling
+            </Heading>
+            <Text>
+              Use data colors for series and reference lines, and text, border,
+              and surface colors for the parts around them.
+            </Text>
+          </VStack>
           <ChartStylingPreview />
           <ChartStylingTable sections={stylingSections} />
-          <Collapsible trigger="Implementation details" defaultIsOpen={false}>
-            <VStack gap={4}>
-              {stylingSections
-                .filter(section => section.id !== 'readable-chart-details')
-                .map(section => (
-                  <VStack key={section.id} gap={3}>
-                    <Heading level={3}>{section.title}</Heading>
-                    {section.content
-                      .filter(
-                        block =>
-                          block.type !== 'table' ||
-                          section.id !== 'map-chart-parts',
-                      )
-                      .map((block, i) => (
-                        <ContentBlockRenderer key={i} block={block} />
-                      ))}
-                  </VStack>
-                ))}
-            </VStack>
-          </Collapsible>
         </VStack>
       </VStack>
     </DocPageLayout>
