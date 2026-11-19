@@ -285,8 +285,45 @@ const LINKED_ROOTS = linkedPackageRoots();
 /** A file of a package linked into the carried folder (see linkedPackageRoots). @param {string} file */
 const inLinkedPackage = file => LINKED_ROOTS.length > 0 && LINKED_ROOTS.some(root => file.startsWith(root));
 
+/**
+ * The files of linked packages that a carried file imports by a relative
+ * path (`./vendor/badge/src/index.js`): the page reaches them as its own
+ * files, so the file carries them.
+ * @type {Set<string>}
+ */
+const linkedReachedAsOwn = new Set();
+
 /** A local file that the rendered file carries: one of the page's own, not a linked package's. @param {string} file */
-const isCarried = file => isLocal(file) && !inLinkedPackage(file);
+const isCarried = file => isLocal(file) && (!inLinkedPackage(file) || linkedReachedAsOwn.has(file));
+
+/**
+ * Whether a file that `importer` imports by a relative path is carried: a
+ * file of the page's own, or one a carried module reaches by its path. A
+ * linked package's own modules import their files as a package does.
+ * @param {string} file
+ * @param {string} importer
+ */
+function carriesRelative(file, importer) {
+  if (!inLinkedPackage(file)) return true;
+  if (!isCarried(importer)) return false;
+  linkedReachedAsOwn.add(file);
+  return true;
+}
+
+/**
+ * Note each linked package file that a carried module imports by a relative
+ * path, before that file loads. Only a page with a linked package does this.
+ * @param {string} source
+ * @param {string} filename
+ */
+function noteLinkedFilesReached(source, filename) {
+  if (LINKED_ROOTS.length === 0 || !isCarried(filename)) return;
+  for (const spec of importSpecifiers(source, filename)) {
+    if (!spec.startsWith('.')) continue;
+    const target = importedFile(spec.split('?')[0], filename);
+    if (target && path.isAbsolute(target) && inLinkedPackage(target)) linkedReachedAsOwn.add(target);
+  }
+}
 
 /** Charts the server render set aside, drawn after it. @type {any[]} */
 const charts = [];
@@ -803,7 +840,7 @@ function pagePlugin(filename, browser = false) {
               /** @type {any} */ (err).renderCode = 'ERR_FILE_NOT_FOUND';
               throw err;
             }
-            if (!inLinkedPackage(file) && !localFiles.includes(file)) localFiles.push(file);
+            if (carriesRelative(file, filename) && !localFiles.includes(file)) localFiles.push(file);
             // The text is the module's default export, as Vite gives it, to
             // every way of importing it.
             const text = t.stringLiteral(fs.readFileSync(file, 'utf8'));
@@ -831,7 +868,7 @@ function pagePlugin(filename, browser = false) {
         }
         if (/\.json$/i.test(bare) && (bare.startsWith('.') || path.isAbsolute(bare))) {
           const file = path.resolve(dir, bare);
-          if (fs.existsSync(file) && !inLinkedPackage(file) && !localFiles.includes(file)) localFiles.push(file);
+          if (fs.existsSync(file) && carriesRelative(file, filename) && !localFiles.includes(file)) localFiles.push(file);
         }
         if (/\.(css|scss|sass|less)$/i.test(bare) && (/\.module\.[a-z]+$/i.test(bare) || p.node.specifiers.length > 0)) {
           // CSS Modules (any stylesheet imported as a value) give class names
@@ -883,7 +920,7 @@ function pagePlugin(filename, browser = false) {
             }
             if (/\.css$/i.test(bare) && fs.existsSync(file) && !importedCss.some(c => c.file === file)) {
               importedCss.push({file, css: fs.readFileSync(file, 'utf8')});
-              if (!inLinkedPackage(file) && !localFiles.includes(file)) localFiles.push(file);
+              if (carriesRelative(file, filename) && !localFiles.includes(file)) localFiles.push(file);
             }
           } else {
             // A package stylesheet (a theme's, say): the caller resolves it
@@ -1200,7 +1237,8 @@ const jiti = createJiti(entry, {
  */
 function compilePageModule(source, filename, browser = false) {
   if (isLocal(filename) && /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)) {
-    if (!inLinkedPackage(filename) && !localFiles.includes(filename)) localFiles.push(filename);
+    if (isCarried(filename) && !localFiles.includes(filename)) localFiles.push(filename);
+    noteLinkedFilesReached(source, filename);
     moduleFiles.add(filename);
     const ts = /\.(tsx?|mts|cts)$/.test(filename);
     const themeFiles = source.includes('stylex') ? servedThemeFiles(source, filename) : null;
@@ -1943,7 +1981,10 @@ try {
       if (target && carriedModule && !raw.startsWith('.')) aliasImports.push({spec: raw, file: target});
       // Modules and JSON only: the transform already carries the stylesheets
       // and images a module imports, and a Sass file is never carried.
-      if (target && /\.([cm]?[jt]sx?|json)$/i.test(target) && isCarried(target) && !localFiles.includes(target)) {
+      const carried =
+        target !== null &&
+        (isCarried(target) || (isLocal(target) && carriedModule && raw.startsWith('.') && carriesRelative(target, file)));
+      if (target && /\.([cm]?[jt]sx?|json)$/i.test(target) && carried && !localFiles.includes(target)) {
         localFiles.push(target);
       } else if (
         target &&

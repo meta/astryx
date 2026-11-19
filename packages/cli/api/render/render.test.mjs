@@ -549,6 +549,25 @@ export default function Page() {
     }
   }, 120_000);
 
+  it('carries the files of a linked folder that the page imports by a relative path, as its own', async () => {
+    put('rel-link/package.json', '{"name":"rel-link","private":true}');
+    putLinkedPackage('rel-link/vendor/badge', '@acme/rel');
+    put('rel-link/vendor/badge/src/parts/badge.css', '.rel-badge { letter-spacing: 4px; }');
+    put(
+      'rel-link/vendor/badge/src/parts/badge.js',
+      "import {jsx} from 'react/jsx-runtime';\nimport {label} from './label.js';\nimport './badge.css';\nexport function Badge() { return jsx('strong', {className: 'rel-badge', children: label}); }\n",
+    );
+    linkFolder('rel-link/node_modules/@acme/rel', 'rel-link/vendor/badge');
+    put('rel-link/page.tsx', "import {Badge} from './vendor/badge/src/index.js';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    const {first, back, markup, againMarkup} = await roundTrip('rel-link/page.tsx');
+    expect([...first.data.files].sort()).toEqual(
+      ['page.tsx', 'vendor/badge/src/index.js', 'vendor/badge/src/parts/badge.css', 'vendor/badge/src/parts/badge.js', 'vendor/badge/src/parts/label.js'].sort(),
+    );
+    expect(markup).toContain('@acme/rel badge text');
+    expect(back.data.exact).toBe(true);
+    expect(againMarkup).toBe(markup);
+  }, 120_000);
+
   it("keeps a linked package's styles, JSON and images in the page, and carries only the images its script reads", async () => {
     put('link-assets/package.json', '{"name":"link-assets","private":true}');
     putLinkedPackage('link-assets/vendor/kit', '@acme/kit');
