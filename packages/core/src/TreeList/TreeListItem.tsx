@@ -42,6 +42,7 @@ import {useLinkComponent} from '../Link/useLinkComponent';
 import {TreeListBranches} from './TreeListBranches';
 import type {TreeListDensity, TreeListVariant} from './TreeListTypes';
 import {themeProps} from '../utils/themeProps';
+import {useThemeIndicator} from '../Indicator/useThemeIndicator';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
 import {
   registerEnglishFallback,
@@ -122,14 +123,23 @@ const styles = stylex.create({
   // when its own treeitem publishes focus (`--_tree-focus-z` on `wrapper`).
   // The ring is the row's outline, so it cannot be lifted on its own: a
   // focused row that is also filled (selected or hovered) covers the guides at
-  // that row. That is the accepted trade-off (DD3). Applied only with
-  // `focusWithinOrPublished`, the rows that draw the ring: a plain row shows
-  // no ring, so its fill stays under the guides.
+  // that row. That is the accepted trade-off (DD3). Its conditions match the
+  // ring's, so only the row whose ring shows rises above the guides.
   focusLift: {
     zIndex: {
       default: 'var(--_tree-focus-z, auto)',
       ':has(:focus-visible)': 2,
     },
+  },
+  // A plain row rings and lifts only on its own treeitem's focus, from the
+  // variables `publishFocusVisibleVars` sets on `wrapper`. A control in its
+  // start or end content rings itself.
+  plainRowFocusRing: {
+    outline: 'var(--_focus-outline, none)',
+    outlineOffset: 'var(--_focus-outline-offset, 0)',
+  },
+  publishedFocusLift: {
+    zIndex: 'var(--_tree-focus-z, auto)',
   },
   // Per-level indent, drawn INSIDE the row box: the row (`contentWrapper`)
   // stays full width, so a nested row's hover and selected fill spans the
@@ -567,7 +577,14 @@ export function TreeListItem({
   // astryx-icon target — so the rotation rides on that same element instead of
   // an extra wrapper: a theme can still restyle the mark and its open/closed
   // transform through one selector.
-  const chevronIcon = (
+  const ThemeDisclosure = useThemeIndicator('tree-disclosure');
+  // A theme's disclosure mark draws each state itself, so it is not rotated.
+  const chevronIcon = ThemeDisclosure ? (
+    <ThemeDisclosure
+      state={isExpanded ? 'expanded' : 'collapsed'}
+      xstyle={styles.chevronSvg}
+    />
+  ) : (
     <Icon
       icon="chevronRight"
       // Nearest size to the 16px chevron column; `chevronSvg` re-pins the exact
@@ -747,8 +764,12 @@ export function TreeListItem({
                   isSelected && styles.selected,
                   xstyle,
                 )
-              : stylex.props(
+              : // A plain row has no action, but it is a stop in the roving
+                // focus. It rings while its treeitem has focus.
+                stylex.props(
+                  styles.plainRowFocusRing,
                   styles.contentWrapper,
+                  styles.publishedFocusLift,
                   densityStyles[density],
                   isDisabled && styles.disabled,
                   isSelected && styles.selected,

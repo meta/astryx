@@ -42,7 +42,7 @@ export default function LoginPage() {
   };
 
   return (
-    <Center axis="both" padding={6} style={pageStyle}>
+    <Center role="main" axis="both" padding={6} style={pageStyle}>
       <VStack gap={4} hAlign="center" style={contentStyle}>
         {/* Logo */}
         <VStack gap={2} hAlign="center">
@@ -56,7 +56,9 @@ export default function LoginPage() {
         <Card padding={8} width="100%">
           <VStack gap={4} hAlign="stretch">
             <VStack gap={1} hAlign="center">
-              <Heading level={2}>Sign in</Heading>
+              <Heading level={2} accessibilityLevel={1}>
+                Sign in
+              </Heading>
               <Text type="body" color="secondary" size="sm">
                 Enter your credentials to continue
               </Text>

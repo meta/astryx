@@ -10,7 +10,9 @@ import {
   discoverBundledThemes,
   discoverIntegrationThemes,
   discoverThemeDirectory,
+  readThemeDescriptorValue,
 } from './theme-discovery.mjs';
+import {recordReads} from '../fs/read-record.mjs';
 
 let tmpDir;
 
@@ -583,29 +585,37 @@ describe('theme descriptor values', () => {
     );
   });
 
-  it('reuses a read while the file keeps its size and mtime', () => {
+  it('reads again a file npm replaced with one of the same size and mtime', () => {
+    // npm stamps every installed file with one mtime and writes new files.
+    const npmTime = new Date('1985-10-26T08:15:00Z');
     const dir = writeTheme();
     const file = path.join(dir, 'oceanTheme.doc.mjs');
-    const pinned = new Date('2020-01-01T00:00:00Z');
-    fs.utimesSync(file, pinned, pinned);
-    expect(discoverThemeDirectory(tmpDir, '@acme/themes')[0].displayName).toBe(
-      'Ocean',
-    );
+    fs.utimesSync(file, npmTime, npmTime);
+    expect(readThemeDescriptorValue(file, 'Theme').displayName).toBe('Ocean');
 
+    const next = `${file}.next`;
     fs.writeFileSync(
-      file,
+      next,
       fs.readFileSync(file, 'utf-8').replace('"Ocean"', '"Coral"'),
     );
-    fs.utimesSync(file, pinned, pinned);
-    expect(discoverThemeDirectory(tmpDir, '@acme/themes')[0].displayName).toBe(
-      'Ocean',
-    );
+    fs.utimesSync(next, npmTime, npmTime);
+    fs.renameSync(next, file);
+    expect(readThemeDescriptorValue(file, 'Theme').displayName).toBe('Coral');
+  });
 
-    const later = new Date('2020-01-01T00:00:01Z');
-    fs.utimesSync(file, later, later);
-    expect(discoverThemeDirectory(tmpDir, '@acme/themes')[0].displayName).toBe(
-      'Coral',
-    );
+  it('counts a kept read as a read of the file', () => {
+    const file = path.join(writeTheme(), 'oceanTheme.doc.mjs');
+    expect(readThemeDescriptorValue(file, 'Theme').displayName).toBe('Ocean');
+    /** @type {Map<string, string>} */
+    const seen = new Map();
+    recordReads(seen, () => readThemeDescriptorValue(file, 'Theme'));
+    expect(seen.has(file)).toBe(true);
+  });
+
+  it('throws for an absent file', () => {
+    expect(() =>
+      readThemeDescriptorValue(path.join(tmpDir, 'none.doc.mjs'), 'Theme'),
+    ).toThrow(/ENOENT/);
   });
 });
 

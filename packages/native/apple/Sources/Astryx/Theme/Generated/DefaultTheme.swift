@@ -201,7 +201,7 @@ extension Theme {
         s9: 36
       ),
       radius: RadiusTokens(
-        chat: 28,
+        chat: 12,
         container: 12,
         element: 8,
         full: 9999,
@@ -378,7 +378,7 @@ extension Theme {
         syntaxAddedMarker: Color(.sRGB, red: 0.6470588235294118, green: 0.9647058823529412, blue: 0.5647058823529412, opacity: 1),
         syntaxAttribute: Color(.sRGB, red: 0.25098039215686274, green: 0.8627450980392157, blue: 0.803921568627451, opacity: 1),
         syntaxBackground: Color(.sRGB, red: 0.06666666666666667, green: 0.06666666666666667, blue: 0.07058823529411765, opacity: 0.4980392156862745),
-        syntaxComment: Color(.sRGB, red: 0.6666666666666666, green: 0.6862745098039216, blue: 0.7098039215686275, opacity: 1),
+        syntaxComment: Color(.sRGB, red: 0.6901960784313725, green: 0.7098039215686275, blue: 0.7333333333333333, opacity: 1),
         syntaxConstant: Color(.sRGB, red: 0.9921568627450981, green: 0.7215686274509804, blue: 0.4627450980392157, opacity: 1),
         syntaxDiffHeader: Color(.sRGB, red: 0.06666666666666667, green: 0.06666666666666667, blue: 0.07058823529411765, opacity: 0.4980392156862745),
         syntaxFunction: Color(.sRGB, red: 0.6862745098039216, green: 0.8431372549019608, blue: 1, opacity: 1),
@@ -386,7 +386,7 @@ extension Theme {
         syntaxNumber: Color(.sRGB, red: 0.9921568627450981, green: 0.7215686274509804, blue: 0.4627450980392157, opacity: 1),
         syntaxOperator: Color(.sRGB, red: 0.6313725490196078, green: 0.9333333333333333, blue: 0.9764705882352941, opacity: 1),
         syntaxProperty: Color(.sRGB, red: 0.6313725490196078, green: 0.9333333333333333, blue: 0.9764705882352941, opacity: 1),
-        syntaxPunctuation: Color(.sRGB, red: 0.6666666666666666, green: 0.6862745098039216, blue: 0.7098039215686275, opacity: 1),
+        syntaxPunctuation: Color(.sRGB, red: 0.6901960784313725, green: 0.7098039215686275, blue: 0.7333333333333333, opacity: 1),
         syntaxRemoved: Color(.sRGB, red: 0.9607843137254902, green: 0.2235294117647059, blue: 0.30980392156862746, opacity: 0.06274509803921569),
         syntaxRemovedMarker: Color(.sRGB, red: 1, green: 0.6980392156862745, blue: 0.7215686274509804, opacity: 1),
         syntaxString: Color(.sRGB, red: 0.6470588235294118, green: 0.9647058823529412, blue: 0.5647058823529412, opacity: 1),
@@ -406,7 +406,7 @@ extension Theme {
         textPrimary: Color(.sRGB, red: 0.8745098039215686, green: 0.8862745098039215, blue: 0.8980392156862745, opacity: 1),
         textPurple: Color(.sRGB, red: 0.7019607843137254, green: 0.6901960784313725, blue: 0.996078431372549, opacity: 1),
         textRed: Color(.sRGB, red: 1, green: 0.6980392156862745, blue: 0.7215686274509804, opacity: 1),
-        textSecondary: Color(.sRGB, red: 0.6666666666666666, green: 0.6862745098039216, blue: 0.7098039215686275, opacity: 1),
+        textSecondary: Color(.sRGB, red: 0.6901960784313725, green: 0.7098039215686275, blue: 0.7333333333333333, opacity: 1),
         textSuccess: Color(.sRGB, red: 0.6470588235294118, green: 0.9647058823529412, blue: 0.5647058823529412, opacity: 1),
         textTeal: Color(.sRGB, red: 0.25098039215686274, green: 0.8627450980392157, blue: 0.803921568627451, opacity: 1),
         textWarning: Color(.sRGB, red: 0.984313725490196, green: 0.807843137254902, blue: 0.011764705882352941, opacity: 1),
@@ -434,7 +434,7 @@ extension Theme {
         s9: 36
       ),
       radius: RadiusTokens(
-        chat: 28,
+        chat: 12,
         container: 12,
         element: 8,
         full: 9999,

@@ -23,6 +23,7 @@ import {
   __resetLayoutViewportForTest,
   layoutViewportHeight,
 } from '../utils/layoutViewport';
+import {sharedWeakMap} from '../utils/sharedRealm';
 import {
   claimTapFocus,
   findTextEntryControl,
@@ -513,6 +514,47 @@ describe('a hide Chrome reports in steps under Remove animations (FR8)', () => {
   });
 });
 
+describe('the store beside another copy of Core (spec:AST-110 FR3)', () => {
+  it('keeps its own store beside a copy whose store has the earlier shape, and each reads its own height', () => {
+    // An earlier copy of Core keeps the window's store under the first
+    // version, without the hide's touch count. It listens, and read 300 px.
+    const earlier = sharedWeakMap<Window, object>(
+      'keyboard/keyboard-height/stores',
+      1,
+    );
+    const previous = earlier.get(window);
+    const theirs = {
+      height: 300,
+      listeners: new Set(),
+      focusListeners: new Set(),
+      detach: () => {},
+      detachFocus: null,
+    };
+    earlier.set(window, theirs);
+    const stop = subscribeKeyboardHeight(window, () => {});
+    try {
+      expect(getKeyboardHeight(window)).toBe(0);
+      report({height: window.innerHeight - 200});
+      expect(getKeyboardHeight(window)).toBe(200);
+      expect(theirs.height).toBe(300);
+      expect(Object.keys(theirs)).toEqual([
+        'height',
+        'listeners',
+        'focusListeners',
+        'detach',
+        'detachFocus',
+      ]);
+    } finally {
+      stop();
+      if (previous == null) {
+        earlier.delete(window);
+      } else {
+        earlier.set(window, previous);
+      }
+    }
+  });
+});
+
 describe('one set of listeners per window (FR1, INV11)', () => {
   it('shares the listeners among subscribers and removes them with the last', () => {
     const add = vi.spyOn(viewport, 'addEventListener');
@@ -885,13 +927,17 @@ describe('the browser\u2019s own reveal pan (FR4)', () => {
     Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
   });
 
+  // A touch's start, and its end or cancel, which tell whether a finger is
+  // down.
+  const TOUCH_TYPES = ['touchstart', 'touchend', 'touchcancel'];
+
   it('listens for touches only while it watches', () => {
     const add = vi.spyOn(window, 'addEventListener');
     const remove = vi.spyOn(window, 'removeEventListener');
     const watch = watchRevealPan(window, {owns: () => true});
-    expect(add.mock.calls.map(([type]) => type)).toEqual(['touchstart']);
+    expect(add.mock.calls.map(([type]) => type)).toEqual(TOUCH_TYPES);
     watch.stop();
-    expect(remove.mock.calls.map(([type]) => type)).toEqual(['touchstart']);
+    expect(remove.mock.calls.map(([type]) => type)).toEqual(TOUCH_TYPES);
   });
 
   it('shares one touch subscription among its watches (architecture INV13, spec:AST-094 FR24)', () => {
@@ -906,7 +952,7 @@ describe('the browser\u2019s own reveal pan (FR4)', () => {
       owns: () => true,
       onTouch: () => touched.push('second'),
     });
-    expect(add.mock.calls.map(([type]) => type)).toEqual(['touchstart']);
+    expect(add.mock.calls.map(([type]) => type)).toEqual(TOUCH_TYPES);
     document.dispatchEvent(new Event('touchstart'));
     expect(touched).toEqual(['first', 'second']);
     first.stop();
@@ -914,7 +960,7 @@ describe('the browser\u2019s own reveal pan (FR4)', () => {
     document.dispatchEvent(new Event('touchstart'));
     expect(touched).toEqual(['first', 'second', 'second']);
     second.stop();
-    expect(remove.mock.calls.map(([type]) => type)).toEqual(['touchstart']);
+    expect(remove.mock.calls.map(([type]) => type)).toEqual(TOUCH_TYPES);
   });
 });
 

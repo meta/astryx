@@ -189,6 +189,11 @@ A command is not done without its `CommandDoc` in `<name>.doc.mjs`. Fill in
 outside a project. Help text, the README tables, and the
 manifest are generated from it, so an undocumented flag is an invisible flag.
 
+When part of an option's text names a command or option that some bases do
+not serve, put that part in the option's `pointers` with the command paths it
+names, such as `{commands: ['template --skeleton'], text: ', --skeleton'}`.
+Help then leaves the part out on those bases. Plain text parts can follow it.
+
 Give at least one example that an agent would actually run, including a `--json`
 one.
 

@@ -22,6 +22,7 @@ import {use} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {layoutHeaderMarker} from './layoutEdges.stylex';
 import {LayoutDividerContext} from './LayoutDividerContext';
+import {LayoutContainerContext} from './LayoutContainerContext';
 import {colorVars, spacingVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils/mergeProps';
 import type {SizeValue, SpacingStep} from '../utils/types';
@@ -162,6 +163,7 @@ export function LayoutHeader({
   ...props
 }: LayoutHeaderProps) {
   const dividerCtx = use(LayoutDividerContext);
+  const container = use(LayoutContainerContext);
   const resolvedHasDivider =
     hasDivider ?? dividerCtx?.defaultHasDividers ?? false;
   const isZeroPadding = padding === 0;
@@ -172,7 +174,7 @@ export function LayoutHeader({
       role={role}
       aria-label={label}
       {...mergeProps(
-        themeProps('layout-header'),
+        themeProps('layout-header', {container}),
         stylex.props(
           layoutHeaderMarker,
           styles.header,

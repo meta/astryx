@@ -509,8 +509,8 @@ const CASES = [
     ],
   },
   {
-    name: 'experimental render',
-    args: ['experimental', 'render', 'page.jsx'],
+    name: 'experimental export',
+    args: ['experimental', 'export', 'page.jsx'],
     cwd: '__TMP__',
     // A page with no imports, in a folder that can resolve React and Core, so
     // the page gets Core's stylesheets in every runner.
@@ -537,10 +537,10 @@ const CASES = [
   },
   {
     // The --reverse projection (same command, same folder as the case above).
-    name: 'experimental render',
+    name: 'experimental export',
     args: [
       'experimental',
-      'render',
+      'export',
       '--reverse',
       'carried.html',
       '--out',
@@ -549,6 +549,39 @@ const CASES = [
     ],
     cwd: '__TMP__',
     // A rendered file that carries its page.
+    setup: dir => {
+      const source = Buffer.from(
+        'export default function Page() { return <h1>Hello</h1>; }\n',
+      );
+      const json = JSON.stringify({
+        version: 1,
+        entry: 'page.jsx',
+        files: [
+          {
+            path: 'page.jsx',
+            sha256: crypto.createHash('sha256').update(source).digest('hex'),
+            base64: source.toString('base64'),
+          },
+        ],
+      });
+      fs.writeFileSync(
+        path.join(dir, 'carried.html'),
+        `<!doctype html><html><body><h1 class="astryx-heading">Hello</h1><script type="application/x-astryx-source">${json}</script></body></html>`,
+      );
+    },
+  },
+  {
+    // The way back as its own command: the --reverse projection above.
+    name: 'experimental import',
+    args: [
+      'experimental',
+      'import',
+      'carried.html',
+      '--out',
+      'back.tsx',
+      '--overwrite',
+    ],
+    cwd: '__TMP__',
     setup: dir => {
       const source = Buffer.from(
         'export default function Page() { return <h1>Hello</h1>; }\n',
