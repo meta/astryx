@@ -613,7 +613,14 @@ they are separately named.
   part of `packages/cli/assets/discover/official-packages.json`, and a new
   story `apps/storybook/stories/<Name>.stories.tsx` that imports from
   `@astryxdesign/lab`, for a Lab component named for its own folder, which
-  the change touches. A component in a family folder keeps the full suite.
+  the change touches, and that component's own record folder
+  `docs/specs/components/<Name>/`, which adds the knowledge check the lane
+  already runs and changes no owner rule: a record there still takes an
+  engineering owner's `/approve-spec`
+  (`architecture:knowledge-contracts` DEC-19). A Lab component's swizzle sample
+  lives in the Lab package (`packages/lab/swizzle-samples.mjs`, which the CLI's
+  swizzle proof imports), so adding one is a Lab path; release checks still run
+  every sample. A component in a family folder keeps the full suite.
   The classifier reads those files' diffs as data and never runs them; a diff
   it cannot read, or a line naming anything else, makes the change mixed. A
   Lab-only change also runs the CLI official-packages check on the first Node
@@ -746,6 +753,11 @@ describe implementation, but they do not receive a specialized route until the
 classifier and join contract are complete. New surfaces may add lanes only through
 FR10. New coverage joins its current surface owner; visual regression remains in
 the shared Storybook PR owner.
+
+FR26's Lab record folder and Lab-package swizzle samples are not built yet:
+today the classifier reads a Lab component's `docs/specs/components/<Name>/`
+folder, and a sample line in `packages/cli/test/swizzle-proof/samples.mjs`, as a
+mixed change, so such a pull request runs the full suite.
 
 Outside the classifier-routed workflows, the Internal Registry dependency check,
 the CLI smoke test and the hardening-issue opener run only when the paths they
