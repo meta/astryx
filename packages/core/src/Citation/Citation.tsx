@@ -40,6 +40,7 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Citation/Citation.generated';
 import {devPropError} from '../utils/devWarning';
+import {selectedTintTextVars} from '../theme/selectedTintText.stylex';
 
 // Bundlers replace this value at build time. The declaration lets a product
 // without Node's types type-check this file.
@@ -140,7 +141,8 @@ const styles = stylex.create({
     fontSize: typeScaleVars['--text-supporting-size'],
     fontWeight: fontWeightVars['--font-weight-semibold'],
     lineHeight: typeScaleVars['--text-supporting-leading'],
-    color: colorVars['--color-text-secondary'],
+    // Secondary text on the tint reads at 4.5:1 (selectedTintText.ts).
+    color: selectedTintTextVars['--_selected-text-secondary'],
     backgroundColor: colorVars['--color-accent-muted'],
     borderRadius: radiusVars['--radius-full'],
     minWidth: spacingVars['--spacing-5'],

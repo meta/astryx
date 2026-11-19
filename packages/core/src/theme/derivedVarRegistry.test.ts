@@ -347,6 +347,22 @@ const PRIVATE_SYSTEM_VARS = new Set([
   // pair to a neutral Badge in its content, which paints the pair inverted.
   '--_button-fill',
   '--_button-on-fill',
+  // The theme-compilation record's secondary text on the accent tint: Core
+  // measures it from the theme's colours (selectedTintText.ts), and every
+  // part that paints the tint reads it.
+  '--_selected-text-secondary',
+  '--_selected-text-secondary-default',
+  '--_selected-text-secondary-muted',
+  '--_selected-text-secondary-blue',
+  '--_selected-text-secondary-cyan',
+  '--_selected-text-secondary-gray',
+  '--_selected-text-secondary-green',
+  '--_selected-text-secondary-orange',
+  '--_selected-text-secondary-pink',
+  '--_selected-text-secondary-purple',
+  '--_selected-text-secondary-red',
+  '--_selected-text-secondary-teal',
+  '--_selected-text-secondary-yellow',
 ]);
 
 const CROSS_COMPONENT_VARS: Record<string, string[]> = {

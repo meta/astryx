@@ -30,6 +30,7 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {selectedTintTextVars} from '../theme/selectedTintText.stylex';
 
 const styles = stylex.create({
   item: {
@@ -63,6 +64,9 @@ const styles = stylex.create({
   },
   itemSelected: {
     backgroundColor: colorVars['--color-accent-muted'],
+    // Secondary text on the tint reads at 4.5:1 (selectedTintText.ts).
+    '--color-text-secondary':
+      selectedTintTextVars['--_selected-text-secondary'],
   },
 });
 

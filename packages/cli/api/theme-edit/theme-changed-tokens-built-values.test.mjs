@@ -121,14 +121,15 @@ describe('changedTokens', () => {
     'names a token a part sets by its rule, in each mode that moved',
     async () => {
       // (A gray neutral at the default vibrancy, then a vivid one: the
-      // readable text color the stylesheet sets on selected rows moves.)
+      // readable text color the stylesheet sets for selected rows in each
+      // card colour moves, a variable Core measures.)
       await cli([...ED, 'undo', 't', 'neutral']);
       await cli([...ED, 'undo', 't', 'vibrancy']);
       const r = await cli([...ED, 'set', 't', 'vibrancy', '90']);
       const parts = /** @type {string[]} */ (r.data.changedPartTokens);
       expect(parts.length).toBeGreaterThan(0);
       expect(parts[0]).toMatch(
-        /^--[a-z0-9-]+ on [a-z-]+\S* \((?:light|dark)\): \S+ -> \S+$/,
+        /^--[a-z0-9_-]+ on [a-z-]+\S* \((?:light|dark)\): \S+ -> \S+$/,
       );
     },
     T,

@@ -31,6 +31,8 @@
  */
 
 import {parseStyleKey} from '../packages/core/src/utils/parseStyleKey';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {JSDOM} from 'jsdom';
 import {describe, expect, it} from 'vitest';
 import {
@@ -40,6 +42,24 @@ import {
   resolveColor,
   themeTokens,
 } from './lib/theme-contrast.mjs';
+
+// Core's built derivation of the secondary text on the accent tint: its
+// source imports Core's StyleX token module, which runs only compiled.
+const {SELECTED_TINT_INPUTS, coreSelectedTintText, deriveSelectedTintText} =
+  await import(
+    path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      '../packages/core/dist/theme/selectedTintText.js',
+    )
+  );
+
+// Core's colour defaults, which Core's own values on the tint are measured on.
+const {colorDefaults} = await import(
+  path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../packages/core/dist/theme/tokens.stylex.js',
+  )
+);
 
 /** WCAG 2.2 AA minimum contrast by role (SC 1.4.3 and 1.4.11). */
 const WCAG_AA = {bodyText: 4.5, largeText: 3, nonText: 3};
@@ -224,9 +244,83 @@ const CARD_ANCESTORS = [
 const ON_ACCENT_TINT = {
   'selected item': ['item', 'selected'],
   'selected tree item': ['tree-list-item', 'selected'],
+  'selected table row': ['table-row', 'selected'],
+  'selected command': ['command-palette-item', 'selected'],
   'numbered citation': ['citation', 'variant:number'],
   dropzone: ['file-input', 'mode:dropzone'],
 };
+
+/**
+ * The secondary text a part on the accent tint draws: its own rule's, when
+ * the theme sets one there; else Core's measured `--_selected-text-secondary`
+ * for the nearest rule that sets secondary text (a card variant, measured on
+ * its fill), or for the theme's root.
+ */
+function tintSecondary(theme, part, key, variant) {
+  // A theme rule keyed on the part's tinted state wins; a rule for the part
+  // at rest yields to the measured text there. A citation and a drop hint
+  // set their colour where no theme token reaches.
+  if (
+    ['item', 'tree-list-item', 'table-row', 'command-palette-item'].includes(
+      part,
+    )
+  ) {
+    const own = rule(theme, part, key)['--color-text-secondary'];
+    if (own) return own;
+  }
+  const sets = SELECTED_TINT_INPUTS.some(
+    token => token in theme.tokens || token in (theme.localTokens ?? {}),
+  );
+  const root = sets
+    ? (deriveSelectedTintText(theme.tokens, theme.localTokens) ??
+      themeTokens(theme)['--color-text-secondary'])
+    : coreSelectedTintText();
+  const fill = CARD_FILLS[variant];
+  if (variant === undefined || fill === undefined) return root;
+  const variantRule = rule(theme, 'card', `variant:${variant}`);
+  if (variantRule['--color-text-secondary'])
+    return deriveSelectedTintText(
+      theme.tokens,
+      theme.localTokens,
+      variantRule,
+      {
+        kind: 'fill',
+        fill,
+      },
+    );
+  // Card reads its variant's entry: Core's, or the theme root's when the
+  // theme sets a colour the measurement reads or that variant's fill.
+  const setsFill = fill in theme.tokens || fill in (theme.localTokens ?? {});
+  if (!sets && !setsFill) {
+    return (
+      deriveSelectedTintText(
+        colorDefaults,
+        {},
+        {},
+        {
+          kind: 'fill-and-page',
+          fill,
+        },
+      ) ?? deriveSelectedTintText(colorDefaults, {}, {}, {kind: 'fill', fill})
+    );
+  }
+  const baseRule = Object.fromEntries(
+    Object.entries(rule(theme, 'card')).filter(([name]) =>
+      name.startsWith('--'),
+    ),
+  );
+  return (
+    deriveSelectedTintText(theme.tokens, theme.localTokens, baseRule, {
+      kind: 'fill-and-page',
+      fill,
+    }) ??
+    deriveSelectedTintText(theme.tokens, theme.localTokens, baseRule, {
+      kind: 'fill',
+      fill,
+    }) ??
+    themeTokens(theme)['--color-text-secondary']
+  );
+}
 
 function rows() {
   const out = [];
@@ -310,25 +404,47 @@ function rows() {
               ...rule(theme, part),
               ...rule(theme, part, key),
               ...insideCard(theme, part, key, variant),
+              '--color-text-secondary': tintSecondary(
+                theme,
+                part,
+                key,
+                variant,
+              ),
             });
-            const layers = [at(tokens, '--color-accent-muted'), ...cardLayers];
-            for (const role of [
-              '--color-text-primary',
-              '--color-text-secondary',
+            const tint = at(tokens, '--color-accent-muted');
+            const hover = at(tokens, '--color-overlay-hover');
+            for (const [state, layers] of [
+              ['', [tint, ...cardLayers]],
+              [' hovered', [hover, tint, ...cardLayers]],
             ])
-              push({
-                ...base,
-                where: `${where} in ${inCard}`,
-                role,
-                text: at(tokens, role),
-                layers,
-              });
+              // Hovered, the measured secondary text (INV22); primary text
+              // is checked at rest.
+              for (const role of state
+                ? ['--color-text-secondary']
+                : ['--color-text-primary', '--color-text-secondary'])
+                push({
+                  ...base,
+                  where: `${where}${state} in ${inCard}`,
+                  role,
+                  text: at(tokens, role),
+                  layers,
+                });
           }
         }
         // The card inside a part with a fill of its own: the row still
         // draws on the card's fill.
         for (const ancestor of CARD_ANCESTORS) {
-          const cardLayers = [cardFill, at(page, '--color-background-surface')];
+          // A see-through card shows the fill of the card it sits in.
+          const [innerPart, innerKey] = ancestor[ancestor.length - 1];
+          const holder =
+            innerPart === 'card'
+              ? CARD_FILLS[innerKey.replace(/^variant:/, '')]
+              : undefined;
+          const cardLayers = [
+            cardFill,
+            ...(holder ? [at(page, holder)] : []),
+            at(page, '--color-background-surface'),
+          ];
           for (const [where, [part, key]] of Object.entries(ON_ACCENT_TINT)) {
             if (part === 'file-input') continue;
             const tokens = themeTokens(theme, {
@@ -336,19 +452,31 @@ function rows() {
               ...rule(theme, part),
               ...rule(theme, part, key),
               ...insideCard(theme, part, key, variant, ancestor),
+              '--color-text-secondary': tintSecondary(
+                theme,
+                part,
+                key,
+                variant,
+              ),
             });
-            const layers = [at(tokens, '--color-accent-muted'), ...cardLayers];
-            for (const role of [
-              '--color-text-primary',
-              '--color-text-secondary',
+            const tint = at(tokens, '--color-accent-muted');
+            const hover = at(tokens, '--color-overlay-hover');
+            for (const [state, layers] of [
+              ['', [tint, ...cardLayers]],
+              [' hovered', [hover, tint, ...cardLayers]],
             ])
-              push({
-                ...base,
-                where: `${where} in a ${variant} card inside ${ancestor.map(a => a.join(' ')).join(' > ')}`,
-                role,
-                text: at(tokens, role),
-                layers,
-              });
+              // Hovered, the measured secondary text (INV22); primary text
+              // is checked at rest.
+              for (const role of state
+                ? ['--color-text-secondary']
+                : ['--color-text-primary', '--color-text-secondary'])
+                push({
+                  ...base,
+                  where: `${where}${state} in a ${variant} card inside ${ancestor.map(a => a.join(' ')).join(' > ')}`,
+                  role,
+                  text: at(tokens, role),
+                  layers,
+                });
           }
         }
       }
@@ -356,10 +484,31 @@ function rows() {
         const tokens = themeTokens(theme, {
           ...rule(theme, part),
           ...rule(theme, part, key),
+          '--color-text-secondary': tintSecondary(theme, part, key),
         });
-        const layers = [at(tokens, '--color-accent-muted'), body];
-        for (const role of ['--color-text-primary', '--color-text-secondary'])
-          push({...base, where, role, text: at(tokens, role), layers});
+        const tint = at(tokens, '--color-accent-muted');
+        const hover = at(tokens, '--color-overlay-hover');
+        // On the page and the surface, at rest and hovered.
+        for (const [on, layers] of [
+          ['', [tint, body]],
+          [' hovered', [hover, tint, body]],
+          [
+            ' on a surface',
+            [tint, at(page, '--color-background-surface'), body],
+          ],
+          [
+            ' hovered on a surface',
+            [hover, tint, at(page, '--color-background-surface'), body],
+          ],
+        ])
+          for (const role of ['--color-text-primary', '--color-text-secondary'])
+            push({
+              ...base,
+              where: `${where}${on}`,
+              role,
+              text: at(tokens, role),
+              layers,
+            });
       }
       // Status text on its pale status fill (a field status, a banner).
       for (const status of ['success', 'warning', 'error', 'info'])

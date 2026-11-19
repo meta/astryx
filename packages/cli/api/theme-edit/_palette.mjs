@@ -289,7 +289,7 @@ export function tempFor(file) {
  * @property {Record<string, Partial<Record<Mode, string>>>} exact - Main tokens the theme sets exactly, the value per mode: the dial's fill gives way to them.
  * @property {Record<string, string>} [unread] - Main tokens the theme sets exactly to a value the editor cannot read as one color in some mode, as written: the text on them is not picked for that value.
  * @property {string[]} notes - What the config writer kept or replaced of a hand edit.
- * @property {Record<string, Partial<Record<Mode, StopRef>>> | null} lift - Lifted secondary text per background token of LIFT_PARTS (the accent tint, the neutral track), per mode, from the neutral color; null without one.
+ * @property {Record<string, Partial<Record<Mode, StopRef>>> | null} lift - Lifted secondary text per background token of LIFT_PARTS (the neutral track, a card fill), per mode, from the neutral color; null without one.
  */
 
 /** The color dials. Each one is a palette family of the same id. */
@@ -511,10 +511,6 @@ function liftGround(part, block) {
 /** What each lifted background is, and the parts on it, for notes. */
 const LIFT_GROUNDS =
   /** @type {Record<string, {what: string, parts: string}>} */ ({
-    '--color-accent-muted': {
-      what: 'the accent tint',
-      parts: 'selected items and rows, a dropzone, numbered citations',
-    },
     '--color-neutral': {
       what: 'the neutral track',
       parts: 'segmented-control labels',
@@ -2440,8 +2436,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
     }
 
     // The tint: the official stop, never the fill's own shade, see-through
-    // or not. Secondary text on the parts that sit on the accent tint is
-    // lifted instead, as the official neutral theme lifts it (`lift`).
+    // or not. Core measures the secondary text on the parts that sit on it.
     const muted = each(m => {
       const i = side(m);
       const spec = word ? STATUS_MUTED[i] : ACCENT_MUTED[i];
@@ -2580,7 +2575,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
 
   // Secondary text on the parts the official neutral theme lifts it on
   // (LIFT_PARTS), lifted the same way, for every accent: for each
-  // background (the accent tint, the neutral track), the gray shade
+  // background (the neutral track), the gray shade
   // nearest the secondary text's own that reads at 4.5:1 on it and on it
   // under a hover, over every surface. The grays are the neutral color's,
   // else a gray ramp the generator grows from the base theme's own
@@ -2874,7 +2869,7 @@ export function mappingRows(dial) {
     `${t('--color-text-$', '--color-text-accent')} and ${t('--color-icon-$', '--color-icon-accent')}: light shade ${TEXT_STOP[0]}, dark shade ${TEXT_STOP[1]} (moves to the nearest shade, darker or lighter, that reads at ${TEXT}:1 on the surfaces and the muted tint)`,
     word
       ? `--color-${word}-muted: light shade ${STATUS_MUTED[0]}, dark shade ${STATUS_MUTED[1][0]} at opacity ${STATUS_MUTED[1][1]} over the surface, never the fill's own shade`
-      : `--color-accent-muted: light shade ${ACCENT_MUTED[0]}, dark shade ${ACCENT_MUTED[1]}, as the official neutral theme maps it, never the fill's own shade; secondary text on the parts that sit on it (selected items and rows, a dropzone, numbered citations) is lifted instead, to the gray nearest it that reads at ${TEXT}:1 on the tint and under a hover: the neutral color's shades, else grays grown from the base theme's own secondary text`,
+      : `--color-accent-muted: light shade ${ACCENT_MUTED[0]}, dark shade ${ACCENT_MUTED[1]}, as the official neutral theme maps it, never the fill's own shade; secondary text on the parts that sit on it (selected items and rows, a dropzone, numbered citations) is Core's: it moves the theme's own secondary text the least that reads at ${TEXT}:1 on the tint and under a hover`,
   ];
   if (word)
     rows.push(

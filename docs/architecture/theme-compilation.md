@@ -15,6 +15,9 @@ applies_to:
     packages/core/src/theme/statusRoleDefaults.ts,
     packages/core/src/theme/themeAdaptations.ts,
     packages/core/src/theme/derivedVarRegistry.ts,
+    packages/core/src/theme/selectedTintText.ts,
+    packages/core/src/theme/selectedTintText.stylex.ts,
+    packages/core/src/Card/Card.tsx,
     packages/core/src/theme/Theme.tsx,
     packages/core/src/privateAttributes/scheme.ts,
     packages/core/src/privateAttributes/mediaDarkPage.ts,
@@ -35,6 +38,8 @@ verified_by:
     packages/core/src/theme/onMediaTokens.test.ts,
     packages/core/src/theme/Theme.test.tsx,
     packages/core/src/theme/derivedVarRegistry.test.ts,
+    packages/core/src/theme/selectedTintText.test.ts,
+    scripts/check-text-contrast-by-role.test.mjs,
     packages/cli/clients/cli/commands/build-theme.adaptations.test.mjs,
     packages/cli/api/theme/build/build.test.mjs,
     packages/cli/api/theme/build/build.public-component-vars.test.mjs,
@@ -321,6 +326,29 @@ var(--text-body-size)` for its own theme (`component:Theme` FR1), so text
   `--color-background-error-inverted`, and its attribute's owner is
   `privateAttributes/mediaDarkPage.ts`, which MediaTheme writes beside its
   own side when `theme/MediaDarkPage` gives it one.
+- **INV22 — Secondary text on the accent tint reads at 4.5:1.** Every part
+  that paints the accent tint (`--color-accent-muted`) behind secondary text
+  reads the private `--_selected-text-secondary`: a selected list item, tree
+  row, table row and command, a checked checkbox row, a numbered citation, and
+  a dropzone's hint while a file is dragged over it. Theme generation sets it
+  to the theme's own `--color-text-secondary`, moved along its own lightness
+  by the least amount that reads at 4.5:1 on the tint and on the tint's hover
+  over the page, the surface and a card, in each mode. A theme that sets none
+  of the colours it reads keeps Core's precomputed value. Inside each Card
+  variant the text is measured again on that variant's fill, so a selected
+  row in a coloured card reads at rest and hovered: from the variant rule's
+  own secondary text when the theme sets one there, else from the page's, on
+  the card and the page fills together where one colour reads on both and on
+  the card alone where none does. A see-through fill is measured over the
+  page, the surface and a default card. Card reads its variant's entry
+  (`--_selected-text-secondary-<variant>`): Core's precomputed one, or the
+  theme root's, which a theme writes when it sets a colour the measurement
+  reads or that variant's fill, so a Theme nested inside it inherits them. Where the text cannot be measured (a colour
+  it cannot read, or a see-through secondary text), the theme's own secondary
+  text stays on the tint. A component rule that sets
+  `--color-text-secondary` measures it again inside that rule. A theme's rule
+  keyed on a part's tinted state (`selected`) sets the text there; a rule for
+  the part at rest yields to the measured text in that state.
 
 This record does not own:
 
@@ -435,6 +463,7 @@ tiers.
 | INV19            | `generateThemeRules.test.ts` (the scope-root font rule), `reset.test.ts` (the `html` font rule, no font on `body`), and `reset.font.a11y.chromium.spec.ts` (a label measured in a span in `body` has its drawn width in the theme root; a page with no token keeps its font)                                                                                                                                                                           | Text measured or drawn in `body` uses a different font from the token at the page root, or a page with no token changes font                                                                                                                                                                      |
 | INV20            | `Theme.test.tsx` (the wrapper's body size) and `reset.test.ts` (no font size on `html` or `body`)                                                                                                                                                                                                                                                                                                                                                      | Text inside a Theme with no size of its own                                                                                                                                                                                                                                                       |
 | INV21            | `generateThemeRules.test.ts` ("a media surface that flips with the page") and `Toast.mediaFallback.test.tsx` (server markup under a system, a forced and a non-flipping theme)                                                                                                                                                                                                                                                                         | A system-mode page's first paint draws a flipping surface on the wrong side, or a theme whose surfaces keep their side gains dark-page rules                                                                                                                                                      |
+| INV22            | `selectedTintText.test.ts` (Core's value and each Card variant's, a theme that lifts, one that keeps, a card fill, a colour it cannot read, the compiler output) and `scripts/check-text-contrast-by-role.test.mjs` (every selected part on the tint, at rest and hovered, on the page, the surface and every card, for every official theme)                                                                                                          | Secondary text on the tint under 4.5:1 at rest or hovered on any ground, an official theme's per-part lift of this text on the tint, a value that differs from the derivation, or a measured value where the text cannot be measured                                                              |
 | INV13, INV14     | Declaration scanner, generator, Theme mounting, CLI receipt tests, and the existing theme-family Chromium guard                                                                                                                                                                                                                                                                                                                                        | One unsafe declaration corrupts neighbors, valid CSS changes, legacy token generation crashes, or reporting changes CSS                                                                                                                                                                           |
 | Built themes     | Theme and CLI build tests                                                                                                                                                                                                                                                                                                                                                                                                                              | Runtime recompiles a built theme, or built output omits canonical rules                                                                                                                                                                                                                           |
 | INV15            | CLI build fixtures with function entries, slot functions, a variant list, and an inherited entry under a replaced list, compared with runtime resolution                                                                                                                                                                                                                                                                                               | Built and runtime icons differ, a function is dropped silently, or tooling enumerates a variant an entry cannot receive                                                                                                                                                                           |

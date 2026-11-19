@@ -162,7 +162,8 @@ function statusHue(
   return fallback === null ? null : {...fallback, a: 1};
 }
 
-function opaqueOver(color: RGBA, under: RGBA): RGBA {
+/** `color` over `under`, opaque: a translucent colour composited, else itself. */
+export function opaqueOver(color: RGBA, under: RGBA): RGBA {
   return color.a < 1 ? composite(color, under) : color;
 }
 
