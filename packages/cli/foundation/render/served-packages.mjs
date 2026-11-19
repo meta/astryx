@@ -16,7 +16,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {createRequire} from 'node:module';
-import {conditionalExportTarget} from '../discovery/package-exports.mjs';
+import {conditionalExportFile} from '../discovery/package-exports.mjs';
 
 /** Packages every Astryx package runs with, besides its own scope. */
 const RUNTIME = ['react', 'react-dom', '@stylexjs/stylex'];
@@ -110,14 +110,11 @@ export function servedImportTarget(spec, servedDir) {
       if (path.dirname(dir) === dir) return null;
       continue;
     }
-    const target = conditionalExportTarget(
+    return conditionalExportFile(
       pkg?.exports,
+      packageDir,
       subpath,
       IMPORT_CONDITIONS,
     );
-    if (!target?.startsWith('./')) return null;
-    const file = path.resolve(packageDir, target);
-    if (!file.startsWith(path.resolve(packageDir) + path.sep)) return null;
-    return fs.statSync(file, {throwIfNoEntry: false})?.isFile() ? file : null;
   }
 }
