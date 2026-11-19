@@ -49,10 +49,11 @@ import {FAMILIES, P} from './_tables.mjs';
  *   for an editor theme: what writes a token, from its saved settings (an
  *   exact token setting, a dial, or a rule on the part); `onPart` when the
  *   part's own rule sets it
- * @property {(property: string, part: string) => 'dial' | 'part'} [propertyVia] -
+ * @property {(property: string, part: string, when: string | null, state: string | null) => 'dial' | 'part'} [propertyVia] -
  *   for an editor theme: what writes a CSS property the theme's own rule on
- *   the part sets: a property setting on the part that covers it, else a
- *   dial (on the part or on the whole theme)
+ *   the part sets under a condition (`when` as `set --when` takes it, null
+ *   at rest): a property setting on the part for that condition that covers
+ *   it, else a dial (on the part or on the whole theme)
  */
 
 /**
@@ -87,6 +88,13 @@ const sets = (a, b) =>
   physical(a) === physical(b) ||
   coversProperty(a, b) ||
   coversProperty(physical(a), physical(b));
+
+/**
+ * A state as `set --state` takes it, without a pseudo-class colon
+ * (`:hover` is `hover`); null for none.
+ * @param {string | null | undefined} state
+ */
+const bareState = state => (state ? state.replace(/^:+/, '') : null);
 
 /** A token Core keeps to itself (`--_x`, `--astryx-x`). @param {string} t */
 const isPrivate = t => /^--(?:_|astryx-)/.test(t);
@@ -165,12 +173,14 @@ async function loadNamedTheme(ctx, cwd, name) {
       // on it, else from a dial: one on the part, or a whole-theme dial
       // that writes part rules (`surfaces outlined` writes the card's
       // border).
-      propertyVia: (property, part) => {
+      propertyVia: (property, part, when, state) => {
         if (
           data.settings.some(
             st =>
               reaches(st, part) &&
               st.source === 'property' &&
+              (st.when ?? null) === when &&
+              bareState(st.state) === bareState(state) &&
               sets(String(st.thing), property),
           )
         )
@@ -366,6 +376,14 @@ export async function themePartValues(cwd, name, part) {
       : onPart
         ? 'part'
         : 'token';
+    // Each condition as `set --when` takes it: `prop:value`, joined with +.
+    const setWhen =
+      when === 'base'
+        ? null
+        : when
+            .split(' ')
+            .map(w => w.replace('=', ':'))
+            .join('+');
     /** @type {PartValue['source']} */
     let source = 'core';
     /** @type {PartValue['via']} */
@@ -381,7 +399,7 @@ export async function themePartValues(cwd, name, part) {
           property.startsWith('--') && theme.tokenVia
             ? theme.tokenVia(property, key, true)
             : theme.propertyVia
-              ? theme.propertyVia(property, key)
+              ? theme.propertyVia(property, key, setWhen, state || null)
               : 'part',
         ];
       else if (mine.length) [source, via] = ['theme', tokenVia];
@@ -394,14 +412,7 @@ export async function themePartValues(cwd, name, part) {
     }
     values.push({
       property,
-      // Each condition as `set --when` takes it: `prop:value`, joined with +.
-      when:
-        when === 'base'
-          ? null
-          : when
-              .split(' ')
-              .map(w => w.replace('=', ':'))
-              .join('+'),
+      when: setWhen,
       state: state || null,
       value:
         v.light === v.dark

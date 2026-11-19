@@ -43,6 +43,11 @@ beforeAll(async () => {
   await themeEditSet('roomy', 'corners', 'pill', {cwd, on: 'card'});
   await themeEditNew('outlined', {cwd, like: 'neutral'});
   await themeEditSet('outlined', 'surfaces', 'outlined', {cwd});
+  await themeEditSet('outlined', 'border-color', '#ff0000', {
+    cwd,
+    on: 'card',
+    when: 'variant:muted',
+  });
 }, 240_000);
 
 afterAll(() => {
@@ -219,7 +224,7 @@ describe('show --on: what one part of a theme shows', () => {
     });
   }, 120_000);
 
-  it('credits the card rules a whole-theme dial writes to that dial', async () => {
+  it('credits the card rules a whole-theme dial writes to that dial, and a variant’s own property setting to the part', async () => {
     const r = /** @type {any} */ (
       await themeEditShow('outlined', {cwd, on: 'card'})
     );
@@ -235,6 +240,17 @@ describe('show --on: what one part of a theme shows', () => {
     );
     expect(ruled.length).toBeGreaterThan(0);
     for (const v of ruled) expect(v.via).toBe('dial');
+    // A border color set on the card for one variant is that variant's
+    // rule on the part; the card at rest still shows the dial's.
+    expect(valueOf(r, 'border-color')).toMatchObject({
+      source: 'theme',
+      via: 'dial',
+    });
+    expect(valueOf(r, 'border-color', 'variant:muted')).toMatchObject({
+      value: '#ff0000',
+      source: 'theme',
+      via: 'part',
+    });
   }, 120_000);
 
   it('gives a button’s corner radius once, not once per corner', async () => {
