@@ -25,6 +25,7 @@ import {
   astryxDefinitionsByName,
   currentDefinitionName,
 } from './icon-definition-discovery.mjs';
+import {meaningWithFallbacks} from './template-placeholders.mjs';
 
 /**
  * One icon definition templates use.
@@ -92,7 +93,9 @@ export function templateIconMeanings() {
 }
 
 /**
- * The template meanings a set's `map` does not name, most used first.
+ * The template meanings a set's `map` does not name, most used first. A
+ * meaning whose fallback the map names is not missing: the set draws its
+ * fallback's icon for it.
  * @param {TemplateMeaning[]} meanings
  * @param {Record<string, string> | undefined} map
  * @returns {TemplateMeaning[]}
@@ -100,6 +103,9 @@ export function templateIconMeanings() {
 export function unmappedTemplateMeanings(meanings, map) {
   const mapped = map ?? {};
   return meanings.filter(
-    each => !Object.prototype.hasOwnProperty.call(mapped, each.definition),
+    each =>
+      !meaningWithFallbacks(each.definition).some(name =>
+        Object.prototype.hasOwnProperty.call(mapped, name),
+      ),
   );
 }
