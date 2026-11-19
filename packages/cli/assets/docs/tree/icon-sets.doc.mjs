@@ -44,7 +44,19 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Astryx keeps a list of icon definitions: one file per meaning, like `close` or `delete` (`astryx docs cli/experimental/icon-definitions`). An icon set registers which of its icons draws each definition, in the `map` of its data file; one icon may draw several definitions (`file` and `document` can both be your `document` icon). Templates say which definition each of their icons draws, so a project that uses your set gets your icon for every definition you map. Every set maps the built-in definitions, the names Core renders itself.',
+          text: 'Astryx owns the meanings; libraries own the drawings. Astryx ships one icon definition per meaning, like `close`, `delete` or `search`: a camelCase name, one sentence that says the job the icon does, and a few words people use for it (`astryx docs cli/experimental/icon-definitions`). A definition names no library and no drawing, so any library can draw it its own way.',
+        },
+        {
+          type: 'prose',
+          text: "A library maps its icons onto the definitions where it already lives: in its own package, or in the integration package that already ships for it. Run `astryx experimental icon new-set` there: the set's data file says which icon draws each definition (its `map`), and the package's entry exports the icons. No separate add-on package is needed, and Astryx needs no change. One icon may draw several definitions (`file` and `document` can both be your `document` icon). Every set maps the built-in definitions, the names Core renders itself.",
+        },
+        {
+          type: 'prose',
+          text: 'When your library draws something no definition covers, add the meaning in the same package: `astryx experimental icon new-definition <name> --description ... --words ... --icon <id>`, or `--new-definition` on `experimental icon add`. It hooks in like an Astryx definition: `astryx experimental icon` answers to its name and words, and once the package is installed the definitions list shows it with the package that ships it. It maps only within your set; to offer it to every set, see Share a definition with every set.',
+        },
+        {
+          type: 'prose',
+          text: "An agent asks by meaning: `astryx experimental icon <words>`. The icon a set maps to the definition those words name comes first, from the project's main set before its backups, with the exact import line. Related icons stay findable by their own words and definitions and rank after it: `search` answers with the set's search icon first, while `find in document` answers with the icon for `documentSearch`. So ask for the job the icon does, take the first match, and paste its import. Templates work the same way: each declares the definition its icons draw, so a project that switches sets gets the new set's icon for every definition that set maps.",
         },
         {
           type: 'prose',
