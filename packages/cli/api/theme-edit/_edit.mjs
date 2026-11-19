@@ -82,6 +82,10 @@ import {
   nearest,
   closestOf,
   partsOf,
+  frameCopies,
+  framesByDefault,
+  edgeCopies,
+  borderFrames,
   undoArgs,
   isCheckNote,
   withoutBadValues,
@@ -253,7 +257,7 @@ import {
   themeCacheRoot,
 } from './_project.mjs';
 import {reactMissing} from './_parts.mjs';
-import {borderFrames, missedSteps} from './_missed.mjs';
+import {missedSteps} from './_missed.mjs';
 import {
   reactCopies,
   renderCause,
@@ -2455,6 +2459,23 @@ async function loadedForCheck(cwd, slug, skip) {
 }
 
 /**
+ * What a whole-theme border width frames in the build (frameCopies): the
+ * surfaces that draw no border of their own, named, with the line that
+ * keeps one borderless; null for any other setting or a width of zero.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {import('./_settings.mjs').Setting} s
+ * @returns {string | null}
+ */
+function frameNote(ctx, slug, data, s) {
+  const copies = frameCopies(ctx, data, s);
+  const parts = [...new Set(copies.map(x => String(x.on)))];
+  if (!parts.length) return null;
+  return `${s.thing === 'edges' ? 'outlines' : '--border-width'} also frames the surfaces that draw no border of their own (${parts.join(', ')}); to keep one borderless: \`${P} set ${slug} border none --on ${parts[0]}\``;
+}
+
+/**
  * The members a spreading change made unreadable: each reached part other
  * than the one named with a new contrast failure (a problem's key names its
  * parts and ends with its mode).
@@ -2609,10 +2630,14 @@ function leftOutParts(ctx, slug, data, sub, s) {
       ? []
       : borderFrames(ctx, data, `${s.value} solid var(--color-border)`);
     const bare = frames.map(x => x.part);
-    if (frames.length)
+    // (The build frames the surfaces at the theme's width, named in the
+    // notes, frameNote; the buttons and the small boxes are left out
+    // here, with the lines that frame them.)
+    const unframed = frames.filter(x => !framesByDefault(ctx, data, x.part));
+    if (unframed.length)
       out.push({
-        note: `--border-width does not reach the surfaces that draw no border or a fixed line of their own (${bare.join(', ')}); these give each one:`,
-        run: frames.flatMap(x =>
+        note: `--border-width does not frame the buttons, whose frame the buttons dial gives, nor the small boxes that only draw their own text (${[...new Set(unframed.map(x => x.part))].join(', ')}); these give each one:`,
+        run: unframed.flatMap(x =>
           x.steps.map(
             st =>
               `${P} set ${slug} border ${quoteCommandArgument(st.value)} --on ${st.on}${st.when ? ` --when ${st.when}` : ''}`,
@@ -7369,6 +7394,17 @@ async function changeOnce(
       : null;
   if (s.note) notes.push(s.note);
   if (s.stateNote) notes.push(s.stateNote);
+  const framesNote = sub === 'set' ? frameNote(ctx, slug, data, s) : null;
+  if (framesNote) notes.push(framesNote);
+  // (The floating surfaces that keep an edge when their shadow goes.)
+  const edged =
+    sub === 'set'
+      ? [...new Set(edgeCopies(ctx, data, s).map(x => String(x.on)))]
+      : [];
+  if (edged.length)
+    notes.push(
+      `with ${s.thing} gone, the floating surfaces that drew no border keep an edge at the theme's border (${edged.join(', ')}), so an open menu never reads as a blank panel; to keep one bare: \`${P} set ${slug} border none --on ${edged[0]}\``,
+    );
   if (keptForText.length)
     notes.push(
       `${keptForText.join(', ')} ${keptForText.length > 1 ? 'keep their' : 'keeps its'} own ${s.thing}: this would make text there unreadable, so the change does not reach ${keptForText.length > 1 ? 'them' : 'it'}; to give it anyway: ${keptForText.map(m => `\`${P} set ${slug} ${setArgs({...s, on: m, only: true, keep: undefined}, String(s.value))}\``).join(', ')}`,

@@ -1035,6 +1035,8 @@ export function makeCompiler(project, parts) {
     checkTokenGlobal,
     variantValues,
     contrast,
+    /** The census's text pairs: each part's text, its ground and the parts it sits in. */
+    pairs: parts.pairs,
   };
 }
 

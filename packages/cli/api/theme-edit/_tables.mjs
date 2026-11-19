@@ -658,6 +658,12 @@ export const DIALS = wordTable({
     words:
       'surface surfaces panel panels flat outlined raised elevated glass frosted blur depth',
   },
+  edges: {
+    help: 'What a theme border width frames. borders (the default): the surfaces that hold content (cards, dialogs, popovers, menus, the banner, panels) and the fields and controls that draw their own; small boxes that only draw their own text (badges, tokens, tooltips) keep theirs, as most systems draw them. outlines: every part that draws a box, the small ones included, at the theme border width and border color (an outlined, brutalist look). Buttons keep the frame the buttons dial gives. A border set on a part or group wins either way. Feel: borders feel structured; outlines feel bold, graphic and brutalist.',
+    values: 'borders|outlines',
+    examples: ['set my edges outlines', 'set my --border-width 3px'],
+    words: 'edges edge outlines brutalist',
+  },
   buttons: {
     help: 'The button style, all variants together. solid: filled primary (the default). outline: primary is an accent outline with accent text. soft: primary is a light accent tint with accent text. caps: solid with uppercase, bold, spaced labels that never shrink. Corners come from the corners dial (corners pill --on button).',
     values: 'solid|outline|soft|caps',
