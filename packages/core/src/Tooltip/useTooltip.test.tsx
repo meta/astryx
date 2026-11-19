@@ -567,6 +567,52 @@ describe('useTooltip — Escape dismissal', () => {
     expect(tooltipElement().matches(':popover-open')).toBe(false);
   });
 
+  it('stays closed on a fresh mouseenter while the pointer never left after Escape', () => {
+    const onShow = vi.fn();
+    render(<Harness delay={0} onShow={onShow} />);
+    fireEvent.mouseEnter(trigger());
+    tick(0);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+
+    fireEvent.keyDown(document, {key: 'Escape'});
+    expect(tooltipElement().matches(':popover-open')).toBe(false);
+
+    // The pointer never moved: the surface closing hands the trigger a fresh
+    // mouseenter, and that enter must not reopen the tooltip.
+    fireEvent.mouseEnter(trigger());
+    tick(1000);
+    expect(onShow).toHaveBeenCalledTimes(1);
+    expect(tooltipElement().matches(':popover-open')).toBe(false);
+
+    // Leaving and entering again is a genuine re-entry: it shows.
+    fireEvent.mouseLeave(trigger());
+    fireEvent.mouseEnter(trigger());
+    tick(0);
+    expect(onShow).toHaveBeenCalledTimes(2);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+  });
+
+  it('shows again after focus leaves and returns following an Escape dismissal', () => {
+    const onShow = vi.fn();
+    render(<Harness delay={0} onShow={onShow} />);
+    const matches = trigger().matches.bind(trigger());
+    vi.spyOn(trigger(), 'matches').mockImplementation(
+      selector => selector === ':focus-visible' || matches(selector),
+    );
+    act(() => trigger().focus());
+    expect(onShow).toHaveBeenCalledTimes(1);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+
+    fireEvent.keyDown(document, {key: 'Escape'});
+    expect(tooltipElement().matches(':popover-open')).toBe(false);
+
+    // Focus leaves and comes back: a new entry, so the tooltip shows.
+    act(() => trigger().blur());
+    act(() => trigger().focus());
+    expect(onShow).toHaveBeenCalledTimes(2);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+  });
+
   it('ignores an Escape that carries the IME keyCode 229', () => {
     const onHide = vi.fn();
     render(<Harness delay={0} onHide={onHide} />);

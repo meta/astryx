@@ -344,6 +344,11 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     disabledRendersRef.current += 1;
   }
 
+  // Set by an Escape dismissal. While set, a mouseenter does not schedule a
+  // show: the pointer never left the trigger, so the enter is the surface
+  // closing, not a new hover. Pointer leave or focus leave clears it.
+  const dismissedByEscapeRef = useRef(false);
+
   // Clear all timeouts
   const clearTimeouts = useCallback(() => {
     if (showTimeoutRef.current) {
@@ -537,11 +542,18 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     if (isTouchPointerRef.current) {
       return;
     }
+    // A tooltip dismissed with Escape stays closed while the pointer rests
+    // on its trigger.
+    if (dismissedByEscapeRef.current) {
+      return;
+    }
     scheduleShow();
   }, [isTouchPointerRef, scheduleShow]);
 
   const handleMouseLeave = useCallback(
     (event: Event) => {
+      // The pointer left the trigger, so a later enter is a new hover.
+      dismissedByEscapeRef.current = false;
       // On touch the synthesized mouseleave arrives with the next tap elsewhere,
       // which the outside-tap dismissal already handles — and handling it here
       // too would close the tooltip behind the tap-open bookkeeping's back.
@@ -625,6 +637,8 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       if (!focusGate.focusOut(e, focusTrigger)) {
         return;
       }
+      // Focus left the trigger, so a later focus is a new entry.
+      dismissedByEscapeRef.current = false;
       scheduleHide();
     },
     [focusGate, focusTrigger, scheduleHide],
@@ -960,6 +974,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       }
     },
     onDismiss: () => {
+      dismissedByEscapeRef.current = true;
       clearTimeouts();
       clearTapOpen();
       dropHold();
