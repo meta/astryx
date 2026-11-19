@@ -73,6 +73,8 @@ const storybook = withStorybook(test);
 const OMEGA = (2 * Math.PI) / 0.3;
 /** Its starting speed, widths per second. */
 const PUSH_VELOCITY = 8.773;
+/** How long a heavy push commit holds the main thread, in ms. */
+const HEAVY_COMMIT_MS = 300;
 
 interface Stack {
   driver: TouchDriver;
@@ -1166,7 +1168,7 @@ test('a push whose commit blocks the main thread starts from its first frame', a
   // check reads the time since the block with the position, because an
   // engine's first frames after a long task can take far longer than 16 ms.
   const {driver, width} = await openStack(page, 'settings');
-  await page.evaluate(() => {
+  await page.evaluate(blockMs => {
     const observer = new MutationObserver(() => {
       if (
         document.querySelector('[data-navigation-screen="screen-General"]') ==
@@ -1175,14 +1177,14 @@ test('a push whose commit blocks the main thread starts from its first frame', a
         return;
       }
       observer.disconnect();
-      const until = performance.now() + 300;
+      const until = performance.now() + blockMs;
       while (performance.now() < until) {
         // Hold the main thread, as a heavy commit does.
       }
       (window as Window & {blockEnd?: number}).blockEnd = performance.now();
     });
     observer.observe(document.body, {childList: true, subtree: true});
-  });
+  }, HEAVY_COMMIT_MS);
   await driver.tap(await rowCenter(page, 'General'));
   // The second frame after the block, and how long after the block it ran.
   const {x, sinceBlock} = await page.evaluate(
@@ -1224,63 +1226,69 @@ test('a push from rest after a heavy commit never skips into its curve', async (
   // The first frame that moves shows no more of the spring than the time
   // since the frame before it (or since the block ended) allows, plus one
   // frame, so the push never skips into its curve. A mouse click is an input
-  // task in every engine, as a tap is, so the test needs no touch path.
+  // task in every engine, as a tap is, so the test needs no touch path. The
+  // frames are read from the task that blocks, so the count starts there.
   await openStory(page, storybook(), 'lab-navigationstack--settings');
   const stackBox = await page.getByTestId('navigation-stack').boundingBox();
   if (stackBox == null) {
     throw new Error('no stack');
   }
   const width = stackBox.width;
-  await page.evaluate(() => {
+  await page.evaluate(blockMs => {
+    type Frame = {offset: number; t: number; isFound: boolean};
+    const trace = window as Window & {
+      blockEnd?: number;
+      pushFrames?: Frame[];
+    };
+    const selector = '[data-navigation-screen="screen-General"]';
     const observer = new MutationObserver(() => {
-      if (
-        document.querySelector('[data-navigation-screen="screen-General"]') ==
-        null
-      ) {
+      if (document.querySelector(selector) == null) {
         return;
       }
       observer.disconnect();
-      const until = performance.now() + 300;
+      const until = performance.now() + blockMs;
       while (performance.now() < until) {
         // Hold the main thread, as a heavy commit does.
       }
-      (window as Window & {blockEnd?: number}).blockEnd = performance.now();
+      trace.blockEnd = performance.now();
+      // The pushed card's offset and the frame time, in the first six
+      // frames after the block.
+      const read: Frame[] = [];
+      const step = (t: number) => {
+        const pushed = document.querySelector(selector);
+        const value =
+          pushed == null ? 'none' : getComputedStyle(pushed).translate;
+        read.push({
+          offset: value === 'none' ? 0 : Math.abs(parseFloat(value)),
+          t,
+          isFound: pushed != null,
+        });
+        if (read.length < 6) {
+          requestAnimationFrame(step);
+        } else {
+          trace.pushFrames = read;
+        }
+      };
+      requestAnimationFrame(step);
     });
     observer.observe(document.body, {childList: true, subtree: true});
-  });
+  }, HEAVY_COMMIT_MS);
   const row = await rowCenter(page, 'General');
   await page.mouse.click(row.x, row.y);
-  // The pushed card's offset and the frame time, in the first six frames,
-  // and when the block ended.
-  const {frames, blockEnd} = await page.evaluate(
+  await page.waitForFunction(
     () =>
-      new Promise<{frames: {offset: number; t: number}[]; blockEnd: number}>(
-        resolve => {
-          const read: {offset: number; t: number}[] = [];
-          const step = (t: number) => {
-            const pushed = document.querySelector(
-              '[data-navigation-screen="screen-General"]',
-            );
-            const value =
-              pushed == null ? 'none' : getComputedStyle(pushed).translate;
-            read.push({
-              offset: value === 'none' ? 0 : Math.abs(parseFloat(value)),
-              t,
-            });
-            if (read.length < 6) {
-              requestAnimationFrame(step);
-            } else {
-              resolve({
-                frames: read,
-                blockEnd:
-                  (window as Window & {blockEnd?: number}).blockEnd ?? 0,
-              });
-            }
-          };
-          requestAnimationFrame(step);
-        },
-      ),
+      (window as Window & {pushFrames?: unknown[]}).pushFrames?.length === 6,
   );
+  const {frames, blockEnd} = await page.evaluate(() => {
+    const trace = window as Window & {
+      blockEnd?: number;
+      pushFrames?: {offset: number; t: number; isFound: boolean}[];
+    };
+    return {frames: trace.pushFrames ?? [], blockEnd: trace.blockEnd ?? 0};
+  });
+  // The push happened: the block ran, and every frame found the pushed card.
+  expect(blockEnd).toBeGreaterThan(0);
+  expect(frames.map(frame => frame.isFound)).toEqual(Array(6).fill(true));
   const travelled = frames.map(frame => 1 - frame.offset / width);
   const firstMoving = travelled.findIndex(share => share > 0.005);
   expect(firstMoving).toBeGreaterThanOrEqual(0);
