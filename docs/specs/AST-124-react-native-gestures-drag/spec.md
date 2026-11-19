@@ -37,8 +37,8 @@ This record details the gesture and drag pieces of the platform layer that
 `spec:AST-112` defines, under the shared platform code rules of `spec:AST-140`:
 it applies the result vocabulary (`spec:AST-140/FR3`), the capability shape
 (`spec:AST-112/FR7`), growth by named features (`spec:AST-140/FR5`), and
-threading (`spec:AST-140/FR6`) to nine native components and the gesture
-handles of `spec:AST-112/FR18`.
+threading (`spec:AST-140/FR6`) to nine native components, the gesture
+handles (FR16), and the gesture arbitration (FR18).
 
 ## Why this exists
 
@@ -64,7 +64,7 @@ handles of `spec:AST-112/FR18`.
 - Gesture handles: other recognizers in the app, those of
   react-native-gesture-handler included, declare simultaneous or
   require-to-fail relationships with Astryx's recognizers
-  (`spec:AST-112/FR18`, FR16).
+  (FR16, FR18).
 
 ## Who uses it
 
@@ -358,7 +358,7 @@ handles of `spec:AST-112/FR18`.
 - **FR16 — Gesture handles.** Each recognizer of a mounted Astryx gesture view
   has a handle, so a recognizer from outside Astryx, such as a
   react-native-gesture-handler gesture or a custom native recognizer, declares
-  its relationship to it (`spec:AST-112/FR18`). Astryx's own recognizers relate
+  its relationship to it (FR18). Astryx's own recognizers relate
   to one another through the gesture owner view's declarations (`ownsLeft`,
   `ownsRight`, `ownsUp`, `ownsDown`, `ownsEdge`, `releasesScroll`, and
   `backGesture`, FR3), so the library's components negotiate with no app
@@ -432,6 +432,17 @@ handles of `spec:AST-112/FR18`.
     or `onPinchEnd` hears one development warning.
   - The wrapper forwards accessibility props, so a grid offers its larger and
     smaller layouts as accessibility actions (FR12).
+- **FR18 — Astryx's gestures join each platform's arbitration.**
+  - The gesture module registers Astryx's recognizers with each platform's
+    arbitration: on iOS, recognizer relationships such as require-to-fail and
+    simultaneous recognition; on Android, touch interception.
+  - It exposes a handle per recognizer, so other recognizers, those of
+    react-native-gesture-handler included, can declare their relationship to
+    it (FR16).
+  - It runs natively, independent of the JavaScript runtime.
+  - Gesture behavior and feel follow `spec:AST-094`, `spec:AST-107`, and
+    `spec:AST-108`.
+  - Astryx owns its own recognizers, and the app owns its other gestures.
 
 ### Platform support
 
@@ -468,7 +479,6 @@ handles of `spec:AST-112/FR18`.
   JavaScript checks before it uses them.
 - Relies on `spec:AST-112` FR5 (amended): the gesture views stay internal
   behind the library's components on `./controls`.
-- Details `spec:AST-112` FR18 (amended): the gesture handles (FR16).
 - Answers `spec:AST-112` OQ7 for the pan and zoom component: it starts in the
   React Native lab under `./unstable/*` (DEC-8).
 - `spec:AST-017` FR27 keeps the pan and zoom component in the lab folder of
@@ -492,6 +502,7 @@ handles of `spec:AST-112/FR18`.
 | FR14     | The platform's spec rules check over the contract list and its named features                                                         | each contract in the group; a binary without `AstryxPinchScaleView.pinch`                                                                                             | A named feature the record does not list, or one used without the check                                                                                                                  |
 | FR16     | Unit tests of the handle and relationship API through the `./testing` doubles; Simulator and emulator checks with a second recognizer | each recognizer name; an absent view; `simultaneous` and `requireToFail`; an unmount                                                                                  | A handle for an absent view, a relationship that outlives its view, or a `requireToFail` waiter that begins first                                                                        |
 | FR17     | Unit tests of the native-driver mapping and the absent view; Simulator and emulator pinch checks over a list under a large title      | a spread and a squeeze; a cancel; `isContentScaled` off; values given and not; a binary without the feature                                                           | A scroll during a two-finger pinch, a frame without `values`, more than one `onPinchEnd`, a large title that stops collapsing, or a missing warning                                      |
+| FR18     | Gesture tests on the Simulator, the emulator, and devices, beside a second gesture library                                            | an Astryx recognizer beside a react-native-gesture-handler recognizer; a busy JavaScript thread                                                                       | A relationship that cannot be declared, an Astryx recognizer that does not follow a declared relationship, or a gesture that waits on JavaScript                                         |
 | FR15     | Source review of the iOS and Android views; an iOS build with the private class name absent                                           | each view; the gesture root with no menu container found; the platform info self-check                                                                                | A private API call, or a gesture root that blocks a touch when the name is absent                                                                                                        |
 
 ## Decision log
