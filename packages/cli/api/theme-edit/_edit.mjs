@@ -214,6 +214,7 @@ import {
   exactTokens,
   lookCollapsed,
   categoryNotes,
+  vibrancyTakes,
   derivedStatusWords,
   paletteRecipeUnknown,
 } from './_palette.mjs';
@@ -6412,6 +6413,7 @@ async function changeOnce(
                 x.thing,
                 slug,
                 modesOf(data),
+                vibrancyTakes(data, ownSourceTokenValues(cwd, slug)),
               ).slice(0, -1),
             ),
           ...cutShort.map(cutShortNote),
@@ -7513,7 +7515,13 @@ async function changeOnce(
     );
   if (PALETTE_DIALS.includes(s.thing) && sub === 'set')
     notes.push(
-      ...paletteNotes(dialPal, s.thing, slug, modesOf(data))
+      ...paletteNotes(
+        dialPal,
+        s.thing,
+        slug,
+        modesOf(data),
+        vibrancyTakes(data, ownSourceTokenValues(cwd, slug)),
+      )
         // A shade the mapping would pick for a token the theme's own source
         // sets never shows: the file's value does (named once above).
         .filter(n => {
@@ -7555,9 +7563,13 @@ async function changeOnce(
     );
     if (pal?.families.some(x => x.dial === dialOfToken)) {
       notes.push(
-        ...paletteNotes(pal, dialOfToken, slug, modesOf(data)).filter(
-          n => !n.startsWith('the generated colors are in '),
-        ),
+        ...paletteNotes(
+          pal,
+          dialOfToken,
+          slug,
+          modesOf(data),
+          vibrancyTakes(data, ownSourceTokenValues(cwd, slug)),
+        ).filter(n => !n.startsWith('the generated colors are in ')),
       );
       colorFails.push(
         ...newFailures(paletteFailures(pal, dialOfToken, modesOf(data))),
@@ -7681,7 +7693,7 @@ async function changeOnce(
     );
   }
   // The status roles the look derives (deriveStatusColors) sit with the
-  // palette already: only a role kept at the base theme's is said.
+  // palette already: only a role the look leaves unset is said.
   const grownRoles = new Set(
     Object.entries(
       (s.thing === 'accent' || s.thing === 'vibrancy'
@@ -7729,9 +7741,9 @@ async function changeOnce(
     notes.push(
       'text below the base size keeps its standard sizes, so small text stays readable',
     );
-  // A change that moved the category or chart colors says why they keep the
-  // base theme's when the look would draw two hues alike (an accent change
-  // says it with the accent's notes).
+  // A change that moved the category or chart colors says what they gave
+  // up to stay written (an accent change says it with the accent's
+  // notes).
   if (
     lookCollapsed(r.changed, derivedStatusWords(data), exactTokens(data)).look
       .length &&
@@ -7744,7 +7756,14 @@ async function changeOnce(
       base,
       ctx.project.core.tokenDefaults,
     );
-    for (const n of look ? categoryNotes(look, '', slug) : [])
+    for (const n of look
+      ? categoryNotes(
+          look,
+          '',
+          slug,
+          vibrancyTakes(data, ownSourceTokenValues(cwd, slug)),
+        )
+      : [])
       if (!notes.includes(n)) notes.push(n);
   }
   // A change that changed nothing writes nothing, the preview included,
@@ -9601,12 +9620,11 @@ function colorsReport(pal, data, built, slug = '', own = {}) {
     return {vibrancy: null, colors: [], colorNotes: [], colorProblems: []};
   /**
    * The category colors (badges, tokens and card tints), chart colors and
-   * status roles: why a themed look leaves some at the base theme's, or that
-   * the build still shows the base theme's where the palette now derives
-   * them.
+   * status roles: what a themed look gave up to write them, or that the
+   * build still shows the base theme's where the palette now derives them.
    */
   const lookNote = () => {
-    const said = categoryNotes(pal, '', slug);
+    const said = categoryNotes(pal, '', slug, vibrancyTakes(data, own));
     const c = pal.categories;
     if (!c || c.badges !== 'derived' || c.chart !== 'derived') return said;
     const words = derivedStatusWords(data);
