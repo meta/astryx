@@ -20,7 +20,8 @@
  * that look with the very icon the template imports; otherwise the script
  * stops and names the icon, so no picture changes. Uses keep their names
  * where the import aliased the icon; other uses take the placeholder's name.
- * Only files it changes are formatted. Running it again changes nothing.
+ * Only files it changes are formatted, and only when they were formatted
+ * before. Running it again changes nothing.
  *
  * @input Template sources and descriptors under assets/templates; the table
  * @output The same templates, importing icon placeholders
@@ -284,8 +285,20 @@ async function main() {
   const config = JSON.parse(
     fs.readFileSync(path.join(REPO, '.prettierrc.json'), 'utf-8'),
   );
-  const format = (/** @type {string} */ text, /** @type {string} */ filepath) =>
-    prettier.format(text, {...config, filepath});
+  /**
+   * Format a changed file the way the repository does, but only when the
+   * file was formatted before: a file that was not keeps every line the
+   * migration did not change.
+   * @param {string} text
+   * @param {string} before
+   * @param {string} filepath
+   */
+  const format = async (text, before, filepath) => {
+    const options = {...config, filepath};
+    return (await prettier.format(before, options)) === before
+      ? prettier.format(text, options)
+      : text;
+  };
   const table = placeholderTable();
   /** @type {Map<string, Record<string, string>>} */
   const docs = new Map();
@@ -320,7 +333,10 @@ async function main() {
     process.exit(1);
   }
   for (const {file, migrated, descriptor, declared} of planned) {
-    fs.writeFileSync(file, await format(migrated, file));
+    fs.writeFileSync(
+      file,
+      await format(migrated, fs.readFileSync(file, 'utf-8'), file),
+    );
     if (descriptor) docs.set(descriptor, declared);
   }
   const moved = planned.length;
@@ -334,9 +350,11 @@ async function main() {
       ),
     );
     if (stillLibrary) continue;
-    const next = withoutIcons(fs.readFileSync(descriptor, 'utf-8'));
-    if (next != null)
-      fs.writeFileSync(descriptor, await format(next, descriptor));
+    const before = fs.readFileSync(descriptor, 'utf-8');
+    const next = withoutIcons(before);
+    if (next != null) {
+      fs.writeFileSync(descriptor, await format(next, before, descriptor));
+    }
   }
   if (check && left.length > 0) {
     console.error(
