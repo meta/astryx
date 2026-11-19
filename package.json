@@ -103,6 +103,7 @@
     "npm:prune-canaries": "node scripts/npm/prune-canaries.mjs",
     "check:knowledge": "node scripts/check-knowledge.mjs",
     "review:pre": "node scripts/pre-review.mjs",
+    "preflight": "node scripts/preflight.mjs",
     "specs:for": "node scripts/specs-for-file.mjs",
     "check:published-manifests": "node scripts/npm/published-manifests.mjs"
   },

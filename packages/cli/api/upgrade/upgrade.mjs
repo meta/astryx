@@ -114,7 +114,7 @@ export async function upgrade(options = {}, {cwd = process.cwd()} = {}) {
   if (!options.list && !options.from) {
     // Outside a project there is no version to install (spec AST-081 FR3).
     const msg = isOutsideProject(cwd)
-      ? 'Missing required --from. This folder is outside a project; upgrade migrates the code of an app project that installs @astryxdesign/core.'
+      ? 'This folder is outside a project, so there is no code to upgrade. Run upgrade with `--from <old version>` in the folder of the app that installs @astryxdesign/core.'
       : `Missing required --from. Install the target version first, then run \`${getCliInvocation()} upgrade --from <old-version>\`.`;
     logger.error(msg);
     logger.log('Aborted\n');
