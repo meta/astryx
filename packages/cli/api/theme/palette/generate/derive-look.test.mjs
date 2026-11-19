@@ -249,3 +249,24 @@ describe("an unreadable tint's ratio", () => {
     expect(ratioDown(4.5)).toBe(4.5);
   });
 });
+
+describe("code colors on the theme's own code background", () => {
+  it('read at 4.5:1 on a code background the theme sets itself', async () => {
+    const {deriveCodeColors} = await import('./derive-look.mjs');
+    const {contrastRatio} = await import('./color.mjs');
+    const {palette, stops} = grow(lookSeeds('#5b3cc4'));
+    const dark = '#1e1e1e';
+    const {tokens} = deriveCodeColors({
+      palette,
+      stops,
+      modes: ['light', 'dark'],
+      grounds: m => page[m],
+      codeGround: () => dark,
+      wanted: k => k !== '--color-syntax-background',
+    });
+    const keyword = tokens['--color-syntax-keyword'];
+    expect(keyword).toBeDefined();
+    for (const m of /** @type {const} */ (['light', 'dark']))
+      expect(contrastRatio(keyword[m].color, dark)).toBeGreaterThanOrEqual(4.5);
+  });
+});

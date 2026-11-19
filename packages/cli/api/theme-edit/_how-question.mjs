@@ -27715,7 +27715,7 @@ export function draftAnswer(ctx, env, question) {
         if (!mixed && typedHere(st) && typedHere(fill)) {
           const said = `${st.value} text on ${fill.value} reads at`;
           if (!d.text.includes(said))
-            d.text += ` (${said} ${Math.min(...fails.map(x => x.ratio)).toFixed(2)}:1, under the 4.5:1 text needs; both are written as you typed them)`;
+            d.text += ` (${said} ${ratioWords(Math.min(...fails.map(x => x.ratio)))}:1, under the 4.5:1 text needs; both are written as you typed them)`;
           continue;
         }
         if (mixed) {
