@@ -4585,7 +4585,33 @@ export function partsOf(ctx, s) {
         .filter(m => drawnAlike(ctx, s, m))
         .filter(takesWhen),
     );
-  return [s.on];
+  const frame = boxFrameOf(ctx, s);
+  return frame ? [frame] : [s.on];
+}
+
+/**
+ * The row a border, corners, shadow, fill or outline set on a part goes on
+ * instead (a pager's control row, for one set on the pager): the part
+ * paints no box of its own, and its controls sit side by side in a row
+ * that frames them as one strip. On the part it would land on the whole
+ * bar, or on no box at all; on each control it would box each one apart.
+ * Null for every other setting.
+ * @param {Ctx} ctx
+ * @param {Pick<Setting, 'on' | 'thing'>} s
+ * @returns {string | null}
+ */
+export function boxFrameOf(ctx, s) {
+  if (!s.on || FAMILIES[s.on]) return null;
+  if (
+    !/^(?:box-shadow|background(?:-color)?|outline|border|corners)(?:-|$)/.test(
+      kebab(String(s.thing ?? '')),
+    )
+  )
+    return null;
+  const own = ctx.C?.MAP?.[s.on]?.own ?? {};
+  if (Object.keys(own).some(k => /^(?:border(?!.*radius)|background)/.test(k)))
+    return null;
+  return rowFrameOf(ctx, s.on);
 }
 
 /**

@@ -124,7 +124,7 @@ import {
   radiusTokenOf,
   borderParts,
   cornerParts,
-  rowFrameOf,
+  boxFrameOf,
   focusStateOf,
   valueProblem,
   partComponentDocs,
@@ -8085,29 +8085,6 @@ function checkOne(
         );
       }
     }
-    // A shadow, fill or outline on a part that paints no box of its own,
-    // whose controls sit in a row that frames them as one strip: the row
-    // takes it, as it takes the strip's border and corners. On the outer
-    // part it draws a box as wide as the whole bar around them.
-    if (
-      !unset &&
-      /^(?:box-shadow|background(?:-color)?|outline)(?:-|$)/.test(prop) &&
-      partsOf(ctx, s).length === 1
-    ) {
-      const part = partsOf(ctx, s)[0];
-      const own = ctx.C.MAP[part]?.own ?? {};
-      const frame = Object.keys(own).some(k =>
-        /^(?:border(?!.*radius)|background)/.test(k),
-      )
-        ? null
-        : rowFrameOf(ctx, part);
-      if (frame)
-        refuse(
-          E.ERR_THEME_NO_EFFECT,
-          `${part} paints no box of its own; its controls sit side by side in ${frame}, which frames them as one strip, so set ${prop} on ${frame}. On ${part} it draws a box as wide as the whole bar around them.`,
-          {run: [setLine(slug, prop, v, {...s, on: frame, only: undefined})]},
-        );
-    }
     // A border on a part that draws none itself, whose edges are drawn by
     // parts of its own inside it (a date-time input's date and time boxes):
     // those parts take it.
@@ -8118,17 +8095,6 @@ function checkOne(
     ) {
       const part = partsOf(ctx, s)[0];
       const inner = borderParts(ctx, part).filter(t => t !== part);
-      const frame = Object.keys(ctx.C.MAP[part]?.own ?? {}).some(k =>
-        /^border(?!.*radius)/.test(k),
-      )
-        ? null
-        : rowFrameOf(ctx, part);
-      if (frame)
-        refuse(
-          E.ERR_THEME_NO_EFFECT,
-          `${part} draws no border of its own; its controls sit side by side in ${frame}, which frames them as one strip, so set ${prop} on ${frame}. A border on each control would box each one apart.`,
-          {run: [setLine(slug, prop, v, {...s, on: frame, only: undefined})]},
-        );
       if (inner.length)
         refuse(
           E.ERR_THEME_NO_EFFECT,
@@ -8795,24 +8761,14 @@ function refuseInvisibleCorners(ctx, slug, s, data) {
   const kids = (ctx.C.MAP[parts[0]]?.contains ?? [])
     .filter(k => ctx.C.showsCorners(k) && ctx.C.MAP[k])
     .slice(0, 3);
-  const frame = rowFrameOf(ctx, parts[0]);
+  // (Set on a pager, the corners go on the row that frames its pages; with
+  // no edge there yet they show nothing, and never on each page.)
+  const frame = boxFrameOf(ctx, s);
   if (frame)
     refuse(
       E.ERR_THEME_NO_EFFECT,
-      `${s.on} has no background, border or shadow of its own, so rounding its corners changes nothing you see. Its controls sit side by side in ${frame}, which frames them as one strip: its corners show once it has a border. Corners on each control would round each one apart.`,
-      // (Its corners show once it has an edge: with one the theme gave it,
-      // the corners go there; without, how lists the border and fill it
-      // takes, since the person names that edge.)
-      {
-        run: data.settings.some(
-          x =>
-            x.source === 'property' &&
-            /^(background|border|box-shadow|outline)/.test(x.thing) &&
-            partsOf(ctx, x).includes(frame),
-        )
-          ? [setLine(slug, s.thing, s.value || 'round', {...s, on: frame})]
-          : [`${HOW} ${frame}`],
-      },
+      `${s.on}'s corners go on ${frame}, the row that frames its controls as one strip, and ${frame} has no border, fill or shadow yet, so its corners show nothing. Give ${frame} an edge first, then set its corners.`,
+      {run: [`${HOW} ${frame}`]},
     );
   refuse(
     E.ERR_THEME_NO_EFFECT,
