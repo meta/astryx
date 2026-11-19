@@ -21,7 +21,7 @@ export const doc = {
     'results keep the lexical order, whose domain priority can put a weaker ' +
     "component, hook, template, or theme above a stronger doc, and a query that is an entry's exact name answers " +
     "with that entry first. The one exception: a family's root can move directly before a part of its own " +
-    'family when the part adds nothing the query asked for (`code sample` lists CodeBlock before Code). Inside a band, fixed weights order the matches, so a ' +
+    'family when the part adds nothing the query asked for. Inside a band, fixed weights order the matches, so a ' +
     'description match can lead a keyword match in the same band (55–99 holds both). ' +
     "A component's usage guidance (its best practices) is indexed one tier below " +
     'its description, so the words a reader types still find it.' +
