@@ -1516,19 +1516,19 @@ function expandComponentDeclarations(
   // `corners` entry. A later radius in the block replaces what an earlier one
   // gave a corner, as the cascade does on the element.
   const cornerProps = new Map<string, string>();
-  const radiusCornerVars = getDerivedVars(component, 'borderRadius')
+  const cornerVarRoots = getDerivedVars(component, 'borderRadius')
     .filter(entry => entry.corners)
     .flatMap(entry => entry.vars ?? []);
 
   for (const [prop, value] of props) {
-    if (radiusCornerVars.length > 0) {
+    if (cornerVarRoots.length > 0) {
       if (prop === 'borderRadius') {
         // The shorthand sets every corner: each physical one, and no
         // logical one (a component reads a logical corner first), here or
         // from a rule it overrides. `initial` leaves a variable without a
         // value, so the reader falls back to the physical corner.
         const corners = radiusCorners(value);
-        for (const varName of radiusCornerVars) {
+        for (const varName of cornerVarRoots) {
           for (const name of Object.values(RADIUS_CORNER_PROPS)) {
             cornerProps.delete(`${varName}-${name}`);
           }
@@ -1542,7 +1542,7 @@ function expandComponentDeclarations(
           }
         }
       } else if (prop in RADIUS_CORNER_PROPS) {
-        for (const varName of radiusCornerVars) {
+        for (const varName of cornerVarRoots) {
           const name = `${varName}-${RADIUS_CORNER_PROPS[prop]}`;
           cornerProps.delete(name);
           cornerProps.set(name, value);

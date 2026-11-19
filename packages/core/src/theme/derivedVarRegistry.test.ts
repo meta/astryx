@@ -351,6 +351,18 @@ const PRIVATE_SYSTEM_VARS = new Set([
   '--_container-corner-start-end',
   '--_container-corner-end-start',
   '--_container-corner-end-end',
+  // A rounded host's radius, copied for the shared corner reading in
+  // Layout/containerCorners.stylex.ts. The host's own radius variables are
+  // the theme surface.
+  '--_container-host-radius',
+  '--_container-host-radius-top-left',
+  '--_container-host-radius-top-right',
+  '--_container-host-radius-bottom-right',
+  '--_container-host-radius-bottom-left',
+  '--_container-host-radius-start-start',
+  '--_container-host-radius-start-end',
+  '--_container-host-radius-end-start',
+  '--_container-host-radius-end-end',
   // The container-padding record's block-edge bleed: a padding publisher
   // gives its block padding only to a direct first or last Table.
   '--_container-bleed-block-start',

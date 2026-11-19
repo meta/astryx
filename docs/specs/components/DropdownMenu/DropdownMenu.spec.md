@@ -584,19 +584,21 @@ listbox, keep their own navigation. Rejected: skipping disabled rows, which
 hides an unavailable action and its reason from keyboard and screen-reader
 users.
 
-### DEC-12 — Every menu row takes the menu's corner shape
+### DEC-12 — Every pointer-menu row takes the menu's corner shape
 
 **Reference:** `component:DropdownMenu/DEC-12`
 **Decider:** `josephfarina`, engineering owner decision, 2026-11-18
 
-When a theme gives a menu corners of different radii, every row takes the
-menu's shape, each corner less the menu's padding: with only the bottom
-corners rounded, each row is rounded at the bottom. This keeps the rows
+When a theme gives a menu corners of different radii, every row of the pointer
+menu takes the menu's shape, each corner less the menu's padding: with only the
+bottom corners rounded, each row is rounded at the bottom. This keeps the rows
 predictable and matches the uniform corners themes already give. A theme that
-wants other row corners styles the row part directly. The rule covers the
-item, checkbox, radio and sub-menu rows, and so ContextMenu. The menu's
-`derived` radius entry sets `corners: true` (`ComponentThemingDerivedVar.corners`
-in the authoring types), so the theme writes each corner to its own variable.
+wants other row corners styles the row part directly. The rule covers the item,
+checkbox, radio and sub-menu rows of DropdownMenu's popover and its sub-menu
+flyouts, and so ContextMenu. The touch sheet draws its rows as List rows (FR4),
+which keep their own corners. The menu's `derived` radius entry sets
+`corners: true` (`ComponentThemingDerivedVar.corners` in the authoring types),
+so the theme writes each corner to its own variable.
 Rejected: only the rows at a menu corner take that corner.
 
 ## Open questions

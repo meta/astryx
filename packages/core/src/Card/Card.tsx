@@ -104,33 +104,16 @@ const styles = stylex.create({
     paddingBlockEnd: `calc(var(--container-padding-block-end) - ${borderVars['--border-width']})`,
   },
   // A full-bleed child reaches under the border, so it takes the outer radius.
-  // The shorthand clears the logical corners, so a logical corner wins only
-  // when the theme writes it last.
   corners: {
-    '--_container-corner-start-start': {
-      default:
-        'var(--_card-radius-start-start, var(--_card-radius-top-left, var(--_card-radius)))',
-      ':dir(rtl)':
-        'var(--_card-radius-start-start, var(--_card-radius-top-right, var(--_card-radius)))',
-    },
-    '--_container-corner-start-end': {
-      default:
-        'var(--_card-radius-start-end, var(--_card-radius-top-right, var(--_card-radius)))',
-      ':dir(rtl)':
-        'var(--_card-radius-start-end, var(--_card-radius-top-left, var(--_card-radius)))',
-    },
-    '--_container-corner-end-start': {
-      default:
-        'var(--_card-radius-end-start, var(--_card-radius-bottom-left, var(--_card-radius)))',
-      ':dir(rtl)':
-        'var(--_card-radius-end-start, var(--_card-radius-bottom-right, var(--_card-radius)))',
-    },
-    '--_container-corner-end-end': {
-      default:
-        'var(--_card-radius-end-end, var(--_card-radius-bottom-right, var(--_card-radius)))',
-      ':dir(rtl)':
-        'var(--_card-radius-end-end, var(--_card-radius-bottom-left, var(--_card-radius)))',
-    },
+    '--_container-host-radius': 'var(--_card-radius)',
+    '--_container-host-radius-top-left': 'var(--_card-radius-top-left)',
+    '--_container-host-radius-top-right': 'var(--_card-radius-top-right)',
+    '--_container-host-radius-bottom-right': 'var(--_card-radius-bottom-right)',
+    '--_container-host-radius-bottom-left': 'var(--_card-radius-bottom-left)',
+    '--_container-host-radius-start-start': 'var(--_card-radius-start-start)',
+    '--_container-host-radius-start-end': 'var(--_card-radius-start-end)',
+    '--_container-host-radius-end-start': 'var(--_card-radius-end-start)',
+    '--_container-host-radius-end-end': 'var(--_card-radius-end-end)',
   },
   // Fixed-height cards scroll content; overflow: auto also clips to border-radius
   scrollable: {
@@ -364,6 +347,7 @@ export function Card({
                 },
           ),
           styles.corners,
+          containerCornerStyles.fromHostRadius,
           containerCornerStyles.publish,
           // Applied after the container padding so the border-inset calc wins;
           // it reads the --container-padding-* vars set above.

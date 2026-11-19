@@ -4,7 +4,7 @@
  * @file containerCorners.stylex.ts
  * @input Uses @stylexjs/stylex
  * @output containerCornerStyles: the corner publication rounded padding
- *   publishers share
+ *   publishers share, and the corner reading of a host's radius
  * @position Layout utility beside container(). Internal: the package does not
  *   export `containerCornerStyles`. The `--container-corner-*` variables it
  *   sets are in the shipped CSS, but no API documents them; only Table and
@@ -24,6 +24,41 @@ import * as stylex from '@stylexjs/stylex';
  * take a corner it does not reach, so then no corner goes out.
  */
 export const containerCornerStyles = stylex.create({
+  /**
+   * Each corner of the host's radius, as a full-bleed child takes it. The
+   * host copies its radius variables into `--_container-host-radius` and
+   * `--_container-host-radius-<corner>` (the corner variables the theme
+   * pipeline writes). A corner reads its logical variable, then the physical
+   * corner it is in this direction, then the one radius. The shorthand
+   * clears the logical corners, so a logical corner wins only when the theme
+   * writes it last.
+   */
+  fromHostRadius: {
+    '--_container-corner-start-start': {
+      default:
+        'var(--_container-host-radius-start-start, var(--_container-host-radius-top-left, var(--_container-host-radius)))',
+      ':dir(rtl)':
+        'var(--_container-host-radius-start-start, var(--_container-host-radius-top-right, var(--_container-host-radius)))',
+    },
+    '--_container-corner-start-end': {
+      default:
+        'var(--_container-host-radius-start-end, var(--_container-host-radius-top-right, var(--_container-host-radius)))',
+      ':dir(rtl)':
+        'var(--_container-host-radius-start-end, var(--_container-host-radius-top-left, var(--_container-host-radius)))',
+    },
+    '--_container-corner-end-start': {
+      default:
+        'var(--_container-host-radius-end-start, var(--_container-host-radius-bottom-left, var(--_container-host-radius)))',
+      ':dir(rtl)':
+        'var(--_container-host-radius-end-start, var(--_container-host-radius-bottom-right, var(--_container-host-radius)))',
+    },
+    '--_container-corner-end-end': {
+      default:
+        'var(--_container-host-radius-end-end, var(--_container-host-radius-bottom-right, var(--_container-host-radius)))',
+      ':dir(rtl)':
+        'var(--_container-host-radius-end-end, var(--_container-host-radius-bottom-left, var(--_container-host-radius)))',
+    },
+  },
   publish: {
     '--container-corner-start-start': {
       default: '0px',

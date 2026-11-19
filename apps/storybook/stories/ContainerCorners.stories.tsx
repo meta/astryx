@@ -406,3 +406,23 @@ export const MenuRowsWithOneRadius: Story = {
     </Theme>
   ),
 };
+
+/** A theme that rounds only a menu's bottom-right corner. */
+const roundedBottomRightMenu = defineTheme({
+  name: 'container-corners-rounded-bottom-right-menu',
+  components: {'dropdown-menu': {base: {borderRadius: '0 0 12px 0'}}},
+});
+
+/**
+ * The menu rounds only its bottom-right corner, in a right-to-left page: each
+ * row rounds the bottom-right corner too, where the menu does.
+ */
+export const MenuRowsWithRoundedBottomRightRtl: Story = {
+  render: () => (
+    <Theme theme={roundedBottomRightMenu} mode="light">
+      <div dir="rtl">
+        <EveryRowMenu />
+      </div>
+    </Theme>
+  ),
+};

@@ -381,4 +381,21 @@ test.describe('Container corners (Chromium)', () => {
       ]);
     }
   });
+
+  test('in a right-to-left page, menu rows round the physical corner the menu rounds', async ({
+    page,
+  }) => {
+    await mount(page, 'menu-rows-with-one-radius', MENU_ROWS);
+    const one = await radii(page, MENU_ROWS);
+    await mount(page, 'menu-rows-with-rounded-bottom-right-rtl', MENU_ROWS);
+    const count = await page.locator(MENU_ROWS).count();
+    for (let index = 0; index < count; index++) {
+      expect(await radii(page, MENU_ROWS, index)).toEqual([
+        '0px',
+        '0px',
+        one[2],
+        '0px',
+      ]);
+    }
+  });
 });

@@ -323,33 +323,17 @@ const styles = stylex.create({
     overflow: 'hidden',
     borderRadius: 'inherit',
   },
-  // The shorthand clears the logical corners, so a logical corner wins only
-  // when the theme writes it last.
+  // A full-bleed child takes the dialog's radius, each corner as drawn.
   innerCorners: {
-    '--_container-corner-start-start': {
-      default:
-        'var(--_dialog-radius-start-start, var(--_dialog-radius-top-left, var(--_dialog-radius)))',
-      ':dir(rtl)':
-        'var(--_dialog-radius-start-start, var(--_dialog-radius-top-right, var(--_dialog-radius)))',
-    },
-    '--_container-corner-start-end': {
-      default:
-        'var(--_dialog-radius-start-end, var(--_dialog-radius-top-right, var(--_dialog-radius)))',
-      ':dir(rtl)':
-        'var(--_dialog-radius-start-end, var(--_dialog-radius-top-left, var(--_dialog-radius)))',
-    },
-    '--_container-corner-end-start': {
-      default:
-        'var(--_dialog-radius-end-start, var(--_dialog-radius-bottom-left, var(--_dialog-radius)))',
-      ':dir(rtl)':
-        'var(--_dialog-radius-end-start, var(--_dialog-radius-bottom-right, var(--_dialog-radius)))',
-    },
-    '--_container-corner-end-end': {
-      default:
-        'var(--_dialog-radius-end-end, var(--_dialog-radius-bottom-right, var(--_dialog-radius)))',
-      ':dir(rtl)':
-        'var(--_dialog-radius-end-end, var(--_dialog-radius-bottom-left, var(--_dialog-radius)))',
-    },
+    '--_container-host-radius': 'var(--_dialog-radius)',
+    '--_container-host-radius-top-left': 'var(--_dialog-radius-top-left)',
+    '--_container-host-radius-top-right': 'var(--_dialog-radius-top-right)',
+    '--_container-host-radius-bottom-right': 'var(--_dialog-radius-bottom-right)',
+    '--_container-host-radius-bottom-left': 'var(--_dialog-radius-bottom-left)',
+    '--_container-host-radius-start-start': 'var(--_dialog-radius-start-start)',
+    '--_container-host-radius-start-end': 'var(--_dialog-radius-start-end)',
+    '--_container-host-radius-end-start': 'var(--_dialog-radius-end-start)',
+    '--_container-host-radius-end-end': 'var(--_dialog-radius-end-end)',
   },
   // Inline wrapper mirrors the dialog's visual styles without <dialog> behavior
   inlineWrapper: {
@@ -908,6 +892,7 @@ export function Dialog({
           containerPaddingBlockEndVarStyles[effectivePadding],
         isFullscreen && useThemeDefault && styles.fullscreenSafeArea,
         styles.innerCorners,
+        containerCornerStyles.fromHostRadius,
         containerCornerStyles.publish,
       )}>
       <DialogContext value={dialogContextValue}>
