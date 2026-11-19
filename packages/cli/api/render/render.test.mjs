@@ -823,7 +823,7 @@ describe('render(): every write stays inside the current folder', () => {
     put('alias-home/package.json', '{"name":"alias-home","private":true}');
     const header = 'export function Header() { return <p>Home header</p>; }\n';
     put('alias-home/src/components/Header.tsx', header);
-    put('alias-home/src/app/page.tsx', "import {Header} from '@/components/Header';\nexport default function Page() { return <Header />; }\n");
+    put('alias-home/src/app/page.tsx', "import {Header} from '@/components/Header';\nexport default function Page() { return <Header />; }\nimport '@astryxdesign/core/astryx.css';\n");
     const cwd = path.join(dir, 'alias-home');
     await render('src/app/page.tsx', {cwd, out: 'page.html'});
     // The project's alias reaches the same file: the page uses it, and only the page is written.
@@ -871,7 +871,7 @@ describe('render(): every write stays inside the current folder', () => {
     put('alias-deep/src/components/Header.tsx', "import {mark} from './mark';\nexport function Header() { return <p>Deep header {mark}</p>; }\n");
     const mark = "export const mark = 'sent mark';\n";
     put('alias-deep/src/components/mark.ts', mark);
-    put('alias-deep/src/app/page.tsx', "import {Header} from '@/components/Header';\nexport default function Page() { return <Header />; }\n");
+    put('alias-deep/src/app/page.tsx', "import {Header} from '@/components/Header';\nexport default function Page() { return <Header />; }\nimport '@astryxdesign/core/astryx.css';\n");
     const deep = path.join(dir, 'alias-deep');
     await render('src/app/page.tsx', {cwd: deep, out: 'page.html'});
     // Unchanged: the page uses the project's files, and only the page is written.
@@ -915,7 +915,7 @@ describe('render(): every write stays inside the current folder', () => {
     put('alias-chain/package.json', '{"name":"alias-chain","private":true}');
     put('alias-chain/src/components/Icon.tsx', 'export function Icon() { return <i>sent icon</i>; }\n');
     put('alias-chain/src/components/Header.tsx', "import {Icon} from '@/components/Icon';\nexport function Header() { return <p>Chain header <Icon /></p>; }\n");
-    put('alias-chain/src/app/page.tsx', "import {Header} from '@/components/Header';\nexport default function Page() { return <Header />; }\n");
+    put('alias-chain/src/app/page.tsx', "import {Header} from '@/components/Header';\nexport default function Page() { return <Header />; }\nimport '@astryxdesign/core/astryx.css';\n");
     const cwd = path.join(dir, 'alias-chain');
     await render('src/app/page.tsx', {cwd, out: 'page.html'});
     // Both files the alias reaches changed in the project since the render.
@@ -960,7 +960,7 @@ describe('render(): every write stays inside the current folder', () => {
     put('alias-gone-src/tsconfig.json', config);
     put('alias-gone-src/package.json', '{"name":"alias-gone-src","private":true}');
     put('alias-gone-src/src/components/Header.tsx', 'export function Header() { return <p>Gone header</p>; }\n');
-    put('alias-gone-src/src/app/page.tsx', "import {Header} from '@/components/Header';\nexport default function Page() { return <Header />; }\n");
+    put('alias-gone-src/src/app/page.tsx', "import {Header} from '@/components/Header';\nexport default function Page() { return <Header />; }\nimport '@astryxdesign/core/astryx.css';\n");
     await render('alias-gone-src/src/app/page.tsx', {cwd: dir});
     fs.copyFileSync(path.join(dir, 'alias-gone-src/src/app/page.html'), path.join(dir, 'alias-gone/page.html'));
     const gone = path.join(dir, 'alias-gone');
@@ -986,7 +986,7 @@ describe('render(): every write stays inside the current folder', () => {
     put('tsc-src/tsconfig.json', '{"compilerOptions": {"baseUrl": ".", "paths": {"@/*": ["./src/*"]}}}\n');
     put('tsc-src/package.json', '{"name":"tsc-src","private":true}');
     put('tsc-src/src/components/Header.tsx', 'export function Header() { return <p>Sent header</p>; }\n');
-    put('tsc-src/src/app/page.tsx', "import {Header} from '@/components/Header';\nexport default function Page() { return <Header />; }\n");
+    put('tsc-src/src/app/page.tsx', "import {Header} from '@/components/Header';\nexport default function Page() { return <Header />; }\nimport '@astryxdesign/core/astryx.css';\n");
     await render('tsc-src/src/app/page.tsx', {cwd: dir});
     const sent = path.join(dir, 'tsc-src/src/app/page.html');
     // A project whose config has other aliases, with a comment and its own layout, that no tool may rewrite.
@@ -1038,7 +1038,7 @@ describe('render(): every write stays inside the current folder', () => {
     put('alias-old/tsconfig.json', '{"compilerOptions": {"baseUrl": ".", "paths": {"@/*": ["./src/*"]}}}\n');
     put('alias-old/package.json', '{"name":"alias-old","private":true}');
     put('alias-old/src/components/Header.tsx', 'export function Header() { return <p>Old header</p>; }\n');
-    put('alias-old/src/app/page.tsx', "import {Header} from '@/components/Header';\nexport default function Page() { return <Header />; }\n");
+    put('alias-old/src/app/page.tsx', "import {Header} from '@/components/Header';\nexport default function Page() { return <Header />; }\nimport '@astryxdesign/core/astryx.css';\n");
     await render('alias-old/src/app/page.tsx', {cwd: dir});
     // A CLI before the alias record wrote the same block without it.
     const html = fs.readFileSync(path.join(dir, 'alias-old/src/app/page.html'), 'utf8');
@@ -3829,6 +3829,7 @@ export default function Page() {
     </div>
   );
 }
+import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('charts-timings.tsx', {cwd: dir});
