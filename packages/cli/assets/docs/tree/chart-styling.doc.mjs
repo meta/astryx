@@ -124,17 +124,17 @@ export const docs = {
             [
               'Tooltip surface',
               '--radius-container',
-              'Recharts opens the tooltip at the hovered data mark. Its content uses a real Astryx Card with the container radius role, matching HoverCard.',
+              'Render tooltip content in an Astryx Card with container radius, like HoverCard.',
             ],
             [
               'Bars',
               '--radius-element',
-              'Round the exposed ends and keep the baseline square. Limit radius to half the bar’s width or height, then round it down to a whole CSS pixel. This changes the corners, not the bar’s length.',
+              'Round the end away from the baseline and keep the baseline square. Limit radius to half the bar’s width or height, then round it down to a whole CSS pixel. This changes the corners, not the bar’s length.',
             ],
             [
               'Filled legend keys',
               '--radius-element',
-              'Use the theme’s element radius, limited to half the key’s size and rounded down to a whole CSS pixel. The 8×8px key keeps its existing dimensions.',
+              'Use the theme’s element radius, limited to half the key’s size and rounded down to a whole CSS pixel. For an 8×8px key, this limit is 4px.',
             ],
             [
               'Plot and hover region',
@@ -144,7 +144,7 @@ export const docs = {
             [
               'Line and point legend keys',
               'Match the plotted mark',
-              'Use the same line, dash pattern, or point shape as the plotted mark. The target key in the preview uses Recharts Curve with the reference line’s stroke and dash pattern.',
+              'Use the same line, dash pattern, or point shape as the plotted mark. For a dashed reference line, use a Recharts Curve with the same stroke and dash pattern.',
             ],
           ],
         },
@@ -165,10 +165,18 @@ export const docs = {
             'Revenue chart with secondary labels and theme-aware supporting parts',
           code: `'use client';
 
+import * as stylex from '@stylexjs/stylex';
 import {Bar, BarChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis, type TooltipContentProps} from 'recharts';
 import {Card, Heading, HStack, Text, VStack} from '@astryxdesign/core';
 import {dataVars} from '@astryxdesign/core/theme/dataTokens.stylex';
-import {colorVars, radiusVars, shadowVars, spacingVars, typographyVars, typeScaleVars} from '@astryxdesign/core/theme/tokens.stylex';
+import {colorVars, shadowVars, spacingVars, typographyVars, typeScaleVars} from '@astryxdesign/core/theme/tokens.stylex';
+
+const styles = stylex.create({
+  tooltip: {
+    backgroundColor: colorVars['--color-background-surface'],
+    boxShadow: shadowVars['--shadow-med'],
+  },
+});
 
 const quarters = [
   {quarter: 'Q1', revenue: 128},
@@ -180,7 +188,7 @@ const quarters = [
 function RevenueDetails({active, payload, label}: TooltipContentProps) {
   if (!active || !payload?.length) return null;
   return (
-    <Card padding={3} style={{backgroundColor: colorVars['--color-background-surface'], borderColor: colorVars['--color-border'], borderRadius: radiusVars['--radius-container'], boxShadow: shadowVars['--shadow-med']}}>
+    <Card padding={3} xstyle={styles.tooltip}>
       <VStack gap={2}>
         <Text weight="semibold">{String(label)}</Text>
         <HStack gap={4} hAlign="between"><Text color="secondary">Revenue ($ thousands)</Text><Text hasTabularNumbers>{String(payload[0].value)}</Text></HStack>
