@@ -100,8 +100,6 @@ const styles = stylex.create({
   interactiveStar: {
     '--rating-color': {
       default: `var(--rating-selected-color, ${colorVars['--color-border-emphasized']})`,
-      '@media (forced-colors: active)':
-        'var(--rating-selected-color, CanvasText)',
       '@media (hover: hover)': {
         [stylex.when.siblingBefore(':hover', ratingStar)]:
           colorVars['--color-border-emphasized'],
@@ -121,11 +119,7 @@ const styles = stylex.create({
     },
   },
   interactiveStarStill: {
-    '--rating-color': {
-      default: `var(--rating-selected-color, ${colorVars['--color-border-emphasized']})`,
-      '@media (forced-colors: active)':
-        'var(--rating-selected-color, CanvasText)',
-    },
+    '--rating-color': `var(--rating-selected-color, ${colorVars['--color-border-emphasized']})`,
     '--rating-fill': 'var(--rating-selected-fill, none)',
   },
   selectedStar: {
@@ -153,13 +147,15 @@ const styles = stylex.create({
 
 export type RatingSize = 'sm' | 'md' | 'lg';
 
-const NAVIGATION_KEYS = new Set([
+const CHOICE_KEYS = new Set([
   'ArrowUp',
   'ArrowDown',
   'ArrowLeft',
   'ArrowRight',
   'Home',
   'End',
+  ' ',
+  'Enter',
 ]);
 
 export type RatingProps = Omit<
@@ -353,7 +349,7 @@ export function Rating({
         ) {
           return;
         }
-        if (NAVIGATION_KEYS.has(event.key)) {
+        if (CHOICE_KEYS.has(event.key)) {
           setPreviewsHover(false);
         }
         isNavigating.current = true;

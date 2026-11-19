@@ -72,6 +72,22 @@ describe('Rating', () => {
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 
+  it('ends the hover preview when Space or Enter chooses a star', async () => {
+    const user = userEvent.setup();
+    render(<Rating label="r" value={2} onChange={() => {}} />);
+    const star = stars()[3];
+    const withPreview = star.className;
+    await user.hover(star);
+    stars()[0].focus();
+    await user.keyboard(' ');
+    expect(star.className).not.toBe(withPreview);
+    fireEvent.pointerMove(screen.getByRole('radiogroup'));
+    expect(star.className).toBe(withPreview);
+    stars()[0].focus();
+    await user.keyboard('{Enter}');
+    expect(star.className).not.toBe(withPreview);
+  });
+
   it('ends the hover preview on a key choice until the pointer moves', async () => {
     const user = userEvent.setup();
     render(<Rating label="r" value={2} onChange={() => {}} />);
