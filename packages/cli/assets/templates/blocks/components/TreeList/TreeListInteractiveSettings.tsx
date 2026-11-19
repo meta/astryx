@@ -4,6 +4,7 @@
 
 import {TreeList} from '@astryxdesign/core/TreeList';
 import {Icon} from '@astryxdesign/core/Icon';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import {Cog6ToothIcon, ChevronRightIcon} from '@heroicons/react/24/outline';
 
 export default function TreeListInteractiveSettings() {
@@ -32,7 +33,9 @@ export default function TreeListInteractiveSettings() {
           id: 'docs',
           label: 'Documentation',
           href: '#',
-          endContent: <Icon icon={ChevronRightIcon} size="sm" />,
+          endContent: (
+            <Icon icon={ChevronRightIcon} size="sm" xstyle={rtlStyles.mirror} />
+          ),
         },
       ]}
     />

@@ -52,9 +52,12 @@ const spacingStepToVar: Record<SpacingStep, keyof typeof spacingVars> = {
 };
 
 const styles = stylex.create({
-  // Two-slot layout (no centerContent): flex row, space-between
+  // Two-lane layout (no centerContent). A lane keeps its controls on one
+  // line, so when the lanes do not fit, the row wraps and the end lane moves
+  // to a following line.
   baseFlex: {
     display: 'flex',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
@@ -75,6 +78,7 @@ const styles = stylex.create({
   // Vertical orientation
   vertical: {
     flexDirection: 'column',
+    flexWrap: 'nowrap',
     alignItems: 'stretch',
   },
   // Slot containers
@@ -110,6 +114,17 @@ const styles = stylex.create({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'flex-end',
+  },
+  // A two-lane lane keeps its controls on one line, capped at the toolbar's
+  // width. A lane wider than the toolbar wraps its own controls.
+  twoLane: {
+    flexWrap: 'wrap',
+    minWidth: stylex.firstThatWorks('fit-content', '-webkit-fit-content'),
+  },
+  // The end lane fills the rest of its line, so its controls stay at the
+  // inline end, also on a following line.
+  twoLaneEnd: {
+    flexGrow: 1,
   },
   // When only startContent is present, let it fill
   startOnly: {
@@ -165,8 +180,7 @@ const defaultBlockPaddingForSize: Record<ElementSize, SpacingStep> = {
 };
 
 /**
- * Whether a three-lane row has wrapped: its lanes no longer share one
- * vertical band.
+ * Whether a row has wrapped: its lanes no longer share one vertical band.
  */
 function lanesHaveWrapped(row: Element): boolean {
   // An empty lane is a box with no height, so it shares every line.
@@ -326,7 +340,10 @@ export function Toolbar({
   // padding. That is right only while the lanes share one line, so a wrapped
   // row keeps the indicator on its tab. The row reports a wrap after layout,
   // in a resize observation.
-  const watchesWrap = hasCenterContent && hasBottomDivider;
+  const canWrap =
+    hasCenterContent ||
+    (hasStartContent && hasEndContent && orientation !== 'vertical');
+  const watchesWrap = canWrap && hasBottomDivider;
   const [isWrapped, setIsWrapped] = useState(false);
   useAttachment(
     listRef,
@@ -453,6 +470,9 @@ export function Toolbar({
                 <div
                   {...stylex.props(
                     styles.startSlot,
+                    hasEndContent &&
+                      orientation !== 'vertical' &&
+                      styles.twoLane,
                     !hasEndContent && styles.startOnly,
                     edgeCompSlot.inset(edgeCompInsetForSize[size]),
                     dynamicStyles.gap(gapVar),
@@ -464,6 +484,11 @@ export function Toolbar({
                 <div
                   {...stylex.props(
                     styles.endSlot,
+                    hasStartContent &&
+                      orientation !== 'vertical' && [
+                        styles.twoLane,
+                        styles.twoLaneEnd,
+                      ],
                     !hasStartContent && styles.endOnly,
                     edgeCompSlot.inset(edgeCompInsetForSize[size]),
                     dynamicStyles.gap(gapVar),

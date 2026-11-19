@@ -67,7 +67,7 @@ describe('public theme helper selector contract', () => {
     expect(css.prose).not.toContain(selector);
   });
   // The layered outputs the CLI's theme build reads from a project's Core
-  // (architecture:theme-compilation INV21), beside the ones above.
+  // (architecture:theme-compilation INV22), beside the ones above.
   it('returns the shared-element parts apart only when asked for the layered output', () => {
     const parted = defineTheme({
       name: 'public-helper-layered',

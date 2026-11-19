@@ -8,7 +8,7 @@
  *   the runtime compiler: the part's rules in `parts`, after every other rule
  *   in `components`, the color-scheme rules outside both, and the single
  *   layer, unchanged, for a theme with no such entry
- *   (architecture:theme-compilation INV21)
+ *   (architecture:theme-compilation INV22)
  * @position CLI build test beside build.family.test.mjs
  */
 import {afterEach, beforeAll, beforeEach, describe, expect, it, vi} from 'vitest';

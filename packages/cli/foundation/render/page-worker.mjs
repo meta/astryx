@@ -85,6 +85,15 @@ for (const level of /** @type {const} */ (['log', 'info', 'warn', 'error', 'debu
 
 const requireFromCli = createRequire(import.meta.url);
 const stylexPlugin = /** @type {any} */ (requireFromCli('@stylexjs/babel-plugin'));
+/**
+ * The class-name prefix of the page's own compiled styles. Core's built sheet
+ * uses StyleX's default, `x`. A page rule with the same declaration as a Core
+ * rule would otherwise get the same class, unlayered, and override Core's
+ * layered rules on Core's own elements. With its own prefix the page's rules
+ * apply to the page's elements only, as in an app that @astryxdesign/build
+ * compiles with one prefix for Astryx and another for product files.
+ */
+const PAGE_CLASS_PREFIX = 'p';
 
 /** StyleX rules collected from every local module the page loads. */
 /** @type {unknown[]} */
@@ -495,6 +504,26 @@ async function withLoadDocument(fn) {
     else delete g.window;
     if (had.document) Object.defineProperty(g, 'document', had.document);
     else delete g.document;
+  }
+}
+
+/**
+ * Run `fn` with console.timeStamp hidden. A development build of React DOM
+ * decides as it loads whether to log every render to the Performance panel
+ * (console.timeStamp and performance.measure), and logs only when both are
+ * there. The worker has no Performance panel, and Node copies the props a
+ * logged re-render changed into its user timing buffer: a page of four
+ * charts of 50,000 points each spent most of its drawing time there.
+ * @param {() => Promise<unknown>} fn
+ */
+async function withoutRenderTimings(fn) {
+  const had = Object.getOwnPropertyDescriptor(console, 'timeStamp');
+  /** @type {any} */ (console).timeStamp = undefined;
+  try {
+    await fn();
+  } finally {
+    if (had) Object.defineProperty(console, 'timeStamp', had);
+    else delete (/** @type {any} */ (console)).timeStamp;
   }
 }
 
@@ -1143,6 +1172,7 @@ function compilePageModule(source, filename, browser = false) {
                   dev: false,
                   runtimeInjection: false,
                   treeshakeCompensation: true,
+                  classNamePrefix: PAGE_CLASS_PREFIX,
                   unstable_moduleResolution: {type: 'commonJS', rootDir: root},
                   ...(themeFiles ? {aliases: themeFiles} : {}),
                 },
@@ -1689,7 +1719,7 @@ try {
   // into a field: a typeahead's search would reach no change handler. It is
   // loaded first, with a document that fires input events as a browser's
   // does; the page then renders on the server with no document.
-  await withLoadDocument(() => jiti.import('react-dom/client'));
+  await withoutRenderTimings(() => withLoadDocument(() => jiti.import('react-dom/client')));
   try {
     reach('importing the page');
     const notInstalled = missingPackages();
