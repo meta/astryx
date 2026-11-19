@@ -377,7 +377,7 @@ export const docsZh = {
       name: 'startIcon',
       type: 'ReactNode | IconType',
       description:
-        '显示在输入框起始位置的图标；可传语义图标名称（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
+        '显示在输入框起始位置的图标；可传内置含义（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
     },
     {
       name: 'status',

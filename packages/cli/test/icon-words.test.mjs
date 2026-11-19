@@ -5,7 +5,8 @@
  * 'close' is a "built-in meaning", never a "semantic icon name". The drawings
  * a theme gives those names are its "theme icons", never an "icon registry";
  * `IconRegistry` is only the name of their type. "icon pack" is not an Astryx
- * term. Keywords and code keep any spelling a reader may search for or type.
+ * term. The Chinese copies use the same words (内置含义, 主题图标). Keywords
+ * and code keep any spelling a reader may search for or type.
  */
 
 import fs from 'node:fs';
@@ -24,8 +25,10 @@ const RETIRED = [
   {
     word: 'semantic icon name',
     pattern:
-      /\bsemantic\b(?:\s+[\w/]+){0,2}?\s+(?:icons?|names?|list|purpose)\b|\bsemantic or (?:namespaced|component)\b/i,
+      /\bsemantic\b(?!\s+(?:icon\s+)?colou?r)(?:\s+[\w/]+){0,2}?\s+(?:icons?|names?|list|purpose)\b|\bsemantic or (?:namespaced|component)\b/i,
   },
+  {word: '图标注册表 (icon registry)', pattern: /图标注册表/},
+  {word: '语义图标名称 (semantic icon name)', pattern: /语义图标|语义名称/},
 ];
 
 /** @param {string} dir @returns {string[]} */

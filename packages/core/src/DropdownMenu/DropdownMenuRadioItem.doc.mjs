@@ -79,7 +79,7 @@ export const docsZh = {
     value: '该项在组内代表的值。组的 value 与之匹配以确定勾选状态。',
     label: '标识该选项的主标签文本。',
     description: '显示在标签下方的次要描述文本。',
-    icon: '显示在标签前的图标；可传语义图标名称（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
+    icon: '显示在标签前的图标；可传内置含义（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
     isDisabled: '该单选项是否禁用。',
     endContent: '在标签和描述之后渲染的内容。',
     ref: '转发到行根元素（带 role="menuitemradio" 的元素）的 ref。',

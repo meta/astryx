@@ -398,7 +398,7 @@ export const docsZh = {
     {
       name: 'labelIcon',
       type: 'ReactNode | IconType',
-      description: '标签文本前显示的语义图标名称或自定义内容。',
+      description: '标签文本前显示的内置含义或自定义内容。',
     },
     {
       name: 'status',
