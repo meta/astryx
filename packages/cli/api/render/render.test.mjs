@@ -697,7 +697,8 @@ export default function Page() {
     const {first, back} = await roundTrip('late-img/page.tsx');
     expect(first.data.files).toEqual(['page.tsx', 'public/pics/late.png']);
     const html = fs.readFileSync(path.join(dir, 'late-img/page.html'), 'utf8');
-    expect(html.slice(html.lastIndexOf('<script>'))).not.toContain("'/pics/late.png'");
+    // The script draws the image from the file's own data, not from its path.
+    expect(html.slice(html.lastIndexOf('<script>'))).not.toMatch(/["'`]\/pics\/late\.png["'`]/);
     expect(back.data.exact).toBe(true);
   }, 120_000);
 
