@@ -6040,6 +6040,12 @@ export const probeTheme = defineTheme({
         borderColor: 'hsl(273.2 82% 25%)',
         outlineColor: 'hsl(341.5 79% 25%)',
       },
+      mode: {
+        backgroundColor: 'hsl(289.1 73% 57%)',
+        color: 'hsl(329.3 80% 12%)',
+        borderColor: 'hsl(82.6 88% 25%)',
+        outlineColor: 'hsl(140.5 91% 25%)',
+      },
     },
     'top-nav-item': {
       base: {
