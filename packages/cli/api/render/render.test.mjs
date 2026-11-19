@@ -19,12 +19,17 @@ import {segmenterWarning} from '../../foundation/render/render-page.mjs';
 import {readSourceBlock, renderedMarkupOf} from '../../foundation/render/source-block.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 import {recordDeclaredSettings} from '../../foundation/env/cli-command.mjs';
+import {CLI_VERSION} from '../../test-utils/release-fixtures.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
 
 const CLI_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 /** @type {string} */
 let dir;
+/** @type {string} */
+let compileCache;
+/** @type {string | undefined} */
+let previousCompileCache;
 
 /** @param {string} name @param {string | Buffer} content */
 const put = (name, content) => {
@@ -75,6 +80,13 @@ export default function Page() {
 `;
 
 beforeAll(async () => {
+  // Each render starts a new page process. render() stops it as soon as it
+  // answers, so each process saves only part of its compiled code. One cache
+  // for this file keeps those parts for later processes. A forked process
+  // takes this environment.
+  previousCompileCache = process.env.NODE_COMPILE_CACHE;
+  compileCache = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-render-compile-'));
+  process.env.NODE_COMPILE_CACHE = compileCache;
   dir = makeLinkedFixture('astryx-render-test-', ['@astryxdesign', '@stylexjs', 'react', 'react-dom', 'recharts']);
   put('dot.png', PNG);
   put('page.tsx', PAGE);
@@ -84,7 +96,13 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(() => {
-  removeLinkedFixture(dir);
+  try {
+    removeLinkedFixture(dir);
+  } finally {
+    if (previousCompileCache === undefined) delete process.env.NODE_COMPILE_CACHE;
+    else process.env.NODE_COMPILE_CACHE = previousCompileCache;
+    fs.rmSync(compileCache, {recursive: true, force: true});
+  }
 });
 
 const LATER_TEXT_PAGE = `import {useState} from 'react';
@@ -2950,6 +2968,28 @@ describe('render(): refusals', () => {
       );
     } finally {
       recordDeclaredSettings(dir, []);
+    }
+  }, 60_000);
+
+  it("names a package Astryx releases with Core at the project's Core release in the run folder's integration line", async () => {
+    // theme-stone is released with Core and is not linked into the fixture.
+    put('core-app/package.json', '{"name":"core-app","private":true}');
+    put('core-app/pnpm-lock.yaml', "lockfileVersion: '9.0'\n");
+    put('core-app/page.tsx', "import stone from '@astryxdesign/theme-stone';\nexport default () => <p>{String(stone)}</p>;\n");
+    const app = path.join(dir, 'core-app');
+    recordDeclaredSettings(app, [{name: '@acme/a', installGuidance: 'acme add {packages}'}]);
+    try {
+      /** @type {any} */
+      let error;
+      try {
+        await render('page.tsx', {cwd: app});
+      } catch (e) {
+        error = e;
+      }
+      expect(error?.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+      expect(error?.suggestions?.[0]?.name).toBe(`acme add @astryxdesign/theme-stone@${CLI_VERSION}`);
+    } finally {
+      recordDeclaredSettings(app, []);
     }
   }, 60_000);
 

@@ -290,15 +290,19 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
      font stylesheet the module imports, with an `@font-face` rule or a font
      service URL that names the family (a warning that names the family when
      this cannot be shown, as when the stylesheet imports a font service URL
-     that does not name it);
+     that does not name it); a Google Fonts or Bunny Fonts stylesheet `<link>` in
+     the app's page head (its HTML page, or a framework root layout or
+     document) that names the family also loads it;
   10. no two added themes write different rules outside their own theme scope
       for the same selector, because every added stylesheet loads at once;
   11. every setting of an added local theme shows as written, as its build
       check reports it (`theme build --check`, `settingIssues`): a setting
       another rule of the theme layer beats where it reaches is a warning,
       never a failure, naming the theme, the setting with its line, and its
-      fix; the check passes only when every local theme's build check ran,
-      and names a local theme whose check did not run (info).
+      fix; the settings a file writes that says a tool generates it are one
+      note (info) per file instead, with their count and that tool; the
+      check passes only when every local theme's build check ran, and names
+      a local theme whose check did not run (info).
 
   Each failure names the exact command that fixes it.
 
@@ -670,7 +674,10 @@ browser does not show as written (`theme build` reads it from the rules Core
 generates) as a warning with its fix, never a failure: such a theme still
 builds and renders, so the check never fails an app, and a saved theme with
 such a setting still opens. The check passes only when every local theme's
-build check ran.
+build check ran. A file that says a tool generates it (a marker in its
+leading comments) is not where such a fix goes: its settings are one note
+per file, with their count and the tool, in `theme build` and in this check
+alike, and `settingIssues` still lists each.
 
 Rejected: failing doctor on such a setting, which fails a working setup.
 
@@ -696,6 +703,23 @@ a copy the builder can see in full and undo with `theme remove`.
 Rejected: routing the shared copy through `theme eject`, the author's fork verb.
 Rejected: installing every imported package, which runs scripts the builder never chose.
 Rejected: building or renaming a shared theme, which runs its code during an add.
+
+### DEC-13 — An editor-made theme's corners move its chat corners with its containers
+
+**Reference:** `spec:AST-050/DEC-13`
+**Decider:** `josephfarina`, `2026-11-18`
+
+Core's chat radius (`--radius-chat`, read by a chat composer, its drawer, and
+message bubbles) defaults to the container radius, and the bundled themes pin
+a chat radius of their own. When a theme the editor makes moves its corners
+with the whole-theme corners dial, it sets the chat radius to
+`var(--radius-container)`, Core's own default, so its chat corners follow its
+container corners, including an exact container radius set after the dial. A
+corners rung set on one part that reads the chat radius gives that part the
+container step.
+
+Rejected: the page radius; Core's chat default is the container radius.
+Rejected: a copied pixel value, which drifts from a container radius set later.
 
 ## Open questions
 

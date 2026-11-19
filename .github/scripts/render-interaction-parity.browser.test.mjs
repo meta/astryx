@@ -21,6 +21,7 @@ import {createRequire} from 'node:module';
 import {pathToFileURL} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {render} from '../../packages/cli/api/render/render.mjs';
+import {renderPage} from '../../packages/cli/foundation/render/render-page.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -676,5 +677,176 @@ describe.runIf(BROWSER_STEP)(
         await context.close();
       }
     }, 120_000);
+  },
+);
+
+/** A page that shows images from the web, some only after a click. */
+const REMOTE_PAGE = `import {useState} from 'react';
+import {Button} from '@astryxdesign/core/Button';
+
+const stripe = 'https://images.example.com/stripe.png';
+const hero = 'https://images.example.com/hero.png';
+const team = {logo: 'https://images.example.com/40'};
+
+export default function Page() {
+  const [open, setOpen] = useState(false);
+  return (
+    <main>
+      <div data-probe="stripe" style={{backgroundImage: \`url(\${stripe})\`, width: 20, height: 20}} />
+      <Button label="Show" onClick={() => setOpen(true)} />
+      {open && (
+        <section>
+          <a href={hero}><img src={hero} alt="Hero" width={10} height={10} /></a>
+          <p data-probe="text">{hero}</p>
+          <img src={\`\${team.logo}?u=alex\`} alt="Alex" width={10} height={10} />
+          <div data-probe="later" style={{backgroundImage: \`url(\${hero})\`, width: 20, height: 20}} />
+        </section>
+      )}
+    </main>
+  );
+}
+`;
+
+/** One pixel, the image every remote address answers with. */
+const PIXEL = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+  'base64',
+);
+
+describe.runIf(BROWSER_STEP)(
+  'a rendered page with images from the web, in a viewer that blocks the network',
+  () => {
+    /** @type {string} */
+    let home;
+    /** @type {any} */
+    let browser;
+
+    beforeAll(async () => {
+      home = makeLinkedFixture('astryx-render-remote-browser-', [
+        '@astryxdesign',
+        '@stylexjs',
+        'react',
+        'react-dom',
+      ]);
+      browser = await chromium.launch();
+    }, 120_000);
+
+    afterAll(async () => {
+      await browser?.close();
+      if (home) removeLinkedFixture(home);
+    });
+
+    it('draws each carried image from its data once the script runs, and keeps links, text and other queries as written', async () => {
+      const file = path.join(home, 'page.tsx');
+      fs.writeFileSync(file, REMOTE_PAGE);
+      const page = await renderPage(file, {
+        cwd: home,
+        remoteImages: {
+          fetch: async () =>
+            new Response(PIXEL, {headers: {'content-type': 'image/png'}}),
+        },
+      });
+      expect(page.remoteImages?.fetched).toEqual(
+        expect.arrayContaining([
+          'https://images.example.com/stripe.png',
+          'https://images.example.com/hero.png',
+          'https://images.example.com/40',
+        ]),
+      );
+      const context = await browser.newContext({
+        viewport: {width: 1024, height: 900},
+      });
+      /** @type {string[]} */
+      const asked = [];
+      await context.route('**/*', (/** @type {any} */ route) => {
+        asked.push(route.request().url());
+        return route.request().url().startsWith('about:')
+          ? route.continue()
+          : route.abort();
+      });
+      try {
+        const viewer = await context.newPage();
+        const framed = page.html.replace(
+          '<head>',
+          `<head><meta http-equiv="Content-Security-Policy" content="${VIEWER_POLICY}">`,
+        );
+        await viewer.setContent(
+          `<!doctype html><body style="margin:0"><iframe sandbox="allow-scripts" style="border:0;width:1024px;height:900px" srcdoc="${framed
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')}"></iframe></body>`,
+        );
+        const frame = viewer
+          .frames()
+          .find((/** @type {any} */ f) => f !== viewer.mainFrame());
+        const scope = viewer.frameLocator('iframe');
+        // The click works once the script has drawn the page.
+        await expect
+          .poll(
+            async () => {
+              await scope.getByRole('button', {name: 'Show'}).click();
+              return scope.getByRole('img', {name: 'Hero'}).count();
+            },
+            {timeout: 20_000},
+          )
+          .toBe(1);
+        await new Promise(resolve => setTimeout(resolve, 200));
+        const seen = await frame.evaluate(() => {
+          const hero = /** @type {HTMLImageElement} */ (
+            document.querySelector('img[alt="Hero"]')
+          );
+          const alex = /** @type {HTMLImageElement} */ (
+            document.querySelector('img[alt="Alex"]')
+          );
+          const background = (/** @type {string} */ probe) =>
+            getComputedStyle(
+              /** @type {Element} */ (
+                document.querySelector(`[data-probe="${probe}"]`)
+              ),
+            ).backgroundImage;
+          return {
+            heroSrc: hero.getAttribute('src'),
+            heroDrawn: hero.complete && hero.naturalWidth > 0,
+            alexSrc: alex.getAttribute('src'),
+            link: document.querySelector('a')?.getAttribute('href'),
+            text: document.querySelector('[data-probe="text"]')?.textContent,
+            stripe: background('stripe'),
+            later: background('later'),
+          };
+        });
+        expect(seen.heroSrc?.startsWith('data:image/png;base64,')).toBe(true);
+        expect(seen.heroDrawn).toBe(true);
+        expect(seen.stripe).toContain('data:image/png;base64,');
+        expect(seen.later).toContain('data:image/png;base64,');
+        expect(seen.link).toBe('https://images.example.com/hero.png');
+        expect(seen.text).toBe('https://images.example.com/hero.png');
+        // Another query can name another image: it keeps the page's address.
+        expect(seen.alexSrc).toBe('https://images.example.com/40?u=alex');
+        // Opened with no viewer policy, every image the page asks for
+        // reaches the network layer: an address with another query does,
+        // and no carried address does.
+        const bare = await context.newPage();
+        asked.length = 0;
+        await bare.setContent(page.html);
+        await expect
+          .poll(
+            async () => {
+              await bare.getByRole('button', {name: 'Show'}).click();
+              return bare.getByRole('img', {name: 'Hero'}).count();
+            },
+            {timeout: 20_000},
+          )
+          .toBe(1);
+        await new Promise(resolve => setTimeout(resolve, 500));
+        expect(asked).toContain('https://images.example.com/40?u=alex');
+        for (const url of [
+          'https://images.example.com/stripe.png',
+          'https://images.example.com/hero.png',
+          'https://images.example.com/40',
+        ])
+          expect(asked).not.toContain(url);
+      } finally {
+        await context.close();
+      }
+    }, 300_000);
   },
 );

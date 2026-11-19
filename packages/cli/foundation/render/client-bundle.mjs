@@ -19,6 +19,8 @@ import {stripVTControlCharacters} from 'node:util';
 import vm from 'node:vm';
 import {packageOf} from '../doc-compiler/source.mjs';
 import {SOURCE_TYPE} from './source-block.mjs';
+import {showsImage} from './image-attributes.mjs';
+import {formatSrcset, parseSrcset} from './srcset.mjs';
 
 /** The id of the element that holds the page's markup in a rendered file. */
 export const ROOT_ID = 'astryx-render-root';
@@ -430,6 +432,158 @@ function locatedFile(file) {
   if (file.startsWith(`${MOUNT}:`)) return null;
   if (file.startsWith(`${PAGE}:`)) return file.slice(PAGE.length + 1);
   return path.resolve(file);
+}
+
+/**
+ * What the file's script does so that an image it draws from an address the
+ * file carries shows with no network. Where the browser takes an image's
+ * address (showsImage: an `<img>`'s or an `<input>`'s `src`, an `<img>`'s or
+ * a `<source>`'s `srcset`, a `<video>`'s `poster`) and in a CSS `url()` in a
+ * style the script sets, the script gives it the carried data instead. The
+ * address must be one the file carries, also with a fragment added; one with
+ * another query is another image. The page's code keeps
+ * every address as it wrote it, so a link, a text, a comparison or the URL
+ * API reads the page's own address.
+ * @param {[string, string][]} entries each carried address with its data: URI
+ * @returns {string} a statement that runs before the page's script
+ */
+export function imageSinks(entries) {
+  return scriptSafe(`${SINKS}(new Map(${JSON.stringify(entries)}));`);
+}
+
+/**
+ * A function's source as the browser runs it: its comments and indents go,
+ * since the file carries every byte.
+ * @param {Function} fn
+ */
+const compact = fn =>
+  String(fn)
+    .replace(/\/\*\*[^]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '')
+    .replace(/\n\s*/g, '\n')
+    .replace(/\n+/g, '\n');
+
+/** The installer, with the srcset reader and the image rule it uses, as one expression. */
+const SINKS = `(carried => (${compact(installImageSinks)})(carried, ${compact(parseSrcset)}, ${compact(formatSrcset)}, ${compact(showsImage)}))`;
+
+/**
+ * Put the carried data where the browser takes an image's address; see
+ * imageSinks. This runs in the browser, before the page's script.
+ * @param {Map<string, string>} carried
+ * @param {typeof parseSrcset} parse
+ * @param {typeof formatSrcset} format
+ * @param {typeof showsImage} shows
+ */
+function installImageSinks(carried, parse, format, shows) {
+  const g = /** @type {any} */ (globalThis);
+  // A fragment names no other file; a query can (`/40?u=alex`), so an
+  // address with another query is another image.
+  /** @param {string} address */
+  const lookup = address => {
+    const whole = address.trim();
+    return carried.get(whole) ?? carried.get(whole.split('#')[0]);
+  };
+  /** @param {unknown} value */
+  const one = value => (typeof value === 'string' && lookup(value)) || value;
+  /** @param {unknown} value */
+  const set = value => {
+    if (typeof value !== 'string') return value;
+    let found = false;
+    const candidates = parse(value).map(candidate => {
+      const uri = lookup(candidate.url);
+      if (!uri) return candidate;
+      found = true;
+      return {url: uri, descriptor: candidate.descriptor};
+    });
+    return found ? format(candidates) : value;
+  };
+  /** @param {unknown} value */
+  const css = value =>
+    typeof value !== 'string'
+      ? value
+      : value.replace(
+          /url\(\s*(["']?)([^"')\s]+)\1\s*\)/g,
+          (whole, _quote, url) => {
+            const uri = lookup(url);
+            return uri ? `url("${uri}")` : whole;
+          },
+        );
+  /** @param {any} element @param {unknown} name @param {unknown} value */
+  const forAttribute = (element, name, value) => {
+    const attr = String(name).toLowerCase();
+    if (attr === 'style') return css(value);
+    if (!shows(String(element.localName), attr)) return value;
+    return attr === 'srcset' ? set(value) : one(value);
+  };
+  const element = g.Element.prototype;
+  const setAttribute = element.setAttribute;
+  element.setAttribute = function (
+    /** @type {string} */ name,
+    /** @type {unknown} */ value,
+  ) {
+    return setAttribute.call(this, name, forAttribute(this, name, value));
+  };
+  const setAttributeNS = element.setAttributeNS;
+  element.setAttributeNS = function (
+    /** @type {string | null} */ ns,
+    /** @type {string} */ name,
+    /** @type {unknown} */ value,
+  ) {
+    return setAttributeNS.call(this, ns, name, forAttribute(this, name, value));
+  };
+  // A setter the browser defines on a prototype, wrapped where it is found.
+  /** @param {any} start @param {string} prop @param {(value: unknown) => unknown} map */
+  const wrap = (start, prop, map) => {
+    for (let at = start; at; at = Object.getPrototypeOf(at)) {
+      const descriptor = Object.getOwnPropertyDescriptor(at, prop);
+      if (!descriptor) continue;
+      const setter = descriptor.set;
+      if (setter) {
+        Object.defineProperty(at, prop, {
+          ...descriptor,
+          set(/** @type {unknown} */ value) {
+            setter.call(this, map(value));
+          },
+        });
+      }
+      return;
+    }
+  };
+  for (const [type, tag] of /** @type {[any, string][]} */ ([
+    [g.HTMLImageElement, 'img'],
+    [g.HTMLInputElement, 'input'],
+    [g.HTMLSourceElement, 'source'],
+    [g.HTMLVideoElement, 'video'],
+  ])) {
+    for (const prop of ['src', 'srcset', 'poster']) {
+      if (type && shows(tag, prop)) wrap(type.prototype, prop, prop === 'srcset' ? set : one);
+    }
+  }
+  // A style the script sets reaches the element's `style` attribute: some
+  // browsers give no setter for a property such as `backgroundImage`. The
+  // swap runs before the browser next draws; a layout read in the same task
+  // can still start one request for a carried background.
+  /** @param {any} node */
+  const restyle = node => {
+    const written = node.getAttribute?.('style');
+    // A style that names only data: URIs needs no swap; the test reads no
+    // further than each `url(`.
+    if (!written || !/url\(\s*(?!["']?data:)/i.test(written)) return;
+    const swapped = css(written);
+    if (swapped !== written) setAttribute.call(node, 'style', swapped);
+  };
+  if (g.MutationObserver && g.document) {
+    new g.MutationObserver((/** @type {any[]} */ records) => {
+      for (const record of records) {
+        if (record.type === 'attributes') restyle(record.target);
+        for (const node of record.addedNodes ?? []) {
+          if (node.nodeType !== 1) continue;
+          restyle(node);
+          for (const styled of node.querySelectorAll('[style]')) restyle(styled);
+        }
+      }
+    }).observe(g.document, {subtree: true, childList: true, attributes: true, attributeFilter: ['style']});
+  }
 }
 
 /** @param {string} file */

@@ -33,6 +33,7 @@ import {BaseTable} from './BaseTable';
 import {TableContext} from './TableContext';
 import {useBaseTablePlugins} from './useBaseTablePlugins';
 import {useScrollableArea} from '../hooks/useScrollableArea';
+import {scrollEdgeFadeStyles} from '../hooks/scrollEdgeFade';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
 import type {
@@ -48,6 +49,10 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Table/Table.generated';
 import {createSharedContext} from '../utils/sharedContext';
+import {
+  NOT_BODY_ROW,
+  TableRowPlacementContext,
+} from './TableRowPlacementContext';
 
 registerEnglishFallback(english);
 
@@ -295,6 +300,7 @@ function TableScrollWrapper({
         focusOutlineStyles.focusVisible,
         scrollWrapperStyles.focusRingInset,
         hasBlockViewport && scrollWrapperStyles.blockViewport,
+        scrollEdgeFadeStyles(state.inline),
         ...(pluginStyles ?? []),
       ),
       pluginClassName,
@@ -385,18 +391,21 @@ function TableInner<T extends Record<string, unknown>>({
 
   return (
     <TableContext value={contextValue}>
-      <TableNameContext value={tableName}>
-        <BaseTable<T>
-          ref={ref}
-          data={data}
-          columns={columns}
-          plugins={mergedPlugins}
-          textOverflow={textOverflowProp}
-          virtualization={virtualization}
-          scrollWrapper={TableScrollWrapper}
-          {...rest}
-        />
-      </TableNameContext>
+      {/* A table nested in a body cell starts outside any body again. */}
+      <TableRowPlacementContext value={NOT_BODY_ROW}>
+        <TableNameContext value={tableName}>
+          <BaseTable<T>
+            ref={ref}
+            data={data}
+            columns={columns}
+            plugins={mergedPlugins}
+            textOverflow={textOverflowProp}
+            virtualization={virtualization}
+            scrollWrapper={TableScrollWrapper}
+            {...rest}
+          />
+        </TableNameContext>
+      </TableRowPlacementContext>
     </TableContext>
   );
 }
