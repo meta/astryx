@@ -70,6 +70,7 @@ import {
   systemFontFamilies,
   isSystemFamily,
   fontStack,
+  onlyMeans,
 } from './_tables.mjs';
 import {
   COLOR_NAMES,
@@ -4828,14 +4829,14 @@ function checkOne(
   // for what the change does anyway: the change is made, without it, and
   // said, so the escape always works.
   if (s.only && (!s.on || TARGET.has(s.on) || FAMILIES[s.on])) {
-    const fam = s.on ? familyOf(s.on) : null;
-    if (!s.on || FAMILIES[s.on])
+    const means = onlyMeans(s.on);
+    if (means === 'group')
       refuse(
         E.ERR_INVALID_ARGUMENT,
         '--only is for one member of a group, such as text-input (how --list groups).',
         {run: [`${HOW} --list groups`]},
       );
-    if (!fam || !AUTO_SPREAD.includes(fam)) {
+    if (means === 'own') {
       s.only = undefined;
       if (!unset)
         s.note = `${s.on} is styled on its own already (only the ${AUTO_SPREAD.join(' and ')} groups spread), so --only changes nothing: it is saved without it`;
