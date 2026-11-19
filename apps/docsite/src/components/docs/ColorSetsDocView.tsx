@@ -9,7 +9,11 @@
  * @position The Color sets subpage under Data visualization.
  */
 
+import {useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {Icon} from '@astryxdesign/core/Icon';
+import {IconButton} from '@astryxdesign/core/IconButton';
+import {useClipboard} from '@astryxdesign/core/hooks';
 import {Card} from '@astryxdesign/core/Card';
 import {Collapsible} from '@astryxdesign/core/Collapsible';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
@@ -58,7 +62,8 @@ const styles = stylex.create({
 
 const PURPOSE: Record<string, string> = {
   Categorical: 'Use different colors to compare categories or named series.',
-  Sequential: 'Use shades of one color to show values from low to high.',
+  Sequential:
+    'Use a sequential palette to show how values vary from low to high.',
   Reference: 'Use neutral or gray for a target or comparison value.',
   Semantic:
     'Use color to show a status, such as positive, warning, or negative.',
@@ -208,17 +213,56 @@ function Palette({
   );
 }
 
+function CopyTokensButton({rows}: {rows: string[][]}) {
+  const {copy, isCopied} = useClipboard({announce: 'Tokens copied'});
+  const [failed, setFailed] = useState(false);
+  const text = JSON.stringify(
+    rows.map(row =>
+      row[2] === '100%'
+        ? row[1]
+        : {token: row[1], opacity: Number.parseFloat(row[2]) / 100},
+    ),
+    null,
+    2,
+  );
+  return (
+    <VStack gap={1}>
+      <IconButton
+        label={isCopied ? 'Copied' : 'Copy tokens'}
+        tooltip="Copy tokens"
+        icon={<Icon icon={isCopied ? 'check' : 'copy'} />}
+        size="sm"
+        variant="ghost"
+        onClick={async () => setFailed(!(await copy(text)))}
+      />
+      {failed && (
+        <Text type="supporting" role="alert">
+          Could not copy. Try again.
+        </Text>
+      )}
+    </VStack>
+  );
+}
+
 function SetSection({section}: {section: DocSection}) {
   const groups = colorGroups(section);
   return (
     <VStack gap={4}>
-      <Heading id={section.title.toLowerCase()} level={2}>
-        {section.title}
-      </Heading>
+      <HStack hAlign="between" vAlign="center" gap={3}>
+        <Heading id={section.title.toLowerCase()} level={2}>
+          {section.title}
+        </Heading>
+        {groups.length === 1 && <CopyTokensButton rows={groups[0].rows} />}
+      </HStack>
       <Text>{PURPOSE[section.title]}</Text>
       {groups.map((group, index) => (
         <VStack key={index} gap={3}>
-          {groups.length > 1 && <Heading level={3}>{group.title}</Heading>}
+          {groups.length > 1 && (
+            <HStack hAlign="between" vAlign="center" gap={3}>
+              <Heading level={3}>{group.title}</Heading>
+              <CopyTokensButton rows={group.rows} />
+            </HStack>
+          )}
           <Palette
             rows={group.rows}
             showMeaning={[
@@ -231,17 +275,6 @@ function SetSection({section}: {section: DocSection}) {
           />
         </VStack>
       ))}
-      {section.content.some(block => block.type === 'code') && (
-        <Collapsible trigger="Implementation details" defaultIsOpen={false}>
-          <VStack gap={4}>
-            {section.content
-              .filter(block => block.type === 'code')
-              .map((block, i) => (
-                <ContentBlockRenderer key={i} block={block} />
-              ))}
-          </VStack>
-        </Collapsible>
-      )}
     </VStack>
   );
 }

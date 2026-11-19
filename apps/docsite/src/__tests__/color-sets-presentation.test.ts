@@ -28,13 +28,24 @@ describe('color-set presentation', () => {
   it('shows every color set and chart styling without selection controls', () => {
     expect(source).not.toContain('TabList');
     expect(source).not.toContain('Selector');
-    expect(source).not.toContain('useState');
+    expect(source).toContain("useClipboard({announce: 'Tokens copied'})");
+    expect(source).toContain("isCopied ? 'Copied' : 'Copy tokens'");
+    expect(source).toContain('<IconButton');
+    expect(source).toContain('variant="ghost"');
+    expect(source).toContain('tooltip="Copy tokens"');
+    expect(source).toContain("isCopied ? 'check' : 'copy'");
     expect(source).toContain('sets.map(section =>');
     expect(source).toContain('groups.map((group, index) =>');
     expect(source).toContain("section.id !== 'readable-chart-details'");
     expect(source).toContain('id="chart-styling"');
     expect(source).toContain('trigger="Implementation details"');
     expect(source).toContain('defaultIsOpen={false}');
+    const setSection = source.slice(
+      source.indexOf('function SetSection'),
+      source.indexOf('export function ColorSetsDocView'),
+    );
+    expect(setSection).not.toContain('Collapsible');
+    expect(setSection).not.toContain('ContentBlockRenderer');
   });
 
   it('preserves canonical mode values and transparency', () => {
