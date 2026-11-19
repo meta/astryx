@@ -290,7 +290,7 @@ describe('touch presentation', () => {
     ]);
     const references = new Set<string>([...pointerKeys, touchKeys.compact]);
     // AppShell's standard width points are width-only queries, not the
-    // compact size; only AppShell and the TopNav it lays out write them.
+    // compact size; only AppShell's unreadWidthPoint module writes them.
     const appShellWidthPointKeys = new Set(
       Object.values(DEFAULT_WIDTH_BREAKPOINTS).map(
         width => `@media not all and (min-width: ${width}px)`,
@@ -312,8 +312,7 @@ describe('touch presentation', () => {
           !/\.(test|spec|stories)\./.test(entry.name)
         ) {
           const source = fs.readFileSync(full, 'utf8');
-          const writesWidthPoints =
-            entry.name === 'AppShell.tsx' || entry.name === 'TopNav.tsx';
+          const writesWidthPoints = entry.name === 'unreadWidthPoint.ts';
           for (const match of source.matchAll(/'(@[^'\n]*)'/g)) {
             const key = match[1];
             if (writesWidthPoints && appShellWidthPointKeys.has(key)) {

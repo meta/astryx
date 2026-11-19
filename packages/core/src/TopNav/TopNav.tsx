@@ -24,7 +24,7 @@ import {mergeProps} from '../utils';
 import {TopNavSlotContext} from './TopNavContext';
 import {
   useTopNavRenderMode,
-  useTopNavUnreadBreakpoint,
+  useTopNavUnreadRegionStyle,
 } from './TopNavRenderContext';
 import {useTopNavMobileContent} from './TopNavMobileContentContext';
 import {Divider} from '../Divider/Divider';
@@ -38,43 +38,8 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/TopNav/TopNav.generated';
 import {isRenderable} from '../utils/isRenderable';
-import type {WidthBreakpointName} from '../theme/themeAdaptations';
 
 registerEnglishFallback(english);
-
-// AppShell's phone layout replaces these regions once the shell reads the
-// window. StyleX compiles media queries at build time, so each standard width
-// point has its own rule. Below the point, the regions do not paint. StyleX
-// keeps `not all and (min-width)` as written, so the rule stops at the point
-// itself.
-const unreadRegionStyles: Readonly<
-  Record<WidthBreakpointName, stylex.StyleXStyles>
-> = stylex.create({
-  sm: {
-    display: {default: 'flex', '@media not all and (min-width: 640px)': 'none'},
-  },
-  md: {
-    display: {default: 'flex', '@media not all and (min-width: 768px)': 'none'},
-  },
-  lg: {
-    display: {
-      default: 'flex',
-      '@media not all and (min-width: 1024px)': 'none',
-    },
-  },
-  xl: {
-    display: {
-      default: 'flex',
-      '@media not all and (min-width: 1280px)': 'none',
-    },
-  },
-  '2xl': {
-    display: {
-      default: 'flex',
-      '@media not all and (min-width: 1536px)': 'none',
-    },
-  },
-});
 
 /**
  * Base TopNav styles
@@ -278,9 +243,7 @@ export function TopNav({
   const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.topNav.landmarkLabel');
   const renderMode = useTopNavRenderMode();
-  const unreadBreakpoint = useTopNavUnreadBreakpoint();
-  const unreadRegionStyle =
-    unreadBreakpoint == null ? undefined : unreadRegionStyles[unreadBreakpoint];
+  const unreadRegionStyle = useTopNavUnreadRegionStyle() ?? undefined;
   const mobileContent = useTopNavMobileContent();
   const {hasAutoToggle} = useAppShellMobile();
   const resolvedStartContent = startContent ?? children;

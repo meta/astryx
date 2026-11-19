@@ -633,8 +633,8 @@ describe('AppShell', () => {
   // ===========================================================================
 
   describe('first paint before the shell reads the window', () => {
-    const UNREAD_SIDE_NAV = 'AppShell__unreadSideNavStyles.';
-    const UNREAD_CORNER = 'AppShell__unreadCornerStyles.';
+    const UNREAD_SIDE_NAV = 'unreadWidthPoint__sideNavStyles.';
+    const UNREAD_CORNER = 'unreadWidthPoint__cornerStyles.';
 
     function serverHost(app: React.ReactElement): HTMLElement {
       const host = document.createElement('div');
@@ -752,7 +752,7 @@ describe('AppShell', () => {
     );
 
     describe('top nav', () => {
-      const UNREAD_REGION = 'TopNav__unreadRegionStyles.';
+      const UNREAD_REGION = 'unreadWidthPoint__topNavRegionStyles.';
 
       function topNavWithAllRegions() {
         return (

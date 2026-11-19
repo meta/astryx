@@ -4,23 +4,18 @@
 
 /**
  * @file TopNavRenderContext.ts
- * @input createSharedContext, use
- * @output Exports TopNavRenderContext, useTopNavRenderMode, TopNavUnreadBreakpointContext and useTopNavUnreadBreakpoint
- * @position Internal context for controlling TopNav rendering mode
- *
- * When AppShell renders TopNav in multiple locations (top bar, mobile drawer),
- * this context tells TopNav and its children which parts to render:
- * - 'default': full top bar (desktop)
- * - 'mobile-bar': heading + endContent + toggle, hide nav items (mobile top bar)
- * - 'drawer': nav items as vertical list elements (mobile drawer)
- *
- * TopNavUnreadBreakpointContext carries the width point below which AppShell's
- * phone layout applies, while the shell has not read the window yet.
+ * @input createSharedContext, use, StyleX style types
+ * @output Exports TopNavRenderContext, useTopNavRenderMode,
+ *   TopNavUnreadRegionContext and useTopNavUnreadRegionStyle
+ * @position Internal contexts through which AppShell tells TopNav how to
+ *   render: its mode ('default' full bar, 'mobile-bar' heading, end content
+ *   and toggle, 'drawer' items as a vertical list), and the rule its start
+ *   and center regions take until the shell reads the window.
  */
 
 import {use} from 'react';
 import {createSharedContext} from '../utils/sharedContext';
-import type {WidthBreakpointName} from '../theme/themeAdaptations';
+import type {StyleXStyles} from '@stylexjs/stylex';
 
 export type TopNavRenderMode = 'default' | 'mobile-bar' | 'drawer';
 
@@ -40,22 +35,22 @@ export function useTopNavRenderMode(): TopNavRenderMode {
 
 /**
  * Until AppShell reads the window, its server-rendered full bar can be
- * showing on a phone. AppShell then names the standard width point below
- * which its phone layout applies, and the full bar hides its start and center
- * content below that point, as its mobile bar does. `null` everywhere else.
+ * showing on a phone. AppShell then hands the full bar the rule that hides
+ * its start and center content below the breakpoint, as its mobile bar does.
+ * `null` everywhere else.
  */
-export const TopNavUnreadBreakpointContext =
-  createSharedContext<WidthBreakpointName | null>(
-    'TopNavUnreadBreakpointContext',
+export const TopNavUnreadRegionContext =
+  createSharedContext<StyleXStyles | null>(
+    'TopNavUnreadRegionContext',
     1,
     null,
   );
-TopNavUnreadBreakpointContext.displayName = 'TopNavUnreadBreakpointContext';
+TopNavUnreadRegionContext.displayName = 'TopNavUnreadRegionContext';
 
 /**
- * Read the width point below which the full bar hides its start and center
- * content until AppShell reads the window.
+ * Read the rule the full bar's start and center regions take until AppShell
+ * reads the window.
  */
-export function useTopNavUnreadBreakpoint(): WidthBreakpointName | null {
-  return use(TopNavUnreadBreakpointContext);
+export function useTopNavUnreadRegionStyle(): StyleXStyles | null {
+  return use(TopNavUnreadRegionContext);
 }
