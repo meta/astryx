@@ -148,8 +148,8 @@ describe('template path safety', () => {
       const before = process.env.HOME;
       process.env.HOME = path.join(root, 'home');
       try {
-        expect(tempFolders()).toEqual([]);
         const given = path.join(elsewhere, 'pages', 'blank.tsx');
+        expect(tempFolderOf(given)).toBeNull();
         const err = await templateApi('blank', {targetPath: given, cwd}).catch(
           e => e,
         );
@@ -174,6 +174,101 @@ describe('template path safety', () => {
       } finally {
         process.env.HOME = before;
       }
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'names a folder given with a trailing separator by the file the copy writes in it',
+    async () => {
+      const root = fs.realpathSync(tmpDir);
+      const cwd = path.join(root, 'project');
+      const elsewhere = path.join(root, 'out');
+      fs.mkdirSync(cwd, {recursive: true});
+      fs.mkdirSync(elsewhere);
+      const before = process.env.HOME;
+      process.env.HOME = path.join(root, 'home');
+      try {
+        const given = `${path.join(elsewhere, 'foo.tsx')}${path.sep}`;
+        expect(tempFolderOf(given)).toBeNull();
+        const err = await templateApi('blank', {targetPath: given, cwd}).catch(
+          e => e,
+        );
+        expect(err.suggestions[1].name).toBe(
+          `cd ${elsewhere} && astryx template blank ./foo.tsx/page.tsx`,
+        );
+      } finally {
+        process.env.HOME = before;
+      }
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'refuses a `..` path out of the project with the same commands as an absolute one',
+    async () => {
+      const root = fs.realpathSync(tmpDir);
+      const cwd = path.join(root, 'project');
+      fs.mkdirSync(cwd, {recursive: true});
+      fs.mkdirSync(path.join(root, 'outside'));
+      const before = process.env.HOME;
+      process.env.HOME = path.join(root, 'home');
+      try {
+        expect(tempFolderOf(path.join(root, 'outside'))).toBeNull();
+        const err = await templateApi('blank', {
+          targetPath: '../outside/app',
+          cwd,
+        }).catch(e => e);
+        expect(err.code).toBe('ERR_PATH_TRAVERSAL');
+        expect(err.message).toContain(
+          'Invalid template target path "../outside/app": it is outside the project root',
+        );
+        expect(err.suggestions).toEqual([
+          {
+            name: 'astryx template blank src/pages/blank.tsx',
+            reason: 'write the page inside the project',
+          },
+          {
+            name: `cd ${path.join(root, 'outside')} && astryx template blank ./app/page.tsx`,
+            reason: 'write the page where you named it, from its folder',
+          },
+          {
+            name: 'astryx template blank',
+            reason: 'print the source and write nothing',
+          },
+        ]);
+        expect(fs.readdirSync(path.join(root, 'outside'))).toEqual([]);
+      } finally {
+        process.env.HOME = before;
+      }
+    },
+  );
+
+  it.skipIf(!tmpTakesScratch)(
+    'never takes a `..` path into the temp folder as a scratch copy, and names its absolute path, which does',
+    async () => {
+      const root = fs.realpathSync(tmpDir);
+      const cwd = path.join(root, 'project');
+      fs.mkdirSync(cwd, {recursive: true});
+      const err = await templateApi('blank', {
+        targetPath: '../scratch',
+        cwd,
+      }).catch(e => e);
+      expect(err.code).toBe('ERR_PATH_TRAVERSAL');
+      expect(err.message).toContain(
+        `A scratch copy in the system temp folder takes its absolute path, ${path.join(root, 'scratch')}.`,
+      );
+      expect(err.suggestions.map(s => s.name)).toEqual([
+        'astryx template blank src/pages/blank.tsx',
+        `astryx template blank ${path.join(root, 'scratch')}`,
+        'astryx template blank',
+      ]);
+      expect(fs.existsSync(path.join(root, 'scratch'))).toBe(false);
+
+      // The named absolute path takes the scratch copy.
+      const written = await templateApi('blank', {
+        targetPath: path.join(root, 'scratch'),
+        cwd,
+      });
+      expect(written.data.outputDir).toBe(path.join(root, 'scratch'));
     },
   );
 

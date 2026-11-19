@@ -78,11 +78,14 @@ describe('cliError — human mode', () => {
         ],
       }),
     ).toThrow('__exit_1__');
-    const shown = formatCliCommand('astryx template blank ./x.tsx');
-    expect(shown).not.toBe('astryx template blank ./x.tsx');
-    expect(stderr).toContain(`  cd '/a b/it'\\''s' && ${shown}  (here)`);
+    const shown = (/** @type {string} */ dir) =>
+      formatCliCommand('astryx template blank ./x.tsx', dir);
+    expect(shown("/a b/it's")).not.toBe('astryx template blank ./x.tsx');
     expect(stderr).toContain(
-      `  cd -LiteralPath C:\\w -ErrorAction Stop; ${shown}`,
+      `  cd '/a b/it'\\''s' && ${shown("/a b/it's")}  (here)`,
+    );
+    expect(stderr).toContain(
+      `  cd -LiteralPath C:\\w -ErrorAction Stop; ${shown('C:\\w')}`,
     );
   });
 

@@ -60,6 +60,7 @@ import {setOutcome} from '../../../foundation/debug/index.mjs';
 import {
   formatCliCommand,
   getCliInvocation,
+  splitCommandInFolder,
 } from '../../../foundation/env/package-manager.mjs';
 import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
 import {doc as experimentalEditorDoc} from '../commands/experimental-theme-editor.doc.mjs';
@@ -328,17 +329,16 @@ export function themeGroupUnknownSubcommand(group, word, names, loaded) {
 /**
  * A suggested command as printed: it stays bare in JSON and the run that
  * answers is prefixed here. A command run in another folder
- * (commandInFolder) keeps its change of folder in front.
+ * (commandInFolder) keeps its change of folder in front, and its invocation
+ * is chosen for that folder (`spec:AST-081` FR5).
  * @param {string} name
  * @returns {string}
  */
 function shownCommand(name) {
-  const inFolder =
-    /^(cd (?:-LiteralPath )?(?:'(?:[^']|'\\''|'')*'|\S+)(?: -ErrorAction Stop;| &&) )(.*)$/su.exec(
-      name,
-    );
-  const [lead, command] = inFolder ? [inFolder[1], inFolder[2]] : ['', name];
-  return /^astryx(\s|$)/.test(command)
-    ? `${lead}${formatCliCommand(command)}`
-    : name;
+  const inFolder = splitCommandInFolder(name);
+  if (inFolder && /^astryx(\s|$)/.test(inFolder.command)) {
+    const lead = name.slice(0, name.length - inFolder.command.length);
+    return `${lead}${formatCliCommand(inFolder.command, inFolder.dir)}`;
+  }
+  return /^astryx(\s|$)/.test(name) ? formatCliCommand(name) : name;
 }

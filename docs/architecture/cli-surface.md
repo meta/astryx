@@ -1285,6 +1285,29 @@ Rejected: following the viewer for every page (a one-mode theme is unreadable
 in the other scheme), and running the theme module to read its modes (a render
 runs no theme code).
 
+### DEC-20 — A refused template path names the same write from its folder
+
+**Decider:** `josephfarina`, `2026-11-18`
+
+When `astryx template <name> <path>` refuses a destination outside the project
+and outside the temp folder (named absolutely, from the home folder, or through
+`..`), the refusal also names a command that writes that same destination: `cd`
+into the nearest folder on the destination's path that exists, then run the
+template command with the rest of the path, using the CLI command that folder
+would use (`spec:AST-081` FR5). Run from that folder, the write stays inside
+the folder the command runs from (INV10), so the caller gets the copy where
+they named it without a second refusal. The command is named only for a Core
+template that no integration replaces: outside the project the project's
+integrations do not load, so an integration's template would not be found
+there, and a replaced Core template would be the Core version instead of the
+project's replacement. No command is named when no folder on the path exists
+except the disk's root. A destination reached through `..` that lands in the
+temp folder is not a scratch copy (DEC-15); the refusal names the same
+destination as an absolute path, which DEC-15 accepts as a scratch copy.
+
+Rejected: writing the named destination from the current folder (it leaves the
+folder a template write is confined to).
+
 ## Verification
 
 | Invariant | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
