@@ -293,6 +293,21 @@ function componentModule(distDir, name) {
   throw new Error(`No built module for ${name} in ${distDir}.`);
 }
 
+/**
+ * The page entry's source: one re-export per item. An item `Name` takes the
+ * export `Name` from the folder `Name`; an item `Folder:name` takes the export
+ * `name` from the folder `Folder`, so a page can import one hook or helper
+ * without the folder's component.
+ */
+export function pageSource(distDir, items) {
+  return items
+    .map(item => {
+      const [folder, name = folder] = item.split(':');
+      return `export {${name}} from ${JSON.stringify(componentModule(distDir, folder))};`;
+    })
+    .join('\n');
+}
+
 const ENTRY_SOURCE = '__astryx-reference-page__.mjs';
 
 /**
@@ -359,12 +374,7 @@ export async function measurePage(distDir, components) {
     ],
     external: APP_EXTERNALS,
     stdin: {
-      contents: components
-        .map(
-          name =>
-            `export {${name}} from ${JSON.stringify(componentModule(distDir, name))};`,
-        )
-        .join('\n'),
+      contents: pageSource(distDir, components),
       resolveDir: distDir,
       sourcefile: ENTRY_SOURCE,
       loader: 'js',
@@ -421,7 +431,9 @@ Options:
                         without its optional feature. Prints PASS or FAIL per page
                         against INV10's limit of 0.3 KB gzip (${UNUSED_FEATURE_LIMIT_BYTES} B),
                         and exits 1 on a failure
-  --page <name=A,B>     Adds a page that imports components A and B
+  --page <name=A,B>     Adds a page that imports components A and B. An item
+                        Folder:name imports one named export from a folder,
+                        e.g. --page chat-composer=Chat:useChatComposerContext
   --json                Prints the comparison as JSON
   -h, --help            Prints this help
 

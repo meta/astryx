@@ -16,12 +16,21 @@ import {
   chunkGraphStats,
   keptModuleCount,
   moduleGraphStats,
+  pageSource,
   comparePages,
   formatComparison,
   USAGE,
   parseArgs,
   parseReferencePages,
 } from './measure-reference-pages.mjs';
+
+// Fixture trees live under the repository's `node_modules/.cache`, as the
+// size helper's own tests keep theirs.
+const FIXTURES = path.resolve(
+  import.meta.dirname,
+  '../node_modules/.cache/astryx-reference-pages',
+);
+fs.mkdirSync(FIXTURES, {recursive: true});
 
 const RECORD = path.resolve(
   import.meta.dirname,
@@ -330,6 +339,29 @@ describe('formatComparison', () => {
   });
 });
 
+describe('pageSource', () => {
+  it('imports a component from its folder, or one named export with Folder:name', () => {
+    const dist = fs.mkdtempSync(path.join(FIXTURES, 'page-source-'));
+    try {
+      for (const file of ['Text/index.js', 'Chat/index.js']) {
+        fs.mkdirSync(path.dirname(path.join(dist, file)), {recursive: true});
+        fs.writeFileSync(path.join(dist, file), '');
+      }
+      expect(pageSource(dist, ['Text', 'Chat:useChatComposerContext'])).toBe(
+        [
+          `export {Text} from ${JSON.stringify(path.join(dist, 'Text/index.js'))};`,
+          `export {useChatComposerContext} from ${JSON.stringify(path.join(dist, 'Chat/index.js'))};`,
+        ].join('\n'),
+      );
+      expect(() => pageSource(dist, ['Missing:useMissing'])).toThrow(
+        /No built module for Missing/,
+      );
+    } finally {
+      fs.rmSync(dist, {recursive: true, force: true});
+    }
+  });
+});
+
 describe('parseArgs', () => {
   it('needs a base and defaults the head to the working tree', () => {
     expect(() => parseArgs([])).toThrow(/Usage/);
@@ -371,6 +403,7 @@ describe('parseArgs', () => {
       '--help',
       `0.3 KB gzip (${UNUSED_FEATURE_LIMIT_BYTES} B)`,
       'pnpm size:pages --base origin/main --unused-on table,menu',
+      'Folder:name',
     ]) {
       expect(USAGE).toContain(text);
     }
