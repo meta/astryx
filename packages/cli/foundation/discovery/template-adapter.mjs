@@ -23,6 +23,7 @@
  *   consumed by Project and by the api/template leaves.
  */
 
+import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -41,7 +42,7 @@ import {
   writtenNames,
   TEMPLATE_COMPONENTS_FILE,
 } from './template-source-tree.mjs';
-import {persistedGather} from '../fs/gather-cache.mjs';
+import {persistedGather, persistedValue} from '../fs/gather-cache.mjs';
 import {packageOf} from '../render/served-packages.mjs';
 import {keptTreeSummary} from '../fs/kept-tree.mjs';
 import {
@@ -53,7 +54,10 @@ import {
   matchedTemplateSuffix,
 } from './template-ids.mjs';
 import {EXACT_CODEC} from '../fs/exact-codec.mjs';
-import {babelParser} from '../runtime/lazy-dependencies.mjs';
+import {
+  babelParser,
+  babelParserRelease,
+} from '../runtime/lazy-dependencies.mjs';
 import {compareText} from '../text/compare-text.mjs';
 import {currentNonCoreBase} from '../bases/state.mjs';
 
@@ -2198,24 +2202,50 @@ export function answeredComponentsInSource(
     documents = (pkg, name) => ownersOf(name).includes(pkg),
   },
 ) {
-  let program;
-  try {
-    program = parseTemplateSource(src, {errorRecovery: true}).program;
-  } catch {
-    return [];
-  }
+  const syntax = keptTemplateSyntax(src);
+  if (syntax === null) return [];
   /** @type {Map<string, {module: string, imported: string}>} */
   const imports = new Map();
+  for (const [local, module, imported] of syntax.imports) {
+    imports.set(local, {module, imported});
+  }
+  /** @type {string[]} */
+  const found = [];
+  // One operation for every name: each lookup lists a folder and reads a
+  // doc once, not once per name.
+  withListingCache(() => {
+    for (const tag of syntax.tags) {
+      const binding = imports.get(tag);
+      if (!binding) continue;
+      const name = answeredName(binding, documents, qualified);
+      if (name !== null && !found.includes(name)) found.push(name);
+    }
+  });
+  return found;
+}
+
+/**
+ * What a template source names components from: its named imports, each as
+ * [local name, module, imported name] in source order, and the names of the
+ * tags it renders, in the order they open. Throws for a source that does not
+ * parse.
+ * @param {string} src
+ * @returns {{imports: Array<[string, string, string]>, tags: string[]}}
+ */
+function templateSyntax(src) {
+  const {program} = parseTemplateSource(src, {errorRecovery: true});
+  /** @type {Array<[string, string, string]>} */
+  const imports = [];
   for (const statement of program.body) {
     if (statement.type !== 'ImportDeclaration') continue;
     for (const specifier of statement.specifiers) {
       if (specifier.type !== 'ImportSpecifier') continue;
       const {imported} = specifier;
-      imports.set(specifier.local.name, {
-        module: statement.source.value,
-        imported:
-          imported.type === 'Identifier' ? imported.name : imported.value,
-      });
+      imports.push([
+        specifier.local.name,
+        statement.source.value,
+        imported.type === 'Identifier' ? imported.name : imported.value,
+      ]);
     }
   }
   /** @type {Array<{name: string, start: number}>} */
@@ -2229,19 +2259,39 @@ export function answeredComponentsInSource(
     }
   });
   tags.sort((a, b) => a.start - b.start);
-  /** @type {string[]} */
-  const found = [];
-  // One operation for every name: each lookup lists a folder and reads a
-  // doc once, not once per name.
-  withListingCache(() => {
-    for (const tag of tags) {
-      const binding = imports.get(tag.name);
-      if (!binding) continue;
-      const name = answeredName(binding, documents, qualified);
-      if (name !== null && !found.includes(name)) found.push(name);
-    }
-  });
-  return found;
+  return {imports, tags: tags.map(tag => tag.name)};
+}
+
+/** A template source's syntax, kept exactly, with the shape it needs. */
+const TEMPLATE_SYNTAX_CODEC = {
+  ...EXACT_CODEC,
+  valid: (/** @type {any} */ value) =>
+    value != null && Array.isArray(value.imports) && Array.isArray(value.tags),
+};
+
+/**
+ * {@link templateSyntax}, kept between runs by the source's text and the
+ * parser's release (persistedValue), so a warm run loads no parser; null for
+ * a source that does not parse, which is never kept.
+ * @param {string} src
+ * @returns {{imports: Array<[string, string, string]>, tags: string[]} | null}
+ */
+function keptTemplateSyntax(src) {
+  try {
+    const parser = babelParserRelease();
+    if (parser === null) return templateSyntax(src);
+    return persistedValue(
+      [
+        'template-syntax',
+        createHash('sha256').update(src).digest('hex'),
+        parser,
+      ],
+      () => templateSyntax(src),
+      TEMPLATE_SYNTAX_CODEC,
+    );
+  } catch {
+    return null;
+  }
 }
 
 /**

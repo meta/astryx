@@ -436,7 +436,9 @@ works on is `spec:AST-040` FR9's.
     in the package's own folder), the locale and time zone a run's debug
     record names (on Linux, kept by any command that delivers a debug
     record), the CLI's own docs tree, each stored doc's checked contents,
-    keyed by its text, discover's record of the integrations a project loads
+    keyed by its text, what `template` reads from a template's source to
+    name the components it uses, keyed by the source's text and the parser's
+    release, discover's record of the integrations a project loads
     and what each adds, and what it searches in its sources' saved copies
     (which `search` reads for its discover line), and
     doctor's
