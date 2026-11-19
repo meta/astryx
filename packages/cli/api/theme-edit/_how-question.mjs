@@ -28008,6 +28008,18 @@ export function draftAnswer(ctx, env, question) {
         const fails = measured.filter(x => x.ratio < 4.5);
         if (!fails.length) continue;
         const mixed = TINT_MIX.exec(String(fill.value ?? '').trim());
+        // ("code #eb5757 text on #f7f6f3": both colors typed as solid
+        // values are the look asked; they are written as typed, and the
+        // answer says how they read.)
+        const typedHere = (/** @type {unknown} */ v) =>
+          /^#[0-9a-f]{3,8}$/i.test(String(v)) &&
+          new RegExp(`${String(v)}(?![0-9a-f])`, 'i').test(String(question));
+        if (!mixed && typedHere(st.value) && typedHere(fill.value)) {
+          const said = `${st.value} text on ${fill.value} reads at`;
+          if (!d.text.includes(said))
+            d.text += ` (${said} ${Math.min(...fails.map(x => x.ratio)).toFixed(2)}:1, under the 4.5:1 text needs; both are written as you typed them)`;
+          continue;
+        }
         if (mixed) {
           /** The weakest ratio across the modes at a strength. @param {number} pct */
           const weakest = pct =>
