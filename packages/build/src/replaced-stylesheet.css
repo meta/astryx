@@ -1,0 +1,7 @@
+/* Copyright (c) Meta Platforms, Inc. and affiliates. */
+
+/*
+ * What a Vite source build loads for Core's prebuilt stylesheet. StyleX
+ * compiles Core's rules from its source, so a second copy would duplicate
+ * them; this file holds no rules.
+ */

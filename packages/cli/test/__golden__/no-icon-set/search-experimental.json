@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "experimental",
-    "matchCount": 13,
+    "matchCount": 16,
     "results": [
       {
         "domain": "doc",
@@ -59,6 +59,21 @@
         "description": "<text>",
         "section": "<text>",
         "title": "<text>",
+        "command": "astryx docs authoring/field-reference reference-doc",
+        "parent": "astryx docs authoring/field-reference --index",
+        "mentions": [
+          "docs mention \"experimental\""
+        ]
+      },
+      {
+        "domain": "doc",
+        "name": "authoring/field-reference",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
         "command": "astryx docs authoring/field-reference schema-doc",
         "parent": "astryx docs authoring/field-reference --index",
         "mentions": [
@@ -91,6 +106,44 @@
         "command": "astryx docs cli/commands/theme",
         "parent": "astryx docs cli/commands",
         "mentions": [
+          "description mentions \"experimental\""
+        ]
+      },
+      {
+        "domain": "doc",
+        "name": "cli/experimental/export-pages",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "title": "<text>",
+        "command": "astryx docs cli/experimental/export-pages --index",
+        "parent": "astryx docs cli/experimental",
+        "mentions": [
+          "Astryx CLI › Experimental features › Pages as one HTML file",
+          "Experimental.",
+          "astryx docs cli/experimental",
+          "astryx docs cli/experimental/export-pages --index",
+          "cli/experimental/export-pages",
+          "description mentions \"experimental\""
+        ]
+      },
+      {
+        "domain": "doc",
+        "name": "cli/experimental/share-a-page",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "title": "<text>",
+        "command": "astryx docs cli/experimental/share-a-page --index",
+        "parent": "astryx docs cli/experimental",
+        "mentions": [
+          "Astryx CLI › Experimental features › Make a shareable page",
+          "Experimental.",
+          "astryx docs cli/experimental",
+          "astryx docs cli/experimental/share-a-page --index",
+          "cli/experimental/share-a-page",
           "description mentions \"experimental\""
         ]
       },

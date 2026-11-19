@@ -15,6 +15,12 @@ const anatomy = [
       'Named Spinner shown beside the input while an asynchronous source is pending, unless a composed owner takes over the busy indicator lane.',
   },
   {
+    name: 'Popup surface',
+    required: false,
+    description:
+      'The layer the Dropdown opens in, above the page and anchored below the input.',
+  },
+  {
     name: 'Dropdown',
     required: false,
     description:

@@ -260,4 +260,92 @@ describe('AvatarGroupOverflow', () => {
 
     expect(screen.getByLabelText('3 de plus')).toBeInTheDocument();
   });
+
+  describe.each([
+    ['static', undefined],
+    ['clickable', () => {}],
+  ] as const)('the %s indicator name', (_form, onClick) => {
+    it("is a caller's aria-label", () => {
+      render(
+        <AvatarGroup>
+          <Avatar name="Alice" />
+          <AvatarGroupOverflow
+            count={5}
+            onClick={onClick}
+            aria-label="Show 5 more teammates"
+          />
+        </AvatarGroup>,
+      );
+
+      expect(screen.getByLabelText('Show 5 more teammates')).toHaveTextContent(
+        '+5',
+      );
+      expect(screen.queryByLabelText('5 more')).not.toBeInTheDocument();
+    });
+
+    it("is a caller's aria-labelledby over the count", () => {
+      render(
+        <>
+          <span id="overflow-name">Everyone else</span>
+          <AvatarGroup>
+            <Avatar name="Alice" />
+            <AvatarGroupOverflow
+              count={5}
+              onClick={onClick}
+              aria-labelledby="overflow-name"
+            />
+          </AvatarGroup>
+        </>,
+      );
+
+      expect(screen.getByLabelText('Everyone else')).toHaveTextContent('+5');
+    });
+
+    it("is a caller's aria-labelledby when an aria-label is also set", () => {
+      render(
+        <>
+          <span id="overflow-both">Everyone else</span>
+          <AvatarGroup>
+            <Avatar name="Alice" />
+            <AvatarGroupOverflow
+              count={5}
+              onClick={onClick}
+              aria-label="Show 5 more teammates"
+              aria-labelledby="overflow-both"
+            />
+          </AvatarGroup>
+        </>,
+      );
+
+      expect(screen.getByLabelText('Everyone else')).toHaveTextContent('+5');
+    });
+
+    it('is the count when the caller aria-label is empty', () => {
+      render(
+        <AvatarGroup>
+          <Avatar name="Alice" />
+          <AvatarGroupOverflow count={5} onClick={onClick} aria-label="" />
+        </AvatarGroup>,
+      );
+
+      expect(screen.getByLabelText('5 more')).toHaveTextContent('+5');
+    });
+
+    it('is the localized count without either', () => {
+      render(
+        <InternationalizationProvider
+          locale="fr"
+          overrides={{
+            fr: {'@astryx.avatarGroup.overflow': '{count, number} de plus'},
+          }}>
+          <AvatarGroup>
+            <Avatar name="Alice" />
+            <AvatarGroupOverflow count={5} onClick={onClick} />
+          </AvatarGroup>
+        </InternationalizationProvider>,
+      );
+
+      expect(screen.getByLabelText('5 de plus')).toHaveTextContent('+5');
+    });
+  });
 });

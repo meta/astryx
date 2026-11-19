@@ -8,6 +8,7 @@ import {Button} from '@astryxdesign/core/Button';
 import {Section} from '@astryxdesign/core/Section';
 import {Stack} from '@astryxdesign/core/Layout';
 import {Heading, Text} from '@astryxdesign/core/Text';
+import {useToast} from '@astryxdesign/core/Toast';
 
 const warmTheme = defineTheme({
   name: 'warm-docs',
@@ -35,6 +36,7 @@ const forestTheme = defineTheme({
   },
 });
 export default function ThemeNested() {
+  const showToast = useToast();
   return (
     <Section variant="muted" padding={4} maxWidth={460}>
       <Theme theme={warmTheme}>
@@ -52,7 +54,15 @@ export default function ThemeNested() {
                   <Text type="body" weight="bold">
                     Nested Forest section
                   </Text>
-                  <Button label="Nested action" size="sm" />
+                  <Button
+                    label="Nested action"
+                    size="sm"
+                    onClick={() =>
+                      showToast({
+                        body: 'Demo: the nested action would run here',
+                      })
+                    }
+                  />
                 </Stack>
               </Card>
             </Theme>

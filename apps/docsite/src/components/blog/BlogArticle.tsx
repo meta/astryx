@@ -24,6 +24,7 @@ import {AuthorByline} from './AuthorByline';
 import {ReleaseCoverArt} from './ReleaseCoverArt';
 import {BlogPostBody} from './BlogPostBody';
 import {parseReleaseVersion} from '../../lib/blog/release';
+import {blogCoverUrl} from '../../lib/blog/coverImage';
 import {layout} from '../../layout.stylex';
 
 const styles = stylex.create({
@@ -93,7 +94,7 @@ export function BlogArticle({post}: BlogArticleProps) {
         {post.coverImage ? (
           <AspectRatio ratio={16 / 9} xstyle={styles.cover}>
             <img
-              src={post.coverImage}
+              src={blogCoverUrl(post.coverImage)}
               alt={post.coverAlt ?? ''}
               {...stylex.props(styles.coverImg)}
             />

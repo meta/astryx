@@ -809,7 +809,13 @@ for (const viewport of [PHONE, DESKTOP, {width: 2200, height: 900}] as const) {
       {
         markdownSurface: MARKDOWN,
         richTextSurface: RICH_TEXT,
-        keys: ['code-fence', 'code-plain', 'code-unknown', 'code-long'],
+        keys: [
+          'code-fence',
+          'code-plain',
+          'code-unknown',
+          'code-long',
+          'code-long-label',
+        ],
       },
     );
     // The editor's frame is 18px narrower than the reader's at every width
@@ -819,7 +825,7 @@ for (const viewport of [PHONE, DESKTOP, {width: 2200, height: 900}] as const) {
     // line in the editor: the known editor-frame gap that AST-061's
     // Current-state impact records, so the check skips that width.
     if (viewport.width !== PHONE.width) {
-      for (const key of ['code-fence', 'code-long']) {
+      for (const key of ['code-fence', 'code-long', 'code-long-label']) {
         const block = (geometry: SurfaceGeometry) =>
           geometry.blocks.find(candidate => candidate.key === key);
         expect(
@@ -831,8 +837,9 @@ for (const viewport of [PHONE, DESKTOP, {width: 2200, height: 900}] as const) {
       }
     }
     for (const frame of frames) {
-      if (frame.key === 'code-long') {
-        // A long line widens the frame past the measure, up to the room.
+      if (frame.key === 'code-long' || frame.key === 'code-long-label') {
+        // A long line, or a long language label, widens the frame past the
+        // measure, up to the room.
         const markdownWide = Math.min(frame.markdownRoom, frame.markdown);
         expect(frame.markdown, frame.key).toBeGreaterThan(
           Math.min(680, frame.markdownRoom) - 1,
@@ -873,7 +880,7 @@ for (const viewport of [PHONE, DESKTOP, {width: 2200, height: 900}] as const) {
     // One header per fenced block; the first is the `ts` block's.
     await expect(
       page.locator(`${RICH_TEXT} [data-richtext-code-header]`),
-    ).toHaveCount(7);
+    ).toHaveCount(8);
     const header = page
       .locator(`${RICH_TEXT} [data-richtext-code-header]`)
       .first();
@@ -897,6 +904,70 @@ for (const viewport of [PHONE, DESKTOP, {width: 2200, height: 900}] as const) {
     expect(errors).toEqual([]);
   });
 }
+
+// A page font setting the `font` shorthand cannot hold (tabular figures, no
+// kerning) leaves the computed shorthand empty in Chromium, so the label's
+// one-line width is read from the font longhands; the long-label fence keeps
+// core's frame width on a wide screen.
+test("side by side: a long-label fence keeps core's frame width under page font settings", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    document.addEventListener('DOMContentLoaded', () => {
+      const style = document.createElement('style');
+      style.textContent =
+        'html { font-variant-numeric: tabular-nums; font-kerning: none; }';
+      document.head.append(style);
+    });
+  });
+  const errors = await openStory(page, STORY.sideBySide, {
+    width: 2200,
+    height: 900,
+  });
+  await waitForDocument(page, MARKDOWN);
+  await waitForDocument(page, RICH_TEXT);
+  const widths = await page.evaluate(
+    ({markdownSurface, richTextSurface}) => {
+      const markdownBlock = document.querySelector<HTMLElement>(
+        `${markdownSurface} [data-parity-block="code-long-label"]`,
+      );
+      const markdownFrame = [
+        markdownBlock,
+        ...(markdownBlock?.querySelectorAll<HTMLElement>('*') ?? []),
+      ].find(element => {
+        const style = element == null ? null : getComputedStyle(element);
+        return (
+          style != null &&
+          style.borderTopStyle !== 'none' &&
+          parseFloat(style.borderTopWidth) > 0
+        );
+      });
+      const richTextFrame = document.querySelector<HTMLElement>(
+        `${richTextSurface} [data-parity-block="code-long-label"]`,
+      );
+      const title = [
+        ...document.querySelectorAll<HTMLElement>(
+          `${richTextSurface} [data-richtext-code-header] *`,
+        ),
+      ].find(
+        element =>
+          element.childElementCount === 0 &&
+          (element.textContent ?? '').includes('alonglanguagename'),
+      );
+      return {
+        shorthand: title == null ? null : getComputedStyle(title).font,
+        markdown: markdownFrame?.getBoundingClientRect().width ?? 0,
+        richText: richTextFrame?.getBoundingClientRect().width ?? 0,
+      };
+    },
+    {markdownSurface: MARKDOWN, richTextSurface: RICH_TEXT},
+  );
+  // The setting does reach the label: Chromium's shorthand is empty.
+  expect(widths.shorthand).toBe('');
+  expect(widths.markdown).toBeGreaterThan(680);
+  expect(Math.abs(widths.richText - widths.markdown)).toBeLessThanOrEqual(2);
+  expect(errors).toEqual([]);
+});
 
 // A long unbroken line wraps inside the code frame at phone width instead of
 // widening the page, and the copy button copies the block from the keyboard,
@@ -946,6 +1017,17 @@ for (const globals of [
   test(`side by side: fences without a language have no label row (${globals})`, async ({
     page,
   }) => {
+    // A header that writes its height on its block while the browser
+    // delivers resize notifications would report a ResizeObserver loop.
+    await page.addInitScript(() => {
+      const seen: string[] = [];
+      Object.assign(window, {resizeObserverErrors: seen});
+      window.addEventListener('error', event => {
+        if (String(event.message).includes('ResizeObserver')) {
+          seen.push(event.message);
+        }
+      });
+    });
     const errors = await openStory(page, STORY.sideBySide, DESKTOP, globals);
     await waitForDocument(page, MARKDOWN);
     await waitForDocument(page, RICH_TEXT);
@@ -956,6 +1038,8 @@ for (const globals of [
       'code-plaintext': '',
       'code-unknown': 'notalanguage',
       'code-long': 'sh',
+      'code-long-label':
+        'alonglanguagenamethatwrapsintheheaderofthecodeblockoneverysurfaceandinbothmodesofthedocumentsurface',
       'code-plain-long': '',
     } as const;
     const markdown = await surfaceGeometry(page, MARKDOWN);
@@ -1017,9 +1101,13 @@ for (const globals of [
           const label = [...(block?.querySelectorAll('*') ?? [])].find(
             element =>
               element.childElementCount === 0 &&
-              ['ts', 'notalanguage', 'plaintext', 'sh'].includes(
-                element.textContent?.trim() ?? '',
-              ),
+              [
+                'ts',
+                'notalanguage',
+                'plaintext',
+                'sh',
+                'alonglanguagenamethatwrapsintheheaderofthecodeblockoneverysurfaceandinbothmodesofthedocumentsurface',
+              ].includes(element.textContent?.trim() ?? ''),
           );
           return label?.textContent?.trim() ?? '';
         }),
@@ -1029,14 +1117,31 @@ for (const globals of [
     // RichText draws one header per fence, in order, each with a copy button
     // and the same label.
     const headers = page.locator(`${RICH_TEXT} [data-richtext-code-header]`);
-    await expect(headers).toHaveCount(7);
+    await expect(headers).toHaveCount(8);
     const richTextLabels = await headers.evaluateAll(elements =>
       elements.map(element =>
         (element.textContent ?? '').replace('Copy code', '').trim(),
       ),
     );
     expect(richTextLabels).toEqual(Object.values(fences));
-    for (const index of [0, 1, 2, 3, 4, 5, 6]) {
+    // The long label wraps: its header is taller than the one-row `ts`
+    // header, and the fence is as tall in RichText as in core Markdown
+    // (checked above with every fence).
+    const headerHeight = (index: number) =>
+      headers
+        .nth(index)
+        .evaluate(element => element.getBoundingClientRect().height);
+    expect(
+      await headerHeight(Object.keys(fences).indexOf('code-long-label')),
+    ).toBeGreaterThan((await headerHeight(0)) + 4);
+    expect(
+      await page.evaluate(
+        () =>
+          (window as unknown as {resizeObserverErrors: string[]})
+            .resizeObserverErrors,
+      ),
+    ).toEqual([]);
+    for (const index of [0, 1, 2, 3, 4, 5, 6, 7]) {
       await expect(
         headers.nth(index).getByRole('button', {name: 'Copy code'}),
       ).toBeVisible();

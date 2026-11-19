@@ -696,7 +696,7 @@ function ChartTooltip({
 
 const AXIS_TICK = {
   fontSize: 'var(--font-size-sm, 12px)',
-  fill: 'var(--color-text-secondary, #4E606F)',
+  fill: 'var(--color-text-secondary, #445564)',
 };
 const GRID_STROKE = 'var(--color-border, rgba(5, 54, 89, 0.1))';
 
@@ -1506,7 +1506,7 @@ export default function ServiceHealthMonitorPage() {
           <VStack gap={10}>
             <VStack gap={6}>
               {/* Traffic-light KPI tiles */}
-              <Grid columns={{minWidth: 240, repeat: 'fit'}} gap={3}>
+              <Grid columns={{minWidth: 240, max: 4, repeat: 'fit'}} gap={3}>
                 {kpis.map(kpi => (
                   <KpiTile
                     key={kpi.key}
@@ -1517,7 +1517,7 @@ export default function ServiceHealthMonitorPage() {
               </Grid>
 
               {/* Time-series charts */}
-              <Grid columns={{minWidth: 320, repeat: 'fit'}} gap={3}>
+              <Grid columns={{minWidth: 320, max: 2, repeat: 'fit'}} gap={3}>
                 <MetricChart
                   title="Response latency"
                   subtitle="Percentile latency across all services (ms)"

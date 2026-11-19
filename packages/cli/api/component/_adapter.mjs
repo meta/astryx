@@ -59,11 +59,7 @@ import {
   findRelatedBlocks,
 } from '../../foundation/discovery/template-adapter.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
-import {
-  componentLinkProvider,
-  linkComponentDoc,
-  loadDocsCatalog,
-} from '../docs/_adapter.mjs';
+import {linkOwnedTexts, ownedDocLinker} from '../docs/_adapter.mjs';
 
 /** How far below the first suggestion's score a later one may be. */
 const NEAR_FIRST = 10;
@@ -807,10 +803,11 @@ export function scopeIntegrationMember(docs, owner, dirName) {
 }
 
 /**
- * A search response with every inline `{@link <target>}` in a component
- * result's description resolved to the command that opens the doc it names,
- * as `astryx component` prints it (spec:AST-047 FR9). The response object is
- * kept, with its results replaced.
+ * A search response with every inline `{@link <target>}` in a component or
+ * template result's description resolved to the command that opens the doc it
+ * names, as `astryx component` and `astryx template` print it (spec:AST-047
+ * FR9), and its doc tokens rendered. The response object is kept, with its
+ * results replaced.
  * @template {{data: {results: any[]}}} R
  * @param {R} response
  * @param {string} cwd
@@ -818,23 +815,37 @@ export function scopeIntegrationMember(docs, owner, dirName) {
  */
 export async function linkSearchResponse(response, cwd) {
   const results = response.data.results;
+  /** @param {any} result @param {string} domain */
+  const linkable = (result, domain) =>
+    result?.domain === domain &&
+    typeof result.description === 'string' &&
+    result.description.includes('{@');
   if (
     !results.some(
-      result =>
-        result?.domain === 'component' &&
-        typeof result.description === 'string' &&
-        result.description.includes('{@'),
+      result => linkable(result, 'component') || linkable(result, 'template'),
     )
   ) {
     return response;
   }
+  const templates = results.filter(result => linkable(result, 'template'));
+  const templateTexts = await linkOwnedTexts(
+    templates.map(result => ({
+      text: result.description,
+      package: result.package,
+    })),
+    cwd,
+  );
+  /** @type {Map<any, string>} */
+  const templateText = new Map(
+    templates.map((result, i) => [result, templateTexts[i]]),
+  );
   const linked = [];
   for (const result of results) {
-    if (
-      result?.domain !== 'component' ||
-      typeof result.description !== 'string' ||
-      !result.description.includes('{@')
-    ) {
+    if (templateText.has(result)) {
+      linked.push({...result, description: templateText.get(result)});
+      continue;
+    }
+    if (!linkable(result, 'component')) {
       linked.push(result);
       continue;
     }
@@ -850,6 +861,44 @@ export async function linkSearchResponse(response, cwd) {
   }
   response.data = {...response.data, results: linked};
   return response;
+}
+
+/**
+ * A `component.detail.blocks` response with each block's description links
+ * and doc tokens rendered, the way `astryx template` renders a template's
+ * description: against the docs of the package that ships the block.
+ * @template {{data: {showcase: any, examples: any[], related: any[]}}} R
+ * @param {R} response
+ * @param {string} cwd
+ * @returns {Promise<R>}
+ */
+export async function linkBlockDescriptions(response, cwd) {
+  const {showcase, examples, related} = response.data;
+  const entries = [...(showcase ? [showcase] : []), ...examples, ...related];
+  const owned = entries.filter(
+    entry =>
+      typeof entry?.description === 'string' &&
+      entry.description.includes('{@'),
+  );
+  if (owned.length === 0) return response;
+  const texts = await linkOwnedTexts(
+    owned.map(entry => ({text: entry.description, package: entry.package})),
+    cwd,
+  );
+  /** @type {Map<any, string>} */
+  const shown = new Map(owned.map((entry, i) => [entry, texts[i]]));
+  /** @param {any} entry */
+  const linked = entry =>
+    shown.has(entry) ? {...entry, description: shown.get(entry)} : entry;
+  return {
+    ...response,
+    data: {
+      ...response.data,
+      showcase: showcase ? linked(showcase) : showcase,
+      examples: examples.map(linked),
+      related: related.map(linked),
+    },
+  };
 }
 
 /**
@@ -876,33 +925,7 @@ export async function linkComponentResponse(response, cwd) {
   if (!JSON.stringify(response.data ?? null).includes('{@')) {
     return response;
   }
-  const catalog = await loadDocsCatalog(cwd);
-  /** @type {Map<string, string>} */
-  const declared = new Map();
-  for (const integration of await loadIntegrationsSafely(cwd)) {
-    const id = /** @type {any} */ (integration).providerId;
-    if (typeof id === 'string') declared.set(integration.name, id);
-  }
-  /**
-   * @param {any} doc
-   * @param {string | undefined} owner
-   */
-  const link = async (doc, owner) => {
-    if (typeof owner !== 'string') return doc;
-    try {
-      return (
-        await linkComponentDoc(
-          catalog,
-          componentLinkProvider(owner, declared.get(owner)),
-          doc,
-        )
-      ).doc;
-    } catch {
-      // An owner that is not a provider id links nothing; its text reads as
-      // written.
-      return doc;
-    }
-  };
+  const link = await ownedDocLinker(cwd);
   if (type !== 'component.list') {
     return {...response, data: await link(response.data, response.package)};
   }
