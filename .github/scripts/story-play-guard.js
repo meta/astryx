@@ -287,6 +287,11 @@ const TARGETS = [
         'FR5/FR8: a layer opened with its anchor off-screen holds beside the anchor from its first frame',
     },
     {
+      story: 'core-layer--anchor-stays-in-view-while-scrolling',
+      guards:
+        'FR4: a layer whose anchor stays in view during a scroll is placed again at the scroll stop, beside its anchor where it fits',
+    },
+    {
       story: 'core-layer--app-declared-inset',
       guards:
         'FR6: LayerProvider inset lifts the bottom gutter so a layer flips above a trigger near a declared bar',
@@ -315,6 +320,11 @@ const TARGETS = [
       story: 'core-layer--gutter-at-the-edge',
       guards:
         'FR1: a wrapping layer beside a flush trigger stops 16px short of the viewport edge',
+    },
+    {
+      story: 'core-layer--anchor-runs-past-the-edge',
+      guards:
+        'FR1/FR4: a layer whose trigger runs past the viewport edge stays inside the gutters',
     },
   ].flatMap(target => [
     {component: 'Layer', ...target},

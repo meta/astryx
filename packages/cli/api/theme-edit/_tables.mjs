@@ -91,6 +91,22 @@ export const familyOf = target =>
     members.includes(target),
   )?.[0] ?? null;
 
+/**
+ * What `--only` means on a place, the one rule `set --only` and the
+ * settings reader share: on a member of a group that spreads (a text input
+ * of inputs) it keeps the change on that member (`member`); on any other
+ * part it changes nothing, as the part is styled on its own already
+ * (`own`); on a group itself, or with no part, it means nothing at all
+ * (`group`).
+ * @param {string | undefined} on
+ * @returns {'member' | 'own' | 'group'}
+ */
+export const onlyMeans = on => {
+  if (!on || Object.hasOwn(FAMILIES, on)) return 'group';
+  const fam = familyOf(on);
+  return fam && AUTO_SPREAD.includes(fam) ? 'member' : 'own';
+};
+
 /** @type {Array<[string, number]>} */
 export const CORNERS = [
   ['square', 0],

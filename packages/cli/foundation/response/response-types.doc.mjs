@@ -198,7 +198,7 @@ export const doc = {
       value: 'icon.search',
       stability: 'experimental',
       description:
-        'The echoed query, `matchCount` (every match, before `limit`), and matches: icons from the installed icon sets ranked by meaning, each {set, id, package, module, export, import, words, definitions, variants, reason, score}.',
+        "The echoed query, `matchCount` (every match, before `limit`), and matches: icons from the installed icon sets ranked by meaning, each {set, id, package, module, export, import, words, definitions, variants, reason, score}, plus `meaningImport` when a definition names the icon: its import under the meaning name (`import {TrashIcon as DeleteIcon} from '…'`).",
     },
     {
       value: 'icon.detail',

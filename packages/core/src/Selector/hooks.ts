@@ -148,13 +148,11 @@ function measureSelectedItem(
   let isAboveAnchor = false;
   if (layer != null) {
     const layerStyle = getComputedStyle(layer);
-    // The position area's block keyword names the side the browser chose:
-    // its block-start side once a fallback flipped the layer. An engine
-    // without anchor positioning reads an empty string here.
-    const [blockArea = ''] = layerStyle
-      .getPropertyValue('position-area')
-      .split(' ');
-    isAboveAnchor = /start$|^top$/.test(blockArea);
+    // The layer opens below its anchor and aligns its block-start edge
+    // toward it. A block flip mirrors that self alignment, so the computed
+    // value names the block end once a fallback flipped the layer. An engine
+    // without anchor positioning keeps the block-start value.
+    isAboveAnchor = layerStyle.alignSelf.endsWith('self-end');
     blockEndGutter = Math.max(
       0,
       parseFloat(
@@ -240,6 +238,11 @@ export function useSelectedItemOffset({
 interface SelectedItemOverlayMargin {
   marginBlockStart: string | undefined;
   isPositioned: boolean;
+  /**
+   * Measures the margin again. The layer runtime calls it after a scroll stop
+   * places the list afresh, because the browser may then have flipped it.
+   */
+  remeasure: () => void;
 }
 
 /**
@@ -258,6 +261,12 @@ export function useSelectedItemOverlayMargin({
   const [marginBlockStart, setMarginBlockStart] = useState<string>();
   const [isPositioned, setIsPositioned] = useState(false);
   const [listboxResizes, setListboxResizes] = useState(0);
+  // A flip changes which margin applies, and the next frame must not show the
+  // old one.
+  const remeasure = useCallback(() => {
+    // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the margin must change before the frame paints
+    flushSync(() => setListboxResizes(count => count + 1));
+  }, []);
 
   // The open list measures again when its own box resizes. An option that
   // grows or shrinks moves the selected row. The report comes before paint.
@@ -339,7 +348,7 @@ export function useSelectedItemOverlayMargin({
     }
   }, [isOpen, isPositioned, listboxRef, anchorRef]);
 
-  return {marginBlockStart, isPositioned};
+  return {marginBlockStart, isPositioned, remeasure};
 }
 
 // =============================================================================

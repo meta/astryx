@@ -432,10 +432,10 @@ function asAstryxError(e, pageDir, cwd = process.cwd()) {
       const pageRoot = findPackageRoot(pageDir);
       const runRoot = findPackageRoot(cwd);
       const samePackage = pageRoot !== null && runRoot !== null && path.resolve(runRoot) === path.resolve(pageRoot);
-      // At installCommandFor's versions: a package Astryx releases with Core
-      // at the project's Core release, in the guidance too; any other at the
-      // CLI's range in the command, bare in the guidance; no command when the
-      // project's lockfiles disagree.
+      // At installCommandFor's versions: Core, the CLI and a package Astryx
+      // releases with Core at the project's Core release, in the guidance
+      // too; any other at the CLI's range in the command, bare in the
+      // guidance; no command when the project's lockfiles disagree.
       const step = pageRoot == null ? null : installCommandFor(packages, pageDir, cwd);
       const guidance = samePackage ? step?.installGuidance : null;
       if (guidance) {
