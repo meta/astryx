@@ -133,6 +133,13 @@ export const docs = {
             'Whether the tooltip should be shown on mount. Still dismissible.',
         },
         {
+          name: 'maxWidth',
+          type: 'SizeValue',
+          description:
+            'Maximum width of the tooltip, padding included, before its content wraps. Numbers are treated as pixels, strings are used as-is.',
+          default: '300',
+        },
+        {
           name: 'isOpen',
           type: 'boolean',
           description:
@@ -265,6 +272,13 @@ export const docsZh = {
           type: 'boolean',
           description: '是否在挂载时显示工具提示。仍然可以关闭。',
         },
+        {
+          name: 'maxWidth',
+          type: 'number | string',
+          description:
+            '工具提示（含内边距）在内容换行前的最大宽度。数字以像素为单位，字符串按原样使用。',
+          default: '300',
+        },
       ],
     },
   ],
@@ -364,6 +378,8 @@ export const docsDense = {
           'Callback when visibility changes; true=shown, false=hidden.',
         hasHoverIndication: 'Dashed underline on trigger element.',
         isDefaultOpen: 'Show tooltip on mount. Still dismissible.',
+        maxWidth:
+          'Max width before wrapping; number = px, string as-is. Default 300.',
       },
     },
   ],

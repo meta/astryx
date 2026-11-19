@@ -27,6 +27,7 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {TooltipPresentInterestContext} from './tooltipPresentInterest';
 import {createTriggerFocusGate, isFocusOnTrigger} from '../utils/triggerFocus';
 import * as stylex from '@stylexjs/stylex';
+import type {SizeValue} from '../utils/types';
 import {
   useLayerInternal,
   type ContextRenderProps,
@@ -58,6 +59,10 @@ import {
  * the tooltip surface without the tooltip disappearing (WCAG 1.4.13 hoverable).
  */
 const HOVER_BRIDGE_DELAY = 100;
+
+const dynamicStyles = stylex.create({
+  contentMaxWidth: (maxWidth: SizeValue) => ({maxWidth}),
+});
 
 const styles = stylex.create({
   // The same inverted surface Toast paints, so the two match in every theme.
@@ -167,6 +172,13 @@ export interface TooltipOptions {
    * The tooltip is still dismissible — this just opens it initially.
    */
   isDefaultOpen?: boolean;
+
+  /**
+   * Maximum width of the tooltip, padding included, before its content wraps.
+   * Numbers are treated as pixels, strings are used as-is.
+   * @default 300
+   */
+  maxWidth?: SizeValue;
 
   /**
    * Callback fired when tooltip is shown. Under `isOpen={false}`, it reports
@@ -287,6 +299,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     isEnabled = true,
     isOpen,
     isDefaultOpen = false,
+    maxWidth,
     onShow,
     onHide,
   } = options;
@@ -974,7 +987,12 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         // clickable container around the trigger leaves the press alone while
         // document listeners still see it.
         // The hold's announcement reads this element's text.
-        <div ref={contentRefs} {...stylex.props(styles.content)}>
+        <div
+          ref={contentRefs}
+          {...stylex.props(
+            styles.content,
+            maxWidth != null && dynamicStyles.contentMaxWidth(maxWidth),
+          )}>
           {children}
         </div>,
         renderProps,
@@ -984,6 +1002,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       renderLayer,
       placement,
       alignment,
+      maxWidth,
       popoverXstyle,
       cancelHide,
       scheduleHide,

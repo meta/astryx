@@ -23,6 +23,7 @@ import React, {
 } from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
+import type {SizeValue} from '../utils/types';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {
   useTooltip,
@@ -164,6 +165,13 @@ export interface TooltipProps {
    * The tooltip is still dismissible — this just opens it initially.
    */
   isDefaultOpen?: boolean;
+
+  /**
+   * Maximum width of the tooltip, padding included, before its content wraps.
+   * Numbers are treated as pixels, strings are used as-is.
+   * @default 300
+   */
+  maxWidth?: SizeValue;
 }
 
 /**
@@ -210,6 +218,7 @@ export function Tooltip({
   hasHoverIndication = 'auto',
   isOpen,
   isDefaultOpen,
+  maxWidth,
 }: TooltipProps): ReactElement {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const textOnly = children != null ? isTextOnly(children) : false;
@@ -237,6 +246,7 @@ export function Tooltip({
     isEnabled,
     isOpen,
     isDefaultOpen,
+    maxWidth,
     onShow: handleShow,
     onHide: handleHide,
   });
