@@ -9,10 +9,10 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {Stack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 import {
-  Cog6ToothIcon,
+  SettingsIcon,
   MicrophoneIcon,
   SparklesIcon,
-} from '@heroicons/react/24/outline';
+} from '@astryxdesign/template-icons';
 
 export default function ChatComposerFlat() {
   return (
@@ -48,7 +48,7 @@ export default function ChatComposerFlat() {
                 label: 'Settings',
                 variant: 'ghost',
                 size: 'md',
-                icon: <Icon icon={Cog6ToothIcon} size="sm" />,
+                icon: <Icon icon={SettingsIcon} size="sm" />,
                 children: 'Settings',
               }}
               menuWidth={200}

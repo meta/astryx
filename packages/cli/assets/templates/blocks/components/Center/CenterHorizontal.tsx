@@ -11,10 +11,10 @@ import {
   BoldIcon,
   ItalicIcon,
   UnderlineIcon,
-  ListBulletIcon,
+  ListIcon,
   LinkIcon,
-  PhotoIcon,
-} from '@heroicons/react/24/outline';
+  ImageIcon,
+} from '@astryxdesign/template-icons';
 
 export default function CenterHorizontal() {
   return (
@@ -41,7 +41,7 @@ export default function CenterHorizontal() {
           />
           <IconButton
             label="List"
-            icon={<Icon icon={ListBulletIcon} />}
+            icon={<Icon icon={ListIcon} />}
             variant="ghost"
             size="sm"
           />
@@ -53,7 +53,7 @@ export default function CenterHorizontal() {
           />
           <IconButton
             label="Image"
-            icon={<Icon icon={PhotoIcon} />}
+            icon={<Icon icon={ImageIcon} />}
             variant="ghost"
             size="sm"
           />

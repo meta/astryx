@@ -8,19 +8,19 @@ import {IconButton} from '@astryxdesign/core/IconButton';
 import {Stack} from '@astryxdesign/core/Layout';
 import {Icon} from '@astryxdesign/core/Icon';
 import {
-  ClipboardDocumentIcon,
-  ScissorsIcon,
-  ClipboardIcon,
+  CopyTextIcon,
+  CutIcon,
+  PasteIcon,
   ChevronDownIcon,
-} from '@heroicons/react/24/outline';
+} from '@astryxdesign/template-icons';
 
 export default function ButtonGroupShowcase() {
   return (
     <Stack direction="horizontal" gap={6} vAlign="center">
       <ButtonGroup label="Clipboard actions">
-        <Button label="Copy" icon={<Icon icon={ClipboardDocumentIcon} />} />
-        <Button label="Cut" icon={<Icon icon={ScissorsIcon} />} />
-        <Button label="Paste" icon={<Icon icon={ClipboardIcon} />} />
+        <Button label="Copy" icon={<Icon icon={CopyTextIcon} />} />
+        <Button label="Cut" icon={<Icon icon={CutIcon} />} />
+        <Button label="Paste" icon={<Icon icon={PasteIcon} />} />
       </ButtonGroup>
       <ButtonGroup label="Save options">
         <Button label="Save" variant="primary" />

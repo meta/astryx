@@ -7,11 +7,11 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {Stack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 import {
-  ArrowDownTrayIcon,
-  PencilSquareIcon,
-  PlusIcon,
-  TrashIcon,
-} from '@heroicons/react/24/outline';
+  DownloadIcon,
+  ComposeIcon,
+  AddIcon,
+  DeleteIcon,
+} from '@astryxdesign/template-icons';
 
 export default function ButtonWithIcon() {
   return (
@@ -23,22 +23,22 @@ export default function ButtonWithIcon() {
         <Button
           label="New item"
           variant="primary"
-          icon={<Icon icon={PlusIcon} />}
+          icon={<Icon icon={AddIcon} />}
         />
         <Button
           label="Edit"
           variant="secondary"
-          icon={<Icon icon={PencilSquareIcon} />}
+          icon={<Icon icon={ComposeIcon} />}
         />
         <Button
           label="Download"
           variant="ghost"
-          icon={<Icon icon={ArrowDownTrayIcon} />}
+          icon={<Icon icon={DownloadIcon} />}
         />
         <Button
           label="Delete"
           variant="destructive"
-          icon={<Icon icon={TrashIcon} />}
+          icon={<Icon icon={DeleteIcon} />}
         />
       </Stack>
     </Stack>
