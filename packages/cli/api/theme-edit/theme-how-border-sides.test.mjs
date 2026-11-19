@@ -282,4 +282,107 @@ describe('per-side border asks', () => {
     },
     T,
   );
+
+  it(
+    'draws a darker edge on every side said',
+    async () => {
+      if (unbuilt) return;
+      const lines = await first(
+        'cards with a slightly darker top and bottom edge',
+      );
+      expect(lines.map(l => l.split(' ')[0])).toEqual([
+        'border-top-color',
+        'border-bottom-color',
+      ]);
+    },
+    T,
+  );
+
+  it(
+    'gives each side of a padding list its length, before or after padding',
+    async () => {
+      if (unbuilt) return;
+      expect(await first('inputs with padding top and bottom 6px')).toEqual([
+        'padding-top 6px --on inputs',
+        'padding-bottom 6px --on inputs',
+      ]);
+    },
+    T,
+  );
+
+  it(
+    'leaves a side list said before padding to the padding',
+    async () => {
+      if (unbuilt) return;
+      const lines = await first(
+        'inputs with a #cccccc border and top and bottom padding 6px',
+      );
+      expect(lines.some(l => /^padding-top .* --on inputs$/.test(l))).toBe(
+        true,
+      );
+      expect(lines.some(l => /^padding-bottom .* --on inputs$/.test(l))).toBe(
+        true,
+      );
+      expect(lines.join('\n')).not.toMatch(/^border-(top|bottom) /m);
+    },
+    T,
+  );
+
+  it(
+    'reads transparent after a label colon as the side drawn see-through, after the border',
+    async () => {
+      if (unbuilt) return;
+      const lines = await first(
+        'selected tab: transparent bottom, #dddddd border',
+      );
+      const side = lines.findIndex(l =>
+        /^border-bottom '1px solid transparent' --on tab/.test(l),
+      );
+      const whole = lines.findIndex(l => /^border '/.test(l));
+      expect(side).toBeGreaterThan(-1);
+      // (The shorthand first, so the side said stays.)
+      expect(whole).toBeLessThan(side);
+    },
+    T,
+  );
+
+  it(
+    'keeps colors one per side with a width said beside them',
+    async () => {
+      if (unbuilt) return;
+      expect(await first('cards border 2px #eee #eee #ddd')).toEqual([
+        "border '2px solid' --on card",
+        "border-color '#eee #eee #ddd' --on card --mode light",
+      ]);
+    },
+    T,
+  );
+
+  it(
+    'draws every side said with its own "on" and "the"',
+    async () => {
+      if (unbuilt) return;
+      for (const q of [
+        'cards with a border on the top and the bottom',
+        'cards with borders on the left and on the right',
+        'cards with a border above and below',
+      ])
+        expect(
+          (await first(q)).map(l => l.split(' ')[0]),
+          q,
+        ).toHaveLength(2);
+    },
+    T,
+  );
+
+  it(
+    'leaves corners on top and bottom every corner',
+    async () => {
+      if (unbuilt) return;
+      expect(
+        (await first('4px corners on top and bottom of cards')).join('\n'),
+      ).not.toMatch(/border-start-(?:start|end)-radius/);
+    },
+    T,
+  );
 });

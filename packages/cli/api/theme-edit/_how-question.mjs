@@ -23,6 +23,7 @@ import {
   ratioWords,
 } from './_color.mjs';
 import {luminance} from '../theme/palette/generate/color.mjs';
+import {coversProperty} from '../../foundation/runtime/css-tree.mjs';
 import {OVERRIDES} from './_part-words.mjs';
 import {
   DESIGN,
@@ -588,10 +589,13 @@ function colorsIn(c) {
  * @returns {string}
  */
 function joinSideLists(q) {
-  const SIDE = String.raw`(?:top|bottom|left|right|sides)`;
+  // ("above and below" are the top and the bottom.)
+  const SIDE = String.raw`(?:top|bottom|left|right|sides|above|below)`;
   return q.replace(
     new RegExp(
-      String.raw`\b${SIDE}(?:(?:\s*,\s*and\s+|\s*,\s*|\s+and\s+)${SIDE}\b)+`,
+      // (Each side may take its own "on" and "the": "the top and the
+      // bottom", "on the left and on the right".)
+      String.raw`\b${SIDE}(?:(?:\s*,\s*and\s+|\s*,\s*|\s+and\s+)(?:on\s+)?(?:the\s+)?${SIDE}\b)+`,
       'gi',
     ),
     (m, at, all) => {
@@ -619,11 +623,26 @@ function joinSideLists(q) {
           /\b(?:borders?|edges?|outlines?|padding|margins?|spacing|gaps?|radius|corners?|space)\b/gi,
         );
       const owner = before?.at(-1) ?? '';
+      // (A look said right after the list is its own: "a border and top
+      // and bottom padding 6px" lists the padding's sides, and the clause
+      // keeps both.)
       const next = text.slice(at + m.length).match(/^\s*([a-z]+)/i)?.[1] ?? '';
-      return /^(?:borders?|edges?|outlines?)$/i.test(owner) ||
-        /^(?:borders?|edges?|outlines?)$/i.test(next) ||
-        (!owner && /^lines?$/i.test(next))
-        ? m.replace(/\s*,\s*and\s+|\s*,\s*|\s+and\s+/gi, ' & ')
+      const nextLook =
+        /^(?:borders?|edges?|outlines?|lines?|padding|margins?|spacing|gaps?|radius|corners?|space)$/i.test(
+          next,
+        );
+      // (Only a border's or a padding's sides are listed: "corners on top
+      // and bottom" are every corner, read by the corner reader.)
+      const sided = /^(?:borders?|edges?|outlines?|lines?|padding|margins?|spacing|space)$/i;
+      // (Any look's list is kept whole, "top and bottom padding 6px", so
+      // each side said takes the look: the border reader and the padding
+      // reader each read the sides.)
+      const look = nextLook ? sided.test(next) : sided.test(owner);
+      return look
+        ? m.replace(
+            /\s*,\s*(?:and\s+)?(?:on\s+)?(?:the\s+)?|\s+and\s+(?:on\s+)?(?:the\s+)?/gi,
+            ' & ',
+          )
         : m;
     },
   );
@@ -18259,8 +18278,13 @@ export function draftAnswer(ctx, env, question) {
       c.parts.length &&
       c.parts.every(p => TARGET.has(one(p.on)) || FAMILIES[p.on])
     ) {
-      // "horizontal padding 20px", "padding top 12px": only those sides.
+      // "horizontal padding 20px", "padding top 12px": only those sides;
+      // "padding top and bottom 6px": each side said.
       const side = named.prop === 'padding' ? sideIn(c) : null;
+      const listed =
+        named.prop === 'padding' && /&/.test(c.text)
+          ? [...new Set(c.text.match(/\b(?:top|bottom|left|right)\b/g))]
+          : [];
       const prop = !side
         ? named.prop
         : /^(left|right|top|bottom)$/.test(side)
@@ -18268,6 +18292,7 @@ export function draftAnswer(ctx, env, question) {
           : /^(vertical|block)/.test(side)
             ? 'padding-block'
             : 'padding-inline';
+      const props = listed.length > 1 ? listed.map(x => `padding-${x}`) : [prop];
       // Padding on a table row (a box CSS draws no padding on) is its
       // cells'.
       const onParts = /^padding/.test(prop)
@@ -18277,9 +18302,14 @@ export function draftAnswer(ctx, env, question) {
               : paddedParts(ctx, one(p.on)).map(on => ({...p, on})),
           )
         : c.parts;
-      const steps = onParts.slice(0, 3).map(p => {
+      const steps = onParts.slice(0, 3).flatMap(p => {
         const {noState: _n, ...f} = flagsFor(c, p);
-        return {p, f, st: set(prop, named.value, {...f, ...modeOf(c)})};
+        return props.map(pr => ({
+          p,
+          f,
+          pr,
+          st: set(pr, named.value, {...f, ...modeOf(c)}),
+        }));
       });
       // A property set cannot use on a part (a heading's color comes from
       // its prop) is answered the usual way, which says why.
@@ -18287,7 +18317,7 @@ export function draftAnswer(ctx, env, question) {
         for (const {p, f, st} of steps) {
           seenPart(p.on);
           const d = {
-            text: `${prop} on ${p.on}${f.state ? ` when ${f.state}` : ''}, as you wrote it`,
+            text: `${st.thing} on ${p.on}${f.state ? ` when ${f.state}` : ''}, as you wrote it`,
             options: [[st]],
           };
           push(d);
@@ -22533,13 +22563,27 @@ export function draftAnswer(ctx, env, question) {
         // rgba(0,0,0,.25) border"): colors written one per side, as CSS
         // writes them, are that one border color, every side as written; a
         // part that draws no border is given one by set.
+        // (A width said with them, "border 2px #eee #eee #ddd", is the
+        // line they color: the border first, then the colors.)
         const perSide = outline ? null : sideColorsIn(c.text);
-        if (perSide && !c.lengths.length)
+        if (perSide && c.lengths.length <= 1)
           return {
-            text: `the border colors${where}, one per side as written (${SIDE_ORDER[perSide.length]}): border-color`,
+            text: `the border colors${where}, one per side as written (${SIDE_ORDER[perSide.length]}): ${c.lengths.length ? 'border, then ' : ''}border-color`,
             options: [
-              [set('border-color', perSide.join(' '), {...f, ...modeOf(c)})],
+              [
+                ...(c.lengths.length
+                  ? [
+                      set(
+                        'border',
+                        `${c.lengths[0]} ${/\b(dashed|dotted|double)\b/.exec(c.text)?.[1] ?? 'solid'}`,
+                        f,
+                      ),
+                    ]
+                  : []),
+                set('border-color', perSide.join(' '), {...f, ...modeOf(c)}),
+              ],
             ],
+            ...(c.lengths.length ? {sequence: true} : {}),
           };
         // ("a transparent bottom border", "with a transparent bottom"): a
         // side said transparent is that side's line drawn see-through, never
@@ -22548,9 +22592,10 @@ export function draftAnswer(ctx, env, question) {
           colorFor(c, 'border') ??
           (transparentSide(c.text) &&
           // (Only "transparent" said plainly, after an article, a joining
-          // word or a side: a word before it that grades it, "barely",
-          // "very", "slightly", "50%", makes a fainter border.)
-          /(?:^|\b(?:a|an|the|with|and|is|are|be|its|their|top|bottom|left|right)\s+|,\s*)transparent\b/i.test(
+          // word, a side or a label's colon or dash: a word before it that
+          // grades it, "barely", "very", "slightly", "50%", makes a fainter
+          // border.)
+          /(?:^|\b(?:a|an|the|with|and|is|are|be|its|their|top|bottom|left|right)\s+|[,:;]\s*|\s[-–—]\s*)transparent\b/i.test(
             c.text,
           )
             ? 'transparent'
@@ -22828,6 +22873,33 @@ export function draftAnswer(ctx, env, question) {
             sequence: true,
           };
         }
+        // "a slightly darker bottom edge", "a darker top and bottom edge":
+        // each side said takes its own line color mixed darker (or
+        // lighter), in every mode.
+        if ((side || sides.length) && !color && !c.lengths.length) {
+          const darker = /\bdarker\b/.test(c.text);
+          const lighter = /\blighter\b/.test(c.text);
+          if (darker || lighter) {
+            const share = /\b(slightly|a bit|a little|a touch)\b/.test(c.text)
+              ? 85
+              : /\b(much|way|a lot)\b/.test(c.text)
+                ? 60
+                : 75;
+            const said = sides.length ? sides : [String(side)];
+            return {
+              text: `a ${darker ? 'darker' : 'lighter'} ${said.join(' and ')} border${where}: the line color it reads (${keptColor}) mixed ${100 - share}% toward ${darker ? 'black' : 'white'} on ${said.length > 1 ? 'those sides' : 'that side'} only, in every mode`,
+              options: [
+                said.map(x =>
+                  set(
+                    `border-${x}-color`,
+                    `color-mix(in srgb, ${keptColor} ${share}%, ${darker ? 'black' : 'white'})`,
+                    f,
+                  ),
+                ),
+              ],
+            };
+          }
+        }
         // ("a #dddddd border on top and sides", "a border on top and
         // bottom"): each side said takes the border, with the part's own
         // line color when none is said; the others keep theirs.
@@ -22845,31 +22917,6 @@ export function draftAnswer(ctx, env, question) {
             ],
             sequence: true,
           };
-        // "a slightly darker bottom edge": that side's color only, its own
-        // line color mixed darker (or lighter), in every mode.
-        if (side && !color && !c.lengths.length) {
-          const darker = /\bdarker\b/.test(c.text);
-          const lighter = /\blighter\b/.test(c.text);
-          if (darker || lighter) {
-            const share = /\b(slightly|a bit|a little|a touch)\b/.test(c.text)
-              ? 85
-              : /\b(much|way|a lot)\b/.test(c.text)
-                ? 60
-                : 75;
-            return {
-              text: `a ${darker ? 'darker' : 'lighter'} ${side} border${where}: the line color it reads (${keptColor}) mixed ${100 - share}% toward ${darker ? 'black' : 'white'} on that side only, in every mode`,
-              options: [
-                [
-                  set(
-                    `border-${side}-color`,
-                    `color-mix(in srgb, ${keptColor} ${share}%, ${darker ? 'black' : 'white'})`,
-                    f,
-                  ),
-                ],
-              ],
-            };
-          }
-        }
         // A border the part draws at rest: a width other than 0 and a style
         // other than none (a button's 0px border is no line).
         // (Every side's, and only the variant asked when one is.)
@@ -23350,6 +23397,18 @@ export function draftAnswer(ctx, env, question) {
             reads.find(r => /^--spacing-/.test(r.token)) ?? reads[0] ?? null;
           return read?.token ? current(read.token) : null;
         };
+        // "padding top and bottom 6px" (a side list kept whole): each side
+        // said takes the length.
+        const listedSides =
+          !gap && /&/.test(c.text)
+            ? [...new Set(c.text.match(/\b(?:top|bottom|left|right)\b/g))]
+            : [];
+        if (listedSides.length > 1 && px)
+          return {
+            text: `padding on the ${listedSides.join(' and ')}${where}: ${listedSides.map(x => `padding-${x}`).join(', ')} ${px}`,
+            options: [listedSides.map(x => set(`padding-${x}`, px, f))],
+            sequence: true,
+          };
         // "padding top 12px", "more padding on the left", "horizontal
         // padding 20px": only those sides.
         const sideWord = gap ? null : sideIn(c);
@@ -27798,6 +27857,23 @@ export function draftAnswer(ctx, env, question) {
             )
           ),
       );
+    // A shorthand said after a side of it on the same part ("selected tab:
+    // transparent bottom, #dddddd border") goes first, so the side said
+    // stays: a later shorthand would replace it.
+    for (let i = 1; i < all.length; i++) {
+      const st = all[i];
+      const first = all.findIndex(
+        (x, k) =>
+          k < i &&
+          x.on === st.on &&
+          x.state === st.state &&
+          x.when === st.when &&
+          (!st.mode || x.mode === st.mode) &&
+          x.thing !== st.thing &&
+          coversProperty(st.thing, x.thing),
+      );
+      if (first >= 0) all.splice(first, 0, ...all.splice(i, 1));
+    }
     // At most MAX_STEPS in one sequence, cut only between clauses: a
     // clause's steps (its write and the keeps it needs, a status's border
     // written back) run together or not at all. The rest follow as the next
