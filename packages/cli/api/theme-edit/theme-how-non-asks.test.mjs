@@ -91,7 +91,6 @@ describe('writes nothing', () => {
     'yes because neon green links are SO professional',
     'had we gone with serif headings',
     'after the review, square the buttons',
-    'accent red; also undo the corners',
   ])(
     '%s',
     async (q, test) => {
@@ -130,6 +129,8 @@ describe('still writes', () => {
     ['boutons arrondis, sans ombre', 'box-shadow none --on button'],
     // ("after that" is the ask's next step, never a later event.)
     ['Make it compact. After that, make headings bold.', 'headings bold'],
+    // (An undo with nothing to take back is named; the rest is written.)
+    ['accent red; also undo the corners', "accent '#dc2626'"],
   ])(
     '%s',
     async (q, line, test) => {

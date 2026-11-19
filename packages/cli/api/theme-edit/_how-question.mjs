@@ -27690,10 +27690,9 @@ export function draftAnswer(ctx, env, question) {
       if (d.options.length && !/replaces the earlier/.test(d.text))
         d.text += ` (said after "then", this replaces the earlier ${superseded.map(st => `${st.thing} ${st.value}`).join(', ')})`;
   result.push(...kept.slice(0, clashes.length ? 0 : undefined));
-  // An ask that takes for granted a setting the theme does not have ("…;
-  // also undo the corners" with no corners set) reads a theme other than
-  // this one: the rest of it is said, never written, until the person
-  // sees what the theme has.
+  // An undo of a setting the theme does not have ("…; also undo the
+  // corners" with no corners set) is named as having nothing to take back;
+  // the rest of the ask is written.
   /** The clauses an undo in the same ask answered. @type {Set<unknown>} */
   const answeredByUndo = new Set();
   {
@@ -27753,18 +27752,9 @@ export function draftAnswer(ctx, env, question) {
         options: [],
       });
     } else if (unmet && result.some(d => d !== unmet && d.options.length)) {
-      // (A change said after the undo, "Undo the heading change. Then make
-      // the headings bold.", is asked of the theme as the undo leaves it,
-      // so it stands.)
-      const before = (/** @type {any} */ d) => {
-        const at = clauses.indexOf(/** @type {any} */ (draftClause.get(d)));
-        return undoAt < 0 || at < 0 || at < undoAt;
-      };
-      for (const d of result)
-        if (d !== unmet && d.options.length && before(d)) {
-          d.text = `${d.text} (held back: the same ask takes back ${unmet.unmet}, which ${env.slug} does not set, so the theme is not as the ask expects; ask for this alone to get it)`;
-          d.options = [];
-        }
+      // ("Make the cards rounder. Reset the card shadows.", with no card
+      // shadow set: the reset has nothing to take back, and says so; the
+      // rest of the ask is written.)
       result.splice(result.indexOf(unmet), 1);
       result.unshift(unmet);
     }
