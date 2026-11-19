@@ -6901,13 +6901,14 @@ async function changeOnce(
           })(),
         ]
       : []),
-    // A card's content takes one radius from Core, whatever its corners.
+    // On a Core that gives a part's content one radius (its derived entry
+    // has no `corners`), that content takes the first corner for all four.
     ...(sub === 'set' &&
     s.source === 'property' &&
     s.thing === 'border-radius' &&
     s.on &&
     (ctx.derived?.[s.on] ?? []).some(
-      d => d.property === 'borderRadius' && d.vars?.length,
+      d => d.property === 'borderRadius' && d.vars?.length && !d.corners,
     ) &&
     /\s|\//.test(String(s.value).trim())
       ? [
