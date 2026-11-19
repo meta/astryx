@@ -161,6 +161,13 @@ const fmt = (n: number) => `$${n.toFixed(2)}`;
 // :root by `@astryxdesign/core/astryx.css`). No StyleX compiler required.
 
 const fullWidth: CSSProperties = {width: '100%'};
+// An order line's name and badge start from no width and grow into the row,
+// so the price stays beside them while they fit, even wrapped onto two lines,
+// and moves under them only when the badge itself does not fit. They never
+// need more than the row (maxWidth): a badge wider than it ellipsizes.
+const itemName: CSSProperties = {flexBasis: 0, flexGrow: 1};
+// A price moved under its line keeps to the end, under the other prices.
+const itemPrice: CSSProperties = {marginInlineStart: 'auto'};
 // Form column flex-basis so the two checkout columns share width evenly.
 const formColBasis: CSSProperties = {flexBasis: 0};
 // Space the Order Summary content below its collapsible trigger title.
@@ -897,8 +904,14 @@ export default function PaymentFormPage() {
                                       <HStack
                                         gap={2}
                                         hAlign="between"
-                                        vAlign="start">
-                                        <HStack gap={2} vAlign="center">
+                                        vAlign="start"
+                                        wrap="wrap">
+                                        <HStack
+                                          gap={2}
+                                          vAlign="center"
+                                          wrap="wrap"
+                                          maxWidth="100%"
+                                          style={itemName}>
                                           <Text type="body" weight="medium">
                                             {item.name}
                                           </Text>
@@ -909,7 +922,10 @@ export default function PaymentFormPage() {
                                             />
                                           )}
                                         </HStack>
-                                        <Text type="body" weight="bold">
+                                        <Text
+                                          type="body"
+                                          weight="bold"
+                                          style={itemPrice}>
                                           {fmt(item.price)}
                                         </Text>
                                       </HStack>
