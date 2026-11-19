@@ -960,7 +960,7 @@ describe('Lab entry files (spec:AST-030 FR26)', () => {
   });
 });
 
-describe('a new Lab component family, as #9832 added one (spec:AST-030 FR26)', () => {
+describe('a new Lab component with its samples and spec folder (spec:AST-030 FR26)', () => {
   const {ROUTES_LOCK, LAB_SAMPLES} = require('./change-scope.cjs');
   const item = (name, path) => [
     '+    {',
@@ -969,76 +969,42 @@ describe('a new Lab component family, as #9832 added one (spec:AST-030 FR26)', (
     '+      "aliases": []',
     '+    },',
   ];
-  // The family folder is MediaPlayer; its doc names AudioPlayer, VideoPlayer
-  // and its parts, a hook, and blocks for each player.
-  const routePatch = [
-    '@@ -98,6 +98,26 @@',
-    ...item('component-lab-audio-player', 'components/lab/audio-player'),
-    ...item('component-lab-media-player', 'components/lab/media-player'),
-    ...item('component-lab-video-player', 'components/lab/video-player'),
-    ...item(
-      'example-audio-player-voice-memo',
-      'examples/audio-player/voice-memo',
-    ),
-    ...item('hook-lab-use-media-player', 'hooks/lab/use-media-player'),
-    ...item(
-      'showcase-media-player-custom-layout',
-      'showcases/media-player/custom-layout',
-    ),
-  ].join('\n');
-  const story = [
-    '@@ -0,0 +1,3 @@',
-    "+import {MediaPlayer} from '@astryxdesign/lab';",
-  ].join('\n');
-  const files = [
-    {filename: 'packages/lab/src/MediaPlayer/MediaPlayer.tsx', status: 'A'},
-    {filename: 'packages/lab/src/MediaPlayer/MediaPlayer.doc.mjs', status: 'A'},
+  const lockPatch = items =>
+    ['@@ -98,6 +98,16 @@', ...items.flatMap(([n, p]) => item(n, p))].join('\n');
+  const added = text => `@@ -0,0 +1,1 @@\n+${text}`;
+  // One component named for its own folder, as a new Lab component lands
+  // once lab:sync has written its route entries and sample.
+  const rating = [
+    {filename: 'packages/lab/src/Rating/Rating.tsx', status: 'A'},
+    {filename: 'packages/lab/src/Rating/Rating.doc.mjs', status: 'A'},
     {filename: 'packages/lab/src/index.ts', status: 'M'},
-    {filename: 'packages/lab/blocks/AudioPlayerVoiceMemo.doc.mjs', status: 'A'},
-    {filename: 'packages/lab/blocks/AudioPlayerVoiceMemo.tsx', status: 'A'},
+    {filename: 'packages/lab/blocks/RatingBasic.doc.mjs', status: 'A'},
     {filename: LAB_SAMPLES, status: 'M'},
-    {
-      filename: 'docs/specs/components/MediaPlayer/MediaPlayer.spec.md',
-      status: 'A',
-    },
-    {filename: 'apps/storybook/stories/MediaPlayer.stories.tsx', status: 'A'},
+    {filename: 'docs/specs/components/Rating/Rating.spec.md', status: 'A'},
+    {filename: 'apps/storybook/stories/Rating.stories.tsx', status: 'A'},
     {filename: ROUTES_LOCK, status: 'M'},
-    {filename: '.changeset/lab-media-player.md', status: 'A'},
+    {filename: '.changeset/lab-rating.md', status: 'A'},
   ];
-  const doc = [
-    '@@ -0,0 +1,9 @@',
-    '+export const docs = {',
-    "+  name: 'MediaPlayer',",
-    "+  components: [{name: 'AudioPlayer'}, {name: 'VideoPlayer'}],",
-    '+};',
-    '+export const audio = {',
-    "+  name: 'AudioPlayer',",
-    "+  props: [{name: 'label', type: 'string'}],",
-    '+};',
-    '+export const hook = {',
-    "+  name: 'useMediaPlayer',",
-    '+};',
-    '+export const video = {',
-    "+  name: 'VideoPlayer',",
-    '+};',
-  ].join('\n');
-  const patches = {
-    [ROUTES_LOCK]: routePatch,
-    'packages/lab/src/MediaPlayer/MediaPlayer.doc.mjs': doc,
-    'apps/storybook/stories/MediaPlayer.stories.tsx': story,
-    [LAB_SAMPLES]: '@@ -1,1 +1,2 @@\n+  lab__MediaPlayer: () => null,',
-    'docs/specs/components/MediaPlayer/MediaPlayer.spec.md':
-      '@@ -0,0 +1,1 @@\n+# MediaPlayer',
+  const ratingPatches = {
+    [ROUTES_LOCK]: lockPatch([
+      ['component-lab-rating', 'components/lab/rating'],
+      ['example-rating-basic', 'examples/rating/basic'],
+    ]),
+    'apps/storybook/stories/Rating.stories.tsx': added(
+      "import {Rating} from '@astryxdesign/lab';",
+    ),
+    [LAB_SAMPLES]: added('  lab__Rating: () => null,'),
+    'docs/specs/components/Rating/Rating.spec.md': added('# Rating'),
   };
 
-  it('stays in the Lab lane with its samples, its spec folder and every route its docs give', () => {
-    const result = classifyChanges(files, {patches});
+  it('stays in the Lab lane with its samples, its own spec folder and its routes', () => {
+    const result = classifyChanges(rating, {patches: ratingPatches});
     expect(result.labOnly).toBe(true);
     expect(result.fullSuite).toBe(false);
   });
 
-  it("refuses another component's spec folder, and a route for a component its docs do not name", () => {
-    const other = files.map(f =>
+  it("refuses another component's spec folder", () => {
+    const other = rating.map(f =>
       f.filename.startsWith('docs/specs/')
         ? {...f, filename: 'docs/specs/components/Drawer/Drawer.spec.md'}
         : f,
@@ -1046,26 +1012,35 @@ describe('a new Lab component family, as #9832 added one (spec:AST-030 FR26)', (
     expect(
       classifyChanges(other, {
         patches: {
-          ...patches,
-          'docs/specs/components/Drawer/Drawer.spec.md': '@@ -1 +1 @@\n+x',
+          ...ratingPatches,
+          'docs/specs/components/Drawer/Drawer.spec.md': added('x'),
         },
       }).labOnly,
     ).toBe(false);
-    const drawer = routePatch
-      .replace('component-lab-video-player', 'component-lab-drawer')
-      .replace('components/lab/video-player', 'components/lab/drawer');
-    expect(
-      classifyChanges(files, {patches: {...patches, [ROUTES_LOCK]: drawer}})
-        .labOnly,
-    ).toBe(false);
-    // A lowercase prop name is not a component name.
-    const prop = routePatch
-      .replace('component-lab-video-player', 'component-lab-label')
-      .replace('components/lab/video-player', 'components/lab/label');
-    expect(
-      classifyChanges(files, {patches: {...patches, [ROUTES_LOCK]: prop}})
-        .labOnly,
-    ).toBe(false);
+  });
+
+  it('keeps the full suite for a family folder, as #9832 added MediaPlayer with AudioPlayer and VideoPlayer', () => {
+    const family = [
+      {filename: 'packages/lab/src/MediaPlayer/MediaPlayer.tsx', status: 'A'},
+      {filename: 'packages/lab/src/MediaPlayer/AudioPlayer.tsx', status: 'A'},
+      {
+        filename: 'packages/lab/src/MediaPlayer/MediaPlayer.doc.mjs',
+        status: 'A',
+      },
+      {filename: LAB_SAMPLES, status: 'M'},
+      {filename: ROUTES_LOCK, status: 'M'},
+    ];
+    const result = classifyChanges(family, {
+      patches: {
+        [LAB_SAMPLES]: added('  lab__MediaPlayer: () => null,'),
+        [ROUTES_LOCK]: lockPatch([
+          ['component-lab-audio-player', 'components/lab/audio-player'],
+          ['component-lab-media-player', 'components/lab/media-player'],
+        ]),
+      },
+    });
+    expect(result.labOnly).toBe(false);
+    expect(result.fullSuite).toBe(true);
   });
 });
 

@@ -72,12 +72,10 @@ function changedLines(patch) {
 }
 
 function routesLockNamesLabOnly(patch, slugs) {
-  const lines = changedLines(patch);
   const ownSlug = value =>
     [...slugs].some(
       slug =>
         value === `components/lab/${slug}` ||
-        value === `hooks/lab/${slug}` ||
         value.startsWith(`examples/${slug}/`) ||
         value.startsWith(`showcases/${slug}/`),
     );
@@ -85,10 +83,10 @@ function routesLockNamesLabOnly(patch, slugs) {
     [...slugs].some(
       slug =>
         value === `component-lab-${slug}` ||
-        value === `hook-lab-${slug}` ||
         value.startsWith(`example-${slug}-`) ||
         value.startsWith(`showcase-${slug}-`),
     );
+  const lines = changedLines(patch);
   return (
     lines.length > 0 &&
     lines.every(({text}) => {
@@ -154,32 +152,6 @@ function storyImportsLab(patch) {
     .map(line => line.slice(1))
     .join('\n');
   return /from '@astryxdesign\/lab(?:\/[^']*)?';/.test(added);
-}
-
-const LAB_DOC = /^packages\/lab\/(?:src\/.+|blocks\/[^/]+)\.doc\.mjs$/;
-
-/**
- * The component and hook names a change's Lab docs add (`name: 'AudioPlayer'`,
- * `name: 'useMediaPlayer'` on an added line). A family doc names each of its
- * components, so their routes belong to the change as the folder's do; a
- * prop's lowercase name is not one.
- * @param {{filename: string}[]} changes
- * @param {Record<string, string> | null} patches
- * @returns {string[]}
- */
-function labDocNames(changes, patches) {
-  return changes.flatMap(change => {
-    const patch = LAB_DOC.test(change.filename)
-      ? patches?.[change.filename]
-      : null;
-    if (typeof patch !== 'string') return [];
-    return changedLines(patch)
-      .filter(({sign}) => sign === '+')
-      .flatMap(({text}) => {
-        const name = /^name:\s*'((?:use)?[A-Z][A-Za-z0-9]*)'$/.exec(text);
-        return name ? [name[1]] : [];
-      });
-  });
 }
 
 /**
@@ -463,9 +435,6 @@ function classifyChanges(
       return match ? [match[1]] : [];
     }),
   );
-  // A carried folder's docs name the components and hooks it adds.
-  if (labNames.size > 0)
-    for (const name of labDocNames(normalized, patches)) labNames.add(name);
   const labEntries = new Set(
     normalized
       .filter(change =>
