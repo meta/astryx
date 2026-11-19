@@ -83,6 +83,7 @@ import {
   WRAPPED_PARTS,
   CARD_LIKE,
   SHOWCASE_GROUPS,
+  onlyMeans,
 } from './_tables.mjs';
 import {TOP_BAR_COMPONENTS} from './_catalog.mjs';
 import {
@@ -1693,7 +1694,7 @@ export function settingsProblem(
     if (s.only != null && s.only !== true)
       return `${s.thing} has only ${JSON.stringify(s.only)}, not true or false`;
     if (s.only === true && !onlyFits(s))
-      return `${describe({...s, only: undefined, value: '?'}).replace(' = ?', '')} has only, which is for one member of a group styled alike (${AUTO_SPREAD.join(', ')})`;
+      return `${describe({...s, only: undefined, value: '?'}).replace(' = ?', '')} has only, which is for one member of a group (${s.on ? `not the ${s.on} group itself` : 'it names no part'})`;
     const key = keyOf(s);
     // The command that changes or removes a setting listed twice keeps one
     // value, or none, so it fixes the list. An entry with a twin is named
@@ -2332,7 +2333,58 @@ function readEntryWords(data, early = /** @type {string[]} */ ([])) {
       }
     }
   }
+  readMeaninglessOnly(data, notes);
   ENTRY_NOTES.set(data, notes);
+}
+
+/**
+ * An `only` that means nothing where it is saved (on a part styled on its
+ * own, onlyMeans: an editor that took --only there saved it) is read as
+ * without it, which is how the build applies it, and said once. Read so, an entry can fall on the place of another
+ * (a plain one beside it): the later one is the one the build shows, so it
+ * is kept, and the earlier one is named.
+ * @param {any} data
+ * @param {string[]} notes
+ */
+function readMeaninglessOnly(data, notes) {
+  if (!Array.isArray(data?.settings)) return;
+  /** @type {Set<any>} */
+  const read = new Set();
+  for (const s of data.settings) {
+    if (
+      !s ||
+      typeof s.thing !== 'string' ||
+      s.only !== true ||
+      typeof s.on !== 'string' ||
+      onlyMeans(s.on) !== 'own'
+    )
+      continue;
+    delete s.only;
+    read.add(s);
+    notes.push(
+      `${describe({...s, value: '?'}).replace(' = ?', '')} was saved with only, which changes nothing there (${s.on} is styled on its own already; only ${AUTO_SPREAD.join(' and ')} spread to their group), so it is read as without it; the next change saves it so`,
+    );
+  }
+  if (!read.size) return;
+  /** @type {Map<string, any>} */
+  const last = new Map();
+  for (const s of data.settings)
+    if (s && typeof s.thing === 'string') last.set(keyOf(s), s);
+  const dropped = data.settings.filter(
+    (/** @type {any} */ s) =>
+      s &&
+      typeof s.thing === 'string' &&
+      last.get(keyOf(s)) !== s &&
+      (read.has(s) || read.has(last.get(keyOf(s)))),
+  );
+  if (!dropped.length) return;
+  data.settings = data.settings.filter(
+    (/** @type {any} */ s) => !dropped.includes(s),
+  );
+  for (const s of dropped)
+    notes.push(
+      `${describe(s)} sits where a later entry of the same setting does, read without only, and that later one is the one that shows; the earlier one is left out`,
+    );
 }
 
 /** @type {WeakMap<object, string[]>} */
@@ -2376,15 +2428,13 @@ export function entryDamage(s) {
 }
 
 /**
- * Whether `only` fits a setting: it names one member of a group styled
- * alike (a text input of inputs), as `set --only` takes it.
+ * Whether a saved `only` reads, as `set --only` reads it (onlyMeans): on a
+ * part, a member of a group or not (on one styled on its own it changes
+ * nothing, and the entry builds as without it); never on a group itself.
  * @param {any} s
  */
 function onlyFits(s) {
-  const fam = typeof s.on === 'string' ? familyOf(s.on) : null;
-  return Boolean(
-    fam && !FAMILIES[s.on] && AUTO_SPREAD.includes(/** @type {string} */ (fam)),
-  );
+  return typeof s.on === 'string' && onlyMeans(s.on) !== 'group';
 }
 
 /**
@@ -4369,7 +4419,7 @@ export function partsOf(ctx, s) {
         : members;
   if (FAMILIES[s.on]) return spread(FAMILIES[s.on].filter(has));
   const fam = familyOf(s.on);
-  if (fam && AUTO_SPREAD.includes(fam) && !s.only)
+  if (fam && onlyMeans(s.on) === 'member' && !s.only)
     return spread(FAMILIES[fam].filter(has).filter(m => drawnAlike(ctx, s, m)));
   return [s.on];
 }

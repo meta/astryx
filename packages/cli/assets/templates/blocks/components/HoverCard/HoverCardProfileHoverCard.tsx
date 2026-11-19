@@ -8,7 +8,7 @@ import {Button} from '@astryxdesign/core/Button';
 import {Icon} from '@astryxdesign/core/Icon';
 import {VStack, HStack} from '@astryxdesign/core/Layout';
 import {Text, Heading} from '@astryxdesign/core/Text';
-import {CalendarIcon} from '@heroicons/react/24/outline';
+import {CalendarIcon} from '@astryxdesign/template-icons';
 
 export default function HoverCardProfileHoverCard() {
   return (

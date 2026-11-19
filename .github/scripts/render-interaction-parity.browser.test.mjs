@@ -850,3 +850,143 @@ describe.runIf(BROWSER_STEP)(
     }, 300_000);
   },
 );
+
+describe.runIf(BROWSER_STEP)(
+  'a light-only theme in a dark viewer',
+  () => {
+    /** @type {string} */
+    let home;
+    /** @type {any} */
+    let browser;
+
+    /**
+     * A built theme package with no colorModes export: its module and the
+     * stylesheet that scopes its tokens.
+     * @param {string} name
+     * @param {string} css
+     */
+    const themePackage = (name, css) => {
+      const dir = path.join(home, 'node_modules', '@acme', name);
+      fs.mkdirSync(dir, {recursive: true});
+      fs.writeFileSync(
+        path.join(dir, 'package.json'),
+        JSON.stringify({name: `@acme/${name}`, version: '1.0.0', type: 'module', main: 'index.js'}),
+      );
+      fs.writeFileSync(
+        path.join(dir, 'index.js'),
+        `export const theme = {name: '${name}', __built: true, tokens: {}};\n`,
+      );
+      fs.writeFileSync(path.join(dir, 'theme.css'), css);
+    };
+
+    /**
+     * Export a page under the theme, and read the page's colors in a
+     * Chromium that prefers dark.
+     * @param {string} name
+     */
+    const colorsInDark = async name => {
+      fs.writeFileSync(
+        path.join(home, `${name}.tsx`),
+        `import {Theme} from '@astryxdesign/core/theme';
+import {theme} from '@acme/${name}';
+import '@acme/${name}/theme.css';
+export default function Page() {
+  return (<Theme theme={theme}><main><h1>Saved notes</h1></main></Theme>);
+}
+`,
+      );
+      await render(`${name}.tsx`, {cwd: home, out: `${name}.html`});
+      const context = await browser.newContext({viewport: {width: 800, height: 600}});
+      try {
+        const page = await context.newPage();
+        await page.emulateMedia({colorScheme: 'dark'});
+        await page.setContent(fs.readFileSync(path.join(home, `${name}.html`), 'utf8'));
+        return await page.evaluate(() => {
+          const root = getComputedStyle(document.documentElement);
+          return {
+            scheme: root.colorScheme,
+            background: root.backgroundColor,
+            text: getComputedStyle(/** @type {Element} */ (document.querySelector('h1'))).color,
+          };
+        });
+      } finally {
+        await context.close();
+      }
+    };
+
+    beforeAll(async () => {
+      home = makeLinkedFixture('astryx-render-light-only-', ['@astryxdesign', '@stylexjs', 'react', 'react-dom']);
+      themePackage('retro', '[data-astryx-theme="retro"]{--color-background-body:#c0c0c0;--color-text-primary:#000000}');
+      themePackage('duo', '[data-astryx-theme="duo"]{--color-background-body:light-dark(#ffffff,#111111)}');
+      browser = await chromium.launch();
+    }, 120_000);
+
+    afterAll(async () => {
+      await browser?.close();
+      if (home) removeLinkedFixture(home);
+    });
+
+    it('stays light: the text sits on the theme\'s light page color, not the viewer\'s dark canvas', async () => {
+      const colors = await colorsInDark('retro');
+      expect(colors.scheme).toBe('light');
+      expect(colors.background).toBe('rgb(192, 192, 192)');
+      // Dark text: each channel well below the page color's.
+      const channels = (colors.text.match(/\d+/g) ?? []).slice(0, 3).map(Number);
+      expect(Math.max(...channels)).toBeLessThan(100);
+    }, 120_000);
+
+    it('keeps a dark-only theme dark: Core\'s track and fill colors resolve to their dark values', async () => {
+      fs.cpSync(
+        path.join(REPO_ROOT, 'packages/cli/assets/templates/themes/gothic'),
+        path.join(home, 'gothic'),
+        {recursive: true},
+      );
+      // The template's icons come from lucide-react, which the theme package lists.
+      const lucide = path.dirname(
+        createRequire(path.join(REPO_ROOT, 'packages/themes/gothic/package.json')).resolve('lucide-react/package.json'),
+      );
+      fs.mkdirSync(path.join(home, 'gothic/node_modules'), {recursive: true});
+      fs.symlinkSync(lucide, path.join(home, 'gothic/node_modules/lucide-react'), 'junction');
+      const {spawnSync} = await import('node:child_process');
+      const built = spawnSync(
+        process.execPath,
+        [path.join(REPO_ROOT, 'packages/cli/clients/cli/bin/astryx.mjs'), 'theme', 'build', 'gothic/gothicTheme.ts'],
+        {cwd: home, encoding: 'utf8', timeout: 120_000},
+      );
+      expect(built.status, built.stderr).toBe(0);
+      fs.writeFileSync(
+        path.join(home, 'gothic-page.tsx'),
+        `import {Theme} from '@astryxdesign/core/theme';
+import {gothicTheme} from './gothic/gothic.js';
+import './gothic/gothic.css';
+export default function Page() {
+  return (<Theme theme={gothicTheme}><main><h1>Saved notes</h1><p data-probe="track" style={{backgroundColor: 'var(--color-track)'}}>Track</p></main></Theme>);
+}
+`,
+      );
+      await render('gothic-page.tsx', {cwd: home, out: 'gothic-page.html'});
+      for (const colorScheme of /** @type {const} */ (['dark', 'light'])) {
+        const context = await browser.newContext({viewport: {width: 800, height: 600}});
+        try {
+          const page = await context.newPage();
+          await page.emulateMedia({colorScheme});
+          await page.setContent(fs.readFileSync(path.join(home, 'gothic-page.html'), 'utf8'));
+          const seen = await page.evaluate(() => ({
+            scheme: getComputedStyle(document.documentElement).colorScheme,
+            track: getComputedStyle(/** @type {Element} */ (document.querySelector('[data-probe="track"]'))).backgroundColor,
+          }));
+          // Core's track is light-dark(#CCD3DB, #5A5E66): its dark value in any viewer.
+          expect(seen, colorScheme).toEqual({scheme: 'dark', track: 'rgb(90, 94, 102)'});
+        } finally {
+          await context.close();
+        }
+      }
+    }, 240_000);
+
+    it('leaves a two-mode theme to follow the viewer, as before', async () => {
+      const colors = await colorsInDark('duo');
+      expect(colors.scheme).toBe('light dark');
+      expect(colors.background).toBe('rgba(0, 0, 0, 0)');
+    }, 120_000);
+  },
+);

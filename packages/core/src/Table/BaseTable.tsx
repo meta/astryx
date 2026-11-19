@@ -120,6 +120,9 @@ const styles = stylex.create({
     // any letter to stay inside its cell, flex rows inside the cell included.
     // Only wrap cells read this (`wrapStyles`); panel and empty rows do not.
     '--_table-cell-word-break': 'break-word',
+    // A heading wraps like the body cells (`headerOverflowStyles`). Set here
+    // too, so a table nested in a children-mode table does not inherit nowrap.
+    '--_table-header-white-space': 'normal',
   },
   tableAutoLayout: {
     tableLayout: 'auto',
@@ -128,6 +131,8 @@ const styles = stylex.create({
     // word to one letter, so the table sets its own.
     wordBreak: 'normal',
     '--_table-cell-word-break': 'normal',
+    // Each column grows to keep its heading on one line.
+    '--_table-header-white-space': 'nowrap',
   },
   /**
    * Inline flex row that keeps the header label and any "after" slot content

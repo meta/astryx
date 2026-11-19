@@ -54,56 +54,56 @@ import {useToast} from '@astryxdesign/core/Toast';
 import {rtlStyles} from '@astryxdesign/core/utils';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {neutralTheme} from '@astryxdesign/theme-neutral/built';
+// Aliased: a bare `File` would shadow the DOM type the image picker reads.
+// The angle mark for the Rotation field. Not `Angle`: that landed in
+// lucide after the version this repo pins, and a template has to build
+// against the icon set the consumer actually gets.
 import {
-  Aperture,
-  ArrowDownToLine,
-  ArrowUpToLine,
-  Baseline,
-  CaseLower,
-  CaseSensitive,
-  CaseUpper,
-  Contrast,
-  Download,
-  // Aliased: a bare `File` would shadow the DOM type the image picker reads.
-  File as FileIcon,
-  FoldVertical,
-  Frame,
-  Grip,
-  Group,
-  Image as ImageIcon,
-  Italic,
-  Lock,
-  LockOpen,
-  Menu,
-  Minus,
-  PanelBottom,
-  PanelLeft,
-  PanelLeftRightDashed,
-  PanelRight,
-  PanelTopBottomDashed,
-  Plus,
-  Redo2,
-  RotateCcw,
-  RotateCw,
-  Scan,
-  SquareSquare,
-  SquareRoundCorner,
-  Strikethrough,
-  TextAlignCenter,
-  TextAlignEnd,
-  TextAlignJustify,
-  TextAlignStart,
-  // The angle mark for the Rotation field. Not `Angle`: that landed in
-  // lucide after the version this repo pins, and a template has to build
-  // against the icon set the consumer actually gets.
-  TriangleRight,
-  TrianglesCenterlineDashedHorizontal,
-  TrianglesCenterlineDashedVertical,
-  Type,
-  Underline,
-  Undo2,
-  X,
-} from 'lucide-react';
+  PhotoEffectIcon,
+  AlignBottomIcon,
+  AlignTopIcon,
+  TextRegularIcon,
+  LowercaseIcon,
+  TextCaseIcon,
+  UppercaseIcon,
+  ContrastIcon,
+  DownloadIcon,
+  FileIcon,
+  AlignMiddleIcon,
+  FrameIcon,
+  HalftoneIcon,
+  GroupIcon,
+  ImageIcon,
+  ItalicIcon,
+  LockIcon,
+  UnlockIcon,
+  MenuIcon,
+  RemoveIcon,
+  PanelBottomIcon,
+  PanelLeftIcon,
+  PaddingHorizontalIcon,
+  PanelRightIcon,
+  PaddingVerticalIcon,
+  AddIcon,
+  RedoIcon,
+  RotateCounterclockwiseIcon,
+  RotateIcon,
+  RadiusPerCornerIcon,
+  PaddingPerSideIcon,
+  CornerRadiusIcon,
+  StrikethroughIcon,
+  AlignCenterIcon,
+  AlignEndIcon,
+  AlignJustifyIcon,
+  AlignStartIcon,
+  AngleIcon,
+  FlipVerticalIcon,
+  FlipHorizontalIcon,
+  TextIcon,
+  UnderlineIcon,
+  UndoIcon,
+  CloseIcon,
+} from '@astryxdesign/template-icons/lucide';
 
 // =============================================================================
 // Canvas editor theme
@@ -439,7 +439,7 @@ const INITIAL_LAYERS: Layer[] = [
   },
 ];
 
-const LAYER_ICON = {text: Type, image: ImageIcon} as const;
+const LAYER_ICON = {text: TextIcon, image: ImageIcon} as const;
 
 /** The inspector's vertical alignment, in the words a Stack uses for it. */
 const V_ALIGN = {start: 'start', center: 'center', end: 'end'} as const;
@@ -500,9 +500,9 @@ const GLYPH = {
  * find the row it wants.
  */
 const EFFECT_PRESETS: {label: string; icon: IconType}[] = [
-  {label: 'Grain overlay', icon: Aperture},
-  {label: 'Halftone', icon: Grip},
-  {label: 'Duotone teal', icon: Contrast},
+  {label: 'Grain overlay', icon: PhotoEffectIcon},
+  {label: 'Halftone', icon: HalftoneIcon},
+  {label: 'Duotone teal', icon: ContrastIcon},
 ];
 
 /**
@@ -511,29 +511,29 @@ const EFFECT_PRESETS: {label: string; icon: IconType}[] = [
  * still needs it for the accessible name.
  */
 const ALIGN_X: {value: AlignX; label: string; icon: IconType}[] = [
-  {value: 'start', label: 'Align left', icon: TextAlignStart},
-  {value: 'center', label: 'Align centre', icon: TextAlignCenter},
-  {value: 'end', label: 'Align right', icon: TextAlignEnd},
-  {value: 'justify', label: 'Justify', icon: TextAlignJustify},
+  {value: 'start', label: 'Align left', icon: AlignStartIcon},
+  {value: 'center', label: 'Align centre', icon: AlignCenterIcon},
+  {value: 'end', label: 'Align right', icon: AlignEndIcon},
+  {value: 'justify', label: 'Justify', icon: AlignJustifyIcon},
 ];
 
 const ALIGN_Y: {value: AlignY; label: string; icon: IconType}[] = [
-  {value: 'start', label: 'Align top', icon: ArrowUpToLine},
-  {value: 'center', label: 'Align middle', icon: FoldVertical},
-  {value: 'end', label: 'Align bottom', icon: ArrowDownToLine},
+  {value: 'start', label: 'Align top', icon: AlignTopIcon},
+  {value: 'center', label: 'Align middle', icon: AlignMiddleIcon},
+  {value: 'end', label: 'Align bottom', icon: AlignBottomIcon},
 ];
 
 const DECORATIONS: {value: Decoration; label: string; icon: IconType}[] = [
-  {value: 'none', label: 'No decoration', icon: CaseSensitive},
-  {value: 'underline', label: 'Underline', icon: Underline},
-  {value: 'line-through', label: 'Strikethrough', icon: Strikethrough},
+  {value: 'none', label: 'No decoration', icon: TextCaseIcon},
+  {value: 'underline', label: 'Underline', icon: UnderlineIcon},
+  {value: 'line-through', label: 'Strikethrough', icon: StrikethroughIcon},
 ];
 
 const TRANSFORMS: {value: Transform; label: string; icon: IconType}[] = [
-  {value: 'none', label: 'As typed', icon: Minus},
-  {value: 'capitalize', label: 'Capitalise', icon: CaseSensitive},
-  {value: 'uppercase', label: 'Uppercase', icon: CaseUpper},
-  {value: 'lowercase', label: 'Lowercase', icon: CaseLower},
+  {value: 'none', label: 'As typed', icon: RemoveIcon},
+  {value: 'capitalize', label: 'Capitalise', icon: TextCaseIcon},
+  {value: 'uppercase', label: 'Uppercase', icon: UppercaseIcon},
+  {value: 'lowercase', label: 'Lowercase', icon: LowercaseIcon},
 ];
 
 /**
@@ -571,9 +571,9 @@ const WEIGHT_OPTIONS = ['Regular', 'Medium', 'Semibold', 'Bold'];
 
 /** What the Insert submenu can add to the artboard. */
 const INSERT_ITEMS: {label: string; icon: IconType}[] = [
-  {label: 'Frame', icon: Frame},
-  {label: 'Group', icon: Group},
-  {label: 'Text', icon: Type},
+  {label: 'Frame', icon: FrameIcon},
+  {label: 'Group', icon: GroupIcon},
+  {label: 'Text', icon: TextIcon},
   {label: 'Image', icon: ImageIcon},
 ];
 
@@ -1323,7 +1323,7 @@ function DocumentTab({
       endContent={
         <ItemAction
           label={`Close ${tab.name}`}
-          icon={X}
+          icon={CloseIcon}
           onClick={onClose}
           {...getContentRevealProps({
             forceVisibility: isActive ? 'shown' : undefined,
@@ -1567,7 +1567,7 @@ function layerTree(
     endContent: (
       <ItemAction
         label={layer.isLocked ? `Unlock ${layer.name}` : `Lock ${layer.name}`}
-        icon={layer.isLocked ? Lock : LockOpen}
+        icon={layer.isLocked ? LockIcon : UnlockIcon}
         onClick={() => onToggleLock(layer.id)}
         {...reveal.getContentRevealProps({
           forceVisibility: layer.isLocked ? 'shown' : undefined,
@@ -1591,7 +1591,7 @@ function layerTree(
       // A group is a frame, not a bigger version of what it holds. Repeating
       // the child's glyph on the parent says the row is another layer of that
       // kind; the frame mark says it is the container.
-      startContent: <Icon icon={Frame} size={ICON} color="secondary" />,
+      startContent: <Icon icon={FrameIcon} size={ICON} color="secondary" />,
       children: layers.filter(l => l.kind === group.kind).map(row),
     }))
     .filter(group => group.children.length > 0);
@@ -1653,7 +1653,7 @@ function StyleRow({
         variant="ghost"
         isDisabled={value === undefined}
         onClick={onClear}
-        icon={<Icon icon={X} size={ICON} />}
+        icon={<Icon icon={CloseIcon} size={ICON} />}
       />
     </InspectorRow>
   );
@@ -1855,7 +1855,7 @@ export default function CanvasEditor() {
                       variant: 'ghost',
                       size: 'sm',
                       isIconOnly: true,
-                      icon: <Icon icon={Menu} size={ICON} />,
+                      icon: <Icon icon={MenuIcon} size={ICON} />,
                     }}
                     hasChevron={false}
                     // Left to itself the menu matches its trigger, and the
@@ -1938,21 +1938,21 @@ export default function CanvasEditor() {
                     <DropdownMenuSubMenu label="View">
                       <DropdownMenuCheckboxItem
                         label="Left panel"
-                        icon={PanelLeft}
+                        icon={PanelLeftIcon}
                         endContent={<Shortcut>⌘B</Shortcut>}
                         value={chrome.left}
                         onChange={next => setChrome(c => ({...c, left: next}))}
                       />
                       <DropdownMenuCheckboxItem
                         label="Right panel"
-                        icon={PanelRight}
+                        icon={PanelRightIcon}
                         endContent={<Shortcut>⇧⌘B</Shortcut>}
                         value={chrome.right}
                         onChange={next => setChrome(c => ({...c, right: next}))}
                       />
                       <DropdownMenuCheckboxItem
                         label="Canvas tools"
-                        icon={PanelBottom}
+                        icon={PanelBottomIcon}
                         endContent={<Shortcut>⌘.</Shortcut>}
                         value={chrome.toolbar}
                         onChange={next =>
@@ -2015,7 +2015,7 @@ export default function CanvasEditor() {
                     the menubar instead — one piece of state, two ways in. */}
                       <DropdownMenuCheckboxItem
                         label={`Lock ${selected.name}`}
-                        icon={selected.isLocked ? Lock : LockOpen}
+                        icon={selected.isLocked ? LockIcon : UnlockIcon}
                         endContent={<Shortcut>⇧⌘L</Shortcut>}
                         value={selected.isLocked}
                         onChange={next => updateSelected({isLocked: next})}
@@ -2102,7 +2102,7 @@ export default function CanvasEditor() {
                     variant="ghost"
                     size="sm"
                     onClick={addTab}
-                    icon={<Icon icon={Plus} size={ICON} color="secondary" />}
+                    icon={<Icon icon={AddIcon} size={ICON} color="secondary" />}
                   />
                 </HStack>
                 <HStack gap={3} vAlign="center" xstyle={styles.headerTrail}>
@@ -2117,7 +2117,7 @@ export default function CanvasEditor() {
                       label: 'Export',
                       variant: 'ghost',
                       size: 'sm',
-                      icon: <Icon icon={Download} size={ICON} />,
+                      icon: <Icon icon={DownloadIcon} size={ICON} />,
                     }}
                     alignment="end"
                     items={EXPORT_MENU}
@@ -2354,7 +2354,7 @@ export default function CanvasEditor() {
                                           variant="ghost"
                                           icon={
                                             <Icon
-                                              icon={Undo2}
+                                              icon={UndoIcon}
                                               size={ICON}
                                               xstyle={rtlStyles.mirror}
                                             />
@@ -2373,7 +2373,7 @@ export default function CanvasEditor() {
                                           variant="ghost"
                                           icon={
                                             <Icon
-                                              icon={Redo2}
+                                              icon={RedoIcon}
                                               size={ICON}
                                               xstyle={rtlStyles.mirror}
                                             />
@@ -2395,7 +2395,10 @@ export default function CanvasEditor() {
                                           tooltip="Add frame"
                                           variant="ghost"
                                           icon={
-                                            <Icon icon={Frame} size={ICON} />
+                                            <Icon
+                                              icon={FrameIcon}
+                                              size={ICON}
+                                            />
                                           }
                                           xstyle={styles.toolBarControl}
                                         />
@@ -2410,7 +2413,7 @@ export default function CanvasEditor() {
                                           tooltip="Add text"
                                           variant="ghost"
                                           icon={
-                                            <Icon icon={Type} size={ICON} />
+                                            <Icon icon={TextIcon} size={ICON} />
                                           }
                                           xstyle={styles.toolBarControl}
                                         />
@@ -2487,7 +2490,7 @@ export default function CanvasEditor() {
                         <InspectorSection title="Layout">
                           <InspectorRow label="Padding">
                             <AxisInput
-                              icon={PanelLeftRightDashed}
+                              icon={PaddingHorizontalIcon}
                               label="Horizontal padding"
                               value={selected.paddingInline}
                               onChange={next =>
@@ -2495,7 +2498,7 @@ export default function CanvasEditor() {
                               }
                             />
                             <AxisInput
-                              icon={PanelTopBottomDashed}
+                              icon={PaddingVerticalIcon}
                               label="Vertical padding"
                               value={selected.paddingBlock}
                               onChange={next =>
@@ -2513,7 +2516,9 @@ export default function CanvasEditor() {
                               tooltip="Per side"
                               size="sm"
                               variant="ghost"
-                              icon={<Icon icon={SquareSquare} size={ICON} />}
+                              icon={
+                                <Icon icon={PaddingPerSideIcon} size={ICON} />
+                              }
                             />
                           </InspectorRow>
                         </InspectorSection>
@@ -2552,7 +2557,7 @@ export default function CanvasEditor() {
                         <InspectorSection title="Styles">
                           <InspectorRow label="Radius">
                             <AxisInput
-                              icon={SquareRoundCorner}
+                              icon={CornerRadiusIcon}
                               label="Corner radius"
                               value={selected.radius}
                               onChange={next => updateSelected({radius: next})}
@@ -2568,7 +2573,9 @@ export default function CanvasEditor() {
                               tooltip="Per corner"
                               size="sm"
                               variant="ghost"
-                              icon={<Icon icon={Scan} size={ICON} />}
+                              icon={
+                                <Icon icon={RadiusPerCornerIcon} size={ICON} />
+                              }
                             />
                           </InspectorRow>
                           <StyleRow
@@ -2610,7 +2617,7 @@ export default function CanvasEditor() {
                         <InspectorSection title="Transforms">
                           <InspectorRow label="Rotate">
                             <AxisInput
-                              icon={TriangleRight}
+                              icon={AngleIcon}
                               label="Rotation"
                               value={selected.rotation}
                               onChange={next =>
@@ -2627,7 +2634,12 @@ export default function CanvasEditor() {
                                   rotation: (selected.rotation + 270) % 360,
                                 })
                               }
-                              icon={<Icon icon={RotateCcw} size={ICON} />}
+                              icon={
+                                <Icon
+                                  icon={RotateCounterclockwiseIcon}
+                                  size={ICON}
+                                />
+                              }
                             />
                             <IconButton
                               label="Rotate clockwise"
@@ -2639,7 +2651,7 @@ export default function CanvasEditor() {
                                   rotation: (selected.rotation + 90) % 360,
                                 })
                               }
-                              icon={<Icon icon={RotateCw} size={ICON} />}
+                              icon={<Icon icon={RotateIcon} size={ICON} />}
                             />
                           </InspectorRow>
                           <InspectorRow label="Flip" hAlign="end">
@@ -2655,10 +2667,7 @@ export default function CanvasEditor() {
                               size="sm"
                               variant="ghost"
                               icon={
-                                <Icon
-                                  icon={TrianglesCenterlineDashedVertical}
-                                  size={ICON}
-                                />
+                                <Icon icon={FlipHorizontalIcon} size={ICON} />
                               }
                             />
                             <IconButton
@@ -2673,10 +2682,7 @@ export default function CanvasEditor() {
                               size="sm"
                               variant="ghost"
                               icon={
-                                <Icon
-                                  icon={TrianglesCenterlineDashedHorizontal}
-                                  size={ICON}
-                                />
+                                <Icon icon={FlipVerticalIcon} size={ICON} />
                               }
                             />
                           </InspectorRow>
@@ -2821,13 +2827,20 @@ export default function CanvasEditor() {
                                     value="normal"
                                     label="Regular"
                                     isLabelHidden
-                                    icon={<Icon icon={Baseline} size={ICON} />}
+                                    icon={
+                                      <Icon
+                                        icon={TextRegularIcon}
+                                        size={ICON}
+                                      />
+                                    }
                                   />
                                   <SegmentedControlItem
                                     value="italic"
                                     label="Italic"
                                     isLabelHidden
-                                    icon={<Icon icon={Italic} size={ICON} />}
+                                    icon={
+                                      <Icon icon={ItalicIcon} size={ICON} />
+                                    }
                                   />
                                 </SegmentedControl>
                               </StackItem>
@@ -2928,7 +2941,7 @@ export default function CanvasEditor() {
                                 variant="ghost"
                                 isDisabled={!selected.stroke}
                                 onClick={() => updateSelected({stroke: 0})}
-                                icon={<Icon icon={X} size={ICON} />}
+                                icon={<Icon icon={CloseIcon} size={ICON} />}
                               />
                             </InspectorRow>
                           </InspectorSection>
