@@ -5,7 +5,8 @@
 /**
  * @file CodeBlockHeaderPlugin.tsx
  * @input Uses @lexical/react (composer context), @lexical/code (CodeNode),
- *   lexical, and core IconButton, Icon, useClipboard, and useTranslator.
+ *   lexical, core IconButton, Icon, useClipboard and useTranslator, and a
+ *   ResizeObserver that schedules its measure frame.
  * @output Exports CodeBlockHeaderPlugin, which draws core CodeBlock's header
  *   over every fenced code block: the language label and a copy button, or
  *   just the copy button in the corner when the block names no language.
@@ -18,7 +19,7 @@
  */
 
 import * as stylex from '@stylexjs/stylex';
-import {useEffect, useLayoutEffect, useRef, useState, type JSX} from 'react';
+import {useCallback, useEffect, useRef, useState, type JSX} from 'react';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {$isCodeNode} from '@lexical/code';
 import {$getNodeByKey, $getRoot} from 'lexical';
@@ -26,7 +27,6 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {useClipboard} from '@astryxdesign/core/hooks';
 import {useTranslator} from '@astryxdesign/core/i18n';
-import {observeResize} from '@astryxdesign/core/utils';
 import type {CodeLanguage} from '@astryxdesign/core/CodeBlock';
 import {listedLanguage} from '../codeLanguages';
 import {
@@ -126,10 +126,13 @@ function samePlacements(
 function CodeBlockHeader({
   placement,
   label,
+  registerHeader,
 }: {
   readonly placement: HeaderPlacement;
   /** The matched language value's name, when a listed value claims the fence. */
   readonly label?: string;
+  /** Hands the plugin the drawn header, which its block reserves room for. */
+  readonly registerHeader: (key: string, header: HTMLDivElement) => () => void;
 }): JSX.Element {
   const [editor] = useLexicalComposerContext();
   const t = useTranslator();
@@ -166,9 +169,10 @@ function CodeBlockHeader({
     placement.left,
     placement.width,
   );
-  const headerRef = useReservedHeaderHeight(
-    placement.key,
-    placement.language != null,
+  const headerRef = useCallback(
+    (header: HTMLDivElement | null) =>
+      header == null ? undefined : registerHeader(placement.key, header),
+    [registerHeader, placement.key],
   );
   if (placement.language == null) {
     return (
@@ -194,41 +198,6 @@ function CodeBlockHeader({
 const HEADER_BLOCK_SIZE = '--_richtext-code-header-block-size';
 
 /**
- * Writes a header's drawn height on its code block, so the block reserves
- * that much room above the code (editorTheme's `code` padding) and the code
- * starts where core Markdown's does.
- */
-function useReservedHeaderHeight(key: string, isHeader: boolean) {
-  const [editor] = useLexicalComposerContext();
-  const headerRef = useRef<HTMLDivElement>(null);
-  // Syncs the header's height to the code block's element, which Lexical
-  // owns.
-  useLayoutEffect(() => {
-    const header = headerRef.current;
-    const block = editor.getElementByKey(key);
-    if (!isHeader || header == null || block == null) {
-      return;
-    }
-    // The size comes from the observer's entry, after layout and before
-    // paint, so no read here forces a layout. The call on registration is
-    // skipped: it runs at commit.
-    let isRegistered = false;
-    const unsubscribe = observeResize(header, entry => {
-      const blockSize = entry.borderBoxSize?.[0]?.blockSize;
-      if (isRegistered && blockSize != null) {
-        block.style.setProperty(HEADER_BLOCK_SIZE, `${blockSize}px`);
-      }
-    });
-    isRegistered = true;
-    return () => {
-      unsubscribe();
-      block.style.removeProperty(HEADER_BLOCK_SIZE);
-    };
-  }, [editor, key, isHeader]);
-  return headerRef;
-}
-
-/**
  * Draws a header over each top-level code block and keeps it there as the
  * document, the editor's size, or the window changes.
  */
@@ -242,6 +211,26 @@ export function CodeBlockHeaderPlugin({
   const [placements, setPlacements] = useState<ReadonlyArray<HeaderPlacement>>(
     [],
   );
+  // The drawn language headers by code block key. The measure frame reads
+  // their heights with the blocks' boxes, then writes each height on its
+  // block, which reserves that room above the code (editorTheme's `code`
+  // padding), so the code starts where core Markdown's does.
+  const headersRef = useRef(new Map<string, HTMLDivElement>());
+  const observerRef = useRef<ResizeObserver | null>(null);
+  const registerHeader = useCallback(
+    (key: string, header: HTMLDivElement) => {
+      headersRef.current.set(key, header);
+      observerRef.current?.observe(header);
+      return () => {
+        observerRef.current?.unobserve(header);
+        if (headersRef.current.get(key) === header) {
+          headersRef.current.delete(key);
+        }
+        editor.getElementByKey(key)?.style.removeProperty(HEADER_BLOCK_SIZE);
+      };
+    },
+    [editor],
+  );
 
   useEffect(() => {
     let frame = 0;
@@ -254,6 +243,9 @@ export function CodeBlockHeaderPlugin({
         return;
       }
       const origin = container.getBoundingClientRect();
+      const heights = [...headersRef.current].map(
+        ([key, header]) => [key, `${header.offsetHeight}px`] as const,
+      );
       const next = editor.getEditorState().read(() =>
         $getRoot()
           .getChildren()
@@ -277,6 +269,17 @@ export function CodeBlockHeaderPlugin({
             ];
           }),
       );
+      // Writes after every read in this frame. A block that grows moves the
+      // blocks below it; the root's resize measures them again next frame.
+      for (const [key, height] of heights) {
+        const block = editor.getElementByKey(key);
+        if (
+          block != null &&
+          block.style.getPropertyValue(HEADER_BLOCK_SIZE) !== height
+        ) {
+          block.style.setProperty(HEADER_BLOCK_SIZE, height);
+        }
+      }
       setPlacements(current =>
         samePlacements(current, next) ? current : next,
       );
@@ -290,10 +293,19 @@ export function CodeBlockHeaderPlugin({
       typeof ResizeObserver === 'undefined'
         ? null
         : new ResizeObserver(schedule);
+    // A header that wraps to a new line count measures again; the observer
+    // only schedules the frame.
+    observerRef.current = observer;
+    for (const header of headersRef.current.values()) {
+      observer?.observe(header);
+    }
     const unregisterRoot = editor.registerRootListener(root => {
       observer?.disconnect();
       if (root != null) {
         observer?.observe(root);
+        for (const header of headersRef.current.values()) {
+          observer?.observe(header);
+        }
       }
       schedule();
     });
@@ -303,6 +315,7 @@ export function CodeBlockHeaderPlugin({
     return () => {
       cancelAnimationFrame(frame);
       observer?.disconnect();
+      observerRef.current = null;
       unregisterRoot();
       unregisterUpdate();
       window.removeEventListener('resize', schedule);
@@ -315,6 +328,7 @@ export function CodeBlockHeaderPlugin({
         <CodeBlockHeader
           key={placement.key}
           placement={placement}
+          registerHeader={registerHeader}
           // A fence matched in `codeLanguages` shows the value's name, as
           // Markdown does (spec:AST-061).
           label={

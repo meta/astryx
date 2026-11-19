@@ -946,6 +946,17 @@ for (const globals of [
   test(`side by side: fences without a language have no label row (${globals})`, async ({
     page,
   }) => {
+    // A header that writes its height on its block while the browser
+    // delivers resize notifications would report a ResizeObserver loop.
+    await page.addInitScript(() => {
+      const seen: string[] = [];
+      Object.assign(window, {resizeObserverErrors: seen});
+      window.addEventListener('error', event => {
+        if (String(event.message).includes('ResizeObserver')) {
+          seen.push(event.message);
+        }
+      });
+    });
     const errors = await openStory(page, STORY.sideBySide, DESKTOP, globals);
     await waitForDocument(page, MARKDOWN);
     await waitForDocument(page, RICH_TEXT);
@@ -1052,6 +1063,13 @@ for (const globals of [
     expect(
       await headerHeight(Object.keys(fences).indexOf('code-long-label')),
     ).toBeGreaterThan((await headerHeight(0)) + 4);
+    expect(
+      await page.evaluate(
+        () =>
+          (window as unknown as {resizeObserverErrors: string[]})
+            .resizeObserverErrors,
+      ),
+    ).toEqual([]);
     for (const index of [0, 1, 2, 3, 4, 5, 6, 7]) {
       await expect(
         headers.nth(index).getByRole('button', {name: 'Copy code'}),
