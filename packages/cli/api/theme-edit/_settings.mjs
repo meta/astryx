@@ -2452,7 +2452,11 @@ export function entryDamage(s) {
  */
 export function onlyFits(s, map = null) {
   const fam = typeof s.on === 'string' ? familyOf(s.on) : null;
-  if (fam && !FAMILIES[s.on] && AUTO_SPREAD.includes(/** @type {string} */ (fam)))
+  if (
+    fam &&
+    !FAMILIES[s.on] &&
+    AUTO_SPREAD.includes(/** @type {string} */ (fam))
+  )
     return true;
   // A height or vertical padding on a bar: --only keeps it off the row the
   // bar holds (barReach). Read without the part map (a saved entry), any
@@ -8173,8 +8177,7 @@ function barReach(ctx, theme, data) {
       // A bar of a fixed height holds its row at that height (its items
       // center in it, and anything taller shows past both edges alike); a
       // bar with a least height gives its row that least height.
-      const key =
-        (b.height ?? b.blockSize) === height ? 'height' : 'minHeight';
+      const key = (b.height ?? b.blockSize) === height ? 'height' : 'minHeight';
       rb[key] = sides.length
         ? `calc(${height} - ${sides.join(' - ')})`
         : String(height);
