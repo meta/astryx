@@ -361,7 +361,10 @@ export const NEUTRAL_STOPS: Record<string, [number, number]> = ownTable({
   ].reverse() as [number, number],
 });
 /** Neutral tokens a tinted gray draws inside its ramp too: primary ink. */
-const TINTED_INK = new Set(['--color-text-primary', '--color-icon-primary']);
+const TINTED_INK: ReadonlyArray<string> = Object.freeze([
+  '--color-text-primary',
+  '--color-icon-primary',
+]);
 
 /** Neutral tokens whose shade stays inside the ramp, off its white and black ends. */
 export const NEUTRAL_INSIDE: ReadonlyArray<string> = Object.freeze([
@@ -1441,7 +1444,7 @@ export function mapPalette(
       // inside the ramp's black and white ends, which always reads.
       const shadeAt =
         NEUTRAL_INSIDE.includes(token) ||
-        (TINTED_INK.has(token) && !isGray(neutral.seed))
+        (TINTED_INK.includes(token) && !isGray(neutral.seed))
           ? atInside
           : at;
       put(
