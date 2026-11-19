@@ -132,7 +132,7 @@ function CodeBlockHeader({
   /** The matched language value's name, when a listed value claims the fence. */
   readonly label?: string;
   /** Hands the plugin the drawn header, which its block reserves room for. */
-  readonly registerHeader: (key: string, header: HTMLDivElement) => () => void;
+  readonly registerHeader: (key: string, parts: HeaderParts) => () => void;
 }): JSX.Element {
   const [editor] = useLexicalComposerContext();
   const t = useTranslator();
@@ -169,9 +169,16 @@ function CodeBlockHeader({
     placement.left,
     placement.width,
   );
+  const titleRef = useRef<HTMLSpanElement>(null);
+  // React attaches a child's ref before its parent's, so the label is set
+  // when the header's ref runs.
   const headerRef = useCallback(
-    (header: HTMLDivElement | null) =>
-      header == null ? undefined : registerHeader(placement.key, header),
+    (header: HTMLDivElement | null) => {
+      const title = titleRef.current;
+      return header == null || title == null
+        ? undefined
+        : registerHeader(placement.key, {header, title});
+    },
     [registerHeader, placement.key],
   );
   if (placement.language == null) {
@@ -188,7 +195,9 @@ function CodeBlockHeader({
       ref={headerRef}
       data-richtext-code-header=""
       {...stylex.props(styles.header, position)}>
-      <span {...stylex.props(styles.title)}>{label ?? placement.language}</span>
+      <span ref={titleRef} {...stylex.props(styles.title)}>
+        {label ?? placement.language}
+      </span>
       {copyButton}
     </div>
   );
@@ -196,6 +205,50 @@ function CodeBlockHeader({
 
 /** The variable the code block's theme class reserves the header with. */
 const HEADER_BLOCK_SIZE = '--_richtext-code-header-block-size';
+/** The variable the code block's theme class takes its least width from. */
+const HEADER_INLINE_SIZE = '--_richtext-code-header-inline-size';
+
+/** A drawn language header and its label. */
+interface HeaderParts {
+  header: HTMLDivElement;
+  title: HTMLSpanElement;
+}
+
+/**
+ * The header's width with its label on one line: its padding, the gaps, the
+ * controls beside the label, and the label's one-line width.
+ */
+function naturalWidth({header, title}: HeaderParts, label: number): number {
+  const style = getComputedStyle(header);
+  const others = [...header.children].filter(child => child !== title);
+  const gap = parseFloat(style.columnGap) || 0;
+  return (
+    parseFloat(style.paddingInlineStart) +
+    parseFloat(style.paddingInlineEnd) +
+    others.reduce((sum, child) => sum + (child as HTMLElement).offsetWidth, 0) +
+    gap * others.length +
+    label
+  );
+}
+
+/**
+ * The width of `title`'s text on one line, in its own font, or null where no
+ * canvas measures text (a DOM without layout).
+ */
+function oneLineWidth(
+  title: HTMLSpanElement,
+  canvas: {current: CanvasRenderingContext2D | null | undefined},
+): number | null {
+  if (canvas.current === undefined) {
+    canvas.current = document.createElement('canvas').getContext('2d');
+  }
+  const context = canvas.current;
+  if (context == null) {
+    return null;
+  }
+  context.font = getComputedStyle(title).font;
+  return context.measureText(title.textContent ?? '').width;
+}
 
 /**
  * Draws a header over each top-level code block and keeps it there as the
@@ -211,22 +264,28 @@ export function CodeBlockHeaderPlugin({
   const [placements, setPlacements] = useState<ReadonlyArray<HeaderPlacement>>(
     [],
   );
-  // The drawn language headers by code block key. The measure frame reads
-  // their heights with the blocks' boxes, then writes each height on its
-  // block, which reserves that room above the code (editorTheme's `code`
-  // padding), so the code starts where core Markdown's does.
-  const headersRef = useRef(new Map<string, HTMLDivElement>());
+  // The drawn language headers, by code block key. The measure frame reads
+  // their sizes with the blocks' boxes. Then it writes each size on its block.
+  // The block's top padding reserves the height, and its least width is the
+  // header's own.
+  const headersRef = useRef(new Map<string, HeaderParts>());
+  // Measures a label's one-line width; made on first use.
+  const canvasRef = useRef<CanvasRenderingContext2D | null | undefined>(
+    undefined,
+  );
   const observerRef = useRef<ResizeObserver | null>(null);
   const registerHeader = useCallback(
-    (key: string, header: HTMLDivElement) => {
-      headersRef.current.set(key, header);
-      observerRef.current?.observe(header);
+    (key: string, parts: HeaderParts) => {
+      headersRef.current.set(key, parts);
+      observerRef.current?.observe(parts.header);
       return () => {
-        observerRef.current?.unobserve(header);
-        if (headersRef.current.get(key) === header) {
+        observerRef.current?.unobserve(parts.header);
+        if (headersRef.current.get(key) === parts) {
           headersRef.current.delete(key);
         }
-        editor.getElementByKey(key)?.style.removeProperty(HEADER_BLOCK_SIZE);
+        const block = editor.getElementByKey(key);
+        block?.style.removeProperty(HEADER_BLOCK_SIZE);
+        block?.style.removeProperty(HEADER_INLINE_SIZE);
       };
     },
     [editor],
@@ -243,9 +302,23 @@ export function CodeBlockHeaderPlugin({
         return;
       }
       const origin = container.getBoundingClientRect();
-      const heights = [...headersRef.current].map(
-        ([key, header]) => [key, `${header.offsetHeight}px`] as const,
-      );
+      // Each header's drawn height, and the width it takes with its label
+      // on one line, border included, as core's frame grows to fit it.
+      const sizes = [...headersRef.current].map(([key, parts]) => {
+        const block = editor.getElementByKey(key);
+        const border =
+          block == null ? 0 : block.offsetWidth - block.clientWidth;
+        const label = oneLineWidth(parts.title, canvasRef);
+        return {
+          key,
+          block,
+          height: `${parts.header.offsetHeight}px`,
+          width:
+            label == null
+              ? null
+              : `${Math.ceil(naturalWidth(parts, label) + border)}px`,
+        };
+      });
       const next = editor.getEditorState().read(() =>
         $getRoot()
           .getChildren()
@@ -271,13 +344,18 @@ export function CodeBlockHeaderPlugin({
       );
       // Writes after every read in this frame. A block that grows moves the
       // blocks below it; the root's resize measures them again next frame.
-      for (const [key, height] of heights) {
-        const block = editor.getElementByKey(key);
-        if (
-          block != null &&
-          block.style.getPropertyValue(HEADER_BLOCK_SIZE) !== height
-        ) {
+      for (const {block, height, width} of sizes) {
+        if (block == null) {
+          continue;
+        }
+        if (block.style.getPropertyValue(HEADER_BLOCK_SIZE) !== height) {
           block.style.setProperty(HEADER_BLOCK_SIZE, height);
+        }
+        if (
+          width != null &&
+          block.style.getPropertyValue(HEADER_INLINE_SIZE) !== width
+        ) {
+          block.style.setProperty(HEADER_INLINE_SIZE, width);
         }
       }
       setPlacements(current =>
@@ -296,14 +374,14 @@ export function CodeBlockHeaderPlugin({
     // A header that wraps to a new line count measures again; the observer
     // only schedules the frame.
     observerRef.current = observer;
-    for (const header of headersRef.current.values()) {
+    for (const {header} of headersRef.current.values()) {
       observer?.observe(header);
     }
     const unregisterRoot = editor.registerRootListener(root => {
       observer?.disconnect();
       if (root != null) {
         observer?.observe(root);
-        for (const header of headersRef.current.values()) {
+        for (const {header} of headersRef.current.values()) {
           observer?.observe(header);
         }
       }

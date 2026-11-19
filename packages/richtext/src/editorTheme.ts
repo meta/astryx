@@ -504,7 +504,9 @@ const editorTheme = stylex.create({
     // never wider than the editor, where long lines wrap.
     boxSizing: 'border-box',
     width: 'fit-content',
-    minWidth: `min(${PROSE_MEASURE}, 100%)`,
+    // At least the header's own width too, as core's frame grows to fit its
+    // header (CodeBlockHeaderPlugin writes it).
+    minWidth: `max(min(${PROSE_MEASURE}, 100%), min(var(--_richtext-code-header-inline-size, 0px), 100%))`,
     maxWidth: '100%',
     marginBlockStart: {
       default: WIDE_BLOCK_SPACE,

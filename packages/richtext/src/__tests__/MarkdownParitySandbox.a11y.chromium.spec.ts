@@ -809,7 +809,13 @@ for (const viewport of [PHONE, DESKTOP, {width: 2200, height: 900}] as const) {
       {
         markdownSurface: MARKDOWN,
         richTextSurface: RICH_TEXT,
-        keys: ['code-fence', 'code-plain', 'code-unknown', 'code-long'],
+        keys: [
+          'code-fence',
+          'code-plain',
+          'code-unknown',
+          'code-long',
+          'code-long-label',
+        ],
       },
     );
     // The editor's frame is 18px narrower than the reader's at every width
@@ -819,7 +825,7 @@ for (const viewport of [PHONE, DESKTOP, {width: 2200, height: 900}] as const) {
     // line in the editor: the known editor-frame gap that AST-061's
     // Current-state impact records, so the check skips that width.
     if (viewport.width !== PHONE.width) {
-      for (const key of ['code-fence', 'code-long']) {
+      for (const key of ['code-fence', 'code-long', 'code-long-label']) {
         const block = (geometry: SurfaceGeometry) =>
           geometry.blocks.find(candidate => candidate.key === key);
         expect(
@@ -831,8 +837,9 @@ for (const viewport of [PHONE, DESKTOP, {width: 2200, height: 900}] as const) {
       }
     }
     for (const frame of frames) {
-      if (frame.key === 'code-long') {
-        // A long line widens the frame past the measure, up to the room.
+      if (frame.key === 'code-long' || frame.key === 'code-long-label') {
+        // A long line, or a long language label, widens the frame past the
+        // measure, up to the room.
         const markdownWide = Math.min(frame.markdownRoom, frame.markdown);
         expect(frame.markdown, frame.key).toBeGreaterThan(
           Math.min(680, frame.markdownRoom) - 1,
