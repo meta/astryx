@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope ^packages/core/src/SideNav/SideNavHeading ^apps/storybook/stories/NavMenu
 
 /**
  * @file NavHeadingMenuStory.a11y.chromium.spec.ts

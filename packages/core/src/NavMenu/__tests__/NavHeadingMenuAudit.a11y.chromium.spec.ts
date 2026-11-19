@@ -3,7 +3,7 @@
 
 /**
  * @file NavHeadingMenuAudit.a11y.chromium.spec.ts
- * @input Exact-head NavHeadingMenu stories, standalone and inside a TopNavHeading, across modes, direction, and sizes
+ * @input Exact-head NavHeadingMenu stories, standalone and inside a TopNavHeading or SideNavHeading, across modes, direction, and sizes
  * @output Screenshots and fail-closed sensor receipts for the NavHeadingMenu whole-component audit
  * @position Component-owned Night Watch browser evidence; CI runs it only for a NavHeadingMenu audit pull request
  */
@@ -247,12 +247,19 @@ for (const mode of ['light', 'dark'] as const) {
       key: `icons-${mode}-${direction}`,
       group: 'standalone',
       story: 'core-navmenu--with-icons',
-      ready: '#storybook-root [role="menuitem"]',
+      ready: '#storybook-root button',
       mode,
       direction,
       viewport: DESKTOP,
       run: async (page, check, frame) => {
-        const rest = await readMenu(page, '#storybook-root');
+        // The story opens the menu from a SideNavHeading, as an app does.
+        const trigger = page.getByRole('button', {name: /Workspace/});
+        check((await trigger.count()) === 1, 'no Workspace heading button');
+        await trigger.focus();
+        await page.keyboard.press('Enter');
+        await page.locator('.astryx-nav-heading-menu').waitFor();
+        await settle(page);
+        const rest = await readMenu(page, 'body');
         checkRows(check, rest, 'md');
         for (const row of rest.rows) {
           check(row.tag === 'a' && row.href === '#', `${row.name}: ${row.tag}`);
@@ -288,7 +295,7 @@ for (const mode of ['light', 'dark'] as const) {
         const order: (string | null)[] = [];
         for (const key of ['ArrowDown', 'ArrowUp', 'ArrowUp', 'Home', 'End']) {
           await page.keyboard.press(key);
-          order.push(focusedRow(await readMenu(page, '#storybook-root')));
+          order.push(focusedRow(await readMenu(page, 'body')));
         }
         check(
           JSON.stringify(order) ===
@@ -302,10 +309,10 @@ for (const mode of ['light', 'dark'] as const) {
           `keyboard order ${JSON.stringify(order)}`,
         );
         await page.keyboard.press('a');
-        const typed = focusedRow(await readMenu(page, '#storybook-root'));
+        const typed = focusedRow(await readMenu(page, 'body'));
         check(typed === 'Analytics', `typeahead "a" reached ${typed}`);
         await settle(page);
-        const focused = await readMenu(page, '#storybook-root');
+        const focused = await readMenu(page, 'body');
         // The focused row's fill is under 3:1 and draws no outline. The
         // receipt records both and does not fail on them.
         await frame('keyboard-focus', {
