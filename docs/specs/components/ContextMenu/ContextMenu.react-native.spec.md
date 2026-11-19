@@ -32,7 +32,7 @@ system_specs: [spec:AST-082, spec:AST-093, spec:AST-112]
 | Builder impact          | An app wraps a card, a row or a canvas object in `ContextMenu` as on the web and describes its rows as data where it wants the system menu. A pressable deep inside an app's own cell guards its handler with `useContextMenuPressScope`.                                                                                                                                                                                                                                                       |
 | Compatibility/readiness | Not yet released; additive. Draft. Gaps are listed under Current-state impact.                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | Review checks           | Reject a web contract prop offered on React Native, a default other than core's `popover` for `presentation`, a hold whose release also presses a child, a short tap that no longer reaches a child, a menu that only a long press opens under a screen reader, a system menu drawn with rows it cannot carry, `preview` offered on Android, or a drawn menu that a tap outside closes while also acting under it.                                                                              |
-| Governing rules         | `component:ContextMenu` FR1, FR3, FR4, FR7 and FR9; `family:overlay-dismissal`; `spec:AST-082` FR3–FR5, FR7, FR11 and FR17; `spec:AST-093` FR2–FR4; DEC-1–DEC-4 below.                                                                                                                                                                                                                                                                                                                          |
+| Governing rules         | `component:ContextMenu` FR1, FR3, FR4, FR7 and FR9; `family:overlay-dismissal`; `spec:AST-082` FR3–FR5, FR7, FR11 and FR17; `spec:AST-093` FR2–FR4; DEC-1–DEC-5 below.                                                                                                                                                                                                                                                                                                                          |
 
 This table is a review projection; the body below is authoritative.
 
@@ -105,7 +105,7 @@ intentional decision. A `current` contract contains no unresolved rows.
 | FR4 | The drawn menu MUST open on a still long press of 500 ms on the trigger area; a short or moving touch opens nothing and reaches the children as a tap. Once the hold opens the menu, the release of that touch presses nothing under the area: the library's press controls cancel their press, and a pressable deeper in an app's own cell skips it through `useContextMenuPressScope`. A later activation that is not that touch (a keyboard, a screen reader, a programmatic press) runs.                                                                                                                                                                                                                                                                                                                                                                        | DEC-3                                                                       | verify             |
 | FR5 | The drawn menu MUST open at the touch point in the app's layer, flipped and clamped inside the safe bounds, with DropdownMenu's rows (`component:react-native/DropdownMenu`); `size` sets the rows' density. `presentation="bottom-sheet"`, and `adaptive` on a compact touch screen, hold the rows in a bottom sheet with spacious touch rows, sub-menus drilling in (`component:ContextMenu` FR7). A tap outside the open menu closes it and reaches nothing under it, and Android's back and the VoiceOver escape close it (`family:overlay-dismissal`, `component:ContextMenu` FR9). The menu mounts on its first open.                                                                                                                                                                                                                                         | `component:ContextMenu` FR1, FR3, FR4, FR7, FR9; `family:overlay-dismissal` | verify             |
 | FR6 | The row record MUST hold core's three entry kinds in one record keyed by `type`: an action row (`label`, `onClick`, `icon`, `isDisabled`, `variant`, nested `items` for a sub-menu), a `divider`, and a `section` (`title`, `items`). The React Native contract adds `layout` (`row` draws a section's items side by side as icon-only actions), `glyph` (an emoji or short text in a row's icon place), `isChecked` (a checkable row and its state) and `selection` (`single` or `multiple` for a section's rows), with DropdownMenu's meaning; the system menu carries each of them. The iOS contract adds `preview`: the card the system menu lifts above its rows in place of the trigger area, drawn in the theme's light or dark mode, at most the window's width less 32 pt and 0.6 of its height; it is absent from the Android types (`spec:AST-082` FR5). | DEC-4; `spec:AST-082` FR4, FR5                                              | verify             |
-| FR7 | Because a screen-reader user cannot aim a long press, the menu MUST open without one under a screen reader: the first press element inside the area carries a "Show menu" accessibility action; on iOS a claimed action stands in for the More button, and on Android, and wherever no element claims the action, a More button named by `label` follows the children. Focus returns to where it was when the menu closes. With `isDisabled`, the area takes no touches and offers neither the action nor the button.                                                                                                                                                                                                                                                                                                                                               | `component:ContextMenu` AR1; `spec:AST-082` FR3                             | verify             |
+| FR7 | Because a screen-reader user cannot aim a long press, the menu MUST open without one under a screen reader: the first press element inside the area carries a "Show menu" accessibility action; on iOS a claimed action stands in for the More button, and on Android, and wherever no element claims the action, a More button named by `label` follows the children. Focus returns to where it was when the menu closes. With `isDisabled`, no long press or action opens the menu and the More button is not drawn; the children still receive their taps (`component:ContextMenu` FR1).                                                                                                                                                                                                                                                                         | DEC-5; `component:ContextMenu` FR1; `spec:AST-082` FR3                      | verify             |
 
 ### Allowed variation
 
@@ -126,7 +126,7 @@ intentional decision. A `current` contract contains no unresolved rows.
 | screen reader on a row                 | "Show menu" opens the menu; on Android a More button too | none               |
 | `presentation="adaptive"` on a phone   | drawn rows in a bottom sheet                             | the sheet's motion |
 | a disabled row, system menu            | left out                                                 | none               |
-| `isDisabled`                           | no touches; no action; no More button                    | none               |
+| `isDisabled`                           | no menu, action or More button; children still tap       | none               |
 
 ### Transformation and precedence order
 
@@ -147,9 +147,10 @@ intentional decision. A `current` contract contains no unresolved rows.
 - **AR1 — A way in without a long press.** The "Show menu" action, or the More
   button named by `label`, opens the menu under a screen reader (FR7).
 - **AR2 — Named menu.** `label` names the menu and the More button.
-- **AR3 — Rows.** Rows keep their names, checked state, disabled state and
-  destructive meaning in the drawn menu (`component:react-native/DropdownMenu`)
-  and in the system menu, where unavailable rows are left out (DEC-2).
+- **AR3 — Rows.** In the drawn menu, rows keep their names, checked state,
+  disabled state and destructive meaning (`component:react-native/DropdownMenu`).
+  The system menu shows the rows that are available, with their names, checked
+  state and destructive meaning, and leaves disabled rows out (DEC-2).
 - **AR4 — Focus.** Focus returns to where it was when the menu closes.
 
 ## Design relationships
@@ -243,6 +244,18 @@ The row record adds DropdownMenu's row layout, glyph, checked state and
 selection, which the system menu shows too, so one description serves the
 system menu and the drawn one. On iOS, a preview card shows what the menu acts
 on, as the system's context menus do.
+
+### DEC-5 — A screen reader opens the menu without a long press
+
+**Reference:** `component:react-native/ContextMenu/DEC-5`
+**Decider:** imdreamrunner, 2026-11-18
+
+A screen-reader user cannot aim a long press at a card or a row, so the menu
+needs a way in that a screen reader offers. The first press element in the area
+carries a "Show menu" action, which VoiceOver and TalkBack list beside the
+element's own action; a More button named by the menu's label follows the
+children wherever no element carries the action, and on Android, where
+TalkBack users reach a visible button more readily than a custom action.
 
 ## Open questions
 
