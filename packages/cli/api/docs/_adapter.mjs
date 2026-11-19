@@ -393,6 +393,67 @@ export function componentLinkProvider(ownerPackage, providerId) {
     : normalizeProviderId(providerId ?? ownerPackage);
 }
 
+/**
+ * A linker for doc objects that packages wrote: it resolves each inline link
+ * in a doc's text fields to the command that opens its doc, against the docs
+ * of the package that wrote it (a Core item's against the CLI's own), and
+ * renders its doc tokens in the same pass (spec:AST-047 FR9). An owner that is
+ * not a package, or names no provider, links nothing: its links print as
+ * written and its tokens still render. `astryx component`, `astryx template`,
+ * `build` and `search` read packages' doc text through it.
+ * @param {string} cwd
+ * @returns {Promise<<T>(doc: T, owner: string | undefined) => Promise<T>>}
+ */
+export async function ownedDocLinker(cwd) {
+  const catalog = await loadDocsCatalog(cwd);
+  /** @type {Map<string, string>} */
+  const declared = new Map();
+  for (const integration of projectOfCatalog.get(catalog)?.loadedIntegrations ??
+    []) {
+    const id = /** @type {any} */ (integration).providerId;
+    if (typeof id === 'string') declared.set(integration.name, id);
+  }
+  /** @type {LinkResolver} */
+  const noDocs = async () => ({problem: 'its owner names no docs provider'});
+  return async (doc, owner) => {
+    if (!JSON.stringify(doc ?? null).includes('{@')) return doc;
+    let provider = null;
+    try {
+      if (typeof owner === 'string') {
+        provider = componentLinkProvider(owner, declared.get(owner));
+      }
+    } catch {
+      // Not a provider id: nothing to link against.
+    }
+    if (provider == null) return (await linkFields(doc, noDocs)).doc;
+    return (await linkComponentDoc(catalog, provider, doc)).doc;
+  };
+}
+
+/**
+ * Doc text that packages wrote, such as template descriptions, read through
+ * {@link ownedDocLinker}. The docs catalog loads only when a text links.
+ * @param {ReadonlyArray<{text: string, package?: string}>} items
+ * @param {string} cwd
+ * @returns {Promise<string[]>}
+ */
+export async function linkOwnedTexts(items, cwd) {
+  if (!items.some(item => item.text.includes('{@link'))) {
+    return items.map(item => renderTokens(item.text));
+  }
+  const link = await ownedDocLinker(cwd);
+  /** @type {string[]} */
+  const out = [];
+  for (const item of items) {
+    const linked = await link(
+      {description: item.text},
+      item.package ?? CORE_PACKAGE,
+    );
+    out.push(linked.description);
+  }
+  return out;
+}
+
 /** @type {WeakMap<DocsCatalog, Promise<DocsTree>>} */
 const treesByCatalog = new WeakMap();
 
