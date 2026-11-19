@@ -374,17 +374,19 @@ const BUILD_CONFIG =
 /**
  * A build setting that compiles JSX other than as React does: a runtime
  * (`jsxImportSource`, `importSource`) other than `react`; a classic factory
- * (`jsxFactory`, `pragma`) other than `React.createElement`; or Next.js's
- * `styledComponents` compiler option, which compiles a `css` prop.
+ * (`jsxFactory`, `pragma`, a name such as `jsx` or `h`) other than
+ * `React.createElement`; or Next.js's `styledComponents` compiler option,
+ * which compiles a `css` prop, when it is not `false`.
  */
 const BUILD_JSX_RUNTIME =
-  /\b(?:jsxImportSource|importSource)['"]?\s*[:=]\s*['"](?!react['"])[^'"\s]+['"]|\b(?:jsxFactory|pragma)['"]?\s*[:=]\s*['"](?!React\.createElement['"])[^'"\s]+['"]|\bstyledComponents['"]?\s*:\s*(?!false\b)/;
+  /\b(?:jsxImportSource|importSource)['"]?\s*[:=]\s*['"](?!react['"])[^'"\s]+['"]|\b(?:jsxFactory|pragma)['"]?\s*[:=]\s*['"](?!React\.createElement['"])[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*['"]|\bstyledComponents['"]?\s*:(?!\s*false\b)/;
 
 /**
  * The packages that compile a `css` prop at build time, whatever name the
  * build config gives them (Babel reads `styled-components` as
  * `babel-plugin-styled-components`): a config can use one only when the
- * project depends on it.
+ * project depends on it, or when it is installed through another package
+ * (`gatsby-plugin-emotion` brings emotion's preset).
  */
 const CSS_PROP_TRANSFORMS = new Set([
   '@emotion/babel-preset-css-prop',
@@ -447,6 +449,10 @@ function buildJsxRuntime(pages, projectDir) {
       if (found) return found;
       if (dir === projectDir || path.relative(projectDir, dir).startsWith('..') || dir === path.dirname(dir)) break;
     }
+  }
+  for (const transform of [...CSS_PROP_TRANSFORMS].sort()) {
+    const installed = findInstalledPackage(projectDir, transform, Infinity);
+    if (installed) return {file: installed, transform};
   }
   return null;
 }
@@ -548,7 +554,7 @@ export async function findUnknownCoreProps(projectDir) {
       `the build config \`${relative(build.file)}\` sets another JSX runtime or compiles a \`css\` prop, which can give every component props of its own`,
     );
   }
-  // One batch read of the props Core's docs list, as `astryx component
+  // Batched reads of the props Core's docs list, as `astryx component
   // <Name> --props` prints them; a component they do not describe is not
   // judged.
   /** @type {Map<string, string[]>} */

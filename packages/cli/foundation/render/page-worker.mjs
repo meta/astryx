@@ -52,6 +52,7 @@ import {importSpecifiers, moduleImports} from './embedded-imports.mjs';
 import {sha256} from './source-block.mjs';
 import {BundleError, CARRIED_MODULE, bundleForBrowser} from './client-bundle.mjs';
 import {droppedImports, importUses} from './value-uses.mjs';
+import {coreComponentOf} from '../discovery/core-elements.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates, separateIds} from './charts.mjs';
 import {LAYER_GLOBAL, LAYER_PLACEHOLDER, countQueuedImmediates, layerDocument, layerPlaceholder, openLayerMarkup, settled} from './layers.mjs';
 
@@ -719,26 +720,6 @@ function carriedName(p, t) {
     program.crawl();
   }
   return t.identifier(name);
-}
-
-/**
- * The Core component a JSX element name draws, when the page imports it from
- * Core: `<Button>` from `import {Button} from '@astryxdesign/core/Button'`, or
- * `<Core.Button>` from `import * as Core from '@astryxdesign/core'`. Null for
- * any other element.
- * @param {any} name the element's JSX name node
- * @param {any} scope the element's Babel scope
- * @returns {string | null}
- */
-function coreComponentOf(name, scope) {
-  const local = name.type === 'JSXIdentifier' ? name : name.type === 'JSXMemberExpression' ? name.object : null;
-  if (local?.type !== 'JSXIdentifier') return null;
-  const spec = scope.getBinding(local.name)?.path;
-  const source = spec?.parent?.source ? String(spec.parent.source.value) : '';
-  if (source !== '@astryxdesign/core' && !source.startsWith('@astryxdesign/core/')) return null;
-  if (name.type === 'JSXMemberExpression') return spec.isImportNamespaceSpecifier() ? name.property.name : null;
-  if (!spec.isImportSpecifier()) return null;
-  return spec.node.imported.type === 'Identifier' ? spec.node.imported.name : spec.node.imported.value;
 }
 
 /**

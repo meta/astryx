@@ -22,6 +22,7 @@ import {readDeclaredDependencies} from '../integrations/declared-dependencies.mj
 import {resolveInstalledPackageDir} from '../integrations/installed-package.mjs';
 import {findManifestPaths} from '../integrations/manifest-paths.mjs';
 import {babelParse} from '../runtime/lazy-dependencies.mjs';
+import {isCoreModule} from './core-elements.mjs';
 
 /** @type {Map<string, string>} */
 const declarationCache = new Map();
@@ -387,10 +388,7 @@ function coreModuleFile(coreRoot, fromFile, specifier) {
       path.dirname(fromFile),
       specifier.replace(/\.[cm]?jsx?$/, ''),
     );
-  } else if (
-    specifier === CORE_PACKAGE ||
-    specifier.startsWith(`${CORE_PACKAGE}/`)
-  ) {
+  } else if (isCoreModule(specifier)) {
     base = path.join(
       coreRoot,
       'src',
@@ -804,14 +802,6 @@ function typeWideningInterfaces(coreRoot, pascalName, prop) {
 }
 
 const CORE_PACKAGE = '@astryxdesign/core';
-
-/**
- * Whether a module path names Core: the package or one of its subpaths.
- * @param {string} specifier
- */
-export function isCoreModule(specifier) {
-  return specifier === CORE_PACKAGE || specifier.startsWith(`${CORE_PACKAGE}/`);
-}
 
 /** A project's own TypeScript file, declarations included. */
 const SOURCE_FILE = /\.[cm]?tsx?$/;

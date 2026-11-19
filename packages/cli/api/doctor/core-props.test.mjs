@@ -199,6 +199,14 @@ describe('doctor core-props', () => {
       });
       expect(babel?.status).toBe('info');
       expect(babel?.message).toMatch(/^Not checked: the project depends on `babel-plugin-styled-components`, which compiles a `css` prop/);
+      // A transform installed through another package, which the project does
+      // not declare.
+      const transitive = await propsCheck({
+        'node_modules/@emotion/babel-preset-css-prop/package.json': JSON.stringify({name: '@emotion/babel-preset-css-prop', version: '11.0.0'}),
+        'src/App.jsx': app('Button', '<Button label="Go" css={{color: "red"}} />'),
+      });
+      expect(transitive?.status).toBe('info');
+      expect(transitive?.message).toMatch(/^Not checked: the project depends on `@emotion\/babel-preset-css-prop`/);
       for (const transform of ['@emotion/babel-preset-css-prop', '@swc/plugin-styled-components', '@compiled/babel-plugin']) {
         const other = await propsCheck({'package.json': manifest({[transform]: '*'}), 'src/App.jsx': app('Button', '<Button label="Go" css={{color: "red"}} />')});
         expect(other?.status, transform).toBe('info');
@@ -216,6 +224,8 @@ describe('doctor core-props', () => {
       // styled-components (an alias), compile JSX as React does.
       for (const [config, text] of [
         ['vite.config.js', "export default {esbuild: {jsxInject: \"import React from 'react'\"}};\n"],
+        ['next.config.js', 'module.exports = {compiler: {styledComponents: false}};\n'],
+        ['next.config.mjs', "export default {headers: async () => [{source: '/', headers: [{key: 'Cache-Control', pragma: 'no-cache'}]}]};\n"],
         ['webpack.config.js', "module.exports = {resolve: {alias: {'styled-components': 'styled-components/dist/x.js'}}};\n"],
       ]) {
         const same = await propsCheck({[config]: text, 'src/App.tsx': app('TabList', '<TabList selectedID="a" />')});
