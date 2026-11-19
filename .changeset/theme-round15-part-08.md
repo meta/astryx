@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] `astryx experimental theme editor how`: a long request that mentions color-blind readers alongside other changes now answers every change. Only a question about color-blind readers alone gets the color-blind answer by itself.
+[experimental] Changes to `astryx experimental theme editor how` and its checks:
 
 - `astryx experimental theme editor how`: a feel word said for the whole theme now moves the dials whose help gives that feel, and each line says what it read. For example, "playful minimal recipe site" gives playful → corners round and vibrancy more, and minimal → spacing roomy and surfaces flat. The corners, spacing, surfaces, vibrancy and type help now says which feel each rung gives (see `how corners`). Words no help names are listed as not taken. A dial the ask sets itself keeps its value, and a feel word said of one part stays with that part.
 
@@ -13,7 +13,7 @@
 - "condensed" before headings or a font now says that a condensed look comes from the font family, instead of reducing the headings' spacing.
 - An opening phrase before a colon ("page loud and fast: …") is no longer reported as a missing part.
 
-- `astryx experimental theme editor how`: a describing word said with "theme" ("minimal theme", "playful theme") is no longer answered as a brand whose colors are asked for. A picture named only by its file ("here is our brand board: ./look.png") now gets the answer for a picture, which says what to describe.
+- `astryx experimental theme editor how`: a picture named only by its file ("here is our brand board: ./look.png") now gets the answer for a picture, which says what to describe.
 
 A built-in theme named as the look ("start from the butter look", "base butter") is now answered with the base (every setting is kept), instead of matching nothing. A base that is not installed is named with the line that installs it.
 

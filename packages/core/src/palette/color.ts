@@ -48,7 +48,7 @@ function rgbToHex(red: number, green: number, blue: number): string {
   );
 }
 
-function linearRgbToOklab(
+export function linearRgbToOklab(
   red: number,
   green: number,
   blue: number,
@@ -184,6 +184,12 @@ export function toneToOklabLightness(tone: number): number {
   }
   const relative = tone > 8 ? Math.pow((tone + 16) / 116, 3) : tone / 903.3;
   return Math.cbrt(relative);
+}
+
+/** A hex color's linear-light red, green and blue, each 0 to 1. */
+export function hexToLinearRgb(hex: string): ColorTriple {
+  const [red, green, blue] = hexToRgb(hex).map(srgbToLinear);
+  return [red, green, blue];
 }
 
 export function luminance(hex: string): number {

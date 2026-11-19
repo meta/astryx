@@ -1543,14 +1543,13 @@ function colorBlindPieces(q) {
   const blind = pieces.filter(x => COLOR_BLIND.test(x));
   if (!blind.length || blind.length === pieces.length)
     return {blind: blind.length > 0, rest: ''};
-  // (The rest as said, its own "and"s kept: "light and dark" stays one
-  // piece.)
+  // (The rest as said, its own "and"s kept, "light and dark" one piece,
+  // and each color-blind piece read as the status colors it is about, so
+  // the list keeps its shape: "soft blue" in "calm and clinical, soft
+  // blue, …, status colors that color-blind staff can tell apart" is
+  // read as it is without the color-blind words.)
   const rest = blind
-    .reduce((t, x) => t.replace(x, ' '), q)
-    .replace(/\s(?:and|plus|&)\s+(?=[,;:]|\s*$)/g, ' ')
-    .replace(/(^|[,;:])\s*(?:and|plus|&)\s/g, '$1 ')
-    .replace(/\s*[,;:](?:\s*[,;:])+/g, ',')
-    .replace(/^\s*[,;:]|[,;:]\s*$/g, '')
+    .reduce((t, x) => t.replace(x, ' status colors '), q)
     .replace(/\s+/g, ' ')
     .trim();
   return {blind: true, rest};

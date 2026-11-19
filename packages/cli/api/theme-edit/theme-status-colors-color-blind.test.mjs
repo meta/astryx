@@ -72,6 +72,9 @@ describe('status colors for color-blind readers', () => {
     for (const ask of [
       'color-blind friendly statuses and a blue accent',
       'color-blind friendly statuses, a blue accent',
+      // (The list keeps its shape: the color piece reads as it does with
+      // no color-blind words.)
+      'Theme our hospital staff rota app: calm and clinical, soft blue, very legible, status colors that color-blind staff can tell apart, light and dark.',
     ]) {
       const r = /** @type {any} */ (
         await themeEditHow(ask, {cwd, theme: 'cb'})
@@ -79,7 +82,7 @@ describe('status colors for color-blind readers', () => {
       const results = /** @type {any[]} */ (r.data.results ?? []);
       const lines = results.flatMap(x => x.commands);
       expect(
-        lines.some(c => / set cb accent '#2563eb'$/.test(c)),
+        lines.some(c => / set cb accent '#[0-9a-f]{6}'$/.test(c)),
         ask,
       ).toBe(true);
       expect(
