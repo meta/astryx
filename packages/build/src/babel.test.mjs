@@ -95,6 +95,27 @@ describe('Astryx babel wrapper -- library StyleX prefix', () => {
     expect(atoms.every(c => c.startsWith('lib'))).toBe(true);
   });
 
+  it('recognises library files using Windows backslash path separators (#11810)', () => {
+    const windowsPath =
+      'node_modules\\@astryxdesign\\core\\src\\Box\\AstryxBox.tsx';
+    const result = babel.transformSync(SOURCE, {
+      filename: windowsPath,
+      babelrc: false,
+      configFile: false,
+      plugins: [
+        [
+          astryxBabelPlugin,
+          {
+            unstable_moduleResolution: {type: 'commonJS', rootDir: process.cwd()},
+          },
+        ],
+      ],
+    });
+    const atoms = atomicClasses(result?.code ?? '');
+    expect(atoms.length).toBeGreaterThan(0);
+    expect(atoms.every(c => c.startsWith('astryx'))).toBe(true);
+  });
+
   it('rejects declarations that StyleX would otherwise drop silently', () => {
     expect(() =>
       transformLibraryFile(undefined, INVALID_BORDER_SOURCE),

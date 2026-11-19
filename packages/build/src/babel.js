@@ -56,8 +56,9 @@ module.exports = function astryxBabelPlugin(api, options) {
     let isLibrary = libraryFiles.get(state.file);
     if (isLibrary === undefined) {
       const filename = state.filename || '';
+      const normalizedFilename = filename.replace(/\\/g, '/');
       isLibrary =
-        libraryPatterns.some(p => filename.includes(p)) ||
+        libraryPatterns.some(p => normalizedFilename.includes(p)) ||
         (filename !== '' && isSwizzledSource(path.resolve(filename)));
       if (state.file != null) libraryFiles.set(state.file, isLibrary);
     }
