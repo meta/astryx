@@ -250,7 +250,7 @@ export const docs = {
       name: 'textOverflow',
       type: "'wrap' | 'truncate'",
       description:
-        "How body cell text behaves when it exceeds the column width. 'wrap' lets text wrap and the row grow taller; 'truncate' clips with an ellipsis (default-rendered cells show a tooltip on hover when truncated). Header cells always truncate.",
+        "How cell text behaves when it exceeds the column width. 'wrap' lets text wrap and the row grow taller; 'truncate' clips with an ellipsis (default-rendered cells show a tooltip on hover when truncated). Header cells follow the same mode: under 'wrap' a long heading wraps in a data-driven table, and in children mode its column grows to keep it on one line.",
       default: "'wrap'",
     },
     {
