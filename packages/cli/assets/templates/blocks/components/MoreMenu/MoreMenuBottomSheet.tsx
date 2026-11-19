@@ -2,7 +2,7 @@
 
 'use client';
 
-import {VStack} from '@astryxdesign/core/Layout';
+import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {
   DocumentDuplicateIcon,
   PencilIcon,
@@ -13,12 +13,11 @@ import {MoreMenu} from '@astryxdesign/core/MoreMenu';
 
 export default function MoreMenuBottomSheet() {
   return (
-    <div
+    <HStack
+      gap={4}
+      vAlign="center"
+      hAlign="between"
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: '16px',
         width: 'min(100%, 360px)',
         padding: '16px',
         border: '1px solid var(--color-border-emphasized)',
@@ -59,6 +58,6 @@ export default function MoreMenuBottomSheet() {
           },
         ]}
       />
-    </div>
+    </HStack>
   );
 }
