@@ -2907,13 +2907,15 @@ export function partLexicon(ctx) {
         real ? {on: real} : {on: key, missing: `${said} ${piece}`},
       ]);
       // (Said before the part that holds it: "the copy button on code
-      // blocks", "the title of the dialog".)
-      out.push([
-        new RegExp(
-          `\\b${piece.replace(/-/g, '[\\s-]?')}s?\\s+(?:on|in|of|inside)\\s+(?:the\\s+|all\\s+|every\\s+|each\\s+)?(?:${source})`,
-        ),
-        real ? {on: real} : {on: key, missing: `${said} ${piece}`},
-      ]);
+      // blocks", "the title of the dialog". Only a piece the part has: "icons
+      // in cards" is the icons a card holds, which the place reader reads.)
+      if (real)
+        out.push([
+          new RegExp(
+            `\\b${piece.replace(/-/g, '[\\s-]?')}s?\\s+(?:on|in|of|inside)\\s+(?:the\\s+|all\\s+|every\\s+|each\\s+)?(?:${source})`,
+          ),
+          {on: real},
+        ]);
     }
     return out;
   };
@@ -18798,8 +18800,25 @@ export function draftAnswer(ctx, env, question) {
     // "avoid hiding", keeps the piece.)
     const removal = removalSaid(c.text);
     const shown = removal === 'show';
+    // (Only a thing said after the removal word takes it away: "no copy
+    // button on code blocks"; "no truncation", "never wrap" name no piece. A
+    // removal ruled out or undone writes no display none, wherever it is
+    // said.)
+    const removedSaid = (() => {
+      const after = new RegExp(
+        String.raw`\b(?:${REMOVAL_LEAD}|hid(?:e|es|den|ing)|un-?hide|remov(?:e|es|ed|ing))\s+(?:the\s+|any\s+|all\s+)?(.+)$`,
+      ).exec(c.text.toLowerCase())?.[1];
+      return (
+        after != null &&
+        lex.parts.some(([re]) => {
+          const x = re.exec(` ${after} `);
+          return x != null && x.index <= 1;
+        })
+      );
+    })();
     if (
       c.parts.length &&
+      (removedSaid || removal === 'keep' || removal === 'show') &&
       ((removal && removal !== 'remove') || /\b(?:hide|hidden)\b/.test(c.text) || (c.neg && !c.aspects.length))
     ) {
       const names = c.parts.map(p => one(p.on));
@@ -18811,7 +18830,9 @@ export function draftAnswer(ctx, env, question) {
           .map(b => `${a}-${b.replace(/s$/, '')}`)
           .filter(k => TARGET.has(k)),
       );
-      const pieces = (paired.length ? paired : names).filter(
+      // (An owner and a piece it does not have, "top nav items without
+      // icons": nothing of the owner is taken away.)
+      const pieces = (paired.length || names.length < 2 ? paired.length ? paired : names : []).filter(
         k =>
           k.includes('-') &&
           [...TARGET.keys()].some(o => k.startsWith(`${o}-`)) &&
@@ -18835,6 +18856,22 @@ export function draftAnswer(ctx, env, question) {
             ? `${own} shown again: the theme's display none on it is taken back`
             : `${own} is shown already (the theme does not hide it), so nothing changes`,
           options: hidden ? [[/** @type {Step} */ ({verb: 'undo', thing: 'display', on: own})]] : [],
+        });
+        continue;
+      }
+      // ("hide the dialog close button": a control said, whose only target is
+      // its icon. Hiding the icon leaves an empty control that still takes
+      // focus, so nothing is written.)
+      if (
+        pieces.length === 1 &&
+        /-icon$/.test(pieces[0]) &&
+        /\b(?:button|control|link|toggle)s?\b/.test(c.text) &&
+        !TARGET.has(pieces[0].replace(/-icon$/, '-button'))
+      ) {
+        seenPart(pieces[0]);
+        push({
+          text: `${pieces[0]} is only the icon of a control that has no target of its own; hiding the icon leaves an empty control that still takes focus, so nothing is written (the app shows or leaves out the control)`,
+          options: [],
         });
         continue;
       }
@@ -27335,7 +27372,7 @@ export function draftAnswer(ctx, env, question) {
     // everything", "the default theme"; a describing word, "make it clear",
     // "more original", never does.)
     const earlier =
-      /\b(?:before|back|reset|revert|restore|previous|earlier|start over|what it was|the way (?:it|they) (?:was|were)|clear (?:everything|all|it all))\b/;
+      /\b(?:(?:like|as) (?:it was )?before|back to (?:how|the way|what)|(?:go|put it|change it) back\b(?! to\b)|reset|revert|restore|start over|what it was|the way (?:it|they) (?:was|were)|clear (?:everything|all|it all)|the (?:previous|earlier|old) (?:look|version|theme))/;
     if (back && /\bthe (?:default|base|original|standard|plain|previous|old) theme\b/.test(t))
       return {
         text: `the app picks its theme: astryx theme use ${env.data.like ?? '<base>'} makes ${env.data.like ?? 'the base theme'} its default; to keep ${env.slug} and take back its settings instead: how "back to the base theme"`,
@@ -32149,9 +32186,18 @@ export function draftAnswer(ctx, env, question) {
         /(?:ful|ish|ive|al|ic|ous|less|est|ern|ed|ing|er|ly|ible|able|ent|ant)$/.test(word)
       )
         return false;
-      return new RegExp(
-        String.raw`\b${word}(?:-like)?\s+(?:theme|look|style|vibe)\b|\b${word}-like\b|\b(?:like|as)\s+${word}\b|${NAMED_LOOK}${word}\b`,
-      ).test(q.toLowerCase());
+      if (
+        new RegExp(
+          String.raw`\b${word}(?:-like)?\s+(?:theme|look|style|vibe)\b|\b${word}-like\b|\b(?:like|as)\s+${word}\b`,
+        ).test(q.toLowerCase())
+      )
+        return true;
+      // (Bare after "make it", a word names a thing only when it is said as
+      // a name, capitalized: "make it Acme"; "make it pretty" describes.)
+      return (
+        new RegExp(`${NAMED_LOOK}${word}\\b`).test(q.toLowerCase()) &&
+        new RegExp(String.raw`\b${word}\b`, 'i').exec(question)?.[0]?.[0] !== word[0]
+      );
     });
     if (namedFor.length)
       result.push({
