@@ -113,6 +113,50 @@ describe('planChecks', () => {
   });
 });
 
+describe('planChecks --quick', () => {
+  it('checks the changed packages, files and tests alone', () => {
+    const checks = plan(
+      ['packages/core/src/Button/Button.tsx', 'scripts/preflight.test.mjs'],
+      {quick: true},
+    );
+    expect(checks.map(check => check.id)).toEqual([
+      'typecheck',
+      'lint',
+      'changed tests',
+      'knowledge',
+      'changesets',
+    ]);
+    const typecheck = argvs(byId(checks, 'typecheck'))[0];
+    expect(typecheck).toContain('--filter [abc123]');
+    expect(typecheck).not.toContain('...[');
+    expect(argvs(byId(checks, 'changed tests'))).toEqual([
+      'pnpm exec vitest run --passWithNoTests scripts/preflight.test.mjs',
+    ]);
+    expect(checks.flatMap(argvs).join('\n')).not.toMatch(
+      /pnpm build|fs-guard-tests|--changed=|check:repo/,
+    );
+  });
+
+  it('skips the tests when no test file changed, and ignores --browser', () => {
+    const checks = plan(['packages/core/src/Button/Button.tsx'], {
+      quick: true,
+      browser: true,
+    });
+    expect(byId(checks, 'changed tests').skip).toBe('no changed test file');
+    expect(byId(checks, 'interaction specs')).toBeUndefined();
+  });
+
+  it('says quick mode is not CI-equivalent', () => {
+    const text = formatTable(
+      [{id: 'lint', result: 'PASS', note: '', failed: null, seconds: 1}],
+      {quick: true},
+    );
+    expect(text).toContain('run `pnpm preflight` before you flip');
+    expect(text).toContain('not CI-equivalent');
+    expect(text).not.toContain('ready to flip');
+  });
+});
+
 describe('runChecks', () => {
   const ticks = () => {
     let t = 0;

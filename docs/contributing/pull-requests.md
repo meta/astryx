@@ -141,6 +141,7 @@ finding is a lead to check, not a verdict.
 pnpm preflight                       # the working tree against origin/main
 pnpm preflight --base upstream/main  # a fork whose main remote is upstream
 pnpm preflight --browser             # also the browser specs the change selects
+pnpm preflight --quick               # minutes: the changed packages, files and tests alone
 ```
 
 `pnpm preflight` runs `pnpm review:pre`, then the checks CI runs for this
@@ -154,6 +155,13 @@ each failing check, and "ready to flip" or "not ready: N"; it exits 1 when a
 check fails. `--wrap <command>` (or `PREFLIGHT_WRAP`) runs each heavy step as
 `<command> <build|test|knowledge> <step...>`, for a machine that limits heavy
 jobs.
+
+`--quick` runs `pnpm review:pre`, the typecheck of the changed packages alone,
+ESLint on the changed files, the changed test files alone, `pnpm check:knowledge`
+and `pnpm check:changesets`, in minutes. It is not CI-equivalent: it builds
+nothing, leaves out dependent packages, the tests the change reaches through an
+import, and the guards, and it ends with "run `pnpm preflight` before you flip"
+rather than "ready to flip".
 
 Preflight is not a required step. It reproduces the pre-review checklist and
 CI's checks; it does not reproduce a reviewer's judgment.

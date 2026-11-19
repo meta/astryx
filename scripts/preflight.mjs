@@ -4,7 +4,8 @@
 /**
  * @file Preflight: the pre-review report and CI's checks for one change, run
  *   locally before the change is marked ready.
- * @input `--base <ref>` (default `origin/main`), `--browser`, and `--wrap
+ * @input `--base <ref>` (default `origin/main`), `--browser`, `--quick` (the
+ *   changed packages, files and tests alone; not CI's scope), and `--wrap
  *   <command>` (or `PREFLIGHT_WRAP`): a command that runs each heavy step as
  *   `<command> <build|test|knowledge> <step command...>`, such as a machine's
  *   job limiter. The working tree, with uncommitted and untracked files.
@@ -29,6 +30,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 /** Files ESLint lints. */
 const LINTED = /\.(?:[cm]?[jt]sx?)$/;
+/** Vitest test files. */
+const TEST_FILE = /\.test\.[cm]?[jt]sx?$/;
 
 /**
  * The checks for a change, in the order they run. Each check is a list of
@@ -45,7 +48,9 @@ export function planChecks({
   browser,
   tmp,
   chromiumScope,
+  quick = false,
 }) {
+  if (quick) return quickChecks({scope, mergeBase, changed});
   const at = name => path.join(tmp, name);
   const checks = [];
   const specOnly = scope.specOnly || scope.timesOnly;
@@ -332,6 +337,97 @@ export function planChecks({
   return checks;
 }
 
+/** Files that exist in the working tree (a deleted file has nothing to check). */
+function present(files) {
+  return files.filter(file => fs.existsSync(path.join(ROOT, file)));
+}
+
+/**
+ * `--quick`: the typecheck of the changed packages alone (their dependencies'
+ * build from an earlier `pnpm build`), ESLint on the changed files, the
+ * changed test files alone, `check:knowledge` and `check:changesets`. It is
+ * not CI's scope: no build, no dependent package, no test the change reaches
+ * through an import, and no guard.
+ */
+function quickChecks({scope, mergeBase, changed}) {
+  const specOnly = scope.specOnly || scope.timesOnly;
+  const typechecks =
+    !specOnly && !scope.docsiteOnly && !scope.toolingOnly && !scope.labOnly;
+  const linted = present(changed.filter(file => LINTED.test(file)));
+  const tests = present(changed.filter(file => TEST_FILE.test(file)));
+  return [
+    typechecks
+      ? {
+          id: 'typecheck',
+          commands: [
+            {
+              kind: 'build',
+              argv: [
+                'pnpm',
+                '-r',
+                '--no-bail',
+                '--workspace-concurrency=1',
+                '--if-present',
+                '--filter',
+                `[${mergeBase}]`,
+                '--filter',
+                '!@astryxdesign/docsite',
+                '--filter',
+                '!@astryxdesign/sandbox',
+                'run',
+                'typecheck',
+              ],
+            },
+          ],
+        }
+      : skip('typecheck', 'CI runs no typecheck on this lane'),
+    linted.length
+      ? {
+          id: 'lint',
+          commands: [
+            {
+              kind: 'light',
+              argv: [
+                'pnpm',
+                'exec',
+                'eslint',
+                '--cache',
+                '--no-warn-ignored',
+                ...linted,
+              ],
+            },
+          ],
+        }
+      : skip('lint', 'no changed file to lint'),
+    tests.length
+      ? {
+          id: 'changed tests',
+          commands: [
+            {
+              kind: 'test',
+              argv: [
+                'pnpm',
+                'exec',
+                'vitest',
+                'run',
+                '--passWithNoTests',
+                ...tests,
+              ],
+            },
+          ],
+        }
+      : skip('changed tests', 'no changed test file'),
+    {
+      id: 'knowledge',
+      commands: [{kind: 'knowledge', argv: ['pnpm', 'check:knowledge']}],
+    },
+    {
+      id: 'changesets',
+      commands: [{kind: 'light', argv: ['pnpm', 'check:changesets']}],
+    },
+  ];
+}
+
 function skip(id, why) {
   return {id, commands: [], skip: why};
 }
@@ -407,7 +503,7 @@ export function runChecks(checks, {exec, wrap = [], now = Date.now} = {}) {
  * The table, the failing commands and the verdict.
  * @param {{id: string, result: string, note: string, failed: string | null, seconds: number}[]} rows
  */
-export function formatTable(rows) {
+export function formatTable(rows, {quick = false} = {}) {
   const width = Math.max(...rows.map(row => row.id.length), 5);
   const lines = [
     `${'CHECK'.padEnd(width)}  RESULT  TIME  NOTE`,
@@ -422,8 +518,14 @@ export function formatTable(rows) {
   }
   lines.push(
     '',
-    failed.length ? `not ready: ${failed.length}` : 'ready to flip',
-    'Preflight reproduces the pre-review checklist and CI checks; a reviewer still judges the change.',
+    failed.length
+      ? `not ready: ${failed.length}`
+      : quick
+        ? 'quick checks pass; run `pnpm preflight` before you flip'
+        : 'ready to flip',
+    quick
+      ? 'Quick mode is not CI-equivalent: it skips the build, dependent packages, the tests the change reaches and the guards.'
+      : 'Preflight reproduces the pre-review checklist and CI checks; a reviewer still judges the change.',
   );
   return lines.join('\n');
 }
@@ -501,12 +603,14 @@ async function main(argv) {
   };
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'preflight-'));
-  const browser = argv.includes('--browser');
+  const quick = argv.includes('--quick');
+  const browser = !quick && argv.includes('--browser');
   const checks = planChecks({
     scope,
     mergeBase,
     changed,
     browser,
+    quick,
     tmp,
     chromiumScope: browser
       ? chromiumScopeFromCi(
@@ -529,7 +633,7 @@ async function main(argv) {
     },
   });
   const all = [reviewRow, ...rows];
-  console.log(`\n${formatTable(all)}`);
+  console.log(`\n${formatTable(all, {quick})}`);
   process.exitCode = all.some(row => row.result === 'FAIL') ? 1 : 0;
 }
 
