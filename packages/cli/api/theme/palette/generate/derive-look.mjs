@@ -20,9 +20,9 @@
  * cannot reach its contrast, is refused: the theme keeps its base's.
  */
 import {
+  compositeOver,
   contrastRatio,
   hexToOklch,
-  luminance,
   maxOklchChroma,
   oklchClampedHex,
 } from './color.mjs';
@@ -230,39 +230,6 @@ export function lookSeeds(accent) {
       return [h, oklchClampedHex(L, C * scale, H)];
     }),
   );
-}
-/**
- * A see-through color over an opaque one, as the eye sees it. `alpha` is
- * two hex digits.
- * @param {string} color
- * @param {string} alpha
- * @param {string} under
- * @returns {string}
- */
-function over(color, alpha, under) {
-  const a = parseInt(alpha, 16) / 255;
-  const ch =
-    /**
-     * @param {string} c
-     * @param {number} i
-     */
-    (c, i) => parseInt(c.slice(1 + i * 2, 3 + i * 2), 16);
-  return `#${[0, 1, 2]
-    .map(i =>
-      Math.round(a * ch(color, i) + (1 - a) * ch(under, i))
-        .toString(16)
-        .padStart(2, '0'),
-    )
-    .join('')}`;
-}
-/**
- * @param {string} a
- * @param {string} b
- */
-function contrast(a, b) {
-  const x = luminance(a);
-  const y = luminance(b);
-  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
 }
 /**
  * Whether a family is one lookSeeds grows: an id, a name and a seed at
@@ -725,7 +692,7 @@ export function deriveStatusColors({
         );
         const scored = order.map(stop => ({
           stop,
-          r: Math.min(...bg.map(c => contrast(at(m, stop).color, c))),
+          r: Math.min(...bg.map(c => contrastRatio(at(m, stop).color, c))),
         }));
         const best =
           scored.find(x => x.r >= needs) ??
@@ -761,12 +728,16 @@ export function deriveStatusColors({
           const c = at(m, s).color;
           if (
             !bright &&
-            Math.min(...grounds(m).map(g => contrast(c, g))) < NON_TEXT
+            Math.min(...grounds(m).map(g => contrastRatio(c, g))) < NON_TEXT
           )
             continue;
+          // (A bright fill already starts at the palest stop that reads as
+          // a fill on a light page: one kept apart from the accent moves
+          // deeper, never paler toward the page.)
+          if (bright && m === 'light' && s > s0) continue;
           const a = accent(m);
           if (a && perceptualDelta(c, a) < APART_FROM_ACCENT) continue;
-          if (contrast(ink.color, c) >= TEXT) {
+          if (contrastRatio(ink.color, c) >= TEXT) {
             onFill[m] = ink;
             return at(m, s);
           }
@@ -806,7 +777,11 @@ export function deriveStatusColors({
       m =>
         muted[m].alpha
           ? grounds(m).map(g =>
-              over(muted[m].color.slice(0, 7), muted[m].alpha ?? 'ff', g),
+              compositeOver(
+                muted[m].color.slice(0, 7),
+                muted[m].alpha ?? 'ff',
+                g,
+              ),
             )
           : [muted[m].color];
     const set = {

@@ -19,9 +19,9 @@
  */
 
 import {
+  compositeOver,
   contrastRatio,
   hexToOklch,
-  luminance,
   maxOklchChroma,
   oklchClampedHex,
 } from './color';
@@ -187,29 +187,6 @@ export function lookSeeds(
       return [h, oklchClampedHex(L, C * scale, H)];
     }),
   );
-}
-
-/**
- * A see-through color over an opaque one, as the eye sees it. `alpha` is
- * two hex digits.
- */
-function over(color: string, alpha: string, under: string): string {
-  const a = parseInt(alpha, 16) / 255;
-  const ch = (c: string, i: number) =>
-    parseInt(c.slice(1 + i * 2, 3 + i * 2), 16);
-  return `#${[0, 1, 2]
-    .map(i =>
-      Math.round(a * ch(color, i) + (1 - a) * ch(under, i))
-        .toString(16)
-        .padStart(2, '0'),
-    )
-    .join('')}`;
-}
-
-function contrast(a: string, b: string) {
-  const x = luminance(a);
-  const y = luminance(b);
-  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
 }
 
 /**
@@ -607,7 +584,7 @@ export function deriveStatusColors({
       );
       const scored = order.map(stop => ({
         stop,
-        r: Math.min(...bg.map(c => contrast(at(m, stop).color, c))),
+        r: Math.min(...bg.map(c => contrastRatio(at(m, stop).color, c))),
       }));
       const best =
         scored.find(x => x.r >= needs) ??
@@ -643,12 +620,16 @@ export function deriveStatusColors({
           const c = at(m, s).color;
           if (
             !bright &&
-            Math.min(...grounds(m).map(g => contrast(c, g))) < NON_TEXT
+            Math.min(...grounds(m).map(g => contrastRatio(c, g))) < NON_TEXT
           )
             continue;
+          // (A bright fill already starts at the palest stop that reads as
+          // a fill on a light page: one kept apart from the accent moves
+          // deeper, never paler toward the page.)
+          if (bright && m === 'light' && s > s0) continue;
           const a = accent(m);
           if (a && perceptualDelta(c, a) < APART_FROM_ACCENT) continue;
-          if (contrast(ink.color, c) >= TEXT) {
+          if (contrastRatio(ink.color, c) >= TEXT) {
             onFill[m] = ink;
             return at(m, s);
           }
@@ -684,7 +665,11 @@ export function deriveStatusColors({
     const tintSeen = (m: Mode) =>
       muted[m].alpha
         ? grounds(m).map(g =>
-            over(muted[m].color.slice(0, 7), muted[m].alpha ?? 'ff', g),
+            compositeOver(
+              muted[m].color.slice(0, 7),
+              muted[m].alpha ?? 'ff',
+              g,
+            ),
           )
         : [muted[m].color];
     const set = {
