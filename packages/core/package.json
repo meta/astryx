@@ -694,6 +694,11 @@
       "types": "./dist/TopNav/index.d.ts",
       "default": "./dist/TopNav/index.js"
     },
+    "./Tour": {
+      "source": "./src/Tour/index.ts",
+      "types": "./dist/Tour/index.d.ts",
+      "default": "./dist/Tour/index.js"
+    },
     "./TreeList": {
       "source": "./src/TreeList/index.ts",
       "types": "./dist/TreeList/index.d.ts",

@@ -22,7 +22,7 @@ affects_consumer_docs: [Tour]
 
 ```json
 {
-  "paths": ["packages/lab/src/Tour/**"]
+  "paths": ["packages/core/src/Tour/**"]
 }
 ```
 
@@ -87,7 +87,10 @@ happens between pages.
 - **FR6 — An anchor is an element or nothing.** A step's `anchorRef` is a ref
   to an element, read as `usePopover`'s `anchorRef` is (`spec:AST-116` FR2,
   FR3). A step without `anchorRef` shows centered in the viewport, with no
-  highlight.
+  highlight. A step whose anchor is inside an open modal dialog or a shown
+  popover shows its callout above that layer, where it can be used. A step
+  with no anchor that starts while a modal Dialog, Drawer or BottomSheet is
+  open shows above it.
 - **FR7 — An anchor off screen scrolls into view.** When a step shows and its
   anchor is outside the viewport or a scrolling ancestor's visible area, the
   anchor scrolls into view, instantly under reduced motion.
@@ -172,8 +175,9 @@ happens between pages.
 - Unsupported behavior: in the runtime's reduced browser fallback, placement
   follows the fallback, and FR10's out-of-view rule follows
   `spec:AST-059`'s fallback. FR7–FR9, the rest of FR10 and FR14–FR17 are
-  unchanged.
-- Browser evidence: real Chromium, Firefox and WebKit for FR7, FR10 and
+  unchanged. While a scrolling panel clips a step's anchor, Chromium and
+  WebKit do not paint the callout, and Firefox keeps painting it.
+- Browser evidence: real Chromium and WebKit for FR7, FR10 and
   FR14–FR16; jsdom for step order, ARIA and event ordering.
 
 ## Current-state impact
@@ -190,40 +194,33 @@ happens between pages.
 - `family:overlay-dismissal`: FR2 names a Tour step's presence, and its
   matrix gains two Tour step rows: without a backdrop, Escape ends the tour
   only while focus is in the callout, or on or inside its anchor; with a
-  backdrop, the step takes Escape as a modal layer does (FR14). An
-  `FR2 gap:` line cites the FR14 gap. Its Lab TourStep row and member entry
-  stay until the lab Tour goes.
+  backdrop, the step takes Escape as a modal layer does (FR14). Its Lab
+  TourStep row and member entry become Tour's.
 - `spec:AST-116` DEC-5 gains an amendment line: the tour step it calls
   non-modal is a step without a backdrop (DEC-6).
 - Consumer docs: `Tour.doc.mjs` documents the step array, conditional steps,
   the active step, missing anchors and the intro-Dialog recipe.
-- Lab `Tour` keeps `<TourStep>` children. Core `Tour` takes a
-  `steps` array; its doc carries a migration example from the lab.
+- The lab Tour is removed. Core `Tour` takes a `steps` array in place of
+  `<TourStep>` children; its doc carries a migration example.
 
-FR1 gap: lab steps are `<TourStep>` children, ordered by mount order.
-FR3 gap: lab steps follow an index; removing an earlier step moves the active
-step, and removing the active last step shows nothing and reports no end.
-FR4 gap: the app cannot name the active lab step; it can only start the tour
-or move it by one.
-FR6 gap: a lab step names its ref `targetRef`, and has no centered step
-without an anchor.
-FR7 gap: the lab does not scroll an anchor into view.
-FR8 gap: when a lab anchor is not in the document as its step starts, the
-callout shows unanchored, the ring never appears, and nothing reports it.
-FR9 gap: a lab step has no preparation before it shows.
-FR10 gap: a lab callout and ring stay on a removed anchor's last box, or jump
-to the viewport corner after a scroll or resize.
-FR11 gap: lab control labels are English only, and no prop rewords them.
-FR12 gap: the lab has no Skip control.
-FR14 gap: a lab step without a backdrop ends the tour on Escape wherever focus
-is, and a lab step with a backdrop does not keep Tab in its callout.
-FR15 gap: a lab step without a backdrop also moves focus into the callout,
-wherever focus was.
-FR16 gap: a lab tour returns focus to the target only when it is in the tab
-order, else to the element focused at the start; with neither, focus stays on
-the page body.
-FR17 gap: the lab callout is a labeled section with no dialog role, no
-description, and no `aria-modal` under a backdrop.
+FR9 gap: while a step prepares, the callout of the step before it is not
+painted, but it stays in the accessibility tree, marked busy, with focus on
+its control. Its close control, Skip and Escape still end the tour.
+FR10 gap: an anchor that leaves the document with no render of the component
+that renders Tour leaves the callout and the ring as they were until the next
+render (`spec:AST-116` FR6 gap). A callout inside a layer that leaves the
+document with no `toggle` or `close` event leaves with it.
+FR13 gap: in a browser without CSS anchor positioning the ring does not show,
+and a backdrop dims the whole page. With a backdrop, while a scrolling panel
+clips the anchor, the ring and the dimming are not painted, and the step stays
+modal.
+FR14 gap: the callout's controls do not follow the anchor in the Tab order in
+the cases that `spec:AST-116`'s `FR12 gap:` names. After a layer that the
+anchor opens has closed, they stay out of the order until the next step
+shows. A step that starts with no anchor on the page, and takes its anchor at
+a later render, keeps its place in DOM order.
+FR16 gap: a tour that ends with focus on the page body, at a step whose anchor
+cannot take focus, leaves focus on the body.
 
 ## Verification
 
@@ -296,7 +293,7 @@ Rejected: an intro-modal step type inside Tour, which duplicates Dialog.
 Tour takes `steps`, `activeId`, `onActiveIdChange`, `onEnd`,
 `missingAnchorBehavior`, `onMissingAnchor`, `hasScrollIntoView`,
 `hasStepCount`, `hasSkipButton`,
-`hasBackdrop` (as the lab Tour names it), `nextLabel`, `doneLabel` and
+`hasBackdrop`, `nextLabel`, `doneLabel` and
 `skipLabel`; a step has `id`, `anchorRef`, `title`, `body`, `placement`,
 `alignment` and `showAction`. A callback mirrors the prop it reports, a choice of response is a
 `<thing>Behavior`, a boolean is `has…`, and `anchorRef` matches `usePopover`. Next

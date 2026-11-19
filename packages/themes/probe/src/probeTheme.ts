@@ -6067,6 +6067,30 @@ export const probeTheme = defineTheme({
         outlineColor: 'hsl(341.2 90% 25%)',
       },
     },
+    tour: {
+      base: {
+        backgroundColor: 'hsl(109.3 75% 59%)',
+        color: 'hsl(288.3 80% 12%)',
+        borderColor: 'hsl(218.8 79% 25%)',
+        outlineColor: 'hsl(306.2 75% 25%)',
+      },
+    },
+    'tour-highlight': {
+      base: {
+        backgroundColor: 'hsl(155.5 86% 58%)',
+        color: 'hsl(49.6 92% 12%)',
+        borderColor: 'hsl(131.8 92% 25%)',
+        outlineColor: 'hsl(28.7 94% 25%)',
+      },
+    },
+    'tour-overlay': {
+      base: {
+        backgroundColor: 'hsl(72.6 87% 62%)',
+        color: 'hsl(314.8 73% 12%)',
+        borderColor: 'hsl(333.1 81% 25%)',
+        outlineColor: 'hsl(275.1 94% 25%)',
+      },
+    },
     'tree-list': {
       base: {
         backgroundColor: 'hsl(345.7 80% 46%)',

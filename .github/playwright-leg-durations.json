@@ -125,8 +125,7 @@
     "packages/lab/src/NavigationStack/__tests__/NavigationStackScrollEdge.interaction.browser.spec.ts": 16.5,
     "packages/lab/src/PageControl/__tests__/PageControl.interaction.browser.spec.ts": 43.9,
     "packages/lab/src/RefreshControl/__tests__/RefreshControl.interaction.browser.spec.ts": 74.9,
-    "packages/lab/src/TabBar/__tests__/TabBar.interaction.browser.spec.ts": 116.1,
-    "packages/lab/src/Tour/__tests__/TourCardTarget.interaction.browser.spec.ts": 5.7
+    "packages/lab/src/TabBar/__tests__/TabBar.interaction.browser.spec.ts": 116.1
   },
   "interaction-webkit": {
     "internal/interaction-harness/src/harness.interaction.browser.spec.ts": 199.1,

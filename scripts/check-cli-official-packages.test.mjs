@@ -172,8 +172,8 @@ describe('buildOfficialList on a stand-in repository', () => {
   });
 
   it('lists the same family members with or without a build of the package', async () => {
-    // A canary-only package whose family member only its root entry exports,
-    // as Lab's TourStep is: the list must not depend on a local build.
+    // A canary-only package whose family member only its root entry exports:
+    // the list must not depend on a local build.
     const dir = path.join(root, 'packages', 'kit');
     writeJSON(path.join(dir, 'package.json'), {
       name: '@astryxdesign/kit',
