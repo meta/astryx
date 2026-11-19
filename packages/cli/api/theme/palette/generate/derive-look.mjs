@@ -112,6 +112,7 @@ import {perceptualDelta} from './generator.mjs';
  * @property {ReadonlyArray<number>} stops
  * @property {ReadonlyArray<Mode>} modes
  * @property {(m: Mode) => string[]} grounds The page colors code sits on, opaque hex.
+ * @property {(m: Mode) => string | null} [codeGround] The code background the theme sets itself in a mode (opaque hex), which code colors read on instead of the neutral's.
  * @property {(token: string) => boolean} [wanted]
  */
 
@@ -987,6 +988,7 @@ export function deriveCodeColors({
   stops,
   modes,
   grounds,
+  codeGround = () => null,
   wanted = () => true,
 }) {
   /**
@@ -1049,7 +1051,12 @@ export function deriveCodeColors({
     const refs = /** @type {Record<Mode, Stop>} */ ({});
     let ok = true;
     for (const m of modes) {
-      const on = [...(ground[m] ? [ground[m].color] : []), ...grounds(m)];
+      // A code background the theme sets itself is the one code shows on.
+      const own = codeGround(m);
+      const on = [
+        ...(own ? [own] : ground[m] ? [ground[m].color] : []),
+        ...grounds(m),
+      ];
       const s0 = near(m === 'light' ? light : dark);
       const order = [...sorted].sort(
         (a, b) =>

@@ -865,6 +865,8 @@ export interface DeriveCodeInput {
   modes: ReadonlyArray<Mode>;
   /** The page colors code sits on, opaque hex. */
   grounds: (m: Mode) => string[];
+  /** The code background the theme sets itself in a mode (opaque hex), which code colors read on instead of the neutral's. */
+  codeGround?: (m: Mode) => string | null;
   wanted?: (token: string) => boolean;
 }
 
@@ -879,6 +881,7 @@ export function deriveCodeColors({
   stops,
   modes,
   grounds,
+  codeGround = () => null,
   wanted = () => true,
 }: DeriveCodeInput): {
   tokens: Record<string, DerivedToken>;
@@ -925,7 +928,12 @@ export function deriveCodeColors({
     const refs = {} as Record<Mode, Stop>;
     let ok = true;
     for (const m of modes) {
-      const on = [...(ground[m] ? [ground[m].color] : []), ...grounds(m)];
+      // A code background the theme sets itself is the one code shows on.
+      const own = codeGround(m);
+      const on = [
+        ...(own ? [own] : ground[m] ? [ground[m].color] : []),
+        ...grounds(m),
+      ];
       const s0 = near(m === 'light' ? light : dark);
       const order = [...sorted].sort(
         (a, b) =>
