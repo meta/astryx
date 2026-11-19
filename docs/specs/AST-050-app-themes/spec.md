@@ -185,7 +185,10 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
   stylesheet at `./themes/<slug>.css`. A package that owns exactly one theme MAY
   instead export `./built` and `./theme.css`. When a theme needs fonts that are
   not system fonts, the package SHOULD export a font stylesheet at
-  `./themes/<slug>.fonts.css`, or `./fonts.css` for a single theme. The font
+  `./themes/<slug>.fonts.css`, or `./fonts.css` for a single theme. Beside each
+  theme, the package exports `colorModes`, the modes the theme draws:
+  `['light', 'dark']`, or `['light']` or `['dark']` for a theme that draws
+  one mode on every page. A theme that exports none draws both. The font
   stylesheet owns loading its fonts: it may ship the font files with
   `@font-face` rules or import them from a font service. An import MUST fail,
   naming what is missing, when a theme has no resolvable built module and
@@ -232,7 +235,12 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
   beside the source and another `--out`.
   `--check` on stale outputs exits 1, and its result carries
   `code: ERR_THEME_STALE`. `--check` names every output the build writes as
-  checked. A missing `.css.d.ts` stylesheet type stub alone is not stale: the
+  checked. `--check` compares each output with what the build writes from the
+  theme's inputs now, the header's `Core:` line included. An output's header
+  also names the CLI release that built it, and a built module's comment names
+  the command that built it. Those two lines alone never make an output stale:
+  an output that another CLI release or another command built checks clean
+  when everything else matches. A missing `.css.d.ts` stylesheet type stub alone is not stale: the
   check warns once in text mode, naming the missing stubs, and its exit code
   and result stay as the other outputs decide; `--json` stays silent. Any other
   missing output, the module's `.d.ts` and `.variants.d.ts` included, is
