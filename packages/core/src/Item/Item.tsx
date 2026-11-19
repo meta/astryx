@@ -291,7 +291,7 @@ export interface ItemProps extends BaseProps<HTMLElement> {
    * named in both places the `controlProps` value is the one written, a
    * disabled row says so there too, and an invisible button the row still
    * nests inside such a root for `onClick` takes none of them. A row given no
-   * `controlProps` renders exactly what it did before the prop existed.
+   * `controlProps` renders as if the prop did not exist.
    * Ignored, with a development warning, where the row renders no control: a
    * row with a `role` on a plain root (its parent owns keyboard access) or an
    * `interactiveRef` (the nested control is the one to attribute), a link
@@ -762,20 +762,21 @@ export function Item({
   // component means the root itself is the anchor, so the address rides it
   // and the invisible anchor below is not rendered.
   const isLinkRoot = typeof Component !== 'string' && href != null;
-  // The control the row renders, if any: the invisible anchor or button, or
-  // the root itself when `as` made the root the link (that root is the
-  // control whatever its `role`). A parent-role row with a plain root and a
-  // delegating row render none, so `controlProps` has nowhere to land there.
+  // A link root is the control whatever its `role`.
   const rendersControl =
     !isDelegate &&
     (isLinkRoot || (role == null && (href != null || onClick != null)));
-  // A link root with a bag: the root is the control and the bag lands on it,
-  // and on nothing else — a link root that also has `onClick` still nests the
-  // invisible button inside it, and that button takes no bag. A row that
-  // passes no bag, or renders no control, keeps every element as it was.
+  // A link root with `onClick` still nests the invisible button inside it.
+  // That button takes no bag: the root is the control.
   const rootControlProps =
     isLinkRoot && rendersControl ? controlProps : undefined;
   const buttonControlProps = isLinkRoot ? undefined : controlProps;
+  // A disabled anchor or link root keeps Enter and Space, the keys that
+  // activate a control, from the bag's key handler. Other keys still reach it.
+  const disabledBagKeys =
+    isDisabled && controlProps?.onKeyDown != null
+      ? {onKeyDown: disabledInteractionProps(controlProps.onKeyDown).onKeyDown}
+      : null;
   useDevWarning(
     'Item',
     '`controlProps` reaches the control the row renders for `onClick` or ' +
@@ -1035,6 +1036,7 @@ export function Item({
             : {href, target, rel})}
           aria-current={ariaCurrent ?? controlProps?.['aria-current']}
           aria-disabled={isDisabled || undefined}
+          {...disabledBagKeys}
           {...focusOwnerProps}
           {...stylex.props(
             styles.invisibleAnchor,
@@ -1117,6 +1119,7 @@ export function Item({
       ref={rootRef as React.Ref<never>}
       {...restProps}
       {...rootControlProps}
+      {...(rootControlProps != null ? disabledBagKeys : null)}
       {...swipeHandlers}
       {...linkRootProps}
       {...(isDelegate
@@ -1142,10 +1145,8 @@ export function Item({
       // bare div, etc.). For those, convey selection via aria-current — valid
       // on any element — so the state still reaches AT. Written after
       // {...restProps}: an interactive row moves the marker, a caller's
-      // included, to the element that takes focus. On a link root that takes a
-      // bag, the root is the control. `controlProps` is written after the
-      // root's props, so its marker wins there, and the row's disabled state
-      // wins over both. A row that passes no bag renders what it always did.
+      // included, to the element that takes focus. On a link root the bag is
+      // written after the root's props, so the bag's marker wins there.
       aria-current={
         currentOnFocusTarget
           ? undefined

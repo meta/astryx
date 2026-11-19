@@ -4394,6 +4394,44 @@ describe('controlProps', () => {
     expect(onKeyDown).toHaveBeenCalledTimes(1);
   });
 
+  it('a disabled href row withholds Enter and Space from the bag\x27s onKeyDown, and passes other keys', () => {
+    const onKeyDown = vi.fn();
+    render(
+      <Item
+        label="Message"
+        href="/m/1"
+        isDisabled
+        controlProps={{onKeyDown}}
+      />,
+    );
+    const link = screen.getByRole('link', {name: 'Message'});
+    fireEvent.keyDown(link, {key: 'Enter'});
+    fireEvent.keyDown(link, {key: ' '});
+    expect(onKeyDown).not.toHaveBeenCalled();
+    fireEvent.keyDown(link, {key: 'ArrowDown'});
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
+  });
+
+  it('a disabled link root withholds Enter and Space from the bag\x27s onKeyDown, and passes other keys', () => {
+    const onKeyDown = vi.fn();
+    render(
+      <Item
+        as={LinkRoot}
+        role="menuitem"
+        label="Docs"
+        href="/docs"
+        isDisabled
+        controlProps={{tabIndex: 0, onKeyDown}}
+      />,
+    );
+    const root = screen.getByRole('menuitem', {name: 'Docs'});
+    fireEvent.keyDown(root, {key: 'Enter'});
+    fireEvent.keyDown(root, {key: ' '});
+    expect(onKeyDown).not.toHaveBeenCalled();
+    fireEvent.keyDown(root, {key: 'ArrowDown'});
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
+  });
+
   it('a link root with an interactiveRef renders no control: the bag is ignored and the warning fires', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
