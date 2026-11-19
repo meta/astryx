@@ -285,49 +285,6 @@ const LINKED_ROOTS = linkedPackageRoots();
 /** A file of a package linked into the carried folder (see linkedPackageRoots). @param {string} file */
 const inLinkedPackage = file => LINKED_ROOTS.length > 0 && LINKED_ROOTS.some(root => file.startsWith(root));
 
-/**
- * The files of linked packages that a carried file imports by their path, a
- * relative one (`./vendor/badge/src/index.js`) or a path alias
- * (`@/vendor/badge/src/index.js`): the page reaches them as its own files,
- * so the file carries them.
- * @type {Set<string>}
- */
-const linkedReachedAsOwn = new Set();
-
-/** A local file that the rendered file carries: one of the page's own, not a linked package's. @param {string} file */
-const isCarried = file => isLocal(file) && (!inLinkedPackage(file) || linkedReachedAsOwn.has(file));
-
-/**
- * Whether a file that `importer` imports by its path is carried: a
- * file of the page's own, or one a carried module reaches by its path. A
- * linked package's own modules import their files as a package does.
- * @param {string} file
- * @param {string} importer
- */
-function carriesByPath(file, importer) {
-  if (!inLinkedPackage(file)) return true;
-  if (!isCarried(importer)) return false;
-  linkedReachedAsOwn.add(file);
-  return true;
-}
-
-/**
- * Note each linked package file that a carried module imports by its path
- * (relative or through a path alias), before that file loads. Only a page
- * with a linked package does this.
- * @param {string} source
- * @param {string} filename
- */
-function noteLinkedFilesReached(source, filename) {
-  if (LINKED_ROOTS.length === 0 || !isCarried(filename)) return;
-  for (const spec of importSpecifiers(source, filename)) {
-    const raw = spec.split('?')[0];
-    if (!raw.startsWith('.') && !isAliased(raw)) continue;
-    const target = importedFile(raw, filename);
-    if (target && path.isAbsolute(target) && inLinkedPackage(target)) linkedReachedAsOwn.add(target);
-  }
-}
-
 /** Charts the server render set aside, drawn after it. @type {any[]} */
 const charts = [];
 /** The props each chart was last drawn with in the page-wide draw. @type {any[]} */
@@ -843,7 +800,7 @@ function pagePlugin(filename, browser = false) {
               /** @type {any} */ (err).renderCode = 'ERR_FILE_NOT_FOUND';
               throw err;
             }
-            if (carriesByPath(file, filename) && !localFiles.includes(file)) localFiles.push(file);
+            if (!localFiles.includes(file)) localFiles.push(file);
             // The text is the module's default export, as Vite gives it, to
             // every way of importing it.
             const text = t.stringLiteral(fs.readFileSync(file, 'utf8'));
@@ -871,7 +828,7 @@ function pagePlugin(filename, browser = false) {
         }
         if (/\.json$/i.test(bare) && (bare.startsWith('.') || path.isAbsolute(bare))) {
           const file = path.resolve(dir, bare);
-          if (fs.existsSync(file) && carriesByPath(file, filename) && !localFiles.includes(file)) localFiles.push(file);
+          if (fs.existsSync(file) && !localFiles.includes(file)) localFiles.push(file);
         }
         if (/\.(css|scss|sass|less)$/i.test(bare) && (/\.module\.[a-z]+$/i.test(bare) || p.node.specifiers.length > 0)) {
           // CSS Modules (any stylesheet imported as a value) give class names
@@ -923,10 +880,8 @@ function pagePlugin(filename, browser = false) {
             }
             if (/\.css$/i.test(bare) && fs.existsSync(file) && !importedCss.some(c => c.file === file)) {
               importedCss.push({file, css: fs.readFileSync(file, 'utf8')});
+              if (!localFiles.includes(file)) localFiles.push(file);
             }
-            // Each importer decides: a linked package may import the
-            // stylesheet first, and a carried module reach it later.
-            if (fs.existsSync(file) && carriesByPath(file, filename) && !localFiles.includes(file)) localFiles.push(file);
           } else {
             // A package stylesheet (a theme's, say): the caller resolves it
             // from this file and inlines the rules the page uses.
@@ -1242,8 +1197,7 @@ const jiti = createJiti(entry, {
  */
 function compilePageModule(source, filename, browser = false) {
   if (isLocal(filename) && /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)) {
-    if (isCarried(filename) && !localFiles.includes(filename)) localFiles.push(filename);
-    noteLinkedFilesReached(source, filename);
+    if (!localFiles.includes(filename)) localFiles.push(filename);
     moduleFiles.add(filename);
     const ts = /\.(tsx?|mts|cts)$/.test(filename);
     const themeFiles = source.includes('stylex') ? servedThemeFiles(source, filename) : null;
@@ -1314,7 +1268,7 @@ function transformModule(opts) {
   // Without this, no file reads as local there and none is transformed.
   const filename = opts.filename ? path.normalize(opts.filename) : '';
   let source = opts.source;
-  if (filename && isCarried(filename) && /\.json$/i.test(filename) && !localFiles.includes(filename)) {
+  if (filename && isLocal(filename) && /\.json$/i.test(filename) && !localFiles.includes(filename)) {
     localFiles.push(filename);
   }
   const compiled = filename ? compilePageModule(source, filename) : null;
@@ -1700,6 +1654,53 @@ function describeFile(file) {
 }
 
 /**
+ * Keep only the files of a linked package (see linkedPackageRoots) that the
+ * page reaches by a path, as --reverse walks it: from the page, through each
+ * relative or path-alias import of a carried module. The rest belong to the
+ * package, and so do the files that only its modules import: none is
+ * carried or named as not carried. A file that no module imports by a path
+ * (one Node loaded by itself) and is not a linked package's stays, as do the
+ * images, which the page's script reads from the file.
+ */
+function dropLinkedPackageFiles() {
+  /** @type {Map<string, Set<string>>} */
+  const importers = new Map();
+  for (const file of [...localFiles, ...outsideFiles]) {
+    if (!/\.[cm]?[jt]sx?$/.test(file)) continue;
+    let source;
+    try {
+      source = fs.readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    for (const spec of importSpecifiers(source, file)) {
+      const target = importedFile(spec, file);
+      if (!target || !path.isAbsolute(target)) continue;
+      const set = importers.get(target) ?? new Set();
+      set.add(file);
+      importers.set(target, set);
+    }
+  }
+  const reached = new Set([entry]);
+  const queue = [entry];
+  for (let file = queue.shift(); file !== undefined; file = queue.shift()) {
+    for (const [target, from] of importers) {
+      if (!reached.has(target) && from.has(file)) {
+        reached.add(target);
+        queue.push(target);
+      }
+    }
+  }
+  /** @param {string} file */
+  const kept = file =>
+    reached.has(file) || assetsInlined.has(file) || (!importers.has(file) && !inLinkedPackage(file));
+  const keptLocal = localFiles.filter(kept);
+  localFiles.splice(0, localFiles.length, ...keptLocal);
+  const keptOutside = outsideFiles.filter(kept);
+  outsideFiles.splice(0, outsideFiles.length, ...keptOutside);
+}
+
+/**
  * Tell the host what the page is doing, so an end without an answer can say
  * where it ended.
  * @param {string} name
@@ -1985,17 +1986,8 @@ try {
       const raw = spec.split('?')[0];
       if (target && carriedModule && !raw.startsWith('.')) aliasImports.push({spec: raw, file: target});
       // Modules and JSON only: the transform already carries the stylesheets
-      // and images a module imports, and a Sass file is never carried. A
-      // linked package module that compiled as a package before a carried
-      // module reached it by its path also gets its stylesheets and text
-      // imports (`?raw`, `?inline`) carried here.
-      const reachedAsOwn =
-        target !== null && isLocal(target) && carriedModule && (raw.startsWith('.') || isAliased(raw)) && inLinkedPackage(target);
-      const carried = target !== null && (isCarried(target) || (reachedAsOwn && carriesByPath(target, file)));
-      const kept =
-        target !== null &&
-        (/\.([cm]?[jt]sx?|json)$/i.test(target) || (reachedAsOwn && (/\.css$/i.test(target) || /[?&](raw|inline)\b/.test(spec))));
-      if (target && kept && carried && !localFiles.includes(target)) {
+      // and images a module imports, and a Sass file is never carried.
+      if (target && /\.([cm]?[jt]sx?|json)$/i.test(target) && isLocal(target) && !localFiles.includes(target)) {
         localFiles.push(target);
       } else if (
         target &&
@@ -2007,6 +1999,7 @@ try {
       }
     }
   }
+  if (LINKED_ROOTS.length > 0) dropLinkedPackageFiles();
   parentPort?.postMessage({
     ok: true,
     markup,

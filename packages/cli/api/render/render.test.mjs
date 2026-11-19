@@ -615,6 +615,52 @@ export default function Page() {
     expect(againMarkup).toBe(markup);
   }, 120_000);
 
+  it("carries a linked folder's stylesheet that a carried stylesheet imports, whichever imported it first", async () => {
+    put('share-link/package.json', '{"name":"share-link","private":true}');
+    putLinkedPackage('share-link/vendor/kit', '@acme/share');
+    put('share-link/vendor/kit/src/parts/tokens.css', '.share-badge { letter-spacing: 7px; }');
+    put('share-link/vendor/kit/src/parts/badge.css', "@import './tokens.css';\n.share-badge { word-spacing: 1px; }");
+    put('share-link/vendor/kit/src/parts/more.css', '.share-more { letter-spacing: 8px; }');
+    put('share-link/vendor/kit/src/parts/theme.css', "@import './more.css';\n");
+    put(
+      'share-link/vendor/kit/src/parts/badge.js',
+      "import {jsx} from 'react/jsx-runtime';\nimport {label} from './label.js';\nimport './badge.css';\nexport function Badge() { return jsx('strong', {className: 'share-badge share-more', children: label}); }\n",
+    );
+    linkFolder('share-link/node_modules/@acme/share', 'share-link/vendor/kit');
+    // The package's own stylesheet imports tokens.css first; then the page's
+    // own stylesheet imports it too, and the page reaches theme.css by its path.
+    put('share-link/app.css', "@import './vendor/kit/src/parts/tokens.css';\n");
+    put('share-link/own.js', "import './app.css';\nimport './vendor/kit/src/parts/theme.css';\nexport const own = 'own';\n");
+    put(
+      'share-link/page.tsx',
+      "import {Badge} from '@acme/share';\nimport {own} from './own.js';\nexport default function Page() { return <p><Badge /> {own}</p>; }\n",
+    );
+    const {first, back, markup, againMarkup} = await roundTrip('share-link/page.tsx');
+    expect([...first.data.files].sort()).toEqual(
+      ['app.css', 'own.js', 'page.tsx', 'vendor/kit/src/parts/more.css', 'vendor/kit/src/parts/theme.css', 'vendor/kit/src/parts/tokens.css'].sort(),
+    );
+    expect(back.data.exact).toBe(true);
+    expect(againMarkup).toBe(markup);
+  }, 120_000);
+
+  it('leaves out a project file that only a linked package imports, as one of the package', async () => {
+    put('reach-out/package.json', '{"name":"reach-out","private":true}');
+    putLinkedPackage('reach-out/vendor/kit', '@acme/reach');
+    put('reach-out/shared/util.js', "export const suffix = 'from shared';\n");
+    put(
+      'reach-out/vendor/kit/src/parts/badge.js',
+      "import {jsx} from 'react/jsx-runtime';\nimport {label} from './label.js';\nimport {suffix} from '../../../../shared/util.js';\nexport function Badge() { return jsx('strong', {children: `${label} ${suffix}`}); }\n",
+    );
+    linkFolder('reach-out/node_modules/@acme/reach', 'reach-out/vendor/kit');
+    put('reach-out/page.tsx', "import {Badge} from '@acme/reach';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    const {first, back, markup, againMarkup} = await roundTrip('reach-out/page.tsx');
+    expect(first.data.files).toEqual(['page.tsx']);
+    expect(first.data.notCarried ?? []).toEqual([]);
+    expect(markup).toContain('@acme/reach badge text from shared');
+    expect(back.data.exact).toBe(true);
+    expect(againMarkup).toBe(markup);
+  }, 120_000);
+
   it("keeps a linked package's styles, JSON and images in the page, and carries only the images its script reads", async () => {
     put('link-assets/package.json', '{"name":"link-assets","private":true}');
     putLinkedPackage('link-assets/vendor/kit', '@acme/kit');
