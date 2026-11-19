@@ -325,7 +325,12 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   a POSIX system; never a temp folder that is a disk's root or holds the home
   folder), under the checks a write in the project has: no link carries it out
   of that folder, and an existing file is replaced only with `--overwrite`
-  (DEC-15). The one HTML file `astryx experimental export` writes may also go
+  (DEC-15). For `astryx template <name> <path>` and `--cdn <path>`, a
+  destination that is `~`, or starts with `~/` or `~\`, names the home folder,
+  as a shell reads it, and then follows the rules of an absolute path; a
+  destination written that way never makes a folder named `~` in the project.
+  Reading it so is a compatible `[fix]`. The one HTML file
+  `astryx experimental export` writes may also go
   to an absolute path the caller names with `--out`, in any folder; it never
   replaces a file that a render did not write (DEC-16).
 - **INV10a — Refusing a write outside its confined root is a compatible fix.**
