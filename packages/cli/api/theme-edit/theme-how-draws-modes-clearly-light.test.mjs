@@ -90,7 +90,9 @@ describe('a page or surface color, by mode', () => {
         (await answer('make the page #fffbeb in both modes')).first.slice(0, 1),
       ).toEqual(["--color-background-body '#fffbeb'"]);
       expect((await answer('white cards')).first).toEqual([
-        "background-color '#ffffff' --on card --mode light",
+        "background-color '#ffffff' --on card --when variant:default --mode light",
+        "background-color '#ffffff' --on card --when variant:transparent --mode light",
+        "background-color '#ffffff' --on card --when variant:muted --mode light",
       ]);
       // (An inverted surface, a tooltip, is dark in light mode by design.)
       for (const c of (await answer('make tooltips black')).first)
@@ -195,9 +197,12 @@ describe('clone and blind asks', () => {
         "--color-background-body '#f6f0e4' --mode light",
         "--color-text-primary '#92400e' --mode light",
       ]);
-      // (A part's own text said with it after a comma stays the part's.)
+      // (A part's own text said with it after a comma stays the part's;
+      // the whole look given, the destructive button keeps its red.)
       expect((await answer('buttons blue, white text')).first).toEqual([
-        "background-color '#2563eb' --on button",
+        "background-color '#2563eb' --on button --when variant:primary",
+        "background-color '#2563eb' --on button --when variant:secondary",
+        "background-color '#2563eb' --on button --when variant:ghost",
         "color '#ffffff' --on button",
       ]);
     },

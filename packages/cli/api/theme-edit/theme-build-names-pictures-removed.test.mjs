@@ -14,7 +14,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as zlib from 'node:zlib';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
   themeEditNew,
   themeEditSet,
@@ -34,6 +34,15 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {realRenders} from '../../test-utils/theme-render-stub.mjs';
+
+// (What these cases check is what a build or a picture run names, not the
+// rendered pages: the renders are stood in for.)
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    await importOriginal(),
+  ),
+);
 
 /** A valid 1x1 PNG. */
 const PNG = (() => {
@@ -149,7 +158,10 @@ describe('a build names the pictures it removed', () => {
 
 describe('a picture run that stops part way', () => {
   const savedPath = process.env.PATH;
+  // (The picture run takes the pages as they are rendered.)
+  beforeAll(() => realRenders(true));
   afterAll(() => {
+    realRenders(false);
     process.env.PATH = savedPath;
     fs.rmSync(path.join(cwd, 'node_modules/playwright'), {
       recursive: true,
@@ -158,7 +170,8 @@ describe('a picture run that stops part way', () => {
   });
 
   it('names the pictures it took and the ones it did not', async () => {
-    // A Playwright stand-in that takes the first picture, then fails.
+    // A Playwright stand-in whose browser takes the first picture, then
+    // fails.
     const pw = path.join(cwd, 'node_modules/playwright');
     fs.rmSync(pw, {recursive: true, force: true});
     fs.mkdirSync(pw, {recursive: true});
@@ -171,11 +184,13 @@ describe('a picture run that stops part way', () => {
       path.join(pw, 'index.js'),
       `const fs = require('fs');
        exports.chromium = {async launch() {
-         const n = Number(fs.existsSync(${JSON.stringify(count)}) ? fs.readFileSync(${JSON.stringify(count)}, 'utf8') : 0) + 1;
-         fs.writeFileSync(${JSON.stringify(count)}, String(n));
-         if (n > 1) throw new Error('crashed on start ' + n);
          return {
-           async newPage() { return {async route() {}, async goto() {}, async screenshot({path}) { fs.writeFileSync(path, Buffer.from(${JSON.stringify(PNG.toString('base64'))}, 'base64')); }}; },
+           async newPage() { return {async route() {}, async goto() {}, async evaluate() {}, async screenshot({path}) {
+             const n = Number(fs.existsSync(${JSON.stringify(count)}) ? fs.readFileSync(${JSON.stringify(count)}, 'utf8') : 0) + 1;
+             fs.writeFileSync(${JSON.stringify(count)}, String(n));
+             if (n > 1) throw new Error('crashed on picture ' + n);
+             fs.writeFileSync(path, Buffer.from(${JSON.stringify(PNG.toString('base64'))}, 'base64'));
+           }}; },
            async close() {},
          };
        }};`,
@@ -191,7 +206,7 @@ describe('a picture run that stops part way', () => {
         /^themes\/t\/preview\.png was taken, but themes\/t\/preview-dark\.png, themes\/t\/sheet-overlays\.png, themes\/t\/sheet-overlays-dark\.png, themes\/t\/sheet-[a-z]+\.png, .* were not: /,
       );
       expect(r.data.pictureProblem).not.toContain('themes/t/sheet.png');
-      expect(r.data.pictureProblem).toMatch(/crashed on start 2/);
+      expect(r.data.pictureProblem).toMatch(/crashed on picture 2/);
       expect(r.data.pictureProblem).not.toMatch(/No picture was taken/);
     } finally {
       process.env.PATH = savedPath;

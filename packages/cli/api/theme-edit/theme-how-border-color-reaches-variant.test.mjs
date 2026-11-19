@@ -98,7 +98,9 @@ describe('how border color reaches variant', () => {
       needsBases(test);
       expect(
         (await answer("make the dropdown menu's items red")).first,
-      ).toEqual(["background-color '#dc2626' --on dropdown-menu-item"]);
+      ).toEqual([
+        "background-color '#dc2626' --on dropdown-menu-item --when variant:default",
+      ]);
       const text = await answer("make the dropdown menu's item text bigger");
       expect(text.first[0]).toMatch(/--on dropdown-menu-item$/);
       for (const c of text.all) expect(c).not.toMatch(/--on dropdown-menu$/);
@@ -110,8 +112,10 @@ describe('how border color reaches variant', () => {
     async test => {
       needsBases(test);
       const r = await answer('make the card green and the shadows softer');
-      expect(r.first[0]).toBe("background-color '#16a34a' --on card");
-      const shadows = r.first.slice(1);
+      expect(r.first[0]).toBe(
+        "background-color '#16a34a' --on card --when variant:default",
+      );
+      const shadows = r.first.filter(c => !/--on card/.test(c));
       expect(shadows.length).toBeGreaterThan(0);
       expect(shadows.every(c => /^--shadow-/.test(c))).toBe(true);
     },

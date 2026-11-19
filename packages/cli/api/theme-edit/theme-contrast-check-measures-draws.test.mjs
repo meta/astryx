@@ -177,18 +177,22 @@ describe('a color given as a theme token', () => {
 
 describe('pairs on different parts', () => {
   it(
-    'are each their own problem, and following each fix makes no new one',
+    'are each their own problem, fixed by one line on the token, which makes no new one',
     async () => {
       await cli([...ED, 'set', 't', '--color-text-secondary', '#c8c8c8']);
-      const before = await open();
-      const parts = new Set(
-        before
-          .filter((/** @type {any} */ p) =>
-            p.problem.startsWith('text in text'),
-          )
-          .map((/** @type {any} */ p) => /--on ([\w-]+)/.exec(p.fix)?.[1]),
+      const before = (await open()).filter((/** @type {any} */ p) =>
+        p.problem.startsWith('text in text'),
       );
-      expect(parts.size).toBeGreaterThan(1);
+      expect(
+        new Set(before.map((/** @type {any} */ p) => p.problem)).size,
+      ).toBeGreaterThan(1);
+      // The whole-theme color is too faint on several parts: one line on
+      // that token, per mode, fixes them all.
+      const lines = new Set(before.map((/** @type {any} */ p) => p.fix));
+      for (const l of lines)
+        expect(l).toMatch(
+          / set t --color-text-secondary '#[0-9a-f]{6}'( --mode \w+)?$/,
+        );
       expect(await followAll()).toEqual([]);
       expect(await open()).toEqual([]);
     },

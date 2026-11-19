@@ -7,6 +7,10 @@ import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
+import {
+  BODY_ROW_UNCOUNTED,
+  TableRowPlacementContext,
+} from './TableRowPlacementContext';
 
 export interface TableBodyProps extends BaseProps<HTMLTableSectionElement> {
   ref?: React.Ref<HTMLTableSectionElement>;
@@ -31,7 +35,12 @@ export function TableBody({
         style,
       )}
       {...rest}>
-      {children}
+      {/* Rows here are body rows. A data-driven table gives each row its
+          stripe from its display index; a children-mode row's position is
+          the caller's, so it carries no parity. */}
+      <TableRowPlacementContext value={BODY_ROW_UNCOUNTED}>
+        {children}
+      </TableRowPlacementContext>
     </tbody>
   );
 }

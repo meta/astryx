@@ -187,7 +187,7 @@ export const doc = {
       name: 'playground',
       type: 'ComponentPlaygroundConfig',
       description:
-        'Interactive-preview config: initial prop `defaults`, `overlay` for modal-only components, `appShellMobile` for components gated on AppShell mobile context, and a `wrapper` for context-dependent sub-components.',
+        'Interactive-preview config: initial prop `defaults`, `overlay` for modal-only components, `appShellMobile` for components gated on AppShell mobile context, `mobile` (props merged over `defaults` for a second render at a phone viewport, which the theme editor part census renders too) for a component whose layout changes at phone width, and a `wrapper` for context-dependent sub-components.',
     },
     {
       name: 'props',

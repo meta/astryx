@@ -18,10 +18,11 @@ import {
   LayoutContent,
   LayoutHeader,
   LayoutPanel,
+  StackItem,
 } from '@astryxdesign/core/Layout';
 import {Icon} from '@astryxdesign/core/Icon';
 import {List, ListItem} from '@astryxdesign/core/List';
-import {Table} from '@astryxdesign/core/Table';
+import {Table, proportional} from '@astryxdesign/core/Table';
 import type {TableColumn} from '@astryxdesign/core/Table';
 import {Section} from '@astryxdesign/core/Section';
 import {
@@ -61,6 +62,7 @@ import {
   LockClosedIcon,
 } from '@heroicons/react/24/outline';
 import {Spinner} from '@astryxdesign/core/Spinner';
+import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 
 type BlockType =
   'hero' | 'text' | 'image' | 'button' | 'cards' | 'features' | 'cta';
@@ -107,6 +109,11 @@ const TRANSACTION_COLUMNS: TableColumn<Transaction>[] = [
   {
     key: 'name',
     header: 'Transaction',
+    // An icon and a name share this cell, so the default 60px floor leaves a
+    // letter or two per line on a phone. Each column's share matches its
+    // floor, so the floors add up to the table's minimum (480px), and the
+    // Table scrolls sideways only below that.
+    width: proportional(3, {minWidth: 180}),
     renderCell: (item: Transaction) => (
       <HStack gap={3} vAlign="center">
         <Icon icon={CATEGORY_ICONS[item.category] || SparklesIcon} />
@@ -124,6 +131,7 @@ const TRANSACTION_COLUMNS: TableColumn<Transaction>[] = [
   {
     key: 'date',
     header: 'Date',
+    width: proportional(2, {minWidth: 120}),
     renderCell: (item: Transaction) => (
       <Text type="body" color="secondary">
         {item.date}
@@ -133,6 +141,7 @@ const TRANSACTION_COLUMNS: TableColumn<Transaction>[] = [
   {
     key: 'amount',
     header: 'Amount',
+    width: proportional(2, {minWidth: 120}),
     renderCell: (item: Transaction) => (
       <Text type="label" weight="semibold" color={undefined} hasTabularNumbers>
         {item.amount}
@@ -141,7 +150,8 @@ const TRANSACTION_COLUMNS: TableColumn<Transaction>[] = [
   },
   {
     key: 'actions',
-    header: '',
+    header: <VisuallyHidden>Actions</VisuallyHidden>,
+    width: proportional(1, {minWidth: 60}),
     renderCell: () => (
       <Button
         label="More"
@@ -541,7 +551,7 @@ function BlockPreview({
         <Card padding={6} style={cardStyle} onClick={onSelect}>
           <HStack gap={3} vAlign="start" hAlign="between" paddingBlockEnd={4}>
             <VStack gap={1}>
-              <Heading level={3}>
+              <Heading level={3} accessibilityLevel={2}>
                 {(props.heading as string) || 'Features'}
               </Heading>
               {(props.description as string) && (
@@ -550,7 +560,9 @@ function BlockPreview({
                 </Text>
               )}
             </VStack>
-            <Button label="View All" variant="secondary" size="sm" />
+            <StackItem>
+              <Button label="View All" variant="secondary" size="sm" />
+            </StackItem>
           </HStack>
           <Table
             data={items}
@@ -568,7 +580,9 @@ function BlockPreview({
       return (
         <Card style={cardStyle} onClick={onSelect}>
           <VStack gap={4}>
-            <Heading level={3}>Cards</Heading>
+            <Heading level={3} accessibilityLevel={2}>
+              Cards
+            </Heading>
             <Divider />
             <List density="balanced" hasDividers={false}>
               {cardItems.map((card, i) => (
@@ -704,7 +718,9 @@ export default function EditorPage() {
   const blocksTabContent = (
     <VStack gap={2}>
       <VStack gap={1}>
-        <Heading level={4}>Add Block</Heading>
+        <Heading level={4} accessibilityLevel={2}>
+          Add Block
+        </Heading>
         <List density="balanced" hasDividers={false}>
           {(Object.keys(BLOCK_META) as BlockType[]).map(type => (
             <ListItem
@@ -720,7 +736,9 @@ export default function EditorPage() {
       </VStack>
 
       <VStack gap={1}>
-        <Heading level={4}>Layers</Heading>
+        <Heading level={4} accessibilityLevel={2}>
+          Layers
+        </Heading>
         <List density="balanced" hasDividers={false}>
           {blocks.map(block => (
             <ListItem
@@ -820,7 +838,9 @@ export default function EditorPage() {
             // Mobile: the title, an Edit button that opens the customizations
             // dialog, and the primary action.
             <HStack gap={3} vAlign="center" hAlign="between">
-              <Heading level={2}>{pageTitle}</Heading>
+              <Heading level={2} accessibilityLevel={1}>
+                {pageTitle}
+              </Heading>
               <HStack gap={2} vAlign="center">
                 <Button
                   label="Edit"
@@ -849,7 +869,9 @@ export default function EditorPage() {
                   onBlur={() => setIsEditingTitle(false)}
                 />
               ) : (
-                <Heading level={2}>{pageTitle}</Heading>
+                <Heading level={2} accessibilityLevel={1}>
+                  {pageTitle}
+                </Heading>
               )}
 
               <Toolbar
@@ -919,7 +941,7 @@ export default function EditorPage() {
         header={isMobile ? sidebar : undefined}
         start={isMobile ? undefined : sidebar}
         content={
-          <LayoutContent padding={8}>
+          <LayoutContent role="main" padding={8}>
             <VStack gap={4} style={canvasStyle(VIEWPORT_MAX[viewport])}>
               {blocks.length > 0 ? (
                 blocks.map(block => (

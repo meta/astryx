@@ -34,13 +34,15 @@ let unbuilt = '';
 
 beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-how-clause-scope-', FIXTURE_PACKAGES);
-  unbuilt = await installRealBaseThemes(cwd, ['neutral']);
+  unbuilt = await installRealBaseThemes(cwd, ['neutral', 'butter']);
   if (unbuilt) return;
   await themeEditNew('n', {cwd, like: 'neutral'});
   // (A theme whose changes show's missed list has an entry for: the
   // disabled primary button after a new accent.)
   await themeEditNew('mt', {cwd, like: 'neutral'});
   await themeEditSet('mt', 'accent', '#dc2626', {cwd});
+  // (A base whose cards draw dark text in dark mode.)
+  await themeEditNew('bt', {cwd, like: 'butter'});
 }, 600_000);
 
 afterAll(() => {
@@ -80,6 +82,7 @@ const answer = async (q, theme = 'n') => {
  *   lead?: string,
  *   never?: RegExp,
  *   firstText?: RegExp,
+ *   textNever?: RegExp,
  * }} Row
  */
 
@@ -123,7 +126,11 @@ const PART = [
   ],
   [
     '", thick borders"',
-    {q: 'big buttons, thick borders', lead: '--border-width 2px'},
+    // ("big buttons" is an ask of its own now, wild N14: both run.)
+    {
+      q: 'big buttons, thick borders',
+      first: ['spacing more --on button', '--border-width 2px'],
+    },
   ],
   [
     'font, text size and surfaces after a with-list',
@@ -195,7 +202,9 @@ const PART = [
     {
       q: 'buttons blue, white text',
       first: [
-        "background-color '#2563eb' --on button",
+        "background-color '#2563eb' --on button --when variant:primary",
+        "background-color '#2563eb' --on button --when variant:secondary",
+        "background-color '#2563eb' --on button --when variant:ghost",
         "color '#ffffff' --on button",
       ],
     },
@@ -216,8 +225,9 @@ const STATE_MODE = [
     {
       q: 'switches: track #e5e7eb when off',
       lead: "background-color '#e5e7eb' --on switch",
+      // (The checked look kept is the accent it draws, never the off gray:
       has: [
-        "background-color 'var(--color-background-gray)' --on switch --state checked",
+        "background-color 'var(--color-accent)' --on switch --state checked",
       ],
     },
   ],
@@ -227,7 +237,9 @@ const STATE_MODE = [
       q: 'in dark mode: page #202020, cards #2B2B2B, card border #1D1D1D, accent #4CC2FF',
       first: [
         "--color-background-body '#202020' --mode dark",
-        "background-color '#2b2b2b' --on card --mode dark",
+        "background-color '#2b2b2b' --on card --when variant:default --mode dark",
+        "background-color '#2b2b2b' --on card --when variant:transparent --mode dark",
+        "background-color '#2b2b2b' --on card --when variant:muted --mode dark",
         "border-color '#1d1d1d' --on card --mode dark",
         "--color-accent '#4cc2ff' --mode dark",
       ],
@@ -293,7 +305,7 @@ const COLOR_RULE = [
     'white cards',
     {
       q: 'cards: white background',
-      lead: "background-color '#ffffff' --on card --mode light",
+      lead: "background-color '#ffffff' --on card --when variant:default --mode light",
     },
   ],
   [
@@ -301,7 +313,9 @@ const COLOR_RULE = [
     {
       q: 'cards #0f1011; main text #f7f8f8',
       first: [
-        "background-color '#0f1011' --on card --mode dark",
+        "background-color '#0f1011' --on card --when variant:default --mode dark",
+        "background-color '#0f1011' --on card --when variant:transparent --mode dark",
+        "background-color '#0f1011' --on card --when variant:muted --mode dark",
         "--color-text-primary '#f7f8f8' --mode dark",
       ],
     },
@@ -359,13 +373,99 @@ const COLOR_RULE = [
     },
   ],
   [
-    'wild: navy buttons spare the variants whose text it would hide',
+    'navy buttons spare the variants whose text it would hide, and the destructive red',
     {
       q: 'navy buttons',
-      first: [
-        "background-color '#1e3a8a' --on button --when variant:primary",
-        "background-color '#1e3a8a' --on button --when variant:destructive",
+      lead: "background-color '#1e3a8a' --on button --when variant:primary",
+      never: /variant:(?:secondary|ghost|destructive)/,
+    },
+  ],
+  [
+    "a page gray is the theme's gray per mode, never one gray",
+    {
+      q: 'page background is too blue, make it gray',
+      // (A gray: the theme's gray step and its mirror, per the parent's
+      // ruling on gray words on a surface.)
+      lead: "--color-background-body 'light-dark(#9e9e9e, #525252)'",
+    },
+  ],
+  [
+    'the color a complaint names is the part now, never a value',
+    {
+      q: 'the pink page background is a bit much, make the page a warm cream in light mode',
+      lead: "--color-background-body '#fef3c7' --mode light",
+      never: /#db2777|#fceef4|#360a1e/,
+    },
+  ],
+];
+
+/** @type {Array<[string, Row]>} */
+const LATER_ASKS = [
+  [
+    'a ban on black text after a page never paints the page',
+    {
+      q: 'white page, never use pure black for text',
+      lead: "--color-background-body '#ffffff' --mode light",
+      never: /--color-background-body '#000000'/,
+    },
+  ],
+  [
+    '"instead of outlined" takes the part\'s own outline away',
+    {
+      q: 'inputs filled gray instead of outlined',
+      has: ['border none --on inputs'],
+      never: /--border-width/,
+    },
+  ],
+  [
+    "the part's text in its with-list",
+    {
+      q: 'badges with a subtle colored background and dark text',
+      lead: "color '#111827' --on badge",
+      never: /^--color-text-primary/,
+    },
+  ],
+  [
+    'the header row is the header cells',
+    {q: 'table header row gray', never: /--on table-row/},
+  ],
+  [
+    "a light border keeps the part's own dark-mode border",
+    {
+      q: 'inputs: 1px border #d5dbe1',
+      lead: "border '1px solid light-dark(#d5dbe1, var(--color-border-emphasized))' --on inputs",
+    },
+  ],
+  [
+    '"unselected tabs gray" is their text, the selected look said',
+    {
+      q: 'selected tab text white, unselected tabs gray',
+      has: ["color '#9e9e9e' --on tab"],
+      never: /background-color/,
+    },
+  ],
+  [
+    "a direction is never swapped for a color word's dark tone",
+    {
+      q: 'make the card background darker',
+      theme: 'bt',
+      textNever: /dark tone/,
+    },
+  ],
+  [
+    'a dark link color the dark page would not read',
+    {q: 'dark red links', lead: "--color-text-accent '#991b1b' --mode light"},
+  ],
+  [
+    'a token list: each item its own, light ones light mode',
+    {
+      q: 'primary #4f46e5, primary hover #4338ca, page background #f9fafb, card surface #ffffff, text #111827, muted text #6b7280, border #e5e7eb',
+      has: [
+        "--color-background-body '#f9fafb' --mode light",
+        "background-color '#ffffff' --on card --when variant:default --mode light",
+        "--color-text-primary '#111827' --mode light",
       ],
+      never: /--color-text-[a-z]+ '#111827' --on card/,
     },
   ],
 ];
@@ -410,6 +510,7 @@ describe('clause scope', () => {
     ['part', PART],
     ['state and mode', STATE_MODE],
     ['the light/dark color rule', COLOR_RULE],
+    ['', LATER_ASKS],
     ['and the rest', OTHER],
   ]))
     describe(group, () => {
@@ -427,6 +528,9 @@ describe('clause scope', () => {
           if (row.never)
             for (const c of r.all) expect(c, row.q).not.toMatch(row.never);
           if (row.firstText) expect(r.texts[0], row.q).toMatch(row.firstText);
+          if (row.textNever)
+            for (const t of r.texts)
+              expect(t, row.q).not.toMatch(row.textNever);
         },
         300_000,
       );

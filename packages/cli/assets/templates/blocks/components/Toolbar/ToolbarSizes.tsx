@@ -20,7 +20,7 @@ const SIZES = [
 export default function ToolbarSizes() {
   const showToast = useToast();
   return (
-    <Stack direction="vertical" gap={4} style={{width: 500}}>
+    <Stack direction="vertical" gap={4} style={{width: 500, maxWidth: '100%'}}>
       {SIZES.map(({size, label}) => (
         <Card key={size}>
           <Toolbar

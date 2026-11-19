@@ -1759,7 +1759,13 @@ function ShortcutRow({
           {isCustom && (
             <IconButton
               label={`Reset ${def.label} to its default`}
-              icon={<Icon icon={ArrowUturnLeftIcon} size="sm" />}
+              icon={
+                <Icon
+                  icon={ArrowUturnLeftIcon}
+                  size="sm"
+                  xstyle={rtlStyles.mirror}
+                />
+              }
               variant="ghost"
               size="sm"
               onClick={onReset}
@@ -1879,7 +1885,13 @@ function ShortcutsPanel() {
               label="Reset all to defaults"
               variant="ghost"
               size="sm"
-              icon={<Icon icon={ArrowUturnLeftIcon} size="sm" />}
+              icon={
+                <Icon
+                  icon={ArrowUturnLeftIcon}
+                  size="sm"
+                  xstyle={rtlStyles.mirror}
+                />
+              }
               onClick={() => {
                 setOverrides({});
               }}
@@ -2470,7 +2482,7 @@ function SettingsSideNav({
         <HStack gap={2} align="center" paddingInline={2} minHeight={32}>
           {/* Also the dialog's accessible name (`aria-labelledby`), so the
               painted title and the announced one cannot drift apart. */}
-          <Heading level={4} id={titleId}>
+          <Heading level={4} accessibilityLevel={1} id={titleId}>
             Settings
           </Heading>
         </HStack>
@@ -2633,10 +2645,9 @@ function SettingsNarrowShell({
     <VStack gap={0} height="100%">
       <HStack gap={2} align="center" paddingInline={3} paddingBlock={3}>
         <StackItem size="fill">
-          {/* The element `aria-labelledby` points at in this shell. A title row,
-              not the head of a navigation column, so it stays a label — the
-              phone layout's only heading should be the panel's own. */}
-          <Text type="label" id={titleId}>
+          {/* The element `aria-labelledby` points at in this shell, and the
+              page's level-1 heading; it keeps the label look. */}
+          <Text type="label" as="h1" id={titleId}>
             Settings
           </Text>
         </StackItem>
@@ -2718,7 +2729,7 @@ export default function SettingsDialogTemplate() {
   return (
     // `Center` is the page root — the rubric's root for a content page, and
     // what puts the inline dialog in the middle of the page it stands in for.
-    <Center height="100dvh">
+    <Center role="main" height="100dvh">
       <Dialog
         isOpen
         // `isInline` renders this same dialog WITHOUT the `<dialog>` element, so

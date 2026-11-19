@@ -446,8 +446,10 @@ function colorSchemeSections(members) {
   return [...groups].reduce((result, [css, names]) => {
     const identities = familyScopeSelector(names), top = `${identities}:not(:where([data-astryx-theme] [data-astryx-theme]))`;
     const active = (/** @type {string} */ selector) => `${selector}${identities},\n${selector}:where(:not([data-astryx-theme])):has(${top})`;
-    result.base.push(`@scope (${identities}) to (${THEME_SCOPE_TO}) {\n  :where(:scope:not([data-theme]):not(html[data-theme] *)) { color-scheme: light dark; }\n  :where(:scope:not([data-theme]):is(html[data-theme="light"] *)) { color-scheme: light; }\n  :where(:scope:not([data-theme]):is(html[data-theme="dark"] *)) { color-scheme: dark; }\n}`);
-    result.themed.push(css.replace(':root', active(':root')).replace('html[data-theme="light"]', active('html[data-theme="light"]')).replace('html[data-theme="dark"]', active('html[data-theme="dark"]')));
+    // A member follows the page's scheme, as a standalone theme does: only a
+    // mode the page forces on html pins it.
+    result.base.push(`@scope (${identities}) to (${THEME_SCOPE_TO}) {\n  :where(:scope:not([data-theme]):is(html[data-theme="light"] *)) { color-scheme: light; }\n  :where(:scope:not([data-theme]):is(html[data-theme="dark"] *)) { color-scheme: dark; }\n}`);
+    result.themed.push(css.replace('html[data-theme="light"]', active('html[data-theme="light"]')).replace('html[data-theme="dark"]', active('html[data-theme="dark"]')));
     return result;
   }, /** @type {{base: string[], themed: string[]}} */ ({base: [], themed: []}));
 }

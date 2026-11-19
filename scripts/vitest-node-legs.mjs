@@ -50,8 +50,9 @@ export const JOB_LIMIT_SECONDS = 15 * 60;
 // VITEST_SHARD_WATCHDOG_SECONDS), so a leg that runs long names its files.
 export const WATCHDOG_MARGIN_SECONDS = 60;
 // The longest a leg takes from its job's start until Vitest starts:
-// checkout, install, the Core build and a scoped run's two listings. Measured
-// at most 96 s to the test step and 21 s of listing in it, over 65 legs.
+// checkout, install, unpacking build-core's Core build and a scoped run's two
+// listings. Measured at most 96 s to the test step and 21 s of listing in it,
+// over 65 legs that still built Core themselves.
 export const SETUP_SECONDS = 120;
 // Recorded test seconds a leg's Vitest finishes per second of wall time on
 // the four-core runner (three test files at once): 2.62 to 2.89 over 21 legs.
@@ -71,16 +72,19 @@ export const WALL_SECONDS =
 export const LEG_BUDGET_SECONDS =
   (WALL_SECONDS * TEST_SECONDS_PER_WALL_SECOND) / RECORD_DRIFT;
 
-// The most Node legs a run starts. Past it the suite itself must get faster:
-// a run of eight legs already holds eight of CI's ninety jobs.
-export const MAX_NODE_LEGS = 8;
-
 // The most Node legs Main's unit run starts (spec:AST-030 FR22, DEC-17). Main
 // runs about once an hour, so it may hold more of the ceiling to finish inside
 // its legs' limit: on the recorded suite with the swizzle proof's slices,
 // twelve legs keep the slowest under about eleven minutes on a runner 1.28
 // times slower than measured, where eight legs reach the fifteen-minute limit.
 export const MAX_MAIN_NODE_LEGS = 12;
+
+// The most Node legs a pull request's run starts: as many as Main's, so a
+// suite that grows past one count of legs takes more legs instead of failing
+// every pull request. A pull request still starts only as many as its legs
+// need to fit their budget, at the widths admission picks, so it never grows
+// to finish sooner. Past this count the suite itself must get faster.
+export const MAX_NODE_LEGS = MAX_MAIN_NODE_LEGS;
 
 // How much slower than measured a runner may be, and how long Main's slowest
 // Node leg may take on it before main's validation warns, ahead of the
@@ -214,6 +218,107 @@ export function overBudgetNotice(plan, {main = false} = {}) {
   };
 }
 
+/**
+ * Why a recorded-times file cannot be used, or null: it must parse, and its
+ * `seconds` must map each file to a finite, non-negative number. A plan read
+ * from an unusable record would plan every file as unrecorded and still fit.
+ * @param {string} file
+ * @returns {string | null}
+ */
+export function recordProblem(file) {
+  let parsed;
+  try {
+    parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (error) {
+    return `${path.relative(ROOT, file)} cannot be read (${error.message})`;
+  }
+  const seconds = parsed?.seconds;
+  if (seconds == null || typeof seconds !== 'object' || Array.isArray(seconds))
+    return `${path.relative(ROOT, file)} has no map of seconds per file`;
+  const bad = Object.entries(seconds).find(
+    ([, value]) =>
+      typeof value !== 'number' || !Number.isFinite(value) || value < 0,
+  );
+  return bad
+    ? `${path.relative(ROOT, file)} records ${JSON.stringify(bad[1])} seconds for ${bad[0]}`
+    : null;
+}
+
+/** The minimum Node's record, which the CLI's legs there pack by. */
+export const MIN_NODE_DURATIONS = path.join(
+  ROOT,
+  'scripts/vitest-node-durations.min-node.json',
+);
+
+/** The recorded-times files: the Node legs' and the minimum Node's. */
+export const RECORDS = [DURATIONS, MIN_NODE_DURATIONS];
+
+// The CLI's legs on its minimum Node (cli-minimum-node.yml): as many as keep
+// the slowest leg near MIN_NODE_TARGET_MINUTES, well inside the job's 30-minute
+// limit and its watchdog at 28. Measured over the four legs of run
+// 44258944787 on Node 22.13: about 40 s from the job's start to the test step,
+// and 2.40 to 2.48 recorded test seconds a second of the step. The setup booked
+// here is three times the measured one, and each file adds its import time on
+// top of that pace, so the projection runs 2 to 3 minutes above the legs: a
+// slower runner day still keeps the slowest leg near the target.
+export const MIN_NODE_TARGET_MINUTES = 20;
+export const MIN_NODE_SETUP_SECONDS = 120;
+export const MIN_NODE_TEST_SECONDS_PER_WALL_SECOND = 2.4;
+// Past this many legs the CLI's tests must get faster instead.
+export const MAX_MIN_NODE_LEGS = 10;
+// The legs the workflow starts when the plan cannot run.
+export const MIN_NODE_FALLBACK_LEGS = 6;
+
+/** Recorded test seconds one minimum-Node leg may plan. */
+export const MIN_NODE_LEG_BUDGET_SECONDS =
+  (MIN_NODE_TARGET_MINUTES * 60 - MIN_NODE_SETUP_SECONDS) *
+  MIN_NODE_TEST_SECONDS_PER_WALL_SECOND;
+
+/**
+ * A minimum-Node leg's projected wall time in minutes: its setup, then its
+ * recorded test seconds at the measured pace.
+ * @param {number} testSeconds
+ */
+export function minNodeLegMinutes(testSeconds) {
+  return (
+    (MIN_NODE_SETUP_SECONDS +
+      testSeconds / MIN_NODE_TEST_SECONDS_PER_WALL_SECOND) /
+    60
+  );
+}
+
+/**
+ * The fewest legs, up to `MAX_MIN_NODE_LEGS`, whose slowest leg plans at most
+ * `MIN_NODE_LEG_BUDGET_SECONDS`, split as the sequencer splits by the
+ * minimum-Node record. A suite past the budget at the most legs warns and
+ * runs the most legs: the daily run never stops for its plan.
+ * @param {string[]} files the CLI's test files
+ * @param {Record<string, number>} seconds the minimum-Node record's seconds
+ * @returns {{legs: number, fits: boolean, longest: number, total: number, minutes: number, reason: string}}
+ */
+export function planMinNodeLegs(files, seconds) {
+  const cost = nodeFileCost(files, seconds);
+  const total = files.reduce((sum, file) => sum + cost(file), 0);
+  const plan = fitLegsToBudget(files, cost, {
+    budget: MIN_NODE_LEG_BUDGET_SECONDS,
+    maxLegs: MAX_MIN_NODE_LEGS,
+  });
+  const legs = Math.max(1, plan.count);
+  const fits = plan.longest <= MIN_NODE_LEG_BUDGET_SECONDS;
+  const minutes = minNodeLegMinutes(plan.longest);
+  const reason = fits
+    ? ''
+    : `The CLI's tests plan ${Math.round(total)} s on the minimum Node: at ${legs} legs, the most it starts, the slowest leg plans ${Math.round(plan.longest)} s, about ${minutes.toFixed(1)} minutes, past the ${MIN_NODE_TARGET_MINUTES}-minute target. Speed up the slowest CLI test files.`;
+  return {legs, fits, longest: plan.longest, total, minutes, reason};
+}
+
+/** The CLI's test files: what `pnpm -F @astryxdesign/cli test` collects. */
+export function minNodeLegFiles(root = ROOT) {
+  return nodeLegFiles(root, {swizzleProofOwnJob: false}).filter(file =>
+    file.startsWith('packages/cli/'),
+  );
+}
+
 /** Recorded seconds per Node test file, or none when the record cannot be read. */
 export function readDurations(file = DURATIONS) {
   try {
@@ -275,16 +380,64 @@ if (
   const at = argv.indexOf('--other-widths');
   if (argv[0] !== 'plan' || (at !== -1 && argv[at + 1] == null)) {
     console.error(
-      "usage: node scripts/vitest-node-legs.mjs plan [--main] [--other-widths '<json>'] [--github-output]",
+      "usage: node scripts/vitest-node-legs.mjs plan [--main | --min-node] [--other-widths '<json>'] [--github-output]",
     );
     process.exit(2);
+  }
+  if (argv.includes('--min-node')) {
+    const files = minNodeLegFiles();
+    const seconds = readDurations(MIN_NODE_DURATIONS);
+    const problem = recordProblem(MIN_NODE_DURATIONS);
+    const planned = planMinNodeLegs(files, seconds);
+    const plan = problem
+      ? {
+          ...planned,
+          legs: MIN_NODE_FALLBACK_LEGS,
+          fits: false,
+          reason: `The minimum-Node record cannot be used: ${problem}.`,
+        }
+      : planned;
+    console.log(
+      problem
+        ? `${plan.reason} The workflow starts ${plan.legs} legs.`
+        : `${files.length} CLI test files plan ${Math.round(plan.total)} s on the minimum Node: ${plan.legs} legs, the slowest ${Math.round(plan.longest)} s, about ${plan.minutes.toFixed(1)} minutes (target ${MIN_NODE_TARGET_MINUTES}).`,
+    );
+    const outputs = {
+      legs: String(plan.legs),
+      shards: JSON.stringify(Array.from({length: plan.legs}, (_, i) => i + 1)),
+    };
+    if (argv.includes('--github-output'))
+      fs.appendFileSync(
+        process.env.GITHUB_OUTPUT,
+        Object.entries(outputs)
+          .map(([key, value]) => `${key}=${value}\n`)
+          .join(''),
+      );
+    else console.log(JSON.stringify(outputs));
+    // The daily run never stops for its plan: it runs its legs and warns.
+    if (!plan.fits)
+      console.log(
+        `::warning title=Minimum-Node legs over target::${plan.reason}`,
+      );
+    process.exit(0);
   }
   const main = argv.includes('--main');
   const files = nodeLegFiles(ROOT, {swizzleProofOwnJob: !main});
   const seconds = readDurations();
-  const plan = main
+  const planned = main
     ? planMainNodeLegs(files, seconds)
     : planNodeLegs(files, seconds);
+  // A record that cannot be used fails the plan, as one past its budget
+  // does: a change only to the recorded times runs only this check and the
+  // tests that read them.
+  const problem = RECORDS.map(recordProblem).find(Boolean);
+  const plan = problem
+    ? {
+        ...planned,
+        fits: false,
+        reason: `The recorded Node test times cannot be used: ${problem}.`,
+      }
+    : planned;
   const outputs = stepOutputs(plan, at === -1 ? {} : JSON.parse(argv[at + 1]));
   const unrecorded = files.filter(file => !Object.hasOwn(seconds, file));
   console.log(

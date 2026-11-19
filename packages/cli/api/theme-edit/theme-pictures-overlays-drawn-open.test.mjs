@@ -72,11 +72,13 @@ describe('pictures', () => {
   it('run each opening animation to its end before the picture', () => {
     const dir = path.resolve(import.meta.dirname, '../../foundation/render');
     expect(
-      fs.readFileSync(path.join(dir, 'picture-chrome.mjs'), 'utf8'),
+      fs.readFileSync(path.join(dir, 'picture-window.mjs'), 'utf8'),
     ).toMatch(/document\.getAnimations\(\)[\s\S]*a\.finish\(\)/);
-    expect(
-      fs.readFileSync(path.join(dir, 'picture-playwright.mjs'), 'utf8'),
-    ).toContain("animations: 'disabled'");
+    // Both browsers run that script before the picture.
+    for (const file of ['picture-chrome.mjs', 'picture-playwright.mjs'])
+      expect(fs.readFileSync(path.join(dir, file), 'utf8')).toContain(
+        'SETTLE_ANIMATIONS',
+      );
   });
 });
 
