@@ -920,8 +920,10 @@ function pagePlugin(filename, browser = false) {
             }
             if (/\.css$/i.test(bare) && fs.existsSync(file) && !importedCss.some(c => c.file === file)) {
               importedCss.push({file, css: fs.readFileSync(file, 'utf8')});
-              if (carriesRelative(file, filename) && !localFiles.includes(file)) localFiles.push(file);
             }
+            // Each importer decides: a linked package may import the
+            // stylesheet first, and a carried module reach it later.
+            if (fs.existsSync(file) && carriesRelative(file, filename) && !localFiles.includes(file)) localFiles.push(file);
           } else {
             // A package stylesheet (a theme's, say): the caller resolves it
             // from this file and inlines the rules the page uses.
@@ -1980,11 +1982,16 @@ try {
       const raw = spec.split('?')[0];
       if (target && carriedModule && !raw.startsWith('.')) aliasImports.push({spec: raw, file: target});
       // Modules and JSON only: the transform already carries the stylesheets
-      // and images a module imports, and a Sass file is never carried.
-      const carried =
+      // and images a module imports, and a Sass file is never carried. A
+      // linked package module that compiled as a package before a carried
+      // module reached it by its path also gets its stylesheets and text
+      // imports (`?raw`, `?inline`) carried here.
+      const reachedAsOwn = target !== null && isLocal(target) && carriedModule && raw.startsWith('.') && inLinkedPackage(target);
+      const carried = target !== null && (isCarried(target) || (reachedAsOwn && carriesRelative(target, file)));
+      const kept =
         target !== null &&
-        (isCarried(target) || (isLocal(target) && carriedModule && raw.startsWith('.') && carriesRelative(target, file)));
-      if (target && /\.([cm]?[jt]sx?|json)$/i.test(target) && carried && !localFiles.includes(target)) {
+        (/\.([cm]?[jt]sx?|json)$/i.test(target) || (reachedAsOwn && (/\.css$/i.test(target) || /[?&](raw|inline)\b/.test(spec))));
+      if (target && kept && carried && !localFiles.includes(target)) {
         localFiles.push(target);
       } else if (
         target &&

@@ -568,6 +568,33 @@ export default function Page() {
     expect(againMarkup).toBe(markup);
   }, 120_000);
 
+  it('carries the stylesheets of a linked folder that a carried module reaches after the package loaded', async () => {
+    put('late-link/package.json', '{"name":"late-link","private":true}');
+    putLinkedPackage('late-link/vendor/kit', '@acme/late');
+    put('late-link/vendor/kit/src/parts/badge.css', '.late-badge { letter-spacing: 5px; }');
+    put('late-link/vendor/kit/src/parts/label.css', '.late-label { word-spacing: 6px; }');
+    put(
+      'late-link/vendor/kit/src/parts/badge.js',
+      "import {jsx} from 'react/jsx-runtime';\nimport {label} from './label.js';\nimport './badge.css';\nexport function Badge() { return jsx('strong', {className: 'late-badge late-label', children: label}); }\n",
+    );
+    put('late-link/vendor/kit/src/parts/label.js', "import './label.css';\nexport const label = '@acme/late badge text';\n");
+    linkFolder('late-link/node_modules/@acme/late', 'late-link/vendor/kit');
+    // The package loads first, by its name; then the page's own module reaches
+    // two of its files by their paths.
+    put('late-link/own.js', "import './vendor/kit/src/parts/badge.css';\nimport {label} from './vendor/kit/src/parts/label.js';\nexport const own = `own ${label}`;\n");
+    put(
+      'late-link/page.tsx',
+      "import {Badge} from '@acme/late';\nimport {own} from './own.js';\nexport default function Page() { return <p><Badge /> {own}</p>; }\n",
+    );
+    const {first, back, markup, againMarkup} = await roundTrip('late-link/page.tsx');
+    expect([...first.data.files].sort()).toEqual(
+      ['own.js', 'page.tsx', 'vendor/kit/src/parts/badge.css', 'vendor/kit/src/parts/label.css', 'vendor/kit/src/parts/label.js'].sort(),
+    );
+    expect(markup).toContain('own @acme/late badge text');
+    expect(back.data.exact).toBe(true);
+    expect(againMarkup).toBe(markup);
+  }, 120_000);
+
   it("keeps a linked package's styles, JSON and images in the page, and carries only the images its script reads", async () => {
     put('link-assets/package.json', '{"name":"link-assets","private":true}');
     putLinkedPackage('link-assets/vendor/kit', '@acme/kit');
