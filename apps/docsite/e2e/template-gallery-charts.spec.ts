@@ -5,7 +5,8 @@
  * @input Production docsite's template gallery, which shows each template
  *   scaled down in a tile
  * @output App-level proof that the Dashboard tile shows its chart lines
- *   complete on every frame, and that a series' own dash pattern stays
+ *   complete on every frame, and that a dash pattern stays on a line that
+ *   does not draw in
  * @position Docsite integration regression. A chart that draws its lines in
  *   draws them to a wrong length in a scaled tile, so the tile shows the
  *   lines complete at once.
@@ -70,7 +71,9 @@ test('the Dashboard tile shows complete chart lines on every frame', async ({
   expect(frames.longest).toBeGreaterThan(0);
   expect(frames.partlyDrawn).toBe(0);
 
-  // A dashed series, such as a target line, sets a pattern with no unit.
+  // A dashed series that does not draw in, such as a target line, has a
+  // pattern with no unit. A dashed series that draws in is not covered: the
+  // tile shows that line solid until its draw-in ends.
   const ownPattern = await page.evaluate(() => {
     const line = document.querySelector<SVGPathElement>(
       '[inert] path.recharts-line-curve',
