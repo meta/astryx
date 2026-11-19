@@ -41,7 +41,8 @@ export function numberedLookValues(family, typed, drawn) {
  * @param {(d: D) => C | undefined} clauseOf
  * @param {C[]} clauses
  * @param {Array<{on: string, whens: string[]}>} families
- * @param {(when: string) => number | null} sizeOf a look's size now, in px
+ * @param {(when: string, on: string) => number | null} sizeOf a look's size
+ *   now on the family's part, in px
  */
 export function oneAnswerPerFamily(drafts, clauseOf, clauses, families, sizeOf) {
   for (const c of clauses) {
@@ -51,7 +52,7 @@ export function oneAnswerPerFamily(drafts, clauseOf, clauses, families, sizeOf) 
     const mine = fam ? drafts.filter(d => clauseOf(d) === c && d.options.length) : [];
     if (!fam || mine.length < 2) continue;
     const [head, ...rest] = mine;
-    const scaled = scaleFamilySizes(mine, fam.whens, sizeOf);
+    const scaled = scaleFamilySizes(mine, fam.whens, w => sizeOf(w, fam.on));
     const seen = new Set();
     head.options = [
       mine
@@ -86,8 +87,9 @@ const inUnitOf = (px, like) => {
  * Scale the size steps of a family's drafts, one draft per look in the
  * order of `whens`: the size said is the largest look's, and every other
  * look's size is that size times the ratio of its size now to the largest
- * look's size now, in the unit said. Says what it wrote, or null when no
- * size is said or a look's size now is unknown.
+ * look's size now, in the unit said. Says what it wrote, or that the steps
+ * cannot be kept when a look's size now is unknown; null when no size is
+ * said.
  * @param {Array<{options: object[][]}>} drafts
  * @param {string[]} whens
  * @param {(when: string) => number | null} sizeOf
@@ -97,7 +99,15 @@ function scaleFamilySizes(drafts, whens, sizeOf) {
   const isSize = (/** @type {any} */ st) =>
     (st.thing === 'font-size' || /^--text-[\w-]+-size$/.test(st.thing)) && pxOf(st.value) != null;
   const now = whens.map(w => sizeOf(w));
-  if (!drafts.some(d => d.options.flat().some(isSize)) || now.some(n => !n)) return null;
+  if (!drafts.some(d => d.options.flat().some(isSize))) return null;
+  const level = (/** @type {string} */ w) => w.split(':')[1];
+  // (A look whose size now is no length, a clamp() or calc(), leaves the
+  // steps unknown: each look takes the size said, and the answer says so.)
+  const unknown = whens.filter((_, i) => !now[i]);
+  if (unknown.length)
+    return `each look takes the size said: the steps between them cannot be kept, since ${unknown
+      .map(level)
+      .join(', ')}'s size now is no length (a clamp() or calc() size)`;
   const top = now.indexOf(Math.max(.../** @type {number[]} */ (now)));
   const said = drafts[top]?.options.flat().find(isSize);
   if (!said) return null;
@@ -108,7 +118,6 @@ function scaleFamilySizes(drafts, whens, sizeOf) {
   drafts.forEach((d, i) => {
     for (const o of d.options) for (const st of o) if (isSize(st)) /** @type {any} */ (st).value = written[i];
   });
-  const level = (/** @type {string} */ w) => w.split(':')[1];
   return `${level(whens[top])} ${written[top]}, the others scaled to keep the steps between them (${whens
     .map((w, i) => (i === top ? '' : `${level(w)} ${written[i]}`))
     .filter(Boolean)

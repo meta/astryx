@@ -578,6 +578,44 @@ describe('a plural display size after one look is set', () => {
   );
 });
 
+describe("a plural display size beside another part's look", () => {
+  it(
+    "reads only the family's own part: a Text set at display-1 leaves the display headings' steps as they are",
+    async () => {
+      const before = first(await answer('display headings 72px')).join('\n');
+      await themeEditSet('t', 'font-size', '200px', {cwd, on: 'text', when: 'type:display-1'});
+      try {
+        expect(first(await answer('display headings 72px')).join('\n')).toBe(before);
+      } finally {
+        await themeEditUndo('t', {cwd, thing: 'font-size', on: 'text', when: 'type:display-1'});
+      }
+    },
+    T,
+  );
+});
+
+describe('a plural display size after one look is set to a clamp()', () => {
+  it(
+    "reads that look's token instead, so the steps stay",
+    async () => {
+      const before = first(await answer('display headings 72px')).join('\n');
+      await themeEditSet('t', 'font-size', 'clamp(40px, 5vw, 64px)', {
+        cwd,
+        on: 'heading',
+        when: 'type:display-2',
+      });
+      try {
+        const data = await answer('display headings 72px');
+        expect(first(data).join('\n')).toBe(before);
+        expect(JSON.stringify(data.results)).toMatch(/scaled to keep the steps/);
+      } finally {
+        await themeEditUndo('t', {cwd, thing: 'font-size', on: 'heading', when: 'type:display-2'});
+      }
+    },
+    T,
+  );
+});
+
 describe('a display heading', () => {
   it(
     'sizes from the display size token',
