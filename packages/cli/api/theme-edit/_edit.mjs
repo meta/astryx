@@ -205,6 +205,7 @@ import {
   writeWhole,
   isGraySeed,
   seedOf,
+  seedsInEffect,
   isEditorTemp,
 } from './_palette.mjs';
 import {
@@ -6632,6 +6633,19 @@ async function changeOnce(
             ? [s.thing, null]
             : null))
         : null;
+  // A color family whose fill the own source sets as a fixed color grows
+  // every shade from that color, so its setting changes nothing on screen.
+  const sourceSeed =
+    sub === 'set' &&
+    PALETTE_DIALS.includes(s.thing) &&
+    !s.on &&
+    !s.mode &&
+    !s.when &&
+    !s.state
+      ? (seedsInEffect(cwd, slug, data).find(
+          f => f.dial === s.thing && f.source,
+        ) ?? null)
+      : null;
   /** @type {string[]} */
   const notes = [
     ...fieldNotes,
@@ -6747,7 +6761,8 @@ async function changeOnce(
     !r.unchanged &&
     !r.changed.length &&
     !styled.length &&
-    !ctx.unchecked
+    !ctx.unchecked &&
+    !sourceSeed
       ? [
           `this changes nothing you see: the theme already shows ${describe(s)} (it is saved, and stays when the base theme changes)`,
           // A mode's own setting under one the theme sets for every mode:
@@ -6921,9 +6936,14 @@ async function changeOnce(
       (dialTokens.has(k) ||
         // A role font writes --font-family-<role>.
         (s.thing === 'font' && s.on && k === `--font-family-${s.on}`)) &&
-      !exactWins.some(x => x.thing === k),
+      !exactWins.some(x => x.thing === k) &&
+      k !== sourceSeed?.source,
   );
   const ownSet = new Set(ownSourceTokens(cwd, slug));
+  if (sourceSeed?.source)
+    notes.push(
+      `${slug}.theme.ts sets ${sourceSeed.source} itself, and every ${s.thing} shade (links, icons, the tints) grows from its color, ${sourceSeed.seed}, so this setting changes nothing you see; ${ownTakeOut(slug, s.thing, [sourceSeed.source], data)}`,
+    );
   if (ownWins.length)
     notes.push(
       `${slug}.theme.ts sets ${ownWins.slice(0, 4).join(', ')}${ownWins.length > 4 ? ` and ${ownWins.length - 4} more` : ''} itself, and your own source wins over the settings, so ${ownWins.length > 1 ? 'those do' : 'that does'} not change; ${ownTakeOut(slug, s.thing, ownWins, data)}`,
@@ -7105,7 +7125,9 @@ async function changeOnce(
     );
   }
   if (s.thing === 'accent' && sub === 'set') {
-    notes.push(...infoClashNotes(data, base, slug, String(s.value)));
+    notes.push(
+      ...infoClashNotes(data, base, slug, sourceSeed?.seed ?? String(s.value)),
+    );
   }
   if (s.thing === 'vibrancy') {
     notes.push(

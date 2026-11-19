@@ -94,6 +94,7 @@ import {
   vibrancyMoves,
   paletteToken,
   seedOf,
+  seedsInEffect,
 } from './_palette.mjs';
 import {
   camel,
@@ -6449,8 +6450,8 @@ function checkOne(
       // With no color to saturate, no vibrancy value is suggested. A color
       // counts when vibrancy changes the shades made from it at all (a warm
       // gray has a little hue to take out or add; a pure gray has none).
-      const canApply = colors.some(x =>
-        vibrancyMoves(x.thing, seedOf(x.value), 0, 100),
+      const canApply = seedsInEffect(ctx.project.cwd, slug, data).some(f =>
+        vibrancyMoves(f.dial, f.seed, 0, 100),
       );
       if (!step && canApply && (!/^\d{1,3}$/.test(v) || Number(v) > 100)) {
         // The value meant: a step in other letters (MORE), or the number

@@ -156,4 +156,28 @@ describe('a family whose fill the source sets', () => {
     expect(notes.filter(n => /kind "neutral" is dropped/.test(n))).toEqual([]);
     expect(notes.filter(n => /seed .* is replaced by/.test(n))).toEqual([]);
   }, 240_000);
+
+  it('says the source color sets every shade when the setting changes', async () => {
+    if (unbuilt) return;
+    const r = /** @type {any} */ (
+      await themeEditSet('t', 'accent', '#dc2626', {cwd})
+    );
+    const notes = /** @type {string[]} */ (r.data?.notes ?? []);
+    expect(
+      notes.filter(n =>
+        /sets --color-accent itself, and every accent shade/.test(n),
+      ),
+    ).toHaveLength(1);
+    expect(notes.filter(n => /the theme already shows/.test(n))).toEqual([]);
+  }, 240_000);
+
+  it('takes vibrancy when only the source fill has a hue', async () => {
+    if (unbuilt) return;
+    await withAccent('x', "'#9333ea'");
+    await themeEditSet('x', 'neutral', '#808080', {cwd});
+    await themeEditSet('x', 'accent', '#7f7f7f', {cwd});
+    await expect(
+      themeEditSet('x', 'vibrancy', '90', {cwd}),
+    ).resolves.toBeTruthy();
+  }, 240_000);
 });

@@ -714,6 +714,17 @@ function dialFamilies(data, own = {}) {
   return out;
 }
 
+/**
+ * The seed each color family grows from now: the fill the theme's own source
+ * sets as a fixed color, else the color setting.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {{settings: Setting[]}} data
+ */
+export function seedsInEffect(cwd, slug, data) {
+  return dialFamilies(data, ownSourceTokenValues(cwd, slug));
+}
+
 /** Notes for damaged color configs kept aside during one sync. @type {string[]} */
 const keptDamaged = [];
 
