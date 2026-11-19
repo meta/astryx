@@ -125,11 +125,13 @@ describe('per-side border asks', () => {
     async () => {
       if (unbuilt) return;
       const lines = await first('input border #dddddd, bottom border #999999');
-      expect(lines.at(-1)).toBe("border-bottom '1px solid #999999' --on inputs");
+      expect(lines.at(-1)).toBe(
+        "border-bottom '1px solid #999999' --on inputs",
+      );
       expect(lines.join('\n')).not.toMatch(/--color-border /);
-      expect(
-        await said('input border #dddddd, bottom border #999999'),
-      ).toMatch(/read "bottom border #999999" as inputs' bottom border/);
+      expect(await said('input border #dddddd, bottom border #999999')).toMatch(
+        /read "bottom border #999999" as inputs' bottom border/,
+      );
     },
     T,
   );
@@ -218,6 +220,64 @@ describe('per-side border asks', () => {
         'border none --on inputs',
         "border-top '1px solid #999999' --on inputs",
         "border-bottom '1px solid #999999' --on inputs",
+      ]);
+    },
+    T,
+  );
+
+  it(
+    'leaves a padding side list beside a border word to the padding',
+    async () => {
+      if (unbuilt) return;
+      const lines = await first(
+        'inputs with a #cccccc border and padding top and bottom 6px',
+      );
+      expect(lines.some(l => /^padding-top .* --on inputs$/.test(l))).toBe(
+        true,
+      );
+      expect(lines).toContain('padding-bottom 6px --on inputs');
+    },
+    T,
+  );
+
+  it(
+    'keeps any graded transparent side a fainter border, never an invisible line',
+    async () => {
+      if (unbuilt) return;
+      for (const w of ['barely', 'very', 'fairly', 'subtly', 'lightly'])
+        expect(
+          (await first(`inputs with a ${w} transparent bottom border`)).join(
+            '\n',
+          ),
+          w,
+        ).not.toMatch(/solid transparent/);
+    },
+    T,
+  );
+
+  it(
+    'draws a border on each side said with no color, width or style',
+    async () => {
+      if (unbuilt) return;
+      const lines = await first('cards with a border on top and bottom');
+      expect(lines.map(l => l.split(' ')[0])).toEqual([
+        'border-top',
+        'border-bottom',
+      ]);
+    },
+    T,
+  );
+
+  it(
+    'keeps color functions said after border one per side',
+    async () => {
+      if (unbuilt) return;
+      expect(
+        await first(
+          'card border rgba(0,0,0,.1) rgba(0,0,0,.1) rgba(0,0,0,.25)',
+        ),
+      ).toEqual([
+        "border-color 'rgba(0,0,0,.1) rgba(0,0,0,.1) rgba(0,0,0,.25)' --on card",
       ]);
     },
     T,

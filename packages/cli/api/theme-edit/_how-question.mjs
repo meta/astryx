@@ -605,7 +605,20 @@ function joinSideLists(q) {
         from,
         after < 0 ? undefined : at + m.length + after,
       );
-      return /\b(?:borders?|edges?|outlines?)\b/i.test(clause)
+      // (The list is the border's when the look it follows is a border,
+      // "a border on top and sides", or a border follows it, "top and
+      // bottom borders"; "a border and padding top and bottom 6px" lists
+      // the padding's sides.)
+      const before = clause
+        .slice(0, at - from)
+        .match(
+          /\b(?:borders?|edges?|outlines?|padding|margins?|spacing|gaps?|radius|corners?|space)\b/gi,
+        );
+      const owner = before?.at(-1) ?? '';
+      const next = text.slice(at + m.length).match(/^\s*([a-z]+)/i)?.[1] ?? '';
+      return /^(?:borders?|edges?|outlines?)$/i.test(owner) ||
+        /^(?:borders?|edges?|outlines?)$/i.test(next) ||
+        (!owner && /^lines?$/i.test(next))
         ? m.replace(/\s*,\s*and\s+|\s*,\s*|\s+and\s+/gi, ' & ')
         : m;
     },
@@ -18135,6 +18148,13 @@ export function draftAnswer(ctx, env, question) {
       ) &&
       // A divider's thickness and color are its border tokens.
       !c.parts.some(p => p.on === 'divider') &&
+      // ("card border rgba(0,0,0,.1) rgba(0,0,0,.1) rgba(0,0,0,.25)"): a
+      // border color written one per side is the border reader's, every
+      // side as written.
+      !(
+        /^border(?:-color)?$/.test(named.prop) &&
+        (sideColorsIn(c.text)?.length ?? 0) > 1
+      ) &&
       c.parts.length &&
       c.parts.every(p => TARGET.has(one(p.on)) || FAMILIES[p.on])
     ) {
@@ -22348,7 +22368,10 @@ export function draftAnswer(ctx, env, question) {
         const color =
           colorFor(c, 'border') ??
           (transparentSide(c.text) &&
-          /(?<!\b(?:more|less|semi|half|slightly|partly|partially|somewhat|mostly|bit|little|touch|\d+\s?%)[\s-]?)\btransparent\b/.test(
+          // (Only "transparent" said plainly, after an article, a joining
+          // word or a side: a word before it that grades it, "barely",
+          // "very", "slightly", "50%", makes a fainter border.)
+          /(?:^|\b(?:a|an|the|with|and|is|are|be|its|their|top|bottom|left|right)\s+|,\s*)transparent\b/i.test(
             c.text,
           )
             ? 'transparent'
@@ -22626,9 +22649,10 @@ export function draftAnswer(ctx, env, question) {
             sequence: true,
           };
         }
-        // ("a #dddddd border on top and sides"): each side said takes the
-        // border, the others keep theirs.
-        if (sides.length > 1 && (color || width || style))
+        // ("a #dddddd border on top and sides", "a border on top and
+        // bottom"): each side said takes the border, with the part's own
+        // line color when none is said; the others keep theirs.
+        if (sides.length > 1)
           return {
             text: `a border on its ${sides.join(', ').replace(/, (?=[^,]*$)/, ' and ')}${where}: ${sides.map(x => `border-${x}`).join(', ')} (the other sides keep theirs)`,
             options: [
