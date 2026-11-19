@@ -510,7 +510,7 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
   try {
     const set = servedSet(input);
     try {
-      page = await renderPage(input, {title, version: cliVersion(), served: set && 'dir' in set ? set : null, output, cwd});
+      page = await renderPage(input, {title, version: cliVersion(), served: set && 'dir' in set ? set : null, output, cwd, cutFontFaces: true});
     } catch (e) {
       // A page that needs the Core the CLI could not obtain says why.
       const detail = /** @type {any} */ (e)?.code === 'ERR_RENDER_MISSING_DEPENDENCY' ? /** @type {any} */ (e).detail : null;
