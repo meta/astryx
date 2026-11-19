@@ -88,40 +88,63 @@ export async function iconSearch(query, {cwd, set, limit}) {
  * no definition names keeps its fields.
  * @param {import('../icon.type.mjs').IconMatchEntry[]} matches
  * @param {string} query
+ * @param {Parameters<typeof rankIcons>[0]} sets the searched sets, whose own
+ *   definitions rank with Astryx's
  * @returns {import('../icon.type.mjs').IconMatchEntry[]}
  */
-function withMeaningImports(matches, query) {
+function withMeaningImports(matches, query, sets) {
   if (!matches.some(match => match.definitions.length > 0)) return matches;
-  const rank = meaningRank(query);
+  /** @type {Map<unknown, (name: string) => number>} */
+  const ranks = new Map();
+  /** @param {import('../icon.type.mjs').IconMatchEntry} match */
+  const rankFor = match => {
+    const set = sets.find(
+      each => each.package === match.package && each.name === match.set,
+    );
+    const own = set?.definitions ?? [];
+    // Sets with no definitions of their own share one order.
+    const key = own.length > 0 ? set : null;
+    let rank = ranks.get(key);
+    if (!rank) {
+      rank = meaningRank(query, own);
+      ranks.set(key, rank);
+    }
+    return rank;
+  };
   return matches.map(match => {
     if (match.definitions.length === 0) return match;
+    const rank = rankFor(match);
     const [meaning] = [...match.definitions].sort(
       (a, b) => rank(a) - rank(b) || (a < b ? -1 : a > b ? 1 : 0),
     );
     const name = `${meaning[0].toUpperCase()}${meaning.slice(1)}Icon`;
     return {
       ...match,
-      meaningImport:
-        name === match.export
-          ? importLine(match.export, match.module)
-          : `import {${match.export} as ${name}} from '${match.module}';`,
+      meaningImport: importLine(match.export, match.module, name),
     };
   });
 }
 
 /**
  * The order of definition names for a query: the definitions that the
- * query matches, best first, then the built-in ones, then the rest.
+ * query matches, best first, then the built-in ones, then the rest. A set's
+ * own definitions rank with Astryx's; on a shared name, Astryx's counts, as
+ * in the icon ranking.
  * @param {string} query
+ * @param {Array<{doc: import('../../../authoring/doctypes/icon-definition/type').IconDefinitionDoc}>} own
  * @returns {(name: string) => number}
  */
-function meaningRank(query) {
-  const matched = definitionMatches(query).map(match => match.doc.name);
+function meaningRank(query, own) {
+  const astryx = astryxIconDefinitions().definitions.map(each => each.doc);
+  const names = new Set(astryx.map(doc => doc.name));
+  const docs = [
+    ...astryx,
+    ...own.map(each => each.doc).filter(doc => !names.has(doc.name)),
+  ];
+  const matched = definitionMatches(query, docs).map(match => match.doc.name);
   const place = new Map(matched.map((name, index) => [name, index]));
   const builtIn = new Set(
-    astryxIconDefinitions()
-      .definitions.filter(each => each.doc.builtIn)
-      .map(each => each.doc.name),
+    astryx.filter(doc => doc.builtIn).map(doc => doc.name),
   );
   return name =>
     place.get(name) ?? matched.length + (builtIn.has(name) ? 0 : 1);
@@ -189,6 +212,7 @@ export function rankIconSets(
             withRelatives(inLook(match, searched, looks), searched),
           ),
         query,
+        searched,
       ),
     },
   };
@@ -286,13 +310,16 @@ function noIconSet(query, limit, discoverListsPacks) {
 }
 
 /**
- * The Astryx icon definitions that answer a query, each with its score,
- * ranked as the search ranks a set's icons (FR6).
+ * The icon definitions that answer a query, each with its score, ranked as
+ * the search ranks a set's icons (FR6): Astryx's, or the `docs` given.
  * @param {string} query
+ * @param {import('../../../authoring/doctypes/icon-definition/type').IconDefinitionDoc[]} [docs]
  * @returns {Array<{doc: import('../../../authoring/doctypes/icon-definition/type').IconDefinitionDoc, score: number}>}
  */
-export function definitionMatches(query) {
-  const docs = astryxIconDefinitions().definitions.map(each => each.doc);
+export function definitionMatches(
+  query,
+  docs = astryxIconDefinitions().definitions.map(each => each.doc),
+) {
   const byId = new Map(docs.map(doc => [definitionId(doc.name), doc]));
   return answeringMatches(
     rankIcons([definitionSet(docs)], query, {words: true}),

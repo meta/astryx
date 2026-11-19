@@ -18,6 +18,7 @@ import {ICON_NAMES} from '../../authoring/doctypes/icon-set/icon-names.mjs';
 import {answeringMatches, rankIcons, scoreIcon} from './_records.mjs';
 import {
   completeGlyphs,
+  definitionSource,
   glyphsData,
   writeIconPackage,
   writeIconSetProject,
@@ -875,6 +876,31 @@ describe('a match names the import that calls it by its meaning (FR6)', () => {
     expect(await meaningOf('home')).toBe(
       "import {HomeIcon as ArrowDownIcon} from '@acme/glyphs';",
     );
+  });
+
+  it('ranks a definition the set declares itself with the Astryx ones', async () => {
+    const data = glyphsData();
+    cwd = writeIconSetProject(path.join(tmp, 'own'), {
+      packages: [
+        {
+          data: {...data, map: {...data.map, farewell: 'x'}},
+          definitions: {
+            farewell: definitionSource('farewell', {
+              words: ['farewell', 'goodbye'],
+            }),
+          },
+        },
+      ],
+    });
+    expect((await search('farewell')).matches[0]).toMatchObject({
+      id: 'x',
+      reason: 'definition "farewell"',
+      meaningImport: "import {XIcon as FarewellIcon} from '@acme/glyphs';",
+    });
+    expect((await search('close')).matches[0]).toMatchObject({
+      id: 'x',
+      meaningImport: "import {XIcon as CloseIcon} from '@acme/glyphs';",
+    });
   });
 
   it('names the export of the look the project picks', async () => {
