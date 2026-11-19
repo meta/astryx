@@ -236,6 +236,87 @@ test.describe("a start lane's own OverflowList", () => {
     expect(BROKEN(row)).toBe(false);
   });
 
+  test('keeps the start lane on one line beside a content-width end lane, in a wide theme gap and at a phone width', async ({
+    page,
+  }) => {
+    const cases = [
+      {theme: 'y2k', width: 1280},
+      {theme: 'matcha', width: 1280},
+      {theme: 'neutral', width: 390},
+    ];
+    const reads: string[] = [];
+    for (const {theme, width} of cases) {
+      await page.goto(
+        `${storybook.origin}/iframe.html?id=core-toolbar--overflow-actions&viewMode=story&globals=astryxTheme:${theme}`,
+      );
+      await page
+        .locator('[data-testid="overflow-actions-frame"] [role="toolbar"]')
+        .waitFor();
+      const row = await rowAt(page, 'overflow-actions-frame', width);
+      const lanes = await page.evaluate(() => {
+        const toolbar = document.querySelector<HTMLElement>(
+          '[data-testid="overflow-actions-frame"] [role="toolbar"]',
+        );
+        const list = toolbar?.querySelector<HTMLElement>(
+          '.astryx-overflow-list',
+        );
+        const start = [...(toolbar?.children ?? [])].find(lane =>
+          lane.contains(list ?? null),
+        ) as HTMLElement | undefined;
+        const end = [...(toolbar?.children ?? [])].find(
+          lane =>
+            lane !== start &&
+            lane instanceof HTMLElement &&
+            lane.getBoundingClientRect().width > 0,
+        ) as HTMLElement | undefined;
+        if (start == null || end == null || list == null) {
+          return null;
+        }
+        // The badge and the list share one line when their vertical centers
+        // match. The hidden measure copy has no height and is left out.
+        const centers = [...start.children]
+          .filter(
+            (child): child is HTMLElement =>
+              child instanceof HTMLElement &&
+              child.getAttribute('aria-hidden') !== 'true' &&
+              child.getBoundingClientRect().height > 0,
+          )
+          .map(child => {
+            const rect = child.getBoundingClientRect();
+            return rect.top + rect.height / 2;
+          });
+        const endContent = [...end.children].reduce(
+          (sum, child) => sum + child.getBoundingClientRect().width,
+          0,
+        );
+        return {
+          oneLine:
+            centers.length > 1 &&
+            Math.max(...centers) - Math.min(...centers) < 4,
+          endSlack: end.getBoundingClientRect().width - endContent,
+        };
+      });
+      reads.push(
+        `${theme} ${width}: ${JSON.stringify({labels: row.labels, lanes})}`,
+      );
+      expect(lanes, `${theme} ${width}`).not.toBeNull();
+      expect(lanes?.oneLine, `${theme} ${width}: one line`).toBe(true);
+      // The end lane keeps its content width; the start lane takes the rest.
+      expect(lanes?.endSlack ?? 0, `${theme} ${width}: end lane`).toBeLessThan(
+        24,
+      );
+      expect(BROKEN(row), `${theme} ${width}`).toBe(false);
+      if (width >= 1280) {
+        expect(row.labels, `${theme} ${width}: every action`).toHaveLength(
+          row.itemCount,
+        );
+      }
+    }
+    test
+      .info()
+      .annotations.push({type: 'lanes', description: reads.join(' | ')});
+  });
+
   test('unfolds again when the row widens after a fold', async ({page}) => {
     await openStory(
       page,

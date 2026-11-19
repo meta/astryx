@@ -138,9 +138,15 @@ const styles = stylex.create({
   // leaves, and its automatic minimum stops counting the list's unfolded
   // items. The list then folds to that width, down to its own floor.
   startFolds: {
-    flexGrow: {default: null, [HOLDS_OVERFLOW_LIST]: 1},
+    // The end lane grows by 1 to keep its controls at the inline end. A
+    // factor this large gives this lane all the free space, so the end lane
+    // stays at its content width.
+    flexGrow: {default: null, [HOLDS_OVERFLOW_LIST]: 1_000_000},
     flexBasis: {default: null, [HOLDS_OVERFLOW_LIST]: '0%'},
     minWidth: {default: null, [HOLDS_OVERFLOW_LIST]: 0},
+    // The list folds instead: a wrapping lane would move the list, at its
+    // unfolded width, to a line of its own.
+    flexWrap: {default: null, [HOLDS_OVERFLOW_LIST]: 'nowrap'},
   },
   // When only endContent, push to end
   endOnly: {
