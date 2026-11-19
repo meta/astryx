@@ -374,24 +374,42 @@ const BUILD_CONFIG =
 /**
  * A build setting that compiles JSX other than as React does: a runtime
  * (`jsxImportSource`, `importSource`) other than `react`; a classic factory
- * (`jsxFactory`, `pragma`) other than `React.createElement`; or a transform
- * that compiles a `css` prop: emotion's css-prop preset, the styled-components
- * Babel or SWC plugin or Next.js's `styledComponents` compiler option, or
- * Compiled's Babel plugin or bundler loader.
+ * (`jsxFactory`, `pragma`) other than `React.createElement`; or Next.js's
+ * `styledComponents` compiler option, which compiles a `css` prop.
  */
 const BUILD_JSX_RUNTIME =
-  /\b(?:jsxImportSource|importSource)['"]?\s*[:=]\s*['"](?!react['"])[^'"\s]+['"]|\b(?:jsxFactory|pragma)['"]?\s*[:=]\s*['"](?!React\.createElement['"])[^'"\s]+['"]|@emotion\/babel-preset-css-prop|(?:babel-plugin|@swc\/plugin)-styled-components|\bstyledComponents['"]?\s*:\s*(?!false\b)|@compiled\/(?:babel-plugin|webpack-loader|parcel-config|vite-plugin)/;
+  /\b(?:jsxImportSource|importSource)['"]?\s*[:=]\s*['"](?!react['"])[^'"\s]+['"]|\b(?:jsxFactory|pragma)['"]?\s*[:=]\s*['"](?!React\.createElement['"])[^'"\s]+['"]|\bstyledComponents['"]?\s*:\s*(?!false\b)/;
 
 /**
- * The first build config that compiles JSX other than as React does, in the
- * folder of a page or a folder above it, up to the project folder: a config
- * file, or the `babel` key of a `package.json`. Null when there is none.
+ * The packages that compile a `css` prop at build time, whatever name the
+ * build config gives them (Babel reads `styled-components` as
+ * `babel-plugin-styled-components`): a config can use one only when the
+ * project depends on it.
+ */
+const CSS_PROP_TRANSFORMS = new Set([
+  '@emotion/babel-preset-css-prop',
+  'babel-plugin-styled-components',
+  '@swc/plugin-styled-components',
+  '@compiled/babel-plugin',
+  '@compiled/webpack-loader',
+  '@compiled/vite-plugin',
+  '@compiled/parcel-config',
+  '@compiled/parcel-transformer',
+]);
+
+/**
+ * What compiles the JSX of a page other than as React does, in the folder of
+ * the page or a folder above it, up to the project folder: a build config
+ * that sets another runtime or factory (a config file, or the `babel` key of
+ * a `package.json`), or a `package.json` that depends on a transform that
+ * compiles a `css` prop. Null when nothing does.
  * @param {string[]} pages
  * @param {string} projectDir
- * @returns {string | null} the config's path
+ * @returns {{file: string, transform: string | null} | null} the config, and
+ *   the transform it depends on
  */
 function buildJsxRuntime(pages, projectDir) {
-  /** @type {Map<string, string | null>} */
+  /** @type {Map<string, {file: string, transform: string | null} | null>} */
   const configIn = new Map();
   const read = (/** @type {string} */ dir) => {
     /** @type {string[]} */
@@ -408,13 +426,17 @@ function buildJsxRuntime(pages, projectDir) {
       try {
         if (BUILD_CONFIG.test(name)) text = readTextFile(file);
         else if (name === 'package.json') {
-          const babel = JSON.parse(readTextFile(file))?.babel;
-          text = babel == null ? null : JSON.stringify(babel);
+          const manifest = JSON.parse(readTextFile(file));
+          for (const field of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']) {
+            const transform = Object.keys(manifest?.[field] ?? {}).find(dependency => CSS_PROP_TRANSFORMS.has(dependency));
+            if (transform) return {file, transform};
+          }
+          text = manifest?.babel == null ? null : JSON.stringify(manifest.babel);
         }
       } catch {
         continue;
       }
-      if (text != null && BUILD_JSX_RUNTIME.test(text)) return file;
+      if (text != null && BUILD_JSX_RUNTIME.test(text)) return {file, transform: null};
     }
     return null;
   };
@@ -516,9 +538,14 @@ export async function findUnknownCoreProps(projectDir) {
     if (runtime) return notChecked(`the project compiles JSX with \`${runtime}\`, which can give every component props of its own`);
   }
   const build = buildJsxRuntime(corePages, projectDir);
+  if (build?.transform) {
+    return notChecked(
+      `the project depends on \`${build.transform}\`, which compiles a \`css\` prop that every component can take`,
+    );
+  }
   if (build) {
     return notChecked(
-      `the build config \`${relative(build)}\` sets another JSX runtime or compiles a \`css\` prop, which can give every component props of its own`,
+      `the build config \`${relative(build.file)}\` sets another JSX runtime or compiles a \`css\` prop, which can give every component props of its own`,
     );
   }
   // One batch read of the props Core's docs list, as `astryx component

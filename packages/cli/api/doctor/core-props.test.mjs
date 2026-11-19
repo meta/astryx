@@ -187,17 +187,26 @@ describe('doctor core-props', () => {
       });
       expect(vite?.status).toBe('info');
       expect(vite?.message).toMatch(/^Not checked: the build config `vite\.config\.js` sets another JSX runtime or compiles a `css` prop/);
+      // A css-prop transform the project depends on, whatever name its
+      // config gives it (Babel reads `styled-components` as
+      // `babel-plugin-styled-components`).
+      const manifest = (/** @type {Record<string, string>} */ devDependencies) =>
+        JSON.stringify({name: 'app', private: true, dependencies: {'@astryxdesign/core': '*', react: '*'}, devDependencies});
       const babel = await propsCheck({
-        'package.json': JSON.stringify({name: 'app', private: true, dependencies: {'@astryxdesign/core': '*', react: '*'}, babel: {presets: ['@emotion/babel-preset-css-prop']}}),
+        'package.json': manifest({'babel-plugin-styled-components': '*'}),
+        '.babelrc': JSON.stringify({presets: ['next/babel'], plugins: [['styled-components', {ssr: true}]]}),
         'src/App.jsx': app('Button', '<Button label="Go" css={{color: "red"}} />'),
       });
       expect(babel?.status).toBe('info');
-      expect(babel?.message).toMatch(/^Not checked: the build config `package\.json` sets another JSX runtime or compiles a `css` prop/);
-      // A classic factory, and the SWC and Next.js forms of a css-prop transform.
+      expect(babel?.message).toMatch(/^Not checked: the project depends on `babel-plugin-styled-components`, which compiles a `css` prop/);
+      for (const transform of ['@emotion/babel-preset-css-prop', '@swc/plugin-styled-components', '@compiled/babel-plugin']) {
+        const other = await propsCheck({'package.json': manifest({[transform]: '*'}), 'src/App.jsx': app('Button', '<Button label="Go" css={{color: "red"}} />')});
+        expect(other?.status, transform).toBe('info');
+      }
+      // A classic factory, and Next.js's own css-prop transform.
       for (const [config, text] of [
         ['vite.config.js', "export default {esbuild: {jsxFactory: 'jsx', jsxInject: \"import {jsx} from '@emotion/react'\"}};\n"],
         ['.babelrc', JSON.stringify({presets: [['@babel/preset-react', {runtime: 'classic', pragma: 'jsx'}]]})],
-        ['.swcrc', JSON.stringify({jsc: {experimental: {plugins: [['@swc/plugin-styled-components', {cssProp: true}]]}}})],
         ['next.config.js', 'module.exports = {compiler: {styledComponents: true}};\n'],
       ]) {
         const other = await propsCheck({[config]: text, 'src/App.jsx': app('Button', '<Button label="Go" css={{color: "red"}} />')});
