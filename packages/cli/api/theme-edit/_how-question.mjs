@@ -8252,14 +8252,24 @@ export function draftAnswer(ctx, env, question) {
     if (!p || !m) continue;
     const values = numberedLookValues(
       m[2],
-      partComponentDocs(ctx, p.on).flatMap(d => literals(d.doc.props?.[m[1]]?.type)),
+      partComponentDocs(ctx, p.on).flatMap(d =>
+        literals(d.doc.props?.[m[1]]?.type),
+      ),
       /** @type {string[]} */ (C.MAP[p.on]?.attrs?.[m[1]] ?? []),
     );
     if (values.length < 2) continue;
-    c.parts = c.parts.flatMap(x => (x === p ? values.map(v => ({...x, when: `${m[1]}:${v}`})) : [x]));
-    const said = new RegExp(`\\b${m[2]}[\\s-]+[a-z]+s\\b`).exec(c.text.toLowerCase())?.[0];
+    c.parts = c.parts.flatMap(x =>
+      x === p ? values.map(v => ({...x, when: `${m[1]}:${v}`})) : [x],
+    );
+    const said = new RegExp(`\\b${m[2]}[\\s-]+[a-z]+s\\b`).exec(
+      c.text.toLowerCase(),
+    )?.[0];
     const whens = values.map(v => `${m[1]}:${v}`);
-    pluralSaid.push({text: `${said ?? `${m[2]} ${p.on}s`}: ${values.join(', ')}`, on: p.on, whens});
+    pluralSaid.push({
+      text: `${said ?? `${m[2]} ${p.on}s`}: ${values.join(', ')}`,
+      on: p.on,
+      whens,
+    });
   }
   /** The aspects each clause names in its own words. @type {WeakMap<Clause, string[]>} */
   const ownAspects = new WeakMap();
@@ -29007,13 +29017,22 @@ export function draftAnswer(ctx, env, question) {
   // ("heavy display headings", "make them blue" after it: one answer.)
   // (A look's size now: the font size the theme sets on that look, else the
   // token it reads.)
-  oneAnswerPerFamily(drafts, d => draftClause.get(d), clauses, pluralSaid, w => {
-    const set = env.data.settings.find(
-      st => st.thing === 'font-size' && st.when === w && !st.state && !st.mode,
-    );
-    const token = `--text-${w.split(':')[1]}-size`;
-    return lengthPx(String(set?.value ?? (resolvedValue(token) || current(token) || '')));
-  });
+  oneAnswerPerFamily(
+    drafts,
+    d => draftClause.get(d),
+    clauses,
+    pluralSaid,
+    w => {
+      const set = env.data.settings.find(
+        st =>
+          st.thing === 'font-size' && st.when === w && !st.state && !st.mode,
+      );
+      const token = `--text-${w.split(':')[1]}-size`;
+      return lengthPx(
+        String(set?.value ?? (resolvedValue(token) || current(token) || '')),
+      );
+    },
+  );
   /** @type {Draft[]} */
   const result = [];
   // Several changes in one question: one answer that runs them all first,
@@ -31841,7 +31860,13 @@ export function draftAnswer(ctx, env, question) {
   for (const n of placeNotes)
     if (!keptInPlace.has(n.c)) result.push({text: n.text, options: []});
   for (const f of pluralSaid)
-    if (result.some(d => d.options.flat().some(st => st.on === f.on && f.whens.includes(st.when ?? ''))))
+    if (
+      result.some(d =>
+        d.options
+          .flat()
+          .some(st => st.on === f.on && f.whens.includes(st.when ?? '')),
+      )
+    )
       result.push({text: f.text, options: []});
   // (The other reading of states said together, said last.)
   result.push(...otherReadings);
