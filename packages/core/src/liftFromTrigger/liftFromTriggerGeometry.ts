@@ -57,6 +57,12 @@ export interface SurfacePlacement {
    * its side: it scrolls what does not fit. Absent when it fits whole.
    */
   readonly maxBlockSize?: number;
+  /**
+   * Beside the source, the surface's top, CSS px from the viewport's top:
+   * the source's top, slid as far as keeps the surface inside the block
+   * gutters.
+   */
+  readonly blockStart?: number;
 }
 
 /**
@@ -146,10 +152,10 @@ export function surfaceAnchorRect(
  * surface never covers it. It goes below when `surfaceHeight` fits between
  * the source, `gap` and the bottom gutter, else above when it fits under the
  * top gutter. Else it goes beside the source, at the inline end first, where
- * `surfaceWidth` fits there, aligned with the source's top or bottom so that
- * it stays inside the block gutters, capped when neither holds it whole.
- * Else it takes the side with more room, capped to that room, and scrolls
- * the rest. Above or below, it centers on the source, or sits flush
+ * `surfaceWidth` fits there, at its whole size capped to the room between
+ * the block gutters; its top slides from the source's top as far as keeps it
+ * inside them. Else it takes the side with more room, capped to that room,
+ * and scrolls the rest. Above or below, it centers on the source, or sits flush
  * with the source's edge when the source reaches the gutter at a side of the
  * viewport.
  */
@@ -194,36 +200,25 @@ export function surfacePlacement(
   // A cap is a pixel under its room, so rounding never puts the surface past
   // the gutter.
   const cap = (room: number) => Math.max(0, room - 1);
-  // Beside the source, the surface aligns with the source's top and runs
-  // down, or with its bottom and runs up: the one that holds it whole inside
-  // the gutters, else the one with more room, capped. An edge past a gutter
-  // aligns neither.
-  const fromTop = lifted.y >= gutter.top - epsilon ? bottom - lifted.y : -1;
-  const fromBottom =
-    lifted.y + lifted.height <= bottom + epsilon
-      ? lifted.y + lifted.height - gutter.top
-      : -1;
-  const beside = (side: 'start' | 'end'): SurfacePlacement | null => {
-    if (surfaceHeight <= fromTop) {
-      return {side, alignment: 'start'};
-    }
-    if (surfaceHeight <= fromBottom) {
-      return {side, alignment: 'end'};
-    }
-    if (fromTop < 0 && fromBottom < 0) {
-      return null;
-    }
-    return fromTop >= fromBottom
-      ? {side, alignment: 'start', maxBlockSize: cap(fromTop)}
-      : {side, alignment: 'end', maxBlockSize: cap(fromBottom)};
+  // Beside the source, the lift places the surface itself, so no browser
+  // shift or fallback has to move it into view.
+  const blockRoom = bottom - gutter.top;
+  const beside = (side: 'start' | 'end'): SurfacePlacement => {
+    const blockSize =
+      surfaceHeight > blockRoom ? cap(blockRoom) : surfaceHeight;
+    const blockStart = Math.min(
+      Math.max(lifted.y, gutter.top),
+      bottom - blockSize,
+    );
+    return surfaceHeight > blockRoom
+      ? {side, alignment: 'start', blockStart, maxBlockSize: blockSize}
+      : {side, alignment: 'start', blockStart};
   };
-  const besideEnd = surfaceWidth <= roomEnd ? beside('end') : null;
-  if (besideEnd != null) {
-    return besideEnd;
+  if (surfaceWidth <= roomEnd) {
+    return beside('end');
   }
-  const besideStart = surfaceWidth <= roomStart ? beside('start') : null;
-  if (besideStart != null) {
-    return besideStart;
+  if (surfaceWidth <= roomStart) {
+    return beside('start');
   }
   return roomBelow >= roomAbove
     ? {side: 'below', alignment, maxBlockSize: cap(roomBelow)}

@@ -854,8 +854,8 @@ export function ContextMenu({
   // before the trigger lifts into it: the menu shows at its moment. The
   // layer's anchor is the lift's own box at the lifted rect: an anchor inside
   // the trigger would move with the trigger's lift. The menu renders below
-  // first, and once shown its height picks the side (the layout effect
-  // below), before the frame paints.
+  // first, and once shown its size picks the side and the anchor's block
+  // span (the layout effect below), before the frame paints.
   const showLifted = useCallback(
     (lifted: LiftFromTriggerResult) => {
       liftRef.current = lifted;
@@ -902,12 +902,28 @@ export function ContextMenu({
       contextMenu.lift.menuGap,
       menu.offsetWidth,
     );
-    const cap = (value: number | undefined) =>
+    // Beside the lifted trigger, the anchor spans the menu's own block span,
+    // so the start-aligned menu opens where the lift slid it. Above or below,
+    // it spans the lifted trigger. The layer follows the anchor in CSS.
+    const anchorTop = `${placement.blockStart ?? lifted.lifted.y}px`;
+    const anchorHeight = `${
+      placement.blockStart == null
+        ? lifted.lifted.height
+        : (placement.maxBlockSize ?? height)
+    }px`;
+    if (lifted.anchor.style.top !== anchorTop) {
+      lifted.anchor.style.top = anchorTop;
+    }
+    if (lifted.anchor.style.height !== anchorHeight) {
+      lifted.anchor.style.height = anchorHeight;
+    }
+    const rounded = (value: number | undefined) =>
       value == null ? null : Math.round(value);
     if (
       placement.side !== liftPlacement.side ||
       placement.alignment !== liftPlacement.alignment ||
-      cap(placement.maxBlockSize) !== cap(liftPlacement.maxBlockSize)
+      rounded(placement.maxBlockSize) !== rounded(liftPlacement.maxBlockSize) ||
+      rounded(placement.blockStart) !== rounded(liftPlacement.blockStart)
     ) {
       setLiftPlacement(placement);
     }

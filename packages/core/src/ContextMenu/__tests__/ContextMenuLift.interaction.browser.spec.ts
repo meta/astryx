@@ -580,84 +580,133 @@ for (const geometry of [
   });
 }
 
-// Beside the trigger: a narrow trigger low on a short, wide screen (a phone in
-// landscape) leaves the menu too little room above and below. Beside it, a
-// menu aligned with the trigger's top would cross the bottom gutter, so it
-// aligns with the trigger's bottom. With and without the layer's fallbacks.
-for (const fallbacks of [true, false]) {
-  test(`beside a narrow trigger low on a landscape phone${fallbacks ? '' : ' with no layer fallbacks'}, the menu stays inside the gutters, never covers the trigger, and the trigger stays where it is`, async ({
-    page,
-  }) => {
-    await page.setViewportSize({width: 800, height: 360});
-    const story = await openLiftStory(page);
-    if (!fallbacks) {
-      await page.addStyleTag({
-        content: '[popover]{position-try-fallbacks:none !important}',
+// Beside the trigger, on a phone in landscape: neither block side has room
+// for the whole menu, so it opens beside the trigger at its whole size,
+// capped only to the room between the gutters. Its top slides from the
+// trigger's top as far as keeps it whole inside the gutters. The lift places
+// it there: the browser's own overflow shift is turned off on the menu, with
+// and without the layer's fallbacks.
+for (const geometry of [
+  {
+    name: 'a narrow trigger low on a landscape phone',
+    width: 800,
+    height: 360,
+    trigger: {width: 100, height: 120, x: 40, y: 197},
+    menuMinHeight: null,
+  },
+  {
+    name: 'a thumbnail on an 844 × 390 landscape phone, with a 300 px menu',
+    width: 844,
+    height: 390,
+    trigger: {width: 120, height: 120, x: 362, y: 135},
+    menuMinHeight: 300,
+  },
+]) {
+  for (const fallbacks of [true, false]) {
+    test(`beside ${geometry.name}${fallbacks ? '' : ' with no layer fallbacks'}, the menu is whole, slides inside the gutters, never covers the trigger, and the trigger stays where it is`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({
+        width: geometry.width,
+        height: geometry.height,
       });
-    }
-    // The trigger takes its size, then a relative offset on its parent puts
-    // it at 40, 197. The offset moves it exactly and changes no layout, and
-    // the lifted trigger carries no offset of its own.
-    const rest = await page.getByTestId('touch-context-menu').evaluate(el => {
-      const host = el as HTMLElement;
-      host.style.width = '100px';
-      host.style.height = '120px';
-      const parent = host.parentElement as HTMLElement;
-      const style = getComputedStyle(parent);
-      if (style.position === 'static') {
-        parent.style.position = 'relative';
+      const story = await openLiftStory(page);
+      await page.addStyleTag({
+        content: [
+          '[popover]:has([role="menu"]){align-self:unsafe self-start !important}',
+          fallbacks ? '' : '[popover]{position-try-fallbacks:none !important}',
+          geometry.menuMinHeight == null
+            ? ''
+            : `[role="menu"]{min-block-size:${geometry.menuMinHeight}px}`,
+        ].join(''),
+      });
+      // The trigger takes its size, then a relative offset on its parent
+      // puts it in place. The offset moves it exactly and changes no layout,
+      // and the lifted trigger carries no offset of its own.
+      const rest = await page
+        .getByTestId('touch-context-menu')
+        .evaluate((el, trigger) => {
+          const host = el as HTMLElement;
+          host.style.width = `${trigger.width}px`;
+          host.style.height = `${trigger.height}px`;
+          const parent = host.parentElement as HTMLElement;
+          const style = getComputedStyle(parent);
+          if (style.position === 'static') {
+            parent.style.position = 'relative';
+          }
+          const box = host.getBoundingClientRect();
+          parent.style.top = `${(parseFloat(style.top) || 0) + trigger.y - box.y}px`;
+          parent.style.left = `${(parseFloat(style.left) || 0) + trigger.x - box.x}px`;
+          const moved = host.getBoundingClientRect();
+          return {
+            x: moved.x,
+            y: moved.y,
+            width: moved.width,
+            height: moved.height,
+          };
+        }, geometry.trigger);
+      expect(rest.x, JSON.stringify(rest)).toBeCloseTo(geometry.trigger.x, 0);
+      expect(rest.y, JSON.stringify(rest)).toBeCloseTo(geometry.trigger.y, 0);
+      story.center = {x: rest.x + rest.width / 2, y: rest.y + rest.height / 2};
+      const lift = await liftAndSettle(page, story);
+      const {preview, menu} = lift;
+      if (preview == null || menu == null) {
+        throw new Error(JSON.stringify(lift));
       }
-      const box = host.getBoundingClientRect();
-      parent.style.top = `${(parseFloat(style.top) || 0) + 197 - box.y}px`;
-      parent.style.left = `${(parseFloat(style.left) || 0) + 40 - box.x}px`;
-      const moved = host.getBoundingClientRect();
-      return {x: moved.x, y: moved.y, width: moved.width, height: moved.height};
+      const fit = await page.evaluate(() => {
+        const list = document.querySelector('[role="menu"]');
+        const popover = list?.closest<HTMLElement>('[popover]');
+        return {
+          natural:
+            popover == null
+              ? 0
+              : popover.scrollHeight +
+                (popover.offsetHeight - popover.clientHeight),
+          scrolls: [popover, list].some(
+            el => el != null && el.scrollHeight > el.clientHeight + 1,
+          ),
+          innerHeight,
+        };
+      });
+      const detail = JSON.stringify({lift, fit, geometry, fallbacks});
+      // The case holds: the whole menu fits on neither block side, and it
+      // fits between the gutters.
+      expect(fit.natural, detail).toBeGreaterThan(preview.y - menuGap - GUTTER);
+      expect(fit.natural, detail).toBeGreaterThan(
+        fit.innerHeight - GUTTER - (preview.y + preview.height + menuGap),
+      );
+      expect(fit.natural, detail).toBeLessThanOrEqual(
+        fit.innerHeight - 2 * GUTTER,
+      );
+      // Beside the trigger, never over it, at its whole size.
+      expect(menu.x, detail).toBeGreaterThanOrEqual(
+        preview.x + preview.width + menuGap - 0.5,
+      );
+      expect(Math.abs(menu.height - fit.natural), detail).toBeLessThanOrEqual(
+        1,
+      );
+      expect(fit.scrolls, detail).toBe(false);
+      // Its top is the slide: the trigger's top, moved as far as keeps the
+      // menu inside the gutters.
+      const slide = Math.min(
+        Math.max(preview.y, GUTTER),
+        fit.innerHeight - GUTTER - fit.natural,
+      );
+      expect(menu.y, detail).toBeCloseTo(slide, 0);
+      expect(menu.y, detail).toBeGreaterThanOrEqual(GUTTER - 0.5);
+      expect(menu.y + menu.height, detail).toBeLessThanOrEqual(
+        fit.innerHeight - GUTTER + 0.5,
+      );
+      expect(preview.x + preview.width / 2, detail).toBeCloseTo(
+        story.center.x,
+        0,
+      );
+      expect(preview.y + preview.height / 2, detail).toBeCloseTo(
+        story.center.y,
+        0,
+      );
     });
-    expect(rest.x, JSON.stringify(rest)).toBeCloseTo(40, 0);
-    expect(rest.y, JSON.stringify(rest)).toBeCloseTo(197, 0);
-    story.center = {x: rest.x + rest.width / 2, y: rest.y + rest.height / 2};
-    const lift = await liftAndSettle(page, story);
-    const {preview, menu} = lift;
-    if (preview == null || menu == null) {
-      throw new Error(JSON.stringify(lift));
-    }
-    const fit = await page.evaluate(() => ({
-      natural: document.querySelector('[role="menu"]')?.scrollHeight ?? 0,
-      innerHeight,
-    }));
-    const detail = JSON.stringify({lift, fit, fallbacks});
-    // The case holds: the whole menu fits on neither block side, and beside
-    // the trigger, from its top, it would cross the bottom gutter.
-    expect(fit.natural, detail).toBeGreaterThan(preview.y - menuGap - GUTTER);
-    expect(fit.natural, detail).toBeGreaterThan(
-      fit.innerHeight - GUTTER - (preview.y + preview.height + menuGap),
-    );
-    expect(preview.y + fit.natural, detail).toBeGreaterThan(
-      fit.innerHeight - GUTTER,
-    );
-    // Beside the trigger, inside the gutters, and never over it.
-    expect(menu.x, detail).toBeGreaterThanOrEqual(
-      preview.x + preview.width + menuGap - 0.5,
-    );
-    // At its own place: aligned with the lifted trigger's top or bottom. A
-    // menu that a browser shifted to fit is aligned with neither.
-    const alignedTop = Math.abs(menu.y - preview.y) <= 0.5;
-    const alignedBottom =
-      Math.abs(menu.y + menu.height - (preview.y + preview.height)) <= 0.5;
-    expect(alignedTop || alignedBottom, detail).toBe(true);
-    expect(menu.y, detail).toBeGreaterThanOrEqual(GUTTER - 0.5);
-    expect(menu.y + menu.height, detail).toBeLessThanOrEqual(
-      fit.innerHeight - GUTTER + 0.5,
-    );
-    expect(preview.x + preview.width / 2, detail).toBeCloseTo(
-      story.center.x,
-      0,
-    );
-    expect(preview.y + preview.height / 2, detail).toBeCloseTo(
-      story.center.y,
-      0,
-    );
-  });
+  }
 }
 
 test('the menu shows above the lifted card and takes the finger: its rows are on top', async ({

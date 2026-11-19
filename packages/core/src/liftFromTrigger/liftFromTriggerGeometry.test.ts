@@ -173,49 +173,62 @@ describe('surfacePlacement', () => {
     expect(surfacePlacement(narrow, 400, VIEWPORT, 16, 160)).toEqual({
       side: 'end',
       alignment: 'start',
+      blockStart: 300,
     });
     // The right side is the inline start in a right-to-left page.
     const rtl: LiftFromTriggerViewport = {...VIEWPORT, direction: 'rtl'};
     expect(surfacePlacement(narrow, 400, rtl, 16, 160)).toEqual({
       side: 'start',
       alignment: 'start',
+      blockStart: 300,
     });
   });
 
-  it('aligns a surface beside the source with its bottom when, from its top, it would cross the bottom gutter', () => {
+  it('slides a surface beside the source along the block axis, so it stays whole inside the gutters', () => {
     // No block side fits 400 px: 352 px above, 54 px below. From the
-    // source's top it would end at 850, past the gutter at 820; from its
-    // bottom it spans 350 to 750.
+    // source's top it would end at 850, past the gutter at 820, so its top
+    // slides up to 420.
     const low = {x: 16, y: 450, width: 100, height: 300};
     expect(surfacePlacement(low, 400, VIEWPORT, 16, 160)).toEqual({
       side: 'end',
-      alignment: 'end',
+      alignment: 'start',
+      blockStart: 820 - 400,
     });
-  });
-
-  it('caps a surface beside the source to the larger room from its block edges, inside the gutters', () => {
-    const narrow = {x: 16, y: 300, width: 100, height: 500};
-    const placement = surfacePlacement(narrow, 900, VIEWPORT, 16, 160);
-    // 520 px from its top down to the gutter at 820; 718 px from its bottom
-    // up to the gutter at 82.
-    expect(placement).toEqual({
-      side: 'end',
-      alignment: 'end',
-      maxBlockSize: 300 + 500 - 82 - 1,
-    });
-    const top = narrow.y + narrow.height - (placement.maxBlockSize ?? 0);
-    expect(top).toBeGreaterThanOrEqual(82);
-  });
-
-  it('does not align a surface beside the source with an edge past a gutter', () => {
-    // No block side fits 500 px. The source's top is in the top gutter, so
-    // the surface aligns with its bottom, which is inside, and is capped to
-    // the 478 px from there up to the gutter at 82.
+    // A source whose top is in the top gutter: the surface's top slides
+    // down to the gutter at 82.
     const high = {x: 16, y: 60, width: 100, height: 500};
     expect(surfacePlacement(high, 500, VIEWPORT, 16, 160)).toEqual({
       side: 'end',
-      alignment: 'end',
-      maxBlockSize: 60 + 500 - 82 - 1,
+      alignment: 'start',
+      blockStart: 82,
+    });
+  });
+
+  it('keeps a surface beside the source at its whole size where it fits between the gutters', () => {
+    // A 120 px thumbnail, lifted, in the middle of an 844 × 390 landscape
+    // phone: neither block side has room for 300 px, and the 358 px between
+    // the gutters hold it whole.
+    const landscape: LiftFromTriggerViewport = {
+      width: 844,
+      height: 390,
+      gutter: {top: 16, bottom: 16, inline: 16},
+      direction: 'ltr',
+    };
+    const thumbnail = {x: 353, y: 126, width: 138, height: 138};
+    expect(surfacePlacement(thumbnail, 300, landscape, 16, 160)).toEqual({
+      side: 'end',
+      alignment: 'start',
+      blockStart: 374 - 300,
+    });
+  });
+
+  it('caps a surface beside the source to the room between the block gutters', () => {
+    const narrow = {x: 16, y: 300, width: 100, height: 500};
+    expect(surfacePlacement(narrow, 900, VIEWPORT, 16, 160)).toEqual({
+      side: 'end',
+      alignment: 'start',
+      blockStart: 82 + 1,
+      maxBlockSize: 820 - 82 - 1,
     });
   });
 
