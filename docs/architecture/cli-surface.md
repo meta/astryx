@@ -1196,6 +1196,30 @@ Rejected: leaving remote images to the viewer (a sandboxed viewer shows them
 broken), and carrying a fetched image in the embedded source (the way back
 would no longer be the page as written).
 
+### DEC-19 — A render keeps a theme that draws in one mode in that mode
+
+**Decider:** `josephfarina`, `2026-11-18`
+
+A rendered page is one file that shows the page in any viewer. A page whose
+root theme draws in one mode is readable only in that mode: in a viewer of the
+other scheme, its text sits on the viewer's own canvas. So `astryx experimental
+export` writes one color scheme when the page's root theme draws in one mode,
+and paints the theme's page color on the document. The theme module's
+`colorModes` export decides, read without running the module. A theme with no
+`colorModes` export draws in one mode when every page and text color its root
+rule sets is a fixed color (an opaque one, for a page color) and all of them
+read as that mode by their lightness (a light page or dark text is light, a
+dark page or light text is dark), and no stylesheet that names the theme sets a
+page or text color under a light or dark condition. A media surface's own
+colors (`data-astryx-media`) do not count.
+Every other theme, and a page with no theme, keeps both schemes, and its file
+is written as before. The theme editor's previews keep both schemes, because
+the editor shows each mode itself.
+
+Rejected: following the viewer for every page (a one-mode theme is unreadable
+in the other scheme), and running the theme module to read its modes (a render
+runs no theme code).
+
 ## Verification
 
 | Invariant | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |

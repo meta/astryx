@@ -66,7 +66,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'Find a component with `{@command search "progress bar"}` and read its props with `{@command component ProgressBar}` before you use it. Use components and tokens, not colors or CSS of your own: the page then follows the reader\u2019s light or dark setting, and a viewer that sets Astryx theme variables gives it that viewer\u2019s theme.',
+          text: 'Find a component with `{@command search "progress bar"}` and read its props with `{@command component ProgressBar}` before you use it. Use components and tokens, not colors or CSS of your own: the page then follows the reader\u2019s light or dark setting (a theme that draws in one mode keeps it), and a viewer that sets Astryx theme variables gives it that viewer\u2019s theme.',
         },
         {
           type: 'list',
