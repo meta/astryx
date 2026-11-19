@@ -171,8 +171,8 @@ intentional decision. A `current` contract contains no unresolved rows.
 
 The component implements design requirements without copying their rationale.
 
-Platform controls (`spec:AST-093` FR2): on iOS, QuickLook's preview
-controller shows files in its own window with its own toolbar and navigation,
+Platform controls (`spec:AST-093` FR2): on iOS, the QuickLook file viewer
+shows files in its own window with its own toolbar and navigation,
 with no place for the app's captions, counter or media surface, and with its
 own close, so it does not meet core's parts (FR3) or its closes (FR6); Android
 has no system media viewer an app can embed, only handing the file to another
