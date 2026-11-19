@@ -39,6 +39,7 @@ import {BUILTIN_DOCS_DIR, BUILTIN_TOPIC_FILE_RE} from './name-roots.mjs';
 import {parseReadableDoc} from '../doc-compiler/parse-readable.mjs';
 import {ReplacementAliases} from './replacement-aliases.mjs';
 import {
+  answersTitleQuery,
   sectionKey,
   sectionKeyErrors,
   sourceTitle,
@@ -884,18 +885,14 @@ export function mergeTopicReport(base, overlay, {contributor} = {}) {
 }
 
 /**
- * Does a section answer an authored id: is the id its key, or a title query
- * its authored title answers?
+ * Does a section answer an authored id: is the id its key, or a fragment of
+ * its authored title?
  * @param {any} section
  * @param {string} id
  * @returns {boolean}
  */
 function answers(section, id) {
-  const title = sourceTitle(section);
-  return (
-    sectionKey(section) === id ||
-    (typeof title === 'string' && title.toLowerCase().includes(id))
-  );
+  return sectionKey(section) === id || answersTitleQuery(section, id);
 }
 
 /**

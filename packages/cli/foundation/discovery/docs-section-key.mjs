@@ -86,11 +86,23 @@ export function sectionKey(section) {
  * @returns {number}
  */
 function legacyTitleMatchIndex(sections, query) {
-  const lower = query.toLowerCase();
-  return sections.findIndex(section => {
-    const title = sourceTitle(section);
-    return typeof title === 'string' && title.toLowerCase().includes(lower);
-  });
+  return sections.findIndex(section => answersTitleQuery(section, query));
+}
+
+/**
+ * Does a section's authored title answer a 0.6.x title query: does the query
+ * appear in it, in any letter case? Merging and key checks share this test,
+ * so a pair the merge keeps is never one the key check refuses.
+ * @param {any} section
+ * @param {string} query
+ * @returns {boolean}
+ */
+export function answersTitleQuery(section, query) {
+  const title = sourceTitle(section);
+  return (
+    typeof title === 'string' &&
+    title.toLowerCase().includes(query.toLowerCase())
+  );
 }
 
 /**

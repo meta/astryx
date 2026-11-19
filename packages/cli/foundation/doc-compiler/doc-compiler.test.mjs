@@ -225,6 +225,15 @@ describe('lowerReferenceTopic', () => {
       ['props', 'Every prop.'],
       ['acme-one-install', 'one'],
     ]);
+    // Titles that differ only in letter case derive one key.
+    expect(
+      keys([adds('one', {title: 'Install'}), adds('two', {title: 'INSTALL'})]),
+    ).toEqual([
+      ['quick-start', 'Start here.'],
+      ['props', 'Every prop.'],
+      ['install', 'one'],
+      ['acme-two-install', 'two'],
+    ]);
     // A section a package put in the place of the topic's own keeps that
     // place's numeric collisions.
     expect(
