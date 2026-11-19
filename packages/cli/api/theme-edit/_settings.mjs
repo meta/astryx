@@ -13906,14 +13906,14 @@ export function paddedParts(ctx, part) {
  * that size. Null for a part outside the checks group, one that reads a size
  * token or sets no width and height of its own, and for a size neither the
  * theme nor the part data gives in px.
- * @param {any} C the part census
+ * @param {Ctx} ctx the editor's context (its part census, ctx.C)
  * @param {Setting[]} settings the theme's settings, in order
  * @param {string} part
  * @param {string} [size] the size value (`md`); none: the size drawn
  * @returns {{w: number, h: number} | null}
  */
-export function selfSizedBox(C, settings, part, size) {
-  const r = readSelfSized(C, settings, part, size);
+export function selfSizedBox(ctx, settings, part, size) {
+  const r = readSelfSized(ctx, settings, part, size);
   return r && 'w' in r ? r : null;
 }
 
@@ -13922,34 +13922,36 @@ export function selfSizedBox(C, settings, part, size) {
  * the editor can step at a size: the theme's own width or height is not in
  * px, or neither the theme nor the part data gives one at that size. Null
  * when it has one.
- * @param {any} C the part census
+ * @param {Ctx} ctx the editor's context (its part census, ctx.C)
  * @param {Setting[]} settings the theme's settings, in order
  * @param {string} part
  * @param {string} [size]
  * @returns {string | null}
  */
-export function selfSizedWhy(C, settings, part, size) {
-  const r = readSelfSized(C, settings, part, size);
+export function selfSizedWhy(ctx, settings, part, size) {
+  const r = readSelfSized(ctx, settings, part, size);
   return r && 'why' in r ? r.why : null;
 }
 
 /**
  * {@link selfSizedBox}'s reading, or why there is none.
- * @param {any} C
+ * @param {Ctx} ctx
  * @param {Setting[]} settings
  * @param {string} part
  * @param {string} [size]
  * @returns {{w: number, h: number} | {why: string} | null}
  */
-function readSelfSized(C, settings, part, size) {
+function readSelfSized(ctx, settings, part, size) {
+  const C = ctx.C;
   if (!(FAMILIES.checks ?? []).includes(part)) return null;
   if ((C.partReads(part, 'size') ?? []).length) return null;
   const at = C.MAP[part]?.at ?? {};
   if (!Object.hasOwn(at, 'width') || !Object.hasOwn(at, 'height')) return null;
-  const ons = [
-    part,
-    ...Object.keys(FAMILIES).filter(g => FAMILIES[g].includes(part)),
-  ];
+  // (A setting reaches this part where the build puts it: on the part, on
+  // a group holding it, or on another member without `--only`, which set
+  // spreads to the group; partsOf is that one rule.)
+  const reaches = (/** @type {Setting} */ x) =>
+    partsOf(ctx, x).includes(part);
   /** @param {unknown} v */
   const px = v => {
     const m = /^\s*(\d*\.?\d+)px\s*$/.exec(String(v));
@@ -13977,7 +13979,7 @@ function readSelfSized(C, settings, part, size) {
         .find(
           x =>
             x.thing === k &&
-            ons.includes(String(x.on)) &&
+            reaches(x) &&
             !x.state &&
             !x.mode &&
             ok(x),

@@ -25675,6 +25675,14 @@ export function draftAnswer(ctx, env, question) {
             ) &&
             sizesItsOwnBox(C, one(on))
           ) {
+            // (A condition other than a size, "indeterminate checkboxes",
+            // is not stepped: the box's width and height hold under every
+            // state, and a size line would replace the condition.)
+            if (f.when && !/^size:/.test(String(f.when)))
+              return {
+                text: `${on} sets its own width and height at each size, the same in every state, so the editor does not step it under ${f.when}; ask without it ("${c.dir === 'less' ? 'smaller' : 'bigger'} ${on}") to size the box`,
+                options: [],
+              };
             const all = C.variantValues(one(on)).size ?? [];
             const named = /^size:(.+)$/.exec(String(f.when ?? ''))?.[1];
             const sizes = named ? [named] : all.length > 1 ? all : [undefined];
@@ -25693,14 +25701,14 @@ export function draftAnswer(ctx, env, question) {
             for (const sz of sizes) {
               const boxes = members.map(m => ({
                 m,
-                box: selfSizedBox(C, env.data.settings, m, sz),
+                box: selfSizedBox(ctx, env.data.settings, m, sz),
               }));
               const missing = boxes.find(x => !x.box);
               if (missing) {
                 unknown.push({
                   sz,
                   why:
-                    selfSizedWhy(C, env.data.settings, missing.m, sz) ??
+                    selfSizedWhy(ctx, env.data.settings, missing.m, sz) ??
                     'no size the editor knows',
                 });
                 continue;
@@ -25741,7 +25749,7 @@ export function draftAnswer(ctx, env, question) {
             // line that gives that size; with no size read at all, nothing
             // is written: spacing never reaches the box.)
             const give = (/** @type {string | undefined} */ sz) =>
-              `give its size in px, such as width 16px and height 16px --on ${on}${sz && all.length > 1 ? ` --when size:${sz}` : ''}`;
+              `give its size in px, such as width 16px and height 16px --on ${on}${sz && all.length > 1 ? ` --when size:${sz}` : ''}${FAMILIES[on] ? '' : ' --only'}`;
             // (One reason for every size is said once.)
             const whys = [...new Set(unknown.map(u => u.why))];
             const kept = !unknown.length

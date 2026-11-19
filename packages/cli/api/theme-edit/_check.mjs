@@ -6824,7 +6824,7 @@ function checkOne(
         // ask that sizes it.)
         const size = /^size:(.+)$/.exec(String(s.when ?? ''))?.[1];
         const boxed = partsOf(ctx, s).map(t =>
-          selfSizedBox(ctx.C, data.settings, t, size),
+          selfSizedBox(ctx, data.settings, t, size),
         );
         if (!spaced.length && boxed.length && boxed.every(b => b)) {
           // (Members of a group that differ are each named with their own
@@ -6837,13 +6837,25 @@ function checkOne(
           const same = sized.every(
             b => b.w === sized[0].w && b.h === sized[0].h,
           );
+          // (The size ask goes the way the spacing asked: more room, a
+          // roomier rung or a factor above 1 is bigger.)
+          const rung = SPACING.find(([n]) => n === String(v).toLowerCase());
+          const factor = /^x?(\d*\.?\d+)(%)?$/i.exec(commaNumbers(v));
+          const grows = rung
+            ? rung[1] > 1
+            : factor
+              ? Number(factor[1]) / (factor[2] ? 100 : 1) > 1
+              : /^(?:more|bigger|larger|loose|looser|airy|airier)$/i.test(
+                  String(v),
+                );
+          const way = grows ? 'bigger' : 'smaller';
           const sizes = same
             ? `${sized[0].w}px by ${sized[0].h}px`
             : sized.map(b => `${b.t} ${b.w}px by ${b.h}px`).join(', ');
           refuse(
             E.ERR_THEME_NO_EFFECT,
-            `${s.on} sets its own width and height (${sizes}) and reads no spacing or control size, so spacing changes nothing you see there. Size it with width and height (how "smaller ${s.on}").`,
-            {run: [`${HOW} "smaller ${s.on}"`]},
+            `${s.on} sets its own width and height (${sizes}) and reads no spacing or control size, so spacing changes nothing you see there. Size it with width and height (how "${way} ${s.on}").`,
+            {run: [`${HOW} "${way} ${s.on}"`]},
           );
         }
         if (!spaced.length)
