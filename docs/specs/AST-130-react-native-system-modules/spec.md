@@ -473,8 +473,8 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
   every module of this group is core.
 - Relies on `spec:AST-140` FR5: contracts grow by named features, which the
   platform info module reports.
-- Relies on `spec:AST-112` DEC-15 (amended): native code uses public platform
-  API only.
+- Relies on `spec:AST-140/FR9` and `spec:AST-140/DEC-9`: native code uses
+  public platform API only.
 - Relies on `spec:AST-112` FR20 (amended): the package covers the native code
   Astryx itself uses; every module of this group is such code.
 - Is the System modules group record that `spec:AST-112/FR7` names: it lists
