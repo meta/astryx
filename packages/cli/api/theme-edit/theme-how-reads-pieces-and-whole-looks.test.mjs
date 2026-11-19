@@ -88,8 +88,9 @@ describe('a look named after a product', () => {
         expect(text, q).toMatch(/its font, how round its corners are/);
         expect(text, q).toMatch(/picture/);
       }
-      // (A quality word, "accessible", "consistent", names no product.)
-      for (const q of ['make it accessible', 'make it consistent'])
+      // (A quality or describing word names no product: a name is said as
+      // one, capitalized.)
+      for (const q of ['make it accessible', 'make it consistent', 'make it pretty', 'make it cozy'])
         expect(JSON.stringify((await answer(q)).results), q).not.toMatch(
           /never guesses a brand/,
         );
@@ -157,6 +158,9 @@ describe('one variant made to look like another', () => {
         'make everything clear',
         'make it crystal clear',
         'make it feel original',
+        'make the cards darker than before',
+        'bring back the retro look',
+        'a back-to-school theme',
       ]) {
         const text = JSON.stringify((await answer(q)).results);
         expect(text, q).not.toMatch(/steps back one change|has no change to undo/);
@@ -217,6 +221,48 @@ describe('"not" or "never" before a look that is no likeness', () => {
         expect(first(data).length, q).toBeGreaterThan(0);
         expect(JSON.stringify(data.results), q).not.toMatch(/asks for no change|nothing to change/);
       }
+    },
+    T,
+  );
+});
+
+describe('a negation that takes no piece away', () => {
+  it(
+    'never hides the part: a behavior word, or an owner without that piece',
+    async () => {
+      for (const q of [
+        'top nav items without icons',
+        'side nav items without icons',
+        'no truncation on table cells',
+        'tabs never wrap',
+        'the toast never moves',
+        'spinners never animate',
+      ]) {
+        const data = await answer(q);
+        expect(JSON.stringify(data.results), q).not.toMatch(/display none/);
+      }
+    },
+    T,
+  );
+
+  it(
+    'leaves a control whose only target is its icon: hiding the icon would keep an empty, focusable control',
+    async () => {
+      const data = await answer('hide the dialog close button');
+      expect(first(data)).toEqual([]);
+      expect(JSON.stringify(data.results)).toMatch(/empty control that still takes focus/);
+    },
+    T,
+  );
+});
+
+describe('a piece said before a part that has no such piece', () => {
+  it(
+    'reads the pieces the part holds: "icons in cards red" writes a color',
+    async () => {
+      const lines = first(await answer('icons in cards red'));
+      expect(lines.length).toBeGreaterThan(0);
+      expect(lines.join('\n')).toMatch(/--on card/);
     },
     T,
   );
