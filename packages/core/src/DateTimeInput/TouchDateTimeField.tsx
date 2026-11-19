@@ -302,6 +302,7 @@ const styles = stylex.create({
     color: colorVars['--color-text-primary'],
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-large-size'],
+    lineHeight: typeScaleVars['--text-large-leading'],
     fontWeight: fontWeightVars['--font-weight-semibold'],
     cursor: {
       default: 'pointer',
@@ -374,6 +375,7 @@ const styles = stylex.create({
   touchWeekday: {
     textAlign: 'center',
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
     fontWeight: fontWeightVars['--font-weight-normal'],
     color: colorVars['--color-text-secondary'],
   },

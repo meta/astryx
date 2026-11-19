@@ -184,6 +184,20 @@ export const Default: Story = {
   },
 };
 
+/**
+ * A list that mixes task items and plain items: each task item draws its
+ * checkbox in the list's marker column, centered on its first line.
+ */
+export const TaskItemsAmongPlainItems: Story = {
+  args: {
+    children: [
+      '- [ ] Write the release notes',
+      '- Review the open questions',
+      '- [x] Tag the release',
+    ].join('\n'),
+  },
+};
+
 export const Compact: Story = {
   args: {
     children: SAMPLE_MD,

@@ -478,6 +478,36 @@ describe('orderByAffinity with typos', () => {
   });
 });
 
+describe('orderRouteSuggestions with slipFrom', () => {
+  const routes = ['alpha', 'card', 'motion', 'cart'].map(name => ({name}));
+  /** @param {string} typed @param {{name: string}[]} [list] */
+  const order = (typed, list = routes) =>
+    orderRouteSuggestions(typed, list, {
+      closest: true,
+      typos: true,
+      slipFrom: 4,
+    }).map(s => s.name);
+
+  it('puts a four-letter name one slip away first', () => {
+    expect(order('crad')).toEqual(['card', 'alpha', 'motion', 'cart']);
+    expect(
+      orderRouteSuggestions('crad', routes, {closest: true, typos: true}).map(
+        s => s.name,
+      ),
+    ).toEqual(['alpha', 'card', 'motion', 'cart']);
+  });
+
+  it('keeps the given order between equally near names', () => {
+    expect(order('carx')).toEqual(['card', 'cart', 'alpha', 'motion']);
+    expect(order('carx', [...routes].reverse())).toEqual([
+      'cart',
+      'card',
+      'motion',
+      'alpha',
+    ]);
+  });
+});
+
 describe('orderDocSuggestions', () => {
   const pages = {
     garden: {title: 'Garden', keywords: ['plants']},

@@ -696,6 +696,89 @@ describe('DropdownMenu', () => {
     );
   });
 
+  it('keeps focus on the row a keyboard user activated when the open sheet re-renders with new items', async () => {
+    const user = userEvent.setup();
+    function Counter() {
+      const [count, setCount] = useState(0);
+      return (
+        <DropdownMenu
+          button={{label: 'Options'}}
+          presentation="bottom-sheet"
+          items={[
+            {label: 'First'},
+            {
+              label: `Bump (${count})`,
+              hasCloseOnSelect: false,
+              onClick: () => setCount(value => value + 1),
+            },
+            {label: 'Last'},
+          ]}
+        />
+      );
+    }
+    render(<Counter />);
+
+    screen.getByRole('button', {name: /Options/}).focus();
+    await user.keyboard('{Enter}');
+    await waitFor(() =>
+      expect(screen.getByRole('button', {name: 'First'})).toHaveFocus(),
+    );
+    await user.tab();
+    expect(screen.getByRole('button', {name: 'Bump (0)'})).toHaveFocus();
+    await user.keyboard('{Enter}');
+    await act(async () => nextFrames(3));
+
+    expect(screen.getByRole('button', {name: 'Bump (1)'})).toHaveFocus();
+  });
+
+  it('keeps focus in an open sub-menu of the sheet when the menu re-renders with new items', async () => {
+    const user = userEvent.setup();
+    function Counter() {
+      const [count, setCount] = useState(0);
+      return (
+        <DropdownMenu
+          button={{label: 'Options'}}
+          presentation="bottom-sheet"
+          items={[
+            {label: 'First'},
+            {
+              label: 'More',
+              items: [
+                {label: 'Inner'},
+                {
+                  label: `Bump (${count})`,
+                  hasCloseOnSelect: false,
+                  onClick: () => setCount(value => value + 1),
+                },
+              ],
+            },
+          ]}
+        />
+      );
+    }
+    render(<Counter />);
+
+    screen.getByRole('button', {name: /Options/}).focus();
+    await user.keyboard('{Enter}');
+    await waitFor(() =>
+      expect(screen.getByRole('button', {name: 'First'})).toHaveFocus(),
+    );
+    await user.tab();
+    await user.keyboard('{Enter}');
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', {name: 'Bump (0)'}),
+      ).toBeInTheDocument(),
+    );
+    await act(async () => nextFrames(3));
+    const bump = screen.getByRole('button', {name: /^Bump/});
+    bump.focus();
+    await user.keyboard('{Enter}');
+    await act(async () => nextFrames(3));
+
+    expect(screen.getByRole('button', {name: /^Bump/})).toHaveFocus();
+  });
+
   it('restores touch focus without painting a trigger focus ring', async () => {
     render(
       <DropdownMenu
@@ -731,9 +814,8 @@ describe('DropdownMenu', () => {
     const popover = screen
       .getByRole('menu', {hidden: true})
       .closest('[popover]');
-    expect(popover?.getAttribute('style')).toContain(
-      'position-area: self-block-end span-self-inline-end',
-    );
+    expect(popover?.className).toContain('useLayer__styles.sideBelow');
+    expect(popover?.className).toContain('useLayer__styles.alignInlineStart');
   });
 
   it('supports explicit menu placement', () => {
@@ -747,9 +829,8 @@ describe('DropdownMenu', () => {
     const popover = screen
       .getByRole('menu', {hidden: true})
       .closest('[popover]');
-    expect(popover?.getAttribute('style')).toContain(
-      'position-area: self-block-start span-self-inline-end',
-    );
+    expect(popover?.className).toContain('useLayer__styles.sideAbove');
+    expect(popover?.className).toContain('useLayer__styles.alignInlineStart');
   });
 
   it('supports explicit menu alignment', () => {
@@ -763,9 +844,8 @@ describe('DropdownMenu', () => {
     const popover = screen
       .getByRole('menu', {hidden: true})
       .closest('[popover]');
-    expect(popover?.getAttribute('style')).toContain(
-      'position-area: self-block-end span-self-inline-start',
-    );
+    expect(popover?.className).toContain('useLayer__styles.sideBelow');
+    expect(popover?.className).toContain('useLayer__styles.alignInlineEnd');
   });
 
   it('uses block-axis viewport gutters for side placement', () => {
@@ -781,15 +861,15 @@ describe('DropdownMenu', () => {
       .getByRole('menu', {hidden: true})
       .closest('[popover]');
     // The gutter is the layer runtime's (spec:AST-059 FR1, FR7).
-    expect(popover?.className).toContain('useLayer__styles.gutterBlockEnd');
+    expect(popover?.className).toContain('useLayer__styles.alignBlockStart');
     expect(popover?.className).not.toContain(
-      'useLayer__styles.gutterInlineEnd',
+      'useLayer__styles.alignInlineStart',
     );
   });
 
   it('emits the direction-independent logical mapping under an RTL ancestor (#3389)', async () => {
-    // The self-* position-area keywords resolve against the popover's own
-    // inherited direction in the browser, so RTL emits the same string as
+    // The logical anchor insets resolve against the popover's own
+    // inherited direction in the browser, so RTL emits the same styles as
     // LTR and the mirroring is pure CSS. jsdom can't verify the geometry —
     // the DropdownMenu RTL Storybook story is the visual proof surface.
     const user = userEvent.setup();
@@ -802,9 +882,8 @@ describe('DropdownMenu', () => {
     await user.click(screen.getByRole('button', {name: /Actions/}));
 
     const popover = container.querySelector('[popover]');
-    expect(popover?.getAttribute('style')).toContain(
-      'position-area: self-block-end span-self-inline-end',
-    );
+    expect(popover?.className).toContain('useLayer__styles.sideBelow');
+    expect(popover?.className).toContain('useLayer__styles.alignInlineStart');
   });
 
   it('caps default and custom widths to the available viewport', () => {
@@ -861,7 +940,7 @@ describe('DropdownMenu', () => {
         'DropdownMenu__styles.popoverCustomIntrinsicWidth',
       );
       expect(popover?.getAttribute('style')).toContain(menuWidth);
-      expect(popover?.className).toContain('useLayer__styles.gutterInlineEnd');
+      expect(popover?.className).toContain('useLayer__styles.alignInlineStart');
       expect(popover?.getAttribute('style')).not.toContain(`min(${menuWidth},`);
     },
   );
@@ -5572,3 +5651,16 @@ describe('DropdownMenu trigger refs across renders', () => {
     expect(refs.at(-1)).toBe(refs[0]);
   });
 });
+
+async function nextFrames(count: number): Promise<void> {
+  return new Promise(resolve => {
+    const step = (left: number) => {
+      if (left === 0) {
+        resolve();
+        return;
+      }
+      requestAnimationFrame(() => step(left - 1));
+    };
+    step(count);
+  });
+}

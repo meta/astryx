@@ -54,8 +54,6 @@ import {
   isJsonMode,
   jsonError as _jsonError,
   humanWarn,
-  outputCaptured,
-  writeAllSync,
 } from '../../../foundation/response/json.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {setOutcome} from '../../../foundation/debug/index.mjs';
@@ -144,10 +142,7 @@ export function cliError(message, options = {}) {
       lines.push(tag);
     }
   }
-  // Written whole before a hard exit: output still queued for a slow pipe
-  // would be cut at 64 KiB. A soft exit lets the stream drain on its own.
-  if (hard && !outputCaptured(2)) writeAllSync(2, `${lines.join('\n')}\n`);
-  else for (const line of lines) console.error(line);
+  for (const line of lines) console.error(line);
 
   if (hard) {
     process.exit(exitCode);

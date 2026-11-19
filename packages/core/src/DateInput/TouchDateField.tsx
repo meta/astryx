@@ -372,6 +372,7 @@ const styles = stylex.create({
     backgroundColor: 'transparent',
     color: colorVars['--color-text-primary'],
     fontSize: typeScaleVars['--text-large-size'],
+    lineHeight: typeScaleVars['--text-large-leading'],
     fontWeight: fontWeightVars['--font-weight-semibold'],
     cursor: {
       default: 'pointer',
@@ -428,6 +429,7 @@ const styles = stylex.create({
   weekday: {
     textAlign: 'center',
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
     fontWeight: fontWeightVars['--font-weight-normal'],
     color: colorVars['--color-text-secondary'],
   },

@@ -35,15 +35,15 @@ system_specs: [spec:AST-082, spec:AST-085, spec:AST-086, spec:AST-102]
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | TextInput is a controlled single-line text field with Field props, `type` (`text`, `password`, `email`, `search`, `tel`, `url`), size, status, clear, start icon, `onChange`, `changeAction`, `isLoading`, disabled and read-only states, the touch-keyboard props `enterKeyHint`, `inputMode`, `autoCapitalize`, `hasAutoCorrect`, and `hasSpellCheck` (FR16), and the input-family part props.                                                |
-| Behavior                | Typing calls `onChange`, then an optional `changeAction` in a transition with an optimistic value, and a busy Spinner while the shown value differs from `value`. A disabled field stays focusable, read-only, unsubmitted, and inert.                                                                                                                                                                                                          |
-| End-user impact         | People type into a labelled field that shows progress and validation in place. Keyboard and screen-reader users can reach a disabled field and its reason. An error without a message is signalled only by color and an icon. On a phone, a field its caller describes opens the keyboard it needs, such as a phone pad or a number pad, with a Return key that says Next, Go, or Done, and leaves names as typed.                              |
-| Builder impact          | Callers can choose the touch keyboard, its Return key label, capitalization, correction, and spell-check marking (FR16); an unset prop leaves the field as it is.                                                                                                                                                                                                                                                                               |
-| Compatibility/readiness | The touch-keyboard props and the `search`, `tel`, and `url` types are additive, a patch `[feat]` (`spec:AST-017` FR5, FR7). Otherwise the record states shipped behavior. The clear button scales under reduced motion, an error may lack text, the height does not grow with text, a `detached` status without a message is color-only, and a grouped `description` is referenced but not rendered; all are listed under Current-state impact. |
-| Review checks           | Reject a disabled field that leaves the tab order, submits, or runs caller handlers; an Enter that fires `onEnter` while committing an IME conversion; a busy state without `aria-busy`; root styling props; a keyboard prop that renders an attribute while unset or changes what Enter does; or a keyboard value type that accepts any string.                                                                                                |
-| Governing rules         | `family:input-fields` FR1, FR2, FR3, FR4, FR6, FR8–FR11; `spec:AST-085` FR1–FR3, FR5–FR7; `spec:AST-086` FR8; `architecture:component-size-cascade` INV3–INV5; `design:reduced-motion` DR1; `spec:AST-102` FR4; `architecture:public-component-api` INV2–INV4, INV25; `spec:AST-082` FR3, DEC-14; `spec:AST-017` FR5, FR7.                                                                                                                      |
+| Area                    | Contract                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | TextInput is a controlled single-line text field with Field props, `type` (`text`, `password`, `email`, `search`, `tel`, `url`), size, status, clear, start icon, `onChange`, `changeAction`, `isLoading`, disabled and read-only states, the touch-keyboard props `enterKeyHint`, `inputMode`, `autoCapitalize`, `hasAutoCorrect`, and `hasSpellCheck` (FR16), and the input-family part props.                                                                  |
+| Behavior                | Typing calls `onChange`, then an optional `changeAction` in a transition with an optimistic value, and a busy Spinner while the shown value differs from `value`. A disabled field stays focusable, read-only, unsubmitted, and inert.                                                                                                                                                                                                                            |
+| End-user impact         | People type into a labelled field that shows progress and validation in place. Keyboard and screen-reader users can reach a disabled field and its reason. An error without a message shows sighted users only color and an icon; screen readers hear a translated fallback. On a phone, a field its caller describes opens the keyboard it needs, such as a phone pad or a number pad, with a Return key that says Next, Go, or Done, and leaves names as typed. |
+| Builder impact          | Callers can choose the touch keyboard, its Return key label, capitalization, correction, and spell-check marking (FR16); an unset prop leaves the field as it is.                                                                                                                                                                                                                                                                                                 |
+| Compatibility/readiness | The touch-keyboard props and the `search`, `tel`, and `url` types are additive, a patch `[feat]` (`spec:AST-017` FR5, FR7). Otherwise the record states shipped behavior. The clear button scales under reduced motion, an error may lack text, the height does not grow with text, a `detached` status without a message is color-only, and a grouped `description` is referenced but not rendered; all are listed under Current-state impact.                   |
+| Review checks           | Reject a disabled field that leaves the tab order, submits, or runs caller handlers; an Enter that fires `onEnter` while committing an IME conversion; a busy state without `aria-busy`; root styling props; a keyboard prop that renders an attribute while unset or changes what Enter does; or a keyboard value type that accepts any string.                                                                                                                  |
+| Governing rules         | `family:input-fields` FR1, FR2, FR3, FR4, FR6, FR8–FR11; `spec:AST-085` FR1–FR3, FR5–FR7; `spec:AST-086` FR8; `architecture:component-size-cascade` INV3–INV5; `design:reduced-motion` DR1; `spec:AST-102` FR4; `architecture:public-component-api` INV2–INV4, INV25; `spec:AST-082` FR3, DEC-14; `spec:AST-017` FR5, FR7.                                                                                                                                        |
 
 This table is a review projection; the body below is authoritative.
 
@@ -182,9 +182,12 @@ Consumer migration instructions belong in consumer docs and release notes.
   cue other than color (WCAG 2.2 1.4.1): a glyph on the control for `attached`
   and `tooltip`, or in the message box for `detached` with a message. Outside
   InputGroup, an error MUST be identified in text (WCAG 2.2 3.3.1); inside
-  InputGroup, the group's own status carries the text. Implementation gap: TextInput
-  accepts an error status without a message, and a `detached` status without a
-  message shows only the colored border.
+  InputGroup, the group's own status carries the text. AR4 gap: an error status
+  without a message shows no visible error text, so sighted users get colour
+  and icon only (WCAG 3.3.1); the field warns in development and links a
+  hidden translated fallback ('Invalid value') for assistive technology.
+  Visible default text is pending (`family:input-fields` FR16 proposal). A
+  `detached` status without a message shows only the colored border.
 - **AR5 — Focus-zoom floor.** FR11.
 - **AR6 — Search field.** With `type="search"` the native input has the
   searchbox role, so a screen reader announces a search field.
@@ -238,9 +241,11 @@ anatomy-theming map.
 
 ## Current-state impact
 
-- **Error without text (AR4).** TextInput accepts an error status without a
-  message, so the error is shown only by color and an icon, against WCAG 2.2
-  3.3.1. The accessibility suite records this as a known failure.
+- **Error without text (AR4).** An error status without a message shows no
+  visible error text, so sighted users get colour and icon only, against WCAG
+  2.2 3.3.1. Assistive technology hears the hidden translated fallback, and
+  the field warns in development. The real-browser accessibility suite records
+  the missing visible text as a known failure.
 - **Color-only detached status (AR4).** A `detached` status without a message
   shows only the colored border, against WCAG 2.2 1.4.1.
 - **Grouped description (ORD3).** Inside InputGroup, TextInput's own

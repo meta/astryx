@@ -13,7 +13,7 @@ import {ChartBarIcon, Cog6ToothIcon} from '@heroicons/react/24/outline';
 export default function TopNavMenuBasic() {
   return (
     <TopNav
-      style={{width: 600}}
+      style={{width: 600, maxWidth: '100%'}}
       label="Main navigation"
       heading={<TopNavHeading heading="Platform" />}
       startContent={

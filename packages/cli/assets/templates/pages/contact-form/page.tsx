@@ -109,7 +109,12 @@ export default function FormSimplePage() {
   return (
     <Center role="main" axis="horizontal">
       <VStack hAlign="center" width="100%">
-        <Section maxWidth={800} padding={6} paddingBlock={10} variant="section">
+        <Section
+          width="100%"
+          maxWidth={800}
+          padding={6}
+          paddingBlock={10}
+          variant="section">
           <VStack gap={6}>
             {/* Header */}
             <VStack gap={2} hAlign="center">

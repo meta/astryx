@@ -1192,6 +1192,8 @@ export interface DerivedVar {
   expand?: 'container';
   /** Emit only the vars, dropping the source property from the rule. */
   replaces?: boolean;
+  /** Also write each corner of a radius to its own corner variable. */
+  corners?: boolean;
 }
 
 export interface ComponentIconSlotState {
@@ -1309,10 +1311,13 @@ function generateComponentPreviewRegistry(allComponents) {
   );
   const entries = packageNames
     .flatMap(packageName =>
-      allComponents[packageName].map(
-        component =>
-          `  ${JSON.stringify(component.name)}: namedLazy(${JSON.stringify(component.name)}, () => import(${JSON.stringify(packageName)}).then(module => module.${component.moduleName} as PreviewComponent)),`,
-      ),
+      allComponents[packageName]
+        // A hook entry carries `params`; a hook renders nothing to preview.
+        .filter(component => component.params == null)
+        .map(
+          component =>
+            `  ${JSON.stringify(component.name)}: namedLazy(${JSON.stringify(component.name)}, () => import(${JSON.stringify(packageName)}).then(module => module.${component.moduleName} as PreviewComponent)),`,
+        ),
     )
     .join('\n');
 

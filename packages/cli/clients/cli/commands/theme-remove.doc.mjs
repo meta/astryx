@@ -10,7 +10,7 @@ export const doc = {
   namespace: 'cli/commands',
   summary: 'Remove a theme from the app',
   description:
-    'Removes one added theme from the generated module and regenerates the whole module. While other themes are added, choose another default with theme use before removing the current default. Removing the only added theme removes the module file and prints the lines the app root must drop (with the provider an installed package names as taking the theme, the props passed to it, keeping the provider); a module with changes the CLI did not write stays. A theme whose local folder or package is gone can be removed, and theme use still works when the default is the one that is gone.',
+    'Removes one added theme from the generated module and regenerates the whole module. While other themes are added, choose another default with theme use before removing the current default. Removing the only added theme removes the module file and prints the lines the app root must drop (with the provider an installed package names as taking the theme, the props passed to it, keeping the provider); a module with changes the CLI did not write stays. A theme whose local folder or package is gone can be removed, and theme use still works when the default is the one that is gone. Removing a theme that theme add copied from a shared theme also undoes that add: the files the add wrote that still hold what it wrote go, any changed since stay and are named, and the packages it installed that no theme still in the record is owned by or imports are uninstalled, with install scripts off; the JSON carries data.undo (removed, kept, uninstalled, uninstallError).',
   fn: 'themeRemove',
   args: [{name: 'slug', param: 'slug', required: true, names: 'theme'}],
   examples: [
