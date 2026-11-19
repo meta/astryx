@@ -15,7 +15,8 @@ import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {describe, expect, it} from 'vitest';
 import {SHARED_ELEMENT_PARTS} from './sharedElementParts';
-import {defineTheme, generateThemeCSS} from './defineTheme';
+import {defineTheme} from './defineTheme';
+import {generateThemeCSS} from './generateThemeRules';
 
 const SRC = join(__dirname, '..');
 
