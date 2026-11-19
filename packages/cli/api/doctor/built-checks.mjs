@@ -141,14 +141,40 @@ const CORE_STYLESHEET_HREF =
  * @param {string} html
  */
 export function linksCoreStylesheet(html) {
-  const text = html.replace(/<!--[\s\S]*?-->/gu, ' ');
+  return stylesheetLinkHrefs(html).some(href =>
+    CORE_STYLESHEET_HREF.test(href),
+  );
+}
+
+/**
+ * The `href` of every `<link>` in a page whose `rel` is a stylesheet: a
+ * page file's HTML, or the JSX of a layout that writes the page head.
+ * Comments never count (HTML ones, and a layout's JS block comments), and
+ * a link whose `rel` only mentions a stylesheet (`preload`) is none.
+ * @param {string} page
+ * @returns {string[]}
+ */
+export function stylesheetLinkHrefs(page) {
+  const text = page
+    .replace(/<!--[\s\S]*?-->/gu, ' ')
+    .replace(/\/\*[\s\S]*?\*\//gu, ' ');
+  /** @type {string[]} */
+  const out = [];
   for (const tag of text.matchAll(/<link\b[^>]*>/giu)) {
     const attributes = tag[0];
-    if (!/\brel\s*=\s*["']?[^"'>]*\bstylesheet\b/iu.test(attributes)) continue;
-    const href = /\bhref\s*=\s*(["'])([^"']*)\1/iu.exec(attributes)?.[2];
-    if (href && CORE_STYLESHEET_HREF.test(href)) return true;
+    const relMatch =
+      /\brel\s*=\s*(?:\{?\s*(["'`])([^"'`]*)\1|([^\s"'`>]+))/iu.exec(
+        attributes,
+      );
+    const rel = relMatch?.[2] ?? relMatch?.[3];
+    if (!rel || !rel.split(/\s+/u).some(word => /^stylesheet$/iu.test(word)))
+      continue;
+    const href = /\bhref\s*=\s*\{?\s*(["'`])([^"'`]*)\1/iu.exec(
+      attributes,
+    )?.[2];
+    if (href) out.push(href);
   }
-  return false;
+  return out;
 }
 
 /**
