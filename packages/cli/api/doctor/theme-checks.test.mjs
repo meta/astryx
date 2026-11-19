@@ -187,8 +187,9 @@ describe('the released themes check', () => {
         installGuidance: 'Add {packages} to package.json, then relock',
       },
     ]);
+    // Named at the release of the CLI that answers: the app has no Core.
     expect(checkThemes(dir, await checkAppThemes(dir)).fix).toContain(
-      '`Add @astryxdesign/theme-neutral to package.json, then relock`',
+      `\`Add @astryxdesign/theme-neutral@${CLI_VERSION} to package.json, then relock\``,
     );
     recordDeclaredSettings(dir, []);
 
