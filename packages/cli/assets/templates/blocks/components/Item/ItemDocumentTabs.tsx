@@ -11,7 +11,6 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {Item} from '@astryxdesign/core/Item';
 import {HStack} from '@astryxdesign/core/Layout';
-import {useToast} from '@astryxdesign/core/Toast';
 import {mergeProps} from '@astryxdesign/core/utils';
 import {DocumentIcon, PlusIcon, XMarkIcon} from '@heroicons/react/24/outline';
 
@@ -29,7 +28,6 @@ const styles = stylex.create({
   action: {margin: 'calc(-1 * var(--spacing-1))', transitionProperty: 'none'},
 });
 function DocumentTab({name, isActive}: (typeof TABS)[number]) {
-  const showToast = useToast();
   const {getContainerProps, getContentRevealProps} = useContainerReveal();
   const revealProps = getContentRevealProps({
     forceVisibility: isActive ? 'shown' : undefined,
@@ -56,7 +54,6 @@ function DocumentTab({name, isActive}: (typeof TABS)[number]) {
           variant="ghost"
           size="sm"
           icon={<Icon icon={XMarkIcon} size="sm" />}
-          onClick={() => showToast({body: `Demo: ${name} would close here`})}
           {...mergeProps(revealProps, stylex.props(styles.action))}
         />
       }
@@ -66,7 +63,6 @@ function DocumentTab({name, isActive}: (typeof TABS)[number]) {
 }
 
 export default function ItemDocumentTabs() {
-  const showToast = useToast();
   return (
     <HStack width="100%" maxWidth={600} gap={0.5} vAlign="center">
       <HStack
@@ -98,9 +94,6 @@ export default function ItemDocumentTabs() {
         variant="ghost"
         size="sm"
         icon={<Icon icon={PlusIcon} size="sm" color="secondary" />}
-        onClick={() =>
-          showToast({body: 'Demo: a new document would open here'})
-        }
       />
     </HStack>
   );
