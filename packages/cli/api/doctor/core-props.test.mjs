@@ -240,6 +240,23 @@ describe('doctor core-props', () => {
         'src/App.tsx': app('TabList', '<TabList selectedID="a" />'),
       });
       expect(aliased?.status).toBe('pass');
+      // A declaration whose type resolves only through the config's
+      // `customConditions`, or through its `rootDirs`.
+      const conditions = await propsCheck({
+        'tsconfig.json': JSON.stringify({compilerOptions: {jsx: 'react-jsx', module: 'esnext', moduleResolution: 'bundler', customConditions: ['source']}, include: ['src']}),
+        'node_modules/@acme/extra/package.json': JSON.stringify({name: '@acme/extra', exports: {'.': {source: './src/index.ts', default: './dist/index.js'}}}),
+        'node_modules/@acme/extra/src/index.ts': 'export interface Extra {\n  selectedID?: string;\n}\n',
+        'src/tab-ids.d.ts': "import type {Extra} from '@acme/extra';\ndeclare module '@astryxdesign/core' {\n  interface TabListProps extends Extra {}\n}\n",
+        'src/App.tsx': app('TabList', '<TabList selectedID="a" />'),
+      });
+      expect(conditions?.status).toBe('pass');
+      const merged = await propsCheck({
+        'tsconfig.json': JSON.stringify({compilerOptions: {jsx: 'react-jsx', rootDirs: ['src', 'generated']}, include: ['src', 'generated']}),
+        'generated/extra.ts': 'export interface Extra {\n  selectedID?: string;\n}\n',
+        'src/tab-ids.d.ts': "import type {Extra} from './extra';\ndeclare module '@astryxdesign/core' {\n  interface TabListProps extends Extra {}\n}\n",
+        'src/App.tsx': app('TabList', '<TabList selectedID="a" />'),
+      });
+      expect(merged?.status).toBe('pass');
       // A string index on what JSX gives every component makes JSX take every name.
       const everyName = await propsCheck({
         'src/every-name.d.ts': "import 'react';\ndeclare module 'react' {\n  namespace JSX {\n    interface IntrinsicAttributes {\n      [name: string]: unknown;\n    }\n  }\n}\n",

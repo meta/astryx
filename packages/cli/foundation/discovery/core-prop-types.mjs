@@ -56,27 +56,24 @@ function queryText(components, sources) {
 const unreadable = (ts, type) => (type.flags & ts.TypeFlags.Any) !== 0;
 
 /**
- * The module-path options of a config, as TypeScript's own config reader
- * resolves them through `extends`: `paths`, `baseUrl`, and the folder that
- * `paths` without a `baseUrl` resolve from. The read hands them to
- * TypeScript's program, so they come from the reader that program trusts,
- * which alone sets that folder. Empty with no config, or one TypeScript
- * cannot read.
+ * The compiler options of a config, as TypeScript's own config reader gives
+ * them to a program through `extends`: module resolution included (`paths`,
+ * `baseUrl` and the folder `paths` resolve from, `moduleResolution`,
+ * `customConditions`, `rootDirs` and the rest). The read hands them to
+ * TypeScript's program, so they come from the reader that program trusts.
+ * Null with no config, or one TypeScript cannot read.
  * @param {any} ts
  * @param {string | undefined} configFile
- * @returns {Record<string, unknown>}
+ * @returns {Record<string, unknown> | null}
  */
-function configPaths(ts, configFile) {
-  if (!configFile) return {};
-  /** @type {any} */
-  let parsed;
+function configCompilerOptions(ts, configFile) {
+  if (!configFile) return null;
   try {
-    parsed = ts.getParsedCommandLineOfConfigFile(configFile, {}, {...ts.sys, onUnRecoverableConfigFileDiagnostic: () => {}});
+    const parsed = ts.getParsedCommandLineOfConfigFile(configFile, {}, {...ts.sys, onUnRecoverableConfigFileDiagnostic: () => {}});
+    return parsed?.options ?? null;
   } catch {
-    return {};
+    return null;
   }
-  const {paths, baseUrl, pathsBasePath} = parsed?.options ?? {};
-  return Object.fromEntries(Object.entries({paths, baseUrl, pathsBasePath}).filter(([, value]) => value !== undefined));
 }
 
 /**
@@ -124,8 +121,8 @@ function isGeneric(ts, checker, type) {
  * @param {Map<string, Set<string>>} input.props for each component, the props to judge
  * @param {Map<string, string>} [input.sources] for each component, the module
  *   path a page imports it from (Core's main module when none is given)
- * @param {string} [input.configFile] the pages' config, whose `paths` and
- *   `baseUrl` TypeScript resolves the augmenting files' imports through
+ * @param {string} [input.configFile] the pages' config, whose options
+ *   TypeScript resolves the augmenting files' imports with
  * @returns {CorePropTypes}
  */
 export function readCorePropTypes({ts, projectDir, configDir, options: configOptions, augmentations, props, sources = new Map(), configFile}) {
@@ -134,17 +131,29 @@ export function readCorePropTypes({ts, projectDir, configDir, options: configOpt
   const text = queryText(components, sources);
   const strings = (/** @type {unknown} */ list) =>
     Array.isArray(list) ? list.filter(entry => typeof entry === 'string') : undefined;
-  const options = {
-    strict: true,
-    noEmit: true,
-    skipLibCheck: true,
-    module: ts.ModuleKind.ESNext,
-    moduleResolution: ts.ModuleResolutionKind.Bundler,
-    target: ts.ScriptTarget.ES2022,
-    types: strings(configOptions.types),
-    typeRoots: strings(configOptions.typeRoots),
-    ...configPaths(ts, configFile),
-  };
+  // The pages' config as TypeScript reads it, so every import of a file that
+  // augments Core resolves as it does for the project; a page with no config
+  // gets a bundler's resolution.
+  const fromConfig = configCompilerOptions(ts, configFile);
+  const options = fromConfig
+    ? {
+        ...fromConfig,
+        noEmit: true,
+        skipLibCheck: true,
+        ...(fromConfig.module == null && fromConfig.moduleResolution == null
+          ? {module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler}
+          : {}),
+      }
+    : {
+        strict: true,
+        noEmit: true,
+        skipLibCheck: true,
+        module: ts.ModuleKind.ESNext,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        target: ts.ScriptTarget.ES2022,
+        types: strings(configOptions.types),
+        typeRoots: strings(configOptions.typeRoots),
+      };
   const host = ts.createCompilerHost(options, true);
   const {getSourceFile, fileExists, readFile} = host;
   // The default type roots are the `node_modules/@types` folders above the
