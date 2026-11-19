@@ -1499,7 +1499,7 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
  * @param {import('./_settings.mjs').ThemeData} d
  * @param {Step} st
  */
-function apply(ctx, slug, d, st) {
+export function apply(ctx, slug, d, st) {
   const unset = st.verb === 'undo';
   const s = checkSetting(
     ctx,
@@ -1523,8 +1523,14 @@ function apply(ctx, slug, d, st) {
   // A border color on a part that draws no border brings the border it
   // needs, as set writes it.
   const edge = unset ? null : borderFor(ctx, slug, d, s);
-  if (edge) d.settings.push(edge);
   const k = keyOf(s);
+  // (With a border brought, the color goes after it, as set writes them:
+  // a color the theme saves already moves last, never stays before the
+  // border, whose shorthand would reset it.)
+  if (edge) {
+    d.settings = d.settings.filter(x => keyOf(x) !== k);
+    d.settings.push(edge);
+  }
   const i = d.settings.findIndex(x => keyOf(x) === k);
   if (unset) {
     if (i < 0)

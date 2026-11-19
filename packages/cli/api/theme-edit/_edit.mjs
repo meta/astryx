@@ -229,6 +229,7 @@ import {
   copyFontsCss,
   writeAppCopy,
   touchedFamilies,
+  shownOnSection,
 } from './_preview.mjs';
 import {appWiring, refreshPreviewRoute, seeLine} from './_preview-app.mjs';
 /** The preview command, as a person runs it. */
@@ -1930,10 +1931,24 @@ async function sizeSheet(ctx, slug, data, tag, measured) {
     ...data,
     settings: [measured],
   });
+  // (One section's page, the faster sheet, only where it draws each part
+  // measured in a cell of its own: a dialog's header shows only inside the
+  // open dialog, so the whole sheet measures it.)
+  const measuredParts = new Set(partsOf(ctx, measured));
+  const section =
+    families.length === 1 &&
+    Object.entries(ctx.project.components).every(
+      ([name, info]) =>
+        !info.targets.some(t =>
+          measuredParts.has(t.className.replace(/^astryx-/, '')),
+        ) || shownOnSection(ctx.project, name, families[0]),
+    )
+      ? families[0]
+      : null;
   try {
     await renderSheet(ctx, slug, data, {
       out,
-      ...(families.length === 1 ? {group: families[0]} : {}),
+      ...(section ? {group: section} : {}),
     });
     return {file: out};
   } catch (e) {
