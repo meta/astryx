@@ -219,12 +219,9 @@ export default {
       content: [
         {
           type: 'prose',
-          text: 'Use neutral for a labeled comparison or target line. For several quieter reference shades, use the gray ramp shown dark → light. Neutral is not an alias of gray-3. Both neutral and gray have mode-relative Core values. These data colors do not replace text or grid roles; {@link generic:chart-styling} covers the parts around the data.',
+          text: 'Use --color-data-neutral for a target or comparison value. The gray 1–5 tokens form a sequential ramp, shown under Sequential; they are not a separate reference palette. Neutral is not an alias of gray-3. Use text and border roles for labels, axes, and grids; {@link generic:chart-styling} covers those parts.',
         },
-        colors([
-          ['Neutral comparison', '--color-data-neutral'],
-          ...ramp('gray'),
-        ]),
+        colors([['Neutral comparison', '--color-data-neutral']]),
       ],
     },
     {

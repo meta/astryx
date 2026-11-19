@@ -20,10 +20,13 @@ import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {Table, pixel, proportional} from '@astryxdesign/core/Table';
 import {resolveThemeTokens} from '@astryxdesign/core/theme/tokens';
+import {dataVars} from '@astryxdesign/core/theme/dataTokens.stylex';
 import {
   colorVars,
   radiusVars,
+  shadowVars,
   spacingVars,
+  typographyVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
 import {neutralTheme} from '@astryxdesign/theme-neutral/built';
 import type {DocSection} from '../../generated/docsRegistry';
@@ -53,6 +56,41 @@ const styles = stylex.create({
     backgroundColor: color,
     opacity: strength,
   }),
+  chartLayout: {
+    display: 'grid',
+    gridTemplateColumns: {
+      default: 'minmax(0, 1fr) 180px',
+      '@media (max-width: 768px)': 'minmax(0, 1fr)',
+    },
+    gap: spacingVars['--spacing-4'],
+    alignItems: 'start',
+  },
+  chart: {
+    width: '100%',
+    height: 'auto',
+    display: 'block',
+    fontFamily: typographyVars['--font-family-body'],
+    overflow: 'visible',
+  },
+  tooltip: {
+    padding: spacingVars['--spacing-3'],
+    backgroundColor: colorVars['--color-background-surface'],
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: colorVars['--color-border'],
+    borderRadius: radiusVars['--radius-container'],
+    boxShadow: shadowVars['--shadow-med'],
+  },
+  plot: {
+    backgroundColor: colorVars['--color-background-card'],
+    padding: spacingVars['--spacing-4'],
+  },
+  marker: {
+    width: 12,
+    height: 12,
+    borderRadius: radiusVars['--radius-element'],
+    backgroundColor: dataVars['--color-data-categorical-blue'],
+  },
   preview: {
     display: 'flex',
     alignItems: 'center',
@@ -64,7 +102,8 @@ const PURPOSE: Record<string, string> = {
   Categorical: 'Use different colors to compare categories or named series.',
   Sequential:
     'Use a sequential palette to show how values vary from low to high.',
-  Reference: 'Use neutral or gray for a target or comparison value.',
+  Reference:
+    'Use neutral for a target or comparison value. Gray 1–5 belong to the sequential gray ramp, not a separate reference palette.',
   Semantic:
     'Use color to show a status, such as positive, warning, or negative.',
   Diverging:
@@ -213,6 +252,216 @@ function Palette({
   );
 }
 
+function ChartStylingPreview() {
+  const values = [120, 160, 140, 180];
+  return (
+    <Card>
+      <VStack gap={4} xstyle={styles.plot}>
+        <VStack gap={1}>
+          <Heading level={3}>Quarterly sales</Heading>
+          <Text color="secondary">Illustrative values in $ thousands</Text>
+        </VStack>
+        <HStack gap={6} vAlign="center" wrap="wrap">
+          <HStack gap={2} vAlign="center">
+            <div {...stylex.props(styles.marker)} />
+            <Text color="secondary">Actual sales</Text>
+          </HStack>
+          <HStack gap={2} vAlign="center">
+            <svg aria-hidden="true" width="28" height="12">
+              <line
+                x1="0"
+                y1="6"
+                x2="28"
+                y2="6"
+                stroke={dataVars['--color-data-neutral']}
+                strokeWidth="2"
+                strokeDasharray="5 3"
+              />
+            </svg>
+            <Text color="secondary">Target: 150</Text>
+          </HStack>
+        </HStack>
+        <div {...stylex.props(styles.chartLayout)}>
+          <svg
+            role="img"
+            aria-label="Quarterly sales: Q1 120, Q2 160, Q3 140, Q4 180. Target 150. Q2 is highlighted with a sample tooltip."
+            viewBox="0 0 540 300"
+            {...stylex.props(styles.chart)}>
+            <title>Quarterly sales against a target</title>
+            <rect
+              x="36"
+              y="24"
+              width="496"
+              height="240"
+              fill={colorVars['--color-background-card']}
+            />
+            <rect
+              x="164"
+              y="24"
+              width="110"
+              height="240"
+              fill={colorVars['--color-overlay-hover']}
+            />
+            {[50, 100, 150, 200].map(value => (
+              <g key={value}>
+                <line
+                  x1="36"
+                  x2="532"
+                  y1={264 - value * 1.2}
+                  y2={264 - value * 1.2}
+                  stroke={colorVars['--color-border']}
+                />
+                <text
+                  x="27"
+                  y={268 - value * 1.2}
+                  textAnchor="end"
+                  fontSize="14"
+                  fill={colorVars['--color-text-secondary']}>
+                  {value}
+                </text>
+              </g>
+            ))}
+            {values.map((value, i) => (
+              <g key={i}>
+                <rect
+                  x={64 + i * 124}
+                  y={264 - value * 1.2}
+                  width="64"
+                  height={value * 1.2}
+                  rx="2"
+                  fill={dataVars['--color-data-categorical-blue']}
+                />
+                <text
+                  x={96 + i * 124}
+                  y={248 - value * 1.2}
+                  textAnchor="middle"
+                  fontSize="14"
+                  fill={colorVars['--color-text-primary']}>
+                  {value}
+                </text>
+                <text
+                  x={96 + i * 124}
+                  y="288"
+                  textAnchor="middle"
+                  fontSize="14"
+                  fill={colorVars['--color-text-secondary']}>
+                  Q{i + 1}
+                </text>
+              </g>
+            ))}
+            <line
+              x1="36"
+              x2="532"
+              y1="84"
+              y2="84"
+              stroke={dataVars['--color-data-neutral']}
+              strokeWidth="2"
+              strokeDasharray="6 4"
+            />
+            <line
+              x1="36"
+              x2="532"
+              y1="264"
+              y2="264"
+              stroke={colorVars['--color-border-emphasized']}
+            />
+            <text
+              x="27"
+              y="268"
+              textAnchor="end"
+              fontSize="14"
+              fill={colorVars['--color-text-secondary']}>
+              0
+            </text>
+          </svg>
+          <VStack gap={2}>
+            <Text color="secondary">Tooltip for Q2</Text>
+            <VStack gap={2} xstyle={styles.tooltip}>
+              <Text weight="bold">Q2</Text>
+              <HStack hAlign="between" gap={2}>
+                <Text color="secondary">Sales</Text>
+                <Text weight="bold">$160k</Text>
+              </HStack>
+              <HStack hAlign="between" gap={2}>
+                <Text color="secondary">Target</Text>
+                <Text weight="bold">$150k</Text>
+              </HStack>
+            </VStack>
+          </VStack>
+        </div>
+      </VStack>
+    </Card>
+  );
+}
+
+function ChartStylingTable({sections}: {sections: DocSection[]}) {
+  const data = sections
+    .filter(section => section.id === 'map-chart-parts')
+    .flatMap(section =>
+      section.content.flatMap(block =>
+        block.type === 'table' ? (block.rows ?? []) : [],
+      ),
+    )
+    .flatMap<{part: string; token: string | null}>(row => {
+      const tokens = row[1].match(/--color-[a-z0-9-]+/g) ?? [];
+      return tokens.length > 0
+        ? tokens.map(token => ({part: row[0], token}))
+        : [{part: row[0], token: null}];
+    });
+  return (
+    <Card>
+      <Table
+        data={data}
+        columns={[
+          {key: 'part', header: 'Chart part', width: proportional(1)},
+          {
+            key: 'token',
+            header: 'Token',
+            width: proportional(2),
+            renderCell: row => (
+              <Text>{row.token ?? 'Same token as the plotted series'}</Text>
+            ),
+          },
+          {
+            key: 'light',
+            header: 'Light mode',
+            width: pixel(152),
+            renderCell: row =>
+              row.token ? (
+                <HStack gap={2} vAlign="center">
+                  <ModePreview token={row.token} mode="light" strength={1} />
+                  <Text type="code" color="secondary">
+                    {modeTokens.light[row.token]}
+                  </Text>
+                </HStack>
+              ) : (
+                <Text color="secondary">Matches series</Text>
+              ),
+          },
+          {
+            key: 'dark',
+            header: 'Dark mode',
+            width: pixel(152),
+            renderCell: row =>
+              row.token ? (
+                <HStack gap={2} vAlign="center">
+                  <ModePreview token={row.token} mode="dark" strength={1} />
+                  <Text type="code" color="secondary">
+                    {modeTokens.dark[row.token]}
+                  </Text>
+                </HStack>
+              ) : (
+                <Text color="secondary">Matches series</Text>
+              ),
+          },
+        ]}
+        density="spacious"
+        dividers="rows"
+      />
+    </Card>
+  );
+}
+
 function CopyTokensButton({rows}: {rows: string[][]}) {
   const {copy, isCopied} = useClipboard({announce: 'Tokens copied'});
   const [failed, setFailed] = useState(false);
@@ -307,14 +556,8 @@ export function ColorSetsDocView({
             examples you can apply to your chart; they do not change component
             defaults.
           </Text>
-          {stylingSections
-            .filter(section => section.id === 'map-chart-parts')
-            .flatMap(section =>
-              section.content.filter(block => block.type === 'table'),
-            )
-            .map((block, i) => (
-              <ContentBlockRenderer key={i} block={block} />
-            ))}
+          <ChartStylingPreview />
+          <ChartStylingTable sections={stylingSections} />
           <Collapsible trigger="Implementation details" defaultIsOpen={false}>
             <VStack gap={4}>
               {stylingSections

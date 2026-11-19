@@ -35,7 +35,7 @@ export const docs = {
         },
         {
           type: 'table',
-          headers: ['Chart part', 'Existing token', 'How to use it'],
+          headers: ['Chart part', 'Token', 'How to use it'],
           rows: [
             [
               'Title and key values',

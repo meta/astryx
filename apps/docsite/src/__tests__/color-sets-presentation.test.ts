@@ -17,7 +17,7 @@ describe('color-set presentation', () => {
     expect(source).toContain('density="spacious"');
     expect(source).toContain('mode="light"');
     expect(source).toContain('mode="dark"');
-    expect(source.match(/width: pixel\(152\)/g)).toHaveLength(2);
+    expect(source.match(/width: pixel\(152\)/g)).toHaveLength(4);
     expect(source).toContain('width: proportional(1)');
     expect(source).toContain(
       '<DocPageLayout title={title} description={description}>',
@@ -46,6 +46,24 @@ describe('color-set presentation', () => {
     );
     expect(setSection).not.toContain('Collapsible');
     expect(setSection).not.toContain('ContentBlockRenderer');
+  });
+
+  it('shows a chart preview with the same roles as the swatch table', () => {
+    expect(source).toContain('<ChartStylingPreview />');
+    expect(source).toContain(
+      '<ChartStylingTable sections={stylingSections} />',
+    );
+    expect(source).toContain('Tooltip for Q2');
+    expect(source).toContain("stroke={colorVars['--color-border']}");
+    expect(source).toContain("stroke={colorVars['--color-border-emphasized']}");
+    expect(source).toContain("stroke={dataVars['--color-data-neutral']}");
+    expect(source).toContain(
+      "fill={dataVars['--color-data-categorical-blue']}",
+    );
+    expect(source).toContain(
+      "backgroundColor: colorVars['--color-background-surface']",
+    );
+    expect(source).toContain("fill={colorVars['--color-overlay-hover']}");
   });
 
   it('preserves canonical mode values and transparency', () => {

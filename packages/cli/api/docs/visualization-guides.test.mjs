@@ -212,6 +212,30 @@ describe('visualization palette and styling guides', () => {
     );
   });
 
+  it('keeps Reference to neutral and the gray ramp under Sequential', () => {
+    const reference = colorSets.sections.find(
+      section => section.id === 'reference-token-semantics',
+    );
+    const sequential = colorSets.sections.find(
+      section => section.id === 'sequential-token-reference',
+    );
+    const rows = section =>
+      section.content
+        .filter(block => block.type === 'table')
+        .flatMap(block => block.rows);
+    expect(rows(reference).map(row => row[1])).toEqual([
+      '--color-data-neutral',
+    ]);
+    expect(
+      rows(sequential)
+        .filter(row => row[1].startsWith('--color-data-gray-'))
+        .map(row => row[1]),
+    ).toEqual([5, 4, 3, 2, 1].map(stop => `--color-data-gray-${stop}`));
+    expect(JSON.stringify(reference)).toContain(
+      'not a separate reference palette',
+    );
+  });
+
   it('links renderer delivery without duplicating its implementation', () => {
     const text = JSON.stringify(renderer.sections[0]);
     expect(text).toContain('{@link generic:choosing-data-colors}');
