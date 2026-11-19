@@ -339,7 +339,7 @@ export function registerBuild(program) {
         out.push(
           section(
             'COMPONENTS',
-            `For the parts you build in the template${more(domain)}. Read one: ${formatCliCommand('component <name>')}`,
+            `For the parts you build in the template${more(domain)}. Read the ones you need in one call: ${formatCliCommand('component <name> [name...]')}`,
           ),
           ...componentLines,
         );
