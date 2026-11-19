@@ -135,7 +135,13 @@ const styles = stylex.create({
   },
   interactivePath: {
     fill: 'var(--rating-fill)',
-    color: 'var(--rating-color)',
+    // The forced-colours arm keeps system colours: Highlight for a checked
+    // star, CanvasText for the others.
+    color: {
+      default: 'var(--rating-color)',
+      '@media (forced-colors: active)':
+        'var(--rating-selected-color, CanvasText)',
+    },
   },
   partial: (fill: number) => ({
     clipPath: {
