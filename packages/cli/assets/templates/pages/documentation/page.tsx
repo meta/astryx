@@ -19,6 +19,18 @@ const styles = stylex.create({
   heroSpacer: {
     display: {default: null, '@media (max-width: 640px)': 'none'},
   },
+  // A phone also gets a narrower card inset, so the display title's longest
+  // word fits its line.
+  hero: {
+    paddingInlineStart: {
+      default: null,
+      '@media (max-width: 640px)': 'var(--spacing-6)',
+    },
+    paddingInlineEnd: {
+      default: null,
+      '@media (max-width: 640px)': 'var(--spacing-6)',
+    },
+  },
 });
 
 const previewCard: CSSProperties = {
@@ -225,7 +237,7 @@ export default function DocumentationOverviewPage() {
       content={
         <LayoutContent role="main" padding={8}>
           <VStack gap={10}>
-            <Card variant="gray" padding={10}>
+            <Card variant="gray" padding={10} xstyle={styles.hero}>
               <HStack gap={8} vAlign="center">
                 <StackItem size="fill">
                   <VStack gap={4}>
