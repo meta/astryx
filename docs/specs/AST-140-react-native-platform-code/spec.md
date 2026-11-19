@@ -418,8 +418,9 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
     (`<Name>HostSet<Prop>(host, value)`, `<Name>Host<Command>(host, …)`) let a
     C caller reach a host directly.
   - On Android the seam is public Kotlin interfaces in one package, as on iOS,
-    where the seam headers are public headers. An engine binding adopts them
-    directly or through a host object it owns.
+    where the seam headers are public headers. A class adopts its seam directly
+    or through a host object it owns, and an engine binding calls those
+    members.
   - A class adopts its seam and keeps its behavior. For React Native, the
     Fabric component or view manager compares old and new props, writes the
     changed ones through the host, calls `didUpdateProps`, and sets
