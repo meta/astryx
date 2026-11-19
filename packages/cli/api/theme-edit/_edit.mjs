@@ -187,6 +187,7 @@ import {
   reachGroupOf,
   ownSettingOf,
   spreads,
+  reachOffers,
 } from './_settings.mjs';
 import {
   BORDER_COLOR_PROP,
@@ -6560,7 +6561,7 @@ async function changeOnce(
           : styledChanges(compiledBefore, compileTheme(ctx, data, after)),
         kept: [],
         lifted: r.lifted,
-        ...(r.widened?.length ? {widened: r.widened} : {}),
+        ...(r.offered?.length ? {offered: r.offered} : {}),
         leftOut: [],
         notes: [
           ...(r.unchanged
@@ -6792,9 +6793,17 @@ async function changeOnce(
     prev &&
     // (By what is saved: a note the command adds is no change. The members
     // the saved setting keeps out, where it would make text unreadable, are
-    // the editor's: the same setting again is the same.)
-    JSON.stringify(savedSetting({...prev, keep: undefined})) ===
-      JSON.stringify(savedSetting({...s, keep: undefined})) &&
+    // the editor's: the same setting again is the same. Its reach record is
+    // too, unless its family gained parts since: then the same setting
+    // again takes them.)
+    JSON.stringify(
+      savedSetting({...prev, keep: undefined, reached: undefined}),
+    ) ===
+      JSON.stringify(
+        savedSetting({...s, keep: undefined, reached: undefined}),
+      ) &&
+    partsOf(ctx, {...prev, keep: undefined}).length ===
+      partsOf(ctx, {...s, keep: undefined, reached: undefined}).length &&
     // A later setting that covers the same parts hides it: set again, it
     // moves last and wins.
     !data.settings
@@ -6839,9 +6848,20 @@ async function changeOnce(
     const at = data.settings.map(x => keyOf(x)).lastIndexOf(keyOf(side));
     if (
       at >= 0 &&
-      // (By what is saved: a note the side's check adds is no change.)
-      JSON.stringify(savedSetting(data.settings[at])) ===
-        JSON.stringify(savedSetting(side)) &&
+      // (By what is saved: a note the side's check adds is no change, and
+      // its reach record is the same setting's, as the first side's is.)
+      JSON.stringify(
+        savedSetting({
+          ...data.settings[at],
+          keep: undefined,
+          reached: undefined,
+        }),
+      ) ===
+        JSON.stringify(
+          savedSetting({...side, keep: undefined, reached: undefined}),
+        ) &&
+      partsOf(ctx, {...data.settings[at], keep: undefined}).length ===
+        partsOf(ctx, {...side, keep: undefined, reached: undefined}).length &&
       !data.settings
         .slice(at + 1)
         .some(
@@ -8775,7 +8795,7 @@ async function changeOnce(
       styled,
       kept,
       lifted: r.lifted,
-      ...(r.widened?.length ? {widened: r.widened} : {}),
+      ...(r.offered?.length ? {offered: r.offered} : {}),
       problems: r.problems,
       // What this change made unreadable or unseen, with each fix: text
       // and borders measured against the settings before it, and the
@@ -9457,6 +9477,12 @@ export async function themeEditShow(theme, options = {}) {
         // change says it.
         ...entryNotes(data),
         ...rebuiltNotes,
+        // A saved setting keeps the reach it was made with: the parts its
+        // family gained since are offered, with the line that takes them.
+        ...reachOffers(ctx, theme, data).map(
+          o =>
+            `${o.setting} would also reach ${o.parts.join(', ')}, drawn alike; to let it: ${o.run}`,
+        ),
         ...(png ? [] : leftWords),
         ...sheet.notes,
         // Text the sample page's pictures draw cut short.
@@ -11087,6 +11113,17 @@ function lastStepTakes(cwd, slug, now) {
 function stepTakesBack(after, before) {
   const now = new Map(before.settings.map(s => [keyOf(s), s]));
   const was = new Map(after.settings.map(s => [keyOf(s), s]));
+  /**
+   * A setting's reach record, on it or kept beside the settings.
+   * @param {any} data @param {string} k @param {any} s
+   * @returns {string[] | null}
+   */
+  const reachOf = (data, k, s) =>
+    Array.isArray(s?.reached)
+      ? s.reached
+      : Array.isArray(data?.reached?.[k])
+        ? data.reached[k]
+        : null;
   /** @type {string[]} */
   const took = [];
   for (const [k, s] of was) {
@@ -11094,6 +11131,12 @@ function stepTakesBack(after, before) {
     if (!back) took.push(describe(s));
     else if (back.value !== s.value)
       took.push(`${describe(s)} (back to ${back.value})`);
+    else {
+      // (An offer taken: the same setting, reaching parts it did not.)
+      const [a, b] = [reachOf(after, k, s), reachOf(before, k, back)];
+      const gained = a && b ? a.filter(t => !b.includes(t)) : [];
+      if (gained.length) took.push(`${describe(s)} on ${gained.join(', ')}`);
+    }
   }
   for (const [k, s] of now)
     if (!was.has(k)) took.push(`the removal of ${describe(s)}`);
@@ -11281,13 +11324,20 @@ async function undoTheme(theme, options) {
   // A top step equal to the settings now (left by an undo stopped between
   // its two writes) changes nothing: skip it.
   const nowText = fs.readFileSync(f.settings, 'utf8');
+  // (A reach record the reader adds for a setting saved without one is no
+  // change; a record that changes, an offer taken, is.)
   const same = (/** @type {string} */ a, /** @type {string} */ b) => {
     const [x, y] = [settingsJson(a), settingsJson(b)];
+    if (x === undefined || y === undefined) return false;
+    const [rx, ry] = [x?.reached ?? {}, y?.reached ?? {}];
     return (
       x !== undefined &&
       y !== undefined &&
       JSON.stringify({...x, lifted: 0, built: 0, reached: 0}) ===
-        JSON.stringify({...y, lifted: 0, built: 0, reached: 0})
+        JSON.stringify({...y, lifted: 0, built: 0, reached: 0}) &&
+      Object.keys(rx).every(
+        k => !(k in ry) || JSON.stringify(rx[k]) === JSON.stringify(ry[k]),
+      )
     );
   };
   while (history.length && same(history[history.length - 1], nowText))
@@ -11494,7 +11544,7 @@ async function undoTheme(theme, options) {
       settings: prev.settings.length,
       stepsLeft: stepsLeft,
       // What the step back changed, as a change reports it.
-      ...(committed.widened?.length ? {widened: committed.widened} : {}),
+      ...(committed.offered?.length ? {offered: committed.offered} : {}),
       changedTokens: lookCollapsed(
         committed.changed,
         derivedStatusWords(prev),

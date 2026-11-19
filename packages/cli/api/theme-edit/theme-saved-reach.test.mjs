@@ -1,14 +1,14 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * A saved setting keeps saying how far it reaches: the build records
- * (`reached`) the parts each setting that reaches beyond its own part
- * writes, and the first change after that reach grows names the setting
- * once, at the top of its result, with the line that keeps it on its own part.
- * A setting with no record yet is recorded as it reaches, with no word.
- * `--only` on a setting the theme already holds replaces it, so the look
- * leaves the group, and a theme saved with both still builds as it did.
- * Against real bundled base themes.
+ * A saved setting's reach is pinned: each setting that reaches beyond its
+ * own part records the parts it reached when it was made (`reached`, kept by
+ * the setting's identity), and the build, show and the previews keep it there. Parts its
+ * family gains later are offered once, with the same line that takes them,
+ * and never applied. A setting with no record yet is recorded as it
+ * reaches, with no word. `--only` on a setting the theme already holds
+ * replaces it, so the look leaves the group, and a theme saved with both
+ * still builds as it did. Against real bundled base themes.
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
@@ -127,15 +127,14 @@ const partsWith = (slug, prop) =>
     .map(m => m[1]);
 
 describe('a saved setting and how far it reaches', () => {
-  it('a setting that now reaches more parts than recorded is named once, first in the result, and its undo names it no second time', async ctx => {
+  it('a setting keeps the reach it was made with; parts its family gains are offered once, never applied', async ctx => {
     if (needBases(ctx)) return;
     copyTheme(BORDERED, 'grow');
     // The theme as an editor that reached only the field it named saved it.
     const data = saved('grow');
-    const key = Object.keys(data.reached ?? {}).find(k =>
-      k.startsWith('border-color|'),
+    const key = /** @type {string} */ (
+      Object.keys(data.reached ?? {}).find(k => k.startsWith('border-color|'))
     );
-    expect(key).toBeTruthy();
     expect(data.reached[key]).toEqual(expect.arrayContaining(['text-area']));
     data.reached[/** @type {string} */ (key)] = data.reached[
       /** @type {string} */ (key)
@@ -145,20 +144,40 @@ describe('a saved setting and how far it reaches', () => {
     const r = /** @type {any} */ (
       await themeEditSet('grow', 'corners', '4px', {cwd})
     );
-    const widened = /** @type {any[]} */ (r.data.widened ?? []);
-    expect(widened).toHaveLength(1);
-    expect(widened[0].setting).toMatch(/^border-color = #ff0000 on text-input/);
-    expect(widened[0].parts).toEqual(expect.arrayContaining(['text-area']));
-    expect(widened[0].keep).toContain('--on text-input --only');
-    // Said once: the record now holds where it reaches.
+    // Built as recorded: the field gained since is not given the color.
+    expect(partsWith('grow', 'border-color')).toContain('text-input');
+    expect(partsWith('grow', 'border-color')).not.toContain('text-area');
+    const offered = /** @type {any[]} */ (r.data.offered ?? []);
+    expect(offered).toHaveLength(1);
+    expect(offered[0].setting).toMatch(/^border-color = #ff0000 on text-input/);
+    expect(offered[0].parts).toEqual(expect.arrayContaining(['text-area']));
+    expect(offered[0].run).toMatch(/set grow border-color .*--on text-input/);
+    expect(offered[0].run).not.toContain('--only');
+    // Said once; the record is unchanged, so the offer stands.
     const again = /** @type {any} */ (
       await themeEditSet('grow', 'corners', '6px', {cwd})
     );
-    expect(again.data.widened ?? []).toEqual([]);
-    // (Undoing the change that named the growth names it no second time.)
-    await themeEditUndo('grow', {cwd});
+    expect(again.data.offered ?? []).toEqual([]);
+    expect(partsWith('grow', 'border-color')).not.toContain('text-area');
+    // The same change again, while the offer stands, changes nothing and
+    // adds no undo step.
+    const same = /** @type {any} */ (
+      await themeEditSet('grow', 'corners', '6px', {cwd})
+    );
+    expect(same.data.notes.join('\n')).toMatch(/^no change: /m);
+    // The offered line takes the parts and records the whole reach.
+    await themeEditSet('grow', 'border-color', '#ff0000', {
+      cwd,
+      on: 'text-input',
+    });
+    expect(partsWith('grow', 'border-color')).toContain('text-area');
+    expect(saved('grow').reached[key]).toEqual(
+      expect.arrayContaining(['text-input', 'text-area']),
+    );
+    // An undo of the taken offer names the parts it takes back.
     const u = /** @type {any} */ (await themeEditUndo('grow', {cwd}));
-    expect(u.data.widened ?? []).toEqual([]);
+    expect(u.data.undid).toMatch(/border-color .*on .*text-area/);
+    expect(partsWith('grow', 'border-color')).not.toContain('text-area');
   }, 240_000);
 
   it('a setting saved with no record is recorded as it reaches, with no word', async ctx => {
@@ -170,20 +189,29 @@ describe('a saved setting and how far it reaches', () => {
     const r = /** @type {any} */ (
       await themeEditSet('old', 'corners', '4px', {cwd})
     );
-    expect(r.data.widened ?? []).toEqual([]);
-    expect(Object.keys(saved('old').reached ?? {})).toEqual(
-      expect.arrayContaining([expect.stringMatching(/^border-color\|/)]),
-    );
+    expect(r.data.offered ?? []).toEqual([]);
+    expect(partsWith('old', 'border-color')).toContain('text-area');
+    const rec = saved('old').reached ?? {};
+    expect(
+      rec[
+        /** @type {string} */ (
+          Object.keys(rec).find(k => k.startsWith('border-color|'))
+        )
+      ],
+    ).toEqual(expect.arrayContaining(['text-area']));
   }, 240_000);
 
-  it('a part setting saved with no record names the family it now reaches, with its keep line', async ctx => {
+  it('a part setting saved with no record keeps its part, and its family is offered', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('fam', {cwd, like: 'neutral'});
     await themeEditSet(
       'fam',
       'background-image',
       'linear-gradient(#ffffff, #e6e6e6)',
-      {cwd, on: 'button'},
+      {
+        cwd,
+        on: 'button',
+      },
     );
     const data = saved('fam');
     delete data.reached;
@@ -191,13 +219,66 @@ describe('a saved setting and how far it reaches', () => {
     const r = /** @type {any} */ (
       await themeEditSet('fam', 'corners', '4px', {cwd})
     );
-    const widened = /** @type {any[]} */ (r.data.widened ?? []);
-    expect(widened).toHaveLength(1);
-    expect(widened[0].parts).toEqual(expect.arrayContaining(['toggle-button']));
-    expect(widened[0].keep).toContain('--on button --only');
+    // (It keeps the reach it was saved with; the rest of its family is
+    // offered with the line that takes it.)
+    const offered = /** @type {any[]} */ (r.data.offered ?? []);
+    expect(offered).toHaveLength(1);
+    expect(offered[0].parts).toEqual(expect.arrayContaining(['toggle-button']));
+    expect(offered[0].run).toMatch(/--on button$/);
   }, 240_000);
 
-  it('an input setting saved with no record names the members it reaches past the values it matched', async ctx => {
+  it('a family setting an earlier editor saved keeps its own part; its family is offered', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('rel', {cwd, like: 'neutral'});
+    await themeEditSet(
+      'rel',
+      'background-image',
+      'linear-gradient(#ffffff, #e6e6e6)',
+      {
+        cwd,
+        on: 'button',
+      },
+    );
+    expect(partsWith('rel', 'background-image')).toContain('toggle-button');
+    // (As an editor that reached only the part named saved it: no record.)
+    const data = saved('rel');
+    delete data.reached;
+    save('rel', data);
+    const r = /** @type {any} */ (
+      await themeEditSet('rel', 'corners', '4px', {cwd})
+    );
+    expect(partsWith('rel', 'background-image')).toContain('button');
+    expect(partsWith('rel', 'background-image')).not.toContain('toggle-button');
+    const offer = (r.data.offered ?? []).find((/** @type {any} */ o) =>
+      o.setting.startsWith('background-image'),
+    );
+    expect(offer?.parts).toEqual(expect.arrayContaining(['toggle-button']));
+    expect(offer?.run).toMatch(/--on button$/);
+  }, 240_000);
+
+  it("a menu's setting an earlier editor saved keeps that menu; the rest is offered", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('menu', {cwd, like: 'neutral'});
+    await themeEditSet('menu', 'border-radius', '3px', {
+      cwd,
+      on: 'context-menu',
+    });
+    const data = saved('menu');
+    delete data.reached;
+    save('menu', data);
+    const r = /** @type {any} */ (
+      await themeEditSet('menu', 'corners', '4px', {cwd})
+    );
+    expect(partsWith('menu', 'border-radius')).toContain('context-menu');
+    expect(partsWith('menu', 'border-radius')).not.toContain('dropdown-menu');
+    expect(
+      (r.data.offered ?? []).some((/** @type {any} */ o) =>
+        o.setting.startsWith('border-radius'),
+      ),
+    ).toBe(true);
+  }, 240_000);
+
+  it('an input setting saved with no record keeps the members it matched; the rest are offered', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('inp', {cwd, like: 'neutral'});
     await themeEditSet('inp', 'padding-inline', '9px', {cwd, on: 'text-input'});
@@ -208,8 +289,8 @@ describe('a saved setting and how far it reaches', () => {
       await themeEditSet('inp', 'corners', '4px', {cwd})
     );
     // (The editors before family reach matched the values themselves: a
-    // member that draws the thing another way is new, and named; one that
-    // matched is not.)
+    // member that draws the thing another way is offered, never applied;
+    // one that matched is not.)
     const ctxt = /** @type {any} */ (await context(cwd));
     const s = {
       thing: 'padding-inline',
@@ -218,10 +299,12 @@ describe('a saved setting and how far it reaches', () => {
       on: 'text-input',
     };
     const earlier = earlierReach(ctxt, s);
-    const grown = partsOf(ctxt, s).filter(t => !earlier.includes(t));
-    const widened = /** @type {any[]} */ (r.data.widened ?? []);
+    const grown = partsOf(ctxt, {...s}).filter(t => !earlier.includes(t));
+    const offered = /** @type {any[]} */ (r.data.offered ?? []);
     expect(earlier).toContain('number-input');
-    expect(widened.flatMap(w => w.parts).sort()).toEqual(grown.sort());
+    expect(offered.flatMap(o => o.parts).sort()).toEqual(grown.sort());
+    for (const t of grown)
+      expect(partsWith('inp', 'padding-inline')).not.toContain(t);
   }, 240_000);
 
   it('--only on the same setting replaces it, so the look leaves the group', async ctx => {
@@ -251,7 +334,7 @@ describe('a saved setting and how far it reaches', () => {
     expect(partsWith('narrow', 'border-color')).not.toContain('text-area');
   }, 240_000);
 
-  it('a setting named on a group says it follows the group, with no line that set refuses', async ctx => {
+  it('a setting named on a group keeps its recorded members; the rest are offered with the group line', async ctx => {
     if (needBases(ctx)) return;
     copyTheme(BLANK, 'grp');
     await themeEditSet('grp', 'border-color', '#00ff00', {cwd, on: 'inputs'});
@@ -266,34 +349,23 @@ describe('a saved setting and how far it reaches', () => {
     const r = /** @type {any} */ (
       await themeEditSet('grp', 'corners', '4px', {cwd})
     );
-    expect(r.data.widened).toHaveLength(1);
-    expect(r.data.widened[0].keep).toBeNull();
+    expect(r.data.offered).toHaveLength(1);
+    expect(r.data.offered[0].run).toContain('--on inputs');
+    expect(r.data.offered[0].run).not.toContain('--only');
+    expect(partsWith('grp', 'border-color')).not.toContain('text-area');
   }, 240_000);
 
-  it('the text names each widened setting, and two keep lines print as one sequence', async ctx => {
+  it('the text lists each offer under the status line, once', async ctx => {
     if (needBases(ctx)) return;
     copyTheme(BORDERED, 'txt');
-    await themeEditSet('txt', 'background-color', '#ffffee', {
-      cwd,
-      on: 'text-input',
-    });
     narrowRecord('txt', 'border-color|');
-    narrowRecord('txt', 'background-color|');
     const out = await cliText(['set', 'txt', 'corners', '4px']);
-    const lines = out.split('\n');
-    expect(lines[0]).toMatch(
-      /but it also made 2 saved settings reach more parts:$/,
-    );
     expect(out).toMatch(
-      /to keep it on text-input alone: .* --on text-input --only/,
+      /- border-color = #ff0000 on text-input would also reach .*text-area.*, drawn alike; to let it: .* set txt border-color '#ff0000' --on text-input$/m,
     );
-    const seq = lines.findIndex(l =>
-      l.startsWith('- to keep each on its own part: '),
-    );
-    expect(seq).toBeGreaterThan(0);
-    expect(lines[seq].split(' && ')).toHaveLength(2);
-    expect(lines[seq + 1]).toBe('  sequence: run as one line, in this order');
-    expect(out).not.toMatch(/in one step/);
+    expect(out).not.toMatch(/reach more parts/);
+    const again = await cliText(['set', 'txt', 'corners', '6px']);
+    expect(again).not.toMatch(/would also reach/);
   }, 240_000);
 
   it('a theme saved with a group setting and its --only twin opens and builds as it did', async ctx => {
@@ -322,7 +394,7 @@ describe('a saved setting and how far it reaches', () => {
     ).toHaveLength(2);
   }, 240_000);
 
-  it('an undo names the growth its build finds, and undoing a narrowing names both entries', async ctx => {
+  it('undoing a narrowing names both entries', async ctx => {
     if (needBases(ctx)) return;
     copyTheme(BORDERED, 'back');
     await themeEditSet('back', 'border-color', '#ff0000', {
@@ -335,14 +407,6 @@ describe('a saved setting and how far it reaches', () => {
     expect(undone).toMatch(/removed border-color = #ff0000 on text-input only/);
     expect(undone).toMatch(/put back border-color = #ff0000 on text-input/);
     expect(partsWith('back', 'border-color')).toContain('text-area');
-
-    narrowRecord('back', 'border-color|');
-    await themeEditSet('back', 'corners', '4px', {cwd});
-    narrowRecord('back', 'border-color|');
-    const u2 = /** @type {any} */ (await themeEditUndo('back', {cwd}));
-    expect(u2.data.widened?.[0]?.parts).toEqual(
-      expect.arrayContaining(['text-area']),
-    );
   }, 240_000);
 
   it('an undo that puts a setting back names the parts it now reaches past its record', async ctx => {
@@ -355,8 +419,21 @@ describe('a saved setting and how far it reaches', () => {
       on: 'text-input',
     });
     const u = /** @type {any} */ (await themeEditUndo('putb', {cwd}));
-    expect(u.data.widened?.[0]?.parts).toEqual(
+    expect(u.data.offered?.[0]?.parts).toEqual(
       expect.arrayContaining(['text-area']),
     );
+  }, 240_000);
+
+  it('an undo never offers again what a change already offered', async ctx => {
+    if (needBases(ctx)) return;
+    copyTheme(BORDERED, 'once');
+    await themeEditSet('once', 'corners', '4px', {cwd});
+    narrowRecord('once', 'border-color|');
+    const said = /** @type {any} */ (
+      await themeEditSet('once', 'corners', '6px', {cwd})
+    );
+    expect(said.data.offered?.length).toBe(1);
+    const u = /** @type {any} */ (await themeEditUndo('once', {cwd}));
+    expect(u.data.offered ?? []).toEqual([]);
   }, 240_000);
 });
