@@ -11,6 +11,7 @@
 import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
+import {safeRegExp} from './regex-safety.mjs';
 import {compareText} from '../text/compare-text.mjs';
 
 /**
@@ -572,7 +573,7 @@ export function createFileProtectionResolver(
             ? globRegex(pattern.replace(/^\//, ''), {
                 basename: !pattern.includes('/'),
               })
-            : new RegExp(pattern);
+            : safeRegExp(pattern);
         hgIgnoreRules.push({
           file: relative,
           dir: baseDir,
