@@ -442,10 +442,11 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
   renderer (a bare `Icon`, or one every use gives an icon prop) is listed as
   not checked. The note is marked `next` (`architecture:cli-surface` DEC-11):
   it fails `--strict --next`, and `--strict` does not fail on it. A package
-  whose templates declare no `icons` gets no such note. Every icon a bundled Core template imports is
-  declared, and two different icons in one bundled template never declare
-  the same definition: a set draws one icon for each definition, so they
-  would draw the same icon.
+  whose templates declare no `icons` gets no such note. A bundled Core
+  template imports every icon as a placeholder (FR21), never from an icon
+  library, and declares no `icons`. Two different icons in one bundled
+  template never draw the same definition: a set draws one icon for each
+  definition, so they would draw the same icon.
 - **FR11 — Search stays stable.** `astryx search` has no icon domain and no
   `--type icon`, and returns no experimental doc, with or without the opt-in.
   Its `results` and `matchCount` never hold an icon. It reads icon sets only
@@ -838,8 +839,8 @@ message}`) names each template or namespace doc that sets `stability`, and
   cache keys on the setting, so a changed setting rebuilds the previews.
   Unset, no loader is added and previews keep their templates' icons.
 
-- **FR21 — Template icon placeholders.** A bundled template source may
-  import an icon by meaning from `@astryxdesign/template-icons`: each export
+- **FR21 — Template icon placeholders.** A bundled template source
+  imports each icon by meaning from `@astryxdesign/template-icons`: each export
   is `<Meaning>Icon`, the definition's name in PascalCase (`delete` →
   `DeleteIcon`). The import path names the variant: the package root draws 24
   outline, and `/24/solid`, `/20/solid`, `/16/solid` and `/lucide` draw the
