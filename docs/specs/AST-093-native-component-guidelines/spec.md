@@ -101,7 +101,8 @@ validating, and reviewing individual native components while
   `defineTheme` definition (`spec:AST-082/FR18`) and native intent and platform
   entries from `defineNativeTheme` (`spec:AST-082/FR10`). A component reads
   every such value from the theme, never hard-codes one, and never adds a
-  visual prop for one platform (`spec:AST-082/DEC-2`). Each spec lists the
+  visual prop for one platform, except `Button` and `IconButton`'s `surface`
+  prop (`spec:AST-082/DEC-2`). Each spec lists the
   theme values the component reads.
 - **FR5 — Every native component is tested and validated the same way.** A
   change to a native component ships with:
