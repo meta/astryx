@@ -191,6 +191,13 @@ export function luminance(hex: string): number {
   return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
 }
 
+/** The WCAG contrast ratio of two opaque colors. */
+export function contrastRatio(a: string, b: string): number {
+  const x = luminance(a);
+  const y = luminance(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}
+
 export function oklabCoordinates(hex: string): ColorTriple {
   const value = hexToOklch(hex);
   const radians = (value.H * Math.PI) / 180;
