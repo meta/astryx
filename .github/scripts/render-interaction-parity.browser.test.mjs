@@ -126,6 +126,8 @@ if (typeof document !== 'undefined') {
     e.preventDefault();
     window.dispatchEvent(new Event('faq'));
   }, true);
+  // A module the page loads with import() handles another the same way.
+  import('./routes-lazy');
 }
 export default function Page() {
   const [place, setPlace] = useState('home');
@@ -138,13 +140,16 @@ export default function Page() {
       setPanel('Help panel open');
     };
     const faq = () => setPanel('FAQ panel open');
+    const lazy = () => setPanel('Lazy panel open');
     follow();
     window.addEventListener('hashchange', follow);
     window.addEventListener('faq', faq);
+    window.addEventListener('lazy', lazy);
     document.addEventListener('click', own, true);
     return () => {
       window.removeEventListener('hashchange', follow);
       window.removeEventListener('faq', faq);
+      window.removeEventListener('lazy', lazy);
       document.removeEventListener('click', own, true);
     };
   }, []);
@@ -153,13 +158,63 @@ export default function Page() {
       <nav>
         <a href="#home">Home</a> <a href="#members">Members</a> <a href="#settings">Settings</a>{' '}
         <a href="#members" onClick={e => e.preventDefault()}>Members, cancelled</a> <a href="#help">Help</a>{' '}
-        <a href="#faq">FAQ</a>
+        <a href="#faq">FAQ</a> <a href="#lazy">Lazy</a>
       </nav>
       <div onClick={e => e.stopPropagation()}>
         <a href="#settings">Settings, in a card</a>
       </div>
       <Heading level={1}>{titles[place] ?? 'Home page'}</Heading>
       <p data-probe="panel">{panel}</p>
+    </main>
+  );
+}
+`;
+
+// The module the routes page loads with import(): it cancels its own link and
+// opens the page's panel.
+const ROUTES_LAZY = `document.addEventListener('click', e => {
+  if (!(e.target instanceof Element) || !e.target.closest('a[href="#lazy"]')) return;
+  e.preventDefault();
+  window.dispatchEvent(new Event('lazy'));
+}, true);
+`;
+
+// A page that registers its own click and key handlers the ways pages do: one
+// handler added while the module loads and again once mounted, which a browser
+// registers once, and one added for click and keydown that removes itself from
+// both on its first call.
+const HANDLERS = `import {useEffect, useState} from 'react';
+
+let clicks = 0;
+let unlocks = 0;
+const show = () => window.dispatchEvent(new Event('probe'));
+const count = () => {
+  clicks += 1;
+  show();
+};
+const unlock = () => {
+  unlocks += 1;
+  document.removeEventListener('click', unlock);
+  document.removeEventListener('keydown', unlock);
+  show();
+};
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', count);
+  document.addEventListener('click', unlock);
+  document.addEventListener('keydown', unlock);
+}
+export default function Page() {
+  const [, setShown] = useState(0);
+  useEffect(() => {
+    document.addEventListener('click', count);
+    const on = () => setShown(n => n + 1);
+    window.addEventListener('probe', on);
+    return () => window.removeEventListener('probe', on);
+  }, []);
+  return (
+    <main>
+      <button type="button">Tap</button>
+      <p data-probe="counts">{\`clicks \${clicks} unlocks \${unlocks}\`}</p>
     </main>
   );
 }
@@ -333,6 +388,8 @@ describe.runIf(BROWSER_STEP)(
     let file;
     /** @type {string} */
     let routes;
+    /** @type {string} */
+    let handlers;
 
     beforeAll(async () => {
       home = makeLinkedFixture('astryx-render-parity-', [
@@ -373,6 +430,10 @@ describe.runIf(BROWSER_STEP)(
       await render('page.tsx', {cwd: home, out: 'page.html'});
       file = fs.readFileSync(path.join(home, 'page.html'), 'utf8');
       fs.writeFileSync(path.join(home, 'routes.tsx'), ROUTES);
+      fs.writeFileSync(path.join(home, 'routes-lazy.ts'), ROUTES_LAZY);
+      fs.writeFileSync(path.join(home, 'handlers.tsx'), HANDLERS);
+      await render('handlers.tsx', {cwd: home, out: 'handlers.html'});
+      handlers = fs.readFileSync(path.join(home, 'handlers.html'), 'utf8');
       await render('routes.tsx', {cwd: home, out: 'routes.html'});
       routes = fs.readFileSync(path.join(home, 'routes.html'), 'utf8');
 
@@ -498,6 +559,7 @@ describe.runIf(BROWSER_STEP)(
             'Home',
             'Settings, in a card',
             'FAQ',
+            'Lazy',
           ]) {
             await scope.getByRole('link', {name, exact: true}).click();
             await new Promise(resolve => setTimeout(resolve, 200));
@@ -524,10 +586,49 @@ describe.runIf(BROWSER_STEP)(
             'Home page | Help panel open | #home',
             'Settings page | Help panel open | #settings',
             'Settings page | FAQ panel open | #settings',
+            'Settings page | Lazy panel open | #settings',
           ]);
           expect(errors).toEqual([]);
           await viewer.close();
         }
+      } finally {
+        await context.close();
+      }
+    }, 120_000);
+
+    it("registers the page's own click and key handlers as a browser tab does", async () => {
+      const context = await browser.newContext({
+        viewport: {width: 1024, height: 900},
+      });
+      await context.route('**/*', (/** @type {any} */ route) =>
+        route.request().url().startsWith('about:')
+          ? route.continue()
+          : route.abort(),
+      );
+      try {
+        const viewer = await context.newPage();
+        const framed = handlers.replace(
+          '<head>',
+          `<head><meta http-equiv="Content-Security-Policy" content="${VIEWER_POLICY}">`,
+        );
+        await viewer.setContent(
+          `<!doctype html><body style="margin:0"><iframe sandbox="allow-scripts" style="border:0;width:1024px;height:900px" srcdoc="${framed
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')}"></iframe></body>`,
+        );
+        const scope = viewer.frameLocator('iframe');
+        const counts = scope.locator('[data-probe="counts"]');
+        await counts.getByText('clicks 0 unlocks 0').waitFor();
+        // Two keys: the unlock handler runs once and removes itself from both.
+        await viewer.focus('iframe');
+        await viewer.keyboard.press('KeyA');
+        await viewer.keyboard.press('KeyB');
+        await new Promise(resolve => setTimeout(resolve, 200));
+        expect(await counts.textContent()).toBe('clicks 0 unlocks 1');
+        // One click: the handler added twice counts once.
+        await scope.getByRole('button', {name: 'Tap'}).click();
+        await new Promise(resolve => setTimeout(resolve, 200));
+        expect(await counts.textContent()).toBe('clicks 1 unlocks 1');
       } finally {
         await context.close();
       }

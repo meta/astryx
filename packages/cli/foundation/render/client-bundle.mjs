@@ -135,26 +135,35 @@ const moveTo = link => {
 // listener from a DOMContentLoaded listener, after this script ran, so the
 // marker goes on the document at that point: after the viewer's listener, and
 // before the listeners the page adds once it is mounted. A cancel from the
-// page's own listeners keeps the page's way. A click listener the page's
-// modules add on the document or the window while they load comes before that
-// marker too, so it runs marked as the page's while it handles the click.
+// page's own listeners keeps the page's way. A click listener the page adds on
+// the document or the window while the document loads (from its modules, an
+// \`import()\` or a promise callback) comes before that marker too, so it runs
+// marked as the page's while it handles the click.
 const add = EventTarget.prototype.addEventListener;
 const pastHost = new WeakSet();
 const markPastHost = () => add.call(document, 'click', event => pastHost.add(event), true);
 if (document.readyState === 'loading') add.call(document, 'DOMContentLoaded', markPastHost, {once: true});
 else markPastHost();
 let inPage = 0;
-let loading = true;
-queueMicrotask(() => {
+// The page's modules load until the document has loaded: this capture listener
+// on the window runs before any listener a viewer adds on the document for the
+// same event, and after every module and promise callback that ran while the
+// document was still loading (an \`import()\` included).
+let loading = document.readyState === 'loading';
+if (loading) add.call(window, 'DOMContentLoaded', () => {
   loading = false;
-});
+}, {capture: true, once: true});
+// One wrapper per click handler. Once a handler has one, every later click add
+// and remove of it uses that wrapper, so a handler added at load and again
+// once mounted registers once, as in a tab. Only \`click\` is wrapped.
 const asPage = new WeakMap();
 for (const target of [document, window]) {
   const remove = target.removeEventListener;
   target.addEventListener = function (type, listener, options) {
-    if (!loading || type !== 'click' || !listener) return add.call(this, type, listener, options);
+    if (type !== 'click' || !listener) return add.call(this, type, listener, options);
     let marked = asPage.get(listener);
     if (!marked) {
+      if (!loading) return add.call(this, type, listener, options);
       marked = function (event) {
         inPage += 1;
         try {
@@ -168,7 +177,7 @@ for (const target of [document, window]) {
     return add.call(this, type, marked, options);
   };
   target.removeEventListener = function (type, listener, options) {
-    return remove.call(this, type, (listener && asPage.get(listener)) || listener, options);
+    return remove.call(this, type, (type === 'click' && listener && asPage.get(listener)) || listener, options);
   };
 }
 add.call(window, 'click', event => {
