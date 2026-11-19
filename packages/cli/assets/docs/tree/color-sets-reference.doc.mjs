@@ -107,20 +107,6 @@ const categorical = [
   'indigo',
 ].map(hue => [hue, `--color-data-categorical-${hue}`]);
 /** @type {Array<[string, string]>} */
-const composedCategories = [
-  ['Blue', '--color-data-categorical-blue'],
-  ['Orange', '--color-data-categorical-orange'],
-  ['Purple', '--color-data-purple-4'],
-  ['Pink', '--color-data-pink-4'],
-  ['Dark blue', '--color-data-blue-4'],
-  ['Teal', '--color-data-categorical-teal'],
-  ['Light purple', '--color-data-purple-3'],
-  ['Burgundy', '--color-data-pink-5'],
-  ['Cyan', '--color-data-categorical-cyan'],
-  ['Dark purple', '--color-data-purple-5'],
-  ['Brown', '--color-data-categorical-brown'],
-];
-/** @type {Array<[string, string]>} */
 const warmCold = [
   ...ramp('orange'),
   ['Midpoint', '--color-data-gray-1'],
@@ -189,15 +175,8 @@ export default {
           type: 'prose',
           text: 'Use distinct colors for unrelated categories or named series, with stable assignments across the plot, legend, and detail view. Native categorical names identify hues, not rank or status: green is not automatically positive, and red is not automatically negative.',
         },
-        {type: 'heading', level: 3, text: 'Native categorical family'},
         colors(categorical),
-        {type: 'heading', level: 3, text: 'Composed categorical example'},
-        {
-          type: 'prose',
-          text: 'This eleven-position example mixes categorical tokens with sequential shades. It is not the native categorical family. Related purples, pinks, and blues can be hard to distinguish; keep labels and another identifying cue, and use fewer colors when those distinctions do not hold.',
-        },
-        colors(composedCategories),
-        tokenCode('categoryTokens', composedCategories),
+        tokenCode('categoryTokens', categorical),
       ],
     },
     {

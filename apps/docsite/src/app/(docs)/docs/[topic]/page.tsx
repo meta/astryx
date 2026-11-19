@@ -136,6 +136,20 @@ export default async function DocPage({
         title={topic.title}
         description={topic.description}
         sections={sections}
+        stylingSections={linkifyDocSections(
+          (
+            docTopics.find(page => page.topic === 'visualization')?.sections ??
+            []
+          ).filter(section =>
+            [
+              'map-chart-parts',
+              'recharts-styled-example',
+              'style-other-renderers',
+              'readable-chart-details',
+            ].includes(section.id ?? ''),
+          ),
+          componentNames,
+        )}
       />
     ) : isTokenTopic ? (
       <TokensDocView

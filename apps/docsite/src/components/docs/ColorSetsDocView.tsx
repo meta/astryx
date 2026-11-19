@@ -5,17 +5,14 @@
 /**
  * @file Compact visual reference for data-color sets.
  * @input Authored set tables and canonical Neutral theme values.
- * @output One readable palette with token names and paired mode previews.
+ * @output All color sets and chart styling on one page with paired mode previews.
  * @position The Color sets subpage under Data visualization.
  */
 
-import {useEffect, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Card} from '@astryxdesign/core/Card';
 import {Collapsible} from '@astryxdesign/core/Collapsible';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
-import {Selector} from '@astryxdesign/core/Selector';
-import {Tab, TabList} from '@astryxdesign/core/TabList';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {Table, pixel, proportional} from '@astryxdesign/core/Table';
 import {resolveThemeTokens} from '@astryxdesign/core/theme/tokens';
@@ -34,7 +31,6 @@ const modeTokens = {
   dark: resolveThemeTokens(neutralTheme, {mode: 'dark'}),
 };
 const styles = stylex.create({
-  tabs: {maxWidth: '100%', minWidth: 0},
   token: {fontSize: '0.75rem', overflowWrap: 'anywhere'},
   surface: (color: string) => ({
     width: 28,
@@ -58,7 +54,6 @@ const styles = stylex.create({
     alignItems: 'center',
     gap: spacingVars['--spacing-2'],
   },
-  controls: {maxWidth: '22rem'},
 });
 
 const PURPOSE: Record<string, string> = {
@@ -131,7 +126,13 @@ function ModePreview({
   );
 }
 
-function Palette({rows}: {rows: string[][]}) {
+function Palette({
+  rows,
+  showMeaning = false,
+}: {
+  rows: string[][];
+  showMeaning?: boolean;
+}) {
   const data = rows.map((row, index) => {
     const strength = Number.parseFloat(row[2]) / 100;
     if (!Number.isFinite(strength) || strength < 0 || strength > 1) {
@@ -152,10 +153,15 @@ function Palette({rows}: {rows: string[][]}) {
           {
             key: 'token',
             header: 'Token',
-            width: pixel(260),
+            width: proportional(1),
             renderCell: row => (
               <VStack gap={1}>
                 <Text>{row.token}</Text>
+                {showMeaning && (
+                  <Text type="supporting" color="secondary">
+                    {row.meaning}
+                  </Text>
+                )}
                 {row.strength !== 1 && (
                   <Text type="supporting" color="secondary">
                     {row.strength * 100}% fill
@@ -165,33 +171,38 @@ function Palette({rows}: {rows: string[][]}) {
             ),
           },
           {
-            key: 'value',
-            header: 'Value',
-            width: proportional(1),
-            renderCell: row => {
-              const light = colorLabel(
-                modeTokens.light[row.token],
-                row.strength,
-              );
-              const dark = colorLabel(modeTokens.dark[row.token], row.strength);
-              return (
-                <HStack gap={2} vAlign="center">
-                  <ModePreview
-                    token={row.token}
-                    mode="light"
-                    strength={row.strength}
-                  />
-                  <ModePreview
-                    token={row.token}
-                    mode="dark"
-                    strength={row.strength}
-                  />
-                  <Text type="code" color="secondary">
-                    {light === dark ? light : `${light} / ${dark}`}
-                  </Text>
-                </HStack>
-              );
-            },
+            key: 'light',
+            header: 'Light mode',
+            width: pixel(152),
+            renderCell: row => (
+              <HStack gap={2} vAlign="center">
+                <ModePreview
+                  token={row.token}
+                  mode="light"
+                  strength={row.strength}
+                />
+                <Text type="code" color="secondary">
+                  {colorLabel(modeTokens.light[row.token], row.strength)}
+                </Text>
+              </HStack>
+            ),
+          },
+          {
+            key: 'dark',
+            header: 'Dark mode',
+            width: pixel(152),
+            renderCell: row => (
+              <HStack gap={2} vAlign="center">
+                <ModePreview
+                  token={row.token}
+                  mode="dark"
+                  strength={row.strength}
+                />
+                <Text type="code" color="secondary">
+                  {colorLabel(modeTokens.dark[row.token], row.strength)}
+                </Text>
+              </HStack>
+            ),
           },
         ]}
         density="spacious"
@@ -201,147 +212,122 @@ function Palette({rows}: {rows: string[][]}) {
   );
 }
 
-function SetPanel({section}: {section: DocSection}) {
+function SetSection({section}: {section: DocSection}) {
   const groups = colorGroups(section);
-  const [groupIndex, setGroupIndex] = useState('0');
-  const group = groups[Number(groupIndex)] ?? groups[0];
-  const rows = group?.rows ?? [];
-  const changes = rows.some(
-    row => modeTokens.light[row[1]] !== modeTokens.dark[row[1]],
-  );
-  const alpha = rows.some(row => row[2] !== '100%');
   return (
     <VStack gap={4}>
-      <Heading level={2}>{section.title}</Heading>
+      <Heading id={section.title.toLowerCase()} level={2}>
+        {section.title}
+      </Heading>
       <Text>{PURPOSE[section.title]}</Text>
-      {groups.length > 1 && (
-        <div {...stylex.props(styles.controls)}>
-          <Selector
-            label={section.title === 'Sequential' ? 'Ramp' : 'Palette'}
-            value={groupIndex}
-            options={groups.map((item, i) => ({
-              value: String(i),
-              label: item.title,
-            }))}
-            onChange={setGroupIndex}
-            width="100%"
-          />
-        </div>
+      {section.title === 'Sequential' && (
+        <Text type="supporting" color="secondary">
+          Shown dark → light (5 → 1). Gray changes in dark mode; the colored
+          ramps keep the same token values.
+        </Text>
       )}
-      <Text type="supporting" color="secondary">
-        {changes
-          ? 'Gray and neutral change in dark mode.'
-          : 'Same token colors in both modes.'}
-        {alpha
-          ? ' Transparent fills blend with the light or dark surface.'
-          : ''}
-        {section.title === 'Sequential' ? ' Shown dark → light (5 → 1).' : ''}
-      </Text>
       {section.title === 'Semantic' && (
         <Text type="supporting" color="secondary">
           Warning yellow is an example, not an approved default.
         </Text>
       )}
-      <Palette rows={rows} />
-      <Collapsible trigger="Implementation details" defaultIsOpen={false}>
-        <VStack gap={4}>
-          {section.content
-            .filter(block => block.type === 'prose' || block.type === 'code')
-            .map((block, i) => (
-              <ContentBlockRenderer key={i} block={block} />
-            ))}
+      {section.title === 'Heatmap' && (
+        <Text type="supporting" color="secondary">
+          Transparent fills blend with the light or dark surface.
+        </Text>
+      )}
+      {groups.map((group, index) => (
+        <VStack key={index} gap={3}>
+          {groups.length > 1 && <Heading level={3}>{group.title}</Heading>}
+          <Palette
+            rows={group.rows}
+            showMeaning={[
+              'Reference',
+              'Semantic',
+              'Diverging',
+              'Spectrum',
+              'Heatmap',
+            ].includes(section.title)}
+          />
         </VStack>
-      </Collapsible>
+      ))}
+      {section.content.some(block => block.type === 'code') && (
+        <Collapsible trigger="Implementation details" defaultIsOpen={false}>
+          <VStack gap={4}>
+            {section.content
+              .filter(block => block.type === 'code')
+              .map((block, i) => (
+                <ContentBlockRenderer key={i} block={block} />
+              ))}
+          </VStack>
+        </Collapsible>
+      )}
     </VStack>
   );
 }
 
 export function ColorSetsDocView({
   title,
+  description,
   sections,
+  stylingSections,
 }: {
   title: string;
   description: string;
   sections: DocSection[];
+  stylingSections: DocSection[];
 }) {
   const sets = sections.filter(section => section.previewType === 'swatch');
-  const [selected, setSelected] = useState('categorical');
-  const keys = sets.map(section => section.title.toLowerCase());
-  const keyString = keys.join('|');
-  useEffect(() => {
-    const restore = () => {
-      const hash = window.location.hash.slice(1);
-      const found = keyString
-        .split('|')
-        .find(key => hash === key || hash.startsWith(`${key}-`));
-      setSelected(found ?? 'categorical');
-    };
-    restore();
-    window.addEventListener('hashchange', restore);
-    window.addEventListener('popstate', restore);
-    return () => {
-      window.removeEventListener('hashchange', restore);
-      window.removeEventListener('popstate', restore);
-    };
-  }, [keyString]);
-  const select = (value: string) => {
-    setSelected(value);
-    window.history.replaceState(window.history.state, '', `#${value}`);
-  };
   return (
-    <DocPageLayout
-      title={title}
-      description="Existing Astryx colors, shown in Neutral.">
-      <VStack gap={6}>
-        <TabList
-          value="colors"
-          onChange={() => {}}
-          aria-label="Data visualization guides"
-          hasDivider>
-          <Tab
-            value="colors"
-            label="Color sets"
-            href="/docs/visualization-color-sets"
-          />
-          <Tab
-            value="styling"
-            label="Chart styling"
-            href="/docs/visualization#match-each-chart-part-to-an-existing-role"
-          />
-        </TabList>
-        <TabList
-          value={selected}
-          onChange={select}
-          role="tablist"
-          aria-label="Color sets"
-          size="sm"
-          hasDivider
-          xstyle={styles.tabs}>
-          {sets.map((section, i) => (
-            <Tab
-              key={keys[i]}
-              value={keys[i]}
-              label={section.title}
-              panelId={`set-${keys[i]}`}
-            />
-          ))}
-        </TabList>
-        {sets.map((section, i) => (
-          <div
-            key={keys[i]}
-            id={`set-${keys[i]}`}
-            role="tabpanel"
-            aria-label={section.title}
-            hidden={selected !== keys[i]}>
-            {selected === keys[i] && (
-              <SetPanel key={keys[i]} section={section} />
-            )}
-          </div>
-        ))}
+    <DocPageLayout title={title} description={description}>
+      <VStack gap={10}>
         <Text type="supporting" color="secondary">
-          Composed palettes are examples, not new token families or approved
-          defaults.
+          Shown in Neutral. Gray and neutral change between modes; colored data
+          tokens keep the same values. Reference, status, and multi-color scales
+          use these existing tokens, not separate token families.
         </Text>
+        {sets.map(section => (
+          <SetSection key={section.id} section={section} />
+        ))}
+        <VStack gap={6}>
+          <Heading id="chart-styling" level={2}>
+            Chart styling
+          </Heading>
+          <Text>
+            Use data colors for series and reference lines. Use text, border,
+            and surface roles for the parts around them.
+          </Text>
+          {stylingSections
+            .filter(section => section.id === 'map-chart-parts')
+            .flatMap(section =>
+              section.content.filter(block => block.type === 'table'),
+            )
+            .map((block, i) => (
+              <ContentBlockRenderer key={i} block={block} />
+            ))}
+          <Text type="supporting" color="secondary">
+            These are example mappings, not changes to component defaults.
+            Tooltip shape uses the existing radius, spacing, and shadow roles.
+          </Text>
+          <Collapsible trigger="Implementation details" defaultIsOpen={false}>
+            <VStack gap={4}>
+              {stylingSections.map(section => (
+                <VStack key={section.id} gap={3}>
+                  <Heading level={3}>{section.title}</Heading>
+                  {section.content
+                    .filter(
+                      block =>
+                        block.type !== 'table' ||
+                        section.id !== 'map-chart-parts',
+                    )
+                    .map((block, i) => (
+                      <ContentBlockRenderer key={i} block={block} />
+                    ))}
+                </VStack>
+              ))}
+            </VStack>
+          </Collapsible>
+        </VStack>
       </VStack>
     </DocPageLayout>
   );

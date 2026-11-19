@@ -6,9 +6,9 @@
 export default {
   type: 'namespace',
   name: 'color-sets',
-  title: 'Color sets',
+  title: 'Colors',
   summary:
-    'See existing data colors, their meanings, and examples of composed sets.',
+    'Choose colors for your data, and style the labels, axes, grids, and tooltips around it.',
   placement: {parent: 'namespace:visualization', slot: 'references', order: 10},
   slots: {guides: {title: 'Reference', accepts: {kinds: ['generic']}}},
 };

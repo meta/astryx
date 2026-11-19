@@ -9,30 +9,35 @@ const source = readFileSync(
 );
 
 describe('color-set presentation', () => {
-  it('uses the token reference’s two-column, paired-swatch format', () => {
+  it('shows a separate swatch and value for each mode', () => {
     expect(source).toContain("header: 'Token'");
-    expect(source).toContain("header: 'Value'");
-    expect(source).not.toContain("header: 'Light'");
-    expect(source).not.toContain("header: 'Dark'");
-    expect(source).toContain('light === dark ? light : `${light} / ${dark}`');
+    expect(source).toContain("header: 'Light mode'");
+    expect(source).toContain("header: 'Dark mode'");
+    expect(source).not.toContain("header: 'Value'");
     expect(source).toContain('density="spacious"');
     expect(source).toContain('mode="light"');
     expect(source).toContain('mode="dark"');
+    expect(source.match(/width: pixel\(152\)/g)).toHaveLength(2);
+    expect(source).toContain('width: proportional(1)');
+    expect(source).toContain(
+      '<DocPageLayout title={title} description={description}>',
+    );
+    expect(source).not.toContain('Example combination');
   });
 
-  it('keeps implementation code optional and chart styling reachable', () => {
+  it('shows every color set and chart styling without selection controls', () => {
+    expect(source).not.toContain('TabList');
+    expect(source).not.toContain('Selector');
+    expect(source).not.toContain('useState');
+    expect(source).toContain('sets.map(section =>');
+    expect(source).toContain('groups.map((group, index) =>');
+    expect(source).toContain('stylingSections.map(section =>');
+    expect(source).toContain('id="chart-styling"');
     expect(source).toContain('trigger="Implementation details"');
     expect(source).toContain('defaultIsOpen={false}');
-    expect(source).toContain('label="Chart styling"');
-    expect(source).toContain(
-      'href="/docs/visualization#match-each-chart-part-to-an-existing-role"',
-    );
   });
 
-  it('keeps set selection addressable without changing token values', () => {
-    expect(source).toContain("window.addEventListener('hashchange', restore)");
-    expect(source).toContain("window.addEventListener('popstate', restore)");
-    expect(source).toContain('window.history.replaceState');
+  it('preserves canonical mode values and transparency', () => {
     expect(source).toContain(
       "resolveThemeTokens(neutralTheme, {mode: 'light'})",
     );

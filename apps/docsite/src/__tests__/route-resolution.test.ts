@@ -149,7 +149,7 @@ describe('route resolution', () => {
   it('shows Color sets as a separate child page of Data visualization', () => {
     const page = pageBySlug.get('visualization-color-sets');
     expect(page?.parent).toBe('visualization');
-    expect(page?.title).toBe('Color sets');
+    expect(page?.title).toBe('Colors');
     expect(page?.sections.map(section => section.title)).toContain(
       'Categorical',
     );

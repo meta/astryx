@@ -74,7 +74,7 @@ describe('visualization palette and styling guides', () => {
       expect(result.nested).toHaveLength(1);
       expect(result.nested[0].page).toMatchObject({
         topic: 'visualization-color-sets',
-        title: 'Color sets',
+        title: 'Colors',
         parent: 'visualization',
       });
       expect(result.nested[0].page.sections.map(s => s.title)).toEqual(
@@ -166,15 +166,14 @@ describe('visualization palette and styling guides', () => {
     expect(codeTokens('categorical-token-reference')).toEqual([
       '--color-data-categorical-blue',
       '--color-data-categorical-orange',
-      '--color-data-purple-4',
-      '--color-data-pink-4',
-      '--color-data-blue-4',
-      '--color-data-categorical-teal',
-      '--color-data-purple-3',
-      '--color-data-pink-5',
+      '--color-data-categorical-purple',
+      '--color-data-categorical-green',
+      '--color-data-categorical-pink',
       '--color-data-categorical-cyan',
-      '--color-data-purple-5',
+      '--color-data-categorical-red',
+      '--color-data-categorical-teal',
       '--color-data-categorical-brown',
+      '--color-data-categorical-indigo',
     ]);
     expect(codeTokens('diverging-data-colors')).toEqual([
       ...stops('orange', reverse),
