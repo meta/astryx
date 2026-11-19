@@ -279,10 +279,16 @@ export function tempFor(file) {
  */
 
 /**
+ * A color dial's family: its seed, and the source token that gives it when
+ * the theme's own source sets the family's fill (null when the setting does).
+ * @typedef {{id: string, dial: string, seed: string, value: string, source: string | null}} DialFamily
+ */
+
+/**
  * The palette mapping of a theme.
  * @typedef {object} PaletteMapping
  * @property {Candidate} candidate
- * @property {Array<{id: string, dial: string, seed: string, value: string}>} families
+ * @property {DialFamily[]} families
  * @property {Record<string, {family: string, light: StopRef, dark: StopRef}>} tokens
  * @property {ContrastCheck[]} contrast
  * @property {number} vibrancy - The generator's vibrancy, 0 to 100.
@@ -647,20 +653,58 @@ export function modesOf(data) {
 }
 
 /**
- * The color dial settings of a theme, in dial order.
- * @param {{settings: Setting[]}} data
+ * The light-mode color of a token value the theme's own source writes: a
+ * plain color, or the first half of a light-dark() pair.
+ * @param {string | undefined} value
  */
-function dialFamilies(data) {
-  /** @type {Array<{id: string, dial: string, seed: string, value: string}>} */
+function lightHalf(value) {
+  const v = String(value ?? '').trim();
+  const pair = /^light-dark\((.*)\)$/is.exec(v);
+  return pair ? (splitTop(pair[1], ',')[0] ?? '').trim() : v;
+}
+
+/**
+ * The color dial settings of a theme, in dial order. A family whose fill
+ * token the theme's own source sets exactly takes that color, the one in
+ * effect, as its seed: the shades its text, icons and tints read come from
+ * the color the fill shows, never from a dial value the source overrides.
+ * The neutral family always takes its setting.
+ * @param {{settings: Setting[]}} data
+ * @param {Record<string, string>} [own] the tokens the theme's own source sets
+ */
+function dialFamilies(data, own = {}) {
+  /** @type {DialFamily[]} */
   const out = [];
   for (const dial of PALETTE_DIALS) {
     const s = [...data.settings]
       .reverse()
       .find(x => x?.source === 'dial' && x.thing === dial && !x.on && !x.mode);
-    const seed = s && seedOf(s.value);
-    if (s && seed) out.push({id: dial, dial, seed, value: s.value});
+    // The neutral family keeps its setting: a gray the source sets exactly
+    // is one surface, not the color every gray grows from.
+    const inEffect =
+      dial === 'neutral' ? null : seedOf(lightHalf(own[paletteToken(dial)]));
+    const seed = inEffect ?? (s && seedOf(s.value));
+    if (s && seed)
+      out.push({
+        id: dial,
+        dial,
+        seed,
+        value: s.value,
+        source: inEffect ? paletteToken(dial) : null,
+      });
   }
   return out;
+}
+
+/**
+ * The seed each color family grows from now: the fill the theme's own source
+ * sets as a fixed color, else the color setting.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {{settings: Setting[]}} data
+ */
+export function seedsInEffect(cwd, slug, data) {
+  return dialFamilies(data, ownSourceTokenValues(cwd, slug));
 }
 
 /** Notes for damaged color configs kept aside during one sync. @type {string[]} */
@@ -1150,14 +1194,14 @@ function darkExact(t, id, seed) {
  * the author's own stay. Null when the config would hold no family.
  * @param {string} cwd
  * @param {string} slug
- * @param {{mode?: string, settings: Setting[]}} data
+ * @param {{mode?: string, settings: Setting[], palette?: string}} data
  * @param {{light: Record<string, string>, dark: Record<string, string>}} [base] the base theme's resolved colors, which the dark check reads
  * @returns {PalettePlan | null}
  */
 function planPalette(cwd, slug, data, base) {
   const file = paletteFiles(slug).config;
   const existing = readConfig(path.join(cwd, file));
-  const fams = dialFamilies(data);
+  const fams = dialFamilies(data, ownSourceTokenValues(cwd, slug));
   if (!existing && !fams.length) return null;
   /** @type {string[]} */
   const notes = [];
@@ -1213,21 +1257,29 @@ function planPalette(cwd, slug, data, base) {
     );
   /** @type {any[]} */
   const before = Array.isArray(config.families) ? config.families : [];
-  const savedSeeds = dialFamilies({settings: saved});
+  const savedSeeds = dialFamilies(
+    {settings: saved},
+    ownSourceTokenValues(cwd, slug),
+  );
+  // A config the editor wrote holds the seeds it gave, from the settings and
+  // the source as they were then: its seed is never a hand edit.
+  const configMine = configWrittenByEditor(cwd, slug, data);
 
   /**
    * One dial family: the author's family with the dial's seed and the
    * exact anchors of that seed in place of the old ones.
    * @param {any} prev
-   * @param {{id: string, seed: string}} f
+   * @param {DialFamily} f
    */
   const familyOf = (prev, f) => {
     const old = prev && typeof prev === 'object' ? prev : {};
     const neutral = f.id === 'neutral';
-    const wasSaved = savedSeeds.find(x => x.id === f.id)?.seed;
+    const wasSaved = configMine
+      ? old.seed
+      : savedSeeds.find(x => x.id === f.id)?.seed;
     if (old.seed != null && wasSaved && !sameColor(old.seed, wasSaved))
       notes.push(
-        `${file}: the ${f.id} seed ${old.seed} there is replaced by your ${f.id} setting, ${f.seed}`,
+        `${file}: the ${f.id} seed ${old.seed} there is replaced by ${f.source ? `the ${f.source} your theme source sets` : `your ${f.id} setting`}, ${f.seed}`,
       );
     const gray = isGray(f.seed);
     const kind =
@@ -1492,6 +1544,38 @@ export function syncPalette(cwd, slug, data, base) {
 }
 
 /**
+ * Whether the editor wrote the theme's palette config as it is now: its hash
+ * is the one the settings hold (`data.palette`, or the saved settings, which
+ * an undo may carry from before the palette existed), or the one the editor
+ * recorded writing (a color change stopped before its settings were saved).
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {{palette?: string}} data
+ */
+function configWrittenByEditor(cwd, slug, data) {
+  const file = path.join(cwd, paletteFiles(slug).config);
+  if (!fs.existsSync(file)) return false;
+  const hash = sha256(fs.readFileSync(file));
+  /** @type {string | undefined} */
+  let saved;
+  try {
+    saved = JSON.parse(
+      fs.readFileSync(
+        path.join(cwd, 'themes', slug, `${slug}.settings.json`),
+        'utf8',
+      ),
+    ).palette;
+  } catch {
+    saved = undefined;
+  }
+  return (
+    data.palette === hash ||
+    saved === hash ||
+    readWrittenRecord(cwd, slug)['palette.config.json'] === hash
+  );
+}
+
+/**
  * @param {string} cwd
  * @param {string} slug
  * @param {any} data
@@ -1505,26 +1589,7 @@ function syncPaletteFiles(cwd, slug, data, base) {
   if (!plan) {
     // Only palette files the editor wrote go: a hand-made palette.config.json
     // (and what it generated) stays.
-    // The hash the saved settings recorded too: an undo may carry settings
-    // from before the palette existed.
-    /** @type {string | undefined} */
-    let saved;
-    try {
-      saved = JSON.parse(
-        fs.readFileSync(abs(`themes/${slug}/${slug}.settings.json`), 'utf8'),
-      ).palette;
-    } catch {
-      saved = undefined;
-    }
-    const hash = fs.existsSync(abs(f.config))
-      ? sha256(fs.readFileSync(abs(f.config)))
-      : null;
-    // Or the config the editor recorded writing (a color change stopped
-    // before its settings were saved).
-    const recorded = readWrittenRecord(cwd, slug)['palette.config.json'];
-    const mine =
-      hash != null &&
-      (data.palette === hash || saved === hash || recorded === hash);
+    const mine = configWrittenByEditor(cwd, slug, data);
     delete data.palette;
     if (!mine) return [];
     // A palette file edited by hand is never deleted: it stays, and the
@@ -2119,7 +2184,7 @@ export function familyRamp(cwd, slug, data, base, family) {
  * @returns {PaletteMapping | null}
  */
 export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
-  const fams = dialFamilies(data);
+  const fams = dialFamilies(data, ownSourceTokenValues(cwd, slug));
   if (!fams.length) return null;
   const plan = /** @type {PalettePlan} */ (planPalette(cwd, slug, data, base));
   const {config} = plan;
@@ -3008,7 +3073,9 @@ export function paletteNotes(pal, dial, slug, modes = ['light', 'dark']) {
   const given = pal.families.find(x => x.dial === dial);
   if (given && isClipped(given.value))
     notes.push(
-      `your ${dial} ${given.value} is outside the colors every screen shows (sRGB), so the nearest one, ${given.seed}, is used`,
+      given.source
+        ? `your ${dial} ${given.value} is outside the colors every screen shows (sRGB); the nearest one is ${seedOf(given.value)}, but the ${given.source} your theme source sets, ${given.seed}, is used`
+        : `your ${dial} ${given.value} is outside the colors every screen shows (sRGB), so the nearest one, ${seedOf(given.value)}, is used`,
     );
   for (const c of dialChecks(pal, dial, modes)) {
     if (c.note || !c.pass) notes.push(checkNote(c, dial));
