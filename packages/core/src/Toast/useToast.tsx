@@ -10,13 +10,14 @@ import {ToastViewport} from './ToastViewport';
 import {createToastQueue, ToastQueueConnector} from '../Layer/toastHost';
 import {ThemeNestingContext} from '../theme/Theme';
 import {ThemeSourceContext} from '../theme/useTheme';
-import {warnOnce} from '../utils/devWarning';
+import {devError, warnOnce} from '../utils/devWarning';
 import type {
   ToastOptions,
   ToastDismissFn,
   ShowToastFn,
   ToastEntry,
 } from './types';
+import {createModuleLoader} from '../utils/moduleLoader';
 import {sharedForReact} from '../utils/sharedForReact';
 import {sharedSequence} from '../utils/sharedRealm';
 
@@ -28,14 +29,20 @@ const fallback = sharedForReact('toast/use-toast/fallback', 1, () => ({
   root: null as Root | null,
 }));
 
+// react-dom/client loads only on the first toast with no LayerProvider. A
+// static import would load it for every import of the package, also where a
+// toast never shows (a server, a test run).
+const clientModule = createModuleLoader(async () => import('react-dom/client'));
+
 const ROOT_THEME_ATTRS = ['data-theme', dataAttr('theme')] as const;
 
 // The fallback container is a separate tree with no ThemeContext. A toast
 // shown from inside a Theme draws under that Theme (CallerTheme). For other
 // toasts, this copies the theme attributes of <html> to the container, so the
 // theme's scoped CSS reaches them. The container lives as long as the app, so
-// the observer stays connected.
-function syncRootThemeAttrs(container: HTMLElement): void {
+// the observer stays connected, unless the viewport fails to load. Returns
+// the function that disconnects it.
+function syncRootThemeAttrs(container: HTMLElement): () => void {
   const sync = () => {
     let mirroredMode: string | null = null;
     for (const attr of ROOT_THEME_ATTRS) {
@@ -65,6 +72,7 @@ function syncRootThemeAttrs(container: HTMLElement): void {
     attributes: true,
     attributeFilter: [...ROOT_THEME_ATTRS],
   });
+  return () => observer.disconnect();
 }
 
 function getFallbackContext(): ToastContextValue {
@@ -89,14 +97,11 @@ function getFallbackContext(): ToastContextValue {
   const container = document.createElement('div');
   container.setAttribute('data-astryx-toast-fallback', '');
   document.body.appendChild(container);
-  syncRootThemeAttrs(container);
+  const stopThemeSync = syncRootThemeAttrs(container);
 
   // Toasts wait in the queue until the fallback viewport's context connects.
   const queue = createToastQueue();
-  // react-dom/client loads only here, on the first toast with no
-  // LayerProvider. A static import would load it for every import of the
-  // package, also where a toast never shows (a server, a test run).
-  import('react-dom/client').then(
+  clientModule.load().then(
     ({createRoot}) => {
       fallback.root = createRoot(container);
       // This root sits inside the app, so a <Theme> in toast content is
@@ -110,12 +115,18 @@ function getFallbackContext(): ToastContextValue {
         </ThemeNestingContext>,
       );
     },
-    () => {
-      warnOnce(
-        'toast-fallback-viewport-load',
+    (error: unknown) => {
+      // The next toast loads the viewport again, so one failed load does not
+      // turn fallback toasts off for the rest of the page.
+      if (fallback.context === queue.context) {
+        fallback.context = null;
+      }
+      stopThemeSync();
+      container.remove();
+      devError(
         'useToast',
-        'The fallback toast viewport did not load, so its toasts do not show. ' +
-          'Wrap your app with <LayerProvider>.',
+        'The fallback toast viewport did not load, so these toasts did not show. The next toast loads it again. Wrap your app with <LayerProvider> to avoid the fallback.',
+        error,
       );
     },
   );
