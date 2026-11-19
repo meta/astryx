@@ -645,18 +645,14 @@ describe('Selector', () => {
 
   it.each([
     ['below its anchor', 'marginBlockEnd', null],
-    [
-      'already flipped above its anchor',
-      'marginBlockStart',
-      'self-block-start span-self-inline-end',
-    ],
+    ['already flipped above its anchor', 'marginBlockStart', 'self-end'],
   ])(
     "keeps the overlay out of the layer's viewport gutter, the layer %s",
-    async (_, gutterMargin, flippedArea) => {
+    async (_, gutterMargin, flippedAlignSelf) => {
       const restoreRects = mockSelectorRects();
       // The layer keeps a 16 px gutter from the viewport's block end. A flip
-      // moves it to the block-start margin and names the block-start side in
-      // the layer's position area.
+      // moves it to the block-start margin and mirrors the layer's block
+      // self alignment to the block end.
       const realGetComputedStyle = window.getComputedStyle.bind(window);
       const styleSpy = vi
         .spyOn(window, 'getComputedStyle')
@@ -667,11 +663,9 @@ describe('Selector', () => {
             element.hasAttribute('popover')
           ) {
             Object.defineProperty(style, gutterMargin, {value: '16px'});
-            if (flippedArea != null) {
-              const read = style.getPropertyValue.bind(style);
-              Object.defineProperty(style, 'getPropertyValue', {
-                value: (name: string) =>
-                  name === 'position-area' ? flippedArea : read(name),
+            if (flippedAlignSelf != null) {
+              Object.defineProperty(style, 'alignSelf', {
+                value: flippedAlignSelf,
               });
             }
           }

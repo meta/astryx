@@ -148,13 +148,11 @@ function measureSelectedItem(
   let isAboveAnchor = false;
   if (layer != null) {
     const layerStyle = getComputedStyle(layer);
-    // The position area's block keyword names the side the browser chose:
-    // its block-start side once a fallback flipped the layer. An engine
-    // without anchor positioning reads an empty string here.
-    const [blockArea = ''] = layerStyle
-      .getPropertyValue('position-area')
-      .split(' ');
-    isAboveAnchor = /start$|^top$/.test(blockArea);
+    // The layer opens below its anchor and aligns its block-start edge
+    // toward it. A block flip mirrors that self alignment, so the computed
+    // value names the block end once a fallback flipped the layer. An engine
+    // without anchor positioning keeps the block-start value.
+    isAboveAnchor = /self-end$/.test(layerStyle.alignSelf);
     blockEndGutter = Math.max(
       0,
       parseFloat(
