@@ -101,6 +101,13 @@ describe('doctor core-props', () => {
       expect(check?.fix).toBe(
         'Give each component a prop it takes: `astryx component <Name>` lists them. A prop the component does not take does nothing.',
       );
+      // Past eight props, the warning counts the rest.
+      const many = await propsCheck({
+        'src/App.tsx': app('TabList', `<TabList ${Array.from({length: 9}, (_, i) => `unknownSetting${i}="x"`).join(' ')} />`),
+      });
+      expect(many?.message).toMatch(/^9 props a Core component does not take: /);
+      expect(many?.message.match(/ has no `/g)).toHaveLength(8);
+      expect(many?.message).toMatch(/, and 1 more\.$/);
     },
     SLOW,
   );
@@ -172,6 +179,26 @@ describe('doctor core-props', () => {
       });
       expect(factory?.status).toBe('info');
       expect(factory?.message).toMatch(/^Not checked: the project compiles JSX with `h`/);
+      // A build config that sets another runtime, as a JavaScript app's
+      // Vite or Babel config does for emotion's `css` prop.
+      const vite = await propsCheck({
+        'vite.config.js': "import react from '@vitejs/plugin-react';\nexport default {plugins: [react({jsxImportSource: '@emotion/react'})]};\n",
+        'src/App.jsx': app('Button', '<Button label="Go" css={{color: "red"}} />'),
+      });
+      expect(vite?.status).toBe('info');
+      expect(vite?.message).toMatch(/^Not checked: the build config `vite\.config\.js` compiles JSX with another runtime/);
+      const babel = await propsCheck({
+        'package.json': JSON.stringify({name: 'app', private: true, dependencies: {'@astryxdesign/core': '*', react: '*'}, babel: {presets: ['@emotion/babel-preset-css-prop']}}),
+        'src/App.jsx': app('Button', '<Button label="Go" css={{color: "red"}} />'),
+      });
+      expect(babel?.status).toBe('info');
+      expect(babel?.message).toMatch(/^Not checked: the build config `package\.json` compiles JSX with another runtime/);
+      // A build config that names React's runtime is React's.
+      const react = await propsCheck({
+        'vite.config.js': "import react from '@vitejs/plugin-react';\nexport default {plugins: [react({jsxImportSource: 'react'})]};\n",
+        'src/App.tsx': app('TabList', '<TabList selectedID="a" />'),
+      });
+      expect(react?.status).toBe('warn');
       // A page that gives Core no prop still has its config read.
       const noProps = await propsCheck({
         'tsconfig.json': JSON.stringify({compilerOptions: {jsx: 'react-jsx', jsxImportSource: '@emotion/react'}}),

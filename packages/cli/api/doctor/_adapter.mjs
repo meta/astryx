@@ -365,6 +365,69 @@ function otherJsxRuntime(options) {
 }
 
 /**
+ * A build config, by file name, that can set how JSX compiles: Babel, SWC,
+ * Vite, Vitest, esbuild, webpack, Rspack, Rsbuild, Next.js or tsup.
+ */
+const BUILD_CONFIG =
+  /^(?:\.babelrc(?:\.[cm]?js|\.json)?|babel\.config\.(?:[cm]?[jt]s|json)|\.swcrc|(?:vite|vitest|webpack|rspack|rsbuild|next|esbuild|tsup)\.config\.[cm]?[jt]s)$/;
+
+/**
+ * A build setting that compiles JSX with a runtime other than React's: a
+ * `jsxImportSource` or `importSource` other than `react`, or a Babel plugin
+ * that compiles a `css` prop away (emotion's css-prop preset, or the
+ * styled-components or Compiled plugin).
+ */
+const BUILD_JSX_RUNTIME =
+  /\b(?:jsxImportSource|importSource)['"]?\s*[:=]\s*['"](?!react['"])[^'"\s]+['"]|@emotion\/babel-preset-css-prop|babel-plugin-styled-components|@compiled\/babel-plugin/;
+
+/**
+ * The first build config that compiles JSX with another runtime, in the
+ * folder of a page or a folder above it up to the project folder: a config
+ * file, or the `babel` key of a `package.json`. Null when there is none.
+ * @param {string[]} pages
+ * @param {string} projectDir
+ * @returns {string | null} the config's path
+ */
+function buildJsxRuntime(pages, projectDir) {
+  /** @type {Map<string, string | null>} */
+  const configIn = new Map();
+  const read = (/** @type {string} */ dir) => {
+    /** @type {string[]} */
+    let names;
+    try {
+      names = fs.readdirSync(dir).sort();
+    } catch {
+      return null;
+    }
+    for (const name of names) {
+      const file = path.join(dir, name);
+      /** @type {string | null} */
+      let text = null;
+      try {
+        if (BUILD_CONFIG.test(name)) text = readTextFile(file);
+        else if (name === 'package.json') {
+          const babel = JSON.parse(readTextFile(file))?.babel;
+          text = babel == null ? null : JSON.stringify(babel);
+        }
+      } catch {
+        continue;
+      }
+      if (text != null && BUILD_JSX_RUNTIME.test(text)) return file;
+    }
+    return null;
+  };
+  for (const page of pages) {
+    for (let dir = path.dirname(page); ; dir = path.dirname(dir)) {
+      if (!configIn.has(dir)) configIn.set(dir, read(dir));
+      const found = configIn.get(dir);
+      if (found) return found;
+      if (dir === projectDir || path.relative(projectDir, dir).startsWith('..') || dir === path.dirname(dir)) break;
+    }
+  }
+  return null;
+}
+
+/**
  * Test, story and fixture files, and the folders that usually hold them:
  * code that shows or checks a component, not a page a person uses.
  */
@@ -449,6 +512,10 @@ export async function findUnknownCoreProps(projectDir) {
   for (const {options} of configs.values()) {
     const runtime = otherJsxRuntime(options);
     if (runtime) return notChecked(`the project compiles JSX with \`${runtime}\`, which can give every component props of its own`);
+  }
+  const build = buildJsxRuntime(corePages, projectDir);
+  if (build) {
+    return notChecked(`the build config \`${relative(build)}\` compiles JSX with another runtime, which can give every component props of its own`);
   }
   // One batch read of the props Core's docs list, as `astryx component
   // <Name> --props` prints them; a component they do not describe is not
