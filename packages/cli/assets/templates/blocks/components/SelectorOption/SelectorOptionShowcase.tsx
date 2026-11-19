@@ -4,7 +4,7 @@
 
 import {useState} from 'react';
 import {Selector, SelectorOption} from '@astryxdesign/core/Selector';
-import {UserIcon} from '@heroicons/react/24/outline';
+import {UserIcon} from '@astryxdesign/template-icons';
 
 const descriptions: Record<string, string> = {
   admin: 'Full access to all resources',

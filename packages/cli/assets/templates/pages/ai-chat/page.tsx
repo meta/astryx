@@ -45,14 +45,14 @@ import {useClipboard} from '@astryxdesign/core/hooks';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 
 import {
-  DocumentTextIcon,
-  ClipboardDocumentIcon,
+  DocumentIcon,
+  ClipboardIcon,
   ShareIcon,
-  AtSymbolIcon,
-  PaperClipIcon,
-  XMarkIcon,
+  MentionIcon,
+  AttachIcon,
+  CloseIcon,
   ChevronRightIcon,
-} from '@heroicons/react/24/outline';
+} from '@astryxdesign/template-icons';
 
 // Below this width the split-pane collapses to a single chat column. Shared by
 // the CSS container query and the JS check in openArtifact so they can't drift.
@@ -229,7 +229,7 @@ function ArtifactActions({onClose}: {onClose?: () => void}) {
         label="Copy"
         variant="ghost"
         size="sm"
-        icon={<Icon icon={ClipboardDocumentIcon} size="sm" />}
+        icon={<Icon icon={ClipboardIcon} size="sm" />}
         isIconOnly
         onClick={copyDocument}
       />
@@ -249,7 +249,7 @@ function ArtifactActions({onClose}: {onClose?: () => void}) {
           label="Close document"
           variant="ghost"
           size="sm"
-          icon={<Icon icon={XMarkIcon} size="sm" />}
+          icon={<Icon icon={CloseIcon} size="sm" />}
           isIconOnly
           onClick={onClose}
         />
@@ -294,7 +294,7 @@ function MobileArtifactActions() {
         {type: 'divider'},
         {
           label: 'Copy',
-          icon: ClipboardDocumentIcon,
+          icon: ClipboardIcon,
           onClick: copyDocument,
         },
         {
@@ -336,7 +336,7 @@ function ArtifactCard({onOpen}: {onOpen: () => void}) {
       padding={3}
       maxWidth={360}>
       <HStack gap={3} vAlign="center" width="100%">
-        <Icon icon={DocumentTextIcon} size="md" color="secondary" />
+        <Icon icon={DocumentIcon} size="md" color="secondary" />
         <StackItem size="fill">
           <VStack gap={0}>
             <Text type="label" weight="semibold">
@@ -423,7 +423,7 @@ export default function AIChatConversationTemplate() {
                             label="Mention"
                             variant="ghost"
                             size="sm"
-                            icon={<Icon icon={AtSymbolIcon} size="sm" />}
+                            icon={<Icon icon={MentionIcon} size="sm" />}
                             isIconOnly
                             onClick={() =>
                               // Demo only: replace this toast with the call that performs the action.
@@ -437,7 +437,7 @@ export default function AIChatConversationTemplate() {
                             label="Attach"
                             variant="ghost"
                             size="sm"
-                            icon={<Icon icon={PaperClipIcon} size="sm" />}
+                            icon={<Icon icon={AttachIcon} size="sm" />}
                             isIconOnly
                             onClick={() =>
                               // Demo only: replace this toast with the call that performs the action.
@@ -824,7 +824,7 @@ The fix is to catch \`TokenExpiredError\` specifically and attempt a refresh bef
                       startContent={
                         <HStack gap={3} vAlign="center">
                           <Icon
-                            icon={DocumentTextIcon}
+                            icon={DocumentIcon}
                             size="sm"
                             color="secondary"
                           />

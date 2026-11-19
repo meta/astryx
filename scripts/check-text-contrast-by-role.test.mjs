@@ -188,7 +188,8 @@ const NESTED = {
     fill: '--color-background-muted',
     own: theme => ({
       ...rule(theme, 'table-row'),
-      ...(rule(theme, 'table-row')[STRIPED_ROW] ?? {}),
+      ...rule(theme, 'table-row', 'striped'),
+      ...(rule(theme, 'table-row', 'striped')[STRIPED_ROW] ?? {}),
     }),
     color: 'the table root sets the cell text color',
   },

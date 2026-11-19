@@ -55,6 +55,7 @@ import {settledBox} from './settledBox';
 import {layerInsetProperties} from './layerInset';
 import {
   LAYER_CLEARANCE_PROPERTY,
+  LAYER_LIFT_PROPERTY,
   ensureSlideRules,
   anchorClearAlignment,
   getAnchorClearFallbacks,
@@ -81,6 +82,10 @@ import {
   isShownAsPopover,
 } from '../utils/nodeType';
 import {subscribeInput} from '../utils/inputStream';
+
+// The keyboard lift every block inset reads (`LAYER_LIFT_PROPERTY` in
+// layerSlideRules.ts). StyleX resolves only constants defined in this file.
+const LIFT = 'var(--_astryx-layer-lift, 0px)';
 
 const styles = stylex.create({
   // The software keyboard's block-size cap, on the layer's own element. Every
@@ -135,7 +140,7 @@ const styles = stylex.create({
   // The margin box is what must fit a position option and what the browser's
   // overflow shift keeps inside the viewport, so a layer that would end
   // inside the gutter — or under a declared bar — does not fit there and the
-  // next option is tried. A flip tactic swaps the two values with the area,
+  // next option is tried. A flip tactic swaps the two values with the insets,
   // so the clearance stays on the anchor side and the gutter on the far side
   // (#4803); for the same reason the gutter is one value for both edges, the
   // larger of the two block gutters.
@@ -180,31 +185,117 @@ const styles = stylex.create({
       `calc(${layerViewportInset.maxBlockSizeFallback})`,
     ),
   },
-  // Alignment-axis gutter (spec:AST-059 FR1): a margin on the far viewport
-  // edge of the alignment axis — one on the anchor-facing edge would push an
-  // aligned layer off its anchor — or both edges for a centered layer. The
-  // flip tactic mirrors it with the area. The slide options carry both
-  // (see layerSlideRules.ts).
-  gutterInlineEnd: {
+  // Anchor geometry. Insets that call `anchor()` place an anchored layer
+  // against the viewport itself, so an option fits only where the layer stays
+  // on screen, even when the anchor runs past the viewport.
+  // Every block-start inset subtracts the keyboard lift and every block-end
+  // inset adds it. The flip tactics mirror insets, margins, and self
+  // alignment together; `getSelfAlignment` writes the self alignment inline.
+  //
+  // Placement axis: the inset on the anchor side meets the anchor's far edge
+  // and the other meets the viewport edge. The placement margins above hold
+  // the clearance and the gutter.
+  sideBelow: {
+    insetBlockStart: `calc(anchor(outside) - ${LIFT})`,
+    insetBlockEnd: `calc(${LIFT})`,
+  },
+  sideAbove: {
+    insetBlockStart: `calc(0px - ${LIFT})`,
+    insetBlockEnd: `calc(anchor(outside) + ${LIFT})`,
+  },
+  sideEnd: {
+    insetInlineStart: 'anchor(outside)',
+    insetInlineEnd: 0,
+  },
+  sideStart: {
+    insetInlineStart: 0,
+    insetInlineEnd: 'anchor(outside)',
+  },
+  // Alignment axis of an aligned layer: the aligned inset meets the anchor's
+  // edge, held off the viewport edge by the gutter, and the far inset meets
+  // the viewport edge with the gutter as its margin. A margin on the aligned
+  // edge would push the layer off its anchor.
+  alignInlineStart: {
+    insetInlineStart: stylex.firstThatWorks(
+      `max(${layerViewportInset.gutterInline}, anchor(inside))`,
+      `max(${layerViewportInset.gutterInlineFallback}, anchor(inside))`,
+    ),
+    insetInlineEnd: 0,
     marginInlineEnd: stylex.firstThatWorks(
       `calc(${layerViewportInset.gutterInline})`,
       `calc(${layerViewportInset.gutterInlineFallback})`,
     ),
   },
-  gutterInlineStart: {
+  alignInlineEnd: {
+    insetInlineStart: 0,
+    insetInlineEnd: stylex.firstThatWorks(
+      `max(${layerViewportInset.gutterInline}, anchor(inside))`,
+      `max(${layerViewportInset.gutterInlineFallback}, anchor(inside))`,
+    ),
     marginInlineStart: stylex.firstThatWorks(
       `calc(${layerViewportInset.gutterInline})`,
       `calc(${layerViewportInset.gutterInlineFallback})`,
     ),
   },
-  gutterBlockEnd: {
+  alignBlockStart: {
+    insetBlockStart: stylex.firstThatWorks(
+      `calc(max(${layerViewportInset.gutterBlock}, anchor(inside)) - ${LIFT})`,
+      `calc(max(${layerViewportInset.gutterBlockFallback}, anchor(inside)) - ${LIFT})`,
+    ),
+    insetBlockEnd: `calc(${LIFT})`,
     marginBlockEnd: stylex.firstThatWorks(
       `calc(${layerViewportInset.gutterBlock})`,
       `calc(${layerViewportInset.gutterBlockFallback})`,
     ),
   },
-  gutterBlockStart: {
+  alignBlockEnd: {
+    insetBlockStart: `calc(0px - ${LIFT})`,
+    insetBlockEnd: stylex.firstThatWorks(
+      `calc(max(${layerViewportInset.gutterBlock}, anchor(inside)) + ${LIFT})`,
+      `calc(max(${layerViewportInset.gutterBlockFallback}, anchor(inside)) + ${LIFT})`,
+    ),
     marginBlockStart: stylex.firstThatWorks(
+      `calc(${layerViewportInset.gutterBlock})`,
+      `calc(${layerViewportInset.gutterBlockFallback})`,
+    ),
+  },
+  // While the anchor is out of view the aligned inset follows the anchor
+  // without the gutter's hold, so the layer keeps the position its flips give
+  // it instead of sliding to the edge.
+  heldInlineStart: {
+    insetInlineStart: 'anchor(inside)',
+  },
+  heldInlineEnd: {
+    insetInlineEnd: 'anchor(inside)',
+  },
+  heldBlockStart: {
+    insetBlockStart: `calc(anchor(inside) - ${LIFT})`,
+  },
+  heldBlockEnd: {
+    insetBlockEnd: `calc(anchor(inside) + ${LIFT})`,
+  },
+  // Alignment axis of a centered layer: both insets meet the viewport edges
+  // with the gutter as both margins.
+  centerInline: {
+    insetInlineStart: 0,
+    insetInlineEnd: 0,
+    marginInlineStart: stylex.firstThatWorks(
+      `calc(${layerViewportInset.gutterInline})`,
+      `calc(${layerViewportInset.gutterInlineFallback})`,
+    ),
+    marginInlineEnd: stylex.firstThatWorks(
+      `calc(${layerViewportInset.gutterInline})`,
+      `calc(${layerViewportInset.gutterInlineFallback})`,
+    ),
+  },
+  centerBlock: {
+    insetBlockStart: `calc(0px - ${LIFT})`,
+    insetBlockEnd: `calc(${LIFT})`,
+    marginBlockStart: stylex.firstThatWorks(
+      `calc(${layerViewportInset.gutterBlock})`,
+      `calc(${layerViewportInset.gutterBlockFallback})`,
+    ),
+    marginBlockEnd: stylex.firstThatWorks(
       `calc(${layerViewportInset.gutterBlock})`,
       `calc(${layerViewportInset.gutterBlockFallback})`,
     ),
@@ -243,7 +334,7 @@ export interface ContextRenderProps {
    * Who authors the layer's position styles.
    *
    * `'anchor'` (default): the hook derives CSS anchor-positioning styles —
-   * `position-area` and `position-try-fallbacks` — from the logical
+   * `anchor()` insets and `position-try-fallbacks` — from the logical
    * `placement`/`alignment`.
    *
    * `'custom'`: the consumer authors its own position styles via `style`
@@ -527,6 +618,13 @@ interface InternalContextLayerOptions extends ContextLayerOptions {
    * runtime's read.
    */
   writesEntranceSide?: boolean;
+  /**
+   * Called after a scroll stop places the open layer afresh, so the browser
+   * may have picked another option. A component that measures the layer
+   * against its anchor (a Selector's list over its selected option) measures
+   * again here.
+   */
+  onPlacedAfresh?: () => void;
 }
 
 function toCssLength(value: number | string): string {
@@ -818,13 +916,16 @@ function observeScrollStop(
  * paint), the viewport resizing (before paint), and a scroll of the anchor
  * stopping (`observeScrollStop`, in the first frame painted after it). Each
  * calls `keepAnchorClear` for this layer and anchor while `isCurrent` says
- * they are still the live pair. Returns the function that removes every
- * observer and listener it added.
+ * they are still the live pair, except that a scroll stop with the anchor in
+ * view (`isAnchorInView`) places the layer afresh. Returns the function that
+ * removes every observer and listener it added.
  */
 function observeAnchorClearance(
   layer: HTMLElement,
   anchor: HTMLElement,
   isCurrent: () => boolean,
+  isAnchorInView: () => boolean,
+  onPlacedAfresh: () => void,
 ): () => void {
   const view = layer.ownerDocument.defaultView;
   if (!view) {
@@ -845,7 +946,19 @@ function observeAnchorClearance(
     observer.observe(anchor);
   }
   view.addEventListener('resize', reread);
-  const stopObservingScrollStop = observeScrollStop(view, anchor, reread);
+  // At a scroll stop a layer whose anchor is in view is placed afresh, as
+  // every anchored layer is; otherwise it is checked against its anchor.
+  const stopObservingScrollStop = observeScrollStop(view, anchor, () => {
+    if (!isCurrent()) {
+      return;
+    }
+    if (isAnchorInView() && layer.hasAttribute(LAYER_ANCHORED_ATTRIBUTE)) {
+      placeAfresh(layer);
+      onPlacedAfresh();
+    } else {
+      keepAnchorClear(layer, anchor);
+    }
+  });
   return () => {
     observer?.disconnect();
     stopObservingScrollStop();
@@ -1087,139 +1200,97 @@ function readPortalWritingContext(
 }
 
 /**
- * Map logical placement/alignment to a CSS position-area value.
+ * Compute the `position-try-fallbacks` list for a placement. Chromium tries
+ * no more than five options after the layer's own position.
  *
- * Uses the self-* logical keyword family: the inline axis resolves against
- * the popover's own direction (inherited inline or preserved when portaled),
- * so it mirrors in RTL without placement-specific JS. The block axis is
- * direction-neutral but must come from the same keyword family — mixing
- * physical `top` with `self-inline-*` produces an invalid position-area
- * (computes to `none`, which pins the popover to the viewport corner because
- * styles.base zeroes the UA margins).
- *
- * Note the plain logical family (`inline-start`, no `self-`) is NOT a
- * substitute: it resolves against the containing block — the page root for
- * a top-layer popover — so it ignores `direction` set on a subtree, which
- * is exactly #3389's repro.
- */
-function getPositionArea(
-  placement: LayerPlacement = 'above',
-  alignment: LayerAlignment = 'center',
-): string {
-  if (placement === 'above' || placement === 'below') {
-    const block = placement === 'above' ? 'self-block-start' : 'self-block-end';
-    if (alignment === 'start') {
-      return `${block} span-self-inline-end`;
-    }
-    if (alignment === 'end') {
-      return `${block} span-self-inline-start`;
-    }
-    return block; // center
-  }
-
-  const inline =
-    placement === 'start' ? 'self-inline-start' : 'self-inline-end';
-  if (alignment === 'start') {
-    return `${inline} span-self-block-end`;
-  }
-  if (alignment === 'end') {
-    return `${inline} span-self-block-start`;
-  }
-  return inline; // center
-}
-
-/**
- * Compute the `position-try-fallbacks` list for a placement/alignment pair
- * (spec:AST-059 FR4).
- *
- * Flips first; they mirror the placement-axis margins (clearance and gutter)
- * and the alignment-axis gutter with the area. Then the slide: named
- * `@position-try` options whose area spans the whole alignment axis
- * (`layerSlideRules.ts`), same side of the trigger first, opposite side
- * second. Flips alone cannot rescue a layer wider than the room on either
- * side of its trigger — every flipped option overflows the alignment axis
- * too, and the browser keeps the base option, so the layer never moves to the
- * side of the trigger that has room on the placement axis (#3671 for centered
- * layers, where a flip maps center → center). A slide option fits wherever
- * the layer fits the viewport; its anchor-center alignment plus the browser's
- * overflow shift keep the layer's margin box — and so the gutter on both
- * edges — inside the viewport. Centered layers keep their one-sided spans
- * ahead of the full span so they slide the least distance first.
+ * Flips first; they mirror the insets, margins, and self alignment of both
+ * axes, so the clearance stays on the anchor side and the gutter on the far
+ * side. Then the slide: named `@position-try` options whose insets span the
+ * whole alignment axis (`layerSlideRules.ts`), same side of the trigger
+ * first, opposite side second. Flips alone cannot rescue a layer wider than
+ * the room on either side of its trigger: every flipped option overflows the
+ * alignment axis too, and the browser keeps the base option, so the layer
+ * never moves to the side of the trigger that has room on the placement axis.
+ * A slide option fits wherever the layer fits the viewport; its
+ * `anchor-center` alignment keeps the layer's margin box, and so the gutter
+ * on both edges, inside the viewport. Content taller than either side fits
+ * no option, so the browser keeps the base option and its overflow alignment
+ * shifts the box into the viewport, which the software keyboard's cap and
+ * lift build on.
  */
 export function getPositionTryFallbacks(
   placement: LayerPlacement = 'above',
-  alignment: LayerAlignment = 'center',
 ): string {
-  const flips = 'flip-block, flip-inline, flip-block flip-inline';
-  const slides = `${slideRuleName(placement, alignment, 'same')}, ${slideRuleName(placement, alignment, 'opposite')}`;
-
-  if (alignment !== 'center') {
-    return `${flips}, ${slides}`;
-  }
-
-  if (placement === 'above' || placement === 'below') {
-    const [same, opposite] =
-      placement === 'above' ? ['top', 'bottom'] : ['bottom', 'top'];
-    return `${flips}, ${same} span-left, ${same} span-right, ${opposite} span-left, ${opposite} span-right, ${slides}`;
-  }
-
-  const [same, opposite] =
-    placement === 'start' ? ['left', 'right'] : ['right', 'left'];
-  return `${flips}, ${same} span-top, ${same} span-bottom, ${opposite} span-top, ${opposite} span-bottom, ${slides}`;
+  return `flip-block, flip-inline, flip-block flip-inline, ${slideRuleName(placement, 'same')}, ${slideRuleName(placement, 'opposite')}`;
 }
 
 /**
- * The self-alignment an aligned layer uses while its anchor is out of view
- * (spec:AST-059 FR5). A position-area box that overflows the room beside its
- * anchor is shifted by default to stay inside the viewport — the slide an
- * aligned layer relies on when it fits on neither side (FR4). Once the anchor
- * has left the viewport that shift would pin the layer into the narrowest
- * strip at the edge, so the alignment is pinned `unsafe` toward the anchor
- * instead and the layer holds the position its flips give it. `self-*`
- * keywords resolve against the layer's own direction, matching the `self-*`
- * position-area family; the flip tactics swap start/end with the area.
- *
- * Centered layers already slide through their span fallbacks and are
- * unchanged; a visible anchor keeps the browser's default alignment.
+ * The self alignment of an anchored layer, written inline because StyleX's
+ * types do not admit `anchor-center` or an overflow position. On the
+ * placement axis the box aligns toward its anchor. On the alignment axis an
+ * aligned layer aligns to its anchor's edge, and a centered one uses
+ * `anchor-center`, which shifts the box the least distance that keeps its
+ * margin box inside the viewport. While the anchor is out of view an aligned
+ * layer's alignment is `unsafe`, so the layer holds the position its flips
+ * give it.
  */
 export function getSelfAlignment(
   placement: LayerPlacement,
   alignment: LayerAlignment,
   isAnchorInView: boolean,
 ): React.CSSProperties {
-  if (isAnchorInView || alignment === 'center') {
-    return {};
-  }
-  const edge = alignment === 'start' ? 'unsafe self-start' : 'unsafe self-end';
-  return placement === 'above' || placement === 'below'
-    ? {justifySelf: edge}
-    : {alignSelf: edge};
+  const isBlockSide = placement === 'above' || placement === 'below';
+  const towardAnchor =
+    placement === 'above' || placement === 'start' ? 'self-end' : 'self-start';
+  const along =
+    alignment === 'center'
+      ? 'anchor-center'
+      : `${isAnchorInView ? '' : 'unsafe '}self-${alignment}`;
+  return isBlockSide
+    ? {alignSelf: towardAnchor, justifySelf: along}
+    : {justifySelf: towardAnchor, alignSelf: along};
 }
 
 /**
- * The gutter styles for a placement/alignment pair: the far viewport edge of
- * the alignment axis, or both edges when centered (spec:AST-059 FR1).
+ * The anchor geometry for a placement/alignment pair: the placement-axis
+ * insets, then the alignment-axis insets and gutter. An aligned layer whose
+ * anchor is out of view follows the anchor without the gutter's hold.
  */
-function getGutterStyles(
+function getAnchorGeometry(
   placement: LayerPlacement,
   alignment: LayerAlignment,
+  isAnchorInView: boolean,
 ): ReadonlyArray<StyleXStyles> {
-  if (placement === 'above' || placement === 'below') {
-    if (alignment === 'start') {
-      return [styles.gutterInlineEnd];
-    }
-    if (alignment === 'end') {
-      return [styles.gutterInlineStart];
-    }
-    return [styles.gutterInlineStart, styles.gutterInlineEnd];
+  const isBlockSide = placement === 'above' || placement === 'below';
+  const side =
+    placement === 'above'
+      ? styles.sideAbove
+      : placement === 'below'
+        ? styles.sideBelow
+        : placement === 'start'
+          ? styles.sideStart
+          : styles.sideEnd;
+  if (alignment === 'center') {
+    return [side, isBlockSide ? styles.centerInline : styles.centerBlock];
   }
-  if (alignment === 'start') {
-    return [styles.gutterBlockEnd];
-  }
-  if (alignment === 'end') {
-    return [styles.gutterBlockStart];
-  }
-  return [styles.gutterBlockStart, styles.gutterBlockEnd];
+  const isStart = alignment === 'start';
+  const aligned = isBlockSide
+    ? isStart
+      ? styles.alignInlineStart
+      : styles.alignInlineEnd
+    : isStart
+      ? styles.alignBlockStart
+      : styles.alignBlockEnd;
+  const held = isAnchorInView
+    ? null
+    : isBlockSide
+      ? isStart
+        ? styles.heldInlineStart
+        : styles.heldInlineEnd
+      : isStart
+        ? styles.heldBlockStart
+        : styles.heldBlockEnd;
+  return held == null ? [side, aligned] : [side, aligned, held];
 }
 
 /**
@@ -1297,6 +1368,9 @@ function useLayerImplementation(
     mode === 'context' ? options.watchesOutsidePans : undefined;
   const writesEntranceSide =
     mode === 'context' ? (options.writesEntranceSide ?? false) : false;
+  const onPlacedAfreshRef = useCommittedRef(
+    mode === 'context' ? options.onPlacedAfresh : undefined,
+  );
   const onCloseStart = mode === 'context' ? options.onCloseStart : undefined;
   const onOpenPendingChange =
     mode === 'context' ? options.onOpenPendingChange : undefined;
@@ -2070,6 +2144,8 @@ function useLayerImplementation(
             layer,
             el,
             () => popoverRef.current === layer && triggerRef.current === el,
+            () => isAnchorInViewRef.current,
+            () => onPlacedAfreshRef.current?.(),
           );
           keepAnchorClear(layer, el);
         }
@@ -2094,7 +2170,7 @@ function useLayerImplementation(
         });
       }
     },
-    [anchorId, cancelPendingAnchorWait, keepsAnchorClear],
+    [anchorId, cancelPendingAnchorWait, keepsAnchorClear, onPlacedAfreshRef],
   );
 
   // Arm only when the dismissing gesture's click is still ahead of us. Some
@@ -2442,12 +2518,50 @@ function useLayerImplementation(
       layer,
       anchor,
       () => popoverRef.current === layer && triggerRef.current === anchor,
+      () => isAnchorInViewRef.current,
+      () => onPlacedAfreshRef.current?.(),
     );
     return () => {
       clearObserversRef.current?.();
       clearObserversRef.current = null;
     };
   }, [keepsAnchorClear, isOpen, mode, mountGeneration]);
+
+  // A scroll only moves an anchored layer by the scroll distance. The browser
+  // keeps the insets it resolved at the last placement. While the anchor is
+  // out of view, the aligned inset follows the anchor, which the move keeps
+  // right. While the anchor is in view, the aligned inset can hold a gutter,
+  // and the browser can pick another option. A move updates neither. So a
+  // layer whose anchor is in view when a scroll stops is placed afresh
+  // (`observeScrollStop`). Nothing reads or forces layout during the scroll.
+  // A layer that keeps its anchor clear has its own scroll-stop listener
+  // (`observeAnchorClearance`), which places it afresh in the same way, so it
+  // is not placed twice.
+  // Effect: syncs the browser's last placement of the layer with the scroll
+  // position at each scroll stop. The scroll-stop listeners are bound while
+  // the layer is open and removed when it closes, unmounts or is remounted by
+  // a moved render call (`mountGeneration`).
+  useIsomorphicLayoutEffect(() => {
+    if (!isOpen || mode !== 'context' || keepsAnchorClear) {
+      return;
+    }
+    const layer = popoverRef.current;
+    const anchor = triggerRef.current;
+    const view = anchor?.ownerDocument.defaultView;
+    if (!layer || !anchor || !view) {
+      return;
+    }
+    return observeScrollStop(view, anchor, () => {
+      if (
+        isAnchorInViewRef.current &&
+        popoverRef.current === layer &&
+        layer.hasAttribute(LAYER_ANCHORED_ATTRIBUTE)
+      ) {
+        placeAfresh(layer);
+        onPlacedAfreshRef.current?.();
+      }
+    });
+  }, [isOpen, mode, keepsAnchorClear, mountGeneration, onPlacedAfreshRef]);
 
   // Render function for context mode
   const renderContext = useCallback(
@@ -2468,7 +2582,7 @@ function useLayerImplementation(
       } = props || {};
 
       // CSS anchor positioning (dynamic, not in StyleX)
-      const standardFallbacks = getPositionTryFallbacks(placement, alignment);
+      const standardFallbacks = getPositionTryFallbacks(placement);
       // An above or below layer that keeps its anchor clear uses one combined
       // list whose options never overlap the anchor (FR4).
       const clearFallbacks =
@@ -2482,12 +2596,11 @@ function useLayerImplementation(
             {positionAnchor: anchorId}
           : {
               positionAnchor: anchorId,
-              positionArea: getPositionArea(placement, alignment),
               positionTryFallbacks: clearFallbacks || standardFallbacks,
+              ...getSelfAlignment(placement, alignment, isAnchorInView),
               ...(clearFallbacks
                 ? {alignSelf: anchorClearAlignment(placement)}
                 : {}),
-              ...getSelfAlignment(placement, alignment, isAnchorInView),
             };
 
       const clearance = offset ? toCssLength(offset) : null;
@@ -2516,7 +2629,10 @@ function useLayerImplementation(
 
       const viewportStyles =
         positioning === 'anchor'
-          ? [styles.viewportFit, ...getGutterStyles(placement, alignment)]
+          ? [
+              styles.viewportFit,
+              ...getAnchorGeometry(placement, alignment, isAnchorInView),
+            ]
           : null;
 
       const stylexResult = stylex.props(
@@ -2559,7 +2675,13 @@ function useLayerImplementation(
           style={{
             ...stylexResult.style,
             ...anchorStyle,
-            ...keyboardLiftStyle(keyboardLift),
+            // Each anchored layer writes its own lift, so a layer nested in a
+            // lifted layer does not inherit the host's lift.
+            ...(positioning === 'anchor'
+              ? (keyboardLiftStyle(keyboardLift) ?? {
+                  [LAYER_LIFT_PROPERTY]: '0px',
+                })
+              : null),
             ...clearanceProperty,
             ...layerInsetProperties(declaredInset),
             ...mount.portalStyle,

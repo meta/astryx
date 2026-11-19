@@ -49,7 +49,8 @@ export function bundleCoreExport(
     const output = execFileSync(
       process.execPath,
       [script, src, module, name, mode],
-      {encoding: 'utf8', timeout: 120_000},
+      // A bundle of a large component is over the 1 MiB default buffer.
+      {encoding: 'utf8', timeout: 120_000, maxBuffer: 64 * 1024 * 1024},
     );
     return JSON.parse(output.trim().split('\n').pop() ?? '""') as string;
   } finally {

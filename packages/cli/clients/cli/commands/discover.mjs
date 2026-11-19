@@ -28,6 +28,7 @@ import {
 } from '../formatters/index.mjs';
 import {cliError, rejectEmptyArgument} from '../lib/cli-error.mjs';
 import {definitionCoverageText} from '../../../foundation/text/definition-coverage.mjs';
+import {defaultVariantText} from '../../../foundation/text/default-variant.mjs';
 import {
   answersQueries,
   discover as discoverApi,
@@ -66,6 +67,7 @@ const ITEM_FIELDS = [
   'themes',
   'codemods',
   'agentDocs',
+  'skills',
   'iconSets',
 ];
 
@@ -637,8 +639,12 @@ export function registerDiscover(program) {
 
           case 'discover.item': {
             const d = result.data;
+            const shown =
+              d.kind === 'icon-set'
+                ? {...d, default: defaultVariantText(d.default)}
+                : d;
             emit(
-              record(withIconSetCoverage(d, iconSetCoverageOf(result)), {
+              record(withIconSetCoverage(shown, iconSetCoverageOf(result)), {
                 omit: ['install', 'experimental'],
                 // An icon set is experimental (spec:AST-017 FR27): its name
                 // carries the mark, as in the list.

@@ -8,7 +8,7 @@ import {ProgressBar} from '@astryxdesign/core/ProgressBar';
 import {Stack} from '@astryxdesign/core/Layout';
 import {Button} from '@astryxdesign/core/Button';
 import {Icon} from '@astryxdesign/core/Icon';
-import {PaperClipIcon, AtSymbolIcon} from '@heroicons/react/24/outline';
+import {AttachIcon, MentionIcon} from '@astryxdesign/template-icons';
 import {useToast} from '@astryxdesign/core/Toast';
 
 export default function ChatComposerDrawerWithProgress() {
@@ -30,7 +30,7 @@ export default function ChatComposerDrawerWithProgress() {
               label="Mention"
               variant="ghost"
               size="sm"
-              icon={<Icon icon={AtSymbolIcon} size="sm" />}
+              icon={<Icon icon={MentionIcon} size="sm" />}
               isIconOnly
               onClick={() =>
                 showToast({body: 'Demo: a mention picker would open here'})
@@ -40,7 +40,7 @@ export default function ChatComposerDrawerWithProgress() {
               label="Attach"
               variant="ghost"
               size="sm"
-              icon={<Icon icon={PaperClipIcon} size="sm" />}
+              icon={<Icon icon={AttachIcon} size="sm" />}
               isIconOnly
               onClick={() =>
                 showToast({body: 'Demo: a file picker would open here'})
