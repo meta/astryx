@@ -883,7 +883,10 @@ function holdsActingContent(path, context) {
       const inContent =
         parent.type === 'JSXElement' || parent.type === 'JSXFragment'
           ? parent.children.includes(inner.node)
-          : parent.type === 'JSXAttribute' && ELEMENT_PROPS.has(attributeName(parent)) && inner.parentPath.parentPath.parent !== path.node;
+          : parent.type === 'JSXAttribute' &&
+            ELEMENT_PROPS.has(attributeName(parent)) &&
+            inner.parentPath.parentPath.parent !== path.node &&
+            !glyphProp(inner.parentPath.parentPath.parentPath, attributeName(parent), context);
       if (inContent && !plainContent(inner.node.expression, path, context)) {
         acting = true;
         inner.stop();
@@ -917,6 +920,21 @@ function holdsActingContent(path, context) {
 
 /** The props of a button that hold content: what it shows beside its label. */
 const ELEMENT_PROPS = new Set(['children', 'endContent', 'icon']);
+
+/** Core components whose named props take a glyph (an icon name or component), never content. */
+const CORE_GLYPH_PROPS = new Map([['Icon', new Set(['icon'])]]);
+
+/**
+ * Whether a prop of an element in a button's content takes a glyph: Core
+ * `Icon`'s `icon`, which nothing can press.
+ * @param {any} elementPath a JSXElement path
+ * @param {string} prop
+ * @param {ScanContext} context
+ */
+function glyphProp(elementPath, prop, context) {
+  const target = referent(elementPath, context);
+  return target.kind === 'package' && isCore(target.source) && CORE_GLYPH_PROPS.get(target.name.split('.').pop() ?? '')?.has(prop) === true;
+}
 
 /**
  * Whether an expression in a button's content is plain content the scan can

@@ -196,6 +196,8 @@ describe('a button that acts, or whose press the scan cannot judge', () => {
     expect(onPage('<Button label="Go">{busy ? "Saving" : "Save"}</Button>')).toEqual(['page.tsx:6 Go']);
     expect(onPage('<Button label="Go"><Text>{"Go now"}</Text></Button>', "import {Text} from '@astryxdesign/core';")).toEqual(['page.tsx:6 Go']);
     expect(onPage('<Button label="Go">{busy && "Saving"}</Button>')).toEqual(['page.tsx:6 Go']);
+    // Core Icon's `icon` takes a glyph, so a variable there is not content.
+    expect(onPage('<IconButton label="Edit" icon={<Icon icon={glyph} />} />', "import {Icon} from '@astryxdesign/core';")).toEqual(['page.tsx:6 Edit']);
     expect(onPage('<Button label="Edit" icon={PencilIcon} />', "import {PencilIcon} from 'lucide-react';")).toEqual(['page.tsx:6 Edit']);
   });
 });

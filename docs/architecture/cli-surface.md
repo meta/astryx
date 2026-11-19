@@ -442,10 +442,13 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
   loading by such a path); or one that an MDX or Astro page names. A module
   that imports a component and exports it again under the same name passes it
   on, as a re-export does, and so does a barrel that a module may load by such
-  a path; and a component that the module refers to other than by rendering it
-  is not judged in any scope. A hash router named only in a comment is not
-  hash routing. The warning names each button's file, line and label, and
-  never fails `doctor`.
+  a path; and a component that the module refers to other than by rendering
+  it, in any function or block, is not judged. A hash router named only in a
+  comment is not hash routing. When the app's own code listens for a press
+  through the DOM (`addEventListener` for a click, or a pointer, mouse or
+  touch press, or an `onclick`-style property), doctor judges no button and
+  reports `info`, since a script may act on any button that way. The warning
+  names each button's file, line and label, and never fails `doctor`.
 - **INV12 — Human chatter never touches stdout in JSON mode.** `humanLog` and
   `humanWarn` are the only chatter primitives, and both are no-ops under
   `--json`. The run-level lines `spec:AST-081` defines, which print before or

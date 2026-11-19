@@ -212,7 +212,7 @@ import {
  *   The project's icon sets (AST-084 FR17), or null when they could not be
  *   read or the icon feature gate is off.
  *   Experimental: may change or be removed in a patch release.
- * @property {{found: Array<{file: string, line: number, column: number, component: 'Button' | 'IconButton', label: string | null, note: string | null}>, files: number, incomplete: boolean}|null} [buttonActions]
+ * @property {{found: Array<{file: string, line: number, column: number, component: 'Button' | 'IconButton', label: string | null, note: string | null}>, files: number, incomplete: boolean, domListener?: string}|null} [buttonActions]
  *   The Core buttons in the project's own source that do nothing when
  *   pressed, and how many source files were read; null outside a project on
  *   Core, or when the scan could not run.
@@ -1807,6 +1807,14 @@ export function checkButtonActions(ctx) {
       label,
       status: 'info',
       message: `Not checked: the project has more source files than doctor reads (${scan.files} read), so it cannot tell where each component is rendered.`,
+    };
+  }
+  if (scan.domListener) {
+    return {
+      id,
+      label,
+      status: 'info',
+      message: `Not checked: \`${scan.domListener}\` listens for a press through the DOM, so a script may act on a button in a way doctor cannot read.`,
     };
   }
   if (count === 0) {

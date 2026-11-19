@@ -283,9 +283,6 @@ export function readTextFileIfExists(file) {
   }
 }
 
-/** A module path a module imports that is not relative, as the capture: a package, an alias or a `#` key. */
-const OWN_MODULE = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*)['"]([^'"./][^'"]*)['"]/g;
-
 /** A module path of only `.` and `..`, with an optional `index`: `'..'`, `'./index'`. */
 const FOLDER_PATH = /['"`](?:\.{1,2}\/)*\.{1,2}(?:\/(?:index(?:\.[cm]?[jt]sx?)?)?)?['"`]/;
 
@@ -419,11 +416,16 @@ const TEST_FILE = /(^|\/)(__tests__|__mocks__|__fixtures__|__stories__)\/|\.(tes
  */
 const TEST_FOLDER = /(^|\/)(tests?|stories|fixtures|e2e)\//;
 
+/** A press listener a script adds through the DOM: `addEventListener('click', …)`, `el.onclick = …`. */
+const DOM_PRESS_LISTENER =
+  /\baddEventListener\(\s*['"`](?:click|auxclick|dblclick|pointerdown|pointerup|mousedown|mouseup|touchstart|touchend)['"`]|\.on(?:click|auxclick|dblclick|pointerdown|pointerup|mousedown|mouseup|touchstart|touchend)\s*=(?!=)/;
+
 /**
- * A bare module path a module imports, re-exports, or loads (`from 'x'`,
- * `import('x')`, `require('x')`), as the capture.
+ * A module path a module imports, re-exports, or loads that is not relative
+ * (`from 'x'`, `import('x')`, `require('x')`), as the capture: a package, a
+ * path alias or a `#` key.
  */
-const BARE_MODULE = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*)['"]([^'"./#][^'"]*)['"]/g;
+const NON_RELATIVE_MODULE = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*)['"]([^'"./][^'"]*)['"]/g;
 
 /** @param {string} text */
 const escapeRegExp = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -436,7 +438,7 @@ const escapeRegExp = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
  * executing app code. `incomplete` says the project has more source files than
  * doctor lists, so the check did not run.
  * @param {string} projectDir
- * @returns {{found: import('../../foundation/discovery/button-actions.mjs').ButtonFinding[], files: number, incomplete: boolean}}
+ * @returns {{found: import('../../foundation/discovery/button-actions.mjs').ButtonFinding[], files: number, incomplete: boolean, domListener?: string}}
  */
 export function findButtonsWithoutAction(projectDir) {
   /** @type {string[]} */
@@ -473,6 +475,10 @@ export function findButtonsWithoutAction(projectDir) {
     return text != null && text.includes('@astryxdesign/core') && /\b(?:Icon)?Button\b/.test(text);
   });
   if (candidates.length === 0) return {found: [], files: files.length, incomplete: false};
+  // A script that listens for a press through the DOM may act on any button,
+  // by its wrapper's id or from the document, so no button is judged.
+  const listener = files.find(file => !TEST_FOLDER.test(relative(file)) && DOM_PRESS_LISTENER.test(textOf(file) ?? ''));
+  if (listener) return {found: [], files: files.length, incomplete: false, domListener: relative(listener)};
   const declared = declaredPackages(projectDir);
   const ownName = readPackageJson(path.join(projectDir, 'package.json'))?.name;
   // The project's own packages, by name: a package.json in a folder of the
@@ -533,7 +539,8 @@ export function findButtonsWithoutAction(projectDir) {
   /** @type {Set<string>} */
   const importedMembers = new Set();
   for (const file of [...files, ...markup]) {
-    for (const [, specifier] of (textOf(file) ?? '').matchAll(BARE_MODULE)) {
+    for (const [, specifier] of (textOf(file) ?? '').matchAll(NON_RELATIVE_MODULE)) {
+      if (specifier.startsWith('#')) continue;
       const {name} = splitSpecifier(specifier);
       const {kind, dir} = installedAs(name, file);
       if (kind === 'member' && dir != null) importedMembers.add(dir);
@@ -587,7 +594,7 @@ export function findButtonsWithoutAction(projectDir) {
   /** @type {Set<string>} */
   const aliasImporters = new Set();
   for (const file of files) {
-    for (const [, specifier] of (textOf(file) ?? '').matchAll(OWN_MODULE)) {
+    for (const [, specifier] of (textOf(file) ?? '').matchAll(NON_RELATIVE_MODULE)) {
       if (specifier.startsWith('#') || projectMapsImport(specifier, file)) {
         aliasImporters.add(file);
         break;

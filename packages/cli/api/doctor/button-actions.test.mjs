@@ -378,6 +378,18 @@ describe('the button-actions check', () => {
         'src/App.tsx': ["import Banner from '#hero';", 'export default function App() {', '  return <a href="/start"><Banner /></a>;', '}', ''].join('\n'),
       });
       expect(viaFallback?.status).toBe('pass');
+      // A script that listens for a press through the DOM may act on the button.
+      const delegated = await fresh({
+        'src/App.tsx': app('<Button label="Start" />'),
+        'src/delegate.ts': "document.getElementById('root')?.addEventListener('click', event => {\n  void event;\n});\n",
+      });
+      expect(delegated?.status).toBe('info');
+      expect(delegated?.message).toBe('Not checked: `src/delegate.ts` listens for a press through the DOM, so a script may act on a button in a way doctor cannot read.');
+      const keys = await fresh({
+        'src/App.tsx': app('<Button label="Start" />'),
+        'src/keys.ts': "document.addEventListener('keydown', event => {\n  void event;\n});\n",
+      });
+      expect(keys?.status).toBe('warn');
       // A wrapper whose content a page passes in, such as a link.
       const wrapper = await fresh({
         'src/CTA.tsx': ["import {Button} from '@astryxdesign/core';", 'export function CTA({children}: {children: unknown}) {', '  return <Button label="Start" variant="primary">{children}</Button>;', '}', ''].join('\n'),
