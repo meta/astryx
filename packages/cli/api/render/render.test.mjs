@@ -1758,7 +1758,7 @@ describe('render(): every write stays inside the current folder', () => {
     );
     put(
       'font-cut/page.tsx',
-      "import './fonts.css';\nimport {useState} from 'react';\nexport default function Page() {\n  const [later, setLater] = useState(false);\n  return <p className=\"t\" onClick={() => setLater(true)}>{later ? 'Привет' : 'Hello'}</p>;\n}\n",
+      "import './fonts.css';\nimport {useState} from 'react';\nexport default function Page() {\n  const [later, setLater] = useState(false);\n  return <p className=\"t\" onClick={() => setLater(true)}>{later ? 'Привет' : 'Hello'}</p>;\n}\nimport '@astryxdesign/core/astryx.css';\n",
     );
     const r = /** @type {any} */ (await render('font-cut/page.tsx', {cwd: dir}));
     const codes = r.data.warnings.map((/** @type {any} */ w) => w.code);
@@ -3906,7 +3906,7 @@ describe('render(): a page outside a project', () => {
     fs.writeFileSync(path.join(site, 'src/c d.png'), PNG);
     fs.writeFileSync(
       path.join(site, 'src/page.tsx'),
-      'export default function Page() {\n  return <main><img src="/pics/a%20b.png" alt="A" /><img src="./c%20d.png" alt="C" /></main>;\n}\n',
+      'export default function Page() {\n  return <main><img src="/pics/a%20b.png" alt="A" /><img src="./c%20d.png" alt="C" /></main>;\n}\nimport \'@astryxdesign/core/astryx.css\';\n',
     );
     const run = runBin(site, ['experimental', 'export', 'src/page.tsx']);
     expect(run.status).toBe(0);
@@ -3924,7 +3924,7 @@ describe('render(): a page outside a project', () => {
     fs.writeFileSync(path.join(site, 'src/Screen%20Shot.png'), PNG);
     fs.writeFileSync(
       path.join(site, 'src/page.tsx'),
-      "import {useState} from 'react';\nexport default function Page() {\n  const [src, setSrc] = useState('');\n  return <main><button onClick={() => { import('./big.png').then(m => setSrc(m.default)); import('./Screen%20Shot.png'); }}>Show</button>{src ? <img src={src} alt=\"Big\" /> : null}</main>;\n}\n",
+      "import {useState} from 'react';\nexport default function Page() {\n  const [src, setSrc] = useState('');\n  return <main><button onClick={() => { import('./big.png').then(m => setSrc(m.default)); import('./Screen%20Shot.png'); }}>Show</button>{src ? <img src={src} alt=\"Big\" /> : null}</main>;\n}\nimport '@astryxdesign/core/astryx.css';\n",
     );
     const run = runBin(site, ['experimental', 'export', 'src/page.tsx']);
     expect(run.status).toBe(0);
