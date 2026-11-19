@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+import type {ComponentType} from 'react';
 /**
  * @file index.ts
  * @output Exports ContextMenu, ContextMenuItem and related types
@@ -15,10 +16,11 @@ export {
 } from './ContextMenu';
 export type {AdaptivePresentation as MenuPresentation} from '../hooks/useAdaptivePresentation';
 
-export {
-  DropdownMenuItem as ContextMenuItem,
-  type DropdownMenuItemProps as ContextMenuItemProps,
-} from '../DropdownMenu/DropdownMenuItem';
+import {DropdownMenuItem} from '../DropdownMenu/DropdownMenuItem';
+import type {ContextMenuItemProps} from './ContextMenuItemProps';
+export const ContextMenuItem =
+  DropdownMenuItem as ComponentType<ContextMenuItemProps>;
+export type {ContextMenuItemProps} from './ContextMenuItemProps';
 export {
   DropdownMenuDivider as ContextMenuDivider,
   type DropdownMenuDividerProps as ContextMenuDividerProps,

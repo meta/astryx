@@ -29,11 +29,13 @@
  */
 
 import {
+  use,
   useCallback,
   type MouseEvent,
   type PointerEvent,
   type ReactNode,
 } from 'react';
+import {createPortal} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {renderIconSlot, type IconType} from '../Icon';
 import {Item} from '../Item';
@@ -46,14 +48,20 @@ import {
   focusVars,
 } from '../theme/tokens.stylex';
 import {composeEventHandlers, mergeProps} from '../utils';
+import {mergeIds} from '../utils/mergeIds';
 import type {BaseProps} from '../BaseProps';
-import {useDropdownMenuContext} from './DropdownMenuContext';
+import {
+  DropdownMenuSurfaceContext,
+  useDropdownMenuContext,
+} from './DropdownMenuContext';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {menuPressLitRowStyle} from '../privateAttributes/menuPressLit.stylex';
 import {focusMenuItemOnHover} from './menuItemHover';
 import {isModifiedClick, keepDisabledRowUnfocused} from './menuItemRoles';
 import {themeProps} from '../utils/themeProps';
 import {usePressFeedback} from '../hooks/usePressFeedback';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useTooltip, type TooltipReturn} from '../Tooltip/useTooltip';
 
 const menuItemStyles = stylex.create({
   root: {
@@ -150,6 +158,12 @@ export interface DropdownMenuItemProps extends Omit<
   rel?: string;
   /** Whether the item is disabled. @default false */
   isDisabled?: boolean;
+  /**
+   * Why the item is unavailable. When the item is disabled, the reason is
+   * shown in a tooltip on hover and keyboard focus and is exposed through
+   * `aria-describedby`.
+   */
+  disabledMessage?: string;
   /** Additional content to render after the label/description. */
   endContent?: ReactNode;
   /**
@@ -174,6 +188,11 @@ export interface DropdownMenuItemProps extends Omit<
   ref?: React.Ref<HTMLElement>;
 }
 
+interface DropdownMenuItemRowProps extends DropdownMenuItemProps {
+  disabledMessageTooltip?: TooltipReturn;
+  hasDisabledMessage?: boolean;
+}
+
 /**
  * An interactive dropdown menu item with icon, label, and optional description.
  *
@@ -188,7 +207,24 @@ export interface DropdownMenuItemProps extends Omit<
  * </DropdownMenu>
  * ```
  */
-export function DropdownMenuItem({
+export function DropdownMenuItem(props: DropdownMenuItemProps) {
+  const hasDisabledMessage = props.isDisabled && !!props.disabledMessage;
+  const disabledMessageTooltip = useTooltip({
+    placement: 'above',
+    focusTrigger: 'always',
+    isEnabled: hasDisabledMessage,
+  });
+
+  return (
+    <DropdownMenuItemRow
+      {...props}
+      disabledMessageTooltip={disabledMessageTooltip}
+      hasDisabledMessage={hasDisabledMessage}
+    />
+  );
+}
+
+function DropdownMenuItemRow({
   icon,
   label,
   description,
@@ -197,6 +233,7 @@ export function DropdownMenuItem({
   target,
   rel,
   isDisabled = false,
+  disabledMessage,
   endContent,
   hasCloseOnSelect = true,
   variant = 'default',
@@ -204,12 +241,22 @@ export function DropdownMenuItem({
   className,
   style,
   ref,
+  'aria-describedby': ariaDescribedByProp,
   onPointerMove,
   onAuxClick,
+  disabledMessageTooltip,
+  hasDisabledMessage = false,
   ...rest
-}: DropdownMenuItemProps) {
+}: DropdownMenuItemRowProps) {
   const ctx = useDropdownMenuContext();
+  const surface = use(DropdownMenuSurfaceContext);
+  const surfaceHost = surface?.host.getElement();
   const menuSize = ctx?.menuSize ?? 'md';
+  const ariaDescribedBy = mergeIds(
+    ariaDescribedByProp,
+    disabledMessageTooltip?.describedBy,
+  );
+  const itemRef = useMergedRefs(ref, disabledMessageTooltip?.ref);
   // Item marks itself as a pressable surface too; naming the row here as well
   // keeps this file's own press arms (above) verifiably reachable by the
   // touch press controller (pressableCoverage.test.ts).
@@ -268,65 +315,76 @@ export function DropdownMenuItem({
   const LinkComponent = useLinkComponent();
 
   return (
-    <Item
-      {...rest}
-      onMouseDown={composeEventHandlers(
-        rest.onMouseDown,
-        isDisabled ? keepDisabledRowUnfocused : undefined,
-      )}
-      ref={ref}
-      // A row that navigates IS the link: its root is the application's
-      // anchor, so a modified click, a middle click, copying the address and
-      // the status bar all keep the browser's meaning. A row without an
-      // address keeps the default root.
-      as={href != null ? LinkComponent : undefined}
-      role="menuitem"
-      tabIndex={-1}
-      // The row's own handling runs first, then the caller's.
-      onPointerMove={composeEventHandlers(handlePointerMove, onPointerMove)}
-      {...pressable}
-      startContent={
-        icon
-          ? renderIconSlot(icon, {
-              size: 'sm',
-              color: isDestructive ? 'error' : 'secondary',
-            })
-          : undefined
-      }
-      label={label}
-      description={description}
-      endContent={endContent}
-      onClick={handleClick}
-      onAuxClick={composeEventHandlers(handleAuxClick, onAuxClick)}
-      href={href}
-      target={target}
-      rel={rel}
-      // A menu row is never a draggable link. Under a mouse, the browser's
-      // native link drag starts a few pixels into a press and cancels the
-      // pointer stream (`pointercancel`), so the press model could not let
-      // the row under the release act.
-      draggable={href != null ? false : undefined}
-      isDisabled={isDisabled}
-      xstyle={[
-        focusOutlineStyles.focusVisible,
-        menuItemStyles.root,
-        menuPressLitRowStyle,
-        itemSizeStyles[menuSize],
-        isDestructive && menuItemStyles.destructive,
-        isDisabled && menuItemStyles.disabled,
-        xstyle,
-      ]}
-      {...mergeProps(
-        themeProps('dropdown-menu-item', {
-          size: menuSize,
-          variant: isDestructive ? 'destructive' : null,
-        }),
-        {
-          className,
-          style,
-        },
-      )}
-    />
+    <>
+      <Item
+        {...rest}
+        onMouseDown={composeEventHandlers(
+          rest.onMouseDown,
+          isDisabled ? keepDisabledRowUnfocused : undefined,
+        )}
+        ref={itemRef}
+        // A row that navigates IS the link: its root is the application's
+        // anchor, so a modified click, a middle click, copying the address and
+        // the status bar all keep the browser's meaning. A row without an
+        // address keeps the default root.
+        as={href != null ? LinkComponent : undefined}
+        role="menuitem"
+        aria-describedby={ariaDescribedBy}
+        tabIndex={-1}
+        // The row's own handling runs first, then the caller's.
+        onPointerMove={composeEventHandlers(handlePointerMove, onPointerMove)}
+        {...pressable}
+        startContent={
+          icon
+            ? renderIconSlot(icon, {
+                size: 'sm',
+                color: isDestructive ? 'error' : 'secondary',
+              })
+            : undefined
+        }
+        label={label}
+        description={description}
+        endContent={endContent}
+        onClick={handleClick}
+        onAuxClick={composeEventHandlers(handleAuxClick, onAuxClick)}
+        href={href}
+        target={target}
+        rel={rel}
+        // A menu row is never a draggable link. Under a mouse, the browser's
+        // native link drag starts a few pixels into a press and cancels the
+        // pointer stream (`pointercancel`), so the press model could not let
+        // the row under the release act.
+        draggable={href != null ? false : undefined}
+        isDisabled={isDisabled}
+        xstyle={[
+          focusOutlineStyles.focusVisible,
+          menuItemStyles.root,
+          menuPressLitRowStyle,
+          itemSizeStyles[menuSize],
+          isDestructive && menuItemStyles.destructive,
+          isDisabled && menuItemStyles.disabled,
+          xstyle,
+        ]}
+        {...mergeProps(
+          themeProps('dropdown-menu-item', {
+            size: menuSize,
+            variant: isDestructive ? 'destructive' : null,
+          }),
+          {
+            className,
+            style,
+          },
+        )}
+      />
+      {hasDisabledMessage &&
+        disabledMessageTooltip != null &&
+        disabledMessage != null &&
+        surfaceHost != null &&
+        createPortal(
+          disabledMessageTooltip.renderTooltip(disabledMessage),
+          surfaceHost,
+        )}
+    </>
   );
 }
 
