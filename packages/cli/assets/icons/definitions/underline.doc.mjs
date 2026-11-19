@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'underline',
+  group: 'textFormat',
   description: 'Underlined text.',
   words: ['text format'],
 };

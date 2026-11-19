@@ -76,8 +76,24 @@ export function useTruncation(
   options: UseTruncationOptions,
 ): UseTruncationReturn {
   const {maxLines, isExpanded = false} = options;
-  const [isTruncated, setIsTruncated] = useState(false);
-  const [fullText, setFullText] = useState('');
+  const [isTruncated, setTruncatedState] = useState(false);
+  const [fullText, setFullTextState] = useState('');
+  // The values last set as state. A measurement that finds the same values
+  // sets nothing, so a list that mounts many texts dispatches no updates
+  // that would change nothing.
+  const shownRef = useRef({isTruncated: false, fullText: ''});
+  const setIsTruncated = useCallback((value: boolean) => {
+    if (shownRef.current.isTruncated !== value) {
+      shownRef.current.isTruncated = value;
+      setTruncatedState(value);
+    }
+  }, []);
+  const setFullText = useCallback((value: string) => {
+    if (shownRef.current.fullText !== value) {
+      shownRef.current.fullText = value;
+      setFullTextState(value);
+    }
+  }, []);
   const elementRef = useRef<HTMLElement | null>(null);
   const unobserveRef = useRef<(() => void) | null>(null);
   const unobserveContentRef = useRef<(() => void) | null>(null);
@@ -122,7 +138,7 @@ export function useTruncation(
         setIsTruncated(answerRef.current.isTruncated);
       }
     },
-    [maxLines],
+    [maxLines, setIsTruncated, setFullText],
   );
 
   const ref: RefCallback<HTMLElement> = useCallback(
@@ -181,7 +197,7 @@ export function useTruncation(
         setFullText('');
       }
     },
-    [maxLines, isExpanded, checkTruncation],
+    [maxLines, isExpanded, checkTruncation, setIsTruncated, setFullText],
   );
 
   return {

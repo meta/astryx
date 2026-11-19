@@ -31,3 +31,6 @@ public/version.json
 src/themes/astryx.js
 src/themes/astryx.css
 src/themes/astryx.d.ts
+
+# The MCP endpoint's CLI folder, written by scripts/build-mcp-runtime.mjs
+.mcp-runtime/

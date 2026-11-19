@@ -32,7 +32,10 @@ import {assertWithin} from '../fs/path-safety.mjs';
 import {findLocalIntegrationManifestOrNull} from '../integrations/manifest-writer.mjs';
 import {loadManifestObject} from '../integrations/integrations.mjs';
 import {levenshteinDistance} from '../text/string-utils.mjs';
-import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
+import {
+  astryxDefinitionsByName,
+  currentDefinitionName,
+} from './icon-definition-discovery.mjs';
 import {generatedTypesPath} from './icon-set-paths.mjs';
 import {
   lookExport,
@@ -56,9 +59,12 @@ import {
   moduleExportOrigin,
   staticExportBindings,
 } from './module-exports.mjs';
+import {iconIdOf} from '../text/icon-id.mjs';
 
 /** @typedef {import('./icon-set-discovery.mjs').DiscoveredIconSet} DiscoveredIconSet */
 /** @typedef {import('../../authoring/doctypes/icon-set/type').IconSetData} IconSetData */
+
+export {iconIdOf};
 
 /**
  * An authoring error with an ERR_* code and suggestions.
@@ -74,35 +80,6 @@ export class IconSetAuthoringError extends Error {
     this.code = code;
     this.suggestions = suggestions;
   }
-}
-
-/**
- * `XMarkIcon` → `x-mark`; `Trash2` → `trash-2`; `ArrowUpDown` →
- * `arrow-up-down`; `Squares2X2Icon` and `Grid2x2` → `squares-2x2`,
- * `grid-2x2`: an icon id from an export name. A dimension (a digit, `x` or
- * `X`, a digit) stays one word.
- * @param {string} name
- */
-export function iconIdOf(name) {
-  return (
-    name
-      .replace(/Icon$/u, '')
-      // `2X2` and `2x2` are one word: lower the x first.
-      .replace(/([0-9])[xX](?=[0-9])/gu, '$1x')
-      // A one-letter word before a digit ends there: `CalendarX2` is
-      // `calendar-x-2`, as its library names it.
-      .replace(/([a-z][A-Z])(?=[0-9])/gu, '$1-')
-      // A lower-case letter before a capital or a digit ends a word, except
-      // the x inside a dimension.
-      .replace(/([a-z])(?=[A-Z0-9])/gu, (match, letter, offset, whole) =>
-        letter === 'x' && /[0-9]/u.test(whole[offset - 1] ?? '')
-          ? letter
-          : `${letter}-`,
-      )
-      .replace(/([0-9])([A-Z])/gu, '$1-$2')
-      .replace(/([A-Z])([A-Z][a-z])/gu, '$1-$2')
-      .toLowerCase()
-  );
 }
 
 /**
@@ -1394,6 +1371,39 @@ const GENERATED_HEADER = [
  * @returns {string[]}
  */
 function generatedStatements(text, label) {
+  return statementTexts(text, label).map(normalizedStatement);
+}
+
+/**
+ * The marked form of each statement of a module that carries a pure mark of
+ * its own, keyed by its normalized (unmarked) form: written back as it was,
+ * with the mark spelled as the CLI writes it, so a mark written by hand
+ * survives the next rewrite.
+ * @param {string} text
+ * @param {string} label the module's path, for the error
+ * @returns {Map<string, string>}
+ */
+function markedStatements(text, label) {
+  /** @type {Map<string, string>} */
+  const marked = new Map();
+  for (const statement of statementTexts(text, label)) {
+    if (statement.search(PURE_MARK) === -1) continue;
+    marked.set(
+      normalizedStatement(statement),
+      collapsedStatement(statement.replace(PURE_MARK, PURE)),
+    );
+  }
+  return marked;
+}
+
+/**
+ * The text of each top-level statement of a module, as written, with a
+ * separator after each type member a formatter left without one.
+ * @param {string} text
+ * @param {string} label the module's path, for the error
+ * @returns {string[]}
+ */
+function statementTexts(text, label) {
   let ast;
   try {
     ast = parse(text, {sourceType: 'module', plugins: ['jsx', 'typescript']});
@@ -1416,7 +1426,7 @@ function generatedStatements(text, label) {
       const at = end - start;
       statement = `${statement.slice(0, at)};${statement.slice(at)}`;
     }
-    return normalizedStatement(statement);
+    return statement;
   });
 }
 
@@ -1426,6 +1436,15 @@ function generatedStatements(text, label) {
  * @param {string} statement
  */
 function normalizedStatement(statement) {
+  return collapsedStatement(statement.replace(PURE_MARK, ''));
+}
+
+/**
+ * A statement's text with whitespace, quotes, padding and trailing
+ * separators normalized, its comments as written.
+ * @param {string} statement
+ */
+function collapsedStatement(statement) {
   return statement
     .replace(/\s+/gu, ' ')
     .replace(/"((?:[^"'\\]|\\.)*)"/gu, "'$1'")
@@ -1548,6 +1567,32 @@ export function generatedTypesMatch(actual, expected, label) {
 
 /** The local name the generated module gives the set's adapter. */
 const ADAPTER_LOCAL = 'adaptIcon';
+
+/**
+ * A bundler's mark that a call has no side effects (`/* @__PURE__ *\/` or
+ * `/*#__PURE__*\/`), so an app that uses a few icons drops the rest. The
+ * module is written with the marks and read without them, so a module an
+ * older CLI wrote (no marks) reads the same.
+ */
+const PURE_MARK = /\/\*\s*[#@]__PURE__\s*\*\/\s*/gu;
+
+/** The mark the generated module writes before each top-level call. */
+const PURE = '/* @__PURE__ */ ';
+
+/**
+ * A normalized statement as the module writes it: an adapted icon's call
+ * marked pure, and any other statement with the marks it was read with.
+ * @param {string} statement
+ * @param {Map<string, string>} marked the module's statements that carried
+ *   their own marks, from {@link markedStatements}
+ */
+function writtenStatement(statement, marked) {
+  const adapted = `= ${ADAPTER_LOCAL}(`;
+  if (statement.startsWith('export const ') && statement.includes(adapted)) {
+    return statement.replace(adapted, `= ${PURE}${ADAPTER_LOCAL}(`);
+  }
+  return marked.get(statement) ?? statement;
+}
 
 export {THEME_MAP_NAME};
 
@@ -1703,6 +1748,8 @@ export function generatedModuleText(
       .map(variantThemeMapName),
   ];
   const lines = before == null ? [] : generatedStatements(before, generated);
+  const marked =
+    before == null ? new Map() : markedStatements(before, generated);
   const lineSet = new Set(lines);
   // Written once, below: the adapter's import, React's createElement, and
   // the theme map. Every lookup below is by name, so a library of twenty
@@ -1815,7 +1862,7 @@ export function generatedModuleText(
     if (reexport) {
       themeImports.add(`import${reexport.slice('export'.length)}`);
     }
-    return `  ${name}: createElement(${exportName}, ${THEME_ELEMENT_PROPS}),`;
+    return `  ${name}: ${PURE}createElement(${exportName}, ${THEME_ELEMENT_PROPS}),`;
   };
   if (themeName) {
     const byId = new Map(data.icons.map(icon => [icon.id, icon]));
@@ -1844,7 +1891,7 @@ export function generatedModuleText(
       ...(themeName ? [REACT_IMPORT] : []),
       ...adapterLine,
       ...[...imports, ...themeImports].sort(),
-      ...[...exports].sort(),
+      ...[...exports].sort().map(line => writtenStatement(line, marked)),
     ].map(terminated),
     ...(themeName
       ? theme.length > 0
@@ -2364,15 +2411,21 @@ export function typecheckNote(pkg) {
 
 /**
  * A definition name as `map` keys it: camelCase. The docs list each
- * definition by its kebab id too (`eye-slash`), so that spelling resolves.
+ * definition by its kebab id too (`eye-slash`), so that spelling resolves,
+ * and a replaced definition's name resolves to the definition that replaced
+ * it.
  * @param {string} name
  * @param {Set<string>} known the definitions the set may map
+ * @param {Parameters<typeof currentDefinitionName>[1]} [set] the set whose
+ *   own replaced names count too
  * @returns {string}
  */
-export function definitionNameOf(name, known) {
+export function definitionNameOf(name, known, set) {
   if (known.has(name)) return name;
   const camel = name.replace(/-([a-z0-9])/gu, (_, c) => c.toUpperCase());
-  return known.has(camel) ? camel : name;
+  if (known.has(camel)) return camel;
+  const current = currentDefinitionName(camel, set);
+  return current != null && known.has(current) ? current : name;
 }
 
 /**

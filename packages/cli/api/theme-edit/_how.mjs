@@ -39,6 +39,7 @@ import {
   resolvedTokens,
   themeSourceParseError,
   themeSourceProblem,
+  baseRedraws,
 } from './_settings.mjs';
 import {missedSteps} from './_missed.mjs';
 import {ASPECTS, settableStates} from './_check.mjs';
@@ -715,18 +716,52 @@ async function answer(subject, options, cwd) {
       FAMILIES[p] ? FAMILIES[p] : ctx.project.target.has(p) ? [p] : [],
     );
     const res = await resolvedTokens(ctx, env.slug).catch(() => null);
+    // (A missed entry never says otherwise than the question: where the
+    // question gives the part a fill or a text color, the missed list's
+    // fill or text for it is not offered, "tooltips #1f2328 with white
+    // text"; and where the question writes the part at all, its own
+    // answer leads and the missed list follows, "secondary buttons white
+    // …" before a disabled-primary entry.)
+    const asked = h.drafts.flatMap(d => d.options.flat());
+    /** @param {any} st */
+    const family = st =>
+      /^background(?:-color)?$|^--color-background-|^--color-[a-z]+-muted$/.test(
+        String(st.thing),
+      )
+        ? 'fill'
+        : st.thing === 'color' || /^--color-(?:text|on)-/.test(String(st.thing))
+          ? 'text'
+          : null;
+    // (An ask to match the rest, "tooltips grey like the rest", is the
+    // missed list's own ask: it leads.)
+    const matching =
+      /\b(?:like the rest|like everything else|match(?:es|ing)? the (?:theme|rest)|same as the rest)\b/i.test(
+        t,
+      );
     const mine = (res ? missedSteps(ctx, env.data, res, env.base) : []).filter(
-      x => parts.includes(x.part) && x.steps.length,
+      x =>
+        parts.includes(x.part) &&
+        x.steps.length &&
+        (matching ||
+          !x.steps.some(st => {
+            const f = family(st);
+            return (
+              f != null && asked.some(a => a.on === x.part && family(a) === f)
+            );
+          })),
     );
-    h.drafts.unshift(
-      .../** @type {any[]} */ (
-        mine.map(x => ({
-          text: `${x.part}${x.state ? ` (${x.state})` : ''}: ${x.why} (show's missed list)`,
-          options: [x.steps.map(st => ({verb: 'set', ...st}))],
-          ...(x.steps.length > 1 ? {sequence: true} : {}),
-        }))
-      ),
+    const entries = /** @type {any[]} */ (
+      mine.map(x => ({
+        text: `${x.part}${x.state ? ` (${x.state})` : ''}: ${x.why} (show's missed list)`,
+        options: [x.steps.map(st => ({verb: 'set', ...st}))],
+        ...(x.steps.length > 1 ? {sequence: true} : {}),
+      }))
     );
+    const written = new Set(
+      matching ? [] : asked.map(a => a.on).filter(Boolean),
+    );
+    h.drafts.unshift(...entries.filter((_, k) => !written.has(mine[k].part)));
+    h.drafts.push(...entries.filter((_, k) => written.has(mine[k].part)));
   }
   const results = finish(env, h.drafts);
   const empty = !results.some(r => r.commands.length);
@@ -949,6 +984,37 @@ function finish(env, drafts) {
       else if (unmet.length)
         d.text = `${d.text} (left out: ${[...new Set(unmet)].join('; ')})`;
     }
+    // A joined answer ("all of it, in order") drops each step that alone
+    // changes nothing, as its own line says; written, it would pin that
+    // setting, so a later dial would not reach it.
+    if (d.sequence && d.options.some(o => o.length > 1)) {
+      /** @param {import('./_how-commands.mjs').Step} st */
+      const noOp = st => {
+        const r = env.check([st]);
+        return !r.ok && /^it changes nothing/.test(r.why);
+      };
+      const before = d.options.map(o => o.length);
+      d.options = d.options
+        .map(o => (o.length > 1 ? o.filter(st => !noOp(st)) : o))
+        .filter(o => o.length);
+      // (Left holding what another answer already says: not given twice.)
+      const narrowed = d.options.some((o, i) => o.length < (before[i] ?? 0));
+      if (
+        narrowed &&
+        d.options.every(o =>
+          drafts.some(
+            x =>
+              x !== d &&
+              x.options.some(
+                y =>
+                  y.length === o.length &&
+                  y.every((st, k) => key(st) === key(o[k])),
+              ),
+          ),
+        )
+      )
+        continue;
+    }
     const {commands, refused} = checked(env, d.options);
     const lookups = d.lookup ? [d.lookup] : [];
     if (!commands.length && !d.options.length && unmet.length) {
@@ -1038,14 +1104,45 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
   );
   const group = familyOf(key);
   const states = settableStates(ctx, env.slug, env.data, key);
+  // A token the base theme points at another one on the part or a part
+  // around it (neutral's progress track reads the muted fill, which it
+  // points at the emphasized border there): that token is what it shows.
+  const blocks =
+    /** @type {{components?: Record<string, Record<string, Record<string, unknown>>>}} */ (
+      env.base
+    ).components ?? {};
+  const around = [
+    key,
+    ...Object.keys(C.MAP).filter(t => C.MAP[t]?.contains?.includes(key)),
+  ];
+  /** @param {string} token */
+  const pointedAt = token => {
+    for (const t of around) {
+      const v = blocks[t]?.base?.[token];
+      const to =
+        typeof v === 'string'
+          ? /^var\((--[\w-]+)\)$/.exec(v.trim())?.[1]
+          : null;
+      if (to) return {token: to, on: t};
+    }
+    return null;
+  };
   const reads = Object.fromEntries(
     Object.keys(GROUPS).map(g => [
       g,
-      C.partReads(key, g).map(r => ({
-        token: r.token,
-        props: r.props,
-        when: [...new Set(r.when.map(w => condition(ctx, key, w, states)))],
-      })),
+      C.partReads(key, g).map(r => {
+        const to = r.token ? pointedAt(r.token) : null;
+        return {
+          token: r.token,
+          ...(to
+            ? {
+                shows: `${to.token} (the ${env.data.like ?? 'base'} theme points ${r.token} at it on ${to.on})`,
+              }
+            : {}),
+          props: r.props,
+          when: [...new Set(r.when.map(w => condition(ctx, key, w, states)))],
+        };
+      }),
     ]),
   );
   const components = [
@@ -1305,6 +1402,9 @@ function tokenAnswer(ctx, env, subject, key, unknown, themeFields) {
   // a variant it does not render reads (heading level 5, an error toast)
   // shows no reader there; Core's stylesheet still names it.
   const inSheet = !readers.length && stylesheetReads(ctx, key);
+  // Where the theme's base draws past it: a part and condition whose own
+  // base rule sets the property this token feeds in Core.
+  const redrawn = ctx.unchecked ? [] : baseRedraws(C, env.base, key);
   return {
     kind: 'setting',
     subject,
@@ -1320,6 +1420,14 @@ function tokenAnswer(ctx, env, subject, key, unknown, themeFields) {
             ? `no part in the part data reads ${key}, but Core's stylesheet does, in a variant or state the part data does not render; so readBy is incomplete`
             : `no part reads ${key}, and Core's stylesheet does not use it`,
         }),
+    ...(redrawn.length
+      ? {
+          notIn: redrawn.map(
+            r =>
+              `${r.part}${r.when ? ` (${r.when.replace(':', ' ')})` : ''}: the ${env.data.like ?? 'base'} theme draws its ${r.prop} from ${r.value}, so ${key} does not reach it; set ${r.prop} --on ${r.part}${r.when ? ` --when ${r.when}` : ''} there`,
+          ),
+        }
+      : {}),
     ...unknown,
     ...themeFields,
     examples: commands,

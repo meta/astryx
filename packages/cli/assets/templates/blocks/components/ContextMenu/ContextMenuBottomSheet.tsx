@@ -3,11 +3,11 @@
 'use client';
 
 import {
-  DocumentDuplicateIcon,
-  PencilIcon,
+  CopyIcon,
+  EditIcon,
   ShareIcon,
-  TrashIcon,
-} from '@heroicons/react/24/outline';
+  DeleteIcon,
+} from '@astryxdesign/template-icons';
 import {ContextMenu} from '@astryxdesign/core/ContextMenu';
 
 export default function ContextMenuBottomSheet() {
@@ -19,13 +19,13 @@ export default function ContextMenuBottomSheet() {
         {
           label: 'Rename document',
           description: 'Change the title shown to collaborators.',
-          icon: PencilIcon,
+          icon: EditIcon,
           onClick: () => {},
         },
         {
           label: 'Duplicate document',
           description: 'Create a copy in the same workspace.',
-          icon: DocumentDuplicateIcon,
+          icon: CopyIcon,
           onClick: () => {},
         },
         {
@@ -37,7 +37,7 @@ export default function ContextMenuBottomSheet() {
         {
           label: 'Delete document',
           description: 'Move this document to the trash.',
-          icon: TrashIcon,
+          icon: DeleteIcon,
           variant: 'destructive',
           onClick: () => {},
         },
@@ -48,7 +48,7 @@ export default function ContextMenuBottomSheet() {
           flexDirection: 'column',
           gap: '8px',
           padding: '32px',
-          border: '1px solid #d1d5db',
+          border: '1px solid var(--color-border-emphasized)',
           borderRadius: '12px',
         }}>
         <strong>Quarterly plan</strong>

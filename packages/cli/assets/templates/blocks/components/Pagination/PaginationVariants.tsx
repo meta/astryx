@@ -15,18 +15,21 @@ export default function PaginationVariants() {
   return (
     <Stack direction="vertical" gap={5} hAlign="center" style={{width: '100%'}}>
       <Pagination
+        label="Dots pagination"
         page={dotsPage}
         onChange={setDotsPage}
         totalPages={8}
         variant="dots"
       />
       <Pagination
+        label="Compact pagination"
         page={compactPage}
         onChange={setCompactPage}
         totalPages={10}
         variant="compact"
       />
       <Pagination
+        label="Count pagination"
         page={countPage}
         onChange={setCountPage}
         totalItems={200}
@@ -34,6 +37,7 @@ export default function PaginationVariants() {
         variant="count"
       />
       <Pagination
+        label="Pages pagination"
         page={pagesPage}
         onChange={setPagesPage}
         totalItems={200}

@@ -94,18 +94,18 @@ import {TextArea} from '@astryxdesign/core/TextArea';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {useMediaQuery} from '@astryxdesign/core/hooks';
 import {
-  BookOpenIcon,
-  BuildingLibraryIcon,
+  BookIcon,
+  BankIcon,
   CalendarIcon,
-  CheckBadgeIcon,
-  CurrencyDollarIcon,
-  ExclamationTriangleIcon,
-  GlobeAltIcon,
+  ReviewIcon,
+  CurrencyIcon,
+  WarningIcon,
+  GlobeIcon,
   LanguageIcon,
-  RectangleStackIcon,
+  CollectionIcon,
   TagIcon,
   UserIcon,
-} from '@heroicons/react/24/outline';
+} from '@astryxdesign/template-icons';
 
 // ── Data ──────────────────────────────────────────────────────────────────────
 
@@ -316,8 +316,9 @@ const COLUMN_GAP = 12; // the column's gap={3}
 
 // The dropzone column next to the thumbnail. flexBasis:0 lets it shrink below
 // its intrinsic width instead of pushing the row wider than the form measure.
-// StackItem already resets min-width, so that half of the job is done for us.
-const coverColumn: CSSProperties = {flexBasis: 0};
+// The floor is the column's own min-content width, its widest button, so the
+// column wraps under the cover before any button has to give up its label.
+const coverColumn: CSSProperties = {flexBasis: 0, minWidth: 'min-content'};
 // Fills what the buttons beneath it leave, so the column ends level with the
 // cover. A definite height rather than `height: 100%` or a flex-grow, because
 // Field sizes its control to content: there is no resolved height above the
@@ -587,9 +588,28 @@ export default function FormWizardVerticalPage() {
       return;
     }
 
-    if (Object.keys(errorsByStep[step]).length === 0 && !isLastStep) {
-      setStep(s => s + 1);
+    if (Object.keys(errorsByStep[step]).length > 0) {
+      return;
     }
+    if (isLastStep) {
+      // An earlier step can still have problems after a jump through the
+      // stepper. Send the person to the first one instead of finishing.
+      const firstBroken = errorsByStep.findIndex(
+        errors => Object.keys(errors).length > 0,
+      );
+      if (firstBroken !== -1) {
+        markAttempted(firstBroken);
+        setStep(firstBroken);
+        return;
+      }
+      // Demo only: replace this toast with the call that performs the action.
+      showToast({
+        body: 'Demo: your audiobook would be submitted for review here',
+        uniqueID: 'submit-review',
+      });
+      return;
+    }
+    setStep(s => s + 1);
   };
 
   const goTo = (index: number) => {
@@ -618,11 +638,7 @@ export default function FormWizardVerticalPage() {
           // tints, so keeping the number there would leave colour as the only
           // thing marking the problem.
           indicator={
-            hasError ? (
-              <Icon icon={ExclamationTriangleIcon} size="sm" />
-            ) : (
-              'number'
-            )
+            hasError ? <Icon icon={WarningIcon} size="sm" /> : 'number'
           }
         />
       );
@@ -701,7 +717,7 @@ export default function FormWizardVerticalPage() {
       header={
         <LayoutHeader hasDivider>
           <VStack gap={4}>
-            <HStack gap={3} vAlign="center">
+            <HStack wrap="wrap" gap={3} vAlign="center">
               <StackItem size="fill">
                 {/* The flow, not the book. The book's own title is a field on
                     step 2 and is echoed back on the review step, so repeating
@@ -709,7 +725,17 @@ export default function FormWizardVerticalPage() {
                     types. */}
                 <Text type="label">Publish audiobook</Text>
               </StackItem>
-              <Button label="Cancel" variant="ghost" onClick={() => {}} />
+              <Button
+                label="Cancel"
+                variant="ghost"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: leaving the audiobook flow would return you to the app here',
+                    uniqueID: 'cancel-audiobook',
+                  })
+                }
+              />
               <Button
                 label="Save & exit"
                 variant="secondary"
@@ -745,7 +771,7 @@ export default function FormWizardVerticalPage() {
         )
       }
       content={
-        <LayoutContent>
+        <LayoutContent role="main">
           <Center axis="horizontal">
             <VStack
               gap={6}
@@ -1236,7 +1262,7 @@ export default function FormWizardVerticalPage() {
                   <Banner
                     status="info"
                     title="Review takes up to 5 business days"
-                    icon={<Icon icon={CheckBadgeIcon} size="sm" />}
+                    icon={<Icon icon={ReviewIcon} size="sm" />}
                     description="You can keep editing metadata while the book is in review. Replacing the audio restarts it."
                   />
 
@@ -1284,7 +1310,7 @@ export default function FormWizardVerticalPage() {
                   <MetadataList columns="multi">
                     <MetadataListItem
                       label="Title"
-                      icon={<Icon icon={BookOpenIcon} size="sm" />}>
+                      icon={<Icon icon={BookIcon} size="sm" />}>
                       {title.trim() || '—'}
                     </MetadataListItem>
                     <MetadataListItem
@@ -1294,7 +1320,7 @@ export default function FormWizardVerticalPage() {
                     </MetadataListItem>
                     <MetadataListItem
                       label="Series"
-                      icon={<Icon icon={RectangleStackIcon} size="sm" />}>
+                      icon={<Icon icon={CollectionIcon} size="sm" />}>
                       {series.trim()
                         ? `${series.trim()}, book ${seriesNumber}`
                         : 'Standalone'}
@@ -1316,7 +1342,7 @@ export default function FormWizardVerticalPage() {
                     </MetadataListItem>
                     <MetadataListItem
                       label="Availability"
-                      icon={<Icon icon={GlobeAltIcon} size="sm" />}>
+                      icon={<Icon icon={GlobeIcon} size="sm" />}>
                       {scope === 'worldwide'
                         ? 'Worldwide'
                         : scope === 'exclusive'
@@ -1330,7 +1356,7 @@ export default function FormWizardVerticalPage() {
                     </MetadataListItem>
                     <MetadataListItem
                       label="List price"
-                      icon={<Icon icon={CurrencyDollarIcon} size="sm" />}>
+                      icon={<Icon icon={CurrencyIcon} size="sm" />}>
                       {usd(price)}{' '}
                       {CURRENCIES.find(c => c.value === currency)
                         ?.label.split(' — ')[0]
@@ -1338,12 +1364,12 @@ export default function FormWizardVerticalPage() {
                     </MetadataListItem>
                     <MetadataListItem
                       label="Advisory"
-                      icon={<Icon icon={ExclamationTriangleIcon} size="sm" />}>
+                      icon={<Icon icon={WarningIcon} size="sm" />}>
                       {isExplicit ? 'Explicit content' : 'None'}
                     </MetadataListItem>
                     <MetadataListItem
                       label="Library lending"
-                      icon={<Icon icon={BuildingLibraryIcon} size="sm" />}>
+                      icon={<Icon icon={BankIcon} size="sm" />}>
                       {allowsLending ? 'Allowed' : 'Not allowed'}
                     </MetadataListItem>
                   </MetadataList>

@@ -13,12 +13,18 @@
  * query of one or two words, the matches on every word keep their lexical
  * order; and an integration's matches that scored the same keep theirs.
  * Below the first result, a block of one domain is ordered by fit (tiesByFit): a part of the first result, then rarer matched
- * words, then the lexical order.
+ * words, then the lexical order. Before that, a family's root leads a part of
+ * its own family in their run when the part answers no query word the root
+ * does not and the query names nothing that only the part is (rootsFirst).
+ * Then, among matches tied with the first result on score and on the query
+ * words they matched, the one whose own name holds more query words leads
+ * (tieByOwnName).
  */
 
 import {entryOf} from './_entries.mjs';
-import {fold, nameWords, words} from './_query-words.mjs';
-import {searchedComponentsOf} from './_result.mjs';
+import {fold, nameWords, queryWords, words} from './_query-words.mjs';
+import {namedLeadsOf, searchedComponentsOf} from './_result.mjs';
+import {sameWord} from './_words.mjs';
 
 /** @typedef {import('./_entries.mjs').EntryTable} EntryTable */
 
@@ -48,9 +54,11 @@ export const bandOf = score => {
  * @param {import('./search.type.mjs').SearchResponse} lexical every lexical match
  * @param {string} query
  * @param {number} limit
+ * @param {Map<string, string>} [families] each family member's
+ *   `domain:name`, mapped to the family its doc lists it in
  * @returns {import('./search.type.mjs').SearchResponse}
  */
-export function orderMatches(table, order, lexical, query, limit) {
+export function orderMatches(table, order, lexical, query, limit, families) {
   const all = lexical.data.results;
   /** @type {Map<number, number>} */
   const place = new Map(order.map((k, i) => [k, i]));
@@ -76,9 +84,13 @@ export function orderMatches(table, order, lexical, query, limit) {
       learned: k === undefined ? Infinity : (place.get(k) ?? Infinity),
     };
   });
+  // An entry the query names: by a name match, or by a name of two or more
+  // words the lexical ranker put first (namedLeadsOf).
+  const leads = namedLeadsOf.get(lexical);
   const named = (/** @type {Item} */ it) =>
-    (it.res.score ?? 0) >= 95 &&
-    /^(exact name|plural of the name|name )/.test(it.res.reason ?? '');
+    ((it.res.score ?? 0) >= 95 &&
+      /^(exact name|plural of the name|name )/.test(it.res.reason ?? '')) ||
+    (leads?.has(it.res) ?? false);
   // Matches the lexical ranker scored the same move as one block, in its
   // order; the learned position of the block's first match places the block
   // in its run (not its best member's, which would let one strong member lift
@@ -105,6 +117,10 @@ export function orderMatches(table, order, lexical, query, limit) {
     ranked = keepLexical(ranked, it => (it.res.score ?? 0) >= FULL_COVERAGE);
   }
   ranked = integrationTies(ranked);
+  if (families) ranked = rootsFirst(ranked, families, query);
+  if (ranked.length > 1 && !named(ranked[0])) {
+    ranked = tieByOwnName(ranked, query, blockOf, families);
+  }
   // Each whole tie is ordered by fit before the limit, so every limit shows
   // the top of one answer.
   const shown = tiesByFit(ranked, table, blockOf).slice(0, limit);
@@ -138,8 +154,7 @@ const PARTS_FIRST = 2;
 function tiesByFit(ranked, table, blockOf) {
   if (ranked.length < 3) return ranked;
   const first = nameWords(String(ranked[0].res.name ?? '')).map(fold);
-  const idf = table.fields.desc.idf;
-  const rarest = Math.max(0, ...idf.values());
+  const {idf, rarest} = table.fields.desc;
   /** @param {Item} it */
   const related = it => {
     // A part's name words start with the first result's whole name words:
@@ -187,6 +202,76 @@ function tiesByFit(ranked, table, blockOf) {
 }
 
 /**
+ * The first result's tie goes to the match whose own name holds more query
+ * words. Among matches of one domain that the lexical ranker scored the same
+ * as the first result, and that matched the same query words (the terms
+ * their reasons list), the match whose name words hold more of the query's
+ * words than the first result's name moves first. A first result whose
+ * reason lists no terms keeps its place: it matched the whole query, or the
+ * query holds its title. A part of the first result never takes its place
+ * this way: rootsFirst decides between a family's root and its parts. Only
+ * the first place changes, and nothing crosses a block or a domain.
+ * @param {Item[]} ranked
+ * @param {string} query
+ * @param {(item: Item) => string} blockOf
+ * @param {Map<string, string>} [families]
+ * @returns {Item[]}
+ */
+export function tieByOwnName(ranked, query, blockOf, families) {
+  const first = ranked[0];
+  const terms = first ? answered(first) : null;
+  if (!terms || ranked.length < 2) return ranked;
+  const asked = new Set(queryWords(query));
+  /** @param {Item} it */
+  const inName = it => {
+    const own = new Set(nameWords(String(it.res.name ?? '')).map(fold));
+    let n = 0;
+    for (const w of asked) if (own.has(w)) n++;
+    return n;
+  };
+  /** @param {Set<string> | null} other */
+  const same = other =>
+    other !== null &&
+    other.size === terms.size &&
+    [...other].every(w => terms.has(w));
+  let best = 0;
+  let most = inName(first);
+  for (let j = 1; j < ranked.length; j++) {
+    const it = ranked[j];
+    if (blockOf(it) !== blockOf(first)) break;
+    if (it.res.domain !== first.res.domain || partOf(it, first, families)) {
+      continue;
+    }
+    if (!same(answered(it))) continue;
+    const n = inName(it);
+    if (n > most) {
+      best = j;
+      most = n;
+    }
+  }
+  if (best === 0) return ranked;
+  const out = [...ranked];
+  out.unshift(...out.splice(best, 1));
+  return out;
+}
+
+/**
+ * Whether a match is a part of another: its doc lists it in the other's
+ * family, or its name words start with the other's whole name words.
+ * @param {Item} it
+ * @param {Item} of
+ * @param {Map<string, string>} [families]
+ */
+function partOf(it, of, families) {
+  if (families?.get(`${it.res.domain}:${it.res.name}`) === of.res.name) {
+    return true;
+  }
+  const root = nameWords(String(of.res.name ?? '')).map(fold);
+  const name = nameWords(String(it.res.name ?? '')).map(fold);
+  return name.length > root.length && root.every((w, n) => name[n] === w);
+}
+
+/**
  * The matches `pick` selects keep the places they hold, filled in lexical
  * order.
  * @param {Item[]} items
@@ -226,6 +311,62 @@ export function integrationTies(items) {
     if (at.length < 2) continue;
     const sorted = at.map(j => items[j]).sort((a, b) => a.i - b.i);
     at.forEach((j, n) => (out[j] = sorted[n]));
+  }
+  return out;
+}
+
+/**
+ * The query words a match answered: the terms its reason lists, folded, or
+ * null when it answered the whole query (a name, keyword, or title hit).
+ * @param {Item} it
+ * @returns {Set<string> | null}
+ */
+function answered(it) {
+  const m = /^matches \d+\/\d+ terms: (.*)$/.exec(it.res.reason ?? '');
+  return m ? new Set(m[1].split(', ').map(fold)) : null;
+}
+
+/**
+ * A family's root leads a part of its own family in their run (same band,
+ * same domain) when the part adds nothing the reader asked for: the root
+ * answers every query word the part answers, and no query word is a word of
+ * the part's name, in any plural or stem form, that does not start a word
+ * of the root's name. `tabs` puts TabList before its Tab; a query holding
+ * "item" keeps ListItem before List, since "item" is only the part's. The
+ * root moves just ahead of the part; nothing else moves, and nothing crosses
+ * a run.
+ * @param {Item[]} ranked
+ * @param {Map<string, string>} families each member's `domain:name`, mapped
+ *   to its family's name
+ * @param {string} query
+ * @returns {Item[]}
+ */
+export function rootsFirst(ranked, families, query) {
+  const asked = nameWords(query);
+  const out = [...ranked];
+  for (let a = 0; a < out.length; a++) {
+    const part = out[a];
+    const family = families.get(`${part.res.domain}:${part.res.name}`);
+    if (!family) continue;
+    const b = out.findIndex(
+      (it, n) =>
+        n > a &&
+        it.band === part.band &&
+        it.res.domain === part.res.domain &&
+        it.res.name === family,
+    );
+    if (b < 0) continue;
+    const ofPart = answered(part);
+    const ofRoot = answered(out[b]);
+    if (ofRoot && (!ofPart || [...ofPart].some(w => !ofRoot.has(w)))) continue;
+    const rootWords = nameWords(family);
+    const own = nameWords(String(part.res.name)).filter(
+      w => !rootWords.some(r => r.startsWith(w)),
+    );
+    // A query word is a part word in any plural or stem form, as search
+    // reads words: `statuses` is the Status in FieldStatus.
+    if (own.some(w => asked.some(q => sameWord(q, w)))) continue;
+    out.splice(a, 0, ...out.splice(b, 1));
   }
   return out;
 }

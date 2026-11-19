@@ -5,6 +5,7 @@ import {
   matchWholeName,
   nameWords,
   orderByAffinity,
+  orderDocSuggestions,
   orderRouteSuggestions,
   rankComponentSuggestions,
   synonymMatches,
@@ -474,5 +475,79 @@ describe('orderByAffinity with typos', () => {
         order(typed, false).length,
       );
     }
+  });
+});
+
+describe('orderRouteSuggestions with slipFrom', () => {
+  const routes = ['alpha', 'card', 'motion', 'cart'].map(name => ({name}));
+  /** @param {string} typed @param {{name: string}[]} [list] */
+  const order = (typed, list = routes) =>
+    orderRouteSuggestions(typed, list, {
+      closest: true,
+      typos: true,
+      slipFrom: 4,
+    }).map(s => s.name);
+
+  it('puts a four-letter name one slip away first', () => {
+    expect(order('crad')).toEqual(['card', 'alpha', 'motion', 'cart']);
+    expect(
+      orderRouteSuggestions('crad', routes, {closest: true, typos: true}).map(
+        s => s.name,
+      ),
+    ).toEqual(['alpha', 'card', 'motion', 'cart']);
+  });
+
+  it('keeps the given order between equally near names', () => {
+    expect(order('carx')).toEqual(['card', 'cart', 'alpha', 'motion']);
+    expect(order('carx', [...routes].reverse())).toEqual([
+      'cart',
+      'card',
+      'motion',
+      'alpha',
+    ]);
+  });
+});
+
+describe('orderDocSuggestions', () => {
+  const pages = {
+    garden: {title: 'Garden', keywords: ['plants']},
+    'garden/compost': {title: 'Compost', keywords: ['soil']},
+    'garden/watering': {title: 'Water the beds', keywords: ['irrigation']},
+    'kitchen/pickling': {title: 'Pickle vegetables', keywords: ['brine']},
+    'kitchen/storage': {title: 'Store produce', keywords: ['garden produce']},
+  };
+  const items = Object.keys(pages).map(name => ({name}));
+  /** @param {string} typed @param {boolean} [closest] */
+  const order = (typed, closest = true) =>
+    orderDocSuggestions(typed, items, {
+      closest,
+      titleOf: i => pages[/** @type {keyof typeof pages} */ (i.name)].title,
+      keywordsOf: i =>
+        pages[/** @type {keyof typeof pages} */ (i.name)].keywords,
+    }).map(i => i.name);
+
+  it('finds a page by its title words', () => {
+    expect(order('pickled vegetable')[0]).toBe('kitchen/pickling');
+    expect(order('watering beds')[0]).toBe('garden/watering');
+  });
+
+  it('finds a page by a keyword it declares', () => {
+    expect(order('irrigation')).toEqual(['garden/watering']);
+    expect(order('brine')).toEqual(['kitchen/pickling']);
+  });
+
+  it('puts route or title evidence before a keyword of the same strength', () => {
+    expect(order('compost soil', false)[0]).toBe('garden/compost');
+  });
+
+  it('puts the broader page first and leaves out a child its parent matches as well', () => {
+    expect(order('garden tools')).toEqual(['garden', 'kitchen/storage']);
+  });
+
+  it('only reorders without closest', () => {
+    expect([...order('zzz', false)].sort()).toEqual(
+      items.map(i => i.name).sort(),
+    );
+    expect(order('zzz')).toHaveLength(items.length);
   });
 });

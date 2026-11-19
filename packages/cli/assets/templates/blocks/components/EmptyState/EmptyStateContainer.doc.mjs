@@ -11,5 +11,4 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['EmptyState', 'Button', 'Card', 'Icon'],
-  icons: {FolderPlusIcon: 'folderAdd'},
 };
