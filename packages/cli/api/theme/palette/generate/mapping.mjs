@@ -12,7 +12,14 @@
  *   settings. `themePalette()` runs it, and the CLI theme editor runs its
  *   generated copy
  */
-import {hexToOklch, luminance, normalizeColor} from './color.mjs';
+import {
+  compositeOver,
+  hexToOklch,
+  luminance,
+  normalizeColor,
+  ratioDown,
+} from './color.mjs';
+export {compositeOver};
 import {
   PALETTE_BLACK,
   PALETTE_WHITE,
@@ -94,6 +101,7 @@ import {
  * What the mapping reads around the palette.
  * @typedef {object} PaletteMappingContext
  * @property {PaletteBase} [base]
+ * @property {boolean} [editor] * The theme editor's own rules, beyond `themePalette()`'s mapping: the colors a look grows (category, chart, status roles left unset, code colors), the slider track and the inverted error fill, icons at 3:1, tinted inks, coloured cards keeping their own secondary text, and a base theme's own pairs kept readable.
  * @property {(token: string) => boolean} has Whether a token exists, so the mapping sets it.
  * @property {Readonly<Record<string, unknown>>} [defaults] Core's default value of each token, as written: a token the official theme leaves to Core follows the family at Core's lightness.
  * @property {PaletteColorReader} reader
@@ -442,6 +450,14 @@ export const LIFT_PARTS = OFFICIAL_NEUTRAL_LIFTED.map(([part, block]) => [
   liftGround(part, block),
 ]);
 /**
+ * The lifted parts the theme editor writes: a coloured card's own
+ * secondary text is that card's ink, not a lift (context.editor).
+ * @type {ReadonlyArray<[string, string, string]>}
+ */
+export const EDITOR_LIFT_PARTS = LIFT_PARTS.filter(
+  ([part, block]) => !(part === 'card' && block.startsWith('variant:')),
+);
+/**
  * What a lifted block's secondary text sits on: a card's own fill for a
  * card colour (the card variant rule lifts it there), the translucent
  * neutral track under segmented-control labels, else the accent tint.
@@ -551,25 +567,8 @@ export function ratio(a, b) {
   const [x, y] = [luminance(hex(a)), luminance(hex(b))].sort((p, q) => q - p);
   return (x + 0.05) / (y + 0.05);
 }
-/**
- * A color drawn at `alpha` over `under`, as the opaque color the eye sees.
- * @param {ReadonlyArray<number>} over
- * @param {number} alpha
- * @param {ReadonlyArray<number>} under
- * @returns {ColorTriple}
- */
-export function compositeOver(over, alpha, under) {
-  return /** @type {ColorTriple} */ (
-    over.map((c, i) => c * alpha + under[i] * (1 - alpha))
-  );
-}
 /** A ratio cut down to two decimals, never rounded up past a need. */
-export const round =
-  /**
-   * @param {number} r
-   * @returns {number}
-   */
-  r => Math.floor(r * 100 + 1e-9) / 100;
+export const round = ratioDown;
 /** A stop as text: a layout may hold 16.666666666666668. */
 export const shade =
   /**
@@ -1157,6 +1156,54 @@ export const fillAt =
     ratio: 0,
   });
 /**
+ * The families the theme editor grows beside the theme's own colors, in
+ * order: the category and chart hues of the look (lookSeeds), then the
+ * status roles the theme leaves unset, from the base theme's color for
+ * each (statusSeeds). Empty without a color setting.
+ * @param {ReadonlyArray<PaletteDial>} dials
+ * @param {Pick<PaletteMappingContext, 'base' | 'reader'>} context
+ * @returns {{id: string; name: string; seed: string}[]}
+ */
+export function grownFamilies(dials, context) {
+  if (!dials.length) {
+    return [];
+  }
+  const named =
+    /**
+     * @param {string} id
+     * @param {string} seed
+     */
+    (id, seed) => ({
+      id,
+      name: id[0].toUpperCase() + id.slice(1),
+      seed,
+    });
+  const accent = dials.find(d => d.id === 'accent')?.seed;
+  const out = Object.entries(
+    lookSeeds(accent, dials.find(d => d.id === 'neutral')?.seed),
+  ).map(([id, seed]) => named(id, seed));
+  /**
+   * @type {Record<string, string>}
+   */
+  const baseColors = {};
+  for (const d of Object.keys(STATUS_TOKEN)) {
+    if (dials.some(f => f.id === d)) {
+      continue;
+    }
+    const v = context.base?.light?.[`--color-${STATUS_TOKEN[d]}`];
+    const rgb = v ? context.reader.rgb(v) : null;
+    if (rgb && context.reader.alpha(v) >= 1) {
+      baseColors[d] = hex(rgb);
+    }
+  }
+  for (const [id, seed] of Object.entries(statusSeeds(baseColors, accent))) {
+    if (!out.some(f => f.id === id)) {
+      out.push(named(id, seed));
+    }
+  }
+  return out;
+}
+/**
  * The generation request for color settings with no palette config of the
  * author's: one family per setting in setting order, each seed anchored
  * exactly, in dark too where it reads there. Null without a setting.
@@ -1196,48 +1243,12 @@ export function planPaletteRequest(dials, options, context) {
   if (Object.keys(fills).length) {
     config.families = anchorDarkFills(config, dials, fills, context);
   }
-  // The category and chart hues grow with the look, after the theme's own
-  // colors.
-  const derived = lookSeeds(
-    dials.find(d => d.id === 'accent')?.seed,
-    dials.find(d => d.id === 'neutral')?.seed,
-  );
-  for (const [id, seed] of Object.entries(derived)) {
-    if (!config.families.some(f => f?.id === id)) {
-      config.families.push({
-        id,
-        name: id[0].toUpperCase() + id.slice(1),
-        seed,
-      });
-    }
-  }
-  // So do the status roles the theme leaves unset, from the base theme's
-  // color for each (statusSeeds).
-  const unset = Object.keys(STATUS_TOKEN).filter(
-    d => !dials.some(f => f.id === d),
-  );
-  /**
-   * @type {Record<string, string>}
-   */
-  const baseColors = {};
-  for (const d of unset) {
-    const v = context.base?.light?.[`--color-${STATUS_TOKEN[d]}`];
-    const rgb = v ? context.reader.rgb(v) : null;
-    if (rgb && context.reader.alpha(String(v)) >= 1) {
-      baseColors[d] = hex(rgb);
-    }
-  }
-  const seeds = statusSeeds(
-    baseColors,
-    dials.find(d => d.id === 'accent')?.seed,
-  );
-  for (const [id, seed] of Object.entries(seeds)) {
-    if (!config.families.some(f => f?.id === id)) {
-      config.families.push({
-        id,
-        name: id[0].toUpperCase() + id.slice(1),
-        seed,
-      });
+  // The editor grows more families (context.editor).
+  if (context.editor) {
+    for (const family of grownFamilies(dials, context)) {
+      if (!config.families.some(f => f?.id === family.id)) {
+        config.families.push(family);
+      }
     }
   }
   return {config, fills};
@@ -1646,7 +1657,9 @@ export function mapPalette(candidate, dials, fills, context) {
     // The track of a slider, which the official theme leaves to Core's
     // blue gray: the neutral color's shade nearest it, so a warm or cool
     // gray reaches it as it reaches the surfaces.
-    put('--color-track', 'neutral', nearCore('--color-track', 'neutral'));
+    if (context.editor) {
+      put('--color-track', 'neutral', nearCore('--color-track', 'neutral'));
+    }
     for (const [token, pair] of Object.entries(NEUTRAL_STOPS)) {
       if (
         token === '--color-text-secondary' ||
@@ -1658,7 +1671,9 @@ export function mapPalette(candidate, dials, fills, context) {
       // inside the ramp's black and white ends, which always reads.
       const shadeAt =
         NEUTRAL_INSIDE.includes(token) ||
-        (TINTED_INK.includes(token) && !isGray(neutral.seed))
+        (context.editor === true &&
+          TINTED_INK.includes(token) &&
+          !isGray(neutral.seed))
           ? atInside
           : at;
       put(
@@ -2035,24 +2050,27 @@ export function mapPalette(candidate, dials, fills, context) {
     put(
       names.icon,
       f.id,
-      each(m => {
-        const grounds = [...surfaces(m, f.id), ...mutedSeen(m)];
-        const from = /** @type {StopRef} */ (fill[m]);
-        const own = exactFill[m] ? solid(exactFill[m], m, f.id) : null;
-        if (
-          own &&
-          Math.min(...grounds.map(([, bg]) => contrast(own, bg))) >= NON_TEXT
-        ) {
-          return {...from, color: own};
-        }
-        return pick(names.icon, f.id, m, from.stop, grounds, NON_TEXT);
-      }),
+      context.editor
+        ? each(m => {
+            const grounds = [...surfaces(m, f.id), ...mutedSeen(m)];
+            const from = /** @type {StopRef} */ (fill[m]);
+            const own = exactFill[m] ? solid(exactFill[m], m, f.id) : null;
+            if (
+              own &&
+              Math.min(...grounds.map(([, bg]) => contrast(own, bg))) >=
+                NON_TEXT
+            ) {
+              return {...from, color: own};
+            }
+            return pick(names.icon, f.id, m, from.stop, grounds, NON_TEXT);
+          })
+        : text,
     );
     // The inverted error fill (an error toast's), which the official theme
     // leaves to Core: the danger color's shade nearest Core's own in each
     // mode, so the toast follows the danger color as Core draws it (its
     // text takes the readable side of Core's media surface).
-    if (word === 'error') {
+    if (context.editor && word === 'error') {
       put(
         '--color-background-error-inverted',
         f.id,
@@ -2164,7 +2182,8 @@ export function mapPalette(candidate, dials, fills, context) {
      * @type {Record<string, Partial<Record<PaletteMode, StopRef>>>}
      */
     const found = {};
-    for (const ground of new Set(LIFT_PARTS.map(([, , g]) => g))) {
+    const liftParts = context.editor ? EDITOR_LIFT_PARTS : LIFT_PARTS;
+    for (const ground of new Set(liftParts.map(([, , g]) => g))) {
       const {what, parts} = LIFT_GROUNDS[ground];
       /**
        * The shade the base theme itself lifts this ground's text to in a
@@ -2177,7 +2196,7 @@ export function mapPalette(candidate, dials, fills, context) {
          * @returns {string | null}
          */
         m => {
-          for (const [part, block, g] of LIFT_PARTS) {
+          for (const [part, block, g] of liftParts) {
             if (g !== ground) {
               continue;
             }
@@ -2321,9 +2340,17 @@ export function mapPalette(candidate, dials, fills, context) {
            */
           v => Boolean(v && parseColor(v) && alphaOf(v) >= 1),
         );
-  const categories = mapCategories();
-  const statuses = mapStatuses();
-  const code = mapCode();
+  /**
+   * @type {PaletteMapping['categories']}
+   */
+  const categories = context.editor
+    ? mapCategories()
+    : {badges: 'none', chart: 'none', merged: [], unreadable: []};
+  /**
+   * @type {PaletteMapping['statuses']}
+   */
+  const statuses = context.editor ? mapStatuses() : {roles: {}, why: []};
+  const code = context.editor ? mapCode() : [];
   const cvd = statusClashes();
   /**
    * The status fills, as the theme shows them, that someone red-weak or
@@ -2441,6 +2468,11 @@ export function mapPalette(candidate, dials, fills, context) {
       stops,
       modes,
       grounds: m => lookColors(LOOK_GROUNDS, m),
+      codeGround: m => {
+        const v = exactOf('--color-syntax-background', m);
+        const rgb = v ? parseColor(v) : null;
+        return v && rgb && alphaOf(v) >= 1 ? hex(rgb) : null;
+      },
       wanted: k => has(k) && !setExactly(k),
     });
     for (const [k, v] of Object.entries(derived.tokens)) {
@@ -2448,13 +2480,9 @@ export function mapPalette(candidate, dials, fills, context) {
     }
     return derived.unreadable;
   }
-  const keptAtBase = keepWhereBaseReads(
-    tokens,
-    base,
-    modes,
-    isLookOrStatus,
-    context.reader,
-  );
+  const keptAtBase = context.editor
+    ? keepWhereBaseReads(tokens, base, modes, isLookOrStatus, context.reader)
+    : [];
   /**
    * The category colors (Badge, Token and Card tints) and the chart colors
    * the palette derives (deriveLookColors), written as its shades. A token
