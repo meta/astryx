@@ -471,6 +471,49 @@ describe('the corners an ask names', () => {
     expect(rs.map(r => r.text).join('\n')).toMatch(/now 8px 8px 0 0\)/);
   }, 240_000);
 
+  it('starts a part that reads no corner token from the radius Core draws', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('dot', {cwd, like: 'neutral'});
+    // (Core draws a status dot at 50%: its bottom corners are round, not
+    // already square.)
+    const {data} = await themeEditHow('status dots square at the bottom', {
+      cwd,
+      theme: 'dot',
+    });
+    expect(data.hint ?? '').not.toMatch(/already so/);
+    expect(
+      (data.results?.[0]?.commands ?? []).map((/** @type {string} */ c) =>
+        c.replace(/^.*? editor set dot /, ''),
+      ),
+    ).toEqual([
+      'border-end-start-radius 0 --on status-dot',
+      'border-end-end-radius 0 --on status-dot',
+    ]);
+  }, 240_000);
+
+  it('writes a corner in the radius when its longhand was set before that radius', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('lb', {cwd, like: 'neutral'});
+    await themeEditSet('lb', 'border-end-end-radius', '8px', {cwd, on: 'tab'});
+    await themeEditSet('lb', 'border-radius', '4px 4px 0 0', {cwd, on: 'tab'});
+    // (The radius set later replaces the 8px corner. A longhand written
+    // again would keep its place before the radius and change nothing, so
+    // the answer writes the radius.)
+    const {data} = await themeEditHow('tabs rounded on the bottom', {
+      cwd,
+      theme: 'lb',
+    });
+    expect(
+      (data.results?.[0]?.commands ?? []).map((/** @type {string} */ c) =>
+        c.replace(/^.*? editor set lb /, ''),
+      ),
+    ).toEqual(['border-radius 4px --on tab']);
+    expect(
+      (await themeEditHow('tabs square at the bottom', {cwd, theme: 'lb'})).data
+        .hint,
+    ).toMatch(/is already so in lb: nothing to change/);
+  }, 240_000);
+
   it('set takes each answer, a menu included', async ctx => {
     if (needBases(ctx)) return;
     for (const q of [

@@ -1015,6 +1015,24 @@ function ownWords(k) {
 }
 
 /**
+ * The radius Core draws on a part's box in every variant and size, when it
+ * is one value and no square corner ("50%" on a status dot or a switch
+ * thumb), or null. States and pseudo-elements are not the box at rest.
+ * @param {{MAP: Record<string, any>}} C
+ * @param {string} part
+ */
+function drawnRadius(C, part) {
+  const rules = C.MAP[part]?.at?.['border-radius'] ?? {};
+  const values = new Set(
+    Object.entries(rules)
+      .filter(([cond]) => !/:/.test(cond))
+      .map(([, v]) => String(v).trim()),
+  );
+  const [v] = values;
+  return values.size === 1 && !/^0(?:px)?$/.test(v) ? v : null;
+}
+
+/**
  * What may follow a side joined by "and" in a corner ask ("on top and
  * bottom", "… and bottom of cards", "… and right corners", "… and bottom
  * too", "… and bottom in dark mode", "… and bottom 4px"): the end of the
@@ -22367,19 +22385,36 @@ export function draftAnswer(ctx, env, question) {
               (named.corners.length === 2 &&
                 (named.corners.every(k => k.startsWith('start-')) ||
                   named.corners.every(k => k.startsWith('end-'))));
-            // (A corner longhand the theme set on the part wins over its
-            // radius, and setting that radius again keeps its place before
-            // the longhand: then only the longhands of the corners that
-            // change are written.)
+            // (A longhand the theme set before the part's last radius keeps
+            // that place when written again, so the radius still wins over
+            // it: such a corner is written in the radius, the other corners
+            // as they are now.)
+            const behindRadius = (/** @type {string} */ k) =>
+              ordered.some(
+                (st, n) => n < lastRadius && LONGHAND[st.thing] === k,
+              );
+            // (A corner longhand set after the part's last radius wins over
+            // it: then only the longhands of the corners that change are
+            // written; see longhandLast.)
             /** @param {Record<string, string | null>} at @param {string[]} keys */
             const writeAll = (at, keys) =>
-              ALL.every(k => at[k] != null) &&
-              sameEitherWay &&
-              !ordered.some(st => st.thing !== 'border-radius')
+              (ALL.every(k => at[k] != null) &&
+                sameEitherWay &&
+                !longhandLast) ||
+              (!longhandLast &&
+                nowAt != null &&
+                keys.some(k => at[k] != null && behindRadius(k)))
                 ? [
                     set(
                       'border-radius',
-                      radiusOf(ALL.map(k => String(at[k]))),
+                      radiusOf(
+                        ALL.map(k =>
+                          String(
+                            at[k] ??
+                              /** @type {Record<string, string>} */ (nowAt)[k],
+                          ),
+                        ),
+                      ),
                       {...f, ...modeOf(c)},
                     ),
                   ]
@@ -22422,6 +22457,16 @@ export function draftAnswer(ctx, env, question) {
               ...own.filter(st => !st.state && !st.when),
               ...own.filter(st => st.state || st.when),
             ];
+            // (A corner longhand set after the part's last radius wins over
+            // it, and setting that radius again keeps its place before the
+            // longhand: then only longhands change those corners. A longhand
+            // set before the radius is already replaced by it.)
+            const lastRadius = ordered
+              .map(st => st.thing)
+              .lastIndexOf('border-radius');
+            const longhandLast = ordered.some(
+              (st, n) => st.thing !== 'border-radius' && n > lastRadius,
+            );
             /** @param {Record<string, string> | null} base @param {(v: string) => string} read */
             const layered = (base, read) => {
               /** @type {Record<string, string> | null} */
@@ -22433,16 +22478,28 @@ export function draftAnswer(ctx, env, question) {
               }
               return at;
             };
-            // (A part that reads no corner token is square until the theme
-            // rounds it: its own longhands then lay over four square corners.)
+            // (A part that reads no corner token draws the radius Core gives
+            // it, a status dot or a switch thumb at 50%, else square corners:
+            // the theme's own longhands lay over those.)
+            const resolved = (/** @type {string} */ v) =>
+              v.replace(/var\(\s*(--[a-z0-9-]+)\s*(?:,[^)]*)?\)/gi, (m, t) =>
+                String(current(t) || m),
+              );
+            const drawn = tok
+              ? null
+              : drawnRadius(C, one(/** @type {string} */ (on)));
             const SQUARE = Object.fromEntries(ALL.map(k => [k, '0']));
-            const nowAt = layered(tok ? fourOf(`var(${tok})`) : SQUARE, v => v);
+            const nowAt = layered(
+              tok ? fourOf(`var(${tok})`) : drawn ? fourOf(drawn) : SQUARE,
+              v => v,
+            );
             const resolvedAt = layered(
-              tok ? fourOf(String(current(tok)).trim()) : SQUARE,
-              v =>
-                v.replace(/var\(\s*(--[a-z0-9-]+)\s*(?:,[^)]*)?\)/gi, (m, t) =>
-                  String(current(t) || m),
-                ),
+              tok
+                ? fourOf(String(current(tok)).trim())
+                : drawn
+                  ? fourOf(resolved(drawn))
+                  : SQUARE,
+              resolved,
             );
             const isZero = (/** @type {string | undefined} */ x) =>
               parseFloat(String(x)) === 0;
@@ -22500,7 +22557,7 @@ export function draftAnswer(ctx, env, question) {
                 : String(ownNow ?? '').trim()
               : tok
                 ? `${tok}, ${String(current(tok)).trim()}`
-                : 'square';
+                : (drawn ?? 'square');
             // (Rounded on one side, the part rounded all round: those corners
             // are as asked and the others stay as they are. The line that
             // squares the others, as "only" would, is offered, never written
@@ -22542,8 +22599,7 @@ export function draftAnswer(ctx, env, question) {
             /** @type {Step[]} */
             const steps = writeAll(
               target,
-              ALL.every(k => target[k] != null) &&
-                !ordered.some(st => st.thing !== 'border-radius')
+              ALL.every(k => target[k] != null) && !longhandLast
                 ? ALL
                 : changing,
             );
