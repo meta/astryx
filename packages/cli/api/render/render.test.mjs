@@ -970,6 +970,195 @@ describe('render(): embedded files stay inside the current folder', () => {
 });
 
 describe('render(): what a page imports', () => {
+  /**
+   * A built theme package: its module and the stylesheet that scopes its tokens.
+   * @param {string} name the package and theme name
+   * @param {string} css
+   * @param {string} [extra] more of the module, such as a colorModes export
+   */
+  const themePackage = (name, css, extra = '') => {
+    put(`node_modules/@acme/${name}/package.json`, JSON.stringify({name: `@acme/${name}`, version: '1.0.0', type: 'module', main: 'index.js'}));
+    put(`node_modules/@acme/${name}/index.js`, `export const theme = {name: '${name}', __built: true, tokens: {}};\n${extra}`);
+    put(`node_modules/@acme/${name}/theme.css`, css);
+  };
+  /** @param {string} name */
+  const themedPage = name =>
+    `import {Theme} from '@astryxdesign/core/theme';
+import {theme} from '@acme/${name}';
+import '@acme/${name}/theme.css';
+export default function Page() {
+  return (<Theme theme={theme}><main><h1>Saved notes</h1></main></Theme>);
+}
+`;
+
+  it('keeps a light-only theme light in a dark viewer: light scheme and the theme\'s page color on the document', async () => {
+    themePackage('retro', '[data-astryx-theme="retro"]{--color-background-body:#c0c0c0;--color-text-primary:#000}');
+    put('retro/page.tsx', themedPage('retro'));
+    await render('retro/page.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'retro/page.html'), 'utf8');
+    expect(html).toContain('<meta name="color-scheme" content="light">');
+    expect(html).toContain(':where(:root){color-scheme:light;background-color:var(--color-background-body)}');
+    expect(html).not.toContain(':root{color-scheme:light dark}');
+  }, 60_000);
+
+  it('reads the colorModes of a theme package whose stylesheet sits beside a nested package.json', async () => {
+    put('node_modules/@acme/split/package.json', JSON.stringify({name: '@acme/split', version: '1.0.0', main: 'dist/index.js'}));
+    put('node_modules/@acme/split/dist/package.json', JSON.stringify({type: 'module'}));
+    put('node_modules/@acme/split/dist/index.js', "export const theme = {name: 'split', __built: true, tokens: {}};\nexport const colorModes = ['light'];\n");
+    put('node_modules/@acme/split/dist/theme.css', '[data-astryx-theme="split"]{--color-background-body:var(--brand-page)}');
+    put('split/page.tsx', `import {Theme} from '@astryxdesign/core/theme';
+import {theme} from '@acme/split';
+import '@acme/split/dist/theme.css';
+export default function Page() {
+  return (<Theme theme={theme}><main><h1>Saved notes</h1></main></Theme>);
+}
+`);
+    await render('split/page.tsx', {cwd: dir});
+    expect(fs.readFileSync(path.join(dir, 'split/page.html'), 'utf8')).toContain('<meta name="color-scheme" content="light">');
+  }, 60_000);
+
+  it('reads the colorModes of a theme package linked in from outside node_modules', async () => {
+    put('linked-src/linked/package.json', JSON.stringify({name: '@acme/linked', version: '1.0.0', type: 'module', main: 'index.js'}));
+    put('linked-src/linked/index.js', "export const theme = {name: 'linked', __built: true, tokens: {}};\nexport const colorModes = ['light'];\n");
+    put('linked-src/linked/theme.css', '[data-astryx-theme="linked"]{--color-background-body:var(--brand-page)}');
+    fs.mkdirSync(path.join(dir, 'node_modules/@acme'), {recursive: true});
+    fs.symlinkSync(path.join(dir, 'linked-src/linked'), path.join(dir, 'node_modules/@acme/linked'), 'dir');
+    put('linked/page.tsx', themedPage('linked'));
+    await render('linked/page.tsx', {cwd: dir});
+    expect(fs.readFileSync(path.join(dir, 'linked/page.html'), 'utf8')).toContain('<meta name="color-scheme" content="light">');
+  }, 60_000);
+
+  it('reads a built theme whose stylesheet the page reaches through an @import in its own CSS', async () => {
+    put('via-import/retro.js', "export const theme = {name: 'retro', __built: true, tokens: {}};\n");
+    put('via-import/retro.css', '[data-astryx-theme="retro"]{--color-background-body:#c0c0c0;--color-text-primary:#000}');
+    put('via-import/app.css', "@import './retro.css';\nmain { margin: 0; }\n");
+    put('via-import/page.tsx', `import {Theme} from '@astryxdesign/core/theme';
+import {theme} from './retro.js';
+import './app.css';
+export default function Page() {
+  return (<Theme theme={theme}><main><h1>Saved notes</h1></main></Theme>);
+}
+`);
+    await render('via-import/page.tsx', {cwd: dir});
+    expect(fs.readFileSync(path.join(dir, 'via-import/page.html'), 'utf8')).toContain('<meta name="color-scheme" content="light">');
+  }, 60_000);
+
+  it('keeps both schemes when the page imports the theme\'s stylesheet for one scheme only', async () => {
+    put('via-media/retro.js', "export const theme = {name: 'retro', __built: true, tokens: {}};\n");
+    put('via-media/retro.css', '[data-astryx-theme="retro"]{--color-background-body:#c0c0c0;--color-text-primary:#000}');
+    put('via-media/app.css', "@import './retro.css' (prefers-color-scheme: light);\n");
+    put('via-media/page.tsx', `import {Theme} from '@astryxdesign/core/theme';
+import {theme} from './retro.js';
+import './app.css';
+export default function Page() {
+  return (<Theme theme={theme}><main><h1>Saved notes</h1></main></Theme>);
+}
+`);
+    await render('via-media/page.tsx', {cwd: dir});
+    expect(fs.readFileSync(path.join(dir, 'via-media/page.html'), 'utf8')).toContain('<meta name="color-scheme" content="light dark">');
+  }, 60_000);
+
+  it('keeps both schemes when an outer import scopes the theme\'s stylesheet to one scheme', async () => {
+    put('via-chain/retro.js', "export const theme = {name: 'retro', __built: true, tokens: {}};\n");
+    put('via-chain/retro.css', '[data-astryx-theme="retro"]{--color-background-body:#c0c0c0;--color-text-primary:#000}');
+    put('via-chain/entry.css', "@import './retro.css';\n");
+    put('via-chain/app.css', "@import './entry.css' (prefers-color-scheme: dark);\n");
+    put('via-chain/page.tsx', `import {Theme} from '@astryxdesign/core/theme';
+import {theme} from './retro.js';
+import './app.css';
+export default function Page() {
+  return (<Theme theme={theme}><main><h1>Saved notes</h1></main></Theme>);
+}
+`);
+    await render('via-chain/page.tsx', {cwd: dir});
+    expect(fs.readFileSync(path.join(dir, 'via-chain/page.html'), 'utf8')).toContain('<meta name="color-scheme" content="light dark">');
+  }, 60_000);
+
+  it('keeps both schemes in a markup-only render, where the theme editor shows each mode itself', async () => {
+    const {renderPage} = await import('../../foundation/render/render-page.mjs');
+    const page = await renderPage(path.join(dir, 'retro/page.tsx'), {cwd: dir, markupOnly: true});
+    expect(page.html).toContain('<meta name="color-scheme" content="light dark">');
+    expect(page.html).not.toContain('background-color:var(--color-background-body)}');
+  }, 60_000);
+
+  it('follows a theme\'s colorModes export over its stylesheet: one mode, and both modes', async () => {
+    themePackage('night', '[data-astryx-theme="night"]{--color-background-body:light-dark(#fff,#111)}', "export const colorModes = ['dark'];\n");
+    put('night/page.tsx', themedPage('night'));
+    await render('night/page.tsx', {cwd: dir});
+    const night = fs.readFileSync(path.join(dir, 'night/page.html'), 'utf8');
+    expect(night).toContain('<meta name="color-scheme" content="dark">');
+    expect(night).toContain(':where(:root){color-scheme:dark;background-color:var(--color-background-body)}');
+    // Its stylesheet alone would read as light only; the export says both.
+    themePackage('pair', '[data-astryx-theme="pair"]{--color-background-body:#c0c0c0;--color-text-primary:#000}', "export const colorModes = ['light', 'dark'];\n");
+    put('pair/page.tsx', themedPage('pair'));
+    await render('pair/page.tsx', {cwd: dir});
+    const pair = fs.readFileSync(path.join(dir, 'pair/page.html'), 'utf8');
+    expect(pair).toContain('<meta name="color-scheme" content="light dark">');
+    expect(pair).not.toContain('background-color:var(--color-background-body)}');
+  }, 60_000);
+
+  it('keeps a two-mode theme\'s scheme as before', async () => {
+    themePackage('duo', '[data-astryx-theme="duo"]{--color-background-body:light-dark(#fff,#111)}');
+    put('duo/page.tsx', themedPage('duo'));
+    await render('duo/page.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'duo/page.html'), 'utf8');
+    expect(html).toContain('<meta name="color-scheme" content="light dark">');
+    expect(html).toContain(':root{color-scheme:light dark}:root[data-theme="light"]{color-scheme:light}:root[data-theme="dark"]{color-scheme:dark}');
+    expect(html).not.toContain('background-color:var(--color-background-body)}');
+  }, 60_000);
+
+  it('reads themes built with theme build: light page colors are light only, a fonts or accent theme keeps both modes', async () => {
+    const themes = {
+      retro: "'--color-background-body': '#c0c0c0', '--color-background-surface': '#c0c0c0', '--color-text-primary': '#000000'",
+      serif: "'--font-family-body': 'Georgia, serif'",
+      accent: "'--color-accent': '#c2185b'",
+    };
+    /** @type {Record<string, string>} */
+    const scheme = {};
+    for (const [name, tokens] of Object.entries(themes)) {
+      put(`built/${name}/${name}.ts`, `import {defineTheme} from '@astryxdesign/core/theme';\nexport const ${name}Theme = defineTheme({name: '${name}', tokens: {${tokens}}});\n`);
+      const built = spawnSync(process.execPath, [path.join(CLI_DIR, 'clients/cli/bin/astryx.mjs'), 'theme', 'build', `built/${name}/${name}.ts`], {cwd: dir, encoding: 'utf8', timeout: 60_000});
+      expect(built.status, built.stderr).toBe(0);
+      put(
+        `built/${name}/page.tsx`,
+        `import {Theme} from '@astryxdesign/core/theme';
+import {${name}Theme} from './${name}.js';
+import './${name}.css';
+export default function Page() {
+  return (<Theme theme={${name}Theme}><main><h1>Saved notes</h1></main></Theme>);
+}
+`,
+      );
+      await render(`built/${name}/page.tsx`, {cwd: dir});
+      scheme[name] = /<meta name="color-scheme" content="([^"]*)">/.exec(fs.readFileSync(path.join(dir, `built/${name}/page.html`), 'utf8'))?.[1] ?? '';
+    }
+    expect(scheme).toEqual({retro: 'light', serif: 'light dark', accent: 'light dark'});
+  }, 240_000);
+
+  it('reads the dark-only Gothic theme, built with theme build, as dark only', async () => {
+    fs.cpSync(path.join(CLI_DIR, 'assets/templates/themes/gothic'), path.join(dir, 'gothic'), {recursive: true});
+    // The template's icons come from lucide-react, which the theme package lists.
+    const lucide = path.dirname(createRequire(path.join(CLI_DIR, '../themes/gothic/package.json')).resolve('lucide-react/package.json'));
+    fs.mkdirSync(path.join(dir, 'gothic/node_modules'), {recursive: true});
+    fs.symlinkSync(lucide, path.join(dir, 'gothic/node_modules/lucide-react'), 'junction');
+    const built = spawnSync(process.execPath, [path.join(CLI_DIR, 'clients/cli/bin/astryx.mjs'), 'theme', 'build', 'gothic/gothicTheme.ts'], {cwd: dir, encoding: 'utf8', timeout: 120_000});
+    expect(built.status, built.stderr).toBe(0);
+    put(
+      'gothic/page.tsx',
+      `import {Theme} from '@astryxdesign/core/theme';
+import {gothicTheme} from './gothic.js';
+import './gothic.css';
+export default function Page() {
+  return (<Theme theme={gothicTheme}><main><h1>Saved notes</h1></main></Theme>);
+}
+`,
+    );
+    await render('gothic/page.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'gothic/page.html'), 'utf8');
+    expect(html).toContain('<meta name="color-scheme" content="dark">');
+    expect(html).toContain(':where(:root){color-scheme:dark;background-color:var(--color-background-body)}');
+  }, 240_000);
+
   it('inlines an imported theme stylesheet, embeds local CSS, JSON and images, and gives them all back', async () => {
     put('node_modules/@acme/theme/package.json', JSON.stringify({name: '@acme/theme', version: '1.0.0'}));
     put('node_modules/@acme/theme/theme.css', ':root{--acme-brand:#123456}.acme-unused{color:red}');
