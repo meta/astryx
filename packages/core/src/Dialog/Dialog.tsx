@@ -323,8 +323,8 @@ const styles = stylex.create({
     overflow: 'hidden',
     borderRadius: 'inherit',
   },
-  // Each corner as the theme gives it (a logical corner first, else the
-  // physical corner it is in this direction, else the one radius).
+  // The shorthand clears the logical corners, so a logical corner wins only
+  // when the theme writes it last.
   innerCorners: {
     '--_container-corner-start-start': {
       default:

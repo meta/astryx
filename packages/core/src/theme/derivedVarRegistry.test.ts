@@ -207,7 +207,7 @@ interface ComponentInfo {
   dir: string;
   sourceVars: string[];
   docVars: string[];
-  docDerived: {property: string; vars?: string[]; expand?: string}[];
+  docDerived: DerivedDocEntry[];
   docTargetKeys: string[];
 }
 

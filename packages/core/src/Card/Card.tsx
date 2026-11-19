@@ -104,8 +104,8 @@ const styles = stylex.create({
     paddingBlockEnd: `calc(var(--container-padding-block-end) - ${borderVars['--border-width']})`,
   },
   // A full-bleed child reaches under the border, so it takes the outer radius.
-  // Each corner reads the logical corner, then the physical corner for this
-  // direction, then the one radius.
+  // The shorthand clears the logical corners, so a logical corner wins only
+  // when the theme writes it last.
   corners: {
     '--_container-corner-start-start': {
       default:
