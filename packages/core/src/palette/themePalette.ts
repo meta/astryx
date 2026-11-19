@@ -136,7 +136,6 @@ export function themePalette(input: ThemePaletteInput): ThemePalette {
   const context: PaletteMappingContext = {
     base: defaultBase(),
     has: token => Object.hasOwn(tokenDefaults, token),
-    defaults: tokenDefaults,
     reader: coreReader,
   };
   const plan = planPaletteRequest(dials, {recipe, vibrancy}, context);
@@ -145,26 +144,9 @@ export function themePalette(input: ThemePaletteInput): ThemePalette {
   }
   const candidate = generateTonalPalette(plan.config as never);
   const mapping = mapPalette(candidate, dials, plan.fills, context);
-  // A value kept at Core's own (a pair the palette's colors would leave
-  // unreadable) is spelled as the palette spells its stops.
-  const spelled = (color: string): string => {
-    const rgb = coreReader.rgb(color);
-    if (!rgb) {
-      return color;
-    }
-    const alpha = coreReader.alpha(color);
-    return alpha < 1
-      ? `${hex(rgb)}${Math.round(alpha * 255)
-          .toString(16)
-          .padStart(2, '0')}`
-      : hex(rgb);
-  };
   const tokens: Record<string, readonly [string, string]> = {};
   for (const [token, {light, dark}] of Object.entries(mapping.tokens)) {
-    tokens[token] = Object.freeze([
-      spelled(light.color),
-      spelled(dark.color),
-    ] as const);
+    tokens[token] = Object.freeze([light.color, dark.color] as const);
   }
   const components: Record<string, Record<string, PaletteLift>> = {};
   for (const [part, block, ground] of LIFT_PARTS) {

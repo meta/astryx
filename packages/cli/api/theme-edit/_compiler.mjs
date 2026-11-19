@@ -9,6 +9,7 @@
  * @position api/theme-edit — compile-time knowledge over the part data
  */
 
+import {ratioDown} from '../theme/palette/generate/color.mjs';
 import {DIRECT, GROUPS, HOW} from './_tables.mjs';
 import {splitTop} from './_css.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
@@ -875,7 +876,7 @@ export function makeCompiler(project, parts) {
           part: p.text,
           mode: m,
           // (Cut down, never rounded up: just under a need never meets it.)
-          ratio: Math.floor(r * 100 + 1e-9) / 100,
+          ratio: ratioDown(r),
           sample: p.sample,
           // A side the theme changed is named by the value it set, not the
           // token the part reads without it.

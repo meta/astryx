@@ -26,8 +26,11 @@ import {
   hexToOklch,
   maxOklchChroma,
   oklchClampedHex,
+  ratioDown,
 } from './color';
 import {perceptualDelta} from './generator';
+
+export {ratioDown};
 
 type Mode = 'light' | 'dark';
 /** A shade of a family: its stop and color. */
@@ -235,14 +238,6 @@ function hueLean(
   const a = toward(accent, 0.15, LEAN_TO_ACCENT);
   const n = toward(neutral, 0.1, LEAN_TO_NEUTRAL);
   return hue => (Math.round(hue + a(hue) + n(hue)) + 360) % 360;
-}
-
-/**
- * A contrast ratio to two decimals, cut down and never rounded up, so a
- * pair just under the bar never prints as meeting it.
- */
-export function ratioDown(ratio: number): number {
-  return Math.floor(ratio * 100 + 1e-9) / 100;
 }
 
 /**

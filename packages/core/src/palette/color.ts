@@ -229,3 +229,11 @@ export function oklabCoordinatesToHex(coordinates: ColorTriple): string {
   const hue = ((Math.atan2(b, a) * 180) / Math.PI + 360) % 360;
   return oklchClampedHex(Math.min(1, Math.max(0, lightness)), chroma, hue);
 }
+
+/**
+ * A contrast ratio to two decimals, cut down and never rounded up, so a
+ * pair just under the bar never prints as meeting it.
+ */
+export function ratioDown(ratio: number): number {
+  return Math.floor(ratio * 100 + 1e-9) / 100;
+}
