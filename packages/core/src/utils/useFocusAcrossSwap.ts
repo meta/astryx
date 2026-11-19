@@ -4,7 +4,7 @@
 
 /**
  * @file useFocusAcrossSwap.ts
- * @input An optional forwarded ref
+ * @input An optional forwarded ref and focus-target options
  * @output A callback ref that carries focus to a replacement element
  * @position Internal hook for a component whose element type changes with a
  *   prop (a link row that renders a plain anchor while disabled). React
@@ -19,13 +19,53 @@
  * elsewhere.
  */
 
-import {useCallback, useRef, type Ref} from 'react';
+import {useCallback, useEffect, useRef, type Ref} from 'react';
+import {isFocusUnclaimed, ownsFocus} from './focusReturn';
 import {mergeRefs} from './mergeRefs';
+import {isHTMLElement} from './nodeType';
+
+function isNativeTarget(value: unknown): value is HTMLElement {
+  // A router ref can hold an instance instead of an HTML element.
+  return (
+    isHTMLElement(value) &&
+    typeof value.getRootNode === 'function' &&
+    typeof value.focus === 'function'
+  );
+}
+
+function wasHidden(node: HTMLElement): boolean {
+  // A hidden Activity can commit another change before microtasks run.
+  for (
+    let ancestor: HTMLElement | null = node;
+    ancestor;
+    ancestor = ancestor.parentElement
+  ) {
+    if (ancestor.style.display === 'none') {
+      return true;
+    }
+  }
+  return false;
+}
 
 export function useFocusAcrossSwap<T extends HTMLElement>(
   ref?: Ref<T>,
+  {
+    getFocusTarget,
+  }: {
+    getFocusTarget?: (node: T) => HTMLElement | null;
+  } = {},
 ): (node: T | null) => (() => void) | undefined {
-  const focusedNodeRef = useRef<T | null>(null);
+  const focusedNodeRef = useRef<{
+    target: HTMLElement;
+    source: T;
+  } | null>(null);
+
+  // Activity keeps hidden DOM; its focus handoff must not survive a disconnect.
+  useEffect(() => {
+    return () => {
+      focusedNodeRef.current = null;
+    };
+  }, [getFocusTarget]);
   return useCallback(
     (node: T | null) => {
       if (node === null) {
@@ -33,23 +73,35 @@ export function useFocusAcrossSwap<T extends HTMLElement>(
       }
       const outgoing = focusedNodeRef.current;
       focusedNodeRef.current = null;
-      const focusFell =
-        document.activeElement === null ||
-        document.activeElement === document.body;
+      const resolved = getFocusTarget ? getFocusTarget(node) : node;
+      const target = isNativeTarget(resolved) ? resolved : null;
       if (
+        target?.isConnected &&
         outgoing !== null &&
-        outgoing !== node &&
-        !outgoing.isConnected &&
-        focusFell
+        outgoing.target !== target &&
+        !outgoing.target.isConnected &&
+        !wasHidden(outgoing.source) &&
+        isFocusUnclaimed(target)
       ) {
-        node.focus();
+        target.focus({preventScroll: true});
       }
       const release = mergeRefs<T>(ref)(node);
       return () => {
-        focusedNodeRef.current = document.activeElement === node ? node : null;
+        const outgoing =
+          target && ownsFocus(target) ? {target, source: node} : null;
+        focusedNodeRef.current = outgoing;
+        if (outgoing) {
+          // Descendant refs can detach without disconnecting this hook's Effect.
+          // Expire the handoff after this commit, but leave newer handoffs intact.
+          queueMicrotask(() => {
+            if (focusedNodeRef.current === outgoing) {
+              focusedNodeRef.current = null;
+            }
+          });
+        }
         release?.();
       };
     },
-    [ref],
+    [ref, getFocusTarget],
   );
 }

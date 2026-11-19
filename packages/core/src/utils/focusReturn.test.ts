@@ -7,8 +7,11 @@ import {
   focusForLastInputTemporarily,
   releaseTemporaryFocus,
   isFocusLost,
+  isFocusUnclaimed,
   moveFocusLeftBehind,
   noteFocusWithin,
+  ownsFocus,
+  prepareFocusReturnOnRemoval,
   returnFocusForLastInput,
 } from './focusReturn';
 import {isFocusDetached} from './isFocusDetached';
@@ -322,6 +325,7 @@ describe('temporary programmatic focus', () => {
 
 describe('isFocusLost', () => {
   afterEach(() => {
+    vi.restoreAllMocks();
     document.body.innerHTML = '';
   });
 
@@ -335,6 +339,108 @@ describe('isFocusLost', () => {
     document.getElementById('outside')?.focus();
     expect(isFocusLost(surface)).toBe(false);
     expect(isFocusLost(null)).toBe(false);
+  });
+
+  it('returns focus within an unfocused cross-origin document after removal', async () => {
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const doc = frame.contentDocument!;
+    vi.spyOn(doc.defaultView!, 'frameElement', 'get').mockReturnValue(null);
+    const hasFocus = vi.spyOn(doc, 'hasFocus').mockReturnValue(true);
+    const opener = doc.createElement('button');
+    const surface = doc.createElement('div');
+    const inside = doc.createElement('button');
+    surface.append(inside);
+    doc.body.append(opener, surface);
+    inside.focus();
+    const returnOnRemoval = prepareFocusReturnOnRemoval(surface);
+
+    hasFocus.mockReturnValue(false);
+    returnOnRemoval(opener);
+    surface.remove();
+    await Promise.resolve();
+    expect(doc.activeElement).toBe(opener);
+  });
+});
+
+describe('isFocusUnclaimed', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    document.body.innerHTML = '';
+  });
+
+  it('reads a shadow root without taking focus from its host or a sibling', () => {
+    const host = document.createElement('div');
+    host.tabIndex = -1;
+    document.body.append(host);
+    const root = host.attachShadow({mode: 'open'});
+    const surface = document.createElement('div');
+    const inside = document.createElement('button');
+    const outside = document.createElement('button');
+    surface.append(inside);
+    root.append(surface, outside);
+
+    inside.focus();
+    expect(isFocusUnclaimed(surface)).toBe(false);
+    outside.focus();
+    expect(isFocusUnclaimed(surface)).toBe(false);
+    outside.blur();
+    expect(isFocusUnclaimed(surface)).toBe(true);
+    host.focus();
+    expect(root.activeElement).toBeNull();
+    expect(isFocusUnclaimed(surface)).toBe(false);
+  });
+
+  it('does not treat a document with a named host as a shadow root', () => {
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const doc = frame.contentDocument!;
+    const form = doc.createElement('form');
+    form.name = 'host';
+    const target = doc.createElement('button');
+    doc.body.append(form, target);
+    Object.defineProperty(doc, 'host', {value: form, configurable: true});
+
+    target.focus();
+    expect(ownsFocus(target)).toBe(true);
+    expect(isFocusUnclaimed(doc)).toBe(false);
+    target.remove();
+    expect(isFocusUnclaimed(doc)).toBe(true);
+  });
+
+  it('preserves focus outside a nested frame even when its document is detached', () => {
+    const outer = document.createElement('iframe');
+    const outside = document.createElement('button');
+    document.body.append(outer, outside);
+    const outerDocument = outer.contentDocument!;
+    const inner = outerDocument.createElement('iframe');
+    outerDocument.body.append(inner);
+    const innerDocument = inner.contentDocument!;
+    const target = innerDocument.createElement('button');
+    innerDocument.body.append(target);
+
+    target.focus();
+    expect(isFocusUnclaimed(innerDocument)).toBe(false);
+    target.remove();
+    expect(isFocusUnclaimed(innerDocument)).toBe(true);
+    outside.focus();
+    expect(isFocusUnclaimed(innerDocument)).toBe(false);
+  });
+
+  it('keeps document-local ownership in an unfocused child with an inaccessible parent', () => {
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const doc = frame.contentDocument!;
+    vi.spyOn(doc.defaultView!, 'frameElement', 'get').mockReturnValue(null);
+    vi.spyOn(doc, 'hasFocus').mockReturnValue(false);
+    const target = doc.createElement('button');
+    doc.body.append(target);
+
+    target.focus();
+    expect(ownsFocus(target)).toBe(true);
+    expect(isFocusUnclaimed(doc)).toBe(false);
+    target.remove();
+    expect(isFocusUnclaimed(doc)).toBe(true);
   });
 });
 
