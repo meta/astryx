@@ -217,9 +217,9 @@ describe('one control height per size', () => {
     ]);
     await themeEditSet('apart', 'height', '21px', {cwd, on: 'text-input'});
     // The later of the two every-size heights stays at the other sizes; the
-    // parts it reached that are not controls keep it.
+    // parts it reached that are not controls keep it. (A one-line height
+    // never reached the text area, a multi-line field: nothing to keep.)
     expect(saved('apart').settings).toEqual([
-      expect.objectContaining({thing: 'height', on: 'text-area', only: true}),
       expect.objectContaining({
         thing: 'height',
         on: 'complex-selector',
