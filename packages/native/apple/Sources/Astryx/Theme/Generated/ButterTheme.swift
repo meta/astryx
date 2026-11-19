@@ -160,7 +160,7 @@ extension Theme {
         syntaxTag: Color(.sRGB, red: 0.43529411764705883, green: 0.0784313725490196, blue: 0, opacity: 1),
         syntaxType: Color(.sRGB, red: 0.3215686274509804, green: 0.13725490196078433, blue: 0.4823529411764706, opacity: 1),
         syntaxVariable: Color(.sRGB, red: 0.3764705882352941, green: 0.37254901960784315, blue: 0.3215686274509804, opacity: 1),
-        textAccent: Color(.sRGB, red: 0.13333333333333333, green: 0.3568627450980392, blue: 1, opacity: 1),
+        textAccent: Color(.sRGB, red: 0.09803921568627451, green: 0.2980392156862745, blue: 0.9098039215686274, opacity: 1),
         textBlue: Color(.sRGB, red: 0.12549019607843137, green: 0.22745098039215686, blue: 0.4235294117647059, opacity: 1),
         textCyan: Color(.sRGB, red: 0, green: 0.27450980392156865, blue: 0.28627450980392155, opacity: 1),
         textDisabled: Color(.sRGB, red: 0.6784313725490196, green: 0.6745098039215687, blue: 0.6196078431372549, opacity: 1),
