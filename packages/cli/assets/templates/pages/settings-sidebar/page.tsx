@@ -251,8 +251,17 @@ export default function SettingsSecurityTemplate() {
   const [mailingAddress, setMailingAddress] = useState('');
   const [emergencyContact, setEmergencyContact] = useState('Provided');
 
-  // Selecting a nav item also drills into the detail view on mobile.
+  // Selecting a nav item also drills into the detail view on mobile. An item
+  // with no section here demos instead of opening an empty page.
   const selectNav = (label: string) => {
+    if (!(label in SECTION_TITLES)) {
+      // Demo only: replace this toast with navigation to the section.
+      showToast({
+        body: `Demo: ${label} settings would open here`,
+        uniqueID: `nav-${label}`,
+      });
+      return;
+    }
     setActiveNav(label);
     setMobileView('detail');
   };
@@ -279,6 +288,9 @@ export default function SettingsSecurityTemplate() {
               ) : undefined
             }
             isSelected={!isNarrow && activeNav === item.label}
+            aria-current={
+              !isNarrow && activeNav === item.label ? 'page' : undefined
+            }
             onClick={() => selectNav(item.label)}
           />
         ))}
