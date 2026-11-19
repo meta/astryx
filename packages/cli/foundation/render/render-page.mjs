@@ -43,7 +43,7 @@ import {ESBUILD_MISSING, findEsbuild} from './esbuild-dependency.mjs';
 import {carriedNameFor, embeddedPathProblem} from './embedded-files.mjs';
 import {scanHtml} from './html-reader.mjs';
 import {removeOnStop} from '../fs/stop-cleanup.mjs';
-import {aliasOnly, assetRefsOf} from './embedded-imports.mjs';
+import {aliasOnly, assetRefsOf, fileNamed} from './embedded-imports.mjs';
 import {isServedPackage, resolveServed} from './served-packages.mjs';
 import {CHART_CSS} from './charts.mjs';
 import {HOST_EXIT} from './host-exit.mjs';
@@ -908,14 +908,7 @@ export function assetRef(ref, at) {
   if (!clean) return null;
   if (NOT_A_LOAD.test(clean)) return null;
   if (/^(https?:)?\/\//i.test(clean)) return {kind: 'remote', ref: clean, url: decodeAttr(ref).trim()};
-  /** @type {string} */
-  let named;
-  try {
-    named = decodeURIComponent(clean);
-  } catch {
-    // A % that starts no escape is the character itself.
-    named = clean;
-  }
+  const named = fileNamed(clean);
   if (!isAssetPath(named)) return null;
   const publicDir = path.join(at.root, 'public');
   const found = named.startsWith('/')
@@ -1773,7 +1766,7 @@ export async function renderPage(entry, options = {}) {
     } catch {
       continue;
     }
-    for (const ref of assetRefsOf(text, file)) {
+    for (const {written: ref, file: name} of assetRefsOf(text, file)) {
       const how = `named in ${path.relative(dir, file).split(path.sep).join('/')}`;
       /** @param {string} f */
       const local = f => isInside(f, named) && isFileAt(f);
@@ -1785,12 +1778,12 @@ export async function renderPage(entry, options = {}) {
       } else {
         // The file the module names beside it, which a restore lays out
         // where the module's own folder finds it.
-        const beside = path.resolve(path.dirname(file), ref);
+        const beside = path.resolve(path.dirname(file), name);
         if (local(beside)) carryAsset(beside, how);
         // A stylesheet's url() is its own folder's file, which its inlined
         // rules already carry; only a module's string reaches the script.
         if (/\.css$/i.test(file)) continue;
-        shown = path.resolve(dir, ref);
+        shown = path.resolve(dir, name);
         if (!local(shown)) shown = null;
       }
       if (!shown) continue;
