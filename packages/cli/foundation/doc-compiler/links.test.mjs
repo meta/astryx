@@ -5,15 +5,20 @@
  * list of blocks comes back with every link resolved or named as a problem.
  */
 
-import {describe, expect, it} from 'vitest';
+import {afterAll, describe, expect, it} from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import {
   linkBlocks,
   linkFields,
   linkSections,
   parseLinkTarget,
+  renderTokens,
   textFields,
   unlinkText,
 } from './links.mjs';
+import {runWithDocPackageManager} from '../env/package-manager.mjs';
 
 /** A resolver over two docs, the second from another provider. */
 const resolve = async (/** @type {string} */ target) => {
@@ -281,5 +286,115 @@ describe('linkFields', () => {
     expect([...new Set(problems.map(problem => problem.field))]).toEqual(
       fields,
     );
+  });
+});
+
+describe("renderTokens in the reader's project", () => {
+  const theme = '@astryxdesign/theme-neutral';
+  const step = `{@pm install ${theme}}`;
+  /** @type {string[]} */
+  const made = [];
+  afterAll(() => {
+    for (const dir of made) fs.rmSync(dir, {recursive: true, force: true});
+  });
+  /** @param {Record<string, string>} dependencies */
+  const app = dependencies => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-doc-pin-'));
+    made.push(dir);
+    fs.writeFileSync(
+      path.join(dir, 'package.json'),
+      JSON.stringify({name: 'app', dependencies}),
+    );
+    fs.writeFileSync(path.join(dir, 'package-lock.json'), '{}');
+    return dir;
+  };
+
+  it('names a package Astryx releases with Core at the Core release the project names', () => {
+    const pinned = app({'@astryxdesign/core': '0.7.10'});
+    expect(
+      runWithDocPackageManager('npm', () => renderTokens(step, 'bash'), pinned),
+    ).toBe(`npm install -E ${theme}@0.7.10`);
+    const ranged = app({'@astryxdesign/core': '^0.7.10'});
+    expect(
+      runWithDocPackageManager('npm', () => renderTokens(step, 'bash'), ranged),
+    ).toBe(`npm install "${theme}@^0.7.10"`);
+  });
+
+  it('names the CLI beside Core at the same release, saved exactly where Core is pinned', () => {
+    const pinned = app({'@astryxdesign/core': '0.7.10'});
+    expect(
+      runWithDocPackageManager(
+        'npm',
+        () =>
+          renderTokens(
+            '{@pm install @astryxdesign/core @astryxdesign/cli}',
+            'bash',
+          ),
+        pinned,
+      ),
+    ).toBe('npm install -E @astryxdesign/core@0.7.10 @astryxdesign/cli@0.7.10');
+  });
+
+  it('names a placeholder theme package at the release too', () => {
+    const pinned = app({'@astryxdesign/core': '0.7.10'});
+    expect(
+      runWithDocPackageManager(
+        'npm',
+        () =>
+          renderTokens(
+            'Install it with {@pm install @astryxdesign/theme-<name>}.',
+          ),
+        pinned,
+      ),
+    ).toBe(
+      'Install it with `npm install -E @astryxdesign/theme-<name>@0.7.10`.',
+    );
+    expect(
+      runWithDocPackageManager(
+        'npm',
+        () => renderTokens('{@pm install @acme/<name>}', 'bash'),
+        pinned,
+      ),
+    ).toBe('npm install @acme/<name>');
+    // It also fills to packages that Astryx does not release with Core.
+    expect(
+      runWithDocPackageManager(
+        'npm',
+        () => renderTokens('{@pm install @astryxdesign/<name>}', 'bash'),
+        pinned,
+      ),
+    ).toBe('npm install @astryxdesign/<name>');
+  });
+
+  it('leaves the package bare in a project that names no Core, or no plain Core range', () => {
+    for (const dependencies of [{}, {'@astryxdesign/core': 'workspace:*'}]) {
+      expect(
+        runWithDocPackageManager(
+          'npm',
+          () => renderTokens(step, 'bash'),
+          app(dependencies),
+        ),
+      ).toBe(`npm install ${theme}`);
+    }
+  });
+
+  it('leaves it bare for a host that renders for every reader, inner scopes included', () => {
+    const pinned = app({'@astryxdesign/core': '0.7.10'});
+    expect(
+      runWithDocPackageManager('npm', () => renderTokens(step, 'bash')),
+    ).toBe(`npm install ${theme}`);
+    expect(
+      runWithDocPackageManager('npm', () =>
+        runWithDocPackageManager(
+          'pnpm',
+          () => renderTokens(step, 'bash'),
+          pinned,
+        ),
+      ),
+    ).toBe(`pnpm add ${theme}`);
+  });
+
+  it('leaves it bare outside any scope, where a read is about no one project', () => {
+    expect(renderTokens(step, 'bash')).toMatch(new RegExp(` ${theme}$`, 'u'));
   });
 });
