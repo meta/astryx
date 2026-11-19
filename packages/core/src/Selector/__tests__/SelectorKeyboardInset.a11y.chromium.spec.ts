@@ -4,14 +4,16 @@
 /**
  * @file SelectorKeyboardInset.a11y.chromium.spec.ts
  * @input The Pre Selected story at a phone viewport, its trigger moved low. A
- *   stand-in `window.visualViewport` shrinks from the bottom as a software
- *   keyboard does.
+ *   stand-in `window.visualViewport` shrinks from the bottom and pans as a
+ *   software keyboard does.
  * @output Browser proof that the selected-item overlay slides above the
  *   software keyboard. The list ends clear of the keyboard with its rows in
  *   view, whether the keyboard was up before the list opened or rose after.
  *   When the keyboard's report ends, the open list keeps its top: a list the
  *   cap held grows downward in place. A list that slid above a late keyboard
- *   holds against a shorter one. A list beside a field near the viewport's
+ *   holds against a shorter one. A pan before or after the cap, and a keyboard
+ *   change after a pan, keep the list clear of the visible keyboard line.
+ *   A list beside a field near the viewport's
  *   end, which the browser flips above it, also ends above the keyboard, as
  *   its options grow. A list taller than the room above the keyboard shrinks
  *   to that room.
@@ -42,6 +44,10 @@ const VIEWPORT = {width: 390, height: 844};
 // The keyboard and its bars cover the lower 300 px of the layout viewport.
 const COVER = 300;
 const LIMIT = VIEWPORT.height - COVER - LAYER_KEYBOARD_CLEARANCE_PX;
+const ISSUE_VIEWPORT = {width: 863, height: 304};
+const ISSUE_COVER = 196;
+const ISSUE_OFFSET_TOP = 101.7;
+const ISSUE_OPTIONS = 6;
 
 /**
  * Replaces `window.visualViewport` before the page loads with one the test
@@ -64,22 +70,31 @@ async function installKeyboard(page: Page) {
       configurable: true,
       get: () => viewport,
     });
-    (window as unknown as {__keyboard: (cover: number) => void}).__keyboard =
-      cover => {
-        viewport.height = window.innerHeight - cover;
-        viewport.dispatchEvent(new Event('resize'));
-      };
+    (
+      window as unknown as {
+        __keyboard: (cover: number, offsetTop?: number) => void;
+      }
+    ).__keyboard = (cover, offsetTop = viewport.offsetTop) => {
+      viewport.offsetTop = offsetTop;
+      viewport.height = window.innerHeight - cover;
+      viewport.dispatchEvent(new Event('resize'));
+    };
   });
 }
 
-const raiseKeyboard = async (page: Page, cover = COVER) =>
+const raiseKeyboard = async (page: Page, cover = COVER, offsetTop?: number) =>
   page.evaluate(
-    value =>
-      (window as unknown as {__keyboard: (cover: number) => void}).__keyboard(
-        value,
-      ),
-    cover,
+    ({cover: nextCover, offsetTop: nextOffsetTop}) =>
+      (
+        window as unknown as {
+          __keyboard: (cover: number, offsetTop?: number) => void;
+        }
+      ).__keyboard(nextCover, nextOffsetTop),
+    {cover, offsetTop},
   );
+
+const panVisualViewport = async (page: Page, offsetTop: number) =>
+  raiseKeyboard(page, COVER, offsetTop);
 
 /**
  * Sets the keyboard's cover (0 ends its report) and returns the open list's
@@ -87,9 +102,11 @@ const raiseKeyboard = async (page: Page, cover = COVER) =>
  */
 async function coverAndTrackTop(page: Page, cover = 0): Promise<number[]> {
   return page.getByRole('listbox').evaluate(async (list, value) => {
-    (window as unknown as {__keyboard: (cover: number) => void}).__keyboard(
-      value,
-    );
+    (
+      window as unknown as {
+        __keyboard: (cover: number, offsetTop?: number) => void;
+      }
+    ).__keyboard(value, value === 0 ? 0 : undefined);
     const tops: number[] = [];
     for (let frame = 0; frame < 30; frame++) {
       await new Promise(resolve => requestAnimationFrame(resolve));
@@ -149,9 +166,9 @@ function expectTopHeld(tops: number[], top: number, detail: string) {
  * Opens the story with its trigger moved down by `drop` px. The centered story
  * root grows with its content, so it adds twice that height above it.
  */
-async function openStory(page: Page, drop: number) {
+async function openStory(page: Page, drop: number, viewport = VIEWPORT) {
   await installKeyboard(page);
-  await page.setViewportSize(VIEWPORT);
+  await page.setViewportSize(viewport);
   await page.goto(
     `${storybook.origin}/iframe.html?id=core-selector--pre-selected&viewMode=story`,
     {waitUntil: 'load'},
@@ -166,6 +183,18 @@ async function openStory(page: Page, drop: number) {
   return trigger;
 }
 
+async function openIssueStory(page: Page) {
+  await installKeyboard(page);
+  await page.setViewportSize(ISSUE_VIEWPORT);
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-selector--overlay-beside-keyboard&viewMode=story`,
+    {waitUntil: 'load'},
+  );
+  const trigger = page.getByRole('combobox').first();
+  await expect(trigger).toBeVisible();
+  return trigger;
+}
+
 interface ListFacts {
   top: number;
   bottom: number;
@@ -175,7 +204,7 @@ interface ListFacts {
 }
 
 /** Where the open list is, and how many of its rows show above the keyboard. */
-async function listFacts(page: Page): Promise<ListFacts> {
+async function listFacts(page: Page, limit = LIMIT): Promise<ListFacts> {
   return page.getByRole('listbox').evaluate((list, limit) => {
     const box = list.getBoundingClientRect();
     const rows = [...list.querySelectorAll('[role="option"]')].map(row =>
@@ -193,7 +222,7 @@ async function listFacts(page: Page): Promise<ListFacts> {
           row.bottom <= Math.min(box.bottom, limit) + 0.5,
       ).length,
     };
-  }, LIMIT);
+  }, limit);
 }
 
 // The Pre Selected story's options.
@@ -208,6 +237,51 @@ function expectClearOfKeyboard(facts: ListFacts) {
   expect(facts.top, detail).toBeGreaterThanOrEqual(0);
   expect(facts.bottom, detail).toBeLessThanOrEqual(LIMIT + 0.5);
   expect(facts.rowsAboveKeyboard, detail).toBe(facts.rows);
+}
+
+function expectClearOfPannedKeyboard(
+  facts: ListFacts,
+  cover: number,
+  offsetTop: number,
+  viewportHeight = VIEWPORT.height,
+) {
+  const limit =
+    viewportHeight + offsetTop - cover - LAYER_KEYBOARD_CLEARANCE_PX;
+  const detail = JSON.stringify({...facts, limit});
+  expect(facts.top, detail).toBeGreaterThanOrEqual(0);
+  expect(facts.bottom - facts.top, detail).toBeGreaterThan(0);
+  expect(facts.bottom, detail).toBeLessThanOrEqual(limit + 0.5);
+  expect(facts.rowsAboveKeyboard, detail).toBe(facts.rows);
+}
+
+function expectPannedGeometry(
+  facts: ListFacts,
+  limit: number,
+  visibleTop = 0,
+  rows = OPTIONS,
+) {
+  const detail = JSON.stringify({...facts, limit});
+  expect(facts.rows, detail).toBe(rows);
+  expect(facts.rowsWithBox, detail).toBeGreaterThan(0);
+  expect(facts.top, detail).toBeGreaterThanOrEqual(visibleTop - 0.5);
+  expect(facts.bottom - facts.top, detail).toBeGreaterThan(0);
+  expect(facts.bottom, detail).toBeLessThanOrEqual(limit + 0.5);
+}
+
+async function expectIssueGeometry(page: Page, cover = ISSUE_COVER) {
+  const limit =
+    ISSUE_VIEWPORT.height +
+    ISSUE_OFFSET_TOP -
+    cover -
+    LAYER_KEYBOARD_CLEARANCE_PX;
+  await expect(async () => {
+    expectPannedGeometry(
+      await listFacts(page, limit),
+      limit,
+      ISSUE_OFFSET_TOP,
+      ISSUE_OPTIONS,
+    );
+  }).toPass({timeout: 3_000});
 }
 
 // Trigger 496–516 px: the cap alone leaves two rows above the keyboard.
@@ -329,6 +403,28 @@ test("a list beside a field near the viewport's end moves above a keyboard that 
   await raiseKeyboard(page);
   await expect(async () => {
     expectClearOfKeyboard(await listFacts(page));
+  }).toPass({timeout: 3_000});
+});
+
+test('a flipped list stays above a panned keyboard', async ({page}) => {
+  const trigger = await openTallStoryNearEnd(page);
+  await trigger.click();
+  await expect(page.getByRole('listbox')).toBeVisible();
+  // Grow an option before the measured reopen so the flip is part of the
+  // scenario, rather than a later layout mutation.
+  await growOption(page, 0, 96);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('listbox')).toBeHidden();
+  await trigger.click();
+  await expect(page.getByRole('listbox')).toBeVisible();
+  await openEnded(page);
+  await raiseKeyboard(page, LANDSCAPE_COVER, 100);
+  await expect(async () => {
+    const facts = await listFacts(page, LANDSCAPE_LIMIT + 100);
+    const detail = JSON.stringify({...facts, visibleTop: 100});
+    expect(facts.top, detail).toBeGreaterThanOrEqual(99.5);
+    expect(facts.bottom, detail).toBeLessThanOrEqual(LANDSCAPE_LIMIT + 100.5);
+    expect(facts.bottom - facts.top, detail).toBeGreaterThan(0);
   }).toPass({timeout: 3_000});
 });
 
@@ -477,4 +573,145 @@ test('a list the cap holds above the keyboard grows downward in place when the r
     detail,
   ).toBeLessThanOrEqual(0.5);
   expect(after.bottom, detail).toBeGreaterThan(held.bottom + 40);
+});
+
+test('a cap followed by a visual-viewport pan keeps the list above the panned keyboard', async ({
+  page,
+}) => {
+  const trigger = await openStory(page, 190);
+  await raiseKeyboard(page);
+  await trigger.click();
+  await expect(page.getByRole('listbox')).toBeVisible();
+  await expect(async () => {
+    expectClearOfKeyboard(await listFacts(page));
+  }).toPass({timeout: 3_000});
+
+  await panVisualViewport(page, 100);
+  await expect(async () => {
+    expectClearOfPannedKeyboard(
+      await listFacts(
+        page,
+        VIEWPORT.height + 100 - COVER - LAYER_KEYBOARD_CLEARANCE_PX,
+      ),
+      COVER,
+      100,
+    );
+  }).toPass({timeout: 3_000});
+});
+
+test('the issue-sized list stays in the panned room when the cap arrives first', async ({
+  page,
+}) => {
+  const trigger = await openIssueStory(page);
+  await raiseKeyboard(page, ISSUE_COVER);
+  await trigger.click();
+  await expect(page.getByRole('listbox')).toBeVisible();
+  await raiseKeyboard(page, ISSUE_COVER, ISSUE_OFFSET_TOP);
+  await expectIssueGeometry(page);
+});
+
+test('the issue-sized list stays in view when the keyboard raises and pans together', async ({
+  page,
+}) => {
+  const trigger = await openIssueStory(page);
+  await trigger.click();
+  await expect(page.getByRole('listbox')).toBeVisible();
+  await raiseKeyboard(page, ISSUE_COVER, ISSUE_OFFSET_TOP);
+  await expectIssueGeometry(page);
+});
+
+test('the issue-sized list opens in the visible room when the page is already panned', async ({
+  page,
+}) => {
+  const trigger = await openIssueStory(page);
+  await raiseKeyboard(page, ISSUE_COVER, ISSUE_OFFSET_TOP);
+  await trigger.click();
+  await expect(page.getByRole('listbox')).toBeVisible();
+  await expectIssueGeometry(page);
+});
+
+test('a visual-viewport pan before the keyboard cap is applied keeps the list clear', async ({
+  page,
+}) => {
+  const trigger = await openStory(page, 190);
+  await raiseKeyboard(page, 0, 100);
+  await trigger.click();
+  await expect(page.getByRole('listbox')).toBeVisible();
+  await raiseKeyboard(page, COVER, 100);
+  await expect(async () => {
+    expectClearOfPannedKeyboard(
+      await listFacts(
+        page,
+        VIEWPORT.height + 100 - COVER - LAYER_KEYBOARD_CLEARANCE_PX,
+      ),
+      COVER,
+      100,
+    );
+  }).toPass({timeout: 3_000});
+});
+
+test('the issue-sized list stays in the panned room when the pan arrives first', async ({
+  page,
+}) => {
+  const trigger = await openIssueStory(page);
+  await raiseKeyboard(page, 0, ISSUE_OFFSET_TOP);
+  await trigger.click();
+  await expect(page.getByRole('listbox')).toBeVisible();
+  await raiseKeyboard(page, ISSUE_COVER, ISSUE_OFFSET_TOP);
+  await expectIssueGeometry(page);
+});
+
+test('a keyboard height change after a visual-viewport pan keeps the list clear', async ({
+  page,
+}) => {
+  const trigger = await openStory(page, 190);
+  await raiseKeyboard(page, COVER, 100);
+  await trigger.click();
+  await expect(page.getByRole('listbox')).toBeVisible();
+  await expect(async () => {
+    expectClearOfPannedKeyboard(
+      await listFacts(
+        page,
+        VIEWPORT.height + 100 - COVER - LAYER_KEYBOARD_CLEARANCE_PX,
+      ),
+      COVER,
+      100,
+    );
+  }).toPass({timeout: 3_000});
+
+  const shorterCover = COVER - 100;
+  await raiseKeyboard(page, shorterCover, 100);
+  await expect(async () => {
+    expectClearOfPannedKeyboard(
+      await listFacts(
+        page,
+        VIEWPORT.height + 100 - shorterCover - LAYER_KEYBOARD_CLEARANCE_PX,
+      ),
+      shorterCover,
+      100,
+    );
+  }).toPass({timeout: 3_000});
+});
+
+test('the issue-sized list stays in the panned room after a keyboard height change', async ({
+  page,
+}) => {
+  const trigger = await openIssueStory(page);
+  await raiseKeyboard(page, ISSUE_COVER, ISSUE_OFFSET_TOP);
+  await trigger.click();
+  await expect(page.getByRole('listbox')).toBeVisible();
+  await expectIssueGeometry(page);
+  const shorterCover = ISSUE_COVER - 60;
+  await raiseKeyboard(page, shorterCover, ISSUE_OFFSET_TOP);
+  await expectIssueGeometry(page, shorterCover);
+});
+
+test('a panned keyboard leaves a nonzero list in the issue-sized viewport', async ({
+  page,
+}) => {
+  const trigger = await openIssueStory(page);
+  await raiseKeyboard(page, ISSUE_COVER, ISSUE_OFFSET_TOP);
+  await trigger.click();
+  await expect(page.getByRole('listbox')).toBeVisible();
+  await expectIssueGeometry(page);
 });

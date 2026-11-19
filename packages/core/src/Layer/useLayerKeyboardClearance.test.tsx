@@ -18,7 +18,8 @@
  *   cap is held through a press until its click. The window listeners are
  *   held only while a press is down. A layer element swapped in while open is
  *   measured again before it paints. The cap is read in layout px under a
- *   pinch zoom.
+ *   pinch zoom. A visual-viewport pan keeps the cap and publishes only its
+ *   offset.
  * @position Testing; real keyboards are proven by the Popover keyboard
  *   browser spec and on the iOS simulator
  */
@@ -40,6 +41,7 @@ import {
   LAYER_KEYBOARD_CAP_PROPERTY,
   LAYER_KEYBOARD_CLEARANCE_PX,
   LAYER_KEYBOARD_INSET_PROPERTY,
+  LAYER_KEYBOARD_VISUAL_VIEWPORT_OFFSET_PROPERTY,
   useLayerKeyboardClearance,
 } from './useLayerKeyboardClearance';
 import {useLayer} from './useLayer';
@@ -127,6 +129,7 @@ function Harness({
   shiftedTop,
   ignoresLift = false,
   slidesAboveKeyboard = false,
+  followsVisualViewportOffset = false,
 }: {
   isOpen?: boolean;
   isAnchored?: boolean;
@@ -152,12 +155,11 @@ function Harness({
    * inset is out, the layer ends above it.
    */
   slidesAboveKeyboard?: boolean;
+  followsVisualViewportOffset?: boolean;
 }) {
   const layerRef = useRef<HTMLDivElement>(null);
-  const {cap, lift, inset, followLayerElement} = useLayerKeyboardClearance(
-    isOpen,
-    layerRef,
-  );
+  const {cap, lift, inset, visualViewportOffsetTop, followLayerElement} =
+    useLayerKeyboardClearance(isOpen, layerRef, followsVisualViewportOffset);
   // The layer's box: its content height, no taller than the cap the hook
   // returned. The runtime applies the cap as the layer's own style, which its
   // block-size cap folds in; the harness applies it the same way. Below its
@@ -173,15 +175,18 @@ function Harness({
     <div
       key={layerKey}
       {...(isAnchored ? {[LAYER_ANCHORED_ATTRIBUTE]: ''} : {})}
-      style={{
-        ...(cap == null ? {} : {[LAYER_KEYBOARD_CAP_PROPERTY]: `${cap}px`}),
-        ...(inset == null
-          ? {}
-          : {[LAYER_KEYBOARD_INSET_PROPERTY]: `${inset}px`}),
-        ...(entering == null ? {} : {transform: `translateY(${entering}px)`}),
-        // As the runtime applies it: the insets move the layer's anchor area.
-        ...keyboardLiftStyle(lift),
-      }}
+      style={
+        {
+          ...(cap == null ? {} : {[LAYER_KEYBOARD_CAP_PROPERTY]: `${cap}px`}),
+          ...(inset == null
+            ? {}
+            : {[LAYER_KEYBOARD_INSET_PROPERTY]: `${inset}px`}),
+          [LAYER_KEYBOARD_VISUAL_VIEWPORT_OFFSET_PROPERTY]: `${visualViewportOffsetTop}px`,
+          ...(entering == null ? {} : {transform: `translateY(${entering}px)`}),
+          // As the runtime applies it: the insets move the layer's anchor area.
+          ...keyboardLiftStyle(lift),
+        } as React.CSSProperties
+      }
       data-testid="layer"
       ref={el => {
         layerRef.current = el;
@@ -317,6 +322,9 @@ describe('keyboardClearanceCap', () => {
     expect(LAYER_KEYBOARD_CLEARANCE_PX).toBe(10);
     expect(keyboardClearanceCap(BOX, VIEWPORT, COVER)).toBe(
       VIEWPORT - COVER - 10 - BOX.top,
+    );
+    expect(keyboardClearanceCap(BOX, VIEWPORT, COVER, 20)).toBe(
+      VIEWPORT + 20 - COVER - 10 - BOX.top,
     );
     expect(
       keyboardClearanceCap({top: 68, bottom: 300}, VIEWPORT, COVER),
@@ -529,7 +537,12 @@ describe('useLayerKeyboardClearance', () => {
     });
     Object.defineProperty(window, 'visualViewport', {
       configurable: true,
-      value: {width: 402 / zoom, height: VIEWPORT / zoom, scale: zoom},
+      value: Object.assign(new EventTarget(), {
+        width: 402 / zoom,
+        height: VIEWPORT / zoom,
+        scale: zoom,
+        offsetTop: 0,
+      }),
     });
     try {
       const {container} = render(<Harness />);
@@ -700,6 +713,55 @@ describe('useLayerKeyboardClearance', () => {
     expect(capOf(container)).toBe('');
     expect(insetOf(container)).toBe('');
     expect(guide.listeners.size).toBe(0);
+  });
+
+  it('publishes a visual-viewport pan without remeasuring the cap', async () => {
+    const saved = Object.getOwnPropertyDescriptor(window, 'visualViewport');
+    const viewport = Object.assign(new EventTarget(), {
+      height: VIEWPORT - COVER,
+      width: 390,
+      offsetTop: 0,
+      scale: 1,
+    });
+    Object.defineProperty(window, 'visualViewport', {
+      configurable: true,
+      value: viewport,
+    });
+    guide.inset = COVER;
+    try {
+      const {container} = render(<Harness followsVisualViewportOffset />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(capOf(container)).toBe(CAPPED);
+      const layer = screen.getByTestId('layer');
+      const getBoundingClientRect = layer.getBoundingClientRect;
+      let reads = 0;
+      layer.getBoundingClientRect = () => {
+        reads += 1;
+        return getBoundingClientRect.call(layer);
+      };
+      const readsBeforePan = reads;
+
+      viewport.offsetTop = 100;
+      act(() => {
+        viewport.dispatchEvent(new Event('scroll'));
+      });
+
+      expect(capOf(container)).toBe(CAPPED);
+      expect(reads).toBe(readsBeforePan);
+      expect(
+        layer.style.getPropertyValue(
+          LAYER_KEYBOARD_VISUAL_VIEWPORT_OFFSET_PROPERTY,
+        ),
+      ).toBe('100px');
+    } finally {
+      if (saved == null) {
+        Reflect.deleteProperty(window, 'visualViewport');
+      } else {
+        Object.defineProperty(window, 'visualViewport', saved);
+      }
+    }
   });
 
   it('measures a layer element the runtime swaps in while open from its own box, before it paints (spec:AST-059 FR8)', () => {

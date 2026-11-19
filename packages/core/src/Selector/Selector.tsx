@@ -1469,6 +1469,7 @@ export function Selector<T extends SelectorOptionType>(
       // The overlay margin moves the list after the show, so the overlay
       // writes the entrance's side once it has moved.
       writesEntranceSide: shouldOverlaySelectedItem,
+      followsVisualViewportOffset: shouldOverlaySelectedItem,
     },
   });
   const {popover} = surface;

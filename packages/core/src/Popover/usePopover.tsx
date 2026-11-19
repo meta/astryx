@@ -419,6 +419,8 @@ export interface InternalPopoverOptions extends UsePopoverOptions {
    * moves the popover (`useLayerInternal`'s `writesEntranceSide`).
    */
   writesEntranceSide?: boolean;
+  /** Whether the popover's own placement follows a visual viewport pan. */
+  followsVisualViewportOffset?: boolean;
 }
 
 /**
@@ -469,6 +471,7 @@ function usePopoverImplementation(
     onHide,
     onCloseStart,
     writesEntranceSide,
+    followsVisualViewportOffset,
     xstyle,
     className,
     style,
@@ -528,6 +531,7 @@ function usePopoverImplementation(
     watchesOutsidePans:
       hasLightDismiss && !ownsOutsidePan ? watchOutsidePans : undefined,
     writesEntranceSide,
+    followsVisualViewportOffset,
     onOpenPendingChange,
   });
 

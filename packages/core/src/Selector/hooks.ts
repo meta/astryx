@@ -26,7 +26,10 @@ import {
   readLayerEntranceSide,
   writeLayerEntranceSide,
 } from '../Layer/layerEntranceSide';
-import {LAYER_KEYBOARD_INSET_PROPERTY} from '../Layer/useLayerKeyboardClearance';
+import {
+  LAYER_KEYBOARD_INSET_PROPERTY,
+  LAYER_KEYBOARD_VISUAL_VIEWPORT_OFFSET_PROPERTY,
+} from '../Layer/useLayerKeyboardClearance';
 import {isImeKeyEvent} from '../utils/ime';
 import {layoutViewportHeight} from '../utils/layoutViewport';
 import {observeResizeAfterLayout} from '../utils/sharedResizeObserver';
@@ -298,14 +301,14 @@ export function useSelectedItemOverlayMargin({
       // layout px. With no keyboard the inset falls back to the room itself.
       // The keyboard term is then 0, and the measured shift stands.
       const room = viewport - listboxHeight - anchorBottom;
-      belowAnchor = `min(${-offset}px, max(${-anchorBottom}px, calc(${room}px - var(${LAYER_KEYBOARD_INSET_PROPERTY}, ${room}px))))`;
+      belowAnchor = `max(calc(var(${LAYER_KEYBOARD_VISUAL_VIEWPORT_OFFSET_PROPERTY}, 0px) - ${anchorBottom}px), min(${-offset}px, max(${-anchorBottom}px, calc(${room}px - var(${LAYER_KEYBOARD_INSET_PROPERTY}, ${room}px) + var(${LAYER_KEYBOARD_VISUAL_VIEWPORT_OFFSET_PROPERTY}, 0px)))))`;
       // A flip swaps the block margins, so this margin sets the list's end
       // from the anchor's top. It puts the list's top at the clamped top, or
       // lifts the list's end above a software keyboard. The list's top stays
       // below the gutter.
       const flipped = anchorTop - placement.clampedTop - listboxHeight;
       const keyboardEnd = anchorTop - viewport;
-      aboveAnchor = `min(${anchorTop - listboxHeight - gutter}px, max(${flipped}px, calc(${keyboardEnd}px + var(${LAYER_KEYBOARD_INSET_PROPERTY}, 0px))))`;
+      aboveAnchor = `min(${anchorTop - listboxHeight - gutter}px, max(${flipped}px, calc(${keyboardEnd}px + var(${LAYER_KEYBOARD_INSET_PROPERTY}, 0px) - var(${LAYER_KEYBOARD_VISUAL_VIEWPORT_OFFSET_PROPERTY}, 0px))))`;
     }
     // At the open, the browser picks the layer's side after this margin
     // applies. The margin below the anchor always fits there, so the layer
