@@ -132,15 +132,46 @@ const moveTo = link => {
 // that scrolls to the place itself and leaves the address alone), not from the
 // page: it holds the browser's own move, and the file still moves, so a page
 // that routes on its address sees the new place. A viewer may add its document
-// listener only once the frame's document has loaded, after this script ran,
-// so the marker goes on the document at that point: after the viewer's
-// listener, and before the listeners the page adds once it is mounted. A
-// cancel from the page's own listeners keeps the page's way.
+// listener from a DOMContentLoaded listener, after this script ran, so the
+// marker goes on the document at that point: after the viewer's listener, and
+// before the listeners the page adds once it is mounted. A cancel from the
+// page's own listeners keeps the page's way. A click listener the page's
+// modules add on the document or the window while they load comes before that
+// marker too, so it runs marked as the page's while it handles the click.
+const add = EventTarget.prototype.addEventListener;
 const pastHost = new WeakSet();
-const markPastHost = () => document.addEventListener('click', event => pastHost.add(event), true);
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', markPastHost, {once: true});
+const markPastHost = () => add.call(document, 'click', event => pastHost.add(event), true);
+if (document.readyState === 'loading') add.call(document, 'DOMContentLoaded', markPastHost, {once: true});
 else markPastHost();
-window.addEventListener('click', event => {
+let inPage = 0;
+let loading = true;
+queueMicrotask(() => {
+  loading = false;
+});
+const asPage = new WeakMap();
+for (const target of [document, window]) {
+  const remove = target.removeEventListener;
+  target.addEventListener = function (type, listener, options) {
+    if (!loading || type !== 'click' || !listener) return add.call(this, type, listener, options);
+    let marked = asPage.get(listener);
+    if (!marked) {
+      marked = function (event) {
+        inPage += 1;
+        try {
+          return typeof listener === 'function' ? listener.call(this, event) : listener.handleEvent(event);
+        } finally {
+          inPage -= 1;
+        }
+      };
+      asPage.set(listener, marked);
+    }
+    return add.call(this, type, marked, options);
+  };
+  target.removeEventListener = function (type, listener, options) {
+    return remove.call(this, type, (listener && asPage.get(listener)) || listener, options);
+  };
+}
+add.call(window, 'click', event => {
   const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
   if (!link || !movesInFile(event, link)) return;
   const cancel = Event.prototype.preventDefault;
@@ -176,7 +207,7 @@ window.addEventListener('click', event => {
   const byHost = () =>
     event.eventPhase === Event.CAPTURING_PHASE && event.currentTarget === document && !pastHost.has(event);
   event.preventDefault = function () {
-    if (byHost()) hostHeld = true;
+    if (!inPage && byHost()) hostHeld = true;
     else cancelled = true;
     return cancel.call(this);
   };

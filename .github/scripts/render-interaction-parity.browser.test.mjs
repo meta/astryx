@@ -118,21 +118,33 @@ const ROUTES = `import {useEffect, useState} from 'react';
 import {Heading} from '@astryxdesign/core/Heading';
 
 const titles = {home: 'Home page', members: 'Members page', settings: 'Settings page'};
+// The page's own module handles one link while it loads, before it mounts: it
+// cancels it and opens its own panel.
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', e => {
+    if (!(e.target instanceof Element) || !e.target.closest('a[href="#faq"]')) return;
+    e.preventDefault();
+    window.dispatchEvent(new Event('faq'));
+  }, true);
+}
 export default function Page() {
   const [place, setPlace] = useState('home');
-  const [panel, setPanel] = useState(false);
+  const [panel, setPanel] = useState('No panel');
   useEffect(() => {
     const follow = () => setPlace(window.location.hash.slice(1) || 'home');
     const own = e => {
       if (!(e.target instanceof Element) || !e.target.closest('a[href="#help"]')) return;
       e.preventDefault();
-      setPanel(true);
+      setPanel('Help panel open');
     };
+    const faq = () => setPanel('FAQ panel open');
     follow();
     window.addEventListener('hashchange', follow);
+    window.addEventListener('faq', faq);
     document.addEventListener('click', own, true);
     return () => {
       window.removeEventListener('hashchange', follow);
+      window.removeEventListener('faq', faq);
       document.removeEventListener('click', own, true);
     };
   }, []);
@@ -140,13 +152,14 @@ export default function Page() {
     <main>
       <nav>
         <a href="#home">Home</a> <a href="#members">Members</a> <a href="#settings">Settings</a>{' '}
-        <a href="#members" onClick={e => e.preventDefault()}>Members, cancelled</a> <a href="#help">Help</a>
+        <a href="#members" onClick={e => e.preventDefault()}>Members, cancelled</a> <a href="#help">Help</a>{' '}
+        <a href="#faq">FAQ</a>
       </nav>
       <div onClick={e => e.stopPropagation()}>
         <a href="#settings">Settings, in a card</a>
       </div>
       <Heading level={1}>{titles[place] ?? 'Home page'}</Heading>
-      <p data-probe="panel">{panel ? 'Help panel open' : 'No panel'}</p>
+      <p data-probe="panel">{panel}</p>
     </main>
   );
 }
@@ -484,6 +497,7 @@ describe.runIf(BROWSER_STEP)(
             'Help',
             'Home',
             'Settings, in a card',
+            'FAQ',
           ]) {
             await scope.getByRole('link', {name, exact: true}).click();
             await new Promise(resolve => setTimeout(resolve, 200));
@@ -494,8 +508,9 @@ describe.runIf(BROWSER_STEP)(
               ),
             );
           }
-          // A link the page cancels or handles itself keeps the page where it
-          // is; a link in a card that stops the click still moves.
+          // A link the page cancels or handles itself, also from a listener its
+          // module adds while it loads, keeps the page where it is; a link in a
+          // card that stops the click still moves.
           const where = !host
             ? 'plain frame'
             : host.includes('DOMContentLoaded')
@@ -508,6 +523,7 @@ describe.runIf(BROWSER_STEP)(
             'Settings page | Help panel open | #settings',
             'Home page | Help panel open | #home',
             'Settings page | Help panel open | #settings',
+            'Settings page | FAQ panel open | #settings',
           ]);
           expect(errors).toEqual([]);
           await viewer.close();
