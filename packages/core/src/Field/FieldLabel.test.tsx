@@ -13,6 +13,7 @@ import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {TestIcon} from '../__tests__/TestIcon';
+import {declaredValue} from '../__tests__/stylexDeclarations';
 import {InternationalizationProvider} from '../i18n';
 import {FieldLabel} from './FieldLabel';
 import {Switch} from '../Switch/Switch';
@@ -20,6 +21,16 @@ import {themeProps} from '../utils/themeProps';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 
 describe('FieldLabel', () => {
+  it('sets the label in the semibold weight', () => {
+    // A 500 weight resolves to the regular face in fonts with no 500 face.
+    render(<FieldLabel label="Email" inputID="email-input" />);
+    const label = screen.getByText('Email').closest('label');
+    expect(label).not.toBeNull();
+    expect(declaredValue(label as Element, 'font-weight')).toBe(
+      'var(--font-weight-semibold)',
+    );
+  });
+
   it('renders label text', () => {
     render(<FieldLabel label="Email" inputID="email-input" />);
     expect(screen.getByText('Email')).toBeInTheDocument();

@@ -62,8 +62,10 @@
  * name match on the whole id (or its plural or singular) comes before one on
  * a part of it, and a meaning
  * match whose query sits earlier among the icon's tags comes first (sets list
- * an icon's most telling tags first). Remaining ties keep id order, so the
- * same installation always answers the same way.
+ * an icon's most telling tags first). Remaining ties put first an icon whose
+ * id the query names in full: each word of the id is a query word, or its
+ * plural or singular. So for `plus add`, `plus` leads `folder-plus`. Then
+ * they keep id order, so the same installation always answers the same way.
  *
  * Ranking reads every icon of every searched set in each pass, and one
  * search makes up to four passes. Each set's icons, with the words they
@@ -748,6 +750,7 @@ function rankTerm(sets, term, searchable) {
       // Within an exact score and one set: a name match keeps whole id
       // before id part, a meaning match its tag position.
       rank: match.tier === 'exact' ? match.rank : 0,
+      whole: namesWholeId(icon.id, term),
       setIndex,
     };
   });
@@ -757,7 +760,22 @@ function rankTerm(sets, term, searchable) {
       b.entry.score - a.entry.score ||
       a.setIndex - b.setIndex ||
       a.rank - b.rank ||
+      Number(b.whole) - Number(a.whole) ||
       (a.entry.id < b.entry.id ? -1 : a.entry.id > b.entry.id ? 1 : 0),
   );
   return found.map(({entry}) => entry);
+}
+
+/**
+ * Whether the query names every word of an icon's id: each id word is a
+ * query word, or its plural or singular.
+ * @param {string} id
+ * @param {string} term lower-case words
+ * @returns {boolean}
+ */
+function namesWholeId(id, term) {
+  const asked = term.split(' ');
+  return id
+    .split('-')
+    .every(part => asked.some(word => word === part || pluralPair(word, part)));
 }

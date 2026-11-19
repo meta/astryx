@@ -478,6 +478,8 @@ export default defineConfig(
     rules: {
       '@astryx/no-border-shorthand':
         astryxConfig.rules['@astryx/no-border-shorthand'],
+      '@astryx/no-shorthand-longhand-merge':
+        astryxConfig.rules['@astryx/no-shorthand-longhand-merge'],
     },
   },
   // `light-dark()` is the theme layer's mechanism, and reaches lab for the
