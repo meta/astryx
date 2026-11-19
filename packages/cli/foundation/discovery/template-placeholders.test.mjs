@@ -13,6 +13,7 @@ import {fileURLToPath} from 'node:url';
 import {describe, expect, it} from 'vitest';
 import {
   DEFAULT_PLACEHOLDER_LOOK,
+  fillTemplatePlaceholders,
   PLACEHOLDER_MODULE,
   placeholderLook,
   placeholderMeaning,
@@ -101,5 +102,137 @@ describe('the placeholder package from a template source', () => {
     for (const look of Object.keys(table.looks)) {
       expect(() => from.resolve(placeholderModule(look))).not.toThrow();
     }
+  });
+});
+
+describe('fillTemplatePlaceholders', () => {
+  it('leaves a source without placeholder imports unchanged', () => {
+    const source = "import {TrashIcon} from '@heroicons/react/24/outline';\n";
+    expect(fillTemplatePlaceholders(source)).toEqual({source, meanings: {}});
+  });
+
+  it('writes the library import for each variant and keeps each meaning by local name', () => {
+    const {source, meanings} = fillTemplatePlaceholders(
+      [
+        '// A comment above stays.',
+        "import {DeleteIcon, CloseIcon as Close} from '@astryxdesign/template-icons';",
+        "import {DeleteIcon as DeleteSmall} from '@astryxdesign/template-icons/20/solid';",
+        "import {CloseIcon as CloseLucide} from '@astryxdesign/template-icons/lucide';",
+        '<DeleteIcon />;',
+        '',
+      ].join('\n'),
+    );
+    expect(source).toBe(
+      [
+        '// A comment above stays.',
+        'import {',
+        '  TrashIcon as DeleteIcon,',
+        '  XMarkIcon as Close,',
+        "} from '@heroicons/react/24/outline';",
+        "import {TrashIcon as DeleteSmall} from '@heroicons/react/20/solid';",
+        `import {${placeholderSource('close', 'lucide')?.export} as CloseLucide} from 'lucide-react';`,
+        '<DeleteIcon />;',
+        '',
+      ].join('\n'),
+    );
+    expect(meanings).toEqual({
+      DeleteIcon: 'delete',
+      Close: 'close',
+      DeleteSmall: 'delete',
+      CloseLucide: 'close',
+    });
+  });
+
+  it('keeps an import that names no meaning as written, and comments inside an import', () => {
+    const {source} = fillTemplatePlaceholders(
+      [
+        'import {',
+        '  // why this icon',
+        '  DeleteIcon,',
+        '  NotAMeaningIcon,',
+        "} from '@astryxdesign/template-icons';",
+        '',
+      ].join('\n'),
+    );
+    expect(source).toBe(
+      [
+        '// why this icon',
+        "import {TrashIcon as DeleteIcon} from '@heroicons/react/24/outline';",
+        "import {NotAMeaningIcon} from '@astryxdesign/template-icons';",
+        '',
+      ].join('\n'),
+    );
+  });
+
+  it('wraps a long import one name per line', () => {
+    const {source} = fillTemplatePlaceholders(
+      "import {DeleteIcon, CloseIcon, SearchIcon, SettingsIcon, HomeIcon} from '@astryxdesign/template-icons';\n",
+    );
+    expect(source.split('\n')[0]).toBe('import {');
+    expect(source).toContain("} from '@heroicons/react/24/outline';");
+  });
+});
+
+describe('placeholder imports in derived component names', () => {
+  it('read as the library icon that draws them, as the copy renders it', async () => {
+    const {parsedComponents} = await import('./template-adapter.mjs');
+    const before = parsedComponents(
+      "import {Search, Trash2} from 'lucide-react';\nexport default () => <><Search /><Trash2 /></>;\n",
+    );
+    const after = parsedComponents(
+      "import {SearchIcon} from '@astryxdesign/template-icons/lucide';\nimport {XMarkIcon} from '@heroicons/react/24/outline';\nexport default () => <><SearchIcon /><XMarkIcon /></>;\n",
+    );
+    expect(after).toEqual(
+      parsedComponents(
+        "import {Search} from 'lucide-react';\nimport {XMarkIcon} from '@heroicons/react/24/outline';\nexport default () => <><Search /><XMarkIcon /></>;\n",
+      ),
+    );
+    expect(before).toContain('Search');
+  });
+});
+
+describe('placeholders in template search', () => {
+  const raw =
+    "import {DeleteIcon} from '@astryxdesign/template-icons';\nexport default () => <DeleteIcon />;\n";
+
+  it('the filled copy lists the same component names as the template', async () => {
+    const {parsedComponents} = await import('./template-adapter.mjs');
+    expect(parsedComponents(fillTemplatePlaceholders(raw).source)).toEqual(
+      parsedComponents(raw),
+    );
+  });
+
+  it('the pre-parse bound holds the library icon a placeholder tag draws', async () => {
+    const {componentNameBound, parsedComponents} =
+      await import('./template-adapter.mjs');
+    const bound = componentNameBound(raw) ?? [];
+    for (const name of parsedComponents(raw)) expect(bound).toContain(name);
+    expect(bound).toContain(placeholderSource('delete', '24/outline')?.export);
+  });
+});
+
+describe('an aliased placeholder in the pre-parse bound', () => {
+  it('holds the library icon the imported placeholder draws', async () => {
+    const {componentNameBound, parsedComponents} =
+      await import('./template-adapter.mjs');
+    const raw =
+      "import {DeleteIcon as Del} from '@astryxdesign/template-icons';\nexport default () => <Del />;\n";
+    const bound = componentNameBound(raw) ?? [];
+    for (const name of parsedComponents(raw)) expect(bound).toContain(name);
+  });
+});
+
+describe('a placeholder import beside a default import', () => {
+  it('keeps the default import as a default, and a comment beside a kept name', () => {
+    const {source} = fillTemplatePlaceholders(
+      "import Thing, {DeleteIcon, NotAMeaningIcon /* keep */} from '@astryxdesign/template-icons';\n",
+    );
+    expect(source).toBe(
+      [
+        "import {TrashIcon as DeleteIcon} from '@heroicons/react/24/outline';",
+        "import Thing, {NotAMeaningIcon /* keep */} from '@astryxdesign/template-icons';",
+        '',
+      ].join('\n'),
+    );
   });
 });
