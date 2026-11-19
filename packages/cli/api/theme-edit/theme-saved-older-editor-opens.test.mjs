@@ -85,7 +85,7 @@ const OLDER = [
     thing: 'line-height',
     value: '20px',
     source: 'property',
-    on: 'kbd',
+    on: 'top-nav-heading',
   },
 ];
 
