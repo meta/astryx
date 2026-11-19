@@ -318,7 +318,7 @@ export const docs = {
   ],
   usage: {
     description:
-      'Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. There is no onRowClick prop: act from a control in the main cell (renderCell). Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.',
+      'Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. There is no onRowClick prop: act from the main cell\'s renderCell. Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.',
     bestPractices: [
       {
         guidance: true,
@@ -421,7 +421,7 @@ const columns = [
 export const docsZh = {
   usage: {
     description:
-      'Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. 没有 onRowClick 属性：请用主单元格中的控件操作（renderCell）。Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.',
+      'Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. 没有 onRowClick 属性：请在主单元格的 renderCell 中操作。Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.',
     bestPractices: [
       {
         guidance: true,
@@ -469,7 +469,7 @@ export const docsDense = {
     'Data-driven table w/ rich cell content via renderCell. Compose cells w/ Badge, StatusDot, Text, Avatar, layout primitives. BaseTable provides unstyled structural core w/ composable plugin pipeline.',
   usage: {
     description:
-      'Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. No onRowClick prop: act from a control in the main cell (renderCell). Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.',
+      'Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. No onRowClick prop: act from the main cell\'s renderCell. Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.',
     bestPractices: [
       {
         guidance: true,
