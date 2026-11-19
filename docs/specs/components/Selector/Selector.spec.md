@@ -219,9 +219,8 @@ These requirements describe shipped behavior on current `main`.
   may read browser layout while opening; it does not impose document-wide or
   persistent observation while closed.
 - **PR3 — A closed Selector holds no option list.** While closed, a Selector
-  renders only its trigger and its form value (the hidden input when `htmlName`
-  is set); a surface may keep an empty, inert anchor marker, but no listbox,
-  option, search row, or other list content exists. Every open, in the popover
+  renders no list content: a surface may keep an empty, inert anchor marker,
+  but no listbox, option, search row, or other list content exists. Every open, in the popover
   and the bottom sheet alike, mounts the list. Every close removes it once the close settles, and the exit still shows the list (`spec:AST-090` FR11, DEC-4). No list stays mounted while closed. The first open
   starts its highlight where a later open by the same path starts it; the
   element AR2 gives the combobox relationship (the trigger, or the search
