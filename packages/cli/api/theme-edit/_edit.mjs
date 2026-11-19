@@ -18,7 +18,7 @@ import {
   vendorProperties,
 } from './_css.mjs';
 import * as path from 'node:path';
-import {AstryxError} from '../error.mjs';
+import {AstryxError, brokenInstallError} from '../error.mjs';
 import {
   followLine,
   readSetLine,
@@ -7679,6 +7679,8 @@ export async function themeEditShow(theme, options = {}) {
     } catch (e) {
       putBack(kept, tokensDir);
       if (e instanceof AstryxError && e.code !== E.ERR_THEME_LOAD) throw e;
+      const broken = brokenInstallError(e, cwd, 'Nothing was changed.');
+      if (broken) throw broken;
       // An own theme source that no longer builds is named, as `set` names
       // it; the old build is never shown as current.
       const why = (e instanceof Error ? e.message : String(e))
