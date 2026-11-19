@@ -257,6 +257,17 @@ describe('part words read in place', () => {
       ).toBe(false);
       expect(w[0], ask).toMatch(new RegExp(` --on ${on}\\b`));
     }
+    // (A call to action is the primary button, never every button.)
+    for (const ask of [
+      'a rounder call to action',
+      'CTA buttons rounder',
+      'make the call to action button rounder',
+    ]) {
+      const w = writes(await how('q0', ask));
+      expect(w.length, ask).toBeGreaterThan(0);
+      for (const c of w)
+        expect(c, ask).toMatch(/ --on button --when variant:primary$/);
+    }
     expect(writes(await how('q0', 'the action buttons rounder'))[0]).toMatch(
       / --on button$/,
     );

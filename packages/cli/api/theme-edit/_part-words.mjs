@@ -19,9 +19,10 @@ export const OVERRIDES = [
   [/\b(?:dividers?|separators?)\b/, {on: 'divider'}],
   // (An action, "a toast's action", is the button it holds. Read first,
   // before the parts it can name, so "actions menu" and "action sheet" are
-  // that menu and that sheet.)
+  // that menu and that sheet. A call to action is the primary button,
+  // below.)
   [
-    /\bactions?(?: buttons?)?\b(?!\s+(?:bars?|sheets?|menus?|lists?))/,
+    /(?<!\bcalls? to )\bactions?(?: buttons?)?\b(?!\s+(?:bars?|sheets?|menus?|lists?))/,
     {on: 'button'},
   ],
   // (The page's main panel, the area its content sits in.)
@@ -101,7 +102,7 @@ export const OVERRIDES = [
   // (The accent buttons and the call to action are the primary button:
   // the one the accent fills.)
   [
-    /\b(primary|main|accent) buttons?\b|\b(?:ctas?|calls? to action)\b/,
+    /\b(primary|main|accent) buttons?\b|\b(?:ctas?|calls? to action)(?: buttons?)?\b/,
     {on: 'button', when: 'variant:primary'},
   ],
   [/\bsecondary buttons?\b/, {on: 'button', when: 'variant:secondary'}],
