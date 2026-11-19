@@ -802,6 +802,15 @@ function printThemeList(
  * add, and the wiring to drop when the last theme's module is deleted.
  * @param {import('../../../api/theme/theme.type.mjs').ThemeAppResponse} result
  */
+async function printThemeGuides(result) {
+  const change = result.data?.change;
+  if (!change || change.action !== 'add') return;
+  const {guidesForThemes, packageThemes, guideLines} = await import('../../../foundation/discovery/theme-guides.mjs');
+  const added = (await packageThemes(process.cwd())).filter(t => t.slug === change.slug);
+  const guides = await guidesForThemes(process.cwd(), added);
+  if (guides.length > 0) emit(...guideLines(guides, getCliInvocation()).map(line => text(line)));
+}
+
 function printThemeApp(result) {
   const {themes, default: defaultSlug, modulePath, change} = result.data;
   if (result.package !== undefined) emit(record({package: result.package}));
@@ -2100,6 +2109,7 @@ function registerThemeCommands(theme, program, docs, words) {
         return answered;
       }
       printThemeApp(result);
+      await printThemeGuides(result);
       return answered;
     },
   });

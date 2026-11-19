@@ -248,6 +248,20 @@ export function registerBuild(program) {
             : 'This kit is narrowed by --type, so it names no template.',
         ),
       ];
+      {
+        const tg = await import('../../../foundation/discovery/theme-guides.mjs');
+        const cwd = process.cwd();
+        let themes = await tg.appThemes(cwd);
+        if (themes.length === 0) themes = await tg.themesNamedIn(cwd, String(q));
+        const guides = await tg.guidesForThemes(cwd, themes.slice(0, 1));
+        if (guides.length > 0) {
+          if (tg.GUIDE_MODE === 'inline') {
+            out.push(section('THEME GUIDE', `Pages in ${guides[0].theme} follow its guide:`), text(tg.guideText(guides[0])));
+          } else {
+            out.push(section('THEME GUIDE', tg.guideLines(guides, run).join('\n')));
+          }
+        }
+      }
 
       if (start) {
         out.push(

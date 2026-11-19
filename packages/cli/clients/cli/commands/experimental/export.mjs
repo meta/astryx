@@ -56,7 +56,15 @@ export function registerExperimentalExport(group, program) {
         return answered;
       }
       const run = getCliInvocation();
-      if (result.type === 'render.page') printRendered(result.data, run);
+      if (result.type === 'render.page') {
+        printRendered(result.data, run);
+        const tg = await import('../../../../foundation/discovery/theme-guides.mjs');
+        const path = await import('node:path');
+        const dir = path.dirname(path.resolve(process.cwd(), result.data.input));
+        const themes = await tg.themesImportedBy(process.cwd(), [path.basename(result.data.input)], dir);
+        const guides = await tg.guidesForThemes(process.cwd(), themes);
+        for (const line of tg.guideLines(guides, run)) console.log(line);
+      }
       else printRestored(result.data, run);
       return answered;
     },
