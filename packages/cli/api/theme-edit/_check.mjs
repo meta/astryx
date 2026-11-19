@@ -6827,10 +6827,22 @@ function checkOne(
           selfSizedBox(ctx.C, data.settings, t, size),
         );
         if (!spaced.length && boxed.length && boxed.every(b => b)) {
-          const b = /** @type {{w: number, h: number}} */ (boxed[0]);
+          // (Members of a group that differ are each named with their own
+          // size.)
+          const parts = partsOf(ctx, s);
+          const sized = boxed.map((b, i) => ({
+            t: parts[i],
+            .../** @type {{w: number, h: number}} */ (b),
+          }));
+          const same = sized.every(
+            b => b.w === sized[0].w && b.h === sized[0].h,
+          );
+          const sizes = same
+            ? `${sized[0].w}px by ${sized[0].h}px`
+            : sized.map(b => `${b.t} ${b.w}px by ${b.h}px`).join(', ');
           refuse(
             E.ERR_THEME_NO_EFFECT,
-            `${s.on} sets its own width and height (${b.w}px by ${b.h}px) and reads no spacing or control size, so spacing changes nothing you see there. Size it with width and height (how "smaller ${s.on}").`,
+            `${s.on} sets its own width and height (${sizes}) and reads no spacing or control size, so spacing changes nothing you see there. Size it with width and height (how "smaller ${s.on}").`,
             {run: [`${HOW} "smaller ${s.on}"`]},
           );
         }

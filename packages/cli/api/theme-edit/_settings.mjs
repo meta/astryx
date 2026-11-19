@@ -13966,18 +13966,25 @@ function readSelfSized(C, settings, part, size) {
     rows.sort((a, b) => a[0].split(',').length - b[0].split(',').length);
     return rows[0] ? px(rows[0][1]) : null;
   };
+  // (The theme's own value: a setting for this size outranks a plain one,
+  // whatever their order, as its rule is the more specific; among the same
+  // kind, the latest wins.)
   /** @param {string} k */
   const own = k => {
-    const st = [...settings]
-      .reverse()
-      .find(
-        x =>
-          x.thing === k &&
-          ons.includes(String(x.on)) &&
-          !x.state &&
-          !x.mode &&
-          (!x.when || (size != null && x.when === `size:${size}`)),
-      );
+    const latest = (/** @type {(x: Setting) => boolean} */ ok) =>
+      [...settings]
+        .reverse()
+        .find(
+          x =>
+            x.thing === k &&
+            ons.includes(String(x.on)) &&
+            !x.state &&
+            !x.mode &&
+            ok(x),
+        );
+    const st =
+      (size != null ? latest(x => x.when === `size:${size}`) : undefined) ??
+      latest(x => !x.when);
     return st ? {v: px(st.value), thing: k, value: String(st.value)} : null;
   };
   const ow = own('width');

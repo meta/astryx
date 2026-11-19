@@ -25679,6 +25679,11 @@ export function draftAnswer(ctx, env, question) {
             const named = /^size:(.+)$/.exec(String(f.when ?? ''))?.[1];
             const sizes = named ? [named] : all.length > 1 ? all : [undefined];
             const step = c.dir === 'less' ? -4 : 4;
+            // (A group's members step each from its own size: one group line
+            // where they agree, a line per member where they differ.)
+            const members = (FAMILIES[on] ?? [one(on)]).filter(m =>
+              sizesItsOwnBox(C, m),
+            );
             /** @type {Step[]} */
             const steps = [];
             /** @type {string[]} */
@@ -25686,32 +25691,57 @@ export function draftAnswer(ctx, env, question) {
             /** @type {Array<{sz: string | undefined, why: string}>} */
             const unknown = [];
             for (const sz of sizes) {
-              const box = selfSizedBox(C, env.data.settings, one(on), sz);
-              if (!box) {
+              const boxes = members.map(m => ({
+                m,
+                box: selfSizedBox(C, env.data.settings, m, sz),
+              }));
+              const missing = boxes.find(x => !x.box);
+              if (missing) {
                 unknown.push({
                   sz,
                   why:
-                    selfSizedWhy(C, env.data.settings, one(on), sz) ??
+                    selfSizedWhy(C, env.data.settings, missing.m, sz) ??
                     'no size the editor knows',
                 });
                 continue;
               }
-              const [w, h] = [box.w + step, box.h + step];
-              if (w <= 0 || h <= 0) continue;
-              const flags =
-                sz && all.length > 1 ? {...f, when: `size:${sz}`} : f;
-              steps.push(
-                set('width', `${w}px`, flags),
-                set('height', `${h}px`, flags),
+              const first = /** @type {{w: number, h: number}} */ (
+                boxes[0].box
               );
-              said.push(
-                `${sz ? `${sz} ` : ''}${w === h ? `${w}px` : `${w}px by ${h}px`} (now ${box.w === box.h ? `${box.w}px` : `${box.w}px by ${box.h}px`})`,
+              const same = boxes.every(
+                x => x.box?.w === first.w && x.box?.h === first.h,
               );
+              const groups = same ? [{m: on, box: first}] : boxes;
+              /** @type {Step[]} */
+              const sizeSteps = [];
+              /** @type {string[]} */
+              const sizeSaid = [];
+              for (const g of groups) {
+                const box = /** @type {{w: number, h: number}} */ (g.box);
+                const [w, h] = [box.w + step, box.h + step];
+                if (w <= 0 || h <= 0) continue;
+                const flags = {
+                  ...f,
+                  ...(g.m !== on ? {on: g.m} : {}),
+                  ...(sz && all.length > 1 ? {when: `size:${sz}`} : {}),
+                };
+                sizeSteps.push(
+                  set('width', `${w}px`, flags),
+                  set('height', `${h}px`, flags),
+                );
+                sizeSaid.push(
+                  `${same ? '' : `${g.m} `}${w === h ? `${w}px` : `${w}px by ${h}px`} (now ${box.w === box.h ? `${box.w}px` : `${box.w}px by ${box.h}px`})`,
+                );
+              }
+              if (!sizeSteps.length) continue;
+              steps.push(...sizeSteps);
+              said.push(`${sz ? `${sz} ` : ''}${sizeSaid.join(', ')}`);
             }
-            // (A size it cannot read keeps its own, and says why; with no
-            // size read at all, nothing is written: spacing never reaches
-            // the box.)
-            const give = `give its size in px, such as width 16px and height 16px --on ${on}`;
+            // (A size it cannot read keeps its own, and says why, with the
+            // line that gives that size; with no size read at all, nothing
+            // is written: spacing never reaches the box.)
+            const give = (/** @type {string | undefined} */ sz) =>
+              `give its size in px, such as width 16px and height 16px --on ${on}${sz && all.length > 1 ? ` --when size:${sz}` : ''}`;
             // (One reason for every size is said once.)
             const whys = [...new Set(unknown.map(u => u.why))];
             const kept = !unknown.length
@@ -25722,7 +25752,7 @@ export function draftAnswer(ctx, env, question) {
                     : unknown
                         .map(u => `${u.sz ? `${u.sz}: ` : ''}${u.why}`)
                         .join('; ')
-                }, so it keeps its own (${give})`;
+                }, so it keeps its own (${unknown.length === 1 ? give(unknown[0].sz) : give(undefined)})`;
             if (steps.length)
               return {
                 text: `${on} ${c.dir === 'less' ? 'smaller' : 'bigger'}: width and height one 4px step at each size, as it sets them itself: ${said.join(', ')}${kept ? `; ${kept}` : ''}`,
@@ -25730,7 +25760,7 @@ export function draftAnswer(ctx, env, question) {
                 sequence: true,
               };
             return {
-              text: `${on} is sized by its own width and height, and the editor cannot read them to step: ${kept || give}`,
+              text: `${on} is sized by its own width and height, and the editor cannot read them to step: ${kept || give(named)}`,
               options: [],
             };
           }

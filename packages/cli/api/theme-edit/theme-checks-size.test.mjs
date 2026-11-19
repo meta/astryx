@@ -67,6 +67,10 @@ describe('the size of checkboxes and radios', () => {
     ]);
     const {data} = await themeEditHow('smaller checkboxes', {cwd, theme: 'c'});
     expect(data.results[0].text).toMatch(/sm: no size the editor knows/);
+    // (The line it offers sets that size only.)
+    expect(data.results[0].text).toMatch(
+      /width 16px and height 16px --on checkbox-indicator --when size:sm\)/,
+    );
     expect(await lines('bigger radio buttons', 'c')).toEqual([
       'set c width 28px --on radio-indicator --when size:md --only',
       'set c height 28px --on radio-indicator --when size:md --only',
@@ -111,6 +115,55 @@ describe('the size of checkboxes and radios', () => {
     expect(r.message).toMatch(/\(13px by 13px\)/);
     expect(r.message).not.toMatch(/share/);
     expect(r.run.some(x => /how "smaller checks"$/.test(x))).toBe(true);
+  });
+
+  it('starts from a size\u2019s own setting first, and steps each member from its own size', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('o', {cwd, like: 'neutral'});
+    await themeEditSet('o', 'width', '30px', {
+      cwd,
+      on: 'checkbox-indicator',
+      when: 'size:md',
+      only: true,
+    });
+    await themeEditSet('o', 'height', '30px', {
+      cwd,
+      on: 'checkbox-indicator',
+      when: 'size:md',
+      only: true,
+    });
+    await themeEditSet('o', 'width', '13px', {cwd, on: 'checks'});
+    await themeEditSet('o', 'height', '13px', {cwd, on: 'checks'});
+    // (The medium box's own 30px outranks the later plain 13px: its rule is
+    // the more specific.)
+    expect(await lines('bigger checkboxes', 'o')).toEqual([
+      'set o width 17px --on checkbox-indicator --when size:sm --only',
+      'set o height 17px --on checkbox-indicator --when size:sm --only',
+      'set o width 34px --on checkbox-indicator --when size:md --only',
+      'set o height 34px --on checkbox-indicator --when size:md --only',
+    ]);
+    // (Members that differ step each from its own size, and the refusal
+    // names each one's size.)
+    const checks = await lines('smaller checks', 'o');
+    expect(checks).toContain(
+      'set o width 26px --on checkbox-indicator --when size:md --only',
+    );
+    expect(checks).toContain(
+      'set o width 9px --on radio-indicator --when size:md --only',
+    );
+    // (At sm, where both are 13px, one group line steps both.)
+    expect(checks).toContain('set o width 9px --on checks --when size:sm');
+    expect(checks.some(l => / --on checks --when size:md/.test(l))).toBe(false);
+    const r = await refusal(() =>
+      themeEditSet('o', 'spacing', 'less', {
+        cwd,
+        on: 'checks',
+        when: 'size:md',
+      }),
+    );
+    expect(r.message).toMatch(
+      /checkbox-indicator 30px by 30px, radio-indicator 13px by 13px/,
+    );
   });
 
   it('leaves the switch, whose track Core lays out with its thumb', async ctx => {
