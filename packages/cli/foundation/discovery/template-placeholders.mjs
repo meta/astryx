@@ -13,13 +13,15 @@
  * Experimental (spec:AST-017 FR27).
  *
  * @input Import paths and export names; the table
- * @output The look, the meaning, and the library icon that draws it
+ * @output The look, the meaning, and the library icon that draws it; a
+ *   source with its placeholder imports replaced by library imports
  * @position packages/cli/foundation/discovery — read by the template copy step
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {CLI_ROOT} from '../fs/paths.mjs';
+import {parseTemplateSource} from './template-source-tree.mjs';
 
 /** The package template sources import icon placeholders from. */
 export const PLACEHOLDER_MODULE = '@astryxdesign/template-icons';
@@ -115,4 +117,94 @@ export function placeholderSource(meaning, look, table = placeholderTable()) {
   const library = Object.hasOwn(table.looks, look) ? table.looks[look] : null;
   const icon = look === 'lucide' ? entry?.lucide : entry?.heroicons;
   return entry && library && icon ? {module: library, export: icon} : null;
+}
+
+/** @param {string} module @param {string[]} specifiers */
+function printImport(module, specifiers) {
+  const line = `import {${specifiers.join(', ')}} from '${module}';`;
+  if (line.length <= 80) return line;
+  return `import {\n${specifiers.map(each => `  ${each},\n`).join('')}} from '${module}';`;
+}
+
+/**
+ * Replace each placeholder import with the library import that draws it,
+ * as a copy of the template writes it. Names in the file do not change:
+ * `import {DeleteIcon} from '@astryxdesign/template-icons'` becomes
+ * `import {TrashIcon as DeleteIcon} from '@heroicons/react/24/outline'`.
+ * The result also declares the meaning each library icon draws, keyed by
+ * the name it imports, as a template descriptor's `icons` does, so an icon
+ * set maps it like any declared icon. An import from the placeholder package
+ * that names no meaning in the table stays as written. A source without
+ * placeholder imports comes back unchanged.
+ * @param {string} source
+ * @returns {{source: string, meanings: Record<string, string>}} the filled
+ *   source, and the meaning of each filled import by its local name
+ */
+export function fillTemplatePlaceholders(source) {
+  if (!source.includes(PLACEHOLDER_MODULE)) return {source, meanings: {}};
+  /** @type {any} */
+  let ast;
+  try {
+    ast = parseTemplateSource(source);
+  } catch {
+    return {source, meanings: {}};
+  }
+  const table = placeholderTable();
+  /** @type {Record<string, string>} */
+  const meanings = {};
+  /** @type {Array<{start: number, end: number, text: string}>} */
+  const edits = [];
+  for (const node of ast.program.body) {
+    if (node.type !== 'ImportDeclaration' || node.importKind === 'type') {
+      continue;
+    }
+    const look = placeholderLook(node.source.value, table);
+    if (look == null) continue;
+    /** @type {string[]} */
+    const filled = [];
+    /** @type {string[]} */
+    const kept = [];
+    let module = null;
+    for (const specifier of node.specifiers) {
+      const name =
+        specifier.type === 'ImportSpecifier'
+          ? (specifier.imported.name ?? specifier.imported.value)
+          : null;
+      const meaning = name ? placeholderMeaning(name) : null;
+      const drawn = meaning ? placeholderSource(meaning, look, table) : null;
+      if (!drawn || specifier.importKind === 'type') {
+        kept.push(source.slice(specifier.start, specifier.end));
+        continue;
+      }
+      module = drawn.module;
+      const local = specifier.local.name;
+      filled.push(
+        drawn.export === local ? local : `${drawn.export} as ${local}`,
+      );
+      meanings[local] = /** @type {string} */ (meaning);
+    }
+    if (!module) continue;
+    const comments = (ast.comments ?? [])
+      .filter(
+        (/** @type {any} */ comment) =>
+          comment.start > node.start && comment.end < node.end,
+      )
+      .map(
+        (/** @type {any} */ comment) =>
+          `${source.slice(comment.start, comment.end)}\n`,
+      )
+      .join('');
+    const lines = [printImport(module, filled)];
+    if (kept.length > 0) lines.push(printImport(node.source.value, kept));
+    edits.push({
+      start: node.start,
+      end: node.end,
+      text: comments + lines.join('\n'),
+    });
+  }
+  let out = source;
+  for (const edit of edits.sort((a, b) => b.start - a.start)) {
+    out = out.slice(0, edit.start) + edit.text + out.slice(edit.end);
+  }
+  return {source: out, meanings};
 }

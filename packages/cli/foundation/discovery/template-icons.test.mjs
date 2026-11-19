@@ -943,3 +943,57 @@ describe('the local placeholder', () => {
     ).toEqual([]);
   });
 });
+
+describe('mapTemplateIcons with placeholder imports (FR22)', () => {
+  const PLACEHOLDERS = [
+    "import {CloseIcon, DeleteIcon} from '@astryxdesign/template-icons';",
+    "import {StarIcon as StarSolid} from '@astryxdesign/template-icons/24/solid';",
+    "import {Icon} from '@astryxdesign/core/Icon';",
+    'export default function Page() {',
+    '  return <><Icon icon={CloseIcon} /><DeleteIcon /><Icon icon={StarSolid} /></>;',
+    '}',
+    '',
+  ].join('\n');
+
+  it('writes aliased Heroicons with no project set, and no report', () => {
+    const {source, icons} = map(
+      PLACEHOLDERS,
+      {},
+      {status: 'none', reason: 'No icon set is installed.'},
+      [],
+    );
+    expect(icons).toBeUndefined();
+    expect(source).toContain(
+      "import {\n  XMarkIcon as CloseIcon,\n  TrashIcon as DeleteIcon,\n} from '@heroicons/react/24/outline';",
+    );
+    expect(source).toContain(
+      "import {StarIcon as StarSolid} from '@heroicons/react/24/solid';",
+    );
+    expect(source).not.toContain('@astryxdesign/template-icons');
+    // Names below the imports never change.
+    expect(source.slice(source.indexOf('export default'))).toBe(
+      PLACEHOLDERS.slice(PLACEHOLDERS.indexOf('export default')),
+    );
+  });
+
+  it('maps each placeholder by its meaning with a project set, like the same icon declared', () => {
+    const fromPlaceholders = map(PLACEHOLDERS);
+    const declaredSource = PLACEHOLDERS.replace(
+      "import {CloseIcon, DeleteIcon} from '@astryxdesign/template-icons';",
+      "import {\n  XMarkIcon as CloseIcon,\n  TrashIcon as DeleteIcon,\n} from '@heroicons/react/24/outline';",
+    ).replace(
+      "import {StarIcon as StarSolid} from '@astryxdesign/template-icons/24/solid';",
+      "import {StarIcon as StarSolid} from '@heroicons/react/24/solid';",
+    );
+    const fromDeclared = map(declaredSource, {
+      XMarkIcon: 'close',
+      TrashIcon: 'delete',
+      StarIcon: 'star',
+    });
+    expect(fromPlaceholders.source).toBe(fromDeclared.source);
+    expect(fromPlaceholders.icons).toEqual(fromDeclared.icons);
+    expect(fromPlaceholders.source).not.toContain(
+      '@astryxdesign/template-icons',
+    );
+  });
+});
