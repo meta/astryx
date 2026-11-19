@@ -14652,7 +14652,19 @@ export function draftAnswer(ctx, env, question) {
     // (A colour said as the list's first word, "cards: blue 2px border",
     // "badges: red", is a value for every member, as main reads it.)
     const colorValue = colorsIn(lead0).length > 0 || lead0 === 'transparent';
-    if (variants.includes(lead0) && lead0 !== 'default' && !colorValue)
+    // ("cards: transparent bottom border": a lead word with a side right
+    // after it is that side's line color, never a variant of the part.)
+    const sideColor = () =>
+      new RegExp(
+        `^(?:[^:]+:)?\\s*${lead0}\\s+(?:top|bottom|left|right)\\b`,
+        'i',
+      ).test(c.text);
+    if (
+      variants.includes(lead0) &&
+      lead0 !== 'default' &&
+      !colorValue &&
+      !sideColor()
+    )
       c.parts = [{...c.parts[0], when: `variant:${lead0}`}];
     else if (
       c.state &&
