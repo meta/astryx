@@ -2,7 +2,8 @@
 
 /**
  * @file `icon.search` leaf (AST-084 FR6): find icons by meaning across every
- * installed set, ranked, with each match's import line in the project's look.
+ * installed set, ranked, with each match's import line in the project's look
+ * and, when a definition names the icon, the import that names its meaning.
  *
  * @input a query, an optional set selector, and a limit
  * @output the `icon.search` envelope
@@ -78,6 +79,55 @@ export async function iconSearch(query, {cwd, set, limit}) {
 }
 
 /**
+ * Matches that name their meaning import: the match's export imported under
+ * the name of a definition that its set's `map` names it for, in PascalCase
+ * with `Icon` (`import {TrashIcon as DeleteIcon} from '…'`). App code that
+ * uses this name keeps it when another set draws the meaning. When the set
+ * maps the icon for several definitions, the one that the query ranks first
+ * gives the name, else a built-in one, else the first by name. A match that
+ * no definition names keeps its fields.
+ * @param {import('../icon.type.mjs').IconMatchEntry[]} matches
+ * @param {string} query
+ * @returns {import('../icon.type.mjs').IconMatchEntry[]}
+ */
+function withMeaningImports(matches, query) {
+  if (!matches.some(match => match.definitions.length > 0)) return matches;
+  const rank = meaningRank(query);
+  return matches.map(match => {
+    if (match.definitions.length === 0) return match;
+    const [meaning] = [...match.definitions].sort(
+      (a, b) => rank(a) - rank(b) || (a < b ? -1 : a > b ? 1 : 0),
+    );
+    const name = `${meaning[0].toUpperCase()}${meaning.slice(1)}Icon`;
+    return {
+      ...match,
+      meaningImport:
+        name === match.export
+          ? importLine(match.export, match.module)
+          : `import {${match.export} as ${name}} from '${match.module}';`,
+    };
+  });
+}
+
+/**
+ * The order of definition names for a query: the definitions that the
+ * query matches, best first, then the built-in ones, then the rest.
+ * @param {string} query
+ * @returns {(name: string) => number}
+ */
+function meaningRank(query) {
+  const matched = definitionMatches(query).map(match => match.doc.name);
+  const place = new Map(matched.map((name, index) => [name, index]));
+  const builtIn = new Set(
+    astryxIconDefinitions()
+      .definitions.filter(each => each.doc.builtIn)
+      .map(each => each.doc.name),
+  );
+  return name =>
+    place.get(name) ?? matched.length + (builtIn.has(name) ? 0 : 1);
+}
+
+/**
  * The look each set in the project's list draws, by `<package>/<set>`: the
  * look the project picks (`experimental.iconVariant`). Empty when it picks
  * none. A set outside the list draws no project look.
@@ -95,7 +145,8 @@ export function projectLooks(choice) {
 /**
  * Rank the icons of `sets` against a query: the one ranking behind both
  * `icon()` and `rankIconIndex()`. Each match's import draws the look `looks`
- * names for its set when its icon has that look. With no set installed, not
+ * names for its set when its icon has that look, and a match that a
+ * definition names also has its meaning import. With no set installed, not
  * even a withdrawn one, the answer names the Astryx icon definitions that
  * match, built-in ones first, and how to get a set.
  * @param {Parameters<typeof rankIcons>[0]} sets in tie order
@@ -131,9 +182,14 @@ export function rankIconSets(
     data: {
       query: query.trim(),
       matchCount: matches.length,
-      matches: matches
-        .slice(0, limit)
-        .map(match => withRelatives(inLook(match, searched, looks), searched)),
+      matches: withMeaningImports(
+        matches
+          .slice(0, limit)
+          .map(match =>
+            withRelatives(inLook(match, searched, looks), searched),
+          ),
+        query,
+      ),
     },
   };
 }

@@ -316,6 +316,7 @@ export function registerExperimentalIcon(group, program) {
               'id',
               'package',
               'import',
+              'meaningImport',
               'look',
               'words',
               'definitions',
@@ -323,6 +324,8 @@ export function registerExperimentalIcon(group, program) {
               'variant',
               'reason',
             ],
+            // A label no longer than `definitions` keeps the column width.
+            labels: {meaningImport: 'by meaning'},
           },
         ),
         text(`Read one with its variants: ${run} experimental icon <set>/<id>`),

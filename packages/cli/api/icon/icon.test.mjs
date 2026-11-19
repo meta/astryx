@@ -17,6 +17,7 @@ import {iconNewDefinition} from './new-definition/new-definition.mjs';
 import {ICON_NAMES} from '../../authoring/doctypes/icon-set/icon-names.mjs';
 import {answeringMatches, rankIcons, scoreIcon} from './_records.mjs';
 import {
+  completeGlyphs,
   glyphsData,
   writeIconPackage,
   writeIconSetProject,
@@ -825,5 +826,68 @@ describe('a word matches whole words (FR6)', () => {
     // One word that nothing answers stays unanswered.
     expect(answer(set, 'zebra')).toEqual([]);
     expect(answer(set, 'zebra stripes')).toEqual([]);
+  });
+});
+
+describe('a match names the import that calls it by its meaning (FR6)', () => {
+  it('imports the export under the name of the definition the set maps it for', async () => {
+    expect((await search('close')).matches[0]).toMatchObject({
+      id: 'x',
+      import: "import {XIcon} from '@acme/glyphs';",
+      meaningImport: "import {XIcon as CloseIcon} from '@acme/glyphs';",
+    });
+    // A query that names no definition still gets the icon's meaning.
+    expect((await search('times')).matches[0]).toMatchObject({
+      id: 'x',
+      meaningImport: "import {XIcon as CloseIcon} from '@acme/glyphs';",
+    });
+  });
+
+  it('needs no alias when the export already has the meaning name', async () => {
+    expect((await search('search')).matches[0]).toMatchObject({
+      id: 'search',
+      meaningImport: "import {SearchIcon} from '@acme/glyphs';",
+    });
+  });
+
+  it('leaves the field out for an icon that no definition names', async () => {
+    const {matches} = await search('delete');
+    expect(matches.map(match => match.id)).toEqual(['trash']);
+    expect(matches[0]).not.toHaveProperty('meaningImport');
+  });
+
+  it('takes the definition the query ranks first when the set maps the icon for several', async () => {
+    const {data, modules} = completeGlyphs();
+    cwd = writeIconSetProject(path.join(tmp, 'complete'), {
+      packages: [{data, modules}],
+    });
+    /** @param {string} query */
+    const meaningOf = async query =>
+      (await search(query)).matches.find(match => match.id === 'home')
+        ?.meaningImport;
+    expect(await meaningOf('check')).toBe(
+      "import {HomeIcon as CheckIcon} from '@acme/glyphs';",
+    );
+    expect(await meaningOf('chevron down')).toBe(
+      "import {HomeIcon as ChevronDownIcon} from '@acme/glyphs';",
+    );
+    // `home` names none of them: the first built-in one by name.
+    expect(await meaningOf('home')).toBe(
+      "import {HomeIcon as ArrowDownIcon} from '@acme/glyphs';",
+    );
+  });
+
+  it('names the export of the look the project picks', async () => {
+    const data = glyphsData();
+    cwd = writeIconSetProject(path.join(tmp, 'solid'), {
+      packages: [{data: {...data, map: {...data.map, delete: 'trash'}}}],
+      config: {experimental: {iconSet: 'glyphs', iconVariant: 'solid'}},
+    });
+    expect((await search('delete')).matches[0]).toMatchObject({
+      id: 'trash',
+      import: "import {TrashSolidIcon} from '@acme/glyphs';",
+      meaningImport:
+        "import {TrashSolidIcon as DeleteIcon} from '@acme/glyphs';",
+    });
   });
 });
