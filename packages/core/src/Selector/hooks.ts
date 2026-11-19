@@ -307,7 +307,7 @@ export function useSelectedItemOverlayMargin({
       // below the gutter.
       const flipped = anchorTop - placement.clampedTop - listboxHeight;
       const keyboardEnd = anchorTop - viewport;
-      aboveAnchor = `max(calc(var(${LAYER_KEYBOARD_VISUAL_VIEWPORT_OFFSET_PROPERTY}, 0px) - ${anchorBottom}px), min(${anchorTop - listboxHeight - Math.max(gutter, offset)}px, max(${flipped}px, calc(${keyboardEnd}px + var(${LAYER_KEYBOARD_INSET_PROPERTY}, 0px) - var(${LAYER_KEYBOARD_VISUAL_VIEWPORT_OFFSET_PROPERTY}, 0px)))))`;
+      aboveAnchor = `min(${anchorTop - listboxHeight - gutter}px, max(${flipped}px, calc(${keyboardEnd}px + var(${LAYER_KEYBOARD_INSET_PROPERTY}, 0px) - var(${LAYER_KEYBOARD_VISUAL_VIEWPORT_OFFSET_PROPERTY}, 0px))))`;
     }
     // At the open, the browser picks the layer's side after this margin
     // applies. The margin below the anchor always fits there, so the layer

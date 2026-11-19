@@ -406,6 +406,25 @@ test("a list beside a field near the viewport's end moves above a keyboard that 
   }).toPass({timeout: 3_000});
 });
 
+test('a flipped list stays above a panned keyboard', async ({page}) => {
+  const trigger = await openStoryNearEnd(page);
+  await trigger.click();
+  await expect(page.getByRole('listbox')).toBeVisible();
+  await openEnded(page);
+
+  await raiseKeyboard(page, COVER, 100);
+  await expect(async () => {
+    expectClearOfPannedKeyboard(
+      await listFacts(
+        page,
+        VIEWPORT.height + 100 - COVER - LAYER_KEYBOARD_CLEARANCE_PX,
+      ),
+      COVER,
+      100,
+    );
+  }).toPass({timeout: 3_000});
+});
+
 /**
  * Makes one option of the open list taller, as a late web font does, and
  * waits two frames. The overlay measures again after the browser's layout, so
