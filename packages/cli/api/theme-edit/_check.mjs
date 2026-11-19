@@ -5178,8 +5178,15 @@ function checkOne(
     // rest of the family. On any other part it changes nothing.)
     if (!reachGroupOf(ctx, s)) {
       s.only = undefined;
+      // (An effect on a member of a family stays on its part already.)
+      const effectOnly =
+        !String(thing).startsWith('--') &&
+        reachGroupOf(ctx, {...s, thing: 'color'}) &&
+        !reachGroupOf(ctx, {...s, thing});
       if (!unset)
-        s.note = `${s.on} is styled on its own already (it is in no family a setting on it spreads to; how --list groups), so --only changes nothing: it is saved without it`;
+        s.note = effectOnly
+          ? `${s.on} keeps ${thing} on its own already (an effect reaches its family only with --on <family>; how --list groups), so --only changes nothing: it is saved without it`
+          : `${s.on} is styled on its own already (it is in no family a setting on it spreads to; how --list groups), so --only changes nothing: it is saved without it`;
     }
   }
   // A later setting on one member of a thing its family already carries
@@ -7585,8 +7592,7 @@ function checkOne(
       const recorded = results.filter(([, r]) => !r?.soft);
       const hard = recorded.filter(([, r]) => r);
       const spread = Boolean(
-        groupsOf(ctx)[s.on ?? ''] ||
-          (reachGroupOf(ctx, s) && parts.length > 1),
+        groupsOf(ctx)[s.on ?? ''] || (reachGroupOf(ctx, s) && parts.length > 1),
       );
       // A part with no record is judged by its group: refused when no
       // member that has a record reads the token, as the group form is.
@@ -8030,7 +8036,11 @@ function checkOne(
       const oneEach =
         prop !== 'color' &&
         inner.every(([t, toks]) => toks.length === 1 || column(t, toks));
-      if (inner.length && inner.length === checkedParts(ctx, s).length && oneEach) {
+      if (
+        inner.length &&
+        inner.length === checkedParts(ctx, s).length &&
+        oneEach
+      ) {
         const said = inner
           .map(([part, toks]) =>
             toks.length === 1
@@ -8336,7 +8346,9 @@ function checkOne(
       // A color with no longhand of its own (a shadow's) goes per mode in
       // the value: light-dark() holds each mode's color, and a part with
       // no such property of its own shows none in the other mode.
-      const ownShadow = checkedParts(ctx, s).some(t => ctx.C.MAP[t]?.own?.[prop]);
+      const ownShadow = checkedParts(ctx, s).some(
+        t => ctx.C.MAP[t]?.own?.[prop],
+      );
       const inValue =
         !alt &&
         colorWord &&

@@ -87,6 +87,8 @@ import {
   edgeCopies,
   heldVariantsOf,
   placementHolds,
+  ownsPlacement,
+  failingModes,
   missedDrawnAs,
   oneLineSizeMisses,
   borderFrames,
@@ -2473,9 +2475,7 @@ async function loadedForCheck(cwd, slug, skip) {
  *   look reaches the selected items, any other the part's own family
  */
 function aloneFlag(ctx, part, thing, state = null) {
-  return spreads(ctx, {on: part, thing, only: false, state})
-    ? ' --only'
-    : '';
+  return spreads(ctx, {on: part, thing, only: false, state}) ? ' --only' : '';
 }
 
 /**
@@ -2523,13 +2523,14 @@ export function unreadableReach(named, reached, newProblems) {
  * nav arrow is a button), and which keep no setting of the same thing of
  * their own: each with the part it is drawn as and the line that keeps it
  * as Core draws it there (the value Core gives it at rest, or the
- * property's initial value where Core sets none).
+ * property's initial value where Core sets none); none for a look set for
+ * a variant.
  * @param {any} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {import('./_settings.mjs').Setting} s
  * @param {string[]} parts the parts the setting writes
- * @returns {Array<{part: string, as: string, keep: string}>}
+ * @returns {Array<{part: string, as: string, keep?: string}>}
  */
 function embeddedReach(ctx, slug, data, s, parts) {
   if (!s.on || s.source !== 'property' || !parts.length) return [];
@@ -2538,7 +2539,7 @@ function embeddedReach(ctx, slug, data, s, parts) {
   const prop = kebab(String(s.thing));
   /** @type {Record<string, any>} */
   const MAP = ctx.C?.MAP ?? {};
-  /** @type {Array<{part: string, as: string, keep: string}>} */
+  /** @type {Array<{part: string, as: string, keep?: string}>} */
   const out = [];
   for (const [part, rec] of Object.entries(MAP)) {
     if (
@@ -2615,10 +2616,17 @@ function embeddedReach(ctx, slug, data, s, parts) {
           : fallback.length === 1
             ? fallback[0]
             : 'initial';
+    // (A look set for a variant is a rule on the variant's attribute,
+    // which a rule on the embedded part, with no such variant, never
+    // outranks: no line keeps it, so none is offered.)
     out.push({
       part,
       as,
-      keep: `${P} set ${slug} ${setArgs({...s, on: part, only: undefined, when: undefined}, value)}${aloneFlag(ctx, part, String(s.thing), s.state ?? null)}`,
+      ...(s.when
+        ? {}
+        : {
+            keep: `${P} set ${slug} ${setArgs({...s, on: part, only: undefined, when: undefined}, value)}${aloneFlag(ctx, part, String(s.thing), s.state ?? null)}`,
+          }),
     });
   }
   return out;
@@ -6670,8 +6678,12 @@ async function changeOnce(
     // the editor's: the same setting again is the same. Its reach record is
     // too, unless its family gained parts since: then the same setting
     // again takes them.)
-    JSON.stringify(savedSetting({...prev, keep: undefined, reached: undefined})) ===
-      JSON.stringify(savedSetting({...s, keep: undefined, reached: undefined})) &&
+    JSON.stringify(
+      savedSetting({...prev, keep: undefined, reached: undefined}),
+    ) ===
+      JSON.stringify(
+        savedSetting({...s, keep: undefined, reached: undefined}),
+      ) &&
     partsOf(ctx, {...prev, keep: undefined}).length ===
       partsOf(ctx, {...s, keep: undefined, reached: undefined}).length &&
     // A later setting that covers the same parts hides it: set again, it
@@ -6954,7 +6966,13 @@ async function changeOnce(
           : []),
         ...placementHolds(ctx, data, s),
       ]),
-    ];
+    ].filter(
+      v =>
+        // (A placement the theme colors itself keeps that color: no hold
+        // is saved or named there; holdCopies skips it in the build too.)
+        !ownsPlacement(data, s, v) ||
+        failingModes(ctx, data, s, v).some(m => !ownsPlacement(data, s, v, m)),
+    );
     if (heldVariants.length) {
       const entry =
         data.settings.find(x => x === s) ??
@@ -7555,6 +7573,23 @@ async function changeOnce(
     notes.push(
       `${keptForText.join(', ')} ${keptForText.length > 1 ? 'keep their' : 'keeps its'} own ${s.thing}: this would make text there unreadable, so the change does not reach ${keptForText.length > 1 ? 'them' : 'it'}; to give it anyway: ${keptForText.map(m => `\`${P} set ${slug} ${setArgs({...s, on: m, only: true, keep: undefined}, String(s.value))}\``).join(', ')}`,
     );
+  // (An effect set on a member of a family stays on that member; the
+  // family's line is named, so a frame said as a border and a shadow can
+  // give the family both.)
+  const effectFamily =
+    sub === 'set' &&
+    s.on &&
+    !s.only &&
+    !s.note &&
+    s.source === 'property' &&
+    !groupsOf(ctx)[s.on] &&
+    !reachGroupOf(ctx, s)
+      ? reachGroupOf(ctx, {...s, thing: 'color'})
+      : null;
+  if (effectFamily)
+    notes.push(
+      `${s.thing} stays on ${s.on}: an effect reaches its family (${effectFamily}) only when --on names it; for the family: \`${P} set ${slug} ${setArgs({...s, on: effectFamily, only: undefined}, String(s.value))}\``,
+    );
   if (onlyLine && parts.length > 1)
     notes.push(
       `reaches ${s.on}'s family (${group}), the parts drawn alike: ${parts.join(', ')}; for ${s.on} alone: \`${onlyLine}\``,
@@ -7647,7 +7682,7 @@ async function changeOnce(
     : [];
   if (tallOnes.length)
     notes.push(
-      `${s.thing} does not reach ${tallOnes.join(', ')}: ${tallOnes.length > 1 ? 'they are' : 'it is'} drawn with no one-line height (a multi-line field grows with its rows); to size ${tallOnes.length > 1 ? 'one' : 'it'} too: ${tallOnes.map(m => `\`${P} set ${slug} ${setArgs({...s, on: m, only: undefined}, String(s.value))}${aloneFlag(ctx, m, String(s.thing), s.state ?? null)}\``).join(', ')}`,
+      `${s.thing} does not reach ${tallOnes.join(', ')}: ${tallOnes.length > 1 ? 'they are multi-line fields' : 'it is a multi-line field'}, which grow${tallOnes.length > 1 ? '' : 's'} with ${tallOnes.length > 1 ? 'their' : 'its'} rows; to size ${tallOnes.length > 1 ? 'one' : 'it'} too: ${tallOnes.map(m => `\`${P} set ${slug} ${setArgs({...s, on: m, only: undefined}, String(s.value))}${aloneFlag(ctx, m, String(s.thing), s.state ?? null)}\``).join(', ')}`,
     );
   if (missedAs.length)
     notes.push(
@@ -7655,7 +7690,7 @@ async function changeOnce(
     );
   if (embedded.length)
     notes.push(
-      `also reaches ${embedded.map(x => x.part).join(', ')}, which ${embedded.length > 1 ? 'are' : 'is'} drawn as ${[...new Set(embedded.map(x => x.as))].join(', ')} inside ${embedded.length > 1 ? 'their components' : 'its component'}; to keep ${embedded.length > 1 ? 'one' : 'it'} as it was: ${embedded.map(x => `\`${x.keep}\``).join(', ')}`,
+      `also reaches ${embedded.map(x => x.part).join(', ')}, which ${embedded.length > 1 ? 'are' : 'is'} drawn as ${[...new Set(embedded.map(x => x.as))].join(', ')} inside ${embedded.length > 1 ? 'their components' : 'its component'}${embedded.every(x => x.keep) ? `; to keep ${embedded.length > 1 ? 'one' : 'it'} as it was: ${embedded.map(x => `\`${x.keep}\``).join(', ')}` : `; a look set for ${s.when} reaches ${embedded.length > 1 ? 'them' : 'it'} with ${s.on}, and no line on ${embedded.length > 1 ? 'them' : 'it'} keeps ${embedded.length > 1 ? 'them' : 'it'} out`}`,
     );
   // A fill on the plain part covers the paints Core gives its variants and
   // states (a primary button's accent, a checked box's): said, with the
@@ -10545,6 +10580,17 @@ function lastStepTakes(cwd, slug, now) {
 function stepTakesBack(after, before) {
   const now = new Map(before.settings.map(s => [keyOf(s), s]));
   const was = new Map(after.settings.map(s => [keyOf(s), s]));
+  /**
+   * A setting's reach record, on it or kept beside the settings.
+   * @param {any} data @param {string} k @param {any} s
+   * @returns {string[] | null}
+   */
+  const reachOf = (data, k, s) =>
+    Array.isArray(s?.reached)
+      ? s.reached
+      : Array.isArray(data?.reached?.[k])
+        ? data.reached[k]
+        : null;
   /** @type {string[]} */
   const took = [];
   for (const [k, s] of was) {
@@ -10552,6 +10598,12 @@ function stepTakesBack(after, before) {
     if (!back) took.push(describe(s));
     else if (back.value !== s.value)
       took.push(`${describe(s)} (back to ${back.value})`);
+    else {
+      // (An offer taken: the same setting, reaching parts it did not.)
+      const [a, b] = [reachOf(after, k, s), reachOf(before, k, back)];
+      const gained = a && b ? a.filter(t => !b.includes(t)) : [];
+      if (gained.length) took.push(`${describe(s)} on ${gained.join(', ')}`);
+    }
   }
   for (const [k, s] of now)
     if (!was.has(k)) took.push(`the removal of ${describe(s)}`);
@@ -10739,13 +10791,18 @@ async function undoTheme(theme, options) {
   // A top step equal to the settings now (left by an undo stopped between
   // its two writes) changes nothing: skip it.
   const nowText = fs.readFileSync(f.settings, 'utf8');
+  // (A reach record the reader adds for a setting saved without one is no
+  // change; a record that changes, an offer taken, is.)
   const same = (/** @type {string} */ a, /** @type {string} */ b) => {
     const [x, y] = [settingsJson(a), settingsJson(b)];
+    if (x === undefined || y === undefined) return false;
+    const [rx, ry] = [x?.reached ?? {}, y?.reached ?? {}];
     return (
-      x !== undefined &&
-      y !== undefined &&
       JSON.stringify({...x, lifted: 0, built: 0, reached: 0}) ===
-        JSON.stringify({...y, lifted: 0, built: 0, reached: 0})
+        JSON.stringify({...y, lifted: 0, built: 0, reached: 0}) &&
+      Object.keys(rx).every(
+        k => !(k in ry) || JSON.stringify(rx[k]) === JSON.stringify(ry[k]),
+      )
     );
   };
   while (history.length && same(history[history.length - 1], nowText))

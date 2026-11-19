@@ -135,6 +135,12 @@ describe('a saved setting and how far it reaches', () => {
     );
     expect(again.data.offered ?? []).toEqual([]);
     expect(partsWith('grow', 'border-color')).not.toContain('text-area');
+    // The same change again, while the offer stands, changes nothing and
+    // adds no undo step.
+    const same = /** @type {any} */ (
+      await themeEditSet('grow', 'corners', '6px', {cwd})
+    );
+    expect(same.data.notes.join('\n')).toMatch(/^no change: /m);
     // The offered line takes the parts and records the whole reach.
     await themeEditSet('grow', 'border-color', '#ff0000', {
       cwd,
@@ -144,6 +150,10 @@ describe('a saved setting and how far it reaches', () => {
     expect(saved('grow').reached[key]).toEqual(
       expect.arrayContaining(['text-input', 'text-area']),
     );
+    // An undo of the taken offer names the parts it takes back.
+    const u = /** @type {any} */ (await themeEditUndo('grow', {cwd}));
+    expect(u.data.undid).toMatch(/border-color .*on .*text-area/);
+    expect(partsWith('grow', 'border-color')).not.toContain('text-area');
   }, 240_000);
 
   it('a setting saved with no record is recorded as it reaches, with no word', async ctx => {

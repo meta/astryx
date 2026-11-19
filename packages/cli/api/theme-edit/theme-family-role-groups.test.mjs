@@ -172,6 +172,28 @@ describe('a look said of one member stays on it (Bootstrap 1.4)', () => {
     ]);
   }, 240_000);
 
+  it("a button shadow stays on the button and names the family's line", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('bf', {cwd, like: 'neutral'});
+    const lines = await first(
+      'buttons with a 1px solid #333333 border and a 0 1px 2px #000000 shadow',
+      'bf',
+    );
+    expect(lines).toEqual([
+      "set bf border '1px solid #333333' --on button",
+      "set bf box-shadow '0 1px 2px #000000' --on button",
+    ]);
+    const r = /** @type {any} */ (
+      await themeEditSet('bf', 'box-shadow', '0 1px 2px #000000', {
+        cwd,
+        on: 'button',
+      })
+    );
+    expect(r.data.notes.join('\n')).toMatch(
+      /box-shadow stays on button: an effect reaches its family \(button-like\) only when --on names it; for the family: .*--on button-like/,
+    );
+  }, 240_000);
+
   it("a border and a shadow said as items of the dialogs' list stay on the dialog", async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('d', {cwd, like: 'neutral'});
@@ -201,7 +223,7 @@ describe('a look said of one member stays on it (Bootstrap 1.4)', () => {
     );
   }, 240_000);
 
-  it('the selected pill, set on one item, names the family and its line', async ctx => {
+  it('the selected pill, set on one item, reaches the selected items', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('p', {cwd, like: 'neutral'});
     const r = await themeEditSet('p', 'border-radius', '4px', {
@@ -209,9 +231,11 @@ describe('a look said of one member stays on it (Bootstrap 1.4)', () => {
       on: 'side-nav-item',
       state: 'selected',
     });
-    const note = JSON.stringify(r.data?.leftOut ?? []);
-    expect(note).toMatch(/calendar-day/);
-    expect(note).toContain('--on selected-items --state selected');
+    // (Set on one item, it reaches the selected items drawn alike.)
+    expect(r.data.group?.name).toBe('selected-items');
+    expect(r.data.parts).toEqual(
+      expect.arrayContaining(['side-nav-item', 'top-nav-item', 'list-item']),
+    );
     for (const [thing, v] of [
       ['border-radius', '4px'],
       ['background-color', '#0069d6'],
@@ -232,7 +256,7 @@ describe('a look said of one member stays on it (Bootstrap 1.4)', () => {
 });
 
 describe('alerts and overlay headers (Bootstrap 1.4)', () => {
-  it('the alert gradient stays on the banner; set names the header rule for every overlay header', async ctx => {
+  it('the alert gradient stays on the banner; a header rule set on one header reaches the overlay headers', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('a', {cwd, like: 'neutral'});
     expect(
@@ -244,8 +268,11 @@ describe('alerts and overlay headers (Bootstrap 1.4)', () => {
       cwd,
       on: 'dialog-header',
     });
-    const note = JSON.stringify(r.data?.leftOut ?? []);
-    expect(note).toMatch(/drawer-header/);
-    expect(note).toContain('--on overlay-headers');
+    // (Set on one header, the rule reaches the overlay headers drawn
+    // alike.)
+    expect(r.data.group?.name).toBe('overlay-headers');
+    expect(
+      JSON.stringify([r.data.parts, r.data.group, r.data.leftOut]),
+    ).toMatch(/drawer-header/);
   }, 240_000);
 });

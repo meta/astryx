@@ -49,7 +49,7 @@ const needBases = ctx => {
 const GLOSS = 'linear-gradient(#ffffff, #e6e6e6)';
 
 describe("a ghost button's look", () => {
-  it('names each part drawn as a ghost button, with its keep-plain line', async ctx => {
+  it('names each part drawn as a ghost button, and says no line keeps it out', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('g', {cwd, like: 'neutral'});
     const r = /** @type {any} */ (
@@ -64,7 +64,13 @@ describe("a ghost button's look", () => {
     );
     for (const part of ['calendar-nav', 'input-clear-button', 'toggle-button'])
       expect(note, part).toContain(part);
-    expect(note).toMatch(/set g background-image \S+ --on calendar-nav/);
+    // (A rule on calendar-nav never outranks the ghost variant's rule on
+    // the same element, so no keep line is offered.)
+    expect(note).not.toMatch(/--on calendar-nav/);
+    expect(note).toMatch(/no line on them keeps them out/);
+    expect(
+      (r.data.embedded ?? []).every((/** @type {any} */ e) => !e.keep),
+    ).toBe(true);
   }, 240_000);
 
   it('a look with two conditions names the parts drawn in both', async ctx => {

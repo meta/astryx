@@ -795,17 +795,24 @@ family. So `set … --on <part>` reaches the members of the part's family that
 draw the property alike: a color reaches only members that draw that same
 color, a shape, an edge or a layered fill reaches every member drawn alike,
 and a look for a moment or a state lands in each member's own state for it.
-The always-alike
-groups (inputs, checks, menus) take every change as one. `--only` keeps a
-setting on its part. A part's own setting wins over its family's, whatever
-their order; a later setting on another member that the family already
-carries is a drill-in, kept to that member. A member the change would make
-unreadable keeps its look (`keep`), and a placement on another ground where
-the color fails (a top nav link in the phone menu) keeps Core's look there
-(`hold`), decided again at each build. A one-line height leaves multi-line
-members their own. Parts drawn as the part inside other components are
-named with the line that keeps each as Core draws it. Menus' floating boxes
-are overlays. Each such member and line is named in the change's result
+An effect (a shadow, a text shadow, a filter) stays on its part unless
+`--on` names the family, except an overlay's lift (a box shadow, or a drop
+shadow drawn as a filter), which every overlay shares; a change that keeps an
+effect on its part names the family's line. A box shadow made only of inset
+rings is how a border for one mode is written: it is an edge, not an effect.
+A ring followed by the part's own shadow carries that shadow, and stays on
+the part.
+The always-alike groups (inputs, checks, menus) take every change as one.
+`--only` keeps a setting on its part. A part's own setting wins over its
+family's, whatever their order; a later setting on another member that the
+family already carries is a drill-in, kept to that member. A member the
+change would make unreadable keeps its look (`keep`), and a placement on
+another ground where the color fails (a top nav link in the phone menu)
+keeps Core's look there (`hold`), decided again at each build. A one-line
+height leaves multi-line members their own. Parts drawn as the part inside
+other components are named with the line that keeps each as Core draws it;
+under a look set for a variant they are named with no line, as a rule on
+them never outranks the variant's. Menus' floating boxes are overlays. Each such member and line is named in the change's result
 (`group`, `embedded`, `notes`).
 
 Rejected: reaching only the part named, which makes a person repeat a look

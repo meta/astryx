@@ -144,13 +144,53 @@ describe('a top nav link colored for a dark bar', () => {
       when: 'mode:drawer',
       only: true,
     });
-    await themeEditSet('own', 'color', '#bfbfbf', {cwd, on: 'top-nav-item'});
+    const r = /** @type {any} */ (
+      await themeEditSet('own', 'color', '#bfbfbf', {cwd, on: 'top-nav-item'})
+    );
+    // (No hold is saved or named where the theme's own color wins.)
+    expect(r.data.setting.hold).toBeUndefined();
+    expect(JSON.stringify(r.data.notes)).not.toMatch(/mode:drawer/);
+    // (Nor is the plain color measured in the phone menu, where the theme's
+    // own color shows.)
+    expect(
+      (r.data.newProblems ?? []).filter((/** @type {any} */ x) =>
+        /drawer/.test(String(x.problem)),
+      ),
+    ).toEqual([]);
     const drawer =
       cssOf('own').match(
         /\.astryx-top-nav-item[^{]*\[data-mode="drawer"\][^{]*\{[^}]*\}/g,
       ) ?? [];
     expect(drawer.join('\n')).toMatch(/#333333/);
     expect(drawer.join('\n')).not.toMatch(/revert-layer/);
+  }, 240_000);
+
+  it('holds the mode the theme leaves to Core where it colors the phone menu in one mode', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('own2', {cwd, like: 'neutral'});
+    await themeEditSet('own2', 'background-color', '#222222', {
+      cwd,
+      on: 'app-shell-header',
+    });
+    await themeEditSet('own2', 'color', '#333333', {
+      cwd,
+      on: 'top-nav-item',
+      when: 'mode:drawer',
+      mode: 'dark',
+      only: true,
+    });
+    const r = /** @type {any} */ (
+      await themeEditSet('own2', 'color', '#bfbfbf', {cwd, on: 'top-nav-item'})
+    );
+    expect(r.data.setting.hold ?? []).toContain('mode:drawer');
+    const drawer = (
+      cssOf('own2').match(
+        /\.astryx-top-nav-item[^{]*\[data-mode="drawer"\][^{]*\{[^}]*\}/g,
+      ) ?? []
+    ).join('\n');
+    // (Core's color in light, the theme's own in dark.)
+    expect(drawer).toMatch(/revert-layer/);
+    expect(drawer).toMatch(/#333333/);
   }, 240_000);
 
   it('holds nothing where the color reads in the menu too', async ctx => {

@@ -48,6 +48,7 @@ import {
   sizesItsOwnBox,
   reachGroupOf,
   groupReachesByDefault,
+  groupEffects,
 } from './_settings.mjs';
 import {missedSteps} from './_missed.mjs';
 import {ASPECTS, settableStates} from './_check.mjs';
@@ -391,6 +392,7 @@ async function answer(subject, options, cwd, blindSaid = false) {
       group: key,
       members: groupsOf(ctx)[key],
       spreads: groupReachesByDefault(key),
+      ...(groupEffects(key) ? {effects: groupEffects(key)} : {}),
     };
   }
   if (ctx.project.target.has(key))
@@ -1307,6 +1309,7 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
     group,
     groupMembers: group ? groupsOf(ctx)[group] : [],
     spreads: group ? groupReachesByDefault(group) : false,
+    ...(group && groupEffects(group) ? {effects: groupEffects(group)} : {}),
     variants: C.variantValues(key),
     states,
     reads,
@@ -1991,6 +1994,7 @@ async function listItems(kind, filter, cwd) {
           name,
           members,
           spreads: groupReachesByDefault(name),
+          ...(groupEffects(name) ? {effects: groupEffects(name)} : {}),
         })),
     };
   if (kind === 'properties') {

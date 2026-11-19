@@ -59,6 +59,10 @@ describe('a height on a text input', () => {
     expect(r.data.parts).not.toContain('text-area');
     const notes = r.data.notes.join('\n');
     expect(notes).toMatch(/height does not reach text-area/);
+    // (A one-line field the census draws no height for, a complex selector,
+    // or one drawn one line tall inside, is no multi-line field.)
+    expect(notes).not.toMatch(/does not reach [^:]*complex-selector/);
+    expect(notes).not.toMatch(/does not reach [^:]*date-time-input/);
     expect(notes).toContain('set t height 21px --on text-area --only');
     // (Run as printed, it sizes the text area alone.)
     const run = /** @type {any} */ (

@@ -623,8 +623,17 @@ function changeBlocks(r) {
     missedOn: _missedOn,
     missedWhere: _missedWhere,
     missedNew: _missedNew,
+    // (The embedded keep lines and the group's --only line are in the
+    // notes already: a field is shown in one section only.)
+    embedded: _embedded,
     ...rest
   } = /** @type {any} */ (d);
+  // (The note carries the --only line only when the change reaches more
+  // than its own part; otherwise the group shows it.)
+  if (rest.group?.only && (rest.parts?.length ?? 0) > 1) {
+    const {only: _only, ...group} = rest.group;
+    rest.group = group;
+  }
   const status = newProblems.length
     ? `${done}, but it made ${newProblems.length} new problem${newProblems.length > 1 ? 's' : ''}:`
     : done;

@@ -4603,6 +4603,9 @@ export function groupsOf(ctx) {
 
 export {GROUP_ROLES};
 
+/** The properties that are an effect on one part: shadows and filters. */
+const EFFECT_THINGS = /^(?:text-shadow|box-shadow|filter|backdrop-filter)$/;
+
 /**
  * The family roles a setting on one of their members reaches by default,
  * the most particular first: a look set on a button reaches every part
@@ -4623,8 +4626,12 @@ const REACH_ROLES = [
  * always-alike group the part is in (inputs, checks, menus), else, for a
  * CSS property or a dial, the family role the census reads from its
  * structure (a selected or active look: the selected items; any other: the
- * first of its look roles). None for a group named itself, a role font, or
- * a part in no family.
+ * first of its look roles). None for a group named itself, a role font, a
+ * part in no family, or an effect (a shadow or a filter) in a family role:
+ * an effect is a mark on the one part it is set on, and reaches the role's
+ * other members only when `--on` names it. The always-alike groups take
+ * every change as one, and an overlay's box shadow (its lift) reaches the
+ * other overlays.
  * @param {{project?: any, C?: any} | null | undefined} ctx
  * @param {Pick<Setting, 'on' | 'thing'> & {state?: string | null}} s
  * @returns {string | null}
@@ -4635,13 +4642,52 @@ export function reachGroupOf(ctx, s) {
   if (groups[s.on]) return null;
   const fam = familyOf(s.on);
   if (fam && AUTO_SPREAD.includes(fam)) return fam;
+  // (A box shadow made only of inset rings, `inset 0 0 0 1px <color>`, is
+  // how a border for one mode is written: an edge, which reaches as a
+  // border does. The color may hold commas: light-dark(), rgba(). A ring
+  // followed by another shadow carries that shadow, an effect: it stays.)
+  const ring = splitTop(String(/** @type {any} */ (s).value ?? ''), ',').every(
+    layer =>
+      /^inset\s+0(?:px)?\s+0(?:px)?\s+0(?:px)?\s+[\d.]+[a-z%]*\s+\S/i.test(
+        layer.trim(),
+      ),
+  );
+  const effect =
+    EFFECT_THINGS.test(kebab(String(s.thing ?? ''))) &&
+    !(kebab(String(s.thing ?? '')) === 'box-shadow' && ring);
   // (A token set on a part is what that part reads inside: a family's
   // members read their own, so no drawing tells which take it alike.)
   if (String(s.thing ?? '').startsWith('--')) return null;
   const roles = /^(?:selected|active)$/.test(String(s.state ?? ''))
     ? ['selected-items']
     : REACH_ROLES;
-  return roles.find(r => (groups[r] ?? []).includes(String(s.on))) ?? null;
+  const role =
+    roles.find(r => (groups[r] ?? []).includes(String(s.on))) ?? null;
+  // A floating frame's shadow is its lift, which every overlay shares (a
+  // dialog's frame reaches the drawer, sheet and popover): a box shadow,
+  // or a drop shadow drawn as a filter.
+  const lift =
+    kebab(String(s.thing)) === 'box-shadow' ||
+    (kebab(String(s.thing)) === 'filter' &&
+      /drop-shadow\(/i.test(String(/** @type {any} */ (s).value ?? '')));
+  if (effect && !(role === 'overlays' && lift)) return null;
+  return role;
+}
+
+/**
+ * How an effect (a shadow, a text shadow, a filter) set on one member of a
+ * group that reaches by default goes, as `how` says it: an always-alike
+ * group takes it as one (`spreads`); the overlays share a box shadow, their
+ * lift, and keep other effects on the member (`box-shadow`); any other
+ * family keeps it on the member (`stays`: `--on <group>` reaches them all).
+ * Null for a group that reaches only when named.
+ * @param {string} name
+ * @returns {'spreads' | 'box-shadow' | 'stays' | null}
+ */
+export function groupEffects(name) {
+  if (AUTO_SPREAD.includes(name)) return 'spreads';
+  if (!groupReachesByDefault(name)) return null;
+  return name === 'overlays' ? 'box-shadow' : 'stays';
 }
 
 /**
@@ -4889,6 +4935,29 @@ export function heldVariantsOf(ctx, part, newProblems) {
 }
 
 /**
+ * Whether the theme sets the thing itself in a placement (an older
+ * `--when mode:drawer` color), in the mode given or in any mode: that
+ * setting wins there, as a part's own setting does, so no hold is written
+ * or named for it.
+ * @param {ThemeData} data
+ * @param {Setting} s
+ * @param {string} variant
+ * @param {string} [mode]
+ */
+export function ownsPlacement(data, s, variant, mode) {
+  return data.settings.some(
+    x =>
+      x !== s &&
+      String(x.value).trim() !== 'revert-layer' &&
+      x.on === s.on &&
+      kebab(String(x.thing)) === kebab(String(s.thing)) &&
+      x.when === variant &&
+      (x.state ?? '') === (s.state ?? '') &&
+      (!x.mode || !mode || x.mode === mode),
+  );
+}
+
+/**
  * The placements of a part (`mode:drawer`) where a text color set on it
  * reads under 4.5:1 on the ground the census drew its text on there, as
  * this theme builds that ground (failsInPlacement), while the part also
@@ -4988,40 +5057,29 @@ export function holdCopies(ctx, data, s) {
     // bar's link color reach it.)
     const failing = failingModes(ctx, data, s, variant);
     if (!failing.length) continue;
-    // (A theme with both modes holds only the mode the color fails in.)
-    const mode =
-      s.mode ??
-      (failing.length === 1 && modesOf(data).length > 1
-        ? failing[0]
-        : undefined);
-    // (A setting the theme made there itself, an older `--when mode:drawer`
-    // color, wins, as a part's own setting does.)
-    if (
-      data.settings.some(
-        x =>
-          x !== s &&
-          String(x.value).trim() !== 'revert-layer' &&
-          x.on === s.on &&
-          kebab(String(x.thing)) === kebab(String(s.thing)) &&
-          x.when === variant &&
-          (x.state ?? '') === (s.state ?? '') &&
-          (!x.mode || !mode || x.mode === mode),
-      )
-    )
-      continue;
-    out.push({
-      ...s,
-      ...(mode ? {mode} : {}),
-      // (Core's own color there in every state, a selected link's included:
-      // the theme's rule rolls back to Core's layer.)
-      value: 'revert-layer',
-      when: variant,
-      only: true,
-      hold: undefined,
-      keep: undefined,
-      reached: undefined,
-      note: undefined,
-    });
+    // (A theme with both modes holds only the modes the color fails in. A
+    // setting the theme made there itself, an older `--when mode:drawer`
+    // color, wins in its mode, as a part's own setting does.)
+    const open = failing.filter(m => !ownsPlacement(data, s, variant, m));
+    if (!open.length) continue;
+    const modes =
+      s.mode || (modesOf(data).length > 1 && open.length < 2)
+        ? [s.mode ?? open[0]]
+        : [undefined];
+    for (const mode of modes)
+      out.push({
+        ...s,
+        ...(mode ? {mode} : {}),
+        // (Core's own color there in every state, a selected link's included:
+        // the theme's rule rolls back to Core's layer.)
+        value: 'revert-layer',
+        when: variant,
+        only: true,
+        hold: undefined,
+        keep: undefined,
+        reached: undefined,
+        note: undefined,
+      });
   }
   return out;
 }
@@ -5048,7 +5106,7 @@ export function failsInPlacement(ctx, data, s, variant) {
  * @param {Ctx} ctx @param {ThemeData} data @param {Setting} s @param {string} variant axis:value
  * @returns {Array<'light' | 'dark'>}
  */
-function failingModes(ctx, data, s, variant) {
+export function failingModes(ctx, data, s, variant) {
   const modes = /** @type {Array<'light' | 'dark'>} */ (
     s.mode ? [s.mode] : ['light', 'dark']
   );
@@ -5729,8 +5787,9 @@ function drawnAlike(ctx, s, member, exact = false) {
         ? 'background-color'
         : kebab(thing);
   // A color is the part's own: members take it only where they draw that
-  // same color (a toast's fill never becomes a banner's). A shape, an edge,
-  // a shadow or a layered fill is a look: by kind.
+  // same color (a toast's fill never becomes a banner's). A shape, an edge
+  // or a layered fill is a look: by kind. (An effect reaches a family only
+  // as reachGroupOf allows: an overlay's lift.)
   const byValue = exact || COLOR_PROPS.test(prop);
   // A see-through color is a tint over what lies under the part: it reads
   // alike only on the same ground, so it stays on the part named.
@@ -5796,26 +5855,52 @@ function drawnAlike(ctx, s, member, exact = false) {
 const ONE_LINE_SIZE = /^(?:min-|max-)?(?:height|block-size)$/;
 
 /**
- * Whether a part is drawn one line tall: it draws a fixed height of its own
- * at rest (a text input's control height), not one its rows set (a text
- * area grows with its text).
+ * Whether a part is drawn one line tall: it, or a part inside it that
+ * draws its box (a selector's control), draws a fixed height at rest (a
+ * text input's control height), not one its rows set (a text area grows
+ * with its text).
  * @param {{C?: any}} ctx @param {string} part
  */
 function drawnOneLine(ctx, part) {
-  const at = /** @type {any} */ (ctx).C?.MAP?.[part]?.at ?? {};
-  return ['height', 'min-height', 'block-size', 'min-block-size'].some(p =>
-    Object.values(at[p] ?? {}).some(
-      v =>
-        !/^(?:auto|none|initial|unset|fit-content|0(?:px)?)$/.test(
-          String(v).trim(),
-        ),
-    ),
+  /** @param {string} t */
+  const fixed = t => {
+    const at = /** @type {any} */ (ctx).C?.MAP?.[t]?.at ?? {};
+    return ['height', 'min-height', 'block-size', 'min-block-size'].some(p =>
+      Object.values(at[p] ?? {}).some(
+        v =>
+          !/^(?:auto|none|initial|unset|fit-content|0(?:px)?)$/.test(
+            String(v).trim(),
+          ),
+      ),
+    );
+  };
+  if (fixed(part)) return true;
+  const inner = /** @type {any} */ (ctx).project
+    ? cornerParts(/** @type {Ctx} */ (ctx), part)
+    : [];
+  return inner.some(t => t !== part && fixed(t));
+}
+
+/**
+ * Whether a part is a multi-line field: it, or a piece of it (a text
+ * area's control), can be resized to more rows. A part the census holds no
+ * drawing for is not one.
+ * @param {{C?: any}} ctx @param {string} part
+ */
+function drawnMultiLine(ctx, part) {
+  const map = /** @type {any} */ (ctx).C?.MAP ?? {};
+  return Object.entries(map).some(
+    ([p, m]) =>
+      (p === part || p.startsWith(`${part}-`)) &&
+      Object.values(/** @type {any} */ (m)?.at?.resize ?? {}).some(
+        v => !/^\s*none\s*$/.test(String(v)),
+      ),
   );
 }
 
 /**
  * Whether a height set on a part drawn one line tall misses a member of its
- * family drawn with no one-line height (a text area beside a text input):
+ * family that is a multi-line field (a text area beside a text input):
  * the member keeps its own height, and the result names it.
  * @param {{C?: any}} ctx
  * @param {{on?: string | null, thing?: string}} s
@@ -5827,7 +5912,7 @@ export function oneLineSizeMisses(ctx, s, member) {
     member !== s.on &&
     ONE_LINE_SIZE.test(kebab(String(s.thing ?? ''))) &&
     drawnOneLine(ctx, String(s.on)) &&
-    !drawnOneLine(ctx, member),
+    drawnMultiLine(ctx, member),
   );
 }
 
@@ -12741,10 +12826,30 @@ export async function contrastProblems(ctx, data, res) {
                   !failsInPlacement(ctx, data, x, `${a}:${v}`),
               ),
           );
+        // (A placement the theme colors itself shows that color, measured
+        // as its own setting: the plain color never draws there.)
+        /** @param {any} p */
+        const ownedPlacement = p =>
+          !x.when &&
+          // (Only where the theme colors it in every mode it draws.)
+          (p.conds ?? []).some((/** @type {string} */ c) =>
+            c
+              .split(/[,\s]+/)
+              .map(kv => kv.split('='))
+              .some(
+                ([a, v]) =>
+                  a !== 'variant' &&
+                  axes[a]?.includes(v) &&
+                  modesOf(data).every(m =>
+                    ownsPlacement(data, x, `${a}:${v}`, m),
+                  ),
+              ),
+          );
         for (const p of census.pairs)
           if (
             p.text === t &&
             !readsInPlacement(p) &&
+            !ownedPlacement(p) &&
             !(
               /** @type {any} */ (p.conds ?? []).some(
                 (/** @type {string} */ c) =>
@@ -13531,13 +13636,20 @@ export async function contrastProblems(ctx, data, res) {
           ]
         : [];
     })(),
-    ...(unchecked.length
-      ? [
-          plain(
-            `not checked: text on or in ${unchecked.slice(0, 3).join(', ')}${unchecked.length > 3 ? ` and ${unchecked.length - 3} more` : ''}, which the editor cannot read as one fixed color`,
-          ),
-        ]
-      : []),
+    // (revert-layer is Core's own value there, a held copy's or a keep
+    // line's: nothing set to read.)
+    ...(left =>
+      left.length
+        ? [
+            plain(
+              `not checked: text on or in ${left.slice(0, 3).join(', ')}${left.length > 3 ? ` and ${left.length - 3} more` : ''}, which the editor cannot read as one fixed color`,
+            ),
+          ]
+        : [])(
+      unchecked.filter(
+        (/** @type {string} */ v) => !/^\s*revert-layer\s*$/i.test(String(v)),
+      ),
+    ),
   ]);
 }
 
@@ -17513,7 +17625,11 @@ export async function commitTheme(
     a != null && reachForm(a) === reachForm(data);
   // A no-op change still mends a build that does not match the settings
   // (an undo stopped part way): it is built again, with no new step.
-  const noop = history && same(parseSettings(snapBefore));
+  // (The file before is read as a load reads it: its reach records back on
+  // its settings, so a setting set again at its pinned reach is the same.)
+  const snapData = parseSettings(snapBefore);
+  if (snapData) readReachRecords(snapData);
+  const noop = history && same(snapData);
   const stale =
     noop && fs.existsSync(f.js) ? staleBuild(cwd, slug, data) : null;
   // The no-op that mends one says what it built again.
