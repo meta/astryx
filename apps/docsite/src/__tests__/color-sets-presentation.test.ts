@@ -7,17 +7,21 @@ const source = readFileSync(
   new URL('../components/docs/ColorSetsDocView.tsx', import.meta.url),
   'utf8',
 );
+const preview = readFileSync(
+  new URL('../components/docs/RechartsThemingPreview.tsx', import.meta.url),
+  'utf8',
+);
 
 describe('color-set presentation', () => {
   it('shows a separate swatch and value for each mode', () => {
-    expect(source).toContain("header: 'Token'");
-    expect(source).toContain("header: 'Light mode'");
-    expect(source).toContain("header: 'Dark mode'");
+    for (const header of ['Token', 'Light mode', 'Dark mode']) {
+      expect(source).toContain(`header: '${header}'`);
+    }
     expect(source).not.toContain("header: 'Value'");
     expect(source).toContain('density="spacious"');
     expect(source).toContain('mode="light"');
     expect(source).toContain('mode="dark"');
-    expect(source.match(/width: pixel\(152\)/g)).toHaveLength(5);
+    expect(source.match(/width: pixel\(152\)/g)).toHaveLength(4);
     expect(source).toContain('width: proportional(1)');
     expect(source).toContain('titleDescriptionGap={1}');
     expect(source).not.toContain('Example combination');
@@ -50,69 +54,82 @@ describe('color-set presentation', () => {
     expect(setSection).not.toContain('ContentBlockRenderer');
   });
 
-  it('shows a chart preview with the same roles as the swatch table', () => {
+  it('composes actual chart components instead of preview-only lookalikes', () => {
     expect(source).toContain('<ChartStylingPreview />');
     expect(source).toContain(
       '<ChartStylingTable sections={stylingSections} />',
     );
-    expect(source).not.toContain('Tooltip for Q2');
-    expect(source).toContain('<HoverCard');
-    expect(source).toContain('delay={0}');
-    expect(source).toContain('touchTrigger="tap"');
-    expect(source).toContain('const target = 150');
-    expect(source).toContain('Target: {money(target)}');
-    expect(source).toContain(
-      'Compare sales by quarter against a $150k target.',
-    );
-    const chart = source.slice(
-      source.indexOf('function ChartStylingPreview'),
-      source.indexOf('function ChartStylingTable'),
-    );
-    expect(chart).not.toContain('type="display-3"');
-    expect(chart).not.toContain('<text');
-    expect(chart).toContain('type="body"');
-    expect(chart).toContain('styles.chartLabel');
-    expect(source).not.toContain('styles.chartText');
-    expect(source).toContain(".replace(/`/g, '')");
-    expect(source).toContain("stroke={colorVars['--color-border']}");
-    expect(source).toContain("stroke={colorVars['--color-border-emphasized']}");
-    expect(source).toContain("stroke={dataVars['--color-data-neutral']}");
-    expect(source).toContain(
-      "backgroundColor: dataVars['--color-data-categorical-blue']",
-    );
-    expect(source).toContain('borderTopLeftRadius: `min(${radiusVars');
-    expect(source).toContain('borderTopRightRadius: `min(${radiusVars');
-    expect(source).toContain(
-      "borderBottomLeftRadius: radiusVars['--radius-none']",
-    );
-    expect(source).toContain(
-      "borderBottomRightRadius: radiusVars['--radius-none']",
-    );
     expect(source).toContain(
       '<ChartRadiusReference sections={stylingSections} />',
     );
-    expect(source).toContain("fill={colorVars['--color-overlay-hover']}");
-    expect(source).toContain("isolation: 'isolate'");
-    expect(source).toContain('<ChartRadiusSample part={row.part} />');
-    expect(source).toContain('<RadiusBarChart />');
-    expect(source).toContain('<HoverCard');
-    expect(source).toContain('<ChartSwatch');
-    expect(source).not.toContain('styles.radiusBar(');
-    expect(source).not.toContain('styles.radiusTooltip');
-    expect(source).not.toContain('styles.radiusPlot');
-    expect(source).toContain('radius preview');
+    expect(source).toContain('<RechartsThemingPreview />');
+    expect(source).toContain('<RechartsThemingPreview anatomy />');
+    const radiusSection = source.slice(
+      source.indexOf('function ChartRadiusReference'),
+      source.indexOf('function CopyTokensButton'),
+    );
+    expect(
+      radiusSection.indexOf('<RechartsThemingPreview anatomy />'),
+    ).toBeLessThan(radiusSection.indexOf('<Table'));
+    expect(source).toContain('<AnatomyNumber value={row.number} />');
+    expect(source).toContain('styles.radiusAnatomy');
+    expect(source).toContain('<Heading level={3}>');
+    expect(source).toContain('<Heading level={4}>');
+    expect(source).toContain(
+      'Compare sales by quarter against a $150k target.',
+    );
+    expect(preview).toContain("from 'recharts'");
+    for (const component of [
+      'BarChart',
+      'Bar',
+      'CartesianGrid',
+      'XAxis',
+      'YAxis',
+      'Legend',
+      'Tooltip',
+      'Rectangle',
+      'Curve',
+    ]) {
+      expect(preview).toContain(`<${component}`);
+    }
+    expect(preview).toContain("stroke={colorVars['--color-border']}");
+    expect(preview).toContain("stroke: colorVars['--color-border-emphasized']");
+    expect(preview).toContain("fill: colorVars['--color-text-secondary']");
+    expect(preview).toContain("fill={colorVars['--color-text-primary']}");
+    expect(preview).toContain(
+      "backgroundColor: colorVars['--color-background-surface']",
+    );
+    expect(preview).toContain("borderRadius: radiusVars['--radius-container']");
+    expect(preview).toContain('radius={[r, r, 0, 0]}');
+    expect(preview).toContain('boundedChartRadius(radius, 8, 8)');
+    expect(preview).toContain('domain={[0, 200]}');
+    expect(preview).toContain('<Card padding={3}');
+    expect(preview).toContain("isolation: 'isolate'");
+    for (const lookalike of [
+      '<svg',
+      '<rect',
+      '<line ',
+      '<button',
+      'styles.barTrigger',
+      'styles.chartLabel',
+      'label="Hover"',
+      '@astryxdesign/charts',
+    ]) {
+      expect(source + preview).not.toContain(lookalike);
+    }
   });
 
-  it('preserves canonical mode values and transparency', () => {
+  it('keeps visible color values tied to canonical Neutral token resolution', () => {
     expect(source).toContain(
-      "resolveThemeTokens(neutralTheme, {mode: 'light'})",
+      "light: resolveThemeTokens(neutralTheme, {mode: 'light'})",
     );
     expect(source).toContain(
-      "resolveThemeTokens(neutralTheme, {mode: 'dark'})",
+      "dark: resolveThemeTokens(neutralTheme, {mode: 'dark'})",
     );
-    expect(source).toContain('opacity: strength');
-    expect(source).not.toContain("section.title === 'Sequential' &&");
-    expect(source).not.toContain("section.title === 'Semantic' &&");
-    expect(source).not.toContain("section.title === 'Heatmap' &&");
+    expect(source).toContain('const color = modeTokens[mode][token]');
+    expect(source).toContain('const label = colorLabel(color, strength)');
+    expect(source).toContain("borderRadius: radiusVars['--radius-element']");
+    expect(source).toContain('<Theme theme={neutralTheme} mode={mode}>');
+    expect(source).not.toContain('radiusBar');
   });
 });

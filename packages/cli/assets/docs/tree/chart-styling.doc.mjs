@@ -110,7 +110,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Use container radius for chart cards and tooltip surfaces, and pass the theme’s element radius to the bar renderer. Legend-key rounding depends on the renderer; these previews use the current components. Rounding changes the corners, not the value, scale, or baseline.',
+          text: 'Use container radius for chart cards and tooltip surfaces, and element radius for bars and filled legend keys. Limit corners to fit the mark without changing its value, scale, or baseline.',
         },
         {
           type: 'table',
@@ -124,27 +124,27 @@ export const docs = {
             [
               'Tooltip surface',
               '--radius-container',
-              'Use the same container role as HoverCard.',
+              'Recharts opens the tooltip at the hovered data mark. Its content uses a real Astryx Card with the container radius role, matching HoverCard.',
             ],
             [
               'Bars',
               '--radius-element',
-              'Round the exposed ends; use --radius-none at the baseline. Astryx bar() accepts a numeric radius and limits it to half the bar’s width or height. Convert the active theme’s element radius to rendered pixels before passing it.',
+              'Round the exposed ends and keep the baseline square. Limit radius to half the bar’s width or height, then round it down to a whole CSS pixel. This changes the corners, not the bar’s length.',
             ],
             [
               'Filled legend keys',
               '--radius-element',
-              'Proposed theme role. The current ChartSwatch square is 8×8px with a fixed 2px radius; the preview shows that real component without overriding it.',
+              'Use the theme’s element radius, limited to half the key’s size and rounded down to a whole CSS pixel. The 8×8px key keeps its existing dimensions.',
             ],
             [
               'Plot and hover region',
               '--radius-none',
-              'Keep the plot rectangular. The current ChartTooltip hover band has 4px corners and uses the text color at 6% opacity, rather than the proposed hover token.',
+              'Keep the plot and hover highlight rectangular. Apply the hover overlay without changing the series color.',
             ],
             [
               'Line and point legend keys',
               'Match the plotted mark',
-              'The preview uses ChartSwatch’s current line variant. A custom dashed or point key needs renderer support; do not imply the built-in swatch reproduces those shapes.',
+              'Use the same line, dash pattern, or point shape as the plotted mark. The target key in the preview uses Recharts Curve with the reference line’s stroke and dash pattern.',
             ],
           ],
         },
@@ -166,6 +166,7 @@ export const docs = {
           code: `'use client';
 
 import {Bar, BarChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis, type TooltipContentProps} from 'recharts';
+import {Card, Heading, HStack, Text, VStack} from '@astryxdesign/core';
 import {dataVars} from '@astryxdesign/core/theme/dataTokens.stylex';
 import {colorVars, radiusVars, shadowVars, spacingVars, typographyVars, typeScaleVars} from '@astryxdesign/core/theme/tokens.stylex';
 
@@ -179,10 +180,12 @@ const quarters = [
 function RevenueDetails({active, payload, label}: TooltipContentProps) {
   if (!active || !payload?.length) return null;
   return (
-    <div style={{background: colorVars['--color-background-surface'], border: '1px solid', borderColor: colorVars['--color-border'], borderRadius: radiusVars['--radius-container'], padding: spacingVars['--spacing-3'], boxShadow: shadowVars['--shadow-med'], fontFamily: typographyVars['--font-family-body']}}>
-      <strong style={{color: colorVars['--color-text-primary']}}>{label}</strong>
-      <p><span style={{color: colorVars['--color-text-secondary']}}>Revenue ($ thousands): </span><strong style={{color: colorVars['--color-text-primary']}}>{payload[0].value}</strong></p>
-    </div>
+    <Card padding={3} style={{backgroundColor: colorVars['--color-background-surface'], borderColor: colorVars['--color-border'], borderRadius: radiusVars['--radius-container'], boxShadow: shadowVars['--shadow-med']}}>
+      <VStack gap={2}>
+        <Text weight="semibold">{String(label)}</Text>
+        <HStack gap={4} hAlign="between"><Text color="secondary">Revenue ($ thousands)</Text><Text hasTabularNumbers>{String(payload[0].value)}</Text></HStack>
+      </VStack>
+    </Card>
   );
 }
 
@@ -191,12 +194,12 @@ export function StyledRevenueChart() {
   const tick = {
     fill: labelColor,
     fontFamily: typographyVars['--font-family-body'],
-    fontSize: typeScaleVars['--text-supporting-size'],
+    fontSize: typeScaleVars['--text-body-size'],
   };
   return (
     <figure style={{margin: 0, padding: spacingVars['--spacing-4'], background: colorVars['--color-background-card'], color: colorVars['--color-text-primary'], fontFamily: typographyVars['--font-family-body']}}>
-      <figcaption>Quarterly revenue ($ thousands)</figcaption>
-      <p>Revenue is highest in Q4 at 184. The target is 150.</p>
+      <Heading level={3}>Quarterly revenue ($ thousands)</Heading>
+      <Text color="secondary">Revenue is highest in Q4 at 184. The target is 150.</Text>
       <div style={{width: '100%', height: 280}}>
         <ResponsiveContainer>
           <BarChart data={quarters} accessibilityLayer title="Quarterly revenue" desc="Revenue by quarter in thousands of dollars; exact values are in the adjacent table." margin={{top: 24, right: 28, bottom: 12, left: 0}}>

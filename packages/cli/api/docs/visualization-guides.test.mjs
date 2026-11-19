@@ -252,13 +252,16 @@ describe('visualization palette and styling guides', () => {
     expect(table.rows[4]).toEqual([
       'Plot and hover region',
       '--radius-none',
-      'Keep the plot rectangular. The current ChartTooltip hover band has 4px corners and uses the text color at 6% opacity, rather than the proposed hover token.',
+      'Keep the plot and hover highlight rectangular. Apply the hover overlay without changing the series color.',
     ]);
     expect(JSON.stringify(section)).toContain(
-      'not the value, scale, or baseline',
+      'without changing its value, scale, or baseline',
     );
     expect(JSON.stringify(section)).toContain(
-      'limits it to half the bar’s width or height',
+      'Limit radius to half the bar’s width or height',
+    );
+    expect(JSON.stringify(section)).toContain(
+      'then round it down to a whole CSS pixel',
     );
   });
 
@@ -289,7 +292,11 @@ describe('visualization palette and styling guides', () => {
     );
     expect(s).toContain('content={RevenueDetails}');
     expect(s).toContain('Use HoverCard’s background token');
-    expect(s).toContain("background: colorVars['--color-background-surface']");
+    expect(s).toContain(
+      "backgroundColor: colorVars['--color-background-surface']",
+    );
+    expect(s).toContain('<Heading level={3}>');
+    expect(s).toContain('<Card padding={3}');
     expect(s).toContain('--color-border-emphasized');
   });
 });

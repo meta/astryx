@@ -9,9 +9,8 @@
  * @position The Color sets subpage under Data visualization.
  */
 
-import {useLayoutEffect, useRef, useState} from 'react';
-import {Chart, ChartSwatch, bar} from '@astryxdesign/charts';
-import '@astryxdesign/charts/charts.css';
+import {useState} from 'react';
+import {RechartsThemingPreview, AnatomyNumber} from './RechartsThemingPreview';
 import * as stylex from '@stylexjs/stylex';
 import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
@@ -20,19 +19,15 @@ import {Button} from '@astryxdesign/core/Button';
 import {Moon, Sun} from 'lucide-react';
 import {Theme} from '@astryxdesign/core/theme';
 import '@astryxdesign/theme-neutral/theme.css';
-import {HoverCard} from '@astryxdesign/core/HoverCard';
 import {Card} from '@astryxdesign/core/Card';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {Table, pixel, proportional} from '@astryxdesign/core/Table';
 import {resolveThemeTokens} from '@astryxdesign/core/theme/tokens';
-import {dataVars} from '@astryxdesign/core/theme/dataTokens.stylex';
 import {
   colorVars,
-  focusVars,
   radiusVars,
   spacingVars,
-  typographyVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
 import {neutralTheme} from '@astryxdesign/theme-neutral/built';
 import type {DocSection} from '../../generated/docsRegistry';
@@ -61,87 +56,17 @@ const styles = stylex.create({
     backgroundColor: color,
     opacity: strength,
   }),
-  chartFrame: {
-    paddingInline: `calc(${spacingVars['--spacing-12']} + ${spacingVars['--spacing-2']})`,
-  },
-  chartLayout: {
-    position: 'relative',
-    containerType: 'inline-size',
-    isolation: 'isolate',
-  },
-  chartOverlay: {
-    position: 'absolute',
-    inset: 0,
-    width: '100%',
-    height: '100%',
-    pointerEvents: 'none',
-    zIndex: 2,
-  },
-  chartLabel: (x: number, y: number) => ({
-    position: 'absolute',
-    left: `${(x / 420) * 100}%`,
-    top: `${(y / 300) * 100}%`,
-    pointerEvents: 'none',
-    whiteSpace: 'nowrap',
-    zIndex: 3,
-  }),
-  axisLabel: {
-    transform: 'translate(-100%, -50%)',
-    marginInlineStart: `calc(-1 * ${spacingVars['--spacing-2']})`,
-  },
-  valueLabel: {
-    transform: 'translate(-50%, -100%)',
-    marginTop: `calc(-1 * ${spacingVars['--spacing-4']})`,
-  },
-  quarterLabel: {
-    transform: 'translate(-50%, 0)',
-    marginTop: spacingVars['--spacing-2'],
-  },
-  barTrigger: (index: number, value: number) => ({
-    position: 'absolute',
-    left: `${((20.5 + index * 105) / 420) * 100}%`,
-    top: `${((264 - value * 1.2) / 300) * 100}%`,
-    width: `${(64 / 420) * 100}%`,
-    height: `${((value * 1.2) / 300) * 100}%`,
-    padding: 0,
-    borderWidth: 0,
-    borderTopLeftRadius: `min(${radiusVars['--radius-element']}, calc(100cqw * 64 / 420 / 2), calc(100cqw * ${value * 1.2} / 420 / 2))`,
-    borderTopRightRadius: `min(${radiusVars['--radius-element']}, calc(100cqw * 64 / 420 / 2), calc(100cqw * ${value * 1.2} / 420 / 2))`,
-    borderBottomLeftRadius: radiusVars['--radius-none'],
-    borderBottomRightRadius: radiusVars['--radius-none'],
-    backgroundColor: dataVars['--color-data-categorical-blue'],
-    zIndex: 1,
-    ':focus-visible': {
-      outlineWidth: focusVars['--focus-outline-width'],
-      outlineStyle: focusVars['--focus-outline-style'],
-      outlineColor: focusVars['--focus-outline-color'],
-      outlineOffset: focusVars['--focus-outline-offset'],
-    },
-  }),
-  chart: {
-    width: '100%',
-    height: 'auto',
-    display: 'block',
-    fontFamily: typographyVars['--font-family-body'],
-    overflow: 'visible',
-  },
   plot: {
     backgroundColor: colorVars['--color-background-card'],
     padding: spacingVars['--spacing-4'],
   },
 
-  radiusSample: {
-    width: 120,
-    height: 80,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radiusProbe: {
+  radiusAnatomy: {position: 'relative'},
+  cardCallout: {
     position: 'absolute',
-    width: radiusVars['--radius-element'],
-    height: 0,
-    visibility: 'hidden',
+    top: spacingVars['--spacing-2'],
+    right: spacingVars['--spacing-2'],
+    pointerEvents: 'none',
   },
   preview: {
     display: 'flex',
@@ -308,10 +233,6 @@ function Palette({
 
 function ChartStylingPreview() {
   const [mode, setMode] = useState<'light' | 'dark'>('light');
-  const [activeQuarter, setActiveQuarter] = useState<number | null>(null);
-  const values = [120, 160, 140, 180];
-  const target = 150;
-  const money = (value: number) => `$${value}k`;
   return (
     <Theme theme={neutralTheme} mode={mode}>
       <Card>
@@ -343,158 +264,7 @@ function ChartStylingPreview() {
               }
             />
           </HStack>
-          <HStack gap={6} vAlign="center" wrap="wrap">
-            <HStack gap={2} vAlign="center">
-              <ChartSwatch
-                color={dataVars['--color-data-categorical-blue']}
-                variant="square"
-              />
-              <Text color="secondary">Actual sales</Text>
-            </HStack>
-            <HStack gap={2} vAlign="center">
-              <svg aria-hidden="true" width="28" height="12">
-                <line
-                  x1="0"
-                  y1="6"
-                  x2="28"
-                  y2="6"
-                  stroke={dataVars['--color-data-neutral']}
-                  strokeWidth="2"
-                  strokeDasharray="6 4"
-                />
-              </svg>
-              <Text color="secondary">Target: {money(target)}</Text>
-            </HStack>
-          </HStack>
-          <div {...stylex.props(styles.chartFrame)}>
-            <div {...stylex.props(styles.chartLayout)}>
-              <svg
-                role="img"
-                aria-label="Quarterly sales in US dollars: Q1 $120k, Q2 $160k, Q3 $140k, Q4 $180k. Target $150k per quarter. Hover or focus a bar for details."
-                viewBox="0 0 420 300"
-                {...stylex.props(styles.chart)}>
-                <title>Quarterly sales against a $150k target</title>
-                <rect
-                  x="0"
-                  y="24"
-                  width="420"
-                  height="240"
-                  fill={colorVars['--color-background-card']}
-                />
-                {activeQuarter !== null && (
-                  <rect
-                    x={activeQuarter * 105}
-                    y="24"
-                    width="105"
-                    height="240"
-                    fill={colorVars['--color-overlay-hover']}
-                  />
-                )}
-                {[50, 100, 150, 200].map(value => (
-                  <line
-                    key={value}
-                    x1="0"
-                    x2="420"
-                    y1={264 - value * 1.2}
-                    y2={264 - value * 1.2}
-                    stroke={colorVars['--color-border']}
-                  />
-                ))}
-              </svg>
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 420 300"
-                {...stylex.props(styles.chartOverlay)}>
-                <line
-                  x1="0"
-                  x2="420"
-                  y1={264 - target * 1.2}
-                  y2={264 - target * 1.2}
-                  stroke={dataVars['--color-data-neutral']}
-                  strokeWidth="2"
-                  strokeDasharray="6 4"
-                />
-                <line
-                  x1="0"
-                  x2="420"
-                  y1="264"
-                  y2="264"
-                  stroke={colorVars['--color-border-emphasized']}
-                />
-              </svg>
-              {[0, 50, 100, 150, 200].map(value => (
-                <Text
-                  key={value}
-                  type="body"
-                  color="secondary"
-                  hasTabularNumbers
-                  xstyle={[
-                    styles.chartLabel(0, 264 - value * 1.2),
-                    styles.axisLabel,
-                  ]}>
-                  {value === 0 ? '$0' : money(value)}
-                </Text>
-              ))}
-              {values.map((value, i) => (
-                <Text
-                  key={`value-${i}`}
-                  type="body"
-                  hasTabularNumbers
-                  xstyle={[
-                    styles.chartLabel(52.5 + i * 105, 264 - value * 1.2),
-                    styles.valueLabel,
-                  ]}>
-                  {money(value)}
-                </Text>
-              ))}
-              {values.map((_, i) => (
-                <Text
-                  key={`quarter-${i}`}
-                  type="body"
-                  color="secondary"
-                  xstyle={[
-                    styles.chartLabel(52.5 + i * 105, 264),
-                    styles.quarterLabel,
-                  ]}>
-                  Q{i + 1}
-                </Text>
-              ))}
-              {values.map((value, i) => (
-                <HoverCard
-                  key={i}
-                  label={`Q${i + 1} sales details`}
-                  delay={0}
-                  hideDelay={0}
-                  placement="above"
-                  focusTrigger="always"
-                  touchTrigger="tap"
-                  onOpenChange={isOpen =>
-                    setActiveQuarter(current =>
-                      isOpen ? i : current === i ? null : current,
-                    )
-                  }
-                  content={
-                    <VStack gap={2}>
-                      <Text weight="bold">Q{i + 1}</Text>
-                      <HStack hAlign="between" gap={6}>
-                        <Text color="secondary">Sales</Text>
-                        <Text weight="bold">{money(value)}</Text>
-                      </HStack>
-                      <HStack hAlign="between" gap={6}>
-                        <Text color="secondary">Target</Text>
-                        <Text weight="bold">{money(target)}</Text>
-                      </HStack>
-                    </VStack>
-                  }>
-                  <button
-                    type="button"
-                    aria-label={`Q${i + 1}: sales ${money(value)}, target ${money(target)}`}
-                    {...stylex.props(styles.barTrigger(i, value))}
-                  />
-                </HoverCard>
-              ))}
-            </div>
-          </div>
+          <RechartsThemingPreview />
         </VStack>
       </Card>
     </Theme>
@@ -572,97 +342,8 @@ function ChartStylingTable({sections}: {sections: DocSection[]}) {
   );
 }
 
-function RadiusBarChart({square = false}: {square?: boolean}) {
-  const probe = useRef<HTMLDivElement>(null);
-  const [radius, setRadius] = useState(0);
-  useLayoutEffect(() => {
-    if (probe.current) {
-      setRadius(probe.current.getBoundingClientRect().width);
-    }
-  }, []);
-  return (
-    <>
-      <div ref={probe} {...stylex.props(styles.radiusProbe)} />
-      <Chart
-        data={[
-          {quarter: 'Q1', sales: 120},
-          {quarter: 'Q2', sales: 16},
-          {quarter: 'Q3', sales: 180},
-        ]}
-        xKey="quarter"
-        series={[
-          bar('sales', {
-            color: dataVars['--color-data-categorical-blue'],
-            radius: square ? 0 : radius,
-          }),
-        ]}
-        height={64}
-        margin={{top: 0, right: 0, bottom: 0, left: 0}}
-        yDomain={[0, 200]}
-        tooltip={square ? {render: () => null, showHoverDots: false} : false}
-        aria-label={
-          square
-            ? 'Square plot with hover highlight'
-            : 'Real bars with theme element radius'
-        }
-      />
-    </>
-  );
-}
-
-function ChartRadiusSample({part}: {part: string}) {
-  return (
-    <Theme theme={neutralTheme} mode="light">
-      <div
-        role="group"
-        aria-label={`${part} radius preview`}
-        {...stylex.props(styles.radiusSample)}>
-        {part === 'Chart card' ? (
-          <Card width={112} padding={2}>
-            <RadiusBarChart />
-          </Card>
-        ) : part === 'Tooltip surface' ? (
-          <HoverCard
-            label="Radius tooltip sample"
-            delay={0}
-            hideDelay={0}
-            focusTrigger="always"
-            touchTrigger="tap"
-            content={
-              <VStack gap={1}>
-                <Text weight="bold">Q2</Text>
-                <Text hasTabularNumbers>Sales: $160k</Text>
-              </VStack>
-            }>
-            <Button size="sm" variant="ghost" label="Hover" />
-          </HoverCard>
-        ) : part === 'Bars' ? (
-          <RadiusBarChart />
-        ) : part === 'Filled legend keys' ? (
-          <HStack gap={2} vAlign="center">
-            <ChartSwatch
-              color={dataVars['--color-data-categorical-blue']}
-              variant="square"
-            />
-            <Text type="supporting">Sales</Text>
-          </HStack>
-        ) : part === 'Plot and hover region' ? (
-          <RadiusBarChart square />
-        ) : (
-          <HStack gap={2} vAlign="center">
-            <ChartSwatch
-              color={dataVars['--color-data-categorical-blue']}
-              variant="line"
-            />
-            <Text type="supporting">Trend</Text>
-          </HStack>
-        )}
-      </div>
-    </Theme>
-  );
-}
-
 function ChartRadiusReference({sections}: {sections: DocSection[]}) {
+  const [mode, setMode] = useState<'light' | 'dark'>('light');
   const section = sections.find(section => section.id === 'chart-radius');
   if (!section) {
     return null;
@@ -683,22 +364,60 @@ function ChartRadiusReference({sections}: {sections: DocSection[]}) {
         </Heading>
         <Text>{description}</Text>
       </VStack>
+      <Theme theme={neutralTheme} mode={mode}>
+        <Card xstyle={styles.radiusAnatomy}>
+          <div {...stylex.props(styles.cardCallout)}>
+            <AnatomyNumber value={1} />
+          </div>
+          <VStack gap={4} xstyle={styles.plot}>
+            <HStack hAlign="between" vAlign="start" gap={4}>
+              <VStack gap={1}>
+                <Heading level={4}>Chart anatomy</Heading>
+                <Text color="secondary">
+                  Hover a bar to see its sales and target details.
+                </Text>
+              </VStack>
+              <Button
+                variant="ghost"
+                isIconOnly
+                size="lg"
+                label={
+                  mode === 'dark'
+                    ? 'Switch anatomy to light mode'
+                    : 'Switch anatomy to dark mode'
+                }
+                tooltip={
+                  mode === 'dark'
+                    ? 'Switch anatomy to light mode'
+                    : 'Switch anatomy to dark mode'
+                }
+                icon={mode === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+                onClick={() =>
+                  setMode(current => (current === 'dark' ? 'light' : 'dark'))
+                }
+              />
+            </HStack>
+            <RechartsThemingPreview anatomy />
+          </VStack>
+        </Card>
+      </Theme>
       <Card>
         <Table
-          data={rows.map(row => ({
+          data={rows.map((row, index) => ({
+            number: index + 1,
             part: plainText(row[0]),
             radius: plainText(row[1]),
             treatment: plainText(row[2]),
           }))}
           columns={[
+            {
+              key: 'number',
+              header: '',
+              width: pixel(48),
+              renderCell: row => <AnatomyNumber value={row.number} />,
+            },
             {key: 'part', header: 'Chart part', width: pixel(160)},
             {key: 'radius', header: 'Radius', width: pixel(180)},
-            {
-              key: 'preview',
-              header: 'Preview',
-              width: pixel(152),
-              renderCell: row => <ChartRadiusSample part={row.part} />,
-            },
             {
               key: 'treatment',
               header: 'Treatment',
