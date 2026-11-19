@@ -160,6 +160,15 @@ export const namedLeadsOf = new WeakMap();
 export const rootLeadsOf = new WeakMap();
 
 /**
+ * The family roots the order of matches moved directly before their parts,
+ * by ordered response: each part's result, mapped to its root's result. The
+ * fit pass keeps those pairs in place. Module-private, so they never enter
+ * search's JSON.
+ * @type {WeakMap<object, Map<object, object>>}
+ */
+export const movedRootsOf = new WeakMap();
+
+/**
  * The query words a match answered: the terms its reason lists, folded, or
  * null when it answered the whole query (a name, keyword, or title hit).
  * @param {string | undefined} reason

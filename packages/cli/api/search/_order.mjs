@@ -27,6 +27,7 @@ import {entryOf} from './_entries.mjs';
 import {fold, nameWords, queryWords, words} from './_query-words.mjs';
 import {
   answeredTerms,
+  movedRootsOf,
   namedLeadsOf,
   rootLeadsOf,
   searchedComponentsOf,
@@ -138,7 +139,9 @@ export function orderMatches(table, order, lexical, query, limit, families) {
   const headRoot = head && roots?.get(head.res);
   const lead = ranked.find(it => it.res === headRoot) ?? head;
   ranked = tiesByFit(ranked, table, blockOf, lead);
-  if (roots) ranked = rootsFirst(ranked, roots);
+  /** @type {Map<object, object>} */
+  const moved = new Map();
+  if (roots) ranked = rootsFirst(ranked, roots, moved);
   const shown = ranked.slice(0, limit);
   const response = {
     ...lexical,
@@ -146,7 +149,7 @@ export function orderMatches(table, order, lexical, query, limit, families) {
   };
   const searched = searchedComponentsOf.get(lexical);
   if (searched) searchedComponentsOf.set(response, searched);
-  if (roots) rootLeadsOf.set(response, roots);
+  if (moved.size) movedRootsOf.set(response, moved);
   return /** @type {import('./search.type.mjs').SearchResponse} */ (response);
 }
 
@@ -353,15 +356,19 @@ function answered(it) {
  * @param {Item[]} ranked
  * @param {Map<object, object>} roots each part's result, mapped to its
  *   root's result
+ * @param {Map<object, object>} [moved] filled with each part whose root
+ *   moved, mapped to that root
  * @returns {Item[]}
  */
-export function rootsFirst(ranked, roots) {
+export function rootsFirst(ranked, roots, moved) {
   const out = [...ranked];
   for (let a = 0; a < out.length; a++) {
     const root = roots.get(out[a].res);
     if (!root) continue;
     const b = out.findIndex((it, n) => n > a && it.res === root);
-    if (b >= 0) out.splice(a, 0, ...out.splice(b, 1));
+    if (b < 0) continue;
+    out.splice(a, 0, ...out.splice(b, 1));
+    moved?.set(out[a + 1].res, root);
   }
   return out;
 }

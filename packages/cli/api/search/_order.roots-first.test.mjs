@@ -303,6 +303,25 @@ describe('rootsFirst', () => {
     ]);
   });
 
+  it('names only the parts whose root it moved', () => {
+    const rows = items([
+      ['QuillBox', 0],
+      ['QuillMark', 0],
+      ['Zorb', 0],
+      ['ZorbList', 1],
+    ]);
+    const roots = new Map([
+      [rows[1].res, rows[0].res],
+      [rows[2].res, rows[3].res],
+    ]);
+    /** @type {Map<object, object>} */
+    const moved = new Map();
+    rootsFirst(rows, roots, moved);
+    expect([...moved].map(([part, root]) => [part.name, root.name])).toEqual([
+      ['Zorb', 'ZorbList'],
+    ]);
+  });
+
   it('leaves a root already ahead of its part in place', () => {
     const rows = items([
       ['ZorbList', 0],

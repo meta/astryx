@@ -23,7 +23,7 @@ import {
   wordsOf,
 } from '../build/blocks/blocks.mjs';
 import {bandOf} from './_order.mjs';
-import {rootLeadsOf, searchedComponentsOf} from './_result.mjs';
+import {movedRootsOf, searchedComponentsOf} from './_result.mjs';
 
 /** An entry stays in place when its fit is at least this times the median. */
 export const FIT_BAR = 1.7;
@@ -147,7 +147,7 @@ const runOf = r => `${bandOf(r.score ?? 0)}:${r.domain === 'doc'}`;
  *   the block picker's weights, or a function that reads them; the function
  *   runs only when a run can change. Without weights the order stays
  * @param {Set<any>} [held] results that never move down: a family root
- *   directly before its part, and that part
+ *   the order moved directly before its part, and that part
  * @returns {any[]}
  */
 export function orderByFit(results, candidates, query, weights, held) {
@@ -234,13 +234,14 @@ export function withFitOrder(response, candidates, query, weights) {
   const r = /** @type {any} */ (response);
   const results = r?.data?.results;
   if (!Array.isArray(results)) return response;
-  // A family root the order moved directly before its part (rootLeadsOf)
-  // stays there: neither the root nor the part moves down.
-  const roots = rootLeadsOf.get(r);
+  // A family root the order moved directly before its part (movedRootsOf)
+  // stays there: neither that root nor its part moves down. A root that sat
+  // above its part on its own is not held.
+  const moved = movedRootsOf.get(r);
   /** @type {Set<any>} */
   const held = new Set();
   results.forEach((part, k) => {
-    if (k > 0 && roots?.get(part) === results[k - 1]) {
+    if (k > 0 && moved?.get(part) === results[k - 1]) {
       held.add(part).add(results[k - 1]);
     }
   });
