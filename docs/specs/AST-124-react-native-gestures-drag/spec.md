@@ -471,6 +471,9 @@ handles of `spec:AST-112/FR18`.
 - Details `spec:AST-112` FR18 (amended): the gesture handles (FR16).
 - Answers `spec:AST-112` OQ7 for the pan and zoom component: it starts in the
   React Native lab under `./unstable/*` (DEC-8).
+- `spec:AST-017` FR27 keeps the pan and zoom component in the lab folder of
+  `@astryxdesign/react-native`, under `./unstable/*`, instead of the Lab
+  package (DEC-8).
 
 ## Verification
 
