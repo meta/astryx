@@ -732,6 +732,7 @@ export default function Page() {
   const [open, setOpen] = useState(false);
   return <main><button type="button" onClick={() => setOpen(true)}>Show</button>{open && <img src="./c%20d.png" alt="Later" />}</main>;
 }
+import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('escaped-later/page.tsx', {cwd: dir, out: 'escaped-later.html'});
