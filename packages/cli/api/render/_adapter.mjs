@@ -48,13 +48,15 @@ import {rebuildPage} from '../../foundation/render/rebuild.mjs';
 import {cliVersion} from '../../foundation/integrations/cli-peer-version.mjs';
 import {assertWithin, PathSafetyError} from '../../foundation/fs/path-safety.mjs';
 import {climbsOut, findCoreDir, findPackageRoot, isInside as liesInside, requireCoreDir} from '../../foundation/fs/paths.mjs';
+import {resolveProjectTypeScript} from '../../foundation/discovery/project-typescript.mjs';
+import {judgeCoreProps, propNamesOf, readCoreDocs} from '../../foundation/discovery/unknown-core-props.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
 import {isAlive, pidSpace} from '../../foundation/release/cache.mjs';
 import {isServedPackage} from '../../foundation/render/served-packages.mjs';
 import {outsideRequests, roundTrip} from '../../foundation/render/share-checks.mjs';
 import {hostedPagePackages, recordResolved} from '../../foundation/runtime/package-root.mjs';
 import {installCommandFor} from '../../foundation/discovery/template-needs.mjs';
-import {component} from '../component/component.mjs';
+import {COMPONENT_BATCH_SELECTOR_LIMIT, component} from '../component/component.mjs';
 import {projectAugmentations, propWideningInterfaces} from '../../foundation/discovery/core-augmentation-points.mjs';
 
 export {PAGE_EXTENSIONS, embeddedPathProblem};
@@ -494,8 +496,6 @@ function servedSet(input) {
   }
 }
 
-const CORE_PACKAGE = '@astryxdesign/core';
-
 /** A prop type that is a closed union of string literals, as a doc writes it: `'sm' | 'md'`. */
 const CLOSED_UNION = /^\s*'[^']*'(?:\s*\|\s*'[^']*')*\s*$/;
 
@@ -514,12 +514,12 @@ const CLOSED_UNION = /^\s*'[^']*'(?:\s*\|\s*'[^']*')*\s*$/;
  * entry, and a prop whose type is not a closed union, are not checked.
  * @param {{component: string, prop: string, value: string, file: string, line: number}[]} values
  * @param {string} page the page file; its folder's Core gives the docs
+ * @param {(name: string) => Promise<any[] | null>} docsOf the documented
+ *   props of a Core component, read once for both prop checks
  * @returns {Promise<import('../../foundation/render/render-page.mjs').RenderWarning[]>}
  */
-async function propValueWarnings(values, page) {
+async function propValueWarnings(values, page, docsOf) {
   const dir = path.dirname(page);
-  /** @type {Map<string, any[] | null>} */
-  const docs = new Map();
   /** @type {import('../../foundation/render/render-page.mjs').RenderWarning[]} */
   const warnings = [];
   const seen = new Set();
@@ -527,18 +527,7 @@ async function propValueWarnings(values, page) {
   /** @type {ReturnType<typeof projectAugmentations> | undefined} */
   let added;
   for (const v of values) {
-    if (!docs.has(v.component)) {
-      /** @type {any[] | null} */
-      let props = null;
-      try {
-        const answer = /** @type {any} */ (await component(v.component, {cwd: dir, package: CORE_PACKAGE, props: true}));
-        props = Array.isArray(answer?.data) ? answer.data : null;
-      } catch {
-        // A component the docs do not describe is not checked.
-      }
-      docs.set(v.component, props);
-    }
-    const prop = docs.get(v.component)?.find(p => p?.name === v.prop);
+    const prop = (await docsOf(v.component))?.find(p => p?.name === v.prop);
     if (typeof prop?.type !== 'string' || !CLOSED_UNION.test(prop.type)) continue;
     const allowed = [...prop.type.matchAll(/'([^']*)'/g)].map(m => m[1]);
     if (allowed.includes(v.value)) continue;
@@ -563,6 +552,111 @@ async function propValueWarnings(values, page) {
     });
   }
   return warnings;
+}
+
+/**
+ * The documented props of each Core component, read from the Core of the
+ * folder `dir` with doctor's reader (`readCoreDocs`); null for a component
+ * the docs do not describe. `load` reads the components it is given in
+ * batches; `of` reads one component that was not loaded. Each component is
+ * read once.
+ * @param {string} dir
+ */
+function coreDocsReader(dir) {
+  /** @type {Map<string, any[] | null>} */
+  const docs = new Map();
+  /** @param {string[]} names */
+  const load = async names => {
+    const missing = [...new Set(names)].filter(name => !docs.has(name));
+    for (const name of missing) docs.set(name, null);
+    try {
+      for (const [name, props] of await readCoreDocs(component, missing, dir, COMPONENT_BATCH_SELECTOR_LIMIT)) docs.set(name, props);
+    } catch {
+      // A component the docs do not describe is not checked.
+    }
+  };
+  /** @param {string} name */
+  const of = async name => {
+    await load([name]);
+    return docs.get(name) ?? null;
+  };
+  return {load, of};
+}
+
+/**
+ * The console line React prints for a prop that reaches a DOM element it
+ * does not know, with the prop's name.
+ */
+const REACT_UNKNOWN_PROP = /React does not recognize the `([^`]+)` prop|Unknown event handler property `([^`]+)`/;
+
+/** How many of a component's props a warning names before it counts the rest. */
+const PROPS_LISTED = 12;
+
+/**
+ * A warning for each Core component element a page's file gives props it
+ * does not take (`<AlertDialog onConfirm={…}>`), judged as `astryx doctor`
+ * judges them (`judgeCoreProps`): the prop does nothing, and a callback the
+ * page passes is never called. Each prop gets the documented prop with the
+ * same words, when there is one; when a prop has none, the warning lists the
+ * props the component takes. Core's types are read with the project's
+ * TypeScript and React's types, as the page finds them; without them, the
+ * props are not judged. Only the docs are read while every prop is
+ * documented.
+ * @param {Array<import('../../foundation/discovery/core-props.mjs').CorePropUse & {file: string, element: {line: number, column: number}}>} names
+ *   each with the file's absolute path and where its element opens
+ * @param {string} page the page file
+ * @param {(name: string) => Promise<any[] | null>} docsOf
+ * @returns {Promise<{warnings: import('../../foundation/render/render-page.mjs').RenderWarning[], props: Set<string>}>}
+ *   the warnings, and the props they name
+ */
+async function propNameWarnings(names, page, docsOf) {
+  if (names.length === 0) return {warnings: [], props: new Set()};
+  const dir = path.dirname(page);
+  const projectDir = runChoice(dir).inProject ? (findPackageRoot(dir) ?? dir) : dir;
+  const shown = (/** @type {string} */ file) => path.relative(dir, file).split(path.sep).join('/');
+  const {found} = await judgeCoreProps({
+    projectDir,
+    uses: names.map(use => ({...use, file: shown(use.file), path: use.file})),
+    pages: [...new Set(names.map(use => use.file))],
+    readDocs: async components => {
+      /** @type {Map<string, any[]>} */
+      const documented = new Map();
+      for (const name of components) {
+        const props = await docsOf(name);
+        if (props) documented.set(name, props);
+      }
+      return documented;
+    },
+    typescript: () => {
+      const compiler = resolveProjectTypeScript([projectDir]);
+      return compiler?.ts ? {ts: compiler.ts} : {skipped: 'the project has no TypeScript to read the types with'};
+    },
+  });
+  /** @type {Map<string, {line: number, column: number}>} */
+  const elementOf = new Map(names.map(use => [`${shown(use.file)}\0${use.line}\0${use.column}`, use.element]));
+  /** @type {Map<string, typeof found>} */
+  const byElement = new Map();
+  for (const use of found) {
+    const element = elementOf.get(`${use.file}\0${use.line}\0${use.column}`);
+    const key = `${use.file}\0${element?.line}\0${element?.column}`;
+    (byElement.get(key) ?? byElement.set(key, []).get(key))?.push(use);
+  }
+  /** @type {import('../../foundation/render/render-page.mjs').RenderWarning[]} */
+  const warnings = [];
+  for (const uses of byElement.values()) {
+    const {file, line, component: name} = uses[0];
+    /** @type {Map<string, string | null>} */
+    const props = new Map(uses.map(use => [use.prop, use.suggestion]));
+    const named = [...props].map(([prop, suggestion]) => (suggestion ? `${prop} (did you mean ${suggestion}?)` : prop));
+    let message = `${file}:${line}: ${name} has no ${named.join(', ')}`;
+    if ([...props.values()].some(suggestion => suggestion === null)) {
+      const takes = propNamesOf((await docsOf(name)) ?? []);
+      const rest = takes.length - PROPS_LISTED;
+      message += `; it takes ${takes.slice(0, PROPS_LISTED).join(', ')}${rest > 0 ? `, and ${rest} more` : ''}`;
+    }
+    warnings.push({code: 'unknown-prop', message: `${message}.`});
+  }
+  return {warnings, props: new Set(found.map(use => use.prop))};
 }
 
 /**
@@ -599,7 +693,23 @@ export async function renderToFile({cwd, input, output, title, keepClassNames = 
   } catch (e) {
     throw asAstryxError(e, path.dirname(input), cwd);
   }
-  page.warnings.push(...(await propValueWarnings(page.propValues ?? [], input)));
+  const docs = coreDocsReader(path.dirname(input));
+  await docs.load([...(page.propValues ?? []), ...(page.propNames ?? [])].map(use => use.component));
+  const docsOf = docs.of;
+  /** @type {Awaited<ReturnType<typeof propNameWarnings>>} */
+  let named = {warnings: [], props: new Set()};
+  try {
+    named = await propNameWarnings(page.propNames ?? [], input, docsOf);
+  } catch {
+    // The check only warns: a project whose types cannot be read still exports.
+  }
+  // React's own console line for a prop the warning names says less, cut
+  // short, so it goes.
+  page.warnings = page.warnings.filter(warning => {
+    const prop = warning.code === 'page-output' ? REACT_UNKNOWN_PROP.exec(warning.message) : null;
+    return !prop || !named.props.has(prop[1] ?? prop[2]);
+  });
+  page.warnings.push(...(await propValueWarnings(page.propValues ?? [], input, docsOf)), ...named.warnings);
   for (const {name, dir} of page.fromSet) {
     let version = null;
     try {

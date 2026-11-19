@@ -228,7 +228,7 @@ import {
  *   Each file in the project's own source with icon imports that do not
  *   match its icon sets, read only when the placeholders are; null otherwise.
  *   Experimental: may change or be removed in a patch release.
- * @property {{found: import('./_adapter.mjs').UnknownCoreProp[], uses: number, skipped: string | null}|null} [coreProps]
+ * @property {{found: import('../../foundation/discovery/unknown-core-props.mjs').UnknownCoreProp[], uses: number, skipped: string | null}|null} [coreProps]
  *   The props the project's own source gives Core components that they do
  *   not take, with how many props it read, or why it checked none; null when
  *   the project reads no Core or the scan failed.

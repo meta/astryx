@@ -9,8 +9,9 @@
  * @output For each component TypeScript can read, whether its props type
  *   takes each prop; the prop names React's types give HTML and SVG elements
  *   and every component; or why the types could not be read.
- * @position Read by `astryx doctor` (api/doctor/_adapter.mjs) for the props a
- *   page gives Core components that Core's docs do not list.
+ * @position Read by the Core prop check that `astryx doctor` and
+ *   `astryx experimental export` share (unknown-core-props.mjs), for the
+ *   props a page gives Core components that Core's docs do not list.
  */
 
 import * as path from 'node:path';

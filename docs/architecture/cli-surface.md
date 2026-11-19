@@ -945,6 +945,15 @@ non-interactive guarantee.
   files and its installed theme and integration packages' declaration files
   add are values the prop has; a project that cannot be read in full leaves
   such a prop unchecked.
+- `api/render` and `foundation/discovery/unknown-core-props.mjs` — the
+  `unknown-prop` warning of `astryx experimental export`: each prop name the
+  page's own files give a Core component, read and judged as INV42 reads and
+  judges it: with the docs and types of the Core the page finds installed,
+  read with the project's own TypeScript and React types; a page that finds
+  no installed Core, or a project without them, gets no judgment. Each
+  element gets one warning, and React's console line for a prop it names is
+  not printed as page output. Only the docs are read while every prop is
+  documented.
 - `foundation/agent-docs` — the shared expected-block renderer and managed-file
   writer used by init and upgrade, and the layout that decides which files hold
   the block (INV31).

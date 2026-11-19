@@ -5,8 +5,10 @@
  * @input One module's source text.
  * @output Each prop a Core component's element names, with the component,
  *   the line and the column; or null when the module does not parse.
- * @position Read by `astryx doctor` (api/doctor/_adapter.mjs), which checks
- *   each prop against the component's docs and Core's own types.
+ * @position Read by `astryx doctor` (api/doctor/_adapter.mjs) and, one
+ *   element at a time, by the page render worker (render/page-worker.mjs);
+ *   unknown-core-props.mjs checks each prop against the component's docs
+ *   and Core's own types.
  */
 
 import {coreImportOf} from './core-elements.mjs';
@@ -47,18 +49,32 @@ export function scanCoreProps(source) {
   const uses = [];
   traverseTemplateSource(file, {
     JSXOpeningElement(/** @type {any} */ path) {
-      const core = coreImportOf(path.node.name, path.scope);
-      if (core == null || !/^[A-Z]/.test(core.component)) return;
-      const {component, source} = core;
-      for (const attribute of path.node.attributes) {
-        if (attribute.type !== 'JSXAttribute' || attribute.name.type !== 'JSXIdentifier') continue;
-        const prop = attribute.name.name;
-        // JSX never checks a name with a hyphen against a props type.
-        if (NOT_COMPONENT_PROPS.has(prop) || prop.includes('-')) continue;
-        const start = attribute.loc?.start;
-        uses.push({component, source, prop, line: start?.line ?? 0, column: (start?.column ?? 0) + 1});
-      }
+      uses.push(...corePropUsesOf(path));
     },
   });
+  return uses;
+}
+
+/**
+ * The props one JSX element gives a Core component by name, as
+ * `scanCoreProps` reads them. A module's reader that walks its own syntax
+ * tree calls this for each opening element, so it reads the same props.
+ * @param {any} path the opening element's Babel path
+ * @returns {CorePropUse[]}
+ */
+export function corePropUsesOf(path) {
+  const core = coreImportOf(path.node.name, path.scope);
+  if (core == null || !/^[A-Z]/.test(core.component)) return [];
+  const {component, source} = core;
+  /** @type {CorePropUse[]} */
+  const uses = [];
+  for (const attribute of path.node.attributes) {
+    if (attribute.type !== 'JSXAttribute' || attribute.name.type !== 'JSXIdentifier') continue;
+    const prop = attribute.name.name;
+    // JSX never checks a name with a hyphen against a props type.
+    if (NOT_COMPONENT_PROPS.has(prop) || prop.includes('-')) continue;
+    const start = attribute.loc?.start;
+    uses.push({component, source, prop, line: start?.line ?? 0, column: (start?.column ?? 0) + 1});
+  }
   return uses;
 }

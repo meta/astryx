@@ -558,6 +558,37 @@ const CASES = [
     ],
   },
   {
+    // A page that gives a Core component a prop it does not take: the text
+    // prints the unknown-prop warning the JSON carries. It shares the folder
+    // of the cases above; TypeScript and React's types let the export read
+    // Core's.
+    name: 'experimental export',
+    args: ['experimental', 'export', 'wrong-prop.tsx'],
+    cwd: '__TMP__',
+    setup: dir => {
+      fs.mkdirSync(path.join(dir, 'node_modules', '@types'), {recursive: true});
+      fs.symlinkSync(
+        path.join(REPO_ROOT, 'node_modules', '@types', 'react'),
+        path.join(dir, 'node_modules', '@types', 'react'),
+      );
+      fs.symlinkSync(
+        path.join(REPO_ROOT, 'node_modules', 'typescript'),
+        path.join(dir, 'node_modules', 'typescript'),
+      );
+      fs.writeFileSync(
+        path.join(dir, 'wrong-prop.tsx'),
+        'import {AlertDialog} from \'@astryxdesign/core/AlertDialog\';\nexport default function Page() { return <AlertDialog isOpen onOpenChange={() => {}} title="Delete?" description="Gone for good." actionLabel="Delete" onAction={() => {}} onConfirm={() => {}} />; }\n',
+      );
+    },
+    jsonFieldAllowlist: [
+      'warnings — listed under Warnings when present',
+      "code — each warning's kind; the text prints its message",
+    ],
+    textBlockAllowlist: [
+      "The file's markup and stylesheets load nothing from outside the file. — the text form of an empty checks.outside",
+    ],
+  },
+  {
     // The --reverse projection (same command, same folder as the case above).
     name: 'experimental export',
     args: [

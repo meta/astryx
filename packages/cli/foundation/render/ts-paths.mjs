@@ -17,7 +17,8 @@
  *
  * @position foundation/render — used by page-worker.mjs, embedded-imports.mjs,
  *   the theme build's module loader (api/theme/build/build.mjs), and Doctor's
- *   icon-imports and Core props scans (api/doctor/_adapter.mjs)
+ *   icon-imports scan (api/doctor/_adapter.mjs), and the Core prop check of
+ *   doctor and export (discovery/unknown-core-props.mjs)
  */
 
 import * as fs from 'node:fs';
