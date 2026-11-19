@@ -27236,8 +27236,16 @@ export function draftAnswer(ctx, env, question) {
       const holders = [...ctx.project.target.keys()].filter(k =>
         /avatar|image|thumbnail|media/.test(k),
       );
-      result.splice(0, result.length, {
-        text: `no part is called "${photo}": a photo is your app's own image, which the theme does not style${holders.length ? `; the parts that show one are ${holders.slice(0, 5).join(', ')}, which take a change by name ("rounder ${holders[0]}")` : ''}; nothing is written`,
+      // (Only the photo's own clause is taken back: "rounded photos and a
+      // blue accent" keeps the accent.)
+      const said = new RegExp(`\\b${photo}\\b`, 'i');
+      const own = result.filter(d => {
+        const c = /** @type {any} */ (draftClause.get(d));
+        return !c || said.test(String(c.text ?? ''));
+      });
+      const kept = result.filter(d => !own.includes(d));
+      result.splice(0, result.length, ...kept, {
+        text: `no part is called "${photo}": a photo is your app's own image, which the theme does not style${holders.length ? `; the parts that show one are ${holders.slice(0, 5).join(', ')}, which take a change by name ("rounder ${holders[0]}")` : ''}; nothing is written for it`,
         options: [],
         lookup: `${HOW} --list parts`,
       });
