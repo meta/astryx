@@ -445,6 +445,43 @@ describe('family reach by default', () => {
     expect(settingsOf('cg')).toEqual([]);
   }, 240_000);
 
+  it.each([['primary'], ['secondary'], ['ghost']])(
+    'a button gradient gives the %s variant the disabled treatment when disabled',
+    async (variant, ctx) => {
+      if (needBases(ctx)) return;
+      const slug = `dg${variant}`;
+      await themeEditNew(slug, {cwd, like: 'neutral'});
+      await themeEditSet(slug, 'background', GRADIENT, {cwd, on: 'button'});
+      const css = cssOf(slug);
+      // (Each part it reaches takes the image off when disabled, so the
+      // disabled fill shows; every variant, since the rule has no variant.)
+      for (const part of ['button', 'toggle-button'])
+        expect(css, part).toMatch(
+          new RegExp(
+            `\\.astryx-${part}[^{\\s]*:is\\(:disabled[^{]*\\{[^}]*background(?:-image)?: revert-layer`,
+          ),
+        );
+      // A disabled look of the theme's own wins.
+      await themeEditSet(
+        slug,
+        'background-image',
+        'linear-gradient(#eeeeee, #dddddd)',
+        {
+          cwd,
+          on: 'button',
+          state: 'disabled',
+          when: `variant:${variant}`,
+        },
+      );
+      expect(cssOf(slug)).toContain('linear-gradient(#eeeeee, #dddddd)');
+      // (The other variants keep Core's disabled look: the copy stays.)
+      expect(cssOf(slug)).toMatch(
+        /\.astryx-button[^{\s]*:is\(:disabled[^{]*\{[^}]*background(?:-image)?: revert-layer/,
+      );
+    },
+    240_000,
+  );
+
   it('a member that draws the thing differently is left as Core draws it', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('k', {cwd, like: 'neutral'});
