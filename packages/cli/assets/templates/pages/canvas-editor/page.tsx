@@ -727,6 +727,9 @@ const styles = stylex.create({
   // second one would flow below the photo and clip. Taking the text layers
   // out of flow is what stacks them over it, the way they sit on an artboard.
   textLayers: {position: 'absolute', inset: 0},
+  // The save note and Export keep their width; the tab strip beside them is
+  // the part that gives up room when the bar is narrow.
+  headerTrail: {flexShrink: 0},
   // A Card given a height prop turns into a scroll container, which is the
   // right default for a card holding more copy than fits. This one is a
   // viewport onto an artboard that is deliberately larger than its frame —
@@ -2037,7 +2040,7 @@ export default function CanvasEditor() {
                     icon={<Icon icon={Plus} size={ICON} color="secondary" />}
                   />
                 </HStack>
-                <HStack gap={3} vAlign="center">
+                <HStack gap={3} vAlign="center" xstyle={styles.headerTrail}>
                   <Text type="supporting" color="secondary">
                     Saved · 2 min ago
                   </Text>

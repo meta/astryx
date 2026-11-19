@@ -205,7 +205,9 @@ export const chocolateTheme = defineTheme({
     '--color-background-cyan': ['#3a7c7c33', '#3a7c7c33'],
     '--color-border-cyan': ['#3a7c7c', '#70c4c4'],
     '--color-icon-cyan': ['#3a7c7c', '#70c4c4'],
-    '--color-text-cyan': ['#2e6060', '#82d4d4'],
+    // Light category text reads at 4.5:1 on its tinted fill over the tan
+    // card as well as the page.
+    '--color-text-cyan': ['#2d5f5f', '#82d4d4'],
 
     // Categorical — Gray
     '--color-background-gray': ['#B8885933', '#6b554033'],
@@ -221,19 +223,19 @@ export const chocolateTheme = defineTheme({
     // the astryx-oklch-v1 ramp grown from the earlier value (anchored at its
     // own stop) nearest it that reads at 4.5:1 on its own category fill:
     // #5a7a00 stop 40, #a06018 stop 45, #cc0000 stop 40, #cc9200 stop 45.
-    '--color-text-green': ['#4e6c00', '#a8d43a'],
+    '--color-text-green': ['#476300', '#a8d43a'],
 
     // Categorical — Orange
     '--color-background-orange': ['#c4762033', '#d4903a33'],
     '--color-border-orange': ['#c47620', '#d4903a'],
     '--color-icon-orange': ['#c47620', '#d4903a'],
-    '--color-text-orange': ['#925314', '#e0a04a'],
+    '--color-text-orange': ['#894a04', '#e0a04a'],
 
     // Categorical — Pink
     '--color-background-pink': ['#c44a7033', '#e07a9a33'],
     '--color-border-pink': ['#c44a70', '#e07a9a'],
     '--color-icon-pink': ['#c44a70', '#e07a9a'],
-    '--color-text-pink': ['#a03a5a', '#f08aaa'],
+    '--color-text-pink': ['#963152', '#f08aaa'],
 
     // Categorical — Purple
     '--color-background-purple': ['#6b4a8c33', '#b08ed433'],
@@ -245,7 +247,7 @@ export const chocolateTheme = defineTheme({
     '--color-background-red': ['#FD000033', '#ff5c5c33'],
     '--color-border-red': ['#FD0000', '#ff5c5c'],
     '--color-icon-red': ['#FD0000', '#ff5c5c'],
-    '--color-text-red': ['#b60000', '#ff7a7a'],
+    '--color-text-red': ['#a80000', '#ff7a7a'],
 
     // Categorical — Teal
     '--color-background-teal': ['#2e6b5a33', '#5ab89833'],
@@ -257,7 +259,7 @@ export const chocolateTheme = defineTheme({
     '--color-background-yellow': ['#FFB60033', '#ffc94033'],
     '--color-border-yellow': ['#FFB600', '#ffc940'],
     '--color-icon-yellow': ['#FFB600', '#ffc940'],
-    '--color-text-yellow': ['#8b6200', '#ffd960'],
+    '--color-text-yellow': ['#805a00', '#ffd960'],
 
     // =========================================================================
     // Radius — soft and rounded
@@ -270,6 +272,8 @@ export const chocolateTheme = defineTheme({
     '--radius-element': '0.625rem',
     '--radius-container': '0.75rem',
     '--radius-page': '1.5rem',
+    // Chat surfaces stay rounder than cards.
+    '--radius-chat': '28px',
     '--radius-full': '9999px',
 
     // =========================================================================

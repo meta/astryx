@@ -46,7 +46,7 @@ import {transformSync} from '@babel/core';
 import {LOAD_EXTENSIONS, existingFile, matchPath, pathsFor, resolvePath} from './ts-paths.mjs';
 import {createJiti} from 'jiti';
 import {assetDataUri, isAssetPath} from './assets.mjs';
-import {SINGLE_COPY, isServedPackage, packageOf, resolveServed} from './served-packages.mjs';
+import {SINGLE_COPY, isServedPackage, packageOf, resolveServed, servedImportTarget} from './served-packages.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
 import {importSpecifiers, moduleImports} from './embedded-imports.mjs';
 import {sha256} from './source-block.mjs';
@@ -85,6 +85,15 @@ for (const level of /** @type {const} */ (['log', 'info', 'warn', 'error', 'debu
 
 const requireFromCli = createRequire(import.meta.url);
 const stylexPlugin = /** @type {any} */ (requireFromCli('@stylexjs/babel-plugin'));
+/**
+ * The class-name prefix of the page's own compiled styles. Core's built sheet
+ * uses StyleX's default, `x`. A page rule with the same declaration as a Core
+ * rule would otherwise get the same class, unlayered, and override Core's
+ * layered rules on Core's own elements. With its own prefix the page's rules
+ * apply to the page's elements only, as in an app that @astryxdesign/build
+ * compiles with one prefix for Astryx and another for product files.
+ */
+const PAGE_CLASS_PREFIX = 'p';
 
 /** StyleX rules collected from every local module the page loads. */
 /** @type {unknown[]} */
@@ -116,7 +125,7 @@ const assetsInlined = new Set();
 /** @type {Set<string>} */
 const packages = new Set();
 /** Static JSX text per element, for the dropped-children warning. */
-/** @type {{file: string, component: string, text: string, hidden: boolean, fn: string, line: number}[]} */
+/** @type {{file: string, component: string, text: string, hidden: boolean, fn: string, line: number, chain: {component: string, line: number, from: string | null, name: string}[]}[]} */
 const texts = [];
 /** Every static JSX text, by the function it is in. */
 /** @type {Record<string, string[]>} */
@@ -194,6 +203,23 @@ const jsxName = node => {
     : n.type === 'JSXMemberExpression'
       ? `${n.object.name}.${n.property.name}`
       : '';
+};
+
+/**
+ * The module a JSX component name is imported from, and the name that module
+ * exports it under; `from` is null for a component the page defines itself.
+ * @param {any} p a JSX element path
+ * @param {string} name the element's name as the page writes it
+ * @returns {{from: string | null, name: string}}
+ */
+const importOf = (p, name) => {
+  const binding = p.scope.getBinding(name);
+  if (binding?.kind !== 'module') return {from: null, name};
+  const spec = binding.path.node;
+  return {
+    from: binding.path.parent.source.value,
+    name: spec.type === 'ImportSpecifier' ? (spec.imported.name ?? spec.imported.value) : name,
+  };
 };
 
 /** @type {Record<string, string>} */
@@ -654,35 +680,64 @@ async function drawOpenLayers(elements, React) {
 
 /**
  * Babel plugin: a bare import that a path alias places loads from that file,
- * as in TypeScript, before any installed copy. An import the aliases do not
- * place is left alone, so an installed package loads. It runs on the page's
+ * as in TypeScript, before any installed copy. A relative `.js`-family import
+ * that names no file loads the TypeScript source it stands for (`./fmt.js`
+ * for fmt.ts). Any other import is left alone, so an installed package
+ * loads. It runs on the page's
  * own files, before {@link pagePlugin}, and on every module the page loads
  * from outside them and outside `node_modules` (a sibling package's source,
  * say).
  */
 function aliasPlugin() {
   return () => {
-    /** @param {any} node a string literal to point at the file an alias places */
-    const point = node => {
+    /**
+     * Point a string literal at the file an alias places, or at the
+     * TypeScript source a relative `.js`-family name stands for when no file
+     * has that name (`./fmt.js` for fmt.ts), as TypeScript and bundlers read
+     * it.
+     * @param {any} node
+     * @param {string} from the importing file
+     */
+    const point = (node, from) => {
       if (node?.type !== 'StringLiteral') return;
       const file = resolvePath(PATHS, node.value);
-      if (file) node.value = file;
+      if (file) {
+        node.value = file;
+        return;
+      }
+      const source = from ? typeScriptSourceOf(node.value, from) : null;
+      if (source) node.value = source;
     };
     return {
       visitor: {
-        'ImportDeclaration|ExportNamedDeclaration|ExportAllDeclaration'(/** @type {any} */ p) {
-          point(p.node.source);
+        'ImportDeclaration|ExportNamedDeclaration|ExportAllDeclaration'(/** @type {any} */ p, /** @type {any} */ state) {
+          point(p.node.source, state.filename);
         },
-        CallExpression(/** @type {any} */ p) {
+        CallExpression(/** @type {any} */ p, /** @type {any} */ state) {
           const callee = p.node.callee;
-          if (callee?.type === 'Import' || (callee?.type === 'Identifier' && callee.name === 'require')) point(p.node.arguments?.[0]);
+          if (callee?.type === 'Import' || (callee?.type === 'Identifier' && callee.name === 'require'))
+            point(p.node.arguments?.[0], state.filename);
         },
-        ImportExpression(/** @type {any} */ p) {
-          point(p.node.source);
+        ImportExpression(/** @type {any} */ p, /** @type {any} */ state) {
+          point(p.node.source, state.filename);
         },
       },
     };
   };
+}
+
+/**
+ * The TypeScript source a relative `.js`-family import names when no file has
+ * the name as written, as the import walk and the browser bundle resolve it,
+ * or null.
+ * @param {string} spec
+ * @param {string} from the importing file
+ */
+function typeScriptSourceOf(spec, from) {
+  if (!spec.startsWith('.') || spec.includes('?')) return null;
+  const written = path.resolve(path.dirname(from), spec);
+  const file = existingFile(written, []);
+  return file && file !== written ? file : null;
 }
 
 /**
@@ -939,6 +994,17 @@ function pagePlugin(filename, browser = false) {
             }
           }
         }
+        // The element and the components around it in the same JSX tree,
+        // innermost first: any of them can be the one that drops the text.
+        /** @type {{component: string, line: number, from: string | null, name: string}[]} */
+        const chain = [];
+        for (let up = p; up && (up.isJSXElement() || up.isJSXFragment()); up = up.parentPath) {
+          if (!up.isJSXElement()) continue;
+          const name = jsxName(up.node);
+          // Host elements are not components; a member name (`ui.Box`) is.
+          if (!/^[A-Z]/.test(name) && !name.includes('.')) continue;
+          chain.push({component: name, line: up.node.loc?.start.line ?? 0, ...importOf(up, name)});
+        }
         texts.push({
           file: filename,
           component,
@@ -946,6 +1012,7 @@ function pagePlugin(filename, browser = false) {
           hidden: hidden || conditional,
           fn: fnKey(p),
           line: p.node.loc?.start.line ?? 0,
+          chain,
         });
       },
     },
@@ -1051,11 +1118,30 @@ function serveFromSet() {
         ? packageOf(request)
         : null;
       if (!name || !isServedPackage(name, served.integrations)) throw e;
-      const file = resolveFilename.call(this, request, servedParent, false);
+      const file = servedFile(request, () => resolveFilename.call(this, request, servedParent, false));
       if (!fromSet.has(name)) fromSet.set(name, packageDirOf(file, name));
       return file;
     }
   };
+}
+
+/**
+ * The file the set serves for `request`: what the CommonJS resolve gives,
+ * or, when that finds the subpath not exported, the file the package exports
+ * to an ES module import (a subpath exported under `import` only).
+ * @param {string} request
+ * @param {() => string} resolveAsRequire
+ * @returns {string}
+ */
+function servedFile(request, resolveAsRequire) {
+  try {
+    return resolveAsRequire();
+  } catch (e) {
+    const file =
+      /** @type {any} */ (e)?.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED' && served ? servedImportTarget(request, served.dir) : null;
+    if (!file) throw e;
+    return file;
+  }
 }
 
 /**
@@ -1163,6 +1249,7 @@ function compilePageModule(source, filename, browser = false) {
                   dev: false,
                   runtimeInjection: false,
                   treeshakeCompensation: true,
+                  classNamePrefix: PAGE_CLASS_PREFIX,
                   unstable_moduleResolution: {type: 'commonJS', rootDir: root},
                   ...(themeFiles ? {aliases: themeFiles} : {}),
                 },
@@ -1359,7 +1446,10 @@ function notExportedSubpath(spec, file) {
   const pkg = packageOf(spec);
   const attempts = [() => createRequire(file).resolve(spec)];
   if (served && isServedPackage(pkg, served.integrations)) {
-    attempts.push(() => createRequire(path.join(served.dir, 'package.json')).resolve(spec, {paths: [served.dir]}));
+    const servedDir = served.dir;
+    attempts.push(() =>
+      servedFile(spec, () => createRequire(path.join(servedDir, 'package.json')).resolve(spec, {paths: [servedDir]})),
+    );
   }
   for (const attempt of attempts) {
     try {

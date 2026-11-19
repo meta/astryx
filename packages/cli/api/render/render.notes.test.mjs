@@ -451,7 +451,7 @@ import '@astryxdesign/core/astryx.css';
     expect(back.data.files).toEqual(expect.arrayContaining(['reach-back/types.ts', 'reach-back/rows.js']));
     expect(back.data).toMatchObject({exact: false, missing: ['../sheets/site.scss']});
   });
-  it('says render format 2 only for a file that carries a module kind earlier CLIs refuse', async () => {
+  it('says render format 2 or 3 only for a file that carries what earlier CLIs cannot read', async () => {
     put('formats/lib/one.cjs', "exports.one = 'from a cjs module';\n");
     put('formats/page.tsx', "import {one} from './lib/one.cjs';\nexport default function Page() {\n  return <p>{one}</p>;\n}\nimport '@astryxdesign/core/astryx.css';\n");
     await render('formats/page.tsx', {cwd: dir, out: 'formats.html'});
@@ -461,6 +461,18 @@ import '@astryxdesign/core/astryx.css';
     // The page reads in this CLI as any other.
     const back = /** @type {any} */ (await render('formats.html', {cwd: dir, reverse: true, out: 'formats-back/page.tsx'}));
     expect(back.data).toMatchObject({exact: true, format: 2});
+    // A module reached by the JavaScript name of its TypeScript file says
+    // format 3, which format 1 and 2 readers decline by name.
+    put('formats-js/lib/rows.ts', "export const rows = ['North'];\n");
+    put('formats-js/page.tsx', "import {rows} from './lib/rows.js';\nexport default function Page() {\n  return <p>{rows[0]}</p>;\n}\n");
+    await render('formats-js/page.tsx', {cwd: dir, out: 'formats-js.html'});
+    const three = read('formats-js.html');
+    expect(readSourceBlock(three)).toMatchObject({found: true, source: {version: 3}});
+    // An extensionless import of the same file stays format 1.
+    put('formats-plain/lib/rows.ts', "export const rows = ['North'];\n");
+    put('formats-plain/page.tsx', "import {rows} from './lib/rows';\nexport default function Page() {\n  return <p>{rows[0]}</p>;\n}\n");
+    await render('formats-plain/page.tsx', {cwd: dir, out: 'formats-plain.html'});
+    expect(readSourceBlock(read('formats-plain.html'))).toMatchObject({found: true, source: {version: 1}});
     // A file without such a module stays format 1, which every earlier CLI opens.
     const one = read('report.html');
     expect(readSourceBlock(one)).toMatchObject({found: true, source: {version: 1}});

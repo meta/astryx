@@ -16,7 +16,7 @@ import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {render} from './render.mjs';
 import {CHART_WIDTHS} from '../../foundation/render/charts.mjs';
 import {segmenterWarning} from '../../foundation/render/render-page.mjs';
-import {renderedMarkupOf} from '../../foundation/render/source-block.mjs';
+import {readSourceBlock, renderedMarkupOf} from '../../foundation/render/source-block.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 import {recordDeclaredSettings} from '../../foundation/env/cli-command.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
@@ -87,6 +87,134 @@ afterAll(() => {
   removeLinkedFixture(dir);
 });
 
+const LATER_TEXT_PAGE = `import {useState} from 'react';
+import {Badge} from '@astryxdesign/core/Badge';
+import {Banner} from '@astryxdesign/core/Banner';
+import {Button} from '@astryxdesign/core/Button';
+import {Heading, Text} from '@astryxdesign/core/Text';
+
+function Settings() {
+  return (
+    <div>
+      <Heading level={1}>Settings</Heading>
+      <Heading level={2}>Appearance</Heading>
+    </div>
+  );
+}
+
+export default function Page() {
+  const [view, setView] = useState('home');
+  return (
+    <div>
+      <Button label="Settings" onClick={() => setView('settings')} />
+      <Banner status="info" title="What changed">Three fields moved to the settings page.</Banner>
+      <Badge>
+        <Text>Finalized</Text>
+      </Badge>
+      <StatCard title="Q3">
+        <Text>Revenue grew 12%</Text>
+      </StatCard>
+      <ui.Box title="Q4">
+        <Text>Costs fell 3%</Text>
+      </ui.Box>
+      {view === 'settings' ? <Settings /> : <Text>Home</Text>}
+    </div>
+  );
+}
+
+function StatCard({title}: {title: string; children?: unknown}) {
+  return <section>{title}</section>;
+}
+
+function Box({title}: {title: string; children?: unknown}) {
+  return <section>{title}</section>;
+}
+
+const ui = {Box};
+`;
+
+describe('render(): text a component did not draw', () => {
+  /** @type {import('./render.type.mjs').RenderWarning[]} */
+  let dropped;
+
+  beforeAll(async () => {
+    put('later-text.tsx', LATER_TEXT_PAGE);
+    const result = /** @type {any} */ (await render('later-text.tsx', {cwd: dir}));
+    dropped = result.data.warnings.filter(
+      (/** @type {any} */ w) => w.code === 'dropped-children',
+    );
+  }, 60_000);
+
+  it('names the component whose docs list no children, not the text inside it', () => {
+    expect(dropped[0].message).toBe(
+      '<Badge> on line 22 did not render the text "Finalized" it was given; Badge takes no children, so pass the text through one of its props (astryx component Badge).',
+    );
+  });
+
+  it('still warns when a component of the page around the text drops it, by name or as a member', () => {
+    expect(dropped.slice(1).map(w => w.message)).toEqual([
+      '<Text> on line 26 did not render the text "Revenue grew 12%" it was given; it takes that text through a prop (often label=), so check its props.',
+      '<Text> on line 29 did not render the text "Costs fell 3%" it was given; it takes that text through a prop (often label=), so check its props.',
+    ]);
+  });
+
+  it('stays silent for text a later paint shows: a collapsed Banner body, an inactive view', () => {
+    const text = dropped.map(w => w.message).join('\n');
+    expect(text).not.toContain('Three fields moved');
+    expect(text).not.toContain('Appearance');
+  });
+});
+
+describe('render(): text dropped in another file of the page', () => {
+  it('names that file, and not the page itself', async () => {
+    put(
+      'split/parts.tsx',
+      `import {Badge} from '@astryxdesign/core/Badge';
+import {Text} from '@astryxdesign/core/Text';
+
+export function Note() {
+  return (
+    <div>
+      <Text>Seen</Text>
+      <Badge>
+        <Text>Beta</Text>
+      </Badge>
+    </div>
+  );
+}
+`,
+    );
+    put(
+      'split/page.tsx',
+      `import {Badge} from '@astryxdesign/core/Badge';
+import {Text} from '@astryxdesign/core/Text';
+import {Note} from './parts';
+
+export default function Page() {
+  return (
+    <div>
+      <Text>Here</Text>
+      <Badge>
+        <Text>Alpha</Text>
+      </Badge>
+      <Note />
+    </div>
+  );
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('split/page.tsx', {cwd: dir}));
+    const messages = result.data.warnings
+      .filter((/** @type {any} */ w) => w.code === 'dropped-children')
+      .map((/** @type {any} */ w) => w.message)
+      .sort();
+    expect(messages).toEqual([
+      '<Badge> on line 8 of parts.tsx did not render the text "Beta" it was given; Badge takes no children, so pass the text through one of its props (astryx component Badge).',
+      '<Badge> on line 9 did not render the text "Alpha" it was given; Badge takes no children, so pass the text through one of its props (astryx component Badge).',
+    ]);
+  }, 60_000);
+});
+
 describe('render(): page to one HTML file', () => {
   /** @type {import('./render.type.mjs').RenderPageResponse} */
   let result;
@@ -143,8 +271,9 @@ describe('render(): page to one HTML file', () => {
   it('warns when a component drops the text it was given', () => {
     const dropped = result.data.warnings.filter(w => w.code === 'dropped-children');
     expect(dropped).toHaveLength(1);
-    expect(dropped[0].message).toContain('ListItem');
-    expect(dropped[0].message).toContain('label=');
+    expect(dropped[0].message).toContain('<ListItem> on line 16');
+    expect(dropped[0].message).toContain('ListItem takes no children');
+    expect(dropped[0].message).toContain('astryx component ListItem');
   });
 
   it('gives the page back byte for byte', async () => {
@@ -2792,6 +2921,54 @@ describe('render(): a page outside a project', () => {
     fs.rmSync(away, {recursive: true, force: true});
   });
 
+  it('uses a .js file that exists under the name as written, not the TypeScript file beside it', () => {
+    const tree = path.join(away, 'own-js-exists');
+    fs.mkdirSync(tree, {recursive: true});
+    fs.writeFileSync(path.join(tree, 'fmt.js'), "export const fmt = value => `js:${value}`;\n");
+    fs.writeFileSync(path.join(tree, 'fmt.ts'), "export const fmt = (value: string): string => `ts:${value}`;\n");
+    fs.writeFileSync(
+      path.join(tree, 'page.tsx'),
+      "import {fmt} from './fmt.js';\nexport default function Page() {\n  return <p>{fmt('128')}</p>;\n}\n",
+    );
+    const run = runBin(tree, ['experimental', 'export', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['page.tsx', 'fmt.js']);
+    const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');
+    expect(html).toContain('js:128');
+    expect(readSourceBlock(html)).toMatchObject({found: true, source: {version: 1}});
+  }, 60_000);
+
+  it('loads the page\'s own modules imported TypeScript-style by .js names, and gives them back exactly', () => {
+    const tree = path.join(away, 'own-ts-js');
+    fs.mkdirSync(path.join(tree, 'parts'), {recursive: true});
+    const files = {
+      'parts/fmt.ts': "export const fmt = (value: string): string => `#${value}`;\n",
+      'parts/later.tsx': 'export const Later = () => <p>Later</p>;\n',
+      'parts/Kpi.tsx':
+        "import {fmt} from './fmt.js';\nexport const loadLater = () => import('./later.js');\nexport function Kpi({label, value}: {label: string; value: string}) {\n  return <p>{label}: {fmt(value)}</p>;\n}\n",
+      'page.tsx':
+        "import {Kpi} from './parts/Kpi.js';\nexport default function Page() {\n  return <main><Kpi label=\"Signups\" value=\"128\" /></main>;\n}\n",
+    };
+    for (const [name, text] of Object.entries(files)) fs.writeFileSync(path.join(tree, name), text);
+    const run = runBin(tree, ['experimental', 'export', 'page.tsx']);
+    expect(run.status, JSON.stringify(run.json)).toBe(0);
+    expect([...run.json.data.files].sort()).toEqual(['page.tsx', 'parts/Kpi.tsx', 'parts/fmt.ts', 'parts/later.tsx']);
+    expect(run.json.data).not.toHaveProperty('notCarried');
+    const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');
+    expect(html).toContain('Signups: #128');
+    // Earlier CLIs cannot follow a .js name to its TypeScript file, so the
+    // file says a render format they do not read, and they name this CLI.
+    expect(readSourceBlock(html)).toMatchObject({found: true, source: {version: 3}});
+    expect(html).toContain('render format 3.');
+    const back = runBin(tree, ['experimental', 'export', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data).toMatchObject({exact: true, format: 3});
+    expect(back.json.data).not.toHaveProperty('missing');
+    for (const [name, text] of Object.entries(files)) {
+      expect(fs.readFileSync(path.join(tree, 'page-restored', name), 'utf8'), name).toBe(text);
+    }
+  }, 60_000);
+
   it('takes Astryx, React and StyleX from the copy the CLI runs with', () => {
     fs.writeFileSync(path.join(away, 'page.tsx'), PAGE);
     fs.writeFileSync(path.join(away, 'dot.png'), PNG);
@@ -3286,6 +3463,78 @@ describe('render(): a page outside a project', () => {
     expect(back.status).toBe(0);
     expect(back.json.data).toMatchObject({mode: 'embedded', output: 'page-restored/page.tsx'});
   }, 60_000);
+
+  describe('a served package whose subpath exports one condition', () => {
+    /** @type {string} */
+    let set;
+    /** @type {string} */
+    let page;
+    beforeAll(() => {
+      set = path.join(away, 'served-conditions');
+      const nm = path.join(set, 'node_modules');
+      for (const name of ['react', 'react-dom']) {
+        const target = path.dirname(createRequire(path.join(CLI_DIR, '../core/package.json')).resolve(`${name}/package.json`));
+        fs.mkdirSync(nm, {recursive: true});
+        fs.cpSync(target, path.join(nm, name), {recursive: true, dereference: true});
+      }
+      const pkg = path.join(nm, 'demo-conditions');
+      fs.mkdirSync(path.join(pkg, 'themes'), {recursive: true});
+      fs.writeFileSync(
+        path.join(pkg, 'package.json'),
+        JSON.stringify({
+          name: 'demo-conditions',
+          type: 'module',
+          exports: {
+            './themes/demo': {import: './themes/demo.js'},
+            './legacy': {require: './legacy.cjs'},
+          },
+        }),
+      );
+      fs.writeFileSync(path.join(pkg, 'themes', 'demo.js'), "export const label = 'from the import condition';\n");
+      fs.writeFileSync(path.join(pkg, 'legacy.cjs'), "exports.label = 'from the require condition';\n");
+      fs.mkdirSync(path.join(set, 'core'), {recursive: true});
+      fs.writeFileSync(path.join(set, 'core', 'package.json'), '{"name":"@astryxdesign/core"}');
+      page = path.join(away, 'served-conditions-page');
+      fs.mkdirSync(page, {recursive: true});
+    });
+    /** @param {string} name @param {string} spec */
+    const exportOf = async (name, spec) => {
+      fs.writeFileSync(
+        path.join(page, `${name}.jsx`),
+        `import {label} from '${spec}';\nexport default function Page() {\n  return <p>{label}</p>;\n}\n`,
+      );
+      const {renderPage} = await import('../../foundation/render/render-page.mjs');
+      try {
+        const rendered = await renderPage(path.join(page, `${name}.jsx`), {
+          served: {dir: path.join(set, 'core'), integrations: ['demo-conditions']},
+          markupOnly: true,
+        });
+        return {html: rendered.html};
+      } catch (e) {
+        return {code: /** @type {any} */ (e).code, message: /** @type {any} */ (e).message};
+      }
+    };
+
+    it('loads a subpath exported only under import', async () => {
+      const result = /** @type {any} */ (await exportOf('import-only', 'demo-conditions/themes/demo'));
+      expect(result.code, JSON.stringify(result)).toBeUndefined();
+      expect(result.html).toContain('from the import condition');
+    }, 60_000);
+
+    it('loads a subpath exported only under require as before', async () => {
+      const result = /** @type {any} */ (await exportOf('require-only', 'demo-conditions/legacy'));
+      expect(result.code, JSON.stringify(result)).toBeUndefined();
+      expect(result.html).toContain('from the require condition');
+    }, 60_000);
+
+    it('keeps the answer for a subpath the package does not export', async () => {
+      const result = /** @type {any} */ (await exportOf('missing', 'demo-conditions/themes/none'));
+      expect(result).toEqual({
+        code: 'ERR_RENDER_MISSING_DEPENDENCY',
+        message: 'The page imports demo-conditions, which is not installed',
+      });
+    }, 60_000);
+  });
 
   it('loads one React outside a project, even when the folder holds its own copy', () => {
     const sub = path.join(away, 'own-react');

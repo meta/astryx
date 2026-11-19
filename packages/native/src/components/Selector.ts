@@ -26,6 +26,10 @@ export const selector: NativeAdditions = {
   webOnly: {
     presentation:
       'web presentation choice; native platforms use their own control (FR11)',
+    placement:
+      'web layer position against the trigger; native platforms place their own control (FR11)',
+    isDefaultOpen:
+      'web showcase and preview state; native platforms open their own control (FR11)',
   },
   platforms: {
     ios: {

@@ -109,6 +109,135 @@ const TYPES = {
   '.css': 'text/css',
 };
 
+// A page that routes on its address, as an app with in-page navigation does:
+// its links name a place, and the page shows the one the address names. One
+// link it cancels in its own handler, one it handles itself from a capture
+// listener on the document (it opens its own panel), and one sits in a
+// clickable card that stops the click.
+const ROUTES = `import {useEffect, useState} from 'react';
+import {Heading} from '@astryxdesign/core/Heading';
+
+const titles = {home: 'Home page', members: 'Members page', settings: 'Settings page'};
+// The page's own module handles one link while it loads, before it mounts: it
+// cancels it and opens its own panel.
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', e => {
+    if (!(e.target instanceof Element) || !e.target.closest('a[href="#faq"]')) return;
+    e.preventDefault();
+    window.dispatchEvent(new Event('faq'));
+  }, true);
+  // A module the page loads with import() handles another the same way.
+  import('./routes-lazy');
+}
+export default function Page() {
+  const [place, setPlace] = useState('home');
+  const [panel, setPanel] = useState('No panel');
+  useEffect(() => {
+    const follow = () => setPlace(window.location.hash.slice(1) || 'home');
+    const own = e => {
+      if (!(e.target instanceof Element) || !e.target.closest('a[href="#help"]')) return;
+      e.preventDefault();
+      setPanel('Help panel open');
+    };
+    const faq = () => setPanel('FAQ panel open');
+    const lazy = () => setPanel('Lazy panel open');
+    follow();
+    window.addEventListener('hashchange', follow);
+    window.addEventListener('faq', faq);
+    window.addEventListener('lazy', lazy);
+    document.addEventListener('click', own, true);
+    return () => {
+      window.removeEventListener('hashchange', follow);
+      window.removeEventListener('faq', faq);
+      window.removeEventListener('lazy', lazy);
+      document.removeEventListener('click', own, true);
+    };
+  }, []);
+  return (
+    <main>
+      <nav>
+        <a href="#home">Home</a> <a href="#members">Members</a> <a href="#settings">Settings</a>{' '}
+        <a href="#members" onClick={e => e.preventDefault()}>Members, cancelled</a> <a href="#help">Help</a>{' '}
+        <a href="#faq">FAQ</a> <a href="#lazy">Lazy</a>
+      </nav>
+      <div onClick={e => e.stopPropagation()}>
+        <a href="#settings">Settings, in a card</a>
+      </div>
+      <Heading level={1}>{titles[place] ?? 'Home page'}</Heading>
+      <p data-probe="panel">{panel}</p>
+    </main>
+  );
+}
+`;
+
+// The module the routes page loads with import(): it cancels its own link and
+// opens the page's panel.
+const ROUTES_LAZY = `document.addEventListener('click', e => {
+  if (!(e.target instanceof Element) || !e.target.closest('a[href="#lazy"]')) return;
+  e.preventDefault();
+  window.dispatchEvent(new Event('lazy'));
+}, true);
+`;
+
+// A page that registers its own click and key handlers the ways pages do: one
+// handler added while the module loads and again once mounted, which a browser
+// registers once, and one added for click and keydown that removes itself from
+// both on its first call.
+const HANDLERS = `import {useEffect, useState} from 'react';
+
+let clicks = 0;
+let unlocks = 0;
+const show = () => window.dispatchEvent(new Event('probe'));
+const count = () => {
+  clicks += 1;
+  show();
+};
+const unlock = () => {
+  unlocks += 1;
+  document.removeEventListener('click', unlock);
+  document.removeEventListener('keydown', unlock);
+  show();
+};
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', count);
+  document.addEventListener('click', unlock);
+  document.addEventListener('keydown', unlock);
+}
+export default function Page() {
+  const [, setShown] = useState(0);
+  useEffect(() => {
+    document.addEventListener('click', count);
+    const on = () => setShown(n => n + 1);
+    window.addEventListener('probe', on);
+    return () => window.removeEventListener('probe', on);
+  }, []);
+  return (
+    <main>
+      <button type="button">Tap</button>
+      <p data-probe="counts">{\`clicks \${clicks} unlocks \${unlocks}\`}</p>
+    </main>
+  );
+}
+`;
+
+// What a viewer may do in the frame it shows a file in: cancel every link to a
+// place in the page on its way down and scroll to the place itself, leaving
+// the frame's address as it is. One does it from the document, one from the
+// window, and one adds its document listener only once the frame's document
+// has loaded, as an artifact viewer's frame script does.
+const hostScrolls = (target, whenLoaded = false) => {
+  const listen = `${target}.addEventListener('click', function (event) {
+  var link = event.target instanceof Element ? event.target.closest('a[href^="#"]') : null;
+  if (!link) return;
+  event.preventDefault();
+  var place = document.getElementById(link.getAttribute('href').slice(1));
+  if (place) place.scrollIntoView({block: 'start'});
+}, true);`;
+  return whenLoaded
+    ? `<script>document.addEventListener('DOMContentLoaded', function () { ${listen} });</script>`
+    : `<script>${listen}</script>`;
+};
+
 /**
  * The steps a reader takes, and what each shows in the app. Each step names
  * the control by its role and accessible name.
@@ -257,6 +386,10 @@ describe.runIf(BROWSER_STEP)(
     let browser;
     /** @type {string} */
     let file;
+    /** @type {string} */
+    let routes;
+    /** @type {string} */
+    let handlers;
 
     beforeAll(async () => {
       home = makeLinkedFixture('astryx-render-parity-', [
@@ -296,6 +429,13 @@ describe.runIf(BROWSER_STEP)(
 
       await render('page.tsx', {cwd: home, out: 'page.html'});
       file = fs.readFileSync(path.join(home, 'page.html'), 'utf8');
+      fs.writeFileSync(path.join(home, 'routes.tsx'), ROUTES);
+      fs.writeFileSync(path.join(home, 'routes-lazy.ts'), ROUTES_LAZY);
+      fs.writeFileSync(path.join(home, 'handlers.tsx'), HANDLERS);
+      await render('handlers.tsx', {cwd: home, out: 'handlers.html'});
+      handlers = fs.readFileSync(path.join(home, 'handlers.html'), 'utf8');
+      await render('routes.tsx', {cwd: home, out: 'routes.html'});
+      routes = fs.readFileSync(path.join(home, 'routes.html'), 'utf8');
 
       const executablePath = chromium.executablePath();
       if (!fs.existsSync(executablePath))
@@ -374,6 +514,125 @@ describe.runIf(BROWSER_STEP)(
         await context.close();
       }
     }, 300_000);
+
+    it("moves to the place a link names in a viewer frame, also when the viewer cancels the link itself, and keeps the page's own way", async () => {
+      const context = await browser.newContext({
+        viewport: {width: 1024, height: 900},
+      });
+      await context.route('**/*', (/** @type {any} */ route) =>
+        route.request().url().startsWith('about:')
+          ? route.continue()
+          : route.abort(),
+      );
+      try {
+        for (const host of [
+          '',
+          hostScrolls('document'),
+          hostScrolls('window'),
+          hostScrolls('document', true),
+        ]) {
+          const viewer = await context.newPage();
+          /** @type {string[]} */
+          const errors = [];
+          viewer.on('pageerror', (/** @type {Error} */ e) =>
+            errors.push(e.message),
+          );
+          const framed = routes.replace(
+            '<head>',
+            `<head><meta http-equiv="Content-Security-Policy" content="${VIEWER_POLICY}">${host}`,
+          );
+          await viewer.setContent(
+            `<!doctype html><body style="margin:0"><iframe sandbox="allow-scripts" style="border:0;width:1024px;height:900px" srcdoc="${framed
+              .replace(/&/g, '&amp;')
+              .replace(/"/g, '&quot;')}"></iframe></body>`,
+          );
+          const scope = viewer.frameLocator('iframe');
+          const heading = scope.getByRole('heading', {level: 1});
+          await heading.getByText('Home page').waitFor();
+          const shown = [];
+          const frame = await (await viewer.$('iframe')).contentFrame();
+          for (const name of [
+            'Members',
+            'Settings',
+            'Members, cancelled',
+            'Help',
+            'Home',
+            'Settings, in a card',
+            'FAQ',
+            'Lazy',
+          ]) {
+            await scope.getByRole('link', {name, exact: true}).click();
+            await new Promise(resolve => setTimeout(resolve, 200));
+            shown.push(
+              await frame.evaluate(
+                () =>
+                  `${document.querySelector('h1').textContent} | ${document.querySelector('[data-probe="panel"]').textContent} | ${location.hash}`,
+              ),
+            );
+          }
+          // A link the page cancels or handles itself, also from a listener its
+          // module adds while it loads, keeps the page where it is; a link in a
+          // card that stops the click still moves.
+          const where = !host
+            ? 'plain frame'
+            : host.includes('DOMContentLoaded')
+              ? 'viewer cancels on the document once it has loaded'
+              : `viewer cancels on the ${host.includes('<script>document.') ? 'document' : 'window'}`;
+          expect(shown, where).toEqual([
+            'Members page | No panel | #members',
+            'Settings page | No panel | #settings',
+            'Settings page | No panel | #settings',
+            'Settings page | Help panel open | #settings',
+            'Home page | Help panel open | #home',
+            'Settings page | Help panel open | #settings',
+            'Settings page | FAQ panel open | #settings',
+            'Settings page | Lazy panel open | #settings',
+          ]);
+          expect(errors).toEqual([]);
+          await viewer.close();
+        }
+      } finally {
+        await context.close();
+      }
+    }, 120_000);
+
+    it("registers the page's own click and key handlers as a browser tab does", async () => {
+      const context = await browser.newContext({
+        viewport: {width: 1024, height: 900},
+      });
+      await context.route('**/*', (/** @type {any} */ route) =>
+        route.request().url().startsWith('about:')
+          ? route.continue()
+          : route.abort(),
+      );
+      try {
+        const viewer = await context.newPage();
+        const framed = handlers.replace(
+          '<head>',
+          `<head><meta http-equiv="Content-Security-Policy" content="${VIEWER_POLICY}">`,
+        );
+        await viewer.setContent(
+          `<!doctype html><body style="margin:0"><iframe sandbox="allow-scripts" style="border:0;width:1024px;height:900px" srcdoc="${framed
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')}"></iframe></body>`,
+        );
+        const scope = viewer.frameLocator('iframe');
+        const counts = scope.locator('[data-probe="counts"]');
+        await counts.getByText('clicks 0 unlocks 0').waitFor();
+        // Two keys: the unlock handler runs once and removes itself from both.
+        await viewer.focus('iframe');
+        await viewer.keyboard.press('KeyA');
+        await viewer.keyboard.press('KeyB');
+        await new Promise(resolve => setTimeout(resolve, 200));
+        expect(await counts.textContent()).toBe('clicks 0 unlocks 1');
+        // One click: the handler added twice counts once.
+        await scope.getByRole('button', {name: 'Tap'}).click();
+        await new Promise(resolve => setTimeout(resolve, 200));
+        expect(await counts.textContent()).toBe('clicks 1 unlocks 1');
+      } finally {
+        await context.close();
+      }
+    }, 120_000);
 
     it('opens a link out of the file in a new tab, leaving the page in its frame', async () => {
       expect(file).toContain(

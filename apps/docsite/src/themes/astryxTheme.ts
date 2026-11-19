@@ -104,6 +104,8 @@ export const astryxTheme = defineTheme({
     '--radius-element': '12px',
     '--radius-container': '16px',
     '--radius-page': '32px',
+    // Chat surfaces stay rounder than cards.
+    '--radius-chat': '28px',
 
     ...customTokens,
   },

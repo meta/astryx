@@ -37,7 +37,9 @@ export const LINK_OUT = /^(https?:|mailto:|tel:|\/\/)/i;
  * event: the file cancels the browser's own submission and fires the event
  * itself, since a frame that blocks form submission never fires it, and a
  * file has no server to send a form to; a form whose action is another
- * site's address submits as the browser submits it. Enter in a form's only text field
+ * site's address submits as the browser submits it. A link to a place in the
+ * page (`#id`) is moved by VIEWER_MOVES, which runs in the script's first
+ * module. Enter in a form's only text field
  * submits a form with no submit button, as a browser does; with a button,
  * the browser clicks it.
  */
@@ -79,6 +81,181 @@ document.addEventListener('keydown', event => {
   event.preventDefault();
   submit(field.form, null);
 });
+}`;
+
+/**
+ * The move to a place in the page (`#id`) in a frame whose address is not
+ * the document's own, as in a `srcdoc` viewer frame. It runs in the script's
+ * first module, before any of the page's own modules, so its click listeners
+ * see a click after the listeners of the frame that hosts the file and before
+ * the page's.
+ */
+export const VIEWER_MOVES = `{
+// Whether a click on this link is one the file moves itself: a link to a
+// place in the page, in a frame whose address is not the document's own.
+const movesInFile = (event, link) => {
+  const href = link.getAttribute('href').trim();
+  return (
+    href.startsWith('#') &&
+    !link.hasAttribute('target') &&
+    !link.hasAttribute('download') &&
+    event.button === 0 &&
+    !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) &&
+    document.baseURI.split('#')[0] !== location.href.split('#')[0]
+  );
+};
+// The browser moves to the place against the frame's own address, so it
+// scrolls, sets :target, fires hashchange, moves focus and adds a history
+// entry as in a tab. The same address again is replaced, which a browser also
+// treats as a move to the place, never a load of the file again.
+const moveTo = link => {
+  const place = new URL(link.getAttribute('href').trim(), location.href).href;
+  if (place !== location.href) location.href = place;
+  else location.replace(place);
+};
+// The move is decided after every click listener the page has, even one it
+// adds later: a capture listener on the window, which runs first, adds a
+// listener for this click that runs last and is removed once it decides. A page that stops the click on its way (a
+// card's handler that calls stopPropagation) has the browser's own move held
+// at that point, and the file decides once every handler has run: it moves
+// unless the page cancelled the click, by preventDefault, \`returnValue =
+// false\` or an onclick handler that returns false.
+//
+// This runs before any of the page's own modules. A cancel made before the
+// click reaches this script's listener on the window, or before it reaches its
+// marker on the document, comes from the frame that hosts the file (a viewer
+// that scrolls to the place itself and leaves the address alone), not from the
+// page: it holds the browser's own move, and the file still moves, so a page
+// that routes on its address sees the new place. A viewer may add its document
+// listener from a DOMContentLoaded listener, after this script ran, so the
+// marker goes on the document at that point: after the viewer's listener, and
+// before the listeners the page adds once it is mounted. A cancel from the
+// page's own listeners keeps the page's way. A click listener the page adds on
+// the document or the window while the document loads (from its modules, an
+// \`import()\` or a promise callback) comes before that marker too, so it runs
+// marked as the page's while it handles the click.
+const add = EventTarget.prototype.addEventListener;
+const pastHost = new WeakSet();
+const markPastHost = () => add.call(document, 'click', event => pastHost.add(event), true);
+if (document.readyState === 'loading') add.call(document, 'DOMContentLoaded', markPastHost, {once: true});
+else markPastHost();
+let inPage = 0;
+// The page's modules load until the document has loaded: this capture listener
+// on the window runs before any listener a viewer adds on the document for the
+// same event, and after every module and promise callback that ran while the
+// document was still loading (an \`import()\` included).
+let loading = document.readyState === 'loading';
+if (loading) add.call(window, 'DOMContentLoaded', () => {
+  loading = false;
+}, {capture: true, once: true});
+// One wrapper per click handler. Once a handler has one, every later click add
+// and remove of it uses that wrapper, so a handler added at load and again
+// once mounted registers once, as in a tab. Only \`click\` is wrapped.
+const asPage = new WeakMap();
+for (const target of [document, window]) {
+  const remove = target.removeEventListener;
+  target.addEventListener = function (type, listener, options) {
+    if (type !== 'click' || !listener) return add.call(this, type, listener, options);
+    let marked = asPage.get(listener);
+    if (!marked) {
+      if (!loading) return add.call(this, type, listener, options);
+      marked = function (event) {
+        inPage += 1;
+        try {
+          return typeof listener === 'function' ? listener.call(this, event) : listener.handleEvent(event);
+        } finally {
+          inPage -= 1;
+        }
+      };
+      asPage.set(listener, marked);
+    }
+    return add.call(this, type, marked, options);
+  };
+  target.removeEventListener = function (type, listener, options) {
+    return remove.call(this, type, (type === 'click' && listener && asPage.get(listener)) || listener, options);
+  };
+}
+add.call(window, 'click', event => {
+  const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
+  if (!link || !movesInFile(event, link)) return;
+  const cancel = Event.prototype.preventDefault;
+  let cancelled = false;
+  let hostHeld = event.defaultPrevented;
+  let stopped = false;
+  let decided = false;
+  // An onclick handler's \`return false\` cancels without calling
+  // preventDefault, so each one on the click's way is read as it returns.
+  const onclicks = event.composedPath().flatMap(node => {
+    const handler = node.onclick;
+    if (typeof handler !== 'function') return [];
+    const read = function (...args) {
+      const result = handler.apply(this, args);
+      if (result === false) cancelled = true;
+      return result;
+    };
+    node.onclick = read;
+    return [[node, handler, read]];
+  });
+  const restore = () => {
+    for (const [node, handler, read] of onclicks) if (node.onclick === read) node.onclick = handler;
+  };
+  const decide = () => {
+    if (decided) return;
+    decided = true;
+    window.removeEventListener('click', last);
+    restore();
+    if (cancelled || (event.defaultPrevented && !hostHeld && !stopped)) return;
+    cancel.call(event);
+    moveTo(link);
+  };
+  const byHost = () =>
+    event.eventPhase === Event.CAPTURING_PHASE && event.currentTarget === document && !pastHost.has(event);
+  event.preventDefault = function () {
+    if (!inPage && byHost()) hostHeld = true;
+    else cancelled = true;
+    return cancel.call(this);
+  };
+  const returnValue = Object.getOwnPropertyDescriptor(Event.prototype, 'returnValue');
+  Object.defineProperty(event, 'returnValue', {
+    get() {
+      return returnValue.get.call(this);
+    },
+    set(value) {
+      if (!value) this.preventDefault();
+    },
+  });
+  for (const name of ['stopPropagation', 'stopImmediatePropagation']) {
+    const stop = Event.prototype[name];
+    event[name] = function () {
+      stop.call(this);
+      if (decided || stopped) return;
+      stopped = true;
+      cancel.call(event);
+      setTimeout(decide);
+    };
+  }
+  // The old way to stop a click, \`cancelBubble = true\`, stops it the same way.
+  const bubble = Object.getOwnPropertyDescriptor(Event.prototype, 'cancelBubble');
+  Object.defineProperty(event, 'cancelBubble', {
+    get() {
+      return bubble.get.call(this);
+    },
+    set(value) {
+      if (value) this.stopPropagation();
+    },
+  });
+  const last = later => {
+    // A click the page dispatches while this one is still on its way (a
+    // handler that clicks another element first) leaves it waiting.
+    if (later === event) decide();
+    else if (event.eventPhase === Event.NONE && !decided) {
+      decided = true;
+      window.removeEventListener('click', last);
+      restore();
+    }
+  };
+  window.addEventListener('click', last);
+}, true);
 }`;
 
 /**
@@ -219,7 +396,7 @@ if (clipboard == null) {
 }
 }`;
 
-/** The namespace of the module that fills in what a viewer's frame blocks: storage and the clipboard. */
+/** The namespace of the module that fills in what a viewer's frame blocks (storage and the clipboard) and moves a link to a place in the page. */
 const VIEWER = 'astryx-viewer';
 const PAGE = 'astryx-page';
 
@@ -442,7 +619,7 @@ export async function bundleForBrowser({
       }));
       build.onResolve({filter: /^astryx:mount$/}, () => ({path: 'mount', namespace: MOUNT}));
       build.onResolve({filter: /^astryx:viewer$/, namespace: MOUNT}, () => ({path: 'viewer', namespace: VIEWER}));
-      build.onLoad({filter: /.*/, namespace: VIEWER}, () => ({contents: `${VIEWER_STORAGE}\n${VIEWER_CLIPBOARD}`, loader: 'js'}));
+      build.onLoad({filter: /.*/, namespace: VIEWER}, () => ({contents: `${VIEWER_STORAGE}\n${VIEWER_CLIPBOARD}\n${VIEWER_MOVES}`, loader: 'js'}));
       build.onLoad({filter: /.*/, namespace: MOUNT}, () => ({
         contents: mount,
         loader: 'js',
