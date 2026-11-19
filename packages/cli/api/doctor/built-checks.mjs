@@ -131,23 +131,33 @@ const CORE_STYLES_MARK = /@layer\s+astryx-base\s*\{/;
 const CORE_STYLESHEET = '@astryxdesign/core/astryx.css';
 
 /**
- * A page's link to Core's component styles: the package's file, from a
- * package CDN (`…/@astryxdesign/core@<version>/dist/astryx.css`) or an
- * installed copy.
- */
-const CORE_STYLESHEET_HREF =
-  /@astryxdesign\/core(?:@[^/"'\s]+)?\/(?:dist\/)?astryx\.css(?:[?#"'\s]|$)/u;
-
-/**
  * Whether a page links Core's component styles: a `<link>` whose `rel` is a
  * stylesheet and whose `href` names the package's `astryx.css`. Comments
  * never count.
  * @param {string} html
  */
 export function linksCoreStylesheet(html) {
-  return stylesheetLinkHrefs(html).some(href =>
-    CORE_STYLESHEET_HREF.test(href),
+  return linksPackageStylesheet(html, CORE_STYLESHEET);
+}
+
+/**
+ * Whether a page links a package's stylesheet (`@astryxdesign/core/reset.css`):
+ * a `<link>` whose `rel` is a stylesheet and whose `href` names the file,
+ * from a package CDN (`…/<package>@<version>/dist/<file>`) or an installed
+ * copy. Comments never count.
+ * @param {string} html
+ * @param {string} specifier a package stylesheet, `<package>/<file>.css`
+ */
+export function linksPackageStylesheet(html, specifier) {
+  const m = /^((?:@[^/]+\/)?[^/]+)\/(.+)$/u.exec(specifier);
+  if (!m) return false;
+  const escape = (/** @type {string} */ v) =>
+    v.replace(/[.*+?^${}()|[\]\\/]/gu, '\\$&');
+  const href = new RegExp(
+    `${escape(m[1])}(?:@[^/"'\\s]+)?\\/(?:dist\\/)?${escape(m[2])}(?:[?#"'\\s]|$)`,
+    'u',
   );
+  return stylesheetLinkHrefs(html).some(value => href.test(value));
 }
 
 /**
@@ -176,10 +186,18 @@ export function stylesheetLinkHrefs(page) {
     const href = /\bhref\s*=\s*\{?\s*(["'`])([^"'`]*)\1/iu.exec(
       attributes,
     )?.[2];
+    // (A template with a value in it keeps its text: a package's file name
+    // still matches; the page-color check reads it as unread.)
     if (href) out.push(href);
+    // (An href written another way, a JSX expression or an unquoted
+    // attribute, is a stylesheet doctor cannot name.)
+    else if (/\bhref\s*=/iu.test(attributes)) out.push(UNREAD_HREF);
   }
   return out;
 }
+
+/** The `href` stylesheetLinkHrefs gives a link whose address it cannot read. */
+export const UNREAD_HREF = '?';
 
 /**
  * Raw elements the rubric names a component for (`astryx docs

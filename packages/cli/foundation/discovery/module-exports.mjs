@@ -1817,6 +1817,58 @@ function importedElements(ast, sources, name) {
 }
 
 /**
+ * Each outermost `<Name>` element a module renders, as its JSX element node
+ * (one
+ * inside no other `<Name>`), `Name` a runtime import of `name` from one of
+ * `sources` (renames included), read without running anything.
+ * @param {string} file
+ * @param {{sources: ReadonlySet<string>, name: string}} element
+ * @returns {any[]}
+ */
+export function outermostElements(file, {sources, name}) {
+  let ast;
+  try {
+    ast = parseModule(file);
+  } catch {
+    return [];
+  }
+  const opening = new Set(importedElements(ast, sources, name));
+  if (opening.size === 0) return [];
+  /** @type {any[]} */
+  const out = [];
+  /** @param {unknown} value @param {boolean} inside */
+  const visit = (value, inside) => {
+    if (value == null || typeof value !== 'object') return;
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, inside);
+      return;
+    }
+    const node = /** @type {any} */ (value);
+    let within = inside;
+    if (node.type === 'JSXElement' && opening.has(node.openingElement)) {
+      if (!inside) out.push(node);
+      within = true;
+    }
+    for (const [key, child] of Object.entries(node)) {
+      if (
+        [
+          'loc',
+          'start',
+          'end',
+          'extra',
+          'leadingComments',
+          'trailingComments',
+        ].includes(key)
+      )
+        continue;
+      visit(child, within);
+    }
+  };
+  visit(ast.program, false);
+  return out;
+}
+
+/**
  * Whether a module renders `<Name>`, a runtime import of `name` from one of
  * `sources` (renames included), read without running anything. An import
  * that is never rendered, or a type-only one, is not.
