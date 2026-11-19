@@ -22433,9 +22433,12 @@ export function draftAnswer(ctx, env, question) {
               }
               return at;
             };
-            const nowAt = layered(tok ? fourOf(`var(${tok})`) : null, v => v);
+            // (A part that reads no corner token is square until the theme
+            // rounds it: its own longhands then lay over four square corners.)
+            const SQUARE = Object.fromEntries(ALL.map(k => [k, '0']));
+            const nowAt = layered(tok ? fourOf(`var(${tok})`) : SQUARE, v => v);
             const resolvedAt = layered(
-              tok ? fourOf(String(current(tok)).trim()) : null,
+              tok ? fourOf(String(current(tok)).trim()) : SQUARE,
               v =>
                 v.replace(/var\(\s*(--[a-z0-9-]+)\s*(?:,[^)]*)?\)/gi, (m, t) =>
                   String(current(t) || m),
@@ -22520,7 +22523,7 @@ export function draftAnswer(ctx, env, question) {
                 options: [
                   writeAll(
                     Object.fromEntries(ALL.map((k, n) => [k, squared[n]])),
-                    others,
+                    others.filter(roundedAt),
                   ),
                 ],
                 offer: true,

@@ -429,6 +429,46 @@ describe('the corners an ask names', () => {
         c.replace(/^.*? editor set l /, ''),
       ),
     ).toEqual(['border-end-end-radius 0 --on tab']);
+    // (The same for an except or "only" ask, and for the offer beside
+    // "rounded on top": only the 8px corner's longhand is squared.)
+    const lines = async (/** @type {string} */ q) =>
+      /** @type {Array<{commands: string[]}>} */ (
+        (await themeEditHow(q, {cwd, theme: 'l'})).data.results ?? []
+      )
+        .flatMap(r => r.commands)
+        .filter(c => / editor set /.test(c))
+        .map(c => c.replace(/^.*? editor set l /, ''));
+    for (const q of [
+      'tab corners 4px except the bottom',
+      'round only the top corners of tabs',
+      'tabs rounded on top',
+    ])
+      expect(await lines(q), q).toEqual(['border-end-end-radius 0 --on tab']);
+  }, 240_000);
+
+  it('reads the corner longhands of a part that reads no corner token', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('hd', {cwd, like: 'neutral'});
+    for (const [thing, value] of [
+      ['background-color', '#eeeeee'],
+      ['border-start-start-radius', '8px'],
+      ['border-start-end-radius', '8px'],
+    ])
+      await themeEditSet('hd', thing, value, {cwd, on: 'heading'});
+    // (Its top corners are 8px already, laid over four square corners:
+    // nothing is rewritten to the round corners, and the answer says what
+    // they are now.)
+    const {data} = await themeEditHow('heading rounded on top', {
+      cwd,
+      theme: 'hd',
+    });
+    const rs = /** @type {Array<{text: string, commands: string[]}>} */ (
+      data.results ?? []
+    );
+    expect(
+      rs.flatMap(r => r.commands).filter(c => / editor set /.test(c)),
+    ).toEqual([]);
+    expect(rs.map(r => r.text).join('\n')).toMatch(/now 8px 8px 0 0\)/);
   }, 240_000);
 
   it('set takes each answer, a menu included', async ctx => {
