@@ -136,7 +136,7 @@ export const docs = {
   },
   theming: {
     targets: [
-      {className: 'astryx-more-menu'},
+      {className: 'astryx-more-menu', sitsOn: 'dropdown-menu'},
     ],
   },
   usage: {
@@ -233,7 +233,7 @@ export const docsZh = {
   ],
   theming: {
     targets: [
-      {className: 'astryx-more-menu'},
+      {className: 'astryx-more-menu', sitsOn: 'dropdown-menu'},
     ],
   },
   usage: {

@@ -35,6 +35,7 @@ import {useLocale} from '../i18n/useLocale';
 import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
+import {TEXT_PART_DEFAULT_COLOR} from '../theme/sharedElementParts';
 import {
   ROLELESS_TRIGGER,
   labelledTriggerAttributes,
@@ -329,7 +330,7 @@ export function Timestamp({
   isLive = false,
   type = 'supporting',
   size,
-  color = 'secondary',
+  color = TEXT_PART_DEFAULT_COLOR.timestamp,
   weight,
   xstyle,
   className,

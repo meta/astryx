@@ -252,6 +252,7 @@ function PersianMonth() {
       {className: 'astryx-calendar', visualProps: ['mode']},
       {
         className: 'astryx-calendar-nav',
+        sitsOn: 'button',
         visualProps: ['nav'],
         states: ['disabled'],
       },
@@ -412,6 +413,7 @@ export const docsZh = {
       },
       {
         className: 'astryx-calendar-nav',
+        sitsOn: 'button',
         visualProps: ['nav'],
         states: ['disabled'],
       },

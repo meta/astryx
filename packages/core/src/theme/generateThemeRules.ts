@@ -68,6 +68,11 @@ import {
 import {readerTextSizeEntries} from './dynamicType';
 import {splitTopLevelWhitespace} from './tokenReferences';
 import {withoutUnsetComponents} from './mergeComponents';
+import {
+  isSharedElementPart,
+  SHARED_ELEMENT_PARTS,
+  TEXT_PART_DEFAULT_COLOR,
+} from './sharedElementParts';
 import {PRESS_BELIEVED_SELECTOR} from '../privateAttributes/press';
 import {ROOT_SCHEME_UNNAMED, rootSchemeIs} from '../privateAttributes/scheme';
 import {mediaDarkPageIs} from '../privateAttributes/mediaDarkPage';
@@ -279,7 +284,29 @@ export interface ThemeRulesSplit {
   component: string[];
   /** Prose element defaults (h1-h6, p, small, code, hr) — belongs in reset layer */
   prose: string[];
+  /**
+   * With `layered`, the rules of the shared-element parts (`SHARED_ELEMENT_PARTS`),
+   * left out of `component`: they belong in the later `parts` sub-layer of
+   * astryx-theme. Absent without `layered`, where `component` holds them.
+   */
+  parts?: string[];
 }
+
+/** Options for the layered theme outputs. */
+export interface ThemeLayerOptions {
+  /**
+   * Leave the shared-element parts' rules out of the component output and return
+   * them apart, for the later `parts` sub-layer of astryx-theme.
+   */
+  layered?: boolean;
+}
+
+/**
+ * The astryx-theme sub-layers in order. A shared-element part's rules sit in
+ * `parts`, after the rest, so they win over the component it sits on by
+ * layer order.
+ */
+export const THEME_SUB_LAYER_ORDER = '@layer components, parts;';
 
 /**
  * Output from generateThemeCSS — two CSS blocks for different layers.
@@ -1025,6 +1052,18 @@ export function generateThemeRules(
   theme: ThemeRuleSource,
   warnings?: string[],
 ): string[] {
+  return themeRulesOf(theme, warnings);
+}
+
+/**
+ * The rules of `generateThemeRules`, its component entries limited to one
+ * group when `group` is given (the layered outputs' two sub-layers).
+ */
+function themeRulesOf(
+  theme: ThemeRuleSource,
+  warnings: string[] | undefined,
+  group?: ComponentGroup,
+): string[] {
   const parts: string[] = [];
   const sink = diagnosticSink(warnings);
 
@@ -1069,6 +1108,7 @@ export function generateThemeRules(
   if (components) {
     generateComponentRules(components, parts, {
       sink,
+      group,
       darkPageSides: darkPageSides(
         resolveModes({...theme.localTokens, ...theme.tokens}),
       ),
@@ -1203,6 +1243,59 @@ interface ComponentRuleOptions {
    * side, whose color-mode blocks follow that side there.
    */
   darkPageSides?: ReadonlySet<MediaSide>;
+  /**
+   * Lower only one group of entries: the shared-element parts (`parts`) or every
+   * other entry (`regular`). Omitted, every entry is lowered.
+   */
+  group?: ComponentGroup;
+}
+
+/**
+ * The two groups of a theme's component entries in the layered outputs: the
+ * shared-element parts (`SHARED_ELEMENT_PARTS`), whose rules sit in the later `parts`
+ * sub-layer, and every other entry, in `components`.
+ */
+type ComponentGroup = 'regular' | 'parts';
+
+function inGroup(component: string, group: ComponentGroup | undefined) {
+  return (
+    group === undefined ||
+    isSharedElementPart(component) === (group === 'parts')
+  );
+}
+
+/**
+ * The Text colors the theme's parts on Text's element give with no color
+ * prop. Text reflects them like an explicit one, so the Text color overrides
+ * written after those parts leave them out, and the part's own color applies
+ * there.
+ */
+function partDefaultColors(
+  components: Record<string, unknown> | undefined,
+): ReadonlySet<string> {
+  const defaults: Readonly<Record<string, string>> = TEXT_PART_DEFAULT_COLOR;
+  return new Set(
+    Object.keys(components ?? {})
+      .filter(part => Object.hasOwn(defaults, part))
+      .map(part => defaults[part]),
+  );
+}
+
+/**
+ * The components a theme's shared-element part entries sit on (Timestamp's
+ * `timestamp` on Text's element), each as a key. A prop override gated on a
+ * theme touching that component (Text's `color` and `size`) follows such a
+ * part into the parts sub-layer, after its rules, so an explicit prop still
+ * wins over the part's entry there as it wins over the component's.
+ */
+function partHosts(
+  components: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.keys(components ?? {})
+      .filter(isSharedElementPart)
+      .map(part => [SHARED_ELEMENT_PARTS[part], {}]),
+  );
 }
 
 /**
@@ -1219,9 +1312,13 @@ function generateComponentRules(
     sink = warnToConsole,
     location: locationPrefix = '',
     darkPageSides = new Set<MediaSide>(),
+    group,
   }: ComponentRuleOptions = {},
 ): void {
   for (const [component, rules] of Object.entries(components)) {
+    if (!inGroup(component, group)) {
+      continue;
+    }
     for (const [key, styles] of Object.entries(rules)) {
       /**
        * Emit a style block on a selector: its declarations, then its
@@ -1674,6 +1771,7 @@ function generateColorOverrides(
   components: Record<string, unknown>,
   parts: string[],
   surface?: MediaSurface,
+  skipColors: ReadonlySet<string> = new Set(),
 ): void {
   const TEXT_COLOR_MAP: Record<string, string> = {
     primary: 'var(--color-text-primary)',
@@ -1692,6 +1790,9 @@ function generateColorOverrides(
 
   if (touchesText || touchesHeading || touchesLink) {
     for (const [colorName, colorValue] of Object.entries(TEXT_COLOR_MAP)) {
+      if (skipColors.has(colorName)) {
+        continue;
+      }
       if (touchesText) {
         parts.push(
           `  ${componentSelector('text', parseStyleKey(`color:${colorName}`), surface)} { color: ${colorValue}; }`,
@@ -1788,8 +1889,14 @@ function generateSizeOverrides(
 export function generateThemeRulesSplit(
   theme: DefinedTheme,
   warnings?: string[],
+  options?: ThemeLayerOptions,
 ): ThemeRulesSplit {
-  const allRules = generateThemeRules(theme, warnings);
+  const layered = options?.layered === true;
+  const allRules = themeRulesOf(
+    theme,
+    warnings,
+    layered ? 'regular' : undefined,
+  );
 
   const prose: string[] = [];
   const component: string[] = [];
@@ -1802,7 +1909,28 @@ export function generateThemeRulesSplit(
     }
   }
 
-  return {component, prose};
+  if (!layered) {
+    return {component, prose};
+  }
+  const parts: string[] = [];
+  const components = withoutUnsetComponents(theme.components);
+  if (components) {
+    generateComponentRules(components, parts, {
+      sink: diagnosticSink(warnings),
+      group: 'parts',
+      darkPageSides: darkPageSides(
+        resolveModes({...theme.localTokens, ...theme.tokens}),
+      ),
+    });
+    generateColorOverrides(
+      partHosts(components),
+      parts,
+      undefined,
+      partDefaultColors(components),
+    );
+    generateSizeOverrides(partHosts(components), parts);
+  }
+  return {component, prose, parts};
 }
 
 function resolvedAdaptationRules(
@@ -1844,6 +1972,37 @@ function resolvedAdaptationRules(
 export function generateOnMediaCSS(
   theme: DefinedTheme,
   warnings?: string[],
+): string;
+export function generateOnMediaCSS(
+  theme: DefinedTheme,
+  warnings: string[] | undefined,
+  options: ThemeLayerOptions & {layered: true},
+): {component: string; parts: string};
+export function generateOnMediaCSS(
+  theme: DefinedTheme,
+  warnings?: string[],
+  options?: ThemeLayerOptions,
+): string | {component: string; parts: string} {
+  if (options?.layered) {
+    return {
+      component: onMediaCSS(theme, warnings, 'regular'),
+      parts: onMediaCSS(theme, warnings, 'parts'),
+    };
+  }
+  return onMediaCSS(theme, warnings);
+}
+
+/**
+ * The media-surface CSS of `generateOnMediaCSS`, its component entries
+ * limited to one group when `group` is given. The `parts` group writes the
+ * shared-element parts' component rules alone, flipped surfaces included;
+ * the surfaces' tokens and the rules derived from them stay with the other
+ * group.
+ */
+function onMediaCSS(
+  theme: DefinedTheme,
+  warnings: string[] | undefined,
+  group?: ComponentGroup,
 ): string {
   const parts: string[] = [];
   const scopeSelector = themeScopeStart(theme.name);
@@ -1867,6 +2026,25 @@ export function generateOnMediaCSS(
       return;
     }
     const location = side === 'dark' ? 'onDark.' : 'onLight.';
+    if (group === 'parts') {
+      if (onMedia.components) {
+        generateComponentRules(onMedia.components, out, {
+          resetInheritedPaddingSpecificity: true,
+          surface,
+          sink: surfaceSink,
+          location,
+          group,
+        });
+        generateColorOverrides(
+          partHosts(onMedia.components),
+          out,
+          surface,
+          partDefaultColors(onMedia.components),
+        );
+        generateSizeOverrides(partHosts(onMedia.components), out, surface);
+      }
+      return;
+    }
 
     // Token overrides. MediaTheme writes on a descendant surface, so a source
     // alias must be local unless an authored root/adaptation role owns it.
@@ -1901,6 +2079,7 @@ export function generateOnMediaCSS(
         surface,
         sink: surfaceSink,
         location,
+        group,
       });
       generateColorOverrides(onMedia.components, out, surface);
       generateSizeOverrides(onMedia.components, out, surface);
@@ -1969,7 +2148,7 @@ export function generateOnMediaCSS(
   }
 
   const adaptationMediaRoleBlocks: string[] = [];
-  for (const [index, rule] of rules.entries()) {
+  for (const [index, rule] of group === 'parts' ? [] : rules.entries()) {
     const authoredRoles = authoredStatusRoleEntries(rule.tokens);
     if (authoredRoles.length === 0) {
       continue;
@@ -2024,6 +2203,52 @@ export function generateOnMediaCSS(
   return blocks.join('\n\n');
 }
 
+/**
+ * The shared-element parts' adaptation rules alone, one media block for each rule
+ * in authored order, for the later `parts` sub-layer.
+ */
+function generateAdaptationPartsCSS(
+  theme: DefinedTheme,
+  warnings?: string[],
+): string {
+  const sink = diagnosticSink(warnings);
+  const {rules} = statusRoleGenerationContext(theme);
+  const scopeSelector = themeScopeStart(theme.name);
+  const blocks: string[] = [];
+  // (A part's color-mode blocks follow a flipped surface's dark-page side as
+  // its component's do.)
+  const flipped = darkPageSides(
+    resolveModes({...theme.localTokens, ...theme.tokens}),
+  );
+  for (const [index, rule] of rules.entries()) {
+    const components = rule.components;
+    if (!components) {
+      continue;
+    }
+    const parts: string[] = [];
+    generateComponentRules(components, parts, {
+      resetInheritedPaddingSpecificity: true,
+      sink,
+      location: `adaptations[${index}].`,
+      group: 'parts',
+      darkPageSides: flipped,
+    });
+    generateColorOverrides(
+      partHosts(components),
+      parts,
+      undefined,
+      partDefaultColors(components),
+    );
+    generateSizeOverrides(partHosts(components), parts);
+    if (parts.length > 0) {
+      blocks.push(
+        generateAdaptationMediaBlock(rule.query, parts, scopeSelector),
+      );
+    }
+  }
+  return blocks.join('\n\n');
+}
+
 /** Generate only the declarations one adaptation rule writes. */
 function generateAdaptationRuleRules(
   rule: ThemeRuleSource,
@@ -2031,6 +2256,7 @@ function generateAdaptationRuleRules(
   sink: DiagnosticSink,
   statusRoleDefaults: [string, string][],
   themeDarkPageSides: ReadonlySet<MediaSide>,
+  group?: ComponentGroup,
 ): string[] {
   const parts: string[] = [];
   const tokens = tokenBlock(rule, location, sink, [
@@ -2049,6 +2275,7 @@ function generateAdaptationRuleRules(
       sink,
       location,
       darkPageSides: themeDarkPageSides,
+      group,
     });
     generateColorOverrides(rule.components, parts);
     generateSizeOverrides(rule.components, parts);
@@ -2089,6 +2316,25 @@ function generateAdaptationMediaBlock(
 export function generateAdaptationCSS(
   theme: DefinedTheme,
   warnings?: string[],
+  options?: ThemeLayerOptions,
+): ThemeCSSOutput & {parts?: string} {
+  if (options?.layered) {
+    return {
+      ...adaptationCSS(theme, warnings, 'regular'),
+      parts: generateAdaptationPartsCSS(theme, warnings),
+    };
+  }
+  return adaptationCSS(theme, warnings);
+}
+
+/**
+ * The adaptation CSS of `generateAdaptationCSS`, its component entries
+ * limited to one group when `group` is given.
+ */
+function adaptationCSS(
+  theme: DefinedTheme,
+  warnings: string[] | undefined,
+  group?: ComponentGroup,
 ): ThemeCSSOutput {
   const sink = diagnosticSink(warnings);
   // Built themes can reach this compiler without passing through defineTheme.
@@ -2123,6 +2369,7 @@ export function generateAdaptationCSS(
       sink,
       statusRoleDefaults[index],
       themeDarkPageSides,
+      group,
     );
     if (parts.length === 0) {
       continue;
@@ -2197,6 +2444,26 @@ function indentRule(rule: string): string {
 }
 
 /**
+ * The astryx-theme content of a theme. With shared-element part rules, the
+ * theme's rules sit in two sub-layers: the parts' rules in `parts`, every
+ * other rule in `components`. Without them, the component CSS as it was.
+ */
+export function layeredThemeCSS(
+  componentCss: string,
+  partsCss: string,
+): string {
+  if (!partsCss) {
+    return componentCss;
+  }
+  const blocks = [THEME_SUB_LAYER_ORDER];
+  if (componentCss) {
+    blocks.push(`@layer components {\n${componentCss}\n}`);
+  }
+  blocks.push(`@layer parts {\n${partsCss}\n}`);
+  return blocks.join('\n\n');
+}
+
+/**
  * Generate layered CSS for a theme — runtime path.
  *
  * Returns two CSS blocks for injection into different layers:
@@ -2230,7 +2497,11 @@ function generateThemeCSSWithContext(
   theme: DefinedTheme,
   warnings?: string[],
 ): ThemeCSSOutput {
-  const {component, prose} = generateThemeRulesSplit(theme, warnings);
+  const {
+    component,
+    prose,
+    parts = [],
+  } = generateThemeRulesSplit(theme, warnings, {layered: true});
   const scopeSelector = themeScopeStart(theme.name);
   const scopeTo = THEME_SCOPE_TO;
 
@@ -2250,19 +2521,34 @@ function generateThemeCSSWithContext(
 
   // Adaptations follow the root theme in authored order. Media-surface rules
   // follow adaptations so onDark/onLight keep their specified precedence.
-  const adaptationCss = generateAdaptationCSS(theme, warnings);
+  const adaptationCss = generateAdaptationCSS(theme, warnings, {
+    layered: true,
+  });
   if (adaptationCss.component) {
     componentCss = componentCss
       ? `${componentCss}\n\n${adaptationCss.component}`
       : adaptationCss.component;
   }
 
-  const onMediaCss = generateOnMediaCSS(theme, warnings);
-  if (onMediaCss) {
+  const onMediaCss = generateOnMediaCSS(theme, warnings, {layered: true});
+  if (onMediaCss.component) {
     componentCss = componentCss
-      ? `${componentCss}\n\n${onMediaCss}`
-      : onMediaCss;
+      ? `${componentCss}\n\n${onMediaCss.component}`
+      : onMediaCss.component;
   }
 
-  return {prose: proseCss, component: componentCss};
+  const partsCss = [
+    parts.length > 0
+      ? `@scope (${scopeSelector}) to (${scopeTo}) {\n${parts.join('\n\n')}\n}`
+      : '',
+    adaptationCss.parts ?? '',
+    onMediaCss.parts,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
+  return {
+    prose: proseCss,
+    component: layeredThemeCSS(componentCss, partsCss),
+  };
 }

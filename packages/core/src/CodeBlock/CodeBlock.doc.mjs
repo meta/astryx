@@ -214,7 +214,7 @@ export const docs = {
         visualProps: ['size', 'language', 'container'],
       },
       {className: 'astryx-code-block-title', visualProps: ['size', 'language']},
-      {className: 'astryx-code-block-copy-button'},
+      {className: 'astryx-code-block-copy-button', sitsOn: 'button'},
     ],
     vars: [
       {
