@@ -67,6 +67,20 @@ describe('a padding of several lengths where only one works', () => {
       expect(saved()).toEqual(['padding-block 5px', 'padding-inline 0']);
       await themeEditUndo('t', {cwd});
       expect(saved()).toEqual([]);
+      // (The result names the value typed and the sides written for it.)
+      const r = await themeEditSet('t', 'padding', '5px 0', {
+        cwd,
+        on: 'dropdown-menu',
+      });
+      expect(r.data.asSides).toMatchObject({
+        thing: 'padding',
+        value: '5px 0',
+        sides: [
+          {thing: 'padding-block', value: '5px'},
+          {thing: 'padding-inline', value: '0'},
+        ],
+      });
+      await themeEditUndo('t', {cwd});
       await set('2px 15px 3px');
       expect(saved()).toEqual([
         'padding-top 2px',

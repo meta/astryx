@@ -7814,6 +7814,15 @@ async function changeOnce(
         sub === 'set'
           ? {...savedSetting(s), ...(s.note == null ? {} : {note: s.note})}
           : /** @type {import('./_settings.mjs').Setting} */ (prev),
+      ...(shorthand
+        ? {
+            asSides: {
+              thing: shorthand.thing,
+              value: String(shorthand.value),
+              sides: [s, ...sidesBeside],
+            },
+          }
+        : {}),
       // On undo, the setting above is the one removed, named as such.
       ...(sub === 'undo' && prev
         ? {

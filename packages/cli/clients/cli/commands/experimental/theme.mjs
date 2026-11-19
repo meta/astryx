@@ -607,7 +607,7 @@ function changeBlocks(r) {
         : `[ok] ${d.theme}: ${describe(s)} was already set; nothing changed`
       : d.was != null
         ? `[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`
-        : `[ok] ${d.theme}: ${d.action === 'set' ? `${describe(s)}${drawnAs.length ? ` (drawn as ${drawnAs.join(', ')})` : ''}` : `removed ${describe(s)}${alsoRemovedText(d)}; now ${/** @type {any} */ (d).now ?? "the base theme's value"} applies`}`;
+        : `[ok] ${d.theme}: ${d.action === 'set' ? (d.asSides ? `${describe({...s, thing: d.asSides.thing, value: d.asSides.value})} (${d.asSides.sides.map(x => `${x.thing} ${x.value}`).join(', ')})` : `${describe(s)}${drawnAs.length ? ` (drawn as ${drawnAs.join(', ')})` : ''}`) : `removed ${describe(s)}${alsoRemovedText(d)}; now ${/** @type {any} */ (d).now ?? "the base theme's value"} applies`}`;
   // A problem the change made leads the result, right under the status
   // line, which counts them: a tail-cut or head-cut output still shows it.
   // What a whole-theme change leaves out comes next, with the lines that
