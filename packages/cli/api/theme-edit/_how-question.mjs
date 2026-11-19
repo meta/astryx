@@ -5106,11 +5106,13 @@ export function draftAnswer(ctx, env, question) {
           : `${w}, `;
       },
     )
-    // ("Charcoal-style bold system font": a word said as a style of the
-    // type is the typeface's likeness, one word, never a color.)
+    // ("Helvetica-style type": a font said as a style of the type is that
+    // font. "Charcoal-style bold system font": any other word said so is
+    // the typeface's likeness, one word, never a color.)
     .replace(
       /\b([a-z]+)-(style|styled|like|esque)(?=\s+(?:[a-z-]+\s+){0,3}(?:fonts?|typefaces?|type|lettering)\b)/gi,
-      '$1$2',
+      (_m, /** @type {string} */ w, /** @type {string} */ tail) =>
+        new RegExp(`^(?:${FONT_NAMES})$`, 'i').test(w) ? w : `${w}${tail}`,
     )
     // ("sunny yellow highlights"): a highlight color with no part that
     // draws it is no part's fill; the color is named in the answer as not
@@ -10863,9 +10865,16 @@ export function draftAnswer(ctx, env, question) {
   // the sentence that says the table ("the top bar" a sentence later is
   // the app's).
   for (const c of clauses) {
-    const said = q.toLowerCase().split(/[.!?\n]+/).find(x => x.includes(c.text.trim().toLowerCase()));
-    if (/\bheaders?\b/.test(c.text) && /\b(tables?|rows?|zebra)\b/.test(said ?? c.text))
-      for (const p of c.parts) if (p.on === 'app-shell-header') p.on = 'table-header-cell';
+    const said = q
+      .toLowerCase()
+      .split(/[.!?\n]+/)
+      .find(x => x.includes(c.text.trim().toLowerCase()));
+    if (
+      /\bheaders?\b/.test(c.text) &&
+      /\b(tables?|rows?|zebra)\b/.test(said ?? c.text)
+    )
+      for (const p of c.parts)
+        if (p.on === 'app-shell-header') p.on = 'table-header-cell';
   }
   // A clause that is only a color ("brand blue, #0057ff") belongs to the
   // clause before it; a clause with any other word ("accent #fff") does not.
@@ -27505,7 +27514,9 @@ export function draftAnswer(ctx, env, question) {
     // ("… make them a bit smaller. Undo the heading change.": an undo of a
     // change said earlier in the same ask takes that change back here; the
     // rest of the ask stands.)
-    const part = unmet ? / on ([a-z0-9-]+)$/.exec(String(unmet.unmet))?.[1] : null;
+    const part = unmet
+      ? / on ([a-z0-9-]+)$/.exec(String(unmet.unmet))?.[1]
+      : null;
     const undone = part
       ? result.filter(
           d =>
