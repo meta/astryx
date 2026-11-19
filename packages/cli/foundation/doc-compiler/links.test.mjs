@@ -320,6 +320,21 @@ describe("renderTokens in the reader's project", () => {
     ).toBe(`npm install "${theme}@^0.7.10"`);
   });
 
+  it('names the CLI beside Core at the same release, saved exactly where Core is pinned', () => {
+    const pinned = app({'@astryxdesign/core': '0.7.10'});
+    expect(
+      runWithDocPackageManager(
+        'npm',
+        () =>
+          renderTokens(
+            '{@pm install @astryxdesign/core @astryxdesign/cli}',
+            'bash',
+          ),
+        pinned,
+      ),
+    ).toBe('npm install -E @astryxdesign/core@0.7.10 @astryxdesign/cli@0.7.10');
+  });
+
   it('leaves the package bare in a project that names no Core, or no plain Core range', () => {
     for (const dependencies of [{}, {'@astryxdesign/core': 'workspace:*'}]) {
       expect(
