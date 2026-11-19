@@ -72,8 +72,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 - FR4 gap: the iOS contract names the choice `presentation`, with the values
   `auto`, `native` and `drawn`, where this record has `render` with `system`,
   as `spec:AST-112` FR21 records.
-- FR3 gap: the package also accepts `hasCloseButton`, which `closeButton`
-  replaces (DEC-1); `closeButton` wins when both are given.
+- FR3 gap: the package also takes `hasCloseButton`, a boolean this record
+  does not specify (DEC-1).
 - FR8 gap: a dismissal its owner refuses does not wait at a peek stop while
   the owner asks (core FR21–FR24).
 - FR11 gap: Astryx's sheet does not scroll a focused field above the keyboard
@@ -265,17 +265,19 @@ own values.
 FR2, FR3, FR4 and FR9 state the reason for each prop React Native narrows,
 adds or leaves out.
 
-### DEC-1 — `closeButton` replaces `hasCloseButton`
+### DEC-1 — `closeButton` is the sheet's one Close choice
 
 **Reference:** `component:react-native/BottomSheet/DEC-1`
 **Decider:** imdreamrunner, 2026-11-09
 
 The sheet's Close button is one three-way choice, `closeButton` (`auto`,
-`hidden`, `own`), in place of the boolean `hasCloseButton`. A boolean could
-say only whether the library draws Close; it could not say that the sheet's
-header or content carries its own Close, so a screen reader heard two.
-`hasCloseButton={false}` is `closeButton="hidden"`, and `closeButton` wins
-when both are given.
+`hidden`, `own`). A boolean could say only whether the library draws Close; it
+could not say that the sheet's header or content carries its own Close, so a
+screen reader heard two. The package is canary-only, and its public entries
+may change in any canary (`spec:AST-112` FR5), so this record specifies
+`closeButton` alone and carries no compatibility form. The package's
+`hasCloseButton` is a gap: the package changes to take `closeButton` alone,
+with no deprecation.
 
 ## Open questions
 
