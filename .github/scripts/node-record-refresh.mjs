@@ -15,13 +15,16 @@
  * leg's slowdown taken out (`regenerate`), and this script opens or refreshes
  * the one pull request on BRANCH that carries it.
  *
- * @input `regenerate --log <run log>`: a Main run's log and the record.
+ * @input `warn`: the record and the Node project's tracked test files.
+ *   `regenerate --log <run log>`: a Main run's log and the record.
  *   `check --log <run log> --reasons <file>`: a Main run's Node leg
  *   logs, each line led by its leg's name (the workflow's read step), the record and the Node project's tracked test
  *   files. `pr --run-url <url> --reasons <file>`: the regenerated record, the
  *   check's reasons, and `gh`.
- * @output `regenerate` rewrites the record's new and far-off entries.
- *   `check` writes the reasons and prints them; with `--github-output`
+ * @output `warn` prints the early warning and adds it to the step summary;
+ *   it always exits 0. `regenerate` rewrites the record's new and far-off
+ *   entries. `check` writes the reasons, prints them and adds the
+ *   warning to the step summary; with `--github-output`
  *   it also writes `refresh`. It fails when a leg's log misses test files. `pr` opens the pull request, or edits the one
  *   that is open.
  * @position .github/scripts — run by node-record-refresh.yml
@@ -41,8 +44,14 @@ import {
 } from '../../scripts/vitest-shard-sequencer.mjs';
 import {MARGIN_S, RATIO, drifted, legFactor} from './node-time-drift.mjs';
 
-/** The least share of Node test files the record must time: nine in ten. */
-export const MIN_RECORDED_SHARE = 0.9;
+/**
+ * The least share of Node test files the record must time: nineteen in
+ * twenty. Past one file in twenty without a time, main's run warns and the
+ * refresh opens, long before leg balance suffers; nothing ever fails on it.
+ */
+export const MIN_RECORDED_SHARE = 0.95;
+/** How many of the heaviest unrecorded files a warning names. */
+export const HEAVIEST_SHOWN = 10;
 /**
  * Seconds past its expected time a recorded file must also run before main's
  * run re-records it: the pull-request drift notice's own margin, so the files
@@ -113,6 +122,47 @@ export function driftedEntries(log, recorded) {
 }
 
 /**
+ * The heaviest of the record's missing files by the time each took in a Main
+ * run's Node legs, as measured.
+ * @param {string} log a Main run's log
+ * @param {string[]} missing
+ * @returns {{file: string, measured: number}[]}
+ */
+export function heaviestUnrecorded(log, missing) {
+  const lacking = new Set(missing);
+  // One parse of the Node legs' lines: a long log holds more lines than a
+  // call can take as arguments.
+  const measured = recordDurations([...nodeLegLogs(log).values()].join('\n'));
+  return Object.entries(measured)
+    .filter(([file]) => lacking.has(file))
+    .map(([file, seconds]) => ({file, measured: seconds}))
+    .sort((a, b) => b.measured - a.measured || a.file.localeCompare(b.file))
+    .slice(0, HEAVIEST_SHOWN);
+}
+
+/**
+ * The early warning for a record that times too few Node test files, or
+ * nothing when it times enough.
+ * @param {{total: number, recorded: number, share: number, fresh: boolean}} covered
+ * @param {{file: string, measured: number}[]} [heaviest]
+ * @returns {string}
+ */
+export function earlyWarning(covered, heaviest = []) {
+  if (covered.fresh) return '';
+  const missing = covered.total - covered.recorded;
+  const lines = [
+    `Early warning: ${missing} of ${covered.total} Node test files (${percent(missing / covered.total)}) have no recorded time, past the ${Math.round((1 - MIN_RECORDED_SHARE) * 100)}% line. Leg balance books each at the ninetieth percentile until the record is refreshed; nothing fails on it.`,
+  ];
+  if (heaviest.length > 0)
+    lines.push(
+      '',
+      `The heaviest unrecorded files in main's run:`,
+      ...heaviest.map(({file, measured}) => `- \`${file}\`: ${measured} s`),
+    );
+  return lines.join('\n');
+}
+
+/**
  * The entries a Main run's Node legs give the record. Each leg's times are
  * divided by that leg's own slowdown (node-time-drift.mjs `legFactor`: the
  * median measured ÷ recorded over its recorded files, never below 1), so a
@@ -168,10 +218,17 @@ export function incompleteLegs(log) {
  * @param {{nodeFiles: string[], recorded: Record<string, number>, log: string}} input
  */
 export function refreshReasons({nodeFiles, recorded, log}) {
-  const {total, recorded: timed, share, fresh} = coverage(nodeFiles, recorded);
+  const {
+    total,
+    recorded: timed,
+    share,
+    fresh,
+    missing,
+  } = coverage(nodeFiles, recorded);
   const late = driftedEntries(log, recorded);
   return {
     coverage: {total, recorded: timed, share, fresh},
+    unrecorded: fresh ? [] : heaviestUnrecorded(log, missing),
     drifted: late,
     refresh: !fresh || late.length > 0,
   };
@@ -193,7 +250,13 @@ export function prBody({reasons, after, runUrl}) {
       ? []
       : [
           `- The record timed ${before.recorded} of ${before.total} Node test files (${percent(before.share)}), below the ${percent(MIN_RECORDED_SHARE)} bar.`,
+          '',
+          earlyWarning(before, reasons.unrecorded ?? []),
+          '',
         ]),
+    ...(reasons.drifted.length > 0 && !before.fresh
+      ? ["Recorded files that ran far past their entry in main's run:", '']
+      : []),
     ...reasons.drifted.map(
       ({file, recorded, measured}) =>
         `- \`${file}\` ran ${measured} s against its recorded ${recorded} s.`,
@@ -316,11 +379,27 @@ function main(args) {
         ? `Recorded files far past their entry in this run:\n${reasons.drifted.map(({file, recorded: before, measured}) => `  ${file}: ${measured} s, recorded ${before} s`).join('\n')}`
         : 'No recorded file ran far past its entry in this run.',
     );
+    const warning = earlyWarning(reasons.coverage, reasons.unrecorded);
+    if (warning && process.env.GITHUB_STEP_SUMMARY)
+      fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${warning}\n`);
     if (args.includes('--github-output') && process.env.GITHUB_OUTPUT)
       fs.appendFileSync(
         process.env.GITHUB_OUTPUT,
         `refresh=${reasons.refresh}\n`,
       );
+    return 0;
+  }
+  if (command === 'warn') {
+    // An early warning on main's own run: it never fails, so the exit code is
+    // 0 whatever the record holds.
+    const warning = earlyWarning(
+      coverage(nodeLegFiles(), readDurations(durationsFile())),
+    );
+    if (warning) {
+      console.log(`::warning title=Node test record::${warning}`);
+      if (process.env.GITHUB_STEP_SUMMARY)
+        fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${warning}\n`);
+    } else console.log('The Node test record times enough files.');
     return 0;
   }
   if (command === 'regenerate' && option('--log')) {
@@ -368,7 +447,7 @@ function main(args) {
     return 0;
   }
   console.error(
-    'usage: node-record-refresh.mjs regenerate --log <run log> | check --log <run log> --reasons <file> [--github-output] | pr --run-url <url> --reasons <file>',
+    'usage: node-record-refresh.mjs warn | regenerate --log <run log> | check --log <run log> --reasons <file> [--github-output] | pr --run-url <url> --reasons <file>',
   );
   return 2;
 }

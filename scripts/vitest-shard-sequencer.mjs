@@ -105,7 +105,12 @@ export function nodeLegLogs(text) {
   const legs = new Map();
   for (const line of text.split('\n')) {
     const job = line.split('\t')[0];
-    if (NODE_LEG_JOB.test(job)) legs.set(job, [...(legs.get(job) ?? []), line]);
+    if (!NODE_LEG_JOB.test(job)) continue;
+    // Append in place: copying the leg's lines for each line is quadratic on
+    // a whole run's log.
+    const lines = legs.get(job);
+    if (lines) lines.push(line);
+    else legs.set(job, [line]);
   }
   return new Map([...legs].map(([job, lines]) => [job, lines.join('\n')]));
 }
