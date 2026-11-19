@@ -229,11 +229,22 @@ shared icon names under FR17.
     third-party native dependency (FR2).
   - The platform's native code calls public platform API only. A capability
     or group record that needs an exception names the API and the reason.
-  - Where the core replaces a method of a class it does not own, from UIKit or
-    React Native, the replacement calls through to the implementation it
-    found, installs once, and leaves another library's replacement of the same
-    method working, whether that library installs before or after Astryx
-    (DEC-22).
+  - The core replaces no method of a UIKit or React Native class at run time
+    (DEC-22). It fixes what it owns inside its own hosts:
+    - The stack host resets React Native's right-to-left mirror on the scroll
+      view it owns, so the large title draws correctly.
+    - On iOS, the library's modal surfaces present only through the
+      presentation host; the library has no React Native `Modal` path on iOS.
+    - The generated app shell and the Expo package's configuration plugin
+      write the explicit call that hands an opened URL to the sign-in claim;
+      an app with its own native projects makes that call itself. No
+      interceptor stands in for it.
+    - The HTTP cache guarantees of clear on sign-out, under which nothing in
+      flight lands after a clear, cover React Native's networking session,
+      through React Native's public session-configuration hook, and Astryx's
+      own sessions. The app's shared URL cache stays the app's own. An app
+      that sets its own session-configuration provider opts in to these
+      guarantees explicitly.
   - The React Native platform ships inside
     `@astryxdesign/react-native`, with the native half of Astryx's components
     linked by default and each device feature linked when an app opts it in
@@ -247,9 +258,19 @@ shared icon names under FR17.
     web pages gain 0 bytes from it. `@astryxdesign/native` is deprecated: the
     shared contracts replace it (DEC-19).
 
-  FR4 gap: the view-controller presentation replacement returns without
-  calling the implementation it found when it refuses a presentation, and the
-  opt-in URL interceptor returns without calling it for a URL it claims.
+  FR4 gap: the core exchanges methods on React Native's scroll view to reset
+  the right-to-left mirror under a large title.
+
+  FR4 gap: the core replaces methods on React Native's `Modal` host, and on iOS
+  the library falls back to React Native's `Modal` for a modal surface.
+
+  FR4 gap: the core replaces UIKit's view-controller presentation method for a
+  hosted-project container; that code leaves the core.
+
+  FR4 gap: the opt-in URL interceptor replaces the application's and the
+  scene's delegate setters and the delegates' URL-opening methods.
+
+  FR4 gap: the core replaces the app's shared URL cache at startup.
 
 - **FR5 — The public surface is deliberate.** Each package declares its entries
   in its `exports` map, and an import outside the map is unsupported. While the
@@ -836,7 +857,8 @@ record depends on an ask whose owner has not agreed to it.
 | DEC-10   | A source check that every `Intl` read has a fallback; Avatar initials rendered under a runtime without `Intl`                                                                                                                                                                                                                                                                                                                                     | each `Intl` read in the package's own code; a name with combining marks and an emoji; a number and a plural formatted without `Intl`                                                                                                                                                                                                                           | An `Intl` read without a fallback, a component that does not render or work without `Intl`, initials without `Intl` other than the first code point of the name's first and last words, or a global `Intl` polyfill                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | Platform | A development-warning test under an unsupported `Platform.OS`                                                                                                                                                                                                                                                                                                                                                                                     | `Platform.OS` set to `macos` and to `windows`                                                                                                                                                                                                                                                                                                                  | No warning, more than one warning, a warning that does not name the platform, or an icon or chart that draws empty without a warning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | DEC-21   | A launch test on iOS of the subscribers MetricKit holds, in an app built with and without the opt-in                                                                                                                                                                                                                                                                                                                                              | an app that did not opt in; an app that opted in; a second launch step in the same process                                                                                                                                                                                                                                                                     | An Astryx subscriber in an app that did not opt in, none or more than one in an app that did, or an app subscriber removed or replaced                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| DEC-22   | Unit tests on iOS of each method the core replaces, with a second library's replacement of the same method                                                                                                                                                                                                                                                                                                                                        | the other replacement installed before Astryx's; installed after it; the core's install run twice                                                                                                                                                                                                                                                              | A replacement that does not call through, the other library's replacement not running, or a second install                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| DEC-22   | A source check of the core's iOS code                                                                                                                                                                                                                                                                                                                                                                                                             | each file in the core                                                                                                                                                                                                                                                                                                                                          | A method exchange, set-implementation, or replace-method call on a UIKit or React Native class                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| FR4      | A launch test on iOS of the shared URL cache; a clear on sign-out with requests in flight over React Native's networking and Astryx's own sessions                                                                                                                                                                                                                                                                                                | the default session-configuration provider; an app's own provider with and without the opt-in                                                                                                                                                                                                                                                                  | The app's shared URL cache replaced, a response that lands after a clear, or an app's own provider overridden without its opt-in                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 ## Decision log
 
@@ -1066,16 +1088,16 @@ adds a MetricKit subscriber only when the app opts in through its capability
 list (FR3), so an app's diagnostics stay the app's choice, and an app that opts
 in has the core's subscriber beside any subscriber it adds itself.
 
-### DEC-22 — Method replacements keep other libraries working
+### DEC-22 — The core replaces no UIKit or React Native method
 
 **Reference:** `spec:AST-112/DEC-22`
 **Decider:** imdreamrunner, 2026-11-19
 
-Astryx stays compatible with the other libraries in an app. The core replaces a
-method of a class it does not own, from UIKit or React Native, only when the
-replacement calls through to the implementation it found, installs once, and
-leaves other libraries' replacements of the same method working, so a library
-that replaces the same method before or after Astryx keeps its behavior.
+The core replaces no method of a UIKit or React Native class at run time, so
+Astryx stays compatible with the other libraries in an app and with React
+Native upgrades. It fixes what it owns inside its own hosts: the scroll view
+its stack host owns, its presentation host, the explicit calls the app shell
+makes, and the network sessions it configures.
 
 ## Open questions
 
@@ -1127,8 +1149,3 @@ that replaces the same method before or after Astryx keeps its behavior.
   (`spec:AST-082` FR5) need a published home once the contracts move into
   `packages/contracts` (DEC-19). Options: a new
   published native package; `@astryxdesign/core`; or each platform package.
-- **OQ9 — Does the core keep replacing the app's shared URL cache?**
-  (`human-design`) On iOS, at startup the core replaces the app's shared URL
-  cache with its own cache under the app's HTTP cache policy, which reaches
-  past the components that use it into the whole app. Options: the core keeps
-  it; or it moves behind an explicit opt-in.
