@@ -20,6 +20,8 @@ import {PALETTE_RECIPES} from './generator.mjs';
 import {newerRecipe} from './newer-recipe.mjs';
 import {cliUpdateStep} from '../../../../foundation/release/notices.mjs';
 import {cliVersion} from '../../../../foundation/release/run-context.mjs';
+import {runWithCliDoor} from '../../../../foundation/env/cli-command.mjs';
+import {toErrorEnvelope} from '../../../../foundation/response/json.mjs';
 
 /** @type {string} */
 let cwd;
@@ -65,15 +67,19 @@ describe('a palette a newer CLI made', () => {
       themePaletteGenerate('palette.config.json', {}, {cwd}),
     );
     expect(error.code).toBe(ERROR_CODES.ERR_PALETTE_GENERATION);
-    // The whole message, with the step that fits where this CLI runs.
+    // The whole message, with the step that fits where this CLI runs:
+    // outside a project, the copy that ran.
     const step = cliUpdateStep({cwd});
+    expect(step.upgrade).toBeNull();
     expect(error.message).toBe(
-      `palette.config.json was made with a newer Astryx CLI: its colors use the ${NEWER} recipe, and this CLI (${cliVersion()}) knows ${PALETTE_RECIPES.join(', ')}. ${step.runs ? 'Run the command again with the newest CLI' : 'Update the CLI, then run the command again'}: ${step.command}. Nothing was changed.`,
+      `palette.config.json was made with a newer Astryx CLI: its colors use the ${NEWER} recipe, and this CLI (${cliVersion()}) knows ${PALETTE_RECIPES.join(', ')}. ${step.runs ? 'Run the command again with the newest CLI' : 'Update the CLI, then run the command again'}: ${step.install}. Nothing was changed.`,
     );
-    expect(error.suggestions?.[0]?.name).toBe(step.command);
+    expect(error.suggestions?.map((/** @type {any} */ s) => s.name)).toEqual([
+      step.install,
+    ]);
   });
 
-  it("in a project, names the step that moves the project's CLI and Core together", () => {
+  it("in a project, names the install of the project's CLI and Core, then the bare codemod run", () => {
     write('package.json', {
       name: 'app',
       dependencies: {'@astryxdesign/core': '0.7.1'},
@@ -86,9 +92,38 @@ describe('a palette a newer CLI made', () => {
     const error = refusal(() =>
       themePaletteGenerate('palette.config.json', {}, {cwd}),
     );
-    expect(error.message).toMatch(
-      /Update the CLI, then run the command again: npm install -E @astryxdesign\/core@\S+ @astryxdesign\/cli@\S+, then npx astryx upgrade --from 0\.7\.1 --apply\. Nothing was changed\.$/,
+    const step = cliUpdateStep({cwd});
+    expect(step.install).toMatch(
+      /^npm install -E @astryxdesign\/core@\S+ @astryxdesign\/cli@\S+$/,
     );
+    expect(error.message).toContain(
+      `Update the CLI: ${step.install}, then run astryx upgrade --from 0.7.1 --apply; then run the command again. Nothing was changed.`,
+    );
+    expect(error.suggestions?.map((/** @type {any} */ s) => s.name)).toEqual([
+      step.install,
+      'astryx upgrade --from 0.7.1 --apply',
+    ]);
+  });
+
+  it('carries every command bare in JSON, whatever the command name (spec AST-081 FR5)', async () => {
+    write('package.json', {
+      name: 'app',
+      dependencies: {'@astryxdesign/core': '0.7.1'},
+    });
+    write('package-lock.json', {lockfileVersion: 3});
+    write('palette.config.json', {
+      recipe: NEWER,
+      families: [{id: 'accent', seed: '#5b3cc4'}],
+    });
+    const error = await runWithCliDoor('acme astryx', async () =>
+      refusal(() => themePaletteGenerate('palette.config.json', {}, {cwd})),
+    );
+    const envelope = JSON.stringify(
+      toErrorEnvelope(error, error.suggestions, error.code),
+    );
+    expect(envelope).not.toContain('acme astryx');
+    expect(envelope).not.toMatch(/(npx|pnpm exec|yarn|bunx) astryx/);
+    expect(envelope).toContain('"astryx upgrade --from 0.7.1 --apply"');
   });
 
   it('any other unknown recipe keeps the refusal of the generator', () => {
