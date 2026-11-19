@@ -594,8 +594,10 @@ menu's shape, each corner less the menu's padding: with only the bottom
 corners rounded, each row is rounded at the bottom. This keeps the rows
 predictable and matches the uniform corners themes already give. A theme that
 wants other row corners styles the row part directly. The rule covers the
-item, checkbox, radio and sub-menu rows, and so ContextMenu. Rejected: only
-the rows at a menu corner take that corner.
+item, checkbox, radio and sub-menu rows, and so ContextMenu. The menu's
+`derived` radius entry sets `corners: true` (`ComponentThemingDerivedVar.corners`
+in the authoring types), so the theme writes each corner to its own variable.
+Rejected: only the rows at a menu corner take that corner.
 
 ## Open questions
 

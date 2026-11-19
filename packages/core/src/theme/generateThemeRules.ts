@@ -38,7 +38,11 @@ import {
   type ResolvedThemeAdaptationRule,
 } from './themeAdaptations';
 import {parseStyleKey} from '../utils/parseStyleKey';
-import {getDerivedVars} from './derivedVarRegistry';
+import {
+  LOGICAL_RADIUS_CORNERS,
+  PHYSICAL_RADIUS_CORNERS,
+  getDerivedVars,
+} from './derivedVarRegistry';
 import {
   STATUS_NAMES,
   deriveStatusRoleTokens,
@@ -359,20 +363,6 @@ const RADIUS_CORNER_PROPS: Record<string, string> = {
   borderEndStartRadius: 'end-start',
   borderEndEndRadius: 'end-end',
 };
-
-const PHYSICAL_CORNERS = [
-  'top-left',
-  'top-right',
-  'bottom-right',
-  'bottom-left',
-] as const;
-
-const LOGICAL_CORNERS = [
-  'start-start',
-  'start-end',
-  'end-start',
-  'end-end',
-] as const;
 
 /**
  * The four corners of a `border-radius` value, as its longhands take them
@@ -1543,10 +1533,10 @@ function expandComponentDeclarations(
             cornerProps.delete(`${varName}-${name}`);
           }
           if (corners) {
-            PHYSICAL_CORNERS.forEach((name, i) => {
+            PHYSICAL_RADIUS_CORNERS.forEach((name, i) => {
               cornerProps.set(`${varName}-${name}`, corners[i]);
             });
-            for (const name of LOGICAL_CORNERS) {
+            for (const name of LOGICAL_RADIUS_CORNERS) {
               cornerProps.set(`${varName}-${name}`, 'initial');
             }
           }

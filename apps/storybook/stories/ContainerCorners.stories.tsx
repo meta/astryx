@@ -2,7 +2,7 @@
 
 /**
  * @file ContainerCorners.stories.tsx
- * @input Card, Dialog, BottomSheet, Section, Table, and List
+ * @input Card, Dialog, BottomSheet, Section, Table, List, and DropdownMenu
  * @output Stories where a full-bleed child meets, or stops short of, a
  *   rounded container corner, including corners a theme gives different radii
  * @position Storybook evidence for container corner geometry. The
@@ -14,6 +14,14 @@ import type {Meta, StoryObj} from '@storybook/react';
 import {BottomSheet} from '@astryxdesign/core/BottomSheet';
 import {Card} from '@astryxdesign/core/Card';
 import {Dialog} from '@astryxdesign/core/Dialog';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSubMenu,
+} from '@astryxdesign/core/DropdownMenu';
 import {List, ListItem} from '@astryxdesign/core/List';
 import {Section} from '@astryxdesign/core/Section';
 import {Table} from '@astryxdesign/core/Table';
@@ -334,6 +342,67 @@ export const TableInDefaultCardInsideRoundedCard: Story = {
           </Card>
         </Card>
       </div>
+    </Theme>
+  ),
+};
+
+/** A theme that rounds only a menu's bottom corners. */
+const roundedBottomMenu = defineTheme({
+  name: 'container-corners-rounded-bottom-menu',
+  components: {'dropdown-menu': {base: {borderRadius: '0 0 12px 12px'}}},
+});
+
+/** A theme that gives a menu one radius at every corner. */
+const roundedMenu = defineTheme({
+  name: 'container-corners-rounded-menu',
+  components: {'dropdown-menu': {base: {borderRadius: '12px'}}},
+});
+
+/** An open menu with each kind of row: item, checkbox, radio and sub-menu. */
+function EveryRowMenu() {
+  const [isChecked, setIsChecked] = useState(true);
+  const [sort, setSort] = useState('newest');
+  return (
+    <DropdownMenu
+      button={{label: 'Actions'}}
+      isMenuOpen
+      onOpenChange={() => {}}
+      menuWidth={240}
+      presentation="popover">
+      <DropdownMenuItem label="Rename" />
+      <DropdownMenuCheckboxItem
+        label="Show archived"
+        value={isChecked}
+        onChange={setIsChecked}
+      />
+      <DropdownMenuRadioGroup value={sort} onChange={setSort} label="Sort by">
+        <DropdownMenuRadioItem value="newest" label="Newest" />
+        <DropdownMenuRadioItem value="oldest" label="Oldest" />
+      </DropdownMenuRadioGroup>
+      <DropdownMenuSubMenu label="Share">
+        <DropdownMenuItem label="Copy link" />
+      </DropdownMenuSubMenu>
+    </DropdownMenu>
+  );
+}
+
+/**
+ * A theme rounds only the menu's bottom corners: every row, of each kind,
+ * takes the menu's shape less its padding.
+ */
+export const MenuRowsWithRoundedBottom: Story = {
+  render: () => (
+    <Theme theme={roundedBottomMenu} mode="light">
+      <EveryRowMenu />
+    </Theme>
+  ),
+};
+
+/** A theme gives the menu one radius: every row takes it less the padding. */
+export const MenuRowsWithOneRadius: Story = {
+  render: () => (
+    <Theme theme={roundedMenu} mode="light">
+      <EveryRowMenu />
     </Theme>
   ),
 };

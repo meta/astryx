@@ -1,5 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope ^(packages/core/src/(Layout|Card|Dialog|BottomSheet|Section|ScrollableArea|Table|List|Item)/|apps/storybook/stories/ContainerCorners\.stories)
+// @pr-a11y scope ^(packages/core/src/(Layout|Card|Dialog|BottomSheet|Section|ScrollableArea|Table|List|Item|DropdownMenu)/|apps/storybook/stories/ContainerCorners\.stories)
 
 /**
  * @file ContainerCorners.a11y.chromium.spec.ts
@@ -34,6 +34,8 @@ test.afterAll(async () => {
 const TABLE_REGION = '#storybook-root [role="group"]:has(> * > table)';
 const BOTTOM_SHEET_TABLE_REGION = 'dialog [role="group"]:has(> * > table)';
 const LIST_ROWS = '#storybook-root [role="list"] > *';
+const MENU_ROWS =
+  '[role="menu"] :is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"])';
 
 /** Used radii in physical order: top-left, top-right, bottom-right, bottom-left. */
 type Radii = readonly [string, string, string, string];
@@ -356,5 +358,27 @@ test.describe('Container corners (Chromium)', () => {
     expect(outer).toEqual(['24px', '24px', '24px', '24px']);
     expect(inner).not.toEqual(outer);
     expect(await radii(page, TABLE_REGION)).toEqual(inner);
+  });
+
+  test('every row of a menu whose theme rounds only the bottom takes that shape less the padding', async ({
+    page,
+  }) => {
+    await mount(page, 'menu-rows-with-one-radius', MENU_ROWS);
+    const one = await radii(page, MENU_ROWS);
+    expect(parseFloat(one[0])).toBeGreaterThan(0);
+    expect(new Set(one).size).toBe(1);
+
+    await mount(page, 'menu-rows-with-rounded-bottom', MENU_ROWS);
+    const count = await page.locator(MENU_ROWS).count();
+    // Item, checkbox, two radios, the sub-menu row and the sub-menu's own row.
+    expect(count).toBe(6);
+    for (let index = 0; index < count; index++) {
+      expect(await radii(page, MENU_ROWS, index)).toEqual([
+        '0px',
+        '0px',
+        one[2],
+        one[3],
+      ]);
+    }
   });
 });

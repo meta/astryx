@@ -28,7 +28,11 @@
  */
 
 import {describe, it, expect} from 'vitest';
-import {derivedVarRegistry, getDerivedVars} from './derivedVarRegistry';
+import {
+  derivedVarRegistry,
+  getDerivedVars,
+  radiusCornerVars,
+} from './derivedVarRegistry';
 import {readdirSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
 
@@ -48,6 +52,7 @@ type DerivedDocEntry = {
   property: string;
   vars?: string[];
   expand?: string;
+  corners?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -368,7 +373,11 @@ const CROSS_COMPONENT_VARS: Record<string, string[]> = {
   // owns and documents it (and sets it itself when it is the group root).
   AvatarGroup: ['--_avatar-group-overlap'],
   // BreadcrumbItem tunes the DropdownMenu it opens.
-  Breadcrumbs: ['--_dropdown-menu-radius', '--_dropdown-menu-padding'],
+  Breadcrumbs: [
+    '--_dropdown-menu-radius',
+    '--_dropdown-menu-padding',
+    ...radiusCornerVars('--_dropdown-menu-radius'),
+  ],
   // SelectableCard draws its selection ring through the Card shadow slot.
   SelectableCard: ['--_card-ring'],
   // Toolbar offsets the TabList indicator it hosts.
@@ -502,12 +511,20 @@ describe('component CSS vars are documented and themeable', () => {
 
   for (const {dir, sourceVars, docVars, docDerived} of components) {
     const crossVars = new Set(CROSS_COMPONENT_VARS[dir] || []);
+    // The theme pipeline writes each corner variable of a `corners` entry, so
+    // the entry documents them.
+    const cornerVars = new Set(
+      docDerived
+        .filter(d => d.corners)
+        .flatMap(d => (d.vars || []).flatMap(radiusCornerVars)),
+    );
 
     it(`${dir}: all source vars are in doc file`, () => {
       const undocumented = sourceVars.filter(
         v =>
           !docVars.includes(v) &&
           !crossVars.has(v) &&
+          !cornerVars.has(v) &&
           !PRIVATE_SYSTEM_VARS.has(v),
       );
       expect(

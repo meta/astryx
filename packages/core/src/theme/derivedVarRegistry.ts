@@ -35,13 +35,40 @@ export interface DerivedVarEntry {
   replaces?: boolean;
   /**
    * A `borderRadius` entry whose component also reads each corner on its
-   * own: the theme pipeline writes every corner of the radius to
-   * `<var>-top-left`, `-top-right`, `-bottom-right` and `-bottom-left` (from
-   * the shorthand or a physical longhand) and to `<var>-start-start`, …
-   * (from a logical longhand), so a radius of different corners reaches what
-   * the component hands each corner to (a full-bleed child of a Card).
+   * own. The theme pipeline writes each corner of the radius to its own
+   * variable, `<var>-<corner>` (see `radiusCornerVars`). A radius of
+   * different corners then reaches what the component hands each corner to,
+   * such as a full-bleed child of a Card.
    */
   corners?: boolean;
+}
+
+/** The physical corners of a radius, top-left first and clockwise. */
+export const PHYSICAL_RADIUS_CORNERS = [
+  'top-left',
+  'top-right',
+  'bottom-right',
+  'bottom-left',
+] as const;
+
+/** The logical corners of a radius, as `border-start-start-radius` names them. */
+export const LOGICAL_RADIUS_CORNERS = [
+  'start-start',
+  'start-end',
+  'end-start',
+  'end-end',
+] as const;
+
+/**
+ * The corner variables the theme pipeline writes for a `corners` entry's
+ * variable, physical corners first.
+ *
+ * @example radiusCornerVars('--_card-radius')[0] -> '--_card-radius-top-left'
+ */
+export function radiusCornerVars(varName: string): string[] {
+  return [...PHYSICAL_RADIUS_CORNERS, ...LOGICAL_RADIUS_CORNERS].map(
+    corner => `${varName}-${corner}`,
+  );
 }
 
 /**
