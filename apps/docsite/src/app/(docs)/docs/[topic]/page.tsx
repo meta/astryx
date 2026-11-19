@@ -143,6 +143,7 @@ export default async function DocPage({
           ).filter(section =>
             [
               'map-chart-parts',
+              'chart-radius',
               'recharts-styled-example',
               'style-other-renderers',
               'readable-chart-details',

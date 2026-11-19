@@ -238,6 +238,30 @@ describe('visualization palette and styling guides', () => {
     );
   });
 
+  it('defines radius roles without changing data geometry', () => {
+    const section = styling.sections.find(
+      section => section.id === 'chart-radius',
+    );
+    const table = section.content.find(block => block.type === 'table');
+    expect(table.rows.slice(0, 4).map(row => [row[0], row[1]])).toEqual([
+      ['Chart card', '--radius-container'],
+      ['Tooltip surface', '--radius-container'],
+      ['Bars', '--radius-element'],
+      ['Filled legend keys', '--radius-element'],
+    ]);
+    expect(table.rows[4]).toEqual([
+      'Plot and hover region',
+      '0',
+      'Keep the data area and highlight rectangular.',
+    ]);
+    expect(JSON.stringify(section)).toContain(
+      'not the value, scale, or baseline',
+    );
+    expect(JSON.stringify(section)).toContain(
+      'one quarter of its smaller dimension',
+    );
+  });
+
   it('links renderer delivery without duplicating its implementation', () => {
     const text = JSON.stringify(renderer.sections[0]);
     expect(text).toContain('{@link generic:choosing-data-colors}');

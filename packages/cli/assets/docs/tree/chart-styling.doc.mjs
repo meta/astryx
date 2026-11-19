@@ -105,6 +105,52 @@ export const docs = {
       ],
     },
     {
+      id: 'chart-radius',
+      title: 'Radius',
+      content: [
+        {
+          type: 'prose',
+          text: 'Use container radius for chart cards and tooltip surfaces, and element radius for bars and filled legend keys. Keep the radius relative to the active theme. Rounding changes the corners, not the value, scale, or baseline.',
+        },
+        {
+          type: 'table',
+          headers: ['Chart part', 'Radius', 'Treatment'],
+          rows: [
+            [
+              'Chart card',
+              '--radius-container',
+              'Round the outer card, not the plot area inside it.',
+            ],
+            [
+              'Tooltip surface',
+              '--radius-container',
+              'Use the same container role as HoverCard.',
+            ],
+            [
+              'Bars',
+              '--radius-element',
+              'Round the exposed ends. Keep the ends at the baseline square; limit rounding to fit short or narrow bars.',
+            ],
+            [
+              'Filled legend keys',
+              '--radius-element',
+              'Keep the key rectangular. Limit the radius to one quarter of its smaller dimension.',
+            ],
+            [
+              'Plot and hover region',
+              '0',
+              'Keep the data area and highlight rectangular.',
+            ],
+            [
+              'Line and point legend keys',
+              'Match the plotted mark',
+              'Keep dashed lines and point shapes consistent with the series. They do not use a surface corner radius.',
+            ],
+          ],
+        },
+      ],
+    },
+    {
       id: 'recharts-styled-example',
       title: 'Use secondary labels in a Recharts chart',
       content: [

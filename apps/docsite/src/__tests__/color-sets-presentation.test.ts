@@ -78,9 +78,17 @@ describe('color-set presentation', () => {
     expect(source).toContain("stroke={colorVars['--color-border-emphasized']}");
     expect(source).toContain("stroke={dataVars['--color-data-neutral']}");
     expect(source).toContain(
-      "fill={dataVars['--color-data-categorical-blue']}",
+      "backgroundColor: dataVars['--color-data-categorical-blue']",
+    );
+    expect(source).toContain('borderTopLeftRadius: `min(${radiusVars');
+    expect(source).toContain('borderTopRightRadius: `min(${radiusVars');
+    expect(source).toContain('borderBottomLeftRadius: 0');
+    expect(source).toContain('borderBottomRightRadius: 0');
+    expect(source).toContain(
+      '<ChartRadiusReference sections={stylingSections} />',
     );
     expect(source).toContain("fill={colorVars['--color-overlay-hover']}");
+    expect(source).toContain("isolation: 'isolate'");
   });
 
   it('preserves canonical mode values and transparency', () => {

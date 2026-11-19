@@ -64,6 +64,16 @@ const styles = stylex.create({
   },
   chartLayout: {
     position: 'relative',
+    containerType: 'inline-size',
+    isolation: 'isolate',
+  },
+  chartOverlay: {
+    position: 'absolute',
+    inset: 0,
+    width: '100%',
+    height: '100%',
+    pointerEvents: 'none',
+    zIndex: 2,
   },
   chartLabel: (x: number, y: number) => ({
     position: 'absolute',
@@ -71,6 +81,7 @@ const styles = stylex.create({
     top: `${(y / 300) * 100}%`,
     pointerEvents: 'none',
     whiteSpace: 'nowrap',
+    zIndex: 3,
   }),
   axisLabel: {
     transform: 'translate(-100%, -50%)',
@@ -92,8 +103,12 @@ const styles = stylex.create({
     height: `${((value * 1.2) / 300) * 100}%`,
     padding: 0,
     borderWidth: 0,
-    borderRadius: 2,
-    backgroundColor: 'transparent',
+    borderTopLeftRadius: `min(${radiusVars['--radius-element']}, calc(100cqw * 64 / 420 / 4))`,
+    borderTopRightRadius: `min(${radiusVars['--radius-element']}, calc(100cqw * 64 / 420 / 4))`,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    backgroundColor: dataVars['--color-data-categorical-blue'],
+    zIndex: 1,
     ':focus-visible': {
       outlineWidth: focusVars['--focus-outline-width'],
       outlineStyle: focusVars['--focus-outline-style'],
@@ -115,7 +130,7 @@ const styles = stylex.create({
   marker: {
     width: 12,
     height: 12,
-    borderRadius: 2,
+    borderRadius: `min(${radiusVars['--radius-element']}, 3px)`,
     backgroundColor: dataVars['--color-data-categorical-blue'],
   },
   preview: {
@@ -370,17 +385,11 @@ function ChartStylingPreview() {
                     stroke={colorVars['--color-border']}
                   />
                 ))}
-                {values.map((value, i) => (
-                  <rect
-                    key={i}
-                    x={20.5 + i * 105}
-                    y={264 - value * 1.2}
-                    width="64"
-                    height={value * 1.2}
-                    rx="2"
-                    fill={dataVars['--color-data-categorical-blue']}
-                  />
-                ))}
+              </svg>
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 420 300"
+                {...stylex.props(styles.chartOverlay)}>
                 <line
                   x1="0"
                   x2="420"
@@ -548,6 +557,45 @@ function ChartStylingTable({sections}: {sections: DocSection[]}) {
   );
 }
 
+function ChartRadiusReference({sections}: {sections: DocSection[]}) {
+  const section = sections.find(section => section.id === 'chart-radius');
+  if (!section) {
+    return null;
+  }
+  const description = section.content.find(
+    block => block.type === 'prose',
+  )?.text;
+  const rows = section.content.flatMap(block =>
+    block.type === 'table' ? (block.rows ?? []) : [],
+  );
+  return (
+    <VStack gap={4}>
+      <VStack gap={1}>
+        <Heading id="chart-radius" level={3}>
+          {section.title}
+        </Heading>
+        <Text>{description}</Text>
+      </VStack>
+      <Card>
+        <Table
+          data={rows.map(row => ({
+            part: row[0],
+            radius: row[1],
+            treatment: row[2],
+          }))}
+          columns={[
+            {key: 'part', header: 'Chart part', width: proportional(1)},
+            {key: 'radius', header: 'Radius', width: proportional(1)},
+            {key: 'treatment', header: 'Treatment', width: proportional(2)},
+          ]}
+          density="spacious"
+          dividers="rows"
+        />
+      </Card>
+    </VStack>
+  );
+}
+
 function CopyTokensButton({rows}: {rows: string[][]}) {
   const {copy, isCopied} = useClipboard({announce: 'Tokens copied'});
   const announce = useAnnounce();
@@ -652,6 +700,7 @@ export function ColorSetsDocView({
           </VStack>
           <ChartStylingPreview />
           <ChartStylingTable sections={stylingSections} />
+          <ChartRadiusReference sections={stylingSections} />
         </VStack>
       </VStack>
     </DocPageLayout>
