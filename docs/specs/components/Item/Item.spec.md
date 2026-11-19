@@ -313,9 +313,10 @@ to marks or handlers.
 **Decider:** vjeux, 2026-10-20
 
 The row's disabled state is its own. A bag's `aria-disabled` would announce
-a state the row does not have: only a busy control pairs `aria-disabled` with
-an enabled one (`spec:AST-085` FR6). A disabled row whose activation a caller
-could restore would contradict its own state (FR2). Its focus order is the
+a state the row does not have: `spec:AST-085` exposes `aria-disabled` on a
+disabled control (FR1) and on a busy one (FR6), never on a plain enabled one.
+A disabled row whose activation a caller could restore would contradict its
+own state (FR2). Its focus order is the
 bag's, as an enabled row's would be (FR1). The button's `type` and click and the anchor's address are likewise the
 row's. So the row writes those last, on every control. Where the control is
 the root, the root's props are written first and `controlProps` after them:
