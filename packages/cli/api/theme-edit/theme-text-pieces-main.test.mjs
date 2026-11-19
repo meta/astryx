@@ -9,7 +9,7 @@
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
-import {themeEditNew, themeEditSet} from './theme-edit.mjs';
+import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -75,6 +75,19 @@ describe('a part whose text is drawn by pieces inside it', () => {
       on: 'top-nav-heading',
     });
     expect(written(weight)).toContain('--font-weight-semibold');
+  }, 240_000);
+
+  it('how answers a dialog title size with its title token, the length as typed', async () => {
+    await themeEditNew('t4', {cwd, like: 'neutral'});
+    const {data} = await themeEditHow('dialog title text 14px', {
+      cwd,
+      theme: 't4',
+    });
+    const commands = (data.results ?? []).flatMap(x => x.commands);
+    expect(commands.join('\n')).toMatch(
+      /--text-heading-2-size 14px --on dialog-header-title-block/,
+    );
+    expect(commands.join('\n')).not.toMatch(/0\.875rem/);
   }, 240_000);
 
   it('a part that draws its own text is set as before', async () => {

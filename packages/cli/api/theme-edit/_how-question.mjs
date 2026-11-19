@@ -24922,7 +24922,13 @@ export function draftAnswer(ctx, env, question) {
               if (now == null) return null;
               const typedPx = px == null ? null : lengthPx(String(px));
               const next = typedPx ?? Math.round(now * factor * 100) / 100;
-              return set(tok, `${Math.round((next / 16) * 1000) / 1000}rem`, {
+              // (A typed length is written as typed, "14px", as set
+              // writes it; a stepped size in rem.)
+              const value =
+                typedPx != null
+                  ? String(px).trim()
+                  : `${Math.round((next / 16) * 1000) / 1000}rem`;
+              return set(tok, value, {
                 on,
               });
             })
@@ -24931,7 +24937,7 @@ export function draftAnswer(ctx, env, question) {
             return {
               // (A typed size is named as typed, "14px", so the answer
               // says what it read.)
-              text: `the text size${where}: ${heldS.join(', ')} on ${on}, the size tokens its text reads, ${px == null ? 'each from its own size' : `each set to ${px} (${steps[0]?.value})`}`,
+              text: `the text size${where}: ${heldS.join(', ')} on ${on}, the size tokens its text reads, ${px == null ? 'each from its own size' : `each set to ${px}`}`,
               options: [/** @type {Step[]} */ (steps)],
               sequence: steps.length > 1,
             };
