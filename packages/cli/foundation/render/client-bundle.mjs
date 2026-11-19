@@ -37,10 +37,9 @@ export const LINK_OUT = /^(https?:|mailto:|tel:|\/\/)/i;
  * itself, since a frame that blocks form submission never fires it, and a
  * file has no server to send a form to; a form whose action is another
  * site's address submits as the browser submits it. A link to a place in the
- * page (`#id`) stays in the file: in a frame whose document is given inline
- * (`srcdoc`), the address resolves against the viewer's own page, so the
- * click would navigate the frame away; the file moves to the place instead,
- * which also sets `:target` and fires `hashchange`, as in a browser tab. Enter in a form's only text field
+ * page (`#id`) opens in a new tab only when it names another site; the move
+ * to the place itself is VIEWER_MOVES, which runs in the script's first
+ * module. Enter in a form's only text field
  * submits a form with no submit button, as a browser does; with a button,
  * the browser clicks it.
  */
@@ -359,7 +358,7 @@ if (clipboard == null) {
 }
 }`;
 
-/** The namespace of the module that fills in what a viewer's frame blocks: storage and the clipboard. */
+/** The namespace of the module that fills in what a viewer's frame blocks (storage and the clipboard) and moves a link to a place in the page. */
 const VIEWER = 'astryx-viewer';
 const PAGE = 'astryx-page';
 
