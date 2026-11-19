@@ -584,11 +584,9 @@
   ],
   "packages/core/src/Markdown/Markdown.fr23.sampling.ts": ["FR23"],
   "packages/core/src/Markdown/Markdown.tsx": [
-    "AST-061",
     "DEC-6",
     "DEC-6",
     "DEC-9",
-    "FR11",
     "FR17",
     "FR23",
     "FR30",
