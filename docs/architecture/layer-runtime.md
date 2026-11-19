@@ -149,19 +149,26 @@ owns Theme provider behavior; this record owns where a layer's DOM is hosted.
 
 - **context / anchor:** the anchor (the trigger unless a separate anchor is
   named) receives a unique CSS `anchor-name`; the
-  surface receives `position-anchor`, logical `position-area`, and ordered
-  fallback positions;
+  surface receives `position-anchor`, logical insets that call `anchor()`,
+  and ordered fallback positions;
 - **context / custom:** the anchor and `position-anchor` relationship remain,
   while the caller owns geometry, fallback, offset, and direction handling; and
 - **fixed:** the caller supplies viewport `x` and `y` coordinates and receives no
   CSS-anchor geometry.
 
 Anchor names form a list so several layers may share one anchor without
-clobbering one another. Standard placement uses the `self-*` logical keyword
-family so inherited direction controls RTL behavior. Every anchored placement
-can flip across either axis. Centered placements also gain span fallbacks so the
-surface can move along the alignment axis near viewport edges. Clearance is
-applied to both edges of the placement axis so a flip retains the gap.
+clobbering one another. Standard placement uses logical inset properties with
+`anchor(inside)` and `anchor(outside)`, and `self-*` alignment, so inherited
+direction controls RTL behavior. Insets resolve against the viewport itself.
+A position area is not used: it grows to include an anchor that runs past the
+viewport, so a layer placed in one could fit there while it left the screen.
+On the placement axis, the inset on the anchor side meets the anchor's far
+edge and the other inset meets the viewport edge. On the alignment axis, an
+aligned layer's inset meets its anchor's edge and a centered layer spans the
+viewport with `anchor-center`. Every anchored placement can flip across either
+axis; a flip mirrors the insets, margins and self alignment together.
+Clearance is applied to both edges of the placement axis so a flip retains the
+gap.
 
 Known limitation: a trigger inside SVG `<foreignObject>` cannot be a CSS
 anchor in Chromium, so an anchored surface for it opens at the viewport corner.
@@ -191,9 +198,12 @@ end inside the gutter or under a declared bar does not fit there and the next
 option is tried. On the placement axis the gutter rides the far edge beside
 the anchor clearance on the near edge; on the alignment axis it rides the far
 edge of an aligned layer — one on the anchor-facing edge would push the layer
-off its anchor — and both edges of a centered one. The flip tactics swap the
-margins with the area, so the clearance stays on the anchor side and the gutter
-on the far side, and the placement-axis gutter is one value for both edges —
+off its anchor — and both edges of a centered one. The aligned edge's inset is
+the larger of the gutter and the anchor's edge, so an anchor that runs past a
+viewport edge, such as one in a panel that scrolls sideways, never takes the
+layer past the gutter. The flip tactics swap the insets and margins together,
+so the clearance stays on the anchor side and the gutter on the far side, and
+the placement-axis gutter is one value for both edges —
 the larger of the two block gutters — so a bar declared on one block edge keeps
 a layer the same distance from the opposite edge.
 
@@ -211,12 +221,13 @@ expression, because a CSS minimum otherwise wins over a maximum.
 The fallback order is the runtime's: preferred position; flip across the
 placement axis; flip across the alignment axis; both; then, while the anchor is
 in view, the slide: named `@position-try` options (`Layer/layerSlideRules.ts`)
-whose area spans the whole alignment axis, same side of the anchor first,
+whose insets span the whole alignment axis, same side of the anchor first,
 opposite side second, each carrying the gutter on both alignment-axis edges and
-the clearance-and-gutter pair of the side it lands on, which the browser's
-overflow alignment shifts the least distance that brings the margin box inside
-the viewport. Centered layers keep their one-sided spans ahead of the full
-span. The slide is its own option because a layer wider than the room on either
+the clearance-and-gutter pair of the side it lands on, centred on the anchor
+with `anchor-center`, which shifts the box the least distance that brings the
+margin box inside the viewport. A centered layer already slides that way in
+its own position.
+The slide is its own option because a layer wider than the room on either
 side of its anchor overflows every flipped option on the alignment axis, and
 the browser would otherwise keep the base option and never move the layer to
 the side of the anchor with room on the placement axis. The rules are one
@@ -245,9 +256,11 @@ no read decides it. Chromium
 tries no more than five options, so this list replaces the standard list
 rather than extending it.
 During a scroll, Chromium does not choose a CSS-anchored layer's option again,
-on a page or inside a scrolling panel, so the runtime checks the layer once a
-scroll stops (`spec:AST-059` DEC-8). Where the box still covers the anchor or,
-while the anchor is in view, leaves the viewport on the block axis, the runtime
+on a page or inside a scrolling panel, so the runtime re-picks the layer once a
+scroll stops (`spec:AST-059` DEC-8). While the anchor is in view, every
+anchored layer is placed afresh then. While it is out of view, a layer that
+keeps its anchor clear is checked, and it is placed afresh where the box still
+covers the anchor. To place a layer afresh, the runtime
 takes the layer out of rendering for one forced layout in the same task (no
 frame paints, the popover stays open, no toggle event fires), and the engine
 places it afresh from its list. Leaving rendering cancels the CSS animations
@@ -264,7 +277,8 @@ with the old ones, and the browser fires their cancel and start events), and a
 finished animation's start time is counted again from now while its held end
 time is kept.
 Once the anchor has left the viewport the runtime pins the layer's
-self-alignment `unsafe` toward the anchor, so the layer holds the position its
+self-alignment `unsafe` toward the anchor and its aligned inset to the
+anchor's edge without the gutter's hold, so the layer holds the position its
 flips give it and holds its size rather than sliding to the edge. Components
 pass no fallbacks of their own to an anchor-mode layer.
 
@@ -616,8 +630,10 @@ layers use Layer rendering without joining Escape/platform dismissal.
   frame paints. The first exception is the check after a scroll stops
   (`spec:AST-059` DEC-8): once a scroll of the page or of a scrolling ancestor
   of the anchor stops (`scrollend`, or 150 ms with no `scroll` event where
-  `scrollend` is missing), the layer is checked once, in the first frame
-  painted after the stop, and placed afresh if it fails. No scroll frame and no
+  `scrollend` is missing), the layer is re-picked once, in the first frame
+  painted after the stop: placed afresh while its anchor is in view, and
+  otherwise, for a layer that keeps its anchor clear, checked and placed afresh
+  if it fails. No scroll frame and no
   scroll handler checks the box, re-picks or forces layout for a layer, and no
   option of the layer's list overlaps its anchor, so a frame painted during
   the scroll can show the layer past the viewport edge but never over its
@@ -955,7 +971,7 @@ this current architecture record.
 | INV19        | `layerPortalBoundary.test.ts`, `RichTextEditor.portalHost.test.tsx`, and `LayerBoundary.a11y.browser.spec.ts`, `TooltipDecorator.a11y.browser.spec.ts` and `DecoratorPortal.a11y.browser.spec.ts` in Chromium and WebKit                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | A corrected layer whose host is inside an editor-managed root, and that has no nearer layer root, rendered inside that root; a nested layer moved out of its parent layer's root; a layer that is safe inline moved; a moved wrapper whose `dir` differs from its host's                                                                                                                                                     |
 | INV3–INV5    | `useLayer.test.tsx` and `anchorName.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | A mode leaks geometry, RTL resolves from the wrong context, fallback clips, or a sibling anchor is lost                                                                                                                                                                                                                                                                                                                      |
 | INV11        | `layerViewportInset.test.ts`, `useLayer.test.tsx`, and the `Core/Layer` viewport-inset stories under the story play guard at a desktop and a phone viewport; `BaseTypeahead.incremental.test.tsx` and the Typeahead incremental-results stories for the `spec:AST-092` FR6 exception                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | A second gutter definition, a `100%`-of-span cap, a layer narrower than its explicit size, a layer box wider than the viewport, a layer inside the gutter, or a layer that slides toward an off-screen anchor; for an open Typeahead popup, a later list for the same query that flips it to the other side or grows it past the room on its side, or a first list for a query that is capped to the span beside the trigger |
-| INV12        | The `Core/Layer` viewport-inset stories' first-frame comparison, and `useLayer.test.tsx`'s synchronous anchor read; for the check after a scroll stops, `useLayer.test.tsx`'s `scrollend` and 150 ms fallback cases (one check, in the first painted frame after the stop, with no read in the scroll handler) and the Tooltip suites' scroll-edge cases; a Chromium trace at 4× CPU of a wheel scroll that carries a Tooltip's trigger to the scroll edge counts the forced layouts per scroll before and after DEC-8: page scroll 27–42 → 5, a scrolling panel 7 → 5, the Slider value bubble 12–22 → 5                                                                                                                                                                                                                                                                                 | A layer whose first painted rectangle differs from its settled one; a box check, a re-pick or a forced layout for a layer in a scroll frame or a scroll handler; a re-pick before the first painted frame after a scroll stops, or more than one per stop; a painted frame that shows a layer that keeps its anchor clear over its anchor                                                                                    |
+| INV12        | The `Core/Layer` viewport-inset stories' first-frame comparison, and `useLayer.test.tsx`'s synchronous anchor read; for the check after a scroll stops, `useLayer.test.tsx`'s `scrollend` and 150 ms fallback cases (one re-pick, in the first painted frame after the stop, with no read in the scroll handler), the `Core/Layer` story "anchor stays in view while the page scrolls" and the Tooltip suites' scroll-edge cases; a Chromium trace at 4× CPU of a wheel scroll that carries a Tooltip's trigger to the scroll edge counts the forced layouts per scroll before and after DEC-8: page scroll 27–42 → 5, a scrolling panel 7 → 5, the Slider value bubble 12–22 → 5                                                                                                                                                                                                         | A layer whose first painted rectangle differs from its settled one; a box check, a re-pick or a forced layout for a layer in a scroll frame or a scroll handler; a re-pick before the first painted frame after a scroll stops, or more than one per stop; a painted frame that shows a layer that keeps its anchor clear over its anchor                                                                                    |
 | INV11, INV12 | The software keyboard's cap: `useLayerKeyboardClearance.test.tsx` for its rule, its timing, its read before first paint, and the inset's hold; the `PopoverKeyboard`, `keyboardCappedLists` and `SelectorKeyboardInset` browser specs for its rendered geometry                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | A layer that runs under the keyboard, or is capped though the keyboard does not reach it; a cap that changes more than once per keyboard movement or under a press; a layer opened with the keyboard up whose first frame is uncapped or paints its content past its box; a layer that reads the inset and moves down when the keyboard report ends                                                                          |
 | INV13        | `layerExitCopy.test.ts` and `layerExitCopy.interaction.browser.spec.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | A copy with an id, a form name, a form owner, or pointer reach; a copy off the layer's drawn box; a copy outside the top layer; a second copy for one layer                                                                                                                                                                                                                                                                  |
 | INV6, INV7   | `useLayer.test.tsx`, `Popover.test.tsx`, `DropdownMenu.test.tsx`, `useMenuHover.test.tsx`, `gestureCounter.test.ts`, `outsidePress.test.ts` and `outsidePanClaim.test.ts`; `ScheduleEventPopover.a11y.chromium.spec.ts` and `ScheduleMonthEventPopover.a11y.chromium.spec.ts` in Chromium for one popover with many triggers: a press on another trigger opens it there, and a press on the open trigger ends closed; `LayerPanLightDismiss.interaction.browser.spec.ts` in Chromium for a touch that pans outside an open light-dismiss popover of the Popover family (Popover, Selector's list) and outside the anchored menus built on it (DropdownMenu, TabMenu, the Breadcrumbs, TopNav and SideNav menus) and ContextMenu, with and without `pointercancel`, including a pan that the browser reads as a tap, and for a resize handle and a swipe row dragged under an open Popover | Duplicate close callback or the same press/re-hover reopens a surface; a press on another trigger of an open layer leaves it closed; a pan outside that light-dismisses an open Popover-family popover, a tap outside that leaves it open, or a page control's drag that the popover takes                                                                                                                                   |

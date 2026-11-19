@@ -2,7 +2,8 @@
 
 /**
  * @file `icon.search` leaf (AST-084 FR6): find icons by meaning across every
- * installed set, ranked, with each match's import line in the project's look.
+ * installed set, ranked, with each match's import line in the project's look
+ * and, when a definition names the icon, the import that names its meaning.
  *
  * @input a query, an optional set selector, and a limit
  * @output the `icon.search` envelope
@@ -13,6 +14,7 @@ import {
   astryxIconDefinitions,
   discoverListsIconSet,
   definitionRelatives,
+  iconExportName,
   iconLookExport,
   iconSetKey,
   importLine,
@@ -27,6 +29,12 @@ import {
   setsNamed,
   unusableSet,
 } from '../_records.mjs';
+
+/**
+ * The old names of a set's own definitions: a live set's `definitionAliases`,
+ * or a stored set's `replacedDefinitions`.
+ * @typedef {Pick<Parameters<typeof rankIcons>[0][number], 'definitionAliases'> & {replacedDefinitions?: Array<{name: string, definition: string}>}} Replacements
+ */
 
 /**
  * Every icon of one set, by id: `--set <name> --all-icons`, so an author can read
@@ -78,6 +86,86 @@ export async function iconSearch(query, {cwd, set, limit}) {
 }
 
 /**
+ * Matches that name their meaning import: the match's export imported under
+ * the name of a definition that its set's `map` names it for, named as an
+ * icon set names its exports (`import {TrashIcon as DeleteIcon} from '…'`).
+ * App code that uses this name keeps it when another set draws the meaning.
+ * When the set maps the icon for several definitions, the one that the query
+ * ranks first gives the name, else a built-in one, else the first by name. A
+ * match that no definition names keeps its fields.
+ * @param {import('../icon.type.mjs').IconMatchEntry[]} matches
+ * @param {string} query
+ * @param {Parameters<typeof rankIcons>[0]} sets the searched sets, whose own
+ *   definitions rank with Astryx's
+ * @returns {import('../icon.type.mjs').IconMatchEntry[]}
+ */
+function withMeaningImports(matches, query, sets) {
+  if (!matches.some(match => match.definitions.length > 0)) return matches;
+  /** @type {Map<unknown, (name: string) => number>} */
+  const ranks = new Map();
+  /** @param {import('../icon.type.mjs').IconMatchEntry} match */
+  const rankFor = match => {
+    const set = sets.find(
+      each => each.package === match.package && each.name === match.set,
+    );
+    const own = set?.definitions ?? [];
+    // Sets with no definitions of their own share one order.
+    const key = own.length > 0 ? set : null;
+    let rank = ranks.get(key);
+    if (!rank) {
+      rank = meaningRank(query, set);
+      ranks.set(key, rank);
+    }
+    return rank;
+  };
+  return matches.map(match => {
+    if (match.definitions.length === 0) return match;
+    const rank = rankFor(match);
+    const [meaning] = [...match.definitions].sort(
+      (a, b) => rank(a) - rank(b) || (a < b ? -1 : a > b ? 1 : 0),
+    );
+    return {
+      ...match,
+      meaningImport: importLine(
+        match.export,
+        match.module,
+        iconExportName(meaning),
+      ),
+    };
+  });
+}
+
+/**
+ * The order of definition names for a query: the definitions that the
+ * query matches, best first, then the built-in ones, then the rest. A set's
+ * own definitions rank with Astryx's, by their names, the names they
+ * replaced, and their words; on a shared name, Astryx's counts, as in the
+ * icon ranking.
+ * @param {string} query
+ * @param {Parameters<typeof rankIcons>[0][number] | undefined} set the
+ *   match's set
+ * @returns {(name: string) => number}
+ */
+function meaningRank(query, set) {
+  const own = set?.definitions ?? [];
+  const astryx = astryxIconDefinitions().definitions.map(each => each.doc);
+  const names = new Set(astryx.map(doc => doc.name));
+  const docs = [
+    ...astryx,
+    ...own.map(each => each.doc).filter(doc => !names.has(doc.name)),
+  ];
+  const matched = definitionMatches(query, docs, set).map(
+    match => match.doc.name,
+  );
+  const place = new Map(matched.map((name, index) => [name, index]));
+  const builtIn = new Set(
+    astryx.filter(doc => doc.builtIn).map(doc => doc.name),
+  );
+  return name =>
+    place.get(name) ?? matched.length + (builtIn.has(name) ? 0 : 1);
+}
+
+/**
  * The look each set in the project's list draws, by `<package>/<set>`: the
  * look the project picks (`experimental.iconVariant`). Empty when it picks
  * none. A set outside the list draws no project look.
@@ -95,7 +183,8 @@ export function projectLooks(choice) {
 /**
  * Rank the icons of `sets` against a query: the one ranking behind both
  * `icon()` and `rankIconIndex()`. Each match's import draws the look `looks`
- * names for its set when its icon has that look. With no set installed, not
+ * names for its set when its icon has that look, and a match that a
+ * definition names also has its meaning import. With no set installed, not
  * even a withdrawn one, the answer names the Astryx icon definitions that
  * match, built-in ones first, and how to get a set.
  * @param {Parameters<typeof rankIcons>[0]} sets in tie order
@@ -131,9 +220,15 @@ export function rankIconSets(
     data: {
       query: query.trim(),
       matchCount: matches.length,
-      matches: matches
-        .slice(0, limit)
-        .map(match => withRelatives(inLook(match, searched, looks), searched)),
+      matches: withMeaningImports(
+        matches
+          .slice(0, limit)
+          .map(match =>
+            withRelatives(inLook(match, searched, looks), searched),
+          ),
+        query,
+        searched,
+      ),
     },
   };
 }
@@ -230,16 +325,22 @@ function noIconSet(query, limit, discoverListsPacks) {
 }
 
 /**
- * The Astryx icon definitions that answer a query, each with its score,
- * ranked as the search ranks a set's icons (FR6).
+ * The icon definitions that answer a query, each with its score, ranked as
+ * the search ranks a set's icons (FR6): Astryx's, or the `docs` given.
  * @param {string} query
+ * @param {import('../../../authoring/doctypes/icon-definition/type').IconDefinitionDoc[]} [docs]
+ * @param {Replacements} [replacements] the old names of a set's own
+ *   definitions among `docs`, so that a name they replaced answers too
  * @returns {Array<{doc: import('../../../authoring/doctypes/icon-definition/type').IconDefinitionDoc, score: number}>}
  */
-export function definitionMatches(query) {
-  const docs = astryxIconDefinitions().definitions.map(each => each.doc);
+export function definitionMatches(
+  query,
+  docs = astryxIconDefinitions().definitions.map(each => each.doc),
+  replacements = {},
+) {
   const byId = new Map(docs.map(doc => [definitionId(doc.name), doc]));
   return answeringMatches(
-    rankIcons([definitionSet(docs)], query, {words: true}),
+    rankIcons([definitionSet(docs, replacements)], query, {words: true}),
   ).map(match => ({
     doc: /** @type {(typeof docs)[number]} */ (byId.get(match.id)),
     score: match.score,
@@ -254,17 +355,24 @@ const definitionId = name =>
   name.replace(/([a-z0-9])([A-Z])/gu, '$1-$2').toLowerCase();
 
 /**
- * Astryx's icon definitions read as one set whose `map` names one icon for
- * each definition, so the icon ranking finds a definition by its name, its
- * name as words, and its own words, exactly as it finds a set's icon.
+ * Icon definitions read as one set whose `map` names one icon for each
+ * definition, so the icon ranking finds a definition by its name, its name
+ * as words, and its own words, exactly as it finds a set's icon. The docs
+ * are the set's own definitions too, so a set's definition answers to its
+ * words as Astryx's do. The set's old definition names come along, so a
+ * name that one of its definitions replaced answers as Astryx's old names
+ * do.
  * @param {import('../../../authoring/doctypes/icon-definition/type').IconDefinitionDoc[]} docs
+ * @param {Replacements} replacements
  * @returns {import('../../../foundation/discovery/icon-set-discovery.mjs').DiscoveredIconSet}
  */
-function definitionSet(docs) {
+function definitionSet(docs, {definitionAliases, replacedDefinitions}) {
   return /** @type {any} */ ({
     name: 'definitions',
     package: '@astryxdesign/cli',
-    definitions: [],
+    definitions: docs.map(doc => ({doc})),
+    ...(definitionAliases ? {definitionAliases} : {}),
+    ...(replacedDefinitions ? {replacedDefinitions} : {}),
     data: {
       schemaVersion: 1,
       module: '@astryxdesign/cli',
