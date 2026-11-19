@@ -451,7 +451,15 @@ function rows() {
                 ...rest,
               ],
             ],
-            ['pressed ', [at(tokens, '--color-overlay-pressed'), ...rest]],
+            // A mouse press keeps the hover fill under the pressed overlay.
+            [
+              'pressed ',
+              [
+                at(tokens, '--color-overlay-pressed'),
+                ...(hoverFill ? [hoverFill] : []),
+                ...rest,
+              ],
+            ],
           ])
             push({
               ...base,
