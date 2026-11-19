@@ -349,7 +349,10 @@ var(--text-body-size)` for its own theme (`component:Theme` FR1), so text
   `--color-text-secondary` measures it again inside that rule: a part's rule
   on the page grounds and every Card variant's fill over them where one colour
   reads there, else on the page; a Card rule that is not one variant's on each
-  variant's fill, into the theme root's Card entries. A theme's rule
+  variant's fill, into the theme root's Card entries. A Card variant rule's
+  color-mode block is measured on that variant's fill. An adaptation or a
+  media surface's block is not measured: inside it the selected parts read the
+  theme root's value. A theme's rule
   keyed on a part's tinted state (`selected`) sets the text there; a rule for
   the part at rest yields to the measured text in that state.
 

@@ -66,7 +66,6 @@ import {themeDataAttributes} from '../../../utils/themeProps';
 registerEnglishFallback(english);
 import {registerFixedHeightColumn} from '../../tableColumnAdmission';
 import {registerCountIndependentPlugin} from '../../tableRowContextUsage';
-import {selectedTintTextVars} from '../../../theme/selectedTintText.stylex';
 
 // =============================================================================
 // Config Type
@@ -187,11 +186,6 @@ function applyRowSelectionStyle(
   const wash = isSelected && hasRowHighlight ? selectedBgColor : '';
   if (el.style.backgroundColor !== wash) {
     el.style.backgroundColor = wash;
-  }
-  // Secondary text on the wash reads at 4.5:1 (selectedTintText.ts). A
-  // class, not an inline style, so a theme's own selected-row text wins.
-  for (const name of WASH_TEXT_CLASSES) {
-    el.classList.toggle(name, wash !== '');
   }
   // A pinned column paints its own opaque background over the row, so the
   // wash alone stops at the freeze line. Publishing it as the row overlay is
@@ -355,15 +349,6 @@ function SelectionCellContentInner<T extends Record<string, unknown>>({
 // =============================================================================
 
 const selectedBgColor = colorVars['--color-accent-muted'];
-const washTextStyles = stylex.create({
-  text: {
-    '--color-text-secondary':
-      selectedTintTextVars['--_selected-text-secondary'],
-  },
-});
-const WASH_TEXT_CLASSES = (stylex.props(washTextStyles.text).className ?? '')
-  .split(' ')
-  .filter(Boolean);
 
 /**
  * The row's current fill, republished for pinned cells to read. Declared as a

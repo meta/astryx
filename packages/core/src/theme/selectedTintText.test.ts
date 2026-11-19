@@ -300,6 +300,48 @@ describe('secondary text on the accent tint', () => {
     }
   });
 
+  it("measures a Card variant's color-mode block on that variant's fill", () => {
+    const tokens = {
+      ...LOW,
+      '--color-background-yellow': ['#f5e08a', '#f5e08a'],
+    } satisfies Record<string, [string, string]>;
+    const css = generateThemeCSS(
+      defineTheme({
+        name: 'pastel',
+        tokens,
+        components: {
+          card: {
+            'variant:yellow': {'@dark': {'--color-text-secondary': '#3a3a10'}},
+          },
+        },
+      }),
+    ).component;
+    const values = [
+      ...css.matchAll(
+        /([^{}]*data-variant="yellow"[^{}]*)\{[^}]*--_selected-text-secondary: (light-dark\([^;]*\));/g,
+      ),
+    ].map(match => match[2]);
+    expect(values.length).toBeGreaterThan(0);
+    for (const value of values) {
+      expect(
+        lowestRatio(
+          {
+            ...(colorDefaults as Record<string, string>),
+            ...Object.fromEntries(
+              Object.entries(tokens).map(([k, v]) => [
+                k,
+                `light-dark(${v[0]}, ${v[1]})`,
+              ]),
+            ),
+            '--color-text-secondary': '#3a3a10',
+          },
+          pair(value),
+          '--color-background-yellow',
+        ),
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it("measures again on a Card variant's fill where the page's text there changes", () => {
     // A translucent tint shows the card's fill through it.
     const tokens = {

@@ -1242,12 +1242,12 @@ function generateComponentRules(
           const own = Object.fromEntries(
             props.filter(([prop]) => prop.startsWith('--')),
           );
-          const ground =
-            block === styles ? ruleTintGround(component, key) : undefined;
+          // A variant's color-mode block reads on that variant's fill too.
+          const ground = ruleTintGround(component, key);
           // A part's rule reads in a Card of any variant where one colour
           // does; else on the page. Unmeasurable: the rule's own text stays.
           const derived =
-            (ground === undefined || ground.kind === 'page'
+            (ground.kind === 'page'
               ? (deriveSelectedTintText(
                   selectedTint.tokens,
                   selectedTint.localTokens,

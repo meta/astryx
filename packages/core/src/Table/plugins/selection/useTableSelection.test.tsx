@@ -14,6 +14,8 @@ import userEvent from '@testing-library/user-event';
 import {Table} from '../../Table';
 import {useTableSelection} from './useTableSelection';
 import {colorVars} from '../../../theme/tokens.stylex';
+import * as stylex from '@stylexjs/stylex';
+import {selectedTintTextVars} from '../../../theme/selectedTintText.stylex';
 import {defineTheme} from '../../../theme/defineTheme';
 import {generateThemeCSS} from '../../../theme/generateThemeRules';
 import type {BodyRowRenderProps, TableColumn} from '../../types';
@@ -45,11 +47,13 @@ function SelectionTable({
   getIsItemEnabled,
   getRowLabel,
   hasRowHighlight,
+  isStriped,
 }: {
   getIsItemSelectable?: (item: SelectableUser) => boolean;
   getIsItemEnabled?: (item: SelectableUser) => boolean;
   getRowLabel?: (item: SelectableUser) => string;
   hasRowHighlight?: boolean;
+  isStriped?: boolean;
 }) {
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
@@ -91,16 +95,45 @@ function SelectionTable({
       data={selectableUsers}
       columns={selectableColumns}
       idKey="id"
+      isStriped={isStriped}
       plugins={{selection: selectionPlugin}}
     />
   );
 }
+
+// The declaration TableRow sets for a selected row; StyleX emits the same
+// atomic class for the same declaration.
+const textOnTintProbe = stylex.create({
+  row: {
+    '--color-text-secondary': {
+      default: null,
+      ':is([aria-selected="true"])':
+        selectedTintTextVars['--_selected-text-secondary'],
+    },
+  },
+});
+const textOnTintClasses = (stylex.props(textOnTintProbe.row).className ?? '')
+  .split(' ')
+  // Debug class names name their source file; only the atoms matter.
+  .filter(name => name !== '' && !name.includes('__'));
 
 // =============================================================================
 // Tests
 // =============================================================================
 
 describe('useTableSelection', () => {
+  it('keeps a selected row on the text Core measures on the tint when the striping changes', async () => {
+    const user = userEvent.setup();
+    const {rerender} = render(<SelectionTable />);
+    await user.click(screen.getAllByLabelText('Select row')[0]);
+    rerender(<SelectionTable isStriped />);
+    const row = screen.getByText('Alice').closest('tr')!;
+    expect(row).toHaveAttribute('aria-selected', 'true');
+    for (const name of textOnTintClasses) {
+      expect(row.classList.contains(name)).toBe(true);
+    }
+  });
+
   it('renders selection checkboxes in header and body rows', () => {
     render(<SelectionTable />);
     const checkboxes = screen.getAllByRole('checkbox');
