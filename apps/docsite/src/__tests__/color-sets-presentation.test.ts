@@ -94,9 +94,12 @@ describe('color-set presentation', () => {
     expect(source).toContain("fill={colorVars['--color-overlay-hover']}");
     expect(source).toContain("isolation: 'isolate'");
     expect(source).toContain('<ChartRadiusSample part={row.part} />');
-    expect(source).toContain('styles.radiusBar(6, 8)');
-    expect(source).toContain('styles.radiusTooltip');
-    expect(source).toContain('styles.radiusPlot');
+    expect(source).toContain('<RadiusBarChart />');
+    expect(source).toContain('<HoverCard');
+    expect(source).toContain('<ChartSwatch');
+    expect(source).not.toContain('styles.radiusBar(');
+    expect(source).not.toContain('styles.radiusTooltip');
+    expect(source).not.toContain('styles.radiusPlot');
     expect(source).toContain('radius preview');
   });
 

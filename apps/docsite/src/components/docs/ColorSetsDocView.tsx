@@ -9,7 +9,9 @@
  * @position The Color sets subpage under Data visualization.
  */
 
-import {useState} from 'react';
+import {useLayoutEffect, useRef, useState} from 'react';
+import {Chart, ChartSwatch, bar} from '@astryxdesign/charts';
+import '@astryxdesign/charts/charts.css';
 import * as stylex from '@stylexjs/stylex';
 import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
@@ -29,7 +31,6 @@ import {
   colorVars,
   focusVars,
   radiusVars,
-  shadowVars,
   spacingVars,
   typographyVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
@@ -104,8 +105,8 @@ const styles = stylex.create({
     height: `${((value * 1.2) / 300) * 100}%`,
     padding: 0,
     borderWidth: 0,
-    borderTopLeftRadius: `min(${radiusVars['--radius-element']}, calc(100cqw * 64 / 420 / 4), calc(100cqw * ${value * 1.2} / 420 / 4))`,
-    borderTopRightRadius: `min(${radiusVars['--radius-element']}, calc(100cqw * 64 / 420 / 4), calc(100cqw * ${value * 1.2} / 420 / 4))`,
+    borderTopLeftRadius: `min(${radiusVars['--radius-element']}, calc(100cqw * 64 / 420 / 2), calc(100cqw * ${value * 1.2} / 420 / 2))`,
+    borderTopRightRadius: `min(${radiusVars['--radius-element']}, calc(100cqw * 64 / 420 / 2), calc(100cqw * ${value * 1.2} / 420 / 2))`,
     borderBottomLeftRadius: radiusVars['--radius-none'],
     borderBottomRightRadius: radiusVars['--radius-none'],
     backgroundColor: dataVars['--color-data-categorical-blue'],
@@ -128,12 +129,7 @@ const styles = stylex.create({
     backgroundColor: colorVars['--color-background-card'],
     padding: spacingVars['--spacing-4'],
   },
-  marker: {
-    width: 12,
-    height: 12,
-    borderRadius: `min(${radiusVars['--radius-element']}, 3px)`,
-    backgroundColor: dataVars['--color-data-categorical-blue'],
-  },
+
   radiusSample: {
     width: 120,
     height: 80,
@@ -141,35 +137,11 @@ const styles = stylex.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  radiusTooltip: {
-    backgroundColor: colorVars['--color-background-surface'],
-    borderRadius: radiusVars['--radius-container'],
-    boxShadow: shadowVars['--shadow-med'],
-    padding: spacingVars['--spacing-3'],
-  },
-  radiusBars: {
-    display: 'flex',
-    alignItems: 'end',
-    gap: spacingVars['--spacing-2'],
-    height: 48,
-  },
-  radiusBar: (width: number, height: number) => ({
-    width,
-    height,
-    backgroundColor: dataVars['--color-data-categorical-blue'],
-    borderTopLeftRadius: `min(${radiusVars['--radius-element']}, ${width / 4}px, ${height / 4}px)`,
-    borderTopRightRadius: `min(${radiusVars['--radius-element']}, ${width / 4}px, ${height / 4}px)`,
-    borderBottomLeftRadius: radiusVars['--radius-none'],
-    borderBottomRightRadius: radiusVars['--radius-none'],
-  }),
-  radiusPlot: {
-    width: 96,
-    height: 48,
-    borderRadius: radiusVars['--radius-none'],
-    backgroundColor: colorVars['--color-overlay-hover'],
-    borderWidth: 1,
-    borderStyle: 'solid',
-    borderColor: colorVars['--color-border-emphasized'],
+  radiusProbe: {
+    position: 'absolute',
+    width: radiusVars['--radius-element'],
+    height: 0,
+    visibility: 'hidden',
   },
   preview: {
     display: 'flex',
@@ -235,14 +207,16 @@ function ModePreview({
   }
   const label = colorLabel(color, strength);
   return (
-    <div {...stylex.props(styles.preview)}>
-      <div
-        role="img"
-        aria-label={`${token}, ${mode}, ${strength * 100}%, ${label}`}
-        {...stylex.props(styles.surface(surface))}>
-        <div {...stylex.props(styles.fill(color, strength))} />
+    <Theme theme={neutralTheme} mode={mode}>
+      <div {...stylex.props(styles.preview)}>
+        <div
+          role="img"
+          aria-label={`${token}, ${mode}, ${strength * 100}%, ${label}`}
+          {...stylex.props(styles.surface(surface))}>
+          <div {...stylex.props(styles.fill(color, strength))} />
+        </div>
       </div>
-    </div>
+    </Theme>
   );
 }
 
@@ -371,7 +345,10 @@ function ChartStylingPreview() {
           </HStack>
           <HStack gap={6} vAlign="center" wrap="wrap">
             <HStack gap={2} vAlign="center">
-              <div {...stylex.props(styles.marker)} />
+              <ChartSwatch
+                color={dataVars['--color-data-categorical-blue']}
+                variant="square"
+              />
               <Text color="secondary">Actual sales</Text>
             </HStack>
             <HStack gap={2} vAlign="center">
@@ -595,59 +572,90 @@ function ChartStylingTable({sections}: {sections: DocSection[]}) {
   );
 }
 
+function RadiusBarChart({square = false}: {square?: boolean}) {
+  const probe = useRef<HTMLDivElement>(null);
+  const [radius, setRadius] = useState(0);
+  useLayoutEffect(() => {
+    if (probe.current) {
+      setRadius(probe.current.getBoundingClientRect().width);
+    }
+  }, []);
+  return (
+    <>
+      <div ref={probe} {...stylex.props(styles.radiusProbe)} />
+      <Chart
+        data={[
+          {quarter: 'Q1', sales: 120},
+          {quarter: 'Q2', sales: 16},
+          {quarter: 'Q3', sales: 180},
+        ]}
+        xKey="quarter"
+        series={[
+          bar('sales', {
+            color: dataVars['--color-data-categorical-blue'],
+            radius: square ? 0 : radius,
+          }),
+        ]}
+        height={64}
+        margin={{top: 0, right: 0, bottom: 0, left: 0}}
+        yDomain={[0, 200]}
+        tooltip={square ? {render: () => null, showHoverDots: false} : false}
+        aria-label={
+          square
+            ? 'Square plot with hover highlight'
+            : 'Real bars with theme element radius'
+        }
+      />
+    </>
+  );
+}
+
 function ChartRadiusSample({part}: {part: string}) {
   return (
     <Theme theme={neutralTheme} mode="light">
       <div
-        role="img"
+        role="group"
         aria-label={`${part} radius preview`}
         {...stylex.props(styles.radiusSample)}>
         {part === 'Chart card' ? (
-          <Card width={112} height={64} padding={2}>
-            <HStack gap={2} vAlign="end">
-              <div {...stylex.props(styles.radiusBar(16, 24))} />
-              <div {...stylex.props(styles.radiusBar(16, 36))} />
-              <div {...stylex.props(styles.radiusBar(16, 28))} />
-            </HStack>
+          <Card width={112} padding={2}>
+            <RadiusBarChart />
           </Card>
         ) : part === 'Tooltip surface' ? (
-          <div {...stylex.props(styles.radiusTooltip)}>
-            <Text hasTabularNumbers>$160k</Text>
-          </div>
+          <HoverCard
+            label="Radius tooltip sample"
+            delay={0}
+            hideDelay={0}
+            focusTrigger="always"
+            touchTrigger="tap"
+            content={
+              <VStack gap={1}>
+                <Text weight="bold">Q2</Text>
+                <Text hasTabularNumbers>Sales: $160k</Text>
+              </VStack>
+            }>
+            <Button size="sm" variant="ghost" label="Hover" />
+          </HoverCard>
         ) : part === 'Bars' ? (
-          <div {...stylex.props(styles.radiusBars)}>
-            <div {...stylex.props(styles.radiusBar(32, 48))} />
-            <div {...stylex.props(styles.radiusBar(12, 32))} />
-            <div {...stylex.props(styles.radiusBar(6, 8))} />
-          </div>
+          <RadiusBarChart />
         ) : part === 'Filled legend keys' ? (
-          <div {...stylex.props(styles.marker)} />
+          <HStack gap={2} vAlign="center">
+            <ChartSwatch
+              color={dataVars['--color-data-categorical-blue']}
+              variant="square"
+            />
+            <Text type="supporting">Sales</Text>
+          </HStack>
         ) : part === 'Plot and hover region' ? (
-          <div {...stylex.props(styles.radiusPlot)} />
+          <RadiusBarChart square />
         ) : (
-          <svg aria-hidden="true" width="96" height="48">
-            <line
-              x1="4"
-              y1="12"
-              x2="92"
-              y2="12"
-              stroke={dataVars['--color-data-neutral']}
-              strokeWidth="2"
-              strokeDasharray="6 4"
+          <HStack gap={2} vAlign="center">
+            <ChartSwatch
+              color={dataVars['--color-data-categorical-blue']}
+              variant="line"
             />
-            <circle
-              cx="28"
-              cy="36"
-              r="4"
-              fill={dataVars['--color-data-categorical-blue']}
-            />
-            <circle
-              cx="68"
-              cy="36"
-              r="4"
-              fill={dataVars['--color-data-categorical-blue']}
-            />
-          </svg>
+            <Text type="supporting">Trend</Text>
+          </HStack>
         )}
       </div>
     </Theme>

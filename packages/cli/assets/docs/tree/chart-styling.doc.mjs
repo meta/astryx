@@ -110,7 +110,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Use container radius for chart cards and tooltip surfaces, and element radius for bars and filled legend keys. Keep the radius relative to the active theme. Rounding changes the corners, not the value, scale, or baseline.',
+          text: 'Use container radius for chart cards and tooltip surfaces, and pass the theme’s element radius to the bar renderer. Legend-key rounding depends on the renderer; these previews use the current components. Rounding changes the corners, not the value, scale, or baseline.',
         },
         {
           type: 'table',
@@ -129,22 +129,22 @@ export const docs = {
             [
               'Bars',
               '--radius-element',
-              'Round the exposed ends. Cap the radius at the smaller of --radius-element and one quarter of the bar’s width or height. Use --radius-none at the baseline.',
+              'Round the exposed ends; use --radius-none at the baseline. Astryx bar() accepts a numeric radius and limits it to half the bar’s width or height. Convert the active theme’s element radius to rendered pixels before passing it.',
             ],
             [
               'Filled legend keys',
               '--radius-element',
-              'Use the same bound: the smaller of --radius-element and one quarter of the key’s width or height, so filled keys stay rectangular.',
+              'Proposed theme role. The current ChartSwatch square is 8×8px with a fixed 2px radius; the preview shows that real component without overriding it.',
             ],
             [
               'Plot and hover region',
               '--radius-none',
-              'Keep the data area and highlight rectangular.',
+              'Keep the plot rectangular. The current ChartTooltip hover band has 4px corners and uses the text color at 6% opacity, rather than the proposed hover token.',
             ],
             [
               'Line and point legend keys',
               'Match the plotted mark',
-              'Keep dashed lines and point shapes consistent with the series. They do not use a surface corner radius.',
+              'The preview uses ChartSwatch’s current line variant. A custom dashed or point key needs renderer support; do not imply the built-in swatch reproduces those shapes.',
             ],
           ],
         },

@@ -252,13 +252,13 @@ describe('visualization palette and styling guides', () => {
     expect(table.rows[4]).toEqual([
       'Plot and hover region',
       '--radius-none',
-      'Keep the data area and highlight rectangular.',
+      'Keep the plot rectangular. The current ChartTooltip hover band has 4px corners and uses the text color at 6% opacity, rather than the proposed hover token.',
     ]);
     expect(JSON.stringify(section)).toContain(
       'not the value, scale, or baseline',
     );
     expect(JSON.stringify(section)).toContain(
-      'one quarter of the bar’s width or height',
+      'limits it to half the bar’s width or height',
     );
   });
 
