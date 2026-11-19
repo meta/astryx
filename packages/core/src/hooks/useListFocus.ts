@@ -61,10 +61,10 @@ export interface UseListFocusOptions {
   boundarySelector?: string;
 
   /**
-   * Whether arrow navigation wraps around at the ends. A list inside a
-   * `role="toolbar"` does not wrap on the toolbar's arrow keys: at its first
-   * and last item it leaves the key unconsumed, so the toolbar moves focus to
-   * its next control.
+   * Whether arrow navigation wraps around at the ends. A list in a
+   * `role="toolbar"`'s row (not one in a popover or dialog the toolbar holds)
+   * does not wrap on the toolbar's arrow keys: at its first and last item it
+   * leaves the key unconsumed, so the toolbar moves focus to its next control.
    * @default true
    */
   wrap?: boolean;
