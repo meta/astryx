@@ -245,7 +245,7 @@ export function deriveLookColors({
     );
   const at = (id: string, m: Mode, stop: number): Stop => ({
     stop,
-    color: String(palette[id][m][stop]),
+    color: palette[id][m][stop],
   });
   /**
    * The stop nearest `start` that reads at `needs` on every ground,
