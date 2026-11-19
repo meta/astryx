@@ -17615,7 +17615,8 @@ export function draftAnswer(ctx, env, question) {
       /** @param {{on: string, when: string}} x @param {string} prop */
       const linesFor = (x, prop) => {
         // (Its text parts' tokens: the ones inside it that set the
-        // property, never its own controls or icons.)
+        // property, never its own controls or icons: a banner's close
+        // button draws as a button, and an icon's size is its glyph's.)
         const rec = C.MAP[one(x.on)];
         const textInside = rec?.own?.[prop]
           ? []
@@ -17623,6 +17624,8 @@ export function draftAnswer(ctx, env, question) {
               (/** @type {string} */ k) =>
                 C.MAP[k]?.own?.[prop] &&
                 !(grouped['button-like'] ?? []).includes(k) &&
+                !(C.MAP[k].tags ?? []).includes('button') &&
+                k !== 'icon' &&
                 !/-icon$/.test(k),
             );
         const inner = [
@@ -22581,12 +22584,7 @@ export function draftAnswer(ctx, env, question) {
         if (heldW.length)
           return {
             text: `${value} text${where}: ${heldW.join(', ')} on ${on}, the weight tokens its text reads`,
-            // (On the status or variant asked, "the error banner's title".)
-            options: [
-              heldW.map(tok =>
-                set(tok, value, {on, ...(f.when ? {when: f.when} : {})}),
-              ),
-            ],
+            options: [heldW.map(tok => set(tok, value, {on}))],
             sequence: heldW.length > 1,
           };
         const rung = Object.entries(HEADING_WEIGHTS).find(
@@ -22747,7 +22745,6 @@ export function draftAnswer(ctx, env, question) {
               const next = typedPx ?? Math.round(now * factor * 100) / 100;
               return set(tok, `${Math.round((next / 16) * 1000) / 1000}rem`, {
                 on,
-                ...(f.when ? {when: f.when} : {}),
               });
             })
             .filter(st => st != null);
@@ -22914,15 +22911,7 @@ export function draftAnswer(ctx, env, question) {
           if (value)
             return {
               text: `the text size${where}: ${largest[0]} on ${on}, the size of its main text${px ? '' : ` (now ${largest[1]})`}`,
-              // (On the status or variant asked, "success alerts".)
-              options: [
-                [
-                  set(largest[0], value, {
-                    on,
-                    ...(f.when ? {when: f.when} : {}),
-                  }),
-                ],
-              ],
+              options: [[set(largest[0], value, {on})]],
             };
         }
         const sizeTok =
