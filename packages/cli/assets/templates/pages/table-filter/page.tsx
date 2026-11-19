@@ -1324,7 +1324,7 @@ const styles = stylex.create({
     rowGap: 6,
     flexWrap: {
       default: null,
-      '@container toolbar (max-width: 355px)': 'wrap',
+      '@container filter-row (max-width: 355px)': 'wrap',
     },
   },
   // This slot is what `observeParent` measures, so its width has to mean "the
@@ -1390,6 +1390,11 @@ const styles = stylex.create({
       default: 0,
       '@container toolbar (max-width: 860px)': '100%',
     },
+    // The filter row queries this box rather than the toolbar: the toolbar's
+    // padding sits inside its own container, so only this box has the width
+    // the row really gets.
+    containerName: 'filter-row',
+    containerType: 'inline-size',
   },
   // Holds the cluster against the end edge on its own row, where it would
   // otherwise sit under the filters at the start.
