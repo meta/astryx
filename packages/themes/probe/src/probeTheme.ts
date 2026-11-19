@@ -6,7 +6,7 @@
 // test fixture. Regenerate with: pnpm visual:probe-theme
 //
 // defineTheme takes six things and this covers all six:
-//   components  287 targets, 926 selectors (generated from the docs)
+//   components  every theming target, one entry each (generated from the docs)
 //   tokens      custom properties, read back off the themed element
 //   icons       every registry entry swapped for a marked glyph
 //   indicators  check / radio / checkbox swapped — the swap that reaches furthest
@@ -548,6 +548,14 @@ export const probeTheme = defineTheme({
         color: 'hsl(63.2 85% 12%)',
         borderColor: 'hsl(290.2 70% 25%)',
         outlineColor: 'hsl(200.6 79% 25%)',
+      },
+    },
+    'banner-close': {
+      base: {
+        backgroundColor: 'hsl(278.5 87% 53%)',
+        color: 'hsl(263.0 79% 12%)',
+        borderColor: 'hsl(193.7 74% 25%)',
+        outlineColor: 'hsl(87.6 86% 25%)',
       },
     },
     'banner-content': {
@@ -3560,6 +3568,20 @@ export const probeTheme = defineTheme({
         outlineColor: 'hsl(228.8 89% 25%)',
       },
     },
+    'number-input-stepper': {
+      base: {
+        backgroundColor: 'hsl(212.4 86% 59%)',
+        color: 'hsl(224.0 84% 12%)',
+        borderColor: 'hsl(331.9 74% 25%)',
+        outlineColor: 'hsl(314.4 76% 25%)',
+      },
+      direction: {
+        backgroundColor: 'hsl(6.5 86% 45%)',
+        color: 'hsl(202.3 79% 12%)',
+        borderColor: 'hsl(328.3 89% 25%)',
+        outlineColor: 'hsl(277.3 79% 25%)',
+      },
+    },
     outline: {
       base: {
         backgroundColor: 'hsl(129.5 92% 45%)',
@@ -5669,6 +5691,14 @@ export const probeTheme = defineTheme({
         color: 'hsl(336.5 94% 12%)',
         borderColor: 'hsl(18.8 82% 25%)',
         outlineColor: 'hsl(322.1 78% 25%)',
+      },
+    },
+    'toast-close': {
+      base: {
+        backgroundColor: 'hsl(350.1 87% 56%)',
+        color: 'hsl(159.1 94% 12%)',
+        borderColor: 'hsl(157.1 76% 25%)',
+        outlineColor: 'hsl(13.3 70% 25%)',
       },
     },
     'toggle-button': {
