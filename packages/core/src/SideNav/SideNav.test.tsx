@@ -2010,6 +2010,9 @@ describe('SideNavItem — collapsed submenu hover intent', () => {
       const trigger = renderFlyout();
       asKeyboardFocusable(trigger);
 
+      // A key press first: script focus right after a pointer press reads as
+      // pointer focus, and earlier cases in this file click.
+      fireEvent.keyDown(trigger, {key: 'Tab'});
       act(() => {
         trigger.focus();
       });
