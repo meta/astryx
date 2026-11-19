@@ -165,6 +165,37 @@ describe('traits from a picture', () => {
     for (const t of traits) expect(t.read).toMatch(/\d+ of \d+ .*boxes/);
   });
 
+  it('writes corners per family when buttons and fields round differently', () => {
+    const c = canvas(400, 140);
+    for (let k = 0; k < 3; k++)
+      c.box({x: 20 + k * 90, y: 20, w: 80, h: 28, r: 4, edge: 1, edgeColor: [0, 80, 180], fill: [40, 150, 230], label: true});
+    for (let k = 0; k < 2; k++)
+      c.box({x: 20 + k * 180, y: 70, w: 170, h: 28, r: 8, edge: 1, edgeColor: [190, 190, 190], fill: [255, 255, 255], label: true, labelAt: 'start'});
+    const steps = readTraits(c.png()).traits.map(t => t.step);
+    expect(steps.some(st => st.thing === '--radius-element')).toBe(false);
+    expect(steps).toContainEqual({verb: 'set', thing: 'corners', value: '4px', on: 'button-like'});
+    expect(steps).toContainEqual({verb: 'set', thing: 'corners', value: '8px', on: 'inputs'});
+  });
+
+  it('reads edge width only from boxes that draw an edge', () => {
+    // Filled buttons beside outlined fields of two heights: the fields'
+    // edge, never 0px from the buttons.
+    const c = canvas(400, 160);
+    for (let k = 0; k < 4; k++)
+      c.box({x: 20 + k * 90, y: 20, w: 80, h: 28, r: 4, fill: [40, 150, 230], label: true});
+    c.box({x: 20, y: 70, w: 170, h: 28, r: 4, edge: 1, edgeColor: [190, 190, 190], fill: [255, 255, 255], label: true, labelAt: 'start'});
+    c.box({x: 200, y: 70, w: 170, h: 40, r: 4, edge: 1, edgeColor: [190, 190, 190], fill: [255, 255, 255], label: true, labelAt: 'start'});
+    const edges = readTraits(c.png()).traits.filter(t => t.step.thing === '--border-width');
+    expect(edges.map(t => t.step.value)).not.toContain('0px');
+    // Filled buttons alone: no border width is written, and it is named.
+    const f = canvas(400, 80);
+    for (let k = 0; k < 4; k++)
+      f.box({x: 20 + k * 90, y: 20, w: 80, h: 28, r: 4, fill: [40, 150, 230], label: true});
+    const filled = readTraits(f.png());
+    expect(filled.traits.some(t => t.step.thing === '--border-width')).toBe(false);
+    expect(filled.unsure).toContainEqual(expect.objectContaining({trait: 'edges', why: expect.stringMatching(/draws an edge/)}));
+  });
+
   it('names what too few boxes show instead of writing it', () => {
     const {traits, unsure} = readTraits(controlsPage());
     // One panel: its corners are named, never written.

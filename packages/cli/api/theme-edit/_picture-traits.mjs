@@ -813,8 +813,10 @@ export function readTraits(pic, scale = 1) {
         ? {verb: /** @type {const} */ ('set'), thing: token, value: `${cornerPx(v)}px`}
         : {verb: /** @type {const} */ ('set'), thing: 'corners', value: `${cornerPx(v)}px`, on};
   const showCorner = (/** @type {number} */ v) => (v === Infinity ? 'pill' : `${cornerPx(v)}px`);
+  // (One theme-wide radius only when every control agrees: a majority
+  // would give the other family's boxes a radius they do not draw.)
   const both = agreed(controls.map(cornerOf), 1 * scale);
-  if (controls.length && both.n >= controls.length * 0.6 && both.value !== Infinity)
+  if (controls.length && both.n === controls.length && both.value !== Infinity)
     fromBoxes('corners', 'button-like', controls, cornerOf, 1, cornerStep('theme', '--radius-element'), showCorner, median);
   else {
     fromBoxes('corners', 'button-like', groups['button-like'], cornerOf, 1, cornerStep('button-like', null), showCorner, median);
@@ -822,8 +824,11 @@ export function readTraits(pic, scale = 1) {
   }
   fromBoxes('corners', 'containers', groups.containers, cornerOf, 1, cornerStep('containers', '--radius-container'), showCorner, median);
   fromBoxes('corners', 'checks', groups.checks, cornerOf, 1, cornerStep('checks', null), showCorner, median);
-  // Edge width: inputs always draw one when the look has edges.
-  if (inputsAgree)
+  // Edge width: read only from boxes that draw an edge. A filled button
+  // draws none, which says nothing about the theme's border width: writing
+  // 0px from it would strip the fields', cards' and checkboxes' borders.
+  const edged = controls.filter(b => b.edge > 0);
+  if (inputsAgree && usualEdge > 0)
     traits.push({
       trait: 'edges',
       on: 'inputs',
@@ -832,7 +837,9 @@ export function readTraits(pic, scale = 1) {
       sure: plainInputs.length >= 2 ? 'sure' : 'about',
       step: {verb: 'set', thing: '--border-width', value: showPx(usualEdge)},
     });
-  else fromBoxes('edges', 'button-like', controls, b => b.edge, 0, v => ({verb: 'set', thing: '--border-width', value: `${px(v)}px`}), v => `${px(v)}px`);
+  else if (edged.length) fromBoxes('edges', 'button-like', edged, b => b.edge, 0, v => ({verb: 'set', thing: '--border-width', value: `${px(v)}px`}), v => `${px(v)}px`);
+  else if (controls.length)
+    unsure.push({trait: 'edges', on: 'button-like', why: `no control box (${whereIn(controls, W, H)}) draws an edge, so the theme's border width is not read from the picture`});
   // Checks size: the box, square or round, written as width and height per
   // size where the theme is read (checksBoxSteps).
   fromBoxes('box size', 'checks', groups.checks, b => b.h, 1, v => ({verb: 'set', thing: 'height', value: `${px(v)}px`, on: 'checks'}), v => `${px(v)}px`);
