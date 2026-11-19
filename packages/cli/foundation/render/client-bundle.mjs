@@ -37,8 +37,7 @@ export const LINK_OUT = /^(https?:|mailto:|tel:|\/\/)/i;
  * itself, since a frame that blocks form submission never fires it, and a
  * file has no server to send a form to; a form whose action is another
  * site's address submits as the browser submits it. A link to a place in the
- * page (`#id`) opens in a new tab only when it names another site; the move
- * to the place itself is VIEWER_MOVES, which runs in the script's first
+ * page (`#id`) is moved by VIEWER_MOVES, which runs in the script's first
  * module. Enter in a form's only text field
  * submits a form with no submit button, as a browser does; with a button,
  * the browser clicks it.
@@ -58,8 +57,7 @@ document.addEventListener('click', event => {
   if (event.defaultPrevented || !(event.target instanceof Element)) return;
   const link = event.target.closest('a[href]');
   if (link) {
-    const href = link.getAttribute('href').trim();
-    if (!link.hasAttribute('target') && out.test(href)) {
+    if (!link.hasAttribute('target') && out.test(link.getAttribute('href').trim())) {
       link.target = '_blank';
       link.rel = [...new Set([...link.rel.split(/\\s+/).filter(Boolean), 'noopener', 'noreferrer'])].join(' ');
     }
@@ -92,10 +90,6 @@ document.addEventListener('keydown', event => {
  * the page's.
  */
 export const VIEWER_MOVES = `{
-// The move to a place is decided after every click listener the page has,
-// on the document or the window, even one it adds later: a capture listener
-// on the window, which runs first, adds a one-time listener for this click
-// that runs last, so a page that handles the link itself cancels the move.
 // Whether a click on this link is one the file moves itself: a link to a
 // place in the page, in a frame whose address is not the document's own.
 const movesInFile = (event, link) => {
@@ -119,8 +113,8 @@ const moveTo = link => {
   else location.replace(place);
 };
 // The move is decided after every click listener the page has, even one it
-// adds later: a capture listener on the window, which runs first, waits for
-// this click to reach the window. A page that stops the click on its way (a
+// adds later: a capture listener on the window, which runs first, adds a
+// listener for this click that runs last and is removed once it decides. A page that stops the click on its way (a
 // card's handler that calls stopPropagation) has the browser's own move held
 // at that point, and the file decides once every handler has run: it moves
 // unless the page cancelled the click, by preventDefault, \`returnValue =
