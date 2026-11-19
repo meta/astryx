@@ -17,6 +17,7 @@ import {
   hex,
   parseColor,
   ratio,
+  ratioWords,
 } from './_color.mjs';
 import {OVERRIDES} from './_part-words.mjs';
 import {
@@ -26081,7 +26082,7 @@ export function draftAnswer(ctx, env, question) {
               : '#ffffff';
           const said = `${st.value} text on the ${where}`;
           if (!d.text.includes(said))
-            d.text += ` (${said} would not read on ${fill.value}${modes.length > 1 || st.mode || fill.mode ? ` in ${x.mode} mode` : ''}: ${x.ratio.toFixed(2)}:1, under the 4.5:1 text needs, so it is ${reads.length ? `kept to ${reads.join(' and ')} mode` : 'not written'}; ${better} reads there at ${ratio(better === '#ffffff' ? light : dark, x.under).toFixed(1)}:1)`;
+            d.text += ` (${said} would not read on ${fill.value}${modes.length > 1 || st.mode || fill.mode ? ` in ${x.mode} mode` : ''}: ${ratioWords(x.ratio)}:1, under the 4.5:1 text needs, so it is ${reads.length ? `kept to ${reads.join(' and ')} mode` : 'not written'}; ${better} reads there at ${ratio(better === '#ffffff' ? light : dark, x.under).toFixed(1)}:1)`;
         }
       }
   for (const n of placeNotes)
