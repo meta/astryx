@@ -37,6 +37,7 @@ import {
   RenderAssetError,
 } from './assets.mjs';
 import {classesIn, cutCss, cutFontFaces, layerOrderOf} from './css-cut.mjs';
+import {aliasClasses} from './class-alias.mjs';
 import {asParsed, formatFor, sha256, sourceBlock} from './source-block.mjs';
 import {LINK_OUT, ROOT_ID, compactSource, imageSinks} from './client-bundle.mjs';
 import {remoteImages} from './remote-images.mjs';
@@ -1966,7 +1967,7 @@ function schemeCssFor(mode) {
 /**
  * Render a page module to one self-contained HTML file.
  * @param {string} entry absolute path of the page module
- * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string, cwd?: string, openLayers?: boolean, leaveLargeStyleAssets?: boolean, markupOnly?: boolean, esbuildFrom?: string, remoteImages?: Parameters<typeof remoteImages>[0], cutFontFaces?: boolean}} [options]
+ * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string, cwd?: string, openLayers?: boolean, leaveLargeStyleAssets?: boolean, markupOnly?: boolean, esbuildFrom?: string, remoteImages?: Parameters<typeof remoteImages>[0], cutFontFaces?: boolean, keepClassNames?: boolean}} [options]
  *   `served`: the Core of the package set the CLI runs from, for the packages
  *   the page's folder has no copy of; `output`: the file the HTML goes to;
  *   `cwd`: the current folder, whose files are the page's own outside a
@@ -1984,6 +1985,8 @@ function schemeCssFor(mode) {
  *   any of the page's modules can use, not only the markup's. esbuild, a
  *   dependency of the CLI, builds the script (`esbuildFrom`: the folder it
  *   resolves from); a page whose script cannot be built fails the render.
+ *   `keepClassNames` keeps every class of the first paint as written,
+ *   for a caller that styles the markup with its own copy of the styles.
  *   `markupOnly` renders the markup and its styles without the script, for a
  *   caller that shows the markup itself (the theme editor); it writes no file
  *   and reaches no network. The render fetches each https image the page
@@ -2039,6 +2042,8 @@ export async function renderPage(entry, options = {}) {
   const sheetText = [];
   /** Each stylesheet's own file, so its url()s resolve from its folder. @type {string[]} */
   const sheetFiles = [];
+  /** Whether each stylesheet is Core's or an official package's (`@astryxdesign/*`). @type {boolean[]} */
+  const sheetIsAstryx = [];
   /** @param {string} spec */
   const addSheet = spec => {
     try {
@@ -2047,6 +2052,7 @@ export async function renderPage(entry, options = {}) {
       sheets.push(spec);
       sheetText.push(fs.readFileSync(file, 'utf8'));
       sheetFiles.push(file);
+      sheetIsAstryx.push(true);
       return true;
     } catch {
       return false;
@@ -2076,6 +2082,7 @@ export async function renderPage(entry, options = {}) {
       sheetFiles.push(file);
       themeSheets.push(/** @type {string} */ (sheetText.at(-1)));
       themeSheetFiles.push({file, pkg: specPackageOf(spec), from});
+      sheetIsAstryx.push(spec.startsWith('@astryxdesign/'));
     } catch {
       warnings.push({
         code: 'missing-asset',
@@ -2240,6 +2247,8 @@ export async function renderPage(entry, options = {}) {
   const states = markup.includes(' data-astryx-state="');
   const layerOrder = sheetText.map(layerOrderOf).find(Boolean) ?? '';
   let css = layerOrder;
+  /** The classes the kept rules of Core's and the official packages' stylesheets name: only these take an alias. @type {Set<string>} */
+  const packageClasses = new Set();
   try {
     // A stylesheet's url()s are relative to the stylesheet, not the page: a
     // theme's font, or an image beside an imported stylesheet.
@@ -2282,6 +2291,9 @@ export async function renderPage(entry, options = {}) {
       );
     };
     const parts = sheetText.map((text, i) => sheet(sheetFiles[i], text));
+    parts.forEach(({cut}, i) => {
+      if (sheetIsAstryx[i]) for (const m of cut.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)) packageClasses.add(m[1]);
+    });
     for (const {
       file,
       css: text,
@@ -2754,7 +2766,12 @@ export async function renderPage(entry, options = {}) {
     }),
     modeSheets.map(sheet => sheet.css),
   );
-  const style = `<style>${schemeCssFor(mode)}${script ? `#${ROOT_ID}{display:contents}` : ''}${markup.includes('class="recharts-responsive-container"') ? CHART_CSS : ''}${css}</style>`;
+  const drawsCharts = markup.includes('class="recharts-responsive-container"');
+  // A page that repeats an element repeats its StyleX class list: the first
+  // paint names each such list by one alias class (class-alias.mjs). The
+  // script draws its own elements with StyleX's classes.
+  if (script && !options.keepClassNames) ({markup, css} = aliasClasses(markup, css, packageClasses, new Set(tokens)));
+  const style = `<style>${schemeCssFor(mode)}${script ? `#${ROOT_ID}{display:contents}` : ''}${drawsCharts ? CHART_CSS : ''}${css}</style>`;
   // With a script, the markup sits in the one element the script draws into,
   // which takes no box of its own.
   const body = script ? `<div id="${ROOT_ID}">${markup}</div>` : markup;
