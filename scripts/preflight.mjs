@@ -4,14 +4,16 @@
 /**
  * @file Preflight: the pre-review report and CI's checks for one change, run
  *   locally before the change is marked ready.
- * @input `--base <ref>` (default `origin/main`), `--browser`, `--quick` (the
+ * @input The committed change (`HEAD` against its merge base with `--base
+ *   <ref>`, default `origin/main`), `--browser`, `--quick` (the
  *   changed packages, files and tests alone; not CI's scope), and `--wrap
  *   <command>` (or `PREFLIGHT_WRAP`): a command that runs each heavy step as
  *   `<command> <build|test|knowledge> <step command...>`, such as a machine's
- *   job limiter. The working tree, with uncommitted and untracked files.
+ *   job limiter. A working tree with uncommitted changes stops the run.
  * @output `pnpm review:pre`'s report, then each check with its own output, one
- *   PASS, FAIL or SKIP table, each failing command to copy, and "ready to
- *   flip" or "not ready: N". The exit code is 1 when a check fails.
+ *   PASS, FAIL or SKIP table, each failing command to copy, "ready to flip"
+ *   or "not ready: N", and the CI checks it does not run. The exit code is 1
+ *   when a check fails, 2 when the working tree has uncommitted changes.
  * @position `pnpm preflight`. It scopes the checks with CI's own classifier
  *   (`.github/scripts/change-scope.cjs`), test listers and Chromium selection,
  *   so it keeps no second copy of their rules. It reproduces the pre-review
@@ -27,6 +29,10 @@ import {fileURLToPath} from 'node:url';
 
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+/** CI's checks the default run leaves out; it names them so a pass promises no more. */
+export const NOT_RUN =
+  'Not run here (CI runs them): the docsite build and tests, the Lint workflow import-boundary, probe-theme and CLI README checks, the first UI leg extra checks (copyright, exports sync, CLI type surface, Lab readiness, the isolated benchmark), and, without --browser, the Storybook build and browser specs.';
 
 /** Files ESLint lints. */
 const LINTED = /\.(?:[cm]?[jt]sx?)$/;
@@ -57,7 +63,7 @@ export function planChecks({
   const noBuild = specOnly || scope.docsiteOnly;
   // CI's typecheck job skips these lanes; the others build every package
   // first, since a package's types read its dependencies' build.
-  const typechecks = !noBuild && !scope.toolingOnly && !scope.labOnly;
+  const typechecks = !noBuild && !scope.toolingOnly;
 
   if (!noBuild)
     checks.push({
@@ -65,7 +71,7 @@ export function planChecks({
       commands: [
         {
           kind: 'build',
-          // Without the typecheck, only the Node tests need a build: Core's.
+          // Without a typecheck, only the Node tests need a build: Core's.
           argv: typechecks
             ? ['pnpm', 'build']
             : ['pnpm', '--filter', '@astryxdesign/core', 'build'],
@@ -82,29 +88,38 @@ export function planChecks({
               kind: 'build',
               argv: scope.fullSuite
                 ? ['pnpm', 'typecheck']
-                : [
-                    'pnpm',
-                    '-r',
-                    '--no-bail',
-                    '--workspace-concurrency=1',
-                    '--if-present',
-                    '--filter',
-                    `...[${mergeBase}]`,
-                    '--filter',
-                    '!@astryxdesign/docsite',
-                    '--filter',
-                    '!@astryxdesign/sandbox',
-                    'run',
-                    'typecheck',
-                  ],
+                : scope.labOnly
+                  ? // CI's Lab lane typechecks Lab and the stories that import it.
+                    [
+                      'pnpm',
+                      '-F',
+                      '@astryxdesign/lab',
+                      '-F',
+                      '@astryxdesign/storybook',
+                      'typecheck',
+                    ]
+                  : [
+                      'pnpm',
+                      '-r',
+                      '--no-bail',
+                      '--workspace-concurrency=1',
+                      '--if-present',
+                      '--filter',
+                      `...[${mergeBase}]`,
+                      '--filter',
+                      '!@astryxdesign/docsite',
+                      '--filter',
+                      '!@astryxdesign/sandbox',
+                      'run',
+                      'typecheck',
+                    ],
             },
           ],
         },
   );
 
-  const linted = changed.filter(
-    file => LINTED.test(file) && fs.existsSync(path.join(ROOT, file)),
-  );
+  const linted = present(changed.filter(file => LINTED.test(file)));
+  const formatted = present(changed);
   checks.push({
     id: 'lint',
     commands: [
@@ -119,6 +134,21 @@ export function planChecks({
                 '--cache',
                 '--no-warn-ignored',
                 ...linted,
+              ],
+            },
+          ]
+        : []),
+      ...(formatted.length
+        ? [
+            {
+              kind: 'light',
+              argv: [
+                'pnpm',
+                'exec',
+                'prettier',
+                '--check',
+                '--ignore-unknown',
+                ...formatted,
               ],
             },
           ]
@@ -351,8 +381,7 @@ function present(files) {
  */
 function quickChecks({scope, mergeBase, changed}) {
   const specOnly = scope.specOnly || scope.timesOnly;
-  const typechecks =
-    !specOnly && !scope.docsiteOnly && !scope.toolingOnly && !scope.labOnly;
+  const typechecks = !specOnly && !scope.docsiteOnly && !scope.toolingOnly;
   const linted = present(changed.filter(file => LINTED.test(file)));
   const tests = present(changed.filter(file => TEST_FILE.test(file)));
   return [
@@ -525,21 +554,29 @@ export function formatTable(rows, {quick = false} = {}) {
         : 'ready to flip',
     quick
       ? 'Quick mode is not CI-equivalent: it skips the build, dependent packages, the tests the change reaches and the guards.'
-      : 'Preflight reproduces the pre-review checklist and CI checks; a reviewer still judges the change.',
+      : NOT_RUN,
+    'Preflight reproduces the pre-review checklist and CI checks; a reviewer still judges the change.',
   );
   return lines.join('\n');
 }
 
-/** The change's files against the merge base: committed, uncommitted and untracked. */
-export function changedChanges(mergeBase, git = gitText) {
-  const {parseNameStatus} = require('../.github/scripts/change-scope.cjs');
-  const tracked = git(['diff', '--name-status', '-M', mergeBase]);
-  const untracked = git(['ls-files', '--others', '--exclude-standard'])
-    .split('\n')
-    .filter(Boolean)
-    .map(file => `A\t${file}`)
-    .join('\n');
-  return parseNameStatus([tracked, untracked].filter(Boolean).join('\n'));
+/**
+ * Why preflight stops before any check, or null. CI's test listers diff
+ * commits, so an uncommitted edit would choose a lane whose tests never see
+ * it: preflight checks committed work alone. With no change it has nothing to
+ * check, as `pnpm review:pre` says.
+ * @param {{dirty: boolean, changes: number, base: string}} input
+ * @returns {{code: number, message: string} | null}
+ */
+export function stopReason({dirty, changes, base}) {
+  if (dirty)
+    return {
+      code: 2,
+      message:
+        'Preflight checks committed work, as CI does: commit your changes first, then run it again.',
+    };
+  if (changes === 0) return {code: 0, message: `No changes against ${base}.`};
+  return null;
 }
 
 /** CI's classification of the change (change-scope.cjs). */
@@ -573,8 +610,17 @@ async function main(argv) {
   const base = valueOf(argv, '--base') ?? 'origin/main';
   const wrapText = valueOf(argv, '--wrap') ?? process.env.PREFLIGHT_WRAP ?? '';
   const wrap = wrapText.split(/\s+/).filter(Boolean);
-  const mergeBase = gitText(['merge-base', base, 'HEAD']);
-  const changes = changedChanges(mergeBase);
+  const dirty = gitText(['status', '--porcelain']) !== '';
+  const mergeBase = dirty ? '' : gitText(['merge-base', base, 'HEAD']);
+  const {buildReport, changedFiles, formatReport} =
+    await import('./pre-review.mjs');
+  const changes = dirty ? [] : changedFiles(mergeBase, 'HEAD');
+  const stop = stopReason({dirty, changes: changes.length, base});
+  if (stop) {
+    (stop.code ? console.error : console.log)(stop.message);
+    process.exitCode = stop.code;
+    return;
+  }
   const scope = classify(changes);
   const changed = [
     ...new Set(
@@ -589,8 +635,7 @@ async function main(argv) {
     `Preflight against ${base} (merge base ${mergeBase.slice(0, 10)}): ${changed.length} changed file(s); ${scope.reason}.`,
   );
 
-  const {buildReport, formatReport} = await import('./pre-review.mjs');
-  const report = buildReport({base, head: null});
+  const report = buildReport({base, head: 'HEAD'});
   console.log(`\n== review:pre\n${formatReport(report)}`);
   const reviewRow = {
     id: 'review:pre',
@@ -598,7 +643,9 @@ async function main(argv) {
     note: report.findings.length
       ? `${report.findings.length} finding(s) above`
       : 'checklist above',
-    failed: report.findings.length ? `pnpm review:pre --base ${base}` : null,
+    failed: report.findings.length
+      ? `pnpm review:pre --base ${base} --head HEAD`
+      : null,
     seconds: 0,
   };
 

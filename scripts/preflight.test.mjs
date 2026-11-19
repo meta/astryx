@@ -23,6 +23,7 @@ import {
   formatTable,
   planChecks,
   runChecks,
+  stopReason,
 } from './preflight.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -58,6 +59,7 @@ describe('planChecks', () => {
     );
     expect(argvs(byId(checks, 'lint'))).toEqual([
       'pnpm exec eslint --cache --no-warn-ignored packages/core/src/Button/Button.tsx',
+      'pnpm exec prettier --check --ignore-unknown packages/core/src/Button/Button.tsx',
       'pnpm check:repo',
     ]);
     const ui = argvs(byId(checks, 'vitest ui'));
@@ -78,10 +80,10 @@ describe('planChecks', () => {
 
   it('runs the Lab tests and the guards for a Lab-only change', () => {
     const checks = plan(['packages/lab/src/Stat/Stat.tsx']);
-    // CI skips the typecheck on the Lab lane; the Node tests still need Core.
-    expect(byId(checks, 'typecheck').skip).toBeTruthy();
-    expect(argvs(byId(checks, 'build'))).toEqual([
-      'pnpm --filter @astryxdesign/core build',
+    // CI's Lab lane typechecks Lab and the stories that import it.
+    expect(argvs(byId(checks, 'build'))).toEqual(['pnpm build']);
+    expect(argvs(byId(checks, 'typecheck'))).toEqual([
+      'pnpm -F @astryxdesign/lab -F @astryxdesign/storybook typecheck',
     ]);
     const ui = argvs(byId(checks, 'vitest ui'));
     expect(ui[0]).toBe('pnpm test:ui --passWithNoTests packages/lab/');
@@ -248,6 +250,29 @@ describe('runChecks', () => {
   });
 });
 
+describe('stopReason', () => {
+  it("stops with exit 2 on uncommitted changes, which CI's listers would not see", () => {
+    expect(
+      stopReason({dirty: true, changes: 3, base: 'origin/main'}),
+    ).toMatchObject({
+      code: 2,
+      message: expect.stringContaining('commit your changes first'),
+    });
+  });
+
+  it('stops with exit 0 when nothing changed, and goes on otherwise', () => {
+    expect(stopReason({dirty: false, changes: 0, base: 'origin/main'})).toEqual(
+      {
+        code: 0,
+        message: 'No changes against origin/main.',
+      },
+    );
+    expect(
+      stopReason({dirty: false, changes: 1, base: 'origin/main'}),
+    ).toBeNull();
+  });
+});
+
 describe('formatTable', () => {
   it('ends "not ready: N" with each failing command, or "ready to flip"', () => {
     const fail = formatTable([
@@ -269,6 +294,8 @@ describe('formatTable', () => {
     expect(fail).toContain('  lint: pnpm check:repo');
     expect(fail).toContain('not ready: 1');
     expect(fail).toContain('a reviewer still judges the change');
+    // A pass names the CI checks it did not run.
+    expect(fail).toContain('Not run here (CI runs them): the docsite build');
     const pass = formatTable([
       {id: 'lint', result: 'PASS', note: '', failed: null, seconds: 3},
     ]);
