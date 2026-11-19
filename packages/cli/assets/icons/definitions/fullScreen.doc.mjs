@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'fullScreen',
+  group: 'resize',
   description: 'Show something full screen.',
   words: [
     'fullscreen',

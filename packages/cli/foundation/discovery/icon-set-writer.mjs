@@ -32,7 +32,10 @@ import {assertWithin} from '../fs/path-safety.mjs';
 import {findLocalIntegrationManifestOrNull} from '../integrations/manifest-writer.mjs';
 import {loadManifestObject} from '../integrations/integrations.mjs';
 import {levenshteinDistance} from '../text/string-utils.mjs';
-import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
+import {
+  astryxDefinitionsByName,
+  currentDefinitionName,
+} from './icon-definition-discovery.mjs';
 import {generatedTypesPath} from './icon-set-paths.mjs';
 import {
   lookExport,
@@ -2408,15 +2411,21 @@ export function typecheckNote(pkg) {
 
 /**
  * A definition name as `map` keys it: camelCase. The docs list each
- * definition by its kebab id too (`eye-slash`), so that spelling resolves.
+ * definition by its kebab id too (`eye-slash`), so that spelling resolves,
+ * and a replaced definition's name resolves to the definition that replaced
+ * it.
  * @param {string} name
  * @param {Set<string>} known the definitions the set may map
+ * @param {Parameters<typeof currentDefinitionName>[1]} [set] the set whose
+ *   own replaced names count too
  * @returns {string}
  */
-export function definitionNameOf(name, known) {
+export function definitionNameOf(name, known, set) {
   if (known.has(name)) return name;
   const camel = name.replace(/-([a-z0-9])/gu, (_, c) => c.toUpperCase());
-  return known.has(camel) ? camel : name;
+  if (known.has(camel)) return camel;
+  const current = currentDefinitionName(camel, set);
+  return current != null && known.has(current) ? current : name;
 }
 
 /**

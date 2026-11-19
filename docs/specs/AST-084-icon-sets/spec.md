@@ -21,6 +21,7 @@ verified_by:
     packages/cli/foundation/discovery/template-icons-variant.test.mjs,
     packages/cli/foundation/integrations/icon-features.test.mjs,
     packages/cli/api/search/search.icons.test.mjs,
+    packages/cli/foundation/discovery/icon-definition-replaces.test.mjs,
     packages/cli/foundation/agent-docs/agent-docs.test.mjs,
   ]
 ---
@@ -206,7 +207,8 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     and `themeMap` (FR12).
 
   A data file that fails this shape, repeats an `id`, maps a name that is
-  neither an Astryx definition nor one of the set's own, maps to a missing
+  neither an Astryx definition nor one of the set's own (nor a name one of
+  those replaced, FR4), maps to a missing
   icon, or names a variant the set does not declare is invalid, and the set
   is withdrawn from every surface.
 
@@ -220,7 +222,30 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   proposing it for every set is a pull request that copies its file into the
   CLI's folder. When names collide, Astryx's wins. The experimental
   `icon-definitions` namespace lists Astryx's definitions and, where icon
-  features are on, each installed set's own.
+  features are on, each installed set's own. A definition may name a
+  camelCase `group`: the family of related definitions it belongs to
+  (`notifications` for `notification`, `notificationActive`, and
+  `notificationOff`). A set's own definition may join an Astryx group or name
+  its own. Every Astryx group has two or more members. A group is information
+  only: no ranking reads it. A definition's docs page names its group and the
+  group's other members, each with the route that opens it.
+  A definition may also declare
+  `replaces`, the name of an older definition it takes the place of, within
+  its own folder. The old name is then not a definition, and it answers with
+  the definition that replaced it, through every later replacement, the way
+  a replaced docs topic's name answers with its replacement (one shared alias
+  chain). A replaced definition's file may stay, so the old names it carries
+  keep answering. One name has one successor, a built-in definition is never
+  replaced, a set's own definition never replaces an Astryx definition's
+  name, and every chain ends at a current definition. A set whose folder
+  breaks one of these is invalid; in Astryx's own folder the definitions
+  that break one are reported and the others read. `experimental icon
+--definitions` gives a definition that declares one its `replaces`, and its
+  docs page names it in a Replaces row. A set's `map` key that names a replaced definition
+  maps its successor (an entry the map has for the successor wins), and the
+  next `experimental icon map` write stores the successor's name, listing
+  each renamed key as `replacedKeys`; a template's `icons` value and a
+  definition named to `map` or `add` resolve the same way.
 - **FR5 — The directory is the boundary.** Discovery reads the descriptor,
   data file, and definitions statically, never runs the icon module, and
   rejects a path that escapes the package (`spec:AST-039/FR5`, FR6).
@@ -230,7 +255,10 @@ icon, and the CLI verifies it, writes the files, and checks the set.
 - **FR6 — `astryx experimental icon <words>` ranks icons by meaning.** It
   answers `icon.search`, each match with its `set`, `id`, `package`, `module`,
   `export`, `import` line, `words`, `definitions`, `variants`, `reason`, and
-  `score`: 100 for a definition the set maps to the icon, 90 or 80 for an
+  `score`, and `relatives` when the groups (FR4) of the definitions it draws
+  have other members: each such definition, Astryx's and its set's own, as
+  `{definition, description}` (the text answer names at most four, under the
+  first match only). The score is 100 for a definition the set maps to the icon, 90 or 80 for an
   exact name or meaning match (the reading most of the searched icons use
   leads), 60 when the query starts one of its words, 40 for a partial match
   (three letters or more inside a word), 20 for a word match (below). A word's
@@ -260,7 +288,9 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   word names, then by `id`. Suggestions for a missing `<set>/<id>` (FR7) and
   the definitions that fit an icon (FR13) never include word matches. An
   icon also answers to
-  the name and words of every definition it draws. Equal scores are ordered by
+  the name and words of every definition it draws, and to the name of a
+  definition one of those replaced (FR4) as to its successor's name, with a
+  reason naming both. Equal scores are ordered by
   set order (FR8), so the project's set leads; then, within a set, an exact
   name match on the whole id, then on its plural or singular, before one on
   an id part, and an exact meaning
@@ -269,7 +299,8 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   `id`. `--set` keeps one set and `--limit`
   caps the list; `--set` with `--all-icons` and no words lists every icon of
   that set (`icon.setIcons`), and `--definitions` lists every Astryx
-  definition (`icon.definitions`), each with `templates`, the number of
+  definition (`icon.definitions`), each with its `group` when it names one
+  and `templates`, the number of
   bundled templates whose `icons` name it (FR9). When a set is known (the
   one `--set` names, else the project's main set, else the only set of the
   icon-set package the command runs in), the answer names it as `set` and
@@ -278,7 +309,8 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   `module`, `export`, and `import`, or, when its icon lacks the look, keeps
   its own and names both looks as `look`. With no set installed, the answer
   says so (`reason`), names the Astryx definitions that match
-  (`definitions`), built-in ones first, and says how to get a set (`next`).
+  (`definitions`), built-in ones first, each with its `group` and
+  `relatives` as a match has them, and says how to get a set (`next`).
   `astryx search` with no `--type` answers an icon ask the same way: where
   icon features are on and one word of the query as typed is `icon`, `icons`, a
   set's name, or an icon export name (`SearchIcon`), and is not a component
@@ -641,6 +673,7 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
   | `icon_builtin_definition_missing` | error    | a built-in definition is not in `map`                                              |
   | `icon_definition_unused`          | warning  | a definition the set declares is not in `map`                                      |
   | `icon_definition_shadowed`        | warning  | a definition the set declares has an Astryx definition's name                      |
+  | `icon_definition_replaced`        | warning  | a `map` key names a replaced definition; the message names the key to rename       |
   | `icon_module_not_public`          | error    | an icon is read from outside the package's public entry                            |
   | `icon_export_name`                | warning  | an export is not named `<Name>Icon`                                                |
   | `icon_not_component`              | error    | an export is a literal, not a component or adapter call                            |
@@ -722,7 +755,8 @@ message}`) names each template or namespace doc that sets `stability`, and
   leaves one out, with the `use` command that adds it. With no list, it
   passes and names the installed sets and whether one is the project's set.
   It warns when another
-  installed set is withdrawn. Its pass message names the project's look.
+  installed set is withdrawn, and when an installed set's `map` keys a
+  replaced definition (FR4), naming the set, the key, and its successor. Its pass message names the project's look.
   Doctor's `icon-placeholders` check runs only where icon features are on
   and a main set is decided (named by `experimental.iconSet`, or the only
   installed set); with no main set there is no check and no scan. It reads
