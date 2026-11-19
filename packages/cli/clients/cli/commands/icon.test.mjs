@@ -72,10 +72,10 @@ describe('astryx experimental icon', () => {
   it('prints the import that names the icon by its meaning when a definition names it', async () => {
     const close = await runCli(['experimental', 'icon', 'close'], cwd);
     expect(close.stdout).toMatch(
-      /by meaning: +import \{XIcon as CloseIcon\} from '@acme\/glyphs';/,
+      /meaningImport: +import \{XIcon as CloseIcon\} from '@acme\/glyphs';/,
     );
     const trash = await runCli(['experimental', 'icon', 'delete'], cwd);
-    expect(trash.stdout).not.toMatch(/by meaning:/);
+    expect(trash.stdout).not.toMatch(/meaningImport:/);
   });
 
   it('answers icon.search, icon.detail, and icon.list as JSON', async () => {

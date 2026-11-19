@@ -337,9 +337,11 @@ const definitionId = name =>
   name.replace(/([a-z0-9])([A-Z])/gu, '$1-$2').toLowerCase();
 
 /**
- * Astryx's icon definitions read as one set whose `map` names one icon for
- * each definition, so the icon ranking finds a definition by its name, its
- * name as words, and its own words, exactly as it finds a set's icon.
+ * Icon definitions read as one set whose `map` names one icon for each
+ * definition, so the icon ranking finds a definition by its name, its name
+ * as words, and its own words, exactly as it finds a set's icon. The docs
+ * are the set's own definitions too, so a set's definition answers to its
+ * words as Astryx's do.
  * @param {import('../../../authoring/doctypes/icon-definition/type').IconDefinitionDoc[]} docs
  * @returns {import('../../../foundation/discovery/icon-set-discovery.mjs').DiscoveredIconSet}
  */
@@ -347,7 +349,7 @@ function definitionSet(docs) {
   return /** @type {any} */ ({
     name: 'definitions',
     package: '@astryxdesign/cli',
-    definitions: [],
+    definitions: docs.map(doc => ({doc})),
     data: {
       schemaVersion: 1,
       module: '@astryxdesign/cli',

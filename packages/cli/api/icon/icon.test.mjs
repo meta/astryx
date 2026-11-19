@@ -897,6 +897,11 @@ describe('a match names the import that calls it by its meaning (FR6)', () => {
       reason: 'definition "farewell"',
       meaningImport: "import {XIcon as FarewellIcon} from '@acme/glyphs';",
     });
+    // A word of the set's own definition names it too.
+    expect((await search('goodbye')).matches[0]).toMatchObject({
+      id: 'x',
+      meaningImport: "import {XIcon as FarewellIcon} from '@acme/glyphs';",
+    });
     expect((await search('close')).matches[0]).toMatchObject({
       id: 'x',
       meaningImport: "import {XIcon as CloseIcon} from '@acme/glyphs';",
