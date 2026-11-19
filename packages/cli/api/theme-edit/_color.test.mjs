@@ -12,7 +12,9 @@ import {
   colorProblem,
   compositeOver,
   hex,
+  isClipped,
   isColorValue,
+  mixSide,
   parseColor,
   ratio,
 } from './_color.mjs';
@@ -84,7 +86,9 @@ describe('parseColor', () => {
     }
     expect(colorProblem('Canvas')?.kind).toBe('system');
     expect(isColorValue('ButtonText')).toBe(true);
-    expect(colorProblem('color(rec2020 1 0 0)')?.kind).toBe('space');
+    // Every color() space CSS has is read; an unknown one is not.
+    expect(colorProblem('color(rec2020 1 0 0)')).toBeNull();
+    expect(colorProblem('color(banana 1 0 0)')).not.toBeNull();
     expect(colorProblem('transparent')?.kind).toBe('unfixed');
     expect(colorProblem('var(--x)')?.kind).toBe('unfixed');
     expect(colorProblem('banana')?.kind).toBe('unknown');
@@ -97,14 +101,30 @@ describe('parseColor', () => {
       opaque: '#ff0000',
     });
     expect(colorProblem(' #7c3aed ')).toBeNull();
+    expect(colorProblem('rgb(255 0 0 / 0.999)')?.message).toContain(
+      'see-through (opacity 0.999)',
+    );
+    expect(colorProblem('rgb(255 0 0 / 0.9999)')?.message).toContain(
+      'not fully opaque',
+    );
+    expect(isClipped('color(display-p3 1 0 0)')).toBe(true);
+    expect(isClipped('#ff0000')).toBe(false);
     // Functions that compute at run time are taken as written.
     expect(isColorValue('rgb(var(--r) 0 0 / 0.5)')).toBe(true);
+  });
+
+  it('works out a color-mix() of two fixed colors', () => {
+    expect(parseColor('color-mix(in srgb, red, blue)')).toEqual([
+      127.5, 0, 127.5,
+    ]);
   });
 
   it('returns null for a value with no fixed color', () => {
     for (const v of [
       'var(--color-accent)',
-      'color-mix(in srgb, red, blue)',
+      // A mix with no fixed color, or in a space the reader does not mix in.
+      'color-mix(in srgb, var(--x), blue)',
+      'color-mix(in hsl, red, blue)',
       'light-dark(red, blue)',
       'transparent',
       'banana',
@@ -147,5 +167,36 @@ describe('see-through colors', () => {
   it('measures translucent text over what is under it', () => {
     const seen = compositeOver([0, 0, 0], 0.15, [255, 255, 255]);
     expect(ratio(seen, [255, 255, 255])).toBeLessThan(1.5);
+  });
+});
+
+describe('color-mix() sides', () => {
+  it('reads no color from a share outside 0-100%, which CSS refuses', () => {
+    expect(parseColor('color-mix(in srgb, red 150%, blue)')).toBeNull();
+    expect(parseColor('color-mix(in srgb, red -10%, blue)')).toBeNull();
+    expect(parseColor('color-mix(in srgb, red 100%, blue)')).not.toBeNull();
+  });
+  it('takes a share after or before a color that holds percentages itself', () => {
+    expect(
+      hex(
+        /** @type {any} */ (
+          parseColor('color-mix(in srgb, hsl(0 100% 50%) 30%, blue)')
+        ),
+      ),
+    ).toBe('#4d00b3');
+    expect(
+      hex(
+        /** @type {any} */ (
+          parseColor('color-mix(in srgb, 30% hsl(0 100% 50%), blue)')
+        ),
+      ),
+    ).toBe('#4d00b3');
+    expect(
+      parseColor('color-mix(in oklch, oklch(70% 0.1 200) 25%, white)'),
+    ).not.toBeNull();
+    expect(mixSide('rgb(255 0 0 / 50%)')).toEqual({
+      color: 'rgb(255 0 0 / 50%)',
+      pct: null,
+    });
   });
 });

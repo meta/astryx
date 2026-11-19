@@ -7,12 +7,13 @@
  *   source that changed, and whether the checkout has a parent commit
  * @output Proves which targets the swizzle proof checks for each kind of run
  *   (spec:AST-110 FR7)
- * @position Node test of proof.mjs's scope choice; reads no files
+ * @position Node test of scope.mjs's scope choice; the toolchain case walks
+ *   the swizzle module graph from disk, and the rest read no files
  */
 
 import {describe, expect, it} from 'vitest';
 
-import {proofScope} from './proof.mjs';
+import {proofScope, toolchainChange} from './scope.mjs';
 
 const component = ['packages/core/src/Button/Button.tsx'];
 
@@ -59,6 +60,18 @@ describe('which targets the swizzle proof checks', () => {
     });
     expect(scope.mode).toBe('all');
     expect(scope.reason).toContain('packages/build/src/babel.js');
+  });
+
+  it("counts the Build package's source as toolchain, but not its tests", () => {
+    expect(toolchainChange(['packages/build/src/babel.js'], 'HEAD')).toBe(
+      'packages/build/src/babel.js',
+    );
+    for (const test of [
+      'packages/build/src/next.turbopack.test.mjs',
+      'packages/build/src/vite.build.test.ts',
+    ]) {
+      expect(toolchainChange([test], 'HEAD'), test).toBeUndefined();
+    }
   });
 
   it('checks every target of a pull request whose change git cannot read', () => {

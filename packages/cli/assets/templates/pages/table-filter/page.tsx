@@ -65,6 +65,7 @@ import {Tab, TabList} from '@astryxdesign/core/TabList';
 import {MetadataList, MetadataListItem} from '@astryxdesign/core/MetadataList';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {Button} from '@astryxdesign/core/Button';
+import {useToast} from '@astryxdesign/core/Toast';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {ToggleButton} from '@astryxdesign/core/ToggleButton';
 import {Icon} from '@astryxdesign/core/Icon';
@@ -792,25 +793,26 @@ const BULK_EDIT_ACTIONS: ReadonlyArray<{
   key: string;
   label: string;
   icon: React.ReactNode;
-  onClick: (selected: ServiceJob[]) => void;
+  /** The demo toast for the selected job IDs. */
+  demoBody: (jobIds: string) => string;
 }> = [
   {
     key: 'assign',
     label: 'Assign',
     icon: <Icon icon={UserPlus} size="sm" />,
-    onClick: s => alert(`Assign technician: ${s.map(j => j.id).join(', ')}`),
+    demoBody: ids => `Demo: a technician would be assigned to ${ids} here`,
   },
   {
     key: 'reschedule',
     label: 'Reschedule',
     icon: <Icon icon={Calendar} size="sm" />,
-    onClick: s => alert(`Reschedule: ${s.map(j => j.id).join(', ')}`),
+    demoBody: ids => `Demo: ${ids} would be rescheduled here`,
   },
   {
     key: 'cancel',
     label: 'Cancel',
     icon: <Icon icon={CircleX} size="sm" />,
-    onClick: s => alert(`Cancel: ${s.map(j => j.id).join(', ')}`),
+    demoBody: ids => `Demo: ${ids} would be canceled here`,
   },
 ];
 
@@ -1313,9 +1315,17 @@ const styles = stylex.create({
     rowGap: 6,
   },
   // Collapses rather than wrapping: clauses that no longer fit fold into the
-  // overflow trigger, so the row is one line at every width.
+  // overflow trigger, so the row is one line down to the narrowest toolbar
+  // that still seats the search box's floor (120) and the folded slot's floor
+  // (44 + READOUT_RESERVE) across its 8px gap. Below that the two cannot share
+  // a line without pushing the readout past the screen edge, so the folded
+  // slot takes a line of its own under the search box.
   filterRow: {
     rowGap: 6,
+    flexWrap: {
+      default: null,
+      '@container filter-row (max-width: 355px)': 'wrap',
+    },
   },
   // This slot is what `observeParent` measures, so its width has to mean "the
   // room the clauses have" and nothing else. Grow is the part that makes that
@@ -1380,6 +1390,11 @@ const styles = stylex.create({
       default: 0,
       '@container toolbar (max-width: 860px)': '100%',
     },
+    // The filter row queries this box rather than the toolbar: the toolbar's
+    // padding sits inside its own container, so only this box has the width
+    // the row really gets.
+    containerName: 'filter-row',
+    containerType: 'inline-size',
   },
   // Holds the cluster against the end edge on its own row, where it would
   // otherwise sit under the filters at the start.
@@ -2193,6 +2208,7 @@ export default function TableFilterTemplate() {
   // client render rather than a default that corrects itself afterwards —
   // which is what lets the auto-open effect below trust it.
   const isCompactSurface = useMediaQuery(COMPACT_SURFACE_QUERY);
+  const showToast = useToast();
 
   // --- Filtering -------------------------------------------------------------
   const [filters, setFilters] = useState<PowerSearchFilter[]>(INITIAL_FILTERS);
@@ -3592,7 +3608,15 @@ export default function TableFilterTemplate() {
                 variant="ghost"
                 size="sm"
                 icon={action.icon}
-                onClick={() => action.onClick(selectedJobs)}
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: action.demoBody(
+                      selectedJobs.map(job => job.id).join(', '),
+                    ),
+                    uniqueID: `bulk-${action.key}`,
+                  })
+                }
               />
             ))}
           </HStack>
@@ -4185,12 +4209,26 @@ export default function TableFilterTemplate() {
                 label={NEXT_ACTION[activeJob.status]}
                 size="sm"
                 width="100%"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: `Demo: “${NEXT_ACTION[activeJob.status]}” would start for ${activeJob.id} here`,
+                    uniqueID: `next-${activeJob.id}`,
+                  })
+                }
               />
               <Button
                 label="Edit job"
                 variant="secondary"
                 size="sm"
                 width="100%"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: `Demo: editing ${activeJob.id} would open here`,
+                    uniqueID: `edit-${activeJob.id}`,
+                  })
+                }
               />
             </HStack>
           </VStack>
@@ -4348,14 +4386,20 @@ export default function TableFilterTemplate() {
                       Section and LayoutHeader all take content only — so the
                       title and its action are a row, the same shape the other
                       table templates use. */}
-                  <HStack gap={3} vAlign="center">
+                  <HStack gap={3} vAlign="center" wrap="wrap">
                     <StackItem size="fill">
                       <Heading level={1}>Service jobs</Heading>
                     </StackItem>
                     <Button
                       label="New job"
                       variant="primary"
-                      onClick={() => alert('New job')}
+                      onClick={() =>
+                        // Demo only: replace this toast with the call that performs the action.
+                        showToast({
+                          body: 'Demo: a new job form would open here',
+                          uniqueID: 'new-job',
+                        })
+                      }
                     />
                   </HStack>
 
@@ -4469,7 +4513,7 @@ export default function TableFilterTemplate() {
         content={
           /* Default padding (16px) is deliberate: Table bleeds to the edges
              and re-applies it to the first and last cells. */
-          <LayoutContent padding={4} label="Service jobs">
+          <LayoutContent role="main" padding={4} label="Service jobs">
             {results.length === 0 ? (
               <EmptyState
                 icon={<Icon icon={Search} size="lg" />}

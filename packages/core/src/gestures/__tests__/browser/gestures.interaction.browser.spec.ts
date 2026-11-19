@@ -356,6 +356,45 @@ async function readTouchMoves(page: Page): Promise<boolean[]> {
   );
 }
 
+/**
+ * Record each touchmove's travel from its touch's start along y, px, and
+ * whether it reached the page cancelled.
+ */
+async function logTouchTravel(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const moves: {travel: number; cancelled: boolean}[] = [];
+    (window as unknown as {__travel: typeof moves}).__travel = moves;
+    let startY = 0;
+    window.addEventListener(
+      'touchstart',
+      event => {
+        startY = event.touches[0]?.clientY ?? 0;
+      },
+      {passive: true},
+    );
+    window.addEventListener(
+      'touchmove',
+      event => {
+        moves.push({
+          travel: Math.round((event.touches[0]?.clientY ?? 0) - startY),
+          cancelled: event.defaultPrevented,
+        });
+      },
+      {passive: true},
+    );
+  });
+}
+
+async function readTouchTravel(
+  page: Page,
+): Promise<{travel: number; cancelled: boolean}[]> {
+  return page.evaluate(
+    () =>
+      (window as unknown as {__travel: {travel: number; cancelled: boolean}[]})
+        .__travel,
+  );
+}
+
 const states = (entries: Entry[], name: string) =>
   entries.filter(entry => entry.name === name).map(entry => entry.state);
 
@@ -1155,6 +1194,49 @@ test('a zero-delay hold that brings its own lock turns selection off only for a 
   expect(held.lens).toEqual([true, false]);
 });
 
+test('one context request per gesture from a finger held still, a right click and Shift+F10, each naming its input (spec:AST-094 FR43)', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await openBare(page, browserName);
+  await page.evaluate(() => {
+    const {attachContextRequest} = window.__api;
+    document.body.innerHTML =
+      '<div id="row" tabindex="0" style="height: 80px">Row</div>';
+    attachContextRequest(document.getElementById('row') as HTMLElement, {
+      onRequest: request =>
+        window.__requests.push(
+          `${request.kind}:${request.pointerType ?? 'none'}`,
+        ),
+    });
+  });
+  const at = await center(page, 'row');
+  // Held past the long press: one request. Android fires its own context
+  // menu during the hold too, as a touch's. The request refuses that one and
+  // makes no second request.
+  await driver.play([{t: 0, down: [{id: 1, ...at}]}]);
+  await page.waitForTimeout(900);
+  const nativeMenuRefused = await page.evaluate(() => {
+    const menu = new PointerEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      pointerType: 'touch',
+    });
+    document.getElementById('row')?.dispatchEvent(menu);
+    return menu.defaultPrevented;
+  });
+  await driver.play([{t: 0, down: []}]);
+  expect(nativeMenuRefused).toBe(true);
+  await page.mouse.click(at.x, at.y, {button: 'right'});
+  await page.focus('#row');
+  await page.keyboard.press('Shift+F10');
+  expect(await page.evaluate(() => window.__requests)).toEqual([
+    'hold:touch',
+    'pointer:mouse',
+    'keyboard:none',
+  ]);
+});
+
 test('a tap recognizer replaces the click: no ghost click, no compatibility mouse events', async ({
   page,
   browserName,
@@ -1293,23 +1375,47 @@ test('scroll edge: at the top the pull is the sheet’s at once', async ({
   expect(await scrollTop(page, 'sheetBody')).toBe(0);
 });
 
-test("scroll edge: at the top the sheet cancels the pull's moves from the first one, before it begins (spec:AST-094 FR19, DEC-18)", async ({
+test("scroll edge: at the top the sheet leaves a tap's wobble to the browser, then cancels the pull's moves from the one that reaches 5 px, before it begins (spec:AST-094 FR19, DEC-30)", async ({
   page,
   browserName,
 }) => {
   const driver = await open(page, browserName);
-  await logTouchMoves(page);
+  await logTouchTravel(page);
   const start = await center(page, 'sheetBody');
   await driver.play(drag(start, {x: start.x, y: start.y + 24}));
-  const moves = await readTouchMoves(page);
+  const moves = await readTouchTravel(page);
   // WebKit sends the first move at 2 px, well before the sheet's 10 px begin;
-  // Chromium sends none inside its own 15 px slop. Every move the page sees
-  // is cancelled, the first one included.
+  // Chromium sends none inside its own 15 px slop. A move under 5 px stays
+  // the browser's, so a tap keeps its click. Every move from 5 px is
+  // cancelled, before Mobile Safari could commit its native pan.
   expect(moves.length).toBeGreaterThan(0);
-  expect(moves).toEqual(moves.map(() => true));
+  expect(moves).toEqual(
+    moves.map(({travel}) => ({travel, cancelled: travel >= 5})),
+  );
   const sheet = (await log(page)).filter(entry => entry.name === 'sheet');
   expect(sheet[0]?.state).toBe('began');
   expect(await scrollTop(page, 'sheetBody')).toBe(0);
+});
+
+test('scroll edge: at the top a tap that wobbles under 5 px keeps every move, so WebKit keeps its click (spec:AST-094 FR19, DEC-30)', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await open(page, browserName);
+  await logTouchTravel(page);
+  const at = await center(page, 'sheetBody');
+  await driver.play([
+    {t: 0, down: [{id: 1, x: at.x, y: at.y}]},
+    {t: 30, down: [{id: 1, x: at.x, y: at.y + 2}]},
+    {t: 60, down: [{id: 1, x: at.x, y: at.y + 4}]},
+    {t: 90, down: []},
+  ]);
+  // WebKit ends a touch's click when one of its moves is cancelled.
+  expect(
+    (await readTouchTravel(page)).filter(({cancelled}) => cancelled),
+  ).toEqual([]);
+  const sheet = (await log(page)).filter(entry => entry.name === 'sheet');
+  expect(sheet.some(entry => entry.state === 'began')).toBe(false);
 });
 
 test('a drag that began as a scroll stays the browser’s (AST-094 FR14): the content scrolls to its top and the sheet never begins', async ({

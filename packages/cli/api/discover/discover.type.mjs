@@ -51,11 +51,21 @@
  * @property {string} [description]
  * @property {string} [displayName]
  * @property {string[]} [templates] Template ids, when it adds any.
- * @property {string[]} [docs] Doc topic names, when it adds any.
+ * @property {string[]} [docs] What `astryx docs` opens each doc it adds by,
+ *   when it adds any: a topic's name, the name of a topic it adds sections
+ *   to, or the route of a namespace doc or guide it places, or of a guide it
+ *   replaces or extends.
+ * @property {Record<string, string[]>} [docSections] For each name in `docs`
+ *   whose topic or guide another package owns, the keys of the sections this
+ *   package adds to it, in reading order: `astryx docs <name> <key>` opens
+ *   one. Present only when it adds such a section.
  * @property {string[]} [themes] Theme slugs, when it adds any.
  * @property {string[]} [codemods] `<version>/<id>`, when it adds any.
  * @property {string[]} [agentDocs] Agent guidance, when a source lists any.
  * @property {string[]} [iconSets] Icon set names, when it adds any. Experimental: may change or be removed in a patch release.
+ * @property {['iconSets']} [experimentalFields] Set on an entry a discover
+ *   source lists when it carries `iconSets`: the fields that list an
+ *   experimental kind (spec:AST-017 FR27), so a consumer can leave them out.
  * @property {string} [latest] The latest release a discover source knows.
  */
 
@@ -72,14 +82,18 @@
  * @property {string[]} [codemods]
  * @property {string[]} [agentDocs]
  * @property {string[]} [iconSets] Icon set names, when it adds any. Experimental: may change or be removed in a patch release.
+ * @property {['iconSets']} [experimentalFields] Set on an entry a discover
+ *   source lists when it carries `iconSets`: the fields that list an
+ *   experimental kind (spec:AST-017 FR27), so a consumer can leave them out.
  * @property {string} [description]
  * @property {string[]} [aliases] The integration's other package names.
  * @property {string} source The discover source that lists it; `Astryx` for
  *   the official list; `installed for this computer` for an integration
  *   installed beside the CLI that the project does not install (spec AST-081
  *   FR12).
- * @property {string} [install] The package-manager command that adds it to
- *   this project; discover prints it and never runs it.
+ * @property {string} [install] How to add it to this project: the
+ *   project's integration install guidance when one gives it, else the
+ *   package-manager command; discover prints it and never runs it.
  */
 
 /**
@@ -110,8 +124,9 @@
  *   versions?: import('../../authoring/discover/type').DiscoverVersion[],
  * }} data `installed` says whether the project has the package;
  *   `installedVersion` is set when it has another version than the one shown.
- *   `install` is the package-manager command that adds a package the project
- *   does not have; discover prints it and never runs it. `installedAs` names
+ *   `install` says how to add a package the project does not have: the
+ *   project's integration install guidance when one gives it, else the
+ *   package-manager command; discover prints it and never runs it. `installedAs` names
  *   the package the project has instead, when this one is an alias of it.
  *   `versions` (newest first) comes from a discover source.
  */
@@ -143,17 +158,23 @@
  *   default?: {variant?: string},
  *   definitions?: string[],
  *   command?: string,
+ *   experimental?: true,
+ *   sections?: string[],
  *   installed: boolean,
  *   installedAs?: string,
  *   install?: string,
  *   source?: string,
- * }} data For an icon set, `title` and `summary` are its display name and
- *   description, and it carries `license`, `iconCount`, `default` (the variant
+ * }} data For a doc whose topic or guide another package owns, `sections`
+ *   holds the keys of the sections the package adds to it: `astryx docs
+ *   <name> <key>` opens one. For an icon set, `title` and `summary` are its
+ *   display name and description, and it carries `license`, `iconCount`, `default` (the variant
  *   an icon's own export draws, when the set names one), the shared icon names
  *   its `map` covers (`definitions`), and `command`, which searches the set's icons. A source's
- *   entry carries `iconCount` and `definitions` when the source lists them.
- *   The icon-set fields (`license`, `iconCount`, `default`, `definitions`,
- *   and `command`) are experimental: they may change or be removed in a patch
+ *   entry carries `license` and `iconCount` when the source lists them; its
+ *   `definitions` are listed only where icon features are on: in a project
+ *   that installs an icon-set package or sets `experimental.iconSet`. An icon set carries `experimental: true`. The
+ *   icon-set fields (`license`, `iconCount`, `default`, `definitions`, and
+ *   `command`) are experimental: they may change or be removed in a patch
  *   release.
  */
 
@@ -174,6 +195,8 @@
  * @property {boolean} installed Whether the project has the package.
  * @property {string} [title]
  * @property {string} [summary]
+ * @property {true} [experimental] Set on an icon set, an experimental kind
+ *   (spec:AST-017 FR27): consumers can leave such matches out.
  */
 
 /**

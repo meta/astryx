@@ -75,7 +75,8 @@
  * browser's commit as well. `'presented'` creates the animations of a call
  * from rest two frames later, once its element at rest has been presented.
  * That serves a UI process that applies commits late. It does not change
- * when a retarget starts.
+ * when a retarget starts. `'next-frame'`, for a call in an input event's own
+ * task, starts a call from rest at the first frame after that task.
  * `handle.curve(property)` hands out the curve a call plays, so a
  * companion can follow it on the same clock.
  * `options.additive` retargets as UIKit does: the old curve keeps going and a
@@ -291,8 +292,15 @@ export interface AnimateOptions {
    *   Any other change to the animator before then creates the animations
    *   first, in call order. A call that continues motion on screen starts
    *   now, as by default.
+   * - `'next-frame'`: the caller makes the call in an input event's own
+   *   task, never in a frame callback. The first frame whose callbacks run
+   *   after the call commits it. A call from rest starts at that frame,
+   *   however long the task ran, so a later listener's block delays the
+   *   motion. Without it, the browser dates the start inside that block, and
+   *   the motion skips ahead. A call that continues motion starts now, as by
+   *   default.
    */
-  start?: 'commit' | 'presented';
+  start?: 'commit' | 'presented' | 'next-frame';
   /**
    * A call that retargets a curve on screen adds to it instead of replacing
    * it, as UIKit's animations do: the old curve keeps going (past its end, at
@@ -375,6 +383,26 @@ export interface AnimatorOptions {
    * browser gave it there.
    */
   requestFrame?: (callback: (frame?: number) => void) => void;
+  /**
+   * Renders `x` into this custom property instead of `translate`, for an
+   * element whose parts all read one value, such as a row's swipe travel.
+   * `y` is not rendered. The value is a `<length>` in px or a plain
+   * `<number>`. Registration lets it interpolate. It is inherited, so every
+   * part of the element reads it. It animates on the main thread, not the
+   * compositor, and every other channel renders as usual.
+   * A `companion` is a second custom property that its `map` draws from x in
+   * the same keyframes and writes. It shares x's animation and start, so it
+   * follows x through every retarget and Reduce Motion plan.
+   */
+  customProperty?: {
+    name: string;
+    syntax: '<length>' | '<number>';
+    companion?: {
+      name: string;
+      syntax: '<length>' | '<number>';
+      map: (x: number) => number;
+    };
+  };
 }
 
 /**
@@ -573,6 +601,11 @@ interface StartGroup {
    * so the frame after it is not the one that starts them.
    */
   madeInFrame?: boolean;
+  /**
+   * Its call asked for `start: 'next-frame'`: the call ran in an input
+   * event's own task. Its task mark carries that to the calls it holds.
+   */
+  nextFrame?: boolean;
   /** The task it was made in, with every call made in that task. */
   task?: TaskMark;
   /**
@@ -747,6 +780,12 @@ interface TaskMark {
   ended?: number;
   /** The start every call of a blocked task moves to, set by its first read. */
   at?: number;
+  /**
+   * A call of the task asked for `start: 'next-frame'`. The task is then an
+   * input event's own. Every call the mark holds moves to the first frame
+   * after the task: the calls made before the task's first microtask.
+   */
+  nextFrame?: boolean;
 }
 
 /** The task the current calls from rest are made in, until it ends. */
@@ -1207,6 +1246,40 @@ const REDUCED_TRANSITION: SpringTransition = {
 };
 
 /**
+ * Registers `name` as an inherited `<length>` (initially 0px) or `<number>`
+ * (initially 0) so keyframes interpolate it; an unregistered custom property
+ * animates in steps. A property the page already registered is left as it
+ * is.
+ */
+function registerCustomProperty(
+  name: string,
+  syntax: '<length>' | '<number>',
+): void {
+  if (
+    typeof CSS === 'undefined' ||
+    typeof CSS.registerProperty !== 'function'
+  ) {
+    return;
+  }
+  try {
+    CSS.registerProperty({
+      name,
+      syntax,
+      inherits: true,
+      initialValue: syntax === '<length>' ? '0px' : '0',
+    });
+  } catch (error) {
+    // A name registered before, by the page or an earlier call, throws this.
+    if (
+      !(error instanceof DOMException) ||
+      error.name !== 'InvalidModificationError'
+    ) {
+      throw error;
+    }
+  }
+}
+
+/**
  * Creates an animator for `element` (or for an element attached later).
  *
  * @example
@@ -1248,6 +1321,47 @@ export function createMotionEngine(
           });
         };
   const pseudoElement = options.pseudoElement;
+  const customProperty = options.customProperty;
+  const companion = customProperty?.companion;
+  if (customProperty != null) {
+    registerCustomProperty(customProperty.name, customProperty.syntax);
+  }
+  if (companion != null) {
+    registerCustomProperty(companion.name, companion.syntax);
+  }
+  const companionText = (x: number): string =>
+    companion == null
+      ? ''
+      : companion.syntax === '<number>'
+        ? `${round(companion.map(x), 5)}`
+        : `${round(companion.map(x), 3)}px`;
+  const isCustom = (channel: Channel) =>
+    customProperty != null && channel === 'translate';
+  const cssName = (channel: Channel): string =>
+    customProperty != null && channel === 'translate'
+      ? customProperty.name
+      : channel;
+  const customUnit = customProperty?.syntax === '<number>' ? '' : 'px';
+  const textOf = (
+    channel: Channel,
+    value: (property: MotionProperty) => number,
+  ): string =>
+    isCustom(channel)
+      ? `${round(value('x'), customUnit === '' ? 5 : 3)}${customUnit}`
+      : format(channel, value);
+  /** A keyframe's properties for a channel: the companion rides x's. */
+  const frameOf = (
+    channel: Channel,
+    value: (property: MotionProperty) => number,
+  ): Record<string, string> =>
+    isCustom(channel) && companion != null
+      ? {
+          [cssName(channel)]: textOf(channel, value),
+          [companion.name]: companionText(value('x')),
+        }
+      : {[cssName(channel)]: textOf(channel, value)};
+  const identityOf = (channel: Channel): string =>
+    isCustom(channel) ? `0${customUnit}` : IDENTITY_TEXT[channel];
   // Reduced Motion reads the person's settings and nothing else: no option
   // overrides them (design:reduced-motion DR4). A theme that reduces motion
   // for everyone counts as the setting.
@@ -1575,14 +1689,22 @@ export function createMotionEngine(
       return;
     }
     touched.add(channel);
-    const text = inlineText(channel, value);
+    const text = isCustom(channel)
+      ? textOf(channel, value)
+      : inlineText(channel, value);
     // An unchanged value is not written: a style write invalidates the
     // element, and WebKit can repaint sticky content stale when that lands in
     // the frame a scroll commits.
-    if (target.style.getPropertyValue(channel) !== text) {
-      target.style.setProperty(channel, text);
+    if (target.style.getPropertyValue(cssName(channel)) !== text) {
+      target.style.setProperty(cssName(channel), text);
     }
-    if (release && text === IDENTITY_TEXT[channel]) {
+    if (isCustom(channel) && companion != null) {
+      const companionValue = companionText(value('x'));
+      if (target.style.getPropertyValue(companion.name) !== companionValue) {
+        target.style.setProperty(companion.name, companionValue);
+      }
+    }
+    if (release && text === identityOf(channel)) {
       // Identity leaves the element when nothing else would move it.
       releaseIdentity(channel);
     }
@@ -1868,7 +1990,7 @@ export function createMotionEngine(
     for (const group of restarted) {
       group.latest?.delete(channel);
     }
-    if (channel === 'translate') {
+    if (channel === 'translate' && !isCustom(channel)) {
       // The animation built below starts from the value at `time` (its first
       // keyframe); a rebase or a retarget builds a new one, so a new start.
       hitTested = {x: valueAt('x', time), y: valueAt('y', time)};
@@ -1946,8 +2068,10 @@ export function createMotionEngine(
     const devicePixel = 1 / Math.max(1, globalThis.devicePixelRatio || 1);
     // An earlier call of this task that played the same curves from the same
     // offset, over the same rest values, baked these keyframes already.
+    // A custom property's keyframes write its own properties, so they are
+    // never shared with another call's.
     const bakeKey =
-      pseudoElement == null
+      pseudoElement == null && !isCustom(channel)
         ? taskBakeKey(channel, moving, from, end, devicePixel)
         : null;
     const baked =
@@ -1996,21 +2120,22 @@ export function createMotionEngine(
         if (jumpTimes.has(t)) {
           frames.push({
             offset,
-            [channel]: format(channel, p => valueBefore(p, t)),
+            ...frameOf(channel, p => valueBefore(p, t)),
           });
         }
         frames.push({
           offset,
-          [channel]: format(channel, p =>
-            t >= end ? finalValue(p) : curveAt(p, t),
-          ),
+          ...frameOf(channel, p => (t >= end ? finalValue(p) : curveAt(p, t))),
         });
       }
-      frames.push({offset: 1, [channel]: format(channel, finalValue)});
+      frames.push({offset: 1, ...frameOf(channel, finalValue)});
       return frames;
     };
     const keyframes = baked?.keyframes ?? bakeKeyframes();
-    promote(channel);
+    // A custom property animates on the main thread: nothing to promote.
+    if (!isCustom(channel)) {
+      promote(channel);
+    }
     const animation =
       baked != null && isCopyable(baked.effect)
         ? copyAnimation(baked.effect, target)
@@ -2321,7 +2446,9 @@ export function createMotionEngine(
     if (pseudoElement != null) {
       return;
     }
-    if (target.style.getPropertyValue(channel) !== IDENTITY_TEXT[channel]) {
+    if (
+      target.style.getPropertyValue(cssName(channel)) !== identityOf(channel)
+    ) {
       return;
     }
     // Read with every other channel the same commit leaves at identity: one
@@ -2349,20 +2476,21 @@ export function createMotionEngine(
     const channels = [...releasing].filter(
       channel =>
         !running.has(channel) &&
-        element?.style.getPropertyValue(channel) === IDENTITY_TEXT[channel],
+        element?.style.getPropertyValue(cssName(channel)) ===
+          identityOf(channel),
     );
     releasing.clear();
     if (element == null || channels.length === 0) {
       return;
     }
     for (const channel of channels) {
-      element.style.removeProperty(channel);
+      element.style.removeProperty(cssName(channel));
     }
     const style = element.ownerDocument.defaultView?.getComputedStyle(element);
     for (const channel of channels) {
-      const underneath = style?.getPropertyValue(channel);
+      const underneath = style?.getPropertyValue(cssName(channel));
       if (underneath != null && !isIdentityText(channel, underneath)) {
-        element.style.setProperty(channel, IDENTITY_TEXT[channel]);
+        element.style.setProperty(cssName(channel), identityOf(channel));
       }
     }
   };
@@ -2771,6 +2899,12 @@ export function createMotionEngine(
     // call's is its second frame's callback, wherever in its frame the call
     // was made.
     group.task = markTask(now(), now);
+    // The call's `start: 'next-frame'` marks its task, so the calls made
+    // before the task's first microtask move together. A call after it opens
+    // a new mark.
+    if (group.nextFrame === true) {
+      group.task.nextFrame = true;
+    }
     group.madeInFrame = frameDepth > 0;
     queueMicrotask(() => {
       group.fresh = false;
@@ -2811,7 +2945,12 @@ export function createMotionEngine(
       const at = frameTime(frame, now);
       if (
         group.madeInFrame !== true &&
-        at - (group.task?.first ?? group.provisional) <= LATE_START_MS &&
+        // A call made in an input event's own task says so with
+        // `start: 'next-frame'`. This frame commits such a call however
+        // late it comes. A later listener's block then holds the motion
+        // back instead of skipping into it.
+        (group.task?.nextFrame === true ||
+          at - (group.task?.first ?? group.provisional) <= LATE_START_MS) &&
         group.animations.some(
           animation =>
             animation.startTime == null && animation.playState === 'running',
@@ -2995,7 +3134,10 @@ export function createMotionEngine(
     }
     const {task} = group;
     // A read in the task's first microtasks comes after its end too.
-    const ended = task?.ended ?? now();
+    // A later listener of an input event may hold the event's task past its
+    // first microtask. So for a call made with `start: 'next-frame'`, the
+    // task ends at this read: the first frame after the task, or its `ready`.
+    const ended = task?.nextFrame === true ? now() : (task?.ended ?? now());
     if (task == null || ended - task.first <= LATE_START_MS) {
       return start;
     }
@@ -4343,8 +4485,8 @@ export function createMotionEngine(
           new Set(
             (Object.keys(CHANNELS) as Channel[]).filter(
               channel =>
-                outgoing.style.getPropertyValue(channel) ===
-                IDENTITY_TEXT[channel],
+                outgoing.style.getPropertyValue(cssName(channel)) ===
+                identityOf(channel),
             ),
           );
       }
@@ -4496,6 +4638,14 @@ export function createMotionEngine(
         animateOptions.at,
         animateOptions.start,
       );
+      // Ignored with `at`, which may join an earlier call's start.
+      if (
+        group != null &&
+        animateOptions.at == null &&
+        animateOptions.start === 'next-frame'
+      ) {
+        group.nextFrame = true;
+      }
       const waitsForFrame = noteShown(
         Object.keys(next) as MotionProperty[],
         time,
@@ -4633,6 +4783,14 @@ export function createMotionEngine(
         playOptions.at,
         playOptions.start,
       );
+      // Ignored with `at`, which may join an earlier call's start.
+      if (
+        group != null &&
+        playOptions.at == null &&
+        playOptions.start === 'next-frame'
+      ) {
+        group.nextFrame = true;
+      }
       const waitsForFrame = noteShown(
         Object.keys(next) as MotionProperty[],
         time,

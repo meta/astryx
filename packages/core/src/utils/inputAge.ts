@@ -12,8 +12,11 @@
 
 import {isDocument, isNode} from './nodeType';
 
-/** The part of a window's performance timeline an input's age reads. */
-export type EventClock = Pick<Performance, 'now'>;
+/**
+ * The part of a window's performance timeline an input's age reads, with
+ * the time origin that converts an epoch stamp.
+ */
+export type EventClock = Pick<Performance, 'now' | 'timeOrigin'>;
 
 /**
  * The clock of the window that stamped an input: an event's `view`, or the

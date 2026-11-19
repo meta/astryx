@@ -265,7 +265,12 @@ describe('swizzle — the astryx-swizzle.json marker', () => {
     fs.writeFileSync(path.join(project, 'notes.txt'), 'notes\n');
     const result = await runCli(['--json', 'swizzle', 'Button', '--output', 'notes.txt'], project);
     expect(result.code).not.toBe(0);
-    expect(JSON.parse(result.stdout).code).toBe('ERR_WRITE_FAILED');
+    const envelope = JSON.parse(result.stdout);
+    expect(envelope.code).toBe('ERR_WRITE_FAILED');
+    expect(envelope.error).toContain(`Could not write ${path.join('notes.txt', 'Button', 'Button.tsx')}:`);
+    expect(envelope.error).toContain('Nothing was written.');
+    expect(envelope.error).not.toContain(project);
+    expect(fs.readFileSync(path.join(project, 'notes.txt'), 'utf-8')).toBe('notes\n');
   });
 
   it('marks a folder the copy creates, and says what the marker does', async () => {

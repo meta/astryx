@@ -5,7 +5,7 @@
  * `../_schema.mjs`; consumers call `parseCommand` or use `parseDoc`.
  */
 
-import {CommandDocKindSchema} from '../_schema.mjs';
+import {docSchemas} from '../_schema.mjs';
 import {formatZodError} from '../../_shared/errors.mjs';
 
 /** @typedef {import('../types.js').CommandDoc} CommandDoc */
@@ -18,7 +18,7 @@ import {formatZodError} from '../../_shared/errors.mjs';
  * @returns {CommandDoc}
  */
 export function parseCommand(input, label = 'command doc') {
-  const result = CommandDocKindSchema.safeParse(input);
+  const result = docSchemas().CommandDocKindSchema.safeParse(input);
   if (!result.success) {
     throw new Error(formatZodError(label, result.error));
   }

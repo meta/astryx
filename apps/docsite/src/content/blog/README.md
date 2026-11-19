@@ -99,7 +99,7 @@ export const authors = {
 ```
 
 For GitHub-backed authors, the avatar and profile link default to
-`https://github.com/<handle>.png` and `https://github.com/<handle>` — no
+`https://github.com/<handle>.png?size=128` and `https://github.com/<handle>` — no
 build-time profile fetching. Then reference the key from your post:
 
 ```yaml
@@ -120,6 +120,10 @@ it with alt text:
 coverImage: '/blog/<slug>/cover.png'
 coverAlt: 'Short description of the image'
 ```
+
+The site loads a PNG or JPEG cover through the image optimizer, no wider than
+1920 pixels, so commit the full-size file. A cover in another format, such as
+an animated GIF, loads as the file itself, so keep it small.
 
 **Release posts** get their cover automatically: when a post title carries a
 version (e.g. "Astryx v0.1.3: …"), the version is rendered on a solid

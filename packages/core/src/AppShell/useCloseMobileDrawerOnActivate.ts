@@ -11,6 +11,7 @@
  */
 
 import {useAppShellMobile} from './AppShellMobileContext';
+import {isModifiedClick} from '../DropdownMenu/menuItemRoles';
 import {useSideNavRenderMode} from '../SideNav/SideNavRenderContext';
 import {useTopNavRenderMode} from '../TopNav/TopNavRenderContext';
 
@@ -18,7 +19,8 @@ import {useTopNavRenderMode} from '../TopNav/TopNavRenderContext';
  * Returns a function that wraps a row's click handler. While
  * `isInMobileDrawer` is true, the wrapped handler calls the row's handler and
  * then closes the AppShell mobile drawer. Otherwise the row's handler comes
- * back unchanged. Every drawer row closes the drawer through this one rule.
+ * back unchanged. Every drawer row closes the drawer through this one rule,
+ * except that a modified click on a link leaves it open.
  */
 export function useCloseMobileDrawerOnActivate(
   isInMobileDrawer: boolean,
@@ -32,9 +34,24 @@ export function useCloseMobileDrawerOnActivate(
     }
     return (...args) => {
       onClick?.(...args);
-      closeMobileNav();
+      if (!isModifiedLinkClick(args[0])) {
+        closeMobileNav();
+      }
     };
   };
+}
+
+// A modified click on a link is the browser's (a new tab), so the drawer stays
+// open for the next one. The clicked element decides whether it is a link, so
+// a row whose blocked `href` renders no address still closes. A row whose
+// `onClick` cancels the click opens nothing elsewhere, so it still closes.
+function isModifiedLinkClick(event: unknown): boolean {
+  const click = event as React.MouseEvent<Element> | undefined;
+  return (
+    click?.currentTarget?.hasAttribute?.('href') === true &&
+    isModifiedClick(click) &&
+    !click.defaultPrevented
+  );
 }
 
 /**

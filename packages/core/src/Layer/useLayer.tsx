@@ -25,6 +25,7 @@ import React, {
   type ReactNode,
   type RefCallback,
 } from 'react';
+import {useCommittedRef, useCommittedRefInto} from '../hooks/useCommittedRef';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {createPortal} from 'react-dom';
@@ -32,9 +33,12 @@ import {LayerContentBoundary} from './layerScopedContext';
 import {layerClickBoundary} from './layerClickBoundary';
 import {addAnchorName, readAnchorNames, removeAnchorName} from './anchorName';
 import {
+  afterRelease,
   claimContextMenuPress,
   currentGesture,
   currentGestureHasClicked,
+  isReleaseInFlight,
+  listenForGestures,
 } from './gestureCounter';
 import {resolveLayerPortalTarget} from './layerHost';
 import {layerTextReset} from './layerTextReset.stylex';
@@ -70,7 +74,12 @@ import {overlayPaddingReset} from '../Layout/overlayPaddingReset.stylex';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {observeMutations} from '../utils/sharedMutationObserver';
 import {containsAlongFlatTree, parentAcrossShadow} from '../utils/flatTree';
-import {isShadowRoot} from '../utils/nodeType';
+import {
+  isDialogShown,
+  isNode,
+  isShadowRoot,
+  isShownAsPopover,
+} from '../utils/nodeType';
 import {subscribeInput} from '../utils/inputStream';
 
 const styles = stylex.create({
@@ -470,10 +479,6 @@ export interface FixedLayerReturn {
   render: (children: ReactNode, props: FixedRenderProps) => ReactNode;
 }
 
-interface InternalLayerFields {
-  wasJustDismissed: () => boolean;
-}
-
 /**
  * Context-mode options a core component may pass through `useLayerInternal`;
  * not part of the public `useLayer` options.
@@ -509,6 +514,12 @@ interface InternalContextLayerOptions extends ContextLayerOptions {
    */
   watchesOutsidePans?: (layer: HTMLElement) => () => void;
   /**
+   * Called with true when a `show()` that the layer accepted starts to wait
+   * for a valid anchor, and with false when that wait ends. The owner reads
+   * it right after `show()`, to tell an open that waits from a refused one.
+   */
+  onOpenPendingChange?: (isPending: boolean) => void;
+  /**
    * The component writes the entrance's side itself, after the commit that
    * moves the layer (a Selector's list over its selected option). The runtime
    * then skips its own read as the layer shows, so a show reads the layer
@@ -517,9 +528,6 @@ interface InternalContextLayerOptions extends ContextLayerOptions {
    */
   writesEntranceSide?: boolean;
 }
-
-type InternalContextLayerReturn = ContextLayerReturn & InternalLayerFields;
-type InternalFixedLayerReturn = FixedLayerReturn & InternalLayerFields;
 
 function toCssLength(value: number | string): string {
   return typeof value === 'number' ? `${value}px` : value;
@@ -845,16 +853,6 @@ function observeAnchorClearance(
   };
 }
 
-/** Whether `element` is shown as a popover (`:popover-open`). */
-function isShownAsPopover(element: HTMLElement): boolean {
-  try {
-    return element.matches(':popover-open');
-  } catch {
-    // An engine without the pseudo-class has no popovers to be shown as.
-    return false;
-  }
-}
-
 /**
  * Whether `anchor` is a valid CSS anchor right now: it has a layout box, and
  * any `<dialog>` it sits in is showing, as a modal (`open`) or as a popover
@@ -862,7 +860,9 @@ function isShownAsPopover(element: HTMLElement): boolean {
  * `Dialog` displays its element during render but only calls `showModal()` in
  * a later Effect, so in that window the trigger already has a box while the
  * dialog is not yet in the top layer; opening a layer then paints it before
- * the dialog is modal.
+ * the dialog is modal. A `<dialog>` the page displays while it stays closed
+ * is never in the top layer; show() opens on it after one commit (see
+ * `isInClosedDialog`).
  */
 function isAnchorReady(anchor: HTMLElement): boolean {
   // No layout box at all: `display: none`, or inside a closed `<dialog>`. An
@@ -873,7 +873,21 @@ function isAnchorReady(anchor: HTMLElement): boolean {
     return false;
   }
   const dialog = anchor.closest('dialog');
-  return dialog == null || dialog.open || isShownAsPopover(dialog);
+  return dialog == null || isDialogShown(dialog);
+}
+
+/**
+ * Whether `anchor` has a layout box inside a `<dialog>` that is neither open
+ * nor shown as a popover. Such a dialog is about to open, in the Effects of
+ * the commit that displayed it. Or the page shows it in flow while it stays
+ * closed.
+ */
+function isInClosedDialog(anchor: HTMLElement): boolean {
+  if (anchor.getClientRects().length === 0) {
+    return false;
+  }
+  const dialog = anchor.closest('dialog');
+  return dialog != null && !isDialogShown(dialog);
 }
 
 /**
@@ -910,29 +924,31 @@ function waitForAncestorAnimations(
   anchor: HTMLElement,
   onReady: () => void,
 ): () => void {
-  if (typeof document.getAnimations !== 'function') {
+  // The anchor's own document and window: a trigger can sit in a frame or a
+  // pop-out window, whose animations and frames are its own.
+  const doc = anchor.ownerDocument;
+  const view = doc.defaultView;
+  if (typeof doc.getAnimations !== 'function' || view == null) {
     onReady();
     return () => {};
   }
   let cancelled = false;
-  const handle = requestAnimationFrame(() => {
+  const handle = view.requestAnimationFrame(() => {
     if (cancelled) {
       return;
     }
-    const running = document.getAnimations().filter(animation => {
+    const running = doc.getAnimations().filter(animation => {
+      const effect = animation.effect;
       const target =
-        animation.effect instanceof KeyframeEffect
-          ? animation.effect.target
+        effect != null && 'target' in effect
+          ? (effect as KeyframeEffect).target
           : null;
-      if (
-        !(target instanceof Node) ||
-        !(target === anchor || target.contains(anchor))
-      ) {
+      if (!isNode(target) || !(target === anchor || target.contains(anchor))) {
         return false;
       }
       // A scroll- or view-driven animation finishes only when the person
       // scrolls to the end of its range, so it is not a settle to wait on.
-      if (animation.timeline !== document.timeline) {
+      if (animation.timeline !== doc.timeline) {
         return false;
       }
       return endsOnItsOwn(animation);
@@ -951,7 +967,7 @@ function waitForAncestorAnimations(
   });
   return () => {
     cancelled = true;
-    cancelAnimationFrame(handle);
+    view.cancelAnimationFrame(handle);
   };
 }
 
@@ -1207,25 +1223,26 @@ function getGutterStyles(
 }
 
 /**
- * Internal props for controls that sit beside an open layer. This stays out of
- * the public useLayer/usePopover return types until the input family adopts it.
+ * Internal props for controls that sit beside an open layer. They are not part
+ * of the public useLayer or usePopover return types.
  */
 export function useKeepLayerOpenProps(
   id: string,
   isOpen: boolean,
 ): KeepLayerOpenProps {
-  const isOpenRef = useRef(isOpen);
-  isOpenRef.current = isOpen;
-
   return useMemo(
     () => ({
       onPointerDown: (event: React.PointerEvent<HTMLElement>) => {
-        if (!isOpenRef.current) {
+        const control = event.currentTarget;
+        const doc = control.ownerDocument;
+        // The runtime shows the layer before its open state commits. The
+        // layer renders in the control's own tree, a shadow root included.
+        const root = control.getRootNode();
+        const layer = (isShadowRoot(root) ? root : doc).getElementById(id);
+        if (!isOpen && (layer == null || !isShownAsPopover(layer))) {
           return;
         }
         // The browser reads the invoker relationship at both ends of the press.
-        const control = event.currentTarget;
-        const doc = control.ownerDocument;
         control.setAttribute('popovertarget', id);
         const onPressEnd = () => {
           doc.removeEventListener('pointerup', onPressEnd);
@@ -1247,7 +1264,7 @@ export function useKeepLayerOpenProps(
         }
       },
     }),
-    [id],
+    [id, isOpen],
   );
 }
 
@@ -1267,7 +1284,7 @@ export function useKeepLayerOpenProps(
  */
 function useLayerImplementation(
   options: InternalContextLayerOptions | FixedLayerOptions,
-): InternalContextLayerReturn | InternalFixedLayerReturn {
+): ContextLayerReturn | FixedLayerReturn {
   const {mode, onShow, onHide, lightDismiss = false} = options;
   const lazyMount = mode === 'context' ? (options.lazyMount ?? false) : false;
   const keepsMountAfterShow =
@@ -1280,9 +1297,10 @@ function useLayerImplementation(
     mode === 'context' ? options.watchesOutsidePans : undefined;
   const writesEntranceSide =
     mode === 'context' ? (options.writesEntranceSide ?? false) : false;
-  const onCloseStartRef = useRef<(() => void) | undefined>(undefined);
-  onCloseStartRef.current =
-    mode === 'context' ? options.onCloseStart : undefined;
+  const onCloseStart = mode === 'context' ? options.onCloseStart : undefined;
+  const onOpenPendingChange =
+    mode === 'context' ? options.onOpenPendingChange : undefined;
+  const onCloseStartRef = useCommittedRef(onCloseStart);
   const id = useId();
   const anchorId = `--astryx-layer-${id.replace(/:/g, '')}`;
 
@@ -1334,6 +1352,8 @@ function useLayerImplementation(
   // one that arrives while another popover is mid show/hide runs once that
   // operation has unwound. hide() forgets it either way.
   const pendingShowRef = useRef(false);
+  // Cancels a show that waits for a press's release to be handled.
+  const cancelAfterReleaseRef = useRef<(() => void) | null>(null);
 
   // Ref mirrors isOpen for synchronous reads inside show/hide.
   // State drives re-renders; the ref lets the imperative calls avoid
@@ -1381,9 +1401,20 @@ function useLayerImplementation(
   );
 
   // The gesture during which the browser last closed this layer on its own.
-  // Read through wasJustDismissed by triggers deciding whether a click is
-  // theirs to act on.
+  // openNow reads it so that the same press cannot reopen the layer.
   const dismissedByGestureRef = useRef<number | null>(null);
+  // The trigger the layer was open for when the browser closed it. Only a
+  // show from that trigger is the dismissing press reopening it.
+  const dismissedTriggerRef = useRef<HTMLElement | null>(null);
+  // A hide the browser has started on its own (light dismiss, popover="auto"
+  // stack eviction, an Escape its close watcher answers), from `beforetoggle`
+  // until its `toggle`, with the trigger the layer was open for. `moved` is
+  // set when a show from another trigger reopens the layer during that hide.
+  const browserHideRef = useRef<{
+    popover: HTMLElement;
+    trigger: HTMLElement | null;
+    moved: boolean;
+  } | null>(null);
   const forgetDismissalRef = useRef<(() => void) | null>(null);
 
   // Stops the watch for pans outside the open layer (`watchesOutsidePans`).
@@ -1553,9 +1584,45 @@ function useLayerImplementation(
 
   const openNow = useCallback(() => {
     // Every caller lands here, so this is where the dismissing press is
-    // absorbed: opening now would reopen the popup that same press closed.
-    if (wasJustDismissed()) {
+    // absorbed: opening now from the same trigger would reopen the popup that
+    // press closed. A show from another trigger of the layer opens it there.
+    if (
+      wasJustDismissed() &&
+      dismissedTriggerRef.current === triggerRef.current
+    ) {
       return;
+    }
+    // A light-dismiss layer asked to show while a press's release is handled
+    // (a menu row acts at the release) would be closed by that release's
+    // light dismiss, which runs after the handlers. It shows once the
+    // release is handled, so it stays a native auto popover.
+    if (lightDismiss && !isOpenRef.current && isReleaseInFlight()) {
+      const doc = popoverRef.current?.ownerDocument ?? document;
+      pendingShowRef.current = true;
+      cancelAfterReleaseRef.current?.();
+      cancelAfterReleaseRef.current = afterRelease(doc, () => {
+        cancelAfterReleaseRef.current = null;
+        if (pendingShowRef.current) {
+          pendingShowRef.current = false;
+          showRef.current();
+        }
+      });
+      return;
+    }
+    // A show from another trigger while the browser closes the layer for its
+    // old trigger: the layer moves to the new trigger. It opens there now, and
+    // the old trigger's close is not reported.
+    const browserHide = browserHideRef.current;
+    if (
+      browserHide != null &&
+      isOpenRef.current &&
+      browserHide.popover === popoverRef.current &&
+      browserHide.trigger !== triggerRef.current
+    ) {
+      browserHide.moved = true;
+      openedPopoverRef.current = null;
+      isOpenRef.current = false;
+      stopOutsidePanWatch();
     }
     // A context popover left over until React commits a previous hide must not
     // be reopened. The synchronous mount ref is the source of truth.
@@ -1650,7 +1717,7 @@ function useLayerImplementation(
   ]);
 
   // A wait for the trigger to get a layout box, started by a show() that
-  // found none. Cancelled by the next show()/hide() or by
+  // found none. Cancelled by hide(), by a show() for another trigger, or by
   // unmount, so a stale wait from a closed-then-reopened layer never fires
   // openNow() after the fact.
   const pendingAnchorWaitRef = useRef<(() => void) | null>(null);
@@ -1663,7 +1730,21 @@ function useLayerImplementation(
   // the same commit never reopens by itself.
   const pendingRestartRef = useRef<{cancelled: boolean} | null>(null);
 
+  // A wait whose trigger sits in a closed `<dialog>` that renders decides in
+  // the next commit (see show()). The state update asks React for that commit,
+  // and the ref holds the decision.
+  const closedDialogDecisionRef = useRef<(() => void) | null>(null);
+  const [closedDialogCommit, requestClosedDialogCommit] = useState(0);
+  // Syncs that wait with the dialog's top-layer state, after the Effects of
+  // the commit before have run.
+  useIsomorphicLayoutEffect(() => {
+    const decide = closedDialogDecisionRef.current;
+    closedDialogDecisionRef.current = null;
+    decide?.();
+  }, [closedDialogCommit]);
+
   const cancelPendingAnchorWait = useCallback(() => {
+    const wasPending = pendingAnchorWaitRef.current != null;
     pendingAnchorWaitRef.current?.();
     pendingAnchorWaitRef.current = null;
     pendingAnchorElementRef.current = null;
@@ -1671,14 +1752,21 @@ function useLayerImplementation(
       pendingRestartRef.current.cancelled = true;
       pendingRestartRef.current = null;
     }
-  }, []);
+    if (wasPending) {
+      onOpenPendingChange?.(false);
+    }
+  }, [onOpenPendingChange]);
 
   // A wait that reached its end: nothing is pending any more, so a later
   // trigger swap must not restart it.
   const finishAnchorWait = useCallback(() => {
+    const wasPending = pendingAnchorWaitRef.current != null;
     pendingAnchorWaitRef.current = null;
     pendingAnchorElementRef.current = null;
-  }, []);
+    if (wasPending) {
+      onOpenPendingChange?.(false);
+    }
+  }, [onOpenPendingChange]);
 
   // A trigger with no layout box (no client rect) is not a valid CSS anchor. Opening against it now resolves the popover to
   // its fallback position (the viewport corner), and unlike a live layout
@@ -1694,9 +1782,20 @@ function useLayerImplementation(
   // owns the trigger element (`triggerRef`, set by `contextRef` below) and the
   // one place every context-mode show() funnels through.
   const show = useCallback(() => {
+    const anchor = mode === 'context' ? triggerRef.current : null;
+    // A wait for this trigger is already running, and its signals end it.
+    // Restarting it would cancel a settle wait that is under way. A wait in a
+    // closed `<dialog>` asks for a render. A controlled layer calls show() on
+    // each render while it is closed, so each restart would ask again.
+    if (
+      anchor != null &&
+      pendingAnchorWaitRef.current != null &&
+      pendingAnchorElementRef.current === anchor
+    ) {
+      return;
+    }
     cancelPendingAnchorWait();
 
-    const anchor = mode === 'context' ? triggerRef.current : null;
     if (!anchor) {
       openNow();
       return;
@@ -1734,11 +1833,14 @@ function useLayerImplementation(
     // - The enclosing `<dialog>`'s `open` attribute and `toggle` event: the
     //   trigger can have a box before the dialog is modal (see
     //   `isAnchorReady`), and a popover-shown dialog never sets `open`.
+    // - The next commit, for a trigger with a box in a closed `<dialog>`: a
+    //   dialog still closed then stays out of the top layer.
     //
     // A ResizeObserver stub that fires synchronously (several component tests
     // use one) resolves exactly as fast as it always did. Environments with no
     // real layout ever are excluded before this point.
     const anchorElement: HTMLElement = anchor;
+    const hadBoxAtShow = anchor.getClientRects().length > 0;
     const dialog = anchor.closest('dialog');
     let cancelSettleWait: () => void = () => {};
     let resolved = false;
@@ -1763,9 +1865,40 @@ function useLayerImplementation(
         openNow();
       });
     };
+    // A closed `<dialog>` that renders enters the top layer only if something
+    // opens it. Astryx's dialogs open it in the Effects of the commit that
+    // displayed them. React runs a commit's Effects before it renders again,
+    // so the next commit decides. A dialog still closed then is one the page
+    // shows in flow. Its trigger is a valid anchor. A trigger that had its box
+    // when show() ran opens at once, as it does anywhere else. For a press,
+    // that commit runs before the press's task ends, so the layer's initial
+    // focus lands within the press. A trigger that got its box later, as the
+    // page displayed its dialog, takes the settle wait: the dialog can still
+    // be animating in.
+    const decideInNextCommit = () => {
+      closedDialogDecisionRef.current = () => {
+        if (resolved || !isInClosedDialog(anchorElement)) {
+          return;
+        }
+        if (hadBoxAtShow) {
+          resolved = true;
+          release();
+          finishAnchorWait();
+          openNow();
+        } else {
+          resolve();
+        }
+      };
+      requestClosedDialogCommit(count => count + 1);
+    };
     function check() {
-      if (!resolved && isAnchorReady(anchorElement)) {
+      if (resolved) {
+        return;
+      }
+      if (isAnchorReady(anchorElement)) {
         resolve();
+      } else if (isInClosedDialog(anchorElement)) {
+        decideInNextCommit();
       }
     }
     const intersection =
@@ -1794,9 +1927,21 @@ function useLayerImplementation(
       cancelSettleWait();
     };
     pendingAnchorElementRef.current = anchor;
-  }, [mode, openNow, cancelPendingAnchorWait, finishAnchorWait]);
+    // An open that did not happen within this call now waits.
+    if (!isOpenRef.current) {
+      onOpenPendingChange?.(true);
+    }
+  }, [
+    mode,
+    openNow,
+    cancelPendingAnchorWait,
+    finishAnchorWait,
+    onOpenPendingChange,
+  ]);
 
   const hide = useCallback(() => {
+    cancelAfterReleaseRef.current?.();
+    cancelAfterReleaseRef.current = null;
     cancelPendingAnchorWait();
     pendingShowRef.current = false;
     if (isOpenRef.current) {
@@ -1837,12 +1982,13 @@ function useLayerImplementation(
     releaseAnchor,
     cancelPendingAnchorWait,
     stopOutsidePanWatch,
+    onCloseStartRef,
   ]);
 
   // A deferred show() replays through a ref so the queued closure reaches the
   // current callback rather than the one captured when it was queued.
   const showRef = useRef(show);
-  showRef.current = show;
+  useCommittedRefInto(showRef, show);
 
   // The open-state geometry observers of a layer that keeps its anchor clear
   // (`observeAnchorClearance`), as their teardown. The open-state layout
@@ -1907,6 +2053,9 @@ function useLayerImplementation(
 
       const previous = triggerRef.current;
       triggerRef.current = el;
+      // A trigger in another document (a frame, a pop-out window) has its
+      // presses counted there too, before its first press.
+      listenForGestures(el.ownerDocument);
 
       // A trigger replaced while the layer is open (React detaches the old
       // node with `null`, then attaches the new one): the old trigger's
@@ -1956,10 +2105,12 @@ function useLayerImplementation(
       return;
     }
     dismissedByGestureRef.current = currentGesture();
+    dismissedTriggerRef.current = triggerRef.current;
     const view = doc.defaultView;
     let forgetTimer: number | null = null;
     const forget = () => {
       dismissedByGestureRef.current = null;
+      dismissedTriggerRef.current = null;
       doc.removeEventListener('click', scheduleForget, true);
       if (forgetTimer !== null) {
         view?.clearTimeout(forgetTimer);
@@ -1989,13 +2140,15 @@ function useLayerImplementation(
 
   // Syncs the document's capture-phase gesture tracking with this mount.
   // Unmount forgets the layer's dismissal, releases a pending anchor wait and
-  // stops the outside-pan watch.
+  // a show waiting for a release, and stops the outside-pan watch.
   useEffect(() => {
     // Install capture-phase gesture tracking before the first interaction.
     currentGesture();
     return () => {
       forgetDismissalRef.current?.();
       pendingAnchorWaitRef.current?.();
+      cancelAfterReleaseRef.current?.();
+      cancelAfterReleaseRef.current = null;
       stopOutsidePanWatch();
     };
   }, [stopOutsidePanWatch]);
@@ -2028,6 +2181,11 @@ function useLayerImplementation(
       if (isOpenRef.current) {
         observeBrowserHide(el);
         onCloseStartRef.current?.();
+        browserHideRef.current = {
+          popover: el,
+          trigger: triggerRef.current,
+          moved: false,
+        };
         // The browser's own close releases the name from its toggle event.
         return;
       }
@@ -2045,12 +2203,21 @@ function useLayerImplementation(
         removeAnchorName(trigger, anchorId);
       }
     },
-    [anchorId],
+    [anchorId, onCloseStartRef],
   );
 
   const handleToggle = useCallback(
     (e: Event) => {
       const toggleEvent = e as ToggleEvent;
+      const browserHide = browserHideRef.current;
+      if (browserHide != null && browserHide.popover === e.currentTarget) {
+        browserHideRef.current = null;
+        // The layer moved to another trigger during the hide: it is open, and
+        // the old trigger's close is not reported.
+        if (browserHide.moved) {
+          return;
+        }
+      }
       if (toggleEvent.newState === 'closed' && isOpenRef.current) {
         openedPopoverRef.current = null;
         isOpenRef.current = false;
@@ -2480,39 +2647,28 @@ function useLayerImplementation(
     [popoverRefCallback, id, lightDismiss],
   );
 
-  const contextResult = useMemo<InternalContextLayerReturn>(
+  const contextResult = useMemo<ContextLayerReturn>(
     () => ({
       ref: contextRef,
       anchorId,
       show,
       hide,
       isOpen,
-      wasJustDismissed,
       id,
       render: renderContext,
     }),
-    [
-      contextRef,
-      anchorId,
-      show,
-      hide,
-      isOpen,
-      wasJustDismissed,
-      id,
-      renderContext,
-    ],
+    [contextRef, anchorId, show, hide, isOpen, id, renderContext],
   );
-  const fixedResult = useMemo<InternalFixedLayerReturn>(
+  const fixedResult = useMemo<FixedLayerReturn>(
     () => ({
       ref: undefined,
       show,
       hide,
       isOpen,
-      wasJustDismissed,
       id,
       render: renderFixed,
     }),
-    [show, hide, isOpen, wasJustDismissed, id, renderFixed],
+    [show, hide, isOpen, id, renderFixed],
   );
 
   return mode === 'context' ? contextResult : fixedResult;
@@ -2523,11 +2679,7 @@ export function useLayer(options: FixedLayerOptions): FixedLayerReturn;
 export function useLayer(
   options: ContextLayerOptions | FixedLayerOptions,
 ): ContextLayerReturn | FixedLayerReturn {
-  const internalLayer = useLayerImplementation(options);
-  return useMemo(() => {
-    const {wasJustDismissed: _, ...layer} = internalLayer;
-    return layer;
-  }, [internalLayer]);
+  return useLayerImplementation(options);
 }
 
 /**
@@ -2536,12 +2688,10 @@ export function useLayer(
  */
 export function useLayerInternal(
   options: InternalContextLayerOptions,
-): InternalContextLayerReturn;
-export function useLayerInternal(
-  options: FixedLayerOptions,
-): InternalFixedLayerReturn;
+): ContextLayerReturn;
+export function useLayerInternal(options: FixedLayerOptions): FixedLayerReturn;
 export function useLayerInternal(
   options: InternalContextLayerOptions | FixedLayerOptions,
-): InternalContextLayerReturn | InternalFixedLayerReturn {
+): ContextLayerReturn | FixedLayerReturn {
   return useLayerImplementation(options);
 }

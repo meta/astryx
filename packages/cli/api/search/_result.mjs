@@ -22,7 +22,7 @@ import {SEARCH_DOMAINS} from './_query.mjs';
  * @param {string} reason
  * @param {number} matchedTerms - Query concepts this result answered.
  * @param {number} queryTerms - Query concepts there were to answer.
-  * @param {boolean} [outside] - The search runs outside a project, where a
+ * @param {boolean} [outside] - The search runs outside a project, where a
  *   theme cannot be added to an app, so its command forks the source instead
  *   (spec AST-081 FR3).
  */
@@ -77,6 +77,7 @@ export function toResult(
         displayName: c._displayName,
         kind: c._kind,
         command: `astryx template ${c._commandName ?? c.name} --type ${c._kind}`,
+        isReady: !c._notReady,
       };
       break;
     case 'theme':
@@ -136,15 +137,23 @@ export function checkSearchArgs(query, options) {
  * The components each search response was scored against, by response:
  * `build` reads them to tell a part of a page from a page without gathering
  * them again. Module-private, so they never enter search's JSON.
- * @type {WeakMap<object, {name: string, keywords: string[]}[]>}
+ * @type {WeakMap<object, {name: string, keywords: string[], category: string}[]>}
  */
 export const searchedComponentsOf = new WeakMap();
 
 /**
- * The components (name and keywords) a search response was scored against, or
+ * The results each search response leads with because the query names them
+ * (see rankLexical): the order of matches keeps them first in their run.
+ * Module-private, so they never enter search's JSON.
+ * @type {WeakMap<object, Set<object>>}
+ */
+export const namedLeadsOf = new WeakMap();
+
+/**
+ * The components (name, keywords and category) a search response was scored against, or
  * null when that search was narrowed away from components.
  * @param {object} response
- * @returns {{name: string, keywords: string[]}[] | null}
+ * @returns {{name: string, keywords: string[], category: string}[] | null}
  */
 export function searchedComponents(response) {
   return searchedComponentsOf.get(response) ?? null;

@@ -11,7 +11,7 @@ export const doc = {
   stability: 'experimental',
   summary: 'The pages of the theme preview in the app',
   description:
-    'Lists the pages of the theme preview, in nav order, with the theme they wear and the route folder. With no preview, and with no routes folder for one, it says so and how to add one (the JSON list is empty). A damaged theme-preview.json is refused with `ERR_THEME_INVALID`, naming the file. With no folder given and no preview in the default place, a preview recorded for a theme is listed; with several, the refusal names each. The tip repeats --path. Experimental: it may change or be removed in a patch release.',
+    'Lists the pages of the theme preview, in nav order, with the theme they wear and the route folder. With no preview, and with no routes folder for one, it says so and how to add one (the JSON list is empty). A damaged theme-preview.json is refused with `ERR_THEME_INVALID`, naming the file. With no folder given and no preview in the default place, a preview recorded for a theme is listed; with several, the refusal names each. The tip repeats --path. `notes` says when the theme the preview wears is gone. Experimental: it may change or be removed in a patch release.',
   fn: 'themeEditPreviewList',
   options: [
     {

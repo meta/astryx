@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'success',
+  group: 'status',
   description: 'Show that something worked.',
   words: ['ok', 'complete', 'passed', 'check circle', 'circle check'],
   builtIn: true,

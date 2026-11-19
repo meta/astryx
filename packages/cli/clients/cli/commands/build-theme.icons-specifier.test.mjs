@@ -186,7 +186,7 @@ describe('theme build --icons-specifier', () => {
     expect(withSpecifier.code).toBe(0);
   });
 
-  it('leaves the scraped specifier untouched when the flag is absent', async () => {
+  it('keeps the scraped path when the flag is absent, with the file’s extension written out', async () => {
     const project = path.join(tmpDir, 'project');
     const themeFile = writeThemeWithIcons(project, 'untouched');
 
@@ -196,15 +196,14 @@ describe('theme build --icons-specifier', () => {
     );
     expect(result.code).toBe(0);
 
-    // The pre-flag behaviour, preserved: no extension is invented. In this
-    // layout the neighbour is a source file only a bundler can resolve, so
-    // adding one would break a build that works today.
+    // The path the source writes, with the extension of the file it names
+    // (icons.mjs), so plain Node loads the built module as a bundler does.
     const generated = fs.readFileSync(
       path.join(project, 'untouched.js'),
       'utf8',
     );
     expect(iconImportLine(generated)).toBe(
-      "import { testIcons } from './icons';",
+      "import { testIcons } from './icons.mjs';",
     );
   });
 

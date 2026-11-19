@@ -13,7 +13,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import jscodeshift from 'jscodeshift';
+import {jscodeshift as loadJscodeshift} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
@@ -928,8 +928,8 @@ async function addAgentDoc(line, options) {
   const source = manifestExists
     ? fs.readFileSync(manifestFile, 'utf-8')
     : 'export default {};\n';
-  const j = jscodeshift.withParser('tsx');
-  /** @type {ReturnType<ReturnType<typeof jscodeshift.withParser>>} */
+  const j = loadJscodeshift().withParser('tsx');
+  /** @type {ReturnType<ReturnType<ReturnType<typeof loadJscodeshift>['withParser']>>} */
   let ast;
   try {
     ast = j(source);

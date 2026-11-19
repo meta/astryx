@@ -7,16 +7,38 @@
  * @position Shared compatibility boundary for generated receipt variants and upgrades.
  */
 
-import {transformFromAstSync} from '@babel/core';
-import {parse} from '@babel/parser';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
-import * as recast from 'recast';
 
+// Babel and recast load on first use, not with this module: everything that
+// imports the CLI's API reaches it, and most runs never transform a source.
+// (The same packages foundation/runtime/lazy-dependencies.mjs loads, which
+// authoring/ may not import; each resolves to one file either way.)
 const require = createRequire(import.meta.url);
-/** @type {import('@babel/core').PluginItem} */
-const transformTypeScript =
-  require('@babel/plugin-transform-typescript').default;
+// Resolved, not loaded: a missing package fails here, at import.
+for (const pkg of [
+  '@babel/core',
+  '@babel/parser',
+  'recast',
+  '@babel/plugin-transform-typescript',
+]) {
+  require.resolve(pkg);
+}
+/** @type {typeof import('@babel/core') | undefined} */
+let babelCore;
+/** @type {typeof import('@babel/parser') | undefined} */
+let babelParser;
+/** @type {typeof import('recast') | undefined} */
+let recastModule;
+/** @type {import('@babel/core').PluginItem | undefined} */
+let typeScriptPlugin;
+const babel = () => (babelCore ??= require('@babel/core'));
+/** @type {typeof import('@babel/parser').parse} */
+const parse = (input, options) =>
+  (babelParser ??= require('@babel/parser')).parse(input, options);
+const recast = () => (recastModule ??= require('recast'));
+const transformTypeScript = () =>
+  (typeScriptPlugin ??= require('@babel/plugin-transform-typescript').default);
 
 /** @type {import('@babel/parser').ParserOptions} */
 const SHADCN_PARSER_OPTIONS = {
@@ -105,23 +127,23 @@ export function shadcnPrecompiledDeclarationTarget(sourceTarget) {
  * @param {string} source
  */
 export function transformShadcnJavaScriptSource(source) {
-  const ast = recast.parse(source, {
+  const ast = recast().parse(source, {
     parser: {
       /** @param {string} input */
       parse: input => parse(input, SHADCN_PARSER_OPTIONS),
     },
   });
-  const transformed = transformFromAstSync(ast, source, {
+  const transformed = babel().transformFromAstSync(ast, source, {
     cloneInputAst: false,
     code: false,
     ast: true,
-    plugins: [transformTypeScript],
+    plugins: [transformTypeScript()],
     configFile: false,
   });
   if (!transformed?.ast) {
     throw new Error('ShadCN JavaScript transform produced no AST');
   }
-  return recast.print(transformed.ast).code;
+  return recast().print(transformed.ast).code;
 }
 
 /**

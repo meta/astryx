@@ -29,7 +29,6 @@ import type {InputStatus} from '../Field/types';
 import {CheckboxRowPressContext} from '../CheckboxInput/CheckboxRowPressContext';
 import {rowPressPaintStyles} from '../privateAttributes/press.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
-import {useTouchPresentation} from '../utils/touchPresentation';
 import {ListItem} from '../List/ListItem';
 import {ListContext} from '../List/ListContext';
 import {CheckboxListContext} from './CheckboxListContext';
@@ -311,11 +310,9 @@ export function CheckboxListItem({
     registerWithRequiredGroup,
   );
 
-  // Under a finger, a delegating row is the option's only press surface. A
-  // touch anywhere on it presses the row. A fine pointer keeps the box's own
-  // press.
-  const {isTouch} = useTouchPresentation();
-  const rowOwnsPress = isTouch && hasRowInteraction && !effectiveDisabled;
+  // A delegating row is the option's only press surface, for every pointer. A
+  // press anywhere on it presses the row.
+  const rowOwnsPress = hasRowInteraction && !effectiveDisabled;
 
   // A read-only checkbox carries aria-readonly, which the row's clickable
   // container treats as a non-interactive target, so a click on it would be

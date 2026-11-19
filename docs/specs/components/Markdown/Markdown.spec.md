@@ -14,6 +14,7 @@ verified_by:
   [
     packages/core/src/Markdown/Markdown.test.tsx,
     packages/core/src/Markdown/Markdown.renderBoundary.test.tsx,
+    packages/core/src/Markdown/Markdown.rerender.test.tsx,
     packages/core/src/Markdown/Markdown.public.test.ts,
     packages/core/src/Markdown/MarkdownTable.a11y.chromium.spec.ts,
     packages/core/src/Markdown/parser.test.ts,
@@ -35,7 +36,11 @@ modules:
 families: [family:navigation-destinations]
 design_specs: []
 architecture:
-  [architecture:component-theming-surface, architecture:public-component-api]
+  [
+    architecture:component-theming-surface,
+    architecture:public-component-api,
+    architecture:react-component-runtime,
+  ]
 contributing: []
 system_specs:
   [
@@ -54,6 +59,7 @@ system_specs:
     spec:AST-061/DEC-6,
     spec:AST-061/DEC-9,
     spec:AST-061/FR6,
+    spec:AST-061/FR11,
     spec:AST-064/DEC-6,
     spec:AST-036/DEC-12,
   ]
@@ -599,11 +605,10 @@ or a status token readable at any reading width, and a floor on the text box
 means the same amount of content at every density without Markdown restating
 Table's own spacing.
 
-Markdown applies this to its own default Table part, over Table's released
-wrap-mode defaults, rather than changing those defaults. Table's wrap mode is a
-released contract for data-driven tables, and Markdown already owns the styling
-of the part it renders; narrowing the change to that part leaves every other
-Table caller untouched.
+Table's children-mode wrapping columns already follow their content and
+scroll when they do not fit (`component:Table` FR24, DEC-6). Markdown adds, on
+its own default Table part, the per-column floors on the text box, visible
+overflow, and header labels that wrap instead of truncating.
 
 The nested Table's Scroll region stays the single owner of the table's
 horizontal overflow, name, and conditional keyboard focusability, so
@@ -612,11 +617,28 @@ duplicated. Two nested scroll containers around one table produce a focus stop
 that never scrolls and a second region with the same name, and the column
 floors are not observable while an outer container absorbs the overflow.
 
-Rejected: changing Table's wrap-mode defaults instead, which would move a
-released behavior for every data-driven caller to fix one part's layout;
-widening columns by measuring rendered text, which adds an observer and a
+Rejected: widening columns by measuring rendered text, which adds an observer and a
 reflow to a purely declarative path; and adding a prop or option for column
 sizing, which would make a default-path defect into a caller's decision.
+
+### DEC-7 — Streaming fade-in starts may come from refs written during render
+
+**Reference:** `component:Markdown/DEC-7`
+**Decider:** `cixzhang`, `2026-11-09`
+
+While Markdown streams, refs written during render decide where each new
+fade-in span starts. They hold the recent fade boundaries and the last rendered
+blocks or inline nodes. `architecture:react-component-runtime` INV4 records
+this exception.
+
+The exception is cosmetic. Markdown renders text only from its committed,
+smoothed children, never from these refs. A render React discards, as a
+suspended transition does, can only shift the fade spans by the text it added.
+The newest fade starts later. When every span is in use, the oldest fading text
+settles one step early. The streamed text stays exact.
+
+Rejected: syncing these refs at commit, which adds commit-phase work to every
+streaming update for a cosmetic difference.
 
 ## Open questions
 
