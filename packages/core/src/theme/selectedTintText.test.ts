@@ -261,6 +261,21 @@ describe('secondary text on the accent tint', () => {
     );
   });
 
+  it('keeps the measured text on a selected list row over a list-item rule for the row at rest', () => {
+    const css = generateThemeCSS(
+      defineTheme({
+        name: 'list-rows',
+        tokens: LOW,
+        components: {
+          'list-item': {base: {'--color-text-secondary': '#8a8a8a'}},
+        },
+      }),
+    ).component;
+    expect(css).toMatch(
+      /\.astryx-list-item\[data-selected="selected"\] \{\n {4}--color-text-secondary: var\(--_selected-text-secondary\);/,
+    );
+  });
+
   it('measures a Card-wide rule on each variant and a part rule on every Card fill', () => {
     const theme = defineTheme({
       name: 'card-wide',

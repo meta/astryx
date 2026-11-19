@@ -1475,6 +1475,8 @@ const THEME_MODE_ATTR = 'data-theme';
  */
 const TINT_STATES: Record<string, string> = {
   item: 'selected',
+  // ListItem puts its target on the Item element that paints the tint.
+  'list-item': 'selected',
   'tree-list-item': 'selected',
   'table-row': 'selected',
   'command-palette-item': 'selected',
