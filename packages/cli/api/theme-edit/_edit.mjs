@@ -56,6 +56,8 @@ import {
   familyOf,
   wordTable,
   pageColorNote,
+  AUTO_SPREAD,
+  onlyMeans,
 } from './_tables.mjs';
 import {
   commitTheme,
