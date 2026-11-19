@@ -81,6 +81,8 @@ describe('color dials through the palette generator', () => {
     await themeEditSet('p', 'accent', '#7c3aed', {cwd});
     const config = JSON.parse(read('palette.config.json'));
     expect(config).toEqual({
+      // A new palette is made with the newest recipe.
+      recipe: 'astryx-oklch-v2',
       modeStrategy: 'light-and-dark',
       families: [
         {
@@ -1524,14 +1526,14 @@ describe('lifted text and see-through colors', () => {
       /"variant:number": \{\s*"--color-text-secondary": "light-dark\(#[0-9a-f]{6}, #[0-9a-f]{6}\)"/,
     );
     await themeEditSet('p', 'neutral', '#64748b', {cwd});
-    // An exact secondary text for light only replaces the lift in light,
-    // and keeps it in dark.
-    await themeEditSet('p', '--color-text-secondary', '#5a5a5a', {
+    // An exact secondary text for light only, one that reads on the tint,
+    // replaces the lift in light, and keeps it in dark.
+    await themeEditSet('p', '--color-text-secondary', '#333333', {
       cwd,
       mode: 'light',
     });
     expect(read('p.settings.ts')).toMatch(
-      /"variant:number": \{\s*"--color-text-secondary": `light-dark\(#5a5a5a, \$\{palette\.neutral\.dark\[\d+\]\}\)`/,
+      /"variant:number": \{\s*"--color-text-secondary": `light-dark\(#333333, \$\{palette\.neutral\.dark\[\d+\]\}\)`/,
     );
     // On the part, it covers numbered citations too.
     await themeEditSet('p', '--color-text-secondary', '#123456', {
@@ -1687,12 +1689,12 @@ describe('colors and type, final checks', () => {
   });
 
   it('gives an exact secondary text to the lifted parts with no color dial', async () => {
-    await themeEditSet('p', '--color-text-secondary', '#5a5a5a', {
+    await themeEditSet('p', '--color-text-secondary', '#333333', {
       cwd,
       mode: 'light',
     });
     expect(read('p.settings.ts')).toMatch(
-      /"variant:number": \{\s*"--color-text-secondary": "light-dark\(#5a5a5a, [^"]+\)"/,
+      /"variant:number": \{\s*"--color-text-secondary": "light-dark\(#333333, [^"]+\)"/,
     );
     await themeEditUndo('p', {
       cwd,
@@ -1728,7 +1730,7 @@ describe('colors and type, final checks', () => {
   });
 });
 
-describe('chaos round 4', () => {
+describe('cases', () => {
   it('refuses a font the loader would refuse, so a saved font never blocks the theme', async () => {
     for (const v of ['serif !important', 'Foo /* x */']) {
       const r = await refusal(() => themeEditSet('p', 'font', v, {cwd}));
@@ -2664,7 +2666,7 @@ describe('colors17', () => {
   });
 });
 
-describe('hunt22', () => {
+describe('cases', () => {
   it('reads undo values in either quote style and spacing, names the headings half set, and tells a new theme from a lost history', async () => {
     await themeEditNew('h22', {cwd, mode: 'dark-only'});
     const fresh = await refusal(() =>
@@ -2730,8 +2732,11 @@ describe('colors19', () => {
         new RegExp(`--font-size-base ${want.replace('.', '\\.')}$`),
       );
     }
+    // A size in the pixels text-size takes, with px, is that size.
+    expect(
+      (await themeEditSet('p', 'text-size', '20 px', {cwd})).data.setting.value,
+    ).toBe('20');
     for (const [value, want] of [
-      ['20 px', '20'],
       ['125%', '20'],
       ['40', '32'],
       ['3px', '10'],

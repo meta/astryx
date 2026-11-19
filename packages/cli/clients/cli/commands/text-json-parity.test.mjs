@@ -509,8 +509,8 @@ const CASES = [
     ],
   },
   {
-    name: 'experimental render',
-    args: ['experimental', 'render', 'page.jsx'],
+    name: 'experimental export',
+    args: ['experimental', 'export', 'page.jsx'],
     cwd: '__TMP__',
     // A page with no imports, in a folder that can resolve React and Core, so
     // the page gets Core's stylesheets in every runner.
@@ -534,13 +534,16 @@ const CASES = [
       );
     },
     jsonFieldAllowlist: ['warnings — listed under Warnings when present'],
+    textBlockAllowlist: [
+      "The file's markup and stylesheets load nothing from outside the file. — the text form of an empty checks.outside",
+    ],
   },
   {
     // The --reverse projection (same command, same folder as the case above).
-    name: 'experimental render',
+    name: 'experimental export',
     args: [
       'experimental',
-      'render',
+      'export',
       '--reverse',
       'carried.html',
       '--out',
@@ -549,6 +552,39 @@ const CASES = [
     ],
     cwd: '__TMP__',
     // A rendered file that carries its page.
+    setup: dir => {
+      const source = Buffer.from(
+        'export default function Page() { return <h1>Hello</h1>; }\n',
+      );
+      const json = JSON.stringify({
+        version: 1,
+        entry: 'page.jsx',
+        files: [
+          {
+            path: 'page.jsx',
+            sha256: crypto.createHash('sha256').update(source).digest('hex'),
+            base64: source.toString('base64'),
+          },
+        ],
+      });
+      fs.writeFileSync(
+        path.join(dir, 'carried.html'),
+        `<!doctype html><html><body><h1 class="astryx-heading">Hello</h1><script type="application/x-astryx-source">${json}</script></body></html>`,
+      );
+    },
+  },
+  {
+    // The way back as its own command: the --reverse projection above.
+    name: 'experimental import',
+    args: [
+      'experimental',
+      'import',
+      'carried.html',
+      '--out',
+      'back.tsx',
+      '--overwrite',
+    ],
+    cwd: '__TMP__',
     setup: dir => {
       const source = Buffer.from(
         'export default function Page() { return <h1>Hello</h1>; }\n',
@@ -585,6 +621,7 @@ const CASES = [
       'score — only shown with --verbose',
       'reason — only shown with --verbose',
       'kind — internal domain subtype, not shown in default text',
+      'isReady — an unready template\'s kind reads "(not ready)"',
     ],
   },
   {
@@ -599,7 +636,7 @@ const CASES = [
     skipFieldChecks: true,
     jsonFieldAllowlist: [
       'id — not shown in text records (#6265)',
-      'isReady — folded into name as "(WIP)" suffix (#6265)',
+      'isReady — folded into name as "(not ready)" suffix (#6265)',
     ],
   },
   {
@@ -875,6 +912,9 @@ const CASES = [
       ])
         fs.rmSync(dir, {recursive: true, force: true});
     },
+    jsonFieldAllowlist: [
+      'missedParts — a small count the missed line says as "on N parts", next to the parts it names',
+    ],
   },
   {
     name: 'experimental theme editor set',

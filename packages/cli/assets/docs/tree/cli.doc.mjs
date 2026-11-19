@@ -16,6 +16,7 @@ export const docs = {
   summary:
     'Commands, programmatic APIs, and output contracts. Building an integration is under {@link namespace:authoring}.',
   keywords: ['cli', 'commands', 'api', 'reference'],
+  describes: 'cli',
   slots: {
     guides: {title: 'Guides', accepts: {kinds: ['generic', 'namespace']}},
     reference: {title: 'Reference', accepts: {kinds: ['namespace']}},

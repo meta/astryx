@@ -658,6 +658,22 @@ describe('Dialog', () => {
     expect(screen.getByRole('button', {name: 'Continue'})).toHaveFocus();
   });
 
+  it('skips an initial-focus request inside a closed nested dialog', () => {
+    render(
+      <Dialog isOpen={true} onOpenChange={() => {}} aria-label="Composer">
+        <DialogHeader title="Compose" />
+        <Dialog isOpen={false} onOpenChange={() => {}} aria-label="Insert link">
+          <input aria-label="URL" data-autofocus />
+        </Dialog>
+      </Dialog>,
+    );
+
+    expect(screen.getByRole('heading', {name: 'Compose'})).toHaveFocus();
+    expect(
+      screen.getByRole('textbox', {name: 'URL', hidden: true}),
+    ).not.toHaveFocus();
+  });
+
   it("focuses a header's title request when no explicit request is eligible", () => {
     render(
       <Dialog isOpen={true} onOpenChange={() => {}}>

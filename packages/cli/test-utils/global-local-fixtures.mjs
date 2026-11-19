@@ -392,13 +392,16 @@ function linkTree(from, to, shared = new Set(), rel = '') {
  * The copy leaves out the global copy's background Core step
  * (core-worker.mjs), as a release that predates it does, so no test's run
  * starts a download behind its back; `coreStep: true` keeps it.
- * @param {{engines?: Record<string, string>, coreStep?: boolean}} [options]
+ * `withoutCore: true` leaves `@astryxdesign/core` out of the packages the copy
+ * resolves, as a global install does: npm does not install an optional peer.
+ * @param {{engines?: Record<string, string>, coreStep?: boolean, withoutCore?: boolean}} [options]
  * @returns {{dir: string, bin: string}}
  */
 export function placeCli(dir, version, options = {}) {
   const key = JSON.stringify([
     version,
     Boolean(options.coreStep),
+    Boolean(options.withoutCore),
     options.engines ?? null,
   ]);
   const ready = fs.existsSync(dir) ? undefined : pool.get(key)?.pop();
@@ -506,7 +509,7 @@ export function recyclePlacedCopies({
  * Link a new copy of the packed CLI at `dir`, labeled `version`.
  * @param {string} dir
  * @param {string} version
- * @param {{engines?: Record<string, string>, coreStep?: boolean}} options
+ * @param {{engines?: Record<string, string>, coreStep?: boolean, withoutCore?: boolean}} options
  */
 function buildCopy(dir, version, options) {
   const from = packedCli();
@@ -526,11 +529,44 @@ function buildCopy(dir, version, options) {
     pkgFile,
     `${JSON.stringify({...pkg, version, ...(options.engines ? {engines: options.engines} : {})}, null, 2)}\n`,
   );
+  if (options.withoutCore) {
+    linkPackagesExceptCore(
+      path.join(CLI_DIR, 'node_modules'),
+      path.join(dir, 'node_modules'),
+    );
+    return;
+  }
   fs.symlinkSync(
     path.join(CLI_DIR, 'node_modules'),
     path.join(dir, 'node_modules'),
     process.platform === 'win32' ? 'junction' : 'dir',
   );
+}
+
+/**
+ * Link each package folder of `from` into a new folder `to`, except
+ * `@astryxdesign/core`.
+ * @param {string} from
+ * @param {string} to
+ */
+function linkPackagesExceptCore(from, to) {
+  const type = process.platform === 'win32' ? 'junction' : 'dir';
+  fs.mkdirSync(to);
+  for (const name of fs.readdirSync(from)) {
+    if (name !== '@astryxdesign') {
+      fs.symlinkSync(path.join(from, name), path.join(to, name), type);
+      continue;
+    }
+    fs.mkdirSync(path.join(to, name));
+    for (const scoped of fs.readdirSync(path.join(from, name))) {
+      if (scoped === 'core') continue;
+      fs.symlinkSync(
+        path.join(from, name, scoped),
+        path.join(to, name, scoped),
+        type,
+      );
+    }
+  }
 }
 
 /**
@@ -614,7 +650,7 @@ const LAYOUTS = {
  * `astryx` command linked into its bin folder.
  * @param {keyof typeof LAYOUTS} layout
  * @param {string} version
- * @param {{root?: string, engines?: Record<string, string>, coreStep?: boolean}} [options]
+ * @param {{root?: string, engines?: Record<string, string>, coreStep?: boolean, withoutCore?: boolean}} [options]
  * @returns {{dir: string, bin: string, binDir: string}}
  */
 export function globalCli(layout, version, options = {}) {

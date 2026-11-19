@@ -207,6 +207,20 @@ describe('parseIntegration (load boundary)', () => {
     expect(reason({cliCommand: 42})).toContain('cliCommand');
   });
 
+  it('accepts an installGuidance and rejects one that is not a single clean line', () => {
+    expect(
+      parseIntegration({installGuidance: 'Add {packages}, then relock'}),
+    ).toEqual({
+      installGuidance: 'Add {packages}, then relock',
+    });
+    expect(reason({installGuidance: ''})).toContain('installGuidance');
+    expect(reason({installGuidance: 'add\nrelock'})).toContain(
+      'installGuidance',
+    );
+    expect(reason({installGuidance: 'a'.repeat(241)})).toContain('240');
+    expect(reason({installGuidance: 7})).toContain('installGuidance');
+  });
+
   it('rejects a noncanonical providerId', () => {
     expect(reason({providerId: 'Acme Widgets'})).toContain('providerId');
   });

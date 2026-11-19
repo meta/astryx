@@ -87,8 +87,8 @@ export default function SideNavWithHeaderMenu() {
         />
       }>
       <SideNavSection title="Navigation">
-        <SideNavItem label="Dashboard" icon={HomeIcon} isSelected />
-        <SideNavItem label="Settings" icon={CogIcon} />
+        <SideNavItem href={'#'} label="Dashboard" icon={HomeIcon} isSelected />
+        <SideNavItem href={'#'} label="Settings" icon={CogIcon} />
       </SideNavSection>
     </SideNav>
   );

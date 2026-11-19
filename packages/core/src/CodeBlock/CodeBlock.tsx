@@ -66,6 +66,11 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/CodeBlock/CodeBlock.generated';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 
@@ -128,6 +133,10 @@ const chevronReveal = stylex.keyframes({
 
 const styles = stylex.create({
   root: {
+    // The page's direction, read where the block sits. The viewport below is
+    // left-to-right so code scrolls and wraps as written; the gutter, the
+    // divider and the diff marker read this to mirror with the page.
+    '--_codeblock-direction': {default: 'ltr', ':dir(rtl)': 'rtl'},
     position: 'relative',
     isolation: 'isolate',
     display: 'flex',
@@ -271,6 +280,9 @@ const styles = stylex.create({
     // highlightLines) spans the full scroll width instead of stopping at the
     // viewport edge when the reader scrolls a long line.
     minWidth: 'max-content',
+    // Lines lay out their gutter in the page's direction; each line's code
+    // carries dir="auto" (see `lineContent`).
+    direction: 'var(--_codeblock-direction)',
     paddingBlock: spacingVars['--spacing-3'],
     paddingInline: spacingVars['--spacing-4'],
     margin: 0,
@@ -329,10 +341,16 @@ const styles = stylex.create({
       fontFamily: typographyVars['--font-family-code'],
     },
   },
-  // In span mode the tokens are wrapped in this element so they form a single
-  // grid item in column 2 (otherwise each token span would flow into its own
-  // grid cell). minWidth:0 lets it shrink so long lines wrap within the track.
+  // Each line's code sits in this element, so it forms a single grid item in
+  // column 2 (otherwise each token span would flow into its own grid cell).
+  // It carries dir="auto": a line takes its direction from its first strong
+  // character, and a line with none (`});`) falls back to the left-to-right
+  // viewport. The gutter mirrors with the page. minWidth:0 lets it shrink so
+  // long lines wrap within the track.
   lineContent: {
+    // A block, so each line aligns to the start edge of its own direction,
+    // whatever the direction of the row around it.
+    display: 'block',
     minWidth: 0,
   },
   lineChunk: {
@@ -864,7 +882,7 @@ function SpanCodeContent({
               )}>
               {diff.glyphs[lineIndex] || ' '}
             </span>
-            <span {...stylex.props(styles.lineContent)}>
+            <span dir="auto" {...stylex.props(styles.lineContent)}>
               {kind === 'header'
                 ? content || '\u200b'
                 : buildSpanLine(content, tokens)}
@@ -872,10 +890,10 @@ function SpanCodeContent({
           </>
         );
       }
-      // Wrap tokens in a single element so they occupy one grid cell when line
-      // numbers are on (see `lineNumbered`); an inline span is a no-op when off.
+      // One content element holds the tokens, so they occupy one grid cell when
+      // line numbers are on (see `lineContent`).
       return (
-        <span {...stylex.props(styles.lineContent)}>
+        <span dir="auto" {...stylex.props(styles.lineContent)}>
           {buildSpanLine(line, tokens)}
         </span>
       );
@@ -957,11 +975,16 @@ function RangeCodeContent({
     return applyHighlightRangesChunked(codeEl, tokenLines);
   }, [tokenLines]);
 
-  // Range mode keeps the line's text as a bare text node (its firstChild) so
-  // applyHighlightRangesChunked can map token offsets onto it \u2014 no wrapper. The
-  // number ::before is a pseudo-element, so it never becomes a child node here.
+  // Range mode keeps each line's text as the only child of one content span,
+  // so applyHighlightRangesChunked can map token offsets onto that text node.
+  // The span carries dir="auto", and it is the single grid item beside the
+  // number, which is a ::before pseudo-element and never a child node here.
   const renderLineContent = useCallback(
-    (line: string): React.ReactNode => line || '\u200b',
+    (line: string): React.ReactNode => (
+      <span dir="auto" {...stylex.props(styles.lineContent)}>
+        {line || '\u200b'}
+      </span>
+    ),
     [],
   );
 
@@ -1029,6 +1052,13 @@ export function CodeBlock({
   ref,
   ...props
 }: CodeBlockProps) {
+  if (process.env.NODE_ENV !== 'production' && typeof code !== 'string') {
+    throw devPropError(
+      'CodeBlock',
+      'code',
+      'must be a string, for example <CodeBlock code="const a = 1;" language="ts" />. CodeBlock does not read children.',
+    );
+  }
   const t = useComponentTranslator();
   // Owns the clipboard write, the transient copied flag, its reset timer, and
   // the polite copy announcement (a swapped aria-label alone is not reliably
@@ -1142,6 +1172,12 @@ export function CodeBlock({
   // blocks on a page don't create duplicate same-named landmarks.
   const {getViewportProps, getContentProps} = useScrollableArea({
     axis: 'both',
+    // Nothing inside the code viewport sticks to an outer scroller, so the
+    // viewport stays a scroll container while its code fits. A long line, or
+    // code past `maxHeight`, then scrolls from the first paint: before script
+    // measures it, and in a page that never runs script, such as a rendered
+    // file. The Tab stop still follows measured overflow.
+    stickyContainment: 'always',
     keyboardAccess: {
       owner: 'viewport',
       role: 'group',
@@ -1286,6 +1322,8 @@ export function CodeBlock({
           styles.viewportFocusRingInset,
         ),
         style: scrollStyle,
+        // Code scrolls and wraps left to right in every page direction.
+        dir: 'ltr',
       })}>
       <div
         {...getContentProps<HTMLDivElement>(

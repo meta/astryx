@@ -18,8 +18,7 @@ import {Divider} from '@astryxdesign/core/Divider';
 import {Card} from '@astryxdesign/core/Card';
 import {Selector} from '@astryxdesign/core/Selector';
 
-const ILLUSTRATION_URL =
-  '/template-assets/light-working-vertical-2.png';
+const ILLUSTRATION_URL = '/template-assets/light-working-vertical-2.png';
 
 const INQUIRY_REASONS = [
   'New business',
@@ -91,7 +90,7 @@ export default function FormTwoColumnPage() {
   const handleSubmit = () => setSubmitted(true);
 
   return (
-    <Center style={pageStyle}>
+    <Center role="main" style={pageStyle}>
       <Section maxWidth={1100} width="100%" padding={10} variant="transparent">
         <VStack gap={10}>
           {/* Two-column; stacks to one column below ~520px. */}
@@ -220,7 +219,7 @@ export default function FormTwoColumnPage() {
           {/* Contact strip; stacks below ~440px. */}
           <VStack gap={6}>
             <Divider />
-            <Grid columns={{minWidth: 200}} gap={6}>
+            <Grid columns={{minWidth: 200, repeat: 'fit'}} gap={6}>
               {CONTACT_COLUMNS.map(col => (
                 <VStack key={col.label} gap={1} hAlign="center">
                   <Text type="supporting" color="secondary">

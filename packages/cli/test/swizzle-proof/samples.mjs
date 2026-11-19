@@ -12,6 +12,62 @@
 const noop = () => {};
 const ref = () => ({current: null});
 
+/** A small icon for targets whose required `icon` takes any node. */
+const dotIcon = React =>
+  React.createElement(
+    'svg',
+    {viewBox: '0 0 16 16', width: 16, height: 16, 'aria-hidden': true},
+    React.createElement('circle', {cx: 8, cy: 8, r: 6}),
+  );
+
+/** A search source over three teams, for the typeahead targets. */
+function teamSource() {
+  const items = [
+    {id: 'design', label: 'Design'},
+    {id: 'engineering', label: 'Engineering'},
+    {id: 'research', label: 'Research'},
+  ];
+  return {
+    search: query =>
+      items.filter(item =>
+        item.label.toLowerCase().includes(String(query).toLowerCase()),
+      ),
+    bootstrap: () => items,
+    cancel: noop,
+  };
+}
+
+/** A rich text editor state of one paragraph, as the view reads it. */
+const paragraphState = text => ({
+  root: {
+    children: [
+      {
+        children: [
+          {
+            detail: 0,
+            format: 0,
+            mode: 'normal',
+            style: '',
+            text,
+            type: 'text',
+            version: 1,
+          },
+        ],
+        direction: 'ltr',
+        format: '',
+        indent: 0,
+        type: 'paragraph',
+        version: 1,
+      },
+    ],
+    direction: 'ltr',
+    format: '',
+    indent: 0,
+    type: 'root',
+    version: 1,
+  },
+});
+
 function chartsSample(React, mod, Pkg, slot) {
   const h = React.createElement;
   const Chart = mod.Chart ?? Pkg.Chart;
@@ -280,6 +336,21 @@ export const samples = {
       },
       'aria-label': 'Dot',
     }),
+  lab__ChatVirtualizer: ({C, React}) =>
+    // A fixed-height frame, so the browser step windows real rows.
+    React.createElement(
+      'div',
+      {style: {height: 320, display: 'flex', flexDirection: 'column'}},
+      React.createElement(C, {
+        data: [
+          {id: 'a', text: 'First message'},
+          {id: 'b', text: 'Second message'},
+          {id: 'c', text: 'Third message'},
+        ],
+        getRowKey: item => item.id,
+        renderItem: ({item}) => React.createElement('p', null, item.text),
+      }),
+    ),
   lab__ChatReactionBar: ({C, React}) =>
     React.createElement(C, {
       reactions: [
@@ -453,8 +524,16 @@ export const samples = {
     return React.createElement(
       TabBar,
       {value: 'home', onChange: noop, label: 'Sections'},
-      React.createElement(C, {value: 'home', label: 'Home'}),
-      React.createElement(C, {value: 'search', label: 'Search'}),
+      React.createElement(C, {
+        value: 'home',
+        label: 'Home',
+        icon: dotIcon(React),
+      }),
+      React.createElement(C, {
+        value: 'search',
+        label: 'Search',
+        icon: dotIcon(React),
+      }),
     );
   },
   core__ComplexSelector: ({C, React}) =>
@@ -545,6 +624,161 @@ export const samples = {
         trailing: [{id: 'archive', label: 'Archive', onActivate() {}}],
       }),
     }),
+  // Required props the docs' playground defaults leave out. A sample that
+  // starts from the defaults (`defaults`, revived as the proof renders them)
+  // adds only the missing handlers.
+  core__CheckboxList: ({C, React, mod, Pkg}) => {
+    const Item = mod.CheckboxListItem ?? Pkg.CheckboxListItem;
+    return React.createElement(
+      C,
+      {label: 'Export formats'},
+      React.createElement(Item, {label: 'CSV'}),
+      React.createElement(Item, {label: 'PDF'}),
+    );
+  },
+  core__DateInput: ({C, React}) =>
+    React.createElement(C, {label: 'Start date'}),
+  core__DateRangeInput: ({C, React}) =>
+    React.createElement(C, {label: 'Trip dates', value: null, onChange: noop}),
+  core__DateTimeInput: ({C, React}) =>
+    React.createElement(C, {label: 'Meeting', onChange: noop}),
+  core__Drawer: ({C, React, defaults}) =>
+    React.createElement(C, {...defaults, isOpen: true, onOpenChange: noop}),
+  core__FieldStatus: ({C, React}) =>
+    React.createElement(C, {type: 'error', message: 'Enter a valid email.'}),
+  core__FileInput: ({C, React}) =>
+    React.createElement(C, {label: 'Attachment', value: null, onChange: noop}),
+  core__IconButton: ({C, React}) =>
+    React.createElement(C, {label: 'Settings', icon: dotIcon(React)}),
+  core__InfoTip: ({C, React}) =>
+    React.createElement(C, {content: 'Totals include tax.'}),
+  core__InputGroup: ({C, React, mod, Pkg}) =>
+    React.createElement(
+      C,
+      {label: 'Price'},
+      React.createElement(mod.InputGroupText ?? Pkg.InputGroupText, null, '$'),
+      React.createElement(mod.TextInput ?? Pkg.TextInput, {
+        label: 'Amount',
+        value: '12.00',
+        onChange: noop,
+      }),
+    ),
+  core__Lightbox: ({C, React, defaults}) =>
+    React.createElement(C, {...defaults, isOpen: true, onOpenChange: noop}),
+  core__MultiSelector: ({C, React, defaults}) =>
+    React.createElement(C, {...defaults, onChange: noop}),
+  core__NavIcon: ({C, React}) => React.createElement(C, {icon: dotIcon(React)}),
+  core__NumberInput: ({C, React, defaults}) =>
+    React.createElement(C, {...defaults, onChange: noop}),
+  core__Pagination: ({C, React, defaults}) =>
+    React.createElement(C, {...defaults, onChange: noop}),
+  core__PowerSearch: ({C, React, defaults}) =>
+    React.createElement(C, {...defaults, onChange: noop}),
+  core__RadioList: ({C, React, mod, Pkg}) => {
+    const Item = mod.RadioListItem ?? Pkg.RadioListItem;
+    return React.createElement(
+      C,
+      {label: 'Shipping', value: 'standard', onChange: noop},
+      React.createElement(Item, {label: 'Standard', value: 'standard'}),
+      React.createElement(Item, {label: 'Express', value: 'express'}),
+    );
+  },
+  core__SegmentedControl: ({C, React, defaults}) =>
+    React.createElement(C, {...defaults, onChange: noop}),
+  core__StatusDot: ({C, React}) =>
+    React.createElement(C, {variant: 'success', label: 'Online'}),
+  core__TabList: ({C, React, defaults}) =>
+    React.createElement(C, {...defaults, onChange: noop}),
+  core__TimeInput: ({C, React}) =>
+    React.createElement(C, {label: 'Start time'}),
+  core__Token: ({C, React}) => React.createElement(C, {label: 'Design'}),
+  core__Tokenizer: ({C, React, defaults}) =>
+    React.createElement(C, {
+      ...defaults,
+      searchSource: teamSource(),
+      onChange: noop,
+    }),
+  core__Typeahead: ({C, React}) =>
+    React.createElement(C, {
+      label: 'Team',
+      searchSource: teamSource(),
+      value: null,
+      onChange: noop,
+    }),
+  lab__ChatEmojiPicker: ({C, React}) =>
+    React.createElement(
+      C,
+      {onSelect: noop},
+      React.createElement('button', {type: 'button'}, 'Add reaction'),
+    ),
+  lab__CircleCheckIndicator: ({C, React}) =>
+    React.createElement(C, {state: 'checked'}),
+  lab__CircularProgress: ({C, React}) =>
+    React.createElement(C, {label: 'Uploading', value: 40}),
+  lab__DialogHeroHeader: ({C, React}) =>
+    React.createElement(C, {
+      title: 'Welcome aboard',
+      media: React.createElement('div', {style: {height: 120}}),
+    }),
+  lab__EmojiPicker: ({C, React}) => React.createElement(C, {onSelect: noop}),
+  lab__LineClamp: ({C, React}) =>
+    React.createElement(
+      C,
+      {maxLines: 2},
+      'A long paragraph that runs past two lines, so the clamp cuts it short and shows the rest only when it is expanded by the reader.',
+    ),
+  lab__SelectableCardGroup: ({C, React, mod, Pkg}) => {
+    const Item = mod.SelectableCardGroupItem ?? Pkg.SelectableCardGroupItem;
+    return React.createElement(
+      C,
+      {label: 'Plan', value: 'pro', onChange: noop},
+      React.createElement(Item, {value: 'basic', label: 'Basic'}),
+      React.createElement(Item, {value: 'pro', label: 'Pro'}),
+    );
+  },
+  lab__Stat: ({C, React}) =>
+    React.createElement(C, {label: 'Revenue', value: '$12.4k'}),
+  lab__TabBar: ({C, React, mod, Pkg}) => {
+    const Item = mod.TabBarItem ?? Pkg.TabBarItem;
+    return React.createElement(
+      C,
+      {value: 'home', onChange: noop, label: 'Sections'},
+      React.createElement(Item, {
+        value: 'home',
+        label: 'Home',
+        icon: dotIcon(React),
+      }),
+      React.createElement(Item, {
+        value: 'search',
+        label: 'Search',
+        icon: dotIcon(React),
+      }),
+    );
+  },
+  richtext__RichTextEditor: ({C, React}) =>
+    React.createElement(C, {label: 'Notes'}),
+  richtext__RichTextView: ({C, React}) =>
+    React.createElement(C, {
+      value: JSON.stringify(paragraphState('Release notes for this version.')),
+    }),
+  vega__VegaChart: ({C, React}) =>
+    React.createElement(C, {
+      spec: {
+        $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
+        data: {
+          values: [
+            {month: 'Jan', revenue: 3},
+            {month: 'Feb', revenue: 5},
+            {month: 'Mar', revenue: 4},
+          ],
+        },
+        mark: 'bar',
+        encoding: {
+          x: {field: 'month', type: 'nominal'},
+          y: {field: 'revenue', type: 'quantitative'},
+        },
+      },
+    }),
 };
 
 /**
@@ -555,4 +789,19 @@ export const notRendered = {
   core__NavItem: 'a style module',
   core__InteractiveRoleContext: 'a context',
   core__SizeContext: 'a context',
+};
+
+/**
+ * Targets whose doc names a required prop that neither a sample nor the doc's
+ * playground defaults give, and that render without it: the proof renders
+ * them with the defaults alone. A target with a required prop that is in none
+ * of `samples`, `needsNoSample` and `notRendered` fails by name
+ * (samples.test.mjs, and the proof before it renders). Every other such target
+ * has a sample, so the browser step renders it with its required props.
+ */
+export const needsNoSample = {
+  // Its rows are the tabs past the fourth, read from the copy's own
+  // TabBarItem, which the copy's entry does not export to a sample.
+  lab__TabBarMoreList:
+    "renders without onChange; its rows need the copy's TabBarItem, which its entry does not export",
 };

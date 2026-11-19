@@ -14,7 +14,7 @@
  * @position api/hook/_adapter.mjs — shared by ./list, ./detail, ./detail/params
  */
 
-import {requireCoreDir} from '../../foundation/fs/paths.mjs';
+import {coreContentDir} from '../../foundation/fs/paths.mjs';
 import {
   findHookDoc,
   getAllHookNames,
@@ -31,10 +31,11 @@ export {CORE_PROVIDER_ID as CORE_PACKAGE} from '../../foundation/identity/provid
  * Locate the @astryxdesign/core package directory, or throw the same
  * ERR_CORE_NOT_FOUND envelope the flat command threw. Shared by every hook leaf.
  * @param {string} cwd
- * @returns {string} Absolute path to the core package directory.
+ * @returns {string | null} Absolute path to the core package directory; null
+ *   in a run whose base is not Core, which has no Core hooks.
  */
 export function resolveCoreDir(cwd) {
-  return coreDirOrThrow(requireCoreDir, cwd);
+  return coreDirOrThrow(coreContentDir, cwd);
 }
 
 /**
@@ -46,7 +47,7 @@ export function resolveCoreDir(cwd) {
  * (foundation/suggest/other-command.mjs withOtherCommand), the list keeping
  * its length. Shared by the detail and detail.params leaves, which both start
  * from a resolved hook doc.
- * @param {string} coreDir
+ * @param {string | null} coreDir
  * @param {string} name
  * @param {{zh?: boolean, lang?: string|null, cwd?: string}} [opts]
  * @returns {Promise<import('./hook.type.mjs').HookDoc>}
@@ -94,7 +95,7 @@ export async function resolveHookDoc(
  * only on this path.
  * @param {string} name
  * @param {import('../../foundation/response/base').Suggestion[]} suggestions
- * @param {{coreDir: string, cwd: string}} context
+ * @param {{coreDir: string | null, cwd: string}} context
  * @returns {Promise<import('../../foundation/response/base').Suggestion[] | undefined>}
  */
 async function withOtherCommandHint(name, suggestions, {coreDir, cwd}) {
