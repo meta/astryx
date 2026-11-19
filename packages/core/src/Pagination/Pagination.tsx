@@ -406,7 +406,6 @@ function PaginationButton({
   ...props
 }: React.ComponentProps<typeof Button> & {
   isCurrent?: boolean;
-  /** The control's end of the controls row, when it is the first or last. */
   rowEnd?: 'first' | 'last';
 }) {
   const ref = useFocusAcrossSwap<HTMLButtonElement>();
@@ -415,9 +414,9 @@ function PaginationButton({
       {...props}
       {...themeProps('pagination-item', {
         selected: isCurrent ? 'selected' : null,
-        // The ends of the row, for a theme that joins the controls into one
-        // strip. Read from the controls, not `:first-child`/`:last-child`: a
-        // control with a tooltip renders its layer after it in the row.
+        // A theme that joins the controls into one strip reads the row's ends
+        // here. A control with a tooltip renders its layer after it in the
+        // row, so `:last-child` can miss the last control.
         first: rowEnd === 'first' ? 'first' : null,
         last: rowEnd === 'last' ? 'last' : null,
       })}
