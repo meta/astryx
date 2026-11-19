@@ -263,6 +263,16 @@ describe('visualization palette and styling guides', () => {
     expect(JSON.stringify(section)).toContain(
       'then round it down to a whole CSS pixel',
     );
+    expect(JSON.stringify(section)).toContain(
+      'Round that final bounded radius down to a whole CSS pixel',
+    );
+    expect(JSON.stringify(section)).toContain(
+      'Never round data values, bar dimensions, scales, or baselines',
+    );
+    expect(JSON.stringify(section)).toContain(
+      'geometric ceiling, not a guarantee',
+    );
+    expect(table.rows[3][2]).toContain('4px corners becomes a circle');
   });
 
   it('links renderer delivery without duplicating its implementation', () => {

@@ -113,6 +113,10 @@ export const docs = {
           text: 'Use container radius for chart cards and tooltip surfaces, and element radius for bars and filled legend keys. Limit corners to fit the mark without changing its value, scale, or baseline.',
         },
         {
+          type: 'prose',
+          text: 'For bars and filled legend keys, cap the radius at the smaller of the theme’s element radius, half the rendered width, and half the rendered height. Round that final bounded radius down to a whole CSS pixel. Never round data values, bar dimensions, scales, or baselines as part of this rule. The half-size cap is a geometric ceiling, not a guarantee that the mark keeps a square shape.',
+        },
+        {
           type: 'table',
           headers: ['Chart part', 'Radius', 'Treatment'],
           rows: [
@@ -134,7 +138,7 @@ export const docs = {
             [
               'Filled legend keys',
               '--radius-element',
-              'Use the theme’s element radius, limited to half the key’s size and rounded down to a whole CSS pixel. For an 8×8px key, this limit is 4px.',
+              'Use the theme’s element radius within the geometric cap, then round it down to a whole CSS pixel. An 8×8px key with 4px corners becomes a circle; use a smaller visual cap when the key needs to remain a rounded square.',
             ],
             [
               'Plot and hover region',

@@ -350,8 +350,8 @@ function ChartRadiusReference({sections}: {sections: DocSection[]}) {
   }
   const plainText = (text: string) =>
     text.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/`/g, '');
-  const description = plainText(
-    section.content.find(block => block.type === 'prose')?.text ?? '',
+  const descriptions = section.content.flatMap(block =>
+    block.type === 'prose' ? [plainText(block.text ?? '')] : [],
   );
   const rows = section.content.flatMap(block =>
     block.type === 'table' ? (block.rows ?? []) : [],
@@ -362,7 +362,9 @@ function ChartRadiusReference({sections}: {sections: DocSection[]}) {
         <Heading id="chart-radius" level={3}>
           {section.title}
         </Heading>
-        <Text>{description}</Text>
+        {descriptions.map(text => (
+          <Text key={text}>{text}</Text>
+        ))}
       </VStack>
       <Theme theme={neutralTheme} mode={mode}>
         <Card xstyle={styles.radiusAnatomy}>

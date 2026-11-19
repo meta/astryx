@@ -68,6 +68,7 @@ describe('color-set presentation', () => {
       source.indexOf('function ChartRadiusReference'),
       source.indexOf('function CopyTokensButton'),
     );
+    expect(radiusSection).toContain('descriptions.map(text =>');
     expect(
       radiusSection.indexOf('<RechartsThemingPreview anatomy />'),
     ).toBeLessThan(radiusSection.indexOf('<Table'));
