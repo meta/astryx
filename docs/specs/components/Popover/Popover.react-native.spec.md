@@ -183,8 +183,7 @@ intentional decision. A `current` contract contains no unresolved rows.
 The component implements design requirements without copying their rationale.
 
 Platform control (`spec:AST-093` FR2): on iOS, the system popover (FR4,
-DEC-3). On Android the candidates are `PopupWindow` and Compose's `Popup`
-(DEC-3); neither fits, so Android draws the surface in the app's layer. The sheet form is the library's bottom
+DEC-3); on Android, the surface drawn in the app's layer (DEC-3). The sheet form is the library's bottom
 sheet. Guideline pages: Popovers and Accessibility (VoiceOver, Reduce Motion)
 in the Apple Human Interface Guidelines (`spec:AST-093` FR3); on Android, this
 record follows Material 3's Menus and Bottom sheets pages.
@@ -247,14 +246,9 @@ as the platforms' compact popover sheets do.
 
 iOS has a system popover, which stays anchored to its trigger in every width
 when it is asked to, so the anchored form uses it on iPhone and iPad alike.
-On Android the anchored windows are `PopupWindow` and Compose's `Popup`. They
-place content in a window of their own beside an anchor, with outside-touch
-dismissal, but bring no surface or placement rule of Material's (Material 3
-has no popover pattern for arbitrary content), do not keep the content above
-the docked keyboard, and take it out of the app's layer, where the overlay
-dismissal of FR5 runs. Android therefore draws the surface in the app's layer,
-where it keeps its trigger, stays above the keyboard and dismisses as every
-other overlay does.
+On Android the anchored form is drawn in the app's layer, where it keeps its
+trigger, stays above the docked keyboard and dismisses as every other overlay
+does.
 
 ## Open questions
 
