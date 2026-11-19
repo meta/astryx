@@ -243,8 +243,8 @@ export function registerBuild(program) {
         section(`Build kit for "${q}"`),
         text(
           start
-            ? 'Start from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\n' +
-                'Changing a page you already have? Keep it, and use only the blocks and components.'
+            ? "Start from the TEMPLATE and build its parts with COMPONENTS. The BLOCK EXAMPLES show how parts like yours are built: read one for reference, then write your part in the template's style.\n" +
+                'Changing a page you already have? Keep it, and add components; read a block example when it helps.'
             : 'This kit is narrowed by --type, so it names no template.',
         ),
       ];
@@ -255,7 +255,7 @@ export function registerBuild(program) {
             'TEMPLATE',
             `${start.reason} ${
               start.basis === 'fallback'
-                ? 'Scaffold it, then put blocks inside it.'
+                ? 'Scaffold it, then build the page inside it.'
                 : 'Scaffold it, then replace its content. Keep its layout and spacing.'
             }`,
           ),
@@ -310,8 +310,8 @@ export function registerBuild(program) {
       if (blocks.length) {
         out.push(
           section(
-            'BLOCKS',
-            `Ready-made sections for parts the template lacks${more(blocks)}. Print one: ${formatCliCommand('template <name>')}`,
+            'BLOCK EXAMPLES',
+            `Examples of parts like yours, for reference: read one, then write your own part; don't paste it${more(blocks)}. Read one: ${formatCliCommand('template <name>')}`,
           ),
           records(
             shown(blocks.map(tagged)),

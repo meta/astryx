@@ -22,7 +22,7 @@ export const doc = {
     "START from (always one: for a whole page, the template its page-pick model chooses from the page ranker's list and its own word tables, or the app shell when its word weights call the shell; for a part " +
     'of a page, the page it names; else the app shell, unless the idea reads as a whole page, which starts ' +
     'from the closest page template) and the next two templates, ' +
-    'and the unified search grouped around it: the other close page templates, drop-in blocks, and ' +
+    'and the unified search grouped around it: the other close page templates, block examples to read for reference, and ' +
     'idea-specific components/hooks, plus the always-on frame + foundation. A template carries the page ' +
     'frame and spacing, so the kit never recommends composing a page from components.',
   importPath: '@astryxdesign/cli/api',
