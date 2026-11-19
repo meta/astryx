@@ -4,15 +4,15 @@
 
 [experimental] `astryx experimental theme editor`: a border asked of a part that draws none goes to the pieces inside it only where those pieces draw borders of their own (a date and time field's two boxes), so "top nav with a 1px bottom border" writes the border on the top nav, not under each nav item, and "sidebar with a 1px right border" on the sidebar, not beside each link.
 
-- `astryx experimental theme editor` keeps what a change reports to what it did: a link (or any text with a role of its own) too faint is fixed with the nearest shade of its own color that reads, never the plain black or white of body text; a border set for light alone no longer reports the dark frame it left as the theme draws it; and one fill on a group of parts says what it covers once for each kind of cover, with lines on the group, not once for each part.
+- `astryx experimental theme editor` keeps what a change reports to what it did: a border set for light alone no longer reports the dark frame it left as the theme draws it.
 
 - `astryx experimental theme editor how`: "the active nav item should be a #e8def8 pill" again gives pill corners on the selected item only. There is now a single reader for a color and shape, so the item's state is kept.
 
-- `astryx experimental theme editor how` now gives a text color for every variant of a part ("buttons with white text", "badges with dark text") to each variant only in the modes where it reads. It measures against the variant's own fill, see-through fills over the page, or the fill the same answer gives it. Variants it can't read on keep their own text, and the answer says which.
+- `astryx experimental theme editor how` now gives a text color for every variant of a part whose variants each take a color of their own ("buttons with white text", "badges with dark text") to each variant only in the modes where it reads; text a part's variants read from shared tokens (a card's) is not measured this way unless the same answer gives them a fill. It measures against the variant's own fill, see-through fills over the page, or the fill the same answer gives it. Variants it can't read on keep their own text, and the answer says which.
 
 Other fixes:
 
-- "tinted <color>" fills with the color at a low strength over what's beneath, not the solid color.
+- "tinted <color>" fills with the color at a low strength over what's beneath, not the solid color. A text color asked with the tint, on any part it fills (a button variant, a card, a selected nav item), deepens the tint along its own hue until that text reads (to 95% for white on blue); only when no strength of that hue reads is the text kept to the modes it reads in, with a readable ink named.
 - A rule with its own verb said after a part's clause ("3px corners on cards, never use pure black for text") now applies to the whole theme.
 
 - `astryx experimental theme editor set … --only` always works as an escape from a group: on a member of a group that spreads it keeps the change to that member, and on a part that is styled on its own already (a sub-part, a card) it is taken and said, in place of a refusal; only a group itself, which has no one member to keep to, refuses it. A menu's radio is kept apart from every other radio: "square corners but keep menu radios round" says its circle is left as it is, and a round ask on a menu radio the theme squared offers the undo that gives the circle back.

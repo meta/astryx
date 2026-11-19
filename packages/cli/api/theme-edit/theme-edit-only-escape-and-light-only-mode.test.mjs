@@ -211,6 +211,37 @@ describe("a menu's radio", () => {
     },
     T,
   );
+
+  it(
+    'offers no rounding line to a sharper ask, squared or not',
+    async () => {
+      fs.writeFileSync(file(), fresh);
+      await cli([
+        ...ED,
+        'set',
+        't',
+        'border-radius',
+        '0',
+        '--on',
+        'dropdown-menu-radio',
+      ]);
+      const squared = await cli([
+        ...ED,
+        'set',
+        't',
+        'corners',
+        'sharper',
+        '--on',
+        'dropdown-menu-radio',
+      ]);
+      expect(squared.error).toMatch(/is a radio's circle/);
+      expect(squared.error).not.toMatch(/gives the circle back|fully round/);
+      expect(names(squared).some(n => /undo t border-radius/.test(n))).toBe(
+        false,
+      );
+    },
+    T,
+  );
 });
 
 describe("a one-mode theme's own --mode", () => {

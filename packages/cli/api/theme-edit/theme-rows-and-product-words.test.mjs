@@ -99,6 +99,10 @@ describe("a part's rows and a product's words", () => {
     ['radio station app: rounder corners', [], 'radio station'],
     ['button factory app: rounder corners', [], 'button factory'],
     ['card game app: rounded corners', [], 'card game'],
+    // (A part with one unknown word after it, and nothing more, keeps the
+    // part: the word is no compound's noun.)
+    ['buttons chunky', ['button'], null],
+    ['header sticky', ['app-shell-header'], null],
   ])('%s', async (ask, parts, compound) => {
     // (The bundled theme the cases above made; skipped with them.)
     if (unbuilt) return;
@@ -113,6 +117,8 @@ describe("a part's rows and a product's words", () => {
     if (compound) {
       expect(text).toContain(`no part is called "${compound}"`);
       expect(writes).toEqual([]);
-    } else expect(writes.length).toBeGreaterThan(0);
+    } else if (ask.split(' ').length > 2)
+      expect(writes.length).toBeGreaterThan(0);
+    else expect(text).not.toMatch(/no part is called/);
   });
 });
