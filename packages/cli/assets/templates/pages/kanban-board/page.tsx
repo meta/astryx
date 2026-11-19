@@ -34,6 +34,7 @@ import {Divider} from '@astryxdesign/core/Divider';
 import {Toolbar} from '@astryxdesign/core/Toolbar';
 import {useToast} from '@astryxdesign/core/Toast';
 import {Section} from '@astryxdesign/core/Section';
+import {useLongPress} from '@astryxdesign/core/hooks';
 
 import {
   PlusIcon,
@@ -225,12 +226,6 @@ const INITIAL_ITEMS: WorkItem[] = [
 // on card controls still register normally.
 const DRAG_THRESHOLD = 5;
 
-// A finger lifts a card with a long press, so a swipe that starts on a card
-// still scrolls the board. The press holds for 0.5 s within 10 px, as a
-// native long press does.
-const LONG_PRESS_MS = 500;
-const LONG_PRESS_SLOP = 10;
-
 // Shared width for every board column, so they stay visually aligned.
 const COLUMN_WIDTH = 300;
 
@@ -262,6 +257,9 @@ const styles = stylex.create({
     ':hover': {
       boxShadow: 'var(--shadow-med)',
     },
+  },
+  carried: {
+    display: 'none',
   },
   // The dragged card is lifted out of flow and follows the pointer. It ignores
   // pointer events so hit-testing reads the columns underneath it.
@@ -370,17 +368,19 @@ function BoardCard({
   cardRef,
   onPointerDown,
   onMove,
+  isCarried = false,
 }: {
   item: WorkItem;
   cardRef: (el: HTMLDivElement | null) => void;
   onPointerDown: (e: ReactPointerEvent, id: string) => void;
   onMove: (id: string, to: ColumnId) => void;
+  isCarried?: boolean;
 }) {
   return (
     <Card
       ref={cardRef}
       padding={3}
-      xstyle={styles.card}
+      xstyle={[styles.card, isCarried && styles.carried]}
       onPointerDown={e => onPointerDown(e, item.id)}>
       <BoardCardBody item={item} onMove={onMove} />
     </Card>
@@ -393,11 +393,13 @@ function BoardColumn({
   meta,
   count,
   contentRef,
+  isEmpty,
   children,
 }: {
   meta: ColumnMeta;
   count: number;
   contentRef: (el: HTMLDivElement | null) => void;
+  isEmpty: boolean;
   children: ReactNode;
 }) {
   return (
@@ -425,7 +427,7 @@ function BoardColumn({
         }
         content={
           <LayoutContent ref={contentRef} padding={2}>
-            {children ?? (
+            {isEmpty ? (
               <EmptyState
                 isCompact
                 xstyle={styles.columnEmptyState}
@@ -435,7 +437,8 @@ function BoardColumn({
                 title={meta.emptyTitle}
                 description={meta.emptyDescription}
               />
-            )}
+            ) : null}
+            {children}
           </LayoutContent>
         }
       />
@@ -461,8 +464,13 @@ export default function KanbanBoardTemplate() {
     new Map<string, (el: HTMLDivElement | null) => void>(),
   );
   const teardownRef = useRef<(() => void) | null>(null);
-  // True while a finger carries a card.
-  const fingerDragRef = useRef(false);
+  // True while a finger or pen carries a card: the card's touch moves then
+  // carry it and must not scroll the board.
+  const carryingRef = useRef(false);
+  // A finger lifts a card with a long press, so a swipe that starts on a
+  // card still scrolls the board.
+  const liftRef = useRef<(() => void) | null>(null);
+  const longPress = useLongPress({onLongPress: () => liftRef.current?.()});
 
   // Stable ref callbacks so registering an element never churns across renders.
   const getColumnRef = (id: ColumnId) => {
@@ -480,12 +488,23 @@ export default function KanbanBoardTemplate() {
     return cb;
   };
 
+  const holdScroll = useRef((ev: TouchEvent) => {
+    if (carryingRef.current) {
+      ev.preventDefault();
+    }
+  }).current;
+
   const getCardRef = (id: string) => {
     let cb = cardRefCbs.current.get(id);
     if (!cb) {
       cb = el => {
+        const previous = cardEls.current.get(id);
+        previous?.removeEventListener('touchmove', holdScroll);
         if (el) {
           cardEls.current.set(id, el);
+          // A touch's moves go to the element it started on, so the hold
+          // lives on each card. It must not be passive to cancel the scroll.
+          el.addEventListener('touchmove', holdScroll, {passive: false});
         } else {
           cardEls.current.delete(id);
         }
@@ -597,12 +616,11 @@ export default function KanbanBoardTemplate() {
 
     let started = false;
     let target: DropTarget | null = null;
-    const isFinger = e.pointerType === 'touch';
-    let pressTimer: number | undefined;
+    const byLongPress = e.pointerType === 'touch';
 
     const follow = (x: number, y: number) => {
       started = true;
-      fingerDragRef.current = isFinger;
+      carryingRef.current = e.pointerType !== 'mouse';
       target = computeTarget(x, y, id);
       setDrag({
         id,
@@ -616,24 +634,24 @@ export default function KanbanBoardTemplate() {
       });
     };
 
-    if (isFinger) {
-      pressTimer = window.setTimeout(
-        () => follow(startX, startY),
-        LONG_PRESS_MS,
-      );
+    if (byLongPress) {
+      liftRef.current = () => follow(startX, startY);
+      longPress.start({x: startX, y: startY});
     }
 
     const onMove = (ev: PointerEvent) => {
-      const travel =
-        Math.abs(ev.clientX - startX) + Math.abs(ev.clientY - startY);
-      if (!started && isFinger) {
+      if (!started && byLongPress) {
         // The finger moved before the long press: it is a scroll.
-        if (travel > LONG_PRESS_SLOP) {
+        if (!longPress.moveTo({x: ev.clientX, y: ev.clientY})) {
           teardownRef.current?.();
         }
         return;
       }
-      if (!started && travel < DRAG_THRESHOLD) {
+      if (
+        !started &&
+        Math.abs(ev.clientX - startX) + Math.abs(ev.clientY - startY) <
+          DRAG_THRESHOLD
+      ) {
         return;
       }
       follow(ev.clientX, ev.clientY);
@@ -653,11 +671,12 @@ export default function KanbanBoardTemplate() {
     };
 
     const teardown = () => {
-      window.clearTimeout(pressTimer);
+      longPress.cancel();
+      liftRef.current = null;
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onCancel);
-      fingerDragRef.current = false;
+      carryingRef.current = false;
       teardownRef.current = null;
     };
     teardownRef.current = teardown;
@@ -684,28 +703,22 @@ export default function KanbanBoardTemplate() {
 
   useEffect(() => () => teardownRef.current?.(), []);
 
-  // While a finger carries a card, the board must not scroll under it. The
-  // browser sends a touch's moves to this listener only when the listener
-  // exists before the touch starts, so it stays attached for the page's life.
-  useEffect(() => {
-    const holdScroll = (ev: TouchEvent) => {
-      if (fingerDragRef.current) {
-        ev.preventDefault();
-      }
-    };
-    window.addEventListener('touchmove', holdScroll, {passive: false});
-    return () => window.removeEventListener('touchmove', holdScroll);
-  }, []);
+  const isColumnEmpty = (colId: ColumnId): boolean =>
+    !itemsByColumn[colId].some(it => it.id !== drag?.id) &&
+    drag?.target?.column !== colId;
 
-  // Card nodes for a column, or null when the column should show its empty
-  // state. A dashed ghost box marks the landing slot during a drag.
+  // Card nodes for a column. A dashed ghost box marks the landing slot during
+  // a drag. The carried card stays mounted, hidden, in its own column: a
+  // touch's moves go to the element the touch started on, so removing it
+  // would end the carry.
   const renderColumnCards = (colId: ColumnId): ReactNode => {
     const colItems = itemsByColumn[colId];
     const visible = drag ? colItems.filter(it => it.id !== drag.id) : colItems;
+    const carried = drag ? colItems.find(it => it.id === drag.id) : undefined;
     const ghostTarget =
       drag && drag.target && drag.target.column === colId ? drag : null;
 
-    if (visible.length === 0 && !ghostTarget) {
+    if (visible.length === 0 && !ghostTarget && !carried) {
       return null;
     }
 
@@ -725,6 +738,19 @@ export default function KanbanBoardTemplate() {
         index,
         0,
         <VStack key="drag-ghost" xstyle={styles.ghost(ghostTarget.height)} />,
+      );
+    }
+
+    if (carried) {
+      nodes.push(
+        <BoardCard
+          key={carried.id}
+          item={carried}
+          cardRef={getCardRef(carried.id)}
+          onPointerDown={onCardPointerDown}
+          onMove={moveItem}
+          isCarried
+        />,
       );
     }
 
@@ -827,7 +853,8 @@ export default function KanbanBoardTemplate() {
                   key={meta.id}
                   meta={meta}
                   count={itemsByColumn[meta.id].length}
-                  contentRef={getColumnRef(meta.id)}>
+                  contentRef={getColumnRef(meta.id)}
+                  isEmpty={isColumnEmpty(meta.id)}>
                   {renderColumnCards(meta.id)}
                 </BoardColumn>
               ))}
