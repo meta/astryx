@@ -39,6 +39,12 @@ const port = Number(getArg('port') || 6010);
 // whole cost of promoting its play function into required CI.
 const TARGETS = [
   {
+    component: 'Table',
+    story: 'core-table--children-mode-narrow',
+    guards:
+      'a children-mode table wider than its container scrolls inside its own box, with every heading in full and every word whole',
+  },
+  {
     component: 'Item',
     story: 'core-item--align-first-line',
     guards:
@@ -113,6 +119,14 @@ const TARGETS = [
     guards:
       'ChartTooltip stays continuously open across content-bearing points in ' +
       'nested Theme/MediaTheme scope above a native modal with nonzero geometry',
+  },
+  {
+    component: 'ChartTooltip',
+    story: 'charts-chrome-tooltip--default',
+    guards:
+      'hovering a month through the chart pointer layer opens the grouped ' +
+      "tooltip with that month's heading and every series value, and " +
+      'leaving the plot closes it',
   },
   {
     component: 'ChartTheming',
@@ -203,6 +217,18 @@ const TARGETS = [
     direction: 'rtl',
     guards:
       'the caret follows the last token at its inline end, and a too-full row stays one row at rest and while read-only, under RTL as well',
+  },
+  {
+    component: 'Tokenizer',
+    story: 'core-inputgroup--with-tokenizer-overflow-end-controls',
+    guards:
+      'in an InputGroup, overflowing tokens scroll beside the clear button and end content, never under them, and the end controls stay put while the row scrolls',
+  },
+  {
+    component: 'Tokenizer',
+    story: 'core-inputgroup--with-tokenizer-overflow-end-controls-rtl',
+    guards:
+      'the grouped token row and its end controls stay separate in RTL as well',
   },
   // spec:AST-059 — the layer runtime's viewport inset. Each story is one
   // claim of the record; the guard is its rendered evidence, at a desktop

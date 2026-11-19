@@ -26,7 +26,7 @@ function HomeIcon() {
 export default function TopNavItemShowcase() {
   return (
     <TopNav
-      style={{width: 600}}
+      style={{width: 600, maxWidth: '100%'}}
       label="Navigation items demo"
       heading={<TopNavHeading heading="App" />}
       startContent={

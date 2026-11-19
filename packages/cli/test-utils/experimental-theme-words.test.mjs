@@ -14,12 +14,27 @@ describe('experimental theme words', () => {
       'compile',
       'a.mjs',
     ]);
-    expect(toExperimental(['theme', 'palette', 'generate', 'x'])).toEqual([
+    expect(toExperimental(['theme', 'targets', 'x'])).toEqual([
       'experimental',
+      'theme',
+      'targets',
+      'x',
+    ]);
+    expect(toExperimental(['theme', 'palette', 'generate', 'x'])).toEqual([
       'theme',
       'palette',
       'generate',
       'x',
+    ]);
+    expect(
+      toExperimental(['--detail', 'full', 'theme', 'build', 'a.mjs']),
+    ).toEqual([
+      '--detail',
+      'full',
+      'experimental',
+      'theme',
+      'compile',
+      'a.mjs',
     ]);
     expect(toExperimental(['component', 'Button'])).toEqual([
       'component',

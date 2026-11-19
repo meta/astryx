@@ -131,6 +131,10 @@ const styles = stylex.create({
     boxSizing: 'border-box',
     flexDirection: 'column',
     backgroundColor: colorVars['--color-background-surface'],
+    // The surface's text color. The browser gives a dialog and a popover
+    // CanvasText, which follows the color scheme and not the theme, so text
+    // that sets no color of its own (a selected nav row) needs this.
+    color: colorVars['--color-text-primary'],
     boxShadow: shadowVars['--shadow-high'],
     // `clip`, not `hidden`: `hidden` makes the panel a scroll container, and
     // Chromium then holds a finger's drag on the page beside an open
@@ -570,12 +574,14 @@ export function Drawer({
   // the same state that drives `isOpen` (`side={selected?.side ?? 'end'}`):
   // that state clears on close, so the live prop flips mid-exit and the panel
   // teleports to the other edge and slides out the wrong way. Children stay
-  // mounted for the exit for the same reason; so does the anchor.
-  const exitSideRef = useRef(side);
-  if (isOpen) {
-    exitSideRef.current = side;
+  // mounted for the exit for the same reason; so does the anchor. It is state,
+  // adjusted while the open drawer renders: a ref written here would keep the
+  // side of a render that React discards.
+  const [exitSide, setExitSide] = useState(side);
+  if (isOpen && side !== exitSide) {
+    setExitSide(side);
   }
-  const anchoredSide = isOpen ? side : exitSideRef.current;
+  const anchoredSide = isOpen ? side : exitSide;
 
   const sideStyle = anchoredSide === 'start' ? styles.start : styles.end;
   const sideOpenStyle =

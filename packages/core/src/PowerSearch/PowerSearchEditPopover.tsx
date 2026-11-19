@@ -40,6 +40,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/PowerSearch/PowerSearchEditPopover.generated';
+import type {ThemeDataAttributes} from '../utils/themeProps';
 
 registerEnglishFallback(english);
 
@@ -92,6 +93,7 @@ const styles = stylex.create({
   // Nested editor styles
   nestedRootLabel: {
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
   },
   nestedFieldSelector: {
     flexShrink: 0,
@@ -130,6 +132,8 @@ export interface PowerSearchEditPopoverProps {
   timezoneID?: string;
   /** Whether the filter is read-only. */
   isReadOnly?: boolean;
+  /** Caller `data-*` attributes for the editor's root element. */
+  dataAttributes?: ThemeDataAttributes;
 }
 
 // =============================================================================
@@ -714,6 +718,7 @@ export function PowerSearchEditPopover({
   maxMenuItems,
   timezoneID,
   isReadOnly = false,
+  dataAttributes,
 }: PowerSearchEditPopoverProps) {
   const t = useComponentTranslator();
   const saveButtonLabel =
@@ -876,7 +881,10 @@ export function PowerSearchEditPopover({
   // Nested filter editing
   if (isNestedType) {
     return (
-      <div {...stylex.props(styles.container)} onKeyDown={handleKeyDown}>
+      <div
+        {...dataAttributes}
+        {...stylex.props(styles.container)}
+        onKeyDown={handleKeyDown}>
         <div {...stylex.props(styles.content)}>
           <VStack gap={2}>
             <HStack gap={2}>
@@ -938,7 +946,10 @@ export function PowerSearchEditPopover({
   }
 
   return (
-    <div {...stylex.props(styles.container)} onKeyDown={handleKeyDown}>
+    <div
+      {...dataAttributes}
+      {...stylex.props(styles.container)}
+      onKeyDown={handleKeyDown}>
       <div {...stylex.props(styles.content)}>
         <HStack
           gap={2}

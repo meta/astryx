@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 // @pr-a11y release-only
+// @visits NavHeadingMenu
 
 /**
  * @file NavMenusSlideSelection.a11y.chromium.spec.ts

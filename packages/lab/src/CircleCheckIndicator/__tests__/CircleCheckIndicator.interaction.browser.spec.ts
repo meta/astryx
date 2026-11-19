@@ -471,7 +471,10 @@ test.describe('CircleCheckIndicator press', () => {
       const held = await readPress(page, 'Mountains');
       await page.mouse.up();
       expect(held.hostContent).toBe('none');
-      expect(held.circleColour).not.toBe('rgba(0, 0, 0, 0)');
+      // The press controller paints the press as an image, and the `:active`
+      // fill stays off, so the circle paints it once.
+      expect(held.circleImage).toContain('gradient');
+      expect(held.circleColour).toBe('rgba(0, 0, 0, 0)');
       expect(held.circleLayerRadius).toBe(held.circleRadius);
     } finally {
       await context.close();

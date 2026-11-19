@@ -6,7 +6,7 @@ export const doc = {
   name: 'IDE',
   displayName: 'IDE',
   description:
-    'Dense multi-pane workspace of resizable, collapsible regions: a hierarchy tree on one flank, tabbed documents in the middle, a docked drawer along the bottom, an inspector opposite. Drag a divider to resize or collapse any of them.',
+    'Dense multi-pane workspace of resizable, collapsible regions: a hierarchy tree on one flank, a single read-only code pane in the middle, a docked drawer along the bottom, an inspector opposite. Drag a divider to resize or collapse any of them.',
   keywords: [
     'editor',
     'ide',

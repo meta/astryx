@@ -224,6 +224,54 @@ describe('component-scoped pale status fills keep their content at 4.5:1 (INV11)
   });
 });
 
+describe('a neutral Badge in a solid Button keeps 4.5:1', () => {
+  // Inside a primary or destructive Button, a neutral Badge paints the
+  // Button's fill pair inverted (`--color-on-<fill>` fill, `--color-<fill>`
+  // text). A theme that repaints the neutral badge keeps its own paint, laid
+  // over the Button's fill (the theme's own Button paint, else the fill).
+  const cases = [];
+  for (const themeName of Object.keys(THEMES)) {
+    for (const [variant, fill] of [
+      ['primary', 'accent'],
+      ['destructive', 'error'],
+    ]) {
+      for (const mode of MODES) cases.push([themeName, variant, fill, mode]);
+    }
+  }
+
+  it.each(cases)(
+    '%s %s Button, %s fill, %s',
+    (themeName, variant, fill, mode) => {
+      const theme = THEMES[themeName];
+      const badge = theme?.components?.badge?.['variant:neutral'] ?? {};
+      const button = theme?.components?.button?.[`variant:${variant}`] ?? {};
+      const probes = {
+        '--probe-button': button.backgroundColor ?? `var(--color-${fill})`,
+        '--probe-badge': badge.backgroundColor ?? `var(--color-on-${fill})`,
+        '--probe-ink': badge.color ?? `var(--color-${fill})`,
+      };
+      const t =
+        theme === null
+          ? resolveThemeTokens({tokens: probes}, {mode})
+          : resolveThemeTokens(
+              {
+                tokens: {
+                  ...(theme.localTokens ?? {}),
+                  ...emittedRootTokens(theme),
+                  ...probes,
+                },
+              },
+              {mode},
+            );
+      const surface = opaque(color(t, '--color-background-surface'), WHITE);
+      const buttonFill = opaque(color(t, '--probe-button'), surface);
+      const pill = opaque(color(t, '--probe-badge'), buttonFill);
+      const ink = opaque(color(t, '--probe-ink'), pill);
+      expect(contrastRatio(ink, pill)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+});
+
 describe("Core's released status fills keep their values", () => {
   // Core's released defaults (light, dark).
   const RELEASED = {

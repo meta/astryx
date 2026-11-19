@@ -49,6 +49,11 @@ export interface WheelLayout {
   /** Row height, px. */
   readonly rowHeight: number;
   readonly rowCount: number;
+  /**
+   * The rows repeat without end: the last row is followed by the first. The
+   * offset is then unbounded.
+   */
+  readonly looping?: boolean;
 }
 
 /** UIKit's row height in pt: the unit the picker constants are measured in. */
@@ -79,11 +84,14 @@ export function restCurve(offset: number): WheelCurve {
   };
 }
 
-/** The offsets of the first and last rows. */
-export function offsetBounds({rowHeight, rowCount}: WheelLayout): {
+/** The offsets of the first and last rows: unbounded when looping. */
+export function offsetBounds({rowHeight, rowCount, looping}: WheelLayout): {
   min: number;
   max: number;
 } {
+  if (looping) {
+    return {min: -Infinity, max: Infinity};
+  }
   return {min: 0, max: Math.max(0, rowCount - 1) * rowHeight};
 }
 
@@ -104,9 +112,16 @@ export function dragOffset(offset: number, layout: WheelLayout): number {
   return offset;
 }
 
-/** The nearest row to `offset`, clamped to the rows. */
+/**
+ * The position of the row nearest `offset`, clamped to the rows. When looping
+ * it is any integer, and the row it shows is that integer folded into the
+ * rows (`mod` in hooks/usePager.ts).
+ */
 export function nearestIndex(offset: number, layout: WheelLayout): number {
   const index = Math.round(offset / layout.rowHeight);
+  if (layout.looping) {
+    return index;
+  }
   return Math.min(Math.max(index, 0), Math.max(0, layout.rowCount - 1));
 }
 

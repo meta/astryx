@@ -271,7 +271,7 @@ describe('theme-showcase local interactions', () => {
     ).toBeInTheDocument();
   });
 
-  it('opens a sign-in dialog from the navigation and closes it again', async () => {
+  it('opens a sign-in dialog from the navigation, closes it, and reopens it empty', async () => {
     // jsdom does not implement the modal dialog methods; remove the stubs
     // afterwards so other tests see jsdom unchanged.
     const proto = HTMLDialogElement.prototype;
@@ -299,6 +299,10 @@ describe('theme-showcase local interactions', () => {
         screen.queryByRole('dialog', {name: 'Sign in'}),
       ).not.toBeInTheDocument(),
     );
+
+    await user.click(screen.getByRole('button', {name: 'Sign in'}));
+    const reopened = await screen.findByRole('dialog', {name: 'Sign in'});
+    expect(within(reopened).getByLabelText('Email')).toHaveValue('');
   });
 
   it('filters inventory by text and changes cart feedback without navigation', async () => {

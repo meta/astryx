@@ -473,13 +473,78 @@ describe('useTableTreeData — row-click expansion', () => {
 // =============================================================================
 
 describe('useTableTreeData — row ARIA', () => {
-  it('sets 1-based aria-level on every body row', () => {
+  it('follows the disclosure pattern: rows carry no aria-level', () => {
     render(<TreeTable defaultExpandedIds={['src', 'components']} />);
 
-    expect(getRowByText('src')).toHaveAttribute('aria-level', '1');
-    expect(getRowByText('components')).toHaveAttribute('aria-level', '2');
-    expect(getRowByText('Button.tsx')).toHaveAttribute('aria-level', '3');
-    expect(getRowByText('README.md')).toHaveAttribute('aria-level', '1');
+    for (const row of getBodyRows()) {
+      expect(row).not.toHaveAttribute('aria-level');
+    }
+  });
+
+  it("links an expanded row's expander to its child rows with aria-controls", () => {
+    render(<TreeTable defaultExpandedIds={['src']} />);
+
+    const expander = within(getRowByText('src')).getByRole('button', {
+      name: 'Collapse row',
+    });
+    const ids = (expander.getAttribute('aria-controls') ?? '').split(' ');
+    expect(ids.map(id => document.getElementById(id))).toEqual([
+      getRowByText('components'),
+      getRowByText('utils.ts'),
+    ]);
+    expect(
+      within(getRowByText('components')).getByRole('button', {
+        name: 'Expand row',
+      }),
+    ).not.toHaveAttribute('aria-controls');
+  });
+
+  it('gives rows with similar ids distinct DOM ids', () => {
+    const data: FileRow[] = [
+      {
+        id: 'root',
+        name: 'root',
+        size: 0,
+        children: [
+          {id: 'src/a', name: 'slash', size: 1},
+          {id: 'src_47a', name: 'underscore', size: 2},
+        ],
+      },
+    ];
+    render(<TreeTable data={data} defaultExpandedIds={['root']} />);
+
+    const expander = within(getRowByText('root')).getByRole('button', {
+      name: 'Collapse row',
+    });
+    const ids = (expander.getAttribute('aria-controls') ?? '').split(' ');
+    expect(new Set(ids).size).toBe(2);
+    expect(ids.map(id => document.getElementById(id))).toEqual([
+      getRowByText('slash'),
+      getRowByText('underscore'),
+    ]);
+  });
+
+  it('expands and collapses from the keyboard', async () => {
+    const user = userEvent.setup();
+    render(<TreeTable />);
+
+    const expander = within(getRowByText('src')).getByRole('button', {
+      name: 'Expand row',
+    });
+    expander.focus();
+    await user.keyboard('{Enter}');
+    expect(expander).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('components')).toBeInTheDocument();
+    const ids = (expander.getAttribute('aria-controls') ?? '').split(' ');
+    expect(ids.length).toBeGreaterThan(0);
+    for (const id of ids) {
+      expect(document.getElementById(id)).not.toBeNull();
+    }
+
+    await user.keyboard(' ');
+    expect(expander).toHaveAttribute('aria-expanded', 'false');
+    expect(expander).not.toHaveAttribute('aria-controls');
+    expect(screen.queryByText('components')).toBeNull();
   });
 
   it('body rows carry no aria-expanded; the expander button does', () => {
@@ -574,7 +639,9 @@ describe('useTableTreeData — stability when the data shape changes', () => {
     const {rerender} = render(
       <TreeTable data={fileTree} defaultExpandedIds={['src']} />,
     );
-    expect(getRowByText('src')).toHaveAttribute('aria-level', '1');
+    expect(
+      within(getRowByText('src')).getByRole('button', {name: 'Collapse row'}),
+    ).toHaveAttribute('aria-controls');
 
     rerender(<TreeTable data={flat} />);
 
@@ -693,7 +760,12 @@ describe('useTableTreeData — indentation', () => {
     );
 
     const leafRow = getRowByText('leaf-e');
-    expect(leafRow).toHaveAttribute('aria-level', '5');
+    expect(leafRow).not.toHaveAttribute('aria-level');
+    expect(
+      within(getRowByText('node-d')).getByRole('button', {
+        name: 'Collapse row',
+      }),
+    ).toHaveAttribute('aria-controls', leafRow.id);
     const wrapper = within(leafRow).getByText('leaf-e').closest('td')
       ?.firstElementChild as HTMLElement;
     expect(wrapper.getAttribute('style')).toContain('calc(4 *');
@@ -799,7 +871,7 @@ describe('useTableTreeData — degenerate configurations', () => {
     expect(() => render(<ZeroColumnsTable />)).not.toThrow();
   });
 
-  it('updates aria-level in place when a row is reparented deeper', () => {
+  it('updates the parent link in place when a row is reparented deeper', () => {
     const flat: FileRow[] = [
       {
         id: 'a',
@@ -824,11 +896,19 @@ describe('useTableTreeData — degenerate configurations', () => {
     const {rerender} = render(
       <TreeTable data={flat} defaultExpandedIds={['a']} />,
     );
-    expect(getRowByText('mover')).toHaveAttribute('aria-level', '1');
+    const alphaExpander = () =>
+      within(getRowByText('alpha')).getByRole('button', {
+        name: 'Collapse row',
+      });
+    expect(alphaExpander().getAttribute('aria-controls')).toBe(
+      getRowByText('kid').id,
+    );
 
     rerender(<TreeTable data={nested} defaultExpandedIds={['a']} />);
 
-    expect(getRowByText('mover')).toHaveAttribute('aria-level', '2');
+    expect(alphaExpander().getAttribute('aria-controls')).toBe(
+      `${getRowByText('kid').id} ${getRowByText('mover').id}`,
+    );
   });
 });
 

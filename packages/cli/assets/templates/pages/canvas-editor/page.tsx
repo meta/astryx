@@ -50,6 +50,9 @@ import {TreeList, type TreeListItemData} from '@astryxdesign/core/TreeList';
 import {useContainerReveal} from '@astryxdesign/core/hooks';
 import {Theme, defineTheme} from '@astryxdesign/core/theme';
 import {Toolbar} from '@astryxdesign/core/Toolbar';
+import {useToast} from '@astryxdesign/core/Toast';
+import {rtlStyles} from '@astryxdesign/core/utils';
+import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {neutralTheme} from '@astryxdesign/theme-neutral/built';
 import {
   Aperture,
@@ -191,6 +194,16 @@ const LABEL_COLUMN = 80;
 const TAB_MAX_WIDTH = 164;
 
 /**
+ * Narrowest a document tab gets before the strip scrolls instead.
+ *
+ * Enough for the mark, a few characters and the close.
+ */
+const TAB_MIN_WIDTH = 96;
+
+/** The strip's inline padding, both sides: `paddingInline={2}` is 8px. */
+const TAB_STRIP_PADDING = 16;
+
+/**
  * Room the tab strip leaves for the rest of the header, in pixels.
  *
  * Covers the menu button ahead of the strip, the save note and Export button
@@ -216,6 +229,16 @@ const HIDE_INSPECTOR = '@media (max-width: 1099.98px)';
  * longer than being able to adjust it.
  */
 const HIDE_RAIL = '@media (max-width: 839.98px)';
+
+/**
+ * Header width below which the save note folds away.
+ *
+ * Below this width the strip cannot have one full tab next to the reserve
+ * that holds the note, so the note gives up its room. It is the least
+ * important thing in the bar: the tabs and Export are actions, and the note
+ * is only status. It leaves the screen, not the accessibility tree.
+ */
+const FOLD_SAVE_NOTE = `@container editor-header (max-width: ${TAB_MIN_WIDTH + TAB_STRIP_PADDING + TAB_STRIP_RESERVE - 0.02}px)`;
 
 const PHOTO_LAYER_SRC = '/template-assets/moody-scene-vertical-1.png';
 
@@ -724,6 +747,9 @@ const styles = stylex.create({
   // second one would flow below the photo and clip. Taking the text layers
   // out of flow is what stacks them over it, the way they sit on an artboard.
   textLayers: {position: 'absolute', inset: 0},
+  // The save note and Export keep their width; the tab strip beside them is
+  // the part that gives up room when the bar is narrow.
+  headerTrail: {flexShrink: 0},
   // A Card given a height prop turns into a scroll container, which is the
   // right default for a card holding more copy than fits. This one is a
   // viewport onto an artboard that is deliberately larger than its frame —
@@ -828,6 +854,17 @@ const styles = stylex.create({
   // a grip is left behind on a seam with nothing on the other side.
   foldsAtRail: {display: {default: null, [HIDE_RAIL]: 'none'}},
   foldsAtInspector: {display: {default: null, [HIDE_INSPECTOR]: 'none'}},
+  // Hidden from sight only: the note gives up its room for a visual reason,
+  // so a screen reader still reads it. The clip block VisuallyHidden uses.
+  foldsAtSaveNote: {
+    position: {default: null, [FOLD_SAVE_NOTE]: 'absolute'},
+    width: {default: null, [FOLD_SAVE_NOTE]: 1},
+    height: {default: null, [FOLD_SAVE_NOTE]: 1},
+    margin: {default: null, [FOLD_SAVE_NOTE]: -1},
+    overflow: {default: null, [FOLD_SAVE_NOTE]: 'hidden'},
+    clip: {default: null, [FOLD_SAVE_NOTE]: 'rect(0, 0, 0, 0)'},
+    whiteSpace: {default: null, [FOLD_SAVE_NOTE]: 'nowrap'},
+  },
   // A short rule, not a full-height one: the strip has no columns to divide,
   // it only needs the smallest mark that reads as "these are separate tabs".
   // A vertical Divider takes its height from the row unless given one, and a
@@ -836,7 +873,7 @@ const styles = stylex.create({
   tabRuleHidden: {visibility: 'hidden'},
   // Everything a tab needs beyond an Item: a width ceiling and a tighter
   // measure. Item brings the 28px box, the radius, the fill when selected,
-  // the inline padding, and the ellipsis on a string label.
+  // and the inline padding; the label's one-line Text brings the ellipsis.
   tab: {
     // Item spaces a list row, where 8px either side of the label is right
     // because the rows are stacked and the eye reads down a column. A tab is
@@ -859,7 +896,7 @@ const styles = stylex.create({
     // A floor, so a crowded strip scrolls instead of grinding every tab down
     // to an unreadable sliver. Enough for the mark, a few characters and the
     // close; past it the strip's own overflow takes over.
-    minWidth: 96,
+    minWidth: TAB_MIN_WIDTH,
   },
   // Item marks a selected row with --color-accent-muted, which this editor's
   // theme resolves to #262626 in dark — the exact colour of the header bar
@@ -1234,10 +1271,11 @@ function ItemAction({
  *
  * An open document is the same kind of thing as a layer: a name with a mark
  * in front of it and an action behind, which is why this is the same Item
- * the rail is built from rather than a tab. Item ellipsizes a string label
- * on its own, so the width ceiling below is the only thing left to say, and
- * it ignores a click that lands on a nested button — that is what stops the
- * close from also switching to the document it is closing.
+ * the rail is built from rather than a tab. Its one-line Text label
+ * ellipsizes the name on its own, so the width ceiling below is the only
+ * thing left to say, and it ignores a click that lands on a nested button —
+ * that is what stops the close from also switching to the document it is
+ * closing.
  *
  * Not TabList: a Tab marks the open one with an underline rather than a
  * fill, sizes itself to its label with no way to cap it from out here, and
@@ -1263,7 +1301,13 @@ function DocumentTab({
 
   return (
     <Item
-      label={tab.name}
+      // A one-line Text truncates the name like Item's own string label, and
+      // shows the full name in a tooltip only when it is cut.
+      label={
+        <Text type="body" color="inherit" maxLines={1}>
+          {tab.name}
+        </Text>
+      }
       density="compact"
       isSelected={isActive}
       onClick={onSelect}
@@ -1659,10 +1703,36 @@ function ShadowFields({
 // =============================================================================
 
 export default function CanvasEditor() {
+  const showToast = useToast();
+  // Demo only: replace these toasts with the calls that perform each action.
+  const demo = (body: string, uniqueID: string) => showToast({body, uniqueID});
   const [layers, setLayers] = useState(INITIAL_LAYERS);
   const [selectedID, setSelectedID] = useState('headline');
   const [panel, setPanel] = useState('layers');
   const [zoom, setZoom] = useState('0.4');
+  // When 40% is too wide for the canvas, open on the largest zoom step whose
+  // artboard fits it, the way a design tool fits a document on open. The
+  // canvas is measured once, when it attaches; after that, zoom is the
+  // user's to change.
+  const attachCanvas = useCallback((canvas: HTMLDivElement | null) => {
+    if (canvas == null || canvas.clientWidth <= 0) {
+      return;
+    }
+    const {paddingInlineStart, paddingInlineEnd} = getComputedStyle(canvas);
+    const room =
+      canvas.clientWidth -
+      parseFloat(paddingInlineStart) -
+      parseFloat(paddingInlineEnd);
+    setZoom(current => {
+      if (FRAME.width * Number(current) <= room) {
+        return current;
+      }
+      const fitting = ZOOM_OPTIONS.filter(
+        option => FRAME.width * Number(option.value) <= room,
+      );
+      return (fitting.at(-1) ?? ZOOM_OPTIONS[0]).value;
+    });
+  }, []);
 
   // The picker is presentational here: a template has no upload endpoint to
   // post to, and swapping the artboard for a local object URL would leave the
@@ -1980,7 +2050,11 @@ export default function CanvasEditor() {
                     paddingInline={2}
                     paddingBlock={1}
                     isScrollable
-                    maxWidth={`calc(100cqw - ${TAB_STRIP_RESERVE}px)`}
+                    // Never narrower than one tab and the strip's own
+                    // padding: below that the open tab's close
+                    // scrolls out of the strip, under the controls after it.
+                    // FOLD_SAVE_NOTE gives this floor its room.
+                    maxWidth={`max(${TAB_MIN_WIDTH + TAB_STRIP_PADDING}px, calc(100cqw - ${TAB_STRIP_RESERVE}px))`}
                     xstyle={styles.tabStrip}>
                     {tabs.map((tab, index) => {
                       // Tabs are all one width, so the rule marks a boundary
@@ -2031,8 +2105,11 @@ export default function CanvasEditor() {
                     icon={<Icon icon={Plus} size={ICON} color="secondary" />}
                   />
                 </HStack>
-                <HStack gap={3} vAlign="center">
-                  <Text type="supporting" color="secondary">
+                <HStack gap={3} vAlign="center" xstyle={styles.headerTrail}>
+                  <Text
+                    type="supporting"
+                    color="secondary"
+                    xstyle={styles.foldsAtSaveNote}>
                     Saved · 2 min ago
                   </Text>
                   <DropdownMenu
@@ -2050,7 +2127,8 @@ export default function CanvasEditor() {
             </LayoutHeader>
           }
           content={
-            <LayoutContent padding={0}>
+            <LayoutContent role="main" padding={0}>
+              <VisuallyHidden as="h1">Canvas editor</VisuallyHidden>
               <Layout
                 height="fill"
                 start={
@@ -2144,13 +2222,17 @@ export default function CanvasEditor() {
                         // over the backdrop rather than sitting on the sill.
                         padding={4}
                         content={
-                          <LayoutContent padding={6}>
+                          <LayoutContent padding={6} ref={attachCanvas}>
                             <HStack
                               width="max-content"
                               height="max-content"
                               minHeight="100%"
                               xstyle={styles.canvasStage}>
+                              {/* The artboard is a physical coordinate space:
+                                  layers sit at x/y from its top-left corner in
+                                  every reading direction. */}
                               <Card
+                                dir="ltr"
                                 padding={0}
                                 elevation="med"
                                 width={FRAME.width * scale}
@@ -2262,19 +2344,39 @@ export default function CanvasEditor() {
                                       <>
                                         <IconButton
                                           label="Undo"
+                                          onClick={() =>
+                                            demo(
+                                              'Demo: the last change would be undone here',
+                                              'undo',
+                                            )
+                                          }
                                           tooltip="Undo"
                                           variant="ghost"
                                           icon={
-                                            <Icon icon={Undo2} size={ICON} />
+                                            <Icon
+                                              icon={Undo2}
+                                              size={ICON}
+                                              xstyle={rtlStyles.mirror}
+                                            />
                                           }
                                           xstyle={styles.toolBarControl}
                                         />
                                         <IconButton
                                           label="Redo"
+                                          onClick={() =>
+                                            demo(
+                                              'Demo: the change would be redone here',
+                                              'redo',
+                                            )
+                                          }
                                           tooltip="Redo"
                                           variant="ghost"
                                           icon={
-                                            <Icon icon={Redo2} size={ICON} />
+                                            <Icon
+                                              icon={Redo2}
+                                              size={ICON}
+                                              xstyle={rtlStyles.mirror}
+                                            />
                                           }
                                           xstyle={styles.toolBarControl}
                                         />
@@ -2284,6 +2386,12 @@ export default function CanvasEditor() {
                                         />
                                         <IconButton
                                           label="Add frame"
+                                          onClick={() =>
+                                            demo(
+                                              'Demo: a new frame would be added here',
+                                              'add-frame',
+                                            )
+                                          }
                                           tooltip="Add frame"
                                           variant="ghost"
                                           icon={
@@ -2293,6 +2401,12 @@ export default function CanvasEditor() {
                                         />
                                         <IconButton
                                           label="Add text"
+                                          onClick={() =>
+                                            demo(
+                                              'Demo: a new text layer would be added here',
+                                              'add-text',
+                                            )
+                                          }
                                           tooltip="Add text"
                                           variant="ghost"
                                           icon={
@@ -2302,6 +2416,12 @@ export default function CanvasEditor() {
                                         />
                                         <IconButton
                                           label="Add image"
+                                          onClick={() =>
+                                            demo(
+                                              'Demo: an image picker would open here',
+                                              'add-image',
+                                            )
+                                          }
                                           tooltip="Add image"
                                           variant="ghost"
                                           icon={
@@ -2384,6 +2504,12 @@ export default function CanvasEditor() {
                             />
                             <IconButton
                               label="Set padding per side"
+                              onClick={() =>
+                                demo(
+                                  'Demo: padding fields for each side would open here',
+                                  'set-padding-per-side',
+                                )
+                              }
                               tooltip="Per side"
                               size="sm"
                               variant="ghost"
@@ -2433,6 +2559,12 @@ export default function CanvasEditor() {
                             />
                             <IconButton
                               label="Set radius per corner"
+                              onClick={() =>
+                                demo(
+                                  'Demo: radius fields for each corner would open here',
+                                  'set-radius-per-corner',
+                                )
+                              }
                               tooltip="Per corner"
                               size="sm"
                               variant="ghost"
@@ -2515,6 +2647,12 @@ export default function CanvasEditor() {
                           <InspectorRow label="Flip" hAlign="end">
                             <IconButton
                               label="Flip horizontally"
+                              onClick={() =>
+                                demo(
+                                  'Demo: the layer would flip horizontally here',
+                                  'flip-horizontally',
+                                )
+                              }
                               tooltip="Flip horizontally"
                               size="sm"
                               variant="ghost"
@@ -2522,6 +2660,12 @@ export default function CanvasEditor() {
                             />
                             <IconButton
                               label="Flip vertically"
+                              onClick={() =>
+                                demo(
+                                  'Demo: the layer would flip vertically here',
+                                  'flip-vertically',
+                                )
+                              }
                               tooltip="Flip vertically"
                               size="sm"
                               variant="ghost"

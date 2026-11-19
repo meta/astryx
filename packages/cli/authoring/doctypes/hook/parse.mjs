@@ -5,7 +5,7 @@
  * `../_schema.mjs`; consumers call `parseHook` or use `parseDoc`.
  */
 
-import {FunctionDocKindSchema} from '../_schema.mjs';
+import {docSchemas} from '../_schema.mjs';
 import {formatZodError} from '../../_shared/errors.mjs';
 
 /** @typedef {import('../types.js').HookDoc} HookDoc */
@@ -18,7 +18,7 @@ import {formatZodError} from '../../_shared/errors.mjs';
  * @returns {HookDoc}
  */
 export function parseHook(input, label = 'function doc') {
-  const result = FunctionDocKindSchema.safeParse(input);
+  const result = docSchemas().FunctionDocKindSchema.safeParse(input);
   if (!result.success) {
     throw new Error(formatZodError(label, result.error));
   }

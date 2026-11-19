@@ -18,10 +18,17 @@
  * - /packages/cli/assets/templates/blocks/components/Hooks/useKeyboardHintHookUsage.tsx
  */
 
-import React, {useCallback, useEffect, useRef, type ReactNode} from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Kbd} from '../Kbd';
 import {useLayer} from '../Layer/useLayer';
+import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -49,8 +56,11 @@ export interface UseKeyboardHintOptions {
   orientation?: KeyboardHintOrientation;
 
   /**
-   * Milliseconds before the hint auto-dismisses after appearing.
-   * @default 3000
+   * Milliseconds before the hint dismisses itself after appearing. Leave it
+   * unset: by default the hint stays until the person presses an arrow key or
+   * Escape, or moves focus out of the group. A time limit can remove the hint
+   * before someone has read it (WCAG 1.4.13).
+   * @default undefined (no time limit)
    */
   dismissAfterMs?: number;
 
@@ -85,7 +95,8 @@ export interface UseKeyboardHintReturn {
 
   /**
    * Attach to the composite container's `onKeyDown`. Dismisses the hint on the
-   * first arrow press (the user discovered the interaction).
+   * first arrow press (the user discovered the interaction). Escape dismisses
+   * it through the shared layer dismissal stack, without moving focus.
    */
   onKeyDown: (e: React.KeyboardEvent) => void;
 }
@@ -116,8 +127,8 @@ const ARROW_HINT_KEYS: Record<
  *
  * The hint renders in the top layer (popover="manual") and is CSS-anchor-
  * positioned to the currently focused element, so it is never clipped by
- * overflow containers. It auto-dismisses on first arrow press, timeout, or
- * blur, and does not re-show for that instance.
+ * overflow containers. It stays until the first arrow press, Escape, or blur,
+ * and does not re-show for that instance.
  *
  * @example
  * ```
@@ -133,7 +144,7 @@ export function useKeyboardHint(
 ): UseKeyboardHintReturn {
   const {
     orientation = 'horizontal',
-    dismissAfterMs = 3000,
+    dismissAfterMs,
     isEnabled = true,
   } = options;
 
@@ -141,6 +152,7 @@ export function useKeyboardHint(
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dismissedRef = useRef(false);
   const isVisibleRef = useRef(false);
+  const anchorRef = useRef<HTMLElement | null>(null);
   const layerAnchorRef = useRef<(el: HTMLElement | null) => void>(() => {});
 
   const clearDismissTimeout = useCallback(() => {
@@ -150,12 +162,17 @@ export function useKeyboardHint(
     }
   }, []);
 
+  // Registered on the layer stack only while the hint shows, so it registers
+  // after its anchor is set and ranks in the anchor's document.
+  const [isShowing, setIsShowing] = useState(false);
+
   const handleLayerShow = useCallback(() => {
     isVisibleRef.current = true;
   }, []);
 
   const handleLayerHide = useCallback(() => {
     isVisibleRef.current = false;
+    setIsShowing(false);
     clearDismissTimeout();
     layerAnchorRef.current(null);
   }, [clearDismissTimeout]);
@@ -183,16 +200,29 @@ export function useKeyboardHint(
         return;
       }
 
+      anchorRef.current = anchor;
       layerAnchorRef.current(anchor);
+      setIsShowing(true);
       layer.show();
 
       clearDismissTimeout();
-      timeoutRef.current = setTimeout(() => {
-        dismiss();
-      }, dismissAfterMs);
+      if (dismissAfterMs != null) {
+        timeoutRef.current = setTimeout(() => {
+          dismiss();
+        }, dismissAfterMs);
+      }
     },
     [clearDismissTimeout, dismiss, dismissAfterMs, isEnabled, layer],
   );
+
+  // Registered while the hint shows, in its anchor's document. The hint's
+  // host is a layer, so a hint in a dialog ranks above that dialog.
+  useLayerDismissal({
+    isActive: isShowing,
+    isPresent: () => isVisibleRef.current,
+    onDismiss: dismiss,
+    getContainer: () => anchorRef.current,
+  });
 
   // Releases the dismiss timer and the layer anchor on unmount.
   useEffect(

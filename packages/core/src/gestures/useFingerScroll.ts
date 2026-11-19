@@ -55,14 +55,14 @@ export interface UseFingerScrollOptions {
 
 /**
  * Watch a scroller's finger scrolls. Pass a ref to a scrolling element, or
- * the document for the page's own scroll. Returns a reader, stable across
+ * the document for the page's own scroll; a ref may also name the document. Returns a reader, stable across
  * renders: `true` while the scroller's scroll is a finger's. Given a time on
  * the page's clock (`performance.now()`, as an IntersectionObserver entry's
  * `time` is), it reads whether the scroll at that time was a finger's.
  * Internal: not exported from the package.
  */
 export function useFingerScroll(
-  scroller: RefObject<Element | null> | Document,
+  scroller: RefObject<Element | Document | null> | Document,
   {onEnd}: UseFingerScrollOptions = {},
 ): (at?: number) => boolean {
   /** The node the watch is on now, for the reader. */

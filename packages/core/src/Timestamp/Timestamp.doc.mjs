@@ -121,13 +121,14 @@ export const docs = {
       {
         slot: 'timestamp-copy',
         description: 'The copy button icon on a hover card row.',
-        fallback: '`copy`; `check` while copied',
+        fallback:
+          '`copy`; `check` while copied; `close` while a failed copy shows',
         state: [
           {
             name: 'copied',
             type: 'boolean',
             description:
-              'True while the copied feedback shows after a successful copy.',
+              'True while the copied feedback shows after a successful copy. False while a failed copy shows, so a theme-mapped slot keeps its rest glyph then.',
           },
         ],
         whenNull:

@@ -72,6 +72,9 @@ import {
   useChatNewMessages,
   useChatStreamScroll,
 } from '@astryxdesign/core/Chat';
+import {useToast} from '@astryxdesign/core/Toast';
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
+import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 
 // StackItem has no wrapping basis; Stack has no body variant.
 // LayoutContent has no height cap; keep the message viewport bounded.
@@ -203,6 +206,8 @@ function ShowcaseNavigation() {
     width: 400,
     'aria-label': 'Sign in',
   });
+  // A new key on each open mounts a new form, so a reopened dialog starts empty.
+  const signInOpens = useRef(0);
   return (
     <>
       <TopNav
@@ -249,7 +254,14 @@ function ShowcaseNavigation() {
             <Button
               label="Sign in"
               variant="primary"
-              onClick={() => signIn.show(<SignInForm onClose={signIn.hide} />)}
+              onClick={() =>
+                signIn.show(
+                  <SignInForm
+                    key={++signInOpens.current}
+                    onClose={signIn.hide}
+                  />,
+                )
+              }
             />
           </HStack>
         }
@@ -260,8 +272,7 @@ function ShowcaseNavigation() {
 }
 
 /** Sign in opens a real dialog, so a theme's header, close control, fields
- * and footer buttons can be reviewed together. Its content mounts on first
- * open, so the page carries no hidden duplicate fields. */
+ * and footer buttons can be reviewed together. */
 function SignInForm({onClose}: {onClose: () => void}) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -624,6 +635,7 @@ const SUGGESTED_QUESTIONS = [
 ];
 
 function ChatCard() {
+  const showToast = useToast();
   const scrollRef = useRef<HTMLDivElement>(null);
   const {lock, isLocked, scrollIfLocked} = useChatStreamScroll({scrollRef});
   const {contentRef} = useChatNewMessages({isLocked, onResize: scrollIfLocked});
@@ -660,6 +672,13 @@ function ChatCard() {
                   label="Export conversation"
                   tooltip="Export conversation"
                   icon={<Icon icon={Download} size="sm" />}
+                  onClick={() =>
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: 'Demo: the conversation would export here',
+                      uniqueID: 'export-chat',
+                    })
+                  }
                 />
                 <Button
                   variant="ghost"
@@ -668,6 +687,13 @@ function ChatCard() {
                   label="Close chat"
                   tooltip="Close chat"
                   icon={<Icon icon={X} size="sm" />}
+                  onClick={() =>
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: 'Demo: the chat would close here',
+                      uniqueID: 'close-chat',
+                    })
+                  }
                 />
               </HStack>
             </HStack>
@@ -700,6 +726,13 @@ function ChatCard() {
                     label="Attach"
                     tooltip="Attach"
                     icon={<Icon icon={Plus} size="sm" />}
+                    onClick={() =>
+                      // Demo only: replace this toast with the call that performs the action.
+                      showToast({
+                        body: 'Demo: a file picker would open here',
+                        uniqueID: 'attach',
+                      })
+                    }
                   />
                 }
                 sendActions={
@@ -710,6 +743,13 @@ function ChatCard() {
                     label="Voice input"
                     tooltip="Voice input"
                     icon={<Icon icon={Mic} size="sm" />}
+                    onClick={() =>
+                      // Demo only: replace this toast with the call that performs the action.
+                      showToast({
+                        body: 'Demo: voice input would start here',
+                        uniqueID: 'voice',
+                      })
+                    }
                   />
                 }
               />
@@ -1020,7 +1060,7 @@ function ItemCell({
 }) {
   const thumbnailSrc = row.imageKey ? images[row.imageKey] : undefined;
   return (
-    <HStack gap={3} vAlign="center">
+    <HStack gap={3} vAlign="center" wrap="wrap">
       <StackItem>
         <VStack width={40}>
           {thumbnailSrc ? (
@@ -1036,7 +1076,9 @@ function ItemCell({
           )}
         </VStack>
       </StackItem>
-      <StackItem size="fill">
+      {/* The basis holds the longest product word, so in a narrow column the
+          name moves under the thumbnail instead of breaking inside a word. */}
+      <StackItem size="fill" style={{flexBasis: '7em'}}>
         <VStack gap={0}>
           <Text type="body" weight="bold">
             {row.name}
@@ -1061,18 +1103,61 @@ function TagsCell({row}: {row: InventoryRow}) {
 }
 
 function ActionsCell() {
+  const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
   return (
-    <MoreMenu
-      label="Row actions"
-      size="sm"
-      items={[
-        {label: 'Edit'},
-        {label: 'Duplicate'},
-        {label: 'Move to…'},
-        {type: 'divider'},
-        {label: 'Delete'},
-      ]}
-    />
+    <>
+      <MoreMenu
+        label="Row actions"
+        size="sm"
+        // Demo only: replace these toasts with the calls that perform each action.
+        items={[
+          {
+            label: 'Edit',
+            onClick: () =>
+              showToast({
+                body: 'Demo: edit would happen here',
+                uniqueID: 'row-edit',
+              }),
+          },
+          {
+            label: 'Duplicate',
+            onClick: () =>
+              showToast({
+                body: 'Demo: duplicate would happen here',
+                uniqueID: 'row-duplicate',
+              }),
+          },
+          {
+            label: 'Move to…',
+            onClick: () =>
+              showToast({
+                body: 'Demo: moving the item would happen here',
+                uniqueID: 'row-move-to',
+              }),
+          },
+          {type: 'divider'},
+          {
+            label: 'Delete',
+            onClick: () =>
+              confirm.show({
+                title: 'Delete this item?',
+                description: "This demo won't delete anything.",
+                actionLabel: 'Delete',
+                onAction: () => {
+                  confirm.hide();
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: the item would be deleted here',
+                    uniqueID: 'row-delete',
+                  });
+                },
+              }),
+          },
+        ]}
+      />
+      {confirm.element}
+    </>
   );
 }
 
@@ -1083,6 +1168,7 @@ function InventoryCard({
   images: Record<string, string>;
   inventory: InventoryRow[];
 }) {
+  const showToast = useToast();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string | null>(null);
   const [location, setLocation] = useState<string | null>(null);
@@ -1127,6 +1213,13 @@ function InventoryCard({
             variant="primary"
             size="sm"
             icon={<Icon icon={Plus} size="sm" />}
+            onClick={() =>
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({
+                body: 'Demo: a new item form would open here',
+                uniqueID: 'add-item',
+              })
+            }
           />
         </HStack>
         <Divider variant="subtle" />
@@ -1197,6 +1290,13 @@ function InventoryCard({
                 label="List view"
                 tooltip="List view"
                 icon={<List size={18} />}
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: the list view would show here',
+                    uniqueID: 'list-view',
+                  })
+                }
               />
               <Button
                 variant="ghost"
@@ -1205,6 +1305,13 @@ function InventoryCard({
                 label="Grid view"
                 tooltip="Grid view"
                 icon={<LayoutGrid size={18} />}
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: the grid view would show here',
+                    uniqueID: 'grid-view',
+                  })
+                }
               />
             </HStack>
           </HStack>
@@ -1223,7 +1330,7 @@ function InventoryCard({
             columns={[
               {
                 key: 'select',
-                header: '',
+                header: <VisuallyHidden>Select</VisuallyHidden>,
                 width: pixel(64),
                 renderCell: row => (
                   <CheckboxInput
@@ -1237,7 +1344,7 @@ function InventoryCard({
               {
                 key: 'item',
                 header: 'Item',
-                width: proportional(3, {minWidth: 80}),
+                width: proportional(3, {minWidth: 160}),
                 renderCell: row => <ItemCell row={row} images={images} />,
               },
               {
@@ -1261,7 +1368,7 @@ function InventoryCard({
               },
               {
                 key: 'actions',
-                header: '',
+                header: <VisuallyHidden>Actions</VisuallyHidden>,
                 width: pixel(64),
                 align: 'end',
                 renderCell: () => <ActionsCell />,

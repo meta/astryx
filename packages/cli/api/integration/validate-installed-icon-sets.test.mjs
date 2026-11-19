@@ -2,9 +2,11 @@
 
 /**
  * @file `validateInstalledIntegration` reads an installed package's icon sets
- * only when the project opts in with `experimental.iconSet` (spec:AST-017
- * FR27, spec:AST-084 FR0, FR17); `iconSets: true` (pack-check's packed copy)
- * checks them whatever the project says.
+ * only where the icon feature gate is on (spec:AST-017 FR27, spec:AST-084
+ * FR0, FR17): the project loads an icon-set package or sets
+ * `experimental.iconSet`. The package being validated is such a package, so
+ * its sets are checked with or without the key; `iconSets` (pack-check's
+ * packed copy) decides whatever the project says.
  */
 
 import * as fs from 'node:fs';
@@ -39,14 +41,15 @@ const iconCodes = result =>
   result.issues.map(issue => issue.code).filter(code => /icon/u.test(code));
 
 describe('an installed package with icon sets', () => {
-  it('is checked for them only when the project sets experimental.iconSet', async () => {
+  it('is checked for them with or without experimental.iconSet: the installed package turns icon features on', async () => {
     const without = await validateInstalledIntegration(
       '@acme/glyphs',
       project(false),
     );
-    expect(iconCodes(without)).toEqual([]);
-    expect(without).not.toHaveProperty('iconSets');
-    expect(without.integration?.iconSets).toBeUndefined();
+    expect(iconCodes(without)).toContain('icon_builtin_definition_missing');
+    expect(without.iconSets).toEqual([
+      expect.objectContaining({set: 'glyphs'}),
+    ]);
 
     const opted = await validateInstalledIntegration(
       '@acme/glyphs',
@@ -54,6 +57,17 @@ describe('an installed package with icon sets', () => {
     );
     expect(iconCodes(opted)).toContain('icon_builtin_definition_missing');
     expect(opted.iconSets).toEqual([expect.objectContaining({set: 'glyphs'})]);
+  });
+
+  it('is not checked with iconSets: false, and its root is left out', async () => {
+    const off = await validateInstalledIntegration(
+      '@acme/glyphs',
+      project(false),
+      {iconSets: false},
+    );
+    expect(iconCodes(off)).toEqual([]);
+    expect(off).not.toHaveProperty('iconSets');
+    expect(off.integration?.iconSets).toBeUndefined();
   });
 
   it('is checked with iconSets: true whatever the project says', async () => {

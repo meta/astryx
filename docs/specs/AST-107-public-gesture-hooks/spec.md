@@ -33,7 +33,11 @@ affects_consumer_docs:
 
 ```json
 {
-  "paths": ["packages/core/src/hooks/**"]
+  "paths": [
+    "packages/core/src/hooks/**",
+    "packages/core/src/dragToSnapPoints/createDragToSnapPoints.ts",
+    "packages/core/src/gestures/createPanGesture.ts"
+  ]
 }
 ```
 
@@ -182,7 +186,18 @@ onSettle}) → {settleTo(index), destroy}`, and `createAnimator(element) →
   only for a job the public layer does not expose; those jobs are listed as
   known public-API gaps in `architecture:react-component-runtime` INV13.
   `createReorderable`'s plain-element attach path (`spec:AST-103`) covers
-  collections that are not List.
+  collections that are not List. The internals beneath the public pan and
+  snap-point drag are `createPan`, in `createPanGesture.ts`, and
+  `createSnapDrag`, in `createDragToSnapPoints.ts`. No package entry exports
+  them. `createPan` takes the recognizer's own options: which pointers and
+  scrolls start the drag, its claim distance and a gate on its begin. Its
+  reports add the claim's travel and what drives the drag. `createPanGesture`
+  has none of these: it starts on every pointer and no scroll.
+  `createSnapDrag` takes a model of where a drag draws its element and where
+  a release lands. It also takes the pan's own options and draws into a
+  custom property when given one. `createDragToSnapPoints` has neither: it
+  follows the finger one for one, draws `translate`, and lands each release
+  by Core's one release policy.
 
 - **FR8 — A headless context menu.** `createContextMenu(element, {items | render, label?, isDisabled?,
 onOpenChange?, presentation?}) → {open(at?), close(), destroy()}`

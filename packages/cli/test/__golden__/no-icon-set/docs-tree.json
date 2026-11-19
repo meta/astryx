@@ -117,6 +117,7 @@
     "sections": [
       "start-from-the-generated-doc",
       "explain-when-to-use-it",
+      "choose-keywords",
       "document-every-public-prop",
       "add-focused-examples",
       "read-the-result"
@@ -167,6 +168,7 @@
       "keep-within-the-limits",
       "see-what-agents-read",
       "refresh-the-block",
+      "ship-a-skill",
       "global-mode"
     ],
     "mentions": []
@@ -564,6 +566,7 @@
       "debug-event",
       "gap-report-handler",
       "discover-source",
+      "example-scope",
       "codemod",
       "provider-identity",
       "authored-doc-graph-fields",
@@ -633,6 +636,7 @@
     "sections": [
       "pick-a-check",
       "run-every-check-in-ci",
+      "get-ready-to-list",
       "what-integration-verify-does"
     ],
     "mentions": []
@@ -1240,13 +1244,23 @@
     "type": "docs.detail",
     "sections": [
       "design-tokens",
-      "stylex-setup"
+      "stylex-setup",
+      "nextjs-webpack"
     ],
-    "mentions": []
+    "mentions": [
+      "/** @type {import('next').NextConfig} */\nconst nextConfig = {\n  experimental: {\n    optimizePackageImports: ['@astryxdesign/core'],\n  },\n};\n\nexport default nextConfig;",
+      "If your Next.js app builds with webpack (`next build --webpack`), add `@astryxdesign/core` to `experimental.optimizePackageImports`."
+    ]
   },
   "theme": {
     "type": "docs.detail",
     "sections": [
+      "make-or-change",
+      "look-after-each-change",
+      "denser-or-roomier",
+      "one-kind-of-part",
+      "no-app-yet",
+      "share-with-other-teams",
       "quick-start",
       "creating-a-custom-theme",
       "icon-sizes",
