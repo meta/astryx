@@ -165,6 +165,10 @@ function HeavyCommitStack() {
   const standalone =
     typeof navigator !== 'undefined' &&
     (navigator as Navigator & {standalone?: boolean}).standalone === true;
+  // With Reduce Motion on, the push cross-fades, so every frame reads 100%.
+  const reducedMotion =
+    typeof window !== 'undefined' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const push = (next: HeavyMode) => {
     setMode(next);
     setReadout([]);
@@ -212,7 +216,7 @@ function HeavyCommitStack() {
           pointerEvents: 'none',
           zIndex: 10,
         }}>
-        {`standalone ${String(standalone)} mode ${mode}\n${readout.join('\n')}`}
+        {`standalone ${String(standalone)} reduce-motion ${String(reducedMotion)} mode ${mode}\n${readout.join('\n')}`}
       </pre>
     </div>
   );
