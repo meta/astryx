@@ -21,16 +21,13 @@
 import {
   compositeOver,
   contrastRatio,
-  hexToRgbTriple as rgbOf,
-  rgbTripleToHex as hexOf,
+  hexToLinearRgb,
   hexToOklch,
+  linearRgbToOklab,
   maxOklchChroma,
   oklchClampedHex,
-  ratioDown,
 } from './color';
 import {perceptualDelta} from './generator';
-
-export {ratioDown};
 
 type Mode = 'light' | 'dark';
 /** A shade of a family: its stop and color. */
@@ -238,6 +235,14 @@ function hueLean(
   const a = toward(accent, 0.15, LEAN_TO_ACCENT);
   const n = toward(neutral, 0.1, LEAN_TO_NEUTRAL);
   return hue => (Math.round(hue + a(hue) + n(hue)) + 360) % 360;
+}
+
+/**
+ * A contrast ratio to two decimals, cut down and never rounded up, so a
+ * pair just under the bar never prints as meeting it.
+ */
+export function ratioDown(ratio: number): number {
+  return Math.floor(ratio * 100 + 1e-9) / 100;
 }
 
 /**
@@ -764,12 +769,10 @@ export function deriveStatusColors({
     const tintSeen = (m: Mode) =>
       muted[m].alpha
         ? grounds(m).map(g =>
-            hexOf(
-              compositeOver(
-                rgbOf(muted[m].color.slice(0, 7)),
-                parseInt(muted[m].alpha ?? 'ff', 16) / 255,
-                rgbOf(g),
-              ),
+            compositeOver(
+              muted[m].color.slice(0, 7),
+              muted[m].alpha ?? 'ff',
+              g,
             ),
           )
         : [muted[m].color];
@@ -865,8 +868,6 @@ export interface DeriveCodeInput {
   modes: ReadonlyArray<Mode>;
   /** The page colors code sits on, opaque hex. */
   grounds: (m: Mode) => string[];
-  /** The code background the theme sets itself in a mode (opaque hex), which code colors read on instead of the neutral's. */
-  codeGround?: (m: Mode) => string | null;
   wanted?: (token: string) => boolean;
 }
 
@@ -881,7 +882,6 @@ export function deriveCodeColors({
   stops,
   modes,
   grounds,
-  codeGround = () => null,
   wanted = () => true,
 }: DeriveCodeInput): {
   tokens: Record<string, DerivedToken>;
@@ -928,12 +928,7 @@ export function deriveCodeColors({
     const refs = {} as Record<Mode, Stop>;
     let ok = true;
     for (const m of modes) {
-      // A code background the theme sets itself is the one code shows on.
-      const own = codeGround(m);
-      const on = [
-        ...(own ? [own] : ground[m] ? [ground[m].color] : []),
-        ...grounds(m),
-      ];
+      const on = [...(ground[m] ? [ground[m].color] : []), ...grounds(m)];
       const s0 = near(m === 'light' ? light : dark);
       const order = [...sorted].sort(
         (a, b) =>
@@ -984,26 +979,6 @@ const CVD_SEVERITY = 0.6;
 /** Two fills closer than this (OKLab distance) read as one color. */
 const CVD_ALIKE = 0.06;
 
-/** A hex color's linear-light channels. */
-function linearRgb(hex: string): number[] {
-  return [1, 3, 5].map(i => {
-    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
-    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  });
-}
-
-/** OKLab of linear-light channels. */
-function oklabOfLinear([r, g, b]: number[]): number[] {
-  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
-  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
-  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
-  return [
-    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
-    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
-    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
-  ];
-}
-
 /**
  * The pairs of status fills that someone red-weak or green-weak may not
  * tell apart: their colors as that vision sees them sit closer than
@@ -1027,15 +1002,14 @@ export function cvdClashes(
       ),
     );
     const seen = (hex: string) => {
-      const lin = linearRgb(hex);
-      return oklabOfLinear(
-        W.map(row =>
-          Math.min(
-            1,
-            Math.max(0, row[0] * lin[0] + row[1] * lin[1] + row[2] * lin[2]),
-          ),
+      const lin = hexToLinearRgb(hex);
+      const [r, g, b] = W.map(row =>
+        Math.min(
+          1,
+          Math.max(0, row[0] * lin[0] + row[1] * lin[1] + row[2] * lin[2]),
         ),
       );
+      return linearRgbToOklab(r, g, b);
     };
     for (let i = 0; i < roles.length; i++) {
       for (let j = i + 1; j < roles.length; j++) {
