@@ -2453,11 +2453,9 @@ try {
     logs,
     script: script?.code ?? null,
     scriptModules: script?.modules ?? 0,
-    // Whether the script's module graph or a package stylesheet a module
-    // imports is Astryx's; null when no script was built.
-    astryx: script
-      ? script.astryx || packageCss.some(({spec}) => spec.startsWith('@astryxdesign/'))
-      : null,
+    // Whether the script's module graph holds an Astryx module; null when no
+    // script was built. The stylesheets it imports are read by the render.
+    astryx: script ? script.astryx : null,
   });
 } catch (e) {
   if (e !== null) classify(e);

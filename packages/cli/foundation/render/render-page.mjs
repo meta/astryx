@@ -51,6 +51,7 @@ import {endNote, headerNote} from './file-header.mjs';
 import {textRuns} from './markup-edits.mjs';
 import {childrenReader, dropperOf} from './dropped-text.mjs';
 import {findNodeModulesPackage, isInside} from '../fs/paths.mjs';
+import {packageOf} from '../doc-compiler/source.mjs';
 
 /** How long one page may take to render before it is stopped. */
 export const RENDER_TIMEOUT_MS = 60_000;
@@ -249,7 +250,7 @@ export function importParams(params) {
  * @param {string} url the import's address, as written
  * @param {string} file the importing stylesheet's path
  * @param {ServedSet | null} served
- * @returns {{kind: 'remote' | 'preprocessed' | 'missing'} | {kind: 'sheet', target: string, fromPackage: boolean}}
+ * @returns {{kind: 'remote'} | {kind: 'preprocessed'} | {kind: 'missing'} | {kind: 'sheet', target: string, fromPackage: boolean}}
  */
 function resolveImport(url, file, served) {
   if (/^([a-z]+:)?\/\//i.test(url)) return {kind: 'remote'};
@@ -265,24 +266,29 @@ function resolveImport(url, file, served) {
 }
 
 /**
- * Whether the page's own stylesheets reach an Astryx package's stylesheet
- * through their `@import`s, followed as {@link expandImports} follows them
- * (project and package stylesheets alike). A package import counts by the
- * package it names, as the page's script counts a package stylesheet.
- * @param {{file: string, css: string}[]} sheets
+ * Whether one of the stylesheets a page brings in is an Astryx package's, or
+ * reaches one through its `@import`s, followed as {@link expandImports}
+ * follows them. A stylesheet counts by the package that holds its file, as a
+ * module counts in the page's script; an import that resolves to no file
+ * counts by the package it names.
+ * @param {string[]} files the page's own stylesheets and the package
+ *   stylesheets its script imports
  * @param {ServedSet | null} served
  * @returns {boolean}
  */
-function importsAstryxSheet(sheets, served) {
+function reachesAstryxSheet(files, served) {
   /** @type {Set<string>} */
   const seen = new Set();
-  /** @param {string} file @param {string} css @returns {boolean} */
-  const visit = (file, css) => {
-    if (seen.has(file) || !/@import/i.test(css)) return false;
+  /** @param {string} file @returns {boolean} */
+  const visit = file => {
+    if (seen.has(file)) return false;
     seen.add(file);
+    if (packageOf(file).startsWith('@astryxdesign/')) return true;
     /** @type {import('postcss').Root} */
     let root;
     try {
+      const css = fs.readFileSync(file, 'utf8');
+      if (!/@import/i.test(css)) return false;
       root = postcss.parse(css, {from: file});
     } catch {
       return false;
@@ -292,16 +298,12 @@ function importsAstryxSheet(sheets, served) {
       const url = importParams(rule.params)?.url;
       if (found || !url) return;
       const to = resolveImport(url, file, served);
-      if (to.kind === 'remote' || to.kind === 'preprocessed') return;
-      if (/^@astryxdesign\//.test(url.replace(/^~/, ''))) {
-        found = to.kind === 'missing' || to.fromPackage;
-        if (found) return;
-      }
-      if (to.kind === 'sheet') found = visit(to.target, fs.readFileSync(to.target, 'utf8'));
+      if (to.kind === 'sheet') found = visit(to.target);
+      else if (to.kind === 'missing') found = /^@astryxdesign\//.test(url.replace(/^~/, ''));
     });
     return found;
   };
-  return sheets.some(({file, css}) => visit(file, css));
+  return files.some(visit);
 }
 
 /**
@@ -1386,12 +1388,17 @@ export async function renderPage(entry, options = {}) {
   };
   const hasCore = addSheet('@astryxdesign/core/reset.css');
   if (hasCore) addSheet('@astryxdesign/core/astryx.css');
+  /** The package stylesheets the page's modules import. @type {string[]} */
+  const scriptSheets = [];
+  let scriptNamesAstryx = false;
   // Package stylesheets the page imports itself, such as a theme's.
   for (const {spec, from} of /** @type {{spec: string, from: string}[]} */ (
     message.packageCss ?? []
   )) {
-    if (sheets.includes(spec)) continue;
     const file = resolveServed(spec, from, served);
+    if (file) scriptSheets.push(file);
+    else if (spec.startsWith('@astryxdesign/')) scriptNamesAstryx = true;
+    if (sheets.includes(spec)) continue;
     try {
       if (!file) throw new Error('not found');
       sheets.push(spec);
@@ -1421,12 +1428,16 @@ export async function renderPage(entry, options = {}) {
 
   // A page that uses nothing from Astryx is not what the command makes: its
   // own app's build shares it. Its script's module graph (local components,
-  // re-exports and lazy imports included) and the Astryx stylesheets its own
-  // stylesheets reach decide, before any stylesheet is expanded, any asset
-  // inlined, any image fetched or anything written. A markup-only render
-  // builds no script and is not checked.
-  const ownSheets = /** @type {{file: string, css: string}[]} */ (message.importedCss ?? []);
-  if (message.astryx === false && !importsAstryxSheet(ownSheets, served)) {
+  // re-exports and lazy imports included) and the stylesheets it brings in
+  // decide, before any stylesheet is expanded, any asset inlined, any image
+  // fetched or anything written. A markup-only render builds no script and
+  // is not checked.
+  const ownSheets = /** @type {{file: string}[]} */ (message.importedCss ?? []).map(({file}) => file);
+  if (
+    message.astryx === false &&
+    !scriptNamesAstryx &&
+    !reachesAstryxSheet([...ownSheets, ...scriptSheets], served)
+  ) {
     throw new RenderError(
       'ERR_RENDER_NOT_ASTRYX',
       `${path.basename(entry)} uses no Astryx components or styles; \`astryx experimental export\` only writes pages built with Astryx. Don't add Astryx to this app to export it: share the page with the app's own build instead (for a Vite app, a single-file build); nothing was written.`,

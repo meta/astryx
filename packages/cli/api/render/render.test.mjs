@@ -460,6 +460,24 @@ describe('render(): a page that uses nothing from Astryx', () => {
     expect(exported('kitalone/page.tsx')).toBe(false);
   });
 
+  it('exports a page whose own stylesheet imports an Astryx stylesheet by its path', async () => {
+    const core = createRequire(path.join(dir, 'package.json')).resolve('@astryxdesign/core/astryx.css');
+    const rel = path.relative(path.join(dir, 'bypath'), core).split(path.sep).join('/');
+    put('bypath/globals.css', `@import '${rel}';\n`);
+    put('bypath/page.tsx', "import './globals.css';\nexport default function Page() {\n  return <p>Styled</p>;\n}\n");
+    const r = /** @type {any} */ (await render('bypath/page.tsx', {cwd: dir}));
+    expect(r.data.files).toContain('page.tsx');
+    expect(exported('bypath/page.tsx')).toBe(true);
+  });
+
+  it('refuses, naming the page, a page whose own stylesheet imports a folder', async () => {
+    fs.mkdirSync(path.join(dir, 'cssdir/styles'), {recursive: true});
+    put('cssdir/globals.css', "@import './styles';\n");
+    put('cssdir/page.tsx', "import './globals.css';\nexport default function Page() {\n  return <p>Plain</p>;\n}\n");
+    expect(await codeOf(() => render('cssdir/page.tsx', {cwd: dir}))).toBe('ERR_RENDER_NOT_ASTRYX');
+    expect(exported('cssdir/page.tsx')).toBe(false);
+  });
+
   it.each([
     [
       'a direct import',
@@ -490,6 +508,14 @@ describe('render(): a page that uses nothing from Astryx', () => {
         'pkgcss/node_modules/@rl3/theme/theme.css': "@import '@astryxdesign/core/astryx.css';\n",
         'pkgcss/globals.css': "@import '@rl3/theme/theme.css';\n",
         'pkgcss/page.tsx': "import './globals.css';\nexport default function Page() {\n  return <p>Themed</p>;\n}\n",
+      },
+    ],
+    [
+      'a package stylesheet its script imports that imports an Astryx stylesheet',
+      {
+        'scriptcss/node_modules/@rl3/theme2/package.json': JSON.stringify({name: '@rl3/theme2', version: '1.0.0'}),
+        'scriptcss/node_modules/@rl3/theme2/theme.css': "@import '@astryxdesign/core/astryx.css';\n",
+        'scriptcss/page.tsx': "import '@rl3/theme2/theme.css';\nexport default function Page() {\n  return <p>Themed</p>;\n}\n",
       },
     ],
     [
