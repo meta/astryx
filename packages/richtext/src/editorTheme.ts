@@ -50,9 +50,11 @@ const LIST_ROW_FLUSH = `calc(${spacingVars['--spacing-0']})`;
 const NESTED_LIST_SPACE = `calc(${spacingVars['--spacing-2']})`;
 const RULE_SPACE = `calc(${spacingVars['--spacing-6']})`;
 const CODE_SPACE = `calc(${spacingVars['--spacing-3']})`;
-// Core CodeBlock's header (8px, a small control, 8px) overlaps the code's
-// 12px top padding by 8px, so its code starts 8px + control + 12px down.
-const CODE_HEADER_SPACE = `calc(${spacingVars['--spacing-2']} + ${sizeVars['--size-element-sm']} + ${spacingVars['--spacing-3']})`;
+// Core CodeBlock's header (8px, a small control, 8px, taller when its label
+// wraps) overlaps the code's 12px top padding by 8px, so the code starts the
+// header's height + 4px down. CodeBlockHeaderPlugin writes the drawn header's
+// height; one row is the fallback.
+const CODE_HEADER_SPACE = `calc(var(--_richtext-code-header-block-size, calc(2 * ${spacingVars['--spacing-2']} + ${sizeVars['--size-element-sm']})) + ${spacingVars['--spacing-3']} - ${spacingVars['--spacing-2']})`;
 // A block that names no language has no header: core CodeBlock puts its copy
 // button in a column of its own at the inline end (8px, a small control, 8px),
 // beside the code rather than over it, so the code ends that much earlier.

@@ -873,7 +873,7 @@ for (const viewport of [PHONE, DESKTOP, {width: 2200, height: 900}] as const) {
     // One header per fenced block; the first is the `ts` block's.
     await expect(
       page.locator(`${RICH_TEXT} [data-richtext-code-header]`),
-    ).toHaveCount(7);
+    ).toHaveCount(8);
     const header = page
       .locator(`${RICH_TEXT} [data-richtext-code-header]`)
       .first();
@@ -956,6 +956,8 @@ for (const globals of [
       'code-plaintext': '',
       'code-unknown': 'notalanguage',
       'code-long': 'sh',
+      'code-long-label':
+        'alonglanguagenamethatwrapsintheheaderofthecodeblockoneverysurfaceandinbothmodesofthedocumentsurface',
       'code-plain-long': '',
     } as const;
     const markdown = await surfaceGeometry(page, MARKDOWN);
@@ -1017,9 +1019,13 @@ for (const globals of [
           const label = [...(block?.querySelectorAll('*') ?? [])].find(
             element =>
               element.childElementCount === 0 &&
-              ['ts', 'notalanguage', 'plaintext', 'sh'].includes(
-                element.textContent?.trim() ?? '',
-              ),
+              [
+                'ts',
+                'notalanguage',
+                'plaintext',
+                'sh',
+                'alonglanguagenamethatwrapsintheheaderofthecodeblockoneverysurfaceandinbothmodesofthedocumentsurface',
+              ].includes(element.textContent?.trim() ?? ''),
           );
           return label?.textContent?.trim() ?? '';
         }),
@@ -1029,14 +1035,24 @@ for (const globals of [
     // RichText draws one header per fence, in order, each with a copy button
     // and the same label.
     const headers = page.locator(`${RICH_TEXT} [data-richtext-code-header]`);
-    await expect(headers).toHaveCount(7);
+    await expect(headers).toHaveCount(8);
     const richTextLabels = await headers.evaluateAll(elements =>
       elements.map(element =>
         (element.textContent ?? '').replace('Copy code', '').trim(),
       ),
     );
     expect(richTextLabels).toEqual(Object.values(fences));
-    for (const index of [0, 1, 2, 3, 4, 5, 6]) {
+    // The long label wraps: its header is taller than the one-row `ts`
+    // header, and the fence is as tall in RichText as in core Markdown
+    // (checked above with every fence).
+    const headerHeight = (index: number) =>
+      headers
+        .nth(index)
+        .evaluate(element => element.getBoundingClientRect().height);
+    expect(
+      await headerHeight(Object.keys(fences).indexOf('code-long-label')),
+    ).toBeGreaterThan((await headerHeight(0)) + 4);
+    for (const index of [0, 1, 2, 3, 4, 5, 6, 7]) {
       await expect(
         headers.nth(index).getByRole('button', {name: 'Copy code'}),
       ).toBeVisible();

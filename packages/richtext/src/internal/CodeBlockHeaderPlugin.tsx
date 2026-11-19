@@ -13,11 +13,12 @@
  *   element that holds the content editable. The headers are siblings of the
  *   editable text, never inside it, so they are not part of the document and
  *   cannot be edited (spec:AST-061 FR8, DEC-4). The code block's theme class
- *   reserves the header's height, so the code sits where core Markdown's does.
+ *   reserves the header's drawn height, which this plugin writes on the block,
+ *   so the code sits where core Markdown's does.
  */
 
 import * as stylex from '@stylexjs/stylex';
-import {useEffect, useState, type JSX} from 'react';
+import {useEffect, useLayoutEffect, useRef, useState, type JSX} from 'react';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {$isCodeNode} from '@lexical/code';
 import {$getNodeByKey, $getRoot} from 'lexical';
@@ -67,6 +68,8 @@ const styles = stylex.create({
   cornerButton: {
     pointerEvents: 'auto',
   },
+  // A long label wraps and keeps its own spacing, as core CodeBlock's does
+  // (component:CodeBlock DEC-5); the header grows with it.
   title: {
     fontSize: typeScaleVars['--text-supporting-size'],
     fontFamily: typographyVars['--font-family-code'],
@@ -74,9 +77,9 @@ const styles = stylex.create({
     lineHeight: typeScaleVars['--text-supporting-leading'],
     color: 'var(--color-syntax-comment)',
     minWidth: 0,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
+    whiteSpace: 'pre-wrap',
+    overflowWrap: 'anywhere',
+    '--_astryx-text-overflow-wrap': 'anywhere',
   },
   copyButton: {
     color: 'var(--color-syntax-comment)',
@@ -162,6 +165,10 @@ function CodeBlockHeader({
     placement.left,
     placement.width,
   );
+  const headerRef = useReservedHeaderHeight(
+    placement.key,
+    placement.language != null,
+  );
   if (placement.language == null) {
     return (
       <div
@@ -173,12 +180,47 @@ function CodeBlockHeader({
   }
   return (
     <div
+      ref={headerRef}
       data-richtext-code-header=""
       {...stylex.props(styles.header, position)}>
       <span {...stylex.props(styles.title)}>{label ?? placement.language}</span>
       {copyButton}
     </div>
   );
+}
+
+/** The variable the code block's theme class reserves the header with. */
+const HEADER_BLOCK_SIZE = '--_richtext-code-header-block-size';
+
+/**
+ * Writes a header's drawn height on its code block, so the block reserves
+ * that much room above the code (editorTheme's `code` padding) and the code
+ * starts where core Markdown's does.
+ */
+function useReservedHeaderHeight(key: string, isHeader: boolean) {
+  const [editor] = useLexicalComposerContext();
+  const headerRef = useRef<HTMLDivElement>(null);
+  // Syncs the header's height to the code block's element, which Lexical
+  // owns.
+  useLayoutEffect(() => {
+    const header = headerRef.current;
+    const block = editor.getElementByKey(key);
+    if (!isHeader || header == null || block == null) {
+      return;
+    }
+    const write = () => {
+      block.style.setProperty(HEADER_BLOCK_SIZE, `${header.offsetHeight}px`);
+    };
+    write();
+    const observer =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(write);
+    observer?.observe(header);
+    return () => {
+      observer?.disconnect();
+      block.style.removeProperty(HEADER_BLOCK_SIZE);
+    };
+  }, [editor, key, isHeader]);
+  return headerRef;
 }
 
 /**
