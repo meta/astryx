@@ -407,21 +407,24 @@ test("a list beside a field near the viewport's end moves above a keyboard that 
 });
 
 test('a flipped list stays above a panned keyboard', async ({page}) => {
-  const trigger = await openStoryNearEnd(page);
+  const trigger = await openTallStoryNearEnd(page);
+  await trigger.click();
+  await expect(page.getByRole('listbox')).toBeVisible();
+  // Grow an option before the measured reopen so the flip is part of the
+  // scenario, rather than a later layout mutation.
+  await growOption(page, 0, 96);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('listbox')).toBeHidden();
   await trigger.click();
   await expect(page.getByRole('listbox')).toBeVisible();
   await openEnded(page);
-
-  await raiseKeyboard(page, COVER, 100);
+  await raiseKeyboard(page, LANDSCAPE_COVER, 100);
   await expect(async () => {
-    expectClearOfPannedKeyboard(
-      await listFacts(
-        page,
-        VIEWPORT.height + 100 - COVER - LAYER_KEYBOARD_CLEARANCE_PX,
-      ),
-      COVER,
-      100,
-    );
+    const facts = await listFacts(page, LANDSCAPE_LIMIT + 100);
+    const detail = JSON.stringify({...facts, visibleTop: 100});
+    expect(facts.top, detail).toBeGreaterThanOrEqual(99.5);
+    expect(facts.bottom, detail).toBeLessThanOrEqual(LANDSCAPE_LIMIT + 100.5);
+    expect(facts.bottom - facts.top, detail).toBeGreaterThan(0);
   }).toPass({timeout: 3_000});
 });
 
