@@ -549,7 +549,7 @@ const CASES = [
     setup: dir => {
       fs.writeFileSync(
         path.join(dir, 'remote.jsx'),
-        'export default function Page() { return <img src="https://images.example.invalid/a.png" alt="" />; }\n',
+        'export default function Page() { return <img src="https://images.example.invalid/a.png" alt="" />; }\nimport "@astryxdesign/core/astryx.css";\n',
       );
     },
     jsonFieldAllowlist: [

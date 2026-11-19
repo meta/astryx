@@ -507,6 +507,27 @@ async function opened(html) {
 }
 
 describe('a render with images from the web', () => {
+  it('fetches nothing for a page it refuses as not Astryx', async () => {
+    const dir = makeLinkedFixture('astryx-render-remote-refused-', [
+      'react',
+      'react-dom',
+    ]);
+    try {
+      const file = path.join(dir, 'page.jsx');
+      fs.writeFileSync(
+        file,
+        'export default function Page() {\n  return <img src="https://example.com/shoe.png" alt="Shoe" />;\n}\n',
+      );
+      const {fetch, asked} = fetchFrom({'https://example.com/shoe.png': png()});
+      await expect(
+        renderPage(file, {cwd: dir, remoteImages: {fetch}}),
+      ).rejects.toMatchObject({code: 'ERR_RENDER_NOT_ASTRYX'});
+      expect(asked).toEqual([]);
+    } finally {
+      removeLinkedFixture(dir);
+    }
+  });
+
   it('carries a fetched image in the markup and the script, and keeps the address in the source', async () => {
     const dir = makeLinkedFixture('astryx-render-remote-', [
       'react',
@@ -527,7 +548,7 @@ describe('a render with images from the web', () => {
           '    </main>',
           '  );',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch, asked} = fetchFrom({'https://example.com/shoe.png': png()});
@@ -597,7 +618,7 @@ describe('a render with images from the web', () => {
           '    </main>',
           '  );',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch, asked} = fetchFrom({
@@ -622,7 +643,7 @@ describe('a render with images from the web', () => {
       const file = path.join(dir, 'page.jsx');
       fs.writeFileSync(
         file,
-        'export default function Page() { return <div style={{backgroundImage: "url(https://example.com/bg.png)"}}>Hero</div>; }\n',
+        'export default function Page() { return <div style={{backgroundImage: "url(https://example.com/bg.png)"}}>Hero</div>; }\nimport "@astryxdesign/core/astryx.css";\n',
       );
       const {fetch} = fetchFrom({'https://example.com/bg.png': png()});
       const page = await renderPage(file, {cwd: dir, remoteImages: {fetch}});
@@ -658,7 +679,7 @@ describe('a render with images from the web', () => {
           '  const [sent, setSent] = useState(false);',
           "  return <main><button onClick={() => fetch(config.imageUploadUrl, {method: 'POST'}).then(() => setSent(true))}>Upload</button>{sent && <p>Sent</p>}</main>;",
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch} = fetchFrom({
@@ -700,7 +721,7 @@ describe('a render with images from the web', () => {
           '    </main>',
           '  );',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch, asked} = fetchFrom({});
@@ -733,7 +754,7 @@ describe('a render with images from the web', () => {
           '  const [open, setOpen] = useState(false);',
           '  return <main><button onClick={() => setOpen(true)}>Me</button>{open && <img src={user.avatarUrl} alt="Me" />}</main>;',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch} = fetchFrom({
@@ -766,7 +787,7 @@ describe('a render with images from the web', () => {
           '  const [open, setOpen] = useState(false);',
           '  return <main><button onClick={() => setOpen(true)}>Show</button>{open && rows.map(r => <img key={r.url} src={r.url} alt="" />)}</main>;',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch} = fetchFrom({
@@ -802,7 +823,7 @@ describe('a render with images from the web', () => {
           '  const [open, setOpen] = useState(false);',
           '  return <main><button onClick={() => setOpen(true)}>More</button>{open && <a href={fullSize}>Full size</a>}</main>;',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch, asked} = fetchFrom({});
@@ -831,7 +852,7 @@ describe('a render with images from the web', () => {
           '  const [size, setSize] = useState(0);',
           '  return <main><button onClick={() => setSize(640)}>Show</button>{size > 0 && <img src={\'https://cdn.example.com/hero.png?size=\' + size} alt="" />}</main>;',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch, asked} = fetchFrom({});
@@ -867,7 +888,7 @@ describe('a render with images from the web', () => {
           '  const [open, setOpen] = useState(false);',
           '  return <main><button onClick={() => setOpen(true)}>Show</button>{open && <img srcSet="https://example.com/a.png 1x, https://example.com/a@2x.png 2x" alt="" />}</main>;',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch, asked} = fetchFrom({
@@ -916,7 +937,7 @@ describe('a render with images from the web', () => {
           '    </main>',
           '  );',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       fs.writeFileSync(path.join(dir, 'local.png'), PNG);
@@ -967,7 +988,7 @@ describe('a render with images from the web', () => {
           '  const [id, setId] = useState(0);',
           '  return <main><button onClick={() => setId(3)}>Show</button>{id > 0 && <img alt="" srcSet={`./${id}.png 1x, https://cdn.example.com/${id}@2x.png 2x`} />}</main>;',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch, asked} = fetchFrom({});
@@ -1006,7 +1027,7 @@ describe('a render with images from the web', () => {
           '    </main>',
           '  );',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch, asked} = fetchFrom({
@@ -1045,7 +1066,7 @@ describe('a render with images from the web', () => {
       const file = path.join(dir, 'page.jsx');
       fs.writeFileSync(
         file,
-        'export default function Page() { return <main><iframe src="https://example.com/embed.png" title="x" /><video src="https://example.com/clip.png" /></main>; }\n',
+        'export default function Page() { return <main><iframe src="https://example.com/embed.png" title="x" /><video src="https://example.com/clip.png" /></main>; }\nimport "@astryxdesign/core/astryx.css";\n',
       );
       const {fetch, asked} = fetchFrom({});
       const page = await renderPage(file, {cwd: dir, remoteImages: {fetch}});
@@ -1073,7 +1094,7 @@ describe('a render with images from the web', () => {
           '  const [open, setOpen] = useState(false);',
           '  return <main><button onClick={() => setOpen(true)}>Show</button>{open && <><img src={logoUrl} alt="Logo" /><iframe src={embed} title="Clip" /></>}</main>;',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch, asked} = fetchFrom({
@@ -1107,7 +1128,7 @@ describe('a render with images from the web', () => {
           '  const [open, setOpen] = useState(false);',
           '  return <main><button onClick={() => setOpen(true)}>Play</button>{open && <><iframe src={player.src} title="Player" /><video src={clip.src} /></>}</main>;',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch, asked} = fetchFrom({
@@ -1143,7 +1164,7 @@ describe('a render with images from the web', () => {
           'export default function Page() {',
           '  return <main><iframe src={player.src} title="Player" /></main>;',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const frameWarnings = (/** @type {any} */ page) =>
@@ -1208,7 +1229,7 @@ describe('a render with images from the web', () => {
           '  const [open, setOpen] = useState(false);',
           '  return <main><button onClick={() => setOpen(true)}>Show</button>{open && <><img src={DEFAULT_AVATAR} alt="" /><img src={own} alt="" /></>}</main>;',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch, asked} = fetchFrom({
@@ -1244,7 +1265,7 @@ describe('a render with images from the web', () => {
           '  const [ids, setIds] = useState([]);',
           '  return <main><button onClick={() => setIds([1, 2])}>Show</button>{ids.map(id => <img key={id} src={avatar(id)} alt="" />)}{ids.map(id => <a key={`a${id}`} href={`https://cdn.example.com/${id}.png`}>Full</a>)}{ids.map(id => <video key={`v${id}`} src={\'https://cdn.example.com/\' + id + \'.mp4\'} />)}</main>;',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch, asked} = fetchFrom({});
@@ -1278,7 +1299,7 @@ describe('a render with images from the web', () => {
           '  const [id, setId] = useState(0);',
           '  return <main><button onClick={() => setId(7)}>Show</button>{id > 0 && <><img src={`https://cdn.example.com/${id}.png`} alt="" /><video src={`https://cdn.example.com/${id}.mp4`} /><iframe src={`https://player.example.com/${id}`} title="Player" /></>}</main>;',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch, asked} = fetchFrom({});
@@ -1328,7 +1349,7 @@ describe('a render with images from the web', () => {
           '    </main>',
           '  );',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch} = fetchFrom({
@@ -1388,7 +1409,7 @@ describe('a render with images from the web', () => {
           '    </main>',
           '  );',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch} = fetchFrom({'https://cdn.example.com/h.png': png()});
@@ -1435,7 +1456,7 @@ describe('a render with images from the web', () => {
           '    </main>',
           '  );',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch} = fetchFrom({});
@@ -1464,7 +1485,7 @@ describe('a render with images from the web', () => {
       const file = path.join(dir, 'page.jsx');
       fs.writeFileSync(
         file,
-        'export default function Page() { return <main><img src="https://example.com/a.png?w=1" alt="" /><img src="https://example.com/a.png?w=2" alt="" /></main>; }\n',
+        'export default function Page() { return <main><img src="https://example.com/a.png?w=1" alt="" /><img src="https://example.com/a.png?w=2" alt="" /></main>; }\nimport "@astryxdesign/core/astryx.css";\n',
       );
       const {fetch} = fetchFrom({});
       const page = await renderPage(file, {cwd: dir, remoteImages: {fetch}});
@@ -1488,7 +1509,7 @@ describe('a render with images from the web', () => {
       const file = path.join(dir, 'page.jsx');
       fs.writeFileSync(
         file,
-        'export default function Page() { return <img src="https://example.com/a.png?w=2" alt="" />; }\n',
+        'export default function Page() { return <img src="https://example.com/a.png?w=2" alt="" />; }\nimport "@astryxdesign/core/astryx.css";\n',
       );
       const {fetch} = fetchFrom({});
       const page = await renderPage(file, {cwd: dir, remoteImages: {fetch}});
@@ -1516,7 +1537,7 @@ describe('a render with images from the web', () => {
           '  const [open, setOpen] = useState(false);',
           '  return <main><button onClick={() => setOpen(true)}>Me</button>{open && <img src={user.avatarUrl} alt="Me" />}</main>;',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch} = fetchFrom({});
@@ -1540,7 +1561,7 @@ describe('a render with images from the web', () => {
       const file = path.join(dir, 'page.jsx');
       fs.writeFileSync(
         file,
-        'export default function Page() { return <img src="https://example.com/away.png" alt="Away" />; }\n',
+        'export default function Page() { return <img src="https://example.com/away.png" alt="Away" />; }\nimport "@astryxdesign/core/astryx.css";\n',
       );
       const {fetch} = fetchFrom({});
       const page = await renderPage(file, {cwd: dir, remoteImages: {fetch}});
@@ -1596,7 +1617,7 @@ describe('a render with images from the web', () => {
         '    </main>',
         '  );',
         '}',
-        '',
+        '', "import '@astryxdesign/core/astryx.css';",
       ].join('\n');
       fs.writeFileSync(file, source);
       const {fetch, asked} = fetchFrom({
@@ -1681,7 +1702,7 @@ describe('a render with images from the web', () => {
       const file = path.join(dir, 'page.jsx');
       fs.writeFileSync(
         file,
-        'export default function Page() { return <img src="https://example.com/shoe.png" alt="Shoe" />; }\n',
+        'export default function Page() { return <img src="https://example.com/shoe.png" alt="Shoe" />; }\nimport "@astryxdesign/core/astryx.css";\n',
       );
       const {fetch, asked} = fetchFrom({'https://example.com/shoe.png': png()});
       const page = await renderPage(file, {
