@@ -55,6 +55,7 @@
  * @property {string[]} [data.notCarried] - Files the page uses that the file does not carry, so experimental import cannot give them back: a name that reads as a tool's configuration, a file a test or story runner would run, a file outside the carried folder (imported by a relative path or a path alias), an image it cannot carry, or a Sass or Less stylesheet, which a render does not compile. Each also has a warning. Present only when there are some.
  * @property {number} data.scriptBytes - Size of the page's script, which `bytes` includes.
  * @property {number} data.scriptModules - How many modules the page's script holds (the page's own, its packages', React's).
+ * @property {{fetched: string[], failed: {url: string, reason: string}[]}} [data.remoteImages] - The https images the page names: each address the render fetched into the file, and each one it left as the page wrote it, with why (not https, no answer in time, not an image, too large, unreachable). Present when the page names a remote image.
  */
 
 /**
