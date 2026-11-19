@@ -6,6 +6,7 @@ import {Stack, StackItem} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 import {Button} from '@astryxdesign/core/Button';
 import {Avatar} from '@astryxdesign/core/Avatar';
+import {useToast} from '@astryxdesign/core/Toast';
 
 const USERS = [
   {name: 'Olivia Chen', role: 'Engineering Lead'},
@@ -14,6 +15,7 @@ const USERS = [
 ];
 
 export default function StackFillItem() {
+  const showToast = useToast();
   return (
     <Stack direction="vertical" gap={3} width="100%" style={{maxWidth: 300}}>
       {USERS.map(user => (
@@ -32,7 +34,14 @@ export default function StackFillItem() {
             </Stack>
           </StackItem>
           <StackItem size="static">
-            <Button label="View" variant="secondary" size="sm" />
+            <Button
+              label="View"
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                showToast({body: 'Demo: this profile would open here'})
+              }
+            />
           </StackItem>
         </Stack>
       ))}

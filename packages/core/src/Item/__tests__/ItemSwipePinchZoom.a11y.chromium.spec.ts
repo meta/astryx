@@ -175,7 +175,8 @@ test('a one-finger sideways drag still swipes the row and leaves the zoom alone'
     type: 'touchStart',
     touchPoints: [{x: startX, y}],
   });
-  // The swipe begins after 25 px and is the travel past them.
+  // The swipe begins at the row's 8 px claim, and the row is then at the
+  // finger's travel since touch-down.
   for (const dx of [6, 14, 28, 50, 70, 90]) {
     await cdp.send('Input.dispatchTouchEvent', {
       type: 'touchMove',

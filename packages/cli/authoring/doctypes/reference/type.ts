@@ -132,6 +132,20 @@ export interface ReferenceDoc extends AuthoredDocGraphFields {
    *  thing. `astryx search` matches each as a keyword of the whole topic, so
    *  an exact one ranks the topic like its own title does. */
   keywords?: string[];
+  /** Makes this doc a skill as well as a topic: apps that keep the Astryx
+   *  skill in a skills folder (`astryx init --to skills`) get this doc as a
+   *  skill of its own, `<name>/SKILL.md`, and the AGENTS.md block gets one
+   *  line that points to it. `name` is lowercase words joined by hyphens, at
+   *  most 64 characters, unique among the app's integrations, and neither
+   *  `astryx` nor `astryx-project`; it is the skill's folder name.
+   *  `description` is one line of at most 1,024 characters that says when an
+   *  agent should load it: agents load a skill only when its description
+   *  matches the task. A skill that breaks a rule is left out with a
+   *  warning; the doc itself still loads. */
+  skill?: {
+    name: string;
+    description: string;
+  };
   /** Name of an existing topic this doc takes the place of. Authored by an
    *  integration whose guide should be served instead of the built-in one —
    *  `replaces: 'getting-started'` on a doc named `getting-started` swaps the

@@ -9,9 +9,12 @@
  *
  * @input The chart elements the server render set aside.
  * @output Their sizes, the CSS that shows a drawn chart at its box's size,
- *   and the heights the page gives the boxes charts fill.
+ *   the heights the page gives the boxes charts fill, and the SVG drawings
+ *   whose text gets too small on a phone.
  * @position foundation/render — read by page-worker.mjs and render-page.mjs.
  */
+
+import {scanHtml} from './html-reader.mjs';
 
 /** The global the render worker installs to set charts aside. SYNC: page-worker.mjs assigns it by this name. */
 export const CHART_GLOBAL = '__astryxRenderChart';
@@ -442,4 +445,112 @@ export async function chartDocument() {
       return String(this.getAttribute?.('class') ?? '').includes('recharts-legend-wrapper') ? legendBox(this) : box(0, 0);
     },
   });
+}
+
+/** A 375 px phone screen less a 16 px margin on each side: the width a page's drawing fills there. */
+const PHONE_DRAWING_WIDTH = 343;
+/** Text smaller than this on a phone is hard to read. */
+const SMALLEST_READABLE_TEXT = 10;
+/** The text size an SVG uses when the drawing states none. */
+const DEFAULT_TEXT_SIZE = 16;
+
+/**
+ * @param {string | undefined} style an element's `style` attribute
+ * @param {string} property a CSS property name
+ * @returns {string | undefined} the property's value in the style, trimmed
+ */
+const styleValue = (style, property) =>
+  new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*([^;]+)`, 'i').exec(style ?? '')?.[1].trim();
+
+/**
+ * The width an SVG drawing fills on a phone when it scales to its box, or
+ * null when it keeps a fixed width. A width in `style` wins over the `width`
+ * attribute. A drawing with no width, or `auto`, fills its box unless a pixel
+ * height fixes its size; a percentage width fills that share of it; a
+ * percentage `max-width` shrinks a wider drawing to its box. Any other width
+ * is fixed. Recharts surfaces are skipped: the render draws those charts at
+ * the widths a reader sees, so their text keeps its size.
+ * @param {Record<string, string>} attrs the `svg` element's attributes
+ * @returns {number | null}
+ */
+function phoneDrawingWidth(attrs) {
+  if (/(?:^|\s)recharts-surface(?:\s|$)/.test(attrs.class ?? '')) return null;
+  const width = styleValue(attrs.style, 'width') ?? attrs.width?.trim();
+  const ownWidth = width == null ? null : pixelLength(width);
+  const maxWidth = fraction(styleValue(attrs.style, 'max-width'));
+  if (maxWidth) return Math.min(ownWidth ?? Infinity, PHONE_DRAWING_WIDTH * Math.min(1, maxWidth));
+  if (width == null || width === '' || width === 'auto') {
+    const height = styleValue(attrs.style, 'height') ?? attrs.height?.trim();
+    return height != null && pixelLength(height) != null ? null : PHONE_DRAWING_WIDTH;
+  }
+  const share = fraction(width);
+  return share ? PHONE_DRAWING_WIDTH * Math.min(1, share) : null;
+}
+
+/**
+ * @param {string} value a CSS or SVG length
+ * @returns {number | null} the length in pixels when it is a plain number or
+ *   a `px` value, else null
+ */
+function pixelLength(value) {
+  const match = /^\s*([\d.]+)(?:px)?\s*$/.exec(value);
+  const n = match ? Number(match[1]) : NaN;
+  return n > 0 ? n : null;
+}
+
+/**
+ * SVG drawings whose text gets too small on a phone. A drawing with a viewBox
+ * that scales to its box scales its text with it: on a phone the text shows
+ * at its own size times the drawing's width there over the viewBox width.
+ * @param {string} markup the page's server markup
+ * @returns {{count: number, px: number} | null} how many drawings show text
+ *   under 10 px on a phone, and the smallest such size, rounded; null when
+ *   none does
+ */
+export function smallSvgText(markup) {
+  let count = 0;
+  let smallest = Infinity;
+  /** @type {{units: number, drawn: number, sizes: number[], hasText: boolean, depth: number} | null} */
+  let open = null;
+  for (const token of scanHtml(markup)) {
+    if (token.kind === 'start') {
+      const attrs = Object.fromEntries(
+        token.attrs.map(([name, value]) => [name.toLowerCase(), value]),
+      );
+      if (open) {
+        if (token.tag === 'svg' && !token.selfClosing) open.depth += 1;
+        if (token.tag === 'text') open.hasText = true;
+        const size =
+          Number(/^\s*([\d.]+)(?:px)?\s*$/.exec(attrs['font-size'] ?? '')?.[1]) ||
+          Number(/font-size:\s*([\d.]+)px/.exec(attrs.style ?? '')?.[1]);
+        if (size > 0) open.sizes.push(size);
+        continue;
+      }
+      if (token.tag !== 'svg' || token.selfClosing) continue;
+      const units = Number(
+        /^\s*[-\d.]+[\s,]+[-\d.]+[\s,]+([\d.]+)/.exec(attrs.viewbox ?? '')?.[1],
+      );
+      const drawn = phoneDrawingWidth(attrs);
+      if (drawn == null || !(units > drawn)) continue;
+      const size =
+        Number(/^\s*([\d.]+)(?:px)?\s*$/.exec(attrs['font-size'] ?? '')?.[1]) ||
+        Number(/font-size:\s*([\d.]+)px/.exec(attrs.style ?? '')?.[1]);
+      open = {units, drawn, sizes: size > 0 ? [size] : [], hasText: false, depth: 0};
+    } else if (open && token.kind === 'end' && token.tag === 'svg') {
+      if (open.depth > 0) {
+        open.depth -= 1;
+        continue;
+      }
+      if (open.hasText) {
+        const textSize = open.sizes.length > 0 ? Math.min(...open.sizes) : DEFAULT_TEXT_SIZE;
+        const px = (textSize * open.drawn) / open.units;
+        if (px < SMALLEST_READABLE_TEXT) {
+          count += 1;
+          smallest = Math.min(smallest, px);
+        }
+      }
+      open = null;
+    }
+  }
+  return count > 0 ? {count, px: Math.round(smallest)} : null;
 }

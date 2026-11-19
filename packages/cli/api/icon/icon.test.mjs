@@ -80,6 +80,38 @@ describe('icon.search ranking', () => {
     expect(data.matches.map(match => match.id)).toEqual(['trash', 'x']);
   });
 
+  it('equal scores put first an icon whose id the query names in full', () => {
+    const setOf = (/** @type {Array<{id: string, words: string[]}>} */ icons) =>
+      /** @type {any} */ ({
+        name: 'brand',
+        package: '@acme/brand-icons',
+        data: {
+          schemaVersion: 1,
+          module: '@acme/brand-icons',
+          icons: icons.map(each => ({...each, export: `${each.id}Icon`})),
+        },
+      });
+    const ids = (/** @type {any} */ set, /** @type {string} */ query) =>
+      answeringMatches(rankIcons([set], query)).map(each => each.id);
+    const plus = setOf([
+      {id: 'folder-plus', words: ['folder', 'plus', 'add']},
+      {id: 'plus', words: ['plus', 'add']},
+    ]);
+    expect(ids(plus, 'plus add')).toEqual(['plus', 'folder-plus']);
+    // A word's plural or singular counts as named.
+    const arrows = setOf([
+      {id: 'arrow-down-up-lock', words: ['arrow', 'down', 'up', 'lock']},
+      {id: 'arrows-up-down', words: ['arrows', 'up', 'down']},
+    ]);
+    expect(ids(arrows, 'up down arrow')[0]).toBe('arrows-up-down');
+    // When no id is named in full, ties keep id order.
+    const parts = setOf([
+      {id: 'a-arrow-down', words: ['a', 'arrow', 'down']},
+      {id: 'arrow-down', words: ['arrow', 'down']},
+    ]);
+    expect(ids(parts, 'arrow')).toEqual(['a-arrow-down', 'arrow-down']);
+  });
+
   it('ties keep set order: the project set first', () => {
     const set = (/** @type {string} */ name) =>
       /** @type {any} */ ({
@@ -524,7 +556,9 @@ describe('a word matches whole words (FR6)', () => {
     });
   /** @param {any} set @param {string} query */
   const answer = (set, query) =>
-    answeringMatches(rankIcons([set], query)).map(each => each.id);
+    answeringMatches(rankIcons([set], query, {words: true})).map(
+      each => each.id,
+    );
 
   it('never offers a longer word that only starts with the query beside a whole-word answer', () => {
     const set = setOf([
@@ -563,6 +597,88 @@ describe('a word matches whole words (FR6)', () => {
     expect(answer(set, 'go')).toEqual([]);
   });
 
+  it('leaves out the words that only join others: `with` and `and` match no icon name, `all` still does', () => {
+    const set = setOf([
+      {id: 'star'},
+      {id: 'credit-card'},
+      {id: 'person-walking-with-cane'},
+      {id: 'plus'},
+      {id: 'minus'},
+      {id: 'pen-and-paper'},
+      {id: 'border-all'},
+    ]);
+    expect(answer(set, 'card with an icon of a star')).toEqual([
+      'star',
+      'credit-card',
+    ]);
+    expect(answer(set, 'plus and minus')).toEqual(['minus', 'plus']);
+    expect(answer(set, 'select all')).toEqual(['border-all']);
+    // An id the query names in full still answers as typed.
+    expect(answer(set, 'person walking with cane')).toEqual([
+      'person-walking-with-cane',
+    ]);
+  });
+
+  it('reads a query that no whole word answers as typed without `with` and `and`', () => {
+    const set = setOf([
+      {id: 'person-walking'},
+      {id: 'person-walking-with-cane'},
+      {id: 'user'},
+      {id: 'user-plus'},
+      {id: 'plus'},
+    ]);
+    expect(answer(set, 'user with plus')).toEqual(['user-plus']);
+    expect(answer(set, 'person walking with')).toEqual(['person-walking']);
+  });
+
+  it('reads a word written as an export name as the words it runs together', () => {
+    const set = setOf([
+      {id: 'search'},
+      {id: 'chevron-down'},
+      {id: 'x-mark'},
+      {id: 'house'},
+    ]);
+    expect(answer(set, 'SearchIcon')).toEqual(['search']);
+    expect(rankIcons([set], 'ChevronDownIcon')[0]).toMatchObject({
+      id: 'chevron-down',
+      score: 90,
+    });
+    expect(answer(set, 'XMarkIcon')).toEqual(['x-mark']);
+    // An export name with a digit reads as the id its set names it by.
+    const numbered = setOf([
+      {id: 'bars-3'},
+      {id: 'cog-8-tooth'},
+      {id: 'squares-2x2'},
+      {id: 'bars-arrow-up'},
+    ]);
+    expect(answer(numbered, 'Bars3Icon')).toEqual(['bars-3']);
+    expect(answer(numbered, 'Cog8ToothIcon')).toEqual(['cog-8-tooth']);
+    expect(answer(numbered, 'Squares2X2Icon')).toEqual(['squares-2x2']);
+  });
+
+  it('keeps the reading whose best match scores higher, the word as typed on a tie', () => {
+    // A set whose ids keep the compound word whole answers it as typed.
+    const whole = setOf([
+      {id: 'paperclip'},
+      {id: 'paper-plane'},
+      {id: 'lightbulb'},
+    ]);
+    expect(rankIcons([whole], 'PaperClip icon')[0]).toMatchObject({
+      id: 'paperclip',
+      score: 90,
+    });
+    expect(answer(whole, 'LightBulb icon')).toEqual(['lightbulb']);
+    // A set that splits it answers the split reading.
+    const split = setOf([{id: 'paper-clip'}, {id: 'paper-plane'}]);
+    expect(rankIcons([split], 'PaperClip icon')[0]).toMatchObject({
+      id: 'paper-clip',
+      score: 90,
+    });
+    // Word matches read the words of both readings.
+    expect(answer(whole, 'PaperClip button')[0]).toBe('paperclip');
+    expect(answer(split, 'PaperClip button')[0]).toBe('paper-clip');
+  });
+
   it('scores a query as typed before it leaves out filler words, so an exact name keeps its score', () => {
     const set = setOf([
       {id: 'arrow-up-to-line'},
@@ -590,5 +706,124 @@ describe('a word matches whole words (FR6)', () => {
     expect(answer(set, 'ex')).toEqual([]);
     // Three letters still find a part of a word.
     expect(answer(set, 'ext')).toEqual(['next-page', 'text']);
+  });
+
+  it('answers a phrase no icon matches as a whole by the words each icon carries', () => {
+    const set = setOf([
+      {id: 'copy'},
+      {id: 'clipboard'},
+      {id: 'clipboard-copy'},
+      {id: 'house'},
+    ]);
+    const ranked = rankIcons([set], 'copy button clipboard icon', {
+      words: true,
+    });
+    // No icon carries `button`, so it counts for nothing.
+    expect(ranked[0]).toMatchObject({
+      id: 'clipboard-copy',
+      score: 20,
+      reason: 'words "copy", "clipboard"',
+    });
+    expect(answer(set, 'copy button clipboard icon')).toEqual([
+      'clipboard-copy',
+      'clipboard',
+      'copy',
+    ]);
+  });
+
+  it('weighs a word by how few icons carry it, so the glyph outweighs a common word', () => {
+    const set = setOf([
+      {id: 'circle-check'},
+      {id: 'circle-x'},
+      {id: 'circle-plus'},
+      {id: 'info'},
+    ]);
+    expect(answer(set, 'info circle tooltip')[0]).toBe('info');
+    // Equal weights keep the icon whose id holds fewer parts no query word
+    // names first.
+    expect(
+      answer(setOf([{id: 'lock-open'}, {id: 'lock'}]), 'lock button'),
+    ).toEqual(['lock', 'lock-open']);
+    // A word carried only as a tag names no id part: `padlock` and
+    // `lock-open` each hold one unnamed part, so id order decides.
+    expect(
+      answer(
+        setOf([{id: 'padlock', words: ['padlock', 'lock']}, {id: 'lock-open'}]),
+        'lock button',
+      ),
+    ).toEqual(['lock-open', 'padlock']);
+  });
+
+  it('keeps set order first among word matches, as among every equal score', () => {
+    const main = setOf([{id: 'clipboard'}]);
+    const backup = /** @type {any} */ ({
+      ...setOf([{id: 'clipboard-copy'}]),
+      name: 'backup',
+      package: '@acme/backup-icons',
+    });
+    expect(
+      answeringMatches(
+        rankIcons([main, backup], 'copy button clipboard', {words: true}),
+      ).map(each => each.set),
+    ).toEqual(['brand', 'backup']);
+  });
+
+  it('answers with word matches only when asked for them', () => {
+    const set = setOf([{id: 'copy'}, {id: 'clipboard-copy'}]);
+    expect(rankIcons([set], 'copy button clipboard')).toEqual([]);
+    expect(
+      rankIcons([set], 'copy button clipboard', {words: true}).length,
+    ).toBe(2);
+  });
+
+  it('counts the words of a definition the icon is mapped to, and their plural or singular', () => {
+    const set = setOf([{id: 'trash'}, {id: 'pencil'}, {id: 'stars'}], {
+      delete: 'trash',
+    });
+    expect(answer(set, 'delete row button')).toEqual(['trash']);
+    expect(answer(set, 'star rating widget')).toEqual(['stars']);
+  });
+
+  it('counts twice the words that name a definition the set maps the icon for', () => {
+    const set = setOf(
+      [
+        {id: 'bin-copy'},
+        {id: 'paper-stack-sheets-pile'},
+        {id: 'house'},
+        {id: 'star'},
+        {id: 'bell'},
+      ],
+      {copy: 'paper-stack-sheets-pile'},
+    );
+    // Both carry `copy` once; the set maps the copy definition to the pile.
+    expect(answer(set, 'copy page button')[0]).toBe('paper-stack-sheets-pile');
+  });
+
+  it('answers repeated queries the same, and each search reads the set as it is then', () => {
+    const first = setOf([{id: 'trash'}, {id: 'house'}]);
+    const second = setOf([{id: 'trash-2'}, {id: 'house'}]);
+    expect(answer(first, 'trash')).toEqual(['trash']);
+    expect(answer(first, 'trash')).toEqual(['trash']);
+    expect(answer(second, 'trash')).toEqual(['trash-2']);
+    expect(answer(first, 'house button')).toEqual(['house']);
+    // A set edited between searches answers from its new data.
+    first.data.icons.push({id: 'zebra', export: 'ZebraIcon', words: ['zebra']});
+    expect(answer(first, 'zebra')).toEqual(['zebra']);
+    expect(answer(first, 'zebra stripes')).toEqual(['zebra']);
+  });
+
+  it('leaves every answered query as it was: word matches come only when nothing else answers', () => {
+    const set = setOf([
+      {id: 'arrow-up-to-line'},
+      {id: 'arrow-up'},
+      {id: 'line'},
+    ]);
+    expect(rankIcons([set], 'arrow up to line')[0]).toMatchObject({
+      id: 'arrow-up-to-line',
+      score: 90,
+    });
+    // One word that nothing answers stays unanswered.
+    expect(answer(set, 'zebra')).toEqual([]);
+    expect(answer(set, 'zebra stripes')).toEqual([]);
   });
 });

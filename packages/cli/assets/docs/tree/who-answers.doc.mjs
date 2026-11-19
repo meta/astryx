@@ -68,12 +68,12 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'In a project with only Core, the hint looks like this, after the command, at most once a day per project:',
+          text: 'In a project with only Core, pinned to one version, the hint looks like this, after the command, at most once a day per project:',
         },
         {
           type: 'code',
           lang: 'text',
-          code: 'astryx: this project has no Astryx CLI installed; answered by CLI 0.7.2 while its Core is 0.6.8. To match, run: npm install @astryxdesign/cli@0.6.8',
+          code: 'astryx: this project has no Astryx CLI installed; answered by CLI 0.7.2 while its Core is 0.6.8. To match, run: npm install -E @astryxdesign/cli@0.6.8',
         },
         {
           type: 'prose',

@@ -95,6 +95,19 @@ describe('typography values in the theme file', () => {
     }
   };
 
+  it('refuses a heading level written twice, a role given as a value, and a weights that is no block', async () => {
+    const twice = await compileTypography(
+      "{scale: {base: 16, ratio: 1.25}, heading: {weights: {'01': '300', 1: '800'}}}",
+    );
+    expect(twice.error).toMatch(/1 and 01 are both heading level 1/);
+    const role = await compileTypography("{body: 'Inter' as any}");
+    expect(role.error).toMatch(/typography\.body is a block of fields/);
+    const weights = await compileTypography(
+      "{scale: {base: 16, ratio: 1.25}, heading: {weights: 'bold' as any}}",
+    );
+    expect(weights.error).toMatch(/reads "bold" by its letters as levels/);
+  }, 240_000);
+
   it('takes a heading level Core reads in any spelling, and refuses a weight no browser reads', async () => {
     const level = await compileTypography(
       "{scale: {base: 16, ratio: 1.25}, heading: {weights: {'01': '800'}}}",
@@ -149,4 +162,60 @@ describe('a weight word after a family whose start the editor knows', () => {
     const kept = await themeEditSet('t', 'font', 'Archivo Black', {cwd});
     expect(JSON.stringify(kept)).toContain('Archivo Black');
   }, 120_000);
+});
+
+describe('a family typed alone', () => {
+  it("keeps the base's own fallbacks for a family the base uses", async () => {
+    const pkg = path.join(
+      path.dirname(cwd),
+      'node_modules',
+      '@astryxdesign',
+      'theme-chocolate',
+    );
+    fs.mkdirSync(pkg, {recursive: true});
+    fs.writeFileSync(
+      path.join(pkg, 'package.json'),
+      JSON.stringify({
+        name: '@astryxdesign/theme-chocolate',
+        version: '0.0.0',
+        type: 'module',
+        exports: {'./built': './built.js'},
+      }),
+    );
+    fs.writeFileSync(
+      path.join(pkg, 'built.js'),
+      `export const chocolateTheme = ${JSON.stringify({
+        name: 'chocolate',
+        __built: true,
+        tokens: {
+          '--font-family-heading':
+            'Fraunces, Georgia, "Times New Roman", serif',
+        },
+      })};\n`,
+    );
+    await themeEditNew('sb', {cwd, like: 'chocolate'});
+    const r = /** @type {any} */ (
+      await themeEditSet('sb', 'font', 'Fraunces', {cwd, on: 'heading'})
+    );
+    expect(JSON.stringify(r.data)).not.toMatch(/Fraunces, system-ui/);
+    const css = fs.readFileSync(path.join(cwd, 'themes/sb/sb.css'), 'utf8');
+    expect(css).toContain(
+      '--font-family-heading: Fraunces, Georgia, "Times New Roman", serif',
+    );
+  }, 240_000);
+
+  it('takes fallbacks of the kind its name says', async () => {
+    for (const [family, stack] of [
+      ['Noto Serif', '"Noto Serif", Georgia, serif'],
+      ['Fira Code', '"Fira Code", ui-monospace, monospace'],
+      ['Albert Sans', '"Albert Sans", system-ui, sans-serif'],
+    ]) {
+      const r = /** @type {any} */ (
+        await themeEditSet('t', 'font', family, {cwd, on: 'heading'})
+      );
+      expect(JSON.stringify(r.data), family).toContain(
+        JSON.stringify(stack).slice(1, -1),
+      );
+    }
+  }, 240_000);
 });

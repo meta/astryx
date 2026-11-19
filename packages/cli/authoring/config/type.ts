@@ -108,6 +108,22 @@ export interface AstryxConfig {
    */
   discover?: DiscoverSource;
   /**
+   * Where the Astryx skill goes in this project. `astryx init --to` writes
+   * it, `astryx init` writes each place it names, and `astryx upgrade
+   * --apply` refreshes them.
+   */
+  skills?: {
+    /**
+     * The places, one or a list: `'agents-md'` (the managed block in
+     * AGENTS.md and the agent files beside it), `'skills'` (the project
+     * skills folders, `.agents/skills/astryx-project` and
+     * `.claude/skills/astryx-project`),
+     * or a folder in the project written as `'./<path>'` (`'./team-skills'`), which
+     * gets `<folder>/astryx-project/SKILL.md`. Leaving it out means `'agents-md'`.
+     */
+    to?: string | string[];
+  };
+  /**
    * EXPERIMENTAL — shape may change and is not part of the stable config
    * contract. Provisional home for features still being proven out.
    */
@@ -124,11 +140,12 @@ export interface AstryxConfig {
     };
     /**
      * Experimental icon sets (spec:AST-084): the project's main icon set, a
-     * set name (`"outline"`) or `"<package>/<set>"`, and the opt-in. A list
+     * set name (`"outline"`) or `"<package>/<set>"`. A list
      * (`["outline", "@acme/icons/brand"]`) names the main set first, then
      * backup sets in order: a copied template takes each icon from the first
-     * set that has its meaning. Copied templates use these icons, and
-     * discover and Doctor report icon sets, only when it is set.
+     * set that has its meaning. Copied templates use these icons only when it
+     * is set. `astryx discover` and `astryx doctor` report icon sets when it is
+     * set or when an icon-set package is installed.
      * @experimental May change or be removed in a patch release.
      */
     iconSet?: string | string[];

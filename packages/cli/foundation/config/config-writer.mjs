@@ -5,7 +5,8 @@
  * astryx.config, or remove them, in one write.
  *
  * A field is a top-level key or a dotted path into nested object literals
- * (`experimental.iconSet`); a missing object on the path is created.
+ * (`experimental.iconSet`); a missing object on the path is created, and an
+ * object a removal empties is removed.
  *
  * Edits the default-exported object literal in place (comments and other
  * fields kept), or creates `astryx.config.mjs` when the project has no
@@ -221,10 +222,12 @@ function newConfigText(fields) {
  * @param {ReadonlyArray<readonly [string, string | readonly string[] | null]>} fields
  *   each a top-level key or a dotted path (`experimental.iconSet`), and its
  *   value
+ * @param {{check?: boolean}} [options] `check`: find every reason the write
+ *   would be refused, and write nothing
  * @returns {{file: string, created: boolean, previous: Array<string | string[] | null>, changed: boolean}}
  *   `previous`: each field's value before the write, in the order given
  */
-export function setConfigValues(projectDir, fields) {
+export function setConfigValues(projectDir, fields, {check = false} = {}) {
   const existing = CONFIG_BASENAMES.map(name =>
     path.join(projectDir, name),
   ).find(file => fs.existsSync(file));
@@ -239,7 +242,7 @@ export function setConfigValues(projectDir, fields) {
     if (set.length === 0)
       return {file, created: false, previous, changed: false};
     assertWritable(projectDir, file);
-    writeAtomically(file, newConfigText(set));
+    if (!check) writeAtomically(file, newConfigText(set));
     return {file, created: true, previous, changed: true};
   }
   assertWritable(projectDir, existing);
@@ -277,6 +280,10 @@ export function setConfigValues(projectDir, fields) {
     let object = root;
     assertNoSpread(object, 'its default export');
     let absent = false;
+    // Each object the path opens, with the object that holds it, so a
+    // removal that empties one removes it too.
+    /** @type {Array<{parent: any, holder: any, object: any}>} */
+    const opened = [];
     for (const each of keys.slice(0, -1)) {
       const holder = object.properties.find((/** @type {any} */ property) =>
         propertyNamed(property, each),
@@ -295,6 +302,7 @@ export function setConfigValues(projectDir, fields) {
       const nested = unwrapManifestExpression(holder.value);
       if (!j.ObjectExpression.check(nested)) throw refuse();
       assertNoSpread(nested, `its "${each}" object`);
+      opened.push({parent: object, holder, object: nested});
       object = nested;
     }
     if (absent) {
@@ -311,6 +319,14 @@ export function setConfigValues(projectDir, fields) {
       if (property) {
         object.properties.splice(at, 1);
         changed = true;
+        // A removal leaves no empty object behind (`skills: {}`).
+        for (const step of opened.reverse()) {
+          if (step.object.properties.length > 0) break;
+          step.parent.properties.splice(
+            step.parent.properties.indexOf(step.holder),
+            1,
+          );
+        }
       }
       continue;
     }
@@ -329,7 +345,7 @@ export function setConfigValues(projectDir, fields) {
   }
   let next = ast.toSource({quote: 'single', reuseWhitespace: true});
   if (source.endsWith('\n') && !next.endsWith('\n')) next += '\n';
-  writeAtomically(existing, next);
+  if (!check) writeAtomically(existing, next);
   return {file: existing, created: false, previous, changed: true};
 }
 

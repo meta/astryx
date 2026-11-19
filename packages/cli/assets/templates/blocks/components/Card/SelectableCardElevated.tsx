@@ -16,7 +16,7 @@ export default function SelectableCardElevated() {
   const [selected, setSelected] = useState('pro');
 
   return (
-    <Grid columns={2} gap={3} width={420}>
+    <Grid columns={2} gap={3} width={420} maxWidth="100%">
       {PLANS.map(plan => (
         <SelectableCard
           key={plan.id}

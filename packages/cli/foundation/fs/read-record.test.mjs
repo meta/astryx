@@ -27,8 +27,10 @@ import {
  */
 let TEMP_ROOT = '';
 beforeAll(() => {
-  TEMP_ROOT = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'astryx-read-record-test-'),
+  // The real path: on macOS the temporary folder is behind a symlink
+  // (/var to /private/var), and a realpath answer names the real path.
+  TEMP_ROOT = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-read-record-test-')),
   );
 });
 afterAll(() => {
@@ -53,6 +55,30 @@ describe('recordReads', () => {
     });
     expect([...seen.keys()]).toEqual(expect.arrayContaining([file, dir]));
     expect(unchangedSince(seen)).toBe(true);
+  });
+
+  it('records a promise read in nested operations and sees an edit', async () => {
+    const {file} = scratch();
+    /** @type {Map<string, string>} */
+    const outer = new Map();
+    /** @type {Map<string, string>} */
+    const inner = new Map();
+    const url = pathToFileURL(file);
+    expect(
+      await recordReads(outer, () =>
+        recordReads(inner, () => fs.promises.readFile(url, 'utf8')),
+      ),
+    ).toBe('one');
+    expect([...inner.keys()]).toEqual([file]);
+    expect([...outer.keys()]).toEqual([file]);
+    expect(unchangedSince(outer)).toBe(true);
+    fs.writeFileSync(file, 'two, longer');
+    expect(unchangedSince(outer)).toBe(false);
+    /** @type {Map<string, string>} */
+    const outside = new Map();
+    recordReads(outside, () => {});
+    expect(await fs.promises.readFile(url, 'utf8')).toBe('two, longer');
+    expect(outside.size).toBe(0);
   });
 
   it('sees an edit made after the operation', () => {

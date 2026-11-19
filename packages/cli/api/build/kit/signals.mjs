@@ -18,6 +18,7 @@ import {
   searchedComponents,
 } from '../../search/search.mjs';
 import {coreDirOrThrow} from '../../error.mjs';
+import {runBase} from '../../../foundation/bases/resolve.mjs';
 import {getResultCoverage} from '../../search/coverage.mjs';
 import {CORE_PROVIDER_ID} from '../../../foundation/identity/providers.mjs';
 import {
@@ -25,10 +26,10 @@ import {
   loadTemplates,
   loadWeights,
   pageDestination,
-  requireBuildCoreDir,
+  buildCoreContentDir,
   templateSetupNotes,
 } from '../_adapter.mjs';
-import {ideaKind} from './kind.mjs';
+import {ideaKind, nameTerms} from './kind.mjs';
 import {pickStart, rankPages} from './rank.mjs';
 import {pickFit} from './weights.mjs';
 import {readNames} from './words.mjs';
@@ -85,7 +86,6 @@ export const FOUNDATION = [
   'Divider',
 ];
 
-const ALWAYS = new Set([...FRAME, ...FOUNDATION]);
 
 /**
  * @typedef {import('../../search/search.type.mjs').SearchResultEntry} SearchResultEntry
@@ -107,6 +107,10 @@ const ALWAYS = new Set([...FRAME, ...FOUNDATION]);
  * @property {SearchResultEntry[]} blocks the blocks build names itself
  * @property {SearchResultEntry[]} domain
  * @property {string[]} kitBlocks the names of `blocks`
+ * @property {string[]} frame the always-on page-shell components; none on a
+ *   base other than Core
+ * @property {string[]} foundation the always-on layout, type, and action
+ *   components; none on a base other than Core
  * @property {BlockScore[]} searched every block search returned, in its order
  * @property {Map<string, SearchResultEntry>} searchedEntries search's entry for each of those blocks (the first of a name)
  * @property {Map<string, string>} blockText each of those blocks' display name and description, from the catalog
@@ -126,6 +130,29 @@ function blockScore(r) {
 }
 
 /**
+ * The not-ready page template the idea names and search matches directly, or
+ * null: the one case where build's reason names a template it does not start
+ * from. Search for the kit leaves not-ready templates out, so only an idea
+ * that names one outright pays for a search that keeps them.
+ * @param {string} query the caller's idea
+ * @param {{name: string}[]} notReady the project's not-ready page templates
+ * @param {() => Promise<SearchResultEntry[]>} searchAll search's results with every template
+ * @param {(r: SearchResultEntry) => boolean} pageMatch
+ * @returns {Promise<string | null>}
+ */
+async function namedNotReady(query, notReady, searchAll, pageMatch) {
+  /** @param {{name: string}} t */
+  const named = t =>
+    namedOutright([t.name], readNames(query, [{name: t.name}]), [t])[0];
+  const names = new Set(notReady.filter(named).map(t => t.name));
+  if (names.size === 0) return null;
+  const found = (await searchAll()).find(
+    r => names.has(r.name) && pageMatch(r) && r.score >= PAGE_DIRECT,
+  );
+  return found?.name ?? null;
+}
+
+/**
  * Build's signals for one request (see {@link KitSignals}).
  *
  * @param {string} query what you're building (e.g. "analytics dashboard")
@@ -136,7 +163,13 @@ export async function kitSignals(query, options = {}) {
   const {cwd = process.cwd(), type, limit = 60} = options;
   // A kit is built from Core's components, hooks, and templates. An open
   // search without core covers the docs alone, so the kit asks for core here.
-  if (type !== 'doc') coreDirOrThrow(requireBuildCoreDir, cwd);
+  if (type !== 'doc') coreDirOrThrow(buildCoreContentDir, cwd);
+  // The always-on names are Core components, so they belong to a run on Core
+  // and to no other base.
+  const run = runBase(cwd);
+  const onCore = !run.ok || run.base.core;
+  const frame = onCore ? FRAME : [];
+  const foundation = onCore ? FOUNDATION : [];
   // search()'s JSDoc @returns widens results to object[]; the SearchResponse
   // shape is the contract (api/search/search.type.mjs). Cast locally rather than
   // tightening the search @returns (a separate follow-up).
@@ -145,43 +178,36 @@ export async function kitSignals(query, options = {}) {
   const wantsPages = !type || type === 'template';
   const templates = wantsPages
     ? await loadTemplates(cwd)
-    : {pages: [], blocks: [], notReadyPages: 0};
+    : {pages: [], blocks: [], notReadyPages: []};
   const catalog = templates.pages;
   // Search reads a page template the idea names in any case, separator or
   // with a neighbour-letter swap in a word of six or more letters as that template's own words
   // (readNames), as the page ranker does, so such a name matches by name.
   const searched = wantsPages ? readNames(query, catalog) : query;
-  // Search wider than the surfaced kit so a flood of doc matches cannot bury
-  // the page templates past the cutoff; the caller's `limit` still caps the
-  // kit below. A non-positive or non-integer limit is passed through
-  // unchanged so search rejects it (ERR_INVALID_ARGUMENT).
-  const wide =
-    Number.isInteger(limit) && limit > 0 ? Math.max(limit, 200) : limit;
-  // A page template not ready yet is still a search match, but build reads
-  // search as if it were absent: it asks for one more result per such
-  // template, sets them aside, and keeps the same number of results, so none
-  // takes a block's or a component's place.
+  const searchOptions = {
+    cwd,
+    type,
+    // Search wider than the surfaced kit so a flood of doc matches cannot
+    // bury the page templates past the cutoff; the caller's `limit` still
+    // caps the kit below. A non-positive or non-integer limit is passed
+    // through unchanged so search rejects it (ERR_INVALID_ARGUMENT).
+    limit: Number.isInteger(limit) && limit > 0 ? Math.max(limit, 200) : limit,
+  };
   const result =
     /** @type {import('../../search/search.type.mjs').SearchResponse} */ (
       await search(searched, {
-        cwd,
-        type,
-        limit: wide + (wide > 0 ? templates.notReadyPages : 0),
+        ...searchOptions,
+        // Build starts only from ready page templates, so it reads search as
+        // if a template not ready yet were absent: such a template takes no
+        // place, moves no order and adds nothing to the count.
+        readyTemplatesOnly: true,
       })
     );
-  /** @param {SearchResultEntry} r */
-  const isReady = r =>
-    catalog.some(t => t.name === r.name && t.package === r.package);
-  /** @param {SearchResultEntry} r */
-  const notReadyPage = r =>
-    r.domain === 'template' && r.kind !== 'block' && !isReady(r);
-  const allResults = result.data.results;
-  const results = allResults.filter(r => !notReadyPage(r)).slice(0, wide);
+  const results = result.data.results;
   // The TOTAL number of matches, not the number that survived `limit`. The kit
   // below is deliberately small (≤3 pages, ≤5 blocks, ≤6 components) and
   // `results` is itself capped, so every other count here is a cap; this is the
-  // one field that says how much the query actually matched. It is search's
-  // own total, so it also counts not-ready page templates that match.
+  // one field that says how much the query actually matched.
   const matchCount = result.data.matchCount;
 
   /**
@@ -197,12 +223,6 @@ export async function kitSignals(query, options = {}) {
     return (coverage?.matched ?? 0) / total >= PAGE_COVERAGE;
   };
 
-  // Build starts only from ready page templates, and the kit reads only
-  // search's other results: a template not ready yet is no direct match, does
-  // not hold back the shell lift, is never listed, and takes no place from a
-  // page, block or component. The one exception is the reason: when the idea
-  // names a not-ready template that search matched directly, the reason says
-  // it is not ready yet.
   /** @param {SearchResultEntry} r */
   const pageMatch = r =>
     r.domain === 'template' &&
@@ -210,29 +230,28 @@ export async function kitSignals(query, options = {}) {
     r.score >= PAGE_FLOOR &&
     covers(r);
   const matchedPages = results.filter(pageMatch).slice(0, 3);
-  // Any not-ready template the idea names and search matched directly, not
-  // only search's first: another not-ready template ranked above it must not
-  // hide the one the reader asked for.
-  const namedUnready =
-    allResults.find(
-      r =>
-        pageMatch(r) &&
-        !isReady(r) &&
-        r.score >= PAGE_DIRECT &&
-        namedOutright([r.name], readNames(query, [{name: r.name}]), [r])[0],
-    )?.name ?? null;
+  const namedUnready = await namedNotReady(
+    query,
+    templates.notReadyPages,
+    async () =>
+      /** @type {import('../../search/search.type.mjs').SearchResponse} */ (
+        await search(searched, searchOptions)
+      ).data.results,
+    pageMatch,
+  );
   const searchedBlocks = results.filter(
     r => r.domain === 'template' && r.kind === 'block',
   );
   const blocks = searchedBlocks
     .filter(r => r.score >= DOMAIN_FLOOR)
     .slice(0, 5);
+  const always = new Set([...frame, ...foundation]);
   const domain = results
     .filter(
       r =>
         (r.domain === 'component' || r.domain === 'hook') &&
         r.score >= DOMAIN_FLOOR &&
-        !ALWAYS.has(r.name),
+        !always.has(r.name),
     )
     .slice(0, 6);
   const directMatch =
@@ -245,18 +264,9 @@ export async function kitSignals(query, options = {}) {
    * `start`, which always scaffolds. Copied rather than mutated: these entries
    * come from `search()` and are not this function's to modify.
    */
-  // The kit names only page templates build could start from: a match the
-  // catalog holds as not ready is left out of the surfaced list, and the
-  // response's `directMatch` and `--skeleton` describe that list. The start
-  // is still chosen from every match (chooseStart).
-  const startable = matchedPages.filter(page =>
-    catalog.some(t => t.name === page.name && t.package === page.package),
-  );
-  const shownDirect =
-    directMatch && startable[0]?.name === matchedPages[0]?.name;
-  const pages = shownDirect
-    ? startable
-    : startable.map(page => ({
+  const pages = directMatch
+    ? matchedPages
+    : matchedPages.map(page => ({
         ...page,
         command: `${page.command} --skeleton`,
       }));
@@ -289,6 +299,7 @@ export async function kitSignals(query, options = {}) {
   const kind = wantsPages ? ideaKind(query, catalog, components) : 'page';
   /** @param {import('../_adapter.mjs').PageTemplate} t */
   const placeOf = t => pageDestination(t.name, cwd);
+  const pieceWords = new Set(components.map(c => nameTerms(c).at(-1) ?? ''));
   const chosen = wantsPages
     ? chooseStart(
         ranked,
@@ -299,6 +310,7 @@ export async function kitSignals(query, options = {}) {
         query,
         placeOf,
         namedUnready,
+        pieceWords,
       )
     : null;
   // Name the ranker's next two templates beside the start: the reader judges
@@ -317,8 +329,8 @@ export async function kitSignals(query, options = {}) {
           loadWeights(),
         )
       : null;
-  /** @type {BuildStart | null} */
-  const start = chosen && {
+  /** @type {Omit<BuildStart, 'isReady'> | null} */
+  const picked = chosen && {
     ...chosen,
     ...(fit === null ? {} : {fit}),
     alternatives: pickStartAlternatives(
@@ -329,20 +341,25 @@ export async function kitSignals(query, options = {}) {
       query,
     ).flatMap(r => {
       const t = catalog.find(c => c.name === r.name);
-      return t ? [asTemplate(t, placeOf(t))] : [];
+      return t
+        ? [{...asTemplate(t, placeOf(t)), isReady: t.isReady !== false}]
+        : [];
     }),
   };
 
   // Analyze what the start template needs that the project lacks (external
   // packages, StyleX compiler). Only the start — alternatives are suggestions,
   // not commitments, so reporting their needs would be noise.
-  if (start) {
-    const startTemplate = catalog.find(t => t.name === start.name);
-    if (startTemplate) {
-      const notes = templateSetupNotes(startTemplate, cwd);
-      if (notes.length > 0) start.notes = notes;
-    }
+  const startTemplate = picked && catalog.find(t => t.name === picked.name);
+  if (picked && startTemplate) {
+    const notes = templateSetupNotes(startTemplate, cwd);
+    if (notes.length > 0) picked.notes = notes;
   }
+  /** @type {BuildStart | null} */
+  const start = picked && {
+    ...picked,
+    isReady: startTemplate?.isReady !== false,
+  };
 
   return {
     // The caller's own words, as search echoes a query; the names read as
@@ -350,12 +367,14 @@ export async function kitSignals(query, options = {}) {
     query: String(query).trim(),
     idea: searched,
     matchCount,
-    directMatch: shownDirect,
+    directMatch,
     start,
     pages: pagesKept,
     blocks: blocksKept,
     domain: domainKept,
     kitBlocks: blocksKept.map(r => r.name),
+    frame,
+    foundation,
     searched: searchedBlocks.map(blockScore),
     searchedEntries: new Map(
       [...searchedBlocks].reverse().map(r => [r.name, r]),
