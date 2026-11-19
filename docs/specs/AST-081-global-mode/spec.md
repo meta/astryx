@@ -137,10 +137,14 @@ works on is `spec:AST-040` FR9's.
     its version, as it did before global mode (DEC-10). A run that starts in
     another copy MUST hand the run to it (FR9) before loading anything the
     project provides: its `astryx.config`, its integrations, or its Core.
-    `doctor` warns when that CLI and the project's Core are different releases
-    and names the command that brings them to one release; from a folder
-    inside the project whose `package.json` is not the project's
-    (`spec:AST-040` FR9), it says to run from the project's folder instead.
+    `doctor` warns when that CLI and the project's Core are different
+    releases, and names the command that brings them to one release. When the
+    CLI is the newer one, that command moves Core up to the CLI's release. It
+    also moves every other package that the project lists and that Astryx
+    releases with Core, such as its themes, because each one names Core's
+    exact release. From a folder inside the project whose `package.json` is
+    not the project's (`spec:AST-040` FR9), `doctor` says to run from the
+    project's folder instead.
   - When the project installs no CLI, as a project with only Core or a fresh
     clone with nothing installed, the copy that started the run answers, as
     it did before global mode (DEC-10), reading the project's Core as it
@@ -219,20 +223,30 @@ works on is `spec:AST-040` FR9's.
     and in a machine-readable result `meta.answeredBy.copy` is `fallback`.
     No other release answers, and nothing falls back while the matched
     release can be obtained. A failed install is recorded in the per-user
-    cache, by release, and no copy using that cache starts it again for 2
-    minutes after a first failure, or 10 minutes after a second failure in a
-    row; a successful install forgets it. So an offline run prints at most one
-    line saying it installs, and the warning says when it was last tried.
+    cache, by release and with npm's registry settings at the time (the
+    `@astryxdesign` scope's registry and npm's registry), and no copy using
+    that cache starts it again for 2 minutes after a first failure, or 10
+    minutes after a second failure in a row with those settings; a successful
+    install forgets it, and a run whose settings differ from the recorded ones
+    installs at once. So an offline run prints at most one line saying it
+    installs, the reason names the registry npm failed to reach, and the
+    warning says when it was last tried and that changing the registry tries
+    again.
     `ERR_VERSIONS_UNAVAILABLE` is for a run nothing can answer, such as a
     command that needs Core outside a project that cannot install it (FR3).
 - **FR3 — Outside a project, the running release answers as a new project
   would.** Outside a project, every copy answers itself, the global copy
   included (FR6, FR9). The answering release MUST answer as it would in a new
   project that installs only that release of Core, the computer-level
-  integrations (FR12), and any integration a programmatic host approves (FR1).
+  integrations (FR12), any integration a programmatic host approves (FR1),
+  and, in a hosted run, each package that the `package.json` of the root that
+  serves the run lists in `dependencies` or `optionalDependencies`: a page that
+  `render` renders takes those packages, and `template`, `build` and
+  `theme eject` do not name them as missing.
   Outside a project, or in a project with nothing
   installed (FR2's copy that started the run, such as in a fresh clone), every
-  command that needs Core answers from the carried Core: the
+  command that needs Core answers from the carried Core when the run's base is
+  Core (`spec:AST-114` FR2): the
   `@astryxdesign/core` release equal to the answering CLI, beside it, carried by
   its door (FR1), or kept in the per-user cache, where a copy that carries none
   installs it the first time a command needs it. The global copy also installs
@@ -248,7 +262,9 @@ works on is `spec:AST-040` FR9's.
   `upgrade` judge or change a project and MUST NOT read the carried Core.
   Output outside a project MUST NOT give advice that works only inside one, such
   as a step that sets up, configures, or refreshes a project the folder does not
-  have.
+  have. So in a folder that no `package.json` holds, `template`, `build` and
+  `theme eject` name a package a page needs that nothing provides as missing,
+  with no install command, for the project that uses the page.
 - **FR4 — Every command declares what it does outside a project.** Every
   command and subcommand MUST declare one of three values in its command doc,
   and `astryx manifest` MUST publish that value as the command's
@@ -406,17 +422,26 @@ works on is `spec:AST-040` FR9's.
     `docs` and `doctor` keep in `astryx/catalogs` (search's catalogs, each
     integration's contribution-check results, template discovery's records,
     the component list (with each integration's component replacements),
-    each integration's components with the doc parts the not-found matcher
-    scores, integrations' theme records, what `theme build` checks a theme
+    whether the installed Core matches the component list the CLI was
+    published with, Core's and each integration's components with the doc
+    parts the not-found matcher scores, Core hooks' declared keywords for the
+    not-found hint, integrations' theme records, what `theme build` checks a theme
     against in Core's component docs, the JavaScript `theme build` compiles
     from a theme's local TypeScript or JSX modules, what `theme build` finds
-    when it checks a theme's pseudo-class keys and token names, the lookup
+    when it checks a theme's pseudo-class keys, token names and settings
+    the browser won't show as written, the lookup
     commands'
     not-found hint's name summaries of folder trees, npm's list of the files an integration
     package packs (for `integration check` and `doctor integration validate`
     in the package's own folder), the locale and time zone a run's debug
     record names (on Linux, kept by any command that delivers a debug
-    record), the CLI's own docs tree, and doctor's
+    record), the CLI's own docs tree, each stored doc's checked contents,
+    keyed by its text, what `template` reads from a template's source to
+    name the components it uses, keyed by the source's text and the parser's
+    release, discover's record of the integrations a project loads
+    and what each adds, and what it searches in its sources' saved copies
+    (which `search` reads for its discover line), and
+    doctor's
     file-only docs checks and theme-wiring scan, which doctor keeps only
     while the folder exists), a
     folder only the user can
@@ -428,22 +453,35 @@ works on is `spec:AST-040` FR9's.
     create it to keep npm's list; used only while it is
     a real folder the user owns and others cannot open, never where the
     system has no user ids), each
-    kept value used only while every input its gather read is unchanged. For the installed CLI's own files, the CLI's build id and the folder the CLI runs from stand for their contents (an upgrade, a reinstall or a copy installed in another folder, such as a patched one, changes them; in-place edits to an installed CLI aren't supported, and deleting the per-user `astryx/catalogs` folder clears what was kept); for the same reason, a run that keeps catalogs loads the installed CLI's own modules by their path in that folder, without Node first checking that each file exists and where it really lives. A
+    kept value used only while every input its gather read is unchanged. For the installed CLI's own files, the CLI's build id and the folder the CLI runs from stand for their contents (an upgrade, a reinstall or a copy installed in another folder, such as a patched one, changes them; in-place edits to an installed CLI aren't supported, and deleting the per-user `astryx/catalogs` folder clears what was kept); for the same reason, a run that keeps catalogs loads the installed CLI's own modules by their path in that folder, without Node first checking that each file exists and where it really lives. One kept value depends on neither the build id nor the folder the CLI runs from: the JavaScript `theme build` compiles from a theme's local TypeScript or JSX module. It is named for the module's source text, the compile options, the import rewrites, the content of the CLI module that compiles it and the files the CLI loads Babel and its plugins from, and it is used only while every file of Babel's code that compiled it keeps its size, modification time, change time and inode, and each package folder Babel's code found another package in keeps its real path; and it is kept only when none of those files changed during the run that made it. A CLI upgrade that leaves Babel's installed files in place reuses it, wherever the new CLI is installed; a reinstall or change of Babel, a CLI that finds Babel in another place, or a change to the compiling module compiles again. A
     run under Yarn Plug'n'Play's loader, such as `yarn astryx`, keeps and
     uses no catalog; `doctor` lists that folder and its size in an info row,
     which also names the size limit it shares with the transpile cache below
-    and in such a run says that it keeps none;
+    and in such a run says that it keeps none. Text output prints the row's
+    brief in place of that message: the folder, its entry count and size, the
+    `doctor --json` command that prints the whole message, and the command
+    that removes the catalogs folder and, when it exists, the transpile
+    folder;
   - the same per-user cache directory, for the code jiti transpiles from the
     files the CLI loads through it (an integration's manifest, TypeScript doc
     topics and codemods, a TypeScript config, a built theme artifact, and the
-    theme sources `theme build` loads), in `astryx/jiti`: made `0700` on first
-    use and used at once, only while it is a real folder the user owns and
-    others cannot open, and kept within the same size limit as the catalogs
-    by removing its least recently used copies once it has grown, never one
-    written in the last day or read in the last day where the file system
-    records reads; otherwise nothing is
-    cached on disk; where the system has no user ids jiti keeps its own
-    default, and a set `JITI_FS_CACHE` is left to jiti;
+    theme sources `theme build` loads), in `astryx/transpiled`: made `0700`
+    on first use and used at once, only while it is a real folder the user
+    owns and others cannot open; otherwise nothing is cached on disk. Each
+    copy is named for its source text and transpile settings, not its
+    location, so the same file in many folders shares one copy; a file whose
+    text contains the word `meta`, as every use of `import.meta` must, also
+    gets a copy per location, because such a copy can hold its own path.
+    Errors still name the real file, and an unreadable copy is made again.
+    Copies are spread over 256 subfolders; a run that writes one trims only
+    that subfolder to its share of the catalogs' size limit, removing the
+    copies made longest ago first, and a copy larger than that share is used
+    for the run but not kept, so no run reads the whole folder. Copies that
+    earlier CLIs left in the old single folder (`astryx/jiti`) are never read
+    or listed; project doctor names that folder and the command that removes
+    it.
+    Where the system has no user ids jiti keeps its own default, and a set
+    `JITI_FS_CACHE` is left to jiti;
   - the platform's temporary directory, for scratch work such as building or
     verifying a package, for a scratch copy of a template at a path the caller
     names there (`architecture:cli-surface` INV10, DEC-15), and for Node's
@@ -457,9 +495,36 @@ works on is `spec:AST-040` FR9's.
     `astryx/state.json`, which holds what the update check found and when
     each notice last printed (FR6, FR8, FR10);
   - the computer-level agent text (FR8), its links, and its copy, written by
-    `astryx init --user` and by the global copy keeping that text installed,
-    in the background, as FR8 states; no other command writes them, and no
-    package install script does.
+    `astryx init --user` (also spelled `--to user`) and by the global copy
+    keeping that text installed, in the background, as FR8 states; no other
+    command writes them, and no package install script does;
+  - a folder a person names with `astryx init --to <folder>`, for
+    `<folder>/astryx-project/SKILL.md` (the project skill) when the folder is
+    in the project, else `<folder>/astryx/SKILL.md` (the computer-level
+    text). The project skills folders `--to skills` writes sit in the folder
+    where `init` writes agent docs. `astryx upgrade --apply` refreshes the
+    project places astryx.config `skills.to` saves under the same rules as
+    `init`: the copies of a place are written together or not at all, an
+    edited file or one Astryx did not write is kept, nothing is written
+    through a folder linked out of the project, and none is written in the
+    home folder or a settings folder. An Astryx block is refreshed wherever
+    it is; only the advice to add one is left out where `skills.to` saves no
+    `agents-md`. `astryx doctor`'s `skill-places` check reports each saved
+    file (current, missing, from another release, or kept), copies of a
+    place that differ, the block and the skill both present without both
+    being saved, and a project skill named `astryx`, and scans no skill
+    folder in the home folder or a settings folder.
+    `astryx init --to <places> --once` writes a copy saved nowhere, so no
+    later run touches it, and refuses the block and any place already
+    saved. `astryx init --remove` (`--remove-agents` is the same option)
+    removes the skill from every place the project saves, or with `--to`
+    from the places named, drops each from what is saved, and removes the
+    block when no `--to` is given or `--to` names `agents-md`; folders saved
+    for this computer stay unless `--to` names them. A skill file Astryx did
+    not write is kept, a linked skill folder's included; an unedited Astryx
+    file is the place's own, through a link too, and a folder saved for this
+    computer where every file was kept is not saved. In the project, linked
+    copy folders share one file, written and removed once.
 
   No run writes a project's agent docs into the home folder or a settings folder
   in it (`architecture:cli-surface` INV31); the computer-level agent text above
@@ -480,11 +545,16 @@ works on is `spec:AST-040` FR9's.
     it names no version, no release-specific command or prop, and only entry
     points every release keeps (`search`, `docs`, `component`, and the like),
     so an older copy never misleads.
+    Inside a project that has its own Astryx text (the `astryx-project` skill,
+    or an Astryx block in AGENTS.md or CLAUDE.md), it tells the agent to follow
+    that text, which knows the project's version and setup.
     It also gives the build route the project agent docs give, through their
-    shared workflow wording: work in a project folder, new or existing, adding
-    `@astryxdesign/core` and `@astryxdesign/cli`, or, where the project already
-    installs Core, the CLI at that Core's version; run `astryx init` there; then
-    start from a template, check, and deliver the built project.
+    shared workflow wording: work in a project folder; a new project adds
+    `@astryxdesign/core` and `@astryxdesign/cli`, an existing app that does not
+    use Astryx keeps its current UI stack unless the user asks for Astryx (then
+    it adds both), and a project that already installs Core adds the CLI at that
+    Core's version; a project that has or adds Astryx runs `astryx init`, starts
+    from a template, checks, and delivers the built project.
     When it names `astryx`, it ends with
     ``If `astryx` is not found, run `<install step>` first.``, where the
     step installs the CLI for the computer with the package manager and folder
@@ -504,7 +574,15 @@ works on is `spec:AST-040` FR9's.
     folder (FR9). `astryx init --user --remove-agents` removes the file, every
     link the CLI made, and every managed copy, and records that the
     computer-level text is not wanted. The global copy honors that choice, and
-    writes nothing, until `astryx init --user` runs again.
+    writes none of these files, until `astryx init --user` runs again. A
+    folder a person saved with `astryx init --to <folder>` is a choice of its
+    own: the global copy refreshes `<folder>/astryx/SKILL.md` on the same
+    schedule while the file is there, an edited file kept, and never writes
+    it again once it is deleted; `astryx init --to <folder>` writes it
+    again, and `astryx init --remove --to <folder>` removes it and forgets
+    the folder. Doctor's computer-level text check names these folders,
+    which are missing and which are from another release, also while the
+    computer-level text is turned off.
   - The settings file is `astryx/settings.json` in the per-user configuration
     directory (FR7): `computerAgentText.install`, `true` or `false`, and
     `computerAgentText.links`, the links the CLI made, so removal removes
@@ -545,8 +623,10 @@ works on is `spec:AST-040` FR9's.
     Starting again is not a hand-off: the same copy runs, with the same
     arguments, folder, and standard streams.
   - A command that acts on the computer rather than the folder it runs in,
-    `astryx init --user` (FR8) and `astryx docs global` with its pages, the
-    docs of global mode itself, is never handed to a project's release: it is
+    `astryx init --user` (FR8), `astryx init --to` naming only places outside
+    the project (`user`, or folders outside it) with no feature beyond the
+    agent docs (FR8), and `astryx docs global` with its pages, the docs of
+    global mode itself, is never handed to a project's release: it is
     answered as outside a project wherever it runs, so those docs read the same
     inside a project whose release predates them, and its standard-error line
     says it answered for the computer.
@@ -609,7 +689,9 @@ works on is `spec:AST-040` FR9's.
   - Inside a project, when the release that answers it is older than the newest
     release the check found: the command installs `@astryxdesign/core` and
     `@astryxdesign/cli`, so a project that installed only Core gets its own CLI
-    too, at the newest release with the project's own package manager, then runs
+    too, and every other package the project lists for its install that Astryx
+    releases with Core, such as its themes, which name Core's exact release,
+    all at the newest release with the project's own package manager, then runs
     `astryx upgrade --from <current> --apply` with the command name FR5 picks
     for that release, as `<install command>, then <upgrade command>`. For this
     notice, the project is the one `spec:AST-040` FR9 defines, as in FR2's
@@ -685,7 +767,8 @@ works on is `spec:AST-040` FR9's.
     lists each computer-level integration the project does not install, whose
     peer range admits the release that answers there and whose manifest loads,
     among the packages the project could add, with source
-    `installed for this computer` and the project's install command. Those are
+    `installed for this computer` and the project's install command, or the
+    install guidance a loaded integration gives (`spec:AST-039` FR16). Those are
     the integrations beside the copy that answers when it was installed outside
     the project, otherwise beside the first `astryx` on the search path that is
     installed for the computer. The command name a door passes still applies
@@ -698,7 +781,7 @@ works on is `spec:AST-040` FR9's.
   - `doctor` outside a project lists each computer-level integration it uses and
     each the folder loads its own copy of, and warns about each it skips or
     cannot load, naming why; inside a project, it lists the ones `discover`
-    lists as available, with the project's install command.
+    lists as available, with the same install command or guidance.
 
 - **FR13 — The repository may ship one plugin skill, shared by the Claude
   Code and Codex plugins.** The repository MAY ship one plugin skill, shared
@@ -894,7 +977,7 @@ needs no Changeset.
 | FR7      | File-system comparison before and after each command in the empty-folder run and in projects                                                                                                                                  | each command that writes; absolute, traversal, and symlinked paths; a home folder                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | A file lands outside the named places, or a refusal writes first                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | FR8      | Release build, drift checks, a starter build in CI, and computer-level text tests                                                                                                                                             | the official list; the agent text for each door; each starter; the global copy's first run and a switch; `--agent` lists; an opt-out; a file a person edited; a file without markers; a link in a file's place; a strict YAML parse of every skill file                                                                                                                                                                                                                                                                                                                                                                                                                             | A committed copy drifts, a global asset is fetched at run time, the computer-level text names a version, a starter fails to scaffold, install, or build, the global copy writes after an opt-out or into an edited file, a command waits for the text, or a skill's frontmatter does not parse                                                                                                                                                                                                                                     |
 | FR9      | Hand-off probes: every command example run through each copy in each folder kind, compared with the release FR2 names run directly in that folder                                                                             | the CLI package installed for the computer on an older and on a newer release than the project's CLI, run directly and run by a package runner in place of a fetch; a package runner's copy, unversioned and with a version requested inside a project, for a read and for `upgrade`; a project with Core but no CLI, through a package runner that fetches the newest release; a package with no Astryx inside a project, which the package runner takes for the project; a project CLI that predates the hand-off and one that hands off itself; a declined project CLI; a project CLI that cannot start; a non-zero exit; piped standard input; outside a project; text and JSON | A release other than the one FR2 names answers in a project, outside the declined case; a project CLI that differs from its Core answers; a requested version answers inside a project; a run is handed off twice or returns to a copy it left; arguments, folder, streams, or exit status differ from a direct run of the project's CLI; outside a project, a release answers that FR3 and FR6 do not name; or the line is missing, prints twice, prints in JSON mode, or prints for a run the project's own CLI answers directly |
-| FR10     | Notice tests                                                                                                                                                                                                                  | the global copy behind, for npm, pnpm, Yarn, Bun, and Volta installs; a newest release that needs a newer Node; a project behind, with and without its own CLI; an old `astryx` first on the search path; two runs in one day and a run the next day; a failed command; JSON mode; `CI`; `NO_UPDATE_NOTIFIER`; standard error not a terminal; a prerelease                                                                                                                                                                                                                                                                                                                          | A notice prints in JSON mode, after a failure, twice in a day, with `CI` or `NO_UPDATE_NOTIFIER` set, or before the command's output; it names another package manager's command; or `doctor` omits it                                                                                                                                                                                                                                                                                                                             |
+| FR10     | Notice tests                                                                                                                                                                                                                  | the global copy behind, for npm, pnpm, Yarn, Bun, and Volta installs; a newest release that needs a newer Node; a project behind, with and without its own CLI, and with a theme Astryx releases with Core; an old `astryx` first on the search path; two runs in one day and a run the next day; a failed command; JSON mode; `CI`; `NO_UPDATE_NOTIFIER`; standard error not a terminal; a prerelease                                                                                                                                                                                                                                                                              | A notice prints in JSON mode, after a failure, twice in a day, with `CI` or `NO_UPDATE_NOTIFIER` set, or before the command's output; it names another package manager's command; or `doctor` omits it                                                                                                                                                                                                                                                                                                                             |
 | FR11     | One test per row of the global and project table, with packed CLI copies in each install layout                                                                                                                               | every row of the table                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | A row's answer, line, or test differs from the table, or a row has no test                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | FR12     | Computer-level integration tests and table rows G35–G43                                                                                                                                                                       | npm and pnpm global folders; a door's package set; a runner's temporary install; the release cache; outside a project; inside one with and without the same integration; an incompatible peer range; a manifest that fails                                                                                                                                                                                                                                                                                                                                                                                                                                                          | A computer-level integration contributes inside a project, is missing outside one, loads beside the project's copy, loads with an excluded peer range, or `discover` and `doctor` omit it                                                                                                                                                                                                                                                                                                                                          |
 | FR13     | Plugin-skill drift check (`--check`) and `scripts/generate-agent-plugin-skill.test.mjs`                                                                                                                                       | the committed plugin skill matches its rendering; a different rendering; a missing file                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | The committed file differs from the rendering and the check passes, or the skill is edited by hand                                                                                                                                                                                                                                                                                                                                                                                                                                 |
@@ -1147,6 +1230,14 @@ notice needs no check. Unlike `gh`, which prints only to a terminal, a notice
 prints when standard error is not one, because agents, the CLI's main
 callers, run it without a terminal and would otherwise never learn of a newer
 release; `CI` and `NO_UPDATE_NOTIFIER` still silence it.
+
+The setup reminder, in a project that installs Astryx but has not run `init`,
+is the one notice that prints before the command's output: on standard error,
+at most once a day per project, on a failing command too (which uses up the
+day), and never into standard output or machine-readable output; `CI` and its
+other quiet paths silence it. It comes first because agents keep the start of
+a long answer (`2>&1 | head`), so a line after the output is cut and its one
+showing of the day is spent unseen.
 
 Rejected: a line on every run, which agents learn to ignore; printing only to
 a terminal, which no agent sees; staying silent, which leaves copies and

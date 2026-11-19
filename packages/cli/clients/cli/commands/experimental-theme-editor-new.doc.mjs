@@ -28,6 +28,7 @@ export const doc = {
     {
       flag: '--like <theme>',
       param: 'options.like',
+      names: 'theme',
       description:
         'A built-in theme to build on: neutral, stone, matcha, y2k, gothic, chocolate, or butter; or none, for Astryx defaults (the same as leaving it out)',
     },
@@ -35,7 +36,7 @@ export const doc = {
       flag: '--png',
       param: 'options.png',
       description:
-        'Also take PNG pictures of the previews (light and dark): preview.png, the sample page, and sheet-overlays.png, each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list drawn open (from sheet-overlays.html, which it writes too; a file of yours by that name is left alone and the picture not taken) (show adds a picture of each family of components the theme sets a part of, or of the buttons when it sets none, and show --section <family> --png takes any other family; sheet.html, every component, is not pictured), with no dev server running: it needs a Playwright installed in the project or a Chrome or Chromium found on the machine, and adds a few seconds while the browser starts (a browser that takes longer than 60 seconds is stopped, and the result says so); without one, the result says how to get it. Each picture carries the editor stamp and is recorded, by name and content, in themes/<theme>/<theme>.pictures.json; a file of yours named like a picture (preview.png, sheet-overlays.png) is never written over: no picture is taken, and the result names the file',
+        'Also take PNG pictures of the previews (light and dark): preview.png, the sample page, and sheet-overlays.png, each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list drawn open (from sheet-overlays.html, which it writes too; a file of yours by that name is left alone and the picture not taken) (show adds a picture of each family of components the theme sets a part of, or of the buttons when it sets none, and show --section <family> --png takes any other family; sheet.html, every component, is not pictured), with no dev server running: it needs a Playwright installed in the project or a Chrome or Chromium found on the machine, and adds a few seconds while the browser starts (a browser that takes longer than 60 seconds, plus 20 seconds for each picture after the first, is stopped, and the result says so); without one, the result says how to get it. Each picture carries the editor stamp and is recorded, by name and content, in themes/<theme>/<theme>.pictures.json; a file of yours named like a picture (preview.png, sheet-overlays.png) is never written over: no picture is taken, and the result names the file',
     },
     {
       flag: '--corners <rung>',
@@ -149,6 +150,7 @@ export const doc = {
     },
   ],
   outsideProject: 'refuse',
+  requires: ['themes.targets', 'themes.compile'],
   notes: [
     {
       type: 'prose',

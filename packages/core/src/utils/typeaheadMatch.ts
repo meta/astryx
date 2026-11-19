@@ -4,7 +4,7 @@
  * @file typeaheadMatch.ts
  * @input Plain strings (an item label and the letters a person typed)
  * @output foldForTypeahead, nextTypeaheadBuffer, typeaheadPrefixMatch,
- *   findTypeaheadMatch
+ *   findTypeaheadMatch, isShortcutChord
  * @position Shared type-to-select matching for useTypeahead, useTreeFocus and
  *   MultiSelector
  *
@@ -139,4 +139,23 @@ export function findTypeaheadMatch(
     }
   }
   return -1;
+}
+
+/** The modifier state a key event reports, as the DOM and React both expose it. */
+interface ModifierKeyEvent {
+  readonly ctrlKey: boolean;
+  readonly metaKey: boolean;
+  getModifierState?(key: string): boolean;
+}
+
+/**
+ * Whether a key is a Control or Command shortcut, not a typed character.
+ * AltGr on Windows reports Control too, with the AltGraph modifier set; the
+ * key it gives is a letter the person typed, such as ł.
+ */
+export function isShortcutChord(e: ModifierKeyEvent): boolean {
+  if (e.metaKey) {
+    return true;
+  }
+  return e.ctrlKey && e.getModifierState?.('AltGraph') !== true;
 }

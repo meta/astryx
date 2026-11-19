@@ -33,6 +33,7 @@ import {
 } from './_catalog.mjs';
 import {
   catalogVariants,
+  codeFingerprint,
   demoProps,
   needsParent,
   renderDir,
@@ -59,15 +60,18 @@ import {importPathOf, installLine} from './_project.mjs';
 import {
   COLOR_PROP_PARTS,
   DIRECT,
+  FAMILIES,
   P,
   SHOWCASE_GROUPS,
   wordTable,
 } from './_tables.mjs';
 import {extractImportedPackages} from '../../foundation/discovery/template-needs.mjs';
 import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
+import {fontFaces} from '../../foundation/fonts/font-stylesheet.mjs';
 import {themeFileImports} from '../../foundation/discovery/theme-discovery.mjs';
 import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
+import {PICTURE_TAKEN} from '../../foundation/render/picture-window.mjs';
 import {FONT_PROBE_PREFIX} from '../../foundation/render/font-probe.mjs';
 import {CUT_SHORT_PREFIX} from '../../foundation/render/cut-short.mjs';
 
@@ -119,7 +123,7 @@ function groupOf(name, category) {
 }
 
 /**
- * A container's or a layout's props on the sheet, with two lines of sample
+ * A container's or a layout's props on the sheet, with a line of sample
  * text when its doc suggests no children (a section, a form layout): empty,
  * it draws nothing of the theme. The part data reads the doc's own props.
  * @param {import('./_project.mjs').ThemeProject} project
@@ -141,10 +145,7 @@ function withSampleContent(project, name, props) {
     return props;
   return {
     ...props,
-    children: [
-      {__element: 'Text', props: {}, children: ['Content']},
-      {__element: 'Text', props: {}, children: ['More content']},
-    ],
+    children: [{__element: 'Text', props: {}, children: ['Sample content']}],
   };
 }
 
@@ -165,8 +166,8 @@ export function familyOf(project, name) {
 
 /**
  * The sections of the theme-building page whose parts the theme's settings
- * set on their own (`--on badge`): the components that part names a class
- * of, each in its section. A setting for the whole theme (a color, the
+ * set on their own (`--on badge`, or a group of parts such as `--on
+ * inputs`): the components each part names a class of, each in its section. A setting for the whole theme (a color, the
  * corners) sets no section here: the sample page and the open states show
  * it.
  * @param {import('./_project.mjs').ThemeProject} project
@@ -174,8 +175,11 @@ export function familyOf(project, name) {
  * @returns {string[]}
  */
 export function touchedFamilies(project, data) {
+  // A group (`--on inputs`) sets each of its parts.
   const parts = new Set(
-    (data.settings ?? []).flatMap(s => (s.on ? [s.on] : [])),
+    (data.settings ?? []).flatMap(s =>
+      s.on ? (FAMILIES[s.on] ?? [s.on]) : [],
+    ),
   );
   /** @type {Set<string>} */
   const out = new Set();
@@ -189,6 +193,76 @@ export function touchedFamilies(project, data) {
 }
 
 /**
+ * What the cached component items are built by ({@link codeFingerprint}):
+ * this file and every file it imports, read the first time it is needed.
+ * @type {string | null}
+ */
+let itemsKey = null;
+
+/**
+ * The component items of the theme-building page for each group, as JSON,
+ * by cache file: read or made once a process. They come from the installed
+ * Core's component docs alone, which the same install (its cache folder,
+ * keyed by its version and stylesheet) never changes, and every sample page
+ * and sheet a command renders starts from them; the cache file
+ * (items.json beside the part data) keeps them for the next command.
+ * @type {Map<string, Record<string, string>>}
+ */
+const itemsByFile = new Map();
+
+/**
+ * The component items for a group, from the cache or made now
+ * ({@link componentItems}), as a copy of their own.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string | undefined} group
+ * @returns {import('./_catalog.mjs').CatalogItem[]}
+ */
+function cachedComponentItems(project, group) {
+  itemsKey ??= codeFingerprint(import.meta.url);
+  const file = path.join(project.cacheDir, 'items.json');
+  let kept = itemsByFile.get(file);
+  if (!kept) {
+    kept = {};
+    try {
+      const cached = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (
+        cached?.itemsKey === itemsKey &&
+        cached.coreKey === project.coreKey &&
+        cached.groups &&
+        typeof cached.groups === 'object'
+      )
+        for (const [g, items] of Object.entries(cached.groups))
+          if (Array.isArray(items)) kept[g] = JSON.stringify(items);
+    } catch {
+      // Not made yet, or unreadable: made now.
+    }
+    itemsByFile.set(file, kept);
+  }
+  const at = group ?? '';
+  if (kept[at] == null) {
+    kept[at] = JSON.stringify(componentItems(project, group));
+    try {
+      fs.mkdirSync(project.cacheDir, {recursive: true});
+      // Written beside it and renamed in, so a reader never sees half a
+      // file; another command writing at once leaves one whole file.
+      const part = `${file}.${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+      fs.writeFileSync(
+        part,
+        `{"itemsKey":${JSON.stringify(itemsKey)},"coreKey":${JSON.stringify(project.coreKey)},"groups":{${Object.entries(
+          kept,
+        )
+          .map(([g, json]) => `${JSON.stringify(g)}:${json}`)
+          .join(',')}}}`,
+      );
+      fs.renameSync(part, file);
+    } catch {
+      // A read-only node_modules: made again next time.
+    }
+  }
+  return JSON.parse(kept[at]);
+}
+
+/**
  * Items of the theme-building page: each component once per variant
  * (overlays open), the sample page, and template pages
  * whose packages the project has.
@@ -197,6 +271,16 @@ export function touchedFamilies(project, data) {
  * @returns {{items: import('./_catalog.mjs').CatalogItem[], imports: Record<string, import('./_catalog.mjs').Binding>, skipped: string[], notes: string[]}}
  */
 export function showcaseItems(project, group) {
+  return withPages(project, group, cachedComponentItems(project, group));
+}
+
+/**
+ * The component items of the theme-building page ({@link showcaseItems}).
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string | undefined} group only this group
+ * @returns {import('./_catalog.mjs').CatalogItem[]}
+ */
+function componentItems(project, group) {
   /** @type {import('./_catalog.mjs').CatalogItem[]} */
   const items = [];
   /** @param {string} name */
@@ -215,6 +299,17 @@ export function showcaseItems(project, group) {
     // to, never alone beside it: that page stays one or two screens.
     if (group === 'overlays' && g === 'overlays' && info?.subComponentOf)
       continue;
+    // A deprecated part is not drawn: a theme styles the part that replaces
+    // it. An overlay whose playground opens it over the page draws nothing
+    // closed (a phone's navigation drawer, slid out of the window): where
+    // the open states draw it open (below), that is its only cell.
+    if (info?.deprecated) continue;
+    if (
+      (!group || group === 'overlays') &&
+      info?.overlay &&
+      OPEN_SCENES.some(s => s.name === name)
+    )
+      continue;
     catalogVariants(project, name, 12, {shown: true}).forEach((v, i) =>
       items.push({
         group: g,
@@ -222,7 +317,11 @@ export function showcaseItems(project, group) {
         label: v.label,
         tree: inParent({
           __element: name,
-          props: withSampleContent(project, name, v.props),
+          // A doc's sample children may name a part by an older name (a
+          // stack, a heading): each is drawn by the name Core exports.
+          props: /** @type {Record<string, unknown>} */ (
+            withCoreAliases(project, withSampleContent(project, name, v.props))
+          ),
         }),
         // An overlay shown open is drawn open: Core places a popover,
         // tooltip or hover card only once it is mounted. Any other part, as
@@ -288,6 +387,19 @@ export function showcaseItems(project, group) {
           states: true,
         });
   }
+  return items;
+}
+
+/**
+ * {@link showcaseItems}' items with the sample app and the template pages
+ * whose packages the project has (read from the project each time: what it
+ * installs can change).
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string | undefined} group only this group
+ * @param {import('./_catalog.mjs').CatalogItem[]} items
+ * @returns {{items: import('./_catalog.mjs').CatalogItem[], imports: Record<string, import('./_catalog.mjs').Binding>, skipped: string[], notes: string[]}}
+ */
+function withPages(project, group, items) {
   items.push({
     group: 'pages',
     name: 'Sample app',
@@ -475,11 +587,19 @@ export function baseFontsSheet(ctx, data) {
   } catch {
     return null;
   }
-  // The families the sheet loads; with the theme's build at hand, the sheet
-  // is imported only while the build still names one of them.
-  const families = [...text.matchAll(/family=([^:&'")]+)/g)].map(m =>
-    decodeURIComponent(m[1].replace(/\+/g, ' ')),
-  );
+  // The families the sheet loads, from a font service request or from its
+  // own `@font-face` rules (a base that ships its font files); with the
+  // theme's build at hand, the sheet is imported only while the build still
+  // names one of them.
+  const faces = fontFaces(text);
+  const families = [
+    ...new Set([
+      ...[...text.matchAll(/family=([^:&'")]+)/g)].map(m =>
+        decodeURIComponent(m[1].replace(/\+/g, ' ')),
+      ),
+      ...faces.map(f => f.family),
+    ]),
+  ];
   /** @type {string | null} */
   let built = null;
   try {
@@ -514,6 +634,20 @@ export function baseFontsSheet(ctx, data) {
       weights.set(
         family,
         [...new Set(list)].sort((a, b) => a - b),
+      );
+  }
+  // The weights the sheet's own faces load: one weight each; a range
+  // (`100 900`) is a variable face, every weight in it, so none is listed.
+  for (const family of new Set(faces.map(f => f.family))) {
+    const own = faces.filter(f => f.family === family).map(f => f.weights);
+    if (own.some(w => !w || w[0] !== w[1])) continue;
+    const list = own.flatMap(w => (w ? [w[0]] : []));
+    if (list.length)
+      weights.set(
+        family,
+        [...new Set([...(weights.get(family) ?? []), ...list])].sort(
+          (a, b) => a - b,
+        ),
       );
   }
   return {spec: sheet, families, remote, weights};
@@ -603,19 +737,9 @@ export function fontIndexWeights(ctx, pkg) {
   } catch {
     return null;
   }
-  /** @type {Array<[number, number]>} */
-  const spans = [];
-  for (const m of text.matchAll(/@font-face\s*\{([^}]*)\}/gi)) {
-    const value = /font-weight\s*:\s*([^;}]+)/i.exec(m[1])?.[1] ?? '400';
-    const nums = value
-      .trim()
-      .replace(/\bnormal\b/gi, '400')
-      .replace(/\bbold\b/gi, '700')
-      .split(/\s+/)
-      .map(Number);
-    if (!nums.length || nums.some(n => !Number.isFinite(n))) continue;
-    spans.push([nums[0], nums[1] ?? nums[0]]);
-  }
+  const spans = fontFaces(text).flatMap(face =>
+    face.weights ? [face.weights] : [],
+  );
   return spans.length ? spans : null;
 }
 
@@ -1095,6 +1219,35 @@ function withCoreNames(project, v) {
       Object.entries(v).map(([k, x]) => [k, withCoreNames(project, x)]),
     );
   return v;
+}
+
+/**
+ * A value with each element a doc names by an older name named as Core
+ * exports it; everything else is the same value, the same
+ * object where nothing in it changed (a part's props keep what marks them).
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {unknown} v
+ * @returns {unknown}
+ */
+function withCoreAliases(project, v) {
+  if (Array.isArray(v)) {
+    const out = v.map(x => withCoreAliases(project, x));
+    return out.every((x, i) => x === v[i]) ? v : out;
+  }
+  if (!v || typeof v !== 'object') return v;
+  if (isElement(v)) {
+    const name = coreName(project, v.__element) ?? v.__element;
+    const props = withCoreAliases(project, v.props);
+    const children = withCoreAliases(project, v.children);
+    return name === v.__element && props === v.props && children === v.children
+      ? v
+      : {...v, __element: name, props, children};
+  }
+  const entries = Object.entries(v);
+  const out = entries.map(([k, x]) => [k, withCoreAliases(project, x)]);
+  return out.every(([, x], i) => x === entries[i][1])
+    ? v
+    : {...v, ...Object.fromEntries(out)};
 }
 
 /** @param {unknown} v @returns {boolean} */
@@ -1914,22 +2067,13 @@ export function newPictureRun() {
 }
 
 /**
- * A whole-page PNG of an HTML file, with a Playwright the project has
- * installed, else a Chrome or Chromium found on the machine. Each browser
- * gets its own time bound, and the next one its turn when one fails or
- * hangs. Not ok with a reason when none is there or every one failed: the
- * reason then names each one's real error. When a later browser took the
- * picture, `note` says why an earlier one did not. `cutShort` is the text
- * the page draws cut short, measured in it by the browser that took the
- * picture, each with whether its part keeping its width draws it whole;
- * absent when that browser's script measured nothing.
+ * A whole-page PNG of an HTML file: {@link screenshots} with one picture.
  * @param {import('./_project.mjs').ThemeProject} project
  * @param {string} html absolute
  * @param {string} png absolute
  * @param {'light' | 'dark'} mode
- * @param {PictureRun} [run] what earlier pictures of the same run learned:
- *   a browser that failed or hung there is not tried again
- * @returns {Promise<{ok: true, file: string, notes?: string[], cutShort?: Array<{part: string | null, text: string, whole: boolean}>} | {ok: false, reason: string, stopped?: string}>}
+ * @param {PictureRun} [run]
+ * @returns {Promise<PictureResult>}
  */
 export async function screenshot(
   project,
@@ -1938,6 +2082,41 @@ export async function screenshot(
   mode,
   run = newPictureRun(),
 ) {
+  const [r] = await screenshots(project, [{html, png, mode}], run);
+  return /** @type {PictureResult} */ (r);
+}
+
+/**
+ * @typedef {{ok: true, file: string, notes?: string[], cutShort?: Array<{part: string | null, text: string, whole: boolean, broken?: boolean}>} | {ok: false, reason: string, stopped?: string}} PictureResult
+ */
+
+/** The time a batch adds to its browser's bound for each page after the first. */
+const PAGE_BOUND_MS = 20_000;
+
+/**
+ * Whole-page PNGs of HTML files, all with one browser: a Playwright the
+ * project has installed, else a Chrome or Chromium found on the machine.
+ * One browser start for the whole batch, a few pages drawn at once, so a
+ * run of many pictures costs about one start. Each browser gets its own
+ * time bound, and the next one the pictures still to take when one fails
+ * or hangs. A result for each picture, in order, up to the first that was
+ * not taken: that one not ok with a reason (naming each browser's real
+ * error, or that none is there), and none after it. When a later browser
+ * took a picture, its `notes` say why an earlier one did not. `cutShort` is
+ * the text the page draws cut short, measured in it by the browser that
+ * took the picture, each with whether its part keeping its width draws it
+ * whole; absent when that browser's script measured nothing.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {Array<{html: string, png: string, mode: 'light' | 'dark'}>} jobs
+ *   absolute paths
+ * @param {PictureRun} [run] what earlier pictures of the same run learned:
+ *   a browser that failed or hung there is not tried again
+ * @returns {Promise<PictureResult[]>}
+ */
+export async function screenshots(project, jobs, run = newPictureRun()) {
+  /** @type {PictureResult[]} */
+  const results = [];
+  if (!jobs.length) return results;
   /** What was tried and why it could not take the picture. @type {string[]} */
   const failed = [...run.failed.values()];
   /** Whether a Playwright was found without its own browser installed. */
@@ -1969,8 +2148,8 @@ export async function screenshot(
       );
     return local(rest ? `${head} (${rest})` : head);
   };
-  /** The browsers to try, in order: each a picture script and its args. */
-  /** @type {Array<{who: string, script: string, args: string[]}>} */
+  /** The browsers to try, in order: each a picture script and its first argument. */
+  /** @type {Array<{who: string, script: string, first: string}>} */
   const tries = [];
   for (const pkg of ['playwright', 'playwright-core']) {
     try {
@@ -1979,7 +2158,7 @@ export async function screenshot(
       tries.push({
         who: `${pkg}'s own browser`,
         script: PLAYWRIGHT_PICTURE,
-        args: [entry, html, png, mode],
+        first: entry,
       });
       break;
     } catch {
@@ -1987,41 +2166,61 @@ export async function screenshot(
     }
   }
   const chrome = chromeBinary();
-  if (chrome)
-    tries.push({
-      who: chrome,
-      script: CHROME_PICTURE,
-      args: [chrome, html, png, mode],
-    });
+  if (chrome) tries.push({who: chrome, script: CHROME_PICTURE, first: chrome});
   for (const t of tries) {
     if (run.failed.has(t.who)) continue;
-    const r = await runBrowser(t.script, t.args, BROWSER_BOUND_MS, {
-      drop: [png],
-    });
-    if (r.stoppedBy)
-      return {
+    const rest = jobs.slice(results.length);
+    const r = await runBrowser(
+      t.script,
+      [t.first, JSON.stringify(rest)],
+      BROWSER_BOUND_MS + (rest.length - 1) * PAGE_BOUND_MS,
+      {drop: rest.map(j => j.png)},
+    );
+    if (r.stoppedBy) {
+      results.push({
         ok: false,
         stopped: r.stoppedBy,
         reason: `the pictures were stopped (${r.stoppedBy}) before the browser finished`,
-      };
-    if (r.noTemp)
-      return {
+      });
+      return results;
+    }
+    if (r.noTemp) {
+      results.push({
         ok: false,
         reason: `no browser was started: the system temp folder cannot be written (${r.noTemp}), and a browser needs a profile folder of its own there; fix the temp folder (TMPDIR), then run the command again`,
-      };
-    if (r.status === 0 && fs.existsSync(png)) {
-      return {
+      });
+      return results;
+    }
+    // Each picture's own lines, by its place in this browser's share.
+    /** @type {Map<number, string[]>} */
+    const said = new Map();
+    for (const line of String(r.stdout ?? '').split('\n')) {
+      const tab = line.indexOf('\t');
+      const i = Number(line.slice(0, tab));
+      if (tab < 1 || !Number.isInteger(i)) continue;
+      said.set(i, [...(said.get(i) ?? []), line.slice(tab + 1)]);
+    }
+    // The pictures it took whole, in order, up to the first it did not.
+    for (const [i, job] of rest.entries()) {
+      const lines = said.get(i) ?? [];
+      if (!lines.includes(PICTURE_TAKEN) || !fs.existsSync(job.png)) break;
+      const out = lines.join('\n');
+      results.push({
         ok: true,
-        file: shown(project.cwd, png),
+        file: shown(project.cwd, job.png),
         notes: [
           ...(failed.length
             ? [`the picture was taken with ${t.who}; ${failed.join('; ')}`]
             : []),
-          ...pictureFontNotes(r.stdout ?? ''),
+          ...pictureFontNotes(out),
         ],
-        ...measuredCutShort(r.stdout ?? ''),
-      };
+        ...measuredCutShort(out),
+      });
     }
+    if (results.length === jobs.length) return results;
+    // A share it did not finish is the next browser's.
+    for (const job of jobs.slice(results.length))
+      fs.rmSync(job.png, {force: true});
     const text = r.error ? String(r.error.message) : r.stderr;
     if (
       t.script === PLAYWRIGHT_PICTURE &&
@@ -2029,30 +2228,31 @@ export async function screenshot(
     )
       pwMissing = true;
     const why = r.timedOut
-      ? `${t.who} did not finish within ${BROWSER_BOUND_MS / 1000} seconds, so it was stopped`
-      : `${t.who} could not take it: ${causeOf(text)}`;
+      ? `${t.who} did not finish within ${(BROWSER_BOUND_MS + (rest.length - 1) * PAGE_BOUND_MS) / 1000} seconds, so it was stopped`
+      : `${t.who} could not take it: ${causeOf(text || (r.status === 0 ? 'it stopped before every picture was taken' : ''))}`;
     run.failed.set(t.who, why);
     failed.push(why);
   }
-  if (failed.length)
-    return {
-      ok: false,
-      // Advice that can change the result: Playwright's browser only when
-      // it is missing; a Chrome to check only when there is one.
-      // What went wrong for this picture, and what can change it; the run
-      // that asked for it says which pictures were and were not taken.
-      reason: `${failed.join('; ')}. ${
-        !pwFound
-          ? `Install Playwright with its browser (${installLine(project.cwd, ['playwright'])}, then npx playwright install chromium), or`
-          : pwMissing
-            ? 'Give Playwright its browser (npx playwright install chromium), or'
-            : "Fix what Playwright's browser needs (the reason is above), or"
-      } ${chrome ? `check that ${chrome} starts on this machine` : 'install Google Chrome or Chromium'}. The HTML preview needs neither.`,
-    };
-  return {
-    ok: false,
-    reason: `No browser was found to take the picture. Install Playwright with its browser (${installLine(project.cwd, ['playwright'])}, then npx playwright install chromium), or install Google Chrome or Chromium. The HTML preview needs neither.`,
-  };
+  results.push(
+    failed.length
+      ? {
+          ok: false,
+          // Advice that can change the result: Playwright's browser only when
+          // it is missing; a Chrome to check only when there is one.
+          reason: `${failed.join('; ')}. ${
+            !pwFound
+              ? `Install Playwright with its browser (${installLine(project.cwd, ['playwright'])}, then npx playwright install chromium), or`
+              : pwMissing
+                ? 'Give Playwright its browser (npx playwright install chromium), or'
+                : "Fix what Playwright's browser needs (the reason is above), or"
+          } ${chrome ? `check that ${chrome} starts on this machine` : 'install Google Chrome or Chromium'}. The HTML preview needs neither.`,
+        }
+      : {
+          ok: false,
+          reason: `No browser was found to take the picture. Install Playwright with its browser (${installLine(project.cwd, ['playwright'])}, then npx playwright install chromium), or install Google Chrome or Chromium. The HTML preview needs neither.`,
+        },
+  );
+  return results;
 }
 
 /** The generic families any font of a common kind stands in for. */
@@ -2101,7 +2301,7 @@ export function pictureFontNotes(stdout) {
  * The text a picture script measured cut short, from the line it prints
  * after `CUT_SHORT_PREFIX`; nothing when it printed none that reads.
  * @param {string} stdout what the picture script printed
- * @returns {{cutShort?: Array<{part: string | null, text: string, whole: boolean}>}}
+ * @returns {{cutShort?: Array<{part: string | null, text: string, whole: boolean, broken?: boolean}>}}
  */
 function measuredCutShort(stdout) {
   const line = stdout.split('\n').find(l => l.startsWith(CUT_SHORT_PREFIX));
@@ -2121,6 +2321,7 @@ function measuredCutShort(stdout) {
         part: typeof x.part === 'string' ? x.part : null,
         text: x.text,
         whole: x.whole === true,
+        ...(x.broken === true ? {broken: true} : {}),
       })),
   };
 }

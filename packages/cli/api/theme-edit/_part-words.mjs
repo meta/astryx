@@ -28,12 +28,20 @@ export const OVERRIDES = [
   ],
   [/\baccordions?\b/, {on: 'collapsible'}],
   [/\bcombo ?box(es)?\b/, {on: 'complex-selector'}],
+  // A calendar's range band, and the band a hover would select.
+  [
+    /\b(?:calendar\s+)?range\s+preview(?:\s+bands?)?\b|\bpreview\s+bands?\b/,
+    {on: 'calendar-range-preview'},
+  ],
+  [/\b(?:calendar\s+)?range\s+bands?\b/, {on: 'calendar-range'}],
   [/\bnotifications?\b/, {on: 'toast'}],
   [/\b(focus (ring|outline)s?)\b/, {on: 'focus-ring'}],
   [/\b((modal |dialog )?(overlay|scrim|backdrop))\b/, {on: 'overlay'}],
   [/\bicons?\b/, {on: 'icons'}],
   [
-    /\b(table headers?|column headers?|table headings?)\b/,
+    // (The header row is the header cells: "table header row gray" is
+    // never every row.)
+    /\b(table header rows?|header rows?|table headers?|column headers?|table headings?)\b/,
     {on: 'table-header-cell'},
   ],
   [
@@ -123,9 +131,20 @@ export const OVERRIDES = [
     /\b(?:toggle|switch)(?:e?s)?(?:'s)?\s+(?:thumbs?|knobs?|handles?)\b/,
     {on: 'switch-thumb'},
   ],
-  // "switch off", "switch the buttons to" are the verb, not the part.
+  // The buttons or items of a toggle group (its own possessive or not):
+  // Core's toggle buttons, never a switch's.
   [
-    /\b(toggles?|switch(?:e?s)?(?! (off|on|to|the|out|it|them|over|back|from)\b))\b/,
+    /\btoggle[- ]?(?:button[- ]?)?groups?(?:'s|s'|’s)?\s+(?:buttons?|items?|options?)\b/,
+    {on: 'toggle-button'},
+  ],
+  // A toggle group: the group of toggle buttons, never a switch.
+  [/\btoggle[- ]?(?:button[- ]?)?groups?\b/, {on: 'toggle-button-group'}],
+  // A toggle button: Core's toggle button, never a switch.
+  [/\btoggle[- ]?buttons?\b/, {on: 'toggle-button'}],
+  // "switch off", "switch the buttons to" are the verb, not the part; the
+  // switch's "on color" or "on state" (its checked look) is the part.
+  [
+    /\b(toggles?|switch(?:e?s)?(?! (?:off|on(?![- ](?:colou?r|state|look)\b)|to|the|out|it|them|over|back|from)\b))\b/,
     {on: 'switch'},
   ],
   [/\b((table )?cells?)\b/, {on: 'table-cell'}],
@@ -135,6 +154,8 @@ export const OVERRIDES = [
     /\b(kbds?|keyboard (keys?|shortcuts?|chips?)|key ?(chips?|caps?)|shortcut keys?)\b/,
     {on: 'kbd'},
   ],
+  // (Kbd's key badges, each key's own box, by their own name.)
+  [/\bkey badges?\b/, {on: 'kbd-key'}],
   [/\b(badges?|chips?|tags?)\b/, {on: 'badge'}],
   [/\bh([1-6])\b/, {on: 'heading'}],
   [/\b(headings?|titles?)\b/, {on: 'heading'}],

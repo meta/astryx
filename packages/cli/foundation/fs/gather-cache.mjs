@@ -26,7 +26,11 @@
  *   against in Core's component docs,
  *   by `doctor` (api/doctor/_adapter.mjs) for its file-only docs checks and
  *   its theme-wiring scan, by the docs adapter (api/docs/_adapter.mjs) for
- *   the CLI's own docs tree, which `docs` and `search` read,
+ *   the CLI's own docs tree, which `docs` and `search` read, by the discover
+ *   adapter (api/discover/_adapter.mjs) for the integrations a project loads
+ *   and what each adds, which `discover` lists, and for what discover
+ *   searches in its sources' saved copies, which `search` reads for its
+ *   discover line,
  *   in a run that records modules and variables to its end, and, through
  *   `persistedSummary`, by kept-tree.mjs for summaries of folder trees, the
  *   lookup commands' not-found hint's name index among them
@@ -37,11 +41,21 @@
  *   modules (api/theme/build/self-contained.mjs), each kept while every
  *   path it stamped but the CLI's own files (which its build id and the
  *   folder it runs from, both in every entry's key, stand for) is
- *   unchanged, in any command. The commands whose runs keep the other
+ *   unchanged, in any command. That JavaScript alone is kept across builds:
+ *   its key holds the content of the code that compiles it in place of the
+ *   build id, and it keeps the stamps of the CLI's own files too. Through `persistedValue`, the stored docs
+ *   (foundation/doc-compiler/stored-docs.mjs keptParse) keep each stored
+ *   doc's parse by the doc's text and the zod release the parsers load, and
+ *   `template` (foundation/discovery/template-adapter.mjs keptTemplateSyntax)
+ *   keeps what it reads from a template's source to name its components by
+ *   the source's text and the parser's release: with the build id, all each
+ *   value depends on, in a run that keeps catalogs. The commands whose runs keep the other
  *   entries are `search`, `build`, `component`, `template`, `theme`,
  *   `discover`, `docs` and `doctor`. The first such run on a machine makes the
  *   folder and keeps its gathers at once, so the next run (most often the same
- *   session's next command) uses them; doctor never makes it. A run through
+ *   session's next command) uses them. doctor never makes it, nor do
+ *   `component` and `template` in a project with no integration: they keep
+ *   their gathers only once it exists. A run through
  *   the host entry keeps them too, keyed on what the host passed
  *   (hostInputs). Only a published CLI stores anything:
  *   its build id (clients/cli/build-id.generated.json, written at `prepack`)
@@ -62,7 +76,8 @@
  *   The folder is `catalogs` in the user's cache folder (userCacheDir):
  *   created 0700, used only while it is a real folder owned by the user and
  *   closed to others (isPrivateDir; never on a system with no user ids), each file written 0600 by a rename, oldest first evicted past
- *   CACHE_LIMIT_BYTES (cache-eviction.mjs). Any failure to read, check, parse or write is silent
+ *   CACHE_LIMIT_BYTES (cache-eviction.mjs) once a run that wrote ends, or by
+ *   doctor's summary when it finds the folder over that. Any failure to read, check, parse or write is silent
  *   and the run gathers fresh, as it would with no cache.
  */
 
@@ -76,8 +91,7 @@ import {isDeepStrictEqual} from 'node:util';
 import {CLI_ROOT, isCliBuildFile, realDir} from './paths.mjs';
 import {mayHaveIntegrations} from '../integrations/may-have-integrations.mjs';
 import {currentUid, isPrivateDir} from '../env/private-dir.mjs';
-import {userCacheDir} from '../env/user-dirs.mjs';
-import {jitiCacheDir} from './jiti-cache.mjs';
+import {transpiledCacheDir, userCacheDir} from '../env/user-dirs.mjs';
 import {hostedRun} from '../runtime/package-root.mjs';
 import {cliDoor} from '../env/cli-command.mjs';
 import {CACHE_LIMIT_BYTES, evictOldest} from './cache-eviction.mjs';
@@ -99,17 +113,18 @@ import {
 
 /**
  * The kept commands whose kept gathers are worth recording only where an
- * integration can load (its check results, and template discovery, whose
- * records hold Core's templates too but which costs little without one): a
- * project with no integration records none of them.
+ * integration can load (its check results): a project with no integration
+ * records none of them.
  */
-const INTEGRATION_COMMANDS = new Set([
-  'component',
-  'template',
-  'theme',
-  'discover',
-  'docs',
-]);
+const INTEGRATION_COMMANDS = new Set(['theme', 'discover', 'docs']);
+
+/**
+ * The kept commands that run template discovery, which reads each of the
+ * CLI's template docs with or without an integration. In a project with no
+ * integration they record only into a catalogs folder that exists already,
+ * and never make it.
+ */
+const TEMPLATE_COMMANDS = new Set(['component', 'template']);
 
 /** The run's commands whose gathers are kept. */
 const KEPT_COMMANDS = new Set([
@@ -154,7 +169,7 @@ const UNSET = null;
  * variables only while the run is armed: from its start to the end of its
  * first gather, and during each later gather, or, in a run armed throughout
  * (`doctor`), to its end. Null outside a recorded run.
- * @type {{reads: Map<string, string>, env: Map<string, string | null>, arm: () => boolean, disarm: () => void, armedThroughout: boolean, realEnv: NodeJS.ProcessEnv, confirmed: Confirmed} | null}
+ * @type {{reads: Map<string, string>, env: Map<string, string | null>, arm: () => boolean, disarm: () => void, armedThroughout: boolean, realEnv: NodeJS.ProcessEnv, confirmed: Confirmed, trims: Set<string>, trimNoted: () => void} | null}
  */
 let run = null;
 
@@ -227,13 +242,13 @@ function inJitiCache(file) {
 let jitiRoots;
 
 /**
- * Where jiti may keep transpiled code: the system temp folder's `jiti`, the
+ * Where transpiled code may be kept: the system temp folder's `jiti`, the
  * per-user folder (jiti-cache.mjs), and a set JITI_FS_CACHE.
  * @returns {string[]}
  */
 function jitiCacheRoots() {
   const env = process.env.JITI_FS_CACHE;
-  const roots = [path.join(os.tmpdir(), 'jiti'), jitiCacheDir()];
+  const roots = [path.join(os.tmpdir(), 'jiti'), transpiledCacheDir()];
   if (env && env !== 'false' && env !== 'true' && env !== '0' && env !== '1') {
     roots.push(path.resolve(env));
   }
@@ -304,20 +319,22 @@ export async function recordRunFor(argv, fn) {
     !KEPT_COMMANDS.has(command) ||
     runsUnderPnp() ||
     currentUid() == null ||
-    withoutRecording(buildId) == null ||
-    // Last, being a few file checks: those commands keep what is worth
-    // keeping only where an integration can load, so a project with none
-    // records nothing.
-    (INTEGRATION_COMMANDS.has(command) &&
-      !withoutRecording(() => mayHaveIntegrations(process.cwd())))
+    withoutRecording(buildId) == null
   ) {
     return fn();
   }
-  // The first recorded run on a machine (search, build, component, template,
-  // theme, discover or docs) makes the folder and keeps its gathers at once.
-  // Once the per-user cache folder exists doctor uses it; it never makes it,
-  // so a doctor alone changes nothing on the machine (nor its own cache row).
-  if (command !== 'doctor') makeGatherCacheDir();
+  // Last, being a few file checks: whether an integration can load.
+  const bare =
+    (INTEGRATION_COMMANDS.has(command) || TEMPLATE_COMMANDS.has(command)) &&
+    !withoutRecording(() => mayHaveIntegrations(process.cwd()));
+  if (bare && !TEMPLATE_COMMANDS.has(command)) return fn();
+  // The first recorded run on a machine (search, build, or component,
+  // template, theme, discover or docs where an integration can load) makes
+  // the folder and keeps its gathers at once. Once the per-user cache folder
+  // exists doctor uses it, and so do component and template in a project
+  // with no integration; they never make it, so such a run alone changes
+  // nothing on the machine (nor doctor's own cache row).
+  if (command !== 'doctor' && !bare) makeGatherCacheDir();
   // A folder the cache would refuse (not the user's own, open to others, a
   // link) leaves the run exactly as without the cache: no hook is installed.
   if (withoutRecording(gatherCacheDir) == null) return fn();
@@ -481,6 +498,12 @@ export async function recordRun(fn, {armedThroughout = false} = {}) {
     }
   };
   if (!arm()) return fn();
+  // The catalogs folders this run wrote to, each trimmed once when it ends.
+  /** @type {Set<string>} */
+  const trims = new Set();
+  const trimNoted = () => {
+    for (const dir of trims) trimNow(dir);
+  };
   run = {
     reads,
     env,
@@ -489,13 +512,51 @@ export async function recordRun(fn, {armedThroughout = false} = {}) {
     armedThroughout,
     realEnv,
     confirmed: new Map(),
+    trims,
+    trimNoted,
   };
   try {
     return await recordReads(reads, fn, {exact: true});
   } finally {
     disarm();
     run = null;
+    process.removeListener('exit', trimNoted);
+    trimNoted();
   }
+}
+
+/**
+ * Keep a catalogs folder within its size limit after a write to it. In a
+ * recorded run the folder is trimmed once, when the run ends, so a run that
+ * keeps many values (a first `theme build` keeps one per Core component doc)
+ * reads the folder once, not once per value. Outside a run it is trimmed at
+ * once.
+ * @param {string} dir
+ */
+function trimAfterWrite(dir) {
+  if (!run) {
+    trimNow(dir);
+    return;
+  }
+  // A command that fails ends through process.exit, which skips the run's
+  // finally: the folders it noted are trimmed as the process exits.
+  if (run.trims.size === 0) process.once('exit', run.trimNoted);
+  run.trims.add(dir);
+}
+
+/**
+ * Trim a catalogs folder to its size limit now, the oldest entries first.
+ * @param {string} dir
+ */
+function trimNow(dir) {
+  // The cache's own upkeep, never an input of what it keeps.
+  withoutRecording(() => {
+    try {
+      evictOldest(dir, isEntry);
+    } catch {
+      // A folder that cannot be read is trimmed by a later run.
+    }
+  });
 }
 
 /**
@@ -624,7 +685,9 @@ function entryKey(key, id) {
   return JSON.stringify([
     FORMAT,
     // The build and the folder it runs from stand for the CLI's own files.
-    [id, cliFolder()],
+    // A summary kept across builds names the code it depends on in its key,
+    // wherever the CLI runs from.
+    id === ACROSS_BUILDS ? [id] : [id, cliFolder()],
     process.version,
     process.platform,
     process.arch,
@@ -1111,12 +1174,97 @@ export function persistedDerived(key, compute, codec, inputs = []) {
       const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
       fs.writeFileSync(temp, text, {mode: 0o600, flag: 'wx'});
       fs.renameSync(temp, file);
-      evictOldest(dir, isEntry);
+      trimAfterWrite(dir);
     } catch {
       // A value that cannot be stored is computed again next time.
     }
   });
   return value;
+}
+
+/**
+ * A value that is a function of `key` and of this CLI build alone, kept in
+ * the catalogs folder: the parse of a doc the CLI reads from the stored docs,
+ * by the doc's text, or what `template` reads from a template's source, by
+ * the source's text and the parser's release. The build and the folder it runs from stand for the
+ * CLI's own code, as in every kept entry, so nothing else is stamped. Kept
+ * only in a run that keeps catalogs (recordRunFor), by an installed CLI whose
+ * cache folder exists, and only when `codec` stores the value as text that
+ * reads back exactly. The entry holds a digest of that text, so a value that
+ * was changed after it was written is a miss. Anywhere else, or on any read
+ * or write error, `compute` runs as before. A `compute` that throws keeps
+ * nothing, so it throws the same way on every run.
+ * @template T, E
+ * @param {unknown[]} key - Everything the value is a function of, besides
+ *   the CLI build; its first item names the kind of value.
+ * @param {() => T} compute
+ * @param {{encode: (value: T) => E, decode: (stored: E) => T, valid?: (value: T) => boolean}} codec
+ * @returns {T}
+ */
+export function persistedValue(key, compute, codec) {
+  if (!run) return compute();
+  const id = withoutRecording(buildId);
+  const dir = id == null ? null : withoutRecording(gatherCacheDir);
+  if (id == null || dir == null) return compute();
+  const file = entryFile(dir, key, id);
+  const entry = entryKey(key, id);
+  try {
+    const stored = JSON.parse(
+      withoutRecording(() => fs.readFileSync(file, 'utf-8')),
+    );
+    const value =
+      stored?.format === FORMAT &&
+      stored.pure === true &&
+      stored.key === entry &&
+      stored.sum === textSum(JSON.stringify(stored.value))
+        ? readBack(() => stored.value, codec)
+        : undefined;
+    if (value !== undefined) {
+      try {
+        const now = new Date();
+        withoutRecording(() => fs.utimesSync(file, now, now));
+      } catch {
+        // An entry that cannot be touched is evicted sooner; nothing more.
+      }
+      return value;
+    }
+  } catch {
+    // No usable entry: computed below.
+  }
+  const value = compute();
+  withoutRecording(() => {
+    try {
+      const body = storedText(codec, value);
+      if (body === undefined) return;
+      const head = JSON.stringify({
+        format: FORMAT,
+        pure: true,
+        key: entry,
+        sum: textSum(body),
+      });
+      // The value's text goes in as checked, as the head's last field.
+      const text = `${head.slice(0, -1)},"value":${body}}`;
+      const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
+      fs.writeFileSync(temp, text, {mode: 0o600, flag: 'wx'});
+      fs.renameSync(temp, file);
+      trimAfterWrite(dir);
+    } catch {
+      // A value that cannot be stored is computed again next time.
+    }
+  });
+  return value;
+}
+
+/**
+ * The digest a value kept by persistedValue is checked against: its JSON
+ * text, as written and as the value read back writes it again.
+ * @param {string | undefined} text
+ * @returns {string | null}
+ */
+function textSum(text) {
+  return text === undefined
+    ? null
+    : createHash('sha256').update(text).digest('hex').slice(0, 32);
 }
 
 /**
@@ -1159,18 +1307,22 @@ function settled(stamps) {
  * @param {() => {value: T, stamps: [string, string][]}} make - The summary,
  *   with the stamp ({@link fileStamp}) of each path it depends on, each taken
  *   before the path was read.
- * @param {{accept?: (value: T) => boolean, keep?: (value: T) => boolean}} [options] - `accept`: whether a
+ * @param {{accept?: (value: T) => boolean, keep?: (value: T) => boolean, acrossBuilds?: boolean}} [options] - `accept`: whether a
  *   stored value serves this call, else it is made again and stored over (a
  *   summary that holds more only once a caller asks for it); `keep`: whether
- *   a value just made is stored at all (a failed or partial answer is not).
+ *   a value just made is stored at all (a failed or partial answer is not);
+ *   `acrossBuilds`: kept for every build of the CLI in its folder, for a
+ *   summary whose key holds the content of the CLI code that makes it
+ *   (loaded-files.mjs codeDigest), since no build id covers that code. Its
+ *   stamps keep the CLI's own files too.
  * @returns {T}
  */
 export function persistedSummary(
   key,
   make,
-  {accept = () => true, keep = () => true} = {},
+  {accept = () => true, keep = () => true, acrossBuilds = false} = {},
 ) {
-  const at = summaryAt(key);
+  const at = summaryAt(key, acrossBuilds);
   if (!at) return make().value;
   const stored = storedSummary(at);
   if (stored && accept(stored.value)) return stored.value;
@@ -1194,7 +1346,7 @@ export async function persistedSummaryAsync(
   make,
   {accept = () => true, keep = () => true} = {},
 ) {
-  const at = summaryAt(key);
+  const at = summaryAt(key, false);
   if (!at) return (await make()).value;
   const stored = storedSummary(at);
   if (stored && accept(stored.value)) return stored.value;
@@ -1203,21 +1355,28 @@ export async function persistedSummaryAsync(
   return value;
 }
 
+/** What a summary kept across builds has in its key in place of a build id. */
+const ACROSS_BUILDS = 'across-builds';
+
 /**
  * Where the summary for `key` is kept, or null where none is kept.
  * @param {unknown[]} key
- * @returns {{dir: string, file: string, entry: string} | null}
+ * @param {boolean} acrossBuilds - kept for every build of the CLI, not under
+ *   this build's id
+ * @returns {{dir: string, file: string, entry: string, acrossBuilds: boolean} | null}
  */
-function summaryAt(key) {
+function summaryAt(key, acrossBuilds) {
   const id = withoutRecording(buildId);
   const dir =
     id == null || runsUnderPnp() ? null : withoutRecording(gatherCacheDir);
   if (id == null || dir == null) return null;
   const summaryKey = ['summary', ...key];
+  const build = acrossBuilds ? ACROSS_BUILDS : id;
   return {
     dir,
-    file: entryFile(dir, summaryKey, id),
-    entry: entryKey(summaryKey, id),
+    file: entryFile(dir, summaryKey, build),
+    entry: entryKey(summaryKey, build),
+    acrossBuilds,
   };
 }
 
@@ -1289,15 +1448,18 @@ function inCliBuild(file) {
  * value does not read back the same. Silent on any failure. A file in jiti's
  * cache is not kept as a stamp, as for a kept gather (inJitiCache), nor is
  * one of the CLI's own files: the build id in the summary's key covers them
- * (inCliBuild), so a new build makes the summary again. Every other file,
- * an installed package's included, keeps its own stamp: an edit in place
- * makes the summary again.
- * @param {{dir: string, file: string, entry: string}} at
+ * (inCliBuild), so a new build makes the summary again. A summary kept
+ * across builds has no build id in its key, so it keeps those stamps too.
+ * Every other file, an installed package's included, keeps its own stamp:
+ * an edit in place makes the summary again.
+ * @param {{dir: string, file: string, entry: string, acrossBuilds: boolean}} at
  * @param {unknown} value
  * @param {[string, string][]} made the stamps the summary was made with
  */
-function storeSummary({dir, file, entry}, value, made) {
-  const stamps = made.filter(([at]) => !inJitiCache(at) && !inCliBuild(at));
+function storeSummary({dir, file, entry, acrossBuilds}, value, made) {
+  const stamps = made.filter(
+    ([at]) => !inJitiCache(at) && (acrossBuilds || !inCliBuild(at)),
+  );
   if (!settled(stamps)) return;
   withoutRecording(() => {
     try {
@@ -1312,7 +1474,7 @@ function storeSummary({dir, file, entry}, value, made) {
       const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
       fs.writeFileSync(temp, text, {mode: 0o600, flag: 'wx'});
       fs.renameSync(temp, file);
-      evictOldest(dir, isEntry);
+      trimAfterWrite(dir);
     } catch {
       // A summary that cannot be stored is made again next time.
     }
@@ -1448,7 +1610,7 @@ function store(dir, file, entry, value, codec) {
       deps: deps.map(([name]) => path.join(dir, name)),
     });
     markUsed(file, run.confirmed);
-    evictOldest(dir, isEntry);
+    trimAfterWrite(dir);
   } catch {
     // A gather that cannot be stored is gathered again next time.
   }
@@ -1468,20 +1630,23 @@ export function runsUnderPnp() {
 /**
  * The cache folder and how much it holds, for `doctor`: null when the CLI
  * keeps no gathers (a checkout) or has no usable folder.
- * @returns {{dir: string, bytes: number, entries: number, pnp: boolean, limitBytes: number, jitiDir: string} | null}
+ * @returns {{dir: string, bytes: number, entries: number, pnp: boolean, limitBytes: number, transpiledDir: string} | null}
  *   `pnp`: whether this run is under Yarn Plug'n'Play's loader (runsUnderPnp);
- *   `limitBytes`: the most the folder, and jiti's folder `jitiDir`, holds
+ *   `limitBytes`: the most the folder holds, and the copies of transpiled
+ *   code in `transpiledDir` (jiti-cache.mjs) share
  */
 export function gatherCacheSummary() {
   // The cache's own bookkeeping, never an input of what it keeps.
   return withoutRecording(summarize);
 }
 
-/** @returns {{dir: string, bytes: number, entries: number, pnp: boolean, limitBytes: number, jitiDir: string} | null} */
-function summarize() {
-  if (buildId() == null) return null;
-  const dir = gatherCacheDir();
-  if (dir == null) return null;
+/**
+ * The entries a catalogs folder holds and their bytes, or null when the
+ * folder cannot be read.
+ * @param {string} dir
+ * @returns {{bytes: number, entries: number} | null}
+ */
+function heldIn(dir) {
   let bytes = 0;
   let entries = 0;
   try {
@@ -1497,12 +1662,29 @@ function summarize() {
   } catch {
     return null;
   }
+  return {bytes, entries};
+}
+
+/** @returns {{dir: string, bytes: number, entries: number, pnp: boolean, limitBytes: number, transpiledDir: string} | null} */
+function summarize() {
+  if (buildId() == null) return null;
+  const dir = gatherCacheDir();
+  if (dir == null) return null;
+  let held = heldIn(dir);
+  // A folder over its limit is trimmed first: this run's own writes are
+  // trimmed only when it ends, and a run that stopped early never trimmed.
+  if (held != null && held.bytes > CACHE_LIMIT_BYTES) {
+    trimNow(dir);
+    held = heldIn(dir);
+  }
+  if (held == null) return null;
+  const {bytes, entries} = held;
   return {
     dir,
     bytes,
     entries,
     pnp: runsUnderPnp(),
     limitBytes: CACHE_LIMIT_BYTES,
-    jitiDir: jitiCacheDir(),
+    transpiledDir: transpiledCacheDir(),
   };
 }

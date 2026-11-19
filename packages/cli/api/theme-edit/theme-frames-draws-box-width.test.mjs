@@ -25,6 +25,7 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {hasModuleHooks} from '../../test-utils/module-hooks.mjs';
 
 // The assertions are about settings, notes and lines, not rendered pages:
 // a render costs seconds, so the pages are written by the stand-in.
@@ -120,7 +121,11 @@ describe('the starter app', () => {
       fs.writeFileSync(path.join(cwd, 'themes/s/extra.scss'), '.x{color:red}');
       await expect(
         themeEditPreviewApp('apps/s', {cwd, theme: 's'}),
-      ).rejects.toThrow(/another language than CSS/);
+      ).rejects.toThrow(
+        hasModuleHooks
+          ? /another language than CSS/
+          : /extra\.scss, and loading a theme that imports a stylesheet or asset needs Node 22\.15 or later/,
+      );
       expect(fs.existsSync(path.join(cwd, 'apps/s'))).toBe(false);
     },
     T,

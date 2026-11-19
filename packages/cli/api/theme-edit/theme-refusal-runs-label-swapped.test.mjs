@@ -221,7 +221,7 @@ describe('a plain part fill that covers its variants', () => {
 
 describe('new', () => {
   it(
-    '--base offers the --like line as new checks it, every other flag repaired',
+    '--base, the global base option, offers the --like line, whose run repairs the rest',
     async () => {
       const r = await editor([
         'new',
@@ -231,8 +231,11 @@ describe('new', () => {
         '--accent',
         'bleu',
       ]);
-      expect(lines(r.env)[0]).toBe('new n1 --like neutral --accent blue');
-      expect((await follow(lines(r.env)[0])).status).toBe(0);
+      expect(r.env.code).toBe('ERR_BASE_NOT_FOUND');
+      expect(lines(r.env)[0]).toBe('new n1 --like neutral --accent bleu');
+      const repaired = await follow(lines(r.env)[0]);
+      expect(lines(repaired.env)[0]).toBe('new n1 --like neutral --accent blue');
+      expect((await follow(lines(repaired.env)[0])).status).toBe(0);
     },
     T,
   );

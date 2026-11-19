@@ -19,6 +19,9 @@
 
 import * as path from 'node:path';
 import {Project} from '../../foundation/config/project.mjs';
+import {discoverIntegrationSkills} from '../../foundation/discovery/integration-skills.mjs';
+import {renderAgentDocsBlock} from '../../foundation/agent-docs/agent-docs.mjs';
+import {resolveAgentDocsRoot} from '../../foundation/agent-docs/agent-docs-target.mjs';
 import {
   DocsCatalog,
   integrationDocsCatalog,
@@ -391,6 +394,67 @@ export function componentLinkProvider(ownerPackage, providerId) {
   return ownerPackage === CORE_PACKAGE
     ? CLI_PROVIDER_ID
     : normalizeProviderId(providerId ?? ownerPackage);
+}
+
+/**
+ * A linker for doc objects that packages wrote: it resolves each inline link
+ * in a doc's text fields to the command that opens its doc, against the docs
+ * of the package that wrote it (a Core item's against the CLI's own), and
+ * renders its doc tokens in the same pass (spec:AST-047 FR9). An owner that is
+ * not a package, or names no provider, links nothing: its links print as
+ * written and its tokens still render. `astryx component`, `astryx template`,
+ * `build` and `search` read packages' doc text through it.
+ * @param {string} cwd
+ * @returns {Promise<<T>(doc: T, owner: string | undefined) => Promise<T>>}
+ */
+export async function ownedDocLinker(cwd) {
+  const catalog = await loadDocsCatalog(cwd);
+  /** @type {Map<string, string>} */
+  const declared = new Map();
+  for (const integration of projectOfCatalog.get(catalog)?.loadedIntegrations ??
+    []) {
+    const id = /** @type {any} */ (integration).providerId;
+    if (typeof id === 'string') declared.set(integration.name, id);
+  }
+  /** @type {LinkResolver} */
+  const noDocs = async () => ({problem: 'its owner names no docs provider'});
+  return async (doc, owner) => {
+    if (!JSON.stringify(doc ?? null).includes('{@')) return doc;
+    let provider = null;
+    try {
+      if (typeof owner === 'string') {
+        provider = componentLinkProvider(owner, declared.get(owner));
+      }
+    } catch {
+      // Not a provider id: nothing to link against.
+    }
+    if (provider == null) return (await linkFields(doc, noDocs)).doc;
+    return (await linkComponentDoc(catalog, provider, doc)).doc;
+  };
+}
+
+/**
+ * Doc text that packages wrote, such as template descriptions, read through
+ * {@link ownedDocLinker}. The docs catalog loads only when a text links.
+ * @param {ReadonlyArray<{text: string, package?: string}>} items
+ * @param {string} cwd
+ * @returns {Promise<string[]>}
+ */
+export async function linkOwnedTexts(items, cwd) {
+  if (!items.some(item => item.text.includes('{@link'))) {
+    return items.map(item => renderTokens(item.text));
+  }
+  const link = await ownedDocLinker(cwd);
+  /** @type {string[]} */
+  const out = [];
+  for (const item of items) {
+    const linked = await link(
+      {description: item.text},
+      item.package ?? CORE_PACKAGE,
+    );
+    out.push(linked.description);
+  }
+  return out;
 }
 
 /** @type {WeakMap<DocsCatalog, Promise<DocsTree>>} */
@@ -1253,23 +1317,37 @@ function ownsNode(node, owner) {
  * guide the tree places, and each typed doc.
  * @param {DocsCatalog} catalog
  * @param {DocsTree} tree
- * @param {{owner?: string, references?: boolean}} [options] `owner`: only the
- *   docs this package owns. `references`: instead of the links, each reference
- *   block that cannot include what it names; a reader loses that content,
- *   where a link that names no doc still prints as written
+ * @param {{owner?: string, references?: boolean, absent?: (target: {provider: string, kind: string, name: string}) => boolean}} [options]
+ *   `owner`: only the docs this package owns. `references`: instead of the
+ *   links, each reference block that cannot include what it names; a reader
+ *   loses that content, where a link that names no doc still prints as
+ *   written. `absent`: true for a target the run leaves out on purpose, such
+ *   as a Core doc in a run whose base is not Core; a link to it is no problem.
+ *   A target that names no provider names one of its own doc's provider.
  * @returns {Promise<string[]>}
  */
 export async function docsLinkProblems(
   catalog,
   tree,
-  {owner, references = false} = {},
+  {owner, references = false, absent} = {},
 ) {
   /** @type {string[]} */
   const problems = [];
-  /** @param {string} where @param {LinkProblem[]} found */
-  const note = (where, found) => {
+  /**
+   * @param {LinkProblem} problem
+   * @param {string | undefined} provider the provider of the doc it sits in
+   */
+  const leftOut = (problem, provider) =>
+    leftOutOfRun(absent, problem, provider);
+  /**
+   * @param {string} where
+   * @param {string | undefined} provider
+   * @param {LinkProblem[]} found
+   */
+  const note = (where, provider, found) => {
     for (const problem of found) {
       if ((problem.include === true) !== references) continue;
+      if (leftOut(problem, provider)) continue;
       problems.push(
         `${where}${problem.section ? ` \u00a7 ${problem.section}` : ''}${problem.field ? ` (${problem.field})` : ''}: ${problem.message}`,
       );
@@ -1278,7 +1356,7 @@ export async function docsLinkProblems(
   for (const entry of catalog.entries()) {
     if (owner != null && !ownsTopic(entry, owner)) continue;
     try {
-      note(entry.name, await topicLinkProblems(catalog, entry));
+      note(entry.name, entry.package, await topicLinkProblems(catalog, entry));
     } catch {
       // The topic budget check reports a topic that does not load.
     }
@@ -1287,12 +1365,72 @@ export async function docsLinkProblems(
     if (owner != null && !ownsNode(node, owner)) continue;
     if (node.kind === 'generic' && node.ref?.topicFile) {
       try {
-        note(node.route, await topicLinkProblems(catalog, guideEntry(node)));
+        note(
+          node.route,
+          node.provider,
+          await topicLinkProblems(catalog, guideEntry(node)),
+        );
       } catch {
         // As above.
       }
     } else if (node.ref?.selfDoc) {
-      note(node.route, (await nodeContent(catalog, tree, node)).problems);
+      note(
+        node.route,
+        node.provider,
+        (await nodeContent(catalog, tree, node)).problems,
+      );
+    }
+  }
+  return problems;
+}
+
+/**
+ * Whether a link problem names a target the run leaves out on purpose.
+ * @param {((target: {provider: string, kind: string, name: string}) => boolean) | undefined} absent
+ * @param {LinkProblem} problem
+ * @param {string | undefined} provider the provider of the doc it sits in
+ * @returns {boolean}
+ */
+function leftOutOfRun(absent, problem, provider) {
+  if (absent == null) return false;
+  const target = parseLinkTarget(problem.target);
+  if ('error' in target) return false;
+  const owning = target.provider ?? provider;
+  return owning != null && absent({...target, provider: owning});
+}
+
+/**
+ * Every link in a template's description that names no doc. Each description
+ * is checked against the docs of the package that wrote it, with the provider
+ * a component doc's links use.
+ * @param {DocsCatalog} catalog
+ * @param {{owner?: string, absent?: (target: {provider: string, kind: string, name: string}) => boolean}} [options]
+ *   `owner`: only this package's templates. `absent`: as in
+ *   {@link docsLinkProblems}.
+ * @returns {Promise<string[]>}
+ */
+export async function templateLinkProblems(catalog, {owner, absent} = {}) {
+  const contributions = await catalog.contributions();
+  /** @type {string[]} */
+  const problems = [];
+  for (const record of contributions?.templates ?? []) {
+    if (owner != null && record.package !== owner) continue;
+    if (!record.description?.includes('{@link')) continue;
+    let provider;
+    try {
+      provider = componentLinkProvider(record.package, record.providerId);
+    } catch {
+      // An owner that is not a provider id has no docs to check against.
+      continue;
+    }
+    const linked = await linkComponentDoc(catalog, provider, {
+      description: record.description,
+    });
+    for (const problem of linked.problems) {
+      if (leftOutOfRun(absent, problem, provider)) continue;
+      problems.push(
+        `template ${record.id}${problem.field ? ` (${problem.field})` : ''}: ${problem.message}`,
+      );
     }
   }
   return problems;
@@ -1342,6 +1480,26 @@ export async function packageComponentLinkProblems(integration, discovered) {
   return (await componentLinkProblems(catalog, integration.name)).map(
     message => ({severity: /** @type {const} */ ('warning'), message}),
   );
+}
+
+/**
+ * Each link in one integration's own template descriptions that names no doc.
+ * `validate` lists each as a `next` note.
+ * @param {any} integration a loaded integration
+ * @param {Parameters<typeof packageCatalog>[1]} discovered the package's own
+ *   docs, which its templates' links may name; null when it ships none
+ * @returns {Promise<string[]>}
+ */
+export async function packageTemplateLinkProblems(integration, discovered) {
+  // A package with no provider id has no docs to check against.
+  try {
+    normalizeProviderId(integration.providerId ?? integration.name);
+  } catch {
+    return [];
+  }
+  return templateLinkProblems(packageCatalog(integration, discovered), {
+    owner: integration.name,
+  });
 }
 
 /**
@@ -1746,10 +1904,16 @@ export async function nodeContent(catalog, tree, node) {
 function typedDocIndex(tree) {
   let index = typedDocIndexes.get(tree);
   if (!index) {
+    const nodes = [...tree.nodes.values()].filter(each => each.ref?.selfDoc);
+    /** @type {Map<string, string>} */
+    const routes = new Map();
+    for (const each of nodes) {
+      const key = `${each.ref.selfDoc.type}:${each.ref.selfDoc.name}`;
+      if (!routes.has(key)) routes.set(key, each.route);
+    }
     index = cliDocIndex(
-      [...tree.nodes.values()].flatMap(each =>
-        each.ref?.selfDoc ? [each.ref.selfDoc] : [],
-      ),
+      nodes.map(each => each.ref.selfDoc),
+      (kind, name) => routes.get(`${kind}:${name}`) ?? null,
     );
     typedDocIndexes.set(tree, index);
   }
@@ -2297,7 +2461,8 @@ function fewerWordMatches(topic, everyDoc, byWords, taken) {
  * first. Otherwise it suggests the docs whose own name it is, or whose route
  * it spells with hyphens; failing that, the topics and top-level namespaces,
  * closest first and cut where the matches get weaker (every one of them when
- * none shares a word with the argument). When the argument matches a component, hook or template
+ * none shares a word with the argument, with the names a slip or two from it
+ * first). When the argument matches a component, hook or template
  * (exact, folded or last segment), the command that reads that entry joins the list as
  * foundation/suggest/other-command.mjs places it, and the list keeps its
  * length; when no suggested doc
@@ -2367,7 +2532,13 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
       orderDocPages(tree, topic, suggestions, false),
     );
   } else if (typeof topic === 'string') {
-    suggestions = orderRouteSuggestions(topic, suggestions, {closest: true});
+    // Every topic and namespace is listed, so a near name (`tokns` for
+    // tokens, `colr` for color) only moves to the front, from four letters.
+    suggestions = orderRouteSuggestions(
+      topic,
+      suggestions,
+      everyDoc ? {closest: true, typos: true, slipFrom: 4} : {closest: true},
+    );
   }
   // In place of the every-doc list: the docs a typed word names by their
   // route, title or keywords.
@@ -2524,3 +2695,78 @@ export async function integrationDocTypes(integration, cwd) {
     ].sort((a, b) => compareText(a.doc, b.doc)),
   };
 }
+
+/**
+ * The skills the project's integrations declare, each with the route `astryx
+ * docs` reads its doc by, and why each skill left out was left out.
+ * `complete` is false when an integration's docs folder could not be read:
+ * its skills are unknown, so no copy is removed as a leftover.
+ * @param {string} cwd
+ * @returns {Promise<{skills: Array<import('../../foundation/discovery/integration-skills.mjs').IntegrationSkill & {route: string}>, problems: Array<{package: string, message: string, unread?: true}>, complete: boolean, unread: string[]}>}
+ */
+export async function projectIntegrationSkills(cwd) {
+  const catalog = await loadDocsCatalog(cwd);
+  const project = projectOfCatalog.get(catalog);
+  if (!project) return {skills: [], problems: [], complete: true, unread: []};
+  const {skills, problems, unread} = await discoverIntegrationSkills(project.loadedIntegrations);
+  const complete = unread.length === 0;
+  if (skills.length === 0) return {skills: [], problems, complete, unread};
+  const tree = await projectTree(catalog);
+  // Each skill reads its own doc: the node whose file it is, as a topic or as
+  // a guide's replacement. A doc the tree withdrew (a name another doc
+  // holds, or a CLI topic's name taken without `replaces`) has no node, and
+  // its skill is left out.
+  /** @type {Map<string, string>} */
+  const routes = new Map();
+  for (const node of tree.nodes.values()) {
+    const ref = /** @type {any} */ (node.ref);
+    const file =
+      node.guideOverlay?.replacement?.path ??
+      ref?.topicFile ??
+      (ref?.flatTopic != null ? catalog.resolve(ref.flatTopic)?.path : undefined);
+    if (typeof file === 'string') routes.set(path.resolve(file), node.route);
+  }
+  /** @type {Array<import('../../foundation/discovery/integration-skills.mjs').IntegrationSkill & {route: string}>} */
+  const kept = [];
+  for (const each of skills) {
+    const route = routes.get(path.resolve(each.file));
+    if (route == null) {
+      problems.push({
+        package: each.package,
+        message: `${path.basename(each.file)}: skill "${each.name}" is left out because its doc "${each.doc}" is not in the docs tree (another doc holds that name; use \`replaces\` to take its place).`,
+      });
+      continue;
+    }
+    kept.push({...each, route});
+  }
+  return {skills: kept, problems, complete, unread};
+}
+
+/**
+ * The project root the project skill belongs to, or null outside a project.
+ * @param {string} cwd
+ * @returns {string | null}
+ */
+export function skillsProjectRoot(cwd) {
+  return resolveAgentDocsRoot(cwd);
+}
+
+/**
+ * The agent-docs block for the project at `root`, pointing to the
+ * integration skills the docs tree keeps, so the block, `docs skills` and
+ * the skill places name the same skills.
+ * @param {string} root
+ * @param {{installedVersion?: string, fresh?: boolean}} [options]
+ * @returns {Promise<string>}
+ */
+export async function renderProjectAgentDocsBlock(root, options = {}) {
+  /** @type {Array<{package: string, name: string, description: string}>} */
+  let skills = [];
+  try {
+    skills = (await projectIntegrationSkills(root)).skills;
+  } catch {
+    // A project that cannot load is reported by the block's own render.
+  }
+  return renderAgentDocsBlock(root, {...options, skills});
+}
+

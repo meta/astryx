@@ -21,6 +21,11 @@ import {
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
+import {realRenders} from '../../test-utils/theme-render-stub.mjs';
+
+// (These cases read the drawn pages, their pictures or what a drawing
+// reports: drawn for real.)
+realRenders(true);
 
 /** @type {string} */
 let cwd;

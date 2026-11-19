@@ -77,9 +77,9 @@ const accepted = async slug => {
 };
 
 describe('every token and part property the source gives is judged', () => {
-  it('names a BigInt and a symbol as they are', async () => {
+  it('names a BigInt as the build writes it (its digits), and a symbol as it is', async () => {
     await withOwn('bi', "  tokens: {'--radius-element': 3n as any},");
-    await refused('bi', /--radius-element the value 3n, which is not text/);
+    await refused('bi', /--radius-element is a size; "3" is not one/);
     await withOwn('sy', "  tokens: {'--radius-element': Symbol('x') as any},");
     await refused(
       'sy',

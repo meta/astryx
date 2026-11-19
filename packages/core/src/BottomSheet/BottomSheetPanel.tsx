@@ -50,6 +50,7 @@ import {
 } from '../theme/tokens.stylex';
 import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
+import {LayoutContainerContext} from '../Layout/LayoutContainerContext';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
@@ -1310,7 +1311,10 @@ export function BottomSheetPanel({
       )}>
       <div
         ref={handleRef}
-        {...stylex.props(styles.handleBar)}
+        {...mergeProps(
+          themeProps('bottom-sheet-handle'),
+          stylex.props(styles.handleBar),
+        )}
         {...handleProps}
         aria-hidden="true"
       />
@@ -1369,7 +1373,11 @@ export function BottomSheetPanel({
               ),
             ),
           )}>
-          <LayerContentBoundary>{children}</LayerContentBoundary>
+          <LayerContentBoundary>
+            <LayoutContainerContext value="bottom-sheet">
+              {children}
+            </LayoutContainerContext>
+          </LayerContentBoundary>
         </div>
       </div>
     </div>

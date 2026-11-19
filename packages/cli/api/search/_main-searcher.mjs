@@ -71,6 +71,18 @@ function namesLoosely(candidate, loose) {
 }
 
 /**
+ * Each family member's `domain:name`, mapped to the family its doc lists it
+ * in (see rootsFirst in _order.mjs).
+ * @param {import('./_lexical.mjs').Candidate[]} all
+ * @returns {Map<string, string>}
+ */
+function familiesOf(all) {
+  return new Map(
+    all.flatMap(c => (c._family ? [[`${c.domain}:${c.name}`, c._family]] : [])),
+  );
+}
+
+/**
  * Ranks with one searcher's weights. Shared by the main searcher and every
  * topic searcher, which differ only in their weights.
  * @param {import('./tree.mjs').SearchRequest} request
@@ -105,6 +117,7 @@ export function rankWith(request, catalog, weights) {
       lexical,
       query,
       Math.max(limit, FIT_PLACES),
+      familiesOf(catalog.all),
     ),
     catalog.all,
     query,

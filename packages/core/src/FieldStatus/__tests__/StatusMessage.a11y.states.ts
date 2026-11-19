@@ -11,7 +11,6 @@ import type {StatusMessageStateFacts} from '@astryxdesign/a11y-spec';
 
 export type CoreStatusMessageBinding =
   | 'Toast announcement channel'
-  | 'Toast card'
   | 'FieldStatus announcement channel'
   | 'Spinner announcement channel'
   | 'ProgressBar';
@@ -110,36 +109,6 @@ export const CORE_STATUS_MESSAGE_BINDING_STATES = [
       semanticTransitions: ['show', 'replace', 'repeat'],
     }),
     storyId: 'a11y-status-message-pattern--toast-error-announcement-top-layer',
-  },
-  {
-    id: 'toast-info-card-mounted',
-    binding: 'Toast card',
-    summary:
-      'the visible info card is mounted with its polite live-region content',
-    facts: liveFacts({
-      role: 'status',
-      politeness: 'polite',
-      initialMessage: 'Changes saved',
-      message: 'Changes saved',
-      replacement: 'Profile updated',
-      semanticTransitions: ['replace'],
-    }),
-    storyId: 'a11y-status-message-pattern--toast-info-card-mounted',
-  },
-  {
-    id: 'toast-error-card-mounted',
-    binding: 'Toast card',
-    summary:
-      'the visible error card is mounted with its assertive live-region content',
-    facts: liveFacts({
-      role: 'alert',
-      politeness: 'assertive',
-      initialMessage: 'Upload failed',
-      message: 'Upload failed',
-      replacement: 'Connection failed',
-      semanticTransitions: ['replace'],
-    }),
-    storyId: 'a11y-status-message-pattern--toast-error-card-mounted',
   },
   {
     id: 'field-status-error-attached',
@@ -277,6 +246,12 @@ export type CoreStatusMessageBindingState =
 export type CoreStatusMessageStateId = CoreStatusMessageBindingState['id'];
 
 export const CORE_STATUS_MESSAGE_EXCLUSIONS = [
+  {
+    owner: 'Toast',
+    part: 'toast card',
+    reason:
+      'component:Toast FR9: the card never holds a live role (spec:AST-086 FR2, FR3). The viewport announces each toast it shows; a caller that renders a Toast on its own owns its announcement.',
+  },
   {
     owner: 'FieldStatus visible message box',
     part: 'visible validation text',

@@ -307,7 +307,7 @@ those contracts.
   factory's name
   (`spec:AST-107` FR6). Core and Lab components use `spec:AST-107`'s public
   layer wherever it covers their job and reach these modules directly only for
-  these known public-API gaps: press feedback timing; the Reduce Motion
+  these known public-API gaps: press feedback timing, which components reach through `architecture:press-feedback`'s engine and profiles, not directly (its INV1 gap names the touch press tracker's remaining direct users); the Reduce Motion
   cross-fade constants; press tracking across a group of actions; the
   selection lock during a gesture; the presentation hold; the input hold;
   lift-from-trigger and the rectangle morph; custom recognizer relationships;
@@ -397,7 +397,15 @@ those contracts.
   subpath: it reports whether a scroller's scroll is a finger's, now or at a
   past time, and, through `onEnd`, when that scroll ends. `timing`, UIKit's
   measured timing table, is on that subpath for Lab components that play the
-  same measured motion.
+  same measured motion. The group press
+  tracking, `useGroupPressTracking` with the pointers it follows,
+  `GROUP_PRESS_POINTERS`, is on that subpath: it is the tracking that
+  `family:buttons` groups use, so a Lab Rating's stars press as one group.
+  `pressGroupItemProps`, the props of the private group-item attribute that
+  `privateAttributes/pressGroupItem.stylex.ts` owns under
+  `architecture:public-component-api` INV23, is on that
+  subpath too: it marks a group's member so press feedback leaves its press to
+  the group's tracker.
   `prepareFocusReturnOnRemoval` is on that subpath too: it returns focus when
   a removal loses it, so a Lab Tour step that ends sends focus to its target
   or the opener.

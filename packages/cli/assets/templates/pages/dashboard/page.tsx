@@ -25,6 +25,7 @@ import {Divider} from '@astryxdesign/core/Divider';
 import {Link} from '@astryxdesign/core/Link';
 import {Icon} from '@astryxdesign/core/Icon';
 import {useToast} from '@astryxdesign/core/Toast';
+import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 
 // ============= ICONS =============
 
@@ -509,7 +510,7 @@ function ActiveUsersChart() {
             tickFormatter={(v: number) => xAxisLabels[v] ?? ''}
             tick={{
               fontSize: 'var(--font-size-sm, 12px)',
-              fill: 'var(--color-text-secondary, #4E606F)',
+              fill: 'var(--color-text-secondary, #445564)',
             }}
             axisLine={false}
             tickLine={false}
@@ -519,11 +520,13 @@ function ActiveUsersChart() {
             ticks={[0, 20, 40, 60, 80, 100, 120]}
             tick={{
               fontSize: 'var(--font-size-sm, 12px)',
-              fill: 'var(--color-text-secondary, #4E606F)',
+              fill: 'var(--color-text-secondary, #445564)',
             }}
             axisLine={false}
             tickLine={false}
-            width={30}
+            // Holds the widest tick label ("120") at the touch type size
+            // without a layout pass, so the chart edge does not clip it.
+            width={40}
           />
           <Tooltip
             content={<ChartTooltip />}
@@ -600,9 +603,13 @@ function MetricCard({
   return (
     <Card>
       <VStack gap={2}>
-        <Heading level={4}>{label}</Heading>
+        <Heading level={4} accessibilityLevel={3}>
+          {label}
+        </Heading>
         <HStack gap={2} vAlign="center">
-          <Heading level={2}>{value}</Heading>
+          <Heading level={2} accessibilityLevel={4}>
+            {value}
+          </Heading>
           <HStack gap={1} vAlign="center">
             {positive ? (
               <Icon icon={ArrowUpIcon} size="xsm" color="success" />
@@ -637,7 +644,9 @@ function StackedBarCard({
   return (
     <Card>
       <VStack gap={4}>
-        <Heading level={4}>{title}</Heading>
+        <Heading level={4} accessibilityLevel={3}>
+          {title}
+        </Heading>
         <ResponsiveContainer width="100%" height={24}>
           <BarChart
             data={chartData}
@@ -701,7 +710,9 @@ function TableCard<T extends {id: string}>({
   return (
     <Card>
       <HStack hAlign="between" vAlign="center" paddingBlockEnd={6}>
-        <Heading level={4}>{title}</Heading>
+        <Heading level={4} accessibilityLevel={3}>
+          {title}
+        </Heading>
         <Link href={linkHref}>{linkLabel}</Link>
       </HStack>
       <Table<T>
@@ -726,12 +737,15 @@ export default function DashboardTemplate() {
     <Layout
       height="fill"
       content={
-        <LayoutContent padding={6}>
+        <LayoutContent role="main" padding={6}>
+          <VisuallyHidden as="h1">Dashboard</VisuallyHidden>
           <VStack gap={6}>
             {/* Active Users Chart */}
             <VStack gap={6}>
               <HStack hAlign="between" vAlign="center">
-                <Heading level={3}>Active users</Heading>
+                <Heading level={3} accessibilityLevel={2}>
+                  Active users
+                </Heading>
                 <Button
                   label="Reload"
                   variant="secondary"
@@ -750,11 +764,11 @@ export default function DashboardTemplate() {
             </VStack>
 
             {/* Metric Cards */}
-            <Grid columns={{minWidth: 320, repeat: 'fit'}} gap={4}>
+            <Grid columns={{minWidth: 320, max: 2, repeat: 'fit'}} gap={4}>
               {[0, 2].map(start => (
                 <Grid
                   key={start}
-                  columns={{minWidth: 240, repeat: 'fit'}}
+                  columns={{minWidth: 240, max: 2, repeat: 'fit'}}
                   gap={4}>
                   {metrics.slice(start, start + 2).map((m, i) => (
                     <MetricCard
@@ -771,7 +785,9 @@ export default function DashboardTemplate() {
 
             {/* Demographics */}
             <HStack hAlign="between" vAlign="center">
-              <Heading level={3}>Demographics</Heading>
+              <Heading level={3} accessibilityLevel={2}>
+                Demographics
+              </Heading>
               <Button
                 label="View more"
                 variant="secondary"
@@ -785,7 +801,7 @@ export default function DashboardTemplate() {
                 }
               />
             </HStack>
-            <Grid columns={{minWidth: 320, repeat: 'fit'}} gap={4}>
+            <Grid columns={{minWidth: 320, max: 2, repeat: 'fit'}} gap={4}>
               <StackedBarCard title="Region" data={regionData} />
               <StackedBarCard title="Role" data={roleData} />
             </Grid>
@@ -794,7 +810,9 @@ export default function DashboardTemplate() {
 
             {/* Engagement */}
             <HStack hAlign="between" vAlign="center">
-              <Heading level={3}>Engagement</Heading>
+              <Heading level={3} accessibilityLevel={2}>
+                Engagement
+              </Heading>
               <Button
                 label="View more"
                 variant="secondary"
@@ -808,7 +826,7 @@ export default function DashboardTemplate() {
                 }
               />
             </HStack>
-            <Grid columns={{minWidth: 320, repeat: 'fit'}} gap={4}>
+            <Grid columns={{minWidth: 320, max: 2, repeat: 'fit'}} gap={4}>
               <TableCard
                 title="Top pages"
                 linkLabel="All pages"

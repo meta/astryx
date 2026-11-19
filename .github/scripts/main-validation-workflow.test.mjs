@@ -9,6 +9,7 @@
  *   Vitest routing over the same lanes is pinned in ci-test-routing.test.mjs.
  */
 
+import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
@@ -21,19 +22,118 @@ const TIP = 'a'.repeat(40);
 const OLDER = 'b'.repeat(40);
 
 describe('main validation legs', () => {
-  it.each([
-    ['test-ui', 6],
-    ['test-node', 6],
-  ])('%s runs %i legs at once, each inside the job budget', (lane, legs) => {
-    const job = workflow.jobs[lane];
-    expect(job.strategy.matrix.shard).toEqual(
-      Array.from({length: legs}, (_, index) => index + 1),
-    );
-    // No hold: every leg starts when the run does.
+  /** Every leg starts when the run does, inside the job budget. */
+  const expectUnheld = job => {
     expect(job.strategy['max-parallel']).toBeUndefined();
     expect(job.strategy['fail-fast']).toBe(false);
     expect(job['timeout-minutes']).toBe(15);
     expect(job['runs-on']).toBe('ubuntu-latest');
+  };
+
+  it("test-node draws the theme editor's pages as a pull request does", () => {
+    const job = workflow.jobs['test-node'];
+    const run = job.steps.find(step =>
+      /pnpm test:node --shard=/.test(step.run ?? ''),
+    );
+    // The legs are planned from times measured without real drawing
+    // everywhere, so they run that way too.
+    expect(run.env ?? {}).not.toHaveProperty('THEME_EDIT_REAL_RENDERS');
+    expect(job.env ?? {}).not.toHaveProperty('THEME_EDIT_REAL_RENDERS');
+    expect(workflow.env ?? {}).not.toHaveProperty('THEME_EDIT_REAL_RENDERS');
+  });
+
+  it('test-ui runs 6 legs at once, each inside the job budget', () => {
+    const job = workflow.jobs['test-ui'];
+    expect(job.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6]);
+    expectUnheld(job);
+  });
+
+  it('test-node runs the legs main-commit plans from the recorded times, at most twelve, each inside the job budget', () => {
+    const job = workflow.jobs['test-node'];
+    expect(job.strategy.matrix.shard).toBe(
+      "${{ fromJSON(needs.main-commit.outputs.node-shards || '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]') }}",
+    );
+    expectUnheld(job);
+    const commit = workflow.jobs['main-commit'];
+    expect(commit.outputs['node-shards']).toBe(
+      '${{ steps.node-legs.outputs.shards }}',
+    );
+    const plan = commit.steps.find(step => step.id === 'node-legs');
+    // Main's Node legs run the swizzle proof's slices too: `--main`.
+    expect(plan).toMatchObject({
+      if: "github.event_name != 'push'",
+      'continue-on-error': true,
+      'working-directory': '.ci-admission',
+      run: 'node scripts/vitest-node-legs.mjs plan --main --github-output',
+    });
+    // The sparse checkout holds the planner and what it reads.
+    const checkout = commit.steps.find(
+      step => step.with?.path === '.ci-admission',
+    );
+    expect(checkout.with['sparse-checkout'].split('\n')).toEqual(
+      expect.arrayContaining(['scripts/lib', '.github/scripts/lib']),
+    );
+    // Planned before the run waits for room, so the legs it starts are the
+    // legs it planned.
+    const names = commit.steps.map(step => step.name);
+    expect(names.indexOf(plan.name)).toBeLessThan(
+      names.indexOf('Wait for room under the CI ceiling'),
+    );
+  });
+});
+
+describe('main validation checkouts', () => {
+  /** Every checkout step in a job, with the steps right after it. */
+  const checkoutsOf = job =>
+    job.steps
+      .map((step, index) => ({step, index}))
+      .filter(({step}) => step.uses?.startsWith('actions/checkout@'));
+
+  it('bounds every checkout at five minutes, tries it once more, and stops with a named reason when both fail', () => {
+    const jobs = Object.entries(workflow.jobs).filter(([, job]) =>
+      job.steps?.some(step => step.uses?.startsWith('actions/checkout@')),
+    );
+    // Every job that checks out code: none is left unbounded.
+    expect(jobs.map(([id]) => id).sort()).toEqual([
+      'main-commit',
+      'sync-exports',
+      'test-node',
+      'test-ui',
+      'typecheck',
+    ]);
+    for (const [id, job] of jobs) {
+      const checkouts = checkoutsOf(job);
+      // One first try and one second try, each bounded.
+      expect(
+        checkouts.map(({step}) => step.id),
+        id,
+      ).toEqual(['checkout', 'checkout-again']);
+      const [first, again] = checkouts;
+      for (const {step} of checkouts) {
+        expect(step['timeout-minutes'], id).toBe(5);
+        expect(step['continue-on-error'], id).toBe(true);
+      }
+      // The second try checks out the same thing, only after the first failed.
+      expect(again.step.with, id).toEqual(first.step.with);
+      expect(again.index, id).toBe(first.index + 1);
+      expect(String(again.step.if), id).toContain(
+        "steps.checkout.outcome != 'success'",
+      );
+      // When both fail, the job stops at once with the reason.
+      const stop = job.steps[again.index + 1];
+      expect(stop.name, id).toBe('Stop when the checkout failed twice');
+      expect(String(stop.if), id).toContain(
+        "steps.checkout.outcome != 'success' && steps.checkout-again.outcome != 'success'",
+      );
+      expect(stop.run, id).toContain('checkout failed twice');
+      expect(stop.run.trim().split('\n').at(-1), id).toBe('exit 1');
+      // A condition the original step had applies to all three.
+      if (first.step.if)
+        for (const each of [again.step, stop])
+          expect(String(each.if), id).toContain(
+            String(first.step.if).replace(/^\$\{\{\s*|\s*\}\}$/g, ''),
+          );
+    }
   });
 });
 
@@ -248,5 +348,41 @@ describe('main validation dispatch', () => {
     await expect(
       resolve({eventName: 'workflow_dispatch', sha}),
     ).rejects.toThrow('full 40-character commit SHA');
+  });
+});
+
+describe("main validation's Node watchdog", () => {
+  it('names the files still running before the job limit without ending the leg, so an overrun stays incomplete and is run again', () => {
+    const job = workflow.jobs['test-node'];
+    const step = job.steps.find(each =>
+      /pnpm test:node --shard=/.test(each.run ?? ''),
+    );
+    expect(step.run).toContain('VITEST_SHARD_WATCHDOG_SECONDS=$(( 14 * 60 - ');
+    expect(step.run).toContain('export VITEST_SHARD_WATCHDOG_SECONDS');
+    expect(step.run).toContain(
+      '--reporter=default --reporter=github-actions --reporter=./scripts/vitest-shard-watchdog.mjs',
+    );
+    // Name-only: the reporter warns and the job limit cancels the leg.
+    expect(step.env.VITEST_SHARD_WATCHDOG_NAME_ONLY).toBe('1');
+    // The script holds only shell: an environment entry that slipped into it
+    // would run as a command after the tests and fail every leg.
+    const script = step.run.replace(/\$\{\{[^}]*\}\}/g, 'X');
+    expect(
+      script.split('\n').filter(line => /^\s*[A-Z_]+:\s/.test(line)),
+    ).toEqual([]);
+    const bash = spawnSync('bash', ['-n'], {input: script, encoding: 'utf8'});
+    expect(bash.status, bash.stderr).toBe(0);
+    expect(script.trim().split('\n').at(-1)).toMatch(
+      /^pnpm test:node --shard=/,
+    );
+    expect(job['timeout-minutes']).toBe(15);
+    // A cancelled unit run is incomplete to the scheduler, which dispatches
+    // the next one and reports it (spec:AST-030 FR21).
+    const heavy = fs.readFileSync(
+      new URL('../workflows/main-heavy-lanes.yml', import.meta.url),
+      'utf8',
+    );
+    const incomplete = /const INCOMPLETE = \[([^\]]+)\]/.exec(heavy)?.[1] ?? '';
+    expect(incomplete).toContain("'cancelled'");
   });
 });

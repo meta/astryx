@@ -11,7 +11,7 @@ export default function StepShowcase() {
   // always wrapped in a Stepper — that is where it reads its progress from —
   // so a single Step in a single Stepper is the smallest complete example.
   return (
-    <div style={{width: 380}}>
+    <div style={{width: 380, maxWidth: '100%'}}>
       <Stepper activeStep={1} orientation="vertical">
         <Step
           step={1}

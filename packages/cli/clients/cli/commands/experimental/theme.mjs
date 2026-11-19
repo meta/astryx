@@ -114,6 +114,11 @@ import {doc as previewListFn} from '../../../../api/theme-edit/themeEditPreviewL
 import {doc as previewRemoveFn} from '../../../../api/theme-edit/themeEditPreviewRemove.doc.mjs';
 import {doc as howFn} from '../../../../api/theme-edit/themeEditHow.doc.mjs';
 import {quoteCommandArgument} from '../../../../foundation/env/package-manager.mjs';
+import {
+  commandAvailable,
+  exampleAvailable,
+  helpBase,
+} from '../../lib/base-gate.mjs';
 
 const PREFIX = 'astryx experimental theme';
 const EDITOR = `${PREFIX} editor`;
@@ -577,10 +582,22 @@ function changeBlocks(r) {
             c => `\\${c.codePointAt(0)?.toString(16).toUpperCase()} `,
           ),
   };
+  // A change that leaves the setting as it was says so, never "x -> x".
+  const unchanged = /** @type {any} */ (d.notes ?? []).some(
+    (/** @type {string} */ n) => n.startsWith('no change: '),
+  );
+  const drawnAlready = /** @type {any} */ (d.notes ?? []).some(
+    (/** @type {string} */ n) =>
+      n.startsWith('no change: ') && n.includes(' already draws '),
+  );
   const done =
-    d.was != null
-      ? `[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`
-      : `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `removed ${describe(s)}${alsoRemovedText(d)}; now ${/** @type {any} */ (d).now ?? "the base theme's value"} applies`}`;
+    unchanged && d.action === 'set'
+      ? drawnAlready
+        ? `[no change] ${d.theme}: ${describe(s)} already shows; nothing written`
+        : `[ok] ${d.theme}: ${describe(s)} was already set; nothing changed`
+      : d.was != null
+        ? `[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`
+        : `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `removed ${describe(s)}${alsoRemovedText(d)}; now ${/** @type {any} */ (d).now ?? "the base theme's value"} applies`}`;
   // A problem the change made leads the result, right under the status
   // line, which counts them: a tail-cut or head-cut output still shows it.
   // What a whole-theme change leaves out comes next, with the lines that
@@ -588,8 +605,10 @@ function changeBlocks(r) {
   const {
     newProblems = [],
     leftOut = [],
-    missed = 0,
-    missedParts = missed,
+    missed: _missed,
+    missedParts: _missedParts,
+    missedOn: _missedOn,
+    missedWhere: _missedWhere,
     ...rest
   } = /** @type {any} */ (d);
   const status = newProblems.length
@@ -610,17 +629,26 @@ function changeBlocks(r) {
           ),
         ]
       : []),
-    // The parts the theme's own changes still do not reach, counted near
-    // the top, so a head of the output keeps it; show names the first ones
-    // with their lines, and show --json lists each.
-    ...(missed
-      ? [
-          record({
-            missed: `${missed} miss${missed > 1 ? 'es' : ''} on ${missedParts} part${missedParts > 1 ? 's' : ''} the theme's changes did not reach (show lists the first with their lines; show --json lists each)`,
-          }),
-        ]
-      : []),
+    ...missedLine(d),
     ...changeFields(rest),
+  ];
+}
+
+/**
+ * The parts the theme's own changes still do not reach, counted and
+ * named, near the top of a change or a new theme, so a head of the
+ * output keeps it; show names the first ones with their lines, and show
+ * --json lists each.
+ * @param {{missed?: number, missedParts?: number, missedOn?: string[], missedWhere?: string[]}} d
+ */
+function missedLine(d) {
+  const {missed = 0, missedParts = missed, missedOn = [], missedWhere = []} = d;
+  const named = missedWhere.length ? missedWhere : missedOn;
+  if (!missed) return [];
+  return [
+    record({
+      missed: `${missed} miss${missed > 1 ? 'es' : ''} on ${missedParts} part${missedParts > 1 ? 's' : ''} the theme's changes did not reach${named.length ? ` (${named.slice(0, 6).join(', ')}${named.length > 6 ? `, and ${named.length - 6} more` : ''})` : ''}: each still shows the base theme's own look there. Keep each one, or bring it in line with your changes: show lists the first misses with their lines, and show --json has every one`,
+    }),
   ];
 }
 
@@ -1550,6 +1578,7 @@ function defineGroup(parent, doc) {
         const word = String(extras[0]).toLowerCase();
         const group = doc.name.split(' ').at(-1) ?? '';
         const ranked = (cmd.commands ?? [])
+          .filter(command => commandAvailable(command, helpBase()))
           .map(command => command.name())
           .sort(
             (a, b) =>
@@ -1589,10 +1618,12 @@ function defineGroup(parent, doc) {
             type: 'help',
             data: {
               command: words.join(' '),
-              commands: (cmd.commands ?? []).map(command => ({
-                name: command.name(),
-                summary: command.summary() || command.description(),
-              })),
+              commands: (cmd.commands ?? [])
+                .filter(command => commandAvailable(command, helpBase()))
+                .map(command => ({
+                  name: command.name(),
+                  summary: command.summary() || command.description(),
+                })),
             },
           }),
         );
@@ -1647,12 +1678,29 @@ export function registerExperimentalTheme(group, program) {
   setUnknownOptionReader(unknownThemeOption);
   const theme = defineGroup(group, groupDoc);
   explained(theme, groupDoc);
+  // The run's base may not serve a line's command; help then leaves it out.
+  const overrides = [
+    [
+      'experimental theme targets',
+      `  ${getCliInvocation()} experimental theme targets          Every themeable class, with its props and states\n`,
+    ],
+    [
+      'experimental theme editor how',
+      `  ${getCliInvocation()} experimental theme editor how <part>  What one part reads, and the commands that change it\n`,
+    ],
+    [
+      'component <Name>',
+      `  ${getCliInvocation()} component <Name>                    One component's theming table\n`,
+    ],
+  ];
   theme.addHelpText(
     'after',
-    `\nComponent style overrides:\n` +
-      `  ${getCliInvocation()} experimental theme targets          Every themeable class, with its props and states\n` +
-      `  ${getCliInvocation()} experimental theme editor how <part>  What one part reads, and the commands that change it\n` +
-      `  ${getCliInvocation()} component <Name>                    One component's theming table\n`,
+    () =>
+      `\nComponent style overrides:\n` +
+      overrides
+        .filter(([cli]) => exampleAvailable(program, cli, helpBase()))
+        .map(([, line]) => line)
+        .join(''),
   );
 
   const editor = defineGroup(theme, editorDoc);
@@ -1690,38 +1738,6 @@ export function registerExperimentalTheme(group, program) {
                 (/** @type {string} */ w) =>
                   /^-/.test(w) && !takes.has(w.split('=')[0]),
               );
-            // `--base` is the dial new takes as --like.
-            if (stray && stray.split('=')[0] === '--base') {
-              const args = (cmd?.args ?? []).slice(1).map(String);
-              const at = args.indexOf(stray);
-              const value = stray.includes('=')
-                ? stray.slice(stray.indexOf('=') + 1)
-                : args[at + 1];
-              // Thrown, as every refusal inside run is: run prints it once
-              // (a refusal printed here and then caught again by run would
-              // print twice where exit does not end the process).
-              // The line with --like is checked as new checks it (an
-              // install first, other flags' repairs folded in), as the
-              // option reader's lines are.
-              const lines = value
-                ? await checkedOptionLines(
-                    'editor',
-                    'new',
-                    `${EDITOR} new ${quoteCommandArgument(name)}${newFlagLine({...o, like: value})}`,
-                  )
-                : [];
-              throw new AstryxError(
-                `new takes the base theme as --like, not --base.`,
-                [
-                  ...lines,
-                  {
-                    name: `${EDITOR} new --help`,
-                    reason: 'every option it takes',
-                  },
-                ],
-                ERROR_CODES.ERR_INVALID_OPTION,
-              );
-            }
             if (stray)
               throw new AstryxError(
                 `unknown option '${stray}'.`,
@@ -2008,8 +2024,11 @@ export function registerExperimentalTheme(group, program) {
                   // not (`"like": "neutral"`), in either order (`red=accent`,
                   // `stone=like`), as set reads a pair swapped; `like` is
                   // never a value (`neutral=like` is the base neutral).
+                  // Pairs apart at `;`, or at a comma when a key comes next
+                  // (`like: neutral, corners: pill`); a comma inside a value
+                  // (`font: Inter, Arial`) is the value's.
                   const byColon = w
-                    .split(/\s*;\s*/)
+                    .split(/\s*;\s*|\s*,\s*(?=["']?[a-z][a-z-]*["']?\s*[=:])/i)
                     .map(x =>
                       /^((["'])[a-z-]+\2|[a-z0-9#(][^=:]*?)\s*[=:]\s*(.+)$/i.exec(
                         x.trim(),
@@ -2258,7 +2277,18 @@ export function registerExperimentalTheme(group, program) {
           },
           r => [
             `[ok] made theme "${r.data.theme}"${r.data.like ? ` on top of ${r.data.like}` : ''}`,
-            ...changeFields(/** @type {any} */ (r.data)),
+            ...missedLine(/** @type {any} */ (r.data)),
+            ...changeFields(
+              /** @type {any} */ (
+                (({
+                  missed: _m,
+                  missedParts: _p,
+                  missedOn: _o,
+                  missedWhere: _w,
+                  ...x
+                }) => x)(/** @type {any} */ (r.data))
+              ),
+            ),
             `Tip: ${EDITOR} set ${r.data.theme} <thing> <value>, or ${HOW} "<what you want>"`,
             `Look at it after each change (this changes nothing in your app): ${EDITOR} show ${r.data.theme} --png writes themes/${r.data.theme}/preview.png (a sample page), sheet-overlays.png (each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list, open) and a picture of each family of components the theme sets a part of (sheet-actions.png, the buttons, while it sets none) from real components, and --section <family> --png pictures any other family (actions, inputs, selection, navigation, feedback, data, containers); open the family pictures, preview.png and sheet-overlays.png and check them against the request`,
           ],

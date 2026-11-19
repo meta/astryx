@@ -87,14 +87,13 @@ describe('a picture never waits on a network', () => {
   });
 
   it.skipIf(!chrome)(
-    'a Chrome takes the picture at once, asking the network for nothing',
+    'a Chrome takes the picture, asking the network for nothing',
     async () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-offline-'));
       try {
         const html = path.join(dir, 'p.html');
         fs.writeFileSync(html, page());
         const png = path.join(dir, 'p.png');
-        const started = Date.now();
         // A proxy that is the silent server: a request the browser makes
         // of its own (an update or time check) would reach it.
         const saved = {
@@ -120,11 +119,14 @@ describe('a picture never waits on a network', () => {
             if (v == null) delete process.env[k];
             else process.env[k] = v;
         }
+        // A request the page waited on would hold the load until the
+        // browser's time bound stops the run, and the picture is not ok.
         expect(r.ok).toBe(true);
         expect(fs.existsSync(png)).toBe(true);
-        // Far inside the run's time limit, which a waited-on request reaches.
-        expect(Date.now() - started).toBeLessThan(30_000);
         // No connection at all: neither the page's nor the browser's own.
+        // A request either reaches the silent server and is counted here, or
+        // fails at once. A wall clock is no proof: a busy machine slows the
+        // browser's start, not its network.
         expect(connections).toBe(0);
       } finally {
         fs.rmSync(dir, {recursive: true, force: true});
@@ -205,6 +207,7 @@ describe('a picture never waits on a network', () => {
                  });
                  fs.writeFileSync(${JSON.stringify(log)}, JSON.stringify(asked));
                },
+               async evaluate() {},
                async screenshot({path}) { fs.writeFileSync(path, 'x'); },
              }; },
              async close() {},

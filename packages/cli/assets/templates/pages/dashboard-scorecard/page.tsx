@@ -111,8 +111,21 @@ const COLORS = {
 const GRID_STROKE = 'var(--color-border, rgba(5, 54, 89, 0.1))';
 const AXIS_TICK = {
   fontSize: 'var(--font-size-sm, 12px)',
-  fill: 'var(--color-text-secondary, #4E606F)',
+  fill: 'var(--color-text-secondary, #445564)',
 };
+
+// Short tick labels ("6M", "350K") fit the fixed gutter with a small font up to
+// 16 px, wide fonts included.
+// A series stored in thousands or millions is scaled first, so the axis agrees
+// with the heading and tooltip beside it.
+const Y_AXIS_WIDTH = 52;
+const UNIT_SCALE: Record<string, number> = {k: 1_000, M: 1_000_000};
+const compactTick = new Intl.NumberFormat('en-US', {
+  notation: 'compact',
+  maximumFractionDigits: 1,
+});
+const formatYTick = (value: number, unit: string) =>
+  compactTick.format(value * (UNIT_SCALE[unit] ?? 1));
 
 // ============= SCORECARD DATA =============
 
@@ -469,7 +482,9 @@ function ScorecardTile({kpi, period}: {kpi: Kpi; period: Period}) {
           {kpi.label}
         </Text>
         <HStack gap={4} vAlign="center">
-          <Heading level={2}>{kpi.value}</Heading>
+          <Heading level={2} accessibilityLevel={3}>
+            {kpi.value}
+          </Heading>
           <DeltaIndicator deltaPct={deltaPct} rag={rag} />
         </HStack>
       </VStack>
@@ -488,7 +503,9 @@ function OkrRow({okr}: {okr: Okr}) {
     <VStack gap={2}>
       <HStack hAlign="between" vAlign="center" gap={3}>
         <StackItem size="fill">
-          <Heading level={4}>{okr.objective}</Heading>
+          <Heading level={4} accessibilityLevel={3}>
+            {okr.objective}
+          </Heading>
         </StackItem>
         <Text type="supporting" color="secondary">
           {pct}%
@@ -533,7 +550,9 @@ function TrendChart({trend}: {trend: TrendSeries}) {
   return (
     <Card padding={5}>
       <VStack gap={6}>
-        <HStack hAlign="between" vAlign="center">
+        {/* On a narrow card the change line moves under the title instead of
+            squeezing both into slivers. */}
+        <HStack hAlign="between" vAlign="center" gap={2} wrap="wrap">
           <HStack gap={2}>
             <Heading level={3}>{trend.title}</Heading>
             <Heading level={3} color="secondary">
@@ -576,14 +595,17 @@ function TrendChart({trend}: {trend: TrendSeries}) {
                 tick={AXIS_TICK}
                 axisLine={false}
                 tickLine={false}
-                width={40}
+                width={Y_AXIS_WIDTH}
+                tickFormatter={(value: number) =>
+                  formatYTick(value, trend.unit)
+                }
               />
               <Tooltip
                 content={<TrendTooltip />}
                 cursor={{stroke: GRID_STROKE}}
               />
               <Area
-                type="monotone"
+                type="linear"
                 dataKey="prior"
                 name="Prior"
                 stroke={COLORS.prior}
@@ -594,7 +616,7 @@ function TrendChart({trend}: {trend: TrendSeries}) {
                 isAnimationActive={false}
               />
               <Area
-                type="monotone"
+                type="linear"
                 dataKey="current"
                 name="Current"
                 stroke={trend.color}
@@ -623,14 +645,17 @@ function TrendChart({trend}: {trend: TrendSeries}) {
                 tick={AXIS_TICK}
                 axisLine={false}
                 tickLine={false}
-                width={40}
+                width={Y_AXIS_WIDTH}
+                tickFormatter={(value: number) =>
+                  formatYTick(value, trend.unit)
+                }
               />
               <Tooltip
                 content={<TrendTooltip />}
                 cursor={{stroke: GRID_STROKE}}
               />
               <Line
-                type="monotone"
+                type="linear"
                 dataKey="prior"
                 name="Prior"
                 stroke={COLORS.prior}
@@ -640,7 +665,7 @@ function TrendChart({trend}: {trend: TrendSeries}) {
                 isAnimationActive={false}
               />
               <Line
-                type="monotone"
+                type="linear"
                 dataKey="current"
                 name="Current"
                 stroke={trend.color}
@@ -699,7 +724,9 @@ function NarrativeCard({callout}: {callout: Callout}) {
         />
         <StackItem size="fill">
           <VStack gap={1}>
-            <Heading level={4}>{callout.title}</Heading>
+            <Heading level={4} accessibilityLevel={3}>
+              {callout.title}
+            </Heading>
             <Text type="body" color="secondary">
               {callout.detail}
             </Text>
@@ -772,22 +799,26 @@ export default function ExecutiveReviewPage() {
           <HStack gap={3} vAlign="center" hAlign="between" wrap="wrap">
             <VStack gap={1}>
               <Heading level={1}>Weekly Business Review</Heading>
-              <HStack gap={2} vAlign="center">
+              {/* On a narrow screen the generated date moves to its own line,
+                  whole, instead of squeezing into a sliver beside the period. */}
+              <HStack gap={2} vAlign="center" wrap="wrap">
                 <Text type="body" color="secondary">
                   {PERIOD_SUBTITLE[period]}
                 </Text>
-                <Text type="body" color="secondary">
-                  · Generated
-                </Text>
-                <Timestamp
-                  value="2026-06-30T08:00:00Z"
-                  format="date"
-                  type="body"
-                  color="secondary"
-                />
+                <HStack gap={2} vAlign="center">
+                  <Text type="body" color="secondary">
+                    · Generated
+                  </Text>
+                  <Timestamp
+                    value="2026-06-30T08:00:00Z"
+                    format="date"
+                    type="body"
+                    color="secondary"
+                  />
+                </HStack>
               </HStack>
             </VStack>
-            <HStack gap={3}>
+            <HStack gap={3} wrap="wrap">
               <SegmentedControl
                 label="Comparison period"
                 value={period}
@@ -813,7 +844,10 @@ export default function ExecutiveReviewPage() {
         </LayoutHeader>
       }
       content={
-        <LayoutContent padding={6} xstyle={pageStyles.contentBottomPad}>
+        <LayoutContent
+          role="main"
+          padding={6}
+          xstyle={pageStyles.contentBottomPad}>
           <VStack gap={10}>
             {/* Narrative lives in the end rail; it folds in here when narrow. */}
             {isNarrow && (
@@ -836,16 +870,14 @@ export default function ExecutiveReviewPage() {
             {/* OKR attainment */}
             <VStack gap={6}>
               <SectionHeading title="Goal attainment" hint={okrSummary} />
-              <Card padding={6}>
-                <VStack gap={6}>
-                  {OKRS.map((okr, i) => (
-                    <VStack gap={6} key={okr.objective}>
-                      {i > 0 && <Divider />}
-                      <OkrRow okr={okr} />
-                    </VStack>
-                  ))}
-                </VStack>
-              </Card>
+              <VStack gap={6}>
+                {OKRS.map((okr, i) => (
+                  <VStack gap={6} key={okr.objective}>
+                    {i > 0 && <Divider />}
+                    <OkrRow okr={okr} />
+                  </VStack>
+                ))}
+              </VStack>
             </VStack>
 
             {/* Trend section: 2x2 grid */}
@@ -854,7 +886,12 @@ export default function ExecutiveReviewPage() {
                 title="Trends"
                 hint="Current vs. prior period · trailing 12 weeks"
               />
-              <Grid columns={{minWidth: 330, repeat: 'fit'}} gap={3}>
+              {/* `max` at the chart count changes no layout where a chart
+                  fits its 330px floor, and lets a lone chart shrink to a
+                  narrower phone column instead of overflowing it. */}
+              <Grid
+                columns={{minWidth: 330, repeat: 'fit', max: TRENDS.length}}
+                gap={3}>
                 {TRENDS.map(trend => (
                   <TrendChart key={trend.key} trend={trend} />
                 ))}

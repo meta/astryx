@@ -538,6 +538,46 @@ describe('useTableSortableState', () => {
     });
   });
 
+  describe('Invalid Date handling', () => {
+    interface LogEntry extends Record<string, unknown> {
+      id: string;
+      at: Date;
+    }
+    const entries: LogEntry[] = [
+      {id: 'late', at: new Date('2024-03-01T00:00:00Z')},
+      {id: 'bad', at: new Date('not a date')},
+      {id: 'early', at: new Date('2024-01-01T00:00:00Z')},
+    ];
+
+    it('sorts an Invalid Date to the end in ascending order, like null', () => {
+      const {result} = renderHook(() =>
+        useTableSortableState<LogEntry>({
+          data: entries,
+          defaultSort: [{sortKey: 'at', direction: 'ascending'}],
+        }),
+      );
+      expect(result.current.sortedData.map(e => e.id)).toEqual([
+        'early',
+        'late',
+        'bad',
+      ]);
+    });
+
+    it('sorts an Invalid Date to the start in descending order, like null', () => {
+      const {result} = renderHook(() =>
+        useTableSortableState<LogEntry>({
+          data: entries,
+          defaultSort: [{sortKey: 'at', direction: 'descending'}],
+        }),
+      );
+      expect(result.current.sortedData.map(e => e.id)).toEqual([
+        'bad',
+        'late',
+        'early',
+      ]);
+    });
+  });
+
   describe('null/undefined handling', () => {
     it('sorts null values to the end', () => {
       const data: Employee[] = [

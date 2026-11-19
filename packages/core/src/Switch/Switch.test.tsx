@@ -1079,12 +1079,14 @@ describe('Switch', () => {
     it('mirrors the on-state thumb travel under RTL (negative translateX)', () => {
       render(<Switch label="Toggle" value={true} onChange={() => {}} />);
       const css = injectedCss();
-      // LTR on-travel moves the thumb toward the physical right (positive px).
-      expect(css).toMatch(/transform:\s*translateX\(1[24]px\)/);
+      // LTR on-travel moves the thumb toward the physical right (positive).
+      expect(css).toMatch(
+        /transform:\s*translateX\(calc\(100cqi - 50cqb - 50%\)\)/,
+      );
       // RTL mirrors it: the on-thumb lands on the inline-end (physical left)
       // side, so the travel flips sign, scoped to `[dir="rtl"]`.
       expect(css).toMatch(
-        /:is\(\[dir="rtl"\][^)]*\)[^{]*\{\s*transform:\s*translateX\(-1[24]px\)/,
+        /:is\(\[dir="rtl"\][^)]*\)[^{]*\{\s*transform:\s*translateX\(calc\(-1 \* calc\(100cqi - 50cqb - 50%\)\)\)/,
       );
     });
   });
@@ -1414,15 +1416,25 @@ describe('Switch', () => {
       expect(off.padding).toBe('4px');
       expect(off.fade[0]).toBe('background-color');
       expect(off.fade[1]).not.toMatch(/^(0s)?$/);
-      expect(off.size).toEqual(['16px', '16px']);
+      // The thumb's size reads the private variable a theme's width and
+      // height on `switch-thumb` set, the size's own by default.
+      expect(off.size).toEqual([
+        'var(--_switch-thumb-width,16px)',
+        'var(--_switch-thumb-height,16px)',
+      ]);
       expect(off.slide[0]).toBe('transform,width,height');
       expect(off.slide[1]).not.toMatch(/^(0s)?$/);
 
       rerender(<Switch label="Wi-Fi" value onChange={() => {}} />);
       const on = look(container);
       expect(on.fill).toContain('--color-accent');
-      expect(on.size).toEqual(['20px', '20px']);
-      expect(on.travel).toBe('translateX(14px)');
+      expect(on.size).toEqual([
+        'var(--_switch-thumb-width,20px)',
+        'var(--_switch-thumb-height,20px)',
+      ]);
+      // The travel reads the track's size: 14px at the shipped 40 × 24 track
+      // (proved in a browser by SwitchThumbRest.interaction.browser.spec).
+      expect(on.travel).toBe('translateX(calc(100cqi - 50cqb - 50%))');
     });
 
     it('adds no element: the thumb is the track’s only child, under a finger too', () => {
@@ -1444,7 +1456,10 @@ describe('Switch', () => {
       );
       const off = look(container);
       expect(off.padding).toBe('2px');
-      expect(off.size).toEqual(['14px', '14px']);
+      expect(off.size).toEqual([
+        'var(--_switch-thumb-width,14px)',
+        'var(--_switch-thumb-height,14px)',
+      ]);
     });
   });
 
@@ -1831,5 +1846,28 @@ describe('label theme target', () => {
     const label = screen.getByText('Wi-Fi').closest('label');
     expect(label).toHaveClass('astryx-field-label');
     expect(label).toHaveClass('astryx-switch-label');
+  });
+});
+
+describe('mount cost (react-component-runtime INV18)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('reads no box when two hundred switches mount', () => {
+    const boxReads = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect');
+    render(
+      <>
+        {Array.from({length: 200}, (_, index) => (
+          <Switch
+            key={index}
+            label={`Setting ${index}`}
+            value={index % 2 === 0}
+            onChange={() => {}}
+          />
+        ))}
+      </>,
+    );
+    expect(boxReads).not.toHaveBeenCalled();
   });
 });
