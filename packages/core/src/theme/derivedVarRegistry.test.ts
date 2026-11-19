@@ -104,6 +104,9 @@ const STRUCTURAL_VARS = new Set([
   '--_table-row-glide-style',
   '--_table-row-glide-color',
   '--_table-row-glide-offset',
+  // The word-break a wrap cell takes for its table's layout (Table/BaseTable.tsx,
+  // Table/table.stylex.ts). Private runtime plumbing, never authored by a theme.
+  '--_table-cell-word-break',
   '--separator-display',
   '--astryx-section-padding',
   // Private counterpart of the public token above: one ancestor Section's
