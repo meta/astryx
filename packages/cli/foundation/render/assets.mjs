@@ -103,6 +103,31 @@ export function assetDataUri(file) {
 }
 
 /**
+ * The image type that bytes are, by their leading bytes, or null for any
+ * other bytes (a font, a page, a script).
+ * @param {Buffer} bytes
+ * @returns {string | null}
+ */
+export function imageTypeOf(bytes) {
+  const at = (/** @type {number} */ i, /** @type {string} */ text) =>
+    bytes.subarray(i, i + text.length).toString('latin1') === text;
+  if (at(0, '\x89PNG\r\n\x1a\n')) return 'image/png';
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+  if (at(0, 'GIF87a') || at(0, 'GIF89a')) return 'image/gif';
+  if (at(0, 'RIFF') && at(8, 'WEBP')) return 'image/webp';
+  if (at(4, 'ftypavif') || at(4, 'ftypavis')) return 'image/avif';
+  if (at(0, 'BM')) return 'image/bmp';
+  if (bytes[0] === 0 && bytes[1] === 0 && bytes[2] === 1 && bytes[3] === 0) return 'image/x-icon';
+  const head = bytes
+    .subarray(0, 4096)
+    .toString('utf8')
+    .replace(/^\uFEFF/, '')
+    .trimStart();
+  if (head.startsWith('<') && /<svg[\s>]/i.test(head)) return 'image/svg+xml';
+  return null;
+}
+
+/**
  * Whether bytes are a known image, font or media format, whatever the file's
  * extension says (a JPEG saved as `.png` is still an inert image): their
  * leading bytes match one (an SVG is XML with an <svg> element). A carried
@@ -114,16 +139,9 @@ export function isAssetBytes(bytes) {
     bytes.subarray(i, i + text.length).toString('latin1') === text;
   const b = (/** @type {number[]} */ ...xs) =>
     xs.every((x, i) => bytes[i] === x);
-  if (
-    at(0, '\x89PNG\r\n\x1a\n') ||
-    b(0xff, 0xd8, 0xff) ||
-    at(0, 'GIF87a') ||
-    at(0, 'GIF89a')
-  )
-    return true;
-  if (at(0, 'RIFF') && (at(8, 'WEBP') || at(8, 'WAVE'))) return true;
-  if (at(4, 'ftyp')) return true; // AVIF, MP4
-  if (at(0, 'BM') || b(0, 0, 1, 0)) return true; // BMP, ICO
+  if (imageTypeOf(bytes)) return true;
+  if (at(0, 'RIFF') && at(8, 'WAVE')) return true;
+  if (at(4, 'ftyp')) return true; // MP4, and AVIF brands the sniffer does not name
   if (
     at(0, 'wOFF') ||
     at(0, 'wOF2') ||
@@ -138,10 +156,5 @@ export function isAssetBytes(bytes) {
     (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0)
   )
     return true;
-  const head = bytes
-    .subarray(0, 4096)
-    .toString('utf8')
-    .replace(/^\uFEFF/, '')
-    .trimStart();
-  return head.startsWith('<') && /<svg[\s>]/i.test(head);
+  return false;
 }

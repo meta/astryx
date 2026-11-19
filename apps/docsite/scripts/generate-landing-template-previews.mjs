@@ -27,6 +27,7 @@ import {
   rewriteTemplatePreview,
 } from './template-icon-loader.mjs';
 import {optimizeTemplateImages} from './template-image-loader.mjs';
+import {fillTemplatePlaceholders} from '../../../packages/cli/foundation/discovery/template-placeholders.mjs';
 import {finishSnapshotHtml} from './lib/preview-snapshot-html.mjs';
 
 const docsiteDir = path.resolve(
@@ -53,10 +54,10 @@ export const CLIENT_NAVIGATION_FILE = path.join(
 );
 // The page template the themes card shows.
 const STORE_TEMPLATE = 'theme-showcase';
-const themeFontsFile = path.resolve(
-  docsiteDir,
-  '../../packages/themes/neutral/fonts.css',
-);
+// The hosted previews load the neutral theme's font from Google Fonts' CDN,
+// as an app that prefers it does.
+const THEME_FONTS_STYLESHEET =
+  'https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap';
 const themesStoreModule = path.join(
   docsiteDir,
   'src/app/(site)/_landing/ThemesStorePreview',
@@ -118,18 +119,6 @@ export default function Preview() {
   );
 }
 `;
-}
-
-/**
- * The stylesheet URL that loads the theme's fonts, read from the theme's
- * `fonts.css`.
- * @param {string} fontsCss
- * @returns {string | null}
- */
-export function fontStylesheetOf(fontsCss) {
-  return (
-    /@import\s+url\(\s*['"]?([^'")]+)['"]?\s*\)/u.exec(fontsCss)?.[1] ?? null
-  );
 }
 
 /**
@@ -238,6 +227,10 @@ async function stageTemplateCopy({
         projectDir,
         list: iconSets,
       });
+    } else {
+      // A copy imports the library icon each placeholder names, not the
+      // private placeholder package.
+      source = fillTemplatePlaceholders(source).source;
     }
     fs.writeFileSync(path.join(copyDir, relative), source);
   }
@@ -275,9 +268,7 @@ async function main() {
   /** @type {string[]} */
   const slugs = JSON.parse(fs.readFileSync(rowsFile, 'utf8')).flat();
   const iconSets = previewIconSetList(process.env[ICON_SET_SETTING]);
-  const fontStylesheet = fontStylesheetOf(
-    fs.readFileSync(themeFontsFile, 'utf8'),
-  );
+  const fontStylesheet = THEME_FONTS_STYLESHEET;
   fs.rmSync(outDir, {recursive: true, force: true});
   fs.mkdirSync(outDir, {recursive: true});
   fs.rmSync(workDir, {recursive: true, force: true});

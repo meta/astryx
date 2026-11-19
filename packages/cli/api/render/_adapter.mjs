@@ -13,7 +13,6 @@ import * as path from 'node:path';
 import {freeRestoreFolder} from '../../foundation/render/restore-folder.mjs';
 import {randomUUID} from 'node:crypto';
 import {createRequire} from 'node:module';
-import {installGuidanceFor} from '../../foundation/env/cli-command.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
@@ -48,12 +47,15 @@ import {isAstryxMarkup} from '../../foundation/render/html-reader.mjs';
 import {rebuildPage} from '../../foundation/render/rebuild.mjs';
 import {cliVersion} from '../../foundation/integrations/cli-peer-version.mjs';
 import {assertWithin, PathSafetyError} from '../../foundation/fs/path-safety.mjs';
-import {climbsOut, findPackageRoot, isInside as liesInside, requireCoreDir} from '../../foundation/fs/paths.mjs';
+import {climbsOut, findCoreDir, findPackageRoot, isInside as liesInside, requireCoreDir} from '../../foundation/fs/paths.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
 import {isAlive, pidSpace} from '../../foundation/release/cache.mjs';
 import {isServedPackage} from '../../foundation/render/served-packages.mjs';
+import {outsideRequests, roundTrip} from '../../foundation/render/share-checks.mjs';
 import {hostedPagePackages, recordResolved} from '../../foundation/runtime/package-root.mjs';
 import {installCommandFor} from '../../foundation/discovery/template-needs.mjs';
+import {component} from '../component/component.mjs';
+import {projectAugmentations, propWideningInterfaces} from '../../foundation/discovery/core-augmentation-points.mjs';
 
 export {PAGE_EXTENSIONS, embeddedPathProblem};
 
@@ -430,20 +432,22 @@ function asAstryxError(e, pageDir, cwd = process.cwd()) {
       const pageRoot = findPackageRoot(pageDir);
       const runRoot = findPackageRoot(cwd);
       const samePackage = pageRoot !== null && runRoot !== null && path.resolve(runRoot) === path.resolve(pageRoot);
-      const guidance = samePackage ? installGuidanceFor(packages, cwd) : undefined;
+      // At installCommandFor's versions: Core, the CLI and a package Astryx
+      // releases with Core at the project's Core release, in the guidance
+      // too; any other at the CLI's range in the command, bare in the
+      // guidance; no command when the project's lockfiles disagree.
+      const step = pageRoot == null ? null : installCommandFor(packages, pageDir, cwd);
+      const guidance = samePackage ? step?.installGuidance : null;
       if (guidance) {
         suggestions.push({name: guidance, reason: needs});
       } else if (typeof e.detail.install === 'string') {
         suggestions.push({name: e.detail.install, reason: needs});
-      } else if (pageRoot == null) {
+      } else if (pageRoot == null || step == null) {
         // In a folder no package.json holds, an install would make the folder
         // a project, so the message names the packages for the project that
         // uses the page instead, as template and build do.
         message = `${message}. Install ${packages.length === 1 ? 'it' : 'them'} in the project that uses this page.`;
       } else {
-        // With the CLI's version ranges, as template and build give it; none
-        // when the project's lockfiles disagree.
-        const step = installCommandFor(packages, pageDir, cwd);
         const line = step.installGuidance ?? step.installCommand;
         if (line && samePackage) {
           suggestions.push({name: line, reason: what});
@@ -490,6 +494,77 @@ function servedSet(input) {
   }
 }
 
+const CORE_PACKAGE = '@astryxdesign/core';
+
+/** A prop type that is a closed union of string literals, as a doc writes it: `'sm' | 'md'`. */
+const CLOSED_UNION = /^\s*'[^']*'(?:\s*\|\s*'[^']*')*\s*$/;
+
+/**
+ * A warning for each string a page gives a Core component's prop that the
+ * prop's closed union does not hold (`<Button variant="danger">`): the
+ * component draws its default look, and nothing else says so. The union
+ * comes from Core's own docs for the component in the page's Core, the props
+ * `astryx component <Name> --package @astryxdesign/core` reads, so an
+ * integration that replaces the component does not change it. Where the
+ * prop's type takes the keys of an interface a theme can widen by declaration
+ * merging (`interface ButtonVariantMap`, `interface TextColorMap` for Link's
+ * `color`), the keys the page's project adds to it are values the prop has
+ * too; when the project cannot be read in full, or the prop's type cannot be
+ * followed, such a prop is not checked. A component or prop with no doc
+ * entry, and a prop whose type is not a closed union, are not checked.
+ * @param {{component: string, prop: string, value: string, file: string, line: number}[]} values
+ * @param {string} page the page file; its folder's Core gives the docs
+ * @returns {Promise<import('../../foundation/render/render-page.mjs').RenderWarning[]>}
+ */
+async function propValueWarnings(values, page) {
+  const dir = path.dirname(page);
+  /** @type {Map<string, any[] | null>} */
+  const docs = new Map();
+  /** @type {import('../../foundation/render/render-page.mjs').RenderWarning[]} */
+  const warnings = [];
+  const seen = new Set();
+  const coreDir = values.length ? findCoreDir(dir) : null;
+  /** @type {ReturnType<typeof projectAugmentations> | undefined} */
+  let added;
+  for (const v of values) {
+    if (!docs.has(v.component)) {
+      /** @type {any[] | null} */
+      let props = null;
+      try {
+        const answer = /** @type {any} */ (await component(v.component, {cwd: dir, package: CORE_PACKAGE, props: true}));
+        props = Array.isArray(answer?.data) ? answer.data : null;
+      } catch {
+        // A component the docs do not describe is not checked.
+      }
+      docs.set(v.component, props);
+    }
+    const prop = docs.get(v.component)?.find(p => p?.name === v.prop);
+    if (typeof prop?.type !== 'string' || !CLOSED_UNION.test(prop.type)) continue;
+    const allowed = [...prop.type.matchAll(/'([^']*)'/g)].map(m => m[1]);
+    if (allowed.includes(v.value)) continue;
+    // The project read can walk a large tree; only a value the docs lack needs it.
+    const widening = await propWideningInterfaces(coreDir, v.component, v.prop);
+    if (widening === null) continue;
+    if (widening.size > 0) {
+      added ??= projectAugmentations(findPackageRoot(dir) ?? dir, page);
+      if (!added.complete) continue;
+      for (const name of widening) {
+        for (const key of added.keys.get(name) ?? []) if (!allowed.includes(key)) allowed.push(key);
+      }
+    }
+    if (allowed.includes(v.value)) continue;
+    const key = `${v.file}:${v.line}:${v.component}:${v.prop}:${v.value}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const kinds = v.prop.endsWith('s') ? `${v.prop} values` : `${v.prop}s`;
+    warnings.push({
+      code: 'unknown-prop-value',
+      message: `${v.file}:${v.line}: ${v.component} has no ${v.prop} "${v.value}"; its ${kinds} are ${allowed.join(', ')}.`,
+    });
+  }
+  return warnings;
+}
+
 /**
  * Render a page module to one HTML file and write it.
  * @param {{cwd: string, input: string, output: string, title?: string, absolute?: boolean}} args absolute paths;
@@ -508,7 +583,7 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
   try {
     const set = servedSet(input);
     try {
-      page = await renderPage(input, {title, version: cliVersion(), served: set && 'dir' in set ? set : null, output, cwd});
+      page = await renderPage(input, {title, version: cliVersion(), served: set && 'dir' in set ? set : null, output, cwd, cutFontFaces: true});
     } catch (e) {
       // A page that needs the Core the CLI could not obtain says why.
       const detail = /** @type {any} */ (e)?.code === 'ERR_RENDER_MISSING_DEPENDENCY' ? /** @type {any} */ (e).detail : null;
@@ -523,6 +598,7 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
   } catch (e) {
     throw asAstryxError(e, path.dirname(input), cwd);
   }
+  page.warnings.push(...(await propValueWarnings(page.propValues ?? [], input)));
   for (const {name, dir} of page.fromSet) {
     let version = null;
     try {
@@ -569,6 +645,9 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
     }
   }
   writeOutput(output, page.html, cwd, {replace: true, ...(existingMode === undefined ? {} : {mode: existingMode & 0o7777})});
+  // The checks read the bytes on disk, not the string in memory: they vouch
+  // for the file that will be shared.
+  const written = fs.readFileSync(output, 'utf8');
   return {
     input: shown(cwd, input),
     output: shown(cwd, output),
@@ -577,11 +656,15 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
     stylesheets: page.stylesheets,
     classes: page.classes,
     cssBytes: page.cssBytes,
+    markupBytes: page.markupBytes,
+    sourceBytes: page.sourceBytes,
     images: page.images,
     warnings: page.warnings,
     ...(page.notCarried ? {notCarried: page.notCarried} : {}),
     scriptBytes: page.scriptBytes ?? 0,
     scriptModules: page.scriptModules ?? 0,
+    checks: {outside: outsideRequests(written), roundTrip: roundTrip(written, input, page.files)},
+    ...(page.remoteImages ? {remoteImages: page.remoteImages} : {}),
   };
 }
 

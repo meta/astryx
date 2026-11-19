@@ -88,6 +88,53 @@ describe('template path safety', () => {
     expect(fs.readdirSync(cwd)).toEqual([]);
   });
 
+  it('reads `~/` as the home folder: outside the project it is refused, and no folder named `~` is made', async () => {
+    const cwd = path.join(tmpDir, 'project');
+    fs.mkdirSync(cwd, {recursive: true});
+    const given = `~/astryx-no-such-folder-${path.basename(tmpDir)}/page.tsx`;
+
+    const err = await templateApi('blank', {targetPath: given, cwd}).catch(
+      e => e,
+    );
+    expect(err.code).toBe('ERR_PATH_TRAVERSAL');
+    expect(err.message).toContain(
+      `Invalid template target path "${given}": it is outside the project root`,
+    );
+    expect(err.suggestions[0]).toEqual({
+      name: 'astryx template blank src/pages/blank.tsx',
+      reason: 'write the page inside the project',
+    });
+    expect(fs.readdirSync(cwd)).toEqual([]);
+    expect(
+      fs.existsSync(path.join(os.homedir(), path.dirname(given.slice(2)))),
+    ).toBe(false);
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'writes a `~/` path that names a place in the project there, as its absolute path is',
+    async () => {
+      const home = fs.realpathSync(tmpDir);
+      const cwd = path.join(home, 'project');
+      fs.mkdirSync(cwd, {recursive: true});
+      const before = process.env.HOME;
+      process.env.HOME = home;
+      try {
+        const res = await templateApi('blank', {
+          targetPath: '~/project/src/pages/home.tsx',
+          cwd,
+        });
+        expect(res.data.outputDir).toBe(path.join('src', 'pages'));
+        expect(res.data.fileName).toBe('home.tsx');
+      } finally {
+        process.env.HOME = before;
+      }
+      expect(fs.existsSync(path.join(cwd, 'src', 'pages', 'home.tsx'))).toBe(
+        true,
+      );
+      expect(fs.existsSync(path.join(cwd, '~'))).toBe(false);
+    },
+  );
+
   it('keeps the flags as typed in the suggested commands', async () => {
     const cwd = path.join(tmpDir, 'project');
     fs.mkdirSync(cwd, {recursive: true});

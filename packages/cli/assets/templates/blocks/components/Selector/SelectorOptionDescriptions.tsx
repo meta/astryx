@@ -7,20 +7,20 @@ import {Selector, SelectorOption} from '@astryxdesign/core/Selector';
 import {InputGroup} from '@astryxdesign/core/InputGroup';
 import {Button} from '@astryxdesign/core/Button';
 import {Stack} from '@astryxdesign/core/Layout';
-import {LockClosedIcon, GlobeAltIcon} from '@heroicons/react/24/outline';
+import {LockIcon, GlobeIcon} from '@astryxdesign/template-icons';
 import {useToast} from '@astryxdesign/core/Toast';
 
 const VISIBILITY = [
   {
     value: 'private',
     label: 'Private',
-    icon: LockClosedIcon,
+    icon: LockIcon,
     description: 'Only members can access this space and its content.',
   },
   {
     value: 'public',
     label: 'Public',
-    icon: GlobeAltIcon,
+    icon: GlobeIcon,
     description: 'Anyone at the company can find and join this space.',
   },
 ];

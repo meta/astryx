@@ -401,11 +401,12 @@ describe('MoreMenu', () => {
   });
 
   describe('placement and alignment', () => {
-    const positionAreaOf = (menu: HTMLElement) =>
-      menu
-        .closest('[popover]')
-        ?.getAttribute('style')
-        ?.match(/position-area:[^;]*/)?.[0];
+    const geometryOf = (menu: HTMLElement) =>
+      (menu.closest('[popover]')?.className ?? '')
+        .split(' ')
+        .filter(name => /useLayer__styles\.(side|align|center)/.test(name))
+        .sort()
+        .join(' ');
 
     it('resolves the same default position as DropdownMenu', () => {
       render(
@@ -418,23 +419,23 @@ describe('MoreMenu', () => {
         hidden: true,
       });
 
-      expect(positionAreaOf(moreMenu)).toBe(positionAreaOf(dropdownMenu));
-      expect(positionAreaOf(moreMenu)).toBe(
-        'position-area: self-block-end span-self-inline-end',
+      expect(geometryOf(moreMenu)).toBe(geometryOf(dropdownMenu));
+      expect(geometryOf(moreMenu)).toBe(
+        'useLayer__styles.alignInlineStart useLayer__styles.sideBelow',
       );
     });
 
     it('forwards alignment to the menu layer', () => {
       render(<MoreMenu items={defaultItems} alignment="end" />);
-      expect(positionAreaOf(screen.getByRole('menu', {hidden: true}))).toBe(
-        'position-area: self-block-end span-self-inline-start',
+      expect(geometryOf(screen.getByRole('menu', {hidden: true}))).toBe(
+        'useLayer__styles.alignInlineEnd useLayer__styles.sideBelow',
       );
     });
 
     it('forwards placement to the menu layer', () => {
       render(<MoreMenu items={defaultItems} placement="above" />);
-      expect(positionAreaOf(screen.getByRole('menu', {hidden: true}))).toBe(
-        'position-area: self-block-start span-self-inline-end',
+      expect(geometryOf(screen.getByRole('menu', {hidden: true}))).toBe(
+        'useLayer__styles.alignInlineStart useLayer__styles.sideAbove',
       );
     });
   });
