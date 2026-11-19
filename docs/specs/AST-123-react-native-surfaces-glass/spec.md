@@ -67,12 +67,12 @@ and a token fill.
 
 ## Who uses it
 
-| Native piece               | Kind                                       | Astryx components that use it                                                                                                                                                                                                                                                                                                                                                                                             | What a person sees                                                                                                                                 |
-| -------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxGlassView`          | native component (Fabric Native Component) | `TabBar` (and `FloatingTabBar`, which renders a `TabBar`), `Header` (its composed parts), `BarButton`, `BarButtonGroup`, the tab accessory (both its `'expanded'` and `'inline'` placements), `SearchBar`, `KeyboardAccessoryView`, `IconButton` and `Button` with `surface="glass"`, and `DropdownMenu`'s icon trigger, each through its own props. The router's stack and tab navigators draw `Header` and `TabBar`     | Glass bars, capsules, and round buttons that brighten and lift under a finger, appear and disappear with UIKit's motion, and spring to a new shape |
-| `AstryxGlassContainerView` | native component (Fabric Native Component) | `TabBar` (and `FloatingTabBar`), `Header`, and `BarButtonGroup`, which group their glass items                                                                                                                                                                                                                                                                                                                            | Adjacent bar items, such as a row of header buttons, look like one piece of glass that joins where they come close                                 |
-| `AstryxMaterialView`       | native component (Fabric Native Component) | Overlays the library builds: `AlertDialog`, `Dialog`, `Popover` (and the surfaces built on it: `DropdownMenu`, `ContextMenu`, `Selector`'s picker, `TabList`'s menu, `HoverCard`, `TopNav`'s menus), `BottomSheet` and `InlineSheet` when the library builds them. Floating surfaces: `Toast` and `ChatLayoutScrollButton` (in `ChatLayout`). Every glass component above where glass paints but the glass view is absent | A menu, sheet, or dialog in system glass on iOS 26 and later; a frosted toast or scroll button where the app asks for material                     |
-| `AstryxScrollEdgeView`     | native component (Fabric Native Component) | `Header`; the router's stack navigator through its header built in React and header search field                                                                                                                                                                                                                                                                                                                          | Rows that soften or fade under the header as they scroll beneath it, as under a system navigation bar                                              |
+| Native piece               | Kind                                       | Astryx components that use it                                                                                                                                                                                                                                                                                                                                                                                                                              | What a person sees                                                                                                                                 |
+| -------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AstryxGlassView`          | native component (Fabric Native Component) | `TabBar` (and `FloatingTabBar`, which renders a `TabBar`), `TopNav` (its `TopNav<Part>` parts; component:react-native/TopNav), `BarButton`, `BarButtonGroup`, the tab accessory (both its `'expanded'` and `'inline'` placements), `SearchBar`, `KeyboardAccessoryView`, `IconButton` and `Button` with `surface="glass"`, and `DropdownMenu`'s icon trigger, each through its own props. The router's stack and tab navigators draw `TopNav` and `TabBar` | Glass bars, capsules, and round buttons that brighten and lift under a finger, appear and disappear with UIKit's motion, and spring to a new shape |
+| `AstryxGlassContainerView` | native component (Fabric Native Component) | `TabBar` (and `FloatingTabBar`), `TopNav`, and `BarButtonGroup`, which group their glass items                                                                                                                                                                                                                                                                                                                                                             | Adjacent bar items, such as a row of header buttons, look like one piece of glass that joins where they come close                                 |
+| `AstryxMaterialView`       | native component (Fabric Native Component) | Overlays the library builds: `AlertDialog`, `Dialog`, `Popover` (and the surfaces built on it: `DropdownMenu`, `ContextMenu`, `Selector`'s picker, `TabList`'s menu, `HoverCard`, `TopNav`'s menus), `BottomSheet` and `InlineSheet` when the library builds them. Floating surfaces: `Toast` and `ChatLayoutScrollButton` (in `ChatLayout`). Every glass component above where glass paints but the glass view is absent                                  | A menu, sheet, or dialog in system glass on iOS 26 and later; a frosted toast or scroll button where the app asks for material                     |
+| `AstryxScrollEdgeView`     | native component (Fabric Native Component) | `TopNav`; the router's stack navigator through its header built in React and header search field                                                                                                                                                                                                                                                                                                                                                           | Rows that soften or fade under the header as they scroll beneath it, as under a system navigation bar                                              |
 
 ## Non-goals
 
@@ -95,7 +95,9 @@ and a token fill.
     (chrome glass); the overlays the library builds and floating surfaces
     default to `material` and follow FR7. `IconButton` and `Button` default to
     `plain`, where they keep the paint their own record gives them, and draw
-    glass with `surface="glass"`. On a bar, an overlay, or a floating surface,
+    glass with `surface="glass"`. On these two, `surface` is a per-call-site
+    appearance choice: each use picks native glass or the plain look for its
+    place (DEC-7). On a bar, an overlay, or a floating surface,
     `surface="plain"` paints with tokens and leaves out the scroll edge (FR7,
     FR8).
   - Theme intent: the theme's `material` member in `defineNativeTheme`, durable
@@ -342,6 +344,8 @@ and a token fill.
 - Relies on `spec:AST-082` FR10 gaining `render.default` and `spec:AST-082`
   DEC-2 taking `surface` and `render` as presentation choices, as
   `spec:AST-112` amends them (`spec:AST-112/FR21`).
+- Amends `spec:AST-082/DEC-2`: `surface` on `Button` and `IconButton` is a
+  component prop, a per-call-site appearance choice (DEC-7).
 - Relies on `spec:AST-140` FR5: contracts grow by named features the binary
   reports.
 
@@ -427,6 +431,17 @@ surface renders it. The native views stay internal behind the components, so
 every surface follows the theme and the accessibility rules on each platform
 and the native views stay free to change. The surface stays `drawn` in every
 case (`spec:AST-112/FR21`).
+
+### DEC-7 — Button and IconButton take `surface` per call site
+
+**Reference:** `spec:AST-123/DEC-7`
+**Decider:** cixzhang, 2026-11-18
+
+`Button` and `IconButton` take `surface` as a component prop, because the same
+component moves between a native and a non-native appearance from one call
+site to the next: a glass button over a photo, a plain one in a form. The prop
+sets the appearance for that use, and the theme and the accessibility rules
+still decide how a `glass` surface paints (FR7).
 
 ## Open questions
 
