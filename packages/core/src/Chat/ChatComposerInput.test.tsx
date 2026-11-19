@@ -12,6 +12,7 @@ import type {
   ChatComposerInputHandle,
 } from './ChatComposerInput';
 import {placeCaretAtEnd, insertTextAtCursor} from './chatComposerSelection';
+import {InternationalizationProvider} from '../i18n';
 import {createStaticSource} from '../Typeahead/createStaticSource';
 import type {SearchableItem, SearchSource} from '../Typeahead/types';
 
@@ -1388,6 +1389,27 @@ describe('ChatComposerInput', () => {
       });
       const {container} = render(<ChatComposerInput triggers={[trigger]} />);
       expect(container).toBeTruthy();
+    });
+
+    it('shows the empty message from the provider catalog when the trigger sets none', async () => {
+      const user = userEvent.setup();
+      render(
+        <InternationalizationProvider
+          locale="fr"
+          overrides={{
+            fr: {'@astryx.chatTriggerMenu.noResults': 'Aucun résultat'},
+          }}>
+          <ChatComposerInput triggers={[createMentionTrigger()]} />
+        </InternationalizationProvider>,
+      );
+
+      await user.click(screen.getByRole('combobox'));
+      await user.keyboard('@zzzzz');
+
+      await waitFor(() => {
+        expect(screen.getByText('Aucun résultat')).toBeInTheDocument();
+      });
+      expect(screen.queryByText('No results')).not.toBeInTheDocument();
     });
 
     // A trigger's `emptySearchResultsText` was renamed to `emptySearchText`

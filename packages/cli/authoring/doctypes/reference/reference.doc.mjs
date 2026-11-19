@@ -127,6 +127,12 @@ export const doc = {
       description:
         "Token category for foundational docs that map to a token section (e.g. 'color'). `astryx docs --json` returns it as authored; no tokens page links to the doc through it.",
     },
+    {
+      name: 'searchable',
+      type: 'true',
+      description:
+        "Set beside `stability: 'experimental'` on one of the CLI's own guides that `astryx search` returns while it is experimental, as one entry for the whole guide. Search reads it on no other doc, and an integration's guide that sets it stays out of search. Omit it everywhere else.",
+    },
   ],
   examples: [
     {
