@@ -59,6 +59,9 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Current-state impact
 
+The gap lines below describe `@astryxdesign/react-native`, the package that
+implements this record.
+
 - FR2, FR4 gap: a read-only row's hint carries no "Read only" word; the row
   only refuses presses.
 - FR5 gap: the busy start is not announced; the row reads as busy only.
