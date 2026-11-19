@@ -75,6 +75,27 @@ describe('Card', () => {
     });
   });
 
+  it('applies each size prop when it is the only one set', () => {
+    const {getByTestId} = render(
+      <>
+        <Card data-testid="width" width={321} />
+        <Card data-testid="height" height={202} />
+        <Card data-testid="maxWidth" maxWidth="43%" />
+        <Card data-testid="minHeight" minHeight={104} />
+      </>,
+    );
+    // jsdom does not resolve var(), so read the values StyleX sets inline.
+    expect(getByTestId('width').getAttribute('style')).toContain('321px');
+    expect(getByTestId('height').getAttribute('style')).toContain('202px');
+    expect(getByTestId('maxWidth').getAttribute('style')).toContain('43%');
+    expect(getByTestId('minHeight').getAttribute('style')).toContain('104px');
+  });
+
+  it('sets no inline size when no size prop is set', () => {
+    const {getByTestId} = render(<Card data-testid="card">C</Card>);
+    expect(getByTestId('card').getAttribute('style') ?? '').not.toMatch(/--/);
+  });
+
   it('forwards ref to the rendered element', () => {
     const ref = createRef<HTMLDivElement>();
     const {container} = render(<Card ref={ref}>C</Card>);
