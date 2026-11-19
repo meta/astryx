@@ -56,7 +56,11 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: "An agent asks by meaning: `astryx experimental icon <words>`. The icon a set maps to the definition those words name comes first, from the project's main set before its backups, with the exact import line. Related icons stay findable by their own words and definitions and rank after it: `search` answers with the set's search icon first, while `find in document` answers with the icon for `documentSearch`. So ask for the job the icon does, take the first match, and paste its import. Templates work the same way: each declares the definition its icons draw, so a project that switches sets gets the new set's icon for every definition that set maps.",
+          text: "An agent asks by meaning: `astryx experimental icon <words>`. The icon a set maps to the definition those words name comes first, from the project's main set before its backups, with the exact import line. Related icons stay findable by their own words and definitions and rank after it: `search` answers with the set's search icon first, while `find in document` answers with the set's icon for `documentSearch`, where the set maps one. So ask for the job the icon does, take the first match, and paste its import. Templates work the same way: each declares the definition its icons draw, so a project that switches sets gets the new set's icon for every definition that set maps.",
+        },
+        {
+          type: 'prose',
+          text: 'Related meanings belong to a `group`, such as `notifications` for `notification`, `notificationActive` and `notificationOff`. A match in `astryx experimental icon` lists the other meanings of its group as `relatives`, so an agent that asked for the bell sees that "mute" has a meaning of its own; a group never changes which icon comes first. A meaning can also declare `replaces`, naming an older meaning it takes the place of: the old name keeps answering, in an icon set\'s `map`, in a template\'s `icons` and in the search, and `integration check` names each `map` key to rename. A meaning your icon set adds may join an Astryx group or start its own, and may replace another of your own meanings, never an Astryx one.',
         },
         {
           type: 'prose',
