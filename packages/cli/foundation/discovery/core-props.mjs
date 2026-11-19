@@ -58,8 +58,9 @@ function coreComponentOf(path) {
 
 /**
  * Each prop the module's elements give a Core component by name, leaving out
- * `key`, `ref`, `children`, the styling props, and `data-` and `aria-`
- * attributes. A prop spread in (`{...props}`) names nothing and is left out.
+ * `key`, `ref`, `children`, the styling props, and every name with a hyphen
+ * (`data-`, `aria-` and others). A prop spread in (`{...props}`) names nothing
+ * and is left out.
  * @param {string} source
  * @returns {CorePropUse[] | null}
  */

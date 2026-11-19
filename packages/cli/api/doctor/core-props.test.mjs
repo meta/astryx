@@ -126,7 +126,7 @@ describe('doctor core-props', () => {
         'src/App.test.tsx': app('TabList', '<TabList selectedID="a" />'),
       });
       expect(check?.status).toBe('pass');
-      expect(check?.message).toMatch(/^Every prop given to a Core component is one it takes \(\d+ props read\)\.$/);
+      expect(check?.message).toMatch(/^No prop was found that a Core component does not take \(\d+ props read\)\.$/);
     },
     SLOW,
   );

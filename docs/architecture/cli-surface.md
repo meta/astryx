@@ -412,8 +412,9 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
   TypeScript cannot read, a generic one, or one from outside Core, and it
   does not judge a module whose `@jsxImportSource` or `@jsx` pragma names
   another JSX runtime. When the project has no TypeScript that it can use,
-  has a `tsconfig` or `jsconfig` whose `jsxImportSource` or `jsxFactory`
-  names another runtime, or has more source files than `doctor` reads,
+  has a `tsconfig` or `jsconfig`, read by a page that imports Core, whose
+  `jsxImportSource` or `jsxFactory` names another runtime, or has more
+  source files than `doctor` reads,
   the check does not run and says why, whatever props the pages give. When
   there is a candidate and the types or the files that augment Core cannot
   all be read, it reports no prop and says why. The warning names each

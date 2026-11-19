@@ -1678,7 +1678,8 @@ const PROPS_NAMED = 8;
  * The props the project's own source gives Core components that the
  * component does not take (see `findUnknownCoreProps`): each with its file,
  * line and component, and the documented prop the name is closest to. A
- * prop a component does not take does nothing, and nothing else says so.
+ * prop a component does not take does nothing, and unless the build
+ * type-checks, no build step reports it.
  * When the project has no TypeScript to read Core's types with, the check
  * says it did not run.
  * @param {DoctorContext} ctx
@@ -1696,7 +1697,7 @@ export function checkCoreProps(ctx) {
       id,
       label,
       status: 'pass',
-      message: `Every prop given to a Core component is one it takes (${scan.uses} prop${scan.uses === 1 ? '' : 's'} read).`,
+      message: `No prop was found that a Core component does not take (${scan.uses} prop${scan.uses === 1 ? '' : 's'} read).`,
     };
   }
   const named = scan.found
