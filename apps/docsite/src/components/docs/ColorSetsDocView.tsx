@@ -13,7 +13,7 @@ import {useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
-import {useClipboard} from '@astryxdesign/core/hooks';
+import {useAnnounce, useClipboard} from '@astryxdesign/core/hooks';
 import {Button} from '@astryxdesign/core/Button';
 import {Moon, Sun} from 'lucide-react';
 import {Theme} from '@astryxdesign/core/theme';
@@ -550,6 +550,7 @@ function ChartStylingTable({sections}: {sections: DocSection[]}) {
 
 function CopyTokensButton({rows}: {rows: string[][]}) {
   const {copy, isCopied} = useClipboard({announce: 'Tokens copied'});
+  const announce = useAnnounce();
   const [failed, setFailed] = useState(false);
   const text = JSON.stringify(
     rows.map(row =>
@@ -568,13 +569,15 @@ function CopyTokensButton({rows}: {rows: string[][]}) {
         icon={<Icon icon={isCopied ? 'check' : 'copy'} />}
         size="sm"
         variant="ghost"
-        onClick={async () => setFailed(!(await copy(text)))}
+        onClick={async () => {
+          const didCopy = await copy(text);
+          setFailed(!didCopy);
+          if (!didCopy) {
+            announce('Could not copy. Try again.', 'assertive');
+          }
+        }}
       />
-      {failed && (
-        <Text type="supporting" role="alert">
-          Could not copy. Try again.
-        </Text>
-      )}
+      {failed && <Text type="supporting">Could not copy. Try again.</Text>}
     </VStack>
   );
 }

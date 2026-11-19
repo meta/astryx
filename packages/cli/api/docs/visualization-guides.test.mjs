@@ -136,12 +136,14 @@ describe('visualization palette and styling guides', () => {
     const section = id => colorSets.sections.find(item => item.id === id);
     const tables = id =>
       section(id).content.filter(block => block.type === 'table');
-    const codeTokens = (id, index = 0) =>
-      [
-        ...section(id)
-          .content.filter(block => block.type === 'code')
-          [index].code.matchAll(/'(--color-data-[a-z0-9-]+)'/g),
+    const codeTokens = (id, index = 0) => {
+      const codeBlocks = section(id).content.filter(
+        block => block.type === 'code',
+      );
+      return [
+        ...codeBlocks[index].code.matchAll(/'(--color-data-[a-z0-9-]+)'/g),
       ].map(match => match[1]);
+    };
     const stops = (hue, order) =>
       order.map(stop => `--color-data-${hue}-${stop}`);
     const forward = [1, 2, 3, 4, 5],

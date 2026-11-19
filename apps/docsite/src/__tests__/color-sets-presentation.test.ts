@@ -32,6 +32,10 @@ describe('color-set presentation', () => {
     expect(source).toContain('variant="ghost"');
     expect(source).toContain('tooltip="Copy tokens"');
     expect(source).toContain("isCopied ? 'check' : 'copy'");
+    expect(source).toContain(
+      "announce('Could not copy. Try again.', 'assertive')",
+    );
+    expect(source).not.toContain('role="alert"');
     expect(source).toContain('sets.map(section =>');
     expect(source).toContain('groups.map((group, index) =>');
     expect(source).not.toContain('Implementation details');
