@@ -89,6 +89,7 @@ import {useThemeDefinition} from '../theme/useTheme';
 import {
   DEFAULT_WIDTH_BREAKPOINTS,
   type WidthBreakpointName,
+  widthBelowFeature,
 } from '../theme/themeAdaptations';
 import type {AppShellVariantMap} from './index';
 
@@ -704,10 +705,7 @@ export function AppShell({
       ? null
       : (activeWidthBreakpoints?.[sideNavBreakpoint] ??
         DEFAULT_WIDTH_BREAKPOINTS[sideNavBreakpoint]);
-  const breakpointQuery =
-    breakpointWidth == null
-      ? '(width < 0px)'
-      : `(width < ${breakpointWidth}px)`;
+  const breakpointQuery = widthBelowFeature(breakpointWidth ?? 0);
   const isMobileOnServer =
     breakpointWidth != null && mobileNavConfig?.defaultIsMobile === true;
   const isBelowBreakpointNow = useMediaQuery(breakpointQuery, isMobileOnServer);
