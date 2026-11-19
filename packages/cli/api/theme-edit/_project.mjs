@@ -641,3 +641,24 @@ export async function baseResolved(project, like) {
   };
   return out;
 }
+
+/** @type {WeakMap<object, Map<string, string>>} */
+const sitsOnMaps = new WeakMap();
+/**
+ * Each part that sits on another part's element, and that part, from the
+ * component docs' `sitsOn`.
+ * @param {any} project
+ * @returns {Map<string, string>}
+ */
+export function sitsOnOf(project) {
+  let map = sitsOnMaps.get(project);
+  if (!map) {
+    map = new Map();
+    for (const info of Object.values(project.components ?? {}))
+      for (const t of /** @type {any} */ (info).targets ?? [])
+        if (typeof t.sitsOn === 'string')
+          map.set(String(t.className).replace(/^astryx-/, ''), t.sitsOn);
+    sitsOnMaps.set(project, map);
+  }
+  return map;
+}

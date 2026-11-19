@@ -1,12 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `--only` means one thing to `set` and to the settings reader (one
- * rule, onlyMeans): every `only` set writes, the theme opens with again;
- * set saves a change on a part styled on its own without it; and a saved
- * one there (as
- * another editor saved it) is read and built as without it, named in one
- * note, never a refusal of the theme.
+ * @file `--only` means one thing to `set` and to the settings reader: every
+ * `only` set writes, the theme opens with again; set saves a change on a
+ * part styled on its own without it; a saved one there (as another editor
+ * saved it) is read and built as without it, named in one note, never a
+ * refusal of the theme; and a saved one that keeps a setting off the
+ * part's family is kept as written.
  */
 
 import * as fs from 'node:fs';
@@ -98,7 +98,7 @@ describe('--only, as set writes it and the reader reads it', () => {
       const r = /** @type {any} */ (
         await themeEditSet('n', 'text-shadow', 'none', {
           cwd,
-          on: 'segmented-control-item',
+          on: 'tab',
           state: 'selected',
           only: true,
         })
@@ -122,13 +122,13 @@ describe('--only, as set writes it and the reader reads it', () => {
           thing: 'text-shadow',
           value: '0 1px 1px #ffffff',
           source: 'property',
-          on: 'segmented-control-item',
+          on: 'tab',
         },
         {
           thing: 'text-shadow',
           value: '0 1px 1px rgba(0, 0, 0, 0.25)',
           source: 'property',
-          on: 'segmented-control-item',
+          on: 'tab',
           state: 'selected',
           only: true,
         },
@@ -137,7 +137,7 @@ describe('--only, as set writes it and the reader reads it', () => {
       const before = fs.readFileSync(file(), 'utf8');
       const r = await themeEditShow('n', {cwd});
       expect(notes(r)).toMatch(
-        /text-shadow on segmented-control-item :selected was saved with only, which changes nothing there/,
+        /text-shadow on tab :selected was saved with only, which changes nothing there/,
       );
       // (show writes no settings.)
       expect(fs.readFileSync(file(), 'utf8')).toBe(before);
@@ -147,7 +147,7 @@ describe('--only, as set writes it and the reader reads it', () => {
       await themeEditUndo('n', {
         cwd,
         thing: 'text-shadow',
-        on: 'segmented-control-item',
+        on: 'tab',
         state: 'selected',
       });
       expect(
@@ -160,13 +160,12 @@ describe('--only, as set writes it and the reader reads it', () => {
       // entry for the place, never a twin; a bare undo removes it.
       await themeEditSet('n', 'text-shadow', 'none', {
         cwd,
-        on: 'segmented-control-item',
+        on: 'tab',
         state: 'selected',
       });
       const at = () =>
         read().settings.filter(
-          (/** @type {any} */ x) =>
-            x.on === 'segmented-control-item' && x.state === 'selected',
+          (/** @type {any} */ x) => x.on === 'tab' && x.state === 'selected',
         );
       expect(at()).toEqual([
         expect.not.objectContaining({only: expect.anything()}),
@@ -174,7 +173,7 @@ describe('--only, as set writes it and the reader reads it', () => {
       await themeEditUndo('n', {
         cwd,
         thing: 'text-shadow',
-        on: 'segmented-control-item',
+        on: 'tab',
         state: 'selected',
       });
       expect(at()).toEqual([]);
@@ -217,8 +216,7 @@ describe('--only, as set writes it and the reader reads it', () => {
           thing: 'color',
           value: '#ffffff',
           source: 'property',
-          on: 'pagination-item',
-          state: 'selected',
+          on: 'badge',
           mode: 'light',
           only: true,
         },
@@ -226,8 +224,7 @@ describe('--only, as set writes it and the reader reads it', () => {
           thing: 'color',
           value: '#111111',
           source: 'property',
-          on: 'pagination-item',
-          state: 'selected',
+          on: 'badge',
           mode: 'light',
         },
       ]);
@@ -238,12 +235,34 @@ describe('--only, as set writes it and the reader reads it', () => {
       // The next change saves only the later entry.
       await themeEditSet('n', 'corners', 'round', {cwd});
       expect(
-        read().settings.filter(
-          (/** @type {any} */ x) => x.on === 'pagination-item',
-        ),
+        read().settings.filter((/** @type {any} */ x) => x.on === 'badge'),
       ).toEqual([expect.objectContaining({value: '#111111'})]);
       expect(read().settings.some((/** @type {any} */ x) => x.only)).toBe(
         false,
+      );
+    },
+    T,
+  );
+
+  it(
+    'a saved only that keeps a setting off its family is kept as written',
+    async () => {
+      write([
+        {
+          thing: 'background-image',
+          value: 'linear-gradient(#ffffff, #e6e6e6)',
+          source: 'property',
+          on: 'toggle-button',
+          only: true,
+        },
+      ]);
+      const r = await themeEditShow('n', {cwd});
+      expect(notes(r)).not.toMatch(/was saved with only/);
+      await themeEditSet('n', 'corners', '4px', {cwd});
+      expect(read().settings).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({on: 'toggle-button', only: true}),
+        ]),
       );
     },
     T,

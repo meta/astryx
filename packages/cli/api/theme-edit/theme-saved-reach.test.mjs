@@ -16,6 +16,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {themeEditNew, themeEditSet, themeEditUndo} from './theme-edit.mjs';
+import {context} from './_context.mjs';
+import {earlierReach, partsOf} from './_settings.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -150,6 +152,54 @@ describe('a saved setting and how far it reaches', () => {
     expect(Object.keys(saved('old').reached ?? {})).toEqual(
       expect.arrayContaining([expect.stringMatching(/^border-color\|/)]),
     );
+  }, 240_000);
+
+  it('a part setting saved with no record names the family it now reaches, with its keep line', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('fam', {cwd, like: 'neutral'});
+    await themeEditSet(
+      'fam',
+      'background-image',
+      'linear-gradient(#ffffff, #e6e6e6)',
+      {cwd, on: 'button'},
+    );
+    const data = saved('fam');
+    delete data.reached;
+    save('fam', data);
+    const r = /** @type {any} */ (
+      await themeEditSet('fam', 'corners', '4px', {cwd})
+    );
+    const widened = /** @type {any[]} */ (r.data.widened ?? []);
+    expect(widened).toHaveLength(1);
+    expect(widened[0].parts).toEqual(expect.arrayContaining(['toggle-button']));
+    expect(widened[0].keep).toContain('--on button --only');
+  }, 240_000);
+
+  it('an input setting saved with no record names the members it reaches past the values it matched', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('inp', {cwd, like: 'neutral'});
+    await themeEditSet('inp', 'padding-inline', '9px', {cwd, on: 'text-input'});
+    const data = saved('inp');
+    delete data.reached;
+    save('inp', data);
+    const r = /** @type {any} */ (
+      await themeEditSet('inp', 'corners', '4px', {cwd})
+    );
+    // (The editors before family reach matched the values themselves: a
+    // member that draws the thing another way is new, and named; one that
+    // matched is not.)
+    const ctxt = /** @type {any} */ (await context(cwd));
+    const s = {
+      thing: 'padding-inline',
+      value: '9px',
+      source: /** @type {const} */ ('property'),
+      on: 'text-input',
+    };
+    const earlier = earlierReach(ctxt, s);
+    const grown = partsOf(ctxt, s).filter(t => !earlier.includes(t));
+    const widened = /** @type {any[]} */ (r.data.widened ?? []);
+    expect(earlier).toContain('number-input');
+    expect(widened.flatMap(w => w.parts).sort()).toEqual(grown.sort());
   }, 240_000);
 
   it('--only on the same setting replaces it, so the look leaves the group', async ctx => {
