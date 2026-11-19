@@ -37,7 +37,7 @@ import {themeProps} from '../utils/themeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {useCutTextOnKeyboardFocus} from '../Text/TruncationTooltip';
-import {tableStickyCellStyles} from './tableStickyCell.stylex';
+import {tableStickyPinnedCellStyles} from './tableStickyCell.stylex';
 
 /** Props for TableHeaderCell — `<th>` wrapper with context-aware styling */
 export interface TableHeaderCellProps extends BaseProps<HTMLTableCellElement> {
@@ -130,11 +130,9 @@ const stickyHeaderStyles = stylex.create({
     position: 'sticky',
     insetBlockStart: 0,
     zIndex: 2,
-    // The sticky-column surface and its divider need to bleed out of the
-    // header cell. The label's inner wrapper owns truncation instead.
-    backgroundColor: `var(--table-sticky-background, ${colorVars['--color-background-card']})`,
-    backgroundClip: 'padding-box',
-    overflow: 'visible',
+    // The shared pinned-cell layer draws this divider in its moving surface,
+    // rather than leaving it behind in the collapsed table border.
+    '--_table-row-divider-width': borderVars['--border-width'],
   },
 });
 
@@ -210,10 +208,12 @@ export function TableHeaderCell({
     cellStyles.push(
       headerStyles.cell,
       densityStyles[ctx.density],
-      headerDividerStyles.cell,
       overflowStyles.cell,
       containerEdgeStyles[ctx.density],
     );
+    if (!ctx.hasStickyHeader) {
+      cellStyles.push(headerDividerStyles.cell);
+    }
     // Column dividers come from the shared builder (column axis only).
     if (ctx.dividers === 'columns' || ctx.dividers === 'grid') {
       cellStyles.push(dividerColumnStyles.cell);
@@ -222,7 +222,7 @@ export function TableHeaderCell({
       cellStyles.push(headerMenuCellStyles.cell);
     }
     if (ctx.hasStickyHeader) {
-      cellStyles.push(stickyHeaderStyles.cell);
+      cellStyles.push(stickyHeaderStyles.cell, tableStickyPinnedCellStyles);
     }
   }
 

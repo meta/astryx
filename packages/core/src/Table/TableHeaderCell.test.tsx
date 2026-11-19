@@ -199,8 +199,8 @@ describe('TableHeaderCell', () => {
     expect(content).not.toBeNull();
     expect(cssDeclarationsOf(content)).toContain('overflow: hidden');
     expect(
-      declarations.some(declaration => declaration.includes('::after')),
-    ).toBe(false);
+      declarations.some(declaration => declaration.includes('::before')),
+    ).toBe(true);
   });
 
   it('keeps the sticky header with custom cell renderers', () => {

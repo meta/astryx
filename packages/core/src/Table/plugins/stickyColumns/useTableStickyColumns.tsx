@@ -48,10 +48,10 @@ import {useTheme, useThemeName} from '../../../theme/useTheme';
 import {
   tableStickyHeaderCellStyles,
   tableStickyBodyCellStyles,
+  tableStickyPinnedCellStyles,
 } from '../../tableStickyCell.stylex';
 import {tableStickyCellGlidingStyles} from '../../../privateAttributes/cellGliding.stylex';
 import {tableStickyPinnedCarryStyles} from '../../../privateAttributes/tablePinned.stylex';
-import {tableStickyPinnedCellStyles} from '../../../privateAttributes/tableStickyPinnedCell.stylex';
 
 // =============================================================================
 // Config
