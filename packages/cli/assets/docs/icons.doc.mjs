@@ -10,7 +10,7 @@ export const docs = {
   title: 'Icons',
   category: 'foundations',
   description:
-    "Semantic icon names available in the design system. These adapt to the active theme's icon registry.",
+    "Built-in icon meanings: the icon names every Astryx component can draw. The active theme's icons draw them, and a theme can replace any of them.",
 
   sections: [
     {
@@ -19,7 +19,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Components that accept an icon prop use IconType: either a semantic name string or a direct SVG component. The semantic names below are resolved through the global icon registry.',
+          text: 'Components that accept an icon prop use IconType: either a built-in meaning by name or a direct SVG component. A name resolves through the theme icons: the drawings the active theme gives each name (its type is `IconRegistry`).',
         },
         {
           type: 'table',
@@ -190,7 +190,7 @@ brandTheme.iconVariants; // ['outline', 'filled']`,
       content: [
         {
           type: 'prose',
-          text: 'A glyph that belongs to one component or library gets a namespaced key (`numberInput:stepperDown`, `richtext:bold`) instead of a new semantic name. It resolves through the same registry and a theme overrides it the same way, but the shared IconName list stays reserved for glyphs the whole system uses, so adding one does not make every downstream icon registry grow a key.',
+          text: 'A glyph that belongs to one component or library gets a namespaced key (`numberInput:stepperDown`, `richtext:bold`) instead of a new semantic name. It resolves through the theme icons and a theme overrides it the same way, but the shared IconName list stays reserved for glyphs the whole system uses, so adding one does not make the icons of every theme grow a key.',
         },
         {
           type: 'code',

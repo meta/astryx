@@ -32,7 +32,7 @@ export const docs = {
     {
       name: 'sendIcon',
       type: 'ReactNode',
-      description: 'Custom icon for the send state. Defaults to arrowUp from icon registry.',
+      description: 'Custom icon for the send state. Defaults to the theme icons\' arrowUp.',
       slotElements: [
         {
           __element: 'Icon',
@@ -46,7 +46,7 @@ export const docs = {
     {
       name: 'stopIcon',
       type: 'ReactNode',
-      description: 'Custom icon for the stop state. Defaults to stop from icon registry.',
+      description: 'Custom icon for the stop state. Defaults to the theme icons\' stop.',
       slotElements: [
         {
           __element: 'Icon',
@@ -130,8 +130,8 @@ export const docsDense = {
     isDisabled: 'disabled; defaults to !canSend from context',
     onSend: 'send click handler; defaults to context onSubmit',
     onStop: 'stop click handler; defaults to context onStop',
-    sendIcon: 'custom send icon; default arrowUp from registry',
-    stopIcon: 'custom stop icon; default stop from registry',
+    sendIcon: 'custom send icon; default: theme icons\' arrowUp',
+    stopIcon: 'custom stop icon; default: theme icons\' stop',
     size: 'btn size',
     xstyle: 'additional StyleX styles',
   },

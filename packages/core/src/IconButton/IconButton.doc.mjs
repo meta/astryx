@@ -136,7 +136,7 @@ export const docs = {
 
   usage: {
     description:
-      'A button that shows only an icon with no visible text. Use IconButton in toolbars, table rows, and compact UI where space is tight and the icon is universally understood.',
+      "A button that shows only an icon with no visible text: pass an `Icon` as `icon`. A built-in meaning goes by name (`<Icon icon=\"close\" />`); for any other icon, such as a trash can, import its drawing from your icon library: `icon={<Icon icon={TrashIcon} />}` with `import {TrashIcon} from '@heroicons/react/24/outline'`. Use IconButton in toolbars, table rows, and compact UI where space is tight and the icon is universally understood.",
     accessibility: [
       {
         name: 'Essential icon or spinner arc',
@@ -208,10 +208,10 @@ export const docs = {
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
 export const docsDense = {
   description:
-    'Button showing only an icon, no visible text. Use in toolbars, table rows, compact UI where space is tight + icon universally understood.',
+    "Button showing only an icon, no visible text; `icon={<Icon icon=\"close\" />}` for a built-in meaning, else import from your icon library (`icon={<Icon icon={TrashIcon} />}`, TrashIcon from '@heroicons/react/24/outline'). Use in toolbars, table rows, compact UI where space is tight + icon universally understood.",
   usage: {
     description:
-      'Button showing only an icon, no visible text. Use in toolbars, table rows, compact UI where space is tight + icon universally understood.',
+      "Button showing only an icon, no visible text; `icon={<Icon icon=\"close\" />}` for a built-in meaning, else import from your icon library (`icon={<Icon icon={TrashIcon} />}`, TrashIcon from '@heroicons/react/24/outline'). Use in toolbars, table rows, compact UI where space is tight + icon universally understood.",
     bestPractices: [
       {
         guidance: true,

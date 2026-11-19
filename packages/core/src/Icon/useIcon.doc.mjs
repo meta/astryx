@@ -21,7 +21,7 @@ export const docs = {
       name: 'name',
       type: 'IconName | NamespacedIconName',
       description:
-        "Semantic icon name, such as 'success', 'warning' or 'close', or a namespaced extension key such as 'richtext:bold'. Both resolve through the same registry.",
+        "Semantic icon name, such as 'success', 'warning' or 'close', or a namespaced extension key such as 'richtext:bold'. Both resolve through the theme icons.",
       required: true,
     },
   ],
@@ -65,7 +65,7 @@ export const docsDense = {
   description:
     "Resolves a semantic icon name to a React node via the nearest Theme, so custom components draw the same icons as Astryx components and follow theme overrides. Fallback: nearest Theme icons (outside any Theme, the root's registered theme), registerIcons() overrides, built-in default. Node returned as is (built-ins are 1em, currentColor). Function entries read at {size: 'md'}. Use <Icon icon={name} /> for another size, a color or a label.",
   paramDescriptions: {
-    name: "semantic icon name ('success', 'close') or namespaced key ('richtext:bold'); same registry.",
+    name: "semantic icon name ('success', 'close') or namespaced key ('richtext:bold'); same theme icons.",
   },
   returnDescriptions: {
     icon: "icon node from nearest Theme (outside any Theme, the root's registered theme), else registerIcons() overrides, else built-in default; function entries read at {size: 'md'}.",
