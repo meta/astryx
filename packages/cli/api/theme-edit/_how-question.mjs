@@ -19,6 +19,7 @@ import {
   ratio,
   ratioWords,
 } from './_color.mjs';
+import {luminance} from '../theme/palette/generate/color.mjs';
 import {OVERRIDES} from './_part-words.mjs';
 import {
   DESIGN,
@@ -730,7 +731,7 @@ function colorsFound(c) {
         shade === 'pastel' ||
         // (A hue already dark, "dark brown", is itself: measured by how
         // light it reads, so a medium teal still deepens.)
-        (shade === 'dark' && relLum(base) > 0.12))
+        (shade === 'dark' && luminance(hex(base.slice(0, 3))) > 0.12))
     ) {
       const to = shade === 'dark' ? 0 : 255;
       // (A pastel is a hue well toward white, keeping some of its color.)
@@ -823,18 +824,6 @@ function outOfBounds(st) {
   )
     return `a border of ${v} covers the part; a border reads up to 64px`;
   return null;
-}
-
-/**
- * How light a color reads (WCAG relative luminance, 0 to 1).
- * @param {number[]} rgb
- */
-function relLum(rgb) {
-  const [r, g, b] = rgb.slice(0, 3).map(v => {
-    const c = v / 255;
-    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
 /**
