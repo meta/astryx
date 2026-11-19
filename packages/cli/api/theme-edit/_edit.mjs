@@ -85,6 +85,7 @@ import {
   heldVariantsOf,
   placementHolds,
   missedDrawnAs,
+  oneLineSizeMisses,
   borderFrames,
   undoArgs,
   isCheckNote,
@@ -2506,7 +2507,7 @@ function embeddedReach(ctx, slug, data, s, parts) {
     const [axis, wanted] = s.when ? String(s.when).split(':') : [];
     if (
       axis &&
-      !/** @type {string[]} */ (rec?.attrs?.[axis] ?? []).includes(wanted)
+      !(/** @type {string[]} */ (rec?.attrs?.[axis] ?? []).includes(wanted))
     )
       continue;
     if (
@@ -7435,6 +7436,85 @@ async function changeOnce(
   // with no variable a theme sets, so nothing reaches them there. Said, with
   // no line, rather than counted as reached.)
   const missedAs = sub === 'set' && s.on ? missedDrawnAs(ctx, s) : [];
+  // (A color set on a part covers a text color token an earlier setting
+  // gives a part around it: the part's own color wins over the color it
+  // would take from around it, whatever their order. Named, with the line
+  // that takes the new color back.)
+  if (
+    sub === 'set' &&
+    s.on &&
+    s.source === 'property' &&
+    kebab(String(s.thing)) === 'color'
+  ) {
+    const MAPC = /** @type {Record<string, any>} */ (ctx.C?.MAP ?? {});
+    const covered = data.settings.filter(
+      x =>
+        x !== s &&
+        x.source === 'token' &&
+        x.on &&
+        !x.state &&
+        (!x.mode || !s.mode || x.mode === s.mode) &&
+        parts.some(
+          t =>
+            t !== x.on &&
+            (MAPC[String(x.on)]?.contains ?? []).includes(t) &&
+            (ctx.C?.partReads(t, 'text') ?? []).some(
+              (/** @type {any} */ r) => r.token === x.thing,
+            ),
+        ),
+    );
+    for (const x of covered) {
+      const inside = parts.filter(t =>
+        (MAPC[String(x.on)]?.contains ?? []).includes(t),
+      );
+      notes.push(
+        `${s.thing} on ${s.on} covers ${describe(x)}: ${inside.join(', ')} inside ${x.on} ${inside.length > 1 ? 'draw' : 'draws'} ${s.value} there now, since a part's own color wins over a text color set on a part around it; to keep ${x.on}'s text as it was: \`${P} undo ${slug} ${undoArgs(s)}\``,
+      );
+    }
+  }
+  // (Two settings that reach one element through two parts drawn on it, a
+  // dialog look reaching the popover and a menu look reaching the selector
+  // popup drawn on that popover: their rules meet on that element, and the
+  // build's order alone decides which shows. Named, with the line that
+  // gives the other part this look too.)
+  if (sub === 'set' && s.on) {
+    const MAPE = /** @type {Record<string, any>} */ (ctx.C?.MAP ?? {});
+    const prop = kebab(String(s.thing));
+    /** @type {Map<import('./_settings.mjs').Setting, Set<string>>} */
+    const meets = new Map();
+    for (const t of parts)
+      for (const q of /** @type {string[]} */ (MAPE[t]?.drawnAs ?? [])) {
+        if (parts.includes(q)) continue;
+        const rival = [...data.settings]
+          .reverse()
+          .find(
+            x =>
+              x !== s &&
+              x.on &&
+              kebab(String(x.thing)) === prop &&
+              (x.state ?? '') === (s.state ?? '') &&
+              (!x.mode || !s.mode || x.mode === s.mode) &&
+              partsOf(ctx, x).includes(q),
+          );
+        if (rival) meets.set(rival, (meets.get(rival) ?? new Set()).add(q));
+      }
+    for (const [rival, qs] of meets) {
+      const list = [...qs];
+      notes.push(
+        `${s.thing} on ${s.on} and ${describe(rival)} meet on one element: ${list.join(', ')} ${list.length > 1 ? 'are' : 'is'} drawn on a part this reaches, and the build's order alone decides which look shows there; to give ${list.length > 1 ? 'one' : 'it'} this look as well: ${list.map(q => `\`${P} set ${slug} ${setArgs({...s, on: q, only: true}, String(s.value))}\``).join(', ')}`,
+      );
+    }
+  }
+  // (A one-line height set on one member of a family leaves its multi-line
+  // members their own height, named with the line that sizes them too.)
+  const fam = sub === 'set' && s.on && !s.only ? reachGroupOf(ctx, s) : null;
+  const tallOnes = fam
+    ? (groupsOf(ctx)[fam] ?? []).filter(m => oneLineSizeMisses(ctx, s, m))
+    : [];
+  if (tallOnes.length)
+    notes.push(
+      `${s.thing} does not reach ${tallOnes.join(', ')}: ${tallOnes.length > 1 ? 'they are' : 'it is'} drawn with no one-line height (a multi-line field grows with its rows); to size ${tallOnes.length > 1 ? 'one' : 'it'} too: ${tallOnes.map(m => `\`${P} set ${slug} ${setArgs({...s, on: m, only: undefined}, String(s.value))}\``).join(', ')}`,
+    );
   if (missedAs.length)
     notes.push(
       `${s.thing} on ${s.on} does not reach ${missedAs.join(', ')}: drawn as ${s.on}, ${missedAs.length > 1 ? 'they draw' : 'it draws'} ${s.thing} with no variable a theme sets, so Core gives no way to change it there`,

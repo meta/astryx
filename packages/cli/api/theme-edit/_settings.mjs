@@ -5612,9 +5612,52 @@ function drawnAlike(ctx, s, member, exact = false) {
       );
     return vals.length ? [...new Set(vals)].sort().join(' | ') : null;
   };
+  // (A one-line height reaches only members drawn one line tall: a
+  // multi-line field grows with its rows, so a text input's height would
+  // shut a text area to one line.)
+  if (oneLineSizeMisses(ctx, s, member)) return false;
   const a = rest(s.on);
   const b = rest(member);
   return a == null || b == null || a === b;
+}
+
+/** The properties that size a part's height, as one line. */
+const ONE_LINE_SIZE = /^(?:min-|max-)?(?:height|block-size)$/;
+
+/**
+ * Whether a part is drawn one line tall: it draws a fixed height of its own
+ * at rest (a text input's control height), not one its rows set (a text
+ * area grows with its text).
+ * @param {{C?: any}} ctx @param {string} part
+ */
+function drawnOneLine(ctx, part) {
+  const at = /** @type {any} */ (ctx).C?.MAP?.[part]?.at ?? {};
+  return ['height', 'min-height', 'block-size', 'min-block-size'].some(p =>
+    Object.values(at[p] ?? {}).some(
+      v =>
+        !/^(?:auto|none|initial|unset|fit-content|0(?:px)?)$/.test(
+          String(v).trim(),
+        ),
+    ),
+  );
+}
+
+/**
+ * Whether a height set on a part drawn one line tall misses a member of its
+ * family drawn with no one-line height (a text area beside a text input):
+ * the member keeps its own height, and the result names it.
+ * @param {{C?: any}} ctx
+ * @param {{on?: string | null, thing?: string}} s
+ * @param {string} member
+ */
+export function oneLineSizeMisses(ctx, s, member) {
+  return Boolean(
+    s.on &&
+      member !== s.on &&
+      ONE_LINE_SIZE.test(kebab(String(s.thing ?? ''))) &&
+      drawnOneLine(ctx, String(s.on)) &&
+      !drawnOneLine(ctx, member),
+  );
 }
 
 /**
@@ -12194,7 +12237,29 @@ export async function contrastProblems(ctx, data, res) {
     if (x.source !== 'property' || x.thing !== 'color' || !x.on || x.state)
       continue;
     for (const t of partsOf(ctx, x)) {
-      if (drawnParts.has(t)) continue;
+      if (drawnParts.has(t)) {
+        // (A part the census draws on another part that sets text of its
+        // own, a top bar heading in the phone menu: the theme's color on
+        // the part is its own rule there, which wins over the color it
+        // would take from around it, so its text is measured on that
+        // ground too.)
+        for (const p of census.pairs)
+          if (
+            p.text === t &&
+            p.bg.target &&
+            p.bg.target !== t &&
+            ctx.C.partReads(p.bg.target, 'text')?.length &&
+            !(x.when && x.when !== /** @type {any} */ (p).when)
+          )
+            ownTextPairs.push(
+              /** @type {any} */ ({
+                ...p,
+                ownColor: true,
+                fg: {target: t, tokens: [], raw: null},
+              }),
+            );
+        continue;
+      }
       // The fill the census saw the part draw (with its default props),
       // else what it reads at rest, else the fill of the part it sits in
       // (a checkbox's check on its box), else none: the page shows.
