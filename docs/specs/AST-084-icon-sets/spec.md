@@ -890,8 +890,8 @@ message}`) names each template or namespace doc that sets `stability`, and
   placeholder, aliased or not, as the library icon that draws it.
 
 - **FR23 — A meaning can fall back.** A table entry may name a `fallback`:
-  another meaning that draws the same icon (`verified` falls back to
-  `success`). Each set in the project's list, in order, maps an icon by its
+  another meaning whose icon a set draws in its place (`verified` falls back
+  to `success`). Each set in the project's list, in order, maps an icon by its
   meaning, then by that meaning's fallback, before the next set is tried, so
   one set draws each icon (DEC-11). An icon declared with a refined meaning
   therefore draws its fallback's icon in every set that does not map the
