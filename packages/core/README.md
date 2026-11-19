@@ -2,14 +2,26 @@
 
 Core UI components, theme system, and utilities for the Astryx design system. For project setup, see [Quick Start](#quick-start) below.
 
-> **Setup is install, then `init`.** Add the CLI and run `init` once, before you write UI:
+> **Setup is install, then `init`.** Add the CLI at Core's version and run `init` once, before you write UI:
 >
 > ```bash
-> npm install -D @astryxdesign/cli   # or: pnpm add -D / yarn add -D / bun add -d
-> npx @astryxdesign/cli init         # asks no questions
+> npm install -D -E @astryxdesign/cli@<core version>   # or: pnpm add -D -E / yarn add -D -E / bun add -d --exact
+> npx @astryxdesign/cli init                           # asks no questions
 > ```
 >
-> `init` prints the getting-started steps (styles, theme) and saves the Astryx guide to your `AGENTS.md`/`CLAUDE.md`: components, templates, and design tokens, so any agent working in the project builds with Astryx instead of guessing. Read it before you write UI. Need a single command without installing? The same scoped command works: `npx @astryxdesign/cli <cmd>`. Always use the scoped name: the unscoped `astryx` resolves to an unrelated npm package until `@astryxdesign/cli` is a dependency. See [XDS CLI](#xds-cli).
+> Use the version of `@astryxdesign/core` you have. Keep `-E` when `package.json` pins Core exactly, as the starters do; leave it out when Core has a `^` or `~` range.
+>
+> `init` prints the getting-started steps (styles, theme) and saves the Astryx guide to your `AGENTS.md`/`CLAUDE.md`: components, templates, and design tokens, so any agent working in the project builds with Astryx instead of guessing. Read it before you write UI. Always use the scoped name: the unscoped `astryx` resolves to an unrelated npm package until `@astryxdesign/cli` is a dependency. See [Astryx CLI](#astryx-cli).
+
+> **Building with an AI agent?** Ask the Astryx CLI before you write code. These commands work with or without the install above:
+>
+> ```bash
+> npx @astryxdesign/cli build "<what you are building>"   # the template, blocks and components to start from
+> npx @astryxdesign/cli component <Name>                  # one component's props, variants and examples
+> npx @astryxdesign/cli doctor --built .                  # checks the setup and the code you wrote
+> ```
+>
+> The `.doc.mjs` files in this package are only part of what the CLI knows: it also has page templates, blocks and checks that no source file shows.
 
 ## Component Docs
 
@@ -31,7 +43,7 @@ panel slots into common page patterns (dashboards, settings, forms, detail pages
 Wrap them in your own app chrome (`AppShell`, `TopNav`, `SideNav`) to add
 global navigation.
 
-Requires `@astryxdesign/cli` (`npm install -D @astryxdesign/cli`):
+Requires `@astryxdesign/cli` at Core's version: `npm install -D -E @astryxdesign/cli@<core version>` (leave out `-E` when Core has a `^` or `~` range).
 
 ```bash
 astryx template --list              # browse all page and block templates

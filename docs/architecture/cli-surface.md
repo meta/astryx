@@ -316,8 +316,8 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   `ERR_PATH_TRAVERSAL`. Bounded inputs are capped rather than trusted. The only
   writes outside a project or output folder are the per-user ones
   `spec:AST-081` FR7 lists: releases, records, kept search catalogs,
-  integration check results, template discovery's records, the component list, whether the installed Core matches the component list the CLI was published with, Core's and each integration's components with the doc parts the not-found matcher scores, Core hooks' declared keywords for the not-found hint, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys and token names, the lookup commands'
-  not-found hint's name summaries, npm's list of the files an integration package packs, the locale and time zone a run's debug record names (on Linux), the CLI's own docs tree, each stored doc's checked contents, keyed by its text, discover's record of the loaded integrations and what each adds, and what it searches in its sources' saved copies (for `discover` and search's discover line), doctor's docs checks and theme-wiring scan, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
+  integration check results, template discovery's records, the component list, whether the installed Core matches the component list the CLI was published with, Core's and each integration's components with the doc parts the not-found matcher scores, Core hooks' declared keywords for the not-found hint, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys, token names and settings the browser won't show as written, the lookup commands'
+  not-found hint's name summaries, npm's list of the files an integration package packs, the locale and time zone a run's debug record names (on Linux), the CLI's own docs tree, each stored doc's checked contents, keyed by its text, what template reads from a template's source to name the components it uses, keyed by the source's text and the parser's release, discover's record of the loaded integrations and what each adds, and what it searches in its sources' saved copies (for `discover` and search's discover line), doctor's docs checks and theme-wiring scan, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
   file with its links or copy in the home folder. None follows a link in its place, and none replaces
   anything the CLI did not create. A template that
   `astryx template <name> <path>` writes may also go, as a scratch copy, to a
@@ -827,6 +827,12 @@ non-interactive guarantee.
   INV20 describes; each owns the `type` on its own envelope.
 - `api/<subject>/_adapter.mjs` — the subject's only access to the environment
   (INV21).
+- `foundation/render/render-page.mjs` sizes and `clients/cli/commands/experimental/render-output.mjs`
+  — the size output of `astryx experimental export`: a `bytes` line, with a
+  note when the page's script is more than half of the file, then one line per
+  part under its JSON key (`scriptBytes`, `cssBytes`, `markupBytes`,
+  `sourceBytes`); `markupBytes` (the markup with its inlined images) and
+  `sourceBytes` (the embedded source) are experimental fields.
 - `authoring/example/preview.mjs` — `previewableExample`, the rule for whether
   a component example runs on its own, which Doctor and preview tools share
   (DEC-14).

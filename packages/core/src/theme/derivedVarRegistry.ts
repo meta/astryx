@@ -99,6 +99,9 @@ export const derivedVarRegistry: Record<string, DerivedVarEntry[]> = {
     {property: 'width', vars: ['--_switch-thumb-width'], replaces: true},
     {property: 'height', vars: ['--_switch-thumb-height'], replaces: true},
   ],
+  // A pinned column replays its row's fill from --table-row-overlay: a
+  // theme's row background reaches it through the same variable.
+  'table-row': [{property: 'backgroundColor', vars: ['--table-row-overlay']}],
   'text-area': [
     {
       property: 'paddingInline',

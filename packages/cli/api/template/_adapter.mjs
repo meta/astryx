@@ -3,14 +3,62 @@
 /**
  * @file The `template` subject's adapter for icon mapping (AST-084 FR9),
  * which reads the project's icon sets through the `Project` seam, for the
- * project's component list, and for the not-found hint that names another
- * lookup command.
+ * project's component list, for the not-found hint that names another
+ * lookup command, and for the links and doc tokens in a template's
+ * description.
  *
  * @position api/template — adapter read by the template dispatcher
  */
 
 import {Project} from '../../foundation/config/project.mjs';
+import {linkOwnedTexts} from '../docs/_adapter.mjs';
 import {NO_ICON_SETS} from '../../foundation/discovery/template-icons.mjs';
+
+/**
+ * A template response with each description's links and doc tokens rendered,
+ * the way `astryx docs` renders a doc's text: JSON readers get the bare
+ * `astryx` command, never token syntax. The list renders every entry's.
+ * @template {{type: string, package?: string, data: any}} R
+ * @param {R} response
+ * @param {string} cwd
+ * @returns {Promise<R>}
+ */
+export async function linkTemplateDescriptions(response, cwd) {
+  const entries = Array.isArray(response.data)
+    ? response.data
+    : [{...response.data, package: response.package}];
+  const owned = entries.filter(
+    (/** @type {any} */ entry) =>
+      typeof entry?.description === 'string' &&
+      entry.description.includes('{@'),
+  );
+  if (owned.length === 0) return response;
+  const texts = await linkOwnedTexts(
+    owned.map((/** @type {any} */ entry) => ({
+      text: entry.description,
+      package: entry.package,
+    })),
+    cwd,
+  );
+  const shown = new Map(
+    owned.map((/** @type {any} */ entry, /** @type {number} */ i) => [
+      entry,
+      texts[i],
+    ]),
+  );
+  if (Array.isArray(response.data)) {
+    return {
+      ...response,
+      data: response.data.map((/** @type {any} */ entry) =>
+        shown.has(entry) ? {...entry, description: shown.get(entry)} : entry,
+      ),
+    };
+  }
+  return {
+    ...response,
+    data: {...response.data, description: shown.get(entries[0])},
+  };
+}
 
 /**
  * The installed icon sets and the project's choice. A project the CLI cannot

@@ -39,6 +39,7 @@ import {
   PROJECT_SKILL_NAME,
 } from './agent-doc-state.mjs';
 import {withHash} from './managed-skill-file.mjs';
+import {absoluteFolder, folderScope, inside} from './folder-scope.mjs';
 import {PROJECT_PLACE_KEYWORDS} from '../../authoring/config/skill-places.mjs';
 
 /**
@@ -89,36 +90,7 @@ export class SkillPlaceError extends Error {
  *   | {scope: 'project' | 'computer', kind: 'folder', dir: string, saved: string}} SkillPlace
  */
 
-/**
- * Whether `value` is written as a path rather than a word.
- * @param {string} value
- * @returns {boolean}
- */
-function writtenAsPath(value) {
-  return (
-    value.startsWith('.') ||
-    value.startsWith('~') ||
-    value.includes('/') ||
-    value.includes('\\') ||
-    path.isAbsolute(value)
-  );
-}
 
-/**
- * `value` as an absolute path: `~` is the home folder, a relative path is
- * from `cwd`.
- * @param {string} value
- * @param {string} cwd
- * @param {string} home
- * @returns {string}
- */
-function absoluteFolder(value, cwd, home) {
-  if (value === '~') return home;
-  if (value.startsWith('~/') || value.startsWith('~\\')) {
-    return path.join(home, value.slice(2));
-  }
-  return path.resolve(cwd, value);
-}
 
 /**
  * How a computer folder is saved: `~/` and its path in the home folder, else
@@ -144,16 +116,6 @@ export function savedComputerFolderSkillFile(saved, home = os.homedir()) {
   return path.join(absoluteFolder(saved, home, home), COMPUTER_SKILL_NAME, 'SKILL.md');
 }
 
-/**
- * Whether `dir` is `root` or inside it.
- * @param {string} dir
- * @param {string} root
- * @returns {boolean}
- */
-function inside(dir, root) {
-  const rel = path.relative(root, dir);
-  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
-}
 
 /**
  * Split a `--to` value (a comma list, or several) into its names.
@@ -193,9 +155,11 @@ export function parsePlaces(names, {cwd, projectRoot, home = os.homedir()}) {
         );
       }
       place = {scope: 'project', kind: /** @type {'agents-md' | 'skills'} */ (name)};
-    } else if (writtenAsPath(name)) {
-      const dir = absoluteFolder(name, cwd, home);
-      if (projectRoot != null && inside(dir, projectRoot)) {
+    } else if (folderScope(name, {cwd, projectRoot, home})) {
+      const {dir, scope} = /** @type {{dir: string, scope: 'project' | 'computer'}} */ (
+        folderScope(name, {cwd, projectRoot, home})
+      );
+      if (scope === 'project' && projectRoot != null) {
         const rel = path.relative(projectRoot, dir).split(path.sep).join('/');
         place = {
           scope: 'project',

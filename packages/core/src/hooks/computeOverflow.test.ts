@@ -59,6 +59,21 @@ describe('computeOverflow — single line, no limits (parity with legacy loop)',
     ).toEqual({visibleCount: 3, rows: 1});
   });
 
+  it('shows all when they fit, though the last item is narrower than the indicator', () => {
+    // 60 + 40 + 40, gap 10 → 160 == 160; a 50 px indicator never shows.
+    for (const collapseFrom of ['end', 'start'] as const) {
+      expect(
+        compute({
+          widths: collapseFrom === 'end' ? [60, 40, 40] : [40, 40, 60],
+          gap: 10,
+          indicatorWidth: 50,
+          availableWidth: 160,
+          collapseFrom,
+        }),
+      ).toEqual({visibleCount: 3, rows: 1});
+    }
+  });
+
   it('off-by-one: one pixel short drops the last item', () => {
     expect(
       compute({
