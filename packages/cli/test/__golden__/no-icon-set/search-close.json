@@ -165,6 +165,19 @@
       },
       {
         "domain": "doc",
+        "name": "author-a-theme",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs author-a-theme component-style-overrides",
+        "parent": "astryx docs author-a-theme --index",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
         "name": "authoring/building-blocks/components/describe-the-component/subcomponent",
         "package": "@astryxdesign/cli",
         "score": "<text>",
@@ -226,21 +239,6 @@
         "command": "astryx docs icons available-names",
         "parent": "astryx docs icons --index",
         "mentions": []
-      },
-      {
-        "domain": "doc",
-        "name": "icons",
-        "package": "@astryxdesign/cli",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "section": "<text>",
-        "title": "<text>",
-        "command": "astryx docs icons theme-overrides",
-        "parent": "astryx docs icons --index",
-        "mentions": [
-          "This lets you swap the icon set (e.g."
-        ]
       }
     ]
   },
