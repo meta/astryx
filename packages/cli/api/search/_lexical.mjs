@@ -619,7 +619,6 @@ export function rankLexical(query, options, catalog) {
     }
     const asked = nameWords(String(query));
     const typedJoined = String(query).trim().split(/\s+/).map(joined);
-    /** @param {(typeof ranked)[number]} r */
     // A typed word that is the root's own name (`stack` for HStack's root
     // Stack) asks for the root, not a misspelled part.
     const misspelled = (
@@ -661,13 +660,13 @@ export function rankLexical(query, options, catalog) {
       if (ofRoot && (!ofPart || [...ofPart].some(w => !ofRoot.has(w)))) {
         continue;
       }
-      if (!strong(root, ofPart)) weakRoots.add(r.result);
       const rootWords = nameWords(String(family));
       const own = nameWords(String(r.result.name)).filter(
         w => !rootWords.some(word => word.startsWith(w)),
       );
       if (own.some(w => asked.some(q => sameWord(q, w)))) continue;
       rootLeads.set(r.result, root.result);
+      if (!strong(root, ofPart)) weakRoots.add(r.result);
     }
   }
 

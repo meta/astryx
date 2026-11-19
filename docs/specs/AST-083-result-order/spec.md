@@ -77,9 +77,7 @@ owns response fields and compatibility.
   does not write the part's name of two or more words as one word, as is or
   misspelled (a typed word that is the root's own name is no misspelling). A
   root leads its part from another run only when its own hits on the words
-  the part answers are name or keyword hits, not mentions in its text. Such a root, when the order places it below that part,
-  moves directly before the part, whatever its band; nothing else crosses a
-  run. Among matches of the first
+  the part answers are name or keyword hits, not mentions in its text. Such a root, when the order places it below that part, moves directly before the part, whatever its band, or only inside the part's run when its evidence is text alone; nothing else crosses a run. Among matches of the first
   result's domain that tie with it on score and on the query words they
   matched, the match whose own name holds more query words leads. A first
   result that matched the whole query (a name, keyword, or title hit), or
