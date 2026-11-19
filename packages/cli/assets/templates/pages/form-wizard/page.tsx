@@ -403,19 +403,17 @@ export default function FormWizardPage() {
               <StackItem size="fill">
                 <Heading level={1}>Create workspace</Heading>
               </StackItem>
-              <StackItem>
-                <Button
-                  label="Cancel"
-                  variant="ghost"
-                  onClick={() =>
-                    // Demo only: replace this toast with the call that performs the action.
-                    showToast({
-                      body: 'Demo: leaving workspace setup would return you to the app here',
-                      uniqueID: 'cancel-workspace',
-                    })
-                  }
-                />
-              </StackItem>
+              <Button
+                label="Cancel"
+                variant="ghost"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: leaving workspace setup would return you to the app here',
+                    uniqueID: 'cancel-workspace',
+                  })
+                }
+              />
             </HStack>
             {/* Indicators sit on the track, and the steps carry a label
                 only. A pinned header pays for every line it keeps, and a
