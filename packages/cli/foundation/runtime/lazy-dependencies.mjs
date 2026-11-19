@@ -4,9 +4,10 @@
  * @file The CLI's heavy parsing and transform dependencies, each loaded on
  *   first use rather than when a module that may use it is imported.
  * @input Nothing; each getter requires its package once and keeps it.
- * @output `babelParser` (and `babelParse`, its `parse`), `babelCore`,
- *   `jscodeshift`, `selectorParser` and `postcss`: the same module objects a
- *   static import gives (test/lazy-dependencies.test.mjs checks it).
+ * @output `babelParser` (and `babelParse`, its `parse`), `babelCore` (and
+ *   `babelCorePath`, the file it loads), `jscodeshift`, `selectorParser` and
+ *   `postcss`: the same module objects a static import gives
+ *   (test/lazy-dependencies.test.mjs checks it).
  * @position The first-use loader for these packages on the API's import
  *   path (authoring/ may not import foundation, so the ShadCN source variants
  *   keep their own). Everything that imports the CLI's API reaches the
@@ -58,6 +59,12 @@ export const babelParse = (input, options) =>
 
 /** @returns {typeof import('@babel/core')} */
 export const babelCore = () => (core ??= require('@babel/core'));
+
+/**
+ * The file `babelCore` loads, resolved without loading it.
+ * @returns {string}
+ */
+export const babelCorePath = () => require.resolve('@babel/core');
 
 /**
  * Untyped here: jscodeshift ships no types, and this module is reached by
