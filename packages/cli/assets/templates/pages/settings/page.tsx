@@ -26,6 +26,10 @@ import {MagnifyingGlassIcon} from '@heroicons/react/24/outline';
 import type {SearchableItem, SearchSource} from '@astryxdesign/core/Typeahead';
 import {useToast} from '@astryxdesign/core/Toast';
 
+// This page is the Profile section; the other items stand for sections an app
+// adds, so they demo instead of selecting an empty page.
+const CURRENT_NAV = 'Profile';
+
 const NAV_ITEMS = [
   'Profile',
   'Account',
@@ -57,7 +61,16 @@ const settingsSearchSource: SearchSource<SearchableItem> = {
 export default function SettingsTemplate() {
   const showToast = useToast();
   const isNarrow = useMediaQuery('(max-width: 768px)');
-  const [activeNav, setActiveNav] = useState('Profile');
+  const openNav = (item: string) => {
+    if (item === CURRENT_NAV) {
+      return;
+    }
+    // Demo only: replace this toast with navigation to the section's page.
+    showToast({
+      body: `Demo: ${item} settings would open here`,
+      uniqueID: `nav-${item}`,
+    });
+  };
   const [username, setUsername] = useState('nicol43');
   const [firstName, setFirstName] = useState('Stephanie');
   const [lastName, setLastName] = useState('Nicol');
@@ -76,7 +89,8 @@ export default function SettingsTemplate() {
       contentWidth={1440}
       header={
         <LayoutHeader hasDivider>
-          <HStack vAlign="center">
+          {/* On a narrow screen the search moves under the title instead of squeezing it. */}
+          <HStack vAlign="center" wrap="wrap" gap={2}>
             <StackItem size="fill">
               <Heading level={1}>Settings</Heading>
             </StackItem>
@@ -101,8 +115,9 @@ export default function SettingsTemplate() {
                 <ListItem
                   key={item}
                   label={item}
-                  isSelected={activeNav === item}
-                  onClick={() => setActiveNav(item)}
+                  isSelected={item === CURRENT_NAV}
+                  aria-current={item === CURRENT_NAV ? 'page' : undefined}
+                  onClick={() => openNav(item)}
                 />
               ))}
             </List>
@@ -110,22 +125,24 @@ export default function SettingsTemplate() {
         )
       }
       content={
-        <LayoutContent padding={4}>
+        <LayoutContent role="main" padding={4}>
           <VStack gap={4}>
             {/* Mobile: the sidebar nav collapses to a horizontal, centered
                 tab bar above the content. */}
             {isNarrow && (
               <VStack hAlign="center">
-                <TabList value={activeNav} onChange={setActiveNav}>
+                <TabList value={CURRENT_NAV} onChange={openNav}>
                   {NAV_ITEMS.map(item => (
                     <Tab key={item} value={item} label={item} />
                   ))}
                 </TabList>
               </VStack>
             )}
-            <Grid columns={{minWidth: 320}} gap={10}>
+            <Grid columns={{minWidth: 320, max: 3}} gap={10}>
               <VStack gap={1}>
-                <Heading level={3}>Basic information</Heading>
+                <Heading level={3} accessibilityLevel={2}>
+                  Basic information
+                </Heading>
                 <Text type="supporting" color="secondary">
                   View and update your personal details and account information.
                 </Text>
@@ -169,9 +186,11 @@ export default function SettingsTemplate() {
 
             <Divider />
 
-            <Grid columns={{minWidth: 320}} gap={10}>
+            <Grid columns={{minWidth: 320, max: 3}} gap={10}>
               <VStack gap={1}>
-                <Heading level={3}>Change password</Heading>
+                <Heading level={3} accessibilityLevel={2}>
+                  Change password
+                </Heading>
                 <Text type="supporting" color="secondary">
                   Update your password to keep your account secure.
                 </Text>
@@ -213,9 +232,11 @@ export default function SettingsTemplate() {
 
             <Divider />
 
-            <Grid columns={{minWidth: 320}} gap={10}>
+            <Grid columns={{minWidth: 320, max: 3}} gap={10}>
               <VStack gap={1}>
-                <Heading level={3}>Advanced settings</Heading>
+                <Heading level={3} accessibilityLevel={2}>
+                  Advanced settings
+                </Heading>
                 <Text type="supporting" color="secondary">
                   Configure detailed account preferences and security options.
                 </Text>

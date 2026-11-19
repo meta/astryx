@@ -30,17 +30,19 @@ import {readDocView} from '../doc-compiler/read.mjs';
 import {importDocModule} from '../doc-compiler/import.mjs';
 import {readStore, storedKey} from '../doc-compiler/stored-docs.mjs';
 import {CLI_ROOT, discoverExternalPackages, realDir} from '../fs/paths.mjs';
-import {listDirEntries} from '../fs/listing-cache.mjs';
+import {listDirEntries, withListingCache} from '../fs/listing-cache.mjs';
 import {CORE_PROVIDER_ID} from '../identity/providers.mjs';
 import {
   isReference,
   parseTemplateSource,
   programPath,
   traverseTemplateSource,
+  walk,
   writtenNames,
   TEMPLATE_COMPONENTS_FILE,
 } from './template-source-tree.mjs';
 import {persistedGather} from '../fs/gather-cache.mjs';
+import {packageOf} from '../render/served-packages.mjs';
 import {keptTreeSummary} from '../fs/kept-tree.mjs';
 import {
   ALL_TEMPLATE_SUFFIXES,
@@ -2165,6 +2167,101 @@ export function componentsInSource(src) {
   const known = readStore(TEMPLATE_COMPONENTS_FILE).get(storedKey(src));
   if (known) return [...known];
   return parsedComponents(src);
+}
+
+/**
+ * The components a template source renders that `astryx component` answers
+ * in the project, in the order the source first renders them, each once, in
+ * the form that command reads them by. `ownersOf` names the packages whose
+ * doc `astryx component <name>` reads for a name, and none for a name it
+ * does not answer. A tag counts only when a named import binds it to a
+ * package that documents the name: a tag no import binds (a helper the file
+ * declares), one from another module (a chart library's `Tooltip`), one whose
+ * package does not document it, and text in a comment do not count. A part
+ * its package does not document counts as its family root when it is
+ * imported from that root's own module, so a `TableHeader` from
+ * `@astryxdesign/core/Table` that has no doc of its own names `Table`. With
+ * `qualified`, each name is written as `<package>/<Name>` for the package its
+ * import names, which reads exactly that package's doc; a project with an
+ * integration needs it, as another package may answer the bare name.
+ * `documents`, when given, answers whether a package documents a name
+ * without looking up every owner of it; it gives the answer `ownersOf` does.
+ * @param {string} src
+ * @param {{ownersOf: (name: string) => readonly string[], qualified: boolean, documents?: (pkg: string, name: string) => boolean}} lookup
+ * @returns {string[]}
+ */
+export function answeredComponentsInSource(
+  src,
+  {
+    ownersOf,
+    qualified,
+    documents = (pkg, name) => ownersOf(name).includes(pkg),
+  },
+) {
+  let program;
+  try {
+    program = parseTemplateSource(src, {errorRecovery: true}).program;
+  } catch {
+    return [];
+  }
+  /** @type {Map<string, {module: string, imported: string}>} */
+  const imports = new Map();
+  for (const statement of program.body) {
+    if (statement.type !== 'ImportDeclaration') continue;
+    for (const specifier of statement.specifiers) {
+      if (specifier.type !== 'ImportSpecifier') continue;
+      const {imported} = specifier;
+      imports.set(specifier.local.name, {
+        module: statement.source.value,
+        imported:
+          imported.type === 'Identifier' ? imported.name : imported.value,
+      });
+    }
+  }
+  /** @type {Array<{name: string, start: number}>} */
+  const tags = [];
+  walk(program, node => {
+    if (
+      node.type === 'JSXOpeningElement' &&
+      node.name.type === 'JSXIdentifier'
+    ) {
+      tags.push({name: node.name.name, start: node.start});
+    }
+  });
+  tags.sort((a, b) => a.start - b.start);
+  /** @type {string[]} */
+  const found = [];
+  // One operation for every name: each lookup lists a folder and reads a
+  // doc once, not once per name.
+  withListingCache(() => {
+    for (const tag of tags) {
+      const binding = imports.get(tag.name);
+      if (!binding) continue;
+      const name = answeredName(binding, documents, qualified);
+      if (name !== null && !found.includes(name)) found.push(name);
+    }
+  });
+  return found;
+}
+
+/**
+ * How `astryx component` reads an imported tag, or null when the package its
+ * import names documents no such component: the imported name itself, else
+ * its family root (the last folder of the module it comes from, when the
+ * name starts with it), bare or, with `qualified`, as `<package>/<Name>`.
+ * @param {{module: string, imported: string}} binding
+ * @param {(pkg: string, name: string) => boolean} documents
+ * @param {boolean} qualified
+ * @returns {string | null}
+ */
+function answeredName({module, imported}, documents, qualified) {
+  const pkg = packageOf(module);
+  const root = module.split('/').at(-1) ?? '';
+  for (const name of [imported, root]) {
+    if (!imported.startsWith(name) || !documents(pkg, name)) continue;
+    return qualified ? `${pkg}/${name}` : name;
+  }
+  return null;
 }
 
 export {TEMPLATE_COMPONENTS_FILE} from './template-source-tree.mjs';

@@ -44,7 +44,9 @@ export const travellingStyles = stylex.create({
   // its neighbors opaque and on top, and these rows have no background of
   // their own. The surface is an inset shadow across the padding box, under
   // the press and the row's content, so the divider and the press stay
-  // visible. A selected row keeps its own fill. It takes no pseudo-element,
+  // visible. A selected row keeps its own fill. The row reads selection from
+  // `data-selected`, because an interactive row's `aria-current` is on its
+  // button, link or delegated control. The surface takes no pseudo-element,
   // since under a finger the row's `::after` is its hit layer. Its z-index, 2,
   // is above a swipeable row's raise under a finger (1), so it rides above
   // the swipeable rows it crosses.
@@ -55,7 +57,7 @@ export const travellingStyles = stylex.create({
     },
     boxShadow: {
       default: null,
-      '[data-astryx-travelling]:not([aria-selected="true"],[aria-current="true"])': `inset 0 0 0 100vmax ${colorVars['--color-background-surface']}`,
+      '[data-astryx-travelling]:not([aria-selected="true"],[aria-current="true"],[data-selected])': `inset 0 0 0 100vmax ${colorVars['--color-background-surface']}`,
     },
     // A row of a List with dividers takes its shadow from the press layer's
     // `overDividers`, composed later, which wins over the one above. So the
@@ -64,8 +66,8 @@ export const travellingStyles = stylex.create({
     // does not inherit it.
     '--_travelling-surface': {
       default: null,
-      '[data-astryx-travelling]:not([aria-selected="true"],[aria-current="true"])': `inset 0 0 0 100vmax ${colorVars['--color-background-surface']}`,
-      ':not([data-astryx-travelling]:not([aria-selected="true"],[aria-current="true"]))':
+      '[data-astryx-travelling]:not([aria-selected="true"],[aria-current="true"],[data-selected])': `inset 0 0 0 100vmax ${colorVars['--color-background-surface']}`,
+      ':not([data-astryx-travelling]:not([aria-selected="true"],[aria-current="true"],[data-selected]))':
         'initial',
     },
   },
