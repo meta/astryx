@@ -13950,8 +13950,7 @@ function readSelfSized(ctx, settings, part, size) {
   // (A setting reaches this part where the build puts it: on the part, on
   // a group holding it, or on another member without `--only`, which set
   // spreads to the group; partsOf is that one rule.)
-  const reaches = (/** @type {Setting} */ x) =>
-    partsOf(ctx, x).includes(part);
+  const reaches = (/** @type {Setting} */ x) => partsOf(ctx, x).includes(part);
   /** @param {unknown} v */
   const px = v => {
     const m = /^\s*(\d*\.?\d+)px\s*$/.exec(String(v));
@@ -13976,14 +13975,7 @@ function readSelfSized(ctx, settings, part, size) {
     const latest = (/** @type {(x: Setting) => boolean} */ ok) =>
       [...settings]
         .reverse()
-        .find(
-          x =>
-            x.thing === k &&
-            reaches(x) &&
-            !x.state &&
-            !x.mode &&
-            ok(x),
-        );
+        .find(x => x.thing === k && reaches(x) && !x.state && !x.mode && ok(x));
     const st =
       (size != null ? latest(x => x.when === `size:${size}`) : undefined) ??
       latest(x => !x.when);
