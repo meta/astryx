@@ -51,9 +51,27 @@ export const overflowStyles = stylex.create({
 export const wrapStyles = stylex.create({
   cell: {
     overflow: 'hidden',
+    // Break a word only when it cannot fit its column. A zero max-width or a
+    // break at any letter lets automatic layout shrink a column below its
+    // longest word. The table sets the word-break for its layout.
     overflowWrap: 'break-word',
-    wordBreak: 'break-word',
-    maxWidth: '0',
+    wordBreak: 'var(--_table-cell-word-break, normal)',
+  },
+});
+
+/**
+ * Truncation for header cells when the table's cells wrap.
+ *
+ * A header label stays on one line and ends in an ellipsis when its column is
+ * narrower than the label. There is no zero max-width: in automatic layout it
+ * would hold every column at zero width. Under `textOverflow="truncate"`,
+ * header cells use `overflowStyles` like the body cells.
+ */
+export const headerOverflowStyles = stylex.create({
+  cell: {
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
 });
 

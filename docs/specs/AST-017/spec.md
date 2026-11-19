@@ -501,7 +501,11 @@ one removal merged ahead of the decision to allow it.
   `share`, `bundle`, `snapshot`, `standalone`) MAY suggest
   `experimental export`, labeled experimental, and never runs it, because
   people and agents who type those words mean that command; the exception
-  ends when the command graduates or is removed. The same exception covers
+  ends when the command graduates or is removed. The command writes only a
+  page that uses Astryx: one whose script holds a module of an Astryx package
+  or that imports an Astryx stylesheet; it refuses any other page with
+  `ERR_RENDER_NOT_ASTRYX` and writes nothing, so the suggestion never turns a
+  page without Astryx into an Astryx file. The same exception covers
   the command that turns such a file back into its page: the answer to an
   unknown top-level word that asks for it (`import`, `back`, `restore`,
   `unrender`, `reverse`) MAY suggest `experimental import`, labeled

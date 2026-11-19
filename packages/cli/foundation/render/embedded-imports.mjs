@@ -143,16 +143,26 @@ export function assetRefsIn(text) {
 }
 
 /**
+ * @typedef {object} AssetRef
+ * @property {string} written the reference as the file writes it
+ * @property {string} file the file name it names: a string or a `url()` is
+ *   URL text, so its percent-escapes are decoded; an import, re-export,
+ *   `import()` or `require()` specifier names its file as written, as a
+ *   bundler resolves it
+ */
+
+/**
  * The images, fonts and media a carried file names by a relative path: in a
- * module's strings, or in a stylesheet. A render carries each one that
- * exists, and {@link reachableFiles} expects each one back.
+ * module's strings and specifiers, or in a stylesheet. A render carries each
+ * one that exists, and {@link reachableFiles} expects each one back, by the
+ * same file name.
  * @param {string} source
  * @param {string} file its path; a `.css` file is read as a stylesheet
- * @returns {string[]}
+ * @returns {AssetRef[]}
  */
 export function assetRefsOf(source, file) {
   return /\.css$/i.test(file)
-    ? assetRefsIn(source)
+    ? assetRefsIn(source).map(ref => ({written: ref, file: fileNamed(ref)}))
     : scanModule(source, file).assets;
 }
 
@@ -180,10 +190,10 @@ function typesOnly(node) {
  * static import declaration; null when the module does not parse.
  * @param {string} source
  * @param {string} file
- * @returns {{imports: string[], assets: string[], records: Array<{specifier: string, line?: number, typeOnly: boolean, declaration: boolean}> | null}}
+ * @returns {{imports: string[], assets: AssetRef[], records: Array<{specifier: string, line?: number, typeOnly: boolean, declaration: boolean}> | null}}
  */
 function scanModule(source, file) {
-  /** @type {string[]} */
+  /** @type {AssetRef[]} */
   const assets = [];
   /** @type {any} */
   let ast;
@@ -215,32 +225,57 @@ function scanModule(source, file) {
       declaration: node.type === 'ImportDeclaration',
     });
   const written = writtenString;
+  /**
+   * The specifier node of an import, a re-export, an `import()` or a
+   * `require()`, or null for any other node.
+   * @param {any} node
+   */
+  const specifierNode = node => {
+    if (
+      node.type === 'ImportDeclaration' ||
+      node.type === 'ExportNamedDeclaration' ||
+      node.type === 'ExportAllDeclaration'
+    )
+      return node.source?.type === 'StringLiteral' ? node.source : null;
+    if (node.type === 'ImportExpression') return node.source ?? null;
+    if (
+      node.type === 'CallExpression' &&
+      (node.callee?.type === 'Import' ||
+        (node.callee?.type === 'Identifier' && node.callee.name === 'require'))
+    )
+      return node.arguments?.[0] ?? null;
+    return null;
+  };
+  /**
+   * The specifier nodes seen so far, and the template parts inside them. A
+   * bundler resolves a specifier as written; any other string is URL text.
+   * @type {WeakSet<object>}
+   */
+  const specifiers = new WeakSet();
+  /** @param {any} node @param {string[]} refs */
+  const addAssets = (node, refs) =>
+    assets.push(
+      ...refs.map(ref => ({
+        written: ref,
+        file: specifiers.has(node) ? ref : fileNamed(ref),
+      })),
+    );
   /** @param {any} node */
   const visit = node => {
     if (!node || typeof node.type !== 'string') return;
-    if (node.type === 'StringLiteral') assets.push(...assetRefsIn(node.value));
-    else if (node.type === 'TemplateElement')
-      assets.push(...assetRefsIn(node.value?.cooked ?? ''));
-    if (
-      (node.type === 'ImportDeclaration' ||
-        node.type === 'ExportNamedDeclaration' ||
-        node.type === 'ExportAllDeclaration') &&
-      node.source?.type === 'StringLiteral'
-    ) {
-      add(node.source.value, node, typesOnly(node));
-    } else if (
-      node.type === 'ImportExpression' &&
-      written(node.source) != null
-    ) {
-      add(/** @type {string} */ (written(node.source)), node);
-    } else if (
-      node.type === 'CallExpression' &&
-      written(node.arguments?.[0]) != null &&
-      (node.callee?.type === 'Import' ||
-        (node.callee?.type === 'Identifier' && node.callee.name === 'require'))
-    ) {
-      add(/** @type {string} */ (written(node.arguments[0])), node);
+    const specifier = specifierNode(node);
+    if (specifier) {
+      specifiers.add(specifier);
+      for (const quasi of specifier.quasis ?? []) specifiers.add(quasi);
+      if (specifier === node.source && node.type !== 'ImportExpression') {
+        add(specifier.value, node, typesOnly(node));
+      } else if (written(specifier) != null) {
+        add(/** @type {string} */ (written(specifier)), node);
+      }
     }
+    if (node.type === 'StringLiteral') addAssets(node, assetRefsIn(node.value));
+    else if (node.type === 'TemplateElement')
+      addAssets(node, assetRefsIn(node.value?.cooked ?? ''));
     for (const key of Object.keys(node)) {
       if (key === 'loc' || key === 'start' || key === 'end' || key === 'extra')
         continue;
@@ -299,6 +334,21 @@ export function resolutionCandidates(spec) {
     ...RESOLVE_EXTENSIONS.map(x => spec + x),
     ...RESOLVE_EXTENSIONS.map(x => `${spec}/index${x}`),
   ];
+}
+
+/**
+ * The file name a reference written as URL text names: its percent-escapes
+ * decoded. A reference with any `%` that starts no escape is read whole, as
+ * written (`./a%20b%.png` stays `./a%20b%.png`). The first paint, the export's
+ * scan of carried modules and `--reverse` all read a reference this way.
+ * @param {string} ref
+ */
+export function fileNamed(ref) {
+  try {
+    return decodeURIComponent(ref);
+  } catch {
+    return ref;
+  }
 }
 
 /**
@@ -443,7 +493,7 @@ export function reachableFiles(files, {aliases = [], recorded, publicDir, reused
             .map(ref => (ref.startsWith('.') ? ref : `./${ref}`)),
           assets: assetRefsOf(source, current),
         };
-    for (const ref of scanned.assets) {
+    for (const {file: ref} of scanned.assets) {
       const joined = ref.startsWith('/')
         ? publicPath(ref)
         : path.posix.normalize(

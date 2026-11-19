@@ -418,42 +418,27 @@ const cellAlignStyles = stylex.create({
  * Cell sizing for Markdown's own default Table part, layered over Table's
  * wrap-mode defaults.
  *
- * Table sizes wrap-mode cells with `max-width: 0` + `word-break: break-word`,
- * and its header cell also applies nowrap + ellipsis. Those defaults zero every
- * column's min-content contribution, so automatic layout divides the container
- * equally: a six-column Markdown table squashes to a few characters per cell,
- * identifiers split mid-word, header labels ellipsize, and nothing ever
- * overflows into the Scroll region that exists to take the width.
- *
- * Here the cell reports an honest min-content, the header wraps instead of
- * truncating, and `box-sizing: content-box` makes the per-column `ch` floor a
- * floor on the text box rather than on the padded border box — so the floor
- * means the same number of characters at every density, with no padding
- * arithmetic to keep in sync with Table's own tokens.
- *
- * Data-driven `Table` keeps its released wrap mode; only Markdown's part is
- * restyled.
+ * Table's wrapping columns already follow their content and scroll when they
+ * do not fit. The header wraps instead of truncating. Overflow stays visible.
+ * `box-sizing: content-box` puts the per-column `ch` floor on the text box,
+ * not the padded box, so the floor holds the same number of characters at
+ * every density.
  */
 const markdownTableCellStyles = stylex.create({
   cell: {
     boxSizing: 'content-box',
-    maxWidth: 'none',
     overflow: 'visible',
-    overflowWrap: 'break-word',
     paddingBlock: spacingVars['--spacing-2'],
     paddingInline: spacingVars['--spacing-2'],
-    wordBreak: 'normal',
   },
   headerCell: {
     boxSizing: 'content-box',
-    maxWidth: 'none',
     overflow: 'visible',
     overflowWrap: 'break-word',
     paddingBlock: spacingVars['--spacing-2'],
     paddingInline: spacingVars['--spacing-2'],
     textOverflow: 'clip',
     whiteSpace: 'normal',
-    wordBreak: 'normal',
   },
   // Inline Code sets `word-break: break-word` so a long token cannot widen a
   // paragraph. Inside a table cell that same rule zeroes the token's
@@ -1326,8 +1311,7 @@ function getElementSpacing(
 /**
  * Content-derived width floors for a Markdown table's columns, in `ch`.
  *
- * Once the cells stop clamping themselves (see `markdownTableCellStyles`),
- * automatic table layout already gives every column its min-content — the
+ * Table's automatic layout already gives every column its min-content — the
  * longest unbreakable token — so no identifier can split mid-word. That floor
  * is honest but not readable: a prose column's longest word is short, so six
  * prose columns in a narrow container still wrap one word per line. The

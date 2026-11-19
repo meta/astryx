@@ -436,7 +436,9 @@ works on is `spec:AST-040` FR9's.
     in the package's own folder), the locale and time zone a run's debug
     record names (on Linux, kept by any command that delivers a debug
     record), the CLI's own docs tree, each stored doc's checked contents,
-    keyed by its text, discover's record of the integrations a project loads
+    keyed by its text, what `template` reads from a template's source to
+    name the components it uses, keyed by the source's text and the parser's
+    release, discover's record of the integrations a project loads
     and what each adds, and what it searches in its sources' saved copies
     (which `search` reads for its discover line), and
     doctor's
@@ -512,6 +514,17 @@ works on is `spec:AST-040` FR9's.
     place that differ, the block and the skill both present without both
     being saved, and a project skill named `astryx`, and scans no skill
     folder in the home folder or a settings folder.
+    `astryx init --to <places> --once` writes a copy saved nowhere, so no
+    later run touches it, and refuses the block and any place already
+    saved. `astryx init --remove` (`--remove-agents` is the same option)
+    removes the skill from every place the project saves, or with `--to`
+    from the places named, drops each from what is saved, and removes the
+    block when no `--to` is given or `--to` names `agents-md`; folders saved
+    for this computer stay unless `--to` names them. A skill file Astryx did
+    not write is kept, a linked skill folder's included; an unedited Astryx
+    file is the place's own, through a link too, and a folder saved for this
+    computer where every file was kept is not saved. In the project, linked
+    copy folders share one file, written and removed once.
 
   No run writes a project's agent docs into the home folder or a settings folder
   in it (`architecture:cli-surface` INV31); the computer-level agent text above
@@ -533,10 +546,12 @@ works on is `spec:AST-040` FR9's.
     points every release keeps (`search`, `docs`, `component`, and the like),
     so an older copy never misleads.
     It also gives the build route the project agent docs give, through their
-    shared workflow wording: work in a project folder, new or existing, adding
-    `@astryxdesign/core` and `@astryxdesign/cli`, or, where the project already
-    installs Core, the CLI at that Core's version; run `astryx init` there; then
-    start from a template, check, and deliver the built project.
+    shared workflow wording: work in a project folder; a new project adds
+    `@astryxdesign/core` and `@astryxdesign/cli`, an existing app that does not
+    use Astryx keeps its current UI stack unless the user asks for Astryx (then
+    it adds both), and a project that already installs Core adds the CLI at that
+    Core's version; a project that has or adds Astryx runs `astryx init`, starts
+    from a template, checks, and delivers the built project.
     When it names `astryx`, it ends with
     ``If `astryx` is not found, run `<install step>` first.``, where the
     step installs the CLI for the computer with the package manager and folder
@@ -561,8 +576,9 @@ works on is `spec:AST-040` FR9's.
     own: the global copy refreshes `<folder>/astryx/SKILL.md` on the same
     schedule while the file is there, an edited file kept, and never writes
     it again once it is deleted; `astryx init --to <folder>` writes it
-    again. Doctor's computer-level text check names these folders, which
-    are missing and which are from another release, also while the
+    again, and `astryx init --remove --to <folder>` removes it and forgets
+    the folder. Doctor's computer-level text check names these folders,
+    which are missing and which are from another release, also while the
     computer-level text is turned off.
   - The settings file is `astryx/settings.json` in the per-user configuration
     directory (FR7): `computerAgentText.install`, `true` or `false`, and

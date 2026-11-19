@@ -25,12 +25,12 @@ export const doc = {
     {
       value: 'init.run',
       description:
-        'The install receipt: the `mode` (`default` | `features`), the features run, agent-doc files written, `agentDocsStatus` (`missing` | `stale` | `current`: the agent docs before the write; null when agent docs were not installed or the write failed), what changed in each (`docsChanges`: `{path, change, from, to}`), any soft `docsError`, whether theme guidance was emitted, the template outcome (`workflow` | `created` | `skipped`) plus its path, and whether the next-steps were emitted (false outside a project, and when `agentDocsStatus` was `current`).',
+        'The install receipt: the `mode` (`default` | `features`), the features run, agent-doc files written, `agentDocsStatus` (`missing` | `stale` | `current`: the agent docs before the write; null when agent docs were not installed or the write failed), what changed in each (`docsChanges`: `{path, change, from, to}`), any soft `docsError`, whether theme guidance was emitted, the template outcome (`workflow` | `created` | `skipped`) plus its path, whether the next-steps were emitted (false outside a project, and when `agentDocsStatus` was `current`), and `to`, `skills`, `user` and `once` (see `init()`).',
     },
     {
       value: 'init.remove',
       description:
-        'The removal receipt — returned when --remove-agents is set: `data.removed` is true when a managed agent-docs block was found and removed, and false when there was none to remove.',
+        'The removal receipt (--remove, or --remove-agents): `removed` (an Astryx block or skill file was removed), `from` (the places removed from), `skills` (`{path, place, action, reason?}` rows), `user` (the `init.user` data, or null).',
     },
     {
       value: 'init.user',
@@ -99,6 +99,17 @@ export const doc = {
       value: 'docs.node',
       description:
         "One node of the docs tree, read by its route: its id, kind, package, title, summary, and breadcrumb, plus a namespace's slots with their children (one level down, each naming its package, and a guide an integration replaced its replaces and replacedPackage) or a typed doc's content, and links ({up, previous, next, related}: the commands that open its parent, its neighbors, and the docs it names).",
+    },
+
+    {
+      value: 'docs.skills',
+      description:
+        'Each skill here: {name, description, package}[].',
+    },
+    {
+      value: 'docs.skill',
+      description:
+        'One skill: {name, description, text}.',
     },
 
     // blog (read from the published RSS feed)
@@ -172,7 +183,7 @@ export const doc = {
       value: 'render.page',
       stability: 'experimental',
       description:
-        'A page rendered to one self-contained file: `input`, `output`, `bytes`, the local files embedded (`files`: modules, stylesheets, images and JSON), the package `stylesheets` cut and inlined, `classes`, `cssBytes`, `markupBytes` (the page\u2019s inlined images included), `sourceBytes` (the embedded source), `images` inlined, the page\u2019s script (`scriptBytes`, and `scriptModules`: how many modules it holds), `warnings` (`{code, message}`; empty when nothing looked wrong), and `checks` run on the written file (`outside`: every reference its markup and stylesheets load from outside the file, a remote address or a file beside it, empty when the file stands alone; `roundTrip`: `{exact, files, differs}`, whether the embedded source gives back every carried file byte for byte, and the carried paths that differ or are missing on either side). Experimental: may change or be removed in a patch release.',
+        'A page rendered to one self-contained file: `input`, `output`, `bytes`, the local files embedded (`files`: modules, stylesheets, images and JSON), the package `stylesheets` cut and inlined, `classes`, `cssBytes`, `markupBytes` (the page\u2019s inlined images included), `sourceBytes` (the embedded source), `images` inlined, the page\u2019s script (`scriptBytes`, and `scriptModules`: how many modules it holds), the https images the page names (`remoteImages`: each address `fetched` into the file, and each one `failed`, with its `reason`; present when the page names one), `warnings` (`{code, message}`; empty when nothing looked wrong), and `checks` run on the written file (`outside`: every reference its markup and stylesheets load from outside the file, a remote address or a file beside it, empty when the file stands alone; `roundTrip`: `{exact, files, differs}`, whether the embedded source gives back every carried file byte for byte, and the carried paths that differ or are missing on either side). Experimental: may change or be removed in a patch release.',
     },
     {
       value: 'render.reverse',

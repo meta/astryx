@@ -64,7 +64,7 @@ export const docs = {
       },
     ],
     derived: [
-      {property: 'borderRadius', vars: ['--_dialog-radius']},
+      {property: 'borderRadius', vars: ['--_dialog-radius'], corners: true},
       {property: 'padding', expand: 'container'},
     ],
   },

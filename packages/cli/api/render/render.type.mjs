@@ -22,7 +22,7 @@
  * author meant.
  * @experimental May change or be removed in a patch release.
  * @typedef {object} RenderWarning
- * @property {'dropped-children' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'screen-query' | 'not-embedded' | 'not-carried' | 'node-crash'} code - What kind of problem.
+ * @property {'dropped-children' | 'unknown-prop-value' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'screen-query' | 'not-embedded' | 'not-carried' | 'node-crash'} code - What kind of problem.
  * @property {string} message - What happened and what to do, in one sentence.
  */
 
@@ -60,6 +60,7 @@
  * @property {object} data.checks - Checks run on the written file.
  * @property {string[]} data.checks.outside - Every reference the file's markup and stylesheets load from outside the file when it opens (a remote address, or a file beside it the render did not carry); empty when the file stands alone.
  * @property {{exact: boolean, files: number, differs: string[]}} data.checks.roundTrip - Whether the embedded source gives back every carried file byte for byte, how many files it carries, and the carried paths whose embedded copy differs from the file on disk or is missing on either side.
+ * @property {{fetched: string[], failed: {url: string, reason: string}[]}} [data.remoteImages] - The https images the page names: each address the render fetched into the file, and each one it left as the page wrote it, with why (not https, no answer in time, not an image, too large, unreachable). Present when the page names a remote image.
  */
 
 /**
