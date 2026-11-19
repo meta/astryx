@@ -55,7 +55,7 @@ const rawLine = (file, seconds) =>
   `2026-01-01T00:00:00.0000000Z  \x1b[32m✓\x1b[39m \x1b[30m\x1b[43m node \x1b[49m\x1b[39m ${file} \x1b[2m(\x1b[22m\x1b[2m3 tests\x1b[22m\x1b[2m)\x1b[22m\x1b[33m ${seconds}s\x1b[39m`;
 
 describe('the Node record refresh workflow', () => {
-  it('runs when a Main run completes, with a six-hour backstop and by hand, never on a pull request or push', () => {
+  it('runs hourly, when a Main run completes and by hand, never on a pull request or push', () => {
     expect(Object.keys(workflow.on).sort()).toEqual([
       'schedule',
       'workflow_dispatch',
@@ -66,7 +66,7 @@ describe('the Node record refresh workflow', () => {
       types: ['completed'],
       branches: ['main'],
     });
-    expect(workflow.on.schedule).toEqual([{cron: '41 */6 * * *'}]);
+    expect(workflow.on.schedule).toEqual([{cron: '41 * * * *'}]);
     expect(workflow.concurrency).toEqual({
       group: 'node-record-refresh',
       'cancel-in-progress': false,

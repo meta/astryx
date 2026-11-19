@@ -24,9 +24,12 @@ on:
     types: [completed]
     branches: [main]
   schedule:
-    # A backstop for a completed run this workflow missed: every six hours it
-    # reads main's latest successful full unit run.
-    - cron: '41 */6 * * *'
+    # Every hour it reads main's latest successful full unit run. The full
+    # unit runs are dispatched with the workflow token, so their completion
+    # starts no workflow_run; only a run a person starts by hand reaches the
+    # trigger above. A run that finds the branch already carrying the record
+    # pushes nothing.
+    - cron: '41 * * * *'
   workflow_dispatch:
 
 permissions: {}
