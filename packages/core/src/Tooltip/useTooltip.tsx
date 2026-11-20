@@ -758,7 +758,9 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // A caller removes the wiring as it disables the tooltip. Close an
   // uncontrolled tooltip then, or the next attach shows a stale tooltip. A
   // detach while enabled, such as a merged ref that changes identity on a
-  // re-render, keeps a hovered or held tooltip open.
+  // re-render, keeps a hovered or held tooltip open. The pointer may have
+  // left while detached, and the mouseleave listener is gone, so the pointer
+  // state resets too.
   const settleDetach = useCallback(() => {
     if (!isDetachPendingRef.current) {
       return;
@@ -767,6 +769,8 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     const latest = handlersRef.current;
     if (!latest.isEnabled && latest.isOpen === undefined) {
       wasSuppressedRef.current = true;
+      isPointerOverRef.current = false;
+      dismissedByEscapeRef.current = false;
       latest.dropHold();
       latest.hideNow();
     }
