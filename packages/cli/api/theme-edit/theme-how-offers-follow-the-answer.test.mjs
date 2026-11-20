@@ -172,6 +172,7 @@ describe('light and dark said as what the theme must work in', () => {
       );
     for (const q of [
       'make sure it works in light and dark mode',
+      'the theme should work in light and dark mode',
       'please make it work in light and dark mode',
       'a navy theme that works in light and dark',
       'a navy theme that should work in light and dark mode',

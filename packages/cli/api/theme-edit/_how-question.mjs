@@ -5288,10 +5288,20 @@ export function draftAnswer(ctx, env, question) {
       const cut = said.slice(0, at).search(/\band\s+(?!.*\band\s)/i);
       const kept = cut >= 0 ? said.slice(0, cut + 4) : '';
       const before = said.slice(cut >= 0 ? cut + 4 : 0, at).trim();
+      // (The part said first: "the border on the cards in the dialog" is
+      // the cards'.)
       const partIn = (/** @type {string} */ w) =>
         partLexicon(ctx)
-          .parts.map(([re]) => re.exec(` ${w.toLowerCase()} `)?.[0]?.trim())
-          .find(Boolean);
+          .parts.map(([re]) => re.exec(` ${w.toLowerCase()} `))
+          .filter(x => x != null)
+          .sort(
+            (x, y) =>
+              /** @type {RegExpExecArray} */ (x).index -
+                /** @type {RegExpExecArray} */ (y).index ||
+              /** @type {RegExpExecArray} */ (y)[0].length -
+                /** @type {RegExpExecArray} */ (x)[0].length,
+          )[0]?.[0]
+          ?.trim();
       // (The part is the one named before the look, "the copy button
       // border"; else the one after on, of, in or around, "I hate the
       // border on cards"; else the one said earlier in the clause, "the
@@ -5454,7 +5464,7 @@ export function draftAnswer(ctx, env, question) {
     // (Its own clause, so a color said in the same clause, "a navy theme
     // that works in light and dark", keeps its own reading.)
     .replace(
-      /\b(?:(?:please\s+)?(?:make\s+sure|ensure)\s+)?(?:(?:please\s+)?make\s+(?:it|this)\s+)?(?:(?:that|which|it|this)\s+)?(?:(?:should|must|needs?\s+to|has\s+to|will|to)\s+)?(?:works?|look(?:s)?\s+good|holds?\s+up)\s+in\s+(?:both\s+)?(?:light\s+(?:and|&)\s+dark|dark\s+(?:and|&)\s+light)(?:\s+modes?)?(?=\s*(?:[,;.!?]|$))/gi,
+      /\b(?:(?:please\s+)?(?:make\s+sure|ensure)\s+)?(?:(?:please\s+)?make\s+(?:it|this)\s+)?(?:(?:that|which|it|this|the\s+(?:theme|app|site|ui|design))\s+)?(?:(?:should|must|needs?\s+to|has\s+to|will|to)\s+)?(?:works?|look(?:s)?\s+good|holds?\s+up)\s+in\s+(?:both\s+)?(?:light\s+(?:and|&)\s+dark|dark\s+(?:and|&)\s+light)(?:\s+modes?)?(?=\s*(?:[,;.!?]|$))/gi,
       ', light and dark modes',
     )
     // ("a theme that works in dark mode": a theme with both modes, which it
@@ -29777,7 +29787,7 @@ export function draftAnswer(ctx, env, question) {
       );
     const partsOf = (/** @type {any} */ d) =>
       /** @type {string[]} */ (
-        /** @type {any} */ ((draftClause.get(d))?.parts ?? []).map(
+        /** @type {any} */ (draftClause.get(d)?.parts ?? []).map(
           (/** @type {{on: string}} */ p) => p.on,
         )
       );

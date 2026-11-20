@@ -406,6 +406,14 @@ describe('a look said, then taken away by a pronoun', () => {
           /text-decoration none --on link\b/,
         ],
         ['I hate the border on cards, remove it', /border none --on card\b/],
+        [
+          'the border on the cards in the dialog is ugly, hide it',
+          /border none --on card\b/,
+        ],
+        [
+          'the underline on the links in the footer is ugly, remove it',
+          /text-decoration none --on link\b/,
+        ],
       ]) {
         const lines = first(await answer(String(q))).join('\n');
         expect(lines, String(q)).toMatch(/** @type {RegExp} */ (want));
