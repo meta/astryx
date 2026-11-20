@@ -325,10 +325,22 @@ describe('a color-blind piece in a list', () => {
   }, 240_000);
 });
 
-// (Asks reviewers raised on this reading that it does not answer yet: each
-// is the answer it should give.)
-describe('a lone color after a part, asks still open', () => {
-  it.todo(
-    '"rounder buttons, white, headings in Lora" fills the buttons white and sets Lora on headings',
-  );
+describe('a lone color with a part said after it', () => {
+  it('keeps its reading whatever part follows', async () => {
+    const green = writes(
+      await how('q0', 'bigger buttons, green, bold headings'),
+    ).join('\n');
+    expect(green).toMatch(/accent '#16a34a'/);
+    expect(green).toMatch(/font-weight 700 --on heading/);
+    const white = writes(
+      await how('q0', 'rounder buttons, white, headings in Lora'),
+    );
+    expect(white.join('\n')).toMatch(/background-color '#ffffff' --on button/);
+    expect(white).toContain('set q0 font Lora --on heading');
+    // ("red, blue buttons": a color right before a colored part is still
+    // that part's run.)
+    expect(writes(await how('q0', 'red, blue buttons')).join('\n')).not.toMatch(
+      /accent '#dc2626'/,
+    );
+  }, 240_000);
 });

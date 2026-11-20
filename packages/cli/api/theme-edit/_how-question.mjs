@@ -9209,7 +9209,10 @@ export function draftAnswer(ctx, env, question) {
       j?.sep === 'comma' &&
       j.list == null &&
       i > 0 &&
-      !next?.parts.length &&
+      // ("red, blue buttons": a color right before a colored part is that
+      // part's run; "bigger buttons, green, bold headings" keeps the green
+      // a piece, whatever part follows.)
+      !(next?.parts.length && next.colors.length) &&
       !c.aspects.length &&
       // ("page background is too blue, make it gray": a pronoun takes the
       // part before it.)
