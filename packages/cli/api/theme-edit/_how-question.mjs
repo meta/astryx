@@ -9275,6 +9275,19 @@ export function draftAnswer(ctx, env, question) {
       // a piece, whatever part follows.)
       !(next?.parts.length && next.colors.length) &&
       !c.aspects.length &&
+      // (Only a piece that is a color and nothing more: "frosted blue
+      // glass" is a look, its blue the glass's tint.)
+      c.text
+        .toLowerCase()
+        .replace(/[.!,;]/g, ' ')
+        .split(/\s+/)
+        .filter(Boolean)
+        .every(
+          w =>
+            colorsIn(w).length > 0 ||
+            new RegExp(`^(?:${SHADE_WORDS})$`).test(w) ||
+            /^(?:an?|the|and)$/.test(w),
+        ) &&
       // ("page background is too blue, make it gray": a pronoun takes the
       // part before it.)
       !c.text.split(/\s+/).some(w => PRONOUN_WORD.test(w)) &&

@@ -382,6 +382,19 @@ describe('a lone color that names a role or variant', () => {
   }, 240_000);
 });
 
+describe('a color inside a look', () => {
+  it("is the look's tint, never a lone color piece", async () => {
+    const glass = writes(
+      await how(
+        'q0',
+        "Make the frames and title areas look like frosted blue glass. I am away, don't wait for answers.",
+      ),
+    ).join('\n');
+    expect(glass).toMatch(/surfaces glass/);
+    expect(glass).not.toMatch(/^set q0 color /m);
+  }, 240_000);
+});
+
 describe('a lone color with a part said after it', () => {
   it('keeps its reading whatever part follows', async () => {
     const green = writes(
