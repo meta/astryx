@@ -106,8 +106,9 @@ test("a theme's expanded state paints the open trigger only", async ({
   expect(await fill()).not.toBe('rgb(220, 38, 38)');
   await trigger.click();
   await expect(trigger).toHaveAttribute('aria-expanded', 'true');
-  expect(await fill()).toBe('rgb(220, 38, 38)');
+  // The trigger's own background-color transition runs, so poll.
+  await expect.poll(fill).toBe('rgb(220, 38, 38)');
   await page.keyboard.press('Escape');
   await expect(trigger).toHaveAttribute('aria-expanded', 'false');
-  expect(await fill()).not.toBe('rgb(220, 38, 38)');
+  await expect.poll(fill).not.toBe('rgb(220, 38, 38)');
 });
