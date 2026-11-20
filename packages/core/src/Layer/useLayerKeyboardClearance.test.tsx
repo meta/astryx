@@ -42,6 +42,7 @@ import {
   LAYER_KEYBOARD_INSET_PROPERTY,
   useLayerKeyboardClearance,
 } from './useLayerKeyboardClearance';
+import {LAYER_LIFT_PROPERTY} from './layerSlideRules';
 import {useLayer} from './useLayer';
 
 const guide = {
@@ -179,7 +180,7 @@ function Harness({
           ? {}
           : {[LAYER_KEYBOARD_INSET_PROPERTY]: `${inset}px`}),
         ...(entering == null ? {} : {transform: `translateY(${entering}px)`}),
-        // As the runtime applies it: the insets move the layer's anchor area.
+        // As the runtime applies it: the layer's insets read the lift.
         ...keyboardLiftStyle(lift),
       }}
       data-testid="layer"
@@ -301,9 +302,9 @@ const capOf = (container: HTMLElement) =>
     .querySelector<HTMLElement>('[data-testid="layer"]')!
     .style.getPropertyValue(LAYER_KEYBOARD_CAP_PROPERTY);
 
-/** The lift the runtime applies, read back from the layer's insets. */
+/** The lift the runtime applies, read back from the layer's style. */
 function liftOf(layer: HTMLElement): number {
-  const end = parseFloat(layer.style.insetBlockEnd);
+  const end = parseFloat(layer.style.getPropertyValue(LAYER_LIFT_PROPERTY));
   return Number.isNaN(end) ? 0 : end;
 }
 

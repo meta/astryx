@@ -15,6 +15,7 @@
  * @property {boolean} [reverse] - Turn a rendered HTML file back into a page module.
  * @property {string} [title] - The rendered page's title (default: its first heading, else the file name). Rendering only.
  * @property {boolean} [overwrite] - Replace the existing page module when reversing (never a protected file, and never a file other than the page, which always goes into a new folder). Rendering replaces an existing HTML file only when a render wrote it.
+ * @property {boolean} [keepClassNames] - Keep every class of the first paint as written, for a caller that takes the file's markup and styles it with its own copy of the StyleX styles. By default, once the repeated lists of the StyleX classes Astryx's packages write (the `x…` classes) add up to 16 KB, each such list becomes one short alias class, whose rules only the file's own stylesheet holds; the page's own StyleX classes keep their names. Rendering only; refused with `reverse`.
  */
 
 /**

@@ -2,14 +2,18 @@
 
 /**
  * @file The scope rule for a folder `--to` names: inside the project root it
- * is a project place, anywhere else the computer's. A leaf with no CLI
- * imports, so the release chooser reads the same rule `init` applies
- * without loading the CLI to answer `astryx --version`.
+ * is a project place, anywhere else the computer's; and how a path written
+ * from the home folder is read, which template destinations follow too
+ * (../fs/path-safety.mjs). A leaf with no CLI imports, so the release chooser
+ * reads the same rule `init` applies without loading the CLI to answer
+ * `astryx --version`.
  * @input a `--to` name, the folder the command runs in, the project root
  * @output whether the name is a folder, where it is, and its scope
- * @position foundation/agent-docs — read by skill-places.mjs and release/choose.mjs
+ * @position foundation/agent-docs — read by skill-places.mjs, release/choose.mjs
+ *   and ../fs/path-safety.mjs
  */
 
+import * as os from 'node:os';
 import * as path from 'node:path';
 
 /**
@@ -28,6 +32,24 @@ export function writtenAsPath(value) {
 }
 
 /**
+ * The absolute path a home-relative path (`~`, or `~/` and a path in the home
+ * folder) names, as a shell expands it; null for any other path. A caller
+ * that does not expand `~` passes it as text, and a write would then make a
+ * folder named `~` in the current folder.
+ *
+ * @param {string} value
+ * @param {string} [home] the home folder
+ * @returns {string | null}
+ */
+export function homeRelativePath(value, home = os.homedir()) {
+  if (value === '~') return home;
+  if (value.startsWith('~/') || value.startsWith('~\\')) {
+    return path.join(home, value.slice(2));
+  }
+  return null;
+}
+
+/**
  * `value` as an absolute path: `~` is the home folder, a relative path is
  * from `cwd`.
  * @param {string} value
@@ -36,11 +58,7 @@ export function writtenAsPath(value) {
  * @returns {string}
  */
 export function absoluteFolder(value, cwd, home) {
-  if (value === '~') return home;
-  if (value.startsWith('~/') || value.startsWith('~\\')) {
-    return path.join(home, value.slice(2));
-  }
-  return path.resolve(cwd, value);
+  return homeRelativePath(value, home) ?? path.resolve(cwd, value);
 }
 
 /**

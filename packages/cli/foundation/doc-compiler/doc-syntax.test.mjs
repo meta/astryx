@@ -325,6 +325,133 @@ describe('renderCommandTokens', () => {
   });
 });
 
+describe('an install step with a pin', () => {
+  const theme = '@astryxdesign/theme-neutral';
+  /** @type {import('./doc-syntax.mjs').DocPin} */
+  const pin = name =>
+    name.startsWith('@astryxdesign/')
+      ? {spec: `${name}@0.7.10`, exact: true}
+      : null;
+
+  it('names each pinned package at its version, saved exactly when every package is pinned exactly', () => {
+    expect(
+      renderCommandTokens(
+        `{@pm install ${theme}}`,
+        {stem: 'astryx', pm: 'npm', pin},
+        'bash',
+      ),
+    ).toBe(`npm install -E ${theme}@0.7.10`);
+    expect(
+      renderCommandTokens(
+        `{@pm install ${theme}}`,
+        {stem: 'astryx', pm: 'bun', pin},
+        'bash',
+      ),
+    ).toBe(`bun add --exact ${theme}@0.7.10`);
+  });
+
+  it('saves nothing exactly beside a package the pin leaves alone, or beside a range', () => {
+    expect(
+      renderCommandTokens(
+        `{@pm install @astryxdesign/core @stylexjs/stylex ${theme}}`,
+        {stem: 'astryx', pm: 'pnpm', pin},
+        'bash',
+      ),
+    ).toBe(
+      `pnpm add @astryxdesign/core@0.7.10 @stylexjs/stylex ${theme}@0.7.10`,
+    );
+    expect(
+      renderCommandTokens(
+        `{@pm install ${theme}}`,
+        {
+          stem: 'astryx',
+          pm: 'npm',
+          pin: name => ({spec: `"${name}@^0.7.10"`, exact: false}),
+        },
+        'bash',
+      ),
+    ).toBe(`npm install "${theme}@^0.7.10"`);
+  });
+
+  it('drops an exact flag the doc writes when a pinned package is saved as a range', () => {
+    expect(
+      renderCommandTokens(
+        `{@pm install ${theme} --exact}`,
+        {
+          stem: 'astryx',
+          pm: 'npm',
+          pin: name => ({spec: `"${name}@^0.7.10"`, exact: false}),
+        },
+        'bash',
+      ),
+    ).toBe(`npm install "${theme}@^0.7.10"`);
+  });
+
+  it('names no release after a shell block moves to another folder', () => {
+    const reader = {stem: 'astryx', pm: /** @type {const} */ ('npm'), pin};
+    expect(
+      renderCommandTokens(
+        `{@pm install ${theme}}\nmkdir my-app && cd my-app\n{@pm install ${theme}}`,
+        reader,
+        'bash',
+      ).split('\n'),
+    ).toEqual([
+      `npm install -E ${theme}@0.7.10`,
+      'mkdir my-app && cd my-app',
+      `npm install ${theme}`,
+    ]);
+    expect(
+      renderCommandTokens(
+        `{@pm install ${theme}} && cd .. && {@pm install ${theme}}`,
+        reader,
+        'bash',
+      ),
+    ).toBe(`npm install -E ${theme}@0.7.10 && cd .. && npm install ${theme}`);
+    expect(
+      renderCommandTokens(
+        [
+          '```bash',
+          'cd ..',
+          `{@pm install ${theme}}`,
+          '```',
+          `Then {@pm install ${theme}}.`,
+        ].join('\n'),
+        reader,
+      ).split('\n'),
+    ).toEqual([
+      '```bash',
+      'cd ..',
+      `npm install ${theme}`,
+      '```',
+      `Then \`npm install -E ${theme}@0.7.10\`.`,
+    ]);
+  });
+
+  it('keeps a version the doc writes, a global install, and every other step as written', () => {
+    const reader = {stem: 'astryx', pm: /** @type {const} */ ('npm'), pin};
+    expect(
+      renderCommandTokens(`{@pm install ${theme}@latest}`, reader, 'bash'),
+    ).toBe(`npm install ${theme}@latest`);
+    expect(
+      renderCommandTokens(
+        '{@pm install --global @astryxdesign/cli}',
+        reader,
+        'bash',
+      ),
+    ).toBe('npm install -g @astryxdesign/cli');
+    expect(renderCommandTokens(`{@pm remove ${theme}}`, reader, 'bash')).toBe(
+      `npm uninstall ${theme}`,
+    );
+    expect(
+      renderCommandTokens(
+        `{@pm install ${theme}}`,
+        {stem: 'astryx', pm: 'npm'},
+        'bash',
+      ),
+    ).toBe(`npm install ${theme}`);
+  });
+});
+
 describe('tokenForCommand', () => {
   it.each([
     [

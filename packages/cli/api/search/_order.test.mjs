@@ -3,7 +3,9 @@
 /**
  * @file Invariants of search's ordering, checked against the lexical ranker on
  * the real catalog: search answers only with lexical matches, keeps each one's
- * score and reason, and never moves a match past one of another band or kind.
+ * score and reason, and never moves a match past one of another band or kind,
+ * except a family root the lexical ranker marks as leading its part, which
+ * moves directly before the part.
  */
 
 import {describe, it, expect} from 'vitest';
@@ -16,6 +18,8 @@ const require = requireNatively(import.meta.url);
 const {search, searchCore} = require('./search.mjs');
 /** @type {typeof import('./_order.mjs')} */
 const {bandOf} = require('./_order.mjs');
+/** @type {typeof import('./_adapter.mjs')} */
+const {gatherCandidatesReused} = require('./_adapter.mjs');
 
 const cwd = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -37,7 +41,18 @@ const QUERIES = [
   'how do I add a theme',
   'button',
   'side panel that resizes',
+  // A part whose name hit scores a band above its family's root.
+  'code sample',
+  'tab layout',
 ];
+
+/** Each family member's `domain:name`, mapped to its family's root. */
+const familyOf = async () => {
+  const {all} = await gatherCandidatesReused({cwd});
+  return new Map(
+    all.flatMap(c => (c._family ? [[`${c.domain}:${c.name}`, c._family]] : [])),
+  );
+};
 
 describe('search ordering invariants', () => {
   for (const q of QUERIES) {
@@ -61,9 +76,22 @@ describe('search ordering invariants', () => {
         expect(r.score).toBe(own?.score);
         expect(r.reason).toBe(own?.reason);
       }
-      // Two results of different runs (band or kind) keep the lexical order.
+      // Two results of different runs (band or kind) keep the lexical order,
+      // except a family root directly before a part of its own family.
       const rs = ours.data.results;
+      const families = await familyOf();
+      /** @param {number} i */
+      const rootOfNext = i =>
+        i + 1 < rs.length &&
+        rs[i + 1].domain === rs[i].domain &&
+        families.get(
+          keyOf(rs[i + 1])
+            .split(':')
+            .slice(0, 2)
+            .join(':'),
+        ) === rs[i].name;
       for (let i = 0; i < rs.length; i++) {
+        if (rootOfNext(i)) continue;
         for (let j = i + 1; j < rs.length; j++) {
           if (runOf(rs[i]) === runOf(rs[j])) continue;
           expect(
@@ -75,4 +103,28 @@ describe('search ordering invariants', () => {
       }
     }, 60_000);
   }
+
+  for (const [q, root, part] of [
+    ['title', 'Dialog', 'DialogHeader'],
+    ['page title', 'Dialog', 'DialogHeader'],
+    ['indicator', 'Field', 'FieldLabel'],
+  ]) {
+    it(`keeps ${root} directly before ${part} for "${q}"`, async () => {
+      const names = (await search(q, {cwd, limit: 20})).data.results.map(
+        r => r.name,
+      );
+      const at = names.indexOf(root);
+      expect(at).toBeGreaterThanOrEqual(0);
+      expect(names[at + 1]).toBe(part);
+    }, 60_000);
+  }
+
+  it('moves a marked root directly before its part, across bands', async () => {
+    const names = (await search('code sample', {cwd, limit: 20})).data.results
+      .filter(r => r.domain === 'component')
+      .map(r => r.name);
+    const root = names.indexOf('CodeBlock');
+    expect(root).toBeGreaterThanOrEqual(0);
+    expect(names[root + 1]).toBe('Code');
+  }, 60_000);
 });

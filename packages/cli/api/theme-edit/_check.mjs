@@ -70,6 +70,7 @@ import {
   systemFontFamilies,
   isSystemFamily,
   fontStack,
+  onlyMeans,
 } from './_tables.mjs';
 import {
   COLOR_NAMES,
@@ -264,6 +265,46 @@ export function modeDialValue(v) {
  */
 export const setLine = (slug, thing, value, s, unset = false) =>
   `${P} ${unset ? 'undo' : 'set'} ${slug} ${quoteCommandArgument(thing)}${value ? ` ${quoteCommandArgument(value)}` : ''}${s.on ? ` --on ${s.on}` : ''}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}${s.only ? ' --only' : ''}`;
+
+/**
+ * The longhand lines that give a box shorthand of two to four lengths side
+ * by side (`padding '5px 0'`: padding-block 5px, padding-inline 0), each
+ * with the length typed for it, as CSS gives the sides out; null for any
+ * other property or value.
+ * @param {string} slug
+ * @param {string} prop
+ * @param {string} v
+ * @param {{on?: string, when?: string, state?: string, mode?: string, only?: boolean}} s
+ * @returns {string[] | null}
+ */
+function boxSideLines(slug, prop, v, s) {
+  if (prop !== 'padding' && prop !== 'margin') return null;
+  const w = splitTop(v.trim(), ' ').filter(Boolean);
+  if (w.length < 2 || w.length > 4) return null;
+  if (!w.every(x => oneLength(x) || /^[+-]?0*\.?0+$/.test(x))) return null;
+  // (One length said again for each side is that one length.)
+  if (new Set(w).size === 1) return null;
+  /** @type {Array<[string, string]>} */
+  const sides =
+    w.length === 2
+      ? [
+          ['block', w[0]],
+          ['inline', w[1]],
+        ]
+      : w.length === 3
+        ? [
+            ['top', w[0]],
+            ['inline', w[1]],
+            ['bottom', w[2]],
+          ]
+        : [
+            ['top', w[0]],
+            ['right', w[1]],
+            ['bottom', w[2]],
+            ['left', w[3]],
+          ];
+  return sides.map(([side, x]) => setLine(slug, `${prop}-${side}`, x, s));
+}
 
 /** @param {string} v */
 const cornerPxOf = v =>
@@ -4790,15 +4831,17 @@ function checkOne(
     });
   // --only is checked on a part this Core has; a part in other letters or
   // misspelt gets the part's own refusal first, with --only kept.
+  // (What --only means is the one rule the settings reader reads a saved
+  // one by: onlyMeans.)
   if (s.only && (!s.on || TARGET.has(s.on) || FAMILIES[s.on])) {
-    const fam = s.on ? familyOf(s.on) : null;
-    if (!fam || FAMILIES[/** @type {string} */ (s.on)])
+    const means = onlyMeans(s.on);
+    if (means === 'group')
       refuse(
         E.ERR_INVALID_ARGUMENT,
         '--only is for one member of a group, such as text-input (how --list groups).',
         {run: [`${HOW} --list groups`]},
       );
-    if (!AUTO_SPREAD.includes(/** @type {string} */ (fam)))
+    if (means === 'own')
       refuse(
         E.ERR_INVALID_ARGUMENT,
         `${s.on} is styled on its own already: only ${AUTO_SPREAD.join(' and ')} spread to their group, so drop --only.`,
@@ -7285,7 +7328,11 @@ function checkOne(
         refuse(
           E.ERR_THEME_BAD_VALUE,
           `${hit} reads ${prop} inside calc() (its corners and inner rows follow it), where only one length works: a length, a variable, or calc(), min(), max() or clamp() giving one; not "${v.trim()}".`,
-          {run: [setLine(slug, prop, fix, s)]},
+          {
+            run: boxSideLines(slug, prop, v, s) ?? [
+              setLine(slug, prop, fix, s),
+            ],
+          },
         );
       }
     }

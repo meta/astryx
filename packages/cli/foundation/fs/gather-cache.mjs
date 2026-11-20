@@ -24,8 +24,9 @@
  *   integration's themes, by theme build
  *   (foundation/discovery/core-theme-facts.mjs) for what it checks a theme
  *   against in Core's component docs,
- *   by `doctor` (api/doctor/_adapter.mjs) for its file-only docs checks and
- *   its theme-wiring scan, by the docs adapter (api/docs/_adapter.mjs) for
+ *   by `doctor` (api/doctor/_adapter.mjs) for its file-only docs checks,
+ *   its theme-wiring scan, its Core-props scan and its Core-button scan, by
+ *   the docs adapter (api/docs/_adapter.mjs) for
  *   the CLI's own docs tree, which `docs` and `search` read, by the discover
  *   adapter (api/discover/_adapter.mjs) for the integrations a project loads
  *   and what each adds, which `discover` lists, and for what discover
@@ -135,9 +136,10 @@ const KEPT_COMMANDS = new Set([
   'theme',
   'discover',
   'docs',
-  // Its project check, with or without `--built`, keeps its docs checks and
-  // theme-wiring scan; its `integration` checks run neither, and keep only
-  // the project gathers they load, as the commands above do.
+  // Its project check, with or without `--built`, keeps its docs checks,
+  // theme-wiring scan, Core-props scan and Core-button scan; its
+  // `integration` checks run none of them, and keep only the project gathers
+  // they load, as the commands above do.
   'doctor',
 ]);
 

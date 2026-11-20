@@ -33,10 +33,10 @@ import {Center} from '@astryxdesign/core/Center';
 import {Thumbnail} from '@astryxdesign/core/Thumbnail';
 import {Icon} from '@astryxdesign/core/Icon';
 import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
-import {ShieldCheckIcon} from '@heroicons/react/24/outline';
-import {LockClosedIcon} from '@heroicons/react/24/outline';
-import {CheckCircleIcon} from '@heroicons/react/24/outline';
-import {TruckIcon} from '@heroicons/react/24/outline';
+import {ShieldIcon} from '@astryxdesign/template-icons';
+import {LockIcon} from '@astryxdesign/template-icons';
+import {SuccessIcon} from '@astryxdesign/template-icons';
+import {ShippingIcon} from '@astryxdesign/template-icons';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -810,7 +810,7 @@ export default function PaymentFormPage() {
                         <HStack gap={5} hAlign="center" wrap="wrap">
                           <HStack gap={1} vAlign="center">
                             <Icon
-                              icon={ShieldCheckIcon}
+                              icon={ShieldIcon}
                               size="sm"
                               color="secondary"
                             />
@@ -819,18 +819,14 @@ export default function PaymentFormPage() {
                             </Text>
                           </HStack>
                           <HStack gap={1} vAlign="center">
-                            <Icon
-                              icon={LockClosedIcon}
-                              size="sm"
-                              color="secondary"
-                            />
+                            <Icon icon={LockIcon} size="sm" color="secondary" />
                             <Text type="supporting" color="secondary">
                               SSL Encrypted
                             </Text>
                           </HStack>
                           <HStack gap={1} vAlign="center">
                             <Icon
-                              icon={CheckCircleIcon}
+                              icon={SuccessIcon}
                               size="sm"
                               color="secondary"
                             />
@@ -1046,7 +1042,7 @@ export default function PaymentFormPage() {
                               </HStack>
                               <Banner
                                 status="info"
-                                icon={<Icon icon={TruckIcon} size="sm" />}
+                                icon={<Icon icon={ShippingIcon} size="sm" />}
                                 title="Free shipping on orders over $300"
                               />
                             </VStack>

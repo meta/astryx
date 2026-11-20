@@ -16,13 +16,4 @@ export const doc = {
     'Text',
     'Icon',
   ],
-  icons: {
-    BoldIcon: 'bold',
-    ItalicIcon: 'italic',
-    ListBulletIcon: 'list',
-    Squares2X2Icon: 'gridView',
-    StrikethroughIcon: 'strikethrough',
-    TableCellsIcon: 'table',
-    UnderlineIcon: 'underline',
-  },
 };

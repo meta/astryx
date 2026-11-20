@@ -93,6 +93,7 @@ export {
 } from '../../foundation/discovery/icon-set-writer.mjs';
 export {exportValueKind} from '../../foundation/discovery/module-exports.mjs';
 export {templateIconMeanings} from '../../foundation/discovery/template-icon-meanings.mjs';
+export {meaningWithFallbacks} from '../../foundation/discovery/template-placeholders.mjs';
 export {
   ICON_SET_GUIDE_COMMAND,
   ICON_USE_COMMAND,
