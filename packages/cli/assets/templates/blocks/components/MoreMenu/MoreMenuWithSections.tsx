@@ -3,11 +3,7 @@
 'use client';
 
 import {MoreMenu} from '@astryxdesign/core/MoreMenu';
-import {
-  PencilIcon,
-  DocumentDuplicateIcon,
-  TrashIcon,
-} from '@heroicons/react/24/outline';
+import {EditIcon, CopyIcon, DeleteIcon} from '@astryxdesign/template-icons';
 
 export default function MoreMenuWithSections() {
   return (
@@ -19,10 +15,10 @@ export default function MoreMenuWithSections() {
           type: 'section',
           title: 'Actions',
           items: [
-            {label: 'Edit', icon: PencilIcon, onClick: () => {}},
+            {label: 'Edit', icon: EditIcon, onClick: () => {}},
             {
               label: 'Duplicate',
-              icon: DocumentDuplicateIcon,
+              icon: CopyIcon,
               onClick: () => {},
             },
           ],
@@ -30,7 +26,7 @@ export default function MoreMenuWithSections() {
         {
           type: 'section',
           title: 'Danger zone',
-          items: [{label: 'Delete', icon: TrashIcon, onClick: () => {}}],
+          items: [{label: 'Delete', icon: DeleteIcon, onClick: () => {}}],
         },
       ]}
     />

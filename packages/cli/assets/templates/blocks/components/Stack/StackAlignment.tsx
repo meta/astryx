@@ -6,8 +6,10 @@ import {Stack} from '@astryxdesign/core/Layout';
 import {Card} from '@astryxdesign/core/Card';
 import {Button} from '@astryxdesign/core/Button';
 import {Text} from '@astryxdesign/core/Text';
+import {useToast} from '@astryxdesign/core/Toast';
 
 export default function StackAlignment() {
+  const showToast = useToast();
   return (
     <Stack direction="vertical" gap={3} width="100%" style={{maxWidth: 500}}>
       <Card padding={4}>
@@ -16,8 +18,22 @@ export default function StackAlignment() {
             Start (left)
           </Text>
           <Stack direction="horizontal" gap={1} hAlign="start">
-            <Button label="Cancel" variant="secondary" size="sm" />
-            <Button label="Save" variant="primary" size="sm" />
+            <Button
+              label="Cancel"
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                showToast({body: 'Demo: your edits would be discarded here'})
+              }
+            />
+            <Button
+              label="Save"
+              variant="primary"
+              size="sm"
+              onClick={() =>
+                showToast({body: 'Demo: your changes would be saved here'})
+              }
+            />
           </Stack>
         </Stack>
       </Card>
@@ -27,8 +43,22 @@ export default function StackAlignment() {
             Center
           </Text>
           <Stack direction="horizontal" gap={1} hAlign="center">
-            <Button label="Cancel" variant="secondary" size="sm" />
-            <Button label="Save" variant="primary" size="sm" />
+            <Button
+              label="Cancel"
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                showToast({body: 'Demo: your edits would be discarded here'})
+              }
+            />
+            <Button
+              label="Save"
+              variant="primary"
+              size="sm"
+              onClick={() =>
+                showToast({body: 'Demo: your changes would be saved here'})
+              }
+            />
           </Stack>
         </Stack>
       </Card>
@@ -38,8 +68,22 @@ export default function StackAlignment() {
             End (right)
           </Text>
           <Stack direction="horizontal" gap={1} hAlign="end">
-            <Button label="Cancel" variant="secondary" size="sm" />
-            <Button label="Save" variant="primary" size="sm" />
+            <Button
+              label="Cancel"
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                showToast({body: 'Demo: your edits would be discarded here'})
+              }
+            />
+            <Button
+              label="Save"
+              variant="primary"
+              size="sm"
+              onClick={() =>
+                showToast({body: 'Demo: your changes would be saved here'})
+              }
+            />
           </Stack>
         </Stack>
       </Card>

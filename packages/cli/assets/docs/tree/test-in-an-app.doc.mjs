@@ -27,7 +27,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: '# In the package\n{@pm-only npm "the tarball the registry receives" pack --pack-destination ..}\n\n# In an app folder beside it\n{@pm install @astryxdesign/core @astryxdesign/cli ../acme-astryx-widgets-1.0.0.tgz}',
+          code: '# In the package\n{@pm-only npm "the tarball the registry receives" pack --pack-destination ..}\n\n# In an app folder beside it\ncd ../my-app\n{@pm install @astryxdesign/core @astryxdesign/cli ../acme-astryx-widgets-1.0.0.tgz}',
         },
         {
           type: 'list',

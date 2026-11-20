@@ -16,8 +16,8 @@ import {
   StarIcon,
   BookmarkIcon,
   HeartIcon,
-  BellIcon,
-} from '@heroicons/react/24/outline';
+  NotificationIcon,
+} from '@astryxdesign/template-icons';
 import {
   BoldIcon as BoldSolid,
   ItalicIcon as ItalicSolid,
@@ -25,7 +25,7 @@ import {
   StarIcon as StarSolid,
   BookmarkIcon as BookmarkSolid,
   HeartIcon as HeartSolid,
-} from '@heroicons/react/24/solid';
+} from '@astryxdesign/template-icons/24/solid';
 
 export default function ToggleButtonColor() {
   const [toolbar, setToolbar] = useState<Record<string, boolean>>({
@@ -127,8 +127,8 @@ export default function ToggleButtonColor() {
           />
           <ToggleButton
             label="Follow"
-            icon={<Icon icon={BellIcon} color="secondary" />}
-            pressedIcon={<Icon icon={BellIcon} color="accent" />}
+            icon={<Icon icon={NotificationIcon} color="secondary" />}
+            pressedIcon={<Icon icon={NotificationIcon} color="accent" />}
             isPressed={reactions.bell}
             onPressedChange={() => toggleReaction('bell')}
             isIconOnly

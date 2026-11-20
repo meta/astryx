@@ -50,9 +50,10 @@ const LIST_ROW_FLUSH = `calc(${spacingVars['--spacing-0']})`;
 const NESTED_LIST_SPACE = `calc(${spacingVars['--spacing-2']})`;
 const RULE_SPACE = `calc(${spacingVars['--spacing-6']})`;
 const CODE_SPACE = `calc(${spacingVars['--spacing-3']})`;
-// Core CodeBlock's header (8px, a small control, 8px) overlaps the code's
-// 12px top padding by 8px, so its code starts 8px + control + 12px down.
-const CODE_HEADER_SPACE = `calc(${spacingVars['--spacing-2']} + ${sizeVars['--size-element-sm']} + ${spacingVars['--spacing-3']})`;
+// Core CodeBlock's header overlaps the code's 12px top padding by 8px. So the
+// code starts 4px below the header. CodeBlockHeaderPlugin writes the header's
+// drawn height; one row is the fallback.
+const CODE_HEADER_SPACE = `calc(var(--_richtext-code-header-block-size, calc(2 * ${spacingVars['--spacing-2']} + ${sizeVars['--size-element-sm']})) + ${spacingVars['--spacing-3']} - ${spacingVars['--spacing-2']})`;
 // A block that names no language has no header: core CodeBlock puts its copy
 // button in a column of its own at the inline end (8px, a small control, 8px),
 // beside the code rather than over it, so the code ends that much earlier.
@@ -503,7 +504,9 @@ const editorTheme = stylex.create({
     // never wider than the editor, where long lines wrap.
     boxSizing: 'border-box',
     width: 'fit-content',
-    minWidth: `min(${PROSE_MEASURE}, 100%)`,
+    // At least the header's own width too, as core's frame grows to fit its
+    // header (CodeBlockHeaderPlugin writes it).
+    minWidth: `max(min(${PROSE_MEASURE}, 100%), min(var(--_richtext-code-header-inline-size, 0px), 100%))`,
     maxWidth: '100%',
     marginBlockStart: {
       default: WIDE_BLOCK_SPACE,
