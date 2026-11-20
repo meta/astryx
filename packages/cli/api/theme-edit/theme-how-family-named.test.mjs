@@ -207,7 +207,7 @@ describe('a mode said with capitals', () => {
 });
 
 describe('a lone color after a piece', () => {
-  it('is the text of a part that is only text, the fill of a plain fill, and the accent after a button', async () => {
+  it('is the text of a part that is only text, and the fill of any part that paints one', async () => {
     expect(
       writes(await how('q0', 'bold headings, dark gray')).join('\n'),
     ).toMatch(/color '#[0-9a-f]{6}' --on heading/);
@@ -221,7 +221,7 @@ describe('a lone color after a piece', () => {
       writes(await how('q0', 'big buttons, a sky blue, high contrast')).join(
         '\n',
       ),
-    ).toMatch(/accent '#[0-9a-f]{6}'/);
+    ).toMatch(/background-color '#38bdf8' --on button/);
   }, 240_000);
 });
 
@@ -254,9 +254,10 @@ describe('a lone color after a link, a group or labels', () => {
 });
 
 describe('a lone color after a part that draws with the accent', () => {
-  it('is the accent when it has a hue, and the part fill when it has none', async () => {
+  it('is the part fill, with a hue or none, never the whole accent', async () => {
     const box = writes(await how('q0', 'rounded checkboxes, navy')).join('\n');
-    expect(box).toMatch(/accent '#1e3a8a'/);
+    expect(box).toMatch(/background-color '#1e3a8a' --on checkbox-indicator/);
+    expect(box).not.toMatch(/^set q0 accent /m);
     for (const [ask, part, ink] of [
       ['rounded checkboxes, white', 'checkbox-indicator', '#ffffff'],
       ['rounded checkboxes, black', 'checkbox-indicator', '#000000'],
@@ -382,7 +383,7 @@ describe('a lone color that names a role or variant', () => {
   }, 240_000);
 });
 
-describe('a lone color the accent dial does not take', () => {
+describe('a modified, shaded, two-word or light hue after a part', () => {
   it('fills the part as before: a modified, shaded, two-word or light hue', async () => {
     for (const [ask, ink] of [
       ['bigger buttons, bright red', '#dc2626'],
@@ -419,7 +420,8 @@ describe('a lone color with a part said after it', () => {
     const green = writes(
       await how('q0', 'bigger buttons, green, bold headings'),
     ).join('\n');
-    expect(green).toMatch(/accent '#16a34a'/);
+    expect(green).toMatch(/background-color '#16a34a' --on button/);
+    expect(green).not.toMatch(/^set q0 accent /m);
     expect(green).toMatch(/font-weight 700 --on heading/);
     const white = writes(
       await how('q0', 'rounder buttons, white, headings in Lora'),

@@ -8464,12 +8464,6 @@ export function draftAnswer(ctx, env, question) {
     Object.values(C.MAP[on]?.at?.['background-color'] ?? {}).some(v =>
       /--color-accent\b/.test(String(v)),
     );
-  const accentParts = (/** @type {Array<{on: string}>} */ parts) =>
-    parts.length > 0 &&
-    parts.every(p => {
-      const members = (FAMILIES[p.on] ?? [p.on]).filter(m => C.MAP[m]);
-      return members.length > 0 && members.every(drawsWithAccent);
-    });
   // ("warning banner title black, description dark gray": a clause led by
   // another piece of the same part is that piece, never the piece said
   // before.)
@@ -8481,50 +8475,6 @@ export function draftAnswer(ctx, env, question) {
     if (!lead || !p.on.includes('-')) return p.on;
     const piece = `${p.on.slice(0, p.on.lastIndexOf('-'))}-${lead}`;
     return piece !== p.on && ctx.project.target.has(piece) ? piece : p.on;
-  };
-  // ("red and blue accents", "primary blue": a piece that names a role or
-  // a variant is read by the colors-before-role pass, never as a lone
-  // color.)
-  const ROLE_OR_VARIANT =
-    /\b(?:accents?|brand|primary|secondary|tertiary|ghost|destructive|success|warnings?|danger|errors?|info|neutral|status(?:es)?|highlights?)\b/;
-  // ("red and blue accents": a color in a run that ends at a role word is
-  // that role's too.)
-  const namesARole = (/** @type {Clause} */ c) => {
-    const n = clauses[clauses.indexOf(c) + 1];
-    return (
-      ROLE_OR_VARIANT.test(c.text) ||
-      Boolean(n?.colors.length && ROLE_OR_VARIANT.test(n.text))
-    );
-  };
-  // (Whether the accent dial takes a piece's color: one named color said
-  // alone, with no shade word, a hue, neither light nor muted. "bright
-  // red", "dark red", "pastel blue", "light blue" and "lavender" are not,
-  // so they keep the part's own reading.)
-  const accentTakes = (/** @type {Clause} */ c) => {
-    const found = colorsFound(c.text);
-    if (found.length !== 1 || found[0][2]) return false;
-    const words = c.text
-      .toLowerCase()
-      .replace(/[.!,]/g, ' ')
-      .split(/\s+/)
-      .filter(Boolean);
-    if (
-      !words.every(
-        w =>
-          (colorsIn(w).length > 0 &&
-            !new RegExp(`^(?:${SHADE_WORDS})$`).test(w)) ||
-          /^(?:an?|the)$/.test(w),
-      )
-    )
-      return false;
-    const rgb = parseColor(found[0][1]);
-    if (!rgb) return false;
-    const hi = Math.max(...rgb.slice(0, 3));
-    const lo = Math.min(...rgb.slice(0, 3));
-    if (hi - lo < 12 && (lo > 235 || hi < 20)) return false;
-    // (A light color, by its lightness: "peach", "lavender".)
-    if ((hi + lo) / 2 > 0.7 * 255) return false;
-    return !(hi - lo < 64 && hi > 120);
   };
   /**
    * The clause-scope reader: whether a clause that names no part takes the
@@ -8568,23 +8518,6 @@ export function draftAnswer(ctx, env, question) {
       )
     )
       return 'inherit';
-    // ("big buttons, a sky blue, high contrast": a list piece that is only a
-    // color, with no look or part word of its own, after a part that draws
-    // with the accent, is the theme's, never a fill on that part; "buttons
-    // rounder and red" is still the buttons'.)
-    if (
-      accentParts(before.parts) &&
-      !namesARole(c) &&
-      accentTakes(c) &&
-      j.sep === 'comma' &&
-      j.list == null &&
-      c.colors.length &&
-      !aspectsOf(c.text).length &&
-      !lex.parts.some(([re]) => re.test(` ${c.text.toLowerCase()} `)) &&
-      !c.state &&
-      !c.dir
-    )
-      return 'theme';
     const subject =
       /^(?:the\s+|my\s+|our\s+|an?\s+)?(?:(?:[a-z]+\s+)?(?=(?:accent|neutral|brand|primary|success|warning|danger|error|info|destructive)\b))?([a-z]+)\b(?!-)(?:\s+([a-z-]+))?/.exec(
         c.text,
@@ -9096,17 +9029,6 @@ export function draftAnswer(ctx, env, question) {
       });
       return ok ? aspect : null;
     };
-    // (Whether the color has no hue: white, black or a gray, by its value
-    // or by its word, "dark gray", "slate", whose value keeps a little
-    // blue.)
-    const neutralInk = (/** @type {string | undefined} */ v) => {
-      const rgb = parseColor(String(v ?? ''));
-      return Boolean(
-        /\b(?:gr[ae]y|white|black|charcoal|silver|slate)\b/.test(c.text) ||
-        (rgb &&
-          Math.max(...rgb.slice(0, 3)) - Math.min(...rgb.slice(0, 3)) < 24),
-      );
-    };
     const pieceOfList =
       j?.sep === 'comma' &&
       j.list == null &&
@@ -9162,12 +9084,10 @@ export function draftAnswer(ctx, env, question) {
       )
         ? takesItself('text', textOnly) ||
           takesItself('background', plainFill) ||
-          // (White, black or a gray is never an accent: after a part that
-          // draws with the accent, "rounder buttons, white", it is that
-          // part's fill.)
-          (neutralInk(c.colors[0])
-            ? takesItself('background', accentFill)
-            : null)
+          // (After a part that draws with the accent, "rounder buttons,
+          // white", "bigger buttons, green", the color is that part's
+          // fill, never the whole theme's accent.)
+          takesItself('background', accentFill)
         : null;
     if (own && !c.aspects.length && !ownLook) {
       c.parts = prevParts.map(p => ({...p, on: pieceSaid(c, p)}));
@@ -9178,19 +9098,7 @@ export function draftAnswer(ctx, env, question) {
       ownAspects.set(c, [own]);
       continue;
     }
-    // (Only after a part that draws with the accent is a lone color the
-    // accent; after any other part it reads as it always has.)
-    const ownPiece =
-      pieceOfList &&
-      !own &&
-      accentParts(prevParts) &&
-      !namesARole(c) &&
-      accentTakes(c);
-    if (
-      !ownLook &&
-      !ownPiece &&
-      (grayLook ? ownedHere : paintsAPart || namesAPart)
-    )
+    if (!ownLook && (grayLook ? ownedHere : paintsAPart || namesAPart))
       continue;
     if (
       /\b(?:success|warning|danger|error|info|neutral|accent|brand|page|background|text|border)\b/.test(
@@ -9495,9 +9403,9 @@ export function draftAnswer(ctx, env, question) {
   }
   // ("red #c8102e and blue #003da5 accents": colors said together before
   // the role they share are each that role, never the part said before.
-  // A theme has one accent: the first color said is it. The second has no
-  // setting of its own, so it is never a choice that holds the rest of the
-  // ask back.)
+  // A theme has one accent: the last color said is it, as on main. The
+  // first has no setting of its own, so it is never a choice that holds
+  // the rest of the ask back.)
   for (let i = 0; i + 1 < clauses.length; i++) {
     const [a, b] = [clauses[i], clauses[i + 1]];
     if (
@@ -9511,12 +9419,13 @@ export function draftAnswer(ctx, env, question) {
         .every(w => colorsIn(w.toLowerCase()).length > 0)
     ) {
       a.parts = [];
-      a.aspects = [...b.aspects];
-      a.text = `${a.text.trim()} accent`;
       if (b.colors.length) {
-        b.text = '';
-        b.colors = [];
-        b.aspects = [];
+        a.text = '';
+        a.colors = [];
+        a.aspects = [];
+      } else {
+        a.aspects = [...b.aspects];
+        a.text = `${a.text.trim()} accent`;
       }
     }
   }

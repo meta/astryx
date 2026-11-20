@@ -439,12 +439,11 @@ const ROWS = [
     },
   ],
   [
-    'a lone color after a part item never fills that part',
+    'a lone color after a part item fills that part, never the whole accent',
     {
       q: 'big buttons, a sky blue, high contrast',
-      has: ["accent '#38bdf8'"],
       saysNot: /not used/,
-      never: /background-color .* --on button/,
+      never: /^accent /,
     },
   ],
 ];

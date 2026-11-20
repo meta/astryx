@@ -204,11 +204,19 @@ const ROWS = [
     },
   ],
   [
-    'two colors before one accent: the first is it, and the rest is kept',
+    'two colors before one accent: the last is it, as on main, and the rest is kept',
     {
       q: 'bold headings, red #c8102e and blue #003da5 accents',
-      has: ['headings bold', "accent '#c8102e'"],
-      never: /^accent '#003da5'/,
+      has: ['headings bold', "accent '#003da5'"],
+      never: /^accent '#c8102e'|--on heading$/,
+    },
+  ],
+  [
+    'two colors said before accents: the last one is the accent, as on main',
+    {
+      q: '#ff0000 and #00ff00 accents',
+      has: ["accent '#00ff00'"],
+      never: /^accent '#ff0000'/,
     },
   ],
   [
@@ -219,7 +227,7 @@ const ROWS = [
         'headings bold',
         'corners more --on card',
         'spacing less --on table-row',
-        "accent '#c8102e'",
+        "accent '#003da5'",
       ],
     },
   ],
