@@ -26074,15 +26074,24 @@ export function draftAnswer(ctx, env, question) {
           .filter(Boolean)
           .join(' ');
         for (const x of fails) {
-          const dark = [0x11, 0x18, 0x27];
-          const light = [0xff, 0xff, 0xff];
-          const better =
-            ratio(dark, x.under) >= ratio(light, x.under)
-              ? '#111827'
-              : '#ffffff';
+          // The ink named is one that reads at 4.5:1 on that fill: the
+          // theme's near-black or white first, else black, which reads
+          // where near-black falls just short.
+          /** @type {Array<[string, number[]]>} */
+          const inks = [
+            ['#111827', [0x11, 0x18, 0x27]],
+            ['#ffffff', [0xff, 0xff, 0xff]],
+            ['#000000', [0, 0, 0]],
+          ];
+          const [better, betterRgb] =
+            [...inks]
+              .slice(0, 2)
+              .sort((a, b) => ratio(b[1], x.under) - ratio(a[1], x.under))
+              .concat([inks[2]])
+              .find(([, c]) => ratio(c, x.under) >= 4.5) ?? inks[1];
           const said = `${st.value} text on the ${where}`;
           if (!d.text.includes(said))
-            d.text += ` (${said} would not read on ${fill.value}${modes.length > 1 || st.mode || fill.mode ? ` in ${x.mode} mode` : ''}: ${ratioWords(x.ratio)}:1, under the 4.5:1 text needs, so it is ${reads.length ? `kept to ${reads.join(' and ')} mode` : 'not written'}; ${better} reads there at ${ratioWords(ratio(better === '#ffffff' ? light : dark, x.under))}:1)`;
+            d.text += ` (${said} would not read on ${fill.value}${modes.length > 1 || st.mode || fill.mode ? ` in ${x.mode} mode` : ''}: ${ratioWords(x.ratio)}:1, under the 4.5:1 text needs, so it is ${reads.length ? `kept to ${reads.join(' and ')} mode` : 'not written'}; ${better} reads there at ${ratioWords(ratio(betterRgb, x.under))}:1)`;
         }
       }
   for (const n of placeNotes)
