@@ -126,7 +126,17 @@ export function ShowcasePreview({name}: ShowcasePreviewProps) {
         justifyContent: 'safe center',
       }}
       {...previewNavigationProps}>
-      <Component />
+      {name.startsWith('SideNav') ? (
+        // A SideNav fills its container's height, as it does beside a page.
+        // Directly in the stage it takes the stage's whole height and shows
+        // its items at the top. A wrapper of content height lets the stage
+        // center it, as it centers every other preview.
+        <div>
+          <Component />
+        </div>
+      ) : (
+        <Component />
+      )}
     </div>
   );
 }

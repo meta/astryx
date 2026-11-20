@@ -31,7 +31,7 @@ export const docs = {
       name: 'onHide',
       type: '() => void',
       description:
-        'Callback fired when the popover is hidden. Use this to return focus to the trigger when needed.',
+        'Callback fired when the popover is hidden. Focus returns on its own as the popover closes, and there is no option to turn that off; to send focus somewhere else, focus that element here.',
     },
     {
       name: 'xstyle',
@@ -185,6 +185,11 @@ export const docs = {
       },
       {
         guidance: true,
+        description:
+          'Do not add your own focus return: the hook returns focus as the popover closes, to the opener or a stand-in, and has no option to turn that off.',
+      },
+      {
+        guidance: true,
         description: 'Use popover as the broad canonical surface target.',
       },
       {
@@ -213,7 +218,8 @@ export const docsDense = {
     anchorRef:
       'ref to the element popover sits on when not the trigger; read on open, each render and each show(); position only, no trigger ARIA or handlers.',
     onShow: 'fires when popover becomes visible.',
-    onHide: 'fires when popover hides; use to return focus when needed.',
+    onHide:
+      'fires when popover hides; focus a specific element here to send focus there (focus return then leaves it).',
     xstyle: 'StyleX styles for content wrapper, after default surface.',
     hasLightDismiss: 'whether outside click dismisses popover.',
     hasEscapeDismiss:
