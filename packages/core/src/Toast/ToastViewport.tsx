@@ -856,16 +856,16 @@ export function ToastViewport({
   const insetStyle: React.CSSProperties = {
     ...layerInsetProperties(layerInset),
   };
-  if (inset?.top) {
+  if (inset?.top != null) {
     insetStyle.top = inset.top;
   }
-  if (inset?.bottom) {
+  if (inset?.bottom != null) {
     insetStyle.bottom = inset.bottom;
   }
-  if (inset?.start) {
+  if (inset?.start != null) {
     insetStyle.insetInlineStart = inset.start;
   }
-  if (inset?.end) {
+  if (inset?.end != null) {
     insetStyle.insetInlineEnd = inset.end;
   }
 

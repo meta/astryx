@@ -138,10 +138,9 @@ Consumer migration instructions belong in consumer docs and release notes.
   entrance, the row collapse, and the swipe's throw run for 0.01 ms on every
   pointer; a touch user
   gets no opacity fade, which `design:reduced-motion` DR2 calls for.
-- **A zero toast inset does not override the provider.** A `toast.inset` edge
-  set to 0 keeps the provider's `layerInset` on that edge; `spec:AST-059` FR6
-  has a set edge replace it. An inset edge opposite the position, such as
-  `top` for a bottom stack, moves the stack to that edge.
+- **An inset edge opposite the position moves the stack.** A `toast.inset`
+  edge opposite the position, such as `top` for a bottom stack, moves the
+  stack to that edge.
 - **The viewport sets a page-level z-index.** The viewport carries
   `z-index: 500`; `spec:AST-027` FR1 keeps z-index local only, and FR8 orders
   floating surfaces through the browser top layer.

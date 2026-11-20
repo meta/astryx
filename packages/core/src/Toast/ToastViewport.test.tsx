@@ -283,6 +283,34 @@ describe('Toast responsive layout', () => {
     expect(viewport.style.insetInlineEnd).toBe('40px');
     expect(getComputedStyle(viewport).width).not.toBe('100%');
   });
+  it('lets an inset edge of 0 replace the provider value on that edge, in LTR and RTL', () => {
+    const edges = [
+      ['top', 'top'],
+      ['bottom', 'bottom'],
+      ['start', 'insetInlineStart'],
+      ['end', 'insetInlineEnd'],
+    ] as const;
+    for (const direction of ['ltr', 'rtl'] as const) {
+      for (const [edge, property] of edges) {
+        render(
+          <div dir={direction}>
+            <ToastViewport isTopLayer={false} inset={{[edge]: 0}}>
+              <ShowToastButton options={INFO_A} />
+            </ToastViewport>
+          </div>,
+        );
+        act(() => {
+          fireEvent.click(screen.getByText('Trigger'));
+        });
+        const viewport = screen.getByRole('region', {name: 'Notifications'});
+        // React writes a zero without a unit; jsdom adds `px` only to `top` and `bottom`.
+        expect(viewport.style[property], `${direction} ${edge}`).toMatch(
+          /^0(px)?$/,
+        );
+        cleanup();
+      }
+    }
+  });
 });
 
 describe('ToastViewport placement', () => {
