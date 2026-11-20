@@ -694,7 +694,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
   );
 
   it.skipIf(!hasModuleHooks)(
-    "keeps doctor's Core-button scan, and a change to a page, a script that listens for a press, an installed package, an MDX page, a package root or a package's name or imports shows on the very next run",
+    "keeps doctor's Core-button scan, and a change to a page, a script that listens for a press, an installed package, an MDX page, a package root, a package's name or imports, or a config's paths shows on the very next run",
     () => {
       const tmp = keptTmp('button-actions');
       const other = makeProject();
@@ -832,6 +832,35 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
           'lib/package.json': JSON.stringify({
             name: '@acme/lib',
             imports: {'#extra': './dist/Extra.tsx'},
+          }),
+        });
+        scansAgain();
+        // A page that imports through an alias, then a config that does not
+        // map it, then one that does.
+        write({
+          'src/Hero.tsx': app('<Button label="Hero" />'),
+          'src/App.tsx': [
+            "import Hero from '@/Hero';",
+            'export default function App() {',
+            '  return <a href="/start"><Hero /></a>;',
+            '}',
+            '',
+          ].join('\n'),
+        });
+        scansAgain();
+        write({
+          'tsconfig.json': JSON.stringify({
+            compilerOptions: {jsx: 'react-jsx'},
+          }),
+        });
+        scansAgain();
+        write({
+          'tsconfig.json': JSON.stringify({
+            compilerOptions: {
+              jsx: 'react-jsx',
+              baseUrl: '.',
+              paths: {'@/*': ['./src/*']},
+            },
           }),
         });
         scansAgain();
