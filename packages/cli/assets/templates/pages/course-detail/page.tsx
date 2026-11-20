@@ -14,7 +14,7 @@
 // the sticky purchase rail below — Astryx layout primitives expose no sticky
 // prop yet (core issue #2613) — and nothing else in the file is styled by
 // hand. The glyphs draw from @astryxdesign/template-icons through the Icon
-// wrapper; directional icons mirror under RTL; sample
+// wrapper, each by meaning; directional icons mirror under RTL; sample
 // media rides the shipped fixture images.
 
 'use client';
@@ -318,18 +318,25 @@ const PREVIEW_LESSONS = MODULES.flatMap(module =>
 );
 // The copy counts that list rather than naming a fixed number, and it
 // says "the preview lessons" rather than "the first lessons", so it stays
-// true when a copy badges a lesson further down the syllabus.
-function previewCount(count: number): string {
+// true when a copy badges a lesson further down the syllabus. The noun
+// agrees with the count, so a copy that badges a single lesson reads
+// "one preview lesson" and not "one preview lessons".
+function previewLessons(count: number): string {
   if (count === 1) {
-    return 'one';
+    return 'one preview lesson';
   }
   if (count === 2) {
-    return 'two';
+    return 'two preview lessons';
   }
   if (count === 3) {
-    return 'three';
+    return 'three preview lessons';
   }
-  return String(count);
+  return `${count} preview lessons`;
+}
+
+// The poster line opens the phrase, so it carries the capital.
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 const STAR_COUNTS = [
   {stars: 5, count: 1042},
@@ -515,8 +522,7 @@ function CourseHead() {
             onClick={() => setPreviewOpen(true)}
           />
           <Text type="supporting" color="secondary">
-            {previewCount(PREVIEW_LESSONS.length)} preview lessons · no card
-            needed
+            {`${capitalize(previewLessons(PREVIEW_LESSONS.length))} · no card needed`}
           </Text>
         </HStack>
       </VStack>
@@ -530,9 +536,9 @@ function CourseHead() {
           header={
             <DialogHeader
               title="Preview lessons"
-              subtitle={`The ${previewCount(
-                PREVIEW_LESSONS.length,
-              )} preview lessons are free — no card needed.`}
+              subtitle={`The ${previewLessons(PREVIEW_LESSONS.length)} ${
+                PREVIEW_LESSONS.length === 1 ? 'is' : 'are'
+              } free — no card needed.`}
               hasDivider
               onOpenChange={setPreviewOpen}
             />
@@ -1202,9 +1208,9 @@ function ClosingBand() {
               Watch lesson one tonight. Decide in the morning.
             </Heading>
             <Text type="body" color="secondary">
-              The {previewCount(PREVIEW_LESSONS.length)} preview lessons are
-              free, the project ships with your enrolment, and the first cohort
-              starts in March.
+              {`The ${previewLessons(PREVIEW_LESSONS.length)} ${
+                PREVIEW_LESSONS.length === 1 ? 'is' : 'are'
+              } free, the project ships with your enrolment, and the first cohort starts in March.`}
             </Text>
             <HStack gap={2} wrap="wrap">
               <Button
