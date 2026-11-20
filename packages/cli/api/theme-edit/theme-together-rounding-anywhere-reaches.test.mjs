@@ -80,6 +80,8 @@ describe('answers that hold together', () => {
       expect(r.first).toEqual(['set n corners square']);
       expect(r.text).toMatch(/squares the pills too \([^)]*badge/);
       expect(r.text).toMatch(/circles keep their shape \([^)]*avatar/);
+      // (The parts said after it are answered, never named as not used.)
+      expect(r.text).not.toMatch(/not used/);
       expect((await answer('corners square')).first).toEqual([
         'set n corners square',
       ]);

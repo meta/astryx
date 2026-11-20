@@ -16223,15 +16223,19 @@ export function draftAnswer(ctx, env, question) {
         }
       }
     }
-    // A part with no aspect: what it reads.
+    // A part with no aspect: what it reads. The lookup answers its clause,
+    // so the clause is never named as not used.
     if (c.parts.length && !c.aspects.length) {
       for (const p of c.parts.slice(0, 2))
-        if (TARGET.has(one(p.on)))
-          drafts.push({
+        if (TARGET.has(one(p.on))) {
+          const lookup = {
             text: `what ${p.on} reads`,
             options: [],
             lookup: `${HOW} ${p.on}`,
-          });
+          };
+          drafts.push(lookup);
+          draftClause.set(lookup, c);
+        }
       continue;
     }
     // "combobox rounder": a word a component's doc lists, as the subject of
