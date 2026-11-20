@@ -39,3 +39,14 @@
   height: 100% !important;
   min-height: 100% !important;
 }
+
+/* A gallery tile is a still picture of the page, scaled down. Recharts draws
+   a line in with a dash pattern in px. It measures the line in the scaled
+   box, so the line stops part way until the animation ends. The tile shows
+   the whole line. A dash pattern that a series sets has no unit, so it
+   shows when the series does not draw in. While a dashed series draws in,
+   Recharts writes its pattern in px too, so the tile shows that line solid
+   until the draw-in ends. */
+.still :global(.recharts-line-curve[stroke-dasharray$='px']) {
+  stroke-dasharray: none;
+}
