@@ -40,7 +40,7 @@ function buildSchemas() {
             {message: 'words must be lower-case and trimmed'},
           ),
         )
-        .min(1, 'a definition must have at least one word'),
+        .min(1, 'a meaning must have at least one word'),
       builtIn: z.literal(true).optional(),
       group: nonBlank('group')
         .regex(
@@ -51,7 +51,7 @@ function buildSchemas() {
       replaces: nonBlank('replaces')
         .regex(
           ICON_DEFINITION_NAME_RE,
-          'replaces must name a definition in camelCase',
+          'replaces must name a meaning in camelCase',
         )
         .optional(),
       stability: z.literal('experimental').optional(),

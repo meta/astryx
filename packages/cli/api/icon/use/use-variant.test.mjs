@@ -180,11 +180,11 @@ describe('iconUse with a variant', () => {
     ).rejects.toMatchObject({
       code: 'ERR_INVALID_ARGUMENT',
       message:
-        'Icon set "@acme/lines/lines" declares no variants: it draws one variant, so it takes no --variant.',
+        'Icon set "@acme/lines/lines" declares no variants, so it takes no --variant.',
       suggestions: [
         {
           name: 'astryx experimental icon use lines --backup glyphs',
-          reason: 'use it in its one variant',
+          reason: 'use it as it is',
         },
       ],
     });
@@ -236,7 +236,7 @@ describe('the project variant in astryx.config and icon --list', () => {
   it('refuses a variant without the sets it is the variant of', async () => {
     const dir = project({config: {experimental: {iconVariant: 'solid'}}});
     await expect(Project.load(dir)).rejects.toThrow(
-      /experimental\.iconVariant.*iconVariant is the look of the icon sets experimental\.iconSet names/su,
+      /experimental\.iconVariant.*iconVariant is the variant of the icon sets experimental\.iconSet names/su,
     );
   });
 

@@ -1703,7 +1703,7 @@ export function checkIconSets(ctx) {
       status: 'fail',
       message:
         declared.length === 0
-          ? `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured ?? choice.set.name} declares no variants: it draws one variant.`
+          ? `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured ?? choice.set.name} declares no variants, so it has none to pick.`
           : `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured ?? choice.set.name} declares no such variant. Its variants: ${declared.join(', ')}.`,
       fix:
         declared.length === 0

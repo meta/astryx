@@ -79,7 +79,7 @@ export const doc = {
     {
       type: 'icon.definitions',
       description:
-        "With meanings: every Astryx icon meaning, with whether it is built in, its description, its words, its `group` and the meaning it `replaces` when it has them, how many bundled templates use it (`templates`), and, when `set` names the set checked, whether that set's `map` names it (`mapped`).",
+        "With `definitions`: every Astryx icon meaning, with whether it is built in, its description, its words, its `group` and the meaning it `replaces` when it has them, how many bundled templates use it (`templates`), and, when `set` names the set checked, whether that set's `map` names it (`mapped`).",
     },
     {
       type: 'icon.setIcons',

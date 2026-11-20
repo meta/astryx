@@ -50,7 +50,7 @@ export const doc = {
       name: 'options.pairs',
       type: 'string | string[]',
       description:
-        'Many entries at once: `<definition>=<icon>` pairs separated by commas or spaces, with no meaning or icon argument; each icon is named as the icon argument is. Every pair is checked before any is written.',
+        'Many entries at once: `<meaning>=<icon>` pairs separated by commas or spaces, with no meaning or icon argument; each icon is named as the icon argument is. Every pair is checked before any is written.',
     },
   ],
   returns: [

@@ -836,7 +836,7 @@ describe('experimental icon use', () => {
       '[ok] experimental.iconVariant is now "solid": every icon draws its solid variant where its set has one.',
     );
     expect(used.stdout).toContain(
-      '[note] @acme/lines/lines declares no variants: its icons draw its one variant.',
+      '[note] @acme/lines/lines declares no variants, so its icons draw as they are.',
     );
     expect(used.stdout).toContain(
       "A theme draws the built-in icons in this variant with `icons: themeIconsSolid` (import {themeIconsSolid} from '@acme/glyphs').",
@@ -3746,7 +3746,7 @@ describe('a refresh from a library root keeps what it does not rewrite', () => {
     );
   });
 
-  it('keeps a variant variant on its subpath when the subpath export has the same name as a root export but is another file', async () => {
+  it('keeps a look variant on its subpath when the subpath export has the same name as a root export but is another file', async () => {
     // The solid subpath exports the root's names, with other artwork.
     addExports({'./solid': './solid/index.js'});
     fs.mkdirSync(path.join(lib(), 'solid'), {recursive: true});

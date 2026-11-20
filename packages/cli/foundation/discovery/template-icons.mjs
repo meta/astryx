@@ -354,7 +354,7 @@ function specifierText(entry) {
  */
 export function placeholderFixes(definitions, main, backups = [], variant) {
   return [
-    `astryx experimental icon map ${definitions[0] ?? '<definition>'} <icon> --set ${main}`,
+    `astryx experimental icon map ${definitions[0] ?? '<meaning>'} <icon> --set ${main}`,
     iconUseCommand(main, [...backups, '<set>'], variant),
   ];
 }

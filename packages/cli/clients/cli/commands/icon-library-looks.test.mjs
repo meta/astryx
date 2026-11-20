@@ -977,7 +977,7 @@ describe('the default variant over an existing set', () => {
 });
 
 describe('add <Export> for a glyph the set already wraps in another variant', () => {
-  it('lists commands that run as printed: a meaning under the variant-kept name, or a variant of the glyph', async () => {
+  it('lists commands that run as printed: a meaning under the look-kept name, or a variant of the glyph', async () => {
     writeVectorLibrary(GLYPHS);
     await json([...NEW_SET, '--variants', 'outline,filled']);
     expect(generatedOf('brand')).toContain(
@@ -1506,7 +1506,7 @@ describe('the default variant on every path', () => {
       .replaceAll('<module>', lib.moduleOf(variant))
       .replaceAll('<Export>', lib.exportOf('Search', variant))
       .replaceAll('<icon>', pair?.icon ?? 'search')
-      .replaceAll('<definition>', pair?.definition ?? 'search');
+      .replaceAll('<meaning>', pair?.definition ?? 'search');
   }
 
   /**
@@ -1911,7 +1911,7 @@ describe('the default variant on every path', () => {
         // Every icon's own export comes from this module: the variant is
         // the look they draw now, the default the set must declare.
         expect(res.body.error).toBe(
-          `"${lib.moduleOf(looks.drawn)}" is the module the ${GLYPHS.length} icons of "brand" come from: its exports are those icons in the variant they draw now, so "${looks.drawn}" is that variant and can't be a variant of them. "brand" declares no default variant; declare "${looks.drawn}" as the default first.`,
+          `"${lib.moduleOf(looks.drawn)}" is the module the ${GLYPHS.length} icons of "brand" come from: its exports already draw those icons as "${looks.drawn}", so "${looks.drawn}" can't be another variant of them. "brand" declares no default variant; declare "${looks.drawn}" as the default first.`,
         );
         expect(suggestions).toEqual([
           `astryx experimental icon new-set brand --variants ${looks.drawn},${looks.other} --default-variant ${looks.drawn}`,

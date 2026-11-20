@@ -920,7 +920,7 @@ describe('the local placeholder', () => {
     ).toEqual([{local: 'MissingIcon', meanings: null}]);
   });
 
-  it('placeholderUses ignores a variant-alike, a commented-out copy and a quoted copy', () => {
+  it('placeholderUses ignores a look-alike, a commented-out copy and a quoted copy', () => {
     const lookAlike = placeholderDeclaration('MissingIcon').replace(
       'width="1em"',
       'width="2em"',

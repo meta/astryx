@@ -265,7 +265,7 @@ function unencodedMove(name, count, current, looks) {
 function droppedDefault(name, count, current, looks, from) {
   const others = looks.variants.filter(variant => variant !== current);
   return new AstryxError(
-    `--variants (${looks.variants.join(', ')}) leaves out "${current}", the default variant of icon set "${name}". Its icons' export names name no variants, so each of its ${count} icons still draws "${current}", the variant its icons' module draws. List "${current}" in --variants, and add each other variant as a variant from the module that draws it (fill <module> with that module).`,
+    `--variants (${looks.variants.join(', ')}) leaves out "${current}", the default variant of icon set "${name}". Its icons' export names name no variants, so each of its ${count} icons still draws "${current}", the variant its icons' module draws. List "${current}" in --variants, and add each other variant from the module that draws it (fill <module> with that module).`,
     [
       {
         name: `astryx experimental icon new-set ${name}${from} --variants ${[current, ...others].join(',')}`,
@@ -350,7 +350,7 @@ export function resolveDefaultLook({
   const words = now != null ? now.words : preferredLook(positions, []);
   const look = drawnWord(positions, words, given.variants);
   if (look == null || !given.variants.includes(look)) {
-    const shown = look ?? '<look>';
+    const shown = look ?? '<variant>';
     throw new AstryxError(
       `None of --variants (${given.variants.join(', ')}) is the variant ${now != null ? `the set's ${now.icons} icons draw` : `${module} is wrapped in by default`} ("${shown}"), and each icon's own export draws the default variant. List it in --variants, or name the default with --default-variant.`,
       [
@@ -458,7 +458,7 @@ export function checkVariantLook({set, variant, module, positions, drawn}) {
   const drawnHere = index >= 0 ? drawn?.words[index] : null;
   if (set.data.default?.variant === variant || drawnHere === variant) {
     throw new AstryxError(
-      `"${variant}" is the variant each icon's own export in "${set.name}" already draws${set.data.default?.variant === variant ? ' (its default variant)' : ''}, so a variant of it would export the same artwork twice.`,
+      `"${variant}" is the variant each icon's own export in "${set.name}" already draws${set.data.default?.variant === variant ? ' (its default variant)' : ''}, so adding it as a variant would export the same artwork twice.`,
       undefined,
       ERROR_CODES.ERR_INVALID_ARGUMENT,
     );

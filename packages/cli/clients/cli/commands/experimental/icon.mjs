@@ -219,7 +219,7 @@ export function registerExperimentalIcon(group, program) {
             ]
           : []),
         text(
-          `Built-in meanings are the ones every set maps; "N templates" counts the bundled templates that use one. Map one: ${run} experimental icon map <definition> <icon id> --set <set>`,
+          `Built-in meanings are the ones every set maps; "N templates" counts the bundled templates that use one. Map one: ${run} experimental icon map <meaning> <icon id> --set <set>`,
         ),
       );
       return answered;
@@ -237,7 +237,7 @@ export function registerExperimentalIcon(group, program) {
           ),
         ),
         text(
-          `Map one: ${run} experimental icon map <definition> <id> --set ${set}`,
+          `Map one: ${run} experimental icon map <meaning> <id> --set ${set}`,
         ),
       );
       return answered;
@@ -305,7 +305,7 @@ export function registerExperimentalIcon(group, program) {
               : {}),
             ...(look
               ? {
-                  look: `no ${look.asked} variant; draws ${look.used ?? 'its one variant'}`,
+                  look: `no ${look.asked} variant; draws ${look.used ?? 'its own export'}`,
                 }
               : {}),
             ...(variants.length > 0
@@ -619,7 +619,7 @@ export function registerExperimentalIcon(group, program) {
                 text(
                   look.variant
                     ? `[note] ${look.set} declares no "${data.variant}" variant: its icons draw its default variant, ${look.variant}.`
-                    : `[note] ${look.set} declares no variants: its icons draw its one variant.`,
+                    : `[note] ${look.set} declares no variants, so its icons draw as they are.`,
                 ),
               ),
             ...(data.themeMap

@@ -759,7 +759,7 @@ async function addVariantForAll({cwd, from, selector, variant}) {
       ...(set.data.variants ?? []).filter(each => each !== variant),
     ];
     throw new AstryxError(
-      `"${source.module}" is the module the ${own.length} icons of "${set.name}" come from: its exports are those icons in the variant they draw now, so "${variant}" is that variant and can't be a variant of them. "${set.name}" declares no default variant; declare "${variant}" as the default first.`,
+      `"${source.module}" is the module the ${own.length} icons of "${set.name}" come from: its exports already draw those icons as "${variant}", so "${variant}" can't be another variant of them. "${set.name}" declares no default variant; declare "${variant}" as the default first.`,
       [
         {
           name: `astryx experimental icon new-set ${set.name} --variants ${variants.join(',')} --default-variant ${variant}`,
