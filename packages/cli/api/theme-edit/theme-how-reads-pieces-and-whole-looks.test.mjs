@@ -660,6 +660,13 @@ describe('a plural display step when two or all looks are fluid', () => {
         const none = JSON.stringify((await answer('display headings bigger')).results);
         expect(none).toMatch(/display-1, display-2, display-3 not changed: their sizes are no length now/);
         expect(none).not.toMatch(/say it as a part and a look/);
+        // (Only a size ask alone takes that answer: a font or an alignment
+        // keeps its own, and a color said with the size is still named.)
+        for (const ask of ['display headings in Georgia', 'display headings centered'])
+          expect(JSON.stringify((await answer(ask)).results), ask).not.toMatch(/not changed: their sizes are no length/);
+        const both = JSON.stringify((await answer('display headings bigger and blue')).results);
+        expect(both).toMatch(/display-1, display-2, display-3 not changed/);
+        expect(both).toMatch(/not used: \\"blue\\"/);
       } finally {
         for (const n of [1, 2, 3])
           await themeEditUndo('t', {cwd, thing: `--text-display-${n}-size`});
