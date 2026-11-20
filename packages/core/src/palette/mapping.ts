@@ -19,8 +19,7 @@ import {
   perceptualDelta,
 } from './generator';
 import type {TonalPaletteCandidate, TonalPaletteGenerationInput} from './types';
-import type {DerivedState} from './derive-look';
-import type {EditorLookResult, PaletteEditorRules} from './editor-look';
+import {deriveLookColors, type DerivedState} from './derive-look';
 
 export type PaletteMode = 'light' | 'dark';
 type ColorTriple = [number, number, number];
@@ -86,14 +85,12 @@ export interface PaletteMappingContext {
   base?: PaletteBase;
   /**
    * The theme editor's own rules, beyond `themePalette()`'s mapping: the
-   * colors a look grows (category and chart colors, the status roles a
-   * theme leaves unset, code colors), the slider track, and a base theme's
-   * own pairs kept readable for those colors. They never change a token
-   * `themePalette()` maps. The editor passes its own rules module
-   * (editor-look) here, so an app that imports only `themePalette()` ships
-   * none of them.
+   * colors a look grows (category, chart, status roles left unset, code
+   * colors), the slider track and the inverted error fill, tinted inks,
+   * coloured cards keeping their own secondary text, and a base theme's own
+   * pairs kept readable.
    */
-  editor?: PaletteEditorRules;
+  editor?: boolean;
   /** Whether a token exists, so the mapping sets it. */
   has: (token: string) => boolean;
   reader: PaletteColorReader;
@@ -1602,21 +1599,57 @@ export function mapPalette(
     }
   }
 
-  // The colors the theme editor grows beyond this mapping, from its own
-  // rules (context.editor, which themePalette() never passes): the look's
-  // category, chart and code colors, the status roles the theme leaves
-  // unset, and a base theme's own pairs kept where they read.
-  const {categories}: EditorLookResult = context.editor
-    ? context.editor.growLook({
-        candidate,
-        dials,
-        context,
-        tokens,
-        modes,
-        setExactly,
-        t,
-      })
-    : {categories: {badges: 'none', chart: 'none', merged: [], unreadable: []}};
+  const categories: PaletteMapping['categories'] = context.editor
+    ? mapCategories()
+    : {badges: 'none', chart: 'none', merged: [], unreadable: []};
+  /**
+   * The category colors (Badge, Token and Card tints) and the chart colors
+   * the palette derives (deriveLookColors), written as its shades. A token
+   * the theme sets by hand keeps its value; a set the palette cannot
+   * draw readable and apart keeps the base theme's.
+   */
+  function mapCategories(): PaletteMapping['categories'] {
+    /** The theme's color for a token in a mode. */
+    const themeColor = (k: string, m: PaletteMode): string | null => {
+      const v =
+        exactOf(k, m) ??
+        tokens[k]?.[m]?.color ??
+        t.colorIn(base?.[m]?.[k] ?? '', m);
+      return v && parseColor(v) && alphaOf(v) >= 1 ? v : null;
+    };
+    const derived = deriveLookColors({
+      palette: candidate.palette as unknown as Record<
+        string,
+        Record<PaletteMode, Record<string | number, string>>
+      >,
+      stops,
+      modes,
+      text: m =>
+        // Card text, secondary text and links all sit on a card tint.
+        [
+          '--color-text-primary',
+          '--color-text-secondary',
+          '--color-text-accent',
+        ]
+          .map(k => themeColor(k, m))
+          .filter((c): c is string => Boolean(c)),
+      grounds: m => surfaces(m, 'neutral').map(([, c]) => c),
+      wanted: k => has(k) && !setExactly(k),
+    });
+    for (const [k, v] of Object.entries(derived.tokens)) {
+      tokens[k] = {family: v.family, light: v.light, dark: v.dark};
+    }
+    return {
+      badges: derived.badges,
+      chart: derived.chart,
+      merged: derived.merged,
+      unreadable: derived.unreadable.map(
+        u =>
+          `${u.token} reads at only ${u.ratio}:1 in ${u.mode} (needs ${u.needs}:1)`,
+      ),
+    };
+  }
+
   return {
     tokens,
     contrast: checks.filter(c => c.note !== ''),
