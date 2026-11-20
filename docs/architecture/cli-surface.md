@@ -163,8 +163,8 @@ and remains available through explicit Core package selection.
   prints the short answer, the `--detail compact` level: the description's
   first paragraph, the import, a usage line, each prop with its description's
   first sentence, the accessibility requirements, the component's pieces, a
-  hook's returns, and as its last line the `--detail full` command that prints
-  the whole doc.
+  hook's parameters and returns, and as its last line the `--detail full`
+  command that prints the whole doc.
   `component <Name> --props` prints each prop description whole. A list prints
   `brief` and a hook or docs read prints `full` when no `--detail` is given.
   The detail level never changes a component read's JSON. A field shown in
@@ -327,7 +327,12 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   a POSIX system; never a temp folder that is a disk's root or holds the home
   folder), under the checks a write in the project has: no link carries it out
   of that folder, and an existing file is replaced only with `--overwrite`
-  (DEC-15). The one HTML file `astryx experimental export` writes may also go
+  (DEC-15). For `astryx template <name> <path>` and `--cdn <path>`, a
+  destination that is `~`, or starts with `~/` or `~\`, names the home folder,
+  as a shell reads it, and then follows the rules of an absolute path; a
+  destination written that way never makes a folder named `~` in the project.
+  Reading it so is a compatible `[fix]`. The one HTML file
+  `astryx experimental export` writes may also go
   to an absolute path the caller names with `--out`, in any folder; it never
   replaces a file that a render did not write (DEC-16).
 - **INV10a — Refusing a write outside its confined root is a compatible fix.**
@@ -391,39 +396,107 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
   from source (`withAstryx()`, `astryxStylex()`, an `@astryx;` rule, or an
   `@stylex;` rule with `@astryxdesign/build` in the PostCSS config) gets
   neither warning.
+- **INV41 — `astryx doctor` warns on a Core button that does nothing when
+  pressed.** In a project on Core, `doctor` reads the app's own source as
+  syntax trees and never runs it; it leaves out test, story and fixture files,
+  and it reports no button in a folder named `test`, `tests`, `stories`,
+  `fixtures` or `e2e`, though it reads those folders for where they render
+  components. When the project has more source files than `doctor` reads, the
+  check does not run and says so. The `button-actions` check warns for each
+  `Button` or `IconButton` from `@astryxdesign/core` that has no `onClick`,
+  `clickAction`, `href`, or `submit` or `reset` type, or whose handler does
+  nothing (an empty body, or a body that only returns `null`, `undefined` or
+  `void 0`) or whose link goes nowhere, and that nothing around it can act on.
+  A link goes nowhere when it is an empty link, a `javascript:` link, or `#`,
+  except in an app that routes by the URL hash (it imports a hash router or a
+  hash history, or listens for `hashchange`), where `#` opens the first page.
+  Nothing acts on a button when each element around it is a Core layout
+  component, a React wrapper, a package's provider, an object's `Provider`,
+  such as a React context's (not one read off a namespace or default import of
+  the app's own module), or HTML that holds no control, that no script defines
+  (a custom element, or an element with an `is` attribute) and that has no
+  handler, link, widget role or spread props, none of them disabled or inert,
+  and when each place the app renders the component that holds it is the same;
+  relative imports (where `.` and `..` name the folder they read), path
+  aliases and package.json `imports` are followed to the app's own code. The
+  check reads a folder named `build`, `dist` or `coverage` except in a folder
+  with a package.json, where a build writes its output; when the walk skips a
+  linked folder or source file, no component counts as one that nothing
+  renders. A component that nothing in the app renders or refers to, while its
+  module exports it, is a page or an entry point, and nothing is around it.
+  The check does not report a button that it cannot judge: one with props
+  spread in, a ref, an id, a tooltip, a disabled or loading state, or a prop
+  it does not know; one that holds content that may act, such as an HTML
+  control, a custom element, another package's component other than an icon
+  (an export named like `PencilIcon`), or content the scan cannot read
+  anywhere in it (`{children}`, `{children ?? 'Start'}`, or an element prop
+  that holds a variable or a call); one inside an element, or a prop of an
+  element, that it does not trust; or one in a component that the app refers
+  to in a way the scan cannot follow, such as through `lazy` or `import()`
+  (directly or through a module that passes its exports on), a list of
+  components, a prop, a namespace read as a value, a renamed re-export, a
+  `require()`, a module path only a bundler resolves, or the package name of a
+  workspace member (a package.json in a folder of the project, installed or
+  not); one in a module that another module may load by a path the scan cannot
+  read (a computed `import()` or `require()` path, `import.meta.glob` or
+  `require.context`, which may load any module in the folder the path starts
+  in (for a path joined with `+`, the folder its first part names): the
+  loading module's own folder when the scan reads none of the path, the
+  project folder for a root path (`/src/…`), or any module when the path
+  starts with an alias, while a glob of data, style or image files, or a
+  tool's config file beside a package.json (`next.config.js`), loads no
+  component; an MDX or Astro page, or a module that does not parse, counts as
+  loading by such a path); or one that an MDX or Astro page names. A module
+  that imports a component and exports it again under the same name passes it
+  on, as a re-export does, and so does a barrel that a module may load by such
+  a path; and a component that the module refers to other than by rendering
+  it, in any function or block, is not judged. A React Router `Route` renders
+  its `element` where its `Routes` sit: a router (`BrowserRouter`,
+  `HashRouter`, `MemoryRouter`, `Router` or `StaticRouter`), `Routes`, and a
+  `Route` with only props that match a path (`path`, `index`, `caseSensitive`,
+  `id`, `key`) render what they hold in place, and a route nested in any other
+  `Route` (one with an `element`, a `Component` or a `lazy` load) renders in
+  that route's `Outlet`, which the check does not follow, so it is not judged.
+  A hash router named only in a comment is not hash routing. When the app's
+  own code listens for a press through the DOM (`addEventListener`, also
+  called as `?.()`, `.call()` or `.apply()`, for a click, or a pointer, mouse
+  or touch press, or for an event that a variable names; a library's `.on()`
+  for such a press; or an `onclick`-style property), doctor judges no button
+  and reports `info`, since a script may act on any button that way. The
+  warning names each button's file, line and label, and never fails `doctor`.
 - **INV42 — `astryx doctor` warns on a prop a Core component does not take.**
   In a project on Core, `doctor` reads the app's own source as syntax trees
   and never runs it; it leaves out test, story and fixture files (`.test.`,
-  `.spec.`, `.stories.` and `.story.` modules) and the folders named `test`,
-  `tests`, `stories`, `fixtures`, `e2e`, `__tests__`, `__mocks__`,
-  `__fixtures__` or `__stories__`. It reads each prop the source gives a
-  component imported from `@astryxdesign/core` or one of its subpaths, except
-  `key`, `ref`, `children`, the styling props and any name with a hyphen
-  (`data-`, `aria-` and others), which JSX never checks against a props type.
-  A prop that Core's docs for the component do not list is a candidate. The
-  `core-props` check reads Core's own published types with the project's own
-  TypeScript, as the page's config has TypeScript read them: Core and React as
-  the page finds them from its own folder, with the docs of that Core, each
-  component from the module path the page imports it from, the type packages
-  that config names, the files of the project and of the installed theme and
-  integration packages of the project and of the page's own package that
-  augment Core's modules, and the project's own modules that widen React's
-  JSX. It warns on a candidate only when TypeScript says the component's props
-  do not take it. It never warns on a prop name that React's types give an
-  HTML or SVG element, which a component can pass on to the element it
-  renders, or on a prop that JSX gives every component. It does not judge a
-  component that Core's docs do not describe, one whose type TypeScript cannot
-  read, a generic one, or one from outside Core, and it does not judge a
-  module whose `@jsxImportSource` or `@jsx` pragma names another JSX runtime,
-  a page whose config maps the Core module path it imports elsewhere
-  (`paths`), or a page that finds no installed Core. When the project has no
-  TypeScript that it can use, has a `tsconfig` or `jsconfig`, read by a page
-  that imports Core, whose `jsxImportSource` or `jsxFactory` names another
-  runtime, has a build config in the folder of such a page or a folder above
-  it, up to the workspace root (as `spec:AST-048` FR15 defines it) (Babel,
-  SWC, Vite, Vitest, esbuild, webpack, Rspack, Rsbuild, Next.js or tsup, or
-  the `babel` key of a `package.json`), that sets another JSX runtime or
-  factory (or Next.js's `styledComponents` option), has a `package.json` in
+  `.spec.`, `.cy.`, `.fixture.`, `.stories.` and `.story.` modules) and the
+  folders named `test`, `tests`, `stories`, `fixtures`, `e2e`, `__tests__`,
+  `__mocks__`, `__fixtures__` or `__stories__`. It reads each prop the source
+  gives a component imported from `@astryxdesign/core` or one of its subpaths,
+  except `key`, `ref`, `children`, the styling props and any name with a
+  hyphen (`data-`, `aria-` and others), which JSX never checks against a props
+  type. A prop that Core's docs for the component do not list is a candidate.
+  The `core-props` check reads Core's own published types with the project's
+  own TypeScript, as the page's config has TypeScript read them: Core and
+  React as the page finds them from its own folder, with the docs of that
+  Core, each component from the module path the page imports it from, the type
+  packages that config names, the files of the project and of the installed
+  theme and integration packages of the project and of the page's own package
+  that augment Core's modules, and the project's own modules that widen
+  React's JSX. It warns on a candidate only when TypeScript says the
+  component's props do not take it. It never warns on a prop name that React's
+  types give an HTML or SVG element, which a component can pass on to the
+  element it renders, or on a prop that JSX gives every component. It does not
+  judge a component that Core's docs do not describe, one whose type
+  TypeScript cannot read, a generic one, or one from outside Core, and it does
+  not judge a module whose `@jsxImportSource` or `@jsx` pragma names another
+  JSX runtime, a page whose config maps the Core module path it imports
+  elsewhere (`paths`), or a page that finds no installed Core. When the
+  project has no TypeScript that it can use, has a `tsconfig` or `jsconfig`,
+  read by a page that imports Core, whose `jsxImportSource` or `jsxFactory`
+  names another runtime, has a build config in the folder of such a page or a
+  folder above it, up to the workspace root (as `spec:AST-048` FR15 defines
+  it) (Babel, SWC, Vite, Vitest, esbuild, webpack, Rspack, Rsbuild, Next.js or
+  tsup, or the `babel` key of a `package.json`), that sets another JSX runtime
+  or factory (or Next.js's `styledComponents` option), has a `package.json` in
   such a folder that depends on a transform that compiles a `css` prop
   (emotion's css-prop preset, the styled-components Babel or SWC plugin, or a
   Compiled plugin or loader) or has such a transform installed where the
@@ -1252,6 +1325,34 @@ Rejected: leaving remote images to the viewer (a sandboxed viewer shows them
 broken), and carrying a fetched image in the embedded source (the way back
 would no longer be the page as written).
 
+### DEC-19 — A render keeps a theme that draws in one mode in that mode
+
+**Decider:** `josephfarina`, `2026-11-18`
+
+A rendered page is one file that shows the page in any viewer. A page whose
+root theme draws in one mode is readable only in that mode: in a viewer of the
+other scheme, its text sits on the viewer's own canvas. So `astryx experimental
+export` writes one color scheme when the page's root theme is a built theme
+that draws in one mode, and paints the theme's page color on the document. A
+built theme is one whose compiled stylesheet the page imports, directly or
+through an `@import`. A theme passed to `Theme` unbuilt injects its CSS only
+at run time, which the render does not read: only what the page's own
+stylesheets set on that theme's root decides, by the same rule. The theme module's
+`colorModes` export decides, read without running the module. A theme with no
+`colorModes` export draws in one mode when every page and text color its root
+rule sets is a fixed color (an opaque one, for a page color) and all of them
+read as that mode by their lightness (a light page or dark text is light, a
+dark page or light text is dark), and no stylesheet that names the theme sets a
+page or text color under a light or dark condition. A media surface's own
+colors (`data-astryx-media`) do not count.
+Every other theme, and a page with no theme, keeps both schemes, and its file
+is written as before. The theme editor's previews keep both schemes, because
+the editor shows each mode itself.
+
+Rejected: following the viewer for every page (a one-mode theme is unreadable
+in the other scheme), and running the theme module to read its modes (a render
+runs no theme code).
+
 ## Verification
 
 | Invariant | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
@@ -1287,6 +1388,7 @@ would no longer be the page as written).
 | INV36     | `api/gap-report/gap-report.test.mjs`, `clients/cli/commands/gap-report.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                           | A run without `--to` reaches an `issuesUrl` the handlers did not choose, `--to` runs a handler or files on GitHub without `--confirm-public`, an unknown `--to` sends anything, or the destinations list or its line telling the agent to ask the person is missing while a destination exists.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | INV37     | `api/integration/validate-integration.test.mjs`, `api/integration/validate-integration-fixes.test.mjs`, `api/integration/pack-check.test.mjs`                                                                                                                                                                                                                                                                                                                              | A top-level source with no doc passes `--strict` (a dotted template id such as `landing.page` included), or a test, spec or story file or a subfolder helper is flagged.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | INV39     | `api/doctor/doctor.test.mjs`, `api/doctor/built-checks.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                                           | An app with no import of or link to Core's `astryx.css` passes `core-stylesheets`, output that uses Astryx without Core's component styles passes `built-astryx-styles`, or an app that compiles Core from source is warned by either.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| INV41     | `foundation/discovery/button-actions.test.mjs`, `api/doctor/button-actions.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                       | A button with an action, one inside a link, a press handler, a trigger prop or an element the scan does not trust, or one in a test or story file is reported; a button with no action in a layout, a page or an entry point is not; or a Core layout component the scan trusts listens for a press or clones what it renders.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | INV42     | `foundation/discovery/core-props.test.mjs`, `api/doctor/core-props.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                               | A prop a Core component takes, an HTML or ARIA attribute, a prop Core's types take that its docs leave out, a prop JSX gives every component (from the project's own modules or a type package its config names), a generic component's prop, another component's prop, or a test file's prop is reported; a prop a Core component does not take is not; or the check runs without TypeScript or on another JSX runtime.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 ## Open questions

@@ -65,6 +65,7 @@ import {
   pkgOf,
   replaceDemoContent,
 } from '../../../packages/cli/foundation/discovery/template-adapter.mjs';
+import {fillTemplatePlaceholders} from '../../../packages/cli/foundation/discovery/template-placeholders.mjs';
 import docsiteConfig from '../astryx.config.mjs';
 import {
   integrationContentEnabled,
@@ -1311,10 +1312,13 @@ function generateComponentPreviewRegistry(allComponents) {
   );
   const entries = packageNames
     .flatMap(packageName =>
-      allComponents[packageName].map(
-        component =>
-          `  ${JSON.stringify(component.name)}: namedLazy(${JSON.stringify(component.name)}, () => import(${JSON.stringify(packageName)}).then(module => module.${component.moduleName} as PreviewComponent)),`,
-      ),
+      allComponents[packageName]
+        // A hook entry carries `params`; a hook renders nothing to preview.
+        .filter(component => component.params == null)
+        .map(
+          component =>
+            `  ${JSON.stringify(component.name)}: namedLazy(${JSON.stringify(component.name)}, () => import(${JSON.stringify(packageName)}).then(module => module.${component.moduleName} as PreviewComponent)),`,
+        ),
     )
     .join('\n');
 
@@ -1609,9 +1613,10 @@ async function generateBlockRegistry() {
     }
     // Displayed source: the Code tab, Open in Playground, and the MCP server
     // show each demo-content element as the placeholder a copy writes, and keep
-    // fixture media. The live preview renders the original file (see
+    // fixture media, and each icon placeholder as the library import a copy
+    // writes. The live preview renders the original file (see
     // writeBlockPreview). A use that cannot be replaced safely fails the build.
-    source = replaceDemoContent(source).source;
+    source = fillTemplatePlaceholders(replaceDemoContent(source).source).source;
 
     const resolvedName = meta.name || basename;
     blocks.push({
@@ -1787,8 +1792,9 @@ async function generateTemplateRegistry() {
     }
 
     // Displayed source, like each block's: the playground and the MCP server
-    // hand out the demo-content replacement a copy applies, with fixture media.
-    source = replaceDemoContent(source).source;
+    // hand out the demo-content replacement and the icon placeholder fill a
+    // copy applies, with fixture media.
+    source = fillTemplatePlaceholders(replaceDemoContent(source).source).source;
 
     templates.push({
       slug: dir.name,

@@ -131,6 +131,30 @@ describe('progressive reads', () => {
     expect(stdout).toMatch(/^## Wrap your app in a theme/m);
   }, SLOW);
 
+  it("installs the theme at the Core release the reader's project names", async () => {
+    const app = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-docs-pin-'));
+    try {
+      fs.writeFileSync(
+        path.join(app, 'package.json'),
+        JSON.stringify({
+          name: 'app',
+          dependencies: {'@astryxdesign/core': '0.7.10'},
+        }),
+      );
+      fs.writeFileSync(path.join(app, 'package-lock.json'), '{}');
+      const {status, stdout} = await runCli(
+        ['docs', 'use-a-theme', 'quick-start'],
+        app,
+      );
+      expect(status).toBe(0);
+      expect(stdout).toContain(
+        'npm install -E @astryxdesign/theme-neutral@0.7.10',
+      );
+    } finally {
+      fs.rmSync(app, {recursive: true, force: true});
+    }
+  }, SLOW);
+
   it('prints a topic whole by default; --index lists its sections', async () => {
     const whole = await runCli(['docs', 'theme']);
     expect(whole.status).toBe(0);

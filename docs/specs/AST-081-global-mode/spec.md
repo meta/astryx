@@ -545,6 +545,9 @@ works on is `spec:AST-040` FR9's.
     it names no version, no release-specific command or prop, and only entry
     points every release keeps (`search`, `docs`, `component`, and the like),
     so an older copy never misleads.
+    Inside a project that has its own Astryx text (the `astryx-project` skill,
+    or an Astryx block in AGENTS.md or CLAUDE.md), it tells the agent to follow
+    that text, which knows the project's version and setup.
     It also gives the build route the project agent docs give, through their
     shared workflow wording: work in a project folder; a new project adds
     `@astryxdesign/core` and `@astryxdesign/cli`, an existing app that does not
