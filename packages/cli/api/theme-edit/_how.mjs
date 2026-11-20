@@ -2318,7 +2318,12 @@ async function pictureLook(cwd, name, read) {
           (s.on === 'checks' ||
             (FAMILIES.checks ?? []).includes(String(s.on ?? '')))
         : aspectsOf(s.thing).some(a => aspectsOf(step.thing).includes(a)) &&
-          (!s.on || !step.on || s.on === step.on),
+          (!s.on ||
+            !step.on ||
+            s.on === step.on ||
+            // (A member of the family the reading is for, `--on button`
+            // for a button-like reading, sets it itself.)
+            (groupsOf(ctx)[step.on] ?? []).includes(s.on)),
     );
     const box = checksSize
       ? checksBoxSteps(ctx, own, Number.parseFloat(String(step.value)))
