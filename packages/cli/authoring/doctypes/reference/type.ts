@@ -169,6 +169,11 @@ export interface ReferenceDoc extends AuthoredDocGraphFields {
    *  to this doc for detailed guidance on that category.
    *  e.g. `'color'` links tokens → color foundational doc. */
   tokenCategory?: string;
+  /** Set beside `stability: 'experimental'` on one of the CLI's own guides
+   *  that `astryx search` returns, as one entry for the whole guide, while it
+   *  is experimental; spec:AST-017 FR27 names the guides that may set it.
+   *  Search reads it on no other doc. */
+  searchable?: true;
 }
 
 /**

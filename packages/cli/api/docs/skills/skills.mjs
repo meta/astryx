@@ -105,7 +105,14 @@ export async function skills({cwd = process.cwd()} = {}) {
       package: pkg,
     })),
     ...(problems.length > 0
-      ? {meta: {notes: problems.map(each => ({package: each.package, message: each.message}))}}
+      ? {
+          meta: {
+            notes: problems.map(each => ({
+              package: each.package,
+              message: each.message,
+            })),
+          },
+        }
       : {}),
   };
 }
@@ -133,7 +140,9 @@ export async function skill(name, {cwd = process.cwd()} = {}) {
   const found = list.find(each => each.name === name);
   if (found == null) {
     // A skill left out is missing for a reason the reader can fix: say it.
-    const why = problems.map(each => ` Note: ${each.package}: ${each.message}`).join('');
+    const why = problems
+      .map(each => ` Note: ${each.package}: ${each.message}`)
+      .join('');
     throw new AstryxError(
       `No skill named "${name}" here. List the skills with \`${formatCliCommand(`docs ${SKILLS_ROUTE}`, cwd)}\`.${why}`,
       list.map(each => ({
@@ -166,14 +175,17 @@ export async function skill(name, {cwd = process.cwd()} = {}) {
  * Each integration skill's SKILL.md for the project at `projectRoot`, and why
  * each skill left out was left out. `keep` names every skill still declared,
  * one whose text could not be read included, and `complete` is false when an
- * integration's docs folder could not be read: a caller removes a leftover
+ * integration's docs could not be read (see projectIntegrationSkills): a caller removes a leftover
  * copy only when `complete`, and never one `keep` names.
  * @param {string} projectRoot
  * @returns {Promise<{skills: Array<{name: string, package: string, text: string}>, problems: Array<{package: string, message: string, unread?: true}>, keep: Set<string>, complete: boolean}>}
  */
 export async function integrationSkillFiles(projectRoot) {
-  const {skills: declared, problems, complete} =
-    await projectIntegrationSkills(projectRoot);
+  const {
+    skills: declared,
+    problems,
+    complete,
+  } = await projectIntegrationSkills(projectRoot);
   /** @type {Array<{name: string, package: string, text: string}>} */
   const files = [];
   for (const each of declared) {
@@ -195,5 +207,10 @@ export async function integrationSkillFiles(projectRoot) {
       });
     }
   }
-  return {skills: files, problems, keep: new Set(declared.map(each => each.name)), complete};
+  return {
+    skills: files,
+    problems,
+    keep: new Set(declared.map(each => each.name)),
+    complete,
+  };
 }

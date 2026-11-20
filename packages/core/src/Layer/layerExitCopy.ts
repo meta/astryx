@@ -51,7 +51,6 @@ const PRESENTED_PROPERTIES = [
 /** Inline properties the copy must not keep from the live layer. */
 const LIVE_ONLY_PROPERTIES = [
   'position-anchor',
-  'position-area',
   'position-try-fallbacks',
   'inset',
   'right',

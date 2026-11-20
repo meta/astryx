@@ -495,8 +495,8 @@ const RUNNERS = {
     sites: ['import(<computed>)'],
   },
   'foundation/render/render-page.mjs': {
-    runs: "the render host process, so a page that never finishes can be stopped and a crash of Node ends only that process, a one-line Intl.Segmenter check after a crash, and the naming module of the page's own Core, to keep the theme rules for the class names Core builds while the page runs",
-    sites: ['child_process.fork', 'child_process.spawnSync', 'importUrl'],
+    runs: "the render host process, so a page that never finishes can be stopped and a crash of Node ends only that process, a one-line Intl.Segmenter check after a crash, the naming module of the page's own Core, to keep the theme rules for the class names Core builds while the page runs, and a parse check of the page's script once it reads its images from the first paint",
+    sites: ['child_process.fork', 'child_process.spawnSync', 'importUrl', 'vm.Script'],
   },
   'foundation/render/page-host.mjs': {
     runs: 'the render worker, in a thread of the host process, so the host can exit with the CLI or at its own time limit while a page loops',
@@ -596,6 +596,10 @@ const RUNNERS = {
     runs: '`astryx manifest` and the error-code and response-type docs, to write the README tables (build time, not shipped)',
     sites: ['child_process.spawnSync', 'import(<computed>)'],
   },
+  'scripts/migrate-template-icons.mjs': {
+    runs: 'Prettier, to format a template file the migration rewrites when the file was formatted before (build tooling, not shipped)',
+    sites: ['require(prettier)'],
+  },
   'scripts/generate-manifest.mjs': {
     runs: "`astryx manifest --json`, from a folder beside each package manager's lockfile, to store the manifest at `prepack` (build time)",
     sites: ['child_process.spawnSync'],
@@ -654,6 +658,7 @@ const LOADER_MODULES = {
     'mergeTopic',
     'mergeTopicReport',
     'problemsInTopic',
+    'sectionContributor',
     'withoutPosition',
     'withSourceTitle',
   ],

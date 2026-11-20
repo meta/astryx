@@ -29,16 +29,12 @@ import {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {
-  colorVars,
-  sizeVars,
-  typographyVars,
-  typeScaleVars,
-} from '../theme/tokens.stylex';
+import {colorVars, typographyVars, typeScaleVars} from '../theme/tokens.stylex';
 import {Field} from '../Field/Field';
 import {InputClearButton} from '../Field/InputClearButton';
 import {
   inputWrapperStyles,
+  inputRowSizeStyles,
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
@@ -90,17 +86,7 @@ const styles = stylex.create({
   },
 });
 
-const sizeStyles = stylex.create({
-  sm: {
-    height: sizeVars['--size-element-sm'],
-  },
-  md: {
-    height: sizeVars['--size-element-md'],
-  },
-  lg: {
-    height: sizeVars['--size-element-lg'],
-  },
-});
+const sizeStyles = inputRowSizeStyles;
 
 export type TextInputSize = keyof typeof sizeStyles;
 
