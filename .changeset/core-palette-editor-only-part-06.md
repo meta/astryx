@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[chore] `@astryxdesign/core/palette`: the theme editor's look rules (a base theme's own text and fill pairs kept readable for the look's colors, and hues leaned toward the accent and neutral) live in the editor's own module, which the editor passes to the palette mapping. `themePalette()` and `defineTheme({palette})` output is unchanged, and an app that imports only `themePalette()` ships none of these rules.
+[chore] `@astryxdesign/core/palette`: the theme editor's look rules (a base theme's own text and fill pairs kept readable, hues leaned toward the accent and neutral, a dial's own dark value, the slider track and the inverted error fill) run behind an editor-only option of the palette mapping. `themePalette()` and `defineTheme({palette})` output is unchanged.
 
 @josephfarina
