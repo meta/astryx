@@ -218,10 +218,40 @@ describe('interactionModality', () => {
 
     releaseSecond();
     expect(removeEventListener.mock.calls.map(([type]) => type).sort()).toEqual(
-      ['focusin', 'keydown', 'pointerdown'],
+      ['keydown', 'pointerdown'],
     );
     secondDocument.dispatchEvent(new Event('pointerdown'));
     expect(tracker.getInteractionModality(secondDocument)).toBe('keyboard');
+  });
+
+  it("hears a second window's focus and blur through the input stream, and stops with its last consumer", async () => {
+    const host = document.createElement('iframe');
+    document.body.append(host);
+    const secondDocument = host.contentDocument as Document;
+    const secondWindow = secondDocument.defaultView as Window;
+    const tracker = await loadTracker();
+    const documentAdd = vi.spyOn(secondDocument, 'addEventListener');
+    const windowAdd = vi.spyOn(secondWindow, 'addEventListener');
+    const windowRemove = vi.spyOn(secondWindow, 'removeEventListener');
+    try {
+      const release =
+        tracker.__trackInteractionModalityInForTest(secondDocument);
+      secondDocument.dispatchEvent(new Event('pointerdown'));
+      expect(documentAdd.mock.calls.map(([type]) => type)).not.toContain(
+        'focusin',
+      );
+      expect(windowAdd.mock.calls.map(([type]) => type).sort()).toEqual([
+        'blur',
+        'focusin',
+      ]);
+      release();
+      expect(windowRemove.mock.calls.map(([type]) => type).sort()).toEqual([
+        'blur',
+        'focusin',
+      ]);
+    } finally {
+      host.remove();
+    }
   });
 
   it('keeps hearing a second window across a release and hold in one commit', async () => {
@@ -315,7 +345,7 @@ describe('interactionModality', () => {
     // The last component in that document unmounts: tracking there stops.
     second.unmount();
     expect(removeEventListener.mock.calls.map(([type]) => type).sort()).toEqual(
-      ['focusin', 'keydown', 'pointerdown'],
+      ['keydown', 'pointerdown'],
     );
     secondDocument.dispatchEvent(new Event('pointerdown'));
     expect(tracker.getInteractionModality(secondDocument)).toBe('keyboard');
@@ -352,7 +382,6 @@ describe('interactionModality', () => {
     elementRef.current = secondDocument.createElement('div');
     rerender();
     expect(firstRemove.mock.calls.map(([type]) => type).sort()).toEqual([
-      'focusin',
       'keydown',
       'pointerdown',
     ]);
@@ -466,7 +495,6 @@ describe('interactionModality', () => {
       expect(remove).not.toHaveBeenCalled();
       await frame.render(h(Fragment, null));
       expect(remove.mock.calls.map(([type]) => type).sort()).toEqual([
-        'focusin',
         'keydown',
         'pointerdown',
       ]);

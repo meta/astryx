@@ -4,7 +4,8 @@
 
 /**
  * @file interactionModality.ts
- * @input Global pointerdown/keydown events
+ * @input Global pointerdown/keydown events, and focus and the window's blur
+ *   through the input stream
  * @output useInteractionModalityTracking, useInteractionModalityTrackingFor,
  *   and getInteractionModality, which reads how the user last interacted in a
  *   document, and isTextEntrySincePointer, which reads whether every key
@@ -34,6 +35,7 @@ import {
   type RefObject,
 } from 'react';
 import {isTextEntryControl} from '../keyboard/keyboardHeight';
+import {subscribeInput} from './inputStream';
 
 export type InteractionModality = 'keyboard' | 'pointer';
 
@@ -61,6 +63,10 @@ type InteractionModalityStore = {
   onWindowBlur?: (event: FocusEvent) => void;
   /** Whether the window's blur is heard: from the first pointer press on. */
   isHearingWindow?: boolean;
+  /** Ends the input-stream subscription for focus that comes in. */
+  stopFocusIn?: (() => void) | null;
+  /** Ends the input-stream subscription for the window's blur. */
+  stopWindowBlur?: (() => void) | null;
 };
 
 // Core's private ring switch. The shared rings read it as
@@ -98,11 +104,12 @@ function hearWindow(
   ) {
     return;
   }
+  const view = targetDocument.defaultView;
+  if (view == null) {
+    return;
+  }
   store.isHearingWindow = true;
-  targetDocument.defaultView?.addEventListener('blur', store.onWindowBlur, {
-    capture: true,
-    passive: true,
-  });
+  store.stopWindowBlur = subscribeInput(view, 'blur', store.onWindowBlur);
 }
 
 const interactionModalityStoreKey = Symbol.for(
@@ -244,11 +251,9 @@ function setListening(
       passive: true,
     });
     // A store an older bundle made has no focus listener.
-    if (store.onFocusIn != null) {
-      targetDocument.addEventListener('focusin', store.onFocusIn, {
-        capture: true,
-        passive: true,
-      });
+    const view = targetDocument.defaultView;
+    if (store.onFocusIn != null && view != null) {
+      store.stopFocusIn = subscribeInput(view, 'focusin', store.onFocusIn);
     }
     // Listening that resumes while a press has the rings off, as when a
     // consumer releases and holds again in one commit, hears the window too.
@@ -263,18 +268,12 @@ function setListening(
     targetDocument.removeEventListener('keydown', store.onKeyDown, {
       capture: true,
     });
-    if (store.onFocusIn != null) {
-      targetDocument.removeEventListener('focusin', store.onFocusIn, {
-        capture: true,
-      });
-    }
-    if (store.isHearingWindow === true && store.onWindowBlur != null) {
+    store.stopFocusIn?.();
+    store.stopFocusIn = null;
+    if (store.isHearingWindow === true) {
       store.isHearingWindow = false;
-      targetDocument.defaultView?.removeEventListener(
-        'blur',
-        store.onWindowBlur,
-        {capture: true},
-      );
+      store.stopWindowBlur?.();
+      store.stopWindowBlur = null;
     }
   }
 }
