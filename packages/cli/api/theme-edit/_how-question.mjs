@@ -18,6 +18,7 @@ import {
   alphaOf,
   compositeOver,
   hex,
+  oklabOf,
   parseColor,
   ratio,
   ratioWords,
@@ -31379,6 +31380,15 @@ export function draftAnswer(ctx, env, question) {
           !/^background(?:-color)?$/.test(st.thing) ||
           !v ||
           alphaOf(String(st.value)) < 1 ||
+          // ("a light blue tint": a color already pale, light and muted, is
+          // the tint itself, written as said; a bright color, aqua or
+          // #ffff00, is still mixed.)
+          (luminance(hex(v.slice(0, 3))) > 0.7 &&
+            Math.hypot(
+              ...oklabOf(
+                /** @type {[number, number, number]} */ (v.slice(0, 3)),
+              ).slice(1),
+            ) <= 0.07) ||
           !tints.some(
             t =>
               t.parts.has(String(st.on)) &&

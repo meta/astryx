@@ -108,6 +108,35 @@ describe('a tint word', () => {
   );
 
   it(
+    'a color already pale is the tint itself, written as said',
+    async test => {
+      needsBases(test);
+      // ("a light blue tint", "a light gray wash": the color is the tint;
+      // a 15% mix of a pale color would barely show.)
+      for (const [ask, line] of [
+        [
+          'secondary button light blue tint with blue text',
+          "background-color '#dbeafe' --on button --when variant:secondary",
+        ],
+        [
+          'header with a light gray wash',
+          "background-color '#e5e7eb' --on app-shell-header --mode light",
+        ],
+      ]) {
+        const all = await sets(ask);
+        expect(all, ask).toContain(line);
+        expect(all.join('\n'), ask).not.toMatch(/color-mix/);
+      }
+      // (A strong or bright color said as a tint still mixes.)
+      for (const ask of ['cards tinted blue', 'cards tinted aqua'])
+        expect((await sets(ask)).join('\n'), ask).toMatch(
+          /color-mix\(in srgb, #[0-9a-f]{6} 15%, transparent\)/,
+        );
+    },
+    T,
+  );
+
+  it(
     'tints a part named before the clause the tint word is in',
     async test => {
       needsBases(test);
