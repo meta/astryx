@@ -4,7 +4,7 @@
 
 import {useState} from 'react';
 import {TextArea} from '@astryxdesign/core/TextArea';
-import {PencilSquareIcon} from '@heroicons/react/24/outline';
+import {ComposeIcon} from '@astryxdesign/template-icons';
 
 export default function TextAreaWithIcon() {
   const [value, setValue] = useState('');
@@ -17,7 +17,7 @@ export default function TextAreaWithIcon() {
         value={value}
         onChange={setValue}
         placeholder="What was discussed?"
-        startIcon={PencilSquareIcon}
+        startIcon={ComposeIcon}
       />
     </div>
   );

@@ -153,13 +153,13 @@ describe('a rendered file describes itself', () => {
     const start = html.indexOf(`<script type="${SOURCE_TYPE}"`);
     const after = html.slice(html.indexOf('</script>', start) + '</script>'.length);
     expect(after.startsWith(
-      `\n<!-- Astryx render: the block above is the source of the page (render format 1), as JSON; each file is base64 with its SHA-256. Get it back: npx @astryxdesign/cli@${cliVersion()} experimental import report.html -->\n<script>`,
+      `\n<!-- Astryx render: the block above is the source of the page (render format 1), as JSON; each file is base64 with its SHA-256. Get it back: npx @astryxdesign/cli@${cliVersion()} experimental import report.html -->\n<script type="module">`,
     )).toBe(true);
     expect(html.endsWith('</script>\n</body></html>\n')).toBe(true);
   });
 
   it('puts an explicit title in the render-again command, and names packages to install outside a project', async () => {
-    put('charts/trend.tsx', `import {LineChart, Line} from 'recharts';\nexport default function Trend() {\n  return <LineChart width={200} height={100} data={[{v: 1}, {v: 2}]}><Line dataKey="v" /></LineChart>;\n}\n`);
+    put('charts/trend.tsx', `import {LineChart, Line} from 'recharts';\nexport default function Trend() {\n  return <LineChart width={200} height={100} data={[{v: 1}, {v: 2}]}><Line dataKey="v" /></LineChart>;\n}\nimport '@astryxdesign/core/astryx.css';\n`);
     await render('charts/trend.tsx', {cwd: dir, title: "Team's trend"});
     const page = read('charts/trend.html');
     expect(page).toContain("experimental export trend-restored/trend.tsx --out trend.html --title 'Team'\\''s trend'");
@@ -217,7 +217,7 @@ describe('render --reverse says what changed after the render', () => {
   it('names where an edited run of several thousand words sits', async () => {
     const words = Array.from({length: 6000}, (_, i) => `w${i}`);
     const lines = Array.from({length: 60}, (_, i) => `        ${words.slice(i * 100, i * 100 + 100).join(' ')}`).join('\n');
-    put('many-words/page.tsx', `export default function Page() {\n  return (\n    <p>\n${lines}\n    </p>\n  );\n}\n`);
+    put('many-words/page.tsx', `export default function Page() {\n  return (\n    <p>\n${lines}\n    </p>\n  );\n}\nimport '@astryxdesign/core/astryx.css';\n`);
     await render('many-words/page.tsx', {cwd: dir});
     put('many-words/edited.html', read('many-words/page.html').replace(' w5999<', ' last<'));
     const back = /** @type {any} */ (await render('many-words/edited.html', {cwd: dir, reverse: true, out: 'many-words-back/page.tsx'}));
@@ -244,7 +244,7 @@ describe('render --reverse says what changed after the render', () => {
 
   it('names the JSON file that holds an edited run of text', async () => {
     put('json-edit/data.json', '{"regions": ["North", "South"]}\n');
-    put('json-edit/page.tsx', "import data from './data.json';\nexport default function Page() {\n  return <ul>{data.regions.map(r => <li key={r}>{r}</li>)}</ul>;\n}\n");
+    put('json-edit/page.tsx', "import data from './data.json';\nexport default function Page() {\n  return <ul>{data.regions.map(r => <li key={r}>{r}</li>)}</ul>;\n}\nimport '@astryxdesign/core/astryx.css';\n");
     await render('json-edit/page.tsx', {cwd: dir, out: 'json-edit.html'});
     put('json-edit-edited.html', editBody(read('json-edit.html'), body => body.replace('>North<', '>North America<')));
     const result = /** @type {any} */ (await render('json-edit-edited.html', {cwd: dir, reverse: true, out: 'json-edit-back/page.tsx'}));
@@ -346,7 +346,7 @@ describe('render --reverse says what changed after the render', () => {
   });
 
   it('quotes a page name a received file chose, in every command it prints', async () => {
-    const page = Buffer.from("import {k} from './k';\nexport default function Page() {\n  return <p>{k}</p>;\n}\n");
+    const page = Buffer.from("import {k} from './k';\nexport default function Page() {\n  return <p>{k}</p>;\n}\nimport '@astryxdesign/core/astryx.css';\n");
     const k = Buffer.from("export const k = 'value';\n");
     const file = (/** @type {string} */ p, /** @type {Buffer} */ b) => ({path: p, sha256: sha256(b), base64: b.toString('base64')});
     const block = (/** @type {string} */ folder) =>
@@ -385,7 +385,7 @@ describe('render --reverse says what changed after the render', () => {
   });
 
   it('leaves an untouched file unedited when its stylesheet text or its page folder looks like HTML', async () => {
-    put('odd/<body>/page.tsx', `import './look.css';\nexport default function Page() {\n  return <p className="tagged">Tagged</p>;\n}\n`);
+    put('odd/<body>/page.tsx', `import './look.css';\nexport default function Page() {\n  return <p className="tagged">Tagged</p>;\n}\nimport '@astryxdesign/core/astryx.css';\n`);
     put('odd/<body>/look.css', '.tagged::before { content: "</head><body><!-- x -->"; }\n');
     await render('odd/<body>/page.tsx', {cwd: dir, out: 'odd.html'});
     const odd = read('odd.html');
@@ -436,6 +436,7 @@ const all: Row[] = rows;
 export default function Page() {
   return <ul>{all.map(r => <li key={r.a}>{r.a}</li>)}</ul>;
 }
+import '@astryxdesign/core/astryx.css';
 `);
     put('reach/types.ts', 'export type Row = {a: string};\n');
     put('reach/rows.js', "export const rows = [{a: 'one'}, {a: 'two'}];\n");
@@ -450,9 +451,9 @@ export default function Page() {
     expect(back.data.files).toEqual(expect.arrayContaining(['reach-back/types.ts', 'reach-back/rows.js']));
     expect(back.data).toMatchObject({exact: false, missing: ['../sheets/site.scss']});
   });
-  it('says render format 2 only for a file that carries a module kind earlier CLIs refuse', async () => {
+  it('says render format 2 or 3 only for a file that carries what earlier CLIs cannot read', async () => {
     put('formats/lib/one.cjs', "exports.one = 'from a cjs module';\n");
-    put('formats/page.tsx', "import {one} from './lib/one.cjs';\nexport default function Page() {\n  return <p>{one}</p>;\n}\n");
+    put('formats/page.tsx', "import {one} from './lib/one.cjs';\nexport default function Page() {\n  return <p>{one}</p>;\n}\nimport '@astryxdesign/core/astryx.css';\n");
     await render('formats/page.tsx', {cwd: dir, out: 'formats.html'});
     const two = read('formats.html');
     expect(readSourceBlock(two)).toMatchObject({found: true, source: {version: 2}});
@@ -460,6 +461,18 @@ export default function Page() {
     // The page reads in this CLI as any other.
     const back = /** @type {any} */ (await render('formats.html', {cwd: dir, reverse: true, out: 'formats-back/page.tsx'}));
     expect(back.data).toMatchObject({exact: true, format: 2});
+    // A module reached by the JavaScript name of its TypeScript file says
+    // format 3, which format 1 and 2 readers decline by name.
+    put('formats-js/lib/rows.ts', "export const rows = ['North'];\n");
+    put('formats-js/page.tsx', "import {rows} from './lib/rows.js';\nexport default function Page() {\n  return <p>{rows[0]}</p>;\n}\nimport '@astryxdesign/core/astryx.css';\n");
+    await render('formats-js/page.tsx', {cwd: dir, out: 'formats-js.html'});
+    const three = read('formats-js.html');
+    expect(readSourceBlock(three)).toMatchObject({found: true, source: {version: 3}});
+    // An extensionless import of the same file stays format 1.
+    put('formats-plain/lib/rows.ts', "export const rows = ['North'];\n");
+    put('formats-plain/page.tsx', "import {rows} from './lib/rows';\nexport default function Page() {\n  return <p>{rows[0]}</p>;\n}\nimport '@astryxdesign/core/astryx.css';\n");
+    await render('formats-plain/page.tsx', {cwd: dir, out: 'formats-plain.html'});
+    expect(readSourceBlock(read('formats-plain.html'))).toMatchObject({found: true, source: {version: 1}});
     // A file without such a module stays format 1, which every earlier CLI opens.
     const one = read('report.html');
     expect(readSourceBlock(one)).toMatchObject({found: true, source: {version: 1}});
@@ -474,7 +487,7 @@ export default function Page() {
     put('kinds/lib/e.mts', "export const e = 'from mts without its extension';\n");
     put(
       'kinds/page.tsx',
-      "import {a} from './lib/a.mts';\nimport {b} from './lib/b.cjs';\nimport {c} from './lib/c.cts';\nimport {d} from './lib/d';\nimport {e} from './lib/e';\nexport default function Page() {\n  return <p>{a} {b} {c} {d} {e}</p>;\n}\n",
+      "import {a} from './lib/a.mts';\nimport {b} from './lib/b.cjs';\nimport {c} from './lib/c.cts';\nimport {d} from './lib/d';\nimport {e} from './lib/e';\nexport default function Page() {\n  return <p>{a} {b} {c} {d} {e}</p>;\n}\nimport '@astryxdesign/core/astryx.css';\n",
     );
     const result = /** @type {any} */ (await render('kinds/page.tsx', {cwd: dir}));
     expect(result.data.files).toEqual(expect.arrayContaining(['page.tsx', 'lib/a.mts', 'lib/b.cjs', 'lib/c.cts', 'lib/d.cjs', 'lib/e.mts']));

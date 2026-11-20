@@ -14,6 +14,9 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {getNextSteps} from '../../../api/init/init.mjs';
 import {recordDeclaredSettings} from '../../../foundation/env/cli-command.mjs';
+// A project with no Core takes the theme at the release of the CLI that
+// answers, whose Core the theme brings.
+import {CLI_VERSION} from '../../../test-utils/release-fixtures.mjs';
 
 /** @type {string[]} */
 const made = [];
@@ -43,7 +46,9 @@ describe('init Next steps theme guidance', () => {
   });
 
   it('adds an installed theme through the CLI', () => {
-    expect(text).toContain('npm install @astryxdesign/theme-neutral\n');
+    expect(text).toContain(
+      `npm install @astryxdesign/theme-neutral@${CLI_VERSION}\n`,
+    );
     expect(text).toContain('npx astryx theme add neutral');
   });
 
@@ -52,8 +57,25 @@ describe('init Next steps theme guidance', () => {
       'pnpm exec astryx',
       project({'pnpm-lock.yaml': "lockfileVersion: '9.0'\n"}),
     ).join('\n');
-    expect(pnpm).toContain('pnpm add @astryxdesign/theme-neutral\n');
+    expect(pnpm).toContain(
+      `pnpm add @astryxdesign/theme-neutral@${CLI_VERSION}\n`,
+    );
     expect(pnpm).not.toContain('npm install');
+  });
+
+  it("installs the theme at the project's Core release, saved exactly where Core is pinned", () => {
+    const dir = project({'package-lock.json': '{}'});
+    fs.writeFileSync(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        name: 'app',
+        dependencies: {'@astryxdesign/core': '0.7.10'},
+      }),
+    );
+    const pinned = getNextSteps('npx @astryxdesign/cli@0.7.10', dir).join('\n');
+    expect(pinned).toContain(
+      'npm install -E @astryxdesign/theme-neutral@0.7.10\n',
+    );
   });
 
   it('wires the generated theme record once', () => {
@@ -89,7 +111,9 @@ describe('init Next steps when the lockfiles disagree', () => {
       'npx astryx',
       project({'pnpm-lock.yaml': "lockfileVersion: '9.0'\n", 'yarn.lock': '# yarn\n'}),
     ).join('\n');
-    expect(text).toContain('npm install @astryxdesign/theme-neutral\n');
+    expect(text).toContain(
+      `npm install @astryxdesign/theme-neutral@${CLI_VERSION}\n`,
+    );
     expect(text).toContain('(the lockfiles in this folder disagree; use the package manager this project uses)');
   });
 
@@ -97,7 +121,9 @@ describe('init Next steps when the lockfiles disagree', () => {
     const dir = project({'package-lock.json': '{}'});
     fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"app","packageManager":"pnpm@10.0.0"}');
     const text = getNextSteps('pnpm exec astryx', dir).join('\n');
-    expect(text).toContain('pnpm add @astryxdesign/theme-neutral\n');
+    expect(text).toContain(
+      `pnpm add @astryxdesign/theme-neutral@${CLI_VERSION}\n`,
+    );
   });
 });
 
@@ -122,7 +148,7 @@ describe('init Next steps when an integration gives install guidance', () => {
     ]);
     const text = getNextSteps('pnpm exec astryx', dir).join('\n');
     expect(text).toContain(
-      'Add @astryxdesign/theme-neutral to package.json, commit, then run the relock script\n',
+      `Add @astryxdesign/theme-neutral@${CLI_VERSION} to package.json, commit, then run the relock script\n`,
     );
     expect(text).not.toContain('pnpm add');
     expect(text).not.toContain('disagree');

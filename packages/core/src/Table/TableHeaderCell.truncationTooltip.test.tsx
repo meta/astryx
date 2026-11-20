@@ -92,11 +92,16 @@ function tooltip() {
   return screen.queryByRole('tooltip', {hidden: true});
 }
 
-function SortableTable() {
+function SortableTable({
+  textOverflow = 'truncate',
+}: {
+  textOverflow?: 'wrap' | 'truncate';
+}) {
   const [sort, setSort] = useState<TableSortState>([]);
   const sortPlugin = useTableSortable<Row>({sort, onSortChange: setSort});
   return (
     <Table
+      textOverflow={textOverflow}
       data={rows}
       columns={[{key: 'payout', header: HEADING, sortable: true}]}
       plugins={{sort: sortPlugin}}
@@ -132,9 +137,29 @@ describe('TableHeaderCell truncation tooltip', () => {
     });
   });
 
+  it('shows nothing on keyboard focus when the header wraps', async () => {
+    restore = withOverflow(true);
+    const realMatches = Element.prototype.matches;
+    vi.spyOn(Element.prototype, 'matches').mockImplementation(function (
+      this: Element,
+      selector: string,
+    ) {
+      return selector === ':focus-visible'
+        ? true
+        : realMatches.call(this, selector);
+    });
+    render(<SortableTable textOverflow="wrap" />);
+    const sortButton = screen.getByRole('button', {name: HEADING});
+    act(() => {
+      sortButton.focus();
+    });
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(tooltip()).toBeNull();
+  });
+
   it('shows nothing on a mouse hover, as before', async () => {
     restore = withOverflow(true);
-    render(<Table data={rows} columns={columns} />);
+    render(<Table textOverflow="truncate" data={rows} columns={columns} />);
     const header = screen.getByRole('columnheader');
     act(() => {
       fireEvent.pointerOver(header, {pointerType: 'mouse'});
@@ -205,7 +230,17 @@ describe('TableHeaderCell truncation tooltip', () => {
       },
     });
     try {
-      render(<Table data={rows} columns={columns} />);
+      // A plain renderer keeps the body cell's own truncation tooltip out of
+      // the count, so only the header cell could read a layout.
+      render(
+        <Table
+          textOverflow="truncate"
+          data={rows}
+          columns={[
+            {key: 'payout', header: HEADING, renderCell: row => row.payout},
+          ]}
+        />,
+      );
       expect(reads).toBe(0);
     } finally {
       if (original) {
@@ -227,6 +262,7 @@ function SelectableTable() {
   );
   return (
     <Table
+      textOverflow="truncate"
       data={data}
       columns={[{key: 'payout', header: 'Payout'}]}
       idKey="id"
@@ -276,6 +312,7 @@ describe('TableHeaderCell truncation tooltip with a field in the header', () => 
     });
     render(
       <Table
+        textOverflow="truncate"
         data={rows}
         columns={[
           {
@@ -317,6 +354,7 @@ describe('TableHeaderCell truncation tooltip with header controls', () => {
     withFocusVisible();
     render(
       <Table
+        textOverflow="truncate"
         data={rows}
         columns={[
           {
@@ -347,6 +385,7 @@ describe('TableHeaderCell truncation tooltip with header controls', () => {
     withFocusVisible();
     render(
       <Table
+        textOverflow="truncate"
         data={rows}
         columns={[
           {
@@ -414,6 +453,7 @@ describe('TableHeaderCell truncation tooltip with an inline enum filter', () => 
     });
     return (
       <Table
+        textOverflow="truncate"
         data={data}
         columns={[
           {key: 'department', header: DEPARTMENT, filter: 'department'},

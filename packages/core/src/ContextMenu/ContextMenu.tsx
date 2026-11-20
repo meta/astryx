@@ -145,6 +145,16 @@ const styles = stylex.create({
     ),
     overflowY: 'auto',
     '--_dropdown-menu-radius': radiusVars['--radius-container'],
+    // Theme corner variables inherit. Reset them, so a nested surface that the
+    // theme does not style hands out its own radius.
+    '--_dropdown-menu-radius-top-left': 'initial',
+    '--_dropdown-menu-radius-top-right': 'initial',
+    '--_dropdown-menu-radius-bottom-right': 'initial',
+    '--_dropdown-menu-radius-bottom-left': 'initial',
+    '--_dropdown-menu-radius-start-start': 'initial',
+    '--_dropdown-menu-radius-start-end': 'initial',
+    '--_dropdown-menu-radius-end-start': 'initial',
+    '--_dropdown-menu-radius-end-end': 'initial',
     '--_dropdown-menu-padding': spacingVars['--spacing-1'],
     padding: spacingVars['--spacing-1'],
     borderRadius: 'var(--_dropdown-menu-radius)',
@@ -191,6 +201,16 @@ const styles = stylex.create({
     gap: spacingVars['--spacing-0-5'],
     width: '100%',
     '--_dropdown-menu-radius': radiusVars['--radius-container'],
+    // Theme corner variables inherit. Reset them, so a nested surface that the
+    // theme does not style hands out its own radius.
+    '--_dropdown-menu-radius-top-left': 'initial',
+    '--_dropdown-menu-radius-top-right': 'initial',
+    '--_dropdown-menu-radius-bottom-right': 'initial',
+    '--_dropdown-menu-radius-bottom-left': 'initial',
+    '--_dropdown-menu-radius-start-start': 'initial',
+    '--_dropdown-menu-radius-start-end': 'initial',
+    '--_dropdown-menu-radius-end-start': 'initial',
+    '--_dropdown-menu-radius-end-end': 'initial',
     '--_dropdown-menu-padding': spacingVars['--spacing-1'],
     padding: spacingVars['--spacing-1'],
     borderRadius: 'var(--_dropdown-menu-radius)',
@@ -472,15 +492,24 @@ function useContextMenuElement(
   const focusOnShowRef = useRef(false);
   const focusFirstRef = useRef<() => void>(() => {});
   const [submenuPath, setSubmenuPath] = useState<ContextMenuItemData[]>([]);
+  // The row reads a node label's text as the level opens. That text names the
+  // sheet.
+  const [submenuTitles, setSubmenuTitles] = useState<(string | undefined)[]>(
+    [],
+  );
   const currentSubmenu = submenuPath.at(-1);
   const currentItems = currentSubmenu?.items ?? items;
   const currentTitle = currentSubmenu?.label ?? label;
-  const sheetLabel = typeof currentTitle === 'string' ? currentTitle : label;
+  const sheetLabel =
+    typeof currentTitle === 'string'
+      ? currentTitle
+      : submenuTitles.at(-1) || label;
 
   const updateOpenState = useCallback(
     (nextIsOpen: boolean) => {
       if (!nextIsOpen) {
         setSubmenuPath([]);
+        setSubmenuTitles([]);
       }
       setIsOpen(nextIsOpen);
       onOpenChange?.(nextIsOpen);
@@ -932,7 +961,10 @@ function useContextMenuElement(
                 <Icon icon="chevronLeft" size="sm" xstyle={rtlStyles.mirror} />
               }
               isIconOnly
-              onClick={() => setSubmenuPath(path => path.slice(0, -1))}
+              onClick={() => {
+                setSubmenuPath(path => path.slice(0, -1));
+                setSubmenuTitles(titles => titles.slice(0, -1));
+              }}
             />
             {sheetViewHeading}
           </div>
@@ -942,7 +974,10 @@ function useContextMenuElement(
         <MenuBottomSheetActionList
           items={currentItems}
           onSelect={handleBottomSheetSelect}
-          onOpenSubmenu={item => setSubmenuPath(path => [...path, item])}
+          onOpenSubmenu={(item, title) => {
+            setSubmenuPath(path => [...path, item]);
+            setSubmenuTitles(titles => [...titles, title]);
+          }}
         />
       </div>
     ) : (

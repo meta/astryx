@@ -859,6 +859,33 @@ The second spread replaced the className the first built, so `astryx-breadcrumb-
 
 Ships as a **warning in both tiers** for now. The spread check has exactly one violation in the repo, in `BreadcrumbItem.tsx`, whose fix is open in [#5332](https://github.com/meta/astryx/pull/5332); both tiers go back to `error` when that lands.
 
+### `@astryx/no-shorthand-longhand-merge`
+
+Flags a StyleX shorthand set after one of its own longhands in one merge: one `stylex.props()` call or one `xstyle` array. For example, `paddingInlineStart` in one style and then `paddingInline` in a later one.
+
+StyleX resolves such a pair by its `styleResolution` option. Storybook builds with `application-order`, where the later style usually wins; for some pairs, such as `paddingInline` after both of its longhands, the longhand wins there too. The published CSS uses `property-specificity`, where the longhand wins whatever the order. A shorthand **before** its longhand resolves the same way under both, so the rule allows it. A shorthand **after** its longhand never overrides it in the published CSS, and Storybook may show the later style instead. Either way the later style does not do what it says.
+
+**Bad:**
+
+```tsx
+const styles = stylex.create({
+  root: {paddingInlineStart: 8, paddingInlineEnd: 8},
+  collapsed: {paddingInline: 0},
+});
+stylex.props(styles.root, isCollapsed && styles.collapsed);
+```
+
+**Good:** the later style sets the same longhands, so the merge is between the same properties and the later style wins in every build.
+
+```tsx
+const styles = stylex.create({
+  root: {paddingInlineStart: 8, paddingInlineEnd: 8},
+  collapsed: {paddingInlineStart: 0, paddingInlineEnd: 0},
+});
+```
+
+**Scope:** styles declared with `stylex.create()` in the same file, including dynamic styles and local constants that pick a style. Styles in different branches of one conditional never merge, so they are not flagged. A style the rule cannot read adds nothing. So a component's own longhand followed by a caller's `xstyle` shorthand is out of scope; avoid splitting a component's base shorthand into longhands for that reason, because a caller's shorthand would then lose to it in the published CSS.
+
 ### `@astryx/disabled-cursor`
 
 Flags a `cursor` inside `stylex.create()` that does not give way to `default` on a disabled element. The cursor is the only affordance a pointer user gets **before** they commit to a click: `cursor: pointer` on a disabled control promises a click it will not honour, and `disabled`/`[aria-disabled]` do not change what the element's own declaration paints.
@@ -1241,7 +1268,7 @@ assumed, and none has an instance in the repo except the last:
   look for colours is a different rule.
 - **A `.css` file**, which ESLint never parses. There is one live instance:
   `packages/core/src/reset.css:291` reads
-  `var(--color-text-secondary, light-dark(#4E606F, #AAAFB5))` — the same
+  `var(--color-text-secondary, light-dark(#445564, #B0B5BB))` — the same
   defensive-fallback shape as the `Sankey` hits, and it rides with them.
 
 Everything else the rule reaches, and a probe confirms it: a `const`, an object

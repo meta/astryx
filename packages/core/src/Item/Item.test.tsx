@@ -817,6 +817,272 @@ describe('Item', () => {
     expect(screen.getByTestId('item')).toHaveAttribute('aria-current', 'step');
   });
 
+  describe('current marker on an interactive row', () => {
+    it('puts the marker on the button of an onClick row, not the root', () => {
+      render(
+        <Item
+          label="Billing"
+          isSelected
+          onClick={() => {}}
+          data-testid="row"
+        />,
+      );
+      expect(screen.getByTestId('row')).not.toHaveAttribute('aria-current');
+      expect(screen.getByRole('button', {current: true})).toHaveTextContent(
+        'Billing',
+      );
+    });
+
+    it('puts the marker on the link of an href row, not the root', () => {
+      render(
+        <Item label="Billing" isSelected href="/billing" data-testid="row" />,
+      );
+      expect(screen.getByTestId('row')).not.toHaveAttribute('aria-current');
+      expect(screen.getByRole('link', {current: true})).toHaveTextContent(
+        'Billing',
+      );
+    });
+
+    it('moves a caller-provided marker to the focusable element', () => {
+      render(
+        <Item
+          label="Billing"
+          href="/billing"
+          aria-current="page"
+          data-testid="row"
+        />,
+      );
+      expect(screen.getByTestId('row')).not.toHaveAttribute('aria-current');
+      expect(screen.getByRole('link', {current: 'page'})).toBeInTheDocument();
+    });
+
+    it('marks the control a delegated row hands focus to', () => {
+      function Row({isSelected}: {isSelected: boolean}) {
+        const ref = useRef<HTMLButtonElement>(null);
+        return (
+          <Item
+            label="Billing"
+            isSelected={isSelected}
+            interactiveRef={ref}
+            data-testid="row"
+            endContent={
+              <button type="button" ref={ref}>
+                Open
+              </button>
+            }
+          />
+        );
+      }
+      const {rerender} = render(<Row isSelected />);
+      expect(screen.getByTestId('row')).not.toHaveAttribute('aria-current');
+      expect(screen.getByRole('button', {current: true})).toHaveTextContent(
+        'Open',
+      );
+      rerender(<Row isSelected={false} />);
+      expect(screen.getByRole('button', {name: 'Open'})).not.toHaveAttribute(
+        'aria-current',
+      );
+    });
+
+    it('keeps a delegated control’s own marker', () => {
+      function Row() {
+        const ref = useRef<HTMLButtonElement>(null);
+        return (
+          <Item
+            label="Billing"
+            isSelected
+            interactiveRef={ref}
+            endContent={
+              <button type="button" ref={ref} aria-current="page">
+                Open
+              </button>
+            }
+          />
+        );
+      }
+      render(<Row />);
+      expect(screen.getByRole('button', {current: 'page'})).toBeInTheDocument();
+    });
+
+    it('marks a delegated control that mounts after the row', () => {
+      function Row({hasControl}: {hasControl: boolean}) {
+        const ref = useRef<HTMLButtonElement>(null);
+        return (
+          <Item
+            label="Billing"
+            isSelected
+            interactiveRef={ref}
+            endContent={
+              hasControl ? (
+                <button type="button" ref={ref}>
+                  Open
+                </button>
+              ) : null
+            }
+          />
+        );
+      }
+      const {rerender} = render(<Row hasControl={false} />);
+      rerender(<Row hasControl />);
+      expect(screen.getByRole('button', {current: true})).toHaveTextContent(
+        'Open',
+      );
+    });
+
+    it('marks a delegated control that is replaced', () => {
+      function Row({version}: {version: number}) {
+        const ref = useRef<HTMLButtonElement>(null);
+        return (
+          <Item
+            label="Billing"
+            isSelected
+            interactiveRef={ref}
+            endContent={
+              <button type="button" key={version} ref={ref}>
+                Open {version}
+              </button>
+            }
+          />
+        );
+      }
+      const {rerender} = render(<Row version={1} />);
+      rerender(<Row version={2} />);
+      expect(screen.getByRole('button', {current: true})).toHaveTextContent(
+        'Open 2',
+      );
+    });
+
+    it('leaves a marker the caller adds to its control after selection', () => {
+      function Row({
+        isSelected,
+        controlCurrent,
+      }: {
+        isSelected: boolean;
+        controlCurrent?: 'page';
+      }) {
+        const ref = useRef<HTMLButtonElement>(null);
+        return (
+          <Item
+            label="Billing"
+            isSelected={isSelected}
+            interactiveRef={ref}
+            endContent={
+              <button type="button" ref={ref} aria-current={controlCurrent}>
+                Open
+              </button>
+            }
+          />
+        );
+      }
+      const {rerender} = render(<Row isSelected />);
+      rerender(<Row isSelected controlCurrent="page" />);
+      rerender(<Row isSelected={false} controlCurrent="page" />);
+      expect(screen.getByRole('button', {current: 'page'})).toBeInTheDocument();
+    });
+
+    it('treats a caller marker with the row’s value as the row’s', () => {
+      function Row({
+        isSelected,
+        controlCurrent,
+      }: {
+        isSelected: boolean;
+        controlCurrent?: 'true';
+      }) {
+        const ref = useRef<HTMLButtonElement>(null);
+        return (
+          <Item
+            label="Billing"
+            isSelected={isSelected}
+            interactiveRef={ref}
+            endContent={
+              <button type="button" ref={ref} aria-current={controlCurrent}>
+                Open
+              </button>
+            }
+          />
+        );
+      }
+      const {rerender} = render(<Row isSelected />);
+      rerender(<Row isSelected controlCurrent="true" />);
+      expect(screen.getByRole('button', {current: true})).toBeInTheDocument();
+      // The caller should not mark a control the row marks: on deselect the
+      // row removes the "true" it cannot tell from its own.
+      rerender(<Row isSelected={false} controlCurrent="true" />);
+      expect(screen.getByRole('button', {name: 'Open'})).not.toHaveAttribute(
+        'aria-current',
+      );
+    });
+
+    it('marks only the root of a delegated row with a parent role', () => {
+      function Row() {
+        const ref = useRef<HTMLButtonElement>(null);
+        return (
+          <Item
+            label="Billing"
+            role="menuitem"
+            isSelected
+            interactiveRef={ref}
+            data-testid="row"
+            endContent={
+              <button type="button" ref={ref}>
+                Open
+              </button>
+            }
+          />
+        );
+      }
+      render(<Row />);
+      expect(screen.getByTestId('row')).toHaveAttribute('aria-current', 'true');
+      expect(screen.getByRole('button', {name: 'Open'})).not.toHaveAttribute(
+        'aria-current',
+      );
+    });
+
+    it('keeps the marker on the root of a row with a parent role', () => {
+      render(
+        <Item
+          label="Billing"
+          role="menuitem"
+          isSelected
+          onClick={() => {}}
+          data-testid="row"
+        />,
+      );
+      expect(screen.getByTestId('row')).toHaveAttribute('aria-current', 'true');
+    });
+
+    it('keeps the marker on a link root', () => {
+      const RootLink = ({ref, ...props}: React.ComponentProps<'a'>) => (
+        <a ref={ref} {...props} />
+      );
+      render(
+        <Item
+          as={RootLink}
+          label="Billing"
+          href="/billing"
+          isSelected
+          data-testid="row"
+        />,
+      );
+      expect(screen.getByTestId('row')).toHaveAttribute('aria-current', 'true');
+    });
+
+    it('keeps data-selected on the root for styling', () => {
+      render(
+        <Item
+          label="Billing"
+          isSelected
+          onClick={() => {}}
+          data-testid="row"
+        />,
+      );
+      expect(screen.getByTestId('row')).toHaveAttribute(
+        'data-selected',
+        'selected',
+      );
+    });
+  });
+
   // ===========================================================================
   // Highlighted state
   // ===========================================================================

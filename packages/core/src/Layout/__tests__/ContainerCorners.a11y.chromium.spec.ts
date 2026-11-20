@@ -1,12 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope ^(packages/core/src/(Layout|Card|Dialog|BottomSheet|Section|ScrollableArea|Table|List|Item)/|apps/storybook/stories/ContainerCorners\.stories)
+// @pr-a11y scope ^(packages/core/src/(Layout|Card|Dialog|BottomSheet|Section|ScrollableArea|Table|List|Item|DropdownMenu)/|apps/storybook/stories/ContainerCorners\.stories)
 
 /**
  * @file ContainerCorners.a11y.chromium.spec.ts
  * @input Built ContainerCorners stories and real Chromium keyboard input
  * @output Evidence that a full-bleed child takes the corner of the rounded
- *   container it reaches, minus the padding it keeps, and that its focus
- *   ring stays whole at that corner
+ *   container it reaches, minus the padding it keeps, each corner as the
+ *   theme gives it, and that its focus ring stays whole at that corner
  * @position Real-engine proof for container corner geometry; jsdom cannot
  *   resolve inherited custom properties into a used radius or paint a ring
  */
@@ -34,6 +34,8 @@ test.afterAll(async () => {
 const TABLE_REGION = '#storybook-root [role="group"]:has(> * > table)';
 const BOTTOM_SHEET_TABLE_REGION = 'dialog [role="group"]:has(> * > table)';
 const LIST_ROWS = '#storybook-root [role="list"] > *';
+const MENU_ROWS =
+  '[role="menu"] :is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"])';
 
 /** Used radii in physical order: top-left, top-right, bottom-right, bottom-left. */
 type Radii = readonly [string, string, string, string];
@@ -295,5 +297,114 @@ test.describe('Container corners (Chromium)', () => {
       '0px',
       '0px',
     ]);
+  });
+
+  test('a table that fills a Card whose theme rounds only the top takes each corner as the card draws it', async ({
+    page,
+  }) => {
+    await mount(page, 'table-in-card-with-rounded-top', TABLE_REGION);
+    const card = await radii(page, '#storybook-root .astryx-card');
+    expect(card).toEqual(['12px', '12px', '0px', '0px']);
+    expect(await radii(page, TABLE_REGION)).toEqual(card);
+    await tabTo(page, TABLE_REGION);
+    expect(
+      await ringPixelsOnCornerDiagonal(
+        page,
+        TABLE_REGION,
+        TABLE_REGION,
+        'top-left',
+      ),
+    ).toBeGreaterThan(0);
+  });
+
+  test('a logical corner a theme rounds reaches the table at that corner in a right-to-left page', async ({
+    page,
+  }) => {
+    await mount(page, 'table-in-card-with-start-corner-rtl', TABLE_REGION);
+    const card = await radii(page, '#storybook-root .astryx-card');
+    expect(card).toEqual(['0px', '20px', '0px', '0px']);
+    expect(await radii(page, TABLE_REGION)).toEqual(card);
+  });
+
+  test('in a Dialog whose theme rounds only the bottom, only the last bleeding row takes corners', async ({
+    page,
+  }) => {
+    await mount(page, 'bleed-list-in-dialog-with-rounded-bottom', LIST_ROWS);
+    const count = await page.locator(LIST_ROWS).count();
+    expect(await radii(page, LIST_ROWS, 0)).toEqual([
+      '0px',
+      '0px',
+      '0px',
+      '0px',
+    ]);
+    expect(await radii(page, LIST_ROWS, count - 1)).toEqual([
+      '0px',
+      '0px',
+      '16px',
+      '16px',
+    ]);
+  });
+
+  test('a table that fills a default Card inside a Card the theme rounds more takes the corners of the inner card', async ({
+    page,
+  }) => {
+    await mount(
+      page,
+      'table-in-default-card-inside-rounded-card',
+      TABLE_REGION,
+    );
+    const outer = await radii(page, '#storybook-root .astryx-card', 0);
+    const inner = await radii(page, '#storybook-root .astryx-card', 1);
+    expect(outer).toEqual(['24px', '24px', '24px', '24px']);
+    expect(inner).not.toEqual(outer);
+    expect(await radii(page, TABLE_REGION)).toEqual(inner);
+  });
+
+  test('every row of a menu whose theme rounds only the bottom takes that shape less the padding', async ({
+    page,
+  }) => {
+    await mount(page, 'menu-rows-with-one-radius', MENU_ROWS);
+    const one = await radii(page, MENU_ROWS);
+    expect(parseFloat(one[0])).toBeGreaterThan(0);
+    expect(new Set(one).size).toBe(1);
+
+    await mount(page, 'menu-rows-with-rounded-bottom', MENU_ROWS);
+    const count = await page.locator(MENU_ROWS).count();
+    // Item, checkbox, two radios, the sub-menu row and the sub-menu's own row.
+    expect(count).toBe(6);
+    for (let index = 0; index < count; index++) {
+      expect(await radii(page, MENU_ROWS, index)).toEqual([
+        '0px',
+        '0px',
+        one[2],
+        one[3],
+      ]);
+    }
+  });
+
+  test('in a right-to-left page, menu rows round the physical corner the menu rounds', async ({
+    page,
+  }) => {
+    await mount(page, 'menu-rows-with-one-radius', MENU_ROWS);
+    const one = await radii(page, MENU_ROWS);
+    await mount(page, 'menu-rows-with-rounded-bottom-right-rtl', MENU_ROWS);
+    const count = await page.locator(MENU_ROWS).count();
+    for (let index = 0; index < count; index++) {
+      expect(await radii(page, MENU_ROWS, index)).toEqual([
+        '0px',
+        '0px',
+        one[2],
+        '0px',
+      ]);
+    }
+  });
+
+  test('a physical corner a theme rounds reaches the table at that corner in a right-to-left page', async ({
+    page,
+  }) => {
+    await mount(page, 'table-in-card-with-top-left-rtl', TABLE_REGION);
+    const card = await radii(page, '#storybook-root .astryx-card');
+    expect(card).toEqual(['12px', '0px', '0px', '0px']);
+    expect(await radii(page, TABLE_REGION)).toEqual(card);
   });
 });
