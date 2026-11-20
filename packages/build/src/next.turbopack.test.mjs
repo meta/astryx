@@ -88,11 +88,11 @@ function classLists(page) {
 function expectStyled(page, stylesheet) {
   const {hooks, astryx, product, app: own} = classLists(page);
   expect(hooks).toEqual(
-    expect.arrayContaining(['astryx-button', 'astryx-stat']),
+    expect.arrayContaining(['astryx-button', 'astryx-line-clamp']),
   );
   expect(astryx.length).toBeGreaterThan(20);
   expect(own.length).toBeGreaterThan(0);
-  // On the overridden Button and Stat: the product's StyleX and its classes.
+  // On the overridden Button and LineClamp: the product's StyleX and its classes.
   expect(product.filter(name => /^p[a-z0-9]+$/.test(name))).toHaveLength(2);
   expect(product.filter(name => !/^p[a-z0-9]+$/.test(name)).sort()).toEqual([
     'product-core',
@@ -118,10 +118,10 @@ const PROBES = {
     product: 'rgb(255, 0, 255)',
   },
   lab: {
-    property: 'flex-direction',
-    base: 'column',
-    theme: 'row-reverse',
-    product: 'row',
+    property: 'overflow-wrap',
+    base: 'break-word',
+    theme: 'anywhere',
+    product: 'normal',
   },
   richtext: {
     property: 'position',

@@ -848,7 +848,7 @@
   },
   {
     "component": "Stat",
-    "storyId": "lab-stat--showcase",
+    "storyId": "core-stat--showcase",
     "dims": ["D2"],
     "selectors": {
       "prev": "span:text-is(\"$1.28M\")",

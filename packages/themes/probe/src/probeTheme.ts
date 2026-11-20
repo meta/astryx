@@ -4757,6 +4757,32 @@ export const probeTheme = defineTheme({
         outlineColor: 'hsl(35.0 70% 25%)',
       },
     },
+    stat: {
+      base: {
+        backgroundColor: 'hsl(154.5 75% 59%)',
+        color: 'hsl(296.7 70% 12%)',
+        borderColor: 'hsl(236.0 90% 25%)',
+        outlineColor: 'hsl(132.2 82% 25%)',
+      },
+      'size:sm': {
+        backgroundColor: 'hsl(353.9 94% 48%)',
+        color: 'hsl(80.7 73% 12%)',
+        borderColor: 'hsl(89.2 80% 25%)',
+        outlineColor: 'hsl(77.9 70% 25%)',
+      },
+      'size:md': {
+        backgroundColor: 'hsl(168.0 94% 48%)',
+        color: 'hsl(283.9 87% 12%)',
+        borderColor: 'hsl(28.2 76% 25%)',
+        outlineColor: 'hsl(354.3 78% 25%)',
+      },
+      'size:lg': {
+        backgroundColor: 'hsl(58.2 70% 48%)',
+        color: 'hsl(123.8 75% 12%)',
+        borderColor: 'hsl(247.1 75% 25%)',
+        outlineColor: 'hsl(65.0 88% 25%)',
+      },
+    },
     'status-dot': {
       base: {
         backgroundColor: 'hsl(97.7 94% 51%)',

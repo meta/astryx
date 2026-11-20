@@ -4,20 +4,27 @@
 
 /**
  * @file Stat.tsx
- * @input Uses React, StyleX, and Astryx core theme tokens/utilities
+ * @input Uses React, StyleX, theme tokens, VisuallyHidden, useComponentTranslator
  * @output Exports Stat component, StatProps, StatDelta, StatDeltaDirection,
  *   StatDeltaSentiment, StatSize types
- * @position Lab implementation; consumed by packages/lab/src/index.ts
+ * @position Core implementation; consumed by packages/core/src/index.ts
  *
  * SYNC: When modified, update these files to stay in sync:
- * - /packages/lab/src/Stat/Stat.doc.mjs (props table, features, implementation notes)
- * - /packages/lab/src/Stat/Stat.test.tsx (tests for new/changed behavior)
- * - /packages/lab/src/Stat/index.ts (exports if types change)
+ * - /packages/core/src/Stat/Stat.doc.mjs (props table, features, implementation notes)
+ * - /packages/core/src/Stat/Stat.test.tsx (tests for new/changed behavior)
+ * - /packages/core/src/Stat/index.ts (exports if types change)
  * - /apps/storybook/stories/Stat.stories.tsx (examples)
  */
 
 import type {ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
+
+import type {BaseProps} from '../BaseProps';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Stat/Stat.generated';
 import {
   colorVars,
   fontWeightVars,
@@ -25,10 +32,13 @@ import {
   textSizeVars,
   typeScaleVars,
   typographyVars,
-} from '@astryxdesign/core/theme/tokens.stylex';
-import type {BaseProps} from '@astryxdesign/core';
-import {mergeProps} from '@astryxdesign/core/utils';
-import {themeProps} from '@astryxdesign/core/utils';
+} from '../theme/tokens.stylex';
+import {isRenderable} from '../utils/isRenderable';
+import {mergeProps} from '../utils/mergeProps';
+import {themeProps} from '../utils/themeProps';
+import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
+
+registerEnglishFallback(english);
 
 /**
  * Base styles
@@ -83,17 +93,6 @@ const styles = stylex.create({
     alignSelf: 'stretch',
     minWidth: 0,
   },
-  srOnly: {
-    position: 'absolute',
-    width: '1px',
-    height: '1px',
-    padding: 0,
-    margin: '-1px',
-    overflow: 'hidden',
-    clip: 'rect(0 0 0 0)',
-    whiteSpace: 'nowrap',
-    borderWidth: 0,
-  },
 });
 
 /**
@@ -115,10 +114,10 @@ const sizeStyles = stylex.create({
  * Delta color per resolved sentiment
  */
 const sentimentStyles = stylex.create({
-  positive: {
+  success: {
     color: colorVars['--color-text-success'],
   },
-  negative: {
+  error: {
     color: colorVars['--color-text-error'],
   },
   neutral: {
@@ -130,7 +129,7 @@ const sentimentStyles = stylex.create({
 export type StatDeltaDirection = 'up' | 'down' | 'flat';
 
 /** Color tone of a delta; overrides the default direction mapping. */
-export type StatDeltaSentiment = 'positive' | 'negative' | 'neutral';
+export type StatDeltaSentiment = 'success' | 'error' | 'neutral';
 
 /** Size variant controlling the value's font size. */
 export type StatSize = 'sm' | 'md' | 'lg';
@@ -146,25 +145,25 @@ export interface StatDelta {
   direction: StatDeltaDirection;
   /**
    * Overrides the direction-to-color mapping for inverted metrics where
-   * down is good (error rate, latency): up maps to positive, down to
-   * negative, flat to neutral by default.
+   * down is good (error rate, latency): up maps to success, down to
+   * error, flat to neutral by default.
    */
   sentiment?: StatDeltaSentiment;
 }
 
 /** Default direction-to-sentiment mapping (up=good, down=bad). */
 const DIRECTION_SENTIMENT: Record<StatDeltaDirection, StatDeltaSentiment> = {
-  up: 'positive',
-  down: 'negative',
+  up: 'success',
+  down: 'error',
   flat: 'neutral',
 };
 
-/** Screen-reader text announced after the delta value. */
-const DIRECTION_TEXT: Record<StatDeltaDirection, string> = {
-  up: 'trending up',
-  down: 'trending down',
-  flat: 'flat',
-};
+/** Catalog key of the screen-reader text read after the delta value. */
+const DIRECTION_MESSAGE = {
+  up: '@astryx.stat.delta.up',
+  down: '@astryx.stat.delta.down',
+  flat: '@astryx.stat.delta.flat',
+} as const satisfies Record<StatDeltaDirection, string>;
 
 /** Inline glyph paths (12x12 viewBox): up-right arrow, down-right arrow, dash. */
 const DELTA_GLYPH_PATHS: Record<StatDeltaDirection, string> = {
@@ -224,7 +223,7 @@ export interface StatProps extends BaseProps<HTMLElement> {
  * <Stat
  *   label="Error rate"
  *   value="0.42%"
- *   delta={{value: '-0.08%', direction: 'down', sentiment: 'positive'}}
+ *   delta={{value: '-0.08%', direction: 'down', sentiment: 'success'}}
  *   description="vs. previous 30 days"
  * />
  * <Stat label="Active users" value="18,204" size="lg" media={<Sparkline />} />
@@ -243,6 +242,7 @@ export function Stat({
   ref,
   ...props
 }: StatProps) {
+  const t = useComponentTranslator();
   const sentiment =
     delta == null
       ? null
@@ -262,9 +262,7 @@ export function Stat({
       <span {...stylex.props(styles.valueRow)}>
         <span {...stylex.props(styles.value, sizeStyles[size])}>{value}</span>
         {delta != null && sentiment != null ? (
-          <span
-            data-sentiment={sentiment}
-            {...stylex.props(styles.delta, sentimentStyles[sentiment])}>
+          <span {...stylex.props(styles.delta, sentimentStyles[sentiment])}>
             <svg
               aria-hidden="true"
               viewBox="0 0 12 12"
@@ -279,16 +277,16 @@ export function Stat({
               <path d={DELTA_GLYPH_PATHS[delta.direction]} />
             </svg>
             {delta.value}
-            <span {...stylex.props(styles.srOnly)}>
-              ({DIRECTION_TEXT[delta.direction]})
-            </span>
+            <VisuallyHidden>
+              {t(DIRECTION_MESSAGE[delta.direction])}
+            </VisuallyHidden>
           </span>
         ) : null}
       </span>
-      {description != null ? (
+      {isRenderable(description) ? (
         <span {...stylex.props(styles.description)}>{description}</span>
       ) : null}
-      {media != null ? (
+      {isRenderable(media) ? (
         <div {...stylex.props(styles.media)}>{media}</div>
       ) : null}
     </div>

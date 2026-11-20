@@ -1,10 +1,49 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/** @type {import('@astryxdesign/cli/authoring').ComponentAnatomyElement[]} */
+const anatomy = [
+  {
+    name: 'Tile',
+    required: true,
+    description: 'Root column that stacks the parts below; the `stat` target.',
+  },
+  {
+    name: 'Label',
+    required: true,
+    description: 'Metric name above the value, from `label`.',
+  },
+  {
+    name: 'Value',
+    required: true,
+    description:
+      'The headline metric from `value`, large, with tabular numerals.',
+  },
+  {
+    name: 'Delta',
+    required: false,
+    description:
+      'Change from `delta`: a direction glyph, the change text in its tone, and hidden words a screen reader hears after it.',
+  },
+  {
+    name: 'Description',
+    required: false,
+    description: 'Muted supporting line from `description`.',
+  },
+  {
+    name: 'Media',
+    required: false,
+    description:
+      'Caller content from `media`, such as a sparkline, below the text.',
+  },
+];
+
 /** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */
 
 export const docs = {
   name: 'Stat',
   displayName: 'Stat',
+  // Keeps the registry route Stat had as a canary-only Lab component.
+  registry: {aliases: ['lab/stat']},
   category: 'Content',
   keywords: ["stat","kpi","metric","number","value","delta","trend","dashboard","statistic","measure"],
   props: [
@@ -23,9 +62,9 @@ export const docs = {
     },
     {
       name: 'delta',
-      type: "{value: string, direction: 'up' | 'down' | 'flat', sentiment?: 'positive' | 'negative' | 'neutral'}",
+      type: "{value: string, direction: 'up' | 'down' | 'flat', sentiment?: 'success' | 'error' | 'neutral'}",
       description:
-        'Change indicator next to the value: an up/down/flat glyph plus colored text. sentiment overrides the direction color mapping (up=positive, down=negative, flat=neutral) for inverted metrics like error rate.',
+        'Change indicator next to the value: an up/down/flat glyph plus colored text. sentiment overrides the direction color mapping (up=success, down=error, flat=neutral) for inverted metrics like error rate.',
     },
     {
       name: 'description',
@@ -58,6 +97,7 @@ export const docs = {
     ],
   },
   usage: {
+    anatomy,
     description:
       'A KPI/metric display for dashboards and summary rows: metric name, large tabular-nums value, an optional sentiment-aware delta, a supporting description, and a media slot for a sparkline or mini chart. Compose several in a Grid for a KPI row.',
     bestPractices: [
@@ -90,9 +130,9 @@ export const docsZh = {
     },
     {
       name: 'delta',
-      type: "{value: string, direction: 'up' | 'down' | 'flat', sentiment?: 'positive' | 'negative' | 'neutral'}",
+      type: "{value: string, direction: 'up' | 'down' | 'flat', sentiment?: 'success' | 'error' | 'neutral'}",
       description:
-        '数值旁的变化指示：上升/下降/持平图标加彩色文本。sentiment 可覆盖默认的方向颜色映射（up=positive、down=negative、flat=neutral），用于错误率等反向指标。',
+        '数值旁的变化指示：上升/下降/持平图标加彩色文本。sentiment 可覆盖默认的方向颜色映射（up=success、down=error、flat=neutral），用于错误率等反向指标。',
     },
     {
       name: 'description',
@@ -124,6 +164,7 @@ export const docsZh = {
     ],
   },
   usage: {
+    anatomy,
     description:
       'A KPI/metric display for dashboards and summary rows: metric name, large tabular-nums value, an optional sentiment-aware delta, a supporting description, and a media slot for a sparkline or mini chart. Compose several in a Grid for a KPI row.',
     bestPractices: [
@@ -140,6 +181,7 @@ export const docsZh = {
 export const docsDense = {
   description: 'KPI/metric display: label, large tabular-nums value, sentiment-aware delta, and trend media slot.',
   usage: {
+    anatomy,
     description:
       'A KPI/metric display for dashboards and summary rows: metric name, large tabular-nums value, an optional sentiment-aware delta, a supporting description, and a media slot for a sparkline or mini chart. Compose several in a Grid for a KPI row.',
     bestPractices: [

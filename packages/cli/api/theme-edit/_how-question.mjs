@@ -2163,9 +2163,16 @@ const NOT_PART_WORDS = new Set([
   'outline',
   'section',
   'stack',
+  'stat',
   'step',
   'token',
 ]);
+
+/**
+ * Part names that common words sit one letter from ("stat" beside "state",
+ * "start", "stays"): no near miss is corrected to them.
+ */
+const NO_NEAR_MISS = new Set(['stat']);
 
 /** A word without its plural ending. @param {string} w */
 const singular = w =>
@@ -2231,7 +2238,7 @@ export function partLexicon(ctx) {
       ...DESIGN_WORDS,
       ...Object.keys(HUES).filter(w => w.length >= 5 && !PALETTE_NAMES.has(w)),
       ...[...project.target.keys()]
-        .filter(key => !key.includes('-'))
+        .filter(key => !key.includes('-') && !NO_NEAR_MISS.has(key))
         .flatMap(key => [key, pluralOf(key)]),
     ]),
   ];

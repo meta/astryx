@@ -729,6 +729,12 @@ export const samples = {
   },
   core__SegmentedControl: ({C, React, defaults}) =>
     React.createElement(C, {...defaults, onChange: noop}),
+  core__Stat: ({C, React}) =>
+    React.createElement(C, {
+      label: 'Total requests',
+      value: '2.4M',
+      delta: {value: '+12.4%', direction: 'up'},
+    }),
   core__StatusDot: ({C, React}) =>
     React.createElement(C, {variant: 'success', label: 'Online'}),
   core__TabList: ({C, React, defaults}) =>

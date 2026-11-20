@@ -728,11 +728,6 @@
       "aliases": []
     },
     {
-      "name": "component-lab-stat",
-      "path": "components/lab/stat",
-      "aliases": []
-    },
-    {
       "name": "component-lab-svg-icon",
       "path": "components/lab/svg-icon",
       "aliases": []
@@ -1081,6 +1076,13 @@
       "name": "component-stack-item",
       "path": "components/stack-item",
       "aliases": []
+    },
+    {
+      "name": "component-stat",
+      "path": "components/stat",
+      "aliases": [
+        "components/lab/stat"
+      ]
     },
     {
       "name": "component-status-dot",

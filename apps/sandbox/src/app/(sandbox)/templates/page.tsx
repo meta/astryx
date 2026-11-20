@@ -34,7 +34,7 @@ import {colorVars, radiusVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {Toolbar} from '@astryxdesign/core/Toolbar';
 import {useToast} from '@astryxdesign/core/Toast';
 import {Drawer, DrawerHeader} from '@astryxdesign/core/Drawer';
-import {Stat} from '@astryxdesign/lab';
+import {Stat} from '@astryxdesign/core/Stat';
 
 import {
   TEMPLATE_AUDIT_CATEGORIES,

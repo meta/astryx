@@ -2,7 +2,7 @@
 
 import * as stylex from '@stylexjs/stylex';
 import {Button, Text} from '@astryxdesign/core';
-import {Stat} from '@astryxdesign/lab';
+import {LineClamp} from '@astryxdesign/lab';
 import {Modules} from './modules';
 
 // Per package, a base instance, one under the product's StyleX and one under
@@ -10,7 +10,7 @@ import {Modules} from './modules';
 const styles = stylex.create({
   card: {padding: 13, borderWidth: 3},
   core: {backgroundColor: 'rgb(255, 0, 255)'},
-  lab: {flexDirection: 'row'},
+  lab: {overflowWrap: 'normal'},
 });
 
 export default function Page() {
@@ -27,13 +27,17 @@ export default function Page() {
         <Button label="Delete" variant="destructive" className="product-core" />
       </div>
       <div data-probe="lab-base">
-        <Stat label="Requests" value="1.2M" />
+        <LineClamp maxLines={2}>Requests</LineClamp>
       </div>
       <div data-probe="lab-stylex">
-        <Stat label="Requests" value="1.2M" xstyle={styles.lab} />
+        <LineClamp maxLines={2} xstyle={styles.lab}>
+          Requests
+        </LineClamp>
       </div>
       <div data-probe="lab-class">
-        <Stat label="Requests" value="1.2M" className="product-lab" />
+        <LineClamp maxLines={2} className="product-lab">
+          Requests
+        </LineClamp>
       </div>
       <Modules />
     </main>

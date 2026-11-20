@@ -594,6 +594,11 @@
       "types": "./dist/Stack/index.d.ts",
       "default": "./dist/Stack/index.js"
     },
+    "./Stat": {
+      "source": "./src/Stat/index.ts",
+      "types": "./dist/Stat/index.d.ts",
+      "default": "./dist/Stat/index.js"
+    },
     "./StatusDot": {
       "source": "./src/StatusDot/index.ts",
       "types": "./dist/StatusDot/index.d.ts",

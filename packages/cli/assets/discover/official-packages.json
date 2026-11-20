@@ -230,10 +230,6 @@
         },
         {
           "kind": "component",
-          "name": "Stat"
-        },
-        {
-          "kind": "component",
           "name": "SVGIcon"
         },
         {

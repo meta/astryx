@@ -1,13 +1,13 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import type {Meta, StoryObj} from '@storybook/react';
-import {Stat} from '@astryxdesign/lab';
+import {Stat} from '@astryxdesign/core/Stat';
 import {Card} from '@astryxdesign/core/Card';
 import {Grid} from '@astryxdesign/core/Grid';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 
 const meta: Meta<typeof Stat> = {
-  title: 'Lab/Stat',
+  title: 'Core/Stat',
   component: Stat,
   tags: ['autodocs'],
   parameters: {
@@ -41,7 +41,7 @@ export const Showcase: Story = {
         <Stat
           label="Error rate"
           value="0.42%"
-          delta={{value: '-0.08%', direction: 'down', sentiment: 'positive'}}
+          delta={{value: '-0.08%', direction: 'down', sentiment: 'success'}}
           description="vs. previous 30 days"
         />
       </Card>

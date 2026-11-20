@@ -122,7 +122,7 @@ export {
   type TourDismissSource,
 } from './Tour';
 
-// Stat — experimental KPI/metric display
+// Stat — KPI tile; Lab imports reach Core's component
 export {
   Stat,
   type StatProps,

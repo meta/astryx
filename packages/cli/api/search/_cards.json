@@ -3595,6 +3595,31 @@
 "as"
 ]
 },
+"Stat":{
+"what":"A KPI/metric display: a metric label, a large tabular-numeral value, an optional up/down/flat change with sentiment color, a muted supporting line, and a slot for a sparkline; use for dashboard KPI tiles and summary rows.",
+"synonyms":[
+"KPI tile",
+"KPI card",
+"metric card",
+"stat card",
+"statistic",
+"big number",
+"scorecard metric",
+"dashboard number",
+"Chakra Stat",
+"Ant Statistic",
+"trend delta"
+],
+"props":[
+"label",
+"value",
+"delta",
+"description",
+"media",
+"size",
+"xstyle"
+]
+},
 "StatusDot":{
 "what":"A small fixed-size colored dot used to indicate a status (online/offline, success/warning/error, etc.) next to a label or avatar.",
 "synonyms":[

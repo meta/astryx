@@ -2750,5 +2750,17 @@
   "@astryx.searchField.cancel": {
     "defaultMessage": "Cancel",
     "description": "Accessible name of a lab SearchField's close button, which ends the search: it clears the query, ends editing and deactivates the field."
+  },
+  "@astryx.stat.delta.up": {
+    "defaultMessage": "(trending up)",
+    "description": "Screen-reader-only text read right after a Stat's change value (for example \"+12.4%\") when the metric went up. Stat is a KPI tile: a metric name, a large value and an optional change. Keep the parentheses or your language's equivalent, since it follows the number as an aside."
+  },
+  "@astryx.stat.delta.down": {
+    "defaultMessage": "(trending down)",
+    "description": "Screen-reader-only text read right after a Stat's change value (for example \"-8 ms\") when the metric went down. Counterpart to `stat.delta.up`; keep the two parallel."
+  },
+  "@astryx.stat.delta.flat": {
+    "defaultMessage": "(flat)",
+    "description": "Screen-reader-only text read right after a Stat's change value when the metric did not change. Counterpart to `stat.delta.up` and `stat.delta.down`; keep the three parallel."
   }
 }
