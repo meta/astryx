@@ -317,11 +317,12 @@ const ROWS = [
     },
   ],
   [
-    'a clause not used is named in the words as typed',
+    'a clause a lookup answers is not named as not used, and no untyped words are quoted',
     {
       q: 'glass windows, blue accent',
-      says: /not used: "glass windows"/,
-      saysNot: /make the surfaces/,
+      has: ["accent '#2563eb'"],
+      says: /what containers reads/,
+      saysNot: /not used|make the surfaces/,
     },
   ],
   [
