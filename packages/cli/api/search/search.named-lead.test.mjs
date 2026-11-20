@@ -3,9 +3,11 @@
 /**
  * @file In search's reading, a match whose name of two or more words the
  * query writes as one whole word leads the answer, alone or inside a longer
- * ask. Words written apart, one-word names, a typed word that only starts a
- * name, and a name inside a longer named run or inside a display name, title
- * or heading the query holds lead nothing. searchCore, which build reads,
+ * ask. A name of three or more words the query spells out as words apart, as
+ * is or with a typo the scorer reads, leads its run of matches. Two words
+ * apart, one-word names, a typed word that only starts a name, and a name
+ * inside a longer named run or inside another entry's display name, title or
+ * heading the query holds lead nothing. searchCore, which build reads,
  * keeps the gathered order. All entries here are made up.
  */
 
@@ -146,8 +148,8 @@ describe('a name written as one word', () => {
 });
 
 describe('nothing leads', () => {
-  it('for a name written as words apart', () => {
-    expect(leadsOf('glim tray sorted rows with paging')).toEqual([]);
+  it('for a name of two words written apart', () => {
+    expect(leadsOf('glim tray with paging')).toEqual([]);
   });
 
   it('for a one-word name inside a longer ask', () => {
@@ -160,12 +162,17 @@ describe('nothing leads', () => {
   });
 
   it('for a name inside a held display name', () => {
-    expect(leadsOf('GlimTray — Sorted rows example')).toEqual([]);
+    // The display name is the block's own, so its spelled-out name leads.
+    expect(leadsOf('GlimTray — Sorted rows example')).toEqual([
+      'GlimTraySortedRows',
+    ]);
     expect(leadsOf('GlimTray paging example')).toEqual(['GlimTray']);
   });
 
   it('for a name inside a held title, read as the title tier reads it', () => {
-    expect(leadsOf('GlimTray — Sorted row example')).toEqual([]);
+    expect(leadsOf('GlimTray — Sorted row example')).toEqual([
+      'GlimTraySortedRows',
+    ]);
     expect(leadsOf('how do I pick palette GlimTray colors')).toEqual([
       'GlimTray',
     ]);
@@ -174,7 +181,9 @@ describe('nothing leads', () => {
 
   it('for a name inside a longer named run', () => {
     expect(leadsOf('glimtray board example')).toEqual(['GlimTray']);
-    expect(leadsOf('GlimTray sorted rows example')).toEqual([]);
+    expect(leadsOf('GlimTray sorted rows example')).toEqual([
+      'GlimTraySortedRows',
+    ]);
   });
 
   it('in the gathered reading, which build reads', () => {
@@ -207,5 +216,118 @@ describe('the order of matches', () => {
     const reversed = all.map((_, i) => all.length - 1 - i);
     const ordered = orderMatches(table, reversed, lexical, query, 10);
     expect(ordered.data.results[0].name).toBe('GlimTraySortedRows');
+  });
+});
+
+/** @type {Candidate} */
+const Vexo = {
+  domain: 'component',
+  name: 'Vexo',
+  keywords: ['vexo', 'panel', 'dock', 'stacked'],
+  description: 'A vexo panel that docks, stacked or side by side.',
+};
+/** @type {Candidate} */
+const VexoPanelDock = {
+  domain: 'component',
+  name: 'VexoPanelDock',
+  keywords: ['dock'],
+  description: 'Docks a vexo panel.',
+};
+/** @type {Candidate} */
+const stackedBlock = {
+  domain: 'template',
+  name: 'VexoPanelDockStacked',
+  keywords: ['VexoPanelDock'],
+  description: 'Panels stacked in a dock.',
+  prose: [],
+  _kind: 'block',
+};
+const spelledAll = [Vexo, VexoPanelDock, stackedBlock];
+
+/**
+ * @param {string} query
+ * @param {boolean} [view]
+ */
+const spelledLeadsOf = (query, view = true) => {
+  const response = rankLexical(
+    query,
+    {},
+    view ? searchView(catalog(spelledAll)) : catalog(spelledAll),
+  );
+  return [...(namedLeadsOf.get(response) ?? [])].map(
+    r => /** @type {any} */ (r).name,
+  );
+};
+
+describe('a name of three or more words spelled out apart', () => {
+  it('leads, as written or with a typo the scorer reads', () => {
+    for (const query of [
+      'vexo panel dock stacked',
+      'Vexo Panel Dock Stacked example',
+      'vexo panel dock stakced',
+      'vexo panels dock stacked',
+    ]) {
+      expect(spelledLeadsOf(query)).toEqual(['VexoPanelDockStacked']);
+    }
+  });
+
+  it('leads only for the whole name, and the longest name wins', () => {
+    expect(spelledLeadsOf('vexo panel dock')).toEqual(['VexoPanelDock']);
+    expect(spelledLeadsOf('vexo panel stacked')).toEqual([]);
+    expect(spelledLeadsOf('vexo panel dock zzzzzzz')).toEqual([
+      'VexoPanelDock',
+    ]);
+  });
+
+  it('leads nothing in the gathered reading, which build reads', () => {
+    expect(spelledLeadsOf('vexo panel dock stacked', false)).toEqual([]);
+  });
+
+  it('goes first in its band, whatever the learned order says', () => {
+    const query = 'vexo panel dock stakced';
+    /** @type {Candidate} */
+    const vexo = {
+      domain: 'component',
+      name: 'Vexo',
+      keywords: ['vexo', 'panel'],
+      description: 'A vexo panel.',
+    };
+    /** @param {Candidate} block */
+    const order = block => {
+      const entries = [vexo, VexoPanelDock, block];
+      const lexical = rankLexical(
+        query,
+        {limit: Number.MAX_SAFE_INTEGER},
+        searchView(catalog(entries)),
+      );
+      const table = entryTable(entries, {});
+      return {
+        lexical: lexical.data.results,
+        ordered: orderMatches(table, [2, 1, 0], lexical, query, 10).data
+          .results,
+      };
+    };
+    // In the band of the components it names more fully, it goes first,
+    // ahead of a match that outscores it, and keeps its own score.
+    const near = order({
+      ...stackedBlock,
+      keywords: ['vexo', 'panel', 'dock', 'stacked'],
+      description: 'Vexo panels stacked in a dock.',
+    });
+    expect(near.ordered.map(r => r.name)).toEqual([
+      'VexoPanelDockStacked',
+      'VexoPanelDock',
+      'Vexo',
+    ]);
+    const lead = near.lexical.find(r => r.name === 'VexoPanelDockStacked');
+    expect(near.ordered[0].score).toBe(lead?.score);
+    expect(near.ordered[1].score ?? 0).toBeGreaterThan(lead?.score ?? 0);
+    // A match of a lower band stays below the band above it.
+    const far = order({
+      ...stackedBlock,
+      keywords: ['VexoPanelDock', 'stacked panels'],
+      description: 'Vexo panels stacked in a dock.',
+    });
+    expect(far.ordered.map(r => r.name).at(-1)).toBe('VexoPanelDockStacked');
   });
 });

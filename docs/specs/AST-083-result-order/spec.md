@@ -90,7 +90,11 @@ owns response fields and compatibility.
   `table-sortable-table`) leads the lexical answer, and the order inside runs
   keeps it first. It does not lead when a longer named run of the query
   contains that word, or when a block's display name or a doc's title or
-  heading that the query holds contains it.
+  heading that the query holds contains it. An entry whose name of three or
+  more words the query spells out as words apart, as written or with a typo
+  the lexical ranker reads, leads its band, unless a longer name the query
+  names contains it or another entry's display name or title the query holds
+  contains it.
 - **FR4 — build orders the block catalog for its block slots.**
   `spec:AST-048` owns which blocks build lists and delegates their order here.
   Build's `blocks` hold as many blocks as build itself lists, each once, each
