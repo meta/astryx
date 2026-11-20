@@ -76,7 +76,7 @@ owns response fields and compatibility.
   part's name that does not start a word of the root's name, and the query
   does not write the part's name of two or more words as one word, as is or
   misspelled (a typed word that is the root's own name, or its plural, is no
-  misspelling). A root leads its part from another run only when its own hits
+  misspelling), or spell it out as FR3's spelled-out-name lead reads it. A root leads its part from another run only when its own hits
   on the words the part answers have keyword strength (the whole name, the name's head word, or a keyword, also one edit away), not a word inside its name or a mention in its text. Such a root, when the order places it below that part, moves directly before the part, whatever its band, or only inside the part's run when its hits are weaker; nothing else crosses a run. Among matches of the first
   result's domain that tie with it on score and on the query words they
   matched, the match whose own name holds more query words leads. A first
@@ -91,8 +91,9 @@ owns response fields and compatibility.
   keeps it first. It does not lead when a longer named run of the query
   contains that word, or when a block's display name or a doc's title or
   heading that the query holds contains it. An entry whose name of three or
-  more words the query spells out as words apart, as written or with a typo
-  the lexical ranker reads, leads its band, unless a longer name the query
+  more words the query spells out as words apart, every word in order and at
+  most one word misspelled with its first letter kept, as the lexical ranker
+  reads a misspelled name, leads its band, also ahead of its family's root, unless a longer name the query
   names contains it or another entry's display name or title the query holds
   contains it.
 - **FR4 — build orders the block catalog for its block slots.**

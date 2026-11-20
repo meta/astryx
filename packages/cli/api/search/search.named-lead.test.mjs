@@ -8,9 +8,12 @@
  * apart, one-word names, a typed word that only starts a name, and a name
  * inside a longer named run or inside another entry's display name, title or
  * heading the query holds lead nothing. searchCore, which build reads,
- * keeps the gathered order. All entries here are made up.
+ * keeps the gathered order. All entries here are made up, except the last
+ * block, which checks plain words after a name in the Core catalog.
  */
 
+import * as path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {describe, expect, it} from 'vitest';
 import {requireNatively} from '../../test-utils/native-require.mjs';
 
@@ -24,7 +27,9 @@ const {orderMatches} = require('./_order.mjs');
 /** @type {typeof import('./_entries.mjs')} */
 const {entryTable} = require('./_entries.mjs');
 /** @type {typeof import('./_result.mjs')} */
-const {namedLeadsOf} = require('./_result.mjs');
+const {namedLeadsOf, rootLeadsOf} = require('./_result.mjs');
+/** @type {typeof import('./search.mjs')} */
+const {search} = require('./search.mjs');
 
 /** @typedef {import('./_lexical.mjs').Candidate} Candidate */
 
@@ -303,7 +308,7 @@ describe('a name of three or more words spelled out apart', () => {
       const table = entryTable(entries, {});
       return {
         lexical: lexical.data.results,
-        ordered: orderMatches(table, [2, 1, 0], lexical, query, 10).data
+        ordered: orderMatches(table, [0, 1, 2], lexical, query, 10).data
           .results,
       };
     };
@@ -314,14 +319,16 @@ describe('a name of three or more words spelled out apart', () => {
       keywords: ['vexo', 'panel', 'dock', 'stacked'],
       description: 'Vexo panels stacked in a dock.',
     });
+    // The learned order puts it last; the rest of the band keeps that order.
     expect(near.ordered.map(r => r.name)).toEqual([
       'VexoPanelDockStacked',
-      'VexoPanelDock',
       'Vexo',
+      'VexoPanelDock',
     ]);
     const lead = near.lexical.find(r => r.name === 'VexoPanelDockStacked');
     expect(near.ordered[0].score).toBe(lead?.score);
-    expect(near.ordered[1].score ?? 0).toBeGreaterThan(lead?.score ?? 0);
+    const outscoring = near.ordered.find(r => r.name === 'VexoPanelDock');
+    expect(outscoring?.score ?? 0).toBeGreaterThan(lead?.score ?? 0);
     // A match of a lower band stays below the band above it.
     const far = order({
       ...stackedBlock,
@@ -330,4 +337,77 @@ describe('a name of three or more words spelled out apart', () => {
     });
     expect(far.ordered.map(r => r.name).at(-1)).toBe('VexoPanelDockStacked');
   });
+});
+
+describe('a spelled-out name with a typo', () => {
+  it('allows one word with a typo that keeps its first letter', () => {
+    expect(spelledLeadsOf('vexo panle dock stacked')).toEqual([
+      'VexoPanelDockStacked',
+    ]);
+    // Two words with typos spell out no name.
+    expect(spelledLeadsOf('vexo panle dokc stacked')).toEqual([]);
+    // A typo that changes the first letter spells out only the shorter name.
+    expect(spelledLeadsOf('vexo panel dock ztacked')).toEqual([
+      'VexoPanelDock',
+    ]);
+  });
+
+  it('never reads a plain word as a name word', () => {
+    expect(spelledLeadsOf('vexo panel with stacked')).toEqual([]);
+    expect(spelledLeadsOf('vexo panel dock with')).toEqual(['VexoPanelDock']);
+  });
+});
+
+describe("a spelled-out part of a family and the family's root", () => {
+  /** @type {Candidate[]} */
+  const family = [
+    {
+      domain: 'component',
+      name: 'BrindleKnob',
+      keywords: ['brindle', 'knob'],
+      description: 'A brindle knob.',
+    },
+    {
+      domain: 'component',
+      name: 'BrindleKnobGroup',
+      _family: 'BrindleKnob',
+      keywords: ['group'],
+      description: 'Groups brindle knobs.',
+    },
+  ];
+
+  it('keeps the part first, with no root lead', () => {
+    const query = 'brindle knob gropu';
+    const lexical = rankLexical(
+      query,
+      {limit: Number.MAX_SAFE_INTEGER},
+      searchView(catalog(family)),
+    );
+    expect(
+      [...(namedLeadsOf.get(lexical) ?? [])].map(
+        r => /** @type {any} */ (r).name,
+      ),
+    ).toEqual(['BrindleKnobGroup']);
+    expect(rootLeadsOf.get(lexical)?.size ?? 0).toBe(0);
+    const table = entryTable(family, {});
+    const ordered = orderMatches(table, [0, 1], lexical, query, 10).data
+      .results;
+    expect(ordered[0].name).toBe('BrindleKnobGroup');
+  });
+});
+
+describe('plain words after a name in the Core catalog', () => {
+  const cwd = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../../../..',
+  );
+
+  it('keep the component the query names first', async () => {
+    const avatar = await search('avatar status with icons', {cwd});
+    expect(avatar.data.results[0].name).toBe('Avatar');
+    const chat = await search('chat message list with icons', {cwd});
+    expect(chat.data.results.slice(0, 3).map(r => r.name)).toContain(
+      'ChatMessage',
+    );
+  }, 60_000);
 });

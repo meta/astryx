@@ -369,18 +369,25 @@ export function rankLexical(query, options, catalog) {
       const words = phraseWords(spellIdentifiers(String(name)));
       if (words.length < SPELLED_NAME_WORDS) continue;
       if (best && best[1] - best[0] >= words.length) continue;
-      const whole = words.join('');
       for (let a = 0; a + words.length <= queryWords.length; a++) {
         const b = a + words.length;
         const run = queryWords.slice(a, b);
+        // Every word stands as written (a plural on any), except at most one,
+        // which keeps its first letter, and the run read joined is a typo of
+        // the name joined as the scorer reads a misspelled name
+        // (typoDistance): `with` never stands in for `dot`, nor `list` for
+        // `ghost`.
+        const typos = words.flatMap((word, n) =>
+          samePhraseWord(run[n], word) ? [] : [n],
+        );
         if (
           typedAs[a - 1] === typedAs[a] ||
           typedAs[b] === typedAs[b - 1] ||
           typedAs[a] === typedAs[b - 1] ||
-          !(
-            run.every((q, n) => samePhraseWord(q, words[n])) ||
-            typoDistance(run.join(''), whole) !== null
-          )
+          typos.length > 1 ||
+          typos.some(n => run[n][0] !== words[n][0]) ||
+          (typos.length === 1 &&
+            typoDistance(run.join(''), words.join('')) === null)
         )
           continue;
         best = [a, b];
@@ -625,10 +632,10 @@ export function rankLexical(query, options, catalog) {
   // In search's reading, an entry whose whole name of SPELLED_NAME_WORDS or
   // more words the query spells out as words apart leads its run of matches
   // (_order.mjs): the run's words are the name's words in order (a plural on
-  // any), or, joined, a typo of the name joined as the scorer reads one
-  // (typoDistance): `glim tray sortde rows` for GlimTraySortedRows. Such a
-  // run names the entry more fully than a component that holds only its
-  // first words. Two words apart stay plain language (see above). It leads
+  // any), at most one of them misspelled with its first letter kept, as the
+  // scorer reads a misspelled name: `glim tray sortde rows` for
+  // GlimTraySortedRows. Such a run names the entry more fully than a
+  // component that holds only its first words, or than its family's root. Two words apart stay plain language (see above). It leads
   // only its run: it moves first among the matches scored the same and is
   // first in its band, never past a match of another band.
   const spelledOut = (catalog.ownEvidence ? ranked : []).flatMap(r => {
@@ -677,6 +684,9 @@ export function rankLexical(query, options, catalog) {
         ),
     )
     .map(({r}) => r.result);
+  // A part whose whole name the query spells out keeps its band lead over
+  // its family's root (rootLeads below).
+  const spelledLed = new Set(spelledLeads);
   const leads = new Set([...typedLeads, ...spelledLeads]);
   if (typedLeads.size) {
     scored.sort(
@@ -762,7 +772,13 @@ export function rankLexical(query, options, catalog) {
     for (const r of ranked) {
       const family = r.candidate._family;
       const root = family && byName.get(`${r.result.domain}:${family}`);
-      if (!root || root === r || typedSpan(r) || misspelled(r, family)) {
+      if (
+        !root ||
+        root === r ||
+        typedSpan(r) ||
+        misspelled(r, family) ||
+        spelledLed.has(r.result)
+      ) {
         continue;
       }
       const ofPart = answeredTerms(r.result.reason);
