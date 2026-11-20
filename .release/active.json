@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "state": "active",
+  "version": "0.7.17",
+  "branch": "release/v0.7.17",
+  "cutSha": "66b2932af1b0847b16d5b9ef8c44db4a63885876",
+  "ownerRecut": {
+    "version": "0.7.17",
+    "tagName": "v0.7.17",
+    "tagSha": "13fe53ac0b39ef43e331f59ec812d3976b5a3c1d",
+    "receiptSha256": "445eaca73603c95bd56d65a5a5023f4de752af1c650e417884075fa9408beb12"
+  },
+  "planDigest": "d15f7299d0a9ff894b124286bcb8a05ad77de8d12ca7da317f592332fcca9220"
+}
