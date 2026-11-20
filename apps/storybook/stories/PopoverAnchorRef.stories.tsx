@@ -3,8 +3,9 @@
 /**
  * @file PopoverAnchorRef.stories.tsx
  * @input usePopover, Button and TextInput from @astryxdesign/core
- * @output A story with one popover shared by three table rows. Each row's
- *   edit button sets `anchorRef` to that row's value cell and calls `show()`.
+ * @output A story with one popover shared by three table rows. One edit
+ *   button per row, in a bar above the table, sets `anchorRef` to that row's
+ *   value cell and calls `show()`.
  *   A button removes and restores row B's value cell, and a button inside
  *   the popover removes it. A counter shows how often the popover reported a
  *   show and a hide
@@ -43,6 +44,22 @@ function RowEditor() {
   const {show} = popover;
   return (
     <div>
+      {/* The edit buttons sit above the table: the popover opens below a
+          value cell, so it never covers a button that moves it. */}
+      <div style={{display: 'flex', flexWrap: 'wrap', gap: 8}}>
+        {ROWS.map(row => (
+          <Button
+            key={row}
+            label={`Edit row ${row}`}
+            onClick={() => {
+              anchorRef.current = document.querySelector(
+                `[data-cell="${row}"]`,
+              );
+              show();
+            }}
+          />
+        ))}
+      </div>
       <table>
         <tbody>
           {ROWS.map(row => (
@@ -57,17 +74,6 @@ function RowEditor() {
                   Value {row}
                 </td>
               )}
-              <td style={{padding: 8}}>
-                <Button
-                  label={`Edit row ${row}`}
-                  onClick={() => {
-                    anchorRef.current = document.querySelector(
-                      `[data-cell="${row}"]`,
-                    );
-                    show();
-                  }}
-                />
-              </td>
             </tr>
           ))}
         </tbody>
