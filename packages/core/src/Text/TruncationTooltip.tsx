@@ -48,22 +48,17 @@ const tooltipModule = createModuleLoader(
 );
 
 // The page's texts share one preload. It waits a frame and a task for the
-// paint, then loads the module once. A failed load lets the next text try
-// again, as the module loader does.
-let preload: ReturnType<typeof tooltipModule.load> | null = null;
-async function loadAfterNextPaint(): ReturnType<typeof tooltipModule.load> {
-  preload ??= new Promise<void>(resolve => {
+// paint, then loads the module once. The shared loader keeps no failed load,
+// so the next text tries again.
+const afterPaintModule = createModuleLoader(async () => {
+  await new Promise<void>(resolve => {
     requestAnimationFrame(() => {
       setTimeout(resolve, 0);
     });
-  })
-    .then(async () => tooltipModule.load())
-    .catch((error: unknown) => {
-      preload = null;
-      throw error;
-    });
-  return preload;
-}
+  });
+  return tooltipModule.load();
+});
+const loadAfterNextPaint = afterPaintModule.load;
 
 export interface TruncationTooltipInterest {
   /** Whether a hover, tap or focus has reached the element. It stays true. */
