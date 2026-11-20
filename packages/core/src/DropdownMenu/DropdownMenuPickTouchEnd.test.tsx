@@ -24,12 +24,14 @@ import {DropdownMenuRadioGroup} from './DropdownMenuRadioGroup';
 import {DropdownMenuRadioItem} from './DropdownMenuRadioItem';
 import {DropdownMenuSubMenu} from './DropdownMenuSubMenu';
 import {__resetMenuPressForTest} from '../hooks/useMenuPress';
-import {CLICK_GUARD_WINDOW_MS} from '../utils/clickGuard';
-import {__setEventTrustForTest} from '../utils/eventTrust';
+import {
+  __setEventTrustForTest,
+  CLICK_GUARD_WINDOW_MS,
+} from '../utils/clickGuard';
 import {TOUCH_QUERY} from '../utils/touchPresentation';
 
 // jsdom sends no trusted event. The events in this set stand in for the
-// browser's own (utils/eventTrust.ts).
+// browser's own (utils/clickGuard.ts).
 const browserEvents = new WeakSet<Event>();
 beforeEach(() => {
   __setEventTrustForTest(event => browserEvents.has(event));
