@@ -59,13 +59,16 @@ import {markTouchEndCancelled} from './touchEndMark';
 
 const readIsTrusted = (event: Event): boolean => event.isTrusted;
 
-// The guard's one trust read. jsdom never sends a trusted event, so the unit
-// tests name the events that stand in for the browser's own.
-let readTrust = readIsTrusted;
+// The guard's one trust read, registered like its state. jsdom never sends a
+// trusted event, so the unit tests name the events that stand in for the
+// browser's own.
+const trust = realmValue(sharedKey('click-guard-trust', 1), () => ({
+  read: readIsTrusted,
+}));
 
 /** Whether the browser sent `event`, not a page's `dispatchEvent` or `click()`. */
 function isUserAgentEvent(event: Event): boolean {
-  return readTrust(event);
+  return trust.read(event);
 }
 
 /**
@@ -328,7 +331,7 @@ export function withoutClickGuard<T>(dispatch: () => T): T {
 export function __setEventTrustForTest(
   read: ((event: Event) => boolean) | null,
 ): void {
-  readTrust = read ?? readIsTrusted;
+  trust.read = read ?? readIsTrusted;
 }
 
 /**
