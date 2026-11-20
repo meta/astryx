@@ -505,10 +505,8 @@ export function useTypedDateField({
     if (valueRetiresLastFiredDate) {
       setFiredEpoch(epoch => epoch + 1);
     }
-    // An explicit clear is an outside value change even when no date was
-    // last reported. Without this branch, rejected text whose last fired
-    // date is already undefined survives a controlled clear. A value restored
-    // in the same Enter or blur render is excluded by isEntryReplaced.
+    // Typing never reports `undefined` while text is held, so a clear to
+    // `undefined` always comes from outside.
     if (
       pendingInput !== null &&
       isEntryReplaced &&
