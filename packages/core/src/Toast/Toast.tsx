@@ -127,6 +127,15 @@ const styles = stylex.create({
   variantError: {
     backgroundColor: colorVars['--color-background-error-inverted'],
   },
+  // The card's text takes the on-color of the side it picks (FR14). The
+  // media surface sets that side's color scheme, so light-dark() reads the
+  // side's on-color, on a dark page too.
+  sideText: {
+    display: 'contents',
+  },
+  sideTextOnColor: {
+    '--color-text-primary': `light-dark(${colorVars['--color-on-light']}, ${colorVars['--color-on-dark']})`,
+  },
   content: {
     flex: 1,
     minWidth: 0,
@@ -474,6 +483,7 @@ export function ToastSurface({
     true,
     pickInvertedSide,
   );
+  const mediaMode = measuredMediaMode ?? fallbackMediaMode;
 
   return (
     <div
@@ -494,37 +504,43 @@ export function ToastSurface({
         ),
       )}>
       <MediaDarkPage side={measuredMediaMode == null ? darkPageSide : null}>
-        <MediaTheme mode={measuredMediaMode ?? fallbackMediaMode}>
-          {renderContent ? (
-            renderContent({
-              body,
-              endContent,
-              type,
-              isAutoHide,
-              autoHideDuration,
-              dismiss: handleDismiss,
-            })
-          ) : (
-            <div {...stylex.props(styles.inner)}>
-              <div ref={bodyRef} {...stylex.props(styles.content)}>
-                {body}
-              </div>
+        <MediaTheme mode={mediaMode}>
+          <div
+            {...stylex.props(
+              styles.sideText,
+              mediaMode !== 'off' && styles.sideTextOnColor,
+            )}>
+            {renderContent ? (
+              renderContent({
+                body,
+                endContent,
+                type,
+                isAutoHide,
+                autoHideDuration,
+                dismiss: handleDismiss,
+              })
+            ) : (
+              <div {...stylex.props(styles.inner)}>
+                <div ref={bodyRef} {...stylex.props(styles.content)}>
+                  {body}
+                </div>
 
-              <div {...stylex.props(styles.endContent)}>
-                {endContent}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  icon={<Icon icon="close" size="sm" color="inherit" />}
-                  className={themeProps('toast-close').className}
-                  xstyle={styles.close}
-                  label={t('@astryx.toast.dismiss')}
-                  onClick={handleDismiss}
-                  isIconOnly
-                />
+                <div {...stylex.props(styles.endContent)}>
+                  {endContent}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<Icon icon="close" size="sm" color="inherit" />}
+                    className={themeProps('toast-close').className}
+                    xstyle={styles.close}
+                    label={t('@astryx.toast.dismiss')}
+                    onClick={handleDismiss}
+                    isIconOnly
+                  />
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </MediaTheme>
       </MediaDarkPage>
     </div>
