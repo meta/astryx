@@ -153,7 +153,7 @@ export const docsDense = {
   },
   usage: {
     description:
-      'Local sort state + sorted rows for Table over useTableSortable. Render sortedData, pass sortConfig to useTableSortable. Shift+click adds tiebreakers with isMultiSortEnabled. Server-sorted data: use useTableSortable.',
+      'Local sort state + sorted rows for Table over useTableSortable: render sortedData, pass sortConfig to useTableSortable. Shift+click adds tiebreakers with isMultiSortEnabled. Server-sorted data: use useTableSortable.',
     bestPractices: [
       {
         guidance: true,
