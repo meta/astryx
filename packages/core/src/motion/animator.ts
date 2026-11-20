@@ -1294,10 +1294,11 @@ export function createMotionEngine(
   element: HTMLElement | null,
   options: AnimatorOptions = {},
 ): Animator {
-  // The document of the element it moves now: an engine made without its
-  // element reads the one an attach gives it.
-  const now =
-    options.now ?? (() => motionNow((target ?? element)?.ownerDocument));
+  // The document of the element it moves, or last moved. An engine made
+  // without its element reads the one an attach gives it, through its
+  // unmount too.
+  let clockDocument = element?.ownerDocument;
+  const now = options.now ?? (() => motionNow(clockDocument));
   const frameSource =
     options.requestFrame ??
     (typeof requestAnimationFrame === 'function'
@@ -3120,8 +3121,7 @@ export function createMotionEngine(
    */
   const startAfterBlock = (group: StartGroup, start: number): number => {
     const doc =
-      (target ?? element)?.ownerDocument ??
-      (typeof document === 'undefined' ? undefined : document);
+      clockDocument ?? (typeof document === 'undefined' ? undefined : document);
     const timeline = doc?.timeline?.currentTime as number | null | undefined;
     // A start well after the animations were created is the browser's
     // commit of them.
@@ -4492,6 +4492,9 @@ export function createMotionEngine(
       }
       const held = heldIdentity;
       target = next;
+      if (next != null) {
+        clockDocument = next.ownerDocument;
+      }
       // A new node: its own will-change is read again.
       cancelSheetWillChangeRead();
       sheetWillChangeRead = false;

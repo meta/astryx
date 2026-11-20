@@ -1918,6 +1918,64 @@ for (const [rate, made] of [
   });
 }
 
+// An engine made without its element keeps the clock of the document it
+// last moved in: its unmount settles the motion there, as interrupted.
+test('in an iframe made after the page, an engine made without its element and detached mid-flight settles its motion as interrupted at once', async ({
+  page,
+}) => {
+  await open(page);
+  await page.waitForTimeout(1000);
+  const result = await page.evaluate(async () => {
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText =
+      'position: absolute; top: 120px; left: 0; width: 400px; height: 200px; border: 0';
+    iframe.srcdoc = `<!doctype html><style>
+      html, body { margin: 0; }
+      #box { position: absolute; top: 40px; left: 0; width: 48px; height: 48px; background: #36c; }
+    </style><div id="box"></div>`;
+    const loaded = new Promise(resolve => {
+      iframe.addEventListener('load', resolve, {once: true});
+    });
+    document.body.append(iframe);
+    await loaded;
+    const view = iframe.contentWindow as Window & typeof globalThis;
+    const box = view.document.getElementById('box') as HTMLElement;
+    const animator = Motion.createMotionEngine(null);
+    animator.attach(box);
+    const handle = animator.animate(
+      {x: 300},
+      {spring: {response: 0.25, dampingRatio: 1}},
+    );
+    for (let i = 0; i < 6; i++) {
+      await new Promise(resolve => {
+        requestAnimationFrame(resolve);
+      });
+    }
+    const detachedAt = performance.now();
+    animator.attach(null);
+    const settled = await Promise.race([
+      handle.finished.then(finished => ({
+        finished,
+        after: performance.now() - detachedAt,
+      })),
+      new Promise<{finished: null; after: number}>(resolve => {
+        setTimeout(() => resolve({finished: null, after: 1000}), 1000);
+      }),
+    ]);
+    return {
+      originGap: view.performance.timeOrigin - performance.timeOrigin,
+      ...settled,
+    };
+  });
+  test.info().annotations.push({
+    type: 'iframe detach',
+    description: JSON.stringify(result),
+  });
+  expect(result.originGap).toBeGreaterThan(500);
+  expect(result.finished).toBe(false);
+  expect(result.after).toBeLessThan(50);
+});
+
 /** Sets the page's animation speed as DevTools does, through its protocol. */
 async function setTimelineSpeed(page: Page, rate: number) {
   const cdp = await page.context().newCDPSession(page);
