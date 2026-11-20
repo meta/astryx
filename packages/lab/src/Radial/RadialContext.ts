@@ -8,9 +8,15 @@
 import {createContext, useContext} from 'react';
 import type {RadialContext} from './types';
 
-const RadialCtx = createContext<RadialContext | null>(null);
+const RadialCtx = createContext<
+  (RadialContext & {interactive?: boolean}) | null
+>(null);
 
 export const RadialProvider = RadialCtx.Provider;
+
+export function useRadialInteractive(): boolean {
+  return useContext(RadialCtx)?.interactive ?? false;
+}
 
 /** Access the radial chart context. Throws if used outside RadialChart. */
 export function useRadial(): RadialContext {

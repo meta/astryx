@@ -4,7 +4,7 @@
 
 /**
  * @file SideNavRenderContext.ts
- * @input React createContext, use
+ * @input createSharedContext, use
  * @output Exports SideNavRenderContext and useSideNavRenderMode hook
  * @position Internal context for controlling SideNav rendering mode
  *
@@ -15,16 +15,17 @@
  * - 'drawer': children only, skip heading + footerIcons (mobile drawer)
  */
 
-import {createContext, use} from 'react';
+import {use} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
 export type SideNavRenderMode =
-  | 'default'
-  | 'topbar'
-  | 'drawer'
-  | 'drawer-content';
+  'default' | 'topbar' | 'drawer' | 'drawer-content';
 
-export const SideNavRenderContext =
-  createContext<SideNavRenderMode>('default');
+export const SideNavRenderContext = createSharedContext<SideNavRenderMode>(
+  'SideNavRenderContext',
+  1,
+  'default',
+);
 SideNavRenderContext.displayName = 'SideNavRenderContext';
 
 /**

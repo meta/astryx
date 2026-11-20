@@ -70,6 +70,135 @@ export function restoreSelectionRange(range: Range): void {
 }
 
 /**
+ * When a collapsed range sits on an element boundary, walk it into the preceding
+ * text node if one exists. Chromium anchors an IME composition to the DOM boundary
+ * where it starts; from an element boundary, the first preedit commits as raw
+ * letters instead of composing. A preceding editable element counts too: the
+ * range lands at the end of its last text node. Otherwise the range stays where
+ * it is.
+ */
+export function landInsideTrailingTextNode(
+  editable: HTMLElement,
+  range: Range,
+): void {
+  if (range.startContainer !== editable) {
+    return;
+  }
+  const offset = range.startOffset;
+  const childBefore = offset > 0 ? editable.childNodes[offset - 1] : null;
+  if (childBefore && childBefore.nodeType === Node.TEXT_NODE) {
+    const textNode = childBefore as Text;
+    range.setStart(textNode, textNode.nodeValue?.length ?? 0);
+    range.collapse(true);
+    return;
+  }
+  if (childBefore && childBefore.nodeType === Node.ELEMENT_NODE) {
+    const el = childBefore as HTMLElement;
+    if (el.isContentEditable) {
+      let current: Node = el;
+      while (current.lastChild) {
+        current = current.lastChild;
+        if (current.nodeType === Node.TEXT_NODE) {
+          const textNode = current as Text;
+          range.setStart(textNode, textNode.nodeValue?.length ?? 0);
+          range.collapse(true);
+          return;
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Collapse the Selection right after `node`, a child of `editable`, or at the
+ * start of `editable` when `node` is null. The caret lands inside the preceding
+ * text, so a composition that starts there composes.
+ */
+export function placeCaretAfterNode(
+  editable: HTMLElement,
+  node: Node | null,
+): void {
+  const selection = window.getSelection();
+  if (!selection) {
+    return;
+  }
+  const range = document.createRange();
+  if (node) {
+    range.setStartAfter(node);
+  } else {
+    range.setStart(editable, 0);
+  }
+  range.collapse(true);
+  landInsideTrailingTextNode(editable, range);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+/**
+ * Whether the content up to `node` ends a line: the last non-empty node at or
+ * before it is a line break element, or text that ends in one.
+ */
+function endsLine(node: Node | null): boolean {
+  let current = node;
+  while (
+    current != null &&
+    current.nodeType === Node.TEXT_NODE &&
+    current.textContent === ''
+  ) {
+    current = current.previousSibling;
+  }
+  if (current == null) {
+    return false;
+  }
+  if (current.nodeName === 'BR') {
+    return true;
+  }
+  return (
+    current.nodeType === Node.TEXT_NODE &&
+    (current.textContent ?? '').endsWith('\n')
+  );
+}
+
+/** Whether `node` or a later sibling holds content; empty text holds none. */
+function hasContentFrom(node: Node | null): boolean {
+  for (let current = node; current != null; current = current.nextSibling) {
+    if (current.nodeType !== Node.TEXT_NODE || current.textContent !== '') {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Place the caret where a removed token was. `before` and `after` are the
+ * nodes that were next to the token and its trailing space. When the removal
+ * empties the last line, the line keeps a `<br>` placeholder, as the browser's
+ * own delete keeps it, and the caret lands in an empty text node before it, so
+ * a composition there composes. Otherwise the caret lands after `before`.
+ */
+export function placeCaretAfterRemovedToken(
+  editable: HTMLElement,
+  before: Node | null,
+  after: Node | null,
+): void {
+  if (!hasContentFrom(after) && endsLine(before)) {
+    const selection = window.getSelection();
+    if (!selection) {
+      return;
+    }
+    const text = document.createTextNode('');
+    editable.append(text, document.createElement('br'));
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return;
+  }
+  placeCaretAfterNode(editable, before);
+}
+
+/**
  * Collapse the Selection to the very end of `editable`'s content,
  * replacing whatever the Selection held before.
  *
@@ -89,6 +218,7 @@ export function placeCaretAtEnd(editable: HTMLElement): boolean {
   const range = document.createRange();
   range.selectNodeContents(editable);
   range.collapse(false); // collapse to end
+  landInsideTrailingTextNode(editable, range);
   selection.removeAllRanges();
   selection.addRange(range);
   return true;
@@ -123,6 +253,7 @@ export function ensureCaretInside(editable: HTMLElement): Selection | null {
   const range = document.createRange();
   range.selectNodeContents(editable);
   range.collapse(false); // collapse to end
+  landInsideTrailingTextNode(editable, range);
   selection.removeAllRanges();
   selection.addRange(range);
   return selection;
@@ -262,7 +393,7 @@ export function insertTextAtCursor(
   const textNode = document.createTextNode(text);
   range.insertNode(textNode);
 
-  range.setStartAfter(textNode);
+  range.setStart(textNode, text.length);
   range.collapse(true);
   selection.removeAllRanges();
   selection.addRange(range);

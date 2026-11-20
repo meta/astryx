@@ -51,8 +51,9 @@ import {useDropdownMenuContext} from './DropdownMenuContext';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {menuPressLitRowStyle} from '../privateAttributes/menuPressLit.stylex';
 import {focusMenuItemOnHover} from './menuItemHover';
-import {isModifiedClick} from './menuItemRoles';
+import {isModifiedClick, keepDisabledRowUnfocused} from './menuItemRoles';
 import {themeProps} from '../utils/themeProps';
+import {menuRowCornerStyles} from './menuRowCorners.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 
 const menuItemStyles = stylex.create({
@@ -61,9 +62,9 @@ const menuItemStyles = stylex.create({
     width: '100%',
     paddingBlock: spacingVars['--spacing-2'],
     paddingInline: spacingVars['--spacing-2'],
-    borderRadius: `max(0px, calc(var(--_dropdown-menu-radius, ${spacingVars['--spacing-2']}) - var(--_dropdown-menu-padding, ${spacingVars['--spacing-1']})))`,
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     color: colorVars['--color-text-primary'],
     backgroundColor: {
       default: 'transparent',
@@ -270,6 +271,10 @@ export function DropdownMenuItem({
   return (
     <Item
       {...rest}
+      onMouseDown={composeEventHandlers(
+        rest.onMouseDown,
+        isDisabled ? keepDisabledRowUnfocused : undefined,
+      )}
       ref={ref}
       // A row that navigates IS the link: its root is the application's
       // anchor, so a modified click, a middle click, copying the address and
@@ -277,7 +282,7 @@ export function DropdownMenuItem({
       // address keeps the default root.
       as={href != null ? LinkComponent : undefined}
       role="menuitem"
-      tabIndex={isDisabled ? undefined : -1}
+      tabIndex={-1}
       // The row's own handling runs first, then the caller's.
       onPointerMove={composeEventHandlers(handlePointerMove, onPointerMove)}
       {...pressable}
@@ -306,6 +311,7 @@ export function DropdownMenuItem({
       xstyle={[
         focusOutlineStyles.focusVisible,
         menuItemStyles.root,
+        menuRowCornerStyles.root,
         menuPressLitRowStyle,
         itemSizeStyles[menuSize],
         isDestructive && menuItemStyles.destructive,

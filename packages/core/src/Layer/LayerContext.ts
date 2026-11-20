@@ -13,7 +13,8 @@
  * - /packages/core/src/Layer/LayerProvider.tsx
  */
 
-import {createContext, use} from 'react';
+import {use} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
 /**
  * The inset an app declares for a persistent bar floating over a viewport
@@ -68,7 +69,11 @@ export interface LayerContextValue {
  * React context for the layer provider.
  * Default value is null — hooks detect this and use the fallback.
  */
-export const LayerContext = createContext<LayerContextValue | null>(null);
+export const LayerContext = createSharedContext<LayerContextValue | null>(
+  'LayerContext',
+  1,
+  null,
+);
 LayerContext.displayName = 'LayerContext';
 
 /**

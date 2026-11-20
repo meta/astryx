@@ -17,7 +17,7 @@
  */
 
 import {useMemo, type ReactNode} from 'react';
-import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
@@ -55,10 +55,11 @@ export interface BreadcrumbContextValue {
   separator: ReactNode;
 }
 
-export const BreadcrumbContext = createContext<BreadcrumbContextValue>({
-  variant: 'default',
-  separator: '/',
-});
+export const BreadcrumbContext =
+  createLayerScopedContext<BreadcrumbContextValue>('BreadcrumbContext', 1, {
+    variant: 'default',
+    separator: '/',
+  });
 BreadcrumbContext.displayName = 'BreadcrumbContext';
 
 // =============================================================================

@@ -42,6 +42,7 @@ describe('NavHeadingMenu', () => {
     );
     const menu = screen.getByRole('menu');
     expect(menu.className).toContain('nav-heading-menu');
+    expect(menu).toHaveAttribute('data-size', 'lg');
   });
 
   it('applies data-testid', () => {
@@ -348,6 +349,28 @@ describe('NavHeadingMenuItem', () => {
 });
 
 describe('keyboard navigation', () => {
+  it('reaches a disabled row with the keys and type-ahead; the row stays inert', async () => {
+    const user = userEvent.setup();
+    const onArchive = vi.fn();
+    render(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem label="Rename" />
+        <NavHeadingMenuItem label="Archive" isDisabled onClick={onArchive} />
+        <NavHeadingMenuItem label="Delete" />
+      </NavHeadingMenu>,
+    );
+    const [rename, archive, del] = screen.getAllByRole('menuitem');
+    rename.focus();
+    fireEvent.keyDown(rename, {key: 'ArrowDown'});
+    expect(archive).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(onArchive).not.toHaveBeenCalled();
+    fireEvent.keyDown(archive, {key: 'ArrowDown'});
+    expect(del).toHaveFocus();
+    fireEvent.keyDown(del, {key: 'a'});
+    expect(archive).toHaveFocus();
+  });
+
   it('keeps arrow navigation when an item handler cancels', () => {
     const onKeyDown = vi.fn((event: KeyboardEvent) => event.preventDefault());
     render(
@@ -495,7 +518,7 @@ describe('keyboard navigation', () => {
     expect(screen.getByRole('menuitem', {name: 'Paste'})).toHaveFocus();
   });
 
-  it('typeahead skips a disabled menuitem (menus-11)', () => {
+  it('typeahead reaches a disabled menuitem, which stays discoverable', () => {
     render(
       <NavHeadingMenu>
         <NavHeadingMenuItem label="Cut" />
@@ -504,14 +527,10 @@ describe('keyboard navigation', () => {
       </NavHeadingMenu>,
     );
     const menu = screen.getByRole('menu');
-    // Typing "p" must land on the enabled "Paste special", never the disabled
-    // "Paste (disabled)" — the disabled item is excluded from the typeahead
-    // selector entirely.
     fireEvent.keyDown(menu, {key: 'p'});
-    expect(screen.getByRole('menuitem', {name: 'Paste special'})).toHaveFocus();
     expect(
       screen.getByRole('menuitem', {name: 'Paste (disabled)'}),
-    ).not.toHaveFocus();
+    ).toHaveFocus();
   });
 });
 
@@ -710,5 +729,108 @@ describe('NavHeadingMenu as an action group (family:action-groups)', () => {
     fireEvent.pointerUp(item('Archive'), finger);
     expect(onDashboard).not.toHaveBeenCalled();
     expect(onSettings).not.toHaveBeenCalled();
+  });
+});
+
+describe('NavHeadingMenu record contract', () => {
+  function Glyph(props: React.SVGProps<SVGSVGElement>) {
+    return <svg data-testid="glyph" {...props} />;
+  }
+
+  it('forwards its ref to the menu, and a caller role does not replace menu (FR1)', () => {
+    const ref = {current: null as HTMLDivElement | null};
+    render(
+      <NavHeadingMenu ref={ref} role="list">
+        <NavHeadingMenuItem label="First" />
+      </NavHeadingMenu>,
+    );
+    const menu = screen.getByRole('menu');
+    expect(ref.current).toBe(menu);
+  });
+
+  it("gives every item the item target with the menu's size (FR2)", () => {
+    render(
+      <NavHeadingMenu size="sm">
+        <NavHeadingMenuItem label="Docs" href="/docs" />
+        <NavHeadingMenuItem label="Archive" />
+      </NavHeadingMenu>,
+    );
+    for (const item of screen.getAllByRole('menuitem')) {
+      expect(item).toHaveClass('astryx-nav-heading-menu-item');
+      expect(item).toHaveAttribute('data-size', 'sm');
+    }
+  });
+
+  it('renders an icon through Icon, string text through Text, and a custom label as given (FR3)', () => {
+    render(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem
+          label="Profile"
+          description="Your account"
+          icon={Glyph}
+        />
+        <NavHeadingMenuItem
+          label={<strong data-testid="custom">Team</strong>}
+        />
+      </NavHeadingMenu>,
+    );
+    expect(screen.getByTestId('glyph').closest('.astryx-icon')).not.toBeNull();
+    expect(screen.getByText('Profile').closest('.astryx-text')).not.toBeNull();
+    expect(
+      screen.getByText('Your account').closest('.astryx-text'),
+    ).not.toBeNull();
+    expect(screen.getByTestId('custom').closest('.astryx-text')).toBeNull();
+  });
+
+  it('makes every enabled item focusable but not a Tab stop (FR5)', () => {
+    render(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem label="Docs" href="/docs" />
+        <NavHeadingMenuItem label="Archive" onClick={() => {}} />
+      </NavHeadingMenu>,
+    );
+    for (const item of screen.getAllByRole('menuitem')) {
+      expect(item).toHaveAttribute('tabindex', '-1');
+    }
+  });
+
+  it('does not close the menu when a disabled item is pressed (FR6)', async () => {
+    const user = userEvent.setup();
+    const closeMenu = vi.fn();
+    render(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem label="Archive" onClick={() => {}} isDisabled />
+      </NavHeadingMenu>,
+      {
+        wrapper: ({children}) => (
+          <NavHeadingCloseContext value={{closeMenu}}>
+            {children}
+          </NavHeadingCloseContext>
+        ),
+      },
+    );
+    await user.click(screen.getByRole('menuitem'));
+    expect(closeMenu).not.toHaveBeenCalled();
+  });
+
+  it('skips the keyboard model when a caller onKeyDown cancels the key (FR7)', async () => {
+    const user = userEvent.setup();
+    render(
+      <NavHeadingMenu
+        onKeyDown={event => {
+          if (event.key === 'ArrowDown') {
+            event.preventDefault();
+          }
+        }}>
+        <NavHeadingMenuItem label="First" />
+        <NavHeadingMenuItem label="Second" />
+      </NavHeadingMenu>,
+    );
+    const items = screen.getAllByRole('menuitem');
+    items[0].focus();
+    await user.keyboard('{ArrowDown}');
+    expect(items[0]).toHaveFocus();
+    await user.keyboard('{End}');
+    expect(items[1]).toHaveFocus();
   });
 });

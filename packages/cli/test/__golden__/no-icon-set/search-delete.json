@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "delete",
-    "matchCount": 19,
+    "matchCount": 21,
     "results": [
       {
         "domain": "component",
@@ -14,6 +14,17 @@
         "description": "<text>",
         "import": "@astryxdesign/core/AlertDialog",
         "command": "astryx component AlertDialog",
+        "mentions": []
+      },
+      {
+        "domain": "hook",
+        "name": "createSwipe",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Swipe",
+        "command": "astryx hook createSwipe",
         "mentions": []
       },
       {
@@ -37,6 +48,19 @@
         "description": "<text>",
         "import": "@astryxdesign/core/Dialog",
         "command": "astryx component Dialog",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "global/uninstall",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs global/uninstall reset",
+        "parent": "astryx docs global/uninstall --index",
         "mentions": []
       },
       {
@@ -65,6 +89,19 @@
       },
       {
         "domain": "doc",
+        "name": "cli/skill-places",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs cli/skill-places keep",
+        "parent": "astryx docs cli/skill-places --index",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
         "name": "global/computer-agent-guide",
         "package": "@astryxdesign/cli",
         "score": "<text>",
@@ -86,19 +123,6 @@
         "section": "<text>",
         "title": "<text>",
         "command": "astryx docs global/uninstall agent-guide",
-        "parent": "astryx docs global/uninstall --index",
-        "mentions": []
-      },
-      {
-        "domain": "doc",
-        "name": "global/uninstall",
-        "package": "@astryxdesign/cli",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "section": "<text>",
-        "title": "<text>",
-        "command": "astryx docs global/uninstall reset",
         "parent": "astryx docs global/uninstall --index",
         "mentions": []
       },
@@ -138,6 +162,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template AlertDialogDeleteConfirmation --type block",
+        "isReady": true,
         "mentions": []
       },
       {
@@ -150,6 +175,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template ButtonWithIcon --type block",
+        "isReady": true,
         "mentions": []
       },
       {
@@ -162,6 +188,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template PopoverConfirmAction --type block",
+        "isReady": true,
         "mentions": []
       },
       {
@@ -174,6 +201,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template ToastAction --type block",
+        "isReady": true,
         "mentions": []
       },
       {
@@ -186,6 +214,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template useContainerRevealHookUsage --type block",
+        "isReady": true,
         "mentions": []
       },
       {
@@ -219,17 +248,6 @@
         "description": "<text>",
         "import": "@astryxdesign/core/IconButton",
         "command": "astryx component IconButton",
-        "mentions": []
-      },
-      {
-        "domain": "component",
-        "name": "ToggleButton",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "import": "@astryxdesign/core/ToggleButton",
-        "command": "astryx component ToggleButton",
         "mentions": []
       }
     ]

@@ -19,7 +19,7 @@ export const docs = {
   },
   category: 'guide',
   description:
-    'Show dates in the Persian, Hebrew, Islamic, Buddhist, Japanese, and other calendars while values stay Gregorian ISO dates.',
+    'Show dates in the Persian, Hebrew, Hijri, Buddhist, Japanese, and other calendars while values stay Gregorian ISO dates.',
 
   sections: [
     {

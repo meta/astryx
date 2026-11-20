@@ -99,6 +99,7 @@ const styles = stylex.create({
     },
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-large-size'],
+    lineHeight: typeScaleVars['--text-large-leading'],
     fontWeight: fontWeightVars['--font-weight-semibold'],
     color: colorVars['--color-text-primary'],
     textAlign: 'start',
@@ -141,6 +142,7 @@ const styles = stylex.create({
     width: typeScaleVars['--text-large-size'],
     height: typeScaleVars['--text-large-size'],
     fontSize: typeScaleVars['--text-large-size'],
+    lineHeight: typeScaleVars['--text-large-leading'],
     transitionProperty: 'transform',
     transitionDuration: durationVars['--duration-fast'],
     transitionTimingFunction: easeVars['--ease-standard'],
@@ -593,13 +595,17 @@ export function Collapsible({
             !isOpen && !isExiting && styles.contentHidden,
           ),
         )}>
-        {presentation != null ? (
-          <CollapsibleGroupPresentationContext value={null}>
-            {children}
-          </CollapsibleGroupPresentationContext>
-        ) : (
-          children
-        )}
+        {/* One box holds the content, so an opening or closing slides it
+            under the region's clip: a translation cannot move bare text. */}
+        <div>
+          {presentation != null ? (
+            <CollapsibleGroupPresentationContext value={null}>
+              {children}
+            </CollapsibleGroupPresentationContext>
+          ) : (
+            children
+          )}
+        </div>
       </div>
     </div>
   );

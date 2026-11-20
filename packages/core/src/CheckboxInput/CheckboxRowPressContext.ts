@@ -18,5 +18,9 @@
 
 import {createLayerScopedContext} from '../Layer/layerScopedContext';
 
-export const CheckboxRowPressContext = createLayerScopedContext(false);
+export const CheckboxRowPressContext = createLayerScopedContext(
+  'CheckboxRowPressContext',
+  1,
+  false,
+);
 CheckboxRowPressContext.displayName = 'CheckboxRowPressContext';

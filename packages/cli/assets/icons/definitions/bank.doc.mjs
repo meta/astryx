@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'bank',
+  group: 'money',
   description: 'A bank or other institution.',
-  words: ['institution', 'library', 'finance'],
+  words: ['institution', 'building library', 'finance'],
 };

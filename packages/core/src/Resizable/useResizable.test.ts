@@ -23,7 +23,7 @@ import {flushSync} from 'react-dom';
 import {renderToString} from 'react-dom/server';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {render, renderHook, act, waitFor} from '@testing-library/react';
-import {useResizable} from './useResizable';
+import {endResizeAt, useResizable} from './useResizable';
 import type {
   ResizableProps,
   ResizableRegion,
@@ -168,11 +168,12 @@ describe('useResizable persistence', () => {
     act(() => result.current.resize(300));
     act(() => result.current.props._onResizeStart());
     act(() => result.current.props._onResizeMove(-270));
-    expect(result.current.isCollapsed).toBe(true);
-
-    // A continued drag below the threshold must not clobber the saved width.
+    // The lift decides the close; a drag below the threshold must not
+    // clobber the saved width either.
+    expect(result.current.isCollapsed).toBe(false);
     act(() => result.current.props._onResizeMove(-275));
     act(() => result.current.props._onResizeEnd());
+    expect(result.current.isCollapsed).toBe(true);
     expect(readStored()).toEqual({size: 300, isCollapsed: true});
 
     act(() => result.current.expand());
@@ -318,6 +319,8 @@ describe('useResizable uncontrolled collapse', () => {
 
     act(() => result.current.props._onResizeStart());
     act(() => result.current.props._onResizeMove(-240));
+    expect(result.current.isCollapsed).toBe(false);
+    act(() => result.current.props._onResizeEnd());
 
     expect(result.current.isCollapsed).toBe(true);
     expect(onCollapseChange).toHaveBeenCalledWith(true);
@@ -371,6 +374,7 @@ describe('useResizable controlled collapse', () => {
 
     act(() => result.current.props._onResizeStart());
     act(() => result.current.props._onResizeMove(-240));
+    act(() => result.current.props._onResizeEnd());
 
     expect(onCollapseChange).toHaveBeenCalledWith(true);
     expect(result.current.isCollapsed).toBe(false);
@@ -426,12 +430,14 @@ describe('useResizable live collapse state', () => {
     for (const delta of [-240, -245, -250, -255, -260]) {
       act(() => gesture._onResizeMove(delta));
     }
+    expect(onCollapseChange).not.toHaveBeenCalled();
+    act(() => gesture._onResizeEnd());
 
     expect(onCollapseChange).toHaveBeenCalledExactlyOnceWith(true);
     expect(result.current.isCollapsed).toBe(true);
   });
 
-  it('re-expands mid-gesture when the drag crosses back above the threshold', () => {
+  it('stays open when the drag crosses back above the threshold before the lift', () => {
     const onCollapseChange = vi.fn();
     const {result} = renderHook(() =>
       useResizable({...BASE_CONFIG, collapsible: true, onCollapseChange}),
@@ -441,10 +447,39 @@ describe('useResizable live collapse state', () => {
     const gesture = result.current.props;
     act(() => gesture._onResizeMove(-240));
     act(() => gesture._onResizeMove(-20));
+    act(() => gesture._onResizeEnd());
 
-    expect(onCollapseChange.mock.calls).toEqual([[true], [false]]);
+    expect(onCollapseChange).not.toHaveBeenCalled();
     expect(result.current.isCollapsed).toBe(false);
     expect(result.current.size).toBe(240);
+  });
+
+  it('closes on a lift released fast enough to come to rest past the threshold', () => {
+    const onCollapseChange = vi.fn();
+    const {result} = renderHook(() =>
+      useResizable({...BASE_CONFIG, collapsible: true, onCollapseChange}),
+    );
+
+    act(() => result.current.props._onResizeStart());
+    act(() => result.current.props._onResizeMove(-100));
+    // 1,500 px/s toward closing projects about 750 px further.
+    act(() => endResizeAt(result.current.props, -1500));
+
+    expect(onCollapseChange).toHaveBeenCalledExactlyOnceWith(true);
+    expect(result.current.isCollapsed).toBe(true);
+  });
+
+  it('springs back to the minimum from a slow lift above the threshold', () => {
+    const {result} = renderHook(() =>
+      useResizable({...BASE_CONFIG, collapsible: true}),
+    );
+
+    act(() => result.current.props._onResizeStart());
+    act(() => result.current.props._onResizeMove(-130));
+    act(() => endResizeAt(result.current.props, 0));
+
+    expect(result.current.isCollapsed).toBe(false);
+    expect(result.current.size).toBe(BASE_CONFIG.minSize);
   });
 
   it('notifies when resize() lifts the panel out of collapse', () => {

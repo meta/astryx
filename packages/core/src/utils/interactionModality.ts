@@ -7,7 +7,8 @@
  * @input Global pointerdown/keydown events
  * @output useInteractionModalityTracking, useInteractionModalityTrackingFor,
  *   and getInteractionModality, which reads how the user last interacted in a
- *   document
+ *   document, and isTextEntrySincePointer, which reads whether every key
+ *   since the last pointer press typed into a text-entry field
  * @position Internal document-wide singleton; used where `:focus-visible`
  *   alone is too broad
  */
@@ -32,11 +33,17 @@ import {
   type RefCallback,
   type RefObject,
 } from 'react';
+import {isTextEntryControl} from '../keyboard/keyboardHeight';
 
 export type InteractionModality = 'keyboard' | 'pointer';
 
 type InteractionModalityStore = {
   modality: InteractionModality;
+  /**
+   * Whether every key since the last pointer press typed into a text-entry
+   * field. Undefined in a store that an older bundle made.
+   */
+  isTextEntrySincePointer?: boolean;
   isListening: boolean;
   /** Mounted consumers holding a second document's listeners. */
   consumers?: number;
@@ -62,9 +69,11 @@ function getStore(targetDocument: Document): InteractionModalityStore {
   // the safe error.
   const store: InteractionModalityStore = {
     modality: 'keyboard',
+    isTextEntrySincePointer: false,
     isListening: false,
     onPointerDown: () => {
       store.modality = 'pointer';
+      store.isTextEntrySincePointer = true;
     },
     onKeyDown: event => {
       // Modifier-only presses are not navigation — holding Shift before a
@@ -73,12 +82,48 @@ function getStore(targetDocument: Document): InteractionModalityStore {
         return;
       }
       store.modality = 'keyboard';
+      if (!isTextEntryKey(event)) {
+        store.isTextEntrySincePointer = false;
+      }
     },
   };
   Object.defineProperty(singletonDocument, interactionModalityStoreKey, {
     value: store,
   });
   return store;
+}
+
+/**
+ * An on-screen keyboard sends `Unidentified` or `Process` for many keys, and
+ * `Enter` is its Go key. `Shift`, `CapsLock` and `Dead` only shape the next
+ * character. Other named keys move focus or the caret, so they are keyboard
+ * navigation.
+ */
+const TEXT_ENTRY_NAMED_KEYS = new Set([
+  'Backspace',
+  'CapsLock',
+  'Dead',
+  'Delete',
+  'Enter',
+  'Process',
+  'Shift',
+  'Unidentified',
+]);
+
+function isTextEntryKey(event: KeyboardEvent): boolean {
+  const target =
+    typeof event.composedPath === 'function'
+      ? event.composedPath()[0]
+      : event.target;
+  if (!isTextEntryControl(target instanceof Element ? target : null)) {
+    return false;
+  }
+  const key = typeof event.key === 'string' ? event.key : '';
+  return (
+    event.isComposing === true ||
+    [...key].length === 1 ||
+    TEXT_ENTRY_NAMED_KEYS.has(key)
+  );
 }
 
 /**
@@ -232,18 +277,24 @@ export function useInteractionModalityTracking(): InteractionModalityTracking {
  * (useMenuPress's `menuRef`, useTouchTrigger's trigger), so it cannot attach a
  * callback ref. After every commit it holds the ref's CURRENT owner document,
  * and the same Effect's cleanup releases it, so a detached, replaced or moved
- * node releases the old document before the new one is held.
+ * node releases the old document before the new one is held. While
+ * `isEnabled` is false, it holds no tracking.
  */
 export function useInteractionModalityTrackingFor(
   elementRef: RefObject<Element | null>,
+  isEnabled: boolean = true,
 ): () => InteractionModality {
   // Syncs the document's interaction-modality tracking with this mount.
-  useEffect(() => trackInteractionModality(), []);
+  useEffect(
+    () => (isEnabled ? trackInteractionModality() : undefined),
+    [isEnabled],
+  );
   // Syncs modality tracking in the element's second document, such as an iframe
   // or a Picture-in-Picture window.
   useEffect(() => {
     const ownerDocument = elementRef.current?.ownerDocument;
     if (
+      !isEnabled ||
       ownerDocument == null ||
       (typeof document !== 'undefined' && ownerDocument === document)
     ) {
@@ -279,10 +330,36 @@ export function getInteractionModality(
     : getStore(document).modality;
 }
 
+/**
+ * Whether a pointer pressed last in `target`'s document, or the page's, and
+ * every key since then typed into a text-entry field. Typing is text entry,
+ * not keyboard navigation: an on-screen keyboard sends a key press for each
+ * character. The modality still turns to `keyboard` for those keys.
+ */
+export function isTextEntrySincePointer(
+  target?: Document | Node | null,
+): boolean {
+  const targetDocument =
+    target == null
+      ? typeof document === 'undefined'
+        ? null
+        : document
+      : target.nodeType === 9
+        ? (target as Document)
+        : target.ownerDocument;
+  if (targetDocument == null) {
+    return false;
+  }
+  const store = getStore(targetDocument);
+  return store.isTextEntrySincePointer ?? store.modality === 'pointer';
+}
+
 /** Test-only: restore the initial state between cases. */
 export function __resetInteractionModalityForTest(): void {
   if (typeof document !== 'undefined') {
-    getStore(document).modality = 'keyboard';
+    const store = getStore(document);
+    store.modality = 'keyboard';
+    store.isTextEntrySincePointer = false;
   }
 }
 

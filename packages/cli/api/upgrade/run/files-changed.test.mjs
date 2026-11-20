@@ -19,6 +19,7 @@ import {
   versions,
   getTransformsBetween,
 } from '../../../assets/codemods/registry.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 const SLOW = 60_000;
 
@@ -88,7 +89,7 @@ describe('upgrade receipt — filesChanged across core and integration codemods'
 
   /** @param {{integrationCodemod: boolean}} options */
   async function run(options) {
-    const dir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-files-changed-'));
+    const dir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-files-changed-'));
     dirs.push(dir);
     seed(dir, options);
     const tier = await authoringTier();

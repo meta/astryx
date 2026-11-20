@@ -67,6 +67,16 @@ export const docs = {
       type: 'StyleXStyles',
       description: 'StyleX styles for layout customization. Must be a stylex.create() value.',
     },
+    {
+      name: 'className',
+      type: 'string',
+      description: 'CSS class name for the root element. Prefer xstyle for styling; className is provided for integration with non-StyleX systems.',
+    },
+    {
+      name: 'style',
+      type: 'CSSProperties',
+      description: 'Inline styles for the root element. Prefer xstyle for styling; inline styles bypass StyleX optimization.',
+    },
   ],
   components: [
     {name: 'MetadataListItem'},
@@ -77,6 +87,8 @@ export const docs = {
     bestPractices: [
       { guidance: true, description: 'Choose label position based on content: "start" for short values, "top" for long or complex values.' },
       { guidance: true, description: 'Collapse long lists with `maxNumOfItems` to keep the page scannable.' },
+      { guidance: true, description: 'Give each MetadataListItem a short label that names its value. Assistive technology reads each label with its value as a term and its definition.' },
+      { guidance: true, description: 'The title does not name the list or add a heading. Pass a heading element as the title when the list needs a place in the page outline.' },
       { guidance: false, description: 'Use for extensive form input; use a form layout instead.' },
       { guidance: false, description: "Use for data that doesn't have a clear key-value structure." },
     ],
@@ -97,6 +109,8 @@ export const docsZh = {
     bestPractices: [
       { guidance: true, description: 'Choose label position based on content: "start" for short values, "top" for long or complex values.' },
       { guidance: true, description: 'Collapse long lists with `maxNumOfItems` to keep the page scannable.' },
+      { guidance: true, description: 'Give each MetadataListItem a short label that names its value. Assistive technology reads each label with its value as a term and its definition.' },
+      { guidance: true, description: 'The title does not name the list or add a heading. Pass a heading element as the title when the list needs a place in the page outline.' },
       { guidance: false, description: 'Use for extensive form input; use a form layout instead.' },
       { guidance: false, description: "Use for data that doesn't have a clear key-value structure." },
     ],
@@ -118,6 +132,8 @@ export const docsDense = {
     bestPractices: [
       { guidance: true, description: 'Choose label position based on content: "start" for short values, "top" for long or complex values.' },
       { guidance: true, description: 'Collapse long lists with `maxNumOfItems` to keep the page scannable.' },
+      { guidance: true, description: 'Give each MetadataListItem a short label that names its value. Assistive technology reads each label with its value as a term and its definition.' },
+      { guidance: true, description: 'The title does not name the list or add a heading. Pass a heading element as the title when the list needs a place in the page outline.' },
       { guidance: false, description: 'Use for extensive form input; use a form layout instead.' },
       { guidance: false, description: "Use for data that doesn't have a clear key-value structure." },
     ],

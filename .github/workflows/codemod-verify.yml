@@ -43,4 +43,9 @@ jobs:
 
       - name: Verify codemod reproduces callsite changes
         id: verify
+        env:
+          # An owner exception: a maintainer applies the label (triage rights).
+          # A label starts no run by itself, so it takes effect on the next
+          # push or a draft-and-ready toggle.
+          ALLOW_MANUAL_EDIT: ${{ contains(github.event.pull_request.labels.*.name, 'allow-manual-edit') }}
         run: node .github/scripts/codemod-verify.mjs

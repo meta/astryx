@@ -6,16 +6,17 @@
  *   Element.animate (its KeyframeEffect's `setKeyframes` and `updateTiming`
  *   included, and a current time read off a stubbed document timeline) and
  *   stubbed layout rectangles (jsdom lays nothing out)
- * @output Checks `spec:AST-105` FR9's edge reveal: the one-state reveal and
- *   conceal from each edge, left to right and right to left; a reversal that
- *   starts from what shows; the moving edge riding the glide of the content
- *   after it, through a reversal too; and the two-state form, which holds the
- *   old state as one copy while the edge rides a gliding element, the element
- *   raised above the copy while it conceals, a reversal starting from the
- *   extent it shows, and Reduce Motion by pointer; and a resized element's
- *   reveal with no copy (a resize controller's pane): held at the extent it
- *   was laid out at while it conceals, its edge's margin freeing the
- *   difference, clipped to its new extent, riding the content beside it
+ * @output Checks `spec:AST-105` FR9's edge reveal. The one-state reveal and
+ *   conceal play from each edge, left to right and right to left. A reversal
+ *   starts from what shows. The moving edge rides the glide of the content
+ *   after it, through a reversal too. The two-state form holds the old state
+ *   as one copy while the edge rides a gliding element. That element stays
+ *   above the copy while it conceals, a reversal starts from the extent it
+ *   shows, and Reduce Motion goes by pointer. A resized element's reveal (a
+ *   resize controller's pane) uses no copy. While it conceals, it holds the
+ *   extent it was laid out at, and its edge's margin frees the difference.
+ *   Its padding, overflow and scroll offset stay as laid out. It is clipped
+ *   to its new extent and rides the content beside it
  * @position Testing; the real geometry is proven in
  *   __tests__/animatedLayout.interaction.browser.spec.ts and, for the SideNav
  *   rail's two-state form, SideNav's rail-motion specs
@@ -454,9 +455,11 @@ describe('the two-state edge reveal (spec:AST-105 FR9)', () => {
     // Every frame of the copy follows the column's glide.
     const glide = lastOn(column) as Played;
     expect(clip.keyframes).toHaveLength(glide.keyframes.length);
-    // The panel, raised above its copy while it conceals, shows the caller's
-    // own frames, and drops the raise once the reveal ends.
-    expect(side.style.zIndex).toBe('2');
+    // The copy paints at the panel's own level: just before it, with no
+    // z-index, and the panel takes none either.
+    expect(copy.nextElementSibling).toBe(side);
+    expect(copy.style.zIndex).toBe('');
+    expect(side.style.zIndex).toBe('');
     expect(icons).toHaveBeenCalled();
     clip.finish?.();
     expect(side.style.zIndex).toBe('');
@@ -641,11 +644,15 @@ function paneSetup({
     handle,
     pane: paneEl,
     grip,
-    /** Collapses or opens the pane, as the controller does, around the report. */
-    resize(next: number, edge: LayoutEdge) {
+    /**
+     * Collapses or opens the pane, as the controller does, around the report.
+     * `commit` changes what else the new size changes in the same commit.
+     */
+    resize(next: number, edge: LayoutEdge, commit?: () => void) {
       const report = reportLayoutEdge(handle, () => paneEl, {edge});
       report.measureBefore();
       width = next;
+      commit?.();
       report.animate();
       return report;
     },
@@ -674,6 +681,48 @@ describe('the edge reveal of a resized element, with no copy (spec:AST-105 FR9)'
     clip.finish?.();
     expect(pane.style.getPropertyValue('inline-size')).toBe('');
     expect(pane.style.getPropertyValue('margin-inline-end')).toBe('');
+  });
+
+  it('keeps the padding and overflow it was laid out with while it conceals, and puts back its own once the motion ends', () => {
+    const {pane, resize} = paneSetup();
+    pane.style.setProperty('padding-inline-start', '16px');
+    pane.style.setProperty('padding-inline-end', '16px');
+    pane.style.setProperty('overflow-y', 'auto');
+    resize(0, 'inline-end', () => {
+      // A LayoutPanel at width 0 drops its padding and stops scrolling.
+      pane.style.setProperty('padding-inline-start', '0px');
+      pane.style.setProperty('padding-inline-end', '0px');
+      pane.style.setProperty('overflow-y', 'clip');
+    });
+    expect(pane.style.getPropertyValue('padding-inline-start')).toBe('16px');
+    expect(pane.style.getPropertyValue('padding-inline-end')).toBe('16px');
+    expect(pane.style.getPropertyValue('overflow-y')).toBe('auto');
+    clipsOf(pane)[0].finish?.();
+    expect(pane.style.getPropertyValue('padding-inline-start')).toBe('0px');
+    expect(pane.style.getPropertyValue('padding-inline-end')).toBe('0px');
+    expect(pane.style.getPropertyValue('overflow-y')).toBe('clip');
+  });
+
+  it('keeps the scroll offset it was laid out at while it conceals, and a reveal that reverses it scrolls back there', () => {
+    const {pane, resize} = paneSetup();
+    let scrollTop = 120;
+    Object.defineProperty(pane, 'scrollTop', {
+      configurable: true,
+      get: () => scrollTop,
+      set: (value: number) => {
+        scrollTop = value;
+      },
+    });
+    // A pane that stops scrolling in the commit loses its offset.
+    resize(48, 'inline-end', () => {
+      scrollTop = 0;
+    });
+    expect(scrollTop).toBe(120);
+    // Releasing the hold to reverse loses it again.
+    resize(260, 'inline-end', () => {
+      scrollTop = 0;
+    });
+    expect(scrollTop).toBe(120);
   });
 
   it('conceals entirely to a size of 0', () => {
@@ -732,9 +781,12 @@ describe('the edge reveal of a resized element, with no copy (spec:AST-105 FR9)'
     expect(pane.style.getPropertyValue('inline-size')).toBe('');
     expect(conceal.cancel).toHaveBeenCalled();
     const [reveal] = clipsOf(pane);
-    expect(String(reveal.keyframes[0].clipPath)).toBe(
-      `inset(0px ${260 - shown}px 0px 0px)`,
+    const start = Number(
+      /^inset\(0px ([\d.]+)px 0px 0px\)$/.exec(
+        String(reveal.keyframes[0].clipPath),
+      )?.[1],
     );
+    expect(start).toBeCloseTo(260 - shown, 9);
   });
 
   it('cancel ends it at once and puts back what it held', () => {

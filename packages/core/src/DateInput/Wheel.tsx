@@ -55,7 +55,7 @@ import {PickerWheel} from './PickerWheel';
 import {dateInputTouchSizes, dateInputTouchGeometry} from './tokens.stylex';
 import {useOwnScrollGesture} from './useOwnScrollGesture';
 import {usePointerDragScroll} from './usePointerDragScroll';
-import {useScrollSettle} from './useScrollSettle';
+import {useScrollSettle, useScrollSteer} from './useScrollSettle';
 import {useWheelListbox} from './useWheelListbox';
 import {
   canSpinTo,
@@ -163,6 +163,7 @@ const styles = stylex.create({
     // a wheel the value under the band is the whole interface, and the rows
     // above and below are read at a glance while moving.
     fontSize: typeScaleVars['--text-large-size'],
+    lineHeight: typeScaleVars['--text-large-leading'],
     fontWeight: fontWeightVars['--font-weight-normal'],
     color: colorVars['--color-text-primary'],
     whiteSpace: 'nowrap',
@@ -290,6 +291,27 @@ export function Wheel(props: WheelProps) {
 Wheel.displayName = 'Wheel';
 
 /**
+ * A steer that never reaches its row still rests. The wheel re-aims at it at
+ * most this many times.
+ */
+const MAX_RE_AIMS = 3;
+
+/**
+ * The keys that scroll a focused column. Tab moves focus out of the column,
+ * and ArrowLeft and ArrowRight scroll nothing in it, so a step keeps running
+ * through them.
+ */
+const COLUMN_SCROLL_KEYS: ReadonlySet<string> = new Set([
+  'ArrowUp',
+  'ArrowDown',
+  'PageUp',
+  'PageDown',
+  'Home',
+  'End',
+  ' ',
+]);
+
+/**
  * One snap-scrolling picker column, under a fine pointer.
  *
  * @example
@@ -360,6 +382,15 @@ export function ScrollWheel({
   // once on a fine one.
   const lastPointerRef = useRef<string | null>(null);
 
+  // The row the wheel's own scroll heads for. A step commits its row at once.
+  // So a rest on the way finishes the scroll and commits nothing. A busy page
+  // can draw no frame of a step for longer than the quiet period.
+  const steer = useScrollSteer(COLUMN_SCROLL_KEYS);
+  // Where the wheel last re-aimed at its steered row, and how often. A rest
+  // short of the row again, with no progress since, ends the steer. Then the
+  // settle commits the row the column shows, so the two always agree.
+  const reAimRef = useRef<{top: number; count: number} | null>(null);
+
   // A reduced-motion dip whose rows have not landed yet: the row they land
   // on. While one is pending the rows stay put for it, so they never move at
   // full opacity, and a further step retargets it.
@@ -381,7 +412,10 @@ export function ScrollWheel({
     (
       index: number,
       behavior: ScrollBehavior,
-      {touchRelease = false}: {touchRelease?: boolean} = {},
+      {
+        touchRelease = false,
+        isReAim = false,
+      }: {touchRelease?: boolean; isReAim?: boolean} = {},
     ) => {
       const scroller = scrollerRef.current;
       const size = itemBlockSize();
@@ -389,6 +423,10 @@ export function ScrollWheel({
         return;
       }
       const top = index * size;
+      steer.start(index);
+      if (!isReAim) {
+        reAimRef.current = null;
+      }
       // Under Reduce Motion the wheel's own scroll lands without travel. It
       // dips on a touch screen or for a touch drag's release. Otherwise it
       // lands at once.
@@ -433,7 +471,7 @@ export function ScrollWheel({
         Number.isFinite(shown) ? shown : 1,
       );
     },
-    [itemBlockSize],
+    [itemBlockSize, steer],
   );
 
   // Commit on rest. A wheel that stops on a disabled row travels on to the
@@ -450,6 +488,22 @@ export function ScrollWheel({
       const size = itemBlockSize();
       if (size === 0) {
         return;
+      }
+      const steered = steer.current();
+      if (steered != null) {
+        const top = scroller.scrollTop;
+        const last = reAimRef.current;
+        const isShort = Math.abs(top - steered * size) >= 1;
+        const isStuck =
+          last != null &&
+          (Math.abs(top - last.top) < 1 || last.count >= MAX_RE_AIMS);
+        if (isShort && !isStuck) {
+          reAimRef.current = {top, count: (last?.count ?? 0) + 1};
+          scrollToIndex(steered, 'smooth', {isReAim: true});
+          return;
+        }
+        steer.end();
+        reAimRef.current = null;
       }
       const index = Math.min(
         options.length - 1,
@@ -472,6 +526,7 @@ export function ScrollWheel({
     },
     isActive,
     isDraggingRef,
+    steer,
   );
 
   // Park the committed row under the band at once whenever the wheel is

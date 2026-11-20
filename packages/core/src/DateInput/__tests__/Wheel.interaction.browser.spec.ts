@@ -17,9 +17,12 @@ import {
   test,
   type Locator,
   type Page,
+  type TestInfo,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  advanceFrozenPage,
   animationStoryboard,
+  armHold,
   blockMainThread,
   busyWindowProof,
   castStoryboard,
@@ -28,8 +31,10 @@ import {
   countBetween,
   curveOf,
   flick,
+  freezePageOn,
   freezeTimers,
   holdAnimations,
+  installPageFreeze,
   installTimerGate,
   markElement,
   openStory,
@@ -40,6 +45,7 @@ import {
   startCompositorTrace,
   startScreencast,
   tap,
+  thawPage,
   thawTimers,
   timeline,
   touchDriver,
@@ -47,9 +53,10 @@ import {
   toTouchEvents,
   traceRendering,
   trackMarker,
-  waitForAnimation,
+  trackMarkers,
+  type waitForAnimation,
   waitForRest,
-  retakeOnWheelPacing,
+  watchAnimations,
   webInputDriver,
   WHEEL_SKIP,
   withStorybook,
@@ -307,9 +314,11 @@ type InputSeen = [type: string, time: number, x: number, y: number];
 
 /**
  * Record the inputs a finger's pan reads, before the gesture system sees them.
- * A finger begins with its touchstart and lifts with its touchend. Its moves
- * are its touch `pointermove`s, one sample per event, as the pan takes them.
- * Each time is on the page's clock, as the gesture host reads it.
+ * A finger begins with its touchstart. Its moves are its touch
+ * `pointermove`s, one sample per event, as the pan takes them. It lifts at its
+ * touch `pointerup`, where the gesture host reads the lift's time and place.
+ * Its touchend counts only when no pointerup came. Each time is on the page's
+ * clock, as the gesture host reads it.
  */
 async function recordFingerInputs(page: Page): Promise<void> {
   await page.evaluate(() => {
@@ -331,20 +340,18 @@ async function recordFingerInputs(page: Page): Promise<void> {
         {capture: true, passive: true},
       );
     }
-    window.addEventListener(
-      'pointermove',
-      event => {
-        if (event.pointerType === 'touch' && seen.length > 0) {
-          seen.push([
-            'pointermove',
-            timeOf(event),
-            event.clientX,
-            event.clientY,
-          ]);
-        }
-      },
-      {capture: true, passive: true},
-    );
+    for (const type of ['pointermove', 'pointerup']) {
+      window.addEventListener(
+        type,
+        event => {
+          const pointer = event as PointerEvent;
+          if (pointer.pointerType === 'touch' && seen.length > 0) {
+            seen.push([type, timeOf(event), pointer.clientX, pointer.clientY]);
+          }
+        },
+        {capture: true, passive: true},
+      );
+    }
   });
 }
 
@@ -356,33 +363,73 @@ async function fingerInputsSeen(page: Page): Promise<InputSeen[]> {
 
 /**
  * The release velocity (px/s, positive when the rows move up) that the pan's
- * tracker reads from `inputs`, as the wheel's release does. The gesture
+ * tracker reads from `inputs`, as the wheel's release does. The pan lifts at
+ * the touch pointerup, or at the touchend when no pointerup came. The gesture
  * arena never lets time go backwards, so each time is held at the latest.
  */
 function releaseVelocityOf(inputs: ReadonlyArray<InputSeen>): number {
+  const lift = inputs.some(([type]) => type === 'pointerup')
+    ? 'pointerup'
+    : 'touchend';
   const tracker = new VelocityTracker();
   let latest = -Infinity;
   for (const [type, time, x, y] of inputs) {
-    latest = Math.max(time, latest);
-    if (type === 'touchend') {
-      return -tracker.scrollVelocity(latest).y;
+    if (type === 'pointerup' || type === 'touchend') {
+      if (type === lift) {
+        return -tracker.scrollVelocity(Math.max(time, latest)).y;
+      }
+      continue;
     }
+    latest = Math.max(time, latest);
     tracker.add(x, y, latest);
   }
   throw new Error(`no lift among the inputs: ${JSON.stringify(inputs)}`);
 }
 
-test('a flick coasts on UIKit’s curve onto the row it projects, and commits it on arrival', async ({
-  page,
-  browserName,
-}, testInfo) => {
+/**
+ * Flicks the wheel up and holds its coast. The coast's curve must follow
+ * UIKit's plan for the release the pan read from the inputs the page saw.
+ * With `holdLiftMs`, a touch pointerup listener first holds the main thread
+ * that long, as a slow app listener does.
+ */
+async function expectFlickCoastsOnPlan(
+  page: Page,
+  browserName: string,
+  testInfo: TestInfo,
+  {holdLiftMs = 0, evidence = 'curves/wheel-coast'} = {},
+): Promise<void> {
   const {driver, field, strip, start} = await openWheel(page);
   const {script, offsetAtLift} = flickUp(start);
   expect(releaseVelocity(script).y).toBeCloseTo(-FLICK_VELOCITY, -1);
   await recordFingerInputs(page);
+  if (holdLiftMs > 0) {
+    await page.evaluate(ms => {
+      window.addEventListener(
+        'pointerup',
+        event => {
+          if (event.pointerType !== 'touch') {
+            return;
+          }
+          const until = performance.now() + ms;
+          while (performance.now() < until) {
+            // The main thread stays busy until `until`.
+          }
+        },
+        {capture: true},
+      );
+    }, holdLiftMs);
+  }
+  // The wheel ends a coast from a timer: gate the page's timers so the held
+  // coast is not ended while it is sampled.
+  await installTimerGate(page);
+  const watch = await watchAnimations(strip);
+  const hold = await armHold(page, strip, {
+    judges: {target: strip, property: 'translate'},
+    newOnly: true,
+  });
   await driver.play(script);
-  const coast = stripAnimationOf(await waitForAnimation(strip));
-  const held = await holdAnimations(page, strip);
+  const held = await hold.held();
+  await freezeTimers(page);
   const motion = held.find(animation => animation.kind === 'Animation');
   if (motion == null) {
     throw new Error(`no coast held: ${JSON.stringify(held)}`);
@@ -392,6 +439,8 @@ test('a flick coasts on UIKit’s curve onto the row it projects, and commits it
     'translateY',
   ).map(sample => ({t: sample.t, value: -sample.value}));
   await releaseAnimations(page);
+  await thawTimers(page);
+  const coast = stripAnimationOf(await watch.started());
 
   const from = samples[0].value;
   const rest = samples[samples.length - 1].value;
@@ -401,12 +450,21 @@ test('a flick coasts on UIKit’s curve onto the row it projects, and commits it
   // inputs the page saw. The whole release is UIKit's plan for that velocity:
   // the row projected, and the coast's rate re-solved to stop there.
   const inputs = await fingerInputsSeen(page);
+  if (holdLiftMs > 0 && browserName === 'webkit') {
+    // Without a late touchend, this case tests nothing.
+    const lastMove = inputs.filter(([type]) => type === 'pointermove').at(-1);
+    const touchEnd = inputs.find(([type]) => type === 'touchend');
+    expect(
+      (touchEnd?.[1] ?? 0) - (lastMove?.[1] ?? 0),
+      'the held pointerup stamps the touchend past the stillness interval',
+    ).toBeGreaterThan(UIKIT_GESTURES.velocity.stillness.value);
+  }
   const pageVelocity = releaseVelocityOf(inputs);
   const plan = planRelease(from, pageVelocity, MINUTES);
   const expected = (t: number) => plan.curve.value(t / 1000);
   const result = compareCurve(samples, expected, 0.75);
   await writeEvidence(
-    'curves/wheel-coast',
+    evidence,
     {
       [`${testInfo.project.name}.json`]: JSON.stringify(
         {
@@ -456,6 +514,28 @@ test('a flick coasts on UIKit’s curve onto the row it projects, and commits it
   await expect(field).toHaveValue(
     String(Math.round(rest / ROW)).padStart(2, '0'),
   );
+}
+
+test('a flick coasts on UIKit’s curve onto the row it projects, and commits it on arrival', async ({
+  page,
+  browserName,
+}, testInfo) => {
+  await expectFlickCoastsOnPlan(page, browserName, testInfo);
+});
+
+test('a flick whose touchend comes late still coasts on the plan for its pointerup, where the pan lifts', async ({
+  page,
+  browserName,
+}, testInfo) => {
+  // WebKit stamps a touch event once the page's pointer listeners are done.
+  // A pointerup listener that holds the main thread for 60 ms so stamps the
+  // touchend past the 40 ms stillness interval. The pan lifts at the
+  // pointerup, so it still reads the flick. Chromium stamps both events from
+  // the script, so there the hold moves no stamp.
+  await expectFlickCoastsOnPlan(page, browserName, testInfo, {
+    holdLiftMs: 60,
+    evidence: 'curves/wheel-coast-held-lift',
+  });
 });
 
 test('the coast keeps advancing every frame while the main thread is blocked', async ({
@@ -520,10 +600,9 @@ test('the coast keeps advancing every frame while the main thread is blocked', a
   // The compositor's own record of the frames it presents: a frame the
   // screencast skips under load is not a stall (busyWindowProof).
   const compositor = await startCompositorTrace(page);
+  const watch = await watchAnimations(strip);
   await driver.play(script);
-  const coast = stripAnimationOf(
-    await waitForAnimation(strip, {minProgressMs: 16}),
-  );
+  const coast = stripAnimationOf(await watch.started({minProgressMs: 16}));
   // Read the coast the page is playing, from its keyframes: where the strip is
   // at each moment. WebKit's real-time input gives the page its own release
   // velocity.
@@ -545,12 +624,10 @@ test('the coast keeps advancing every frame while the main thread is blocked', a
   await page.waitForTimeout(150);
   const presented = await compositor.stop();
   const castFrames = await cast.stop();
-  const tracks: Awaited<ReturnType<typeof trackMarker>>[] = [];
-  for (const rgb of STRIP_MARKER_RGB) {
-    tracks.push(await trackMarker(page, castFrames, {rgb}));
-  }
-  const controlFrames = await trackMarker(page, castFrames, {
-    rgb: CONTROL_RGB,
+  // Each frame is decoded once for every marker colour and the control. On a
+  // loaded machine, the decoding takes most of this test's time.
+  const [controlFrames, ...tracks] = await trackMarkers(page, castFrames, {
+    colors: [CONTROL_RGB, ...STRIP_MARKER_RGB],
   });
   await control.remove();
   // Every marker colour, and the control, is in the recorded frames.
@@ -672,14 +749,29 @@ test('the coast does no Layout or Paint per frame', async ({
 test('a finger landing on the coasting wheel stops it where it is, then it eases onto the nearest row', async ({
   page,
 }) => {
+  await installPageFreeze(page);
   const {driver, field, strip, start} = await openWheel(page);
+  await installTimerGate(page);
   const before = await stripOffset(strip);
-  await driver.play(flickUp(start).script);
-  const coast = stripAnimationOf(
-    await waitForAnimation(strip, {minProgressMs: 16}),
-  );
+  const watch = await watchAnimations(strip);
+  // The flick plays on the scene's clock. Frozen from its first touch, the
+  // scene moves on by each step's scripted time. So the page reads the
+  // script's release however loaded the runner is.
+  const {script} = flickUp(start);
+  const times = toTouchEvents(script).map(step => step.t);
+  await freezePageOn(page, 'touchstart');
+  await driver.play(script, {
+    onEvent: async (_step, index) => {
+      if (index + 1 < times.length) {
+        await advanceFrozenPage(page, times[index + 1] - times[index]);
+      }
+    },
+  });
+  // The coast starts held at the lift. The scene moves 300 ms into it, and
+  // the finger lands there.
+  await advanceFrozenPage(page, 300);
+  const coast = stripAnimationOf(await watch.started({minProgressMs: 16}));
   const coastEnd = -stripYOf(coast.keyframes?.at(-1));
-  await page.waitForTimeout(300);
   // Land and hold still: the wheel stops at once, between rows.
   const hold = tap(start, {holdMs: 300});
   let caught = NaN;
@@ -688,6 +780,7 @@ test('a finger landing on the coasting wheel stops it where it is, then it eases
   await driver.play(hold, {
     onEvent: async () => {
       if (step++ === 0) {
+        await thawPage(page);
         await page.waitForTimeout(50);
         caught = await stripOffset(strip);
         await page.waitForTimeout(150);
@@ -712,6 +805,7 @@ test(
   'storyboard: a flick and its coast onto a row',
   {tag: '@storyboard'},
   async ({page}, testInfo) => {
+    await installPageFreeze(page);
     const {driver, minutes, strip, start} = await openWheel(page);
     const box = await minutes.boundingBox();
     if (box == null) {
@@ -728,6 +822,9 @@ test(
     // The wheel ends a motion from a timer; gate the page's timers so the
     // held coast is not finished behind the filmstrip's back.
     await installTimerGate(page);
+    // Frozen in the lift's own task, the coast starts held at its start, and
+    // the hold takes it there however long the flick's film took.
+    await freezePageOn(page, 'touchend');
     const flickBoard = await touchStoryboard(page, driver, script, {
       name: 'wheel-flick',
       clip,
@@ -735,12 +832,15 @@ test(
       columns: 6,
       cellScale: 0.5,
     });
-    await waitForAnimation(strip);
+    const held = await holdAnimations(page, strip, {
+      judges: {target: strip, property: 'translate'},
+    });
+    await thawPage(page);
     await freezeTimers(page);
     const {storyboard: coastBoard} = await animationStoryboard(page, {
+      held,
       name: 'wheel-coast',
       clip,
-      scope: strip,
       measure,
       columns: 8,
       cellScale: 0.5,
@@ -1075,57 +1175,53 @@ test.describe('a mouse wheel and a trackpad (component:DateInput FR15)', () => {
     test('a trackpad flick drives the touch column as a finger does: it follows, coasts on at the lift, and commits the row it rests on', async ({
       page,
       browserName,
-    }, testInfo) => {
+    }) => {
       test.skip(
         browserName !== 'webkit',
         "Chromium's driver sends each wheel as a mouse wheel's notch; only WebKit's sends a trackpad's precise deltas",
       );
-      await retakeOnWheelPacing(testInfo, async () => {
-        const {field, at} = await openTouchColumn(page);
-        const input = await webInputDriver(page);
-        test.skip(!input.wheels, WHEEL_SKIP);
-        // The fingers: 12 px a frame for 12 frames (144 px, five rows and a
-        // bit), then the platform's momentum, a shrinking run.
-        const fingers = Array.from({length: 12}, () => ({dy: 12}));
-        const momentum = [11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map(dy => ({dy}));
-        await input.wheelBurst({
-          ...at,
-          steps: [...fingers, ...momentum],
-          maxGapMs: 100,
-        });
-        // It coasts on at UIKit's deceleration, well past the fingers'
-        // travel and the momentum's (66 px), and commits where it rests.
-        await expect
-          .poll(async () => Number(await field.inputValue()), {timeout: 8000})
-          .toBeGreaterThanOrEqual(10);
-        const rested = await field.inputValue();
-        await page.waitForTimeout(1000);
-        await expect(field).toHaveValue(rested);
+      const {field, at} = await openTouchColumn(page);
+      const input = await webInputDriver(page);
+      test.skip(!input.wheels, WHEEL_SKIP);
+      // The fingers: 12 px a frame for 12 frames (144 px, five rows and a
+      // bit), then the platform's momentum, a shrinking run.
+      const fingers = Array.from({length: 12}, () => ({dy: 12}));
+      const momentum = [11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map(dy => ({dy}));
+      await input.wheelBurst({
+        ...at,
+        steps: [...fingers, ...momentum],
+        maxGapMs: 100,
       });
+      // It coasts on at UIKit's deceleration, well past the fingers'
+      // travel and the momentum's (66 px), and commits where it rests.
+      await expect
+        .poll(async () => Number(await field.inputValue()), {timeout: 8000})
+        .toBeGreaterThanOrEqual(10);
+      const rested = await field.inputValue();
+      await page.waitForTimeout(1000);
+      await expect(field).toHaveValue(rested);
     });
 
     test('a slow trackpad drag that stops rests on the nearest row, without coasting', async ({
       page,
       browserName,
-    }, testInfo) => {
+    }) => {
       test.skip(
         browserName !== 'webkit',
         "Chromium's driver sends each wheel as a mouse wheel's notch; only WebKit's sends a trackpad's precise deltas",
       );
-      await retakeOnWheelPacing(testInfo, async () => {
-        const {field, at} = await openTouchColumn(page);
-        const input = await webInputDriver(page);
-        test.skip(!input.wheels, WHEEL_SKIP);
-        // 2 px a frame for 20 frames: 40 px, a row and a half less a bit.
-        await input.wheelBurst({
-          ...at,
-          steps: Array.from({length: 20}, () => ({dy: 2})),
-          maxGapMs: 100,
-        });
-        await expect(field).toHaveValue('01', {timeout: 5000});
-        await page.waitForTimeout(1000);
-        await expect(field).toHaveValue('01');
+      const {field, at} = await openTouchColumn(page);
+      const input = await webInputDriver(page);
+      test.skip(!input.wheels, WHEEL_SKIP);
+      // 2 px a frame for 20 frames: 40 px, a row and a half less a bit.
+      await input.wheelBurst({
+        ...at,
+        steps: Array.from({length: 20}, () => ({dy: 2})),
+        maxGapMs: 100,
       });
+      await expect(field).toHaveValue('01', {timeout: 5000});
+      await page.waitForTimeout(1000);
+      await expect(field).toHaveValue('01');
     });
   });
 });

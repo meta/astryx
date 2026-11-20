@@ -3,14 +3,15 @@
 /**
  * @file coarsePointer.test.ts
  * @input coarsePointer.ts and the gestures' pointer test helper
- * @output The gate reads and follows the primary pointer, and watches any
- *   media query
+ * @output The gate reads and follows the primary pointer, and reads and
+ *   watches any media query, also where the window has no matchMedia
  * @position Unit tests of packages/core/src/utils/coarsePointer.ts
  */
 
 import {describe, expect, it} from 'vitest';
 import {
   isCoarsePointer,
+  matchesMediaQuery,
   watchCoarsePointer,
   watchMediaQuery,
 } from './coarsePointer';
@@ -37,6 +38,22 @@ describe('coarsePointer', () => {
   it('answers fine without a window', () => {
     expect(isCoarsePointer(null)).toBe(false);
     expect(watchCoarsePointer(null, () => {})).toBeTypeOf('function');
+  });
+
+  it('reads any media query, and matches nothing where the window has no matchMedia', () => {
+    const view = {
+      matchMedia: (query: string) => ({
+        media: query,
+        matches: query === '(max-width: 600px)',
+      }),
+    } as unknown as Window;
+    expect(matchesMediaQuery(view, '(max-width: 600px)')).toBe(true);
+    expect(matchesMediaQuery(view, '(min-width: 601px)')).toBe(false);
+    const bare = {} as unknown as Window;
+    expect(matchesMediaQuery(bare, '(max-width: 600px)')).toBe(false);
+    expect(watchMediaQuery(bare, '(max-width: 600px)', () => {})).toBeTypeOf(
+      'function',
+    );
   });
 
   it('watches any media query, through the older pair where there is no addEventListener', () => {

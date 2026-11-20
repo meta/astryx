@@ -132,13 +132,13 @@ const CASES: Case[] = [
     'disabled-row',
     'with-disabled-items',
     'keyboard-last-row',
-    'Disabled — aria-disabled row, muted, skipped by focus',
+    'Disabled — aria-disabled row, muted, reached by focus',
   ),
   c(
     'disabled-row-dark',
     'with-disabled-items',
     'keyboard-last-row',
-    'Disabled — aria-disabled row, muted, skipped by focus',
+    'Disabled — aria-disabled row, muted, reached by focus',
     {mode: 'dark'},
   ),
   c(
@@ -536,20 +536,12 @@ function assertClaimedState(
   }
   if (state.startsWith('disabled-row')) {
     expectAnchored();
-    const disabledIndexes = rows.flatMap((row, index) =>
-      row.disabled ? [index] : [],
+    expect(rows.at(-1)?.disabled, `${state}: a trailing disabled row`).toBe(
+      true,
     );
-    const lastEnabled = rows.reduce(
-      (last, row, index) => (row.disabled ? last : index),
-      -1,
-    );
-    expect(disabledIndexes.length, `${state}: a disabled row`).toBeGreaterThan(
-      0,
-    );
-    // End lands on the last enabled row: the trailing disabled row is skipped.
-    expect(lastEnabled).toBeLessThan(rows.length - 1);
-    expect(observed.focusedRowIndex).toBe(lastEnabled);
-    expect(focusedRow?.disabled).toBe(false);
+    // End lands on the last row: the keys reach the trailing disabled row.
+    expect(observed.focusedRowIndex).toBe(rows.length - 1);
+    expect(focusedRow?.disabled).toBe(true);
     return;
   }
   if (state.startsWith('destructive-row')) {
@@ -655,18 +647,44 @@ async function capture(page: Page, scenario: Case) {
     const isOpen = scenario.drive !== 'closed';
     const measureBox = async () =>
       isOpen ? subject.boundingBox() : page.locator(TRIGGER).boundingBox();
-    const firstBox = await measureBox();
-    await nextFrames(page);
-    const box = await measureBox();
-    if (firstBox == null || box == null) {
+    const initialBox = await measureBox();
+    if (initialBox == null) {
       throw new Error(`${scenario.state}: subject has no layout box`);
     }
-    const geometryDelta = Math.max(
-      Math.abs(box.x - firstBox.x),
-      Math.abs(box.y - firstBox.y),
-      Math.abs(box.width - firstBox.width),
-      Math.abs(box.height - firstBox.height),
-    );
+    let firstBox = initialBox;
+    let box = initialBox;
+    let geometryDelta = Infinity;
+    let maxObservedDelta = 0;
+    let missingBox = false;
+    // Opening can place the menu between frame samples. The receipt needs a
+    // settled pair, not two frames chosen before the layout stops moving.
+    await expect
+      .poll(
+        async () => {
+          await nextFrames(page);
+          const nextBox = await measureBox();
+          if (nextBox == null) {
+            // Stop sampling and fail below; do not wait for a box to reappear.
+            missingBox = true;
+            return 0;
+          }
+          firstBox = box;
+          box = nextBox;
+          geometryDelta = Math.max(
+            Math.abs(box.x - firstBox.x),
+            Math.abs(box.y - firstBox.y),
+            Math.abs(box.width - firstBox.width),
+            Math.abs(box.height - firstBox.height),
+          );
+          maxObservedDelta = Math.max(maxObservedDelta, geometryDelta);
+          return geometryDelta;
+        },
+        {message: `${scenario.state}: geometry settles before capture`},
+      )
+      .toBeLessThanOrEqual(0.5);
+    if (missingBox) {
+      throw new Error(`${scenario.state}: subject has no layout box`);
+    }
 
     const observed = await page.evaluate(
       ({open}) => {
@@ -1023,7 +1041,13 @@ async function capture(page: Page, scenario: Case) {
         forcedColorsFocusIndicator: focusIndicator,
         pageErrors: pageErrors.length,
         geometry: box,
-        settledRender: {initial: firstBox, final: box, maxDelta: geometryDelta},
+        settledRender: {
+          opening: initialBox,
+          maxObservedDelta,
+          initial: firstBox,
+          final: box,
+          maxDelta: geometryDelta,
+        },
       },
       image: {
         file,

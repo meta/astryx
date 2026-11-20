@@ -49,6 +49,10 @@ const RESET_VALUES: Record<string, string[]> = {
     '--container-padding-inline-end',
     '--container-padding-block-start',
     '--container-padding-block-end',
+    '--container-corner-start-start',
+    '--container-corner-start-end',
+    '--container-corner-end-start',
+    '--container-corner-end-end',
   ],
   initial: [
     '--layout-padding-outer-x',

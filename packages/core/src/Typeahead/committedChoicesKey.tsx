@@ -15,7 +15,8 @@
  *   render does not change the key and reloads nothing.
  */
 
-import {createContext, use} from 'react';
+import {use} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
 export type CommittedChoices = {
   /** Changes exactly when the committed values change. */
@@ -26,9 +27,9 @@ export type CommittedChoices = {
   isAtLimit: boolean;
 };
 
-export const CommittedChoicesKeyContext = createContext<
+export const CommittedChoicesKeyContext = createSharedContext<
   CommittedChoices | undefined
->(undefined);
+>('CommittedChoicesKeyContext', 1, undefined);
 CommittedChoicesKeyContext.displayName = 'CommittedChoicesKeyContext';
 
 /** The caller's committed values, if a caller provides them. */

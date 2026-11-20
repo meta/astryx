@@ -224,6 +224,11 @@
       "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/color-contrast?application=playwright"
     },
     {
+      "key": "InputGroup::With Tokenizer Overflow Disabled::color-contrast",
+      "impact": "serious",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/color-contrast?application=playwright"
+    },
+    {
       "key": "Layout::Content Width — Start Panel::color-contrast",
       "impact": "serious",
       "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/color-contrast?application=playwright"
@@ -330,6 +335,11 @@
     },
     {
       "key": "TableTree::With Sibling Sorting::aria-conditional-attr",
+      "impact": "serious",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-conditional-attr?application=playwright"
+    },
+    {
+      "key": "core/tabletree::core-tabletree--compact-density::aria-conditional-attr",
       "impact": "serious",
       "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-conditional-attr?application=playwright"
     },

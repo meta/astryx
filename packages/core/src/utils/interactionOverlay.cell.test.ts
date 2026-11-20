@@ -62,7 +62,12 @@ function rulesIn(el: Element, media: string | null): string[] {
         walk(rule.cssRules, rule.media.mediaText);
       } else if (rule instanceof CSSStyleRule) {
         const selector = rule.selectorText;
-        const here = media == null ? inside == null : inside?.includes(media);
+        // A `not (…)` query names the media only to exclude it.
+        const here =
+          media == null
+            ? inside == null
+            : inside?.includes(media) === true &&
+              !inside.includes(`not ${media}`);
         if (here && classes.some(cls => selector.startsWith(cls))) {
           out.push(`${selector} {${rule.style.cssText}}`);
         }

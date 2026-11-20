@@ -300,4 +300,27 @@ describe('response-types EnumDoc names every field', () => {
       'message',
     ]);
   });
+
+  it('themeEdit.set and themeEdit.undo (fields from api/theme-edit/theme-edit.type.mjs)', () => {
+    const type = fs.readFileSync(
+      new URL('../../api/theme-edit/theme-edit.type.mjs', import.meta.url),
+      'utf8',
+    );
+    /** The properties a typedef declares, optional ones included. @param {string} name */
+    const props = name =>
+      [
+        ...(type.split(`@typedef {object} ${name}`)[1] ?? '')
+          .split('*/')[0]
+          .matchAll(/@property \{[^}]*\} \[?(\w+)/g),
+      ].map(m => m[1]);
+    const change = props('ThemeEditChangeData');
+    expect(change).toEqual(
+      expect.arrayContaining(['missed', 'missedParts', 'alsoRemoved']),
+    );
+    // The set fields, and the undo of one setting, which has the same.
+    expectNamed('themeEdit.set', ['missed', 'missedParts']);
+    expectNamed('themeEdit.undo', ['alsoRemoved']);
+    // `missed` counts misses, never parts.
+    expect(describedAs('themeEdit.set')).not.toMatch(/count of parts/);
+  });
 });

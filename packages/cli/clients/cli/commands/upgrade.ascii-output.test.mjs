@@ -11,6 +11,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 import {generateCompressedIndex} from '../../../foundation/agent-docs/agent-docs.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 const NON_ASCII = /[\u0080-\uFFFF]/;
 
@@ -37,7 +38,7 @@ async function nonAsciiLines(args) {
 
 beforeEach(() => {
   // Repo-local so the config module can be imported under Vitest.
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-upgrade-ascii-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-upgrade-ascii-'));
   write('package.json', JSON.stringify({name: 'consumer', private: true}));
   write(
     'node_modules/@astryxdesign/core/package.json',

@@ -60,5 +60,9 @@ export interface CheckboxListContextValue {
 }
 
 export const CheckboxListContext =
-  createLayerScopedContext<CheckboxListContextValue | null>(null);
+  createLayerScopedContext<CheckboxListContextValue | null>(
+    'CheckboxListContext',
+    1,
+    null,
+  );
 CheckboxListContext.displayName = 'CheckboxListContext';

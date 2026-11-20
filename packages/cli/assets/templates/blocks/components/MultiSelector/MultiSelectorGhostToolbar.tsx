@@ -6,14 +6,22 @@ import {useState} from 'react';
 import {Button} from '@astryxdesign/core/Button';
 import {HStack} from '@astryxdesign/core/Layout';
 import {MultiSelector} from '@astryxdesign/core/MultiSelector';
+import {useToast} from '@astryxdesign/core/Toast';
 
 export default function MultiSelectorGhostToolbar() {
+  const showToast = useToast();
   const [columns, setColumns] = useState<string[]>(['Name', 'Email']);
   const [filters, setFilters] = useState<string[]>(['Active']);
 
   return (
     <HStack align="center" gap={2}>
-      <Button label="Refresh" variant="ghost" />
+      <Button
+        onClick={() =>
+          showToast({body: 'Demo: the data would be refreshed here'})
+        }
+        label="Refresh"
+        variant="ghost"
+      />
       <MultiSelector
         label="Columns"
         isLabelHidden
@@ -36,7 +44,11 @@ export default function MultiSelectorGhostToolbar() {
         status={{type: 'warning', message: 'Some filters hide archived rows'}}
         statusVariant="tooltip"
       />
-      <Button label="Export" variant="ghost" />
+      <Button
+        onClick={() => showToast({body: 'Demo: an export would start here'})}
+        label="Export"
+        variant="ghost"
+      />
     </HStack>
   );
 }

@@ -177,6 +177,48 @@ describe('attachTapHaptic', () => {
     }
   });
 
+  it("leaves a switch's label as it is in a same-origin iframe's document", () => {
+    // Another window: its nodes do not match this window's classes.
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    try {
+      const doc = frame.contentDocument as Document;
+      doc.body.innerHTML =
+        '<label id="a"><input type="checkbox" switch> Wi-Fi</label>';
+      const label = doc.getElementById('a') as HTMLLabelElement;
+      const control = label.control;
+      expect(control instanceof HTMLInputElement).toBe(false);
+      const release = attachTapHaptic(label);
+      // Plain values: the test runner cannot print another window's nodes.
+      expect(label.querySelectorAll('input').length).toBe(1);
+      expect(label.control === control).toBe(true);
+      release();
+    } finally {
+      frame.remove();
+    }
+  });
+
+  it("leaves a switch's label as it is when the page moves it into a same-origin iframe's document", () => {
+    // The label keeps this window's classes while the iframe owns it, as an
+    // element moved into a Picture-in-Picture window does.
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    try {
+      const doc = frame.contentDocument as Document;
+      const label = document.createElement('label');
+      label.innerHTML = '<input type="checkbox" switch> Wi-Fi';
+      doc.body.append(label);
+      const control = label.control;
+      const release = attachTapHaptic(label);
+      // Plain values: the test runner cannot print another window's nodes.
+      expect(label.querySelectorAll('input').length).toBe(1);
+      expect(label.control === control).toBe(true);
+      release();
+    } finally {
+      frame.remove();
+    }
+  });
+
   it('reports whether the browser knows the switch control', () => {
     // jsdom has no `switch` property on checkbox inputs, like browsers
     // before Safari 17.4.

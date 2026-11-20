@@ -149,6 +149,8 @@ interface Receipt {
     role: string | null;
     accessibleName: string | null;
     disabled: boolean;
+    nativeDisabled: boolean;
+    tabIndex: number;
     size: string | null;
     variant: string | null;
   };
@@ -317,24 +319,6 @@ function isIdentityTransform(transform: string): boolean {
   }
   if (transform.startsWith('matrix(') && values?.length === 6) {
     const expected = [1, 0, 0, 1, 0, 0];
-    return values.every((value, index) => close(value, expected[index]));
-  }
-  return false;
-}
-
-function isScale098(transform: string): boolean {
-  const values = transform
-    .slice(transform.indexOf('(') + 1, transform.lastIndexOf(')'))
-    .match(/-?[\d.]+/g)
-    ?.map(Number);
-  const close = (actual: number, expected: number) =>
-    Math.abs(actual - expected) < 0.001;
-  if (transform.startsWith('matrix3d(') && values?.length === 16) {
-    const expected = [0.98, 0, 0, 0, 0, 0.98, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
-    return values.every((value, index) => close(value, expected[index]));
-  }
-  if (transform.startsWith('matrix(') && values?.length === 6) {
-    const expected = [0.98, 0, 0, 0.98, 0, 0];
     return values.every((value, index) => close(value, expected[index]));
   }
   return false;
@@ -565,7 +549,11 @@ async function readSensors(page: Page, interaction: Interaction) {
       role:
         element?.getAttribute('role') ?? element?.tagName.toLowerCase() ?? null,
       accessibleName: element?.getAttribute('aria-label') ?? null,
-      disabled: element?.disabled ?? false,
+      // A disabled Button stays focusable: it exposes aria-disabled, not the
+      // native disabled attribute.
+      disabled: element?.getAttribute('aria-disabled') === 'true',
+      nativeDisabled: element?.disabled ?? false,
+      tabIndex: element?.tabIndex ?? -1,
       size: element?.getAttribute('data-size') ?? null,
       variant: element?.getAttribute('data-variant') ?? null,
       direction: style?.direction ?? '',
@@ -753,13 +741,13 @@ async function capture(
     parseRgb(actual.pressedOverlayToken),
   );
   const representation = fixture.disabled
-    ? 'Disabled: native disabled, muted and non-interactive'
+    ? 'Disabled: aria-disabled, still focusable, muted and non-interactive'
     : interaction === 'hover'
       ? 'Hovered: overlay style'
       : interaction === 'focus-visible'
         ? 'Focused: outline style'
         : interaction === 'pressed'
-          ? 'Pressed: scale(0.98) plus pressed overlay'
+          ? 'Pressed: identity transform plus pressed overlay under reduced motion'
           : 'Rest: base tokens with no interaction';
   const interactionStateIsExclusive =
     interaction === 'rest'
@@ -798,7 +786,7 @@ async function capture(
         : interaction === 'pressed'
           ? overlayIsAlpha &&
             pressedOverlayMatches &&
-            isScale098(actual.transform) &&
+            isIdentityTransform(actual.transform) &&
             interactionStateIsExclusive
           : interactionStateIsExclusive;
   const renderedContrastPairs = contrastPairs(actual, fixture, interaction);
@@ -821,6 +809,8 @@ async function capture(
   check(actual.role === 'button', 'native button role drifted');
   check(actual.accessibleName === fixture.name, 'accessible name drifted');
   check(actual.disabled === fixture.disabled, 'disabled state drifted');
+  check(!actual.nativeDisabled, 'the button renders native disabled');
+  check(actual.tabIndex >= 0, 'the button left the tab order');
   check(actual.size === fixture.size, 'size attribute drifted');
   check(
     actual.variant === (fixture.state === 'stop' ? 'secondary' : 'primary'),
@@ -919,6 +909,8 @@ async function capture(
       role: actual.role,
       accessibleName: actual.accessibleName,
       disabled: actual.disabled,
+      nativeDisabled: actual.nativeDisabled,
+      tabIndex: actual.tabIndex,
       size: actual.size,
       variant: actual.variant,
     },

@@ -71,6 +71,33 @@ describe('lockSelection where iOS WebKit runs', () => {
       restore();
     }
   });
+
+  it('locks an element whose inline style comes from another window (spec:AST-094 FR41)', () => {
+    const restore = asIosWebKit();
+    try {
+      const get = mount('<a id="row" href="/next">Next</a>');
+      // jsdom builds every window's style objects in this realm. In a browser,
+      // another window's style fails `instanceof Object`, as an object with no
+      // prototype does here.
+      const setProperty = vi.fn();
+      const style = Object.assign(Object.create(null) as CSSStyleDeclaration, {
+        setProperty,
+        getPropertyValue: () => '',
+        getPropertyPriority: () => '',
+        removeProperty: vi.fn(),
+      });
+      Object.defineProperty(get('row'), 'style', {
+        configurable: true,
+        value: style,
+      });
+      const release = lockSelection([get('row')], get('row'));
+      expect(setProperty).toHaveBeenCalledWith('-webkit-touch-callout', 'none');
+      expect(setProperty).toHaveBeenCalledWith('user-select', 'none');
+      release();
+    } finally {
+      restore();
+    }
+  });
 });
 
 describe('lockSelection elsewhere', () => {

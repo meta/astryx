@@ -34,15 +34,16 @@
 // scroll view and writes how much of it the pull reveals. It fades it as a
 // settle takes the content back.
 //
-// The settle hands the table's spring to the animator. The end plays the
-// theme's duration and move easing tokens, read at its start, so the theme's
-// tempo scales it. Finger tracking runs on the main thread, because the
+// The settle hands the table's spring to the animator. The end plays
+// UIKit's curve over the theme's duration token, read at its start, so the
+// theme's tempo scales it. Finger tracking runs on the main thread, because the
 // browser has no refresh pull to ride. Every release, settle and end runs on
 // the compositor.
 
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -313,8 +314,12 @@ export function useRefreshTouchController({
     edge.current = {element: null, saved: null};
   }, []);
 
+  // Syncs the scroll listener's ref with the committed `isPullEnabled`. A
+  // render React discards must not leave its value.
   const isPullEnabledRef = useRef(isPullEnabled);
-  isPullEnabledRef.current = isPullEnabled;
+  useLayoutEffect(() => {
+    isPullEnabledRef.current = isPullEnabled;
+  });
 
   /**
    * Near the top, the browser draws no overscroll: the pull does. Only an
@@ -556,8 +561,9 @@ export function useRefreshTouchController({
           resetIndicator();
         }
       };
-      // The theme's tokens as they apply here, at the end's start. With no
-      // tokens, or tokens in a form it cannot read, the end has no slide.
+      // The theme's duration token as it applies here, at the end's start.
+      // With no token, or a token in a form it cannot read, the end has no
+      // slide.
       const timing =
         element == null ? null : endTiming(getComputedStyle(element));
       if (timing == null || timing.ms <= 0) {

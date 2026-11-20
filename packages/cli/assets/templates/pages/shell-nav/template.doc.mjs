@@ -10,17 +10,13 @@ export const doc = {
   keywords: [
     'shell',
     'chrome',
-    'layout frame',
+    'layout',
+    'frame',
     'navigation',
     'sidebar',
-    'menu bar',
+    'menu',
+    'bar',
   ],
   isReady: true,
   category: 'Shell - Top Nav + Left Sidebar',
-  icons: {
-    DocumentTextIcon: 'document',
-    FolderIcon: 'folder',
-    MagnifyingGlassIcon: 'search',
-    PlayIcon: 'play',
-  },
 };

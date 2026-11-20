@@ -19,6 +19,8 @@ export const docs = {
     'tailwind-theme.css',
     'utility classes',
     'preflight',
+    'existing Tailwind app',
+    'cascade layer order',
   ],
 
   sections: [
@@ -69,7 +71,45 @@ import {themes, defaultThemeSlug} from './astryx-themes';`,
         },
         {
           type: 'prose',
-          text: 'The Tailwind bridge is the concrete example of the general interop pattern: expose another library\'s semantic API, but point the values at system token variables.',
+          text: "The Tailwind bridge is the concrete example of the general interop pattern: expose another library's semantic API, but point the values at system token variables.",
+        },
+      ],
+    },
+    {
+      title: 'Add Astryx to an app that already uses Tailwind',
+      content: [
+        {
+          type: 'prose',
+          text: 'The recipe in the Tailwind section is a whole `globals.css` for a new app. An app that already uses Tailwind keeps its own file: its `@import "tailwindcss"`, its `@theme` mapping, and its `:root` variables stay as they are. Add one `@layer` line above the Tailwind import and the Astryx stylesheets below it.',
+        },
+        {
+          type: 'code',
+          lang: 'css',
+          label: 'globals.css (existing Tailwind app)',
+          code: `@layer reset, theme, base, astryx-base, astryx-theme, components, utilities;
+
+@import "tailwindcss"; /* the app's own entry, unchanged */
+@import "@astryxdesign/core/reset.css";
+@import "@astryxdesign/core/astryx.css";
+@import "@astryxdesign/theme-neutral/theme.css";
+
+/* The app's own @theme and :root rules stay below, unchanged. */`,
+        },
+        {
+          type: 'prose',
+          text: "This recipe leaves out `tailwind-theme.css`. The bridge maps Tailwind theme names to system tokens, including Tailwind's own defaults such as `rounded-lg` and `shadow-md`, so in an existing app it changes what the app's own classes paint. Add it only when the app does not use the names it maps.",
+        },
+        {
+          type: 'prose',
+          text: "Astryx's theme defines its own CSS custom properties (color, spacing, radius, shadow, font, motion and more), and {@link namespace:tokens} has the full list. An app token with one of those names collides in one of two ways. An app `@theme` key takes Astryx's value, because `astryx.css` sets the tokens on `:root` above Tailwind's `theme` layer: with `@theme { --spacing-4: 1.5rem }`, the app's `gap-4` stays 16px. Marking the block `@theme inline` keeps the app's value in its utilities. An app `:root` variable replaces Astryx's value, so Astryx's own components change: `:root { --spacing-4: 1.5rem }` widens Astryx's spacing step 4 from 16px to 24px. Where the root Theme component sets a token again, such as `--color-warning`, the app's own rules inside it read Astryx's value instead. Rename any app token that shares a name.",
+        },
+        {
+          type: 'prose',
+          text: "Put the `@layer` line above the app's `@import \"tailwindcss\"`, never below it. A `@layer` statement orders only the layer names the page has not seen yet, and the Tailwind import names `theme`, `base`, `components`, and `utilities` as it loads. Below that import, the statement can only add `reset`, `astryx-base`, and `astryx-theme` after Tailwind's `utilities`. That inverts the cascade: the Astryx reset then outranks every utility class in the app, and, for example, removes the borders and padding the app's utilities give its controls. Nothing reports it: the build and the browser console stay clean, and the `@layer` line still looks right in the source, so only the rendered page shows the problem.",
+        },
+        {
+          type: 'prose',
+          text: 'The load-order rule from the Tailwind section still applies: `globals.css` must be the first stylesheet the page loads, so its `@layer` line names the layers first.',
         },
       ],
     },

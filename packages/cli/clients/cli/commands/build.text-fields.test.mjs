@@ -8,7 +8,11 @@
 import {describe, it, expect} from 'vitest';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {runCli} from '../../../test-utils/run-cli.mjs';
+import {requireNatively} from '../../../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('../../../test-utils/run-cli.mjs')} */
+const {runCli} = require('../../../test-utils/run-cli.mjs');
 
 // Run against the monorepo root so @astryxdesign/core is discoverable.
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
@@ -58,16 +62,16 @@ describe('build kit text fields mirror the JSON keys', () => {
     }
   }, SLOW);
 
-  it('leads with the start, then the alternatives, blocks and components', async () => {
+  it('leads with the start, then the alternatives, block examples and components', async () => {
     const human = await runCli(['build', 'analytics dashboard'], REPO);
     expect(human.status).toBe(0);
     const headings = human.stdout
       .split('\n')
-      .filter(line => /^(TEMPLATE|OTHER TEMPLATES|BLOCKS|COMPONENTS)$/.test(line));
-    expect(headings).toEqual(['TEMPLATE', 'OTHER TEMPLATES', 'BLOCKS', 'COMPONENTS']);
+      .filter(line => /^(TEMPLATE|OTHER TEMPLATES|BLOCK EXAMPLES|COMPONENTS)$/.test(line));
+    expect(headings).toEqual(['TEMPLATE', 'OTHER TEMPLATES', 'BLOCK EXAMPLES', 'COMPONENTS']);
     // A builder changing a page they already have keeps it.
     expect(human.stdout).toContain(
-      'Changing a page you already have? Keep it, and use only the blocks and components.',
+      'Changing a page you already have? Keep it, and add components; read a block example when it helps.',
     );
   }, SLOW);
 

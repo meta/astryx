@@ -8,7 +8,7 @@
  */
 
 import {describe, it, expect, vi} from 'vitest';
-import {useState} from 'react';
+import {Suspense, startTransition, use, useState} from 'react';
 import {act, render, renderHook, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Table} from '../../Table';
@@ -447,5 +447,44 @@ describe('useTableSelectionState with filtered data', () => {
     expect(rows[2]).toHaveAttribute('aria-selected', 'true'); // Bob
     expect(rows[3]).not.toHaveAttribute('aria-selected'); // Charlie
     expect(rows[4]).not.toHaveAttribute('aria-selected'); // Diana
+  });
+});
+
+// A render that reads this promise suspends for good.
+const pending = new Promise<never>(() => {});
+function Pending(): null {
+  use(pending);
+  return null;
+}
+
+function PagedTable({data, isPending}: {data: TestItem[]; isPending: boolean}) {
+  return (
+    <Suspense fallback={null}>
+      <StateHelperTable data={data} />
+      {isPending ? <Pending /> : null}
+    </Suspense>
+  );
+}
+
+describe('useTableSelectionState after a render React discards', () => {
+  it('select-all selects the rows on screen, not those of a page still loading', async () => {
+    const user = userEvent.setup();
+    const {rerender} = render(
+      <PagedTable data={testData.slice(0, 2)} isPending={false} />,
+    );
+    // The next props render in a transition, then suspend for good, so React
+    // keeps the committed tree and never commits that render.
+    await act(async () => {
+      startTransition(() => {
+        rerender(<PagedTable data={testData.slice(2)} isPending />);
+      });
+    });
+    expect(screen.queryByText('Charlie')).toBeNull();
+
+    await user.click(screen.getByLabelText('Select all rows'));
+
+    const rows = screen.getAllByRole('row');
+    expect(rows[1]).toHaveAttribute('aria-selected', 'true'); // Alice
+    expect(rows[2]).toHaveAttribute('aria-selected', 'true'); // Bob
   });
 });

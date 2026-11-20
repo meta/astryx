@@ -14,9 +14,11 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {withListingCache} from '../fs/listing-cache.mjs';
+import {recordReads} from '../fs/read-record.mjs';
 import {
   CORE_PACKAGE,
   discoverComponents,
+  documentedEntry,
   familyMember,
   findComponentReadme,
   findComponentSource,
@@ -28,6 +30,7 @@ import {
   findIntegrationComponentSource,
   discoverOwnedComponents,
 } from './component-discovery.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 // packages/cli/foundation/discovery/ -> up 4 = repo root (has packages/core).
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
@@ -57,7 +60,7 @@ describe('discoverComponents (real core)', () => {
       expect(members.length).toBeGreaterThan(0);
       expect([...members].sort()).toEqual(members);
     }
-    expect([...keys].sort((a, b) => a.localeCompare(b))).toEqual(keys);
+    expect([...keys].sort((a, b) => compareText(a, b))).toEqual(keys);
     expect(keys).toContain('Button');
     expect(comps.Button).toContain('Button');
     expect(comps.Button).toContain('IconButton');
@@ -123,6 +126,25 @@ describe('discoverComponents (real core)', () => {
     expect(discoverComponents(core)).toEqual({});
   });
 
+  it('reads the docs once per operation and fresh outside one', () => {
+    const core = mkTmp('as-cd-once-');
+    const dir = path.join(core, 'src', 'Foo');
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(path.join(dir, 'XDSFoo.tsx'), 'x');
+    const doc = path.join(dir, 'Foo.doc.mjs');
+    fs.writeFileSync(doc, 'export default {};\n');
+    withListingCache(() => {
+      const first = discoverComponents(core);
+      expect(first).toEqual({Foo: ['Foo']});
+      first.Foo.push('Bar');
+      fs.writeFileSync(doc, "export default {\n  group: 'Widgets',\n};\n");
+      // The operation read the doc once, so the edit does not reach it. A
+      // change to one caller's result does not reach the next caller.
+      expect(discoverComponents(core)).toEqual({Foo: ['Foo']});
+    });
+    expect(discoverComponents(core)).toEqual({Widgets: ['Foo']});
+  });
+
   it('lists HStack, VStack and Heading, whose docs live in their family folders', () => {
     // Each has its own folder and import path; Stack's doc documents HStack and
     // VStack as members, and Heading's own doc sits in the Text folder.
@@ -165,6 +187,49 @@ describe('discoverComponents (real core)', () => {
     expect(findComponentReadme(core, 'Prose')).toBeNull();
     // A family doc is read only from the folders the component imports.
     expect(findComponentReadme(core, 'Orphan')).toBeNull();
+  });
+
+  it('reads a family doc again when npm replaced it with one of the same size and mtime', () => {
+    // npm stamps every installed file with one mtime and writes new files.
+    const npmTime = new Date('1985-10-26T08:15:00Z');
+    const core = mkTmp('as-cd-family-npm-');
+    const write = (rel, text) => {
+      const file = path.join(core, 'src', rel);
+      fs.mkdirSync(path.dirname(file), {recursive: true});
+      fs.writeFileSync(file, text);
+      fs.utimesSync(file, npmTime, npmTime);
+      return file;
+    };
+    write('Stack/Stack.tsx', 'x');
+    write('VStack/VStack.tsx', "import {Stack} from '../Stack/Stack';\n");
+    const family = member =>
+      `export const docs = {name: 'Stack', components: [{name: 'Stack'}, {name: '${member}'}]};\n`;
+    const doc = write('Stack/Stack.doc.mjs', family('VStack'));
+    expect(findComponentReadme(core, 'VStack')).toBe(doc);
+    const next = write('Stack/Stack.next.mjs', family('WStack'));
+    fs.renameSync(next, doc);
+    expect(findComponentReadme(core, 'VStack')).toBeNull();
+  });
+
+  it("counts a family doc's kept members as a read of the doc", () => {
+    const core = mkTmp('as-cd-family-record-');
+    const write = (rel, text) => {
+      const file = path.join(core, 'src', rel);
+      fs.mkdirSync(path.dirname(file), {recursive: true});
+      fs.writeFileSync(file, text);
+      return file;
+    };
+    write('Stack/Stack.tsx', 'x');
+    write('VStack/VStack.tsx', "import {Stack} from '../Stack/Stack';\n");
+    const doc = write(
+      'Stack/Stack.doc.mjs',
+      "export const docs = {name: 'Stack', components: [{name: 'Stack'}, {name: 'VStack'}]};\n",
+    );
+    expect(findComponentReadme(core, 'VStack')).toBe(doc);
+    /** @type {Map<string, string>} */
+    const seen = new Map();
+    recordReads(seen, () => findComponentReadme(core, 'VStack'));
+    expect(seen.has(doc)).toBe(true);
   });
 
   it('lists a component folder with no doc when its own doc sits in a family folder', () => {
@@ -227,6 +292,19 @@ describe('familyMember', () => {
     expect(familyMember(stack, 'Stack')).toBeNull();
     expect(familyMember({name: 'Button'}, 'Button')).toBeNull();
     expect(familyMember(stack, 'HStack')).toBeNull();
+  });
+});
+
+describe('documentedEntry', () => {
+  it("returns a doc with its own props, a family member's entry, or the entry a doc keeps its own props in", () => {
+    const button = {name: 'Button', props: [{name: 'label'}]};
+    expect(documentedEntry(button, 'Button')).toBe(button);
+    const stack = {name: 'Stack', components: [{name: 'Stack', props: []}, {name: 'VStack', props: [{name: 'gap'}]}]};
+    expect(documentedEntry(stack, 'VStack')).toEqual({name: 'VStack', props: [{name: 'gap'}]});
+    const link = {name: 'Link', components: [{name: 'Link', props: [{name: 'children'}]}]};
+    expect(documentedEntry(link, 'Link')).toEqual({name: 'Link', props: [{name: 'children'}]});
+    expect(documentedEntry(stack, 'HStack')).toBeNull();
+    expect(documentedEntry(null, 'Button')).toBeNull();
   });
 });
 
@@ -400,7 +478,7 @@ describe('integration component discovery (ownership-aware)', () => {
   }
 
   it('records owner package, issuesUrl, group, and source presence; drops hidden', () => {
-    const recs = discoverIntegrationComponents(buildIntegration()).sort((a, b) => a.name.localeCompare(b.name));
+    const recs = discoverIntegrationComponents(buildIntegration()).sort((a, b) => compareText(a.name, b.name));
     expect(recs.map(r => r.name)).toEqual(['MetaAppShell', 'MetaDiff']);
     const shell = recs.find(r => r.name === 'MetaAppShell');
     expect(shell.package).toBe('@acme/astryx-meta');

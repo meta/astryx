@@ -34,8 +34,12 @@ independent auto passes: **D1 (icon-mirror)**, **D5 (positional-mirror)**, and
 > package produces a report whose requested package/filter, duplicate-free exact
 > D1/D5/D6 identities, and nonzero planned/completed scans match. When trusted
 > policy requires full scope, every manifest must be runnable with an empty
-> filter and all five package reports must arrive. A planned scan ending in ERROR
-> is incomplete. Missing or malformed analysis/index/manifest input, a noncanonical owner, stale output, a missing or unexpected report, and
+> filter and all five package reports must arrive. A D1 or D5/D6 scan that
+> throws (ERROR: a navigation or page timeout, a crash; no verdict) runs once
+> more on a fresh page; a judged verdict is never retried. The report, its job
+> summary and one `rtl-audit-retries: <n> [story ids]` log line list each retried
+> story with its first ERROR. A planned scan still ending in ERROR after its
+> retry is incomplete. Missing or malformed analysis/index/manifest input, a noncanonical owner, stale output, a missing or unexpected report, and
 > an all-skipped required matrix all fail closed. An RTL-harness-only PR labelled `ci:run-rtl` runs the fixed
 > `Chart,ChartLegend` routing smoke scope so package discovery and curated aliases
 > cannot skip their own check; without the label, `main`'s `release-check` covers
@@ -282,8 +286,8 @@ The report rolls every public component in the canonical component-package
 registry into one of three states. Package roots, layouts, story prefixes, and
 public component names come from `scripts/component-packages.cjs`; Storybook
 titles project onto that canonical roster across Core, Lab, Charts, Rich Text,
-and Vega, including one-to-many grouped titles such as
-`Charts/Chrome/Axes & Grids`. Curated targets remain the exact alias when a title
+and Vega, including one-to-many grouped titles whose final segment joins several
+components with `&` or `and`. Curated targets remain the exact alias when a title
 cannot name its owner. An entry with an empty `dims` array is route-only: it
 binds a public owner to a story that renders it for universal D1/D5/D6 scanning
 without inventing a curated measurement.

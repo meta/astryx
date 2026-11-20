@@ -8,7 +8,7 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 import {rtlStyles} from '@astryxdesign/core/utils';
-import {ChevronDownIcon, ChevronRightIcon} from '@heroicons/react/24/outline';
+import {ChevronDownIcon, ChevronRightIcon} from '@astryxdesign/template-icons';
 
 type FileNode = {name: string; children?: FileNode[]};
 

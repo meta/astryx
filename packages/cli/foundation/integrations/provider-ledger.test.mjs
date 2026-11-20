@@ -7,21 +7,29 @@
  * codemod policy says otherwise.
  *
  * The expected candidates come from the scenario description, never from the
- * resolver. Fixtures live under a repo-local temp dir, not /tmp, because Vite
- * refuses to dynamically import a module from outside the project root.
+ * resolver. Fixtures live under the system temp folder, so TMPDIR chooses the
+ * filesystem that takes each seed's writes and removals.
  */
 
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
-import {Project, providerLedgerOf} from '../config/project.mjs';
-import {loadProjectContext} from '../../api/upgrade/_adapter.mjs';
 import {
   expectedProjectInputs,
   generateScenario,
   isRunnable,
   writeScenario,
 } from '../../test-utils/provider-scenarios.mjs';
+import {requireNatively} from '../../test-utils/native-require.mjs';
+
+// The code under test loads natively, so each seed's fixture modules load as
+// Node loads them, not as one Vitest request each.
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('../config/project.mjs')} */
+const {Project, providerLedgerOf} = require('../config/project.mjs');
+/** @type {typeof import('../../api/upgrade/_adapter.mjs')} */
+const {loadProjectContext} = require('../../api/upgrade/_adapter.mjs');
 
 // 200 seeds keep this near 4 s; any seed range must hold.
 const SEEDS = Array.from({length: 200}, (_, index) => index + 1);
@@ -34,7 +42,7 @@ let originalCwd;
 
 beforeAll(() => {
   originalCwd = process.cwd();
-  root = fs.mkdtempSync(path.join(process.cwd(), '.astryx-provider-ledger-'));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), '.astryx-provider-ledger-'));
 });
 
 // Only a seed that failed before removing its folder leaves one here.

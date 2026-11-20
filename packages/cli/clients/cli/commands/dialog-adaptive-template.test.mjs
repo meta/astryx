@@ -1,7 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, expect, it} from 'vitest';
-import {component} from '../../../api/component/component.mjs';
+import {requireNatively} from '../../../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('../../../api/component/component.mjs')} */
+const {component} = require('../../../api/component/component.mjs');
 
 const CWD = {cwd: '.'};
 

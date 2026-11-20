@@ -9,7 +9,7 @@
  * SYNC: When the ComplexSelector + TransferList staged contract changes, update this test.
  */
 
-import {useEffect, useRef, useState} from 'react';
+import {useEffect, useMemo, useRef, useState} from 'react';
 import {describe, expect, it, vi} from 'vitest';
 import {
   fireEvent,
@@ -20,6 +20,7 @@ import {
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {ComplexSelector} from '@astryxdesign/core/ComplexSelector';
+import {createReorderable} from '@astryxdesign/core';
 import {TransferList, type TransferListOption} from './TransferList';
 
 type Column = 'name' | 'owner' | 'status' | 'updated';
@@ -68,6 +69,18 @@ function StagedColumnSelector({
   const [appliedValue, setAppliedValue] =
     useState<readonly Column[]>(initialValue);
   const [draftValue, setDraftValue] = useState<readonly Column[]>(initialValue);
+  // The composition owns the draft, so its reorderable moves the draft.
+  const reorderable = useMemo(
+    () =>
+      createReorderable<Column>({
+        onReorder: ({key, to}) =>
+          setDraftValue(draft => {
+            const rest = draft.filter(item => item !== key);
+            return [...rest.slice(0, to), key, ...rest.slice(to)];
+          }),
+      }),
+    [],
+  );
 
   return (
     <>
@@ -105,6 +118,7 @@ function StagedColumnSelector({
               options={OPTIONS}
               value={draftValue}
               onChange={setDraftValue}
+              reorderable={reorderable}
             />
             <button type="button" onClick={close}>
               Close
@@ -251,7 +265,7 @@ describe('ComplexSelector + TransferList composition', () => {
     ).toEqual(['Owner', 'Name']);
   });
 
-  it('lets Escape cancel an active reorder without closing the selector', async () => {
+  it('lets Escape end reorder mode without closing the selector', async () => {
     const user = userEvent.setup();
     const onCommit = vi.fn();
     render(<StagedColumnSelector onCommit={onCommit} />);
@@ -272,15 +286,18 @@ describe('ComplexSelector + TransferList composition', () => {
       ...hidden,
     });
     reorder.focus();
+    // In reorder mode, a move changes the draft at once.
     await user.keyboard('{Enter}{ArrowDown}');
     expect(screen.getByTestId('draft-value')).toHaveTextContent(
       '["status","name"]',
     );
+    expect(reorder).toHaveAttribute('aria-pressed', 'true');
 
+    // Escape ends the mode, keeping the move, and leaves the selector open.
     await user.keyboard('{Escape}');
-
+    expect(reorder).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByTestId('draft-value')).toHaveTextContent(
-      '["name","status"]',
+      '["status","name"]',
     );
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
     expect(onCommit).not.toHaveBeenCalled();

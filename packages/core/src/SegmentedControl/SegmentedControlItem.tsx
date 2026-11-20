@@ -40,6 +40,9 @@ import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {isRenderable} from '../utils/isRenderable';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useTouchHitArea} from '../utils/touchHitArea';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 
 export interface SegmentedControlItemProps extends BaseProps<HTMLButtonElement> {
   ref?: React.Ref<HTMLButtonElement>;
@@ -166,6 +169,7 @@ const sizeStyles = stylex.create({
     borderRadius: CONCENTRIC_RADIUS,
     paddingInline: spacingVars['--spacing-2'],
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
   },
   md: {
     height: `calc(${sizeVars['--size-element-md']} - 4px)`,
@@ -228,13 +232,17 @@ export function SegmentedControlItem({
     },
   );
 
+  // A disabled segment takes no taps, so it gets no band.
+  const hasHitArea = !isItemDisabled;
+  const segmentRef = useMergedRefs(ref, useTouchHitArea(hasHitArea));
+
   const iconElement = isRenderable(icon) ? (
     <span {...stylex.props(styles.icon, iconSizeStyles[size])}>{icon}</span>
   ) : null;
 
   return (
     <button
-      ref={ref}
+      ref={segmentRef}
       {...rest}
       type="button"
       role="radio"
@@ -271,6 +279,7 @@ export function SegmentedControlItem({
             !isItemDisabled &&
             interactionOverlayStyles.backgroundColor,
           isItemDisabled && styles.disabled,
+          hasHitArea && touchHitAreaStyles.layer,
           ctx.isTouchPresentation === true && styles.touchPresentation,
           xstyle,
         ),

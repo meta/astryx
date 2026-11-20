@@ -1,8 +1,21 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {execFileSync} from 'node:child_process';
+import {mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {describe, expect, it} from 'vitest';
 
-import {buildProbeComponents, probeColor, unionValues} from './probe-theme.mjs';
+import {
+  buildProbeComponents,
+  colorDistance,
+  paint,
+  probeColor,
+  renderProbeTheme,
+  unionValues,
+} from './probe-theme.mjs';
+import {PROBE_TOKENS} from './probe-axes.mjs';
 
 describe('unionValues', () => {
   it('reads an inline string union', () => {
@@ -117,5 +130,90 @@ describe('buildProbeComponents', () => {
     expect(buildProbeComponents(targets, props)).toEqual(
       buildProbeComponents(targets, props),
     );
+  });
+});
+
+describe('paint', () => {
+  // A background that matches the fixed probe text colour hides the text of a
+  // child that keeps the token, so the gate cannot see that text reach the
+  // pixels.
+  const fixedText = PROBE_TOKENS['--color-text-primary'];
+
+  it('keeps an open Collapsible content background distinct from the fixed probe text colour', () => {
+    const {backgroundColor} = paint('collapsible-content.open');
+    expect(colorDistance(backgroundColor, fixedText)).toBeGreaterThanOrEqual(
+      60,
+    );
+  });
+
+  it('keeps every background in the generated probe theme distinct from the fixed probe text colour', () => {
+    const source = readFileSync(
+      fileURLToPath(
+        new URL(
+          '../../../../packages/themes/probe/src/probeTheme.ts',
+          import.meta.url,
+        ),
+      ),
+      'utf8',
+    );
+    const backgrounds = [...source.matchAll(/backgroundColor: '([^']+)'/g)].map(
+      match => match[1],
+    );
+    expect(backgrounds.length).toBeGreaterThan(100);
+    const collisions = backgrounds.filter(
+      color => colorDistance(color, fixedText) < 60,
+    );
+    expect(collisions).toEqual([]);
+  });
+});
+
+describe('the generated probe theme merges', () => {
+  /** @param {string[]} keys */
+  const render = keys =>
+    renderProbeTheme(
+      buildProbeComponents(
+        keys.map(key => ({key, component: 'X', props: [], states: ['open']})),
+        {},
+      ),
+    );
+
+  it('names no counts in its header, so a new target changes no shared line', () => {
+    expect(render(['alpha', 'omega'])).not.toMatch(/\d+ targets|\d+ selectors/);
+  });
+
+  it('sorts its targets whatever order the docs give them in', () => {
+    expect(render(['omega', 'alpha'])).toBe(render(['alpha', 'omega']));
+  });
+
+  it('merges two branches that add targets to different components, with no conflict', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'probe-merge-'));
+    try {
+      const base = ['banner', 'card', 'pagination', 'tabs'];
+      const files = {
+        base: render(base),
+        ours: render([...base, 'calendar-range']),
+        theirs: render([...base, 'pagination-item']),
+      };
+      for (const [name, text] of Object.entries(files)) {
+        writeFileSync(join(dir, name), text);
+      }
+      // `git merge-file` exits with the number of conflicts.
+      const merged = execFileSync(
+        'git',
+        [
+          'merge-file',
+          '-p',
+          join(dir, 'ours'),
+          join(dir, 'base'),
+          join(dir, 'theirs'),
+        ],
+        {encoding: 'utf8'},
+      );
+      expect(merged).toBe(
+        render([...base, 'calendar-range', 'pagination-item']),
+      );
+    } finally {
+      rmSync(dir, {recursive: true, force: true});
+    }
   });
 });

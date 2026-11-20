@@ -26,6 +26,7 @@ import {
 } from './cli-self-docs.mjs';
 import {routeSegment} from './docs-section-key.mjs';
 import {formatCliCommand} from '../env/package-manager.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const SLOW = 60_000;
 
@@ -37,7 +38,7 @@ afterAll(() => {
 
 /** Write `files` (relative path -> content) under a fresh directory. */
 function writeTree(/** @type {Record<string, string>} */ files) {
-  const root = fs.mkdtempSync(path.join(process.cwd(), '.astryx-cli-docs-'));
+  const root = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-cli-docs-'));
   tmpRoots.push(root);
   for (const [rel, content] of Object.entries(files)) {
     const file = path.join(root, rel);
@@ -314,6 +315,38 @@ describe('cliDocSection', () => {
         text: 'It runs `grpSub()` from `@astryxdesign/cli/api`. Read it with {@link function:grpSub}.',
       },
     ]);
+  });
+
+  it("reads every part of an option's pointers, after its own or its parameter's text", () => {
+    const docs = [
+      command('pick', {
+        fn: 'pick',
+        options: [
+          {
+            flag: '--list',
+            description: 'List: <name>',
+            pointers: [{commands: ['pick --deep'], text: ', --deep'}, ' are refused'],
+          },
+          {
+            flag: '--from <pkg>',
+            param: 'options.from',
+            pointers: [{commands: ['pick x --from core'], text: ' Use core for originals.'}],
+          },
+        ],
+      }),
+      fn('pick', {
+        params: [{name: 'options.from', type: 'string', description: 'Narrow to one package.'}],
+      }),
+    ];
+    const section = cliDocSection(docs[0], indexOf(docs));
+    expect(section.content).toContainEqual({
+      type: 'table',
+      headers: ['Option', 'Description'],
+      rows: [
+        ['`--list`', 'List: <name>, --deep are refused'],
+        ['`--from <pkg>`', 'Narrow to one package. Use core for originals.'],
+      ],
+    });
   });
 
   it('marks required parameters and adds a Default column when a parameter has a default', () => {

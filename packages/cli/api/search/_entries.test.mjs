@@ -8,8 +8,13 @@
 import {describe, it, expect} from 'vitest';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {gatherCandidates, loadSearchData} from './_adapter.mjs';
-import {HASHED_FIELDS, buildTable, entryTable} from './_entries.mjs';
+import {requireNatively} from '../../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('./_adapter.mjs')} */
+const {gatherCandidates, loadSearchData} = require('./_adapter.mjs');
+/** @type {typeof import('./_entries.mjs')} */
+const {HASHED_FIELDS, buildTable, entryTable} = require('./_entries.mjs');
 
 const cwd = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),

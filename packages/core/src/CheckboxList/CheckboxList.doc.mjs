@@ -237,6 +237,11 @@ export const docs = {
       {
         guidance: true,
         description:
+          'Pass an option description that is longer than one line as a node: description={<Text type="supporting">…</Text>}. A string description shows on one line, and the row cuts the remaining text with an ellipsis.',
+      },
+      {
+        guidance: true,
+        description:
           'Write a group label that says what the choices represent: "Export formats" tells users more than "Options".',
       },
       {
@@ -262,7 +267,7 @@ export const docs = {
       {
         name: '--_checkbox-row-press-paint',
         description:
-          "The touch press paint a row that owns its checkbox's press hands that checkbox's box: none at rest, and the press paint at the press's strength while the touch press controller presses that row under a coarse pointer. Set on the row by its own press arms; the box reads its nearest row's value, so a list placed in a row's content keeps its own rows' paint.",
+          "The press paint a row that owns its checkbox's press hands that checkbox's box: none at rest, and the press paint at the press's strength while the press controller presses that row, for every pointer. Set on the row by its own press arms; the box reads its nearest row's value, so a list placed in a row's content keeps its own rows' paint.",
         default: 'none',
         private: true,
       },
@@ -285,6 +290,11 @@ export const docsZh = {
         guidance: true,
         description:
           'Turn on dividers (hasDividers) when items have helper text underneath; without them the labels and descriptions blur together.',
+      },
+      {
+        guidance: true,
+        description:
+          'Pass an option description that is longer than one line as a node: description={<Text type="supporting">…</Text>}. A string description shows on one line, and the row cuts the remaining text with an ellipsis.',
       },
       {
         guidance: true,
@@ -327,6 +337,11 @@ export const docsDense = {
         guidance: true,
         description:
           'Turn on dividers (hasDividers) when items have helper text underneath; without them the labels and descriptions blur together.',
+      },
+      {
+        guidance: true,
+        description:
+          'Pass an option description that is longer than one line as a node: description={<Text type="supporting">…</Text>}. A string description shows on one line, and the row cuts the remaining text with an ellipsis.',
       },
       {
         guidance: true,

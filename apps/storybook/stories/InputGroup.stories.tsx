@@ -12,8 +12,10 @@ import {DateInput} from '@astryxdesign/core/DateInput';
 import type {ISODateString} from '@astryxdesign/core/Calendar';
 import {Typeahead} from '@astryxdesign/core/Typeahead';
 import type {SearchableItem, SearchSource} from '@astryxdesign/core/Typeahead';
+import {Tokenizer} from '@astryxdesign/core/Tokenizer';
 import {Selector} from '@astryxdesign/core/Selector';
 import {MultiSelector} from '@astryxdesign/core/MultiSelector';
+import {Badge} from '@astryxdesign/core/Badge';
 import {Icon} from '@astryxdesign/core/Icon';
 import type {ISOTimeString} from '@astryxdesign/core';
 
@@ -76,6 +78,33 @@ export const WithPrefix: Story = {
   args: {
     label: 'Price',
   },
+};
+
+/**
+ * Caller text that holds only weak and neutral characters, or that mixes a
+ * Latin word into right-to-left text. `MixedDirectionText.a11y.chromium.spec.ts`
+ * reads its character order under RTL and LTR.
+ */
+const MIXED_DIRECTION_TEXTS = [
+  'https://',
+  '.com',
+  '+3',
+  '@alice',
+  'iPhone جديد',
+  'example.com موقع',
+];
+
+export const MixedDirection: Story = {
+  render: () => (
+    <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
+      {MIXED_DIRECTION_TEXTS.map(text => (
+        <InputGroup key={text} label={`Prefix ${text}`}>
+          <InputGroupText>{text}</InputGroupText>
+          <TextInput label="Value" isLabelHidden value="" onChange={() => {}} />
+        </InputGroup>
+      ))}
+    </div>
+  ),
 };
 
 export const WithSuffix: Story = {
@@ -167,6 +196,268 @@ export const WithTypeahead: Story = {
     label: 'Favorite fruit',
     description: 'Select one fruit from the list',
   },
+};
+
+export const WithTokenizer: Story = {
+  render: args => {
+    const [value, setValue] = useState<SearchableItem[]>([fruits[0]]);
+    return (
+      <InputGroup {...args}>
+        <InputGroupText>Tags</InputGroupText>
+        <Tokenizer
+          label="Selections"
+          isLabelHidden
+          searchSource={fruitSource}
+          value={value}
+          onChange={setValue}
+          placeholder="Add fruits..."
+          maxEntries={3}
+          hasEntriesOnFocus
+        />
+      </InputGroup>
+    );
+  },
+  args: {
+    label: 'Favorite fruits',
+    description: 'Pick up to three fruits',
+  },
+};
+
+export const WithTokenizerOverflow: Story = {
+  render: () => {
+    const [many, setMany] = useState<SearchableItem[]>(fruits.slice(0, 6));
+    const [sized, setSized] = useState<SearchableItem[]>(fruits.slice(0, 2));
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px',
+          width: '320px',
+        }}>
+        {/* More tokens than fit: the grouped row stays single-line and scrolls. */}
+        <InputGroup label="Favorite fruits">
+          <InputGroupText>Tags</InputGroupText>
+          <Tokenizer
+            label="Selections"
+            isLabelHidden
+            searchSource={fruitSource}
+            value={many}
+            onChange={setMany}
+            placeholder="Add fruits..."
+          />
+        </InputGroup>
+        {/* An explicit lg Tokenizer takes the sm group's size. */}
+        <InputGroup label="Snack fruits" size="sm">
+          <InputGroupText>Tags</InputGroupText>
+          <Tokenizer
+            label="Selections"
+            isLabelHidden
+            size="lg"
+            searchSource={fruitSource}
+            value={sized}
+            onChange={setSized}
+            placeholder="Add fruits..."
+          />
+        </InputGroup>
+      </div>
+    );
+  },
+};
+
+/**
+ * End controls hold the row's inline end while a grouped Tokenizer's tokens
+ * overflow: the tokens scroll beside the clear button and `endContent`, never
+ * underneath them, and the controls do not move with the scroll.
+ */
+export const WithTokenizerOverflowEndControls: Story = {
+  render: () => {
+    const [value, setValue] = useState<SearchableItem[]>(fruits.slice(0, 6));
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          width: '320px',
+        }}>
+        <InputGroup label="Favorite fruits">
+          <InputGroupText>Tags</InputGroupText>
+          <Tokenizer
+            label="Selections"
+            isLabelHidden
+            searchSource={fruitSource}
+            value={value}
+            onChange={setValue}
+            placeholder="Add fruits..."
+            hasClear
+            endContent={<Badge label={String(value.length)} />}
+          />
+        </InputGroup>
+      </div>
+    );
+  },
+  play: async ({canvasElement}) => {
+    const row = canvasElement.querySelector<HTMLElement>('.astryx-tokenizer');
+    const input = row?.querySelector<HTMLInputElement>('[role="combobox"]');
+    const endContent = row?.querySelector<HTMLElement>('.astryx-badge');
+    const clearButton = row?.querySelector<HTMLButtonElement>(
+      'button[aria-label="Clear all"]',
+    );
+    const tokens = Array.from(
+      row?.querySelectorAll<HTMLElement>('.astryx-token') ?? [],
+    );
+    if (!row || !input || !endContent || !clearButton || tokens.length < 2) {
+      throw new Error(
+        'Grouped end-controls fixture did not render as expected',
+      );
+    }
+
+    const nextFrame = () =>
+      new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    await document.fonts.ready;
+    await nextFrame();
+    await nextFrame();
+
+    // Fail closed if the fixture stops overflowing: without a scrolling token
+    // row every check below would pass vacuously.
+    const scroller = [row, ...row.querySelectorAll<HTMLElement>('*')].find(
+      element => {
+        const {overflowX} = getComputedStyle(element);
+        return (
+          (overflowX === 'auto' || overflowX === 'scroll') &&
+          element.scrollWidth > element.clientWidth
+        );
+      },
+    );
+    if (!scroller) {
+      throw new Error(
+        'Fixture no longer overflows: the grouped token row does not scroll',
+      );
+    }
+
+    const endControlsRect = () => {
+      const content = endContent.getBoundingClientRect();
+      const clear = clearButton.getBoundingClientRect();
+      return {
+        left: Math.min(content.left, clear.left),
+        right: Math.max(content.right, clear.right),
+      };
+    };
+    const assertClearOfEndControls = (position: string) => {
+      const end = endControlsRect();
+      const clip = scroller.getBoundingClientRect();
+      for (const element of [...tokens, input]) {
+        const rect = element.getBoundingClientRect();
+        // Only the part the scrolling row leaves visible can paint or be hit.
+        const left = Math.max(rect.left, clip.left);
+        const right = Math.min(rect.right, clip.right);
+        const overlap = Math.min(right, end.right) - Math.max(left, end.left);
+        if (right > left && overlap > 0.5) {
+          const name =
+            element === input
+              ? 'The combobox'
+              : `Token "${element.textContent}"`;
+          throw new Error(
+            `${name} sits under the end controls by ${overlap.toFixed(2)}px at the ${position} of the scroll`,
+          );
+        }
+      }
+      const clearRect = clearButton.getBoundingClientRect();
+      const hit = document.elementFromPoint(
+        clearRect.left + clearRect.width / 2,
+        clearRect.top + clearRect.height / 2,
+      );
+      if (!hit || !clearButton.contains(hit)) {
+        throw new Error(
+          `Clear all center is hit-tested as ${hit?.tagName ?? 'nothing'} at the ${position} of the scroll`,
+        );
+      }
+    };
+
+    const tokenTops = tokens.map(token => token.getBoundingClientRect().top);
+    if (Math.max(...tokenTops) - Math.min(...tokenTops) > 0.5) {
+      throw new Error('Grouped tokens wrapped onto a second row');
+    }
+
+    assertClearOfEndControls('start');
+    const endAtStart = endControlsRect();
+
+    const isRTL = getComputedStyle(scroller).direction === 'rtl';
+    scroller.scrollLeft = (isRTL ? -1 : 1) * scroller.scrollWidth;
+    await nextFrame();
+    if (scroller.scrollLeft === 0) {
+      throw new Error('The grouped token row did not scroll');
+    }
+
+    const endAtEnd = endControlsRect();
+    const shift = Math.max(
+      Math.abs(endAtEnd.left - endAtStart.left),
+      Math.abs(endAtEnd.right - endAtStart.right),
+    );
+    if (shift > 0.5) {
+      throw new Error(
+        `End controls moved ${shift.toFixed(2)}px when the token row scrolled`,
+      );
+    }
+    assertClearOfEndControls('end');
+
+    // Leave the row at rest, so that is the frame a screenshot keeps.
+    scroller.scrollLeft = 0;
+  },
+};
+
+export const WithTokenizerOverflowEndControlsRTL: Story = {
+  ...WithTokenizerOverflowEndControls,
+  decorators: [
+    Story => (
+      <div dir="rtl">
+        <Story />
+      </div>
+    ),
+  ],
+  name: 'With Tokenizer Overflow End Controls (RTL)',
+};
+
+/**
+ * A disabled field has no remove buttons, so the overflowing strip is itself
+ * the keyboard stop; one that fits adds no stop. The first field's disabled
+ * reason keeps its input focusable, after the strip.
+ * Browser evidence: Tokenizer/__tests__/TokenizerGroupScroll.a11y.browser.spec.ts.
+ */
+export const WithTokenizerOverflowDisabled: Story = {
+  render: () => (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+        width: '320px',
+      }}>
+      <InputGroup label="Favorite fruits">
+        <InputGroupText>Tags</InputGroupText>
+        <Tokenizer
+          label="Selections"
+          isLabelHidden
+          searchSource={fruitSource}
+          value={fruits.slice(0, 6)}
+          onChange={() => {}}
+          isDisabled
+          disabledMessage="Selections are locked for review"
+        />
+      </InputGroup>
+      <InputGroup label="Favorite fruit">
+        <InputGroupText>Tags</InputGroupText>
+        <Tokenizer
+          label="Selection"
+          isLabelHidden
+          searchSource={fruitSource}
+          value={fruits.slice(0, 1)}
+          onChange={() => {}}
+          isDisabled
+        />
+      </InputGroup>
+    </div>
+  ),
 };
 
 export const WithNumberInput: Story = {

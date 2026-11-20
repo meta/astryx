@@ -84,7 +84,7 @@ import {
   PowerSearchValueEditor,
 } from './PowerSearchValueEditor';
 import {resolveOperatorLabel} from './resolveOperatorLabel';
-import {themeProps} from '../utils/themeProps';
+import {pickDataAttributes, themeProps} from '../utils/themeProps';
 import {useLocale} from '../i18n/useLocale';
 import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import type {Locale} from '../i18n/types';
@@ -106,15 +106,27 @@ import type {
   PowerSearchBottomSheetProps,
   PowerSearchSheetEditors,
 } from './PowerSearchBottomSheet';
-import {formatTokenValueText} from './formatTokenValue';
+import {
+  formatTokenLabel,
+  formatTokenText,
+  formatTokenValueText,
+  tokenTextKeepsParts,
+} from './formatTokenValue';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
+import {hasInteractiveAncestor} from '../hooks/useClickableContainer';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 import {
   registerEnglishFallback,
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/PowerSearch/PowerSearch.generated';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 // =============================================================================
@@ -258,7 +270,13 @@ const sheetTriggerStyles = stylex.create({
     position: 'absolute',
     inset: 0,
     minWidth: 0,
-    padding: 0,
+    paddingBlock: 0,
+    paddingInline: 0,
+  },
+  // Holds the status icon without a box of its own, so the icon stays a
+  // direct item of the end lane.
+  statusIconSlot: {
+    display: 'contents',
   },
   endSection: {
     display: 'flex',
@@ -374,6 +392,7 @@ export interface PowerSearchProps extends Omit<
    * How the status message is placed relative to the input.
    * - 'attached': message overlaps directly below the input (bordered treatment)
    * - 'detached': message floats below as a separate element with spacing
+   * - 'tooltip': the status icon is an info-tip button that reveals the message
    * @default 'attached'
    */
   statusVariant?: FieldStatusPlacement;
@@ -594,7 +613,23 @@ export function PowerSearch({
   style,
   components: componentOverrides,
   presentation = 'adaptive',
+  ...rest
 }: PowerSearchProps) {
+  if (process.env.NODE_ENV !== 'production' && configProp == null) {
+    throw devPropError(
+      'PowerSearch',
+      'config',
+      'is required: the fields people can filter by, for example config={{fields: [...]}}.',
+    );
+  }
+  if (process.env.NODE_ENV !== 'production' && !Array.isArray(filters)) {
+    throw devPropError(
+      'PowerSearch',
+      'filters',
+      'must be an array of the applied filters, for example filters={filters} with onChange={setFilters} and useState([]).',
+    );
+  }
+  const dataAttributes = pickDataAttributes(rest);
   const size = useSize(sizeProp, 'md');
   const config = useInternalConfig(configProp);
   const searchSource = usePowerSearchSource(config, maxSearchResults);
@@ -713,9 +748,11 @@ export function PowerSearch({
     (filter: PowerSearchFilter) => {
       const field = config.getField(filter.field);
       const operator = config.getOperator(filter.field, filter.operator);
-      const fieldLabel = field?.label ?? '';
+      // A field the config no longer has shows its key, so the token keeps
+      // a visible text and a name.
+      const fieldLabel = field?.label ?? filter.field;
       const operatorLabel = operator ? resolveOperatorLabel(operator, t) : '';
-      const label = `${fieldLabel}: ${operatorLabel}`.trim();
+      const label = formatTokenLabel(t, fieldLabel, operatorLabel);
       const value = operator
         ? formatTokenValueText(
             operator.value,
@@ -731,7 +768,11 @@ export function PowerSearch({
             timezoneID,
           )
         : null;
-      return {label, value, full: value != null ? `${label} ${value}` : label};
+      return {
+        label,
+        value,
+        full: value != null ? formatTokenText(t, label, value) : label,
+      };
     },
     [config, maxTokenLength, t, locale, timezoneID, calendar],
   );
@@ -783,6 +824,9 @@ export function PowerSearch({
       editedBuiltInFilter != null
         ? tokenText(editedBuiltInFilter).full
         : undefined,
+    // The entrance runs on the surface: an anchored layer lays out again on
+    // each frame its own style animates.
+    xstyle: layerAnimations.below,
   });
 
   // A presentation swap removes the focused control, so the other
@@ -874,7 +918,11 @@ export function PowerSearch({
       const field = config.getField(filter.field);
       const operator = config.getOperator(filter.field, filter.operator);
       const resolvedOp = operator ? resolveOperatorLabel(operator, t) : '';
-      const operatorLabel = resolvedOp ? `: ${resolvedOp}` : '';
+      const label = formatTokenLabel(
+        t,
+        field?.label ?? filter.field,
+        resolvedOp,
+      );
       const valueStr = operator
         ? formatFilterValue(
             config,
@@ -889,8 +937,8 @@ export function PowerSearch({
         : '';
 
       const displayLabel = valueStr
-        ? `${field?.label ?? filter.field}${operatorLabel} ${valueStr}`
-        : `${field?.label ?? filter.field}${operatorLabel}`;
+        ? formatTokenText(t, label, valueStr)
+        : label;
 
       return {
         id: `filter-${index}-${filter.field}-${filter.operator}`,
@@ -1118,12 +1166,20 @@ export function PowerSearch({
       const text =
         filter != null
           ? tokenText(filter)
-          : {label: `${fieldLabel}: ${operatorLabel}`.trim(), value: null};
-      const tokenLabel = text.label;
+          : {
+              label: formatTokenLabel(t, fieldLabel, operatorLabel),
+              value: null,
+            };
       const fullText =
-        text.value != null ? `${text.label} ${text.value}` : text.label;
+        text.value != null
+          ? formatTokenText(t, text.label, text.value)
+          : text.label;
+      // The pill shows the text that names it. A locale that writes the full
+      // text in another shape than "label value" gets it as one text.
+      const showsParts = text.value == null || tokenTextKeepsParts(t);
+      const tokenLabel = showsParts ? text.label : fullText;
       const valueContent =
-        text.value != null ? (
+        showsParts && text.value != null ? (
           <PowerSearchTokenValue text={text.value} />
         ) : undefined;
 
@@ -1417,17 +1473,24 @@ export function PowerSearch({
   // and taps, and an interactive control must not nest in a component
   // button, so a tap on it must not open the flow.
   const endLaneRef = useRef<HTMLDivElement>(null);
+  const statusIconRef = useRef<HTMLSpanElement>(null);
   const handleTriggerWrapperClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
-      // Tokens are display-only; a tap on them or the empty space around them
-      // opens the flow. The trigger button handles its own click, and the end
-      // lane handles its own.
-      if (
-        event.target instanceof Node &&
-        (triggerRef.current?.contains(event.target) ||
-          endLaneRef.current?.contains(event.target))
-      ) {
-        return;
+      // Tokens are display-only; a tap on them, the empty space around them or
+      // the plain status icon opens the flow. The trigger button handles its
+      // own click, and the rest of the end lane (the result count,
+      // `endContent`, the status info-tip) handles its own.
+      const target = event.target;
+      if (target instanceof Element) {
+        const isOnPlainStatusIcon =
+          statusIconRef.current?.contains(target) === true &&
+          !hasInteractiveAncestor(target, event.currentTarget);
+        if (
+          triggerRef.current?.contains(target) ||
+          (endLaneRef.current?.contains(target) && !isOnPlainStatusIcon)
+        ) {
+          return;
+        }
       }
       openSheet();
     },
@@ -1470,10 +1533,21 @@ export function PowerSearch({
     [handleFieldBlur],
   );
 
+  // The popover presentation's Tokenizer draws its own status icon; the sheet
+  // trigger's field draws this one.
+  const {statusIcon, describedBy: statusTooltipDescribedBy} =
+    useInputStatusIcon({
+      status: isSheetPresentation ? status : undefined,
+      statusVariant,
+    });
+
   if (isSheetPresentation) {
     const triggerDescribedBy =
       [
-        status?.message ? statusMessageId : null,
+        // The tooltip variant renders no message box; the info-tip's tooltip
+        // describes the trigger instead.
+        status?.message && statusVariant !== 'tooltip' ? statusMessageId : null,
+        statusTooltipDescribedBy,
         showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
       ]
         .filter(Boolean)
@@ -1508,6 +1582,7 @@ export function PowerSearch({
             aria-disabled={isDisabled ? true : undefined}
             {...stylex.props(
               inputWrapperStyles.base,
+              inputWrapperStyles.textField,
               sheetTriggerStyles.wrapper,
               filters.length > 0 && sheetTriggerStyles.wrapperWithTokens,
               sheetTriggerSizeStyles[size],
@@ -1540,11 +1615,12 @@ export function PowerSearch({
                 </React.Fragment>
               ))}
               <button
+                {...dataAttributes}
                 type="button"
                 id={triggerId}
                 ref={triggerRef}
-                // The field's primary control: `data-testid` lands here, as it
-                // lands on the combobox input in the popover presentation.
+                // The field's primary control: `data-*` attributes land here, as
+                // they land on the combobox input in the popover presentation.
                 data-testid={testId}
                 autoFocus={autoFocusOnMount}
                 onClick={openSheet}
@@ -1564,7 +1640,9 @@ export function PowerSearch({
                 ) : null}
               </button>
             </div>
-            {(endContent || isRenderable(resultCountText)) && (
+            {(endContent ||
+              isRenderable(resultCountText) ||
+              isRenderable(statusIcon)) && (
               <div
                 ref={endLaneRef}
                 {...stylex.props(sheetTriggerStyles.endSection)}>
@@ -1574,6 +1652,11 @@ export function PowerSearch({
                   </span>
                 )}
                 {endContent}
+                <span
+                  ref={statusIconRef}
+                  {...stylex.props(sheetTriggerStyles.statusIconSlot)}>
+                  {statusIcon}
+                </span>
               </div>
             )}
           </div>
@@ -1646,6 +1729,7 @@ export function PowerSearch({
               containerXstyle={xstyle}
               containerClassName={className}
               containerStyle={style}
+              {...dataAttributes}
               data-testid={testId}
               presentation="popover"
             />
@@ -1656,7 +1740,7 @@ export function PowerSearch({
         placement: 'below',
         alignment: 'start',
         offset: spacingVars['--spacing-1'],
-        xstyle: [popoverLayerStyles.layer, layerAnimations.below],
+        xstyle: popoverLayerStyles.layer,
       })}
     </>
   );
