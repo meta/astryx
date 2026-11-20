@@ -95,7 +95,7 @@ describe('text on a fill', () => {
     expect(valueOf('ios', '--color-on-error')[0]).not.toBe('#ffffff');
     const notes = await notesOf('ios');
     expect(notes).toMatch(
-      /--color-on-accent uses near-black text in light, not white, .*white text reads at only 4\.02:1 \(button and badge labels are normal-size text, which needs 4\.5:1\); to keep white text anyway, set --color-on-accent exactly/,
+      /--color-on-accent uses near-black text in light, not white, .*white text reads at only 4\.01:1 \(button and badge labels are normal-size text, which needs 4\.5:1\); to keep white text anyway, set --color-on-accent exactly/,
     );
   });
 

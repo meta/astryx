@@ -376,9 +376,12 @@ describe('round 3', () => {
   it('says which colors keep the base theme at any vibrancy, with the commands', async () => {
     const r = await themeEditSet('s', 'vibrancy', '0', {cwd});
     const note = r.data.notes.join(' ');
-    expect(note).toContain('keep the base theme');
-    expect(note).toContain('colored cards');
-    expect(note).toMatch(/set s info '#[0-9a-fA-F]{6}'/);
+    // The status roles grow from the look at the new vibrancy; a role kept
+    // at the base theme's says so, with the command that sets it.
+    for (const role of ['info', 'success', 'warning', 'danger'])
+      if (new RegExp(`${role} keeps the base theme's colors`).test(note))
+        expect(note).toMatch(new RegExp(`set s ${role} <color>`));
+    expect(note).not.toContain('colored cards');
     await themeEditUndo('s', {cwd, thing: 'vibrancy'});
     await themeEditUndo('s', {cwd, thing: 'accent'});
   }, 120_000);
@@ -722,8 +725,18 @@ describe('review fixes', () => {
     () =>
       withRealRenders(async () => {
         await themeEditNew('cc', {cwd, like: 'neutral'});
+        // (The show draws one section of the sheet: two commands still run
+        // at once, each drawing its pages.)
         const [a, b] = await Promise.all([
-          cli(['experimental', 'theme', 'editor', 'show', 's']),
+          cli([
+            'experimental',
+            'theme',
+            'editor',
+            'show',
+            's',
+            '--section',
+            'actions',
+          ]),
           cli([
             'experimental',
             'theme',

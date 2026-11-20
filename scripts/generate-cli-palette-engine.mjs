@@ -8,8 +8,8 @@
  * The CLI runs its own generated copy, so `astryx theme palette generate`
  * works with no Core installed, or with an older one. `--check` compares
  * without writing.
- * @input packages/core/src/palette/{color,generator,mapping,types}.ts
- * @output packages/cli/api/theme/palette/generate/{color,generator,mapping,types}.mjs,
+ * @input packages/core/src/palette/{color,derive-look,generator,mapping,types}.ts
+ * @output packages/cli/api/theme/palette/generate/{color,derive-look,generator,mapping,types}.mjs,
  *   JavaScript with JSDoc types like the CLI's own sources
  * @position Repository maintenance command and the drift guard for the copy
  */
@@ -23,7 +23,14 @@ import ts from 'typescript';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const CORE_DIR = 'packages/core/src/palette';
 export const CLI_DIR = 'packages/cli/api/theme/palette/generate';
-const MODULES = ['color', 'generator', 'mapping', 'types'];
+const MODULES = [
+  'color',
+  'derive-look',
+  'editor-look',
+  'generator',
+  'mapping',
+  'types',
+];
 
 /** @param {string} name */
 const header = name =>
@@ -141,7 +148,11 @@ export function toJsdocJavaScript(source, fileName) {
       );
     }
     for (const param of fn.parameters) {
-      const name = param.name.getText(sourceFile);
+      // A destructured parameter is named by its place: JSDoc names
+      // only identifiers.
+      const name = ts.isIdentifier(param.name)
+        ? param.name.text
+        : `param${fn.parameters.indexOf(param)}`;
       const optional = Boolean(param.questionToken || param.initializer);
       const label = optional
         ? `[${name}${param.initializer ? `=${param.initializer.getText(sourceFile)}` : ''}]`
@@ -237,6 +248,22 @@ export function toJsdocJavaScript(source, fileName) {
           false,
         );
         return paren;
+      }
+      if (ts.isImportDeclaration(node)) {
+        // A type named inside a value import (`import {type X}`) is
+        // dropped from the import; its typedef carries it.
+        const spec = /** @type {ts.StringLiteral} */ (node.moduleSpecifier)
+          .text;
+        const bindings = node.importClause?.namedBindings;
+        if (bindings && ts.isNamedImports(bindings)) {
+          for (const element of bindings.elements) {
+            if (!element.isTypeOnly) continue;
+            const imported = (element.propertyName ?? element.name).text;
+            typedefs.push(
+              `/** @typedef {import('${spec}.mjs').${imported}} ${element.name.text} */`,
+            );
+          }
+        }
       }
       if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
         const spec = node.moduleSpecifier;

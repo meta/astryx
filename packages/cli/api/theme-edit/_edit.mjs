@@ -45,7 +45,6 @@ import {
   CSS_PSEUDO_ELEMENTS,
   ONE_COLON_PSEUDO_ELEMENTS,
   DIALS,
-  FAMILIES,
   FONT_ROLES,
   HEADING_TRACKING,
   HEADING_WEIGHTS,
@@ -138,6 +137,7 @@ import {
   dialValueFits,
   holdAfterBuild,
   cornersPlain,
+  pillShapes,
   setArgs,
   editedThemes,
   entryFieldNames,
@@ -150,6 +150,7 @@ import {
   OPEN_SECTION,
   FOLLOWS,
   baseRedraws,
+  groupsOf,
 } from './_settings.mjs';
 import {
   checkSetting,
@@ -158,12 +159,11 @@ import {
   coveredPaints,
   dividerParts,
   normalizeEntry,
-  pillDrawnRadios,
-  pillParts,
   propertyValueProblem,
   storedProblems,
   unknownVarRef,
   STATE_WORDS,
+  partNamed,
 } from './_check.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
 import {fontShorthandFamilyList} from '../theme/build/font-warning.mjs';
@@ -189,7 +189,7 @@ import {
   cycleProblem,
   writtenPrimitive,
 } from '../theme/build/written-values.mjs';
-import {colorProblem, hex, parseColor} from './_color.mjs';
+import {alphaOf, colorProblem, hex, parseColor} from './_color.mjs';
 import {hexToOklch, oklchClampedHex} from '../theme/palette/generate/color.mjs';
 import {
   PALETTE_DIALS,
@@ -207,6 +207,11 @@ import {
   seedOf,
   seedsInEffect,
   isEditorTemp,
+  isLookToken,
+  exactTokens,
+  lookCollapsed,
+  categoryNotes,
+  derivedStatusWords,
 } from './_palette.mjs';
 import {
   renderPreview,
@@ -245,6 +250,7 @@ import {
   cutShortProblem,
   openStatesPage,
   fontNotes,
+  fontsNotLoaded,
   themeImageNotes,
   styledChanges,
   previewAfter,
@@ -2066,8 +2072,8 @@ async function labelRead(scope, cwd) {
   const target = await openProject(cwd)
     .then(p => p.target)
     .catch(() => null);
-  if (target?.has(word) || FAMILIES[word]) return {on: word};
-  const parts = [...(target?.keys() ?? []), ...Object.keys(FAMILIES)];
+  if (target?.has(word) || groupsOf(null)[word]) return {on: word};
+  const parts = [...(target?.keys() ?? []), ...Object.keys(groupsOf(null))];
   if (parts.filter(n => typoNear(word, n)).length === 1)
     return {on: scope.label.trim()};
   // A state (`(hover)`) is that state.
@@ -2329,8 +2335,66 @@ async function loadedForCheck(cwd, slug, skip) {
 }
 
 /**
+ * A look set on one member of a family role ("set … background-image …
+ * --on toggle-button", "border-radius 4px --on side-nav-item --state
+ * selected"): the family's other members that draw alike but do not share
+ * it (the theme set nothing of that kind on them), named, with the one line
+ * that gives it to the family. The set itself stays on the member asked.
+ * @param {any} ctx @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {import('./_settings.mjs').Setting} s
+ * @returns {Array<{note: string, run: string[]}>}
+ */
+function familyLeftOut(ctx, slug, data, s) {
+  const thing = kebab(String(s.thing));
+  const selected = /^(?:selected|active)$/.test(String(s.state ?? ''));
+  const look = selected
+    ? /^(?:background(?:-color|-image)?|border-radius|corners)$/.test(thing)
+    : !s.state &&
+      !/^(?:none|0|0px|transparent|initial|unset)$/i.test(
+        String(s.value ?? '').trim(),
+      ) &&
+      (/^(?:background-image|box-shadow|border)$/.test(thing) ||
+        (thing === 'background' && /gradient\(/.test(String(s.value))));
+  const groups = groupsOf(ctx);
+  const rule =
+    !s.state &&
+    /^border-(?:bottom|top|block-end|block-start)$/.test(thing) &&
+    (groups['overlay-headers'] ?? []).includes(String(s.on));
+  if (!look && !rule) return [];
+  const role = rule
+    ? 'overlay-headers'
+    : (selected
+        ? ['selected-items']
+        : ['button-like', 'overlays', 'option-rows', 'status-surfaces']
+      ).find(r => (groups[r] ?? []).includes(String(s.on)));
+  if (!role) return [];
+  const others = (groups[role] ?? []).filter(
+    m =>
+      m !== s.on &&
+      ctx.project.target.has(m) &&
+      !data.settings.some(
+        x =>
+          x.on === m &&
+          kebab(String(x.thing)) === thing &&
+          (x.state ?? '') === (s.state ?? ''),
+      ),
+  );
+  if (!others.length) return [];
+  return [
+    {
+      note: `${others.join(', ')} ${others.length > 1 ? 'are' : 'is'} of ${s.on}'s family (${role}) but ${others.length > 1 ? 'do' : 'does'} not share this look; this gives it to the family (a member set on its own keeps its own):`,
+      run: [
+        `${P} set ${slug} ${s.thing} ${quoteCommandArgument(String(s.value))} --on ${role}${s.state ? ` --state ${s.state}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`,
+      ],
+    },
+  ];
+}
+
+/**
  * What a whole-theme change leaves out, by the census, each with the lines
- * that reach it, one per part: square corners leave the parts drawn as
+ * that reach it, one per part: corners leave the parts the theme gives
+ * corners of their own as they are; square corners leave the parts drawn as
  * pills round (they read --radius-full); a wider or narrower
  * --border-width does not reach the surfaces that draw no border or a
  * fixed line of their own, and moves every divider's rule with it.
@@ -2342,35 +2406,58 @@ async function loadedForCheck(cwd, slug, skip) {
  * @returns {Array<{note: string, run: string[]}>}
  */
 function leftOutParts(ctx, slug, data, sub, s) {
+  if (sub === 'set' && s.on && !s.when)
+    return familyLeftOut(ctx, slug, data, s);
   if (sub !== 'set' || s.on || s.when || s.state) return [];
   const C = ctx.C;
   const has = (/** @type {string} */ p) => ctx.project.target.has(p);
   /** @type {Array<{note: string, run: string[]}>} */
   const out = [];
+  // Whole-theme corners never reach a part the theme gives corners of its
+  // own (border-radius 12px --on dialog, corners pill --on button): those
+  // parts are named as kept, with the lines that hand them back to the
+  // dial.
+  if (s.source === 'dial' && s.thing === 'corners') {
+    const own = data.settings.filter(
+      x =>
+        x.on &&
+        !x.state &&
+        (x.thing === 'corners' ||
+          /^border-(?:(?:top|bottom)-(?:left|right)-|(?:start|end)-(?:start|end)-)?radius$/.test(
+            String(x.thing),
+          )),
+    );
+    const parts = [...new Set(own.map(x => String(x.on)))];
+    if (parts.length)
+      out.push({
+        note: `${parts.join(', ')} ${parts.length > 1 ? 'keep their' : 'keeps its'} own corners (set on ${parts.length > 1 ? 'them' : 'it'} in this theme), which the corners dial does not change; ${own.length > 1 ? 'these hand them' : 'this hands it'} back to the dial:`,
+        run: own.map(x => `${P} undo ${slug} ${undoArgs(x)}`),
+      });
+  }
+  // Square corners square the pills that are a styling choice (the build
+  // does), and corners of an explicit size (Bootstrap's 4px) give them that
+  // size; the parts drawn as circles keep their shape either way, said,
+  // with the lines that give them the corners too.
+  const plain =
+    s.source === 'dial' && s.thing === 'corners'
+      ? cornersPlain(String(s.value))
+      : null;
+  const sized =
+    plain != null && /^\d*\.?\d+px$/.test(plain) && cornerPx(plain) < 9999;
   if (
-    s.source === 'dial' &&
-    s.thing === 'corners' &&
-    ['square', '0px'].includes(cornersPlain(String(s.value)) ?? '') &&
+    plain != null &&
+    (['square', '0px'].includes(plain) || sized) &&
     !data.settings.some(x => x.thing === '--radius-full' && !x.on)
   ) {
-    const pills = pillParts(C).filter(has);
-    // On a Core that draws a radio's circle with the pill token, the radio
-    // marks keep it at Core's value (pillDrawnRadios).
-    const radios = pillDrawnRadios(C).filter(has);
-    const round = String(
-      ctx.project.core.tokenDefaults?.['--radius-full'] ?? '9999px',
-    );
-    /** @param {string} m */
-    const only = m => (onlyMeans(m) === 'member' ? ' --only' : '');
-    if (pills.length)
+    const circles = pillShapes(C).circles.filter(has);
+    const square = ['square', '0px'].includes(plain);
+    if (circles.length)
       out.push({
-        note: `the parts drawn as pills stay round (${pills.join(', ')}): they read --radius-full, which corners leaves as it is; ${radios.length ? `these square them and keep the radio marks round (${radios.join(', ')})` : 'this squares them'}:`,
-        run: [
-          `${P} set ${slug} --radius-full 0px`,
-          ...radios.map(
-            m => `${P} set ${slug} --radius-full ${round} --on ${m}${only(m)}`,
-          ),
-        ],
+        note: `the parts drawn as circles stay round (${circles.join(', ')}): a circle is their shape, not a corner choice; ${square ? 'to square one:' : `to give them these ${plain} corners too:`}`,
+        run: (square ? circles.slice(0, 3) : circles).map(
+          m =>
+            `${P} set ${slug} corners ${square ? 'square' : plain} --on ${m}`,
+        ),
       });
   }
   if (s.source === 'token' && s.thing === '--border-width') {
@@ -2851,8 +2938,13 @@ async function swappedOrder(e, sub, words, options) {
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {string | {thing: string, on?: string, when?: string, state?: string, mode?: string}} [skip]
  */
-function refuseStoredTokens(ctx, slug, data, skip) {
-  const bad = storedProblems(ctx, slug, data, skip);
+function refuseStoredTokens(
+  ctx,
+  slug,
+  data,
+  skip,
+  bad = storedProblems(ctx, slug, data, skip).filter(b => !b.noEffect),
+) {
   if (!bad.length) return;
   // A repair offers only the value it holds, cleaned: never a stock value
   // the saved setting did not hold.
@@ -2965,6 +3057,47 @@ function refuseStoredTokens(ctx, slug, data, skip) {
 }
 
 /**
+ * Saved settings the editor no longer takes because they do not do there
+ * what was meant (a color on a part an element inside it paints over, a
+ * line-height its items set themselves: refused with no effect): the theme
+ * still opens. Each is kept in the file and built as an earlier editor
+ * built it, so nothing anyone sees changes, and named in a note with the
+ * lines that clear it (the undo and set's repair, as a refusal of it gives
+ * them). Any other saved damage stops the command, with its lines, as
+ * before.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {string} cwd
+ * @param {string | {thing: string, on?: string, when?: string, state?: string, mode?: string}} [skip]
+ * @returns {Promise<string[]>} the notes
+ */
+async function leaveOutStored(ctx, slug, data, cwd, skip) {
+  // Any other saved damage stops the command, with its lines.
+  refuseStoredTokens(ctx, slug, data, skip);
+  const quiet = storedProblems(ctx, slug, data, skip).filter(b => b.noEffect);
+  if (!quiet.length) return [];
+  /** @type {string[]} */
+  let lines = [];
+  try {
+    refuseStoredTokens(ctx, slug, data, skip, quiet);
+  } catch (e) {
+    const repaired = await savedDamageRefusal(e, slug, cwd, {ctx, data});
+    lines = (
+      repaired instanceof AstryxError ? (repaired.suggestions ?? []) : []
+    )
+      .map(x => x.name)
+      .filter(n => n.startsWith(`${P} `));
+  }
+  const what = quiet
+    .map(b => `${describe(b.setting)} (${b.why.replace(/\.+$/, '')})`)
+    .join('; ');
+  return [
+    `${slug}.settings.json holds what this editor no longer takes, as it does not do there what was meant: ${what}. ${quiet.length === 1 ? 'It is' : 'They are'} kept and built as an earlier editor built ${quiet.length === 1 ? 'it' : 'them'}, so the theme opens as it was${lines.length ? `; to clear ${quiet.length === 1 ? 'it' : 'them'}: ${lines.join(', then ')}` : ''}`,
+  ];
+}
+
+/**
  * For `compile`: a refusal of what the settings file holds, with the lines
  * every command gives it (the undo and set's repair).
  * @param {AstryxError} e
@@ -2989,6 +3122,7 @@ export async function editorStoredRefusal(root, slug) {
   try {
     seen.ctx = await context(root);
     seen.data = loadTheme(root, slug);
+    // A saved setting that never shows never stops a build (leaveOutStored).
     refuseStoredTokens(seen.ctx, slug, seen.data);
     return null;
   } catch (e) {
@@ -5385,15 +5519,16 @@ async function changeOnce(
   ctx.takesPictures = png ? {sheet: null} : null;
   // An undo of one setting only removes it, so it never waits on the
   // others being fixed.
-  if (sub !== 'undo') {
-    refuseStoredTokens(ctx, slug, data, {
-      thing,
-      on: options.on,
-      when: options.when,
-      state: options.state,
-      mode: options.mode,
-    });
-  }
+  if (sub !== 'undo')
+    fieldNotes.push(
+      ...(await leaveOutStored(ctx, slug, data, cwd, {
+        thing,
+        on: options.on,
+        when: options.when,
+        state: options.state,
+        mode: options.mode,
+      })),
+    );
   const flags = {
     on: options.on,
     when: options.when,
@@ -5780,6 +5915,28 @@ async function changeOnce(
             })),
             e.code,
           );
+        // A part named in the setting's place (`undo t card`, `undo t card
+        // padding`): the undo of each setting the theme holds on that part
+        // (the one named after it, when one is), as --on reads it.
+        const partWord =
+          !matches.length && !flags.on ? partNamed(ctx, typed) : null;
+        const after = String(value ?? '')
+          .trim()
+          .toLowerCase();
+        const onPart = partWord
+          ? data.settings.filter(
+              x => x.on === partWord && (!after || x.thing === after),
+            )
+          : [];
+        if (onPart.length)
+          throw new AstryxError(
+            `"${thing}" is a part, not a setting; ${slug} sets ${onPart.map(x => describe(x)).join(', ')}. Nothing was changed.`,
+            onPart.slice(0, 5).map(x => ({
+              name: `${P} undo ${slug} ${undoArgs(x)}`,
+              reason: `do this instead: ${describe({...x, value: '?'}).replace(' = ?', '')}`,
+            })),
+            e.code,
+          );
         // A step back takes back the last change, which may be another
         // setting: it says what it takes back, and a look at the theme
         // follows it.
@@ -6066,7 +6223,11 @@ async function changeOnce(
         was: before,
         parts: [],
         group: null,
-        changedTokens: r.changed,
+        changedTokens: lookCollapsed(
+          r.changed,
+          derivedStatusWords(data),
+          exactTokens(data),
+        ).lines,
         changedPartTokens: r.changedParts ?? [],
         styled: styledChanges(compiledBefore, compileTheme(ctx, data, after)),
         kept: [],
@@ -6328,7 +6489,7 @@ async function changeOnce(
             // the later setting wins, whichever way Core writes it.
             (x.on === s.on ||
               (s.on != null &&
-                (FAMILIES[s.on] ?? []).includes(
+                (groupsOf(ctx)[s.on] ?? []).includes(
                   /** @type {string} */ (x.on),
                 ))) &&
             x.when === s.when &&
@@ -6347,13 +6508,13 @@ async function changeOnce(
   data.settings = data.settings.filter(x => !longhands.includes(x));
   // A group setting covers part settings made before it for its members.
   const covers =
-    sub === 'set' && s.source === 'dial' && s.on && FAMILIES[s.on]
+    sub === 'set' && s.source === 'dial' && s.on && groupsOf(ctx)[s.on]
       ? data.settings.filter(
           x =>
             x !== s &&
             x.thing === s.thing &&
             x.on &&
-            FAMILIES[/** @type {string} */ (s.on)].includes(x.on) &&
+            groupsOf(ctx)[/** @type {string} */ (s.on)].includes(x.on) &&
             (x.when ?? '') === (s.when ?? '') &&
             (x.state ?? '') === (s.state ?? ''),
         )
@@ -6842,9 +7003,7 @@ async function changeOnce(
     !s.on &&
     (['text-size', 'type'].includes(s.thing) ||
       /^--(font-size-|text-[a-z0-9-]+-(size|leading)$)/.test(s.thing))
-      ? [
-          'phones (touch screens below 1024px wide) keep the base theme reading sizes; this applies on wider or mouse screens',
-        ]
+      ? [PHONE_SIZES_NOTE]
       : []),
     // A scale step far outside reading sizes is named.
     ...(sub === 'set' && ['text-size', 'type'].includes(s.thing)
@@ -6962,7 +7121,7 @@ async function changeOnce(
     ...r.notes,
   ];
   const group = s.on
-    ? FAMILIES[s.on]
+    ? groupsOf(ctx)[s.on]
       ? s.on
       : parts.length > 1
         ? familyOf(s.on)
@@ -6978,36 +7137,127 @@ async function changeOnce(
     !s.state &&
     !s.when &&
     /^background(-color)?$/.test(s.thing)
-  )
+  ) {
+    // One note for each cause: the parts of a group whose fill covers the
+    // same paints (every input's status and disabled fills) are said
+    // together, with lines on the group, not once for each part.
+    /** @type {Map<string, {members: string[], rest: string | null, all: Set<string>, flags: Set<string>}>} */
+    const causes = new Map();
     for (const t of parts) {
       const {rest, covered} = coveredPaints(ctx, t, s.thing);
       if (!covered.length) continue;
-      const all = [...new Set(covered.map(c => `${c.cond} (${c.token})`))];
+      // (The cause is what the fill covers, by kind: the props and states
+      // Core paints a fill for, whatever their order or count on a part.)
+      const kinds = [
+        ...new Set(covered.map(c => String(c.cond).split('=')[0])),
+      ].sort();
+      const key = JSON.stringify([kinds, rest ?? null]);
+      const cause = causes.get(key) ?? {
+        members: [],
+        rest: rest ?? null,
+        all: new Set(),
+        flags: new Set(),
+      };
+      cause.members.push(t);
+      for (const c of covered) {
+        cause.all.add(`${c.cond} (${c.token})`);
+        if (c.flags) cause.flags.add(String(c.flags));
+      }
+      causes.set(key, cause);
+    }
+    // Each chain starts with the undo of the fill just set: while it
+    // stays, every variant and state keeps it.
+    const undo = `${P} undo ${slug} ${undoArgs(s)}`;
+    const modeFlag = s.mode ? ` --mode ${s.mode}` : '';
+    for (const {
+      members,
+      rest,
+      all: allSet,
+      flags: flagSet,
+    } of causes.values()) {
+      const all = [...allSet].sort();
       const named = [
         ...all.slice(0, 4),
         ...(all.length > 4 ? [`${all.length - 4} more`] : []),
       ];
+      const flags = [...flagSet];
+      // Lines go on the part as set when the cause is every part it
+      // styles (its group); else on each part the cause is.
+      const targets =
+        members.length === parts.length && s.on ? [s.on] : members;
       const lines = [
         ...new Set(
-          covered
-            .filter(c => c.flags)
-            .map(
-              c =>
-                `${P} set ${slug} background-color ${quoteCommandArgument(String(s.value))} --on ${t} ${c.flags}${s.mode ? ` --mode ${s.mode}` : ''}`,
+          targets.flatMap(on =>
+            flags.map(
+              f =>
+                `${P} set ${slug} background-color ${quoteCommandArgument(String(s.value))} --on ${on} ${f}${modeFlag}`,
             ),
+          ),
         ),
       ];
-      // Each chain starts with the undo of the fill just set: while it
-      // stays, every variant and state keeps it.
-      const undo = `${P} undo ${slug} ${undoArgs(s)}`;
+      const who =
+        members.length > 3
+          ? `${members.slice(0, 3).join(', ')} and ${members.length - 3} more`
+          : members.join(', ');
+      const own = members.length > 1 ? 'their' : 'its';
       notes.push(
-        `${s.mode ? `in ${s.mode} mode, ` : ''}${t}'s fill now covers the fill Core gives it ${named.length > 1 ? 'in each of' : 'in'} ${named.join(', ')}, so ${named.length > 1 ? 'those no longer differ' : 'that no longer shows'}${
+        `${s.mode ? `in ${s.mode} mode, ` : ''}${who}${members.length > 1 ? "'s fills now cover" : "'s fill now covers"} the fill Core gives ${members.length > 1 ? 'them' : 'it'} ${named.length > 1 ? 'in each of' : 'in'} ${named.join(', ')}, so ${named.length > 1 ? 'those no longer differ' : 'that no longer shows'}${
           rest
-            ? `; to change only its fill at rest: ${undo}, then ${P} set ${slug} ${rest} ${quoteCommandArgument(String(s.value))} --on ${t}${s.mode ? ` --mode ${s.mode}` : ''}`
+            ? `; to change only ${own} fill at rest: ${undo}, then ${targets.map(on => `${P} set ${slug} ${rest} ${quoteCommandArgument(String(s.value))} --on ${on}${modeFlag}`).join('; ')}`
             : ''
         }${lines.length ? `; to fill only one of them: ${undo}, then ${lines.slice(0, 3).join('; or ')}` : ''}`,
       );
     }
+  }
+  // A fill on a part whose own sub-parts keep a resting fill of their own
+  // (a code block's header) leaves the part in two tones: said, with the
+  // line that gives each the same fill.
+  if (
+    sub === 'set' &&
+    s.on &&
+    !s.state &&
+    !s.when &&
+    /^background(-color)?$/.test(s.thing)
+  ) {
+    const mode = /** @type {'light' | 'dark'} */ (
+      s.mode ?? modesOf(data)[0] ?? 'light'
+    );
+    const tokens = /** @type {any} */ (r.res)?.[mode] ?? {};
+    const now = parseColor(String(s.value));
+    for (const t of parts) {
+      const inner = /** @type {string[]} */ (
+        /** @type {any} */ (ctx.C.MAP[t])?.contains ?? []
+      ).filter(c => c.startsWith(`${t}-`));
+      for (const c of inner) {
+        if (
+          data.settings.some(
+            x =>
+              x.on &&
+              partsOf(ctx, x).includes(c) &&
+              /^background(-color)?$/.test(x.thing) &&
+              !x.state &&
+              !x.when,
+          )
+        )
+          continue;
+        const read = (ctx.C.partReads(c, 'background') ?? []).find(
+          q =>
+            q.when.includes('') &&
+            q.props.some((/** @type {string} */ p) =>
+              /^background(-color)?$/.test(p),
+            ) &&
+            !/overlay|tint/.test(q.token),
+        );
+        const value = read ? String(tokens[read.token] ?? '') : '';
+        const own = parseColor(value);
+        if (!read || !own || alphaOf(value) < 1) continue;
+        if (now && hex(now) === hex(own)) continue;
+        notes.push(
+          `${c} inside ${t} keeps its own fill (${read.token}, ${hex(own)}${s.mode ? ` in ${s.mode} mode` : ''}), so ${t} now shows two tones; to give it the same fill: ${P} set ${slug} background-color ${quoteCommandArgument(String(s.value))} --on ${c}${s.mode ? ` --mode ${s.mode}` : ''}`,
+        );
+      }
+    }
+  }
   // A color dial or token that a plain part's own fill covers no longer
   // reaches that part where Core paints with it: said.
   if (sub === 'set' && !s.on) {
@@ -7255,9 +7505,9 @@ async function changeOnce(
       '--color-text-secondary',
       '--color-border-emphasized',
     ];
-    const moved = /** @type {unknown[]} */ (r.changed ?? []).map(
-      c => String(c).split(/[\s:]/)[0],
-    );
+    const moved = /** @type {unknown[]} */ (r.changed ?? [])
+      .map(c => String(c).split(/[\s:]/)[0])
+      .filter(k => !isLookToken(k));
     if (!GRAYS_SHOWN.some(k => moved.includes(k)))
       notes.push(
         `neutral ${s.value} grows the same grays the ${data.like ?? 'base'} theme already shows, so its page, surfaces, text and borders keep their colors${moved.length ? ` (only ${[...new Set(moved)].join(', ')} changed)` : ''}: a gray sets the tint of the grays, not how light or dark the surfaces are. For dark surfaces: ${P} set ${slug} mode dark-only, or set --color-background-surface and --color-background-body to the colors you want`,
@@ -7270,15 +7520,30 @@ async function changeOnce(
         !x.when &&
         !x.state,
     );
+    // (A page color the theme already sets is kept, and offered no line.)
     notes.push(
       `${pinned ? 'the page background keeps the color you set for it' : "the page background follows it too, at the official theme's page shade of this gray"}${
-        modes.includes('light')
-          ? `; for a white or off-white page: ${P} set ${slug} --color-background-body ${quoteCommandArgument('#ffffff')}${modes.length > 1 ? ' --mode light' : ''}`
-          : `; for another page color: ${P} set ${slug} --color-background-body ${quoteCommandArgument('#111111')}`
+        pinned
+          ? ''
+          : modes.includes('light')
+            ? `; for a white or off-white page: ${P} set ${slug} --color-background-body ${quoteCommandArgument('#ffffff')}${modes.length > 1 ? ' --mode light' : ''}`
+            : `; for another page color: ${P} set ${slug} --color-background-body ${quoteCommandArgument('#111111')}`
       }`,
     );
   }
-  if (s.thing === 'accent' && sub === 'set') {
+  // The status roles the look derives (deriveStatusColors) sit with the
+  // palette already: only a role kept at the base theme's is said.
+  const grownRoles = new Set(
+    Object.entries(
+      (s.thing === 'accent' || s.thing === 'vibrancy'
+        ? paletteMapping(cwd, slug, data, base, ctx.project.core.tokenDefaults)
+        : null
+      )?.statuses?.roles ?? {},
+    )
+      .filter(([, how]) => how === 'derived')
+      .map(([role]) => role),
+  );
+  if (s.thing === 'accent' && sub === 'set' && !grownRoles.has('info')) {
     notes.push(
       ...infoClashNotes(data, base, slug, sourceSeed?.seed ?? String(s.value)),
     );
@@ -7289,7 +7554,7 @@ async function changeOnce(
         ? `every color this theme sets is made again at vibrancy ${s.value} (0 is gray, 100 the most vivid, ${VIBRANCY_DEFAULT} the default)`
         : `every color this theme sets is made again at the default vibrancy, ${VIBRANCY_DEFAULT}`,
     );
-    notes.push(...unsetColorNotes(data, base, slug));
+    notes.push(...unsetColorNotes(data, base, slug, grownRoles));
   }
   // A font set (the dial, a part's own font-family, a font token): how
   // it loads.
@@ -7315,6 +7580,24 @@ async function changeOnce(
     notes.push(
       'text below the base size keeps its standard sizes, so small text stays readable',
     );
+  // A change that moved the category or chart colors says why they keep the
+  // base theme's when the look would draw two hues alike (an accent change
+  // says it with the accent's notes).
+  if (
+    lookCollapsed(r.changed, derivedStatusWords(data), exactTokens(data)).look
+      .length &&
+    dialOfToken !== 'accent'
+  ) {
+    const look = paletteMapping(
+      cwd,
+      slug,
+      data,
+      base,
+      ctx.project.core.tokenDefaults,
+    );
+    for (const n of look ? categoryNotes(look, '', slug) : [])
+      if (!notes.includes(n)) notes.push(n);
+  }
   // A change that changed nothing writes nothing, the preview included,
   // once preview.html was rendered from the theme as it is now (a retry
   // after a render that failed renders it).
@@ -7377,6 +7660,18 @@ async function changeOnce(
       // What the whole-theme change leaves out, with the lines that reach
       // it; the text output prints it right under the status line.
       leftOut: leftOutParts(ctx, slug, data, sub, s),
+      // A font this set names that does not load until its package is
+      // installed: the text prints it under the status line too.
+      ...(() => {
+        const fonts =
+          sub === 'set' &&
+          (s.thing === 'font' ||
+            s.thing === 'font-family' ||
+            /^--font-family-/.test(s.thing))
+            ? fontsNotLoaded(ctx, {...data, settings: [s]})
+            : [];
+        return fonts.length ? {fontNotLoaded: fonts} : {};
+      })(),
       parts,
       group: group
         ? {
@@ -7385,7 +7680,11 @@ async function changeOnce(
             onlyHint: onlyMeans(s.on) === 'member',
           }
         : null,
-      changedTokens: r.changed,
+      changedTokens: lookCollapsed(
+        r.changed,
+        derivedStatusWords(data),
+        exactTokens(data),
+      ).lines,
       changedPartTokens: r.changedParts ?? [],
       styled,
       kept,
@@ -7401,7 +7700,19 @@ async function changeOnce(
         // the browser measured as keeping it whole.
         ...cutShort.map(c => cutShortProblem(ctx, slug, c)),
       ],
-      ...(await missedSummary(ctx, slug, data, r.res)),
+      // Problems the theme had that this change moved but left failing,
+      // each with what it was and its fix; left out when none.
+      .../** @type {any} */ (
+        r.leftProblems?.length
+          ? {leftProblems: problemLines(/** @type {any} */ (r).leftProblems)}
+          : {}
+      ),
+      // (What it brought is told apart from the misses it found: those
+      // repeat after every change otherwise.)
+      ...(await missedSummary(ctx, slug, data, r.res, {
+        data: r.before,
+        res: r.resBefore,
+      })),
       warnings: r.warnings,
       ...p,
     },
@@ -7457,12 +7768,14 @@ function infoClashNotes(data, base, slug, accent) {
  * values whatever the vibrancy, with the commands that bring them in: each
  * seeded with the base theme's own color, so it is then generated at the
  * theme's vibrancy. Colored cards and other info-tinted surfaces follow info.
+ * A role the look derives (`derived`) follows the vibrancy already.
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {{light: Record<string, string>, dark: Record<string, string>}} base
  * @param {string} slug
+ * @param {Set<string>} [derived]
  * @returns {string[]}
  */
-function unsetColorNotes(data, base, slug) {
+function unsetColorNotes(data, base, slug, derived = new Set()) {
   const word = /** @type {Record<string, string>} */ ({
     info: '--color-info',
     success: '--color-success',
@@ -7470,7 +7783,9 @@ function unsetColorNotes(data, base, slug) {
     danger: '--color-error',
   });
   const unset = Object.keys(word).filter(
-    d => !data.settings.some(x => x.source === 'dial' && x.thing === d),
+    d =>
+      !derived.has(d) &&
+      !data.settings.some(x => x.source === 'dial' && x.thing === d),
   );
   if (!unset.length) return [];
   return [
@@ -7554,6 +7869,10 @@ function problemLines(list) {
   return (list ?? []).map(x => ({problem: x.text, fix: x.fix}));
 }
 
+/** Where a whole-theme size change applies: phones keep their own. */
+const PHONE_SIZES_NOTE =
+  'phones (touch screens below 1024px wide) keep the base theme reading sizes; this applies on wider or mouse screens';
+
 /**
  * Every setting of a theme, key resolved values, problems it caused, the
  * sample page and the theme-building page with every component.
@@ -7589,7 +7908,7 @@ export async function themeEditShow(theme, options = {}) {
   // A saved value or scope set refuses gets set's lines (the undo and the
   // repair), as a change does.
   try {
-    refuseStoredTokens(ctx, theme, data);
+    rebuiltNotes.push(...(await leaveOutStored(ctx, theme, data, cwd)));
   } catch (e) {
     throw await savedDamageRefusal(e, theme, cwd, {ctx, data});
   }
@@ -7626,11 +7945,17 @@ export async function themeEditShow(theme, options = {}) {
   // of it now makes as they are (it was compiled since): current, as
   // `compile --check` reads it, so the editor records the source it was
   // built with instead of building again. One rule for both.
+  /** The warnings the build of the changed source gives. @type {string[]} */
+  const sourceWarnings = [];
   if (
     stale === sourceChangedReason(theme) &&
     !brokenSource &&
-    !(await outputsDrift(ctx, theme))
+    !(await outputsDrift(ctx, theme, sourceWarnings))
   ) {
+    // Recorded as built without a build: the warnings that build gives
+    // (a stylesheet the source imports that the outputs do not carry) are
+    // said here, as a build says them.
+    rebuiltNotes.push(...sourceWarnings);
     if (!readOnly) refreshSourceStamp(cwd, theme);
     stale = readOnly ? stale : staleBuild(cwd, theme, data);
   }
@@ -7844,7 +8169,7 @@ export async function themeEditShow(theme, options = {}) {
   // Each takes a browser run, so --png pictures the families the theme sets
   // a part of (the buttons when it sets none); --section <family> takes any
   // other, and sheet.html holds every component.
-  const touched = touchedFamilies(ctx.project, data).filter(f =>
+  const touched = touchedFamilies(ctx, data).filter(f =>
     FAMILY_SECTIONS.includes(f),
   );
   const families =
@@ -7879,7 +8204,7 @@ export async function themeEditShow(theme, options = {}) {
           }
         })
       : null;
-  /** @type {{files: string[], problem: string | null, cutShort: import('./_context.mjs').CutShort[]}} */
+  /** @type {{files: string[], problem: string | null, cutShort: import('./_context.mjs').CutShort[], lowContrast?: import('./_context.mjs').LowContrast[]}} */
   const shots =
     png && !noPages
       ? await pictures(
@@ -7991,7 +8316,22 @@ export async function themeEditShow(theme, options = {}) {
         ...sheet.notes,
         // Text the sample page's pictures draw cut short.
         ...shots.cutShort.map(cutShortNote),
+        // Text the pictures draw too faint to read that no check above
+        // measures (a state, an open overlay, a variant the checks do not
+        // draw).
+        ...drawnContrastNotes(shots.lowContrast ?? [], checked),
         ...misplacedNotes(theme, data),
+        // (A whole-theme size the theme sets, the text-size or type dial
+        // or a size token, skips phones: a page measured on a touch screen
+        // under 1024px shows the base theme's sizes, which is no fault.)
+        ...(data.settings.some(
+          x =>
+            !x.on &&
+            (['text-size', 'type'].includes(x.thing) ||
+              /^--(font-size-|text-[a-z0-9-]+-(size|leading)$)/.test(x.thing)),
+        )
+          ? [`text sizes: ${PHONE_SIZES_NOTE}`]
+          : []),
         ...(noReact
           ? [
               `react and react-dom cannot be found from this app, so the pages and pictures were not made again and the checks that render components were skipped; install them (${installLine(cwd, ['react', 'react-dom'])}), then run show again`,
@@ -8748,10 +9088,14 @@ async function sayNextStepClears(ctx, slug, s, r) {
  * @param {{light: Record<string, string>, dark: Record<string, string>} | undefined} res
  *   the theme's tokens as the change built them (a change that changed
  *   nothing comes back with none: they are read again)
- * @returns {Promise<{missed?: number, missedParts?: number, missedOn?: string[], missedWhere?: string[]}>}
+ * @param {{data: import('./_settings.mjs').ThemeData | null | undefined, res: {light: Record<string, string>, dark: Record<string, string>} | null | undefined}} [prior]
+ *   for a change, the settings and tokens before it: the misses it brought
+ *   (`missedNew`) are told apart from the ones it found
+ * @returns {Promise<{missed?: number, missedParts?: number, missedOn?: string[], missedWhere?: string[], missedNew?: number}>}
  */
-async function missedSummary(ctx, slug, data, res) {
+async function missedSummary(ctx, slug, data, res, prior) {
   if (!data.settings.length) return {};
+  const base = await baseResolved(ctx.project, data.like);
   const list = await missedParts(
     ctx,
     slug,
@@ -8759,10 +9103,11 @@ async function missedSummary(ctx, slug, data, res) {
     Object.keys(res?.light ?? {}).length
       ? /** @type {any} */ (res)
       : await resolvedTokens(ctx, slug),
-    await baseResolved(ctx.project, data.like),
+    base,
     {count: true},
   ).catch(() => []);
   const on = [...new Set(list.map(m => m.part))];
+  if (!list.length) return {};
   // (Where each part keeps the base look: the state named, or at rest.)
   const where = [
     ...new Set(
@@ -8772,14 +9117,107 @@ async function missedSummary(ctx, slug, data, res) {
       ),
     ),
   ];
-  return list.length
-    ? {
-        missed: list.length,
-        missedParts: on.length,
-        missedOn: on,
-        missedWhere: where,
-      }
-    : {};
+  /** @param {{part: string, state?: string, why: string}} m */
+  const key = m => `${m.part}|${m.state ?? ''}|${m.why}`;
+  const had =
+    prior?.data && prior.res && prior.data.settings.length
+      ? new Set(
+          (
+            await missedParts(ctx, slug, prior.data, prior.res, base, {
+              count: true,
+            }).catch(() => [])
+          ).map(key),
+        )
+      : prior
+        ? new Set()
+        : null;
+  return {
+    missed: list.length,
+    missedParts: on.length,
+    missedOn: on,
+    missedWhere: where,
+    ...(had ? {missedNew: list.filter(m => !had.has(key(m))).length} : {}),
+  };
+}
+
+/** The color dials a missed line can set (the status colors). */
+const STATUS_DIALS = new Set(['info', 'success', 'warning', 'danger']);
+
+/**
+ * A status color a missed line sets, as one its own contrast check passes:
+ * the color asked for, else the nearest the check offers (a pale base
+ * yellow as the warning dial stands out from the page too little, and
+ * following that line would only bring a new problem).
+ * @param {any} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {Record<string, any>} base
+ * @param {{thing: string, value: string, on?: string}} step
+ * @returns {string}
+ */
+function passingDialValue(ctx, slug, data, base, step) {
+  if (step.on || !STATUS_DIALS.has(step.thing)) return step.value;
+  const pal = paletteMapping(
+    ctx.project.cwd,
+    slug,
+    {
+      ...data,
+      settings: [
+        ...data.settings.filter(
+          x => !(x.source === 'dial' && x.thing === step.thing && !x.on),
+        ),
+        /** @type {any} */ ({
+          source: 'dial',
+          thing: step.thing,
+          value: step.value,
+        }),
+      ],
+    },
+    /** @type {any} */ (base),
+    ctx.project.core.tokenDefaults,
+  );
+  // (The check's own fix for the dial itself, never one for one mode.)
+  const better = paletteFailures(pal, step.thing, modesOf(data))
+    .map(f => /** @type {any} */ (f).fix)
+    .find(
+      f => f?.thing === step.thing && !f.mode && typeof f.value === 'string',
+    );
+  return better?.value ?? step.value;
+}
+
+/**
+ * Notes for the text the pictures draw too faint to read that no contrast
+ * check measured: one for each part and mode, its texts, its ratios and
+ * colors as drawn, and the picture it is on, with `how` for the part. A
+ * part a check already names in that mode is left out: its problem or note
+ * says it.
+ * @param {import('./_context.mjs').LowContrast[]} drawn
+ * @param {Array<{text: string}>} checked every contrast check's problem and note
+ * @returns {string[]}
+ */
+export function drawnContrastNotes(drawn, checked) {
+  /** @type {Map<string, import('./_context.mjs').LowContrast[]>} */
+  const byPart = new Map();
+  for (const x of drawn) {
+    const named = checked.some(
+      c =>
+        new RegExp(`(^|[\\s(])${x.part}\\b`).test(c.text) &&
+        c.text.includes(` in ${x.mode}`),
+    );
+    if (named) continue;
+    const k = `${x.part}\u0000${x.mode}`;
+    byPart.set(k, [...(byPart.get(k) ?? []), x]);
+  }
+  return [...byPart.values()].map(list => {
+    const [x] = list;
+    const ratios = list.map(y => y.ratio);
+    const lo = Math.min(...ratios);
+    const hi = Math.max(...ratios);
+    const texts = [...new Set(list.map(y => `"${y.text}"`))];
+    // (The pictures' paths come as the results show them.)
+    const files = [...new Set(list.map(y => y.file))];
+    return `the pictures draw text in ${x.part} (${texts.slice(0, 3).join(', ')}${texts.length > 3 ? ` and ${texts.length - 3} more` : ''}) at ${lo === hi ? lo : `${lo}–${hi}`}:1 in ${x.mode} (${x.fg} on ${x.bg}, in ${files.join(', ')}), which no check above measures; text needs 4.5:1; what draws it: ${P} how ${x.part}`;
+  });
 }
 
 /**
@@ -8827,7 +9265,8 @@ async function missedParts(ctx, slug, data, res, base, opts = {}) {
     /** @type {string[]} */
     const lines = [];
     let refused = false;
-    for (const st of x.steps) {
+    for (const st0 of x.steps) {
+      const st = {...st0, value: passingDialValue(ctx, slug, data, base, st0)};
       const typed = `${P} set ${slug} ${st.thing} ${quoteCommandArgument(st.value)}${st.on ? ` --on ${st.on}` : ''}${st.when ? ` --when ${st.when}` : ''}${st.state ? ` --state ${st.state}` : ''}${st.mode ? ` --mode ${st.mode}` : ''}`;
       const followed = await followChangeLine(
         'set',
@@ -8953,6 +9392,41 @@ function partValues(ctx, data, res, mode) {
 function colorsReport(pal, data, built, slug = '', own = {}) {
   if (!pal)
     return {vibrancy: null, colors: [], colorNotes: [], colorProblems: []};
+  /**
+   * The category colors (badges, tokens and card tints), chart colors and
+   * status roles: why a themed look leaves some at the base theme's, or that
+   * the build still shows the base theme's where the palette now derives
+   * them.
+   */
+  const lookNote = () => {
+    const said = categoryNotes(pal, '', slug);
+    const c = pal.categories;
+    if (!c || c.badges !== 'derived' || c.chart !== 'derived') return said;
+    const words = derivedStatusWords(data);
+    const status = new RegExp(
+      `^--color-(?:(?:on|text|icon|border)-)?(?:${words.join('|') || '(?!)'})(?:-muted)?$`,
+    );
+    const behind = Object.entries(pal.tokens).filter(
+      ([k, v]) =>
+        (isLookToken(k) || status.test(k)) &&
+        !(k in own) &&
+        !data.settings.some(
+          x => x.source === 'token' && x.thing === k && !x.on && !x.when,
+        ) &&
+        modes.some(
+          m =>
+            built?.[m]?.[k] &&
+            built[m][k].trim().toLowerCase() !==
+              String(v[m].color).toLowerCase(),
+        ),
+    );
+    return behind.length
+      ? [
+          ...said,
+          `category, chart and status colors still show the base theme's in this build (${behind.length} values): your palette grows them from your look now, and the next change rebuilds them, for example ${P} set ${slug} vibrancy ${pal.vibrancy}`,
+        ]
+      : said;
+  };
   /** What the user set for each token exactly, in each mode. */
   const exactBy =
     /** @type {Record<string, {light?: string, dark?: string}>} */ ({});
@@ -9011,7 +9485,8 @@ function colorsReport(pal, data, built, slug = '', own = {}) {
       seed: fam.seed,
       tokens: Object.fromEntries(
         Object.entries(pal.tokens)
-          .filter(([, v]) => v.family === fam.id)
+          // The category and chart colors are said in one note (lookNote).
+          .filter(([k, v]) => v.family === fam.id && !isLookToken(k))
           .map(([k, v]) => [
             k,
             // Each mode says what it shows: the exact setting where one is
@@ -9044,6 +9519,7 @@ function colorsReport(pal, data, built, slug = '', own = {}) {
       ...pairings
         .filter(c => c.note || !c.pass || c.stop !== c.preferred)
         .map(pairingNote),
+      ...lookNote(),
     ].filter(
       n =>
         !Object.keys(ownBy).some(k =>
@@ -9659,9 +10135,15 @@ async function undoTheme(theme, options) {
   }
   // The checks that need this Core too (a token's type, a part, a state,
   // a name that is no token or property): what they refuse is left out of
-  // the step, with the same note, so the build stays valid.
+  // the step, with the same note, so the build stays valid. One refused
+  // only as doing nothing there is kept, as every command keeps it
+  // (leaveOutStored).
   {
-    const bad = new Set(storedProblems(ctx, theme, prev).map(p => p.setting));
+    const bad = new Set(
+      storedProblems(ctx, theme, prev)
+        .filter(p => !p.noEffect)
+        .map(p => p.setting),
+    );
     if (bad.size) {
       leftOut = [...leftOut, ...prev.settings.filter(s => bad.has(s))];
       prev = {...prev, settings: prev.settings.filter(s => !bad.has(s))};
@@ -9779,7 +10261,11 @@ async function undoTheme(theme, options) {
       settings: prev.settings.length,
       stepsLeft: stepsLeft,
       // What the step back changed, as a change reports it.
-      changedTokens: committed.changed,
+      changedTokens: lookCollapsed(
+        committed.changed,
+        derivedStatusWords(prev),
+        exactTokens(prev),
+      ).lines,
       changedPartTokens: committed.changedParts ?? [],
       problems: committed.problems,
       newProblems: [

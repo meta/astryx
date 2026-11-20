@@ -369,8 +369,9 @@ describe('two variants and elided clauses', () => {
       const r = await answer('white text on primary, black text on secondary');
       expect(r.commands).toEqual(
         expect.arrayContaining([
-          "set q color '#ffffff' --on button --when variant:primary",
-          "set q color '#000000' --on button --when variant:secondary",
+          // (Each reads on its look in light mode only.)
+          "set q color '#ffffff' --on button --when variant:primary --mode light",
+          "set q color '#000000' --on button --when variant:secondary --mode light",
         ]),
       );
     },

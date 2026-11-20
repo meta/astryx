@@ -105,14 +105,19 @@ describe('no rounding anywhere', () => {
     );
   }, 240_000);
 
-  it('on a Core that draws the radio at 50%, squares the pills with no radio pin', async ({
+  it('on a Core that draws the radio at 50%, squares the pills and keeps the circles, with no radio pin', async ({
     skip,
   }) => {
     await themeEditNew('r1', {cwd});
     const radius = await radioRadius();
     if (radius.some(v => /--radius-full/.test(v))) skip();
     const css = await follow('r1', 'no rounding anywhere');
-    expect(css).toMatch(/--radius-full:\s*0px/);
+    // (The pills go square through their own corners; the pill token, which
+    // the circles read, stays.)
+    expect(css).not.toMatch(/--radius-full:\s*0px/);
+    expect(rule(css, '.astryx-badge')).toMatch(
+      /border-radius:\s*var\(--radius-element\)/,
+    );
     expect(radius).toContain('50%');
     expect(css).not.toMatch(/\.astryx-radio-indicator\s*\{/);
     expect(css).not.toMatch(/\.astryx-dropdown-menu-radio\s*\{/);

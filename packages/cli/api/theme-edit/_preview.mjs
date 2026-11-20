@@ -53,6 +53,7 @@ import {
   themeFiles,
   APP_COPY_BUILT,
   appCopyNames,
+  groupsOf,
 } from './_settings.mjs';
 import {readRegularFile, writeWhole} from './_palette.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
@@ -60,7 +61,6 @@ import {importPathOf, installLine} from './_project.mjs';
 import {
   COLOR_PROP_PARTS,
   DIRECT,
-  FAMILIES,
   P,
   SHOWCASE_GROUPS,
   wordTable,
@@ -75,6 +75,7 @@ import {compareText} from '../../foundation/text/compare-text.mjs';
 import {PICTURE_TAKEN} from '../../foundation/render/picture-window.mjs';
 import {FONT_PROBE_PREFIX} from '../../foundation/render/font-probe.mjs';
 import {CUT_SHORT_PREFIX} from '../../foundation/render/cut-short.mjs';
+import {LOW_CONTRAST_PREFIX} from '../../foundation/render/drawn-contrast.mjs';
 
 const TEMPLATES_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -182,16 +183,18 @@ export function familyOf(project, name) {
  * inputs`): the components each part names a class of, each in its section. A setting for the whole theme (a color, the
  * corners) sets no section here: the sample page and the open states show
  * it.
- * @param {import('./_project.mjs').ThemeProject} project
+ * A family role (`--on option-rows`) is read from the census, as the
+ * change itself reads it, so the pictured set is what the change touched.
+ * @param {{project: import('./_project.mjs').ThemeProject, C?: any}} ctx
  * @param {import('./_settings.mjs').ThemeData} data
  * @returns {string[]}
  */
-export function touchedFamilies(project, data) {
-  // A group (`--on inputs`) sets each of its parts.
+export function touchedFamilies(ctx, data) {
+  const {project} = ctx;
+  // A group (`--on inputs`, `--on option-rows`) sets each of its parts.
+  const groups = groupsOf(ctx);
   const parts = new Set(
-    (data.settings ?? []).flatMap(s =>
-      s.on ? (FAMILIES[s.on] ?? [s.on]) : [],
-    ),
+    (data.settings ?? []).flatMap(s => (s.on ? (groups[s.on] ?? [s.on]) : [])),
   );
   /** @type {Set<string>} */
   const out = new Set();
@@ -202,6 +205,71 @@ export function touchedFamilies(project, data) {
     if (family) out.add(family);
   }
   return [...out];
+}
+
+/** The Astryx control each plain HTML text control is drawn as. */
+const ASTRYX_CONTROLS = Object.freeze({
+  input: 'TextInput',
+  textarea: 'TextArea',
+});
+
+/** The input types a text input draws. */
+const TEXT_TYPES = new Set([
+  '',
+  'text',
+  'email',
+  'search',
+  'url',
+  'tel',
+  'password',
+]);
+
+/**
+ * A value with each plain HTML text control in a doc's sample (a field's
+ * `<input>`) drawn as the Astryx control for it, its label hidden, so the
+ * sheet shows the theme's own control where an app would use one: a bare
+ * browser control shows nothing of the theme. Every other value is the same
+ * object.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {unknown} v
+ * @returns {unknown}
+ */
+function withAstryxControls(project, v) {
+  if (Array.isArray(v)) {
+    const out = v.map(x => withAstryxControls(project, x));
+    return out.every((x, i) => x === v[i]) ? v : out;
+  }
+  if (!v || typeof v !== 'object') return v;
+  if (isElement(v)) {
+    const own = /** @type {Record<string, string>} */ (ASTRYX_CONTROLS)[
+      v.__element
+    ];
+    const p = /** @type {Record<string, unknown>} */ (v.props ?? {});
+    if (
+      own &&
+      project.components[own] &&
+      (v.__element !== 'input' || TEXT_TYPES.has(String(p.type ?? '')))
+    )
+      return {
+        __element: own,
+        props: {
+          label: String(p['aria-label'] ?? p.placeholder ?? 'Text'),
+          isLabelHidden: true,
+          ...(p.placeholder != null ? {placeholder: p.placeholder} : {}),
+          ...(p.id != null ? {id: p.id} : {}),
+        },
+      };
+    const props = withAstryxControls(project, v.props);
+    const children = withAstryxControls(project, v.children);
+    return props === v.props && children === v.children
+      ? v
+      : {...v, props, children};
+  }
+  const entries = Object.entries(v);
+  const out = entries.map(([k, x]) => [k, withAstryxControls(project, x)]);
+  return out.every(([, x], i) => x === entries[i][1])
+    ? v
+    : {...v, ...Object.fromEntries(out)};
 }
 
 /**
@@ -314,14 +382,9 @@ function componentItems(project, group) {
     // A deprecated part is not drawn: a theme styles the part that replaces
     // it. An overlay whose playground opens it over the page draws nothing
     // closed (a phone's navigation drawer, slid out of the window): where
-    // the open states draw it open (below), that is its only cell.
+    // the open states draw it open, that is its only cell, on every page.
     if (info?.deprecated) continue;
-    if (
-      (!group || group === 'overlays') &&
-      info?.overlay &&
-      OPEN_SCENES.some(s => s.name === name)
-    )
-      continue;
+    if (info?.overlay && OPEN_SCENES.some(s => s.name === name)) continue;
     catalogVariants(project, name, 12, {shown: true}).forEach((v, i) =>
       items.push({
         group: g,
@@ -332,7 +395,13 @@ function componentItems(project, group) {
           // A doc's sample children may name a part by an older name (a
           // stack, a heading): each is drawn by the name Core exports.
           props: /** @type {Record<string, unknown>} */ (
-            withCoreAliases(project, withSampleContent(project, name, v.props))
+            withAstryxControls(
+              project,
+              withCoreAliases(
+                project,
+                withSampleContent(project, name, v.props),
+              ),
+            )
           ),
         }),
         // An overlay shown open is drawn open: Core places a popover,
@@ -2101,7 +2170,7 @@ export async function screenshot(
 }
 
 /**
- * @typedef {{ok: true, file: string, notes?: string[], cutShort?: Array<{part: string | null, text: string, whole: boolean, broken?: boolean}>} | {ok: false, reason: string, stopped?: string}} PictureResult
+ * @typedef {{ok: true, file: string, notes?: string[], cutShort?: Array<{part: string | null, text: string, whole: boolean, broken?: boolean, overlaps?: boolean}>, lowContrast?: Array<{part: string, text: string, ratio: number, fg: string, bg: string}>} | {ok: false, reason: string, stopped?: string}} PictureResult
  */
 
 /** The time a batch adds to its browser's bound for each page after the first. */
@@ -2229,6 +2298,7 @@ export async function screenshots(project, jobs, run = newPictureRun()) {
           ...pictureFontNotes(out),
         ],
         ...measuredCutShort(out),
+        ...measuredLowContrast(out),
       });
     }
     if (results.length === jobs.length) return results;
@@ -2315,7 +2385,7 @@ export function pictureFontNotes(stdout) {
  * The text a picture script measured cut short, from the line it prints
  * after `CUT_SHORT_PREFIX`; nothing when it printed none that reads.
  * @param {string} stdout what the picture script printed
- * @returns {{cutShort?: Array<{part: string | null, text: string, whole: boolean, broken?: boolean}>}}
+ * @returns {{cutShort?: Array<{part: string | null, text: string, whole: boolean, broken?: boolean, overlaps?: boolean}>}}
  */
 function measuredCutShort(stdout) {
   const line = stdout.split('\n').find(l => l.startsWith(CUT_SHORT_PREFIX));
@@ -2336,7 +2406,39 @@ function measuredCutShort(stdout) {
         text: x.text,
         whole: x.whole === true,
         ...(x.broken === true ? {broken: true} : {}),
+        ...(x.overlaps === true ? {overlaps: true} : {}),
       })),
+  };
+}
+
+/**
+ * The text a picture script measured too faint to read, from the line it
+ * prints after `LOW_CONTRAST_PREFIX`; nothing when it printed none that
+ * reads.
+ * @param {string} stdout what the picture script printed
+ * @returns {{lowContrast?: Array<{part: string, text: string, ratio: number, fg: string, bg: string}>}}
+ */
+function measuredLowContrast(stdout) {
+  const line = stdout.split('\n').find(l => l.startsWith(LOW_CONTRAST_PREFIX));
+  if (!line) return {};
+  /** @type {unknown} */
+  let found;
+  try {
+    found = JSON.parse(line.slice(LOW_CONTRAST_PREFIX.length));
+  } catch {
+    return {};
+  }
+  if (!Array.isArray(found)) return {};
+  return {
+    lowContrast: found.filter(
+      x =>
+        x &&
+        typeof x.part === 'string' &&
+        typeof x.text === 'string' &&
+        typeof x.ratio === 'number' &&
+        /^#[0-9a-f]{6}$/.test(String(x.fg)) &&
+        /^#[0-9a-f]{6}$/.test(String(x.bg)),
+    ),
   };
 }
 

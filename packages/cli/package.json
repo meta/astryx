@@ -118,6 +118,7 @@
     "typecheck:authoring": "tsc --project tsconfig.authoring-contract.json",
     "sync:api-types": "node scripts/sync-api-types.mjs",
     "generate:build-id": "node scripts/generate-build-id.mjs",
+    "generate:font-families": "node scripts/generate-fontsource-families.mjs",
     "readme": "node scripts/generate-cli-readme.mjs",
     "readme:check": "node scripts/generate-cli-readme.mjs --check",
     "postpack": "node scripts/generate-template-components.mjs --clean && node scripts/generate-component-list.mjs --clean && node scripts/generate-stored-docs.mjs --clean && node scripts/generate-command-list.mjs --clean && node scripts/generate-self-audit.mjs --clean && node scripts/generate-docs-routes.mjs --clean && node scripts/generate-manifest.mjs --clean && node scripts/generate-search-catalog.mjs --clean && node scripts/generate-build-id.mjs --clean",

@@ -97,19 +97,22 @@
  * @property {string | null} was - For `base`, `mode` and a whole-theme dial: the value before.
  * @property {string[]} parts - The parts it styles (a group's members when it spread).
  * @property {{name: string, members: string[], onlyHint: boolean} | null} group - The group it spread to; `onlyHint` when `--only` would style one member.
- * @property {string[]} changedTokens - Resolved token changes, `name (mode): before -> after`.
+ * @property {string[]} changedTokens - Resolved token changes, `name (mode): before -> after`. The category colors (badges, tokens, card tints) and chart colors that moved with the look are counted in one line each.
  * @property {string[]} [changedPartTokens] - Changes to the custom properties the built stylesheet sets on parts, `name on <rule> (mode): before -> after` (a readable text color on a selected row). With `changedTokens`, every custom property whose built value moved.
  * @property {string[]} styled - Part styles and typography the change wrote.
  * @property {string[]} kept - Part settings a whole-theme dial left in place (a part setting wins).
  * @property {string[]} lifted - Variant keys the setting was newly repeated on, so a more specific base rule cannot beat it.
  * @property {string[]} notes - What else to know: the shade a color's main token uses and any shade contrast moved, then the generated color files; font loading; what a token feeds; with `png`, the text the sample page's pictures draw cut short and the words they break inside the word, as the browser measured them (one note for each part, with its labels).
  * @property {Array<{note: string, run: string[]}>} leftOut - What a whole-theme change leaves out, each with the commands that reach it, one per part: the parts drawn as pills that square corners leave round; the surfaces a border width does not reach, and the dividers it moves. The text output prints it right under the status line.
+ * @property {Array<{family: string, run: string[]}>} [fontNotLoaded] - The open fonts this set names whose package is not installed, each with the command that installs it; the previews and the app draw the next font in the stack until then. Left out when every one loads. The text output prints it right under the status line.
  * @property {string[]} problems - Text this theme made unreadable (below 4.5:1, and not that low in the base theme).
  * @property {ThemeEditProblem[]} newProblems - What this change made unreadable or unseen, each with the command that fixes it: text and borders that read well before it, and the contrast checks the colors it made fail; with `png`, text the sample page's pictures draw cut short, with `flex-shrink 0` on its part when the browser measured that drawing it whole. The text output leads with them, under the status line.
+ * @property {ThemeEditProblem[]} [leftProblems] - Problems the theme had that this change moved but left failing (a fill made darker, still not dark enough), each with what it was and the command that fixes it; left out when none. The text output says them under the new problems.
  * @property {number} [missed] - How many misses the theme's own changes left (show --json lists each, with the line that reaches it); the text output counts them near its top.
  * @property {number} [missedParts] - On how many parts those misses are (a part can miss two ways, its border and its shadow).
  * @property {string[]} [missedOn] - Those parts, in show's order; the text output names them.
  * @property {string[]} [missedWhere] - Where each of those parts keeps the base theme's look: the part, the variant its miss is in when it is one (`type:error`), then the state, or `at rest`; the text output names them.
+ * @property {number} [missedNew] - How many of those misses this change brought (not there before it); the text output says the missed line only when it brought one.
  * @property {string[]} warnings - Warnings from the theme build.
  * @property {string | null} preview
  * @property {string[]} pictures
@@ -289,11 +292,22 @@
  */
 
 /**
+ * One result of a plain-words question (`data.results`, `kind: 'question'`).
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditHowResult
+ * @property {string} text - What the result does, or why it does nothing.
+ * @property {string[]} commands - The commands, each checked as `set` checks it.
+ * @property {boolean} [sequence] - Run every command in order.
+ * @property {Array<{command: string, why: string, run?: string[]}>} [refused] - Commands left out, with the reason.
+ * @property {boolean} [offer] - More than the ask (a colored variant changed too): never first, never the answer itself.
+ */
+
+/**
  * `astryx --json experimental theme editor how <subject>`. `kind` says which answer it is.
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditHowResponse
  * @property {'themeEdit.how'} type
- * @property {{kind: 'part' | 'group' | 'setting' | 'aspect' | 'question' | 'picture' | 'list', subject: string, [key: string]: any}} data
+ * @property {{kind: 'part' | 'group' | 'setting' | 'aspect' | 'question' | 'picture' | 'list', subject: string, results?: ThemeEditHowResult[], [key: string]: any}} data
  */
 
 export {};

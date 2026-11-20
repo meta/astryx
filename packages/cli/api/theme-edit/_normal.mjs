@@ -17,7 +17,7 @@ import {
   fontStack,
   wordTable,
 } from './_tables.mjs';
-import {colorProblem, hex, parseColor} from './_color.mjs';
+import {colorOpacitiesAsCss, colorProblem, hex, parseColor} from './_color.mjs';
 import {sameKindValues, takesWholeNumbersOnly, unitsJoined} from './_css.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 
@@ -1401,7 +1401,8 @@ const SCALED_DIALS = Object.keys(DIALS).filter(d =>
  * The declared sources: (1) the value typed, under the exact readings of
  * typedReading, sameToken and numbersEqual, the words joined into a CSS
  * color name (`dark red` is darkred), or the color the typed color is
- * (rgb() as its hex, a see-through color opaque); (2) a documented table
+ * (rgb() as its hex, a see-through color opaque, Tailwind's `black/5` as
+ * rgb(0 0 0 / 0.05)); (2) a documented table
  * registered with documentReadings, documentNumericTable or documentRange;
  * (3) the theme's own saved value of the line's setting, for a setting
  * other than the one typed (a keep or unlock line); (4) the setting's
@@ -1420,10 +1421,40 @@ const SCALED_DIALS = Object.keys(DIALS).filter(d =>
 export function readsTyped(line) {
   const read = readsTypedValue(line);
   if (read === true || !line.scope?.on) return read;
-  const rest = withoutScopeWords(String(line.typed), line.scope);
-  return rest != null && rest !== String(line.typed).trim()
-    ? readsTypedValue({...line, typed: rest}) === true || read
-    : read;
+  const typed = String(line.typed).trim();
+  const on = String(line.scope.on).toLowerCase();
+  const typedThing = String(line.typedThing ?? '').toLowerCase();
+  const esc = (/** @type {string} */ x) =>
+    x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // The part typed in the setting's place (`card padding 20px`): the
+  // line's --on carries the part, and its setting the name typed first in
+  // the value, so the rest is the value read.
+  const partFirst =
+    typedThing &&
+    [
+      typedThing,
+      typedThing.replace(/e?s$/, ''),
+      typedThing.replace(/s$/, ''),
+    ].includes(on) &&
+    line.thing
+      ? typed.replace(
+          new RegExp(`^${esc(String(line.thing))}\\s*(?:[:=]\\s*|\\s+)`, 'i'),
+          '',
+        )
+      : null;
+  for (const rest of [withoutScopeWords(typed, line.scope), partFirst])
+    if (
+      rest != null &&
+      rest !== typed &&
+      rest.trim() &&
+      readsTypedValue({
+        ...line,
+        typed: rest.replace(/\s*;\s*$/, ''),
+        typedThing: line.thing,
+      }) === true
+    )
+      return true;
+  return read;
 }
 
 /**
@@ -1570,6 +1601,11 @@ function readsTypedValue({
     /^#[0-9a-f]{3,8}$/.test(o) &&
     (color ? hex(color) === o : colorProblem(t)?.opaque === o)
   )
+    return true;
+  // A color with an opacity after its slash, as Tailwind writes it
+  // (`black/5`), is that color at that opacity, as CSS writes it.
+  const clear = colorOpacitiesAsCss(t);
+  if (clear && !clear.unread.length && clear.css.trim().toLowerCase() === o)
     return true;
   // One half of a light and a dark pair: for the line that sets that mode,
   // or, as the light one, for a color dial, which makes both modes from

@@ -15,13 +15,16 @@
 /**
  * The script run on a page before its picture: each animation that ends (an
  * overlay's fade-in) is run to its end, so the picture shows the part as it
- * looks once it has played; each that loops (a skeleton's shimmer, a pulsing
+ * looks once it has played, except a part drawn pressed, whose press
+ * animation (a flash that fades) is held at its start, the moment of the
+ * press; each that loops (a skeleton's shimmer, a pulsing
  * dot, a spinner) is held at the middle of its first round, a frame a person
  * sees as it plays, never its first frame, where a part can be faint or gone.
  */
 export const SETTLE_ANIMATIONS = `for (const a of document.getAnimations()) {
   const t = a.effect?.getComputedTiming();
   if (!t) continue;
+  if (typeof CSSAnimation === 'function' && a instanceof CSSAnimation && t.iterations !== Infinity && a.effect.target?.closest?.('[data-astryx-state~="active"]')) { a.pause(); a.currentTime = Number(a.effect.getTiming().delay) || 0; continue; }
   if (t.iterations !== Infinity) { a.finish(); continue; }
   a.pause();
   a.currentTime = (Number(a.effect.getTiming().delay) || 0) + (typeof t.duration === 'number' ? t.duration : 0) / 2;
@@ -89,6 +92,101 @@ export async function eachAtOnce(jobs, atOnce, run) {
   const first = /** @type {{error: unknown} | null} */ (failed);
   if (first) throw first.error;
 }
+
+/**
+ * The script run on a sheet before its picture: text a part cuts with an
+ * ellipsis when it is narrow (a stepper's step names, a section heading)
+ * gets the room it needs, and so does a row that scrolls sideways (a
+ * carousel's slides), so its picture shows every item and cuts none at its
+ * edge. Each sheet item holding such text or row grows by what it lacks, a
+ * few rounds while the layout settles, up to the room an item has in a cell
+ * as wide as the sheet's content box (the sheet's width less its padding,
+ * the cell's padding and border, and the item's margins), so a grown cell
+ * stays inside the sheet and the picture keeps the window's width. A part
+ * whose own width is fixed keeps it, and what it still cuts is the theme's
+ * to fix. A page with no sheet items is left as it is.
+ */
+export const FIT_CELLS = `(() => {
+  for (let round = 0; round < 4; round++) {
+    let grew = false;
+    for (const item of document.querySelectorAll('.cs-item')) {
+      let need = 0;
+      for (const el of item.querySelectorAll('*')) {
+        // A text cut by less than a pixel still ends in an ellipsis. Text
+        // drawn in no width at all (a label only a screen reader reads) is
+        // not cut: no width given to it would show it.
+        if (el.clientWidth < 2 || el.scrollWidth <= el.clientWidth) continue;
+        const cs = getComputedStyle(el);
+        const scrolls = /^(?:auto|scroll)$/.test(cs.overflowX);
+        if (cs.textOverflow !== 'ellipsis' && !scrolls) continue;
+        need = Math.max(need, el.scrollWidth - el.clientWidth + 1);
+      }
+      if (!need) continue;
+      const width = item.getBoundingClientRect().width;
+      const sheet = item.closest('.cs-sheet');
+      if (!sheet) continue;
+      const sides = (el, a, b) => {
+        const s = getComputedStyle(el);
+        return (parseFloat(s[a]) || 0) + (parseFloat(s[b]) || 0);
+      };
+      const cell = item.closest('.cs-cell');
+      const most = Math.floor(
+        sheet.clientWidth -
+          sides(sheet, 'paddingLeft', 'paddingRight') -
+          (cell
+            ? sides(cell, 'paddingLeft', 'paddingRight') +
+              sides(cell, 'borderLeftWidth', 'borderRightWidth')
+            : 0) -
+          sides(item, 'marginLeft', 'marginRight'),
+      );
+      const next = Math.min(Math.ceil(width + need), Math.max(most, width));
+      if (next > width + 0.5) {
+        item.style.minWidth = next + 'px';
+        grew = true;
+      }
+    }
+    if (!grew) break;
+  }
+})()`;
+
+/**
+ * The script run on a sheet before its picture: an overlay drawn open
+ * after its part (a toolbar's menu) moves along the row to sit under the
+ * control that opens it, as a browser places it, as far as its item has
+ * room for what it draws. A flyout drawn beside its menu stays there. A
+ * panel as wide as the window is drawn as wide as its cell. A dialog drawn
+ * in its cell is not in the top layer, so the browser draws no backdrop
+ * for it: one with no background of its own (a lightbox, its controls
+ * drawn for the dark backdrop) gets its backdrop's colour as its own.
+ */
+export const PLACE_LAYERS = `(() => {
+  for (const layer of document.querySelectorAll('.cs-item [data-astryx-layer-root]')) {
+    if (layer.parentElement?.closest('[data-astryx-layer-root], [data-astryx-layer-nest]')) continue;
+    const item = layer.closest('.cs-item');
+    const ids = [layer, ...layer.querySelectorAll('[id]')].map(e => e.id).filter(Boolean);
+    const opener = [...item.querySelectorAll('[aria-controls]')].find(c => !layer.contains(c) && !c.closest('[data-astryx-layer-root]') && ids.includes(c.getAttribute('aria-controls')));
+    if (!opener) continue;
+    // The layer box spans its row; what it draws is its content, so the
+    // room is measured from the content's right edge.
+    const at = layer.getBoundingClientRect();
+    const drawn = Math.max(at.left, ...[...layer.children].map(c => c.getBoundingClientRect().right));
+    const shift = Math.min(opener.getBoundingClientRect().left - at.left, item.getBoundingClientRect().right - drawn);
+    if (shift > 0.5) layer.style.setProperty('margin-inline-start', shift + 'px', 'important');
+  }
+  // A panel as wide as the window (a navigation drawer's dialog) is drawn as
+  // wide as its cell: the window's width would stretch the cell, and the
+  // page, past it.
+  for (const dialog of document.querySelectorAll('.cs-cell dialog')) {
+    if (dialog.getBoundingClientRect().width >= window.innerWidth - 0.5)
+      dialog.style.setProperty('width', '100%', 'important');
+  }
+  const clear = color => /^transparent$|rgba\\([^)]*,\\s*0\\)$/.test(color.trim());
+  for (const dialog of document.querySelectorAll('.cs-cell dialog')) {
+    const backdrop = getComputedStyle(dialog, '::backdrop').backgroundColor;
+    if (clear(getComputedStyle(dialog).backgroundColor) && backdrop && !clear(backdrop))
+      dialog.style.setProperty('background-color', backdrop, 'important');
+  }
+})()`;
 
 export const PICTURE_WINDOW = Object.freeze({width: 1280, height: 900});
 

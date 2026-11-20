@@ -17,8 +17,11 @@
 
 import {pathToFileURL} from 'node:url';
 import {CUT_SHORT_PREFIX, cutShortText} from './cut-short.mjs';
+import {LOW_CONTRAST_PREFIX, lowContrastText} from './drawn-contrast.mjs';
 import {LOCAL_URL, QUIET_BROWSER_ARGS} from './offline.mjs';
 import {
+  FIT_CELLS,
+  PLACE_LAYERS,
   PICTURE_PAGES_AT_ONCE,
   PICTURE_TAKEN,
   PICTURE_WINDOW,
@@ -68,6 +71,10 @@ try {
         // Playwright's own animations: 'disabled' would put a looping one
         // back at its first frame, where a skeleton is faint.
         await page.evaluate(SETTLE_ANIMATIONS);
+        // Text a part cuts when narrow gets the room it needs (FIT_CELLS).
+        await page.evaluate(FIT_CELLS);
+        // An overlay drawn after its part sits under its opener (PLACE_LAYERS).
+        await page.evaluate(PLACE_LAYERS);
         // A whole-page picture makes the page see a resize; a part that
         // redraws on it (a responsive chart) would start over and be
         // pictured empty. The page's script is held while it is taken.
@@ -90,6 +97,13 @@ try {
         try {
           const cut = await page.evaluate(cutShortText);
           say(i, `${CUT_SHORT_PREFIX}${JSON.stringify(cut)}`);
+        } catch {
+          // Not measured.
+        }
+        // The text the picture draws too faint to read, the same way.
+        try {
+          const faint = await page.evaluate(lowContrastText);
+          say(i, `${LOW_CONTRAST_PREFIX}${JSON.stringify(faint)}`);
         } catch {
           // Not measured.
         }

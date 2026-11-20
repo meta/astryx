@@ -48,7 +48,7 @@ function rgbToHex(red: number, green: number, blue: number): string {
   );
 }
 
-function linearRgbToOklab(
+export function linearRgbToOklab(
   red: number,
   green: number,
   blue: number,
@@ -186,9 +186,41 @@ export function toneToOklabLightness(tone: number): number {
   return Math.cbrt(relative);
 }
 
+/** A hex color's linear-light red, green and blue, each 0 to 1. */
+export function hexToLinearRgb(hex: string): ColorTriple {
+  const [red, green, blue] = hexToRgb(hex).map(srgbToLinear);
+  return [red, green, blue];
+}
+
 export function luminance(hex: string): number {
   const [red, green, blue] = hexToRgb(hex).map(srgbToLinear);
   return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+}
+
+/** A hex color's red, green and blue, 0 to 255. */
+export function hexToRgbTriple(hex: string): ColorTriple {
+  return hexToRgb(hex);
+}
+
+/** Red, green and blue (0 to 255, rounded) as a lowercase hex. */
+export function rgbTripleToHex(rgb: ReadonlyArray<number>): string {
+  return rgbToHex(Math.round(rgb[0]), Math.round(rgb[1]), Math.round(rgb[2]));
+}
+
+/** A color drawn at `alpha` over `under`, as the opaque color the eye sees. */
+export function compositeOver(
+  over: ReadonlyArray<number>,
+  alpha: number,
+  under: ReadonlyArray<number>,
+): ColorTriple {
+  return over.map((x, n) => x * alpha + under[n] * (1 - alpha)) as ColorTriple;
+}
+
+/** The WCAG contrast ratio of two opaque colors. */
+export function contrastRatio(a: string, b: string): number {
+  const x = luminance(a);
+  const y = luminance(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
 }
 
 export function oklabCoordinates(hex: string): ColorTriple {
@@ -202,4 +234,12 @@ export function oklabCoordinatesToHex(coordinates: ColorTriple): string {
   const chroma = Math.sqrt(a * a + b * b);
   const hue = ((Math.atan2(b, a) * 180) / Math.PI + 360) % 360;
   return oklchClampedHex(Math.min(1, Math.max(0, lightness)), chroma, hue);
+}
+
+/**
+ * A contrast ratio to two decimals, cut down and never rounded up, so a
+ * pair just under the bar never prints as meeting it.
+ */
+export function ratioDown(ratio: number): number {
+  return Math.floor(ratio * 100 + 1e-9) / 100;
 }

@@ -70,7 +70,7 @@ function rgbToHex(red, green, blue) {
  * @param {number} blue
  * @returns {ColorTriple}
  */
-function linearRgbToOklab(red, green, blue) {
+export function linearRgbToOklab(red, green, blue) {
   const lRoot = Math.cbrt(
     0.4122214708 * red + 0.5363325363 * green + 0.0514459929 * blue,
   );
@@ -229,12 +229,60 @@ export function toneToOklabLightness(tone) {
   return Math.cbrt(relative);
 }
 /**
+ * A hex color's linear-light red, green and blue, each 0 to 1.
+ * @param {string} hex
+ * @returns {ColorTriple}
+ */
+export function hexToLinearRgb(hex) {
+  const [red, green, blue] = hexToRgb(hex).map(srgbToLinear);
+  return [red, green, blue];
+}
+/**
  * @param {string} hex
  * @returns {number}
  */
 export function luminance(hex) {
   const [red, green, blue] = hexToRgb(hex).map(srgbToLinear);
   return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+}
+/**
+ * A hex color's red, green and blue, 0 to 255.
+ * @param {string} hex
+ * @returns {ColorTriple}
+ */
+export function hexToRgbTriple(hex) {
+  return hexToRgb(hex);
+}
+/**
+ * Red, green and blue (0 to 255, rounded) as a lowercase hex.
+ * @param {ReadonlyArray<number>} rgb
+ * @returns {string}
+ */
+export function rgbTripleToHex(rgb) {
+  return rgbToHex(Math.round(rgb[0]), Math.round(rgb[1]), Math.round(rgb[2]));
+}
+/**
+ * A color drawn at `alpha` over `under`, as the opaque color the eye sees.
+ * @param {ReadonlyArray<number>} over
+ * @param {number} alpha
+ * @param {ReadonlyArray<number>} under
+ * @returns {ColorTriple}
+ */
+export function compositeOver(over, alpha, under) {
+  return /** @type {ColorTriple} */ (
+    over.map((x, n) => x * alpha + under[n] * (1 - alpha))
+  );
+}
+/**
+ * The WCAG contrast ratio of two opaque colors.
+ * @param {string} a
+ * @param {string} b
+ * @returns {number}
+ */
+export function contrastRatio(a, b) {
+  const x = luminance(a);
+  const y = luminance(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
 }
 /**
  * @param {string} hex
@@ -254,4 +302,13 @@ export function oklabCoordinatesToHex(coordinates) {
   const chroma = Math.sqrt(a * a + b * b);
   const hue = ((Math.atan2(b, a) * 180) / Math.PI + 360) % 360;
   return oklchClampedHex(Math.min(1, Math.max(0, lightness)), chroma, hue);
+}
+/**
+ * A contrast ratio to two decimals, cut down and never rounded up, so a
+ * pair just under the bar never prints as meeting it.
+ * @param {number} ratio
+ * @returns {number}
+ */
+export function ratioDown(ratio) {
+  return Math.floor(ratio * 100 + 1e-9) / 100;
 }

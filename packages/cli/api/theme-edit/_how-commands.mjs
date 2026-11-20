@@ -20,8 +20,9 @@ import {
   loadTheme,
   readHistory,
   themeFiles,
+  groupsOf,
 } from './_settings.mjs';
-import {FAMILIES, GROUPS, LIKE, P} from './_tables.mjs';
+import {GROUPS, LIKE, P} from './_tables.mjs';
 import {hexToOklch} from '../theme/palette/generate/color.mjs';
 import {
   COLOR_IN_VALUE,
@@ -63,7 +64,7 @@ export const EXAMPLE_THEME = 'my-theme';
  * @property {number} undoSteps - How many changes `undo` can step back.
  * @property {boolean} bodyFontReachesHeadings - Whether `font X --on body` also changes the heading font in this release.
  * @property {import('./_settings.mjs').ThemeData} data
- * @property {{light: Record<string, string>, dark: Record<string, string>}} base
+ * @property {{light: Record<string, string>, dark: Record<string, string>, onDark?: Record<string, string>}} base - `onDark`: the tokens the base's dark media rule replaces
  * @property {{light: Record<string, string>, dark: Record<string, string>}} [own] - The theme's own values: the base's with its settings applied.
  * @property {(steps: Step[]) => {ok: true} | {ok: false, why: string, run?: string[]}} check
  * @property {(steps: Step[], part: string, prop: string) => {light: string, dark: string} | null} valueAfter what a part shows for a property at rest after the steps, in each mode, or null when it reads none
@@ -74,12 +75,37 @@ export const EXAMPLE_THEME = 'my-theme';
  * The theme's own token values in each mode: the base theme's, with the
  * theme's settings applied (a whole-theme corners setting, an exact
  * token), as `compile` builds them.
+ * A type scale the theme writes (the text-size and type dials write one)
+ * is expanded the way Core expands it, so a heading size reads as the
+ * scale draws it, not as the base theme's.
  * @param {any} compiled
  * @param {{light: Record<string, string>, dark: Record<string, string>}} base
+ * @param {any} [core] the project's Core module, which expands the scale
  * @returns {{light: Record<string, string>, dark: Record<string, string>}}
  */
-function ownTokens(compiled, base) {
+function ownTokens(compiled, base, core) {
   const out = {light: {...base.light}, dark: {...base.dark}};
+  const scale = compiled?.typography?.scale;
+  if (
+    scale &&
+    typeof scale.base === 'number' &&
+    typeof scale.ratio === 'number' &&
+    typeof core?.expandTypeScale === 'function'
+  ) {
+    try {
+      const expanded = core.expandTypeScale({
+        base: scale.base,
+        ratio: scale.ratio,
+      });
+      for (const [k, v] of Object.entries(expanded ?? {}))
+        if (typeof v === 'string' && /^--font-size-|^--text-.*-size$/.test(k)) {
+          out.light[k] = v;
+          out.dark[k] = v;
+        }
+    } catch {
+      // (A Core that cannot expand the scale leaves the base sizes.)
+    }
+  }
   for (const [k, v] of Object.entries(compiled?.tokens ?? {})) {
     const pair = Array.isArray(v)
       ? v
@@ -209,7 +235,7 @@ export async function howTheme(ctx, cwd, name) {
           : 'last-changed',
     data: theme,
     base,
-    own: ownTokens(compileTheme(ctx, theme, base), base),
+    own: ownTokens(compileTheme(ctx, theme, base), base, ctx.project?.core),
     undoSteps: exists
       ? readHistory(themeFiles(cwd, slug).history).steps.length
       : 0,
@@ -260,7 +286,7 @@ export async function howTheme(ctx, cwd, name) {
         return null;
       }
       const now = compileTheme(ctx, d, base);
-      const toks = ownTokens(now, base);
+      const toks = ownTokens(now, base, ctx.project?.core);
       const camel = prop.replace(/-([a-z])/g, (_m, x) => x.toUpperCase());
       /** @type {Record<string, any>} */
       const rules = {
@@ -565,9 +591,10 @@ function ruleValue(compiled, part, render, prop) {
  * @param {Step[]} steps
  * @param {MeasureIntent} intent
  * @param {'light' | 'dark' | null} visible
+ * @param {Record<string, string[]>} groups the family groups `--on` takes, read from the census
  * @returns {string | null}
  */
-function lineWay(C, was, now, tw, tn, steps, intent, visible) {
+function lineWay(C, was, now, tw, tn, steps, intent, visible, groups) {
   const fainter = Boolean(intent.fainter) || intent.zero;
   // (A dial set to a named look, "the buttons dial, outline", draws that
   // look's lines: a line it adds is the look asked.)
@@ -587,7 +614,7 @@ function lineWay(C, was, now, tw, tn, steps, intent, visible) {
     steps
       .map(st => st.on)
       .filter(Boolean)
-      .flatMap(x => FAMILIES[String(x)] ?? [String(x)]),
+      .flatMap(x => groups[String(x)] ?? [String(x)]),
   );
   if (changedTokens.size)
     for (const [part, info] of Object.entries(C.MAP ?? {}))
@@ -788,11 +815,11 @@ const luminance = c => c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114;
  * @param {'light' | 'dark' | null} [visible] the one mode a one-mode theme shows
  */
 function measureFit(ctx, base, was, now, intent, steps, visible = null) {
-  const tw = ownTokens(was, base);
-  const tn = ownTokens(now, base);
+  const tw = ownTokens(was, base, ctx.project?.core);
+  const tn = ownTokens(now, base, ctx.project?.core);
   const C = ctx.C;
   /** @param {string} part */
-  const members = part => FAMILIES[part] ?? [part];
+  const members = part => groupsOf(ctx)[part] ?? [part];
   // A kept part, or one state or variant of it (`part@when|state|`).
   /** @type {Array<{part: string, prefix: string}>} */
   const keeps = intent.keep.flatMap(k => {
@@ -1090,7 +1117,17 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
     (Boolean(intent.dir) &&
       intent.families.some(f => f === 'border' || f === 'shadow'));
   if (lineAsk) {
-    const why = lineWay(C, was, now, tw, tn, steps, intent, visible);
+    const why = lineWay(
+      C,
+      was,
+      now,
+      tw,
+      tn,
+      steps,
+      intent,
+      visible,
+      groupsOf(ctx),
+    );
     if (why) return why;
   }
   const typed = new Set(intent.typed.map(x => x.toLowerCase()));
