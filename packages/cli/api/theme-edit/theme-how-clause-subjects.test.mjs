@@ -189,6 +189,14 @@ const ROWS = [
     },
   ],
   [
+    "a part's fill keeps one readable-text line, for the look it fills",
+    {
+      q: 'badges: red',
+      has: ["background-color '#dc2626' --on badge --when variant:neutral"],
+      says: /^(?![\s\S]*variant warning in light mode)/,
+    },
+  ],
+  [
     'colors before their role',
     {
       q: 'bold headings, red #c8102e and blue #003da5 accents',
