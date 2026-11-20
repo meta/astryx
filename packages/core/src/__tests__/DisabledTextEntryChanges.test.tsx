@@ -5,8 +5,8 @@
  * @input Uses vitest, @testing-library/react, user-event, and the five text
  *   entry fields: TextInput, TextArea, NumberInput, Typeahead and Tokenizer
  * @output Pins spec:AST-085 FR2 (a paste or a drop changes nothing) and FR3
- *   (no value is submitted) for each field, both natively disabled and
- *   focusable-disabled with a reason
+ *   (no value is submitted) for each field, disabled without a reason and
+ *   disabled with a reason
  * @position Shared contract test across the text entry fields
  */
 
@@ -57,6 +57,7 @@ const fields: Field[] = [
     render: props => (
       <TextInput
         label="Owner"
+        isRequired
         htmlName="owner"
         value="alice"
         isDisabled
@@ -72,6 +73,7 @@ const fields: Field[] = [
     render: props => (
       <TextArea
         label="Notes"
+        isRequired
         htmlName="notes"
         value="Draft"
         isDisabled
@@ -87,6 +89,7 @@ const fields: Field[] = [
     render: props => (
       <NumberInput
         label="Seats"
+        isRequired
         htmlName="seats"
         value={4}
         isDisabled
@@ -121,6 +124,7 @@ const fields: Field[] = [
         htmlName="reviewers"
         searchSource={peopleSource}
         value={[people[0]]}
+        isRequired
         isDisabled
         {...props}
       />
@@ -129,7 +133,7 @@ const fields: Field[] = [
 ];
 
 const states = [
-  {label: 'disabled', disabledMessage: undefined},
+  {label: 'disabled without a reason', disabledMessage: undefined},
   {label: 'disabled with a reason', disabledMessage: REASON},
 ] as const;
 
@@ -169,12 +173,15 @@ describe('a disabled text entry field changes nothing and submits nothing (spec:
           fireEvent.drop(input, {dataTransfer});
           expect(input).toHaveValue(field.shownValue);
           expect(onChange).not.toHaveBeenCalled();
-          // A browser inserts no dropped or pasted text into a disabled or
+          // A disabled field stays focusable: it is read-only, never natively
+          // disabled, and a browser inserts no dropped or pasted text into a
           // read-only input.
-          expect(input.disabled || input.readOnly).toBe(true);
+          expect(input.readOnly).toBe(true);
+          expect(input.disabled).toBe(false);
         });
 
-        it('adds nothing to form data', () => {
+        // A required disabled field does not block submission (FR3).
+        it('adds nothing to form data, and a required one does not block submission', () => {
           const {container} = render(
             <form>
               {field.render({
