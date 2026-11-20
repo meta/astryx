@@ -11,20 +11,21 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {spawn} from 'node:child_process';
-import {
-  recordDeclaredCliCommands,
-  runWithCliDoor,
-} from '../env/cli-command.mjs';
+import {getDlxPrefix} from '../env/package-manager.mjs';
+import {recordDeclaredSettings, runWithCliDoor} from '../env/cli-command.mjs';
 import {
   NOTICE_INTERVAL_MS,
   availableLine,
+  cliUpdateStep,
   globalBehind,
+  globalUpdateBesideCli,
   globalUpgradeCommand,
   noticeLines,
   oldGlobalCommand,
   oldGlobalLines,
   projectLag,
   alignCliAndCore,
+  addMatchingCore,
   addVerbFor,
   lastNoticeSkip,
   recordNoticeSkip,
@@ -37,7 +38,9 @@ import {
   tryStateLock,
   updateGlobalState,
 } from './global-state.mjs';
+import {_resetRunChoice, recordRunChoice} from './run-context.mjs';
 import {
+  CLI_VERSION,
   cleanupFixtures,
   installCore,
   installStandInCli,
@@ -331,6 +334,45 @@ describe('the lines', () => {
   });
 });
 
+describe('globalUpdateBesideCli', () => {
+  const linux = {
+    execPath: '/usr/bin/node',
+    home: '/home/a',
+    platform: /** @type {const} */ ('linux'),
+    env: {},
+  };
+
+  it('updates a package beside the CLI with the package manager and prefix that hold the CLI', () => {
+    expect(
+      globalUpdateBesideCli(
+        '/home/a/.npm-global/lib/node_modules/@astryxdesign/cli',
+        '@acme/widgets',
+        linux,
+      ),
+    ).toBe('npm i -g --prefix ~/.npm-global @acme/widgets@latest');
+  });
+
+  it("names no command for one of Astryx's own packages, which follows the CLI's releases", () => {
+    expect(
+      globalUpdateBesideCli(
+        '/home/a/.npm-global/lib/node_modules/@astryxdesign/cli',
+        '@astryxdesign/lab',
+        linux,
+      ),
+    ).toBeNull();
+  });
+
+  it('names no command under Volta, which keeps each package in a folder of its own', () => {
+    expect(
+      globalUpdateBesideCli(
+        '/home/a/.volta/tools/image/packages/@astryxdesign/cli/lib/node_modules/@astryxdesign/cli',
+        '@acme/widgets',
+        linux,
+      ),
+    ).toBeNull();
+  });
+});
+
 describe('globalBehind and projectLag', () => {
   it('need a completed check, and never report a current, newer, or prerelease version', () => {
     const self = {
@@ -401,6 +443,93 @@ describe('globalBehind and projectLag', () => {
   });
 });
 
+describe('addMatchingCore', () => {
+  it("adds a package Astryx releases with Core at the project's Core release, saved exactly where Core is pinned", () => {
+    const app = project(tempDir(), {'@astryxdesign/core': '0.7.10'});
+    writeJson(path.join(app, 'package-lock.json'), {lockfileVersion: 3});
+    installCore(app, '0.7.10');
+    expect(addMatchingCore(app, '@astryxdesign/theme-stone')).toBe(
+      'npm install -E @astryxdesign/theme-stone@0.7.10',
+    );
+    // With the project's package manager.
+    fs.rmSync(path.join(app, 'package-lock.json'));
+    fs.writeFileSync(
+      path.join(app, 'pnpm-lock.yaml'),
+      "lockfileVersion: '9.0'\n",
+    );
+    expect(addMatchingCore(app, '@astryxdesign/theme-stone')).toBe(
+      'pnpm add -E @astryxdesign/theme-stone@0.7.10',
+    );
+  });
+
+  it('adds it at the Core range a project declares when no Core is installed, quoted for the shell', () => {
+    const app = project(tempDir(), {'@astryxdesign/core': '^0.7.10'});
+    writeJson(path.join(app, 'package-lock.json'), {lockfileVersion: 3});
+    expect(addMatchingCore(app, '@astryxdesign/theme-stone')).toBe(
+      'npm install "@astryxdesign/theme-stone@^0.7.10"',
+    );
+  });
+
+  it('adds it at the release of the CLI that answers when the project has no Core', () => {
+    const app = project(tempDir(), {});
+    writeJson(path.join(app, 'package-lock.json'), {lockfileVersion: 3});
+    expect(addMatchingCore(app, '@astryxdesign/theme-stone')).toBe(
+      `npm install @astryxdesign/theme-stone@${CLI_VERSION}`,
+    );
+  });
+
+  it('adds any other package at the version the package manager picks', () => {
+    const app = project(tempDir(), {'@astryxdesign/core': '0.7.10'});
+    writeJson(path.join(app, 'package-lock.json'), {lockfileVersion: 3});
+    installCore(app, '0.7.10');
+    expect(addMatchingCore(app, '@acme/themes')).toBe(
+      'npm install @acme/themes',
+    );
+  });
+
+  it("adds the CLI, which bundles themes, at the project's Core release too", () => {
+    const app = project(tempDir(), {'@astryxdesign/core': '0.7.10'});
+    writeJson(path.join(app, 'package-lock.json'), {lockfileVersion: 3});
+    installCore(app, '0.7.10');
+    expect(addMatchingCore(app, '@astryxdesign/cli')).toBe(
+      'npm install -E @astryxdesign/cli@0.7.10',
+    );
+  });
+});
+
+describe('the packages that move with Core', () => {
+  it('are every package the project lists that Astryx releases with Core, at the new release, and no canary-only one', () => {
+    const stateDir = checked('0.7.3');
+    const app = project(tempDir(), {
+      '@astryxdesign/core': '0.7.1',
+      '@astryxdesign/theme-neutral': '0.7.1',
+      '@astryxdesign/lab': '0.7.1-canary.abc1234',
+      react: '19.2.0',
+    });
+    writeJson(path.join(app, 'package-lock.json'), {lockfileVersion: 3});
+    installCore(app, '0.7.1');
+    expect(projectLag({cwd: app, current: '0.7.1', stateDir})?.install).toBe(
+      'npm install -E @astryxdesign/core@0.7.3 @astryxdesign/cli@0.7.3 @astryxdesign/theme-neutral@0.7.3',
+    );
+    // Aligning Core up to a newer CLI moves the themes with it.
+    expect(alignCliAndCore({cwd: app, cli: '0.7.3', core: '0.7.1'})).toBe(
+      'npm install -E @astryxdesign/core@0.7.3 @astryxdesign/theme-neutral@0.7.3, then npx astryx upgrade --from 0.7.1 --apply',
+    );
+    // A theme named only as a peer is the consumer's to install.
+    const kit = tempDir();
+    writeJson(path.join(kit, 'package.json'), {
+      name: 'kit',
+      dependencies: {'@astryxdesign/core': '0.7.1'},
+      peerDependencies: {'@astryxdesign/theme-neutral': '0.7.1'},
+    });
+    writeJson(path.join(kit, 'package-lock.json'), {lockfileVersion: 3});
+    installCore(kit, '0.7.1');
+    expect(projectLag({cwd: kit, current: '0.7.1', stateDir})?.install).toBe(
+      'npm install -E @astryxdesign/core@0.7.3 @astryxdesign/cli@0.7.3',
+    );
+  });
+});
+
 describe('addVerbFor', () => {
   it('reads the CLI a project pins when it declares no Core', () => {
     const cliOnly = project(tempDir(), {'@astryxdesign/cli': '0.7.1'});
@@ -442,6 +571,216 @@ describe('projectLag from a tool folder inside a project', () => {
   });
 });
 
+describe('cliUpdateStep', () => {
+  it("in a project, moves the project's CLI and Core together, then names the bare codemod run", () => {
+    const app = project(tempDir(), {'@astryxdesign/core': '0.7.1'});
+    writeJson(path.join(app, 'package-lock.json'), {lockfileVersion: 3});
+    installCore(app, '0.7.1');
+    const self = {version: '0.7.2', root: path.join(app, 'cli')};
+    // The newest release known: the install the update notice names.
+    const stateDir = checked('0.7.3');
+    const lag = projectLag({cwd: app, current: '0.7.1', stateDir});
+    expect(cliUpdateStep({cwd: app, self, stateDir})).toEqual({
+      install: lag?.install,
+      upgrade: 'astryx upgrade --from 0.7.1 --apply',
+      folder: null,
+      runs: false,
+      newest: null,
+    });
+    // Not known yet: the same install, at the latest release, and a project
+    // that pins Core to one version keeps its pins.
+    expect(cliUpdateStep({cwd: app, self, stateDir: tempDir('state')})).toEqual(
+      {
+        install:
+          'npm install -E @astryxdesign/core@latest @astryxdesign/cli@latest',
+        upgrade: 'astryx upgrade --from 0.7.1 --apply',
+        folder: null,
+        runs: false,
+        newest: null,
+      },
+    );
+    // A project that declares a range keeps a range.
+    const ranged = project(tempDir(), {'@astryxdesign/core': '^0.7.1'});
+    writeJson(path.join(ranged, 'package-lock.json'), {lockfileVersion: 3});
+    installCore(ranged, '0.7.1');
+    expect(
+      cliUpdateStep({cwd: ranged, self, stateDir: tempDir('state')}).install,
+    ).toBe('npm install @astryxdesign/core@latest @astryxdesign/cli@latest');
+  });
+
+  it('installs the latest release when the newest known one is not newer than the CLI that ran', () => {
+    const app = project(tempDir(), {'@astryxdesign/core': '0.7.1'});
+    writeJson(path.join(app, 'package-lock.json'), {lockfileVersion: 3});
+    installCore(app, '0.7.1');
+    const stateDir = checked('0.7.3');
+    for (const version of ['0.7.3', '0.7.4']) {
+      expect(
+        cliUpdateStep({
+          cwd: app,
+          self: {version, root: path.join(app, 'cli')},
+          stateDir,
+        }).install,
+      ).toBe(
+        'npm install -E @astryxdesign/core@latest @astryxdesign/cli@latest',
+      );
+    }
+  });
+
+  it("from a tool folder inside a project, runs in the project's folder", () => {
+    const app = project(tempDir(), {'@astryxdesign/core': '0.7.1'});
+    writeJson(path.join(app, 'package-lock.json'), {lockfileVersion: 3});
+    installCore(app, '0.7.1');
+    const tool = path.join(app, 'tools', 'codegen');
+    writeJson(path.join(tool, 'package.json'), {name: 'codegen'});
+    expect(
+      cliUpdateStep({
+        cwd: tool,
+        self: {version: '0.7.2', root: path.join(app, 'cli')},
+        stateDir: tempDir('state'),
+      }),
+    ).toEqual({
+      install: `cd ${app} && npm install -E @astryxdesign/core@latest @astryxdesign/cli@latest`,
+      upgrade: 'astryx upgrade --from 0.7.1 --apply',
+      folder: app,
+      runs: false,
+      newest: null,
+    });
+  });
+
+  it('outside a project, updates the copy that ran', () => {
+    const outside = tempDir();
+    const prefix = tempDir('prefix');
+    const global = path.join(
+      prefix,
+      'lib',
+      'node_modules',
+      '@astryxdesign',
+      'cli',
+    );
+    fs.mkdirSync(global, {recursive: true});
+    writeJson(path.join(global, 'package.json'), {
+      name: '@astryxdesign/cli',
+      version: '0.7.2',
+    });
+    expect(
+      cliUpdateStep({cwd: outside, self: {version: '0.7.2', root: global}}),
+    ).toEqual({
+      install: globalUpgradeCommand(global),
+      upgrade: null,
+      folder: null,
+      runs: false,
+      newest: null,
+    });
+    // A package runner's copy: nothing installed it, so the newest runs.
+    const runner = path.join(
+      tempDir('runner'),
+      '_npx',
+      'abc123',
+      'node_modules',
+      '@astryxdesign',
+      'cli',
+    );
+    fs.mkdirSync(runner, {recursive: true});
+    writeJson(path.join(runner, 'package.json'), {
+      name: '@astryxdesign/cli',
+      version: '0.7.2',
+    });
+    const dlx = getDlxPrefix(outside);
+    const stateDir = checked('0.7.3');
+    // The run's own command after the newest known release, pinned (the
+    // runner the run came through, its user agent, else npx).
+    expect(
+      cliUpdateStep({
+        cwd: outside,
+        self: {version: '0.7.2', root: runner},
+        stateDir,
+        argv: ['theme', 'palette', 'generate', 'my palette.json'],
+      }),
+    ).toEqual({
+      install: `${dlx} @astryxdesign/cli@0.7.3 theme palette generate 'my palette.json'`,
+      upgrade: null,
+      folder: null,
+      runs: true,
+      newest: '0.7.3',
+    });
+    // With no arguments to repeat, a place for the command.
+    expect(
+      cliUpdateStep({
+        cwd: outside,
+        self: {version: '0.7.2', root: runner},
+        stateDir,
+        argv: [],
+      }).install,
+    ).toBe(`${dlx} @astryxdesign/cli@0.7.3 <command>`);
+  });
+
+  it("outside a project, a package runner's copy with no newer release known installs the newest CLI for the computer", () => {
+    const outside = tempDir();
+    const runner = path.join(
+      tempDir('runner'),
+      '_npx',
+      'abc123',
+      'node_modules',
+      '@astryxdesign',
+      'cli',
+    );
+    fs.mkdirSync(runner, {recursive: true});
+    writeJson(path.join(runner, 'package.json'), {
+      name: '@astryxdesign/cli',
+      version: '0.7.3',
+    });
+    const self = {version: '0.7.3', root: runner};
+    for (const stateDir of [tempDir('state'), checked('0.7.3')]) {
+      expect(
+        cliUpdateStep({cwd: outside, self, stateDir, argv: ['theme']}),
+      ).toEqual({
+        install: 'npm i -g @astryxdesign/cli@latest',
+        upgrade: null,
+        folder: null,
+        runs: false,
+        newest: null,
+      });
+    }
+  });
+
+  it("outside a project, repeats the run's command only when the bin started the run", () => {
+    const outside = tempDir();
+    const runner = path.join(
+      tempDir('runner'),
+      '_npx',
+      'abc123',
+      'node_modules',
+      '@astryxdesign',
+      'cli',
+    );
+    fs.mkdirSync(runner, {recursive: true});
+    writeJson(path.join(runner, 'package.json'), {
+      name: '@astryxdesign/cli',
+      version: '0.7.2',
+    });
+    const dlx = getDlxPrefix(outside);
+    const self = {version: '0.7.2', root: runner};
+    const stateDir = checked('0.7.3');
+    const argv = process.argv;
+    process.argv = [argv[0], 'host.mjs', '--port', '4000', '--watch'];
+    try {
+      // Driven in-process, the arguments are the host program's own.
+      _resetRunChoice();
+      expect(cliUpdateStep({cwd: outside, self, stateDir}).install).toBe(
+        `${dlx} @astryxdesign/cli@0.7.3 <command>`,
+      );
+      process.argv = [argv[0], 'astryx', 'theme', 'palette', 'generate'];
+      recordRunChoice(/** @type {any} */ ({copy: 'carried', answer: 'self'}));
+      expect(cliUpdateStep({cwd: outside, self, stateDir}).install).toBe(
+        `${dlx} @astryxdesign/cli@0.7.3 theme palette generate`,
+      );
+    } finally {
+      process.argv = argv;
+      _resetRunChoice();
+    }
+  });
+});
+
 describe('the commands notices print go through the command-name picker (spec AST-081 FR5)', () => {
   /** A Core-only npm project behind the newest release. */
   const coreOnlyProject = () => {
@@ -454,9 +793,7 @@ describe('the commands notices print go through the command-name picker (spec AS
   it("use an integration's declared cliCommand for the upgrade step", () => {
     const stateDir = checked('0.7.3');
     const dir = coreOnlyProject();
-    recordDeclaredCliCommands(dir, [
-      {name: '@acme/a', cliCommand: 'acme astryx'},
-    ]);
+    recordDeclaredSettings(dir, [{name: '@acme/a', cliCommand: 'acme astryx'}]);
     try {
       expect(projectLag({cwd: dir, current: '0.7.1', stateDir})?.upgrade).toBe(
         'acme astryx upgrade --from 0.7.1 --apply',
@@ -465,7 +802,7 @@ describe('the commands notices print go through the command-name picker (spec AS
         'npm install -E @astryxdesign/core@0.7.3, then acme astryx upgrade --from 0.7.1 --apply',
       );
     } finally {
-      recordDeclaredCliCommands(dir, []);
+      recordDeclaredSettings(dir, []);
     }
   });
 
@@ -479,6 +816,43 @@ describe('the commands notices print go through the command-name picker (spec AS
       expect(alignCliAndCore({cwd: dir, cli: '0.7.3', core: '0.7.1'})).toBe(
         'npm install -E @astryxdesign/core@0.7.3, then host astryx upgrade --from 0.7.1 --apply',
       );
+    });
+  });
+
+  it("name no command outside a project when a host's door starts the run", () => {
+    const outside = tempDir();
+    const runner = path.join(
+      tempDir('runner'),
+      '_npx',
+      'abc123',
+      'node_modules',
+      '@astryxdesign',
+      'cli',
+    );
+    fs.mkdirSync(runner, {recursive: true});
+    const self = {version: '0.7.2', root: runner};
+    runWithCliDoor('host astryx', () => {
+      // The door runs the CLI the host carries, so the step names the newer
+      // release known and no command.
+      for (const [stateDir, newest] of [
+        [checked('0.7.3'), '0.7.3'],
+        [tempDir('state'), null],
+      ]) {
+        expect(
+          cliUpdateStep({
+            cwd: outside,
+            self,
+            stateDir: /** @type {string} */ (stateDir),
+            argv: ['theme', 'palette', 'generate'],
+          }),
+        ).toEqual({
+          install: null,
+          upgrade: null,
+          folder: null,
+          runs: false,
+          newest,
+        });
+      }
     });
   });
 

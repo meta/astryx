@@ -55,12 +55,12 @@ import {
   StarIcon,
   ClockIcon,
   UsersIcon,
-  GlobeAltIcon,
+  GlobeIcon,
   BoltIcon,
   ArrowRightIcon,
-  BookOpenIcon,
-} from '@heroicons/react/24/outline';
-import {StarIcon as StarIconSolid} from '@heroicons/react/24/solid';
+  BookIcon,
+} from '@astryxdesign/template-icons';
+import {StarIcon as StarIconSolid} from '@astryxdesign/template-icons/24/solid';
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 const COURSE = {
@@ -318,13 +318,13 @@ function CourseHead() {
           </Text>
         </HStack>
         <HStack gap={1} vAlign="center">
-          <Icon icon={BookOpenIcon} size="sm" />
+          <Icon icon={BookIcon} size="sm" />
           <Text type="body" color="secondary">
             {COURSE.lessonCount} lessons
           </Text>
         </HStack>
         <HStack gap={1} vAlign="center">
-          <Icon icon={GlobeAltIcon} size="sm" />
+          <Icon icon={GlobeIcon} size="sm" />
           <Text type="body" color="secondary">
             {COURSE.language}
           </Text>
@@ -445,7 +445,7 @@ function InstructorSection() {
                 </Text>
               </HStack>
               <HStack gap={1} vAlign="center">
-                <Icon icon={BookOpenIcon} size="sm" />
+                <Icon icon={BookIcon} size="sm" />
                 <Text type="body" color="secondary">
                   {INSTRUCTOR.courses} courses
                 </Text>
@@ -573,7 +573,7 @@ function ReviewsSection() {
             </HStack>
           </VStack>
         </Card>
-        <Grid columns={{minWidth: 280, repeat: 'fit'}} gap={4}>
+        <Grid columns={{minWidth: 280, max: 4, repeat: 'fit'}} gap={4}>
           {REVIEWS.map(review => (
             <ReviewCard key={review.name} review={review} />
           ))}
@@ -722,8 +722,8 @@ export default function CourseDetailTemplate() {
       height="fill"
       contentWidth={1200}
       content={
-        <LayoutContent padding={6}>
-          <Grid columns={{minWidth: 320, repeat: 'fit'}} gap={6}>
+        <LayoutContent role="main" padding={6}>
+          <Grid columns={{minWidth: 320, max: 2, repeat: 'fit'}} gap={6}>
             <VStack gap={4}>
               <CourseHead />
               <AboutSection />

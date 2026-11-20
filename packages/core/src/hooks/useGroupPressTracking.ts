@@ -9,7 +9,7 @@
  * @output useGroupPressTracking: the press tracking that ButtonGroup and
  *   ToggleButtonGroup share; GROUP_PRESS_POINTERS, the pointers it follows,
  *   re-exported from pressGroupContext
- * @position Internal hook, not exported from the hooks entry. It drives
+ * @position Internal hook. Core's internal/touch entry exposes it to Lab. It drives
  *   useActionGroupTracking and the shared touch hit area (useTouchHitArea)
  *   for a group's members. Each group's root applies
  *   touchHitAreaStyles.layerBelowChildren. AlertDialog's tracking follows

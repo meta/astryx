@@ -162,7 +162,8 @@ describe.each([
           title: 'Acme release notes',
         }),
       ]);
-      const index = (await runCli(['docs', GUIDE], {cwd: tmpDir})).stdout;
+      const index = (await runCli(['docs', GUIDE, '--index'], {cwd: tmpDir}))
+        .stdout;
       expect(index).toContain('sections from @acme/notes: acme-release-notes');
     },
     SLOW,
@@ -172,7 +173,8 @@ describe.each([
     'names the added section at the top of the index and of the full read',
     async () => {
       const line = 'sections from @acme/glyph-theme: install-the-glyph-theme';
-      const index = (await runCli(['docs', 'theme'], {cwd: tmpDir})).stdout;
+      const index = (await runCli(['docs', 'theme', '--index'], {cwd: tmpDir}))
+        .stdout;
       expect(index).toContain(line);
       // Before the section list, which ends with the added section.
       expect(index.indexOf(line)).toBeLessThan(index.indexOf('quick-start'));

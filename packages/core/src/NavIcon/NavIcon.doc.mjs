@@ -24,13 +24,7 @@ export const docs = {
   category: 'Navigation',
   isHiddenFromOverview: true,
   hidden: false,
-  keywords: [
-    'navicon',
-    'iconbutton',
-    'toolbar icon',
-    'appbar icon',
-    'nav button',
-  ],
+  keywords: ['navicon', 'toolbar icon', 'appbar icon'],
   props: [
     {
       name: 'icon',
@@ -47,7 +41,7 @@ export const docs = {
   usage: {
     anatomy,
     description:
-      'NavIcon is a circular icon container with an accent-colored background. Use it in navigation headers such as TopNavHeading and PageNavHeader to visually identify a section or application.',
+      'NavIcon is a circular icon container with an accent-colored background. Use it in navigation headers such as TopNavHeading and SideNavHeading to visually identify a section or application.',
     bestPractices: [
       {
         guidance: true,
@@ -58,6 +52,11 @@ export const docs = {
         guidance: true,
         description:
           'Pass an Icon or similarly sized icon component to ensure proper proportions.',
+      },
+      {
+        guidance: true,
+        description:
+          'NavIcon adds no role or name of its own, so the icon you pass decides what assistive technology announces. An Icon is hidden from screen readers unless you give it a label.',
       },
       {
         guidance: false,
@@ -86,7 +85,7 @@ export const docsZh = {
   usage: {
     anatomy,
     description:
-      'NavIcon is a circular icon container with an accent-colored background. Use it in navigation headers such as TopNavHeading and PageNavHeader to visually identify a section or application.',
+      'NavIcon is a circular icon container with an accent-colored background. Use it in navigation headers such as TopNavHeading and SideNavHeading to visually identify a section or application.',
     bestPractices: [
       {
         guidance: true,
@@ -97,6 +96,11 @@ export const docsZh = {
         guidance: true,
         description:
           'Pass an Icon or similarly sized icon component to ensure proper proportions.',
+      },
+      {
+        guidance: true,
+        description:
+          'NavIcon adds no role or name of its own, so the icon you pass decides what assistive technology announces. An Icon is hidden from screen readers unless you give it a label.',
       },
       {
         guidance: false,
@@ -114,7 +118,7 @@ export const docsDense = {
   usage: {
     anatomy,
     description:
-      'NavIcon is a circular icon container with an accent-colored background. Use it in navigation headers such as TopNavHeading and PageNavHeader to visually identify a section or application.',
+      'NavIcon is a circular icon container with an accent-colored background. Use it in navigation headers such as TopNavHeading and SideNavHeading to visually identify a section or application.',
     bestPractices: [
       {
         guidance: true,
@@ -125,6 +129,11 @@ export const docsDense = {
         guidance: true,
         description:
           'Pass an Icon or similarly sized icon component to ensure proper proportions.',
+      },
+      {
+        guidance: true,
+        description:
+          'NavIcon adds no role or name of its own, so the icon you pass decides what assistive technology announces. An Icon is hidden from screen readers unless you give it a label.',
       },
       {
         guidance: false,

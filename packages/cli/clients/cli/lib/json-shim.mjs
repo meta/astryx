@@ -48,35 +48,31 @@ import {
 } from '../../../foundation/response/json.mjs';
 import {answeredBy} from '../../../foundation/release/run-context.mjs';
 import {unknownSubcommandSuggestions} from './cli-error.mjs';
+import {
+  answerBareSubcommand,
+  answersBareSubcommands,
+} from './define-command.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {
   setCommand,
   setOutcome,
   recordHelp,
+  recordCommandResult,
 } from '../../../foundation/debug/index.mjs';
 import {
   formatCliCommand,
   getCliInvocation,
   quoteCommandArgument,
 } from '../../../foundation/env/package-manager.mjs';
-
-/**
- * Fully-qualified name of a command relative to the root program, e.g.
- * `theme build`. The root itself is ''.
- * @param {import('commander').Command} cmd
- * @returns {string}
- */
-function fullNameOf(cmd) {
-  /** @type {string[]} */
-  const parts = [];
-  /** @type {any} */
-  let node = cmd;
-  while (node?.parent) {
-    parts.unshift(node.name());
-    node = node.parent;
-  }
-  return parts.join(' ');
-}
+import {
+  commandAvailable,
+  helpBase,
+  optionAvailable,
+  servedHelpDescription,
+  servedHelpOptionDescription,
+  servedSubcommands,
+} from './base-gate.mjs';
+import {commandPath} from './command-path.mjs';
 
 /**
  * Cheap argv check used before preAction has had a chance to engage
@@ -111,10 +107,11 @@ export function buildHelpEnvelope(cmd) {
     c = c.parent;
   }
 
+  const base = helpBase();
   /** @type {Array<{flags: string, description: string, defaultValue?: unknown, choices?: string[]}>} */
-  const options = cmd.options.map(o => {
+  const options = cmd.options.filter(o => optionAvailable(cmd, o, base)).map(o => {
     /** @type {any} */
-    const opt = {flags: o.flags, description: o.description || ''};
+    const opt = {flags: o.flags, description: servedHelpOptionDescription(cmd, o) || ''};
     if (o.defaultValue !== undefined) opt.defaultValue = o.defaultValue;
     if (Array.isArray(o.argChoices) && o.argChoices.length)
       opt.choices = o.argChoices;
@@ -122,15 +119,21 @@ export function buildHelpEnvelope(cmd) {
   });
 
   const subcommands = cmd.commands
-    .filter(s => !(/** @type {any} */ (s)._hidden))
-    .map(s => ({name: s.name(), description: s.description() || ''}));
+    .filter(s => !(/** @type {any} */ (s)._hidden) && commandAvailable(s, base))
+    // Off Core, a group's listing reads its summary, as text help does: its
+    // full description can name commands the base refuses.
+    .map(s => ({
+      name: s.name(),
+      description:
+        (base != null && !base.core && s.summary()) || servedHelpDescription(s) || '',
+    }));
 
   return {
     apiVersion: API_VERSION,
     type: 'help',
     data: {
       command: nameParts.join(' '),
-      description: cmd.description() || '',
+      description: servedHelpDescription(cmd) || '',
       usage: `${nameParts.join(' ')} ${cmd.usage()}`.trim(),
       options,
       subcommands,
@@ -149,7 +152,12 @@ export function buildHelpEnvelope(cmd) {
  */
 export function buildHelpErrorEnvelope(cmd) {
   const available = cmd.commands
-    .filter(s => !(/** @type {any} */ (s)._hidden) && s.name() !== 'help')
+    .filter(
+      s =>
+        !(/** @type {any} */ (s))._hidden &&
+        s.name() !== 'help' &&
+        commandAvailable(s, helpBase()),
+    )
     .map(s => s.name());
   if (!cmd.parent) {
     // Commander dispatches `help <name>` with ['help', <name>, ...] in args.
@@ -160,7 +168,7 @@ export function buildHelpErrorEnvelope(cmd) {
       ERROR_CODES.ERR_UNKNOWN_COMMAND,
     );
   }
-  const group = fullNameOf(cmd);
+  const group = commandPath(cmd);
   return toErrorEnvelope(
     `'${group}' needs a subcommand`,
     available.map(name => ({
@@ -275,7 +283,7 @@ function applyShimRecursively(cmd) {
   // recorded against the root program instead of `theme build`.
   cmd.exitOverride(err => {
     try {
-      setCommand(fullNameOf(cmd));
+      setCommand(commandPath(cmd));
     } catch {
       // Never let recording interfere with the error path.
     }
@@ -383,7 +391,7 @@ function optionsWithoutSubcommand(group) {
   }
   const rest = argv.slice(at);
   if (!rest.length || !rest[0].startsWith('-')) return null;
-  const subs = /** @type {any[]} */ (group.commands);
+  const subs = servedSubcommands(group);
   /** @type {string[]} */
   const flags = [];
   /** @type {string[]} */
@@ -450,7 +458,7 @@ function optionsBeforeSubcommand(group) {
   }
   const rest = argv.slice(at);
   if (!rest.length || !String(rest[0]).startsWith('-')) return null;
-  const subs = /** @type {any[]} */ (group.commands);
+  const subs = servedSubcommands(group);
   /** The command a list of commands names by a word. @param {any[]} list @param {unknown} w */
   const named = (list, w) =>
     list.find(c => c.name() === w || c.aliases().includes(w));
@@ -472,8 +480,8 @@ function optionsBeforeSubcommand(group) {
     let target = first;
     const words = [first.name()];
     let j = i + 1;
-    while (target.commands?.length && named(target.commands, rest[j])) {
-      target = named(target.commands, rest[j]);
+    while (named(servedSubcommands(target), rest[j])) {
+      target = named(servedSubcommands(target), rest[j]);
       words.push(target.name());
       j++;
     }
@@ -1105,7 +1113,7 @@ export function handleCommanderError(err) {
       suggestions: unknownSubcommandSuggestions(
         `${getCliInvocation(process.cwd())} ${chain.join(' ')}`,
         word,
-        group.commands.map((/** @type {any} */ c) => c.name()),
+        servedSubcommands(group).map((/** @type {any} */ c) => c.name()),
       ),
     });
   }
@@ -1113,6 +1121,14 @@ export function handleCommanderError(err) {
   // commands' options; every other command gets the generic answer.
   if (code === 'commander.unknownOption' && rejected)
     return answerStrayOption(err, rejected, message, exitCode);
+
+  // A subcommand called bare without the argument it needs: its group may
+  // answer in its place, or add a suggestion to the error.
+  if (
+    code === 'commander.missingArgument' &&
+    answersBareSubcommands(rejected?.parent)
+  )
+    return answerBareMissingArgument(err, rejected, message, exitCode);
 
   // Real error paths. Strip Commander's "error: " prefix once: in the envelope
   // the key is already `error`, and in text mode the Astryx prefix replaces it.
@@ -1161,9 +1177,15 @@ async function answerStrayOption(err, rejected, message, exitCode) {
       first &&
       !rejected.commands.some((/** @type {any} */ c) => c.name() === first.word)
     ) {
-      const answer = await unknownCommandAnswer(rejected, cleaned, {
-        findEntry,
-      });
+      /** @param {Awaited<ReturnType<typeof unknownCommandAnswer>>} a */
+      const withRun = a =>
+        a?.suggestions.some(s => s.name.startsWith('astryx ')) ? a : null;
+      // The whole run first: a command the words point at can take the
+      // option (`migrate --from 0.6.0` is `upgrade --from 0.6.0`). Without a
+      // run, the run without the option.
+      const answer =
+        withRun(await unknownCommandAnswer(rejected, words, {findEntry})) ??
+        (await unknownCommandAnswer(rejected, cleaned, {findEntry}));
       setOutcome('parse-error', {
         exitCode: exitCode || 1,
         error: new Error(answer?.message ?? message),
@@ -1204,6 +1226,44 @@ async function answerStrayOption(err, rejected, message, exitCode) {
 }
 
 /**
+ * The answer to a missing argument. When the subcommand was called bare and
+ * its group answers in its place, that answer is the run's result and the
+ * run succeeds. Otherwise the error is Commander's, with the group's
+ * suggestion after the usage when it gives one.
+ * @param {unknown} err
+ * @param {any} rejected the command that is missing its argument
+ * @param {string} message Commander's message
+ * @param {number} exitCode
+ * @returns {Promise<boolean>}
+ */
+async function answerBareMissingArgument(err, rejected, message, exitCode) {
+  const code = 'commander.missingArgument';
+  const bare = await answerBareSubcommand(rejected);
+  if (bare && 'result' in bare) {
+    recordCommandResult(bare.result);
+    setOutcome('ok', {exitCode: 0});
+    process.exit(0);
+    return true;
+  }
+  return finishParseError(
+    err,
+    code,
+    message,
+    exitCode,
+    bare && {
+      message: message.replace(/^error:\s*/i, ''),
+      // Text prints a suggestion's name as the run to type.
+      suggestions: [
+        ...(usageSuggestion(err, code) ?? []),
+        jsonActive()
+          ? bare.suggestion
+          : {...bare.suggestion, name: formatCliCommand(bare.suggestion.name)},
+      ],
+    },
+  );
+}
+
+/**
  * The rest of {@link handleCommanderError} for a parse failure: the message
  * and suggestions written (the theme reader's answer when it read the
  * option), and the exit.
@@ -1211,7 +1271,7 @@ async function answerStrayOption(err, rejected, message, exitCode) {
  * @param {string} code
  * @param {string} message
  * @param {number} exitCode
- * @param {{message: string, suggestions: Array<{name: string, reason: string}>} | undefined | null} read
+ * @param {{message: string, suggestions: import('../../../foundation/response/base').Suggestion[]} | undefined | null} read
  * @param {string} [errorCode] the code the answer reports, when it is not
  *   the one Commander's code maps to
  * @returns {boolean}

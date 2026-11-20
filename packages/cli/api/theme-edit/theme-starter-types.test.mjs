@@ -22,6 +22,11 @@ import {
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
 import {appPackages, refusal} from '../../test-utils/theme-edit-fixture.mjs';
+import {hasModuleHooks} from '../../test-utils/module-hooks.mjs';
+import {
+  ASSET_FILE,
+  STYLESHEET_FILE,
+} from '../../foundation/fs/stylesheet-file.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
@@ -104,7 +109,13 @@ describe('a starter whose theme imports a file only a bundler loads', () => {
               themeEditPreviewApp('q', {cwd, theme: 't'}),
             );
             expect(e.message, spec).toContain(
-              `imports '${spec}', a file whose name the new app's type check has no declaration for`,
+              hasModuleHooks ||
+                !(
+                  STYLESHEET_FILE.test(String(file)) ||
+                  ASSET_FILE.test(String(file))
+                )
+                ? `imports '${spec}', a file whose name the new app's type check has no declaration for`
+                : `${file}, and loading a theme that imports a stylesheet or asset needs Node 22.15 or later`,
             );
             expect(fs.existsSync(path.join(cwd, 'q')), spec).toBe(false);
           },
@@ -113,7 +124,7 @@ describe('a starter whose theme imports a file only a bundler loads', () => {
     T,
   );
 
-  it(
+  it.skipIf(!hasModuleHooks)(
     'is copied for a plain .css file and a picture',
     async () => {
       await withImport("import './brand.css';", 'brand.css', async () => {
@@ -150,7 +161,9 @@ describe('a starter whose theme imports by a template literal', () => {
             themeEditPreviewApp('q', {cwd, theme: 't'}),
           );
           expect(e.message).toContain(
-            "imports './brand.scss', a stylesheet in another language than CSS",
+            hasModuleHooks
+              ? "imports './brand.scss', a stylesheet in another language than CSS"
+              : 'brand.scss, and loading a theme that imports a stylesheet or asset needs Node 22.15 or later',
           );
         },
       );

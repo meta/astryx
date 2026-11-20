@@ -76,6 +76,9 @@ export interface ResizeGesturePointerEvent {
 export interface ResizeGestureKeyEvent {
   readonly key: string;
   readonly shiftKey: boolean;
+  readonly altKey: boolean;
+  readonly ctrlKey: boolean;
+  readonly metaKey: boolean;
   preventDefault(): void;
 }
 
@@ -291,6 +294,17 @@ export function createResizeGesture(
     keyDown(event) {
       const config = getConfig();
       if (config.isDisabled) {
+        return;
+      }
+      // Only the key map acts: a plain key, or Shift with an arrow. Other
+      // modified keys belong to the browser (history navigation, scrolling to
+      // the top or bottom) and to app shortcuts, so they pass through.
+      if (
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        (event.shiftKey && !event.key.startsWith('Arrow'))
+      ) {
         return;
       }
       const state = model.state();
