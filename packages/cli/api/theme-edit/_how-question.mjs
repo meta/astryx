@@ -28922,6 +28922,11 @@ export function draftAnswer(ctx, env, question) {
         (x, k) =>
           k < i &&
           oneList(x, st) &&
+          // (Only past a side the person said, in an earlier clause: never
+          // a step the editor writes to keep a look, a focus border's own
+          // color written back, which the shorthand must come after.)
+          stepClause.get(x) !== stepClause.get(st) &&
+          !/^var\(/.test(String(x.value).trim()) &&
           x.on === st.on &&
           x.state === st.state &&
           x.when === st.when &&

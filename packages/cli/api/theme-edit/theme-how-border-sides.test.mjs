@@ -615,4 +615,20 @@ describe('per-side border asks', () => {
     },
     T,
   );
+
+  it(
+    "never moves a shorthand before the editor's own kept step",
+    async () => {
+      if (unbuilt) return;
+      const lines = await first(
+        'inputs: 1px border #79747e, 2px #6750a4 when focused',
+      );
+      const focus = lines.filter(l =>
+        /^border(?:-[a-z-]+)? .*--state focus-within/.test(l),
+      );
+      // (The asked focus color is the last focus border step: it wins.)
+      expect(focus.at(-1)).toMatch(/^border '2px solid #6750a4'/);
+    },
+    T,
+  );
 });
