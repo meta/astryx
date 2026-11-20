@@ -4,7 +4,7 @@
 
 [experimental] `astryx experimental theme editor how`: a top bar's fill reaches the top nav along with its text, so the text always reads on the bar's own fill; a top nav takes a fill of its own. A word that begins only one component's name before a part noun names that component ("segmented buttons" are the segmented control, never every button). After a ";" that goes on with a part's colon list, the items its bar holds are that bar's ("navigation bar: …; the selected item gets a pill" styles the top nav's selected item), and a top nav's items in the bar are written on the top nav item.
 
-- `astryx experimental theme editor`: a pale accent that does not read on a track gets a line on its own fill rather than one darkening the track, and a selected look's missed line says what the accent tint draws in dark, with a softer one first where it is a strong block of the accent.
+- `astryx experimental theme editor`: the danger color now reaches the error toast's fill and the gray dial the slider track (each at the shade nearest Core's own), a pale accent that does not read on a track gets a line on its own fill rather than one darkening the track, and a selected look's missed line says what the accent tint draws in dark, with a softer one first where it is a strong block of the accent.
 
 - `astryx experimental theme editor show --png` notes text its pictures draw too faint to read that no contrast check measures (a menu drawn open, a pressed or selected state, a variant), with the part, the ratio and colors and the picture it is in; the theme's disabled and placeholder text and text over media are left out. A ratio just under what a check needs is said cut down, never rounded up to read as meeting it. Text a base theme colors through the part around it (a colored card) gets the line that sets that token there, and clears once it is set.
 
@@ -31,6 +31,6 @@ Where a base theme draws its own text with one of these colors and the grown val
 
 A set `--color-on-accent` (or another role's text or icon color) reaches only what reads it, and a role color set for one mode leaves the base theme's own parts as they are in the other mode.
 
-- `astryx experimental theme editor`: a whole-theme `--color-accent` set as a token now acts as the theme's accent when no accent color is set. Links, selected rows, list items, citations and the accent tint grow from it, as they do from `set <theme> accent`. The token keeps the exact value it was given in each mode. Set for one mode only, it moves that mode only: the other mode keeps the colors the theme's own palette gives it, and where the theme has none, it reads the base theme's values, so it follows a later change to the base theme.
+- `astryx experimental theme editor`: a whole-theme `--color-accent` set as a token now acts as the theme's accent when no accent color is set. Links, selected rows, list items, citations and the accent tint grow from it, as they do from `set <theme> accent`. A dark value set with `--mode dark` carries the dark shades, and the token keeps the exact value it was given in each mode. Set for one mode only, it moves that mode only: the other mode keeps the colors the theme's own palette gives it, and where the theme has none, it reads the base theme's values, so it follows a later change to the base theme.
 
 @josephfarina
