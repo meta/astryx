@@ -2304,6 +2304,8 @@ export function Selector<T extends SelectorOptionType>(
             status: status?.type ?? null,
             disabled: isDisabled ? 'disabled' : null,
             readonly: isEffectivelyReadOnly ? 'readonly' : null,
+            expanded:
+              !isEffectivelyReadOnly && surface.isOpen ? 'expanded' : null,
           }),
           stylex.props(
             inputWrapperStyles.base,

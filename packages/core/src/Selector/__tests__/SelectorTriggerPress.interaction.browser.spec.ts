@@ -85,3 +85,29 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
     });
   }
 }
+
+// The rule a theme builds for `--state expanded --on selector`
+// (theme-states-core-paints-aria.test.mjs checks the built selector).
+const OPEN_SELECTOR_RULE =
+  '.astryx-selector[data-expanded="expanded"] { background-color: rgb(220, 38, 38); }';
+
+test("a theme's expanded state paints the open trigger only", async ({
+  page,
+}) => {
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-selector--secondary-variant&viewMode=story`,
+  );
+  await page.addStyleTag({content: OPEN_SELECTOR_RULE});
+  const trigger = page.locator('#storybook-root [role="combobox"]').first();
+  const box = page.locator('#storybook-root .astryx-selector').first();
+  await expect(trigger).toBeVisible();
+  const fill = async () =>
+    box.evaluate(node => getComputedStyle(node).backgroundColor);
+  expect(await fill()).not.toBe('rgb(220, 38, 38)');
+  await trigger.click();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  expect(await fill()).toBe('rgb(220, 38, 38)');
+  await page.keyboard.press('Escape');
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  expect(await fill()).not.toBe('rgb(220, 38, 38)');
+});

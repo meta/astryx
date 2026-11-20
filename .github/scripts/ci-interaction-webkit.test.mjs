@@ -567,7 +567,7 @@ describe('WebKit interaction proof routing', () => {
 
   it('runs nothing for everything else, including components with no interaction spec', () => {
     for (const untouched of [
-      'packages/core/src/Selector/useSelectorPresentation.ts',
+      'packages/core/src/Badge/Badge.tsx',
       'packages/core/src/utils/focusReturn.ts',
       'packages/core/src/internal/focus.ts',
       'packages/core/locales/en.json',
