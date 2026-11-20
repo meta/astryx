@@ -15,8 +15,10 @@ import {Card} from '@astryxdesign/core/Card';
 import {Button} from '@astryxdesign/core/Button';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {List, ListItem} from '@astryxdesign/core/List';
+import {useToast} from '@astryxdesign/core/Toast';
 
 export default function LayoutSidebarLayout() {
+  const showToast = useToast();
   return (
     <Card width="100%" style={{maxWidth: 500}}>
       <Layout
@@ -50,10 +52,20 @@ export default function LayoutSidebarLayout() {
         footer={
           <LayoutFooter hasDivider>
             <HStack gap={2} hAlign="end">
-              <Button label="Reset" variant="secondary">
+              <Button
+                label="Reset"
+                variant="secondary"
+                onClick={() =>
+                  showToast({body: 'Demo: the settings would reset here'})
+                }>
                 Reset
               </Button>
-              <Button label="Save Changes" variant="primary">
+              <Button
+                label="Save Changes"
+                variant="primary"
+                onClick={() =>
+                  showToast({body: 'Demo: your changes would be saved here'})
+                }>
                 Save Changes
               </Button>
             </HStack>

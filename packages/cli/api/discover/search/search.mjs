@@ -364,6 +364,9 @@ export async function search(packages, query, opts) {
       installed: item.installed,
       ...(item.title ? {title: item.title} : {}),
       ...(item.summary ? {summary: item.summary} : {}),
+      ...(item.kind === 'icon-set'
+        ? {experimental: /** @type {const} */ (true)}
+        : {}),
     }));
     const shown = limit == null ? matches : matches.slice(0, limit);
     return {

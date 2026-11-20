@@ -256,6 +256,41 @@ describe('integration docs in the docs tree', () => {
     expect(bad.message).toContain('"generic:nope" names no doc');
   }, SLOW);
 
+  it("warns on a link in a template's description that names no doc, and passes one to its own guide", async () => {
+    scaffold(kit());
+    const pkgDir = path.join(tmpDir, 'node_modules', '@acme', 'kit');
+    fs.writeFileSync(
+      path.join(pkgDir, 'astryx.integration.mjs'),
+      "export default {docs: './docs', templates: './templates', providerId: '@acme/tree-provider'};\n",
+    );
+    /** @param {string} description */
+    const template = description => {
+      fs.mkdirSync(path.join(pkgDir, 'templates'), {recursive: true});
+      fs.writeFileSync(
+        path.join(pkgDir, 'templates', 'acme-hero.doc.mjs'),
+        `export default ${JSON.stringify({type: 'block', name: 'Acme hero', description})};\n`,
+      );
+      fs.writeFileSync(
+        path.join(pkgDir, 'templates', 'acme-hero.tsx'),
+        'export default function AcmeHero() { return null; }\n',
+      );
+    };
+    template('Set it up as {@link generic:setup} says.');
+    const ok = await checkDocsTree({
+      docsCatalog: await loadDocsCatalog(tmpDir),
+    });
+    expect(ok).toMatchObject({id: 'docs-tree', status: 'pass'});
+    template('Set it up as {@link generic:setup} says, then {@link generic:nope}.');
+    const bad = await checkDocsTree({
+      docsCatalog: await loadDocsCatalog(tmpDir),
+    });
+    expect(bad.status).toBe('warn');
+    expect(bad.message).toContain(
+      'template acme-hero (description): "generic:nope" names no doc',
+    );
+    expect(bad.message).not.toContain('"generic:setup"');
+  }, SLOW);
+
   it("keeps the CLI's routes: an integration namespace or topic that claims one is withdrawn, and both doctors say so", async () => {
     const flat = (/** @type {string} */ name) => ({
       type: 'generic',

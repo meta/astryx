@@ -11,6 +11,7 @@
 
 import {describe, expect, it} from 'vitest';
 import {
+  formatElapsedDuration,
   formatLocaleTime,
   isLocaleTimeComplete,
   parseLocaleTime,
@@ -254,5 +255,47 @@ describe('isLocaleTimeComplete', () => {
     ).toBe(true);
     expect(isLocaleTimeComplete('오후 1:30', 'ko-KR', '12h')).toBe(true);
     expect(isLocaleTimeComplete('1:30', 'ko-KR', '12h')).toBe(false);
+  });
+});
+
+describe('formatElapsedDuration', () => {
+  it('writes compact English with two-digit trailing parts', () => {
+    expect(formatElapsedDuration('en', [['second', 34]])).toBe('34s');
+    expect(
+      formatElapsedDuration('en', [
+        ['minute', 2],
+        ['second', 8],
+      ]),
+    ).toBe('2m 08s');
+    expect(
+      formatElapsedDuration('en', [
+        ['hour', 1],
+        ['minute', 2],
+      ]),
+    ).toBe('1h 02m');
+  });
+
+  it('never groups the digits of a large count', () => {
+    expect(
+      formatElapsedDuration('en', [
+        ['hour', 1000],
+        ['minute', 5],
+      ]),
+    ).toBe('1000h 05m');
+  });
+
+  it("writes the locale's unit names and joining", () => {
+    expect(
+      formatElapsedDuration('de-DE', [
+        ['minute', 2],
+        ['second', 8],
+      ]),
+    ).toBe('2 Min., 08 Sek.');
+    expect(
+      formatElapsedDuration('ja-JP', [
+        ['minute', 2],
+        ['second', 8],
+      ]),
+    ).toBe('2m08s');
   });
 });

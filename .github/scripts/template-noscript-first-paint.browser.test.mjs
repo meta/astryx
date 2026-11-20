@@ -3,7 +3,7 @@
 /**
  * @file The page templates people share as a file read correctly with no
  * script. Each one is rendered to static HTML with `astryx experimental
- * render`, the form a shared page takes, and shown in Chromium with
+ * export`, the form a shared page takes, and shown in Chromium with
  * JavaScript off at a phone's and a desktop's width. On that first paint:
  *
  * - the page is no wider than the screen;
@@ -11,6 +11,10 @@
  *   them into a narrow column;
  * - every in-page link points at a section the page has;
  * - no copy button shows, since copying needs script.
+ *
+ * A board template's lanes also read whole on that first paint: on a phone
+ * every lane fits the screen's width, one under another; on a desktop the
+ * lanes sit side by side at their fixed width.
  *
  * CI runs it in node-browser-contracts' "Template no-script first paint
  * browser case" step, after the Chromium install.
@@ -45,6 +49,9 @@ const SHARED_TEMPLATES = [
   'work-item-detail',
 ];
 
+/** Templates whose page is a row of lanes, and each lane's desktop width. */
+const LANE_TEMPLATES = [{id: 'kanban-board', laneWidth: 300}];
+
 /** A phone and a desktop, in CSS pixels. */
 const WIDTHS = [
   {name: 'phone', width: 390, height: 844},
@@ -67,7 +74,10 @@ describe.runIf(BROWSER_STEP)('shared page templates with no script', () => {
       'react-dom',
       'recharts',
     ]);
-    const failed = await scaffoldAndRender(home, SHARED_TEMPLATES);
+    const failed = await scaffoldAndRender(home, [
+      ...SHARED_TEMPLATES,
+      ...LANE_TEMPLATES.map(t => t.id),
+    ]);
     if (failed.length)
       throw new Error(`Templates did not render:\n${failed.join('\n')}`);
     const executablePath = chromium.executablePath();
@@ -153,6 +163,82 @@ describe.runIf(BROWSER_STEP)('shared page templates with no script', () => {
             problems.push(
               `${size.name}: ${found.copyButtons} copy button(s) that need script`,
             );
+        } finally {
+          await page.close();
+        }
+      }
+      expect(problems).toEqual([]);
+    },
+    300_000,
+  );
+
+  it.each(LANE_TEMPLATES)(
+    '$id shows whole lanes on its first paint',
+    async ({id, laneWidth}) => {
+      /** @type {string[]} */
+      const problems = [];
+      for (const size of WIDTHS) {
+        const page = await browser.newPage({
+          viewport: {width: size.width, height: size.height},
+          javaScriptEnabled: false,
+        });
+        await page.route('**/*', (/** @type {any} */ route) =>
+          route.request().url().startsWith('file:')
+            ? route.continue()
+            : route.abort(),
+        );
+        try {
+          await page.goto(
+            pathToFileURL(path.join(home, 'templates', id, 'page.html')).href,
+            {waitUntil: 'domcontentloaded'},
+          );
+          const lanes = await page.evaluate(() => {
+            const {document} = /** @type {any} */ (globalThis);
+            // The board is the element whose children are the lanes: each
+            // child holds one second-level heading, the lane's name.
+            const board = [...document.querySelectorAll('body *')].find(
+              (/** @type {any} */ e) =>
+                e.children.length > 2 &&
+                [...e.children].every(
+                  (/** @type {any} */ c) =>
+                    c.querySelectorAll('h2, [aria-level="2"]').length === 1,
+                ),
+            );
+            return board
+              ? [...board.children].map((/** @type {any} */ c) => {
+                  const r = c.getBoundingClientRect();
+                  return {
+                    left: r.left,
+                    right: r.right,
+                    top: r.top,
+                    width: r.width,
+                  };
+                })
+              : [];
+          });
+          if (lanes.length < 3) {
+            problems.push(`${size.name}: found ${lanes.length} lanes`);
+            continue;
+          }
+          if (size.name === 'phone') {
+            for (const [i, lane] of lanes.entries()) {
+              if (lane.left < 0 || lane.right > size.width)
+                problems.push(
+                  `phone: lane ${i + 1} spans ${Math.round(lane.left)}..${Math.round(lane.right)} px of a ${size.width} px screen`,
+                );
+              if (i > 0 && lane.top <= lanes[i - 1].top)
+                problems.push(`phone: lane ${i + 1} sits beside lane ${i}`);
+            }
+          } else {
+            for (const [i, lane] of lanes.entries()) {
+              if (Math.round(lane.width) !== laneWidth)
+                problems.push(
+                  `desktop: lane ${i + 1} is ${Math.round(lane.width)} px wide`,
+                );
+              if (i > 0 && lane.left < lanes[i - 1].right)
+                problems.push(`desktop: lane ${i + 1} is not beside lane ${i}`);
+            }
+          }
         } finally {
           await page.close();
         }

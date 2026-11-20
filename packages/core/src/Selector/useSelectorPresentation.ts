@@ -30,7 +30,11 @@ import {
 import type {InteractionModalityTracking} from '../utils/interactionModality';
 import {useFocusReturnVisibility} from '../hooks/useFocusReturnVisibility';
 import {useOutsidePress} from '../Layer/outsidePress';
-import {containsAlongFlatTree} from '../utils/flatTree';
+import {
+  containsAlongFlatTree,
+  deepActiveElement,
+  shadowRootsOutward,
+} from '../utils/flatTree';
 import {isShadowRoot} from '../utils/nodeType';
 import {
   createPresentationHold,
@@ -128,7 +132,8 @@ export function useSelectorPresentation({
     // Escape, a press inside the list, or a press on nothing focusable returns
     // focus to the trigger. So does a press on a container around the list
     // that is no Tab stop, such as one with `tabIndex={-1}`.
-    const active = document.activeElement;
+    // Read through open shadow roots: the document reports a root's host.
+    const active = deepActiveElement(document);
     const list = popoverContentRef.current?.current ?? null;
     // The press inside the list explains focus only while that focus still
     // holds the list. A later key can move focus to another field.
@@ -137,6 +142,13 @@ export function useSelectorPresentation({
       active != null &&
       list != null &&
       containsAlongFlatTree(active, list);
+    // A closed shadow root hides which element inside it holds focus, so its
+    // host is not a container around the list: focus may be on another field.
+    const isClosedRootHost =
+      active != null &&
+      active.shadowRoot == null &&
+      list != null &&
+      shadowRootsOutward(list.getRootNode()).some(({host}) => host === active);
     const focusLandedElsewhere =
       !isFocusReturnAlways &&
       !isFocusFromPressInList &&
@@ -144,7 +156,10 @@ export function useSelectorPresentation({
       active !== document.body &&
       active !== trigger &&
       list?.contains(active) !== true &&
-      (active.tabIndex >= 0 || !active.contains(list));
+      (active.tabIndex >= 0 ||
+        isClosedRootHost ||
+        list == null ||
+        !containsAlongFlatTree(active, list));
     if (focusLandedElsewhere) {
       return;
     }
