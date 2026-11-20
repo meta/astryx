@@ -420,7 +420,9 @@ const BASES = new WeakMap();
 /**
  * The provider ledger a Project resolved at load: one outcome for every
  * package directory configured, autolinked, or authored. Internal: upgrade
- * resolves on top of it, and tests account for every candidate with it.
+ * resolves on top of it, `doctor integration validate` finds the folder's
+ * own copy of a package in it, loaded or not, and tests account for every
+ * candidate with it.
  * @param {Project} project
  * @returns {import('../integrations/provider-resolution.mjs').ProviderLedger}
  */

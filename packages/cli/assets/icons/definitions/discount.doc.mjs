@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'discount',
+  group: 'money',
   description: 'A discount, coupon, or percentage off.',
   words: ['coupon', 'sale', 'percent', 'percent badge'],
 };

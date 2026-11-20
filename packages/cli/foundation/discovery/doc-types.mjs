@@ -95,8 +95,16 @@ import {compareText} from '../text/compare-text.mjs';
  *   or not fully checked
  */
 
+const NOT_CHECKED = 'so docs were not checked against the authoring types.';
+
 /** The line both surfaces print when the compiler is missing. */
-export const DOC_TYPES_TYPESCRIPT_MISSING_REASON = `TypeScript is not installed in this project, so docs were not checked against the authoring types. ${TYPESCRIPT_FIX}`;
+export const DOC_TYPES_TYPESCRIPT_MISSING_REASON = `TypeScript is not installed in this project, ${NOT_CHECKED} ${TYPESCRIPT_FIX}`;
+
+/**
+ * The line in a folder outside any package, where no project install step
+ * applies.
+ */
+export const DOC_TYPES_TYPESCRIPT_MISSING_HERE = `TypeScript is not installed here, ${NOT_CHECKED}`;
 
 const AUTHORING = '@astryxdesign/cli/authoring';
 const AUTHORING_TYPES = path.resolve(
@@ -921,12 +929,19 @@ function findingsFor(ts, diagnostic, astPath, where) {
 /**
  * Check each doc file's values against the published authoring types.
  * @param {DocFile[]} files
- * @param {{packageDir: string, resolveFrom: Array<string | null | undefined>, core?: boolean}} options
- *   `core`: the docs are Core's own, so templates are held to TemplateDoc
+ * @param {{packageDir: string, resolveFrom: Array<string | null | undefined>, core?: boolean, outsideAnyPackage?: boolean}} options
+ *   `core`: the docs are Core's own, so templates are held to TemplateDoc;
+ *   `outsideAnyPackage`: the check runs outside any package, where no project
+ *   install step applies
  * @returns {Promise<DocTypesReport>}
  */
 export async function checkDocTypes(files, options) {
-  const {packageDir, resolveFrom, core = false} = options;
+  const {
+    packageDir,
+    resolveFrom,
+    core = false,
+    outsideAnyPackage = false,
+  } = options;
   // With no doc files there is nothing to check, TypeScript or not.
   if (files.length === 0) {
     return {status: 'checked', docs: 0, findings: [], unchecked: []};
@@ -936,8 +951,12 @@ export async function checkDocTypes(files, options) {
     return {
       status: 'skipped',
       reason: compiler
-        ? unusableTypeScriptReason(compiler.version, 'docs were not checked')
-        : DOC_TYPES_TYPESCRIPT_MISSING_REASON,
+        ? unusableTypeScriptReason(compiler.version, 'docs were not checked', {
+            here: outsideAnyPackage,
+          })
+        : outsideAnyPackage
+          ? DOC_TYPES_TYPESCRIPT_MISSING_HERE
+          : DOC_TYPES_TYPESCRIPT_MISSING_REASON,
       docs: 0,
       findings: [],
       unchecked: [],
@@ -954,7 +973,7 @@ export async function checkDocTypes(files, options) {
   if (major < needMajor || (major === needMajor && minor < needMinor)) {
     return {
       status: 'skipped',
-      reason: `TypeScript ${version} cannot check ${hasJs ? 'a JavaScript doc' : 'a doc'} against its type (that needs TypeScript ${needMajor}.${needMinor} or later), so docs were not checked. ${TYPESCRIPT_FIX}`,
+      reason: `TypeScript ${version} cannot check ${hasJs ? 'a JavaScript doc' : 'a doc'} against its type (that needs TypeScript ${needMajor}.${needMinor} or later), so docs were not checked.${outsideAnyPackage ? '' : ` ${TYPESCRIPT_FIX}`}`,
       docs: 0,
       findings: [],
       unchecked: [],

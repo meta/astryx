@@ -7,8 +7,10 @@ import {AspectRatio} from '@astryxdesign/core/AspectRatio';
 import {Button} from '@astryxdesign/core/Button';
 import {VStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
+import {useToast} from '@astryxdesign/core/Toast';
 
 export default function OverlayShowcase() {
+  const showToast = useToast();
   return (
     <Overlay
       align="center"
@@ -17,7 +19,14 @@ export default function OverlayShowcase() {
           <Text type="supporting" weight="bold" color="inherit">
             Design system foundations
           </Text>
-          <Button label="Open gallery" variant="secondary" size="sm" />
+          <Button
+            label="Open gallery"
+            variant="secondary"
+            size="sm"
+            onClick={() =>
+              showToast({body: 'Demo: the gallery would open here'})
+            }
+          />
         </VStack>
       }>
       <AspectRatio

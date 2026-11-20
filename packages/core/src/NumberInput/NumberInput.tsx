@@ -38,7 +38,6 @@ import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
-  sizeVars,
   spacingVars,
   typographyVars,
   typeScaleVars,
@@ -63,6 +62,10 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {lockSelection, locksSelectionFor} from '../utils/selectionLock';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
+import {
+  inputRowSizeStyles,
+  inputRowStepperSizeStyles,
+} from '../Field/inputStyles.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
@@ -208,17 +211,7 @@ const styles = stylex.create({
   },
 });
 
-const sizeStyles = stylex.create({
-  sm: {
-    height: sizeVars['--size-element-sm'],
-  },
-  md: {
-    height: sizeVars['--size-element-md'],
-  },
-  lg: {
-    height: sizeVars['--size-element-lg'],
-  },
-});
+const sizeStyles = inputRowSizeStyles;
 
 export type NumberInputSize = keyof typeof sizeStyles;
 
@@ -1392,6 +1385,7 @@ export function NumberInput({
           styles.wrapper,
           hasNumberSteppers && styles.wrapperWithNumberSteppers,
           sizeStyles[size],
+          hasNumberSteppers && inputRowStepperSizeStyles[size],
           isDisabled && inputWrapperStyles.disabled,
           isDisabled && inputDisabledFocusStyles.ring,
           fieldStatus && inputStatusBorderStyles[fieldStatus.type],
@@ -1515,11 +1509,14 @@ export function NumberInput({
               inputRef.current?.focus();
               stepValue(1);
             }}
-            {...stylex.props(
-              styles.numberStepperButton,
-              interactionOverlayStyles.backgroundImage,
-              (isDisabled || isReadOnly || !canIncrement) &&
-                styles.numberStepperButtonDisabled,
+            {...mergeProps(
+              themeProps('number-input-stepper', {direction: 'increment'}),
+              stylex.props(
+                styles.numberStepperButton,
+                interactionOverlayStyles.backgroundImage,
+                (isDisabled || isReadOnly || !canIncrement) &&
+                  styles.numberStepperButtonDisabled,
+              ),
             )}>
             <Icon
               icon="numberInput:stepperDown"
@@ -1563,12 +1560,15 @@ export function NumberInput({
               inputRef.current?.focus();
               stepValue(-1);
             }}
-            {...stylex.props(
-              styles.numberStepperButton,
-              interactionOverlayStyles.backgroundImage,
-              styles.decrementButton,
-              (isDisabled || isReadOnly || !canDecrement) &&
-                styles.numberStepperButtonDisabled,
+            {...mergeProps(
+              themeProps('number-input-stepper', {direction: 'decrement'}),
+              stylex.props(
+                styles.numberStepperButton,
+                interactionOverlayStyles.backgroundImage,
+                styles.decrementButton,
+                (isDisabled || isReadOnly || !canDecrement) &&
+                  styles.numberStepperButtonDisabled,
+              ),
             )}>
             <Icon icon="numberInput:stepperDown" size="xsm" color="inherit" />
           </button>

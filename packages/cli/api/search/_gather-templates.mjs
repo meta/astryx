@@ -5,7 +5,6 @@
  */
 
 import fs from 'node:fs';
-import {renderTokens} from '../../foundation/doc-compiler/links.mjs';
 import {CORE_PACKAGE} from '../../foundation/discovery/component-discovery.mjs';
 import {discoverTemplates} from '../template/template.mjs';
 import {listAvailableThemes} from '../theme/_adapter.mjs';
@@ -124,7 +123,7 @@ export async function gatherTemplates(cwd) {
         return derive();
       },
       ...(weakKeywordBound ? {weakKeywordBound} : {}),
-      description: renderTokens(t.description || ''),
+      description: t.description || '',
       // A template's own keywords name the many ideas it serves, so they score
       // as its prose does, not as a name: one of them matching one word of a
       // short idea is not a direct match.

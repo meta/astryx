@@ -17,6 +17,7 @@ import {
   prefixCliCommands,
   quoteCommandArgument,
   commandInFolder,
+  splitCommandInFolder,
 } from './package-manager.mjs';
 import {recordDeclaredSettings, runWithCliDoor} from './cli-command.mjs';
 import {CLI_VERSION} from '../../test-utils/release-fixtures.mjs';
@@ -811,6 +812,31 @@ describe('quoteCommandArgument', () => {
     expect(quoteCommandArgument('/home/jo/Macy’s app', 'linux')).toBe(
       "'/home/jo/Macy’s app'",
     );
+  });
+});
+
+describe('splitCommandInFolder', () => {
+  it('reads back the folder and the command of every line commandInFolder prints', () => {
+    for (const [dir, platform] of [
+      ['/srv/app', 'linux'],
+      ["/tmp/it's here", 'linux'],
+      ['/a b/c && d', 'darwin'],
+      ['C:\\a[1] b', 'win32'],
+      ["C:\\it's", 'win32'],
+      ['C:\\Macy\u2019s', 'win32'],
+    ]) {
+      const line = commandInFolder(dir, 'astryx template blank ./x.tsx', platform);
+      expect(splitCommandInFolder(line), line).toEqual({
+        dir,
+        command: 'astryx template blank ./x.tsx',
+      });
+    }
+  });
+
+  it('reads no folder from any other line', () => {
+    for (const line of ['astryx docs', 'cd', 'cd /x', 'cd /x; astryx docs']) {
+      expect(splitCommandInFolder(line), line).toBeNull();
+    }
   });
 });
 

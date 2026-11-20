@@ -76,6 +76,10 @@ export const doc = {
       when: 'the theme does not build, its own <theme>.theme.ts does not parse, or a token in it is not text; the folder stays as it was',
     },
     {
+      code: 'ERR_DEP_MISSING',
+      when: "a package the build loads is broken in node_modules (it needs a package it declares, and that package is missing); the suggestion is the app's install command, or, when the run uses a CLI copy of its own (global, one-off or cached) and the app's install does not hold the package that needs it, the message names that copy (a release-cache copy: the folder to remove); nothing was changed",
+    },
+    {
       code: 'ERR_FILE_EXISTS',
       when: 'a folder sits where the build writes a file (such as themes/<theme>/<theme>.d.ts); the suggestion lists it',
     },

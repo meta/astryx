@@ -139,16 +139,16 @@ function foldedName(text) {
  * carry every typed word.
  * @param {string[]} typed - {@link nameWords} of the typed name
  * @param {string} name
- * @param {{typos?: boolean}} [options]
+ * @param {{typos?: boolean, slipFrom?: number}} [options]
  * @returns {number}
  */
-function affinityOf(typed, name, {typos = false} = {}) {
+function affinityOf(typed, name, {typos = false, slipFrom} = {}) {
   const words = nameWords(name);
   if (typed.length === 0 || words.length === 0) return 0;
   const typedJoined = typed.join('');
   const joined = words.join('');
   if (joined === typedJoined) return 40;
-  const slips = typos ? nearNameSlips(typedJoined, joined) : 0;
+  const slips = typos ? nearNameSlips(typedJoined, joined, slipFrom) : 0;
   const near = slips > 0 ? NEAR_NAME_SCORE - slips * 0.2 : 0;
   const have = new Set(words);
   const want = new Set(typed);
@@ -168,15 +168,16 @@ function affinityOf(typed, name, {typos = false} = {}) {
 /**
  * How many slips separate a typed name from a candidate, both with their
  * words joined, when it is a near name: an edit or two adjacent letters
- * swapped count as one slip, one slip is allowed from five letters and two from
- * eight. Zero when it is not a near name.
+ * swapped count as one slip, one slip is allowed from `slipFrom` letters (five
+ * unless given) and two from eight. Zero when it is not a near name.
  * @param {string} typed
  * @param {string} name
+ * @param {number} [slipFrom]
  * @returns {number}
  */
-function nearNameSlips(typed, name) {
+function nearNameSlips(typed, name, slipFrom = 5) {
   const shorter = Math.min(typed.length, name.length);
-  const cap = shorter >= 8 ? 2 : shorter >= 5 ? 1 : 0;
+  const cap = shorter >= 8 ? 2 : shorter >= slipFrom ? 1 : 0;
   if (cap === 0 || Math.abs(typed.length - name.length) > cap) return 0;
   const slips = levenshteinDistance(typed, name, cap, {swaps: true});
   return slips <= cap ? slips : 0;
@@ -189,7 +190,7 @@ function nearNameSlips(typed, name) {
  * @param {string} typedName
  * @param {T[]} items
  * @param {(item: T) => Array<string | undefined>} namesOf
- * @param {{typos?: boolean}} [options]
+ * @param {{typos?: boolean, slipFrom?: number}} [options]
  * @returns {Array<{item: T, best: number}>}
  */
 function scoreByAffinity(typedName, items, namesOf, options = {}) {
@@ -220,17 +221,22 @@ function scoreByAffinity(typedName, items, namesOf, options = {}) {
  * `ButonGroup` or `ButtonGorup` for ButtonGroup) ranks just below the names
  * that carry every typed word and above the rest. With `closest` too, near
  * names stay in the list whatever the cut leaves out, and the list is never
- * longer than it is without `typos`.
+ * longer than it is without `typos`. `slipFrom` lowers the fewest letters a
+ * one-slip near name needs (five unless given), for a list the near names
+ * only reorder: in one, a short slip that makes another word costs nothing.
  * @template T
  * @param {string} typedName
  * @param {T[]} items
  * @param {(item: T) => Array<string | undefined>} namesOf
- * @param {{closest?: boolean, typos?: boolean}} [options]
+ * @param {{closest?: boolean, typos?: boolean, slipFrom?: number}} [options]
  * @returns {T[]}
  */
 export function orderByAffinity(typedName, items, namesOf, options = {}) {
   if (!options.typos) return orderByWords(typedName, items, namesOf, options);
-  const scored = scoreByAffinity(typedName, items, namesOf, {typos: true});
+  const scored = scoreByAffinity(typedName, items, namesOf, {
+    typos: true,
+    slipFrom: options.slipFrom,
+  });
   if (!options.closest) return scored.map(s => s.item);
   const kept = new Set(orderByWords(typedName, items, namesOf, options));
   return scored
@@ -327,11 +333,12 @@ export function closeNameScore(typedName, name) {
  * suggestion sits under one namespace the typed route also starts with, that
  * shared part is left out of the comparison: it says nothing about which page
  * was meant. Equal matches keep their order. `closest` stops the list where
- * the matches get weaker, as in {@link orderByAffinity}.
+ * the matches get weaker, and `typos` puts a near name first, as in
+ * {@link orderByAffinity}.
  * @template {{name: string}} T
  * @param {string} topic - the typed route
  * @param {T[]} suggestions
- * @param {{closest?: boolean}} [options]
+ * @param {{closest?: boolean, typos?: boolean, slipFrom?: number}} [options]
  * @returns {T[]}
  */
 export function orderRouteSuggestions(topic, suggestions, options = {}) {

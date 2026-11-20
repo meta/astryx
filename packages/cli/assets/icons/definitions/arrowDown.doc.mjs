@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'arrowDown',
+  group: 'arrows',
   description: 'Sort descending or move down.',
   words: ['descending', 'down', 'decrease'],
   builtIn: true,
