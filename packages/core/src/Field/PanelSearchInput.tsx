@@ -45,10 +45,8 @@ import type {StyleXStyles} from '@stylexjs/stylex';
 import {Icon} from '../Icon/Icon';
 import {InputClearButton} from './InputClearButton';
 import {mergeProps} from '../utils/mergeProps';
-import {
-  getInteractionModality,
-  useInteractionModalityTracking,
-} from '../utils/interactionModality';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import {
   colorVars,
   durationVars,
@@ -59,6 +57,8 @@ import {
   typographyVars,
 } from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
+import {textEntryTraitAttributes} from './textEntryTraits';
+import {inputWrapperStyles} from './inputStyles.stylex';
 
 const styles = stylex.create({
   // Gutter only. Matches the option list's own padding so the field below
@@ -186,6 +186,14 @@ export interface PanelSearchInputProps extends Omit<
    * the field to the same height as its rows.
    */
   fieldXstyle?: StyleXStyles;
+  /**
+   * Draw the field as the shared input box — the input border, accent while
+   * focused, surface and radius — instead of the borderless panel row. A
+   * touch sheet is a full-width surface, not a bordered panel, so its field
+   * reads as a form input.
+   * @default false
+   */
+  hasInputBox?: boolean;
 }
 
 /**
@@ -209,6 +217,7 @@ export function PanelSearchInput({
   onBlur,
   onContainerKeyDown,
   fieldXstyle,
+  hasInputBox = false,
   xstyle,
   className,
   style,
@@ -220,14 +229,15 @@ export function PanelSearchInput({
   // stays `:focus-visible`, this only narrows it.
   const [isKeyboardFocus, setIsKeyboardFocus] = useState(false);
 
-  useInteractionModalityTracking();
+  const {ref: modalityRef, readModality} = useInteractionModalityTracking();
+  const mergedInputRef = useMergedRefs(ref, modalityRef);
 
   const handleFocus = useCallback(
     (e: React.FocusEvent<HTMLInputElement>) => {
-      setIsKeyboardFocus(getInteractionModality() === 'keyboard');
+      setIsKeyboardFocus(readModality() === 'keyboard');
       onFocus?.(e);
     },
-    [onFocus],
+    [onFocus, readModality],
   );
 
   const handleBlur = useCallback(
@@ -268,12 +278,19 @@ export function PanelSearchInput({
         {...stylex.props(
           styles.field,
           isKeyboardFocus && styles.fieldKeyboardFocus,
+          hasInputBox && inputWrapperStyles.base,
+          hasInputBox && inputWrapperStyles.textField,
           fieldXstyle,
         )}>
         <Icon icon="search" size="sm" color="secondary" xstyle={styles.icon} />
         <input
-          ref={ref}
+          ref={mergedInputRef}
           type="text"
+          // Autocorrect would rewrite names and identifiers.
+          {...textEntryTraitAttributes({
+            enterKeyHint: 'search',
+            hasAutoCorrect: false,
+          })}
           aria-label={label}
           placeholder={placeholder}
           value={value}

@@ -15,6 +15,7 @@ import * as path from 'node:path';
 import {requireThemeCoreDir} from '../_adapter.mjs';
 import {collectThemingTargets} from '../../../foundation/discovery/theming-targets.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
+import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
 import {AstryxError, coreDirOrThrow} from '../../error.mjs';
 
 /**
@@ -34,6 +35,19 @@ function matchesLoosely(target, filter) {
 }
 
 /**
+ * A targets filter as it is matched: trimmed, lowercase, and without a
+ * leading `.`, so a class copied from the output (`.astryx-switch`) reads as
+ * its name. Null when nothing is left, which means no filter.
+ * @param {string | undefined | null} filter
+ * @returns {string | null}
+ */
+export function normalizeTargetFilter(filter) {
+  return filter
+    ? String(filter).trim().replace(/^\./, '').toLowerCase() || null
+    : null;
+}
+
+/**
  * List every component theming target — the `defineTheme` `components` keys,
  * with the props and states each one accepts.
  *
@@ -49,7 +63,7 @@ export async function themeTargets(filter, {cwd = process.cwd()} = {}) {
   const coreDir = coreDirOrThrow(requireThemeCoreDir, cwd);
 
   const all = await collectThemingTargets(path.join(coreDir, 'src'));
-  const needle = filter ? String(filter).toLowerCase() : null;
+  const needle = normalizeTargetFilter(filter);
   let targets = all;
   if (needle) {
     const named = all.filter(t => t.component.toLowerCase() === needle);
@@ -61,10 +75,16 @@ export async function themeTargets(filter, {cwd = process.cwd()} = {}) {
       .filter(name => name.toLowerCase().startsWith(needle.slice(0, 3)))
       .sort()
       .slice(0, 5)
-      .map(name => ({name, reason: 'has theming targets'}));
+      .map(name => ({
+        name: formatCliCommand(`theme targets ${name}`, cwd),
+        reason: 'has theming targets',
+      }));
+    const listAll = formatCliCommand('theme targets', cwd);
     throw new AstryxError(
-      `No theming target matches "${filter}". Run \`theme targets\` with no filter for the whole list.`,
-      near.length > 0 ? near : undefined,
+      `No theming target matches "${filter}". Run \`${listAll}\` with no filter for the whole list.`,
+      near.length > 0
+        ? near
+        : [{name: listAll, reason: 'every theming target'}],
       ERROR_CODES.ERR_UNKNOWN_COMPONENT,
     );
   }

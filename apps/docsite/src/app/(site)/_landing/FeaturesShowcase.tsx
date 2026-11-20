@@ -9,23 +9,10 @@ import {VStack, HStack} from '@astryxdesign/core/Layout';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {Link} from '@astryxdesign/core/Link';
 import {spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
-import {components} from '../../../generated/componentRegistry';
 import {layout} from '../../../layout.stylex';
 import {ComponentsPreview} from './ComponentsPreview';
 import {CliPreview} from './CliPreview';
 import {ThemesPreview} from './ThemesPreview';
-import {TemplatesPreview} from './TemplatesPreview';
-
-// Count of public @astryxdesign/core components (excluding hooks and hidden entries).
-// Sourced from the generated registry so the number stays accurate as the
-// library grows.
-const CORE_COMPONENT_COUNT = (components['@astryxdesign/core'] ?? []).filter(
-  c => !c.hidden && !c.name.startsWith('use'),
-).length;
-// Round down to the nearest 10 for marketing copy ("Over X components"
-// reads better than "Over 87 components" and avoids the displayed number
-// going stale every time a single component lands.
-const CORE_COMPONENT_COUNT_ROUNDED = Math.floor(CORE_COMPONENT_COUNT / 10) * 10;
 
 const styles = stylex.create({
   // Bento CSS-grid layout. Each grid cell holds a full-height
@@ -356,9 +343,14 @@ type Feature = {
 // ordered array because the visual order in the grid is not the
 // same as any obvious data order — explicit slot mapping is clearer
 // than counting indices.
-const features: Record<string, Feature> = {
+const features: {
+  components: Omit<Feature, 'title'>;
+  themes: Feature;
+  templates: Feature;
+  cli: Feature;
+} = {
+  // FeaturesShowcase adds the title: its count comes from the server page.
   components: {
-    title: `Over ${CORE_COMPONENT_COUNT_ROUNDED} components`,
     description:
       'Accessible and themeable React components with built-in spacing, dark mode, and flexible styling.',
     href: '/components',
@@ -372,19 +364,19 @@ const features: Record<string, Feature> = {
     description:
       'Fully customizable themes ready for use. Make it yours without starting from scratch.',
     href: '/themes',
-    // Live Butter-themed store preview + swatches/"Aa" instead of the old
+    // Butter-themed store preview + swatches/"Aa" instead of the old
     // /feature-brand.png, so it re-themes for dark mode (the PNG stayed light).
-    preview: <ThemesPreview />,
+    // FeaturesShowcase adds the preview: its store comes from the server page.
   },
   templates: {
     title: 'Ready to ship templates',
     description:
       'Production-ready templates for common pages, just plug in your content.',
     href: '/templates',
-    // Live scaled-down renders of real page templates instead of the baked
-    // /feature-templates.png, so they re-theme for dark mode and stay in sync
-    // with the actual templates.
-    preview: <TemplatesPreview />,
+    // Scaled-down static pages that the build renders from the real page
+    // templates, so they re-theme for dark mode and stay in sync with the
+    // templates. The server page renders them and passes them to
+    // FeaturesShowcase.
   },
   cli: {
     title: 'A design system that your agent can use',
@@ -581,7 +573,18 @@ function HeadingBlock() {
   );
 }
 
-export function FeaturesShowcase() {
+export function FeaturesShowcase({
+  coreComponentCount,
+  templatesPreview,
+  themesStore,
+}: {
+  /** Public Core components, rounded down to the nearest 10. */
+  coreComponentCount: number;
+  /** The templates card preview (TemplatesPreview). */
+  templatesPreview: ReactNode;
+  /** The themes card store snapshot (FrozenPreview), rendered on the server. */
+  themesStore: ReactNode;
+}) {
   // Each grid cell holds a full-height column wrapper (VStack
   // height:100%) rather than a single card, so the grid stretches
   // all three columns to the height of the tallest column. Cards
@@ -617,14 +620,32 @@ export function FeaturesShowcase() {
             owns only the responsive display switch. */}
         <VStack gap={8} width="100%" height="100%" xstyle={styles.column}>
           <HeadingBlock />
-          <FeatureCard feature={features.themes} isFlex bottomPreview />
+          <FeatureCard
+            feature={{
+              ...features.themes,
+              preview: <ThemesPreview store={themesStore} />,
+            }}
+            isFlex
+            bottomPreview
+          />
         </VStack>
         <VStack gap={8} width="100%" height="100%" xstyle={styles.column}>
-          <FeatureCard feature={features.components} isFlex insetImage />
+          <FeatureCard
+            feature={{
+              ...features.components,
+              title: `Over ${coreComponentCount} components`,
+            }}
+            isFlex
+            insetImage
+          />
           <FeatureCard feature={features.cli} />
         </VStack>
         <VStack gap={8} width="100%" height="100%" xstyle={styles.column}>
-          <FeatureCard feature={features.templates} isTall bottomPreview />
+          <FeatureCard
+            feature={{...features.templates, preview: templatesPreview}}
+            isTall
+            bottomPreview
+          />
         </VStack>
       </div>
     </VStack>

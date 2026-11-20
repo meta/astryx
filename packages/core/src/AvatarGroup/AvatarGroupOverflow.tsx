@@ -3,7 +3,7 @@
 
 /**
  * @file AvatarGroupOverflow.tsx
- * @input Uses React, StyleX, AvatarGroupContext, i18n (useTranslator)
+ * @input Uses React, StyleX, AvatarGroupContext, i18n (useComponentTranslator)
  * @output Exports AvatarGroupOverflow for overflow indicator
  * @position Slot component used inside AvatarGroup
  *
@@ -32,7 +32,13 @@ import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/AvatarGroup/AvatarGroupOverflow.generated';
+
+registerEnglishFallback(english);
 
 const BORDER_WIDTH = 2;
 const OVERFLOW_FONT_RATIO = 0.35;
@@ -129,6 +135,7 @@ const dynamicStyles = stylex.create({
     fontSize: `max(${typeScaleVars['--text-supporting-size']}, ${
       s * OVERFLOW_FONT_RATIO
     }px)`,
+    lineHeight: typeScaleVars['--text-supporting-leading'],
   }),
   overlap: (offset: number) => ({
     '--_avatar-group-overlap': `${offset}px`,
@@ -157,10 +164,11 @@ export function AvatarGroupOverflow({
   xstyle,
   className,
   style,
+  'aria-label': ariaLabel,
   ...rest
 }: AvatarGroupOverflowProps): ReactNode {
   const pressable = usePressFeedback();
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const group = useAvatarGroup();
   const size = group?.size ?? 'md';
   const shape = group?.shape ?? 'circle';
@@ -171,7 +179,10 @@ export function AvatarGroupOverflow({
   // `total - visibleCount`, which goes negative whenever the list is shorter
   // than the slice. Clamping keeps that from rendering "+-3".
   const safeCount = Math.max(0, count);
-  const label = t('@astryx.avatarGroup.overflow', {count: safeCount});
+  // A caller's non-empty aria-label names the indicator; the count is the
+  // fallback. A caller's aria-labelledby wins over both in the browser.
+  const label =
+    ariaLabel || t('@astryx.avatarGroup.overflow', {count: safeCount});
   const content = children ?? `+${safeCount}`;
 
   if (onClick) {

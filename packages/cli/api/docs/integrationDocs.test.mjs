@@ -23,6 +23,7 @@ import {search} from '../search/search.mjs';
 import {loadDocsCatalog} from './_adapter.mjs';
 import {AstryxError} from '../error.mjs';
 import {discoverCoreTemplates} from '../../foundation/discovery/template-adapter.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const SLOW = 30_000;
 
@@ -82,7 +83,7 @@ function scaffold(topics, {config} = {}) {
 }
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-integration-docs-test-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-integration-docs-test-'));
 });
 
 afterEach(() => {

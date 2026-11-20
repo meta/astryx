@@ -38,12 +38,17 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Give every nav slot an accessible name. AppShell renders TopNav and SideNav as separate navigation landmarks, and a screen reader lists them by name, so pass `label` to each one.',
+          'Give every nav slot an accessible name. AppShell renders TopNav and SideNav as separate navigation landmarks, and a screen reader lists them by name. Pass `label` to TopNav. SideNav has a translated default name; pass `aria-label` to rename it.',
       },
       {
         guidance: true,
         description:
           'Start the page heading inside `children`. AppShell owns the skip link, the banner landmark and the main landmark, but it renders no heading, so the first heading in the content area is the page h1.',
+      },
+      {
+        guidance: true,
+        description:
+          'On phones, opt the page into the full screen with `viewport-fit=cover` in the viewport meta tag (`width=device-width, initial-scale=1, viewport-fit=cover`). AppShell then extends its header under the status bar and out to the screen sides, and keeps the header\'s items and the end of the content inside the device\'s safe area. An installed web app can also draw under the status bar with `<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">`. In landscape only the header is inset: an inline SideNav and the content\'s sides still reach under a notch, so keep content padding there. A shell with no header region or phone top bar keeps no top inset; keep top padding there.',
       },
       {
         guidance: false,
@@ -178,6 +183,28 @@ export const docs = {
     },
   ],
   playground: {
+    // The phone layout (the menu button in the top bar, the open drawer with
+    // the top bar's links):
+    // the theme editor's census renders it, so a theme reaches the parts
+    // only that layout draws.
+    mobile: {
+      mobileNav: {defaultIsMobile: true, isOpen: true},
+      // The top bar's links, which the phone menu draws as its own rows.
+      topNav: {
+        __element: 'TopNav',
+        props: {
+          label: 'Navigation',
+          heading: {__element: 'TopNavHeading', props: {heading: 'My App'}},
+          startContent: [
+            {
+              __element: 'TopNavItem',
+              props: {label: 'Inbox', href: '#', isSelected: true},
+            },
+            {__element: 'TopNavItem', props: {label: 'Reports', href: '#'}},
+          ],
+        },
+      },
+    },
     defaults: {
       variant: 'surface',
       contentPadding: 4,
@@ -341,7 +368,12 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Give every nav slot an accessible name: TopNav and SideNav are separate navigation landmarks, so pass `label` to each.',
+          'Give every nav slot an accessible name: TopNav and SideNav are separate navigation landmarks. Pass `label` to TopNav; SideNav has a translated default name, and `aria-label` renames it.',
+      },
+      {
+        guidance: true,
+        description:
+          'Phones: add `viewport-fit=cover` to the viewport meta; the header then reaches under the status bar while its items and the content end stay in the safe area. Landscape: only the header is inset (not an inline SideNav or the content sides). No header region or phone top bar: no top inset, so keep top padding. Installed web apps: `apple-mobile-web-app-status-bar-style` `black-translucent`.',
       },
       {
         guidance: true,

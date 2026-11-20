@@ -15,13 +15,19 @@
  * Astryx's shipped default operators use the i18nKey variant; consumers
  * writing custom operators typically use the label variant.
  *
+ * A custom operator may name any Astryx key in `i18nKey`, so this module
+ * registers the whole English catalog rather than only the keys Core names.
+ *
  * SYNC: When modified, update:
  * - /packages/core/src/PowerSearch/types.ts (PowerSearchOperator type)
  * - /packages/core/src/PowerSearch/index.ts (re-export)
  */
 
-import type {TranslatorFn} from '../i18n';
+import type {TranslatorFn} from '../i18n/useTranslator';
+import {registerFullEnglishFallback} from '../i18n/fullEnglishFallback';
 import type {PowerSearchOperator} from './types';
+
+registerFullEnglishFallback();
 
 export function resolveOperatorLabel(
   operator: PowerSearchOperator,

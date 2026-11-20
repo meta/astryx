@@ -17,6 +17,7 @@ import {
   findLocalIconSet,
   mappableDefinitions,
   refuseOutsideProject,
+  templateMeaningsOf,
   writeGeneratedIcons,
   writeIconSetData,
   definitionNameOf,
@@ -55,9 +56,12 @@ export async function iconMap(definition, icon, options = {}) {
     ],
   );
   if (pairs != null) {
-    return authoring(() => mapMany({cwd, selector, pairs}));
+    return withTemplateMeanings(
+      await authoring(() => mapMany({cwd, selector, pairs})),
+      cwd,
+    );
   }
-  return authoring(async () => {
+  const result = await authoring(async () => {
     if (typeof definition !== 'string' || definition.trim() === '') {
       throw new AstryxError(
         'Name the icon definition to map',
@@ -77,10 +81,11 @@ export async function iconMap(definition, icon, options = {}) {
         ERROR_CODES.ERR_MISSING_ARGUMENT,
       );
     }
-    const {packageDir, set} = await findLocalIconSet(cwd, selector);
+    const {packageDir, set, moduleRenamed, moduleUpdate} =
+      await findLocalIconSet(cwd, selector);
     // The docs' kebab id (`eye-slash`) names the same definition, and a
     // library's other name for an icon (`trash-2`) names the same icon.
-    definition = definitionNameOf(definition, mappableDefinitions(set));
+    definition = definitionNameOf(definition, mappableDefinitions(set), set);
     if (!remove) icon = iconIdIn(set, /** @type {string} */ (icon)) ?? icon;
     const map = {...(set.data.map ?? {})};
     const previous = map[definition] ?? null;
@@ -112,7 +117,12 @@ export async function iconMap(definition, icon, options = {}) {
       }
       map[definition] = /** @type {string} */ (icon);
     }
-    const changed = remove ? previous != null : previous !== icon;
+    // A key that names a replaced definition is written under its
+    // successor's name, as discovery reads it.
+    const changed =
+      (remove ? previous != null : previous !== icon) ||
+      moduleRenamed ||
+      set.replacedKeys != null;
     /** @type {string[]} */
     const files = [];
     if (changed) {
@@ -139,10 +149,27 @@ export async function iconMap(definition, icon, options = {}) {
         icon: remove ? null : /** @type {string} */ (icon),
         previous,
         changed,
+        ...(moduleUpdate ? {moduleUpdate} : {}),
+        ...(set.replacedKeys ? {replacedKeys: set.replacedKeys} : {}),
         ...(files.length > 0 ? {files} : {}),
       },
     };
   });
+  return withTemplateMeanings(result, cwd);
+}
+
+/**
+ * Add the template meanings the set leaves unmapped after the write.
+ * @template {{data: {set: string}}} T
+ * @param {T} result
+ * @param {string} cwd
+ * @returns {Promise<T>}
+ */
+async function withTemplateMeanings(result, cwd) {
+  const templateMeanings = await templateMeaningsOf(cwd, result.data.set);
+  return templateMeanings
+    ? {...result, data: {...result.data, templateMeanings}}
+    : result;
 }
 
 /**
@@ -161,7 +188,10 @@ async function mapMany({cwd, selector, pairs}) {
       ERROR_CODES.ERR_MISSING_ARGUMENT,
     );
   }
-  const {packageDir, set} = await findLocalIconSet(cwd, selector);
+  const {packageDir, set, moduleRenamed, moduleUpdate} = await findLocalIconSet(
+    cwd,
+    selector,
+  );
   const known = mappableDefinitions(set);
   const ids = set.data.icons.map(each => each.id);
   const map = {...(set.data.map ?? {})};
@@ -176,7 +206,7 @@ async function mapMany({cwd, selector, pairs}) {
         ERROR_CODES.ERR_INVALID_ARGUMENT,
       );
     }
-    const name = definitionNameOf(match[1], known);
+    const name = definitionNameOf(match[1], known, set);
     const id = iconIdIn(set, match[2]) ?? match[2];
     if (!known.has(name)) {
       throw new AstryxError(
@@ -204,7 +234,10 @@ async function mapMany({cwd, selector, pairs}) {
       changed: previous !== id,
     });
   }
-  const changed = entries.some(each => each.changed);
+  const changed =
+    entries.some(each => each.changed) ||
+    moduleRenamed ||
+    set.replacedKeys != null;
   /** @type {string[]} */
   const files = [];
   if (changed) {
@@ -228,6 +261,8 @@ async function mapMany({cwd, selector, pairs}) {
       file: path.relative(packageDir, set.dataPath).split(path.sep).join('/'),
       entries,
       changed,
+      ...(moduleUpdate ? {moduleUpdate} : {}),
+      ...(set.replacedKeys ? {replacedKeys: set.replacedKeys} : {}),
       ...(files.length > 0 ? {files} : {}),
     },
   };

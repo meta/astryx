@@ -75,7 +75,7 @@ export const docs = {
   ],
   usage: {
     description:
-      "Adds APG type-to-focus search to a collection: printable keystrokes are buffered (resetting after a pause), and the first item whose label starts with the buffer is reported through onMatch. Pressing the same letter repeatedly cycles through the matches rather than filtering deeper. It moves nothing itself; pair it with the collection's own focus management, most often useListFocus or useGridFocus.",
+      "Adds APG type-to-focus search to a collection: printable keystrokes are buffered (resetting after a pause), and the first item whose label starts with the buffer (ignoring case, accents, the stroked letters đ ł ø ħ ŧ ƀ and Turkish ı/İ, the same in every locale; a typed accent prefers the exact match) is reported through onMatch. Pressing the same letter repeatedly cycles through the matches rather than filtering deeper. It moves nothing itself; pair it with the collection's own focus management, most often useListFocus or useGridFocus.",
     bestPractices: [
       {
         guidance: true,
@@ -108,7 +108,7 @@ export const docs = {
 /** @type {import('@astryxdesign/cli/authoring').HookTranslationDoc} */
 export const docsDense = {
   description:
-    'APG type-to-focus search for a collection. Buffers printable keys (resets after pause), matches labels by prefix, reports index via onMatch. Same letter pressed repeatedly cycles matches. Moves nothing itself; pair w/ useListFocus / useGridFocus.',
+    'APG type-to-focus search for a collection. Buffers printable keys (resets after pause), matches labels by prefix ignoring case, accents, stroked letters + Turkish ı/İ in every locale (typed accent prefers exact match), reports index via onMatch. Same letter pressed repeatedly cycles matches. Moves nothing itself; pair w/ useListFocus / useGridFocus.',
   paramDescriptions: {
     options: 'config.',
     'options.getItemLabels':

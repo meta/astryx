@@ -11,7 +11,7 @@
  *   exactly as they were at the default 16px root.
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,

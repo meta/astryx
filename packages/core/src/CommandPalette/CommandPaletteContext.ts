@@ -3,13 +3,14 @@
 'use client';
 /**
  * @file CommandPaletteContext.ts
- * @input Uses React createContext
+ * @input Uses createSharedContext
  * @output Exports CommandPaletteContext and useCommandPaletteContext hook
  * @position Internal context; consumed by composable sub-components
  */
 
-import {createContext, use} from 'react';
+import {use} from 'react';
 import type {SearchableItem} from '../Typeahead';
+import {createSharedContext} from '../utils/sharedContext';
 
 export interface CommandPaletteContextValue {
   /** Current search query. */
@@ -45,7 +46,11 @@ export interface CommandPaletteContextValue {
 }
 
 export const CommandPaletteContext =
-  createContext<CommandPaletteContextValue | null>(null);
+  createSharedContext<CommandPaletteContextValue | null>(
+    'CommandPaletteContext',
+    1,
+    null,
+  );
 CommandPaletteContext.displayName = 'CommandPaletteContext';
 
 /**

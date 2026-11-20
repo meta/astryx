@@ -50,17 +50,19 @@ export const press = {
    */
   flashMs: 100,
   /**
-   * Highlight fade after release: UIKit's deselect cross-fade.
+   * Highlight fade after release: UIKit's deselect cross-fade. Reference
+   * only, not played: a press release plays the theme's exit motion tokens
+   * (`--duration-exit`, `--ease-exit`).
    * @source measured: Settings and Contacts, iOS 26.2, simulator driven
-   *   with real HID touches at 60 fps (PRESS_FADE_MS / pressConsts.releaseMs,
+   *   with real HID touches at 60 fps (touch press model,
    *   packages/core/src/utils/pressGesture.ts, 2026-10-06)
    */
   highlightOutMs: 200,
   /**
    * The highlight fade's curve after release: an ease-out that spends the
-   * whole clock fading (strength about 0.2 at the midpoint).
-   * @source GUESS — the release curve the touch press model ships with
-   *   (`RELEASE_EASE`, packages/core/src/utils/interactionOverlay.stylex.ts),
+   * whole clock fading (strength about 0.2 at the midpoint). Reference only,
+   * not played: a press release plays the theme's `--ease-exit`.
+   * @source GUESS — the release curve the touch press model shipped with,
    *   chosen to read as UIKit's deselect cross-fade, not read from UIKit
    * @measure M-PR1
    */

@@ -13,6 +13,7 @@ export const docs = {
       {guidance: true, description: 'Use for cards that navigate to a detail page or trigger a single action.'},
       {guidance: true, description: 'Nest buttons or links freely inside; they handle their own events.'},
       {guidance: false, description: 'Use for toggling selection; use SelectableCard for that.'},
+      {guidance: false, description: 'Use with a transparent variant and no padding only to borrow the press model for a surface that owns its own box. Compose the chrome-free recipe in the useClickableContainer docs instead: it adds no Card styles to the page.'},
     ],
     anatomy: [
       {name: 'Container', required: true, description: 'Interactive div with hover/focus/active states.'},
@@ -67,6 +68,7 @@ export const docsDense = {
       {guidance: true, description: 'Use for cards navigating to detail page or triggering single action.'},
       {guidance: true, description: 'Nest buttons/links freely inside; they handle own events.'},
       {guidance: false, description: 'Use for toggling selection; use SelectableCard instead.'},
+      {guidance: false, description: 'Use w/ transparent variant + no padding only to borrow press model for surface owning its own box; compose chrome-free recipe in useClickableContainer docs instead (no Card styles).'},
     ],
   },
   propDescriptions: {

@@ -33,29 +33,37 @@ import {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {menuRowCornerStyles} from './menuRowCorners.stylex';
 import {renderIconSlot, type IconType} from '../Icon';
 import {useIndicator} from '../Indicator';
 import {Item} from '../Item';
 import {useDropdownMenuContext} from './DropdownMenuContext';
+import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {menuPressLitRowStyle} from '../privateAttributes/menuPressLit.stylex';
 import {focusMenuItemOnHover} from './menuItemHover';
-import {colorVars, spacingVars} from '../theme/tokens.stylex';
+import {colorVars, focusVars} from '../theme/tokens.stylex';
 import {composeEventHandlers, mergeProps, themeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
+import {keepDisabledRowUnfocused} from './menuItemRoles';
 
 const styles = stylex.create({
   root: {
     width: '100%',
-    borderRadius: `max(0px, calc(var(--_dropdown-menu-radius, ${spacingVars['--spacing-2']}) - var(--_dropdown-menu-padding, ${spacingVars['--spacing-1']})))`,
     color: colorVars['--color-text-primary'],
     backgroundColor: {
       default: 'transparent',
-      ':focus': colorVars['--color-overlay-hover'],
+      // menuPressLitRowStyle sets the variable on the row a held finger or pen
+      // lights.
+      ':focus': `var(--_menu-row-focus-paint, ${colorVars['--color-overlay-hover']})`,
     },
     cursor: {
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
-    outline: 'none',
+    // Rows show focus with a translucent overlay, which forced colors replace
+    // with the page color. The standard focus ring (focusOutlineStyles), drawn
+    // inside the row by its own width, marks the focused row in every mode.
+    outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
   },
   disabled: {
     opacity: 0.5,
@@ -110,8 +118,10 @@ export interface DropdownMenuCheckboxItemProps extends Omit<
    */
   onChange?: (checked: boolean) => void;
   /**
-   * Whether the item is disabled. Disabled items expose `aria-disabled`, block
-   * activation, and are currently skipped by DropdownMenu arrow-key navigation.
+   * Whether the item is disabled. A disabled item stays in the accessibility
+   * tree as disabled (`aria-disabled`), and the arrow keys and typeahead reach
+   * it so keyboard users find it. The pointer highlight skips it, and
+   * activation is blocked.
    * @default false
    */
   isDisabled?: boolean;
@@ -196,9 +206,13 @@ export function DropdownMenuCheckboxItem({
   return (
     <Item
       {...rest}
+      onMouseDown={composeEventHandlers(
+        rest.onMouseDown,
+        isDisabled ? keepDisabledRowUnfocused : undefined,
+      )}
       role="menuitemcheckbox"
       aria-checked={value}
-      tabIndex={isDisabled ? undefined : -1}
+      tabIndex={-1}
       onPointerMove={composeEventHandlers(handlePointerMove, onPointerMove)}
       marker={
         // No wrapper, and no menu-specific theme target: the shared
@@ -223,7 +237,14 @@ export function DropdownMenuCheckboxItem({
       endContent={endContent}
       onClick={handleClick}
       isDisabled={isDisabled}
-      xstyle={[styles.root, isDisabled && styles.disabled, xstyle]}
+      xstyle={[
+        focusOutlineStyles.focusVisible,
+        styles.root,
+        menuRowCornerStyles.root,
+        menuPressLitRowStyle,
+        isDisabled && styles.disabled,
+        xstyle,
+      ]}
       {...mergeProps(themeProps('dropdown-menu-item', {size: menuSize}), {
         className,
         style,

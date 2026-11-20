@@ -10,14 +10,14 @@ npm install @astryxdesign/theme-neutral
 
 ## Usage
 
-Wrap your app with `XDSTheme` and pass the theme:
+Wrap your app with `Theme` and pass the theme:
 
 ```tsx
-import {XDSTheme} from '@astryxdesign/core/theme';
+import {Theme} from '@astryxdesign/core/theme';
 import {neutralTheme} from '@astryxdesign/theme-neutral/built';
 
 function App() {
-  return <XDSTheme theme={neutralTheme}>{/* your app */}</XDSTheme>;
+  return <Theme theme={neutralTheme}>{/* your app */}</Theme>;
 }
 ```
 
@@ -92,24 +92,20 @@ This theme uses a custom typeface:
 | Heading | Figtree                     |
 | Code    | System monospace (built in) |
 
-**Figtree must be loaded separately.** The theme references it by name but does not bundle the font files.
+**Load it with the theme's font stylesheet.** It loads Figtree from font files shipped in this package (in `fonts/`, with its license), each with `font-display: fallback`, so a page never waits on a network; served from the same machine or a fast connection, the text first draws in the theme's fonts (a face that takes more than about 3 s leaves that page in the fallback font) (an offline machine, a sandbox, CI):
 
-Add this to your HTML `<head>`:
-
-```html
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link
-  rel="stylesheet"
-  href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" />
+```css
+@import '@astryxdesign/theme-neutral/fonts.css';
 ```
 
-Without this, the theme falls back to system fonts. If you'd rather avoid external font requests entirely (offline apps, no-third-party-request policies), that fallback is a supported choice — the system stack is designed to hold up on its own.
+To use Google Fonts' CDN instead, add its stylesheet to your page in place of the import: `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" />`.
+
+Without it, the theme falls back to system fonts, a supported choice: the system stack is designed to hold up on its own.
 
 ## Related Packages
 
-| Package                                                                              | Description                               |
-| ------------------------------------------------------------------------------------ | ----------------------------------------- |
+| Package                                                                          | Description                               |
+| -------------------------------------------------------------------------------- | ----------------------------------------- |
 | [`@astryxdesign/core`](https://github.com/meta/astryx/tree/main/packages/core)   | Core components and theme system          |
 | [`@astryxdesign/build`](https://github.com/meta/astryx/tree/main/packages/build) | Build plugins for StyleX source builds    |
 | [`@astryxdesign/cli`](https://github.com/meta/astryx/tree/main/packages/cli)     | CLI tooling including `astryx docs theme` |

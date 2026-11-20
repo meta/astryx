@@ -4,61 +4,12 @@
 
 /**
  * @file BottomSheetSwitcher.tsx
- * @input Uses React context, StyleX, shared layer dismissal, the modal outlet registry, the private bottom-sheet stack, BottomSheetSwitcherContext, BottomSheetHostContext
+ * @input React context, StyleX, shared layer dismissal, the modal outlet
+ *   registry, the private bottom-sheet stack, BottomSheetSwitcherContext,
+ *   BottomSheetHostContext
  * @output Exports BottomSheetSwitcher and BottomSheetSwitcherProps
- * @position Core switcher for mutually exclusive BottomSheet flows
- *
- * The switcher turns a set of declaratively nested BottomSheets into a
- * controlled single-selection group: `activeSheet` names the one interactive
- * child, or is null when the flow is closed. During a handoff the new sheet
- * enters above the previous sheet. If it is shorter, the previous sheet moves
- * down at the same time until their top edges align; otherwise it stays
- * stationary. The previous sheet fades only after both motions complete.
- *
- * Every child sheet owns a native `<dialog>`: a scrim flow presents each
- * sheet with showModal(), as a standalone modal sheet does, and a no-scrim
- * flow with show() inside the flow wrapper (a standalone no-scrim sheet is a
- * manual popover in the top layer instead; this deprecated path keeps its
- * released hosting). For a modal flow the browser then does what a modal
- * dialog does -- the page is inert, focus stays in the top-layer dialog,
- * Escape and the platform close arrive as `cancel`. The switcher is the coordinator: it decides which
- * sheet dialog is presented, retained, or hidden, keeps one scrim painted
- * across a handoff (the retained sheet's backdrop until it fades, then the
- * new sheet's, swapped without a fade), holds the flow's one page scroll
- * lock (the shared useScrollLock, as Dialog uses, acquired once while the
- * flow is presented and released after its exit, never per step) and the
- * one layer-dismissal registration, and returns focus to the flow's opener
- * when the flow ends, which no single dialog can know.
- *
- * The switcher's one element is a flow wrapper. In a scrim flow it has no box
- * (`display: contents`): the dialogs sit in the top layer. In a no-scrim flow
- * it is the isolated surface that orders the sheet dialogs locally, the way
- * the shared shell once did, so no sheet needs a page-level value of its own.
- *
- * Its `ref` resolves to the host dialog: the one presenting the active sheet,
- * the exiting sheet's through its exit, and the last host's (or the first
- * mounted sheet's) while the flow is closed, so the ref is never null while a
- * sheet is mounted. `id` and `data-testid` render on the host dialog only:
- * a flow that mounts open carries them on the active sheet's dialog in server
- * markup too; a flow that mounts closed carries them from the first commit's
- * synchronous re-render on, and its server markup carries them on no element.
- * Every other dialog prop and handler, `onCancel` included, applies to every
- * sheet dialog; the browser raises `cancel` on the dialog it presents.
- *
- * A scrim flow is one level of the private bottom-sheet stack
- * (bottomSheetStack.ts) while it is visible: it stacks over, or under, other
- * modal sheets in open order, recedes as a whole when covered, and switching
- * its step in place never changes its position. The level is realized by the
- * active step's dialog; on a handoff the registry is told the dialog changed
- * so the sheets above the flow stay above its new dialog. A flow stacked
- * above another sheet keeps every step backdrop clear; a flow beneath owns
- * the stack's one scrim and hands it between its own steps as it always did.
- * A switcher step is never paired in a replace: the flow replaces its own
- * steps. A flow rendered in another sheet's content leaves and returns with
- * that sheet, like a standalone sheet, without its state being written. A
- * modal flow's host dialog is a toast outlet like a standalone scrim sheet's
- * (Layer/modalOutlet.ts), following the handoff. The switcher is deprecated
- * in favour of standalone step sheets.
+ * @position Core switcher for mutually exclusive BottomSheet flows. It is
+ *   deprecated in favor of standalone step sheets.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/BottomSheet/BottomSheet.tsx
@@ -67,12 +18,30 @@
  * - /packages/core/src/BottomSheet/BottomSheetStacking.test.tsx
  * - /packages/core/src/BottomSheet/BottomSheetSwitcherContext.ts
  * - /packages/core/src/BottomSheet/BottomSheetSwitcher.doc.mjs
- * - /packages/core/src/BottomSheet/BottomSheetSwitcher.spec.md
+ * - /docs/specs/components/BottomSheet/BottomSheetSwitcher.spec.md
  * - /packages/core/src/BottomSheet/BottomSheetSwitcher.test.tsx
  * - /packages/core/src/BottomSheet/index.ts
  * - /apps/storybook/stories/BottomSheetSwitcher.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/BottomSheet/BottomSheetSwitcherShowcase.tsx
  */
+
+// `activeSheet` names the one interactive child, or null when the flow is
+// closed. On a handoff the new sheet enters above the previous one. A taller
+// previous sheet moves down until the top edges align. The previous sheet
+// fades after both motions end.
+//
+// Each child sheet owns a native `<dialog>`. A scrim flow uses showModal(),
+// and a no-scrim flow uses show() inside the flow wrapper. The switcher
+// decides which dialog is presented, retained or hidden. It keeps one scrim
+// across a handoff, holds the flow's one scroll lock and one dismissal
+// registration, and returns focus to the flow's opener when the flow ends.
+//
+// The ref resolves to the host dialog: the active sheet's, the exiting
+// sheet's during its exit, else the last host's. `id` and `data-testid`
+// render on the host dialog only. Other dialog props apply to every sheet
+// dialog. A scrim flow is one level of the sheet stack (bottomSheetStack.ts),
+// and a step switch never changes that level. A modal flow's host dialog is
+// a toast outlet (Layer/modalOutlet.ts).
 
 import {
   use,
@@ -87,6 +56,8 @@ import {
   type ReactNode,
   type SyntheticEvent,
 } from 'react';
+import {useIsHydrating} from '../hooks/useIsHydrating';
+import {useSettledOpen} from '../hooks/useSettledOpen';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import type {DialogPurpose} from '../Dialog';
@@ -96,7 +67,7 @@ import {dispatchLayerEscapeKeyDown} from '../Layer/layerStack';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {composeEventHandlers} from '../utils';
 import {mergeRefs} from '../utils/mergeRefs';
-import {useModalOutlet} from '../Layer/modalOutlet';
+import {useModalOutletWithoutRef} from '../Layer/modalOutlet';
 import {BottomSheetHostContext} from './BottomSheetHostContext';
 import {
   BOTTOM_SHEET_STACK_DEFAULT_VIEW,
@@ -130,13 +101,11 @@ const styles = stylex.create({
     display: 'contents',
   },
   // show() leaves a no-scrim flow in the normal rendering tree, where DOM
-  // order would decide which sheet dialog paints in front during a handoff.
-  // The wrapper is then the flow's isolated surface: the sheet dialogs order
-  // themselves locally inside it (`spec:AST-027` FR2), and the wrapper itself
-  // keeps the one overlay value the shared shell carried before, which
-  // `spec:AST-027` records as the non-modal migration gap. It passes pointer
-  // input through to the live page; each sheet panel opts back in. Consumers
-  // of this non-modal mode must still avoid transformed or clipping ancestors.
+  // order would decide which dialog paints in front. So the wrapper is the
+  // flow's isolated surface: the dialogs order themselves inside it, and the
+  // wrapper keeps the one overlay value of the old shared shell. It
+  // passes pointer input through, and each panel opts back in. Consumers of
+  // this mode must avoid transformed or clipping ancestors.
   flowNonModal: {
     display: 'block',
     position: 'fixed',
@@ -250,9 +219,11 @@ function takeOverScrim(dialog: HTMLDialogElement, opacity: number): void {
  * by one state value that names the open step; closing the top sheet and
  * opening the next in the same update, from inside the open step, runs the
  * same replace handoff (see BottomSheet, "Replacing a sheet"). Keeps working until a future minor
- * release removes it: on its own as released (plus two fixes: a toast raised
- * from a step now renders above the flow and can be pressed, and reduced motion
- * follows design:reduced-motion), as one stack level when stacked.
+ * release removes it: on its own as released (plus three fixes: a toast raised
+ * from a step now renders above the flow and can be pressed, reduced motion
+ * follows the reduced-motion design rules, and a flow whose active sheet is set on the
+ * server renders closed until hydration, then opens that sheet settled), as
+ * one stack level when stacked.
  */
 export interface BottomSheetSwitcherProps extends BaseProps<HTMLDialogElement> {
   /**
@@ -309,10 +280,11 @@ export interface BottomSheetSwitcherProps extends BaseProps<HTMLDialogElement> {
  * `sheetId` and no switcher, for modal and `hasScrim={false}` flows alike; a
  * step changed from outside the flow's sheets closes and opens with the
  * sheets' own motion. The switcher keeps working until a future
- * minor release removes it: on its own as released (plus two fixes: a toast
- * raised from a step now renders above the flow and can be pressed, and reduced
- * motion follows design:reduced-motion), and as one level of the stack when
- * stacked with other sheets.
+ * minor release removes it: on its own as released (plus three fixes: a toast
+ * raised from a step now renders above the flow and can be pressed, reduced
+ * motion follows the reduced-motion design rules, and a flow whose active sheet is set
+ * on the server renders closed until hydration, then opens that sheet
+ * settled), and as one level of the stack when stacked with other sheets.
  */
 export function BottomSheetSwitcher({
   activeSheet: activeSheetProp,
@@ -335,7 +307,20 @@ export function BottomSheetSwitcher({
   // for it; with the host closed the flow simply reads as closed.
   const host = use(BottomSheetHostContext);
   const isHostOpen = host?.isOpen ?? true;
-  const activeSheet = isHostOpen ? activeSheetProp : null;
+  // A flow with an active sheet on the server reads as closed until
+  // hydration. It opens in the next render, the first one that can enter its
+  // native host. A <dialog> painted open with aria-modal before it is modal
+  // claims a state it does not have.
+  const isHydrating = useIsHydrating();
+  const activeSheet = isHostOpen && !isHydrating ? activeSheetProp : null;
+  // The step active on the server opens settled, with no entry motion. The
+  // first change of step animates (AST-013 FR13). It latches on the flow's
+  // own request, because a hydrating host sheet reads as closed.
+  const [settledSheet, releaseSettledSheet] = useSettledOpen(
+    activeSheetProp,
+    activeSheet,
+    null,
+  );
   // Every sheet host applies the switcher's dialog surface to its own dialog.
   const dialogProps = useShallowStable<BottomSheetSwitcherDialogProps>({
     ...restDialogProps,
@@ -373,6 +358,7 @@ export function BottomSheetSwitcher({
   const stackViewRef = useRef(stackView);
   stackViewRef.current = stackView;
   const scrimWriteRef = useRef<BottomSheetScrimWrite>({frame: null});
+  // Releases the pending scrim write frame on unmount.
   useEffect(() => () => cancelScrimWrite(scrimWriteRef.current), []);
   // What the flow's place in the stack was when it left the registry: its
   // depth and the open sheet beneath it. React runs the registration
@@ -549,15 +535,15 @@ export function BottomSheetSwitcher({
     [],
   );
 
-  // The flow's host dialog is an outlet for app-global surfaces (toasts)
-  // while the flow is a modal one, as a standalone scrim sheet's dialog is
-  // (`component:BottomSheet` FR13): every open scrim sheet supplies one, the
-  // latest among sheets follows the stack, and a Dialog supplied later stays
-  // above. The host changes on a handoff, so the supply follows `hostSheet`;
-  // the retained step's dialog, inert and fading, is never the outlet. A
-  // closing flow stops supplying at once, as a closing sheet does. Passive:
-  // it runs after the layout effects that present the step dialogs.
-  useModalOutlet(
+  // While the flow is modal, its host dialog is an outlet for app-global
+  // surfaces (toasts), as a standalone scrim sheet's is. The supply follows
+  // `hostSheet` across a handoff, and the fading retained dialog is never the
+  // outlet. A closing flow stops supplying at once. Passive: it runs after the
+  // layout effects that present the step dialogs.
+  // The flow has no element for the outlet's ref. Its wrapper's ref is the
+  // sheet stack's tree-order anchor, which the stack reads in the closing
+  // commit, and the element of its host step changes on a handoff.
+  useModalOutletWithoutRef(
     hostDialogRef,
     isModal && isFlowOpen,
     stackView.isTop || !stackView.isStacked,
@@ -582,6 +568,9 @@ export function BottomSheetSwitcher({
     presentationCounterRef.current += 1;
     presentationOrderRef.current.set(sheetId, presentationCounterRef.current);
   }, []);
+  // Syncs document focus with the flow's visibility. When the flow hides, focus
+  // goes to the opener, to the sheet now on top, or to the target of the
+  // registry.
   useLayoutEffect(() => {
     if (isFlowVisible) {
       if (!hasScrim) {
@@ -712,6 +701,7 @@ export function BottomSheetSwitcher({
       unregister();
     };
   }, [hasScrim, isFlowVisible, onBeforeSheetPresent]);
+  // Syncs the open state of this flow in the sheet stack registry.
   useLayoutEffect(() => {
     if (isFlowVisible && hasScrim) {
       setBottomSheetOpen(stackKeyRef.current, isFlowOpen);
@@ -1033,6 +1023,8 @@ export function BottomSheetSwitcher({
   const contextValue = useMemo<BottomSheetSwitcherContextValue>(
     () => ({
       activeSheet,
+      settledSheet,
+      releaseSettledSheet,
       hasScrim,
       onActiveSheetChange,
       getSheetPhase,
@@ -1075,6 +1067,8 @@ export function BottomSheetSwitcher({
       registerSheetDialog,
       registerSheetElement,
       registerSheetPurpose,
+      releaseSettledSheet,
+      settledSheet,
       stackView,
     ],
   );

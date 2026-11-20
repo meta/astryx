@@ -26,13 +26,15 @@ apple/
 │   │   │   └── Generated/ # typed tokens and every published theme, generated; do not edit
 │   │   ├── Resources/     # core's messages per locale, generated; do not edit
 │   │   ├── Localization/
-│   │   ├── Icon/          # Icon, Icon.spec.md
-│   │   ├── Avatar/        # Avatar, Avatar.spec.md
+│   │   ├── Icon/          # Icon
+│   │   ├── Avatar/        # Avatar
+│   │   ├── Item/          # Item
+│   │   ├── List/          # ListItem
 │   │   ├── Text/          # Text
 │   │   ├── Heading/       # Heading
 │   │   ├── Button/        # Button
 │   │   ├── TextInput/     # TextInput
-│   │   ├── Thumbnail/     # Thumbnail, Thumbnail.spec.md
+│   │   ├── Thumbnail/     # Thumbnail
 │   │   ├── Card/          # Card
 │   │   └── Banner/        # Banner
 │   └── AstryxNative/      # contracts, wire, logic host (module AstryxNative)
@@ -45,6 +47,9 @@ apple/
     ├── Login/             # LoginTemplate, from `astryx template login`
     └── Tests/
 ```
+
+Each component's Swift spec sits beside its core spec, at
+`docs/specs/components/<ComponentRoot>/<Name>.swift.spec.md`.
 
 - **`Sources/Astryx/<Name>/`** holds one folder per component, named as in
   `packages/core/src/<Name>/`. Each view has core's component name in the
@@ -89,6 +94,13 @@ struct DemoApp: App {
 `astryxTheme(_:)` paints a subtree with a theme; without it, components use
 core's default theme. Either way they follow Dark Mode and the person's text
 size.
+
+On iOS and iPadOS 26 and later, a `Button` in a navigation bar or toolbar draws
+no fill of its own, so the bar's Liquid Glass shows, and `astryxFloating()` on
+a container of controls over scrolling content gives its Buttons the system's
+glass. A `variant` keeps its meaning in glass, and Reduce Transparency or
+Increase Contrast draws a solid token fill instead. Elsewhere, and on macOS,
+Buttons keep their token look.
 
 ## Theme tokens
 
@@ -142,6 +154,17 @@ export:
 ```sh
 node packages/native/scripts/swift-ios-theme.mjs --theme ./src/acmeTheme.ts#acmeTheme --out ./Sources/Theme
 ```
+
+The generator reads the CSS forms its spec lists
+(`specs/swift/library/theme-generator.md`, G7): hex and named colors, `rgb()`,
+`hsl()`, `hwb()`, Lab, LCH, OKLab, OKLCH, `color()` in the listed spaces,
+`color-mix()`, and relative colors (wide-gamut colors kept as Display P3),
+lengths with `calc()`, and `[light, dark]` tuples. A value it can only
+approximate, such as a color outside Display P3 (clipped, as browsers draw it),
+prints a warning after the run; a value with no static form, such as
+`currentColor` or `50%`, takes core's default for that token with a warning, or
+stops the run when core has none. A form the generator does not read yet stops
+the run, saying so. Add `--strict` to fail on any warning.
 
 A theme's local tokens are not generated yet; the generator names each one it
 leaves out.

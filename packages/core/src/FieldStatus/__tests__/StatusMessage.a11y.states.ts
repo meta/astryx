@@ -11,9 +11,8 @@ import type {StatusMessageStateFacts} from '@astryxdesign/a11y-spec';
 
 export type CoreStatusMessageBinding =
   | 'Toast announcement channel'
-  | 'Toast card'
   | 'FieldStatus announcement channel'
-  | 'Spinner'
+  | 'Spinner announcement channel'
   | 'ProgressBar';
 
 export interface CoreStatusMessageBindingDefinition {
@@ -84,34 +83,32 @@ export const CORE_STATUS_MESSAGE_BINDING_STATES = [
     storyId: 'a11y-status-message-pattern--toast-error-announcement',
   },
   {
-    id: 'toast-info-card-mounted',
-    binding: 'Toast card',
+    id: 'toast-info-announcement-top-layer',
+    binding: 'Toast announcement channel',
     summary:
-      'the visible info card is mounted with its polite live-region content',
+      'a top-layer viewport outside a modal announces an info toast once through the shared polite region, and adds no region of its own',
     facts: liveFacts({
       role: 'status',
       politeness: 'polite',
-      initialMessage: 'Changes saved',
       message: 'Changes saved',
       replacement: 'Profile updated',
-      semanticTransitions: ['replace'],
+      semanticTransitions: ['show', 'replace', 'repeat'],
     }),
-    storyId: 'a11y-status-message-pattern--toast-info-card-mounted',
+    storyId: 'a11y-status-message-pattern--toast-info-announcement-top-layer',
   },
   {
-    id: 'toast-error-card-mounted',
-    binding: 'Toast card',
+    id: 'toast-error-announcement-top-layer',
+    binding: 'Toast announcement channel',
     summary:
-      'the visible error card is mounted with its assertive live-region content',
+      'a top-layer viewport outside a modal announces an error toast once through the shared assertive region, and adds no region of its own',
     facts: liveFacts({
       role: 'alert',
       politeness: 'assertive',
-      initialMessage: 'Upload failed',
       message: 'Upload failed',
       replacement: 'Connection failed',
-      semanticTransitions: ['replace'],
+      semanticTransitions: ['show', 'replace', 'repeat'],
     }),
-    storyId: 'a11y-status-message-pattern--toast-error-card-mounted',
+    storyId: 'a11y-status-message-pattern--toast-error-announcement-top-layer',
   },
   {
     id: 'field-status-error-attached',
@@ -157,14 +154,13 @@ export const CORE_STATUS_MESSAGE_BINDING_STATES = [
   },
   {
     id: 'spinner-default-label-mounted',
-    binding: 'Spinner',
+    binding: 'Spinner announcement channel',
     summary:
-      'a loading spinner is mounted with its default accessible status name',
+      'a mounted spinner sends its default label and updates through the persistent polite channel',
     facts: liveFacts({
       role: 'status',
       politeness: 'polite',
       initialMessage: 'Loading',
-      messageSource: 'accessible-name',
       message: 'Loading',
       replacement: 'Saving',
       semanticTransitions: ['replace'],
@@ -173,14 +169,13 @@ export const CORE_STATUS_MESSAGE_BINDING_STATES = [
   },
   {
     id: 'spinner-visible-label-mounted',
-    binding: 'Spinner',
+    binding: 'Spinner announcement channel',
     summary:
-      'a loading spinner is mounted with a visible label that names its status role',
+      'a mounted spinner sends its visible label and updates through the persistent polite channel',
     facts: liveFacts({
       role: 'status',
       politeness: 'polite',
       initialMessage: 'Fetching data',
-      messageSource: 'accessible-name',
       message: 'Fetching data',
       replacement: 'Saving data',
       semanticTransitions: ['replace'],
@@ -251,6 +246,12 @@ export type CoreStatusMessageBindingState =
 export type CoreStatusMessageStateId = CoreStatusMessageBindingState['id'];
 
 export const CORE_STATUS_MESSAGE_EXCLUSIONS = [
+  {
+    owner: 'Toast',
+    part: 'toast card',
+    reason:
+      'component:Toast FR9: the card never holds a live role (spec:AST-086 FR2, FR3). The viewport announces each toast it shows; a caller that renders a Toast on its own owns its announcement.',
+  },
   {
     owner: 'FieldStatus visible message box',
     part: 'visible validation text',

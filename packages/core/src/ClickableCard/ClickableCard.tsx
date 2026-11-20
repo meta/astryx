@@ -46,6 +46,7 @@ import {
 } from '../theme/tokens.stylex';
 import type {SizeValue, SpacingStep, Elevation} from '../utils/types';
 import {mergeProps} from '../utils';
+import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {Card} from '../Card/Card';
 import type {CardVariant} from '../Card/Card';
 import {useClickableContainer} from '../hooks/useClickableContainer';
@@ -125,9 +126,27 @@ const styles = stylex.create({
         default: 'background-color',
         [PRESSED_ON]: 'none',
         [PRESSED_FADING]: 'none',
+        // Under reduced motion a colour changes at once. Only opacity may
+        // still fade on a touch screen.
+        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+          'opacity',
       },
-      transitionDuration: durationVars['--duration-fast'],
-      transitionTimingFunction: easeVars['--ease-standard'],
+      transitionDuration: {
+        default: durationVars['--duration-fast'],
+        // Under reduced motion a fine pointer gets no transition. A touch
+        // screen's fade keeps the exit tokens, within 200 ms.
+        '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+          '0s',
+        // The 200 ms bound copies reducedMotionFadeConsts.duration. That
+        // module is internal, and a swizzled component imports only exported
+        // paths. reducedMotionValues.test.ts keeps the copies equal.
+        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': `min(${durationVars['--duration-exit']}, 200ms)`,
+      },
+      transitionTimingFunction: {
+        default: easeVars['--ease-standard'],
+        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+          easeVars['--ease-exit'],
+      },
       // While the controller paints, the colour yields to the image: a
       // touchscreen beside a fine pointer still matches `:active` under a
       // finger, and the press would otherwise paint twice.
@@ -167,9 +186,26 @@ const styles = stylex.create({
     paddingInlineEnd: `calc(var(--container-padding-inline-end) - ${borderVars['--border-width']})`,
     paddingBlockStart: `calc(var(--container-padding-block-start) - ${borderVars['--border-width']})`,
     paddingBlockEnd: `calc(var(--container-padding-block-end) - ${borderVars['--border-width']})`,
-    transitionProperty: 'border-color',
-    transitionDuration: durationVars['--duration-fast'],
-    transitionTimingFunction: easeVars['--ease-standard'],
+    transitionProperty: {
+      default: 'border-color',
+      // Under reduced motion the border's colour changes at once.
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        'opacity',
+    },
+    transitionDuration: {
+      default: durationVars['--duration-fast'],
+      // Under reduced motion a fine pointer gets no transition. A touch
+      // screen's opacity fade, such as a disabled card's dimming, takes
+      // 200 ms at most.
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        '0s',
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': `min(${durationVars['--duration-exit']}, 200ms)`,
+    },
+    transitionTimingFunction: {
+      default: easeVars['--ease-standard'],
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        easeVars['--ease-exit'],
+    },
   },
   // Emphasize the bordered variant's border on hover. Guarded by
   // @media (hover: hover) so touch devices don't get a stuck hover state.
@@ -314,6 +350,7 @@ export function ClickableCard({
   label,
   onClick: onClickProp,
   onMouseUp: onMouseUpProp,
+  onPointerDown: onPointerDownProp,
   href,
   target,
   isDisabled = false,
@@ -370,7 +407,7 @@ export function ClickableCard({
 
   const LinkComponent = useLinkComponent();
 
-  const {onClick, onMouseUp} = useClickableContainer({
+  const {onClick, onMouseUp, onPointerDown} = useClickableContainer({
     containerRef,
     interactiveRef,
     onClick: onClickProp,
@@ -427,6 +464,11 @@ export function ClickableCard({
       }
       onClick={!isDisabled ? onClick : undefined}
       onMouseUp={!isDisabled ? handleMouseUp : undefined}
+      onPointerDown={
+        !isDisabled
+          ? chainEventHandlers(onPointerDown, onPointerDownProp)
+          : onPointerDownProp
+      }
       {...props}>
       {isLink ? (
         <LinkRoot

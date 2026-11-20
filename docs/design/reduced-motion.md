@@ -10,7 +10,11 @@ approved_by: cixzhang
 approved_at: 2026-10-24
 owners: [cixzhang]
 review_triggers: [motion, interaction, accessibility]
-verified_by: [scripts/check-knowledge.mjs]
+verified_by:
+  [
+    scripts/check-knowledge.mjs,
+    packages/core/src/__tests__/ReducedMotionPress.a11y.chromium.spec.ts,
+  ]
 architecture: [architecture:interaction-modality]
 components: []
 families: []
@@ -32,8 +36,8 @@ deciding_specs: []
 A person who asks their device to reduce motion still sees every change Astryx
 shows, with no travel, scaling, or springing. On a touch screen a change
 cross-fades, as iOS does with Reduce Motion and Prefer Cross-Fade, except an
-in-place value change, which applies at once; with a mouse,
-trackpad, or keyboard the change is immediate.
+in-place value change and a hover or selection color, which apply at once;
+with a mouse, trackpad, or keyboard the change is immediate.
 
 ## Design principles
 
@@ -56,7 +60,7 @@ trackpad, or keyboard the change is immediate.
 
 | State                                             | Required representation                                                                         | Allowed variation          |
 | ------------------------------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------- |
-| reduced motion, coarse pointer                    | Opacity-only cross-fade of 200 ms or less (DR2); an in-place value change applies at once (DR2) | A shorter cross-fade       |
+| reduced motion, coarse pointer                    | Opacity-only cross-fade of 200 ms or less (DR2); in-place values and colors apply at once (DR2) | A shorter cross-fade       |
 | reduced motion, any other pointer                 | Immediate change (DR3), except a touch drag's release (DR2)                                     | None                       |
 | no reduced-motion preference, theme on `'system'` | Outside this record                                                                             | Component and theme motion |
 | a theme on `'always'` (DR2a)                      | As reduced motion, whatever the person's setting                                                | DR1–DR3                    |
@@ -75,7 +79,13 @@ trackpad, or keyboard the change is immediate.
   coast Astryx animates itself after a throw behaves like native momentum
   under Reduce Motion. An in-place value change, such as a progress fill's length or
   another continuous value, does not cross-fade: under reduced motion it
-  applies at once on any pointer, with no added element (DEC-3).
+  applies at once on any pointer, with no added element (DEC-3). A control's
+  hover or selection color, such as SelectableCard's selection border and
+  ring, also applies at once on any pointer, as on iOS (DEC-4). So does the
+  onset of its press color. A color that changes with a part that cross-fades
+  follows that cross-fade, such as Switch's track with its thumb
+  (`component:Switch` FR15). A touch press's release keeps its fade of 200 ms
+  or less.
 - **DR2a — A theme may reduce motion for everyone.** A theme's
   `reducedMotion: 'always'` applies DR1–DR3 for every person, whatever their
   setting; `'system'` follows each person's setting (`spec:AST-108`). No theme
@@ -131,6 +141,7 @@ No normative assets are included.
 | DR1, DR2     | Real-browser computed animations under reduced motion, coarse pointer          | Layer entrance and exit (Tooltip, Popover, menu); Dialog; modal BottomSheet; a presentation switch            | An animated transform, size, or position; a spring; a property other than opacity; over 200 ms; a change with no cross-fade |
 | DR2 momentum | Real-browser computed animations under reduced motion after a touch throw      | A flick that coasts and settles at an edge; a release that snaps to a detent, dismisses, or pages to a target | A coast replaced by a cross-fade or stopped at release; a snap, dismissal, or page that travels instead of cross-fading     |
 | DR2 values   | Real-browser computed animations under reduced motion, coarse and fine pointer | A determinate ProgressBar's fill and another continuous value changing in place                               | A value that animates, cross-fades, or adds an element under reduced motion fails                                           |
+| DR2 colors   | Real-browser computed animations under reduced motion, coarse and fine pointer | Button's press onset; ClickableCard's, SelectableCard's and Thumbnail's hover, border and selection colors    | A hover or selection color, or a press onset, that animates or cross-fades; a touch release fade over 200 ms                |
 | DR1, DR3     | Real-browser computed animations under reduced motion, fine pointer            | The same components                                                                                           | Any animated property, or a frame where the change is partly applied                                                        |
 | DR4          | Component prop and theme review plus the browser checks above                  | A component with a motion prop or theme motion value set                                                      | A prop or theme value that restores travel or a longer animation under reduced motion                                       |
 
@@ -173,6 +184,21 @@ cross-fading two lengths would need a second element and still show motion.
 Under reduced motion they take the new value at once on any pointer.
 
 Rejected: a cross-fade between the old and new value on a touch screen.
+
+### DEC-4 — A color-only change of state applies at once
+
+**Reference:** `design:reduced-motion/DEC-4`
+**Decider:** `cixzhang`, `2026-11-03`; companion clause per the owner's motion rule (2026-11-04)
+
+A control's hover and selection colors, and the onset of its press color,
+change where they are and move nothing, so reduced motion has nothing to
+remove from them. Under reduced motion they take the new color at once on any
+pointer, as iOS does and as an in-place value does (DEC-3). A color that
+changes with a part that cross-fades, such as Switch's track with its thumb,
+follows that cross-fade, so the two never show different states. A touch
+press's release keeps its fade of 200 ms or less, which confirms the tap.
+
+Rejected: a cross-fade of a hover or selection color on a touch screen.
 
 ## Open questions
 

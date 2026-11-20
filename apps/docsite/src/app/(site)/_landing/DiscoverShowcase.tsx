@@ -11,17 +11,7 @@ import {Heading, Text} from '@astryxdesign/core/Text';
 import {Button} from '@astryxdesign/core/Button';
 import {spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {AstryxLogo} from '../../../components/logos';
-import {components} from '../../../generated/componentRegistry';
 import {layout} from '../../../layout.stylex';
-
-// Public core component count, rounded down to the nearest 10 for marketing
-// copy. Sourced from the generated registry so it stays accurate as the library grows.
-const CORE_COMPONENT_COUNT_ROUNDED =
-  Math.floor(
-    (components['@astryxdesign/core'] ?? []).filter(
-      c => !c.hidden && !c.name.startsWith('use'),
-    ).length / 10,
-  ) * 10;
 
 const styles = stylex.create({
   section: {
@@ -192,7 +182,12 @@ const styles = stylex.create({
   },
 });
 
-export function DiscoverShowcase() {
+export function DiscoverShowcase({
+  coreComponentCount,
+}: {
+  /** Public Core components, rounded down to the nearest 10. */
+  coreComponentCount: number;
+}) {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const [spread, setSpread] = useState(false);
 
@@ -227,7 +222,7 @@ export function DiscoverShowcase() {
             + empty alt keep this pure decoration out of the a11y tree; it
             animates from a clumped to a spread pose on scroll into view. */}
         <img
-          src="/discover-card-1.png"
+          src="/landing/discover-card-1.webp"
           alt=""
           aria-hidden="true"
           {...stylex.props(
@@ -236,7 +231,7 @@ export function DiscoverShowcase() {
           )}
         />
         <img
-          src="/discover-card-3.png"
+          src="/landing/discover-card-3.webp"
           alt=""
           aria-hidden="true"
           {...stylex.props(
@@ -245,7 +240,7 @@ export function DiscoverShowcase() {
           )}
         />
         <img
-          src="/discover-card-2.png"
+          src="/landing/discover-card-2.webp"
           alt=""
           aria-hidden="true"
           {...stylex.props(
@@ -254,7 +249,7 @@ export function DiscoverShowcase() {
           )}
         />
         <img
-          src="/discover-card-4.png"
+          src="/landing/discover-card-4.webp"
           alt=""
           aria-hidden="true"
           {...stylex.props(
@@ -278,7 +273,7 @@ export function DiscoverShowcase() {
                 type="body"
                 color="secondary"
                 xstyle={styles.supportingText}>
-                Browse {CORE_COMPONENT_COUNT_ROUNDED}+ components, explore
+                Browse {coreComponentCount}+ components, explore
                 production-ready templates, and tune themes to match your brand;
                 pick a starting point and go.
               </Text>

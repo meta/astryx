@@ -93,9 +93,9 @@ export const SLIDER_BINDING_STATES = [
 export const SLIDER_EXCLUSIONS = [
   {
     id: 'range-thumb-separation',
-    owner: 'component:Slider AR1 and Slider.test.tsx',
+    owner: 'the range Slider binding, SliderRange.a11y.*',
     reason:
-      "A range Slider renders two thumbs whose aria-valuemin/aria-valuemax narrow to the other thumb minus the minimum separation; that two-thumb coupling and the group semantics around them are the binding's own tests. This binding proves the single-thumb pattern each thumb follows.",
+      'A range Slider renders two thumbs whose aria-valuemin/aria-valuemax narrow to the other thumb minus the minimum separation. The range binding runs the multi-thumb pattern over the pair and this slider pattern over each thumb. This binding proves the single-thumb states.',
   },
   {
     id: 'pointer-drag-model',

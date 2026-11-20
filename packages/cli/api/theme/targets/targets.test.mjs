@@ -88,4 +88,14 @@ describe('themeTargets (api/theme/targets)', () => {
       code: 'ERR_UNKNOWN_COMPONENT',
     });
   }, 60_000);
+
+  it('reads a class selector as the output prints it, and ignores surrounding spaces', async () => {
+    const byClass = await themeTargets('.astryx-switch');
+    const byName = await themeTargets('astryx-switch');
+    expect(byClass.data.targets.length).toBeGreaterThan(0);
+    expect(byClass.data.targets).toEqual(byName.data.targets);
+    expect((await themeTargets('  Switch ')).data.targets).toEqual(
+      (await themeTargets('Switch')).data.targets,
+    );
+  });
 });

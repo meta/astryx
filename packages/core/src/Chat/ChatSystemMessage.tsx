@@ -29,6 +29,7 @@ import {
   typographyVars,
 } from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
+import {isRenderable} from '../utils/isRenderable';
 import {Divider} from '../Divider';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
@@ -72,6 +73,7 @@ const styles = stylex.create({
     paddingBlock: spacingVars['--spacing-1'],
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
     fontWeight: fontWeightVars['--font-weight-normal'],
     color: colorVars['--color-text-secondary'],
     textAlign: 'center',
@@ -152,7 +154,9 @@ export function ChatSystemMessage({
       )}
       {...rest}>
       <span {...stylex.props(styles.content)}>
-        {icon != null && <span {...stylex.props(styles.icon)}>{icon}</span>}
+        {isRenderable(icon) && (
+          <span {...stylex.props(styles.icon)}>{icon}</span>
+        )}
         {children}
       </span>
     </div>

@@ -29,6 +29,12 @@ export const docs = {
       required: true,
     },
     {
+      name: 'getRowLabel',
+      type: '(item: T) => string',
+      description:
+        'Derive a human-readable row identity for the chevron accessible name. Astryx combines it with localized expand/collapse wording. Omit it, or return blank text, to keep the generic "Expand row" and "Collapse row" labels.',
+    },
+    {
       name: 'renderExpanded',
       type: '(item: T) => ReactNode',
       description:
@@ -75,6 +81,7 @@ const expansion = useTableRowExpansion({
       return next;
     }),
   getRowKey: item => item.id,
+  getRowLabel: item => item.name,
   renderExpanded: item => <OrderDetails order={item} />,
 });
 
@@ -122,6 +129,8 @@ export const docsDense = {
     expandedKeys: 'Set of currently-expanded row keys. Consumer-owned.',
     onToggle: 'Called with a row key when its expansion is toggled.',
     getRowKey: 'Derive a stable unique key from a row item.',
+    getRowLabel:
+      'Derive a row identity for the localized expand/collapse control label. Blank or omitted values keep the generic row label.',
     renderExpanded:
       'Render the full-width detail panel below an expanded row. Receives the row item.',
     getIsItemExpandable:

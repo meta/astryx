@@ -17,7 +17,7 @@ import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
-import {useListFocus} from '../hooks/useListFocus';
+import {useInternalListFocus} from '../hooks/useListFocus';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {pressOnItemsOnly} from '../hooks/menuPressOnItems';
 import {menuTouchActionStyles} from '../DropdownMenu/menuTouchAction.stylex';
@@ -53,8 +53,11 @@ const sizeStyles = stylex.create({
   },
 });
 
-/** The rows a press, a key or typeahead can reach. */
+/** The rows a press can act on. */
 const ENABLED_ITEM_SELECTOR = '[role="menuitem"]:not([aria-disabled="true"])';
+
+/** The rows a key or typeahead visits: a disabled row too, which stays inert. */
+const ROW_SELECTOR = '[role="menuitem"]';
 
 export interface NavHeadingMenuProps extends BaseProps<HTMLDivElement> {
   ref?: React.Ref<HTMLDivElement>;
@@ -116,8 +119,9 @@ export function NavHeadingMenu({
   // SideNavHeading) still lets a mouse released outside dismiss it.
   const dismissMenu = use(NavHeadingDismissContext)?.dismiss;
 
-  const {listRef, handleKeyDown, focusItem} = useListFocus({
-    itemSelector: ENABLED_ITEM_SELECTOR,
+  const {listRef, handleKeyDown, focusItem} = useInternalListFocus({
+    itemSelector: ROW_SELECTOR,
+    reachesDisabledItems: true,
     onEscape: closeMenu,
   });
 
@@ -131,14 +135,12 @@ export function NavHeadingMenu({
   });
   const hasOverflow = useMenuOverflow(listRef, children, true);
 
-  // First-character typeahead over the (enabled) menu items (menus-11).
+  // First-character typeahead over the menu items, disabled ones included.
   const getMenuItems = useCallback(
     (): HTMLElement[] =>
       listRef.current
         ? Array.from(
-            listRef.current.querySelectorAll<HTMLElement>(
-              ENABLED_ITEM_SELECTOR,
-            ),
+            listRef.current.querySelectorAll<HTMLElement>(ROW_SELECTOR),
           )
         : [],
     [listRef],

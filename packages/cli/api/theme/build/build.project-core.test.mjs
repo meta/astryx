@@ -17,8 +17,13 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {coreUnavailableMessage, themeBuild} from './build.mjs';
+import {
+  coreUnavailableMessage,
+  themeBuild,
+  validateThemePrivateInputs,
+} from './build.mjs';
 import {fetchCarriedThemeCoreDir} from '../_adapter.mjs';
+import {CLI_VERSION} from '../../../test-utils/release-fixtures.mjs';
 
 vi.mock('../_adapter.mjs', async importOriginal => {
   const actual = /** @type {Record<string, any>} */ (await importOriginal());
@@ -122,7 +127,8 @@ describe('theme build generates with the Core the project installed', () => {
     const app = makeDir();
     installCore(app);
     await themeBuild('ocean.mjs', {}, {cwd: app});
-    expect(globalThis.__astryxProjectCoreLoads).toEqual(['theme', 'root']);
+    // The theme imports nothing from the root entry, so the root never loads.
+    expect(globalThis.__astryxProjectCoreLoads).toEqual(['theme']);
     // The same Core, re-exported, emits the same CSS as the CLI's own. The
     // generated header differs only in the Core version it records.
     const bare = makeDir();
@@ -134,6 +140,50 @@ describe('theme build generates with the Core the project installed', () => {
         .replace(/^\/\*[\s\S]*?\*\/\n/, '');
     expect(rules(app)).toBe(rules(bare));
     expect(rules(app)).toContain('#0a0a0a');
+  });
+
+  it('loads the app’s installed root only for a theme that imports it', async () => {
+    const app = makeDir();
+    installCore(app);
+    fs.writeFileSync(
+      path.join(app, 'harbor.mjs'),
+      "import {defineTheme} from '@astryxdesign/core';\nexport default defineTheme({name: 'harbor', tokens: {'--color-bg': '#0b0b0b'}});\n",
+    );
+    await themeBuild('harbor.mjs', {}, {cwd: app});
+    expect(globalThis.__astryxProjectCoreLoads).toEqual(['theme', 'root']);
+    expect(fs.readFileSync(path.join(app, 'harbor.css'), 'utf-8')).toContain(
+      '#0b0b0b',
+    );
+  });
+
+  it('checks a theme’s private inputs without loading the app’s installed root when the theme does not import it', async () => {
+    // The doctor's check: the CommonJS patch wraps the installed Core for a
+    // `.cjs` dependency, and wraps its root only if something requires it.
+    const app = makeDir();
+    installCore(app);
+    expect(await validateThemePrivateInputs('ocean.mjs', {cwd: app})).toEqual(
+      [],
+    );
+    expect(globalThis.__astryxProjectCoreLoads).toEqual(['theme']);
+  });
+
+  it('checks the private inputs of every theme beside an installed Core whose theme entry fails to load', async () => {
+    // Doctor runs this check for each added theme. A `.cjs` dependency could
+    // not load that entry either, so the CommonJS patch skips it.
+    const app = makeDir();
+    installCore(app, {
+      themeModule: "throw new Error('the theme entry failed to load');\n",
+    });
+    fs.writeFileSync(
+      path.join(app, 'harbor.mjs'),
+      "export default {name: 'harbor', tokens: {'--_card-radius': '4px'}};\n",
+    );
+    expect(await validateThemePrivateInputs('ocean.mjs', {cwd: app})).toEqual(
+      [],
+    );
+    const errors = await validateThemePrivateInputs('harbor.mjs', {cwd: app});
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain('--_card-radius');
   });
 
   it('keeps the CLI’s own Core when the project has none', async () => {
@@ -187,7 +237,10 @@ describe('the error when there is no Core to generate with', () => {
     expect(message).toContain(
       'This project does not have @astryxdesign/core installed',
     );
-    expect(message).toContain('`npm install @astryxdesign/core`');
+    // With no Core, Core is named at the release of the CLI that answers.
+    expect(message).toContain(
+      `\`npm install @astryxdesign/core@${CLI_VERSION}\``,
+    );
     expect(message).not.toContain('pnpm -F');
     expect(message).toContain(
       "Import error: Cannot find package '@astryxdesign/core'",

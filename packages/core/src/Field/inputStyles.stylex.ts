@@ -3,7 +3,8 @@
 /**
  * @file inputStyles.stylex.ts
  * @input Uses theme tokens (color, spacing, radius, shadow, transition)
- * @output Exports shared input wrapper appearance styles
+ * @output Exports shared input wrapper appearance styles, and the text field
+ *   timing that shows the focus look at once under a coarse pointer
  * @position Shared styles consumed by TextInput, TextArea, NumberInput, DateInput,
  *   TimeInput, Selector, Typeahead, and Tokenizer
  *
@@ -22,6 +23,8 @@ import {
   durationVars,
   easeVars,
   borderVars,
+  sizeVars,
+  typeScaleVars,
 } from '../theme/tokens.stylex';
 
 /**
@@ -41,9 +44,16 @@ export const inputWrapperStyles = stylex.create({
     paddingInline: spacingVars['--spacing-2'],
     borderWidth: borderVars['--border-width'],
     borderStyle: 'solid',
+    // Forced colors drop the inset shadow below and repaint author border
+    // colors in one system color, so the field-focus treatment would vanish
+    // there. A focused field's border takes the system Highlight color instead
+    // (`spec:AST-020` FR1).
     borderColor: {
       default: colorVars['--color-border-emphasized'],
-      ':focus-within': colorVars['--color-accent'],
+      ':focus-within': {
+        default: colorVars['--color-accent'],
+        '@media (forced-colors: active)': 'Highlight',
+      },
     },
     '--_field-radius': radiusVars['--radius-element'],
     borderRadius: 'var(--_field-radius)',
@@ -71,26 +81,92 @@ export const inputWrapperStyles = stylex.create({
     // Suppress the base hover ring — a disabled control must not react to hover.
     boxShadow: 'none',
   },
+  // Text fields apply this after `base`. A tap on one raises the keyboard,
+  // and a fade would repaint the field on each frame of that rise.
+  textField: {
+    transitionDuration: {
+      default: durationVars['--duration-fast'],
+      '@media (prefers-reduced-motion: reduce)': '0s',
+      '@media (pointer: coarse)': '0s',
+    },
+  },
+});
+
+/**
+ * The row height of a one-line text field, by size: the larger of the size
+ * and one bordered body text line. At the theme's default text size that is
+ * the size, as before; larger text grows the row to hold its line inside the
+ * borders. The height stays definite, so a theme's block padding cannot grow
+ * the row at the default text size, and group members can still fill a row.
+ * The coarse-pointer line follows the iOS 16px floor the input's own font
+ * size has.
+ */
+export const inputRowSizeStyles = stylex.create({
+  sm: {
+    height: {
+      default: `max(${sizeVars['--size-element-sm']}, calc(${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
+      '@media (pointer: coarse)': {
+        '@supports (-webkit-touch-callout: none)': `max(${sizeVars['--size-element-sm']}, calc(max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
+      },
+    },
+  },
+  md: {
+    height: {
+      default: `max(${sizeVars['--size-element-md']}, calc(${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
+      '@media (pointer: coarse)': {
+        '@supports (-webkit-touch-callout: none)': `max(${sizeVars['--size-element-md']}, calc(max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
+      },
+    },
+  },
+  lg: {
+    height: {
+      default: `max(${sizeVars['--size-element-lg']}, calc(${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
+      '@media (pointer: coarse)': {
+        '@supports (-webkit-touch-callout: none)': `max(${sizeVars['--size-element-lg']}, calc(max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
+      },
+    },
+  },
 });
 
 /**
  * Status border colors for input wrappers.
- * Keyed by InputStatusType.
+ * Keyed by InputStatusType. Under forced colors a focused field's border is
+ * Highlight, as in the base style, for wrappers that apply no status focus
+ * style of their own (Selector, MultiSelector).
  */
 export const inputStatusBorderStyles = stylex.create({
   warning: {
-    borderColor: colorVars['--color-border-warning'],
+    borderColor: {
+      default: colorVars['--color-border-warning'],
+      ':focus-within': {
+        default: colorVars['--color-border-warning'],
+        '@media (forced-colors: active)': 'Highlight',
+      },
+    },
   },
   error: {
-    borderColor: colorVars['--color-border-error'],
+    borderColor: {
+      default: colorVars['--color-border-error'],
+      ':focus-within': {
+        default: colorVars['--color-border-error'],
+        '@media (forced-colors: active)': 'Highlight',
+      },
+    },
   },
   success: {
-    borderColor: colorVars['--color-border-success'],
+    borderColor: {
+      default: colorVars['--color-border-success'],
+      ':focus-within': {
+        default: colorVars['--color-border-success'],
+        '@media (forced-colors: active)': 'Highlight',
+      },
+    },
   },
 });
 
 /**
- * Status hover shadow styles for input wrappers.
+ * Status hover shadow styles for input wrappers. Each keeps the base focus
+ * ring.
  * Keyed by InputStatusType.
  */
 export const inputStatusHoverShadowStyles = stylex.create({
@@ -101,6 +177,10 @@ export const inputStatusHoverShadowStyles = stylex.create({
         {
           '@media (hover: hover)': shadowVars['--shadow-inset-warning'],
         },
+      // This boxShadow replaces the base one whole, so it keeps the base
+      // focus ring: the status border does not change on focus, and the ring
+      // is the only sign of keyboard focus.
+      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
     },
   },
   error: {
@@ -110,6 +190,10 @@ export const inputStatusHoverShadowStyles = stylex.create({
         {
           '@media (hover: hover)': shadowVars['--shadow-inset-error'],
         },
+      // This boxShadow replaces the base one whole, so it keeps the base
+      // focus ring: the status border does not change on focus, and the ring
+      // is the only sign of keyboard focus.
+      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
     },
   },
   success: {
@@ -119,12 +203,17 @@ export const inputStatusHoverShadowStyles = stylex.create({
         {
           '@media (hover: hover)': shadowVars['--shadow-inset-success'],
         },
+      // This boxShadow replaces the base one whole, so it keeps the base
+      // focus ring: the status border does not change on focus, and the ring
+      // is the only sign of keyboard focus.
+      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
     },
   },
 });
 
 /**
- * Status focus border styles using :focus-within.
+ * Status focus border styles using :focus-within. Under forced colors the
+ * focused border is Highlight, as in the base style.
  * Used by input wrappers that contain a child input/textarea element.
  * Keyed by InputStatusType.
  */
@@ -132,19 +221,28 @@ export const inputStatusFocusWithinStyles = stylex.create({
   warning: {
     borderColor: {
       default: colorVars['--color-border-warning'],
-      ':focus-within': colorVars['--color-border-warning'],
+      ':focus-within': {
+        default: colorVars['--color-border-warning'],
+        '@media (forced-colors: active)': 'Highlight',
+      },
     },
   },
   error: {
     borderColor: {
       default: colorVars['--color-border-error'],
-      ':focus-within': colorVars['--color-border-error'],
+      ':focus-within': {
+        default: colorVars['--color-border-error'],
+        '@media (forced-colors: active)': 'Highlight',
+      },
     },
   },
   success: {
     borderColor: {
       default: colorVars['--color-border-success'],
-      ':focus-within': colorVars['--color-border-success'],
+      ':focus-within': {
+        default: colorVars['--color-border-success'],
+        '@media (forced-colors: active)': 'Highlight',
+      },
     },
   },
 });

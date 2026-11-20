@@ -8,7 +8,7 @@
  * @position Contract fixtures; no component or assistive-technology claim.
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test} from '../playwright';
 import {checkAccessibilitySpec} from '../check';
 import {createChromiumHarness} from '../harness/chromium';
 import {LISTBOX_PATTERN, type ListboxStateFacts} from './listbox';

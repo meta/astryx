@@ -30,6 +30,7 @@ import {Lightbox} from '../Lightbox/Lightbox';
 import {MobileNav} from '../MobileNav/MobileNav';
 import {Popover} from '../Popover/Popover';
 import {DropdownMenu} from '../DropdownMenu/DropdownMenu';
+import {preloadMenuBottomSheetActionList} from '../DropdownMenu/lazyMenuBottomSheet';
 import {useBusyAnnouncement} from './useBusyAnnouncement';
 import {ModalAnnounceProvider} from './ModalAnnounceProvider';
 import {__resetLiveRegionsForTest, useAnnounce} from './useAnnounce';
@@ -198,6 +199,13 @@ describe('useAnnounce inside Astryx modals (spec:AST-086 FR14)', () => {
   });
 
   it("routes a caller inside a DropdownMenu's bottom-sheet presentation into that sheet", async () => {
+    // The sheet and its rows load as two lazy chunks. Load both first, so the
+    // dialog query below waits on the render and not on a cold module load,
+    // which a loaded machine can stretch past the query's budget.
+    await Promise.all([
+      import('../DropdownMenu/MenuBottomSheet'),
+      preloadMenuBottomSheetActionList(),
+    ]);
     render(
       <DropdownMenu
         button={{label: 'Project actions'}}
@@ -266,6 +274,42 @@ describe('useAnnounce inside Astryx modals (spec:AST-086 FR14)', () => {
     }
   });
 
+  it('watches every open modal through one shared observer', async () => {
+    const isPresentationWatch = (options?: MutationObserverInit) =>
+      options?.attributeFilter?.join() === 'open,inert,aria-hidden';
+    const watchers = new Set<MutationObserver>();
+    const watched: Node[] = [];
+    const Original = globalThis.MutationObserver;
+    class Counting extends Original {
+      observe(target: Node, options?: MutationObserverInit) {
+        if (isPresentationWatch(options)) {
+          watchers.add(this);
+          watched.push(target);
+        }
+        super.observe(target, options);
+      }
+    }
+    vi.stubGlobal('MutationObserver', Counting);
+    try {
+      render(
+        <Dialog isOpen onOpenChange={() => {}} aria-label="Lower">
+          <Owner label="Lower say" message="Lower words" />
+          <Dialog isOpen onOpenChange={() => {}} aria-label="Upper">
+            <Owner label="Upper say" message="Upper words" />
+          </Dialog>
+        </Dialog>,
+      );
+      await nextFrame();
+      expect(watched).toEqual([
+        screen.getByRole('dialog', {name: 'Upper'}),
+        screen.getByRole('dialog', {name: 'Lower'}),
+      ]);
+      expect(watchers.size).toBe(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('routes a caller inside an open Lightbox into its dialog', async () => {
     // Lightbox renders no children; a caption is content inside its dialog.
     render(
@@ -279,6 +323,24 @@ describe('useAnnounce inside Astryx modals (spec:AST-086 FR14)', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Say'}));
     await nextFrame();
     expect(regionIn(dialog)).toHaveTextContent('Added Design');
+    expect(shared()?.textContent ?? '').toBe('');
+  });
+
+  it("routes Lightbox's own position message into its open viewer", async () => {
+    render(
+      <Lightbox
+        isOpen
+        onOpenChange={() => {}}
+        media={[
+          {src: '/a.jpg', alt: 'Harbour'},
+          {src: '/b.jpg', alt: 'Lighthouse'},
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Next'}));
+    await nextFrame();
+    const dialog = screen.getByRole('dialog', {name: 'Lighthouse'});
+    expect(regionIn(dialog)).toHaveTextContent('Lighthouse, 2 of 2');
     expect(shared()?.textContent ?? '').toBe('');
   });
 
@@ -812,6 +874,9 @@ describe('useAnnounce inside Astryx modals (spec:AST-086 FR14)', () => {
     const sheet = document.querySelector<HTMLDialogElement>('dialog')!;
     await nextFrame();
     fireEvent.click(screen.getByRole('button', {name: 'Say'}));
+    // Focus is outside the sheet, so it goes inert from the close
+    // (component:BottomSheet FR9).
+    act(() => (document.activeElement as HTMLElement | null)?.blur());
     fireEvent.click(screen.getByRole('button', {name: 'Done'}));
     // The sheet keeps its dialog open and modal while it leaves, but takes
     // it out of the accessibility tree; the page body is behind an active
@@ -848,6 +913,9 @@ describe('useAnnounce inside Astryx modals (spec:AST-086 FR14)', () => {
     const sheet = document.querySelector<HTMLDialogElement>('dialog')!;
     await nextFrame();
     fireEvent.click(screen.getByRole('button', {name: 'Busy'}));
+    // Focus is outside the sheet, so it goes inert from the close
+    // (component:BottomSheet FR9).
+    act(() => (document.activeElement as HTMLElement | null)?.blur());
     fireEvent.click(screen.getByRole('button', {name: 'Done'}));
     // Held for the real close, as the sheet-exit test shows...
     expect(sheet).toHaveAttribute('inert');
@@ -1072,6 +1140,9 @@ describe('useAnnounce inside Astryx modals (spec:AST-086 FR14)', () => {
     const sheet = screen.getByRole('dialog', {name: 'Sheet'});
     await nextFrame();
     fireEvent.click(screen.getByRole('button', {name: 'Say'}));
+    // Focus is outside the sheet, so it goes inert from the close
+    // (component:BottomSheet FR9).
+    act(() => (document.activeElement as HTMLElement | null)?.blur());
     fireEvent.click(screen.getByRole('button', {name: 'Done'}));
     // The sheet, still an open modal through its exit, covers the Dialog:
     // nothing is exposed yet, so the words wait rather than being written

@@ -9,6 +9,13 @@
 
 import type {ISODateString, PlainDate} from './dateTypes';
 import type {Locale} from '../i18n/types';
+import {
+  formatCalendarDate,
+  isCalendarSystem,
+  type CalendarSystem,
+} from './calendarSystem';
+import {firstCharacter} from './characters';
+import {standaloneMonthCapitalLanguages} from './standaloneMonthCapitals.generated';
 
 export type {PlainDate} from './dateTypes';
 
@@ -171,6 +178,38 @@ export function getTimeZoneParts(
   };
 }
 
+/** The wall-clock fields of an instant: in a zone, or in the viewer's. */
+export interface WallClock {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+}
+
+/**
+ * Wall-clock fields for an instant, in the named zone or in the viewer's
+ * zone (`undefined`, `null` or ""). The zone-less branch reads plain `Date`
+ * getters, so the default rendering needs no `Intl` zone data. The explicit
+ * return type keeps both branches on one shape.
+ */
+export function getWallClock(
+  date: Date,
+  timeZone: string | null | undefined,
+): WallClock {
+  return !timeZone
+    ? {
+        year: date.getFullYear(),
+        month: date.getMonth() + 1,
+        day: date.getDate(),
+        hour: date.getHours(),
+        minute: date.getMinutes(),
+        second: date.getSeconds(),
+      }
+    : getTimeZoneParts(date.getTime(), timeZone);
+}
+
 function getTimezoneOffsetMS(timezoneID: string, instant: number): number {
   const parts = getTimeZoneParts(instant, timezoneID);
   return (
@@ -200,7 +239,7 @@ export function plainDateToInstant(
   // this wall time skipped or repeated.
   const offsetBefore = getTimezoneOffsetMS(timezoneID, wallTime - DAY_MS);
   const offsetAfter = getTimezoneOffsetMS(timezoneID, wallTime + DAY_MS);
-  // AST-067 (Temporal's "compatible" disambiguation): a wall time that happens
+  // Temporal's "compatible" disambiguation (AST-067): a wall time that happens
   // twice resolves to its earlier occurrence, and one that never happens is
   // read in the offset before the transition, which moves it forward by the
   // length of the gap.
@@ -259,6 +298,52 @@ export function plainDateIsInRange(
   range: [PlainDate, PlainDate],
 ): boolean {
   return compare(pd, range[0]) >= 0 && compare(pd, range[1]) <= 0;
+}
+
+export interface NearestAcceptedDateOptions {
+  min?: PlainDate | null;
+  max?: PlainDate | null;
+  /** Rejects a date inside the bounds, such as a date constraint. */
+  isDateDisabled?: (date: PlainDate) => boolean;
+  /** How many days to search on each side of the clamped date. */
+  searchDays?: number;
+}
+
+/**
+ * The date nearest to `target` that a field accepts. It clamps `target` into
+ * [`min`, `max`], then searches outward one day at a time, inside the bounds,
+ * for a date that `isDateDisabled` allows. On a tie the later date wins. When
+ * no date inside the search window is allowed, it returns the clamped date.
+ */
+export function nearestAcceptedDate(
+  target: PlainDate,
+  {min, max, isDateDisabled, searchDays = 366}: NearestAcceptedDateOptions,
+): PlainDate {
+  let clamped = target;
+  if (min != null && compare(clamped, min) < 0) {
+    clamped = min;
+  }
+  if (max != null && compare(clamped, max) > 0) {
+    clamped = max;
+  }
+  if (isDateDisabled == null || !isDateDisabled(clamped)) {
+    return clamped;
+  }
+  const isAccepted = (date: PlainDate) =>
+    (min == null || compare(date, min) >= 0) &&
+    (max == null || compare(date, max) <= 0) &&
+    !isDateDisabled(date);
+  for (let offset = 1; offset <= searchDays; offset += 1) {
+    const later = plainDateAddDays(clamped, offset);
+    if (isAccepted(later)) {
+      return later;
+    }
+    const earlier = plainDateAddDays(clamped, -offset);
+    if (isAccepted(earlier)) {
+      return earlier;
+    }
+  }
+  return clamped;
 }
 
 export function plainDateSetFirstOfMonth(pd: PlainDate): PlainDate {
@@ -329,15 +414,69 @@ export const DATE_FORMAT_MONTH_YEAR: Intl.DateTimeFormatOptions = {
   month: 'long',
 };
 
+/**
+ * The month and year as a label that stands alone, such as a calendar heading
+ * or a month grid's name. `Intl` formats the month for running text; where
+ * CLDR titlecases a stand-alone month name (its `contextTransforms`), the
+ * label starts with a capital, as Calendar's weekday headers use CLDR's
+ * stand-alone forms (`component:Calendar` FR1). Internal: not re-exported from
+ * `utils/index.ts`.
+ */
+export function plainDateFormatStandaloneMonthYear(
+  pd: PlainDate,
+  locale: Locale,
+  calendar: Intl.DateTimeFormatOptions['calendar'] = 'gregory',
+): string {
+  const label = plainDateFormat(
+    pd,
+    {...DATE_FORMAT_MONTH_YEAR, calendar},
+    locale,
+  );
+  let language: string;
+  try {
+    language = new Intl.Locale(locale).language;
+  } catch {
+    return label;
+  }
+  if (!standaloneMonthCapitalLanguages.has(language)) {
+    return label;
+  }
+  const first = firstCharacter(label);
+  return first.toLocaleUpperCase(locale) + label.slice(first.length);
+}
+
 // e.g. "Sun" (locale-dependent) — the weekday on its own, abbreviated.
 //
-// This is CLDR's `abbreviated` width, which `Intl` reaches natively. Note
-// that Calendar's 2-letter header ("Su") is CLDR's *short* width, a
-// different thing that `Intl` cannot express at all — which is why that one
-// needs the generated lookup table beside it and this one does not.
+// This is CLDR's `abbreviated` width. Weekday headers prefer a generated
+// table, because `Intl` has no short width.
 export const DATE_FORMAT_WEEKDAY_ONLY: Intl.DateTimeFormatOptions = {
   weekday: 'short',
 };
+
+/**
+ * The platform's weekday names for a locale, Sunday first, in `Intl`'s
+ * `short` width (CLDR's abbreviated) or its `narrow` width. Returns `null`
+ * when the platform has no data for the locale's language, so a caller uses
+ * its own fallback instead of the host's default locale.
+ */
+export function plainDateWeekdayNames(
+  locale: Locale,
+  width: 'short' | 'narrow' = 'short',
+): string[] | null {
+  const options: Intl.DateTimeFormatOptions = {weekday: width};
+  // A language the platform lacks resolves to the host's default locale.
+  const resolved = dateTimeFormatFor(locale, {
+    ...options,
+    calendar: 'gregory',
+  }).resolvedOptions().locale;
+  if (new Intl.Locale(resolved).language !== new Intl.Locale(locale).language) {
+    return null;
+  }
+  // January 4, 1970 was a Sunday.
+  return Array.from({length: 7}, (_, day) =>
+    plainDateFormat({year: 1970, month: 1, day: 4 + day}, options, locale),
+  );
+}
 
 // e.g. "January" (locale-dependent) — the month on its own, for a control
 // that shows a list of months and carries the year separately.
@@ -367,7 +506,8 @@ export const DATE_FORMAT_SHORT_WITH_YEAR: Intl.DateTimeFormatOptions = {
  * when `options.calendar` is omitted. The explicit option remains supported for
  * compatibility with the public `Intl.DateTimeFormatOptions` signature; it is a
  * display-only escape hatch and does not change PlainDate arithmetic, parsing,
- * serialization, or any Astryx component's calendar semantics.
+ * serialization, or any Astryx component's calendar semantics. Another
+ * calendar names the month and day that Calendar shows in it.
  */
 export function plainDateFormat(
   pd: PlainDate,
@@ -375,27 +515,54 @@ export function plainDateFormat(
   locale: Locale = 'en',
 ): string {
   const calendar = options.calendar ?? 'gregory';
+  if (calendar !== 'gregory' && isCalendarSystem(calendar)) {
+    return formatCalendarDate(calendar, pd, options, locale);
+  }
+  const [format, date] = plainDateFormatInput(pd, options, locale);
+  return format.format(date);
+}
+
+/**
+ * The parts of `plainDateFormat`'s output, from the same formatter and date.
+ * Internal: not re-exported from `utils/index.ts`.
+ */
+export function plainDateFormatToParts(
+  pd: PlainDate,
+  options: Intl.DateTimeFormatOptions,
+  locale: Locale,
+): Intl.DateTimeFormatPart[] {
+  const [format, date] = plainDateFormatInput(pd, options, locale);
+  return format.formatToParts(date);
+}
+
+function plainDateFormatInput(
+  pd: PlainDate,
+  options: Intl.DateTimeFormatOptions,
+  locale: Locale,
+): [Intl.DateTimeFormat, Date | number] {
+  const calendar = options.calendar ?? 'gregory';
   if (options.timeZone != null) {
-    return dateTimeFormatFor(locale, {...options, calendar}).format(
+    return [
+      dateTimeFormatFor(locale, {...options, calendar}),
       plainDateToDate(pd),
-    );
+    ];
   }
   if (TIME_OF_DAY_FIELDS.some(field => options[field] != null)) {
     // A zone name or a time of day reads local midnight in the zone current
     // at the call. A cached formatter would keep the zone it was built in,
     // so this one is built for the call.
-    return new Intl.DateTimeFormat(locale, {...options, calendar}).format(
+    return [
+      new Intl.DateTimeFormat(locale, {...options, calendar}),
       plainDateToDate(pd),
-    );
+    ];
   }
   // Date fields alone: UTC midnight formatted in UTC, so neither the cached
   // formatter nor the date depends on the host's zone, which can change while
   // a page is open.
-  return dateTimeFormatFor(locale, {
-    ...options,
-    calendar,
-    timeZone: 'UTC',
-  }).format(utcTime(pd.year, pd.month - 1, pd.day));
+  return [
+    dateTimeFormatFor(locale, {...options, calendar, timeZone: 'UTC'}),
+    utcTime(pd.year, pd.month - 1, pd.day),
+  ];
 }
 
 /** Options that print a time of day or a zone, which a PlainDate lacks. */
@@ -436,6 +603,20 @@ export function dateTimeFormatFor(
 }
 
 /**
+ * @internal `dateTimeFormatFor`, except that without `options.timeZone` it
+ * builds a formatter for the call. A cached formatter keeps the host zone it
+ * was built in.
+ */
+export function dateTimeFormatAtCall(
+  locale: Locale,
+  options: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+  return options.timeZone === undefined
+    ? new Intl.DateTimeFormat(locale, options)
+    : dateTimeFormatFor(locale, options);
+}
+
+/**
  * The locale's name for the "week of year" date field ("week", "Woche", "週"),
  * from CLDR through `Intl.DisplayNames`. Calendar names its week-number
  * column header with it, so no catalog string is needed for a word the
@@ -458,6 +639,33 @@ export function plainDateWeekFieldName(locale: Locale = 'en'): string {
     // Fall through to the English CLDR value.
   }
   return 'week';
+}
+
+const dayNumberFormats = new Map<string, Intl.NumberFormat>();
+
+/**
+ * A day of the month or a week number in the locale's own digits: `15` in
+ * English, `۱۵` in Persian, `١٥` in Egyptian Arabic. A `numberingSystem`
+ * replaces the locale's digits. Only the digits change. The number stays the
+ * value that it is given, so no calendar applies, and no grouping separator or
+ * unit word is added.
+ * Internal: not re-exported from `utils/index.ts`.
+ */
+export function plainDateFormatDayNumber(
+  value: number,
+  locale: Locale,
+  numberingSystem?: string,
+): string {
+  const key = `${locale}|${numberingSystem ?? ''}`;
+  let format = dayNumberFormats.get(key);
+  if (format == null) {
+    format = new Intl.NumberFormat(locale, {
+      useGrouping: false,
+      numberingSystem,
+    });
+    dayNumberFormats.set(key, format);
+  }
+  return format.format(value);
 }
 
 // =============================================================================
@@ -501,14 +709,21 @@ export const SHARED_DATE_FORMAT_OPTIONS: Record<
  * members. The shared entry point DateInput uses for the named-format path;
  * Timestamp maps the same members onto {@link SHARED_DATE_FORMAT_OPTIONS} in
  * its own `formatTimestamp` switch (its input is a `Date`, not a `PlainDate`).
+ * The locale-aware members write the date in `calendar`, which defaults to
+ * Gregorian. `system_date` stays the Gregorian ISO date in every calendar.
  */
 export function formatSharedDate(
   pd: PlainDate,
   format: SharedDateFormat,
   locale: Locale = 'en',
+  calendar: CalendarSystem = 'gregory',
 ): string {
   if (format === 'system_date') {
     return plainDateToISO(pd);
   }
-  return plainDateFormat(pd, SHARED_DATE_FORMAT_OPTIONS[format], locale);
+  return plainDateFormat(
+    pd,
+    {...SHARED_DATE_FORMAT_OPTIONS[format], calendar},
+    locale,
+  );
 }

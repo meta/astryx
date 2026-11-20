@@ -121,6 +121,29 @@ describe('Token', () => {
     expect(handleRemove).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    ['static', {}],
+    ['clickable', {onClick: vi.fn()}],
+    ['link', {href: '/filters/open'}],
+  ])(
+    'keeps the remove button from shrinking when a %s token is cut by its width',
+    (_structure, props) => {
+      render(
+        <div style={{width: 60}}>
+          <Token
+            label="Location: Ho Chi Minh City"
+            onRemove={vi.fn()}
+            {...props}
+          />
+        </div>,
+      );
+      const removeButton = screen.getByRole('button', {
+        name: 'Remove Location: Ho Chi Minh City',
+      });
+      expect(getComputedStyle(removeButton).flexShrink).toBe('0');
+    },
+  );
+
   it('stops propagation when remove button is clicked', () => {
     const handleRemove = vi.fn();
     const handleClick = vi.fn();
@@ -264,6 +287,43 @@ describe('Token accessibility', () => {
     expect(
       screen.getByRole('button', {name: 'Remove JavaScript'}),
     ).toBeInTheDocument();
+  });
+
+  it('keeps aria-labelledby and aria-describedby on a disabled link token', () => {
+    render(
+      <>
+        <span id="dl-label">Docs section</span>
+        <span id="dl-hint">Unavailable offline</span>
+        <Token
+          label="Docs"
+          href="/docs"
+          isDisabled
+          aria-labelledby="dl-label"
+          aria-describedby="dl-hint"
+        />
+      </>,
+    );
+    const link = screen.getByRole('link', {name: 'Docs section'});
+    expect(link).toHaveAccessibleDescription('Unavailable offline');
+  });
+
+  it("passes aria-labelledby and aria-describedby to a clickable token's button (public-component-api INV5)", () => {
+    render(
+      <>
+        <span id="field-label">Fruit</span>
+        <span id="field-hint">Pick one</span>
+        <Token
+          label="Apple"
+          onClick={() => {}}
+          aria-labelledby="field-label"
+          aria-describedby="field-hint"
+          data-testid="token"
+        />
+      </>,
+    );
+    const button = screen.getByRole('button', {name: 'Fruit'});
+    expect(button).toHaveAccessibleDescription('Pick one');
+    expect(screen.getByTestId('token')).not.toHaveAttribute('aria-labelledby');
   });
 
   it('reflects the disabled state on the token target in every structure (theming-surface INV6)', () => {
@@ -426,6 +486,78 @@ describe('Token accessibility', () => {
       'button[aria-label="Remove Token"]',
     );
     expect(removeButton).toBeInTheDocument();
+  });
+});
+
+describe('Token link onClick', () => {
+  // jsdom does not implement navigation, so a native listener stops it. React
+  // handlers still run for the click.
+  function stopNavigation(link: HTMLElement) {
+    link.addEventListener('click', e => e.preventDefault());
+  }
+
+  it('calls a caller onClick once when a link token is clicked', () => {
+    const handleClick = vi.fn();
+    render(<Token label="Tag" href="/test" onClick={handleClick} />);
+    const link = screen.getByRole('link', {name: 'Tag'});
+    stopNavigation(link);
+
+    fireEvent.click(link);
+    expect(handleClick).toHaveBeenCalledTimes(1);
+    expect(link).toHaveAttribute('href', '/test');
+  });
+
+  it('calls a caller onClick once when the link of a removable token is clicked', () => {
+    const handleClick = vi.fn();
+    render(
+      <Token
+        label="Tag"
+        href="/test"
+        onClick={handleClick}
+        onRemove={() => {}}
+      />,
+    );
+    const link = screen.getByRole('link', {name: 'Tag'});
+    stopNavigation(link);
+
+    fireEvent.click(link);
+    expect(handleClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls a caller onClick once when the surface of a removable token is clicked', () => {
+    const handleClick = vi.fn();
+    render(
+      <Token
+        label="Tag"
+        href="/test"
+        onClick={handleClick}
+        onRemove={() => {}}
+        data-testid="token"
+      />,
+    );
+    stopNavigation(screen.getByRole('link', {name: 'Tag'}));
+
+    // The surface click is delegated to the link; it must not run twice.
+    fireEvent.click(screen.getByTestId('token'));
+    expect(handleClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call a caller onClick when the remove button is clicked', () => {
+    const handleClick = vi.fn();
+    const handleRemove = vi.fn();
+    render(
+      <Token
+        label="Tag"
+        href="/test"
+        onClick={handleClick}
+        onRemove={handleRemove}
+      />,
+    );
+    stopNavigation(screen.getByRole('link', {name: 'Tag'}));
+
+    fireEvent.click(screen.getByRole('button', {name: 'Remove Tag'}));
+    expect(handleRemove).toHaveBeenCalledTimes(1);
+    expect(handleClick).not.toHaveBeenCalled();
   });
 });
 
@@ -978,5 +1110,28 @@ describe('Token — owned handlers on the link+remove container', () => {
     await user.click(remove);
     expect(handleRemove).toHaveBeenCalled();
     openSpy.mockRestore();
+  });
+});
+
+describe('popup state on a clickable token (FR10)', () => {
+  it('passes aria-haspopup and aria-expanded to the inner button', () => {
+    render(
+      <Token
+        label="Status"
+        onClick={() => {}}
+        aria-haspopup="dialog"
+        aria-expanded={false}
+      />,
+    );
+    const button = screen.getByRole('button', {name: 'Status'});
+    expect(button).toHaveAttribute('aria-haspopup', 'dialog');
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    expect(button.parentElement).not.toHaveAttribute('aria-haspopup');
+  });
+
+  it('passes aria-pressed to the inner button, so the token is a toggle', () => {
+    render(<Token label="Open" onClick={() => {}} aria-pressed={true} />);
+    const button = screen.getByRole('button', {name: 'Open', pressed: true});
+    expect(button.parentElement).not.toHaveAttribute('aria-pressed');
   });
 });

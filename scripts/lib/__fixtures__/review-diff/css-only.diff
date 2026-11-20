@@ -1,0 +1,21 @@
+diff --git a/packages/core/src/Card/Card.css b/packages/core/src/Card/Card.css
+index 1111111..2222222 100644
+--- a/packages/core/src/Card/Card.css
++++ b/packages/core/src/Card/Card.css
+@@ -1,4 +1,4 @@
+ .card {
+-  padding: 8px;
++  padding: 12px;
+   border-radius: 4px;
+ }
+diff --git a/packages/core/src/Card/Card.tsx b/packages/core/src/Card/Card.tsx
+index 3333333..4444444 100644
+--- a/packages/core/src/Card/Card.tsx
++++ b/packages/core/src/Card/Card.tsx
+@@ -10,7 +10,7 @@ const styles = stylex.create({
+   root: {
+-    padding: spacingVars['2'],
++    padding: spacingVars['3'],
+     borderRadius: radiusVars.md,
+   },
+ });

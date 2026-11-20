@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx experimental render --reverse` without an embedded source:
+ * @file `astryx experimental import` without an embedded source:
  * rebuild a page module from Astryx markup. Each element whose class list
  * names an Astryx component (`astryx-<name>`) becomes that component, with
  * the props its `data-*` attributes record and its text. This keeps text and
@@ -13,6 +13,7 @@
 
 import {astryxClass, decode, find, FORM_TAGS, hasTag, isEl, parseHtml, textOf, VOID} from './html-reader.mjs';
 import {componentMap, pascal} from './component-map.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 /** @typedef {import('./html-reader.mjs').ElementNode} ElementNode */
 /** @typedef {import('./html-reader.mjs').Node} Node */
@@ -240,11 +241,11 @@ export function rebuildPage(html, fromDir) {
 
   const lines = body.children.flatMap(c => emit(c, '    '));
   const importLines = [...imports.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
+    .sort(([a], [b]) => compareText(a, b))
     .map(([mod, names]) => `import {${[...names].sort().join(', ')}} from '${mod}';`);
   const title = decode(textOf(find(doc, 'title') ?? {text: ''})).trim();
   const source = [
-    `// Rebuilt by astryx experimental render --reverse from rendered markup${title ? `: ${oneLine(title)}` : ''}.`,
+    `// Rebuilt by astryx experimental import from rendered markup${title ? `: ${oneLine(title)}` : ''}.`,
     '// Text and layout come from the markup; styling, state and behavior do not,',
     '// so review it before use.',
     '',

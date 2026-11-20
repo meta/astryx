@@ -116,8 +116,13 @@ const APPROVED_IMPLEMENTATION_FILES = [
   // NumberInput's locale-aware read of typed and pasted text: it derives the
   // grouping/decimal separators and group sizes from Intl rather than a table.
   'packages/core/src/NumberInput/numberParser.ts',
+  // DateInput/DateTimeInput typed dates in any calendar: month, era and
+  // weekday names, field order and digits read off Intl and parsed back, the
+  // committed text, and the calendar's display name.
+  'packages/core/src/utils/calendarDateParser.ts',
   // TimeInput/DateTimeInput time text: the locale's hour cycle, digits,
-  // separator and day-period words, read off Intl and parsed back.
+  // separator and day-period words, read off Intl and parsed back; and
+  // Timer's compact elapsed durations in the locale's narrow units.
   'packages/core/src/utils/timeFormat.ts',
   'packages/core/src/i18n/useCollator.ts',
   // Joins several catalog messages into one locale-correct list (INV8).

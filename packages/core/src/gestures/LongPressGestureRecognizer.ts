@@ -21,6 +21,7 @@
  */
 
 import {UIKIT_LONG_PRESS, UIKIT_TAP} from '../motion/uikit/gestures';
+import {lockSelection} from '../utils/selectionLock';
 import {travel} from './geometry';
 import {
   GestureRecognizer,
@@ -45,6 +46,11 @@ export class LongPressGestureRecognizer extends GestureRecognizer {
     return 'longPress';
   }
 
+  /** @internal The host's brand: a long press keeps the callout and selection off (recognizerInternals). */
+  protected get family(): 'longPress' {
+    return 'longPress';
+  }
+
   minimumPressDuration: number;
   allowableMovement: number;
   numberOfTapsRequired: number;
@@ -59,7 +65,20 @@ export class LongPressGestureRecognizer extends GestureRecognizer {
   beganAt: number | null = null;
 
   constructor(options: LongPressGestureRecognizerOptions = {}) {
-    super(options);
+    // A long press's hold does something (a menu, a hold-repeat): it locks
+    // selection for its press (spec:AST-094 FR41). One at 0 ms recognizes at
+    // touch-down and has no hold, so it brings none, nor does one told null:
+    // there the browser keeps its native long press.
+    super({
+      ...options,
+      selectionLock:
+        options.selectionLock !== undefined
+          ? options.selectionLock
+          : (options.minimumPressDuration ??
+                UIKIT_LONG_PRESS.minimumPressDuration.value) > 0
+            ? lockSelection
+            : null,
+    });
     this.minimumPressDuration =
       options.minimumPressDuration ??
       UIKIT_LONG_PRESS.minimumPressDuration.value;

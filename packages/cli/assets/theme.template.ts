@@ -82,6 +82,7 @@
 
 import {defineTheme} from '@astryxdesign/core/theme';
 // import {palette} from './palette.generated';
+// import {themePalette} from '@astryxdesign/core/palette';
 // import {dracula} from '@astryxdesign/core/theme/syntax';
 // import {neutralTheme} from '@astryxdesign/theme-neutral';
 
@@ -150,12 +151,21 @@ export const myTheme = defineTheme({
   // color: {accent: '#0064E0', neutralStyle: 'cool', contrast: 'standard'},
 
   /**
+   * Or take the color tokens from a few seeds: `themePalette()` from
+   * `@astryxdesign/core/palette` maps them as the theme editor maps its color
+   * settings, and explicit `tokens` still win, token by token. Name the
+   * recipe: a palette with none runs the first one, `astryx-oklch-v1`.
+   */
+  // palette: themePalette({accent: '#0064E0', recipe: 'astryx-oklch-v2'}),
+
+  /**
    * Type scale and the three font roles.
    *   scale.base   body size in px; scale.ratio  step between sizes
    *                (1.125 tight/dense · 1.2 default · 1.333 dramatic)
    *   body / heading / code: {family, fallbacks, weight, weights}
-   *   heading inherits family and fallbacks from body when omitted; `weights`
-   *   sets per-level weight for headings 1–6.
+   *   heading without a family of its own uses body's full list; given a
+   *   family, it keeps just its own fallbacks (fallbacks alone do nothing).
+   *   `weights` sets per-level weight for headings 1–6.
    *
    * See §2 above — naming a family here does not load it.
    *
@@ -181,8 +191,8 @@ export const myTheme = defineTheme({
   radius: {base: 4, multiplier: 1},
 
   /**
-   * Motion. Two knobs set how its CSS feels (touch springs don't read them
-   * yet):
+   * Motion. Two knobs set how it feels. tempo also times the touch springs;
+   * character sets only the CSS curves for now:
    *   tempo — 1 is Astryx's own; 0.75 the quickest, 1.5 the slowest.
    *   character — 'crisp' | 'standard' | 'expressive': the entrance and move
    *     curves (--ease-entrance, --ease-move). --ease-exit, the curve for
@@ -229,8 +239,10 @@ export const myTheme = defineTheme({
   //   --focus-outline-* width · style · color · offset
   //   --border-width   hairline thickness shared by bordered surfaces
   //   --radius-*       none · inner · element · container · page · chat · full
+  //                    (chat defaults to container)
   //   --shadow-*       low/med/high + inset-{hover,selected,success,warning,error}
-  //   --duration-*     {fast,medium,slow} × {-min, base, -max}
+  //   --duration-*     {fast,medium,slow} × {-min, base, -max} · exit
+  //                    (dismissal; defaults to fast)
   //   --ease-*         standard (state) · entrance (arriving) · move (on
   //                    screen) · exit (leaving)
   //   --font-family-*  body · heading · code
@@ -247,7 +259,7 @@ export const myTheme = defineTheme({
     //   palette.neutral.light[100],
     //   palette.neutral.dark[15],
     // ],
-    '--color-accent': ['#0064E0', '#2694FE'],
+    '--color-accent': ['#0064E0', '#0171E3'],
     // Changing an accent means owning its on-colour: this is the label that
     // sits on top of the fill above, in each mode.
     '--color-on-accent': ['#FFFFFF', '#FFFFFF'],
@@ -268,8 +280,8 @@ export const myTheme = defineTheme({
   // (`astryx-button` → `button`, `astryx-side-nav-item` → `side-nav-item`),
   // including inner parts like `progress-bar-fill`.
   //
-  // `astryx component <Name>` IS THE REFERENCE HERE. It prints that
-  // component's theming targets, the visual props and states you can key on,
+  // `astryx component <Name> --detail full` IS THE REFERENCE HERE. It prints
+  // that component's theming targets, the visual props and states you can key on,
   // its public CSS variables with defaults, and which standard CSS properties
   // it expands. `astryx component --list` names every component, and
   // `astryx docs styling` covers the escape hatches outside a theme.
@@ -280,25 +292,31 @@ export const myTheme = defineTheme({
   //   'variant:ghost+size:sm'   intersection of two
   //   'checked'                 a state the component reflects
   //   ':hover' / ':focus-visible' / ':disabled' — nested inside any of the above
+  //   '@light' / '@dark'        a block inside any of the above that applies
+  //                             only in that color mode (properties and
+  //                             ':hover' etc. as above); the other mode is
+  //                             left as written
   //
   // Write ordinary CSS properties: `borderRadius` and `padding` expand into
   // the component's internal vars for you, concentric radius math included.
   // Set a public CSS var directly when no standard property reaches it — take
-  // the name from `astryx component <Name>`, since a var no component defines
-  // compiles to CSS that never applies. Never set a private `--_`-prefixed
-  // var; the build rejects it.
+  // the name from `astryx component <Name> --detail full`, since a var no
+  // component defines compiles to CSS that never applies. Never set a private
+  // `--_`-prefixed var; the build rejects it.
   // ───────────────────────────────────────────────────────────────────────
   components: {
     button: {
       base: {
         borderRadius: 'var(--radius-full)',
         fontWeight: 'var(--font-weight-semibold)',
-        // A public var from `astryx component Button` — no CSS-property
-        // equivalent exists for it.
+        // A public var from `astryx component Button --detail full` — no
+        // CSS-property equivalent exists for it.
         '--button-focus-offset': '2px',
         // Interaction states live inside the same block.
         ':hover': {transform: 'translateY(-1px)'},
         ':active': {transform: 'translateY(0)'},
+        // A value for one color mode only — any property, not just a colour:
+        // '@dark': {fontWeight: 'var(--font-weight-medium)'},
       },
       'variant:ghost': {borderWidth: '1px', borderStyle: 'solid'},
       'variant:destructive+size:sm': {letterSpacing: '0.02em'},
@@ -344,6 +362,18 @@ export const myTheme = defineTheme({
    * Reference: `astryx docs icons`.
    */
   // iconVariants: ['outline', 'filled'],
+
+  /**
+   * Choose which shared icon a component's own icon role uses, by slot, such
+   * as `code-block-copy` for CodeBlock's copy button. A value is an icon name,
+   * `null` to hide the icon, a partial `{icon, variant, size}` request, or a
+   * pure function of the slot's state that returns one.
+   * Keep a slot function in its own module and import it, so a built theme
+   * can import it too. Here `copySlot` is
+   * `({copied}) => ({icon: copied ? 'checkDouble' : 'copy'})`.
+   * Reference: `astryx docs icons`; each component's docs list its slots.
+   */
+  // componentIcons: {'code-block-copy': copySlot},
 
   /**
    * Replace the small components that DRAW control state — the checkbox box,

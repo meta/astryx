@@ -20,10 +20,11 @@
 export type MotionCharacter = 'crisp' | 'standard' | 'expressive';
 
 /**
- * Whose Reduce Motion setting a theme follows: `'system'`, each person's own.
- * Internal: no theme sets it until `'always'` ships (`spec:AST-108` FR6).
+ * Whose Reduce Motion setting a theme follows: `'system'`, each person's own,
+ * or `'always'`, reduced for everyone. Internal: `resolveKnobs` resolves
+ * every theme to `'system'` until `'always'` ships (`spec:AST-108` FR6).
  */
-export type ThemeReducedMotion = 'system';
+export type ThemeReducedMotion = 'system' | 'always';
 
 /** The motion knobs a theme sets (`spec:AST-108` FR1). */
 export interface ThemeMotionKnobs {

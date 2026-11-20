@@ -9,7 +9,7 @@
  *   dropped) at the midnight boundary
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test} from '@astryxdesign/a11y-spec/playwright';
 import {
   finishEvidence,
   openStory,

@@ -10,5 +10,4 @@ export const doc = {
   isReady: true,
   aspectRatio: 4 / 3,
   componentsUsed: ['Center', 'Card', 'Icon', 'Layout', 'Text'],
-  icons: {InboxIcon: 'inbox'},
 };

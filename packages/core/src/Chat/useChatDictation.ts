@@ -16,6 +16,7 @@
 import {useState, useCallback, useEffect, useRef} from 'react';
 import type {ChatComposerInputHandle} from './ChatComposerInput';
 import {useSpeechRecognition} from './useSpeechRecognition';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 
 // =============================================================================
 // Types
@@ -292,7 +293,6 @@ export function useChatDictation(
 
   const volumeHistoryRef = useRef<number[]>([]);
   const getAudioContextRef = useRef(getAudioContext);
-  getAudioContextRef.current = getAudioContext;
   const analyserRef = useRef<VolumeAnalyser | null>(null);
   const rafRef = useRef<number>(0);
   const interimSpanRef = useRef<HTMLSpanElement | null>(null);
@@ -303,12 +303,18 @@ export function useChatDictation(
     onStartProp,
     onEndProp,
   });
-  callbacksRef.current = {
-    onTranscriptProp,
-    onResultProp,
-    onStartProp,
-    onEndProp,
-  };
+  // Recognition events read the latest callbacks and audio context. Write
+  // them at commit: a render React discards, as a suspended transition does,
+  // must not leave its values behind.
+  useIsomorphicLayoutEffect(() => {
+    getAudioContextRef.current = getAudioContext;
+    callbacksRef.current = {
+      onTranscriptProp,
+      onResultProp,
+      onStartProp,
+      onEndProp,
+    };
+  });
 
   const startVolumePolling = useCallback(() => {
     const poll = () => {
@@ -395,6 +401,7 @@ export function useChatDictation(
     [userTransform],
   );
 
+  // Releases the audio analyser and the animation frame on unmount.
   useEffect(() => {
     return () => {
       analyserRef.current?.cleanup();

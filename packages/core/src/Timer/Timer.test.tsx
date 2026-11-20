@@ -11,6 +11,8 @@ import {renderToString} from 'react-dom/server';
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {Timer} from './Timer';
+import {InternationalizationProvider} from '../i18n';
+import {formatElapsedDuration} from '../utils/timeFormat';
 
 describe('Timer', () => {
   beforeEach(() => {
@@ -90,6 +92,31 @@ describe('Timer', () => {
     rerender(<Timer startTime={now - 3_753_000} data-testid="timer" />);
     expect(timer).toHaveTextContent('1h 02m');
     expect(timer).toHaveAttribute('datetime', 'PT3720S');
+  });
+
+  it('writes elapsed durations in the provider locale', () => {
+    const now = Date.now();
+    const renderTimer = (startTime: number) => (
+      <InternationalizationProvider locale="de-DE">
+        <Timer startTime={startTime} data-testid="timer" />
+      </InternationalizationProvider>
+    );
+    const {rerender} = render(renderTimer(now - 34_000));
+    const timer = screen.getByTestId('timer');
+    // The locale's own unit text; timeFormat.test.ts pins the exact strings.
+    expect(timer).toHaveTextContent(
+      formatElapsedDuration('de-DE', [['second', 34]]),
+    );
+    expect(timer).not.toHaveTextContent('34s');
+
+    rerender(renderTimer(now - 128_000));
+    expect(timer).toHaveTextContent(
+      formatElapsedDuration('de-DE', [
+        ['minute', 2],
+        ['second', 8],
+      ]),
+    );
+    expect(timer).toHaveAttribute('datetime', 'PT128S');
   });
 
   it('formats clock durations across minutes and hours', () => {
@@ -298,5 +325,59 @@ describe('Timer', () => {
 
     expect(timer).not.toHaveAttribute('aria-live');
     expect(timer).not.toHaveAttribute('role');
+  });
+});
+
+describe('Timer hardening guards', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-22T00:00:00Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('caps the wait for a distant future origin at the 32-bit timeout ceiling', () => {
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    render(
+      <Timer
+        startTime={Date.now() + 30 * 24 * 60 * 60 * 1000}
+        data-testid="timer"
+      />,
+    );
+
+    // A raw startTime - now delay would exceed the 32-bit setTimeout range and
+    // fire immediately in some browsers; the ceiling keeps the wake scheduled.
+    expect(setTimeoutSpy).toHaveBeenLastCalledWith(
+      expect.any(Function),
+      2_147_483_647,
+    );
+  });
+
+  it('coerces an unknown format to elapsed', () => {
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    const now = Date.now();
+    const {rerender} = render(
+      <Timer
+        format={'stopwatch' as never}
+        startTime={now - 3_723_000}
+        data-testid="timer"
+      />,
+    );
+
+    // Past one hour, only the elapsed format moves to minute cadence: the
+    // next wake is the 57 s left in the minute, not one second.
+    expect(screen.getByTestId('timer')).toHaveTextContent('1h 02m');
+    expect(setTimeoutSpy).toHaveBeenLastCalledWith(
+      expect.any(Function),
+      57_000,
+    );
+
+    rerender(
+      <Timer format="clock" startTime={now - 3_723_000} data-testid="timer" />,
+    );
+    expect(screen.getByTestId('timer')).toHaveTextContent('1:02:03');
   });
 });

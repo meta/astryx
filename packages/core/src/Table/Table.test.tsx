@@ -26,6 +26,8 @@ import {
   resolveColumnWidths,
   resolveTableMinWidth,
   capitalize,
+  defaultCellRenderer,
+  isInvalidDate,
   DEFAULT_FLEXIBLE_COLUMN_MIN_WIDTH,
   DEFAULT_MIN_COLUMN_WIDTH,
 } from './columnUtils';
@@ -102,6 +104,25 @@ describe('columnUtils', () => {
       // Deseret 𐐨 (U+10428) uppercases to 𐐀 (U+10400); charAt(0) would grab
       // half the surrogate pair and leave the string unchanged.
       expect(capitalize('\u{10428}pple')).toBe('\u{10400}pple');
+    });
+  });
+
+  describe('defaultCellRenderer', () => {
+    it('renders an Invalid Date as an empty cell, like null', () => {
+      expect(defaultCellRenderer({at: new Date('not a date')}, 'at')).toBe('');
+      expect(defaultCellRenderer({at: null}, 'at')).toBe('');
+    });
+
+    it('still renders a valid Date as its ISO text', () => {
+      expect(
+        defaultCellRenderer({at: new Date('2024-01-01T00:00:00Z')}, 'at'),
+      ).toBe('2024-01-01T00:00:00.000Z');
+    });
+
+    it('tells an Invalid Date from a valid one', () => {
+      expect(isInvalidDate(new Date('not a date'))).toBe(true);
+      expect(isInvalidDate(new Date(0))).toBe(false);
+      expect(isInvalidDate('not a date')).toBe(false);
     });
   });
 
@@ -1008,6 +1029,24 @@ describe('Table', () => {
     render(<Table data={users} columns={columns} plugins={{custom: plugin}} />);
     const wrapper = screen.getByRole('region', {name: 'Orders'});
     expect(wrapper).toHaveAttribute('tabindex', '2');
+  });
+
+  it("composes a plugin's scroll-wrapper className with the wrapper's own", () => {
+    const plugin: TablePlugin<User> = {
+      transformScrollWrapper: props => ({
+        ...props,
+        htmlProps: {
+          ...props.htmlProps,
+          className: 'plugin-wrapper',
+        },
+      }),
+    };
+    render(<Table data={users} columns={columns} plugins={{custom: plugin}} />);
+    const wrapper = screen.getByRole('group', {name: 'Table'});
+    // The plugin's class reaches the scroll container, beside the wrapper's
+    // own theme target.
+    expect(wrapper).toHaveClass('plugin-wrapper');
+    expect(wrapper).toHaveClass('astryx-table-scroll-wrapper');
   });
 
   it('contains overscroll only while the table scrolls', () => {

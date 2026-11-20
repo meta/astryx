@@ -33,13 +33,65 @@ export function gated(condition, gate = PR_CI_GATE) {
   return condition.startsWith('${{') ? `\${{ ${wrapped} }}` : wrapped;
 }
 
-/** The job's own condition, without the gate in front. */
+/**
+ * The job's own condition, without the gate in front, nor the heavy-suite
+ * deferral a heavy job adds after it (spec:AST-030 FR20).
+ */
 export function ungated(condition) {
-  const expression = condition.replace(/^\$\{\{\s*|\s*\}\}$/g, '');
+  let expression = condition.replace(/^\$\{\{\s*|\s*\}\}$/g, '');
   for (const gate of [PR_CI_GATE, PR_REPORT_GATE]) {
     const prefix = `${gate} && (`;
-    if (expression.startsWith(prefix))
-      return expression.slice(prefix.length, -1);
+    if (expression.startsWith(prefix)) {
+      expression = expression.slice(prefix.length, -1);
+      break;
+    }
   }
+  if (expression.startsWith(`${HEAVY_RUNS} && (`))
+    expression = expression.slice(HEAVY_RUNS.length + 5, -1);
+  if (expression.startsWith(`${HEAVY_ADMITTED} && (`))
+    expression = expression.slice(HEAVY_ADMITTED.length + 5, -1);
   return expression;
 }
+
+/**
+ * A run that defers the heavy suites (spec:AST-030 FR20, DEC-32): a
+ * pull-request run into `main`, from any author, in its first attempt (a push,
+ * or the pull request opened, reopened or marked ready). A release merge-back
+ * is never deferred. The `heavy-ci` job runs only then, and defers unless the
+ * change is spec-only or Lab-only, or a release-critical label that someone
+ * with write access applied last counts (DEC-30).
+ * The heavy suites run when review passes (ci-review-pass.yml re-runs the
+ * run in full) and in merge-guard's pre-merge re-run.
+ */
+/**
+ * The shared agent logins. The heavy-suite caps
+ * (.github/actions/heavy-caps) list the same logins, and a test holds the two
+ * lists equal.
+ */
+export const SHARED_AGENT_LOGINS = ['cixzhang'];
+
+export const HEAVY_CANDIDATE =
+  "(github.event_name == 'pull_request' && github.run_attempt == '1' && " +
+  "github.base_ref == 'main' && !startsWith(github.head_ref, 'chore/merge-v'))";
+
+/** `heavy-ci` decided to defer this push's heavy suites. */
+export const HEAVY_DEFERRED = "needs.heavy-ci.outputs.deferred == 'true'";
+
+/**
+ * A heavy job's condition after the gate. `heavy-ci` skips for every push it
+ * does not decide, so the job runs then too (`!cancelled()`, not success()).
+ */
+export const HEAVY_RUNS =
+  "!cancelled() && needs.heavy-ci.outputs.deferred != 'true'";
+
+/**
+ * `!cancelled()` above also drops Actions' implicit success check, so a heavy
+ * job that needs admission and had no status check of its own checks
+ * admission itself: when CI is full admission fails, and the job must stop
+ * (spec:AST-030 FR16).
+ */
+export const HEAVY_ADMITTED = "needs.admission.result == 'success'";
+
+/** What a deferred required check and the PR report say. */
+export const HEAVY_DEFERRED_MESSAGE =
+  'Heavy CI deferred: runs when review passes and before merge';

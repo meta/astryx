@@ -13,6 +13,7 @@ import {
   collectViolations,
   diffAgainstBaseline,
   formatDiffSummary,
+  formatResolvedWarning,
   violationKey,
 } from './a11y-baseline.js';
 
@@ -117,7 +118,11 @@ function makeMultiRoutedReport(rows, {legacyBaselineAliases = {}} = {}) {
     });
     legacyStoryOwners[legacyStoryKey] ??= [];
     legacyStoryOwners[legacyStoryKey].push(canonicalStoryKey);
-    components[row.component] ??= {storiesAudited: 0, violations: [], storyDetails: []};
+    components[row.component] ??= {
+      storiesAudited: 0,
+      violations: [],
+      storyDetails: [],
+    };
     components[row.component].storiesAudited += 1;
     if (row.ruleId) {
       components[row.component].storyDetails.push({
@@ -129,8 +134,8 @@ function makeMultiRoutedReport(rows, {legacyBaselineAliases = {}} = {}) {
   }
   return {
     auditedStories,
-    auditedStoryKeys: auditedStories.map(({owner, storyId}) =>
-      `${owner}::${storyId}`,
+    auditedStoryKeys: auditedStories.map(
+      ({owner, storyId}) => `${owner}::${storyId}`,
     ),
     legacyStoryOwners,
     legacyBaselineAliases,
@@ -304,8 +309,7 @@ describe('diffAgainstBaseline', () => {
       legacyStoryOwners,
     });
     const legacyKey = 'Tooltip::Default::color-contrast';
-    const coreKey =
-      'core/Tooltip::core-tooltip--default::color-contrast';
+    const coreKey = 'core/Tooltip::core-tooltip--default::color-contrast';
     const chartsKey =
       'charts/ChartTooltip::charts-chrome-tooltip--default::color-contrast';
     const diff = diffAgainstBaseline(scopedReport, {
@@ -328,9 +332,9 @@ describe('diffAgainstBaseline', () => {
       version: 1,
       entries: [{key: legacyKey}],
     });
-    expect(collisionDiff.newViolations.map(violation => violation.key)).toEqual([
-      chartsKey,
-    ]);
+    expect(collisionDiff.newViolations.map(violation => violation.key)).toEqual(
+      [chartsKey],
+    );
     expect(collisionDiff.unchecked).toEqual([legacyKey]);
   });
 
@@ -359,9 +363,7 @@ describe('diffAgainstBaseline', () => {
     });
 
     expect(diff.newViolations.map(violation => violation.key).sort()).toEqual(
-      rows
-        .map(row => `${row.owner}::${row.storyId}::${row.ruleId}`)
-        .sort(),
+      rows.map(row => `${row.owner}::${row.storyId}::${row.ruleId}`).sort(),
     );
     expect(diff.resolved).toEqual([]);
     expect(diff.unchecked).toEqual([legacyKey]);
@@ -378,8 +380,7 @@ describe('diffAgainstBaseline', () => {
       },
       {
         owner: 'core/CheckboxListItem',
-        storyId:
-          'a11y-checkbox-pattern--list-item-group-disabled-with-message',
+        storyId: 'a11y-checkbox-pattern--list-item-group-disabled-with-message',
         component: 'Checkbox pattern',
         story: 'List Item Group Disabled With Message',
         ruleId: 'color-contrast',
@@ -401,8 +402,7 @@ describe('diffAgainstBaseline', () => {
       },
       {
         owner: 'core/RadioListItem',
-        storyId:
-          'a11y-radio-group-pattern--radio-list-option-group-disabled',
+        storyId: 'a11y-radio-group-pattern--radio-list-option-group-disabled',
         component: 'Radio group pattern',
         story: 'Radio List Option Group Disabled',
         ruleId: 'color-contrast',
@@ -447,9 +447,7 @@ describe('diffAgainstBaseline', () => {
       existing: {version: 1, entries: legacyKeys},
     }).entries.map(entry => entry.key);
     expect(migrated).toEqual(
-      rows
-        .map(row => `${row.owner}::${row.storyId}::${row.ruleId}`)
-        .sort(),
+      rows.map(row => `${row.owner}::${row.storyId}::${row.ruleId}`).sort(),
     );
   });
 });
@@ -598,8 +596,7 @@ describe('buildBaseline', () => {
   });
 
   it('migrates a unique audited legacy key to package and story identity', () => {
-    const legacyKey =
-      'RichTextEditor::With Toolbar::aria-input-field-name';
+    const legacyKey = 'RichTextEditor::With Toolbar::aria-input-field-name';
     const scopedReport = makeRoutedReport({
       owner: 'richtext/RichTextEditorToolbar',
       storyId: 'lab-richtexteditor--with-toolbar',
@@ -651,5 +648,59 @@ describe('formatDiffSummary', () => {
     expect(summary).toContain('can be removed');
     expect(summary).toContain('Button::Primary::button-name');
     expect(summary).toContain('Gate passed');
+  });
+});
+
+describe('formatResolvedWarning', () => {
+  it('is empty when every baseline entry still occurs', () => {
+    const report = makeReport({
+      Button: {Primary: [axeViolation('button-name')]},
+    });
+    const diff = diffAgainstBaseline(report, {
+      version: 1,
+      entries: ['Button::Primary::button-name'],
+    });
+    expect(diff.resolved).toEqual([]);
+    expect(formatResolvedWarning(diff)).toBe('');
+  });
+
+  it('warns, without failing, when one baseline entry no longer occurs', () => {
+    const report = makeReport({Button: {Primary: []}});
+    const diff = diffAgainstBaseline(report, {
+      version: 1,
+      entries: ['Button::Primary::button-name'],
+    });
+    expect(diff.newViolations).toEqual([]);
+    expect(formatResolvedWarning(diff)).toBe(
+      '::warning title=Resolved accessibility baseline entries::1 baseline entry no longer occurs; ' +
+        "remove it from .github/a11y-baseline.json. The keys are in this step's log.",
+    );
+  });
+
+  it('counts every resolved entry and names the baseline path it was given', () => {
+    const warning = formatResolvedWarning(
+      {resolved: ['A::One::color-contrast', 'B::Two::color-contrast']},
+      {baselinePath: 'custom/baseline.json'},
+    );
+    expect(warning).toMatch(/^::warning /);
+    expect(warning).toContain(
+      '2 baseline entries no longer occur; remove them',
+    );
+    expect(warning).toContain('custom/baseline.json');
+  });
+
+  it('leaves an entry outside the audited stories out of the count', () => {
+    const report = makeReport({Button: {Primary: []}});
+    const diff = diffAgainstBaseline(report, {
+      version: 1,
+      entries: [
+        'Button::Primary::button-name',
+        'Dialog::Default::aria-dialog-name',
+      ],
+    });
+    expect(diff.unchecked).toEqual(['Dialog::Default::aria-dialog-name']);
+    expect(formatResolvedWarning(diff)).toContain(
+      '1 baseline entry no longer occurs',
+    );
   });
 });

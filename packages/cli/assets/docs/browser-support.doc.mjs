@@ -32,7 +32,12 @@ export const docs = {
         },
         {
           type: 'table',
-          headers: ['Tier', 'Baseline', 'Representative versions', 'What your users experience'],
+          headers: [
+            'Tier',
+            'Baseline',
+            'Representative versions',
+            'What your users experience',
+          ],
           rows: [
             [
               'Tier 1: Full fidelity',
@@ -135,6 +140,27 @@ export const docs = {
             'Astryx does not guarantee correct layer positioning below Tier 1 (anchor positioning). Closing that gap for a Tier 2 audience is a consumer choice; see below.',
             'Astryx does not ship a `light-dark()` fallback, so theme colors are not guaranteed below Tier 2.',
           ],
+        },
+      ],
+    },
+    {
+      title: 'The On-Screen Keyboard',
+      content: [
+        {
+          type: 'prose',
+          text: "On a phone, the components that respond to the on-screen keyboard, a fully expanded `height='tall'` BottomSheet and ChatLayout's composer, measure it the same way: the layout viewport's height minus the visual viewport's height times its scale. Where the visual viewport shrinks for the keyboard, as in Safari on iOS in the browser and as a home-screen app, in Firefox for Android and in Chrome on Android, they keep the focused field and the surface around it above the keyboard and leave the page where it was. If Firefox for Android pans to the field, they put the page back within a couple of frames.",
+        },
+        {
+          type: 'prose',
+          text: 'In Chrome on Android, ChatLayout\u2019s composer rides the keyboard as Gboard slides it up and down. A Tall BottomSheet\u2019s focused field rides the keyboard as Gboard slides it up, and as Gboard slides it down after the field loses focus. The scroll room stays until the keyboard is down. A hide Chrome reports late, such as Back, which keeps the focus, rides down from Chrome\u2019s report. When the keyboard is reported, the sheet places the field just above it in that same frame, so Chrome has no covered field to pan to; if Chrome pans anyway, the sheet puts the page back when that pan ends. Chrome follows your viewport setting, which Astryx documents and never sets: your app owns its viewport `<meta>` element. By default (`interactive-widget=resizes-visual`) Chrome lays the keyboard over the page and pans to a focused field elsewhere on the page. With `interactive-widget=resizes-content` it shrinks the layout viewport instead, so content anchored to the bottom sits above the keyboard, and those components measure no keyboard and change nothing: the browser has already made the room.',
+        },
+        {
+          type: 'code',
+          lang: 'html',
+          label: 'Chrome on Android resizes the page for the keyboard',
+          code: `<meta
+  name="viewport"
+  content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />`,
         },
       ],
     },

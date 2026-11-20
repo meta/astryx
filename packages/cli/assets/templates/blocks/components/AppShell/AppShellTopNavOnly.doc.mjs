@@ -18,5 +18,4 @@ export const doc = {
     'VStack',
     'NavIcon',
   ],
-  icons: {CubeIcon: 'package'},
 };

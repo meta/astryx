@@ -4,8 +4,8 @@
 
 /**
  * @file ModalAnnounceProvider.tsx
- * @input Uses React context, effects and the exposure and delivery
- *   internals of useAnnounce
+ * @input Uses React context, effects, the exposure and delivery internals of
+ *   useAnnounce, and the shared MutationObserver
  * @output Exports ModalAnnounceProvider, the element every Astryx component
  *   that owns a native <dialog> renders around its content
  * @position Core a11y internal (spec:AST-086 FR14). Its own module so only
@@ -32,6 +32,7 @@ import {
 } from './modalAnnounce';
 import {ModalAnnounceContext, type ModalAnnounceScope} from './useAnnounce';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
+import {observeMutations} from '../utils/sharedMutationObserver';
 
 /**
  * Rendered by every Astryx component that owns a native `<dialog>` (Dialog,
@@ -56,10 +57,9 @@ export function ModalAnnounceProvider({
 }: {
   dialogRef: RefObject<HTMLDialogElement | null>;
   /**
-   * The owner's intent for this render: open as a modal (or presented as a
-   * modal step). A non-modal surface — a scrimless Drawer shown with
-   * `showPopover()`, a scrimless sheet — passes `false`: it is not an FR14
-   * modal, and callers inside it route as the page does.
+   * The owner's intent for this render: open as a modal, or presented as a
+   * modal step. A non-modal surface, such as a scrimless Drawer or sheet,
+   * passes `false`. Callers inside it route as the page does.
    */
   isOpen: boolean;
   children: ReactNode;
@@ -76,12 +76,10 @@ export function ModalAnnounceProvider({
   useIsomorphicLayoutEffect(() => {
     scope.isOpen = isOpen;
   }, [scope, isOpen]);
-  // The presentation watch is a session: it starts when the owner intends
-  // the dialog open (or finds it already open), follows `open`, `inert` and
-  // `aria-hidden` through the exit, and ends once the dialog has really
-  // closed, or when the provider unmounts. A closed dialog at rest — a
-  // preloaded sheet, a Drawer never shown — holds no observer
-  // (`architecture:react-component-runtime` INV5).
+  // The presentation watch is a session. It starts when the owner intends the
+  // dialog open, or finds it open. It follows `open`, `inert` and
+  // `aria-hidden` through the exit, and it ends when the dialog really closes
+  // or the provider unmounts. A closed dialog at rest holds no observer.
   const sessionRef = useRef<{
     dialog: HTMLDialogElement;
     stop: () => void;
@@ -97,11 +95,11 @@ export function ModalAnnounceProvider({
     notePresented(dialog);
     let wasOpen = dialog.open;
     const end = () => {
-      presentation.disconnect();
+      stop();
       forgetPresented(dialog);
       sessionRef.current = null;
     };
-    const stop = () => presentation.disconnect();
+    const stop = () => unobserve();
     const onPresentationChange = () => {
       // The order is the top-layer order: only `open` being set moves a
       // dialog up it. A dialog turning inert or aria-hidden for its exit
@@ -126,13 +124,16 @@ export function ModalAnnounceProvider({
         end();
       }
     };
-    const presentation = new MutationObserver(onPresentationChange);
-    presentation.observe(dialog, {
-      attributes: true,
-      attributeFilter: ['open', 'inert', 'aria-hidden'],
-    });
+    // Core's shared observer watches every open modal's presentation: one
+    // observer for all of them, not one per open modal.
+    const unobserve = observeMutations(
+      dialog,
+      {attributes: true, attributeFilter: ['open', 'inert', 'aria-hidden']},
+      onPresentationChange,
+    );
     sessionRef.current = {dialog, stop};
   }, [dialogRef, isOpen]);
+  // Releases the presentation watch and the held announcements on unmount.
   useEffect(
     () => () => {
       const session = sessionRef.current;

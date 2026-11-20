@@ -3,9 +3,15 @@
 'use client';
 
 /**
- * @input A top-level page and an anonymous iframe's exact-origin reachability message
+ * @input Build-time docs and probe origins, a top-level page, and an anonymous
+ *   iframe's exact-origin reachability message
  * @output A fail-closed, once-per-page-load reachability result
  * @position Client-only detection shared across root-layout remounts
+ *
+ * Both origins are deployment configuration, read from
+ * NEXT_PUBLIC_INTERNAL_DOCS_ORIGIN and NEXT_PUBLIC_DOCS_ACCESS_CHECK_ORIGIN at
+ * build time. A build without both (every fork and local build by default)
+ * never probes and never shows the prompt.
  */
 
 import {useSyncExternalStore} from 'react';
@@ -15,8 +21,33 @@ export const ALLOWED_PARENT_ORIGINS: readonly string[] = [
   'https://astryx-git-feat-docs-internal-network-prompt-fbopensource.vercel.app',
   'https://astryx-canary.vercel.app',
 ];
-export const INTERNAL_DOCS_ORIGIN = 'https://astryx.internalmeta.com';
-export const ACCESS_CHECK_ORIGIN = 'https://codebunny.internalmeta.com';
+
+/**
+ * The exact origin of a configured absolute https URL, or undefined when the
+ * value is missing, malformed, or not https: a bad value disables the prompt
+ * rather than probing or linking somewhere unintended.
+ */
+export function configuredOrigin(
+  value: string | undefined,
+): string | undefined {
+  if (!value?.trim()) {
+    return undefined;
+  }
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === 'https:' ? url.origin : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// Each variable is read by its literal name so the build inlines it.
+export const INTERNAL_DOCS_ORIGIN = configuredOrigin(
+  process.env.NEXT_PUBLIC_INTERNAL_DOCS_ORIGIN,
+);
+export const ACCESS_CHECK_ORIGIN = configuredOrigin(
+  process.env.NEXT_PUBLIC_DOCS_ACCESS_CHECK_ORIGIN,
+);
 export const ACCESS_CHECK_MESSAGE_TYPE = 'codebunny:access-check:v1';
 
 const listeners = new Set<() => void>();
@@ -33,6 +64,12 @@ function publishReachability(next: boolean) {
 
 function startCheck() {
   attempted = true;
+
+  // Without both configured origins there is nothing to probe or link to.
+  const accessCheckOrigin = ACCESS_CHECK_ORIGIN;
+  if (!accessCheckOrigin || !INTERNAL_DOCS_ORIGIN) {
+    return;
+  }
 
   // Embedded documents, including playground previews, must not probe again.
   if (window.top !== window) {
@@ -53,7 +90,7 @@ function startCheck() {
   frame.setAttribute('sandbox', 'allow-scripts allow-same-origin');
   frame.title = 'Astryx documentation reachability check';
   frame.referrerPolicy = 'no-referrer';
-  frame.src = `${ACCESS_CHECK_ORIGIN}/embed/access-check?parent_origin=${encodeURIComponent(parentOrigin)}`;
+  frame.src = `${accessCheckOrigin}/embed/access-check?parent_origin=${encodeURIComponent(parentOrigin)}`;
 
   let loaded = false;
   let received = false;
@@ -73,7 +110,7 @@ function startCheck() {
   };
   const onMessage = (event: MessageEvent) => {
     if (
-      event.origin !== ACCESS_CHECK_ORIGIN ||
+      event.origin !== accessCheckOrigin ||
       event.source !== frame.contentWindow ||
       event.data?.type !== ACCESS_CHECK_MESSAGE_TYPE ||
       event.data?.reachable !== true

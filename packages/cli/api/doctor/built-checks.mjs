@@ -11,10 +11,14 @@
  *   integration the project loads (its component catalog's providers).
  * @output `built-astryx-usage`: fails when the path holds no value import from those
  *   packages, no use of a component imported from them, and no Astryx
- *   stylesheet in built CSS or HTML. `built-astryx-purity`: warns with the
+ *   stylesheet in built CSS or HTML. `built-astryx-styles`: warns when output
+ *   that uses Astryx holds built stylesheets or pages but none carries Core's
+ *   component styles, so its components render unstyled; an app that compiles
+ *   Core from source is not checked. `built-astryx-purity`: warns with the
  *   findings of the source check in `astryx docs is-my-code-good` (raw
  *   elements Astryx has a component for, raw SVG and icon-library icons,
- *   inline styles, classes, StyleX declarations and imported stylesheets),
+ *   inline styles, classes, StyleX declarations and imported stylesheets,
+ *   except a setup stylesheet that only loads Astryx packages' CSS),
  *   each with its file and line; info, "not inspected", when the path holds
  *   no source with JSX (a bundle is build output, not source).
  * @position Pure: the doctor adapter reads the files (readBuiltPath) and the
@@ -26,11 +30,15 @@
 import {
   BUILT_FILE_LIMIT,
   BUILT_FILE_MAX_MB,
+  doctorStylesheetOnlyLoads,
+  doctorThemeWiring,
   readBuiltPath,
   resolveBuiltPath,
 } from './_adapter.mjs';
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
-import {parse as parseModule} from '@babel/parser';
+import {babelParse as parseModule} from '../../foundation/runtime/lazy-dependencies.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
+import * as path from 'node:path';
 
 /** Source files, read for imports and JSX. */
 const SOURCE_EXT = new Set(['.tsx', '.jsx', '.ts', '.js', '.mjs', '.cjs']);
@@ -71,6 +79,7 @@ function hasJsx(text) {
         sourceType: 'unambiguous',
         plugins,
         errorRecovery: true,
+        attachComment: false,
       });
       break;
     } catch {
@@ -108,6 +117,69 @@ const SHOWN = 5;
  */
 const STYLESHEET_MARK =
   /@layer\s+[^{;]*\bastryx-(?:base|theme)\b|--astryx-[\w-]+/;
+
+/**
+ * The mark of Core's component styles (`@astryxdesign/core/astryx.css`) in a
+ * built stylesheet or page: the rules of the `astryx-base` cascade layer. A
+ * theme's stylesheet names that layer only in its layer order. Core's
+ * scripts hold such a rule as text they write at run time, so only
+ * stylesheets and pages count.
+ */
+const CORE_STYLES_MARK = /@layer\s+astryx-base\s*\{/;
+
+/** Core's component styles, as a stylesheet or a module imports them. */
+const CORE_STYLESHEET = '@astryxdesign/core/astryx.css';
+
+/**
+ * A page's link to Core's component styles: the package's file, from a
+ * package CDN (`…/@astryxdesign/core@<version>/dist/astryx.css`) or an
+ * installed copy.
+ */
+const CORE_STYLESHEET_HREF =
+  /@astryxdesign\/core(?:@[^/"'\s]+)?\/(?:dist\/)?astryx\.css(?:[?#"'\s]|$)/u;
+
+/**
+ * Whether a page links Core's component styles: a `<link>` whose `rel` is a
+ * stylesheet and whose `href` names the package's `astryx.css`. Comments
+ * never count.
+ * @param {string} html
+ */
+export function linksCoreStylesheet(html) {
+  return stylesheetLinkHrefs(html).some(href =>
+    CORE_STYLESHEET_HREF.test(href),
+  );
+}
+
+/**
+ * The `href` of every `<link>` in a page whose `rel` is a stylesheet: a
+ * page file's HTML, or the JSX of a layout that writes the page head.
+ * Comments never count (HTML ones, and a layout's JS block comments), and
+ * a link whose `rel` only mentions a stylesheet (`preload`) is none.
+ * @param {string} page
+ * @returns {string[]}
+ */
+export function stylesheetLinkHrefs(page) {
+  const text = page
+    .replace(/<!--[\s\S]*?-->/gu, ' ')
+    .replace(/\/\*[\s\S]*?\*\//gu, ' ');
+  /** @type {string[]} */
+  const out = [];
+  for (const tag of text.matchAll(/<link\b[^>]*>/giu)) {
+    const attributes = tag[0];
+    const relMatch =
+      /\brel\s*=\s*(?:\{?\s*(["'`])([^"'`]*)\1|([^\s"'`>]+))/iu.exec(
+        attributes,
+      );
+    const rel = relMatch?.[2] ?? relMatch?.[3];
+    if (!rel || !rel.split(/\s+/u).some(word => /^stylesheet$/iu.test(word)))
+      continue;
+    const href = /\bhref\s*=\s*\{?\s*(["'`])([^"'`]*)\1/iu.exec(
+      attributes,
+    )?.[2];
+    if (href) out.push(href);
+  }
+  return out;
+}
 
 /**
  * Raw elements the rubric names a component for (`astryx docs
@@ -191,6 +263,11 @@ const ICON_PACKAGES = [
  * @property {number} componentUses JSX uses of names imported from them
  * @property {string[]} packages the Astryx packages imported, sorted
  * @property {string[]} stylesheets built files with an Astryx stylesheet
+ * @property {number} styleFiles built stylesheets and pages read
+ * @property {string[]} coreStyles those with Core's component styles
+ * @property {string[]} coreStyleImports source files and stylesheets that
+ *   import Core's component styles, which a build then carries
+ * @property {string[]} coreStyleLinks pages that link Core's component styles
  * @property {BuiltFinding[]} findings
  * @property {boolean} truncated whether the file limit cut the read short
  * @property {number} unread source files over the size limit, unreadable, or
@@ -254,14 +331,24 @@ let lineCache = {text: null, starts: [0]};
  * @param {string} text
  */
 function withoutComments(text, ext = '', parsed = commentRanges(text, ext)) {
-  if (parsed) {
-    const out = text.split('');
-    for (const [start, end] of parsed) {
-      for (let j = start; j < end; j++) if (out[j] !== '\n') out[j] = ' ';
-    }
-    return out.join('');
+  return parsed ? blankRanges(text, parsed) : scanOutComments(text);
+}
+
+/**
+ * Text with each range blanked, every character but a line break made a
+ * space, so every offset and line stays where it was.
+ * @param {string} text
+ * @param {Array<[number, number]>} ranges in order, none overlapping
+ */
+function blankRanges(text, ranges) {
+  let out = '';
+  let at = 0;
+  for (const [start, end] of ranges) {
+    out +=
+      text.slice(at, start) + text.slice(start, end).replace(/[^\n]/g, ' ');
+    at = end;
   }
-  return scanOutComments(text);
+  return out + text.slice(at);
 }
 
 /**
@@ -287,6 +374,8 @@ function parseSource(text, ext) {
         sourceType: 'unambiguous',
         plugins,
         errorRecovery: true,
+        // The checks read the file's list of comments, never a node's.
+        attachComment: false,
       });
     } catch {
       // try the next set of syntax plugins
@@ -312,14 +401,23 @@ function commentRanges(text, ext, ast = parseSource(text, ext)) {
 }
 
 /**
+ * Whether a source can hold a `require()` or `import()` call: the word
+ * `require`, `import` followed by a parenthesis or a comment, or a Unicode
+ * escape, which can spell `require`. A source with none of these has no such
+ * call, so its syntax tree is not walked for one.
+ */
+const MAY_CALL = /\brequire\b|\bimport\s*(?:\(|\/[*/]|<!--|-->)|\\u/;
+
+/**
  * The imports a parsed source file makes, read from its syntax tree so that
  * an import written in a string, a template literal or JSX text (a code
  * sample on a page) is not one: import and export-from declarations, and
  * `require()` and `import()` of a string.
  * @param {any} ast
+ * @param {string} source the file's text
  * @returns {{spec: string, names: string[], at: number}[]}
  */
-function astImports(ast) {
+function astImports(ast, source) {
   /** @type {{spec: string, names: string[], at: number}[]} */
   const found = [];
   for (const node of ast.program.body) {
@@ -354,7 +452,7 @@ function astImports(ast) {
     }
   }
   /** @type {any[]} */
-  const stack = [ast.program];
+  const stack = MAY_CALL.test(source) ? [ast.program] : [];
   while (stack.length > 0) {
     const node = stack.pop();
     if (!node || typeof node.type !== 'string') continue;
@@ -384,7 +482,8 @@ function astImports(ast) {
  * @param {string} text
  */
 function scanOutComments(text) {
-  const out = text.split('');
+  /** @type {Array<[number, number]>} */
+  const comments = [];
   /** @type {string | null} the quote of the string being read */
   let quote = null;
   for (let i = 0; i < text.length; i++) {
@@ -405,10 +504,10 @@ function scanOutComments(text) {
       next === '/'
         ? (text.indexOf('\n', i) + 1 || text.length + 1) - 1
         : (text.indexOf('*/', i + 2) + 1 || text.length - 1) + 1;
-    for (let j = i; j < end; j++) if (out[j] !== '\n') out[j] = ' ';
+    comments.push([i, end]);
     i = end - 1;
   }
-  return out.join('');
+  return blankRanges(text, comments);
 }
 
 /**
@@ -556,14 +655,50 @@ function jsxFindings(text, rel, iconNames) {
 }
 
 /**
+ * Whether a source file's relative stylesheet import names a scanned
+ * stylesheet that only loads Astryx packages' CSS: the setup stylesheet the
+ * getting-started steps write (`reset.css`, `astryx.css`, a theme's CSS).
+ * Importing one wires Astryx up; it never styles a page. A sheet with any
+ * rule of its own, or an import from elsewhere, is not one. Each sheet is
+ * read once, and only when a source file imports it.
+ * @param {ReadonlyArray<{rel: string, read: () => string | null}>} files
+ * @param {readonly string[]} packages
+ * @returns {(spec: string, rel: string) => boolean}
+ */
+function astryxSetupStylesheets(files, packages) {
+  const byRel = new Map(files.map(file => [file.rel, file]));
+  /** @type {Map<string, boolean>} */
+  const known = new Map();
+  return (spec, rel) => {
+    if (!spec.startsWith('.')) return false;
+    const sheet = path.posix.join(path.posix.dirname(rel), spec);
+    let setup = known.get(sheet);
+    if (setup === undefined) {
+      const raw =
+        extensionOf(sheet) === '.css' ? byRel.get(sheet)?.read() : null;
+      const specs = raw == null ? null : doctorStylesheetOnlyLoads(raw);
+      setup =
+        specs != null &&
+        specs.length > 0 &&
+        specs.every(each => isAstryxSpecifier(each, packages));
+      known.set(sheet, setup);
+    }
+    return setup;
+  };
+}
+
+/**
  * Read a path and gather the evidence both checks judge.
  * @param {string} target an existing file or folder
  * @param {readonly string[]} packages package names whose components count as
  *   Astryx, beside every `@astryxdesign/*` package
+ * @param {{fileLimit?: number}} [options] how many files to read at most
  * @returns {BuiltScan}
  */
-export function scanBuilt(target, packages) {
-  const {files, truncated, missing = 0} = readBuiltPath(target);
+export function scanBuilt(target, packages, {fileLimit} = {}) {
+  const {files, truncated, missing = 0} = readBuiltPath(target, {fileLimit});
+  const wiring = doctorThemeWiring(target);
+  const isSetupSheet = astryxSetupStylesheets(files, packages);
   /** @type {BuiltScan} */
   const scan = {
     sourceFiles: 0,
@@ -574,6 +709,10 @@ export function scanBuilt(target, packages) {
     componentUses: 0,
     packages: [],
     stylesheets: [],
+    styleFiles: 0,
+    coreStyles: [],
+    coreStyleImports: [],
+    coreStyleLinks: [],
     findings: [],
     truncated,
     unread: 0,
@@ -607,6 +746,13 @@ export function scanBuilt(target, packages) {
           ? raw.replace(/\/\*[\s\S]*?\*\/|<!--[\s\S]*?-->/g, ' ')
           : raw;
       if (STYLESHEET_MARK.test(styles)) scan.stylesheets.push(rel);
+      if (ext === '.css' || ext === '.html' || ext === '.htm') {
+        scan.styleFiles++;
+        if (CORE_STYLES_MARK.test(styles)) scan.coreStyles.push(rel);
+      }
+      if ((ext === '.html' || ext === '.htm') && linksCoreStylesheet(raw)) {
+        scan.coreStyleLinks.push(rel);
+      }
       // A stylesheet that imports an Astryx package's CSS, as the
       // getting-started setup does, uses Astryx.
       if (ext === '.css') {
@@ -614,6 +760,7 @@ export function scanBuilt(target, packages) {
           /@import\s+(?:url\(\s*)?['"]?([^'")\s;]+)/g,
         )) {
           if (!isAstryxSpecifier(match[1], packages)) continue;
+          if (match[1] === CORE_STYLESHEET) scan.coreStyleImports.push(rel);
           scan.imports++;
           scan.importFiles++;
           imported.add(
@@ -633,8 +780,11 @@ export function scanBuilt(target, packages) {
     const astryxNames = new Set();
     const iconNames = new Set();
     let fileImports = 0;
-    for (const {spec, names, at} of ast ? astImports(ast) : importsOf(text)) {
+    for (const {spec, names, at} of ast
+      ? astImports(ast, raw)
+      : importsOf(text)) {
       if (isAstryxSpecifier(spec, packages)) {
+        if (spec === CORE_STYLESHEET) scan.coreStyleImports.push(rel);
         fileImports++;
         imported.add(
           spec.startsWith('@')
@@ -644,7 +794,11 @@ export function scanBuilt(target, packages) {
         for (const name of names) astryxNames.add(name);
       } else if (isIconSpecifier(spec)) {
         for (const name of names) iconNames.add(name);
-      } else if (/\.(?:css|scss|sass|less)$/.test(spec)) {
+      } else if (
+        /\.(?:css|scss|sass|less)$/.test(spec) &&
+        !wiring.has(spec, rel) &&
+        !isSetupSheet(spec, rel)
+      ) {
         scan.findings.push({
           category: 'Styling',
           file: rel,
@@ -690,7 +844,7 @@ export function scanBuilt(target, packages) {
     }
   }
   scan.packages = [...imported].sort();
-  scan.findings.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
+  scan.findings.sort((a, b) => compareText(a.file, b.file) || a.line - b.line);
   return scan;
 }
 
@@ -703,13 +857,84 @@ function plural(count, word) {
 }
 
 /**
- * The two checks for a path.
+ * Whether output that uses Astryx carries Core's component styles. A page's
+ * components take their styles from `@astryxdesign/core/astryx.css`; a build
+ * without it passes and loads, but every component renders unstyled. It
+ * warns: `--built` shipped in a stable release without this check, and a new
+ * failure waits for the next minor release. An app that compiles Core's
+ * styles from source needs no `astryx.css`, so output that carries none is
+ * not checked there.
+ * @param {BuiltScan} scan
  * @param {string} target as the caller gave it
- * @param {{cwd: string, packages: readonly string[]}} options `packages`: the
- *   integration packages whose components count as Astryx
+ * @param {string} cwd
+ * @param {string | null} sourceBuild how the app compiles Core from source
+ * @returns {import('./doctor.type.mjs').DoctorCheck}
+ */
+function coreStylesCheck(scan, target, cwd, sourceBuild) {
+  const label = "Built output carries Core's component styles";
+  if (scan.coreStyles.length > 0) {
+    return {
+      id: 'built-astryx-styles',
+      label,
+      status: 'pass',
+      message: `Core's component styles are in ${scan.coreStyles.slice(0, 3).join(', ')}${scan.coreStyles.length > 3 ? ` and ${scan.coreStyles.length - 3} more` : ''}.`,
+    };
+  }
+  if (scan.coreStyleLinks.length > 0) {
+    return {
+      id: 'built-astryx-styles',
+      label,
+      status: 'pass',
+      message: `${scan.coreStyleLinks[0]} links ${CORE_STYLESHEET}, Core's component styles.`,
+    };
+  }
+  if (scan.coreStyleImports.length > 0) {
+    return {
+      id: 'built-astryx-styles',
+      label,
+      status: 'pass',
+      message: `${scan.coreStyleImports[0]} imports ${CORE_STYLESHEET}, Core's component styles, so a build of it carries them.`,
+    };
+  }
+  if (sourceBuild) {
+    return {
+      id: 'built-astryx-styles',
+      label,
+      status: 'info',
+      message: `Not checked: this app compiles Core's styles from source (${sourceBuild}), so its build does not need ${CORE_STYLESHEET}.`,
+    };
+  }
+  if (scan.styleFiles === 0) {
+    return {
+      id: 'built-astryx-styles',
+      label,
+      status: 'info',
+      message: `${target} holds no built stylesheet or page, so doctor did not check whether Core's component styles reached the build. Run \`${formatCliCommand('doctor --built <folder>', cwd)}\` on the build output.`,
+    };
+  }
+  return {
+    id: 'built-astryx-styles',
+    label,
+    status: 'warn',
+    message: `${scan.styleFiles === 1 ? 'The one built stylesheet or page that doctor read does not carry' : `None of the ${scan.styleFiles} built stylesheets and pages that doctor read carries`} Core's component styles (the \`astryx-base\` layer of ${CORE_STYLESHEET}). This output's Astryx components render unstyled.`,
+    fix: "Import Core's stylesheets once, in the app's global stylesheet: `@import '@astryxdesign/core/reset.css';` then `@import '@astryxdesign/core/astryx.css';`. Or import both in the app's entry module, reset.css first. Then build again. Do not deliver this output.",
+  };
+}
+
+/**
+ * The checks for a path.
+ * @param {string} target as the caller gave it
+ * @param {{cwd: string, packages: readonly string[], fileLimit?: number, sourceBuild?: string | null}} options
+ *   `packages`: the integration packages whose components count as Astryx.
+ *   `fileLimit`: how many files to read at most (BUILT_FILE_LIMIT).
+ *   `sourceBuild`: how the path's app compiles Core's styles from source,
+ *   when it does (the doctor adapter reads it).
  * @returns {import('./doctor.type.mjs').DoctorCheck[]}
  */
-export function checkBuilt(target, {cwd, packages}) {
+export function checkBuilt(
+  target,
+  {cwd, packages, fileLimit = BUILT_FILE_LIMIT, sourceBuild = null},
+) {
   const resolved = resolveBuiltPath(cwd, target);
   if (resolved == null) {
     return [
@@ -722,10 +947,10 @@ export function checkBuilt(target, {cwd, packages}) {
       },
     ];
   }
-  const scan = scanBuilt(resolved, packages);
+  const scan = scanBuilt(resolved, packages, {fileLimit});
   const used =
     scan.imports > 0 || scan.componentUses > 0 || scan.stylesheets.length > 0;
-  const read = `${plural(scan.sourceFiles, 'source file')} and ${plural(scan.builtFiles, 'built file')}${scan.truncated ? ` (the first ${BUILT_FILE_LIMIT} files)` : ''}`;
+  const read = `${plural(scan.sourceFiles, 'source file')} and ${plural(scan.builtFiles, 'built file')}${scan.truncated ? ` (the first ${fileLimit} files)` : ''}`;
   const evidence = [
     scan.imports > 0
       ? `${plural(scan.imports, 'import')} from ${scan.packages.join(', ')} in ${plural(scan.importFiles, 'file')}`
@@ -761,7 +986,7 @@ export function checkBuilt(target, {cwd, packages}) {
             id: 'built-astryx-usage',
             label: 'Built output uses Astryx',
             status: 'warn',
-            message: `Read ${read} and found no Astryx in them, but ${[scan.truncated ? `the rest past the first ${BUILT_FILE_LIMIT} files` : null, scan.unread > 0 ? `${plural(scan.unread, 'source file')} over ${BUILT_FILE_MAX_MB} MB, unreadable or unparsed` : null, scan.missingLinks > 0 ? `${plural(scan.missingLinks, 'file')} the page links but that are not there` : null].filter(Boolean).join(' and ')} went unread, so this does not show whether the output uses Astryx.`,
+            message: `Read ${read} and found no Astryx in them, but ${[scan.truncated ? `the rest past the first ${fileLimit} files` : null, scan.unread > 0 ? `${plural(scan.unread, 'source file')} over ${BUILT_FILE_MAX_MB} MB, unreadable or unparsed` : null, scan.missingLinks > 0 ? `${plural(scan.missingLinks, 'file')} the page links but that are not there` : null].filter(Boolean).join(' and ')} went unread, so this does not show whether the output uses Astryx.`,
             fix: `Run \`${formatCliCommand('doctor --built <folder>', cwd)}\` on the folder that holds the page itself, or on its build output.`,
           }
         : {
@@ -798,7 +1023,7 @@ export function checkBuilt(target, {cwd, packages}) {
       id: 'built-astryx-purity',
       label: 'Source uses Astryx well',
       status: 'info',
-      message: `Not fully inspected: ${plural(scan.jsxFiles, 'source file')} with JSX had no finding${scan.truncated ? `, but only the first ${BUILT_FILE_LIMIT} files were read` : ''}.${unreadNote}`,
+      message: `Not fully inspected: ${plural(scan.jsxFiles, 'source file')} with JSX had no finding${scan.truncated ? `, but only the first ${fileLimit} files were read` : ''}.${unreadNote}`,
       fix: `Run \`${formatCliCommand('doctor --built <folder>', cwd)}\` on the folder that holds the page's own source.`,
     };
   } else if (scan.findings.length === 0) {
@@ -829,9 +1054,11 @@ export function checkBuilt(target, {cwd, packages}) {
       id: 'built-astryx-purity',
       label: 'Source uses Astryx well',
       status: 'warn',
-      message: `${plural(scan.findings.length, 'finding')} (${counts}): ${shown}${more}.${unreadNote}${scan.truncated ? ` Only the first ${BUILT_FILE_LIMIT} files were read.` : ''}`,
+      message: `${plural(scan.findings.length, 'finding')} (${counts}): ${shown}${more}.${unreadNote}${scan.truncated ? ` Only the first ${fileLimit} files were read.` : ''}`,
       fix: `Replace each with the Astryx component, icon surface, prop or token it names; \`${formatCliCommand('docs is-my-code-good', cwd)}\` has the full rubric. Keep a raw element only where its native meaning is needed.`,
     };
   }
-  return [usage, purity];
+  return used
+    ? [usage, coreStylesCheck(scan, target, cwd, sourceBuild), purity]
+    : [usage, purity];
 }

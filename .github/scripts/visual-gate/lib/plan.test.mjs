@@ -16,6 +16,7 @@ import {
   emptyVisualPlanMessage,
   exceedsPrVisualShotLimit,
   existingComponentBaselinePlan,
+  probeBaselineStories,
   readStoryIndex,
   readThemeCatalog,
   representativeStories,
@@ -347,6 +348,209 @@ describe('buildPlan', () => {
       'core-button--variants__probe-dark',
       'core-button--variants__probe-light',
     ]);
+  });
+
+  describe('the probe cover is a fixed point', () => {
+    const target = key => ({key, className: `astryx-${key}`, component: 'Badge', props: [], states: []});
+    const badge = (id, name) => story({id, title: 'Core/Badge', name, component: 'Badge'});
+    const plannedStories = ({stories: list, targets: wanted, observations, baselineStories}) => [
+      ...new Set(
+        buildPlan({
+          stories: list,
+          targets: wanted,
+          themeOverrides: {},
+          observations,
+          defaultTheme: 'neutral',
+          tiers: ['probe'],
+          probeTheme: 'probe',
+          baselineStories,
+        }).map(shot => shot.storyId),
+      ),
+    ].sort();
+    const cases = {
+      'a baselined story and a wider one a new target needs': {
+        stories: [badge('core-badge--solid', 'Solid'), badge('core-badge--wide', 'Wide')],
+        targets: ['badge', 'tooltip'].map(target),
+        observations: {
+          'core-badge--solid': {badge: ['base']},
+          'core-badge--wide': {badge: ['base'], tooltip: ['base']},
+        },
+        baselineStories: new Set(['core-badge--solid']),
+      },
+      'two baselined stories and a wider newcomer': {
+        stories: ['first', 'second', 'wider'].map(name => badge(`core-badge--${name}`, name)),
+        targets: ['a', 'b', 'c', 'd'].map(target),
+        observations: {
+          'core-badge--first': {a: ['base'], b: ['base']},
+          'core-badge--second': {c: ['base'], d: ['base']},
+          'core-badge--wider': {a: ['base'], b: ['base'], c: ['base']},
+        },
+        baselineStories: new Set(['core-badge--first', 'core-badge--second']),
+      },
+      'a baselined cover and a story newly tagged into the theme matrix': {
+        stories: [
+          badge('core-badge--first', 'First'),
+          badge('core-badge--second', 'Second'),
+          {...badge('core-badge--matrix', 'Matrix'), tags: ['visual-theme-matrix']},
+        ],
+        targets: ['a', 'b', 'c'].map(target),
+        observations: {
+          'core-badge--first': {a: ['base'], b: ['base']},
+          'core-badge--second': {c: ['base']},
+          'core-badge--matrix': {a: ['base'], b: ['base'], c: ['base']},
+        },
+        baselineStories: new Set(['core-badge--first', 'core-badge--second']),
+      },
+      'no baseline': {
+        stories: ['first', 'second', 'wider'].map(name => badge(`core-badge--${name}`, name)),
+        targets: ['a', 'b', 'c', 'd'].map(target),
+        observations: {
+          'core-badge--first': {a: ['base'], b: ['base']},
+          'core-badge--second': {c: ['base'], d: ['base']},
+          'core-badge--wider': {a: ['base'], b: ['base'], c: ['base']},
+        },
+        baselineStories: new Set(),
+      },
+    };
+
+    it.each(Object.entries(cases))(
+      'plans the same stories when its own plan is the baseline: %s',
+      (_label, fixture) => {
+        const once = plannedStories(fixture);
+        const again = plannedStories({...fixture, baselineStories: new Set(once)});
+        expect(again).toEqual(once);
+      },
+    );
+  });
+
+  describe('the probe cover keeps the baseline it already has', () => {
+    const target = key => ({key, className: `astryx-${key}`, component: 'Badge', props: [], states: []});
+    const four = ['a', 'b', 'c', 'd'].map(target);
+    const badge = (id, name) => story({id, title: 'Core/Badge', name, component: 'Badge'});
+    const first = badge('core-badge--first', 'First');
+    const second = badge('core-badge--second', 'Second');
+    const wider = badge('core-badge--wider', 'Wider');
+    const coverOf = ({stories: list, observations, baselineStories}) => [
+      ...new Set(
+        buildPlan({
+          stories: list,
+          targets: four,
+          themeOverrides: {},
+          observations,
+          defaultTheme: 'neutral',
+          tiers: ['probe'],
+          probeTheme: 'probe',
+          baselineStories,
+        }).map(shot => shot.storyId),
+      ),
+    ].sort();
+
+    it('keeps the baselined stories when a wider story arrives that they still cover', () => {
+      // The baseline covers a+b and c+d. A new story renders a, b and c: the
+      // greedy cover alone would take it first and move the plan.
+      const observations = {
+        'core-badge--first': {a: ['base'], b: ['base']},
+        'core-badge--second': {c: ['base'], d: ['base']},
+        'core-badge--wider': {a: ['base'], b: ['base'], c: ['base']},
+      };
+      expect(
+        coverOf({
+          stories: [first, second, wider],
+          observations,
+          baselineStories: new Set(['core-badge--first', 'core-badge--second']),
+        }),
+      ).toEqual(['core-badge--first', 'core-badge--second']);
+    });
+
+    it('drops a baselined story that renders no target and fills what it lost', () => {
+      const observations = {
+        'core-badge--first': {},
+        'core-badge--second': {c: ['base'], d: ['base']},
+        'core-badge--wider': {a: ['base'], b: ['base'], c: ['base']},
+      };
+      expect(
+        coverOf({
+          stories: [first, second, wider],
+          observations,
+          baselineStories: new Set(['core-badge--first', 'core-badge--second']),
+        }),
+      ).toEqual(['core-badge--second', 'core-badge--wider']);
+    });
+
+    it('takes the widest story first when there is no baseline', () => {
+      const observations = {
+        'core-badge--first': {a: ['base'], b: ['base']},
+        'core-badge--second': {c: ['base'], d: ['base']},
+        'core-badge--wider': {a: ['base'], b: ['base'], c: ['base']},
+      };
+      expect(coverOf({stories: [first, second, wider], observations})).toEqual([
+        'core-badge--second',
+        'core-badge--wider',
+      ]);
+    });
+  });
+
+  describe('the probe cover between stories that tie', () => {
+    const badgeTarget = [{key: 'badge', className: 'astryx-badge', component: 'Badge', props: [], states: []}];
+    const solid = story({id: 'core-badge--solid', title: 'Core/Badge', name: 'Solid', component: 'Badge'});
+    // A story added later that renders the same targets as the one already
+    // in the baseline, and comes first in the story index.
+    const added = story({id: 'core-badge--added-later', title: 'Core/Badge', name: 'Added Later', component: 'Badge'});
+    const observations = {
+      'core-badge--solid': {badge: ['base']},
+      'core-badge--added-later': {badge: ['base']},
+    };
+    const probeKeys = (list, extra = {}) =>
+      buildPlan({
+        stories: list,
+        targets: badgeTarget,
+        themeOverrides: {},
+        observations,
+        defaultTheme: 'neutral',
+        tiers: ['probe'],
+        probeTheme: 'probe',
+        ...extra,
+      }).map(shot => shot.key);
+
+    it('keeps the story already in the baseline when a new story ties with it', () => {
+      const baselineStories = new Set(['core-badge--solid']);
+      const kept = ['core-badge--solid__probe-dark', 'core-badge--solid__probe-light'];
+      expect(probeKeys([added, solid], {baselineStories})).toEqual(kept);
+      expect(probeKeys([solid, added], {baselineStories})).toEqual(kept);
+    });
+
+    it('picks the same story whatever the story index order, with no baseline', () => {
+      const first = ['core-badge--added-later__probe-dark', 'core-badge--added-later__probe-light'];
+      expect(probeKeys([solid, added])).toEqual(first);
+      expect(probeKeys([added, solid])).toEqual(first);
+    });
+
+    it('reads the baselined probe stories from the accepted manifest', () => {
+      const manifest = {
+        shots: {
+          'core-badge--solid__probe-dark': {storyId: 'core-badge--solid', theme: 'probe'},
+          'core-badge--solid__neutral-dark': {storyId: 'core-badge--solid', theme: 'neutral'},
+          'core-button--primary__neutral-light': {storyId: 'core-button--primary', theme: 'neutral'},
+        },
+      };
+      expect(probeBaselineStories(manifest, 'probe')).toEqual(new Set(['core-badge--solid']));
+      expect(probeBaselineStories({}, 'probe')).toEqual(new Set());
+    });
+
+    it('lets a wider story a new target needs replace the baselined story it makes redundant', () => {
+      const wide = story({id: 'core-badge--wide', title: 'Core/Badge', name: 'Wide', component: 'Badge'});
+      const keys = buildPlan({
+        stories: [solid, wide],
+        targets: [...badgeTarget, {key: 'tooltip', className: 'astryx-tooltip', component: 'Tooltip', props: [], states: []}],
+        themeOverrides: {},
+        observations: {'core-badge--solid': {badge: ['base']}, 'core-badge--wide': {badge: ['base'], tooltip: ['base']}},
+        defaultTheme: 'neutral',
+        tiers: ['probe'],
+        probeTheme: 'probe',
+        baselineStories: new Set(['core-badge--solid']),
+      }).map(shot => shot.key);
+      expect(keys).toEqual(['core-badge--wide__probe-dark', 'core-badge--wide__probe-light']);
+    });
   });
 
   it('adds a shot for every theme that overrides a component the story renders', () => {

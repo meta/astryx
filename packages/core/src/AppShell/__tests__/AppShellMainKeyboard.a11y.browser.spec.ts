@@ -19,7 +19,13 @@
  *   only assert the tab stop against mocked geometry.
  */
 
-import {chromium, expect, test, type Page} from '@playwright/test';
+import {
+  chromium,
+  expect,
+  keepRequestsLocal,
+  test,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -458,6 +464,7 @@ test('a Tab-focused main keeps its ring after a window or tab switch', async ({
     const context = await browser.newContext({
       viewport: {width: 1280, height: 720},
     });
+    await keepRequestsLocal(context);
     const page = await context.newPage();
     await openStory(page, 'long-content');
     const main = page.getByRole('main');

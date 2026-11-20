@@ -80,14 +80,16 @@ export interface UseGridFocusOptions {
   onNavigateAfter?: (column: number, offset: number) => void;
 
   /**
-   * Callback for Page Up key (e.g., previous month).
+   * Callback for Page Up key (e.g., previous month). It receives the key
+   * event, so `event.shiftKey` can select a larger step, such as a year.
    */
-  onPageUp?: () => void;
+  onPageUp?: (event: React.KeyboardEvent) => void;
 
   /**
-   * Callback for Page Down key (e.g., next month).
+   * Callback for Page Down key (e.g., next month). It receives the key
+   * event, so `event.shiftKey` can select a larger step, such as a year.
    */
-  onPageDown?: () => void;
+  onPageDown?: (event: React.KeyboardEvent) => void;
 
   /**
    * Roving-tabindex ownership. When true, the hook manages a single tab stop
@@ -157,7 +159,8 @@ export interface UseGridFocusReturn<T extends HTMLElement = HTMLElement> {
  * - End: Move to last cell in row
  * - Ctrl+Home: Move to first cell in grid
  * - Ctrl+End: Move to last cell in grid
- * - Page Up/Down: Custom callbacks (e.g., month navigation)
+ * - Page Up/Down: Custom callbacks that receive the key event (e.g., month
+ *   navigation, or a year with Shift)
  *
  * The hook enumerates ALL cells matched by `cellSelector` in DOM order and
  * computes row/column over that full set, preserving the true grid geometry
@@ -571,11 +574,11 @@ export function useGridFocus<T extends HTMLElement = HTMLElement>(
           break;
 
         case 'PageUp':
-          onPageUp?.();
+          onPageUp?.(e);
           break;
 
         case 'PageDown':
-          onPageDown?.();
+          onPageDown?.(e);
           break;
 
         default:

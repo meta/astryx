@@ -94,12 +94,13 @@ export default function PowerSearchFullFeatured() {
   const [filters, setFilters] = useState<PowerSearchFilter[]>([]);
 
   return (
-    <PowerSearch
-      style={{width: 300}}
-      config={config}
-      filters={filters}
-      onChange={newFilters => setFilters([...newFilters])}
-      placeholder="Search..."
-    />
+    <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 300px)'}}>
+      <PowerSearch
+        config={config}
+        filters={filters}
+        onChange={newFilters => setFilters([...newFilters])}
+        placeholder="Search..."
+      />
+    </div>
   );
 }

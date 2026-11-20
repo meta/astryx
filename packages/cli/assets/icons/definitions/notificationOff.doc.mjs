@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'notificationOff',
+  group: 'notifications',
   description: 'Turn notifications off, or show that they are muted.',
   words: ['mute', 'silence', 'notifications off', 'bell slash', 'bell off'],
 };

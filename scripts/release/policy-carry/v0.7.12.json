@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "releaseBranch": "release/v0.7.12",
+  "base": "75010433f5e001f116619ffd6a0469db9031b0ac",
+  "patch": "scripts/release/policy-carry/v0.7.12.diff",
+  "patchSha256": "1311538af18116338c4ae44a19e6fc5658c14efa4f318bd7dae290630375638b",
+  "targets": {
+    ".github/scripts/touched-components.test.mjs": "8da716947c46b6431b63239f6868d0ff93117ad1905dff8887be12bf68ad3ad0",
+    "scripts/release/active-release.mjs": "3050e044d91597e2b48622eaf4cc14a4551a7d634a8a4a6e60909d65bac3c90b",
+    "scripts/release/active-release.test.mjs": "d26873e12c9e2588498736e5e78e1cd4bc34705ca6b8bb119b70672e2fd74c41"
+  }
+}

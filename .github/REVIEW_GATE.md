@@ -13,12 +13,28 @@ neutral yellow "waiting" signal, not a red failure).
 | **Design owner** (`DESIGNOWNERS`) | needs code review | self-serve                       | self-serve        |
 | **Contributor** (anyone else)     | needs code review | needs code review + design label | needs code review |
 | **Bot** (Dependabot, etc.)        | exempt            | exempt                           | exempt            |
+| **The review app** (`REVIEW_APP`) | trainer pass      | trainer pass                     | trainer pass      |
 
+- **The review app's own pull requests** need a trainer pass: an engineering
+  owner's approval of the exact head. The app cannot approve its own work.
 - **Code review is the only hard gate.** It shows up as the `review-required`
   status: `pending` (🟡, blocks the merge) or `success` (🟢).
 - **Design review is advisory** — it labels the PR and requests design owners,
   but does not block the merge.
 - An entitled owner's **approval clears the gate automatically** (no manual step).
+- **On a fork pull request, also post the owner command.** GitHub can hold a
+  fork's review event until a maintainer approves the run (a first-time
+  contributor, for example), so the approval alone may not reach the gate. An
+  engineering owner who approves a fork pull request also posts
+  `/approve-spec <full-sha>`: the command re-evaluates both halves of
+  `review-required` from the current head, the code review included.
+  Only the review-clear reconcile waits on the held review run (it runs when
+  that run completes), and the owner command and a dispatch repeat it, so the
+  held run never needs approving. GitHub's approve endpoint refuses such a run
+  anyway ("This run is not from a fork pull request or queued by the Actions
+  bot"). If the command was not posted, an engineering owner can run the
+  "Review signal" workflow by hand with that pull request's number, which reads
+  the reviews and re-evaluates both halves the same way.
 - **Write-access authors can also clear it with the review app.** When the PR
   author has write or admin permission on the repository (internal
   contributors, including designers and partners who are not owners), the
@@ -41,7 +57,7 @@ design and theme records also accept DESIGNOWNERS. Approve with
 `/approve-spec <full-sha>` at the start of a comment (the trigger matches the
 raw body) or a non-author review; `/revoke-spec` withdraws. The gate's details
 give the command to copy and why an approval no longer counts; it posts no
-comments. `spec-owner-approval` mirrors the spec half.
+comments. `spec-owner-approval` records the spec decision the other writers read.
 
 The gate never re-decides a merged or closed head. A run that starts after the
 merge publishes nothing, and neither does a run yielding to a newer one.
@@ -56,7 +72,7 @@ A PR changes only spec records when every changed path is one of:
 
 - `docs/specs/<id>/spec.md` or `plan.md`;
 - a family or design spec (excluding indexes, templates, schemas, and assets);
-- a colocated Core/Lab `<Name>.spec.md`.
+- a component or module record under `docs/specs/components/`.
 
 Draft-only spec records can merge after validation without owner approval.
 Approval reads the record against the `## Writing rubric results` the author
@@ -121,7 +137,9 @@ internal contributors' PRs. Owners still self-serve their own domain.
 
 ```
 ① PR opened / updated  ──pull_request_target──►  review-signal.yml : flag
-     bot? → status success, exempt, stop
+     the review app (REVIEW_APP)? → pending until an eng owner approves the exact head
+       (the trainer pass), then "Cleared by code-owner approval.", stop
+     other bot? → status success, exempt, stop
      resolve author bucket (DESIGNOWNERS → ENGOWNERS → contributor)
      detect high-risk / design from changed paths (lab filtered out)
      read reviews → codeApproved / designApproved
@@ -160,13 +178,12 @@ write-access author who is not an owner still needs an engineering owner's
 approval or the review app's exact-head approval. (Repo admins can still
 bypass.)
 
-### The mirror
+### The spec decision status
 
-`spec-owner-approval` now only mirrors the spec half of `review-required`.
-First re-flag every open, non-draft PR (the blank-`pr` backfill, in batches;
-see below) so each `review-required` carries its spec half; then remove the mirror
-from the required status checks on `main`. To re-publish a head's statuses, run
-`gh workflow run review-signal.yml -f pr=<number>`.
+`spec-owner-approval` is the spec-owner job's decision: the other writers of
+`review-required` read the spec half from it. It is not a required check;
+`review-required` blocks on a missing spec approval. To re-publish a head's
+statuses, run `gh workflow run review-signal.yml -f pr=<number>`.
 
 ## Why a commit status (not a check run)
 

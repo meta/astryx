@@ -68,7 +68,14 @@ export const doc = {
       description:
         'Tell `{@command discover}` which integrations this project could add: an async function that returns a catalog. An integration can provide one too, as a `discover` named export from its manifest. Discover calls every source, yours first, and one that fails never hides the others. Discover only reads; your package manager installs.',
       example:
-        "async ({signal, package: name, version}) => fetchCatalog({signal, name, version})",
+        'async ({signal, package: name, version}) => fetchCatalog({signal, name, version})',
+    },
+    {
+      name: 'skills',
+      type: '{ to?: string | string[] }',
+      description:
+        "Where the Astryx skill goes in this project. `skills.to` is one place or a list: `'agents-md'`, the managed block in AGENTS.md and the agent files beside it; `'skills'`, the project skills folders `.agents/skills/astryx-project` and `.claude/skills/astryx-project`; or a folder in the project written as `'./<path>'`, such as `'./team-skills'`, which gets `<folder>/astryx-project/SKILL.md`. Leaving it out means `'agents-md'`. `{@command init} --to` writes it, `{@command init}` writes the places it names, and `{@command upgrade} --apply` refreshes them.",
+      example: "{ to: 'skills' }",
     },
     {
       name: 'experimental',
@@ -77,11 +84,19 @@ export const doc = {
       fields: [
         {
           name: 'experimental.iconSet',
+          type: 'string | string[]',
+          stability: 'experimental',
+          description:
+            "Experimental: may change or be removed in a patch release. The project's main icon set, by set name or as `<package>/<set>`; or a list of them, the main set first and then backup sets in order. A copied template takes each icon from the first set in the list that has its meaning, and draws a placeholder the copied file declares when none has it. Copied templates use these icons only when it is set. `astryx discover` and `astryx doctor` report icon sets when it is set or when an icon-set package is installed. `astryx experimental icon use <main> --backup <set>` writes it. `astryx experimental icon` ranks the main set's icons first; without it, the only installed set is the project's there. Where icon features are on, `astryx search` answers an icon ask, a query that uses the word `icon` or `icons`, names an installed icon set, or writes an icon's export name (`trash icon`, `heroicons trash`, `SearchIcon`). Two cases ask for no icon: a word that is the exact name of a component or hook (`Icon`, `NavIcon`, `IconButton`), and an `icon` or `icons` right after `with` (only `a`, `an` or `the` between) that no `of` or `for` follows, when the results hold a component or template (`card with an icon`; `card with an icon of a star` still asks). It lists up to three installed icons that the ask's words find, in its own `icons` block after its results, which never hold an icon.",
+          example: "['@acme/outline-icons/outline', '@acme/brand-icons/brand']",
+        },
+        {
+          name: 'experimental.iconVariant',
           type: 'string',
           stability: 'experimental',
           description:
-            "Experimental: may change or be removed in a patch release. The project's icon set, by set name or as `<package>/<set>`. It is the opt-in: copied templates use its icons, and `astryx discover` and `astryx doctor` report icon sets, only when it is set. `astryx experimental icon` ranks its icons first; without it, the only installed set is the project's there. `astryx search` never returns icons.",
-          example: "'@acme/outline-icons/outline'",
+            "Experimental: may change or be removed in a patch release. The look every icon of the project draws, such as `outline` or `filled`, by the variant name the icon sets declare. Each set in `experimental.iconSet` that declares a variant of that name draws it: copied templates import that variant's icons, and a theme takes that look's theme map (`themeIconsFilled`). A set that declares no variant of that name draws its default look. The main set must declare it, and it needs `experimental.iconSet`. `astryx experimental icon use <main> --variant <variant>` writes it; without `--variant` that command removes it.",
+          example: "'filled'",
         },
         {
           name: 'experimental.xle.components',
