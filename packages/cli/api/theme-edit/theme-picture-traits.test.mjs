@@ -171,8 +171,12 @@ describe('traits from a picture', () => {
       c.box({x: 20 + k * 90, y: 20, w: 80, h: 28, r: 4, edge: 1, edgeColor: [0, 80, 180], fill: [40, 150, 230], label: true});
     for (let k = 0; k < 2; k++)
       c.box({x: 20 + k * 180, y: 70, w: 170, h: 28, r: 8, edge: 1, edgeColor: [190, 190, 190], fill: [255, 255, 255], label: true, labelAt: 'start'});
-    const steps = readTraits(c.png()).traits.map(t => t.step);
+    const {traits} = readTraits(c.png());
+    const steps = traits.map(t => t.step);
     expect(steps.some(st => st.thing === '--radius-element')).toBe(false);
+    // (Each reading names the family its boxes come from.)
+    expect(traits.find(t => t.trait === 'corners' && t.on === 'inputs')?.read).toMatch(/^2 of 2 inputs boxes/);
+    expect(traits.find(t => t.trait === 'corners' && t.on === 'button-like')?.read).toMatch(/^3 of 3 button-like boxes/);
     expect(steps).toContainEqual({verb: 'set', thing: 'corners', value: '4px', on: 'button-like'});
     expect(steps).toContainEqual({verb: 'set', thing: 'corners', value: '8px', on: 'inputs'});
   });
@@ -187,13 +191,15 @@ describe('traits from a picture', () => {
     c.box({x: 200, y: 70, w: 170, h: 40, r: 4, edge: 1, edgeColor: [190, 190, 190], fill: [255, 255, 255], label: true, labelAt: 'start'});
     const edges = readTraits(c.png()).traits.filter(t => t.step.thing === '--border-width');
     expect(edges.map(t => t.step.value)).not.toContain('0px');
+    // (Read from the fields, and named so.)
+    for (const t of edges) expect(t.read).toMatch(/ inputs boxes/);
     // Filled buttons alone: no border width is written, and it is named.
     const f = canvas(400, 80);
     for (let k = 0; k < 4; k++)
       f.box({x: 20 + k * 90, y: 20, w: 80, h: 28, r: 4, fill: [40, 150, 230], label: true});
     const filled = readTraits(f.png());
     expect(filled.traits.some(t => t.step.thing === '--border-width')).toBe(false);
-    expect(filled.unsure).toContainEqual(expect.objectContaining({trait: 'edges', why: expect.stringMatching(/draws an edge/)}));
+    expect(filled.unsure).toContainEqual(expect.objectContaining({trait: 'edges', on: 'button-like', why: expect.stringMatching(/draws an edge/)}));
   });
 
   it('names what too few boxes show instead of writing it', () => {
@@ -393,7 +399,7 @@ describe('how <picture>', () => {
     const d = /** @type {any} */ ((await themeEditHow('look.png', {cwd, theme: 'pc'})).data);
     const commands = d.results.flatMap((/** @type {any} */ r) => r.commands);
     expect(commands.some((/** @type {string} */ c) => /--radius-element/.test(c))).toBe(false);
-    expect(d.unsure.some((/** @type {any} */ u) => /^corners on button-like: the picture reads 4px .* sets corners 12px already, which stays/.test(u.text))).toBe(true);
+    expect(d.unsure.some((/** @type {any} */ u) => /^corners on controls: the picture reads 4px .* sets corners 12px already, which stays/.test(u.text))).toBe(true);
   });
 
   it("gives the checks' box as width and height together, so a box stays square and a radio round", async () => {

@@ -775,6 +775,14 @@ export function readTraits(pic, scale = 1) {
       });
   };
   const controls = [...groups['button-like'], ...groups.inputs];
+  // (The family a reading comes from: the inputs, the buttons, or the
+  // controls when it holds both.)
+  const familyOf = (/** @type {Box[]} */ boxes) =>
+    boxes.every(b => groups.inputs.includes(b))
+      ? 'inputs'
+      : boxes.every(b => groups['button-like'].includes(b))
+        ? 'button-like'
+        : 'controls';
   // Height of controls: the control size token set on the control families
   // only, buttons (button-like) and inputs, each from its own boxes. It is
   // never set for the whole theme: parts that are not controls read it too
@@ -817,7 +825,7 @@ export function readTraits(pic, scale = 1) {
   // would give the other family's boxes a radius they do not draw.)
   const both = agreed(controls.map(cornerOf), 1 * scale);
   if (controls.length && both.n === controls.length && both.value !== Infinity)
-    fromBoxes('corners', 'button-like', controls, cornerOf, 1, cornerStep('theme', '--radius-element'), showCorner, median);
+    fromBoxes('corners', familyOf(controls), controls, cornerOf, 1, cornerStep('theme', '--radius-element'), showCorner, median);
   else {
     fromBoxes('corners', 'button-like', groups['button-like'], cornerOf, 1, cornerStep('button-like', null), showCorner, median);
     fromBoxes('corners', 'inputs', groups.inputs, cornerOf, 1, cornerStep('inputs', null), showCorner, median);
@@ -837,9 +845,9 @@ export function readTraits(pic, scale = 1) {
       sure: plainInputs.length >= 2 ? 'sure' : 'about',
       step: {verb: 'set', thing: '--border-width', value: showPx(usualEdge)},
     });
-  else if (edged.length) fromBoxes('edges', 'button-like', edged, b => b.edge, 0, v => ({verb: 'set', thing: '--border-width', value: `${px(v)}px`}), v => `${px(v)}px`);
+  else if (edged.length) fromBoxes('edges', familyOf(edged), edged, b => b.edge, 0, v => ({verb: 'set', thing: '--border-width', value: `${px(v)}px`}), v => `${px(v)}px`);
   else if (controls.length)
-    unsure.push({trait: 'edges', on: 'button-like', why: `no control box (${whereIn(controls, W, H)}) draws an edge, so the theme's border width is not read from the picture`});
+    unsure.push({trait: 'edges', on: familyOf(controls), why: `no control box (${whereIn(controls, W, H)}) draws an edge, so the theme's border width is not read from the picture`});
   // Checks size: the box, square or round, written as width and height per
   // size where the theme is read (checksBoxSteps).
   fromBoxes('box size', 'checks', groups.checks, b => b.h, 1, v => ({verb: 'set', thing: 'height', value: `${px(v)}px`, on: 'checks'}), v => `${px(v)}px`);
@@ -974,7 +982,8 @@ export function readTraits(pic, scale = 1) {
   if (shadowed.length >= 2) slot('button-like', 'depth', shadowed[0].shadow, shadowed.length, controls.length);
   for (const t of traits) {
     const name = {height: 'height', corners: 'radius'}[t.trait];
-    const role = t.on === 'inputs' ? 'inset-fields' : t.on;
+    // (A reading of the controls together rides on the button-like slot, as it always has.)
+    const role = t.on === 'inputs' ? 'inset-fields' : t.on === 'controls' ? 'button-like' : t.on;
     if (name && role !== 'checks' && role !== 'containers') {
       const [n, of] = (/(\d+) of (\d+)/.exec(t.read) ?? [0, 1, 1]).slice(1).map(Number);
       slot(role, name, t.value === 'pill' ? 'pill' : parseFloat(t.value), n, of);
