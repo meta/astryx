@@ -94,6 +94,7 @@ import {
   partRuleTokens,
   positionalCornerToken,
   radiusAt,
+  chatRatio,
   partState,
   baseBlocksFor,
   partsOf,
@@ -29811,7 +29812,14 @@ export function draftAnswer(ctx, env, question) {
           );
           if (at < 0) continue;
           const value = String(o[at].value);
-          const over = DIAL_RADII.filter(t => {
+          // (The chat radius the dial writes from the container radius is
+          // held too, where the base keeps it apart.)
+          const over = [
+            ...DIAL_RADII,
+            ...(chatRatio(/** @type {any} */ (env.base))
+              ? ['--radius-chat']
+              : []),
+          ].filter(t => {
             const px = radiusAt(/** @type {any} */ (env.base), value, t);
             return lb.up
               ? lb.strict

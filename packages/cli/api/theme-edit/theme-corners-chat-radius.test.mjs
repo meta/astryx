@@ -1,12 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file The corners dial gives the chat radius back to the container radius:
+ * @file The corners dial writes the chat radius from the container radius:
  * Core's chat surfaces (a composer, its drawer, a message bubble) read
  * --radius-chat, which Core defaults to the container radius and the bundled
- * themes pin to a value of their own, so a theme that makes its corners
- * smaller makes the drawer's top corners smaller too, never leaving them at
- * the base's pinned radius.
+ * themes pin to a value of their own. The dial keeps the base's ratio of the
+ * two, so a theme that makes its corners smaller makes the drawer's corners
+ * smaller, and one that makes them rounder makes them rounder.
  */
 
 import * as fs from 'node:fs';
@@ -19,7 +19,7 @@ import {
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
 import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
-import {radiusAt} from './_settings.mjs';
+import {chatRatio, radiusAt} from './_settings.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
@@ -54,7 +54,7 @@ const builtToken = (slug, token) => {
 
 describe('the corners dial and chat surfaces', () => {
   it(
-    'writes --radius-chat as the container radius for each corners value, on a base that pins its chat radius',
+    'writes --radius-chat from the container radius at the base ratio for each corners value, on a base that pins its chat radius',
     async ctx => {
       if (unbuilt) {
         console.warn(`skipped: ${unbuilt}`);
@@ -66,7 +66,7 @@ describe('the corners dial and chat surfaces', () => {
         await themeEditSet('c', 'corners', value, {cwd});
         expect(builtToken('c', '--radius-container'), value).toBeTruthy();
         expect(builtToken('c', '--radius-chat'), value).toBe(
-          'var(--radius-container)',
+          'calc(var(--radius-container) * 28 / 12)',
         );
       }
       await themeEditSet('c', 'corners', 'small', {cwd});
@@ -87,17 +87,21 @@ describe('the corners dial and chat surfaces', () => {
       await themeEditSet('e', 'corners', 'small', {cwd});
       await themeEditSet('e', '--radius-container', '5px', {cwd});
       expect(builtToken('e', '--radius-container')).toBe('5px');
-      expect(builtToken('e', '--radius-chat')).toBe('var(--radius-container)');
+      expect(builtToken('e', '--radius-chat')).toBe(
+        'calc(var(--radius-container) * 28 / 12)',
+      );
       // (An unrelated change rebuilds with the radii it keeps: chat still
       // reads the one container radius.)
       await themeEditSet('e', 'corners', 'small', {cwd, on: 'button'});
       expect(builtToken('e', '--radius-container')).toBe('5px');
-      expect(builtToken('e', '--radius-chat')).toBe('var(--radius-container)');
+      expect(builtToken('e', '--radius-chat')).toBe(
+        'calc(var(--radius-container) * 28 / 12)',
+      );
     },
     T,
   );
 
-  it('is the container radius whatever chat radius the base pins', () => {
+  it('is the container radius at the ratio the base pins', () => {
     // (Most bundled themes pin their chat radius at 28px.)
     const base = {
       light: {
@@ -109,7 +113,37 @@ describe('the corners dial and chat surfaces', () => {
     };
     for (const value of ['small', 'round', '3px'])
       expect(radiusAt(base, value, '--radius-chat')).toBe(
-        radiusAt(base, value, '--radius-container'),
+        Math.round((radiusAt(base, value, '--radius-container') * 28) / 12),
       );
+    // A base that pins no chat radius, or square containers, follows the
+    // container radius.
+    expect(chatRatio({light: {'--radius-container': '12px'}})).toBeNull();
+    expect(
+      chatRatio({light: {'--radius-container': '0px', '--radius-chat': '0px'}}),
+    ).toBeNull();
+  });
+
+  it('rounder corners never make the chat radius smaller, and sharper never larger', () => {
+    // (The neutral base: 12px containers, 28px chat.)
+    const base = {
+      light: {
+        '--radius-element': '0.625rem',
+        '--radius-container': '0.75rem',
+        '--radius-page': '1.75rem',
+        '--radius-chat': '28px',
+      },
+    };
+    const rungs = ['square', 'small', 'medium', 'large', 'round', 'pill'];
+    const chat = rungs.map(v => radiusAt(base, v, '--radius-chat'));
+    for (let i = 1; i < chat.length; i++)
+      expect(chat[i], rungs[i]).toBeGreaterThanOrEqual(chat[i - 1]);
+    // A container radius above the base's gives a chat radius above 28px;
+    // one below gives one below.
+    for (const v of rungs) {
+      const container = radiusAt(base, v, '--radius-container');
+      const c = radiusAt(base, v, '--radius-chat');
+      if (container > 12) expect(c, v).toBeGreaterThan(28);
+      if (container < 12) expect(c, v).toBeLessThan(28);
+    }
   });
 });
