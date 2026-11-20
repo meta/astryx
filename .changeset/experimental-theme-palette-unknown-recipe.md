@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] `astryx experimental theme editor`: a theme whose palette was made with a palette recipe this CLI doesn't know (one a newer CLI brings) is now refused plainly. The message names the recipe and this CLI's version, says to update the CLI with the project's own install command for `@astryxdesign/cli@latest`, and leaves the file exactly as it is, instead of asking for the file to be fixed by hand.
+[experimental] `astryx experimental theme editor`: a theme whose palette names a palette recipe this CLI doesn't know is now refused plainly, and the file is left exactly as it is, instead of asking for the file to be fixed by hand. A recipe a newer CLI made gets the same refusal as `astryx theme palette generate`, with the update step that fits where the CLI runs; any other name is said to be no recipe Astryx makes, with the recipes this CLI knows.
 
 @josephfarina

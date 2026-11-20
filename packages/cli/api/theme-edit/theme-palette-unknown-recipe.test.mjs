@@ -2,9 +2,10 @@
 
 /**
  * @file A theme whose palette.config.json names a palette recipe this CLI
- * does not know (one a newer CLI brings) is refused plainly: the message
- * names the recipe and this CLI's version and says to update the CLI, and
- * the file's bytes stay exactly as they were, for any recipe name.
+ * does not know is refused plainly, and the file's bytes stay exactly as
+ * they were. A newer CLI's recipe gets the refusal `theme palette generate`
+ * gives, with the update step that fits where the CLI runs; any other name
+ * is named as no recipe Astryx makes.
  */
 
 import * as fs from 'node:fs';
@@ -17,6 +18,8 @@ import {
   themeEditUndo,
 } from './theme-edit.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
+import {PALETTE_RECIPES} from '../theme/palette/generate/generator.mjs';
+import {newerRecipeRefusal} from '../theme/palette/generate/newer-recipe.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -77,16 +80,36 @@ describe('a palette recipe this CLI does not know', () => {
         const e = await refusal(run);
         expect(e.message).toContain('palette recipe made-up-recipe-zz9');
         expect(e.message).toContain(`this CLI (${cliVersion()})`);
-        expect(e.message).toMatch(/update the CLI/);
-        expect(e.message).not.toMatch(/by hand/);
-        // The way to a newer CLI is the project's own install of it, never
-        // `astryx upgrade`, which migrates code and installs nothing.
-        expect(JSON.stringify(e)).not.toContain('astryx upgrade');
-        expect(JSON.stringify(e.suggestions ?? e)).toMatch(
-          /(npm install|pnpm add|yarn add|bun add) @astryxdesign\/cli@latest/,
-        );
+        expect(e.message).toMatch(/no Astryx CLI makes/);
+        expect(e.message).not.toMatch(/by hand|update the CLI/);
         expect(fs.readFileSync(config).equals(before)).toBe(true);
       }
+    },
+    T,
+  );
+
+  it(
+    "a newer CLI's recipe gets the refusal palette generate gives, with its update step",
+    async () => {
+      const data = JSON.parse(fs.readFileSync(config, 'utf8'));
+      const newer = `astryx-oklch-v${PALETTE_RECIPES.length + 1}`;
+      fs.writeFileSync(
+        config,
+        `${JSON.stringify({...data, recipe: newer}, null, 2)}\n`,
+      );
+      const before = fs.readFileSync(config);
+      const e = await refusal(() => themeEditShow('n', {cwd}));
+      expect(e.message).toContain(
+        `was made with a newer Astryx CLI: its colors use the ${newer} recipe`,
+      );
+      expect(e.code).toBe(
+        newerRecipeRefusal({recipe: newer, file: 'x', cwd}).code,
+      );
+      // In a project, the install of its CLI and Core, then the codemod run.
+      expect(
+        (e.suggestions ?? []).map((/** @type {any} */ s) => s.name),
+      ).toContainEqual(expect.stringMatching(/@astryxdesign\/cli@/));
+      expect(fs.readFileSync(config).equals(before)).toBe(true);
     },
     T,
   );

@@ -88,7 +88,10 @@ import {P} from './_tables.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 import {sha256} from '../../foundation/render/source-block.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
-import {projectAddCommand} from '../../foundation/release/notices.mjs';
+import {
+  newerRecipe,
+  newerRecipeRefusal,
+} from '../theme/palette/generate/newer-recipe.mjs';
 
 export {readRegularFile};
 
@@ -1538,35 +1541,24 @@ export function syncPaletteRefs(cwd, slug, source, pal) {
 }
 
 /**
- * The command that brings a newer CLI to the project at `cwd`, with its
- * package manager (or the integration's own install guidance); outside a
- * project, the newest CLI run once.
- * @param {string} [cwd]
- * @returns {{name: string, reason: string}}
- */
-function newerCliCommand(cwd) {
-  const add = cwd ? projectAddCommand(cwd) : null;
-  return add
-    ? {name: add('@astryxdesign/cli@latest'), reason: 'install the newest CLI'}
-    : {name: 'npx @astryxdesign/cli@latest', reason: 'run the newest CLI'};
-}
-
-/**
- * A palette made with a recipe this CLI does not know (one a newer CLI
- * brings): said as such, with the file left as it is, never as a fault to
- * fix by hand.
+ * A palette made with a recipe this CLI does not know, with the file left as
+ * it is, never as a fault to fix by hand. A newer CLI's recipe gets the
+ * refusal `theme palette generate` gives, with the update step that fits
+ * where the CLI runs; any other recipe is named as no recipe Astryx makes.
  * @param {any} config
  * @param {string} file the config's path, for the refusal
- * @param {string} [cwd] the project, for the command that updates the CLI
+ * @param {string} [cwd] the project, for the step that updates the CLI
  */
 function refuseUnknownRecipe(config, file, cwd) {
   const recipe = config?.recipe;
-  if (recipe != null && !PALETTE_RECIPES.includes(recipe))
-    throw new AstryxError(
-      `${file}: this theme's colors were made with the palette recipe ${String(recipe)}, which this CLI (${cliVersion()}) doesn't know; update the CLI to open it. The file is left as it is. Nothing was changed.`,
-      [newerCliCommand(cwd)],
-      ERROR_CODES.ERR_PALETTE_GENERATION,
-    );
+  if (recipe == null || PALETTE_RECIPES.includes(recipe)) return;
+  if (newerRecipe(recipe))
+    throw newerRecipeRefusal({recipe, file, cwd: cwd ?? process.cwd()});
+  throw new AstryxError(
+    `${file}: this theme's colors name the palette recipe ${String(recipe)}, which no Astryx CLI makes; this CLI (${cliVersion()}) knows ${PALETTE_RECIPES.join(', ')}. The file is left as it is. Nothing was changed.`,
+    [{name: `${P} how colors`, reason: 'how the colors are made'}],
+    ERROR_CODES.ERR_PALETTE_GENERATION,
+  );
 }
 
 /**
