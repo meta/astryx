@@ -265,7 +265,7 @@ describe('a lone color after a part that draws with the accent', () => {
     ).not.toMatch(/accent '#374151'/);
     expect(
       writes(await how('q0', 'rounder progress bars, white')).join('\n'),
-    ).toMatch(/background-color '#ffffff' --on progress-bar/);
+    ).toMatch(/background-color '#ffffff' --on progress-bar-fill(?:\s|$)/m);
   }, 240_000);
 });
 
