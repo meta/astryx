@@ -54,6 +54,36 @@ const sortedUsers = useMemo(() => {
 
 <Table data={sortedUsers} columns={columns} idKey="id" plugins={{sort: sortPlugin}} />;`,
     },
+    {
+      label: 'Custom order: a status rank and a tags array',
+      code: `interface Task extends Record<string, unknown> {
+  id: string;
+  title: string;
+  status: 'blocked' | 'active' | 'done';
+  tags: string[];
+}
+const columns: TableColumn<Task>[] = [
+  {key: 'title', header: 'Title'},
+  {key: 'status', header: 'Status', sortable: true},
+  {key: 'tags', header: 'Tags', sortable: true, renderCell: task => task.tags.join(', ')},
+];
+const statusRank = {blocked: 0, active: 1, done: 2};
+const collator = useCollator({numeric: true});
+
+const {sortedData, sortConfig} = useTableSortableState<Task>({
+  data: tasks,
+  defaultSort: [{sortKey: 'status', direction: 'ascending'}],
+  // Comparators sort ascending; the hook flips them for descending.
+  comparators: {
+    status: (a, b) => statusRank[a.status] - statusRank[b.status],
+    // Arrays compare as equal without a comparator.
+    tags: (a, b) => collator.compare(a.tags.join(', '), b.tags.join(', ')),
+  },
+});
+const sortPlugin = useTableSortable<Task>(sortConfig);
+
+<Table data={sortedData} columns={columns} idKey="id" plugins={{sort: sortPlugin}} />;`,
+    },
   ],
   props: [
     {

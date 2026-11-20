@@ -3506,9 +3506,15 @@ describe('parts36', () => {
         on: 'segmented-control',
       }),
     );
-    expect(keeps.run[0]).toMatch(
-      /padding 'var\(--spacing-2\)' --on segmented-control$/,
-    );
+    // (Each side keeps the variable typed for it.)
+    expect(keeps.run).toEqual([
+      expect.stringMatching(
+        /padding-block 'var\(--spacing-2\)' --on segmented-control$/,
+      ),
+      expect.stringMatching(
+        /padding-inline 'var\(--spacing-3\)' --on segmented-control$/,
+      ),
+    ]);
   });
 
   it('takes a state padding on a card through the padding model', async () => {

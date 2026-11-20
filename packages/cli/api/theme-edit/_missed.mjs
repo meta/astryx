@@ -409,7 +409,7 @@ export function missedSteps(ctx, data, res, base) {
     // the base points the role token at another one there (stone's and
     // gothic's info banner reads the categorical blue), or a variant named
     // for the role draws a color of the base's palette written out (stone's
-    // accent progress fill in its pale blue). Listed once the theme moved
+    // accent progress fill in its blue). Listed once the theme moved
     // that role, in each mode where it looks different, with a line that
     // gives the part the theme's role color there.
     for (const [key, look] of Object.entries(

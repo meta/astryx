@@ -114,6 +114,8 @@ import {
 import {
   keptFileCheck,
   THEME_WIRING_CODEC,
+  CORE_PROPS_CODEC,
+  BUTTON_ACTIONS_CODEC,
   alignCommand,
   addCliCommandFor,
   dependencyInstallFor,
@@ -127,6 +129,8 @@ import {
   computerIntegrationsOutside,
   findIconImports,
   findIconPlaceholders,
+  findButtonsWithoutAction,
+  findUnknownCoreProps,
   iconFeatureGate,
   iconUseCommand,
   placeholderFixes,
@@ -211,6 +215,10 @@ import {
  *   The project's icon sets (AST-084 FR17), or null when they could not be
  *   read or the icon feature gate is off.
  *   Experimental: may change or be removed in a patch release.
+ * @property {{found: Array<{file: string, line: number, column: number, component: 'Button' | 'IconButton', label: string | null, note: string | null}>, files: number, incomplete: boolean, domListener?: string}|null} [buttonActions]
+ *   The Core buttons in the project's own source that do nothing when
+ *   pressed, and how many source files were read; null outside a project on
+ *   Core, or when the scan could not run.
  * @property {Array<{file: string, local: string, meanings: string[] | null, uses: number}>|null} [iconPlaceholders]
  *   Each file in the project's own source that uses the placeholder component
  *   the CLI writes for a missing icon, read only where the icon feature gate
@@ -220,6 +228,10 @@ import {
  *   Each file in the project's own source with icon imports that do not
  *   match its icon sets, read only when the placeholders are; null otherwise.
  *   Experimental: may change or be removed in a patch release.
+ * @property {{found: import('../../foundation/discovery/unknown-core-props.mjs').UnknownCoreProp[], uses: number, skipped: string | null}|null} [coreProps]
+ *   The props the project's own source gives Core components that they do
+ *   not take, with how many props it read, or why it checked none; null when
+ *   the project reads no Core or the scan failed.
  * @property {string|null} [projectError] - Why the CLI could not load the
  *   project from its config, when it could not. Checks that need the loaded
  *   project quote it when they skip, so a skip says what was found.
@@ -1804,6 +1816,110 @@ export function checkIconPlaceholders(ctx) {
   };
 }
 
+/** How many props the warning names before it counts the rest. */
+const PROPS_NAMED = 8;
+
+/**
+ * The props the project's own source gives Core components that the
+ * component does not take (see `findUnknownCoreProps`): each with its file,
+ * line and component, and a documented prop with the same words when there
+ * is one. A prop a component does not take does nothing, and unless the build
+ * type-checks, no build step reports it.
+ * When the project has no TypeScript to read Core's types with, the check
+ * says it did not run.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkCoreProps(ctx) {
+  const scan = ctx.coreProps;
+  if (scan == null) return null;
+  const id = 'core-props';
+  const label = 'Core props';
+  if (scan.skipped) return {id, label, status: 'info', message: `Not checked: ${scan.skipped}`};
+  const count = scan.found.length;
+  if (count === 0) {
+    return {
+      id,
+      label,
+      status: 'pass',
+      message: `No prop was found that a Core component does not take (${scan.uses} prop${scan.uses === 1 ? '' : 's'} read).`,
+    };
+  }
+  const named = scan.found
+    .slice(0, PROPS_NAMED)
+    .map(
+      use =>
+        `${use.file}:${use.line} ${use.component} has no \`${use.prop}\`${use.suggestion ? ` (did you mean \`${use.suggestion}\`?)` : ''}`,
+    );
+  const rest = count - named.length;
+  return {
+    id,
+    label,
+    status: 'warn',
+    message: `${count} prop${count === 1 ? '' : 's'} a Core component does not take: ${named.join(', ')}${rest > 0 ? `, and ${rest} more` : ''}.`,
+    fix: 'Give each component a prop it takes: `astryx component <Name>` lists them. A prop the component does not take does nothing.',
+  };
+}
+
+/** The most buttons a warning names before it counts the rest. */
+const BUTTONS_NAMED = 8;
+
+/**
+ * The Core buttons in the project's own source that do nothing when pressed:
+ * a `Button` or `IconButton` from `@astryxdesign/core` with no `onClick`,
+ * `clickAction`, `href`, or `submit` or `reset` type, or with an empty
+ * handler or a link that goes nowhere (`#`), where nothing around it acts on
+ * a press (see
+ * foundation/discovery/button-actions.mjs). A warning: a person who presses
+ * one gets nothing, and the build still works. Each is named by its file,
+ * line and label.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkButtonActions(ctx) {
+  const scan = ctx.buttonActions;
+  if (scan == null) return null;
+  const id = 'button-actions';
+  const label = 'Button actions';
+  const count = scan.found.length;
+  if (scan.incomplete) {
+    return {
+      id,
+      label,
+      status: 'info',
+      message: `Not checked: the project has more source files than doctor reads (${scan.files} read), so it cannot tell where each component is rendered.`,
+    };
+  }
+  if (scan.domListener) {
+    return {
+      id,
+      label,
+      status: 'info',
+      message: `Not checked: \`${scan.domListener}\` may listen for a press through the DOM, so a script may act on a button in a way doctor cannot read.`,
+    };
+  }
+  if (count === 0) {
+    return {
+      id,
+      label,
+      status: 'pass',
+      message: `No Astryx button that does nothing when pressed (${scan.files} source file${scan.files === 1 ? '' : 's'} read).`,
+    };
+  }
+  const named = scan.found.slice(0, BUTTONS_NAMED).map(
+    button =>
+      `${button.file}:${button.line} ${button.label == null ? button.component : `"${button.label}"`}${button.note ? ` (${button.note})` : ''}`,
+  );
+  const rest = count - named.length;
+  return {
+    id,
+    label,
+    status: 'warn',
+    message: `${count} button${count === 1 ? '' : 's'} ${count === 1 ? 'does' : 'do'} nothing when pressed: ${named.join(', ')}${rest > 0 ? `, and ${rest} more` : ''}.`,
+    fix: 'Give each one an action: `onClick` (or `clickAction` for async work), a real `href` in place of a placeholder, or `type="submit"` inside a form. If it has no action yet, disable it with `isDisabled` or remove it: an empty handler still does nothing.',
+  };
+}
+
 /**
  * The icon imports in the project's own source that do not match its icon
  * sets (AST-084): each file and import, with the icon of the list that draws
@@ -2590,6 +2706,13 @@ export function checkInstallGuidance(ctx) {
  *   the integrations installed beside the running CLI
  * @property {string[]} [loadedComputerIntegrations] the names of those that
  *   loaded outside a project
+ * @property {Array<{package: string, severity: string, message: string}>} [computerIntegrationIssues]
+ *   the issues in the contributions of those that loaded
+ * @property {((name: string) => string | null) | null} [integrationUpdate]
+ *   the command that updates one of them, beside a CLI installed for the
+ *   computer
+ * @property {boolean} [integrationsUpdateWithTool] they sit in a tool's
+ *   package set, which updates them
  * @property {string[]} [folderIntegrations] the names of the integrations the
  *   folder loads itself, whose copies win over the computer's
  */
@@ -2920,7 +3043,9 @@ export function checkComputerAgentText(ctx) {
 /**
  * The integrations installed for the computer (spec AST-081 FR12). Outside a
  * project: each one that loads, and a warning for each that is skipped
- * because its peer ranges exclude the answering release, or fails to load.
+ * because its peer ranges exclude the answering release, fails to load, or
+ * has issues in its contributions. The everyday commands print one line for
+ * such issues that points here.
  * @param {ComputerContext} ctx
  * @returns {DoctorCheck}
  */
@@ -2947,10 +3072,23 @@ export function checkComputerIntegrations(ctx) {
   const used = rest.filter(c => !c.incompatible && loaded.has(c.name));
   const skipped = rest.filter(c => c.incompatible);
   const failed = rest.filter(c => !c.incompatible && !loaded.has(c.name));
+  /** @type {Map<string, string[]>} the issue messages of each package */
+  const issuesOf = new Map();
+  for (const issue of ctx.computerIntegrationIssues ?? []) {
+    issuesOf.set(issue.package, [
+      ...(issuesOf.get(issue.package) ?? []),
+      issue.message,
+    ]);
+  }
+  const withIssues = used.filter(c => issuesOf.has(c.name));
   const notes = [
     used.length > 0
       ? `Used outside a project: ${used.map(label).join(', ')}.`
       : '',
+    ...withIssues.map(c => {
+      const messages = issuesOf.get(c.name) ?? [];
+      return `${label(c)} has ${messages.length} integration issue${messages.length === 1 ? '' : 's'}: ${messages.join(' ')}`;
+    }),
     ...shadowed.map(
       c =>
         `${label(c)} is not used here: this folder loads its own copy of ${c.name}.`,
@@ -2967,11 +3105,28 @@ export function checkComputerIntegrations(ctx) {
         `run \`${formatCliCommand(`astryx doctor integration validate ${c.name}`, ctx.cwd)}\``,
     ),
   ];
+  // The issues are in the package's own files: its maintainer fixes them, so
+  // anyone else needs a newer release.
+  const advice = withIssues.map(c => {
+    const one = (issuesOf.get(c.name) ?? []).length === 1;
+    const command = ctx.integrationUpdate?.(c.name) ?? null;
+    const how = command
+      ? ` To get one, run \`${command}\`.`
+      : ctx.integrationsUpdateWithTool
+        ? ' It updates with the tool that runs this CLI.'
+        : '';
+    return `If you maintain ${c.name}, the ${one ? 'fix in the issue is' : 'fixes in the issues are'} yours. Otherwise, a newer release of ${c.name} needs to fix ${one ? 'it' : 'them'}.${how}`;
+  });
+  const fix = [
+    ...(fixes.length > 0 ? [`To fix: ${fixes.join('; ')}.`] : []),
+    ...advice,
+  ].join(' ');
   return {
     ...base,
-    status: skipped.length + failed.length > 0 ? 'warn' : 'pass',
+    status:
+      withIssues.length + skipped.length + failed.length > 0 ? 'warn' : 'pass',
     message: notes.join(' '),
-    ...(fixes.length > 0 ? {fix: `To fix: ${fixes.join('; ')}.`} : {}),
+    ...(fix ? {fix} : {}),
   };
 }
 
@@ -3079,7 +3234,7 @@ export function checkGatherCache(ctx) {
     label: 'Kept catalog cache',
     status: 'info',
     brief: `${entries} (${size}) in ${summary.dir}. \`${formatCliCommand('doctor --json', ctx.cwd)}\` lists every kept item and the size limits. To clear the caches, run: ${removeFolderCommand(kept)}.`,
-    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list and whether the installed Core still matches the stored one, Core's and integrations' components with the doc parts the component matcher scores, Core hooks' declared keywords, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys, token names and settings the browser won't show as written, the lookup commands' not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, what template reads from a template's source to name the components it uses, discover's record of the integrations a project loads and what each adds, and what it searches in its sources' saved copies, which search's discover line reads, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${entries}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, the installed CLI's own files judged by its build id and folder (an upgrade, a reinstall or a copy in another folder changes them; in-place edits aren't supported), and deleting the folder clears it. A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's \`integration check\` of itself, for npm's list. On Linux, when a debug handler is set, runs also keep the locale and time zone here. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB, dropping oldest entries first; the transpile cache in ${summary.transpiledDir} keeps its copies in ${SUBFOLDERS} subfolders, each holding at most 1/${SUBFOLDERS} of that, and drops the copies made longest ago first.`,
+    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list and whether the installed Core still matches the stored one, Core's and integrations' components with the doc parts the component matcher scores, Core hooks' declared keywords, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys, token names and settings the browser won't show as written, the lookup commands' not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, what template reads from a template's source to name the components it uses, discover's record of the integrations a project loads and what each adds, and what it searches in its sources' saved copies, which search's discover line reads, doctor's docs checks and theme-wiring scan, what doctor's Core-props check finds in the project's source files, keyed by the folders it lists and the files it reads, and by the TypeScript, Core and project-config versions it used, and what doctor's Core-button check finds in the project's source files, keyed by the folders it lists and the files it reads, and by the installed packages and Node.js version it used) in ${summary.dir} (${entries}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, the installed CLI's own files judged by its build id and folder (an upgrade, a reinstall or a copy in another folder changes them; in-place edits aren't supported), and deleting the folder clears it. A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's \`integration check\` of itself, for npm's list. On Linux, when a debug handler is set, runs also keep the locale and time zone here. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB, dropping oldest entries first; the transpile cache in ${summary.transpiledDir} keeps its copies in ${SUBFOLDERS} subfolders, each holding at most 1/${SUBFOLDERS} of that, and drops the copies made longest ago first.`,
   };
 }
 
@@ -3158,6 +3313,8 @@ export const SYNC_CHECKS = [
   checkIconSets,
   checkIconPlaceholders,
   checkIconImports,
+  checkButtonActions,
+  checkCoreProps,
   checkAgentDocs,
   checkSkillPlaces,
   checkPeerDeps,
@@ -3384,6 +3541,8 @@ export async function runChecks(options = {}) {
     // Set after the docs checks, below.
     iconPlaceholders: null,
     iconImports: null,
+    buttonActions: null,
+    coreProps: null,
     base: project?.base.ok ? project.base.base : coreBase(),
   };
   const readsCore = ctx.base?.core !== false;
@@ -3413,6 +3572,39 @@ export async function runChecks(options = {}) {
     } catch {
       // A scan that fails leaves the icon facts unknown.
       ctx.iconSets = null;
+    }
+  }
+
+  // The props scan reads the app's source, Core's docs, and Core's types
+  // with the project's TypeScript, and runs nothing, so it is kept like the
+  // docs checks; a scan that fails leaves the check out.
+  if (readsCore) {
+    try {
+      const projectDir = findPackageRoot(cwd) ?? cwd;
+      ctx.coreProps = await keptFileCheck(
+        {name: 'core-props', ...where},
+        () => findUnknownCoreProps(projectDir),
+        CORE_PROPS_CODEC,
+      );
+    } catch {
+      ctx.coreProps = null;
+    }
+  }
+
+  // A project on Core scans its own source for buttons that do nothing. The
+  // scan reads only files and folders and runs nothing, so it is kept like
+  // the docs checks.
+  if (readsCore) {
+    try {
+      const projectDir = findPackageRoot(cwd) ?? cwd;
+      ctx.buttonActions = await keptFileCheck(
+        {name: 'button-actions', ...where},
+        async () => findButtonsWithoutAction(projectDir),
+        BUTTON_ACTIONS_CODEC,
+      );
+    } catch {
+      // A scan that fails leaves the check out.
+      ctx.buttonActions = null;
     }
   }
 

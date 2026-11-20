@@ -95,6 +95,17 @@ function formatReturnsTable(returns) {
 }
 
 /**
+ * The `## Parameters` section: what the hook takes, one row per parameter. A
+ * hook read prints it, and so does a component read that resolves to a hook.
+ * @param {any} docs
+ * @returns {string[]}
+ */
+export function formatHookParameters(docs) {
+  if (!docs.params?.length) return [];
+  return ['## Parameters\n', formatParamsTable(docs.params) + '\n'];
+}
+
+/**
  * The `## Returns` section: what the hook returns, one row per field. A hook
  * read prints it, and so does a component read that resolves to a hook.
  * @param {any} docs
@@ -126,11 +137,7 @@ export function formatHookFull(docs) {
 
   sections.push(...formatAccessibility(docs.usage?.accessibility));
 
-  // Parameters (analogous to ## Props)
-  if (docs.params?.length) {
-    sections.push('## Parameters\n');
-    sections.push(formatParamsTable(docs.params) + '\n');
-  }
+  sections.push(...formatHookParameters(docs));
 
   sections.push(...formatHookReturns(docs));
 
@@ -169,11 +176,7 @@ export function formatHookCompact(docs, importPath) {
 
   sections.push(...formatAccessibility(docs.usage?.accessibility));
 
-  // Parameters (matches ## Props in component compact)
-  if (docs.params?.length) {
-    sections.push('## Parameters\n');
-    sections.push(formatParamsTable(docs.params) + '\n');
-  }
+  sections.push(...formatHookParameters(docs));
 
   sections.push(...formatHookReturns(docs));
 
@@ -275,8 +278,6 @@ export async function formatHookBriefAll(coreDir) {
  * @returns {string}
  */
 export function formatHookParams(docs) {
-  if (docs.params?.length) {
-    return `## Parameters\n\n${formatParamsTable(docs.params)}\n`;
-  }
+  if (docs.params?.length) return formatHookParameters(docs).join('\n');
   return `No parameters documentation found for ${docs.name}.\n`;
 }

@@ -31,10 +31,18 @@ export interface ChartAxisProps {
   position: 'top' | 'right' | 'bottom' | 'left';
   /** Number of ticks (approximate — d3 decides final count) */
   tickCount?: number;
-  /** Maximum number of tick labels to show. Labels are thinned to at most this many; the first and last labels stay. */
+  /**
+   * Maximum number of tick labels to show. Leave unset to thin labels to fit
+   * the axis width. A set value wins over that fit, so its labels can overlap
+   * on a narrow chart. Labels are thinned to at most this many; the first and
+   * last labels stay.
+   */
   maxTicks?: number;
-  /** Custom tick formatter */
-  tickFormat?: (value: unknown) => string;
+  /**
+   * Custom tick formatter. A `null` or `undefined` result shows the default
+   * tick text.
+   */
+  tickFormat?: (value: unknown) => string | null | undefined;
   /** Truncate labels to this many user-perceived characters (appends "\u2026"). */
   truncate?: number;
   /** Enable smooth transitions for streaming (default: true) */
@@ -131,18 +139,18 @@ export function ChartAxis({
   // like "0.30000000000000004") and dates render as calendar labels instead of
   // `String(Date)`. Band scales keep their category strings.
   const autoFormat = useMemo<((v: unknown) => string) | null>(() => {
-    if (tickFormat || isBandScale(scale)) {
+    if (isBandScale(scale)) {
       return null;
     }
     const continuous = scale as
       ScaleLinear<number, number> | ScaleTime<number, number>;
     const fmt = continuous.tickFormat(safeTickCount);
     return (v: unknown) => fmt(v as number & Date);
-  }, [tickFormat, scale, safeTickCount]);
+  }, [scale, safeTickCount]);
 
   const format = useCallback(
     (value: unknown): string => {
-      const str = (tickFormat ?? autoFormat ?? String)(value);
+      const str = tickFormat?.(value) ?? (autoFormat ?? String)(value);
       if (!truncate) {
         return str;
       }
