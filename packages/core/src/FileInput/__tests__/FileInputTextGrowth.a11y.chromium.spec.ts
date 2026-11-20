@@ -8,8 +8,9 @@
  *   desktop and a phone viewport.
  * @output Real-browser proof of spec:AST-102 FR4 for input mode: at the
  *   default text size the field is 32 px; at 200% text the field grows so its
- *   prompt stays inside its borders, and in a 120 px field the prompt is cut
- *   with an ellipsis inside the field's inline borders.
+ *   prompt stays inside its borders, wrapped or not, and in a 120 px field a
+ *   word wider than the field breaks inside itself, so no text leaves the
+ *   field's inline borders.
  * @position Runs in pr-a11y when FileInput or its stories change. jsdom has
  *   no layout.
  */
@@ -32,8 +33,8 @@ test.afterAll(async () => {
 });
 
 /**
- * The field's height, how far its prompt reaches past its borders, and
- * whether the prompt is cut. `width` narrows the field's container.
+ * The field's height, and how far its prompt reaches past its borders.
+ * `width` narrows the field's container.
  */
 async function readField(page: Page, rootFontSize: string, width?: string) {
   await page.goto(
@@ -64,17 +65,8 @@ async function readField(page: Page, rootFontSize: string, width?: string) {
       if (prompt != null) {
         range.selectNodeContents(prompt);
       }
-      // The text's own box: a word wider than its span draws past the span,
-      // unless the span clips it.
+      // The text's own box: a word wider than its span draws past the span.
       const ink = prompt == null ? null : range.getBoundingClientRect();
-      const clips =
-        prompt != null && getComputedStyle(prompt).overflowX !== 'visible';
-      const inkEnd =
-        ink == null || text == null
-          ? Infinity
-          : clips
-            ? Math.min(ink.right, text.right)
-            : ink.right;
       return {
         height: box.height,
         overflow:
@@ -84,8 +76,7 @@ async function readField(page: Page, rootFontSize: string, width?: string) {
         inlineOverflow:
           text == null || ink == null
             ? Infinity
-            : Math.max(0, start - text.left, text.right - end, inkEnd - end),
-        isCut: prompt != null && prompt.scrollWidth > prompt.clientWidth,
+            : Math.max(0, start - text.left, text.right - end, ink.right - end),
       };
     },
     {size: rootFontSize, fieldWidth: width},
@@ -111,13 +102,12 @@ for (const viewport of [
       expect(field?.overflow).toBe(0);
     });
 
-    test('a 120 px field at 200% text cuts its prompt inside its borders', async ({
+    test('a 120 px field at 200% text wraps its prompt inside its borders', async ({
       page,
     }) => {
       const field = await readField(page, '200%', '120px');
       expect(field?.inlineOverflow).toBe(0);
       expect(field?.overflow).toBe(0);
-      expect(field?.isCut).toBe(true);
     });
   });
 }
