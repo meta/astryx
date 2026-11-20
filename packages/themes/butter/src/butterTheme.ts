@@ -10,7 +10,9 @@
  * The signature blue and butter yellow remain exact anchors.
  */
 
+import {parseStyleKey} from '@astryxdesign/core/utils';
 import {defineTheme, defineSyntaxTheme} from '@astryxdesign/core/theme';
+import type {ComponentStyleMap} from '@astryxdesign/core/theme';
 import {butterIconRegistry} from './icons';
 import {butterPaletteRefs} from './butterPaletteRefs.generated';
 
@@ -31,6 +33,149 @@ const {
 const withAlpha = (color: string, alpha: string): string => `${color}${alpha}`;
 const lightDark = (light: string, dark: string): string =>
   `light-dark(${light}, ${dark})`;
+
+/**
+ * Secondary text on the accent tint (a selected row, a dropzone's hint, a
+ * numbered citation): the nearest stop that reads on the tint over the page,
+ * a card and the muted fill. Inside a coloured card, a selected row and a
+ * numbered citation take a dark stop like the rest of the card's ink.
+ */
+const LIFTED_ON_PAGE = lightDark(neutral.light[40], neutral.dark[85]);
+const LIFTED_ON_COLOURED_CARD = lightDark(neutral.light[30], neutral.dark[45]);
+
+// The theme's own text and link colours, which a part that paints a fill
+// of its own sets again (OWN_FILL_RULES).
+const SURFACE_TEXT = {
+  '--color-text-primary': lightDark(neutral.light[15], neutral.dark[90]),
+  '--color-text-secondary': lightDark(neutral.light[45], neutral.dark[70]),
+  '--color-text-accent': lightDark(accent.light[40], yellow.dark[90]),
+};
+
+/**
+ * The selector Core's TableRow gives a striped table's painted rows: its
+ * even rows, not counting expansion panels. The striped-row rule repeats it
+ * under the row's `striped` state, so a plain table's rows keep the text
+ * around them.
+ */
+const STRIPED_ROW = ':nth-child(even of :not([data-expansion-panel]))';
+
+/**
+ * The rules of the parts that paint a fill of their own (a surface, a
+ * popover, the muted fill or a card fill) and draw text on it, each as
+ * `[part, rule, selector?]`. A coloured card's ink must not reach them, so
+ * each sets the theme's own text and link colours again. A transparent card
+ * is left out: it paints nothing, so it keeps its parent's ink.
+ */
+const OWN_FILL_RULES: ReadonlyArray<readonly [string, string, string?]> = [
+  ['card', 'variant:default'],
+  ['card', 'variant:muted'],
+  ['clickable-card', 'variant:default'],
+  ['clickable-card', 'variant:muted'],
+  ['selectable-card', 'variant:default'],
+  ['selectable-card', 'variant:muted'],
+  ['section', 'variant:section'],
+  ['section', 'variant:muted'],
+  ['app-shell', 'variant:surface'],
+  ['app-shell', 'variant:section'],
+  ['app-shell-header', 'variant:surface'],
+  ['app-shell-sidenav', 'variant:surface'],
+  ['layout-panel', 'base'],
+  ['layout-content', 'base'],
+  ['code', 'base'],
+  ['avatar', 'base'],
+  ['avatar-group-overflow', 'base'],
+  ['segmented-control-item', 'selected'],
+  ['step-indicator', 'progress:not-started'],
+  ['table-row', 'striped', STRIPED_ROW],
+  ['banner-content', 'base'],
+  ['input-group-text', 'base'],
+  ['text-input', 'base'],
+  ['text-area', 'base'],
+  ['number-input', 'base'],
+  ['date-input', 'base'],
+  ['date-range-input', 'base'],
+  ['date-time-input-date-segment', 'base'],
+  ['date-time-input-time-segment', 'base'],
+  ['time-input', 'base'],
+  ['file-input', 'base'],
+  ['typeahead', 'base'],
+  ['tokenizer', 'base'],
+  ['selector', 'variant:input'],
+  ['multi-selector', 'variant:input'],
+  ['selector-popup', 'base'],
+  ['multi-selector-popup', 'base'],
+  ['dropdown-menu', 'base'],
+  ['dropdown-menu-radio', 'base'],
+  ['context-menu', 'base'],
+  ['popover', 'base'],
+  ['hover-card', 'base'],
+  ['dialog', 'base'],
+  ['drawer', 'base'],
+  ['bottom-sheet', 'base'],
+  ['chat-composer-drawer', 'base'],
+];
+
+/** Puts SURFACE_TEXT under each own-fill rule; a rule's own values win. */
+function withOwnFillText(components: ComponentStyleMap): ComponentStyleMap {
+  const out: ComponentStyleMap = {...components};
+  for (const [part, key, selector] of OWN_FILL_RULES) {
+    const rule = out[part]?.[key] ?? {};
+    out[part] = {
+      ...out[part],
+      [key]: selector
+        ? {
+            ...rule,
+            // A table sets its text color on its root, so a painted row
+            // sets it again as well as the tokens.
+            [selector]: {
+              ...SURFACE_TEXT,
+              color: 'var(--color-text-primary)',
+              ...((rule as Record<string, object>)[selector] ?? {}),
+            },
+          }
+        : {...SURFACE_TEXT, ...rule},
+    };
+  }
+  return out;
+}
+
+/** The coloured card variants: a pastel fill with dark ink in both modes. */
+const COLOURED_CARDS = [
+  'blue',
+  'cyan',
+  'gray',
+  'green',
+  'orange',
+  'pink',
+  'purple',
+  'red',
+  'teal',
+  'yellow',
+];
+
+/** The selector Core gives a part's rule key. */
+function ruleSelector(part: string, key: string): string {
+  return `.astryx-${part}${parseStyleKey(key)}`;
+}
+
+/**
+ * Inside a coloured card and not inside a part with a fill of its own
+ * between that card and the element: where a part draws on the card's
+ * pastel fill. A part with its own fill above the card does not count.
+ */
+const COLOURED_CARD = `:is(${COLOURED_CARDS.map(
+  variant => `.astryx-card[data-variant="${variant}"]`,
+).join(', ')})`;
+const OWN_FILL = `:is(${OWN_FILL_RULES.filter(([, , selector]) => !selector)
+  .map(([part, key]) => ruleSelector(part, key))
+  .join(', ')})`;
+const IN_COLOURED_CARD = `:where(${COLOURED_CARD} *):not(:where(${COLOURED_CARD} ${OWN_FILL} *))`;
+/**
+ * The same one level down: a coloured card inside a part with its own fill
+ * that itself sits in a coloured card. The dark stop holds two coloured
+ * cards deep.
+ */
+const IN_NESTED_COLOURED_CARD = `:where(${COLOURED_CARD} ${OWN_FILL} ${COLOURED_CARD} *):not(:where(${COLOURED_CARD} ${OWN_FILL} ${COLOURED_CARD} ${OWN_FILL} *))`;
 
 /** Butter syntax colors resolved through reviewed palette stops. */
 const butterSyntax = defineSyntaxTheme({
@@ -125,6 +270,9 @@ const INPUT_STATUS_VARS = {
     '--color-icon-error': red.light[60],
   },
 } as const;
+
+/** The color modes butter draws: light and dark. */
+export const colorModes = ['light', 'dark'] as const;
 
 export const butterTheme = defineTheme({
   name: 'butter',
@@ -345,6 +493,8 @@ export const butterTheme = defineTheme({
     '--radius-element': '0.5rem', // 8px
     '--radius-container': '0.75rem', // 12px
     '--radius-page': '1.5rem',
+    // Chat surfaces stay rounder than cards.
+    '--radius-chat': '28px',
     '--radius-full': '9999px',
 
     // =========================================================================
@@ -360,7 +510,48 @@ export const butterTheme = defineTheme({
     '--shadow-inset-error': `inset 0px 0px 0px 2px ${withAlpha(red.light[30], '30')}`,
   },
 
-  components: {
+  components: withOwnFillText({
+    // The send button keeps the 16px corner it took from the 28px composer:
+    // a rounded square on Butter's 40px controls.
+    'chat-send-button': {
+      base: {':where(.astryx-chat-composer *)': {borderRadius: '16px'}},
+    },
+    // In dark mode, secondary text falls under 4.5:1 on the selected fill (the
+    // accent tint) and under its hover. Selected rows, a dropzone's hint and
+    // a numbered citation, all on that fill, use the nearest stop that clears
+    // both.
+    item: {
+      selected: {
+        '--color-text-secondary': LIFTED_ON_PAGE,
+        [IN_COLOURED_CARD]: {'--color-text-secondary': LIFTED_ON_COLOURED_CARD},
+        [IN_NESTED_COLOURED_CARD]: {
+          '--color-text-secondary': LIFTED_ON_COLOURED_CARD,
+        },
+      },
+    },
+    'tree-list-item': {
+      selected: {
+        '--color-text-secondary': LIFTED_ON_PAGE,
+        [IN_COLOURED_CARD]: {'--color-text-secondary': LIFTED_ON_COLOURED_CARD},
+        [IN_NESTED_COLOURED_CARD]: {
+          '--color-text-secondary': LIFTED_ON_COLOURED_CARD,
+        },
+      },
+    },
+    citation: {
+      'variant:number': {
+        '--color-text-secondary': LIFTED_ON_PAGE,
+        [IN_COLOURED_CARD]: {'--color-text-secondary': LIFTED_ON_COLOURED_CARD},
+        [IN_NESTED_COLOURED_CARD]: {
+          '--color-text-secondary': LIFTED_ON_COLOURED_CARD,
+        },
+      },
+    },
+    'file-input': {
+      'mode:dropzone': {
+        '--color-text-secondary': LIFTED_ON_PAGE,
+      },
+    },
     // TopNav uses Butter's blue accent: the heading and the selected item are
     // the full brand blue; unselected items (default + hover) use a lighter
     // blue. Dark mode keeps the theme's butter-yellow accent.
@@ -393,7 +584,8 @@ export const butterTheme = defineTheme({
     button: {
       // Radius intentionally not pinned, so buttons keep core's
       // `var(--_button-radius, --radius-element)`: standalone buttons stay 8px,
-      // while the chat composer (which sets --_button-radius) rounds them fully.
+      // while the chat composer (which sets --_button-radius) gives them its
+      // 16px concentric corner.
       // Inline padding only. Button sets its own block padding and height.
       base: {
         paddingInline: 'var(--spacing-4)',
@@ -484,48 +676,62 @@ export const butterTheme = defineTheme({
         '--color-text-secondary': neutral.light[45],
       },
       'variant:blue': {
+        '--color-text-accent': accent.light[35],
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:cyan': {
+        '--color-text-accent': accent.light[35],
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:gray': {
+        '--color-text-accent': accent.light[35],
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:green': {
+        '--color-text-accent': accent.light[35],
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:orange': {
+        '--color-text-accent': accent.light[35],
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:pink': {
+        '--color-text-accent': accent.light[35],
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:purple': {
+        '--color-text-accent': accent.light[35],
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:red': {
+        '--color-text-accent': accent.light[35],
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:teal': {
+        '--color-text-accent': accent.light[35],
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:yellow': {
+        '--color-text-accent': accent.light[35],
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
+      // The muted fill turns dark in dark mode: its text follows the mode.
       'variant:muted': {
-        '--color-text-primary': neutral.light[15],
-        '--color-text-secondary': neutral.light[45],
+        '--color-text-primary': lightDark(neutral.light[15], neutral.dark[90]),
+        '--color-text-secondary': lightDark(
+          neutral.light[45],
+          neutral.dark[70],
+        ),
       },
     },
 
@@ -535,8 +741,8 @@ export const butterTheme = defineTheme({
       },
     },
 
-    // Progress bar — pale track in light, warm brown in dark. Vivid
-    // semantic fills match the banner colors (Success / Warning / Error).
+    // Progress bar — pale track in light, warm brown in dark. Status fills take
+    // the theme's status roles, which reach 3:1 on that track.
     'progress-bar-track': {
       base: {
         backgroundColor: lightDark(neutral.light[85], neutral.dark[40]),
@@ -544,13 +750,41 @@ export const butterTheme = defineTheme({
     },
     'progress-bar-fill': {
       'variant:success': {
-        backgroundColor: green.light[70],
+        backgroundColor: 'var(--color-success)',
       },
       'variant:warning': {
-        backgroundColor: yellow.light[80],
+        backgroundColor: 'var(--color-warning)',
       },
       'variant:error': {
-        backgroundColor: red.light[60],
+        backgroundColor: 'var(--color-error)',
+      },
+      // The secondary text color (stop 70) reads under 3:1 on the dark track,
+      // so a neutral or disabled fill takes stop 80 there.
+      'variant:neutral': {
+        backgroundColor: lightDark(
+          'var(--color-text-secondary)',
+          neutral.dark[80],
+        ),
+      },
+      'variant:disabled': {
+        backgroundColor: lightDark(
+          'var(--color-text-secondary)',
+          neutral.dark[80],
+        ),
+      },
+    },
+
+    // A status fill is the status color, so its mark takes that status's
+    // on-color.
+    'progress-bar-mark': {
+      'placement:fill+variant:success': {
+        backgroundColor: 'var(--color-on-success)',
+      },
+      'placement:fill+variant:warning': {
+        backgroundColor: 'var(--color-on-warning)',
+      },
+      'placement:fill+variant:error': {
+        backgroundColor: 'var(--color-on-error)',
       },
     },
 
@@ -668,7 +902,7 @@ export const butterTheme = defineTheme({
         fontFamily: 'Sarina, "Brush Script MT", "Snell Roundhand", cursive',
       },
     },
-  },
+  }),
 
   icons: butterIconRegistry,
 });

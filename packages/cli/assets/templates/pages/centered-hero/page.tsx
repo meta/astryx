@@ -10,7 +10,7 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {AspectRatio} from '@astryxdesign/core/AspectRatio';
 import {Section} from '@astryxdesign/core/Section';
 import {rtlStyles} from '@astryxdesign/core/utils';
-import {ArrowRightIcon} from '@heroicons/react/20/solid';
+import {ArrowRightIcon} from '@astryxdesign/template-icons/20/solid';
 
 const IMAGE_URL = '/template-assets/light-scene-horizontal-1.png';
 
@@ -29,7 +29,7 @@ export default function CenteredHero() {
   return (
     <Layout
       content={
-        <LayoutContent padding={6}>
+        <LayoutContent role="main" padding={6}>
           <VStack gap={10}>
             <VStack gap={6} hAlign="center">
               <VStack gap={3} hAlign="center">

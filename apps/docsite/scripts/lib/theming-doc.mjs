@@ -26,7 +26,13 @@ export const COMPONENT_VAR_FIELDS = [
 ];
 
 /** Fields of the emitted `DerivedVar` interface. */
-export const DERIVED_VAR_FIELDS = ['property', 'vars', 'expand', 'replaces'];
+export const DERIVED_VAR_FIELDS = [
+  'property',
+  'vars',
+  'expand',
+  'replaces',
+  'corners',
+];
 
 /** Fields of the emitted `ComponentIconSlot` interface. */
 export const COMPONENT_ICON_SLOT_FIELDS = [

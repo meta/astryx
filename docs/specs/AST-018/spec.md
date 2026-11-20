@@ -27,6 +27,9 @@ A theme may keep an approved palette in a theme-owned source file. Authors and
 tools can use it to select and audit explicit theme colors. `defineTheme()` still
 receives the explicit values that control rendered output; it does not receive,
 inherit, validate, publish, or resolve palette data.
+A theme may instead opt into the palette input that `spec:AST-008` FR19 owns;
+`defineTheme()` then receives that input's resolved tokens, and this record's
+palette file does not apply to it.
 
 Semantic tokens remain the primary interface for components and applications.
 The palette is a starting point for color decisions and contrast testing, not a

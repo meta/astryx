@@ -86,7 +86,7 @@ describe.skipIf(!POSIX)(
       const dir = makeProject({core: '9.0.1'});
       const r = run(g.bin, ['--version'], {cwd: dir, pc});
       expect(r.stdout).toBe('9.0.0');
-      expect(r.lines).toEqual([noCliHint('9.0.0', '9.0.1')]);
+      expect(r.lines).toEqual([noCliHint('9.0.0', '9.0.1', {exact: true})]);
       // Once a day per project.
       expect(run(g.bin, ['--version'], {cwd: dir, pc}).lines).toEqual([]);
       const json = run(g.bin, ['docs', '--json'], {cwd: dir, pc});
@@ -205,7 +205,9 @@ describe.skipIf(!POSIX)(
           cwd: peer,
           pc,
         });
-        expect(peerRun.lines).toEqual([noCliHint('9.0.0', '9.0.1')]);
+        expect(peerRun.lines).toEqual([
+          noCliHint('9.0.0', '9.0.1', {exact: true}),
+        ]);
       }),
     );
 
@@ -222,7 +224,7 @@ describe.skipIf(!POSIX)(
         );
         const r = await runAsync(
           g.bin,
-          ['experimental', 'render', 'page.jsx', '--json'],
+          ['experimental', 'export', 'page.jsx', '--json'],
           {
             cwd: dir,
             pc,
@@ -305,7 +307,7 @@ describe.skipIf(!POSIX)(
       );
       expect(r.notice).toEqual([
         'A new release of Astryx is available: 9.0.1 → 9.0.7',
-        `To upgrade, run: cd ${app} && npm install @astryxdesign/core@9.0.7 @astryxdesign/cli@9.0.7, then cd ${app} && npx astryx upgrade --from 9.0.1 --apply`,
+        `To upgrade, run: cd ${app} && npm install -E @astryxdesign/core@9.0.7 @astryxdesign/cli@9.0.7, then cd ${app} && npx astryx upgrade --from 9.0.1 --apply`,
       ]);
       const doctor = JSON.parse(
         run(g.bin, ['doctor', '--json'], {cwd: tool, pc}).stdout,
@@ -462,7 +464,7 @@ describe.skipIf(!POSIX)(
       const r = run(g.bin, ['--version'], {cwd: member, pc});
       const all = [...r.lines, ...r.notice].join('\n');
       expect(all).not.toContain(`cd ${root}`);
-      expect(r.lines).toContain(noCliHint('9.0.0', '9.0.5'));
+      expect(r.lines).toContain(noCliHint('9.0.0', '9.0.5', {exact: true}));
     });
 
     it('G6 the installed Core wins over a lockfile that disagrees, for the release a project whose CLI cannot start gets', () => {

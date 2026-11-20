@@ -9,7 +9,7 @@ import {Text} from '@astryxdesign/core/Text';
 import {Stack} from '@astryxdesign/core/Layout';
 import {Avatar} from '@astryxdesign/core/Avatar';
 import {Icon} from '@astryxdesign/core/Icon';
-import {StarIcon} from '@heroicons/react/24/solid';
+import {StarIcon} from '@astryxdesign/template-icons/24/solid';
 
 const REVIEWS = [
   {

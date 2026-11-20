@@ -28,6 +28,7 @@ import {themeProps} from '../utils/themeProps';
 import {
   NavHeadingDismissContext,
   NavHeadingMenuContext,
+  NavHeadingMenuHostContext,
   useNavHeadingCloseContext,
   type NavHeadingMenuSize,
 } from './NavMenuContext';
@@ -118,6 +119,9 @@ export function NavHeadingMenu({
   // A heading whose menu items do not close it on selection (an expanded
   // SideNavHeading) still lets a mouse released outside dismiss it.
   const dismissMenu = use(NavHeadingDismissContext)?.dismiss;
+  // Inside a heading's named menu, this element is only a wrapper: one menu
+  // holds the items, as WAI-ARIA requires.
+  const isInHeadingMenu = use(NavHeadingMenuHostContext);
 
   const {listRef, handleKeyDown, focusItem} = useInternalListFocus({
     itemSelector: ROW_SELECTOR,
@@ -234,7 +238,7 @@ export function NavHeadingMenu({
             ENABLED_ITEM_SELECTOR,
           ),
         )}
-        role="menu"
+        role={isInHeadingMenu ? 'none' : 'menu'}
         onKeyDownCapture={handleMenuKeyDownCapture}
         onKeyDown={handleMenuKeyDown}>
         {children}

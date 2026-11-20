@@ -11,6 +11,25 @@ import {
   readsPressStrength,
 } from '../__tests__/pressState';
 
+/** The outline-style values `element`'s classes set with no focus condition. */
+function outlineStylesAtRest(element: Element): string[] {
+  const classes = Array.from(element.classList, name => `.${name}`);
+  const values: string[] = [];
+  for (const sheet of Array.from(document.styleSheets)) {
+    for (const rule of Array.from(sheet.cssRules)) {
+      if (
+        rule instanceof CSSStyleRule &&
+        classes.some(cls => rule.selectorText.startsWith(cls)) &&
+        !rule.selectorText.includes('focus') &&
+        rule.style.getPropertyValue('outline-style') !== ''
+      ) {
+        values.push(rule.style.getPropertyValue('outline-style'));
+      }
+    }
+  }
+  return values;
+}
+
 describe('Thumbnail', () => {
   it('renders an image when src is provided', () => {
     render(<Thumbnail src="/photo.jpg" alt="Test photo" />);
@@ -276,6 +295,22 @@ describe('Thumbnail', () => {
     const ref = vi.fn();
     render(<Thumbnail ref={ref} data-testid="thumb" />);
     expect(ref).toHaveBeenCalled();
+  });
+
+  it('draws no ring of its own on Open, inside the image container ring', () => {
+    render(
+      <Thumbnail
+        src="/photo.jpg"
+        alt="Photo"
+        onClick={() => {}}
+        onRemove={() => {}}
+        showRemoveOn="always"
+      />,
+    );
+    const open = screen.getByRole('button', {name: 'Open Photo'});
+    const atRest = outlineStylesAtRest(open);
+    expect(atRest.length).toBeGreaterThan(0);
+    expect(atRest.every(value => value === 'none')).toBe(true);
   });
 
   describe('showRemoveOn', () => {
