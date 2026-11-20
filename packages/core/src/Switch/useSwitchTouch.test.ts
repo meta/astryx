@@ -89,6 +89,9 @@ const {SwitchTouchController} = await import('./useSwitchTouch');
 const {switchTouchGeometry} = await import('./switchTouch');
 const {trackStateOf} = await import('./switchFill');
 
+/** Every controller a test attaches. The top-level afterEach detaches them. */
+const controllers: InstanceType<typeof SwitchTouchController>[] = [];
+
 function mount() {
   // The theme's two fills, as the track's classes paint them.
   const style = document.createElement('style');
@@ -108,6 +111,7 @@ function mount() {
     false,
     switchTouchGeometry(40, 24),
   );
+  controllers.push(controller);
   controller.setOtherTrack(trackStateOf({className: 'on'}));
   controller.attach({surface, input, thumb, track}, 'touch');
   const fade = animators.find(
@@ -146,6 +150,12 @@ const flush = async () => {
 };
 
 afterEach(() => {
+  // A lift starts a 300 ms wait for the browser's click. Detach ends the
+  // wait, so its timer cannot fire after the test environment removes the
+  // window.
+  for (const controller of controllers.splice(0)) {
+    controller.detach();
+  }
   animators.length = 0;
   document.body.innerHTML = '';
   document.head.innerHTML = '';
@@ -450,8 +460,9 @@ describe('the first value change before any measurement', () => {
     // The theme's size for the state the switch attaches in, as its
     // compiled CSS sets it on the thumb.
     const style = document.createElement('style');
-    if (attached != null)
+    if (attached != null) {
       style.textContent = `div div { --_switch-thumb-width: ${attached}; }`;
+    }
     document.head.append(style);
     return mount();
   }
@@ -531,6 +542,7 @@ describe('the first value change before any measurement', () => {
       false,
       switchTouchGeometry(40, 24),
     );
+    controllers.push(controller);
     controller.attach({surface, input, thumb: thumbElement, track}, 'pointer');
 
     layOut(track, 20);

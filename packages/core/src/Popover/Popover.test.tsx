@@ -188,6 +188,58 @@ describe('Popover', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
   });
 
+  it('names its surface in aria-controls only while it is open (AR6)', () => {
+    render(
+      <Popover content={<span>Popover content</span>} label="Test">
+        <button type="button">Open</button>
+      </Popover>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Open'});
+    expect(trigger).not.toHaveAttribute('aria-controls');
+
+    fireEvent.click(trigger);
+    const controlled = document.getElementById(
+      trigger.getAttribute('aria-controls') ?? '',
+    );
+    expect(controlled).not.toBeNull();
+    expect(controlled).toContainElement(
+      screen.getByRole('dialog', {hidden: true}),
+    );
+
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).not.toHaveAttribute('aria-controls');
+  });
+
+  it('gives an anchorRef trigger no aria-controls while closed, across a re-attach (AR6)', () => {
+    function AnchorRefTest({label}: {label: string}) {
+      const ref = useRef<HTMLButtonElement>(null);
+      return (
+        <>
+          <button type="button" ref={ref}>
+            Anchor
+          </button>
+          <Popover
+            anchorRef={ref as React.RefObject<HTMLElement>}
+            content={<span>Sibling content</span>}
+            label={label}
+          />
+        </>
+      );
+    }
+    const {rerender} = render(<AnchorRefTest label="First" />);
+    const anchor = screen.getByRole('button', {name: 'Anchor'});
+    expect(anchor).not.toHaveAttribute('aria-controls');
+    rerender(<AnchorRefTest label="Second" />);
+    expect(anchor).toHaveAttribute('aria-expanded', 'false');
+    expect(anchor).not.toHaveAttribute('aria-controls');
+
+    fireEvent.click(anchor);
+    expect(
+      document.getElementById(anchor.getAttribute('aria-controls') ?? ''),
+    ).toContainElement(screen.getByRole('dialog', {hidden: true}));
+  });
+
   it('renders popover content with role=dialog while open', () => {
     render(
       <Popover content={<span>Hello</span>} label="Greeting">

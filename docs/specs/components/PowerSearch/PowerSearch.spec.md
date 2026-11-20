@@ -988,8 +988,7 @@ that the editor would not run).
   date-range, and nested summaries ("{n} items", "date range", "{n} filters") as
   English literals, joins the items of a list value with a literal ", " where
   FR12's rows use the locale's list format, and shows a relative-date value as
-  the stored key (`3d_ago`), and its relative-date editor writes the choice
-  labels ("3 days ago") as English literals. `formatFilterValue` resolves its
+  the stored key (`3d_ago`). `formatFilterValue` resolves its
   summaries from the catalog but differs from the token in four places: it
   says "{n} entities" for an
   entity list where the token says "{n} items"; it formats an `integer` or
@@ -1004,8 +1003,7 @@ that the editor would not run).
   relative-date value as stored). The sheet presentation resolves all of these
   from the catalog, or the locale's formats, on its own surfaces (FR12, FR20)
   and shows the popover token's text on the trigger, except a date, which FR11
-  reads in `timezoneID` or its fallback zone; changing the token's and the
-  editor's own text is a separate stable change for the owner.
+  reads in `timezoneID` or its fallback zone.
 - Known gap against `family:input-fields/FR10`, opened by DEC-3: the sheet
   presentation's trigger composes Field for the box the tokenizer field has,
   so PowerSearch is a component that composes Field, which FR10 binds

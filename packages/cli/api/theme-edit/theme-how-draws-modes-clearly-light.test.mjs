@@ -194,7 +194,10 @@ describe('clone and blind asks', () => {
         (await answer('sepia page #f6f0e4 in light mode, dark brown text'))
           .first,
       ).toEqual([
+        // (The page joins with its frame and main panel lines.)
         "--color-background-body '#f6f0e4' --mode light",
+        "background-color '#f6f0e4' --on app-shell --mode light",
+        "background-color '#f6f0e4' --on layout-content --mode light",
         "--color-text-primary '#92400e' --mode light",
       ]);
       // (A part's own text said with it after a comma stays the part's;

@@ -3,10 +3,10 @@
 /**
  * @file timeFormat.ts
  * @input An ISO time or typed text, plus the provider's BCP 47 locale
- * @output Exports resolveHourFormat, formatLocaleTime, parseLocaleTime, and
- *   isLocaleTimeComplete
- * @position Internal shared helper for TimeInput and DateTimeInput; not part
- *   of the public surface
+ * @output Exports resolveHourFormat, formatLocaleTime, parseLocaleTime,
+ *   isLocaleTimeComplete, and formatElapsedDuration
+ * @position Internal shared helper for TimeInput, DateTimeInput, and Timer;
+ *   not part of the public surface
  *
  * The hour cycle, digits, separator and day-period words come from Intl, so a
  * field reads like `Timestamp`. A `-u-hc-` extension on the provider locale
@@ -18,6 +18,7 @@
  * - /packages/core/src/utils/timeFormat.test.ts
  * - /packages/core/src/TimeInput/TimeInput.tsx
  * - /packages/core/src/DateTimeInput/DateTimeInput.tsx
+ * - /packages/core/src/Timer/Timer.tsx
  */
 
 import type {Locale} from '../i18n/types';
@@ -348,4 +349,53 @@ export function isLocaleTimeComplete(
   }
   const hour = Number(parts[1]);
   return hour === 0 || (hour >= 13 && hour <= 23);
+}
+
+export type ElapsedDurationUnit = 'hour' | 'minute' | 'second';
+
+const unitFormats = new Map<string, Intl.NumberFormat>();
+const unitLists = new Map<string, Intl.ListFormat>();
+
+function unitFormat(
+  locale: Locale,
+  unit: ElapsedDurationUnit,
+  isPadded: boolean,
+): Intl.NumberFormat {
+  const key = `${locale}|${unit}|${String(isPadded)}`;
+  let format = unitFormats.get(key);
+  if (format == null) {
+    format = new Intl.NumberFormat(locale, {
+      style: 'unit',
+      unit,
+      unitDisplay: 'narrow',
+      minimumIntegerDigits: isPadded ? 2 : 1,
+      // A count is never grouped: 1000 hours reads "1000h".
+      useGrouping: false,
+    });
+    unitFormats.set(key, format);
+  }
+  return format;
+}
+
+/**
+ * Formats a compact elapsed duration as the locale writes it, from its parts,
+ * largest unit first. Each part after the first has two digits.
+ * en: [["minute", 2], ["second", 8]] → "2m 08s"; [["hour", 1], ["minute", 2]]
+ * → "1h 02m"; [["second", 34]] → "34s". Unit names, digits and joining come
+ * from Intl, so no catalog string is involved.
+ */
+export function formatElapsedDuration(
+  locale: Locale,
+  parts: ReadonlyArray<readonly [ElapsedDurationUnit, number]>,
+): string {
+  let list = unitLists.get(locale);
+  if (list == null) {
+    list = new Intl.ListFormat(locale, {type: 'unit', style: 'narrow'});
+    unitLists.set(locale, list);
+  }
+  return list.format(
+    parts.map(([unit, value], index) =>
+      unitFormat(locale, unit, index > 0).format(value),
+    ),
+  );
 }
