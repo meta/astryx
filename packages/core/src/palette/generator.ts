@@ -63,7 +63,7 @@ type PaletteGenerationResult = {
   errors: {familyId: string; message: string}[];
 };
 
-type PaletteRecipe = 'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3';
+type PaletteRecipe = 'astryx-oklch-v1' | 'astryx-oklch-v2';
 
 /** The recipe a request that names none runs: the first one. */
 export const PALETTE_RECIPE = 'astryx-oklch-v1';
@@ -74,28 +74,11 @@ export const PALETTE_RECIPE = 'astryx-oklch-v1';
  * chroma. A request runs it by naming it.
  */
 export const PALETTE_RECIPE_V2 = 'astryx-oklch-v2';
-/**
- * v2, and a dusty seed's pale tints stay at or below its own chroma even
- * where the gamut is wide, so a muted olive gives an earthy tint, not
- * chartreuse. The newest recipe: new palettes name it.
- */
-export const PALETTE_RECIPE_V3 = 'astryx-oklch-v3';
-/** The recipe new palettes name. */
-export const PALETTE_RECIPE_NEWEST = PALETTE_RECIPE_V3;
 /** Every recipe the generator runs. */
 export const PALETTE_RECIPES = Object.freeze([
   PALETTE_RECIPE,
   PALETTE_RECIPE_V2,
-  PALETTE_RECIPE_V3,
 ]);
-
-/**
- * Whether a recipe shares the pale side of the gamut and fades a gray's
- * pale stops (v2, and v3 after it).
- */
-function sharesGamut(recipe: string): boolean {
-  return recipe === PALETTE_RECIPE_V2 || recipe === PALETTE_RECIPE_V3;
-}
 /**
  * Identity of this generator implementation. `PALETTE_RECIPE` names the
  * normative algorithm; this names the code that ran it, so a receipt can tell
@@ -287,7 +270,7 @@ function coordinatedChroma(
   recipe: PaletteRecipe = PALETTE_RECIPE,
 ) {
   const drawn = sourceChroma * 0.35 + 0.18 * 0.65;
-  return sharesGamut(recipe) ? Math.min(sourceChroma, drawn) : drawn;
+  return recipe === PALETTE_RECIPE_V2 ? Math.min(sourceChroma, drawn) : drawn;
 }
 
 /**
@@ -297,13 +280,6 @@ function coordinatedChroma(
  * it shares it wholly.
  */
 const V2_SHARED_FROM = 1.3;
-/**
- * From this tone v3 starts to draw a tint at the seed's own chroma; by
- * V3_PALE_FROM + V3_PALE_SPAN it draws it wholly. The middle of a ramp, up
- * to tone 70, stays as v1 draws it.
- */
-const V3_PALE_FROM = 70;
-const V3_PALE_SPAN = 15;
 /** v2 shares only stops lighter than this tone: the pale side of a ramp. */
 const V2_SHARED_ABOVE = 50;
 const V2_SHARED_FULL = 2;
@@ -390,16 +366,9 @@ function generateCandidate(
   const adjustedTone = tone;
   const adjustedHue = toneAdjustedHue(source.hue, adjustedTone);
   // Every recipe starts from v1's chroma, so a stop v2 does not share is
-  // drawn exactly as v1 draws it, the middle of a ramp included. In v3 a
-  // pale tint (above V3_PALE_FROM) moves to the seed's own chroma, which
-  // coordination never raises: a dusty seed's tints stay dusty.
-  const pale =
-    recipe === PALETTE_RECIPE_V3
-      ? smoothstep((adjustedTone - V3_PALE_FROM) / V3_PALE_SPAN)
-      : 0;
+  // drawn exactly as v1 draws it.
   const baseChroma = coordinateWithOtherFamilies
-    ? (1 - pale) * coordinatedChroma(source.chroma) +
-      pale * coordinatedChroma(source.chroma, recipe)
+    ? coordinatedChroma(source.chroma)
     : source.chroma;
   let chroma =
     baseChroma *
@@ -413,7 +382,7 @@ function generateCandidate(
   // v2: a gray family's color fades toward white the way a gray scale's
   // does, so its pale stops (a page, a card on it) carry only a faint tint
   // of its hue; its darker stops keep their color.
-  if (sharesGamut(recipe) && !coordinateWithOtherFamilies) {
+  if (recipe === PALETTE_RECIPE_V2 && !coordinateWithOtherFamilies) {
     chroma *= grayFade(lightness);
   }
   // v2, on the pale side of a ramp (above its middle): the narrower a
@@ -427,7 +396,7 @@ function generateCandidate(
   // strength): those stops are drawn exactly as v1 draws them, for every
   // seed at every vibrancy.
   if (
-    sharesGamut(recipe) &&
+    recipe === PALETTE_RECIPE_V2 &&
     coordinateWithOtherFamilies &&
     adjustedTone > V2_SHARED_ABOVE
   ) {
