@@ -6,7 +6,8 @@
  * reason. A match never moves past one of another score band (BANDS below)
  * or another kind, doc or not; between runs the lexical order holds. The one
  * exception is a family's root that the lexical ranker marks as leading its
- * part: it moves directly before the part. A band
+ * part with hits of keyword strength: it moves directly before the part. A
+ * band
  * can be wide: 55–99 holds keyword matches beside one-word description hits,
  * and a synonym name match can score under 55, so inside a band a weaker match
  * can lead a stronger one when the weights favor it. Inside such a
@@ -20,7 +21,8 @@
  * own name holds more query words leads (tieByOwnName). Last, a family's root
  * that the lexical ranker marks as leading a part of its own family
  * (rootLeadsOf) moves directly before the part when it sits below it
- * (rootsFirst), after the part's tie is ordered as one block.
+ * (rootsFirst), after the part's tie is ordered as one block; a root with
+ * weaker hits (weakRootsOf) moves so only inside the part's run.
  */
 
 import {entryOf} from './_entries.mjs';
@@ -31,6 +33,7 @@ import {
   namedLeadsOf,
   rootLeadsOf,
   searchedComponentsOf,
+  weakRootsOf,
 } from './_result.mjs';
 
 /** @typedef {import('./_entries.mjs').EntryTable} EntryTable */
@@ -94,6 +97,7 @@ export function orderMatches(table, order, lexical, query, limit, families) {
     };
   });
   const roots = rootLeadsOf.get(lexical);
+  const weak = weakRootsOf.get(lexical);
   // An entry the query names: by a name match, or by a name of two or more
   // words the lexical ranker put first (namedLeadsOf).
   const leads = namedLeadsOf.get(lexical);
@@ -137,11 +141,15 @@ export function orderMatches(table, order, lexical, query, limit, families) {
   // the roots move: a part's root, when the part comes first.
   const head = ranked[0];
   const headRoot = head && roots?.get(head.res);
-  const lead = ranked.find(it => it.res === headRoot) ?? head;
+  const rootItem = ranked.find(it => it.res === headRoot);
+  const lead =
+    rootItem && !(weak?.has(head.res) && rootItem.band !== head.band)
+      ? rootItem
+      : head;
   ranked = tiesByFit(ranked, table, blockOf, lead);
   /** @type {Map<object, object>} */
   const moved = new Map();
-  if (roots) ranked = rootsFirst(ranked, roots, moved);
+  if (roots) ranked = rootsFirst(ranked, roots, moved, weak);
   const shown = ranked.slice(0, limit);
   const response = {
     ...lexical,
@@ -358,15 +366,18 @@ function answered(it) {
  *   root's result
  * @param {Map<object, object>} [moved] filled with each part whose root
  *   moved, mapped to that root
+ * @param {Set<object>} [weak] parts whose root leads them only inside their
+ *   own run
  * @returns {Item[]}
  */
-export function rootsFirst(ranked, roots, moved) {
+export function rootsFirst(ranked, roots, moved, weak) {
   const out = [...ranked];
   for (let a = 0; a < out.length; a++) {
     const root = roots.get(out[a].res);
     if (!root) continue;
     const b = out.findIndex((it, n) => n > a && it.res === root);
     if (b < 0) continue;
+    if (weak?.has(out[a].res) && out[b].band !== out[a].band) continue;
     out.splice(a, 0, ...out.splice(b, 1));
     moved?.set(out[a + 1].res, root);
   }
