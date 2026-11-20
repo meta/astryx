@@ -161,3 +161,37 @@ describe('offers follow the answer', () => {
     );
   }, 300_000);
 });
+
+describe('light and dark said as what the theme must work in', () => {
+  it('asks for both modes at the end of the ask or its clause, never mid-clause', async () => {
+    const lines = async (/** @type {string} */ q) =>
+      (await results('lo', q)).flatMap(r =>
+        r.commands.map((/** @type {string} */ c) =>
+          c.replace(/^.*? editor /, ''),
+        ),
+      );
+    for (const q of [
+      'make sure it works in light and dark mode',
+      'please make it work in light and dark mode',
+      'a navy theme that works in light and dark',
+      'a navy theme that should work in light and dark mode',
+      'works in light and dark',
+      'works in light and dark mode',
+      'looks good in dark and light modes',
+      'should work in light and dark mode',
+      'it needs to look good in dark and light',
+    ])
+      expect(await lines(q), q).toContain('set lo mode both');
+    // (Said before more of its clause, it only qualifies that clause.)
+    const text = await lines(
+      'text that must work in light and dark mode should be #111111',
+    );
+    expect(text).toContain(`set lo --color-text-primary '#111111'`);
+    expect(text).not.toContain('set lo mode both');
+    const headings = await lines(
+      'headings that work in light and dark mode should be navy',
+    );
+    expect(headings).not.toContain('set lo mode both');
+    expect(headings.join('\n')).not.toMatch(/headings light/);
+  }, 300_000);
+});

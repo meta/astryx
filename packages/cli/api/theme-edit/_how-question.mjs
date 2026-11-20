@@ -5447,6 +5447,16 @@ export function draftAnswer(ctx, env, question) {
       /\b(?:make\s+)?(?:the\s+)?text\s+(?:more\s+readable|easier\s+to\s+read)\b|\bmore\s+readable\s+text\b/gi,
       'larger text',
     )
+    // ("it should work in light and dark mode", said at the end of the ask
+    // or its clause: both modes asked for. Said before more of its clause,
+    // "text that must work in light and dark mode should be #111111", it
+    // only qualifies that clause, and the next rule drops it.)
+    // (Its own clause, so a color said in the same clause, "a navy theme
+    // that works in light and dark", keeps its own reading.)
+    .replace(
+      /\b(?:(?:please\s+)?(?:make\s+sure|ensure)\s+)?(?:(?:please\s+)?make\s+(?:it|this)\s+)?(?:(?:that|which|it|this)\s+)?(?:(?:should|must|needs?\s+to|has\s+to|will|to)\s+)?(?:works?|look(?:s)?\s+good|holds?\s+up)\s+in\s+(?:both\s+)?(?:light\s+(?:and|&)\s+dark|dark\s+(?:and|&)\s+light)(?:\s+modes?)?(?=\s*(?:[,;.!?]|$))/gi,
+      ', light and dark modes',
+    )
     // ("a theme that works in dark mode": a theme with both modes, which it
     // has; never an ask scoped to dark.)
     .replace(
