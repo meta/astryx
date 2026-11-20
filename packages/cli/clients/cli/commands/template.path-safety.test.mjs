@@ -135,6 +135,194 @@ describe('template path safety', () => {
     },
   );
 
+  it.skipIf(process.platform === 'win32')(
+    'names the same path run from its nearest folder, and that command writes it there',
+    async () => {
+      const root = fs.realpathSync(tmpDir);
+      const cwd = path.join(root, 'project');
+      const elsewhere = path.join(root, "someone's folder");
+      fs.mkdirSync(cwd, {recursive: true});
+      fs.mkdirSync(elsewhere, {recursive: true});
+      // A home folder inside the temp folder turns scratch copies off, so a
+      // path outside the project is refused here as it is elsewhere.
+      const before = process.env.HOME;
+      process.env.HOME = path.join(root, 'home');
+      try {
+        const given = path.join(elsewhere, 'pages', 'blank.tsx');
+        expect(tempFolderOf(given)).toBeNull();
+        const err = await templateApi('blank', {targetPath: given, cwd}).catch(
+          e => e,
+        );
+        expect(err.code).toBe('ERR_PATH_TRAVERSAL');
+        expect(err.suggestions.map(s => s.reason)).toEqual([
+          'write the page inside the project',
+          'write the page where you named it, from its folder',
+          'print the source and write nothing',
+        ]);
+        expect(err.suggestions[1].name).toBe(
+          `cd '${elsewhere.replace(/'/g, `'\\''`)}' && astryx template blank ./pages/blank.tsx`,
+        );
+        expect(fs.readdirSync(elsewhere)).toEqual([]);
+
+        // The named command, run from that folder, writes the path named.
+        const written = await templateApi('blank', {
+          targetPath: './pages/blank.tsx',
+          cwd: elsewhere,
+        });
+        expect(written.data.fileName).toBe('blank.tsx');
+        expect(fs.existsSync(given)).toBe(true);
+      } finally {
+        process.env.HOME = before;
+      }
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'names a folder given with a trailing separator by the file the copy writes in it',
+    async () => {
+      const root = fs.realpathSync(tmpDir);
+      const cwd = path.join(root, 'project');
+      const elsewhere = path.join(root, 'out');
+      fs.mkdirSync(cwd, {recursive: true});
+      fs.mkdirSync(elsewhere);
+      const before = process.env.HOME;
+      process.env.HOME = path.join(root, 'home');
+      try {
+        const given = `${path.join(elsewhere, 'foo.tsx')}${path.sep}`;
+        expect(tempFolderOf(given)).toBeNull();
+        const err = await templateApi('blank', {targetPath: given, cwd}).catch(
+          e => e,
+        );
+        expect(err.suggestions[1].name).toBe(
+          `cd ${elsewhere} && astryx template blank ./foo.tsx/page.tsx`,
+        );
+      } finally {
+        process.env.HOME = before;
+      }
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'refuses a `..` path out of the project with the same commands as an absolute one',
+    async () => {
+      const root = fs.realpathSync(tmpDir);
+      const cwd = path.join(root, 'project');
+      fs.mkdirSync(cwd, {recursive: true});
+      fs.mkdirSync(path.join(root, 'outside'));
+      const before = process.env.HOME;
+      process.env.HOME = path.join(root, 'home');
+      try {
+        expect(tempFolderOf(path.join(root, 'outside'))).toBeNull();
+        const err = await templateApi('blank', {
+          targetPath: '../outside/app',
+          cwd,
+        }).catch(e => e);
+        expect(err.code).toBe('ERR_PATH_TRAVERSAL');
+        expect(err.message).toContain(
+          'Invalid template target path "../outside/app": it is outside the project root',
+        );
+        expect(err.suggestions).toEqual([
+          {
+            name: 'astryx template blank src/pages/blank.tsx',
+            reason: 'write the page inside the project',
+          },
+          {
+            name: `cd ${path.join(root, 'outside')} && astryx template blank ./app/page.tsx`,
+            reason: 'write the page where you named it, from its folder',
+          },
+          {
+            name: 'astryx template blank',
+            reason: 'print the source and write nothing',
+          },
+        ]);
+        expect(fs.readdirSync(path.join(root, 'outside'))).toEqual([]);
+      } finally {
+        process.env.HOME = before;
+      }
+    },
+  );
+
+  it.skipIf(!tmpTakesScratch)(
+    'never takes a `..` path into the temp folder as a scratch copy, and names its absolute path, which does',
+    async () => {
+      const root = fs.realpathSync(tmpDir);
+      const cwd = path.join(root, 'project');
+      fs.mkdirSync(cwd, {recursive: true});
+      const err = await templateApi('blank', {
+        targetPath: '../scratch',
+        cwd,
+      }).catch(e => e);
+      expect(err.code).toBe('ERR_PATH_TRAVERSAL');
+      expect(err.message).toContain(
+        `A scratch copy in the system temp folder takes its absolute path, ${path.join(root, 'scratch')}.`,
+      );
+      expect(err.suggestions.map(s => s.name)).toEqual([
+        'astryx template blank src/pages/blank.tsx',
+        `astryx template blank ${path.join(root, 'scratch')}`,
+        'astryx template blank',
+      ]);
+      expect(fs.existsSync(path.join(root, 'scratch'))).toBe(false);
+
+      // The named absolute path takes the scratch copy.
+      const written = await templateApi('blank', {
+        targetPath: path.join(root, 'scratch'),
+        cwd,
+      });
+      expect(written.data.outputDir).toBe(path.join(root, 'scratch'));
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'keeps `--overwrite` in the command that writes the named path, so it does not refuse again',
+    async () => {
+      const root = fs.realpathSync(tmpDir);
+      const cwd = path.join(root, 'project');
+      const elsewhere = path.join(root, 'elsewhere');
+      const given = path.join(elsewhere, 'pages', 'blank.tsx');
+      fs.mkdirSync(cwd, {recursive: true});
+      fs.mkdirSync(path.dirname(given), {recursive: true});
+      fs.writeFileSync(given, 'old\n');
+      const before = process.env.HOME;
+      process.env.HOME = path.join(root, 'home');
+      try {
+        const err = await templateApi('blank', {
+          targetPath: given,
+          cwd,
+          overwrite: true,
+        }).catch(e => e);
+        expect(err.code).toBe('ERR_PATH_TRAVERSAL');
+        // The place inside the project is another file: no `--overwrite`.
+        expect(err.suggestions[0].name).toBe(
+          'astryx template blank src/pages/blank.tsx',
+        );
+        expect(err.suggestions[1].name).toBe(
+          `cd ${path.dirname(given)} && astryx template blank ./blank.tsx --overwrite`,
+        );
+
+        // The named command, run from that folder, replaces the file.
+        const written = await templateApi('blank', {
+          targetPath: './blank.tsx',
+          cwd: path.dirname(given),
+          overwrite: true,
+        });
+        expect(written.data.fileName).toBe('blank.tsx');
+        expect(fs.readFileSync(given, 'utf8')).not.toBe('old\n');
+      } finally {
+        process.env.HOME = before;
+      }
+    },
+  );
+
+  it('names no folder to run from when only the disk root exists', async () => {
+    const cwd = path.join(tmpDir, 'project');
+    fs.mkdirSync(cwd, {recursive: true});
+    const err = await templateApi('blank', {
+      targetPath: nowhere('deep', 'page.tsx'),
+      cwd,
+    }).catch(e => e);
+    expect(err.suggestions.some(s => s.name.startsWith('cd '))).toBe(false);
+  });
+
   it('keeps the flags as typed in the suggested commands', async () => {
     const cwd = path.join(tmpDir, 'project');
     fs.mkdirSync(cwd, {recursive: true});
@@ -615,6 +803,34 @@ describe('template path text output', () => {
       expect(result.status).toBe(0);
       expect(result.stdout).toContain(`Copied template to ${scratch}/page.tsx`);
       expect(result.stdout).not.toContain('is inside the project');
+    },
+    60_000,
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'prints the run-from-its-folder command with the CLI invocation after the change of folder',
+    async () => {
+      const root = fs.realpathSync(tmpDir);
+      const cwd = fs.realpathSync(fs.mkdtempSync(path.join(root, 'cli-')));
+      const elsewhere = path.join(root, 'elsewhere');
+      fs.mkdirSync(elsewhere);
+      const before = process.env.HOME;
+      process.env.HOME = path.join(root, 'home');
+      try {
+        const result = await runCli(
+          ['template', 'blank', path.join(elsewhere, 'dash.tsx')],
+          cwd,
+        );
+        expect(result.status).toBe(1);
+        expect(result.stderr).toMatch(
+          new RegExp(
+            `cd ${elsewhere.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} && \\S.* template blank \\./dash\\.tsx\\s+\\(write the page where you named it, from its folder\\)`,
+          ),
+        );
+        expect(result.stderr).not.toMatch(/&& astryx template/);
+      } finally {
+        process.env.HOME = before;
+      }
     },
     60_000,
   );

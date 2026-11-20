@@ -116,6 +116,8 @@ describe('wild wrong writes', () => {
     expect(writes(r).join(' ')).not.toMatch(/app-shell-header/);
     expect(top(await how('q0', 'green text on a black page'))).toEqual([
       `set q0 --color-background-body '#000000' --mode dark`,
+      `set q0 background-color '#000000' --on app-shell --mode dark`,
+      `set q0 background-color '#000000' --on layout-content --mode dark`,
       `set q0 --color-text-primary '#16a34a' --mode dark`,
     ]);
   }, 240_000);
@@ -140,6 +142,8 @@ describe('wild mediums and lows', () => {
     expect(top(await how('q0', 'dark only, page #0b0b10'))).toEqual([
       'set q0 mode dark-only',
       `set q0 --color-background-body '#0b0b10'`,
+      `set q0 background-color '#0b0b10' --on app-shell`,
+      `set q0 background-color '#0b0b10' --on layout-content`,
     ]);
   }, 240_000);
 

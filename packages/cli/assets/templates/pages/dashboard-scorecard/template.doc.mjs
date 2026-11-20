@@ -10,11 +10,4 @@ export const doc = {
   keywords: ['executive summary', 'business review', 'readout', 'reporting'],
   isReady: true,
   category: 'Dashboard - Scorecard',
-  icons: {
-    ArrowDownIcon: 'arrowDown',
-    ArrowDownTrayIcon: 'download',
-    ArrowRightIcon: 'arrowRight',
-    ArrowUpIcon: 'arrowUp',
-    StopIcon: 'stop',
-  },
 };

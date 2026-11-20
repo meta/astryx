@@ -12,8 +12,8 @@ import {performance} from 'node:perf_hooks';
 import {describe, expect, it} from 'vitest';
 import {classesIn, cutCss, cutFontFaces, layerOrderOf, requiredClasses} from './css-cut.mjs';
 import {RENDER_FORMAT, readSourceBlock, renderedHeadOf, renderedMarkupOf, sourceBlock} from './source-block.mjs';
-import {isAstryxMarkup, parseHtml} from './html-reader.mjs';
-import {oneColorModeOf, renderPage, withCarriedPaths, withUncarriedImages} from './render-page.mjs';
+import {isAstryxMarkup, parseHtml, scanHtml} from './html-reader.mjs';
+import {CARRY_ATTR, oneColorModeOf, renderPage, withCarriedPaths, withUncarriedImages} from './render-page.mjs';
 import {carriedNameFor, embeddedPathProblem} from './embedded-files.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
 
@@ -327,6 +327,13 @@ describe('the HTML reader', () => {
     expect(p.children[0].text).toBe('after');
   });
 
+  it('reads a CDATA section in svg as its text, closed or not', () => {
+    const closed = /** @type {any} */ (parseHtml('<svg><text><![CDATA[Hello]]></text></svg>').children[0]);
+    expect(closed.children[0]).toEqual({tag: 'text', attrs: {}, children: [{text: 'Hello'}]});
+    const open = /** @type {any} */ (parseHtml('<svg><text><![CDATA[Hi').children[0]);
+    expect(open.children[0].children).toEqual([{text: 'Hi'}]);
+  });
+
   it('tells Astryx markup from other HTML', () => {
     expect(isAstryxMarkup('<div class="x astryx-button"></div>')).toBe(true);
     expect(isAstryxMarkup('<div class="button"></div>')).toBe(false);
@@ -391,13 +398,33 @@ export default function Page() {
 });
 
 describe('withCarriedPaths', () => {
-  it('rewrites an image path the script names, and leaves text the page shows as written', () => {
+  it('reads an image path the script names from the markup, and leaves text the page shows as written', () => {
     const rewrites = new Map([['./photo.png', 'data:image/png;base64,AAAA']]);
-    expect(
-      withCarriedPaths(`a({src:"./photo.png",children:"./photo.png"});b('./photo.png');c({children: \`./photo.png\`})`, rewrites),
-    ).toBe(
-      `a({src:"data:image/png;base64,AAAA",children:"./photo.png"});b('data:image/png;base64,AAAA');c({children: \`./photo.png\`})`,
+    const script = withCarriedPaths(`a({src:"./photo.png",children:"./photo.png"});b('./photo.png');c({children: \`./photo.png\`})`, rewrites, new Map([['./photo.png', 0]]));
+    expect(script).not.toContain('data:image/png');
+    expect(script.endsWith(`a({src:__astryxCarried[0],children:"./photo.png"});b(__astryxCarried[0]);c({children: \`./photo.png\`})`)).toBe(true);
+    expect(script).toContain(`'[${CARRY_ATTR}]'`);
+  });
+
+  it('writes the data itself where a read cannot go: an object key, a tagged template, a value the first paint does not carry, or a script that would not parse', () => {
+    const rewrites = new Map([['./photo.png', 'data:image/png;base64,AAAA']]);
+    const carried = new Map([['./photo.png', 0]]);
+    expect(withCarriedPaths('f("./photo.png")', rewrites, new Map())).toBe('f("data:image/png;base64,AAAA")');
+    expect(withCarriedPaths(`m={"./photo.png":1};f("./photo.png")`, rewrites, carried)).toMatch(
+      /m=\{"data:image\/png;base64,AAAA":1\};f\(__astryxCarried\[0\]\)$/,
     );
+    expect(withCarriedPaths('f=()=>tag`./photo.png`', rewrites, carried)).toMatch(/f=\(\)=>tag`data:image\/png;base64,AAAA`$/);
+    expect(withCarriedPaths('f=()=>{return"./photo.png"}', rewrites, carried)).toMatch(/f=\(\)=>\{return __astryxCarried\[0\]\}$/);
+    expect(withCarriedPaths('f("./photo.png"', rewrites, carried)).toBe('f("data:image/png;base64,AAAA"');
+  });
+});
+
+describe('withCarriedPaths numbering', () => {
+  it('reads each value by the number its first-paint mark gives it, even after an earlier value left the rewrites', () => {
+    // ./a.png was 0 when the markup was marked, then left (kept as written).
+    const rewrites = new Map([['./b.png', 'data:image/png;base64,BBBB']]);
+    const script = withCarriedPaths('f("./a.png");g("./b.png")', rewrites, new Map([['./b.png', 1]]));
+    expect(script.endsWith('f("./a.png");g(__astryxCarried[1])')).toBe(true);
   });
 });
 
@@ -562,5 +589,84 @@ describe('oneColorModeOf: the modes a page\'s root theme draws in', () => {
       expect(oneColorModeOf(root, null, [light, dark])).toBeNull();
     expect(oneColorModeOf('<main>Hi</main>', null, [light])).toBeNull();
     expect(oneColorModeOf(root, null, ['.page{--color-background-body:#fff}'])).toBeNull();
+  });
+});
+
+describe('scanHtml', () => {
+  /** @param {string} html */
+  const pieces = html => [...scanHtml(html)].map(t => `${t.kind}:${html.slice(t.start, t.end)}`);
+
+  it('reads the content of iframe, xmp, noembed and noframes as raw text, and everything after plaintext', () => {
+    for (const tag of ['iframe', 'xmp', 'noembed', 'noframes']) {
+      expect(pieces(`<${tag}><img src="a.png"></${tag}><b>`)).toEqual([`start:<${tag}>`, 'raw:<img src="a.png">', `end:</${tag}>`, 'start:<b>']);
+    }
+    expect(pieces('<plaintext><img src="a.png"></plaintext><b>')).toEqual(['start:<plaintext>', 'raw:<img src="a.png"></plaintext><b>']);
+  });
+
+  it('reads a bogus comment to the next >', () => {
+    expect(pieces('<?php x ?><b>')).toEqual(['comment:<?php x ?>', 'start:<b>']);
+    expect(pieces('<!x <img src="a.png"><b>')).toEqual(['comment:<!x <img src="a.png">', 'start:<b>']);
+    expect(pieces('</ <img src="a.png"><b>')).toEqual(['comment:</ <img src="a.png">', 'start:<b>']);
+    expect(pieces('a < b')).toEqual(['text:a < b']);
+  });
+
+  it('ends raw text only at its own end tag, and a script only where the script data states end it', () => {
+    expect(pieces('<textarea>a</textareas><img src="a.png"></textarea><b>')).toEqual(['start:<textarea>', 'raw:a</textareas><img src="a.png">', 'end:</textarea>', 'start:<b>']);
+    expect(pieces('<title>a</TITLE >b')).toEqual(['start:<title>', 'raw:a', 'end:</TITLE >', 'text:b']);
+    expect(pieces('<script>x<!--<script>y</script>z</script><b>')).toEqual(['start:<script>', 'raw:x<!--<script>y</script>z', 'end:</script>', 'start:<b>']);
+    expect(pieces('<script>a<!-- b --></script><b>')).toEqual(['start:<script>', 'raw:a<!-- b -->', 'end:</script>', 'start:<b>']);
+    expect(pieces('<script>a<!--<scripts></script><b>')).toEqual(['start:<script>', 'raw:a<!--<scripts>', 'end:</script>', 'start:<b>']);
+  });
+
+  it('reads a CDATA section inside svg or math to ]]>, and outside them as a bogus comment', () => {
+    expect(pieces('<svg><![CDATA[ a > <img src="a.png"> ]]></svg><b>')).toEqual(['start:<svg>', 'cdata:<![CDATA[ a > <img src="a.png"> ]]>', 'end:</svg>', 'start:<b>']);
+    expect(pieces('<![CDATA[ a > b ]]>')).toEqual(['comment:<![CDATA[ a >', 'text: b ]]>']);
+  });
+
+  it('reads a tag name up to white space, / or >, and closes only an open foreign root of its own name', () => {
+    expect(pieces(`<x.y title='<img src="a.png">'>b`)).toEqual([`start:<x.y title='<img src="a.png">'>`, 'text:b']);
+    expect(pieces('<math></svg><![CDATA[ a > <img src="a.png"> ]]></math>')).toEqual(['start:<math>', 'end:</svg>', 'cdata:<![CDATA[ a > <img src="a.png"> ]]>', 'end:</math>']);
+  });
+
+  it('honours a self-closing tag only in svg or math', () => {
+    expect(pieces('<textarea/><img src="a.png"></textarea><b>')).toEqual(['start:<textarea/>', 'raw:<img src="a.png">', 'end:</textarea>', 'start:<b>']);
+    const closed = [...scanHtml('<div/><svg><path/></svg>')].filter(t => t.kind === 'start').map(t => /** @type {any} */ (t).selfClosing);
+    expect(closed).toEqual([false, false, true]);
+  });
+
+  it('reads HTML again in an svg or MathML integration point and after a breakout tag', () => {
+    expect(pieces('<svg><foreignObject><textarea/><img src="a.png"></textarea></foreignObject></svg>')).toContain('raw:<img src="a.png">');
+    expect(pieces('<math><mi><iframe/><img src="a.png"></iframe></mi></math>')).toContain('raw:<img src="a.png">');
+    expect(pieces('<svg><p><title/><img src="a.png"></title></svg>')).toContain('raw:<img src="a.png">');
+    // In svg itself, /> closes the tag and svg's <title> holds markup.
+    expect(pieces('<svg><path/><title>t</title></svg>')).toEqual(['start:<svg>', 'start:<path/>', 'start:<title>', 'text:t', 'end:</title>', 'end:</svg>']);
+  });
+
+  it('closes svg and MathML elements as the tree builder does (HTML 13.2.6)', () => {
+    const raw = (/** @type {string} */ html) => pieces(html).includes('raw:<img src="a.png">');
+    const IMG = '<textarea/><img src="a.png"></textarea>';
+    // Foreign "any other end tag": walk up to the node of that name.
+    expect(raw(`<svg><desc></svg></desc>${IMG}`)).toBe(true);
+    expect(raw(`<math><mi><svg></math>${IMG}`)).toBe(true);
+    // ...and at the first HTML element, the HTML mode reads it: a special
+    // element there stops it, so the integration point stays open.
+    expect(raw(`<svg><foreignObject><div></foreignObject>${IMG}</div></foreignObject></svg>`)).toBe(true);
+    expect(raw(`<svg><foreignObject><div></svg>${IMG}</div></foreignObject></svg>`)).toBe(true);
+    // An annotation-xml with an HTML encoding is an HTML integration point;
+    // one without is not, so /> closes and no raw text opens there.
+    expect(raw(`<math><annotation-xml encoding="text/html">${IMG}</annotation-xml></math>`)).toBe(true);
+    expect(raw(`<math><annotation-xml>${IMG}</annotation-xml></math>`)).toBe(false);
+    // In a MathML text integration point, mglyph and malignmark stay MathML.
+    expect(pieces('<math><mi><mglyph/>x</mi></math>')).toContain('start:<mglyph/>');
+    // The dispatcher gives <svg> in annotation-xml to HTML: an svg root.
+    expect(pieces('<math><annotation-xml><svg><path/></svg></annotation-xml></math>')).toContain('start:<path/>');
+    // CDATA while the current node is foreign, an integration point too.
+    expect(pieces('<svg><desc><![CDATA[ a > b ]]></desc></svg>')).toContain('cdata:<![CDATA[ a > b ]]>');
+  });
+
+  it('says where each attribute is', () => {
+    const html = `<span data-tip='<img src="a.png">' id=b>`;
+    const [tag] = /** @type {any[]} */ ([...scanHtml(html)]);
+    expect(tag.attrs.map((/** @type {[string, string, number, number]} */ [, , from, to]) => html.slice(from, to))).toEqual([`data-tip='<img src="a.png">'`, 'id=b']);
   });
 });

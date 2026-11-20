@@ -1002,6 +1002,7 @@ function SwitcherBottomSheetItem({
     registerSheetDialog,
     registerSheetPurpose,
     onBeforeSheetPresent,
+    onBeforeSheetShow,
     isCoveredInTopLayer,
     onSheetEnterStart,
     onSheetTransitionComplete,
@@ -1166,6 +1167,7 @@ function SwitcherBottomSheetItem({
           presentWithClearScrim(dialog);
         }
       } else {
+        onBeforeSheetShow();
         dialog.show();
       }
     }
@@ -1177,6 +1179,7 @@ function SwitcherBottomSheetItem({
     isInteractive,
     isPresented,
     onBeforeSheetPresent,
+    onBeforeSheetShow,
     ownsScrim,
     sheetId,
   ]);

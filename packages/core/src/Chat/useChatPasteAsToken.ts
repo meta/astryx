@@ -19,6 +19,9 @@
 
 import {useCallback} from 'react';
 import type {ClipboardEvent} from 'react';
+import {useComponentTranslator} from '../i18n/useComponentTranslator';
+import type {TranslatorFn} from '../i18n/useTranslator';
+import {formatPastedTextLabel} from './pastedTextLabel';
 import type {
   ChatComposerInputHandle,
   ChatComposerToken,
@@ -57,13 +60,10 @@ export interface UseChatPasteAsTokenReturn {
 // Default token factory
 // =============================================================================
 
-function defaultToToken(text: string): ChatComposerToken {
-  const lines = text.split('\n').length;
-  const chars = text.length;
-  const label = lines > 1 ? `${lines} lines, ${chars} chars` : `${chars} chars`;
+function defaultToToken(text: string, t: TranslatorFn): ChatComposerToken {
   return {
     value: text,
-    label,
+    label: formatPastedTextLabel(text, t),
     variant: 'neutral' as const,
   };
 }
@@ -75,19 +75,20 @@ function defaultToToken(text: string): ChatComposerToken {
 export function useChatPasteAsToken({
   inputRef,
   threshold = 200,
-  toToken = defaultToToken,
+  toToken,
 }: UseChatPasteAsTokenOptions): UseChatPasteAsTokenReturn {
+  const t = useComponentTranslator();
   const onPaste = useCallback(
     (_event: ClipboardEvent<HTMLDivElement>, text: string): boolean => {
       if (text.length <= threshold) {
         return false;
       }
 
-      const token = toToken(text);
+      const token = toToken ? toToken(text) : defaultToToken(text, t);
       inputRef.current?.insertToken(token);
       return true;
     },
-    [inputRef, threshold, toToken],
+    [inputRef, threshold, toToken, t],
   );
 
   return {onPaste};

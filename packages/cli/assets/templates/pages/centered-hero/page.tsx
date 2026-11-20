@@ -10,7 +10,7 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {AspectRatio} from '@astryxdesign/core/AspectRatio';
 import {Section} from '@astryxdesign/core/Section';
 import {rtlStyles} from '@astryxdesign/core/utils';
-import {ArrowRightIcon} from '@heroicons/react/20/solid';
+import {ArrowRightIcon} from '@astryxdesign/template-icons/20/solid';
 
 const IMAGE_URL = '/template-assets/light-scene-horizontal-1.png';
 

@@ -66,6 +66,7 @@ import {
   wordTable,
 } from './_tables.mjs';
 import {extractImportedPackages} from '../../foundation/discovery/template-needs.mjs';
+import {fillTemplatePlaceholders} from '../../foundation/discovery/template-placeholders.mjs';
 import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
 import {fontFaces} from '../../foundation/fonts/font-stylesheet.mjs';
 import {themeFileImports} from '../../foundation/discovery/theme-discovery.mjs';
@@ -79,6 +80,17 @@ const TEMPLATES_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../../assets/templates/pages',
 );
+
+/**
+ * A template page's source as a copy of it reads: icon placeholders filled.
+ * @param {string} template
+ * @returns {string}
+ */
+function templatePageSource(template) {
+  return fillTemplatePlaceholders(
+    fs.readFileSync(path.join(TEMPLATES_DIR, template, 'page.tsx'), 'utf8'),
+  ).source;
+}
 
 /** The groups of the theme-building page, in order. */
 export {SHOWCASE_GROUPS};
@@ -415,7 +427,7 @@ function withPages(project, group, items) {
   for (const t of PAGE_TEMPLATES) {
     const file = path.join(TEMPLATES_DIR, t, 'page.tsx');
     if (!fs.existsSync(file)) continue;
-    const src = fs.readFileSync(file, 'utf8');
+    const src = templatePageSource(t);
     const pkgs = [...extractImportedPackages(src)].filter(
       pkg => !findNodeModulesPackage(project.cwd, pkg),
     );
@@ -519,9 +531,11 @@ function inParentOf(project, name) {
 }
 
 /**
- * Template page modules the theme-building page imports, copied beside it.
+ * Template page modules the theme-building page imports, written beside it
+ * as a copy of the template writes them: each icon placeholder import is the
+ * library import that draws it.
  * @param {Record<string, import('./_catalog.mjs').Binding>} imports
- * @returns {Array<{name: string, from: string}>}
+ * @returns {Array<{name: string, text: string}>}
  */
 function templateFiles(imports) {
   return Object.values(imports).flatMap(b => {
@@ -530,7 +544,7 @@ function templateFiles(imports) {
       ? [
           {
             name: `templates/${m[1]}.tsx`,
-            from: path.join(TEMPLATES_DIR, m[1], 'page.tsx'),
+            text: templatePageSource(m[1]),
           },
         ]
       : [];

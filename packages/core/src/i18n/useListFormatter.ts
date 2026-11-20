@@ -9,8 +9,9 @@
  * @position Internal provider-aware list-formatting hook
  *   (architecture:internationalization INV8). Components that show several
  *   catalog messages as one string join them here rather than at the call
- *   site (INV1a). Not exported from the i18n barrel. Raw Intl.ListFormat
- *   construction stays centralized in this hook.
+ *   site (INV1a). Not exported from the i18n barrel. The shared time helper
+ *   (utils/timeFormat.ts) builds its own unit list for compact elapsed
+ *   durations.
  *
  * Falls back to `'en'` when called outside a provider, matching the
  * useTranslator/useCollator fallback.

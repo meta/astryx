@@ -9,11 +9,11 @@ import {Text} from '@astryxdesign/core/Text';
 import {useToast} from '@astryxdesign/core/Toast';
 import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {
-  ArrowDownTrayIcon,
-  PencilSquareIcon,
-  PlusIcon,
-  TrashIcon,
-} from '@heroicons/react/24/outline';
+  DownloadIcon,
+  ComposeIcon,
+  AddIcon,
+  DeleteIcon,
+} from '@astryxdesign/template-icons';
 
 export default function ButtonWithIcon() {
   const showToast = useToast();
@@ -27,7 +27,7 @@ export default function ButtonWithIcon() {
         <Button
           label="New item"
           variant="primary"
-          icon={<Icon icon={PlusIcon} />}
+          icon={<Icon icon={AddIcon} />}
           onClick={() =>
             showToast({body: 'Demo: a new item would be created here'})
           }
@@ -35,7 +35,7 @@ export default function ButtonWithIcon() {
         <Button
           label="Edit"
           variant="secondary"
-          icon={<Icon icon={PencilSquareIcon} />}
+          icon={<Icon icon={ComposeIcon} />}
           onClick={() =>
             showToast({body: 'Demo: the item would open for editing here'})
           }
@@ -43,7 +43,7 @@ export default function ButtonWithIcon() {
         <Button
           label="Download"
           variant="ghost"
-          icon={<Icon icon={ArrowDownTrayIcon} />}
+          icon={<Icon icon={DownloadIcon} />}
           onClick={() =>
             showToast({body: 'Demo: the file would download here'})
           }
@@ -51,7 +51,7 @@ export default function ButtonWithIcon() {
         <Button
           label="Delete"
           variant="destructive"
-          icon={<Icon icon={TrashIcon} />}
+          icon={<Icon icon={DeleteIcon} />}
           onClick={() =>
             confirm.show({
               title: 'Delete this item?',

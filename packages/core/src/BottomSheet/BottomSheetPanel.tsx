@@ -862,16 +862,16 @@ export function BottomSheetPanel({
   if (keyedSnapPoints.key !== snapPointsKey) {
     setKeyedSnapPoints({key: snapPointsKey, points: snapPoints});
   }
-  const {snapHeights, ignoredSnapPointsMessage} = useMemo(() => {
+  const {snapHeights, ignoredSnapPointsWarning} = useMemo(() => {
     const {key, points} = keyedSnapPoints;
     if (key === '') {
-      return {snapHeights: undefined, ignoredSnapPointsMessage: ''};
+      return {snapHeights: undefined, ignoredSnapPointsWarning: ''};
     }
     const ignored = (points ?? []).filter(point => !isValidSnapPoint(point));
     return {
       snapHeights: () =>
         resolveSnapPoints(points ?? [], layoutViewportHeight()),
-      ignoredSnapPointsMessage:
+      ignoredSnapPointsWarning:
         ignored.length === 0
           ? ''
           : `snapPoints ignored ${JSON.stringify(ignored)}. A snap point is a viewport fraction above 0 and up to 1 (0.5 is half the screen), a px length ('320px'), or a percentage ('50%').`,
@@ -879,8 +879,8 @@ export function BottomSheetPanel({
   }, [keyedSnapPoints]);
   useDevWarning(
     'BottomSheet',
-    ignoredSnapPointsMessage,
-    ignoredSnapPointsMessage !== '',
+    ignoredSnapPointsWarning,
+    ignoredSnapPointsWarning !== '',
   );
 
   // A caller's height owns the element's height: the drag never writes it.

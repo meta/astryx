@@ -27,8 +27,8 @@ import {
 import {Badge} from '../Badge';
 import {Button} from '../Button';
 import {HoverCard} from '../HoverCard';
-import type {TranslatorFn} from '../i18n';
 import {useTapStop} from '../Layer/useTouchTrigger';
+import {formatPastedTextLabel} from './pastedTextLabel';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -86,13 +86,6 @@ const styles = stylex.create({
 // Helpers
 // =============================================================================
 
-function formatLabel(text: string, t: TranslatorFn): string {
-  return t('@astryx.chat.pastedText.label', {
-    lines: text.split('\n').length,
-    chars: text.length,
-  });
-}
-
 // =============================================================================
 // Component
 // =============================================================================
@@ -102,7 +95,7 @@ export function ChatPastedTextToken({
   onExpand,
 }: ChatPastedTextTokenProps) {
   const t = useComponentTranslator();
-  const label = formatLabel(text, t);
+  const label = formatPastedTextLabel(text, t);
   // A tap on the token, by finger or pen, asks for its preview, so it stops
   // there: cancelling the mouse press the browser makes of it keeps the
   // composer around the token from taking focus and the caret, which on a
