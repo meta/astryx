@@ -121,6 +121,7 @@ test('the script reader leaves alone a script that answers after the network is 
   );
   const closed = page.waitForEvent('close');
   let reading: Promise<unknown> = Promise.resolve();
+  let lateReads = 0;
   // This listener comes before the reader's own. A read of the late script
   // then waits until the page has closed, so it is in flight at the close.
   page.on('response', response => {
@@ -129,6 +130,7 @@ test('the script reader leaves alone a script that answers after the network is 
     }
     const text = response.text.bind(response);
     response.text = async () => {
+      lateReads += 1;
       const read = closed.then(text);
       reading = read.catch(() => undefined);
       return read;
@@ -147,6 +149,7 @@ test('the script reader leaves alone a script that answers after the network is 
   await new Promise(resolve => {
     setImmediate(resolve);
   });
+  expect(lateReads).toBe(0);
 });
 
 // home-component-count.test.tsx pins the rule of the count. This test proves
