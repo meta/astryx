@@ -183,28 +183,29 @@ theme` differs from `integration add component`. A step a command can do
   subcommands is. A requirement names a step, never a package: no command
   requires Core.
 
-  | Command or part                                 | Requires                           |
-  | ----------------------------------------------- | ---------------------------------- |
-  | `template --skeleton`                           | `templates.skeleton`               |
-  | `template --cdn`                                | `templates.standalonePage`         |
-  | `integration add theme`                         | `themes.scaffold`                  |
-  | `theme targets`                                 | `themes.targets`                   |
-  | `theme template`                                | `themes.template`                  |
-  | `theme build`                                   | `themes.compile`                   |
-  | `theme add`, `use`, `remove`                    | `themes.appModule`                 |
-  | `experimental export`                           | `render.page`                      |
-  | `experimental export --reverse`                 | `render.reverse`                   |
-  | `experimental import`                           | `render.reverse`                   |
-  | `experimental theme compile`                    | `themes.compile`                   |
-  | `experimental theme check`                      | `themes.compile`                   |
-  | `experimental theme add`, `use`, `remove`       | `themes.appModule`                 |
-  | `experimental theme template`                   | `themes.template`                  |
-  | `experimental theme targets`                    | `themes.targets`                   |
-  | `experimental theme editor new`, `editor set`   | `themes.targets`, `themes.compile` |
-  | `experimental theme editor undo`, `editor show` | `themes.compile`                   |
-  | `experimental theme editor how`                 | `themes.targets`                   |
-  | `experimental theme preview add`                | `themes.appModule`                 |
-  | `experimental theme preview app`                | `setup.guide`, `themes.appModule`  |
+  | Command or part                                 | Requires                                               |
+  | ----------------------------------------------- | ------------------------------------------------------ |
+  | `template --skeleton`                           | `templates.skeleton`                                   |
+  | `template --cdn`                                | `templates.standalonePage`                             |
+  | `integration add theme`                         | `themes.scaffold`                                      |
+  | `theme targets`                                 | `themes.targets`                                       |
+  | `theme template`                                | `themes.template`                                      |
+  | `theme build`                                   | `themes.compile`                                       |
+  | `theme add`, `use`, `remove`                    | `themes.appModule`                                     |
+  | `experimental export`                           | `render.page`                                          |
+  | `experimental export --reverse`                 | `render.reverse`                                       |
+  | `experimental import`                           | `render.reverse`                                       |
+  | `experimental theme compile`                    | `themes.compile`                                       |
+  | `experimental theme check`                      | `themes.compile`                                       |
+  | `experimental theme create`                     | `themes.targets`, `themes.compile`, `themes.appModule` |
+  | `experimental theme add`, `use`, `remove`       | `themes.appModule`                                     |
+  | `experimental theme template`                   | `themes.template`                                      |
+  | `experimental theme targets`                    | `themes.targets`                                       |
+  | `experimental theme editor new`, `editor set`   | `themes.targets`, `themes.compile`                     |
+  | `experimental theme editor undo`, `editor show` | `themes.compile`                                       |
+  | `experimental theme editor how`                 | `themes.targets`                                       |
+  | `experimental theme preview add`                | `themes.appModule`                                     |
+  | `experimental theme preview app`                | `setup.guide`, `themes.appModule`                      |
 
   Every other command and option declares nothing.
 

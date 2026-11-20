@@ -21,6 +21,7 @@ export {
   themeEditPreviewRemove,
   themeEditHow,
   themeEditCheck,
+  themeEditCreate,
 } from './theme-edit/theme-edit.mjs';
 
 // Types (runtime no-ops; tsc carries them into api/experimental.d.mts).

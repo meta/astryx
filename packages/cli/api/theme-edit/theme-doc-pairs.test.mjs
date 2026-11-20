@@ -19,6 +19,7 @@ const PAIRS = /** @type {const} */ ([
   ['themeEditPreviewList', 'experimental-theme-preview-list'],
   ['themeEditPreviewRemove', 'experimental-theme-preview-remove'],
   ['themeEditCheck', 'experimental-theme-check'],
+  ['themeEditCreate', 'experimental-theme-create'],
 ]);
 
 /**

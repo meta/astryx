@@ -352,3 +352,28 @@
  */
 
 export {};
+
+/**
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditCreateOptions
+ * @property {string} [cwd] - The folder to start from (default: process.cwd()); the command acts on the Astryx app at or above it.
+ */
+
+/**
+ * `astryx --json experimental theme create <name> --traits '<json>'`.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditCreateResponse
+ * @property {'themeEdit.create'} type
+ * @property {object} data
+ * @property {string} data.theme - The theme's name.
+ * @property {string} data.file - The theme file written, from the app root: the person's to edit.
+ * @property {'light' | 'dark' | 'both'} data.look - One look (the app shows the theme in that mode) or a light and a dark look.
+ * @property {number} data.colors - Color tokens the file sets once `theme check --fix` filled it, each with a light and a dark value.
+ * @property {number} data.values - Other tokens written: corners, spacing, sizes, type, shadows, borders.
+ * @property {string[]} data.parts - The parts the file styles.
+ * @property {string | null} data.built - The stylesheet the build wrote.
+ * @property {string} data.module - The app's generated theme module, which now has the theme as its default.
+ * @property {boolean} data.firstAdd - True when this was the app's first theme: the app wires the module in once.
+ * @property {ThemeEditCheckResponse['data']} data.check - What `experimental theme check <name> --fix` found (`problems`) and repaired (`fixed`) in the file.
+ * @property {string[]} data.notes - What else to know.
+ */

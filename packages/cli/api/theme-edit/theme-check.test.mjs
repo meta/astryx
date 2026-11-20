@@ -293,7 +293,10 @@ describe('experimental theme check', () => {
       const barFixed = await check('bar/barTheme.ts', {fix: true});
       expect(barFixed.problems.some(p => p.kind === 'bar-text')).toBe(false);
       expect(barFixed.fixed.filter(x => x.group === 'inputs')).toHaveLength(1);
-      expect(barFixed.fixed.every(x => !x.part)).toBe(true);
+      // (Its only part lines are the secondary text the palette lifts.)
+      expect(barFixed.fixed.every(x => !x.part || /lifted/.test(x.why))).toBe(
+        true,
+      );
       const text = fs.readFileSync(
         path.join(cwd, 'bar', 'barTheme.ts'),
         'utf8',
