@@ -300,19 +300,30 @@ const ROWS = [
     },
   ],
   [
-    'an undo that names two changes takes nothing back and says so',
+    // (Replaces the take-nothing-back reading: each change the undo names
+    // was said earlier in the ask, so each is taken back.)
+    'an undo that names two changes takes back both',
     {
       q: 'Make the cards rounder. Make the headings bold. Undo the card change and the heading change.',
-      has: ['corners more --on card', 'headings bold'],
-      says: /names more than one change, so none is taken back and each stays written/,
+      never: /--on card|^headings |--on heading/,
+      says: /card and heading changes said earlier/,
     },
   ],
   [
-    'an undo that names two changes, only one said earlier, takes nothing back and says so',
+    'an undo that names two parts at once takes back both',
+    {
+      q: 'Cards rounder. Headings bigger. Undo the card and heading changes. A blue accent.',
+      has: ["accent '#2563eb'"],
+      never: /--on card|--text-heading-\d-size|^headings /,
+    },
+  ],
+  // (Replaces the base's "none is taken back" row: an undo that names
+  // several changes takes back each one said earlier.)
+  [
+    'an undo that names two changes takes back the one said earlier',
     {
       q: 'Make the headings bold. Undo the card change and the heading change.',
-      has: ['headings bold'],
-      says: /names more than one change, so none is taken back and each stays written/,
+      never: /^headings |--on heading/,
     },
   ],
   [
@@ -324,11 +335,56 @@ const ROWS = [
     },
   ],
   [
-    'an undo whose look more than one earlier change could be takes nothing back',
+    // (Replaces the take-nothing-back reading: the size named is one of
+    // the two changes, and only it is taken back.)
+    'an undo that names a look takes back only that look',
     {
       q: 'Make the headings bigger. Make the headings bold. Undo the heading size change.',
       has: ['headings bold'],
-      says: /more than one earlier change[\s\S]*one at a time/,
+      never: /--text-heading-\d-size/,
+    },
+  ],
+  [
+    'an undo names a part by its whole name, never a part that shares a word',
+    {
+      q: 'Make the code block header darker. Make the code block copy button blue. Undo the code block header change.',
+      has: ["background-color '#2563eb' --on code-block-copy-button"],
+    },
+  ],
+  [
+    "an undo of a part's color never takes back its size",
+    {
+      q: 'Make the headings bigger. Make the headings blue. Undo the heading color change.',
+      has: ['--text-heading-1-size 1.725rem'],
+    },
+  ],
+  [
+    "an undo of a part's size takes back its room when that was its size",
+    {
+      q: 'Make the buttons bigger. Undo the button size change.',
+      never: /--on button|sets nothing/,
+    },
+  ],
+  [
+    "an undo of a card's size keeps its color",
+    {
+      q: 'Make the cards bigger. Make the cards blue. Undo the card size change.',
+      has: ["background-color '#2563eb' --on card --when variant:default"],
+      never: /spacing more --on card/,
+    },
+  ],
+  [
+    'an undo of the text takes back the text size said earlier',
+    {
+      q: 'Make the text bigger. Undo the text change.',
+      never: /^text-size |sets nothing/,
+    },
+  ],
+  [
+    'an undo of the body text takes back the text size said earlier',
+    {
+      q: 'Make the body text bigger. Undo the body text change.',
+      never: /^text-size |--text-body-size|sets nothing/,
     },
   ],
   [
