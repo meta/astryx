@@ -689,20 +689,35 @@ export function prefixCliCommands(text, stem, lang = null) {
     .join('\n');
 }
 
-/** @type {AsyncLocalStorage<{pm: import('../doc-compiler/doc-syntax.mjs').DocPackageManager}>} */
+/** @type {AsyncLocalStorage<{pm: import('../doc-compiler/doc-syntax.mjs').DocPackageManager, dir: string | null}>} */
 const docPackageManagerScope = new AsyncLocalStorage();
 
 /**
  * Run `fn` with doc `{@pm}` steps rendered for `pm`, whatever the working
  * directory's project uses: a host that shows docs to readers of every
- * package manager, such as the docsite, picks one.
+ * package manager, such as the docsite, picks one. `dir` is the project the
+ * docs render for, whose Core release a step's Astryx packages take
+ * ({@link docProjectDir}); a host for every reader passes none. A scope
+ * inside another keeps the outer one's project.
  * @template T
  * @param {import('../doc-compiler/doc-syntax.mjs').DocPackageManager} pm
  * @param {() => T} fn
+ * @param {string | null} [dir]
  * @returns {T}
  */
-export function runWithDocPackageManager(pm, fn) {
-  return docPackageManagerScope.run({pm}, fn);
+export function runWithDocPackageManager(pm, fn, dir = null) {
+  const outer = docPackageManagerScope.getStore();
+  return docPackageManagerScope.run({pm, dir: outer ? outer.dir : dir}, fn);
+}
+
+/**
+ * The project folder doc steps render for: the one a scope names
+ * ({@link runWithDocPackageManager}); none in a scope for every reader, and
+ * none outside any scope, where a read is about no one project.
+ * @returns {string | null}
+ */
+export function docProjectDir() {
+  return docPackageManagerScope.getStore()?.dir ?? null;
 }
 
 /**
@@ -773,4 +788,33 @@ export function commandInFolder(dir, command, platform = process.platform) {
   return platform === 'win32'
     ? `cd -LiteralPath ${folder} -ErrorAction Stop; ${command}`
     : `cd ${folder} && ${command}`;
+}
+
+/**
+ * The folder and the command of a line {@link commandInFolder} printed, in
+ * either form; null for any other line. A printer reads it to choose the CLI
+ * invocation for the folder the command runs in, not the current one.
+ *
+ * @param {string} line
+ * @returns {{dir: string, command: string} | null}
+ */
+export function splitCommandInFolder(line) {
+  const posix = /^cd ('(?:[^']|'\\'')*'|[^\s']+) && (.*)$/su.exec(line);
+  if (posix) {
+    const [, folder, command] = posix;
+    const dir = folder.startsWith("'")
+      ? folder.slice(1, -1).replace(/'\\''/gu, "'")
+      : folder;
+    return {dir, command};
+  }
+  const powershell =
+    /^cd -LiteralPath ('(?:[^']|'')*'|\S+) -ErrorAction Stop; (.*)$/su.exec(line);
+  if (powershell) {
+    const [, folder, command] = powershell;
+    const dir = folder.startsWith("'")
+      ? folder.slice(1, -1).replace(/(['\u2018\u2019\u201A\u201B])\1/gu, '$1')
+      : folder;
+    return {dir, command};
+  }
+  return null;
 }

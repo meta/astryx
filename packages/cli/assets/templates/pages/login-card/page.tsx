@@ -3,7 +3,7 @@
 'use client';
 
 import {useState, type CSSProperties} from 'react';
-import {CubeIcon} from '@heroicons/react/24/outline';
+import {PackageIcon} from '@astryxdesign/template-icons';
 import {VStack} from '@astryxdesign/core/Layout';
 import {Center} from '@astryxdesign/core/Center';
 import {Text, Heading} from '@astryxdesign/core/Text';
@@ -92,7 +92,7 @@ export default function LoginSimple() {
       <VStack gap={4} hAlign="center" style={contentStyle}>
         {/* Logo */}
         <VStack gap={2} hAlign="center">
-          <Icon icon={CubeIcon} size="lg" />
+          <Icon icon={PackageIcon} size="lg" />
           <Text type="body" weight="bold" size="lg">
             Product Inc.
           </Text>

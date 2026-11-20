@@ -49,6 +49,10 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Table/Table.generated';
 import {createSharedContext} from '../utils/sharedContext';
+import {
+  NOT_BODY_ROW,
+  TableRowPlacementContext,
+} from './TableRowPlacementContext';
 
 registerEnglishFallback(english);
 
@@ -64,7 +68,7 @@ export type TableDensity = 'compact' | 'balanced' | 'spacious';
 
 export type TableDividers = 'rows' | 'columns' | 'grid' | 'none';
 
-/** How body cell text behaves when it exceeds column width */
+/** How cell text behaves when it exceeds column width; header cells follow the same mode */
 
 export type TableTextOverflow = 'wrap' | 'truncate';
 
@@ -93,13 +97,14 @@ interface TableAppearanceProps<T extends Record<string, unknown>> extends Omit<
    */
   verticalAlign?: TableVerticalAlign;
   /**
-   * How body cell text behaves when it exceeds the column width.
+   * How cell text behaves when it exceeds the column width.
    *
    * - `'wrap'` — text wraps and the row grows taller. No content is hidden.
    * - `'truncate'` — text is clipped with an ellipsis. Default-rendered cells
    *   show a tooltip on hover when truncated.
    *
-   * Header cells always truncate regardless of this setting.
+   * Header cells follow the same mode: under `'wrap'` a long heading wraps in
+   * a data-driven table, and in children mode its column grows to fit it.
    *
    * @default 'wrap'
    *
@@ -387,18 +392,21 @@ function TableInner<T extends Record<string, unknown>>({
 
   return (
     <TableContext value={contextValue}>
-      <TableNameContext value={tableName}>
-        <BaseTable<T>
-          ref={ref}
-          data={data}
-          columns={columns}
-          plugins={mergedPlugins}
-          textOverflow={textOverflowProp}
-          virtualization={virtualization}
-          scrollWrapper={TableScrollWrapper}
-          {...rest}
-        />
-      </TableNameContext>
+      {/* A table nested in a body cell starts outside any body again. */}
+      <TableRowPlacementContext value={NOT_BODY_ROW}>
+        <TableNameContext value={tableName}>
+          <BaseTable<T>
+            ref={ref}
+            data={data}
+            columns={columns}
+            plugins={mergedPlugins}
+            textOverflow={textOverflowProp}
+            virtualization={virtualization}
+            scrollWrapper={TableScrollWrapper}
+            {...rest}
+          />
+        </TableNameContext>
+      </TableRowPlacementContext>
     </TableContext>
   );
 }

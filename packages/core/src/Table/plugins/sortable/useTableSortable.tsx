@@ -142,7 +142,7 @@ const sortStyles = stylex.create({
     color: 'inherit',
     // At least the cell's content width, so the whole cell is the target. A
     // longer label may grow into the header cell's end padding before it
-    // truncates.
+    // wraps or truncates.
     width: 'max-content',
     minWidth: '100%',
     maxWidth: 'calc(100% + var(--_table-header-end-room, 0px))',
@@ -150,8 +150,8 @@ const sortStyles = stylex.create({
     textAlign: 'inherit',
     borderRadius: radiusVars['--radius-inner'],
   },
-  // The label truncates before the sort indicator, so the indicator stays
-  // visible in a narrow column.
+  // The label wraps or truncates before the sort indicator, so the indicator
+  // stays visible in a narrow column.
   label: {
     minWidth: 0,
     overflow: 'hidden',

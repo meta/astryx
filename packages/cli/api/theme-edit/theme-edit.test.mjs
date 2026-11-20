@@ -413,16 +413,16 @@ describe('typed modes', () => {
     });
   });
 
-  it('refuses --mode on a one-mode theme', async () => {
+  it("reads a one-mode theme's own --mode as no --mode, and says so", async () => {
     await themeEditNew('night', {cwd});
     await themeEditSet('night', 'mode', 'dark-only', {cwd});
-    const r = await refusal(() =>
-      themeEditSet('night', '--color-accent', '#ff0000', {cwd, mode: 'dark'}),
+    const r = await themeEditSet('night', '--color-accent', '#ff0000', {
+      cwd,
+      mode: 'dark',
+    });
+    expect(r.data.notes.join(' ')).toMatch(
+      /night is dark-only: --mode dark is its own mode, the same as no --mode/,
     );
-    expect(r.code).toBe('ERR_THEME_NO_MODE');
-    expect(r.run).toEqual([
-      "astryx experimental theme editor set night --color-accent '#ff0000'",
-    ]);
   });
 });
 

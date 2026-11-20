@@ -7,14 +7,27 @@ import {Button} from '@astryxdesign/core/Button';
 import {List, ListItem} from '@astryxdesign/core/List';
 import {Stack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
+import {useToast} from '@astryxdesign/core/Toast';
 
 export default function BannerCollapsibleContent() {
+  const showToast = useToast();
   return (
     <Banner
       status="warning"
       title="Configuration changes detected"
       description="Review the changes before they take effect."
-      endContent={<Button label="Review" variant="secondary" size="sm" />}
+      endContent={
+        <Button
+          label="Review"
+          variant="secondary"
+          size="sm"
+          onClick={() =>
+            showToast({
+              body: 'Demo: the changed settings would open for review here',
+            })
+          }
+        />
+      }
       isDismissable
       collapsible={{defaultIsOpen: true}}>
       <Stack direction="vertical" gap={2}>

@@ -9,6 +9,7 @@ import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {setResultCoverage} from './coverage.mjs';
 import {SEARCH_DOMAINS} from './_query.mjs';
+import {fold} from './_query-words.mjs';
 
 /** @typedef {import('./_lexical.mjs').Candidate} Candidate */
 
@@ -148,6 +149,45 @@ export const searchedComponentsOf = new WeakMap();
  * @type {WeakMap<object, Set<object>>}
  */
 export const namedLeadsOf = new WeakMap();
+
+/**
+ * The family roots each search response puts ahead of their parts (see
+ * rankLexical): each part's result, mapped to its root's result. The order of
+ * matches places the root in its part's run, just ahead of the part.
+ * Module-private, so they never enter search's JSON.
+ * @type {WeakMap<object, Map<object, object>>}
+ */
+export const rootLeadsOf = new WeakMap();
+
+/**
+ * The family roots the order of matches moved directly before their parts,
+ * by ordered response: each part's result, mapped to its root's result. The
+ * fit pass keeps those pairs in place. Module-private, so they never enter
+ * search's JSON.
+ * @type {WeakMap<object, Map<object, object>>}
+ */
+export const movedRootsOf = new WeakMap();
+
+/**
+ * The parts, by lexical response, whose root leads them on hits weaker than
+ * keyword strength (STRONG_TOKEN_SCORE; see rankLexical): such a root leads
+ * its part
+ * only inside the part's run. Module-private, so they never enter search's
+ * JSON.
+ * @type {WeakMap<object, Set<object>>}
+ */
+export const weakRootsOf = new WeakMap();
+
+/**
+ * The query words a match answered: the terms its reason lists, folded, or
+ * null when it answered the whole query (a name, keyword, or title hit).
+ * @param {string | undefined} reason
+ * @returns {Set<string> | null}
+ */
+export function answeredTerms(reason) {
+  const m = /^matches \d+\/\d+ terms: (.*)$/.exec(reason ?? '');
+  return m ? new Set(m[1].split(', ').map(fold)) : null;
+}
 
 /**
  * The components (name, keywords and category) a search response was scored against, or
