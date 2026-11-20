@@ -208,8 +208,8 @@ export function MetadataList({
   style,
   'data-testid': testId,
   ref,
-  // The accessible name belongs on the dl that owns the list's meaning; a
-  // name on the plain div wrapper is not reliably announced.
+  // The accessible name belongs on the dl that owns the list's meaning.
+  // Screen readers do not reliably announce a name on the plain div wrapper.
   'aria-label': ariaLabel,
   'aria-labelledby': ariaLabelledBy,
   'aria-describedby': ariaDescribedBy,
