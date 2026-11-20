@@ -7,7 +7,10 @@
  * @output Its string, or null when it writes none as it is.
  * @position Read by the module readers that take an import's specifier
  *   (foundation/discovery/template-needs.mjs,
- *   foundation/render/embedded-imports.mjs), so both read one rule.
+ *   foundation/render/embedded-imports.mjs), by doctor's button-action reader
+ *   (foundation/discovery/button-actions.mjs) and by the export's prop-value
+ *   reader (foundation/discovery/written-prop-values.mjs), so all read one
+ *   rule.
  */
 
 /**
