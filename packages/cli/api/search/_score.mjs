@@ -209,6 +209,9 @@ export function scoreQuery(
   // Multi-word natural language: score each content token, counting only
   // strong hits, then reward coverage so candidates matching more terms win.
   let strongest = 0;
+  // How many query words a hit of keyword strength answers, or a word of the
+  // candidate's own name (see ownName below).
+  let strongWords = 0;
   // Words the candidate answers with its own text: not only through a
   // component a template uses (see STRONG_TOKEN_SCORE). A word of its own
   // name, display name or title, or the start of one, is its own answer,
@@ -256,10 +259,16 @@ export function scoreQuery(
     }
     if (h && h.score >= MIN_TOKEN_SCORE) {
       if (h.score > strongest) strongest = h.score;
+      /** @type {boolean | undefined} */
+      let inOwnName;
+      const own = () => (inOwnName ??= ownName(tok));
+      if (h.score >= STRONG_TOKEN_SCORE || (ownEvidence && own())) {
+        strongWords++;
+      }
       if (
         !('used' in h && h.used) ||
         (h.own ?? 0) >= MIN_TOKEN_SCORE ||
-        ownName(tok)
+        own()
       ) {
         ownMatched++;
       }
@@ -303,6 +312,7 @@ export function scoreQuery(
     for (const tok of tokens) {
       if (!hitTerms.includes(tok) && inTitle(tok)) {
         if (STRONG_TOKEN_SCORE > strongest) strongest = STRONG_TOKEN_SCORE;
+        strongWords++;
         matched++;
         ownMatched++;
         hitTerms.push(tok);
@@ -321,7 +331,12 @@ export function scoreQuery(
   // both; a candidate that has both comes first, ordered among its peers by
   // how strong its matches are. It needs one keyword-strength hit:
   // every word mentioned in prose, or rendered by a page, is breadth, and
-  // stays on the token sum below an exact hit on one word.
+  // stays on the token sum below an exact hit on one word. In search's
+  // reading (`ownEvidence`), an entry that is not a doc needs two strong
+  // words: a hit of keyword strength, or a word of its own name, display
+  // name or title. One strong word and a mention of the others is a match on
+  // that word, not on the ask. A doc answers in prose, so it keeps the bar
+  // of one.
   //
   // The TOTAL quality of matches orders candidates within this tier, not
   // just the strongest single hit. A doc matching both words by keyword
@@ -331,7 +346,8 @@ export function scoreQuery(
   if (
     matched === tokens.length &&
     ownMatched === tokens.length &&
-    strongest >= STRONG_TOKEN_SCORE
+    strongest >= STRONG_TOKEN_SCORE &&
+    (!ownEvidence || candidate.domain === 'doc' || strongWords >= 2)
   ) {
     return {
       score:
