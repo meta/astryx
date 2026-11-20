@@ -144,7 +144,8 @@ draws each meaning a bundled template imports.
   features are on, it also names `astryx experimental icon`: with the words
   to look for that follow it (a first word that only asks to look or list
   is left out), with `--list` when the words ask only for the list, as the
-  help of the subcommand the next word names, and as its help otherwise.
+  help of the subcommand that the first word to look for names, and as its
+  help otherwise.
 
   With no such package loaded and no `experimental.iconSet`, help (apart from
   the marked `experimental` group line), `astryx manifest` (apart from that group: its command, and its

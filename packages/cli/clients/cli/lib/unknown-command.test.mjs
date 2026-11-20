@@ -74,6 +74,7 @@ function program() {
     .option('--set <set>', 'set');
   icon.command('add').argument('[export]').option('--from <library>', 'from');
   icon.command('use').argument('<set>');
+  icon.command('map').argument('<meaning>').argument('[icon]');
   experimental
     .command('export')
     .argument('[page]')
@@ -163,11 +164,12 @@ describe('the command the words point at', () => {
   });
 
   it('offers only runs that parse', async () => {
-    // `theme list` takes no word, so `list layouts` points at no run.
+    // `theme list` takes no word, so `list layouts` points at no run, and
+    // the answer falls back to the help.
     const a = await unknownCommandAnswer(program(), ['list', 'layouts'], {
       findEntry: entries,
     });
-    expect(a?.suggestions.every(s => !s.name.startsWith('astryx '))).toBe(true);
+    expect(a?.suggestions.map(s => s.name)).toEqual(['astryx help']);
   });
 
   it('falls back to the names a typo of the word could be, else the help', async () => {
@@ -176,7 +178,7 @@ describe('the command the words point at', () => {
       findEntry: entries,
     });
     expect(far?.suggestions).toEqual([
-      {name: 'help', reason: 'every command, with what it does'},
+      {name: 'astryx help', reason: 'every command, with what it does'},
     ]);
   });
 });
@@ -206,7 +208,7 @@ describe('a typo of a command', () => {
     // files; `start` and `serve` are three from `search`; `icon` would be
     // three from `init` too.
     for (const word of ['edit', 'exit', 'lint', 'start', 'serve', 'frobnicate'])
-      expect(await names([word]), word).toEqual(['help']);
+      expect(await names([word]), word).toEqual(['astryx help']);
   });
 });
 
@@ -277,6 +279,19 @@ describe('an icon word', () => {
     expect(await names(['icon', 'use', 'lucide'], on)).toEqual([
       'astryx experimental icon use --help',
       'astryx docs icons',
+    ]);
+    // So does the first word to look for, after a look word or an option.
+    expect(await names(['icon', 'search', 'use', 'lucide'], on)).toEqual([
+      'astryx experimental icon use --help',
+      'astryx docs icons',
+    ]);
+    expect(await names(['icon', 'find', 'map', 'pin'], on)).toEqual([
+      'astryx experimental icon map --help',
+      'astryx docs icons',
+    ]);
+    expect(await names(['icon', '--json', 'add', 'trash'], on)).toEqual([
+      'astryx experimental icon add --help',
+      'astryx docs icons --json',
     ]);
     // With no words to look for, the guide comes first, then the finder's help.
     expect(await names(['icon'], on)).toEqual([
@@ -518,12 +533,11 @@ describe('the CLI', () => {
   });
 
   it('names the icons guide for an icon word outside a project, and that run works', async () => {
-    const {status, stdout} = await runCli([
-      '--json',
-      'icon',
-      'search',
-      'arrow',
-    ]);
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-icon-word-'));
+    const {status, stdout} = await runCli(
+      ['--json', 'icon', 'search', 'arrow'],
+      tmp,
+    ).finally(() => fs.rmSync(tmp, {recursive: true, force: true}));
     expect(status).toBe(1);
     const envelope = JSON.parse(stdout);
     expect(envelope.code).toBe('ERR_UNKNOWN_COMMAND');
@@ -568,7 +582,7 @@ describe('the CLI', () => {
     const {status, stdout} = await runCli(['--json', 'frobnicate']);
     expect(status).toBe(1);
     expect(JSON.parse(stdout).suggestions).toEqual([
-      {name: 'help', reason: 'every command, with what it does'},
+      {name: 'astryx help', reason: 'every command, with what it does'},
     ]);
   });
 

@@ -182,7 +182,7 @@ describe('--json shim: unknown subcommand emits error envelope', () => {
     expect(parsed.error).toMatch(/bogus-cmd/);
     // A word that names nothing gets the help, which lists every command.
     expect(parsed.suggestions).toEqual([
-      {name: 'help', reason: 'every command, with what it does'},
+      {name: 'astryx help', reason: 'every command, with what it does'},
     ]);
   });
 });

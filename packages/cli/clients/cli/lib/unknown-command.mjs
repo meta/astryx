@@ -551,8 +551,8 @@ function plainWords(cmd, words) {
  * word that only asks to look or list is left out, and so is `--list`, which
  * takes no words (`icon list arrows` is `experimental icon arrows`). A list
  * word or `--list` with nothing to look for asks for `experimental icon
- * --list`, and a word that names a subcommand of the finder asks for that
- * subcommand's help. With neither, the guide comes first, then the finder's
+ * --list`, and a first word to look for that names a subcommand of the
+ * finder asks for that subcommand's help. With neither, the guide comes first, then the finder's
  * help. Where icon features are off, the answer names no experimental
  * command (spec:AST-084 FR0).
  * @param {{word: string, before: string[], after: string[]}} run the word,
@@ -583,10 +583,14 @@ async function iconRuns({before, after: rest}, program, iconFeatures) {
   );
   const [lead, ...more] = rest;
   const lower = lead?.toLowerCase() ?? '';
-  // A word that names one of the finder's subcommands (`icon add trash`,
-  // `icon use lucide`) is that subcommand, which may need inputs or write
-  // files: the answer names its help, never a run of it.
-  const sub = visible(finderCmd).find(c => c.name() === lower);
+  const listWord = LIST_WORDS.has(lower);
+  const words = listWord || LOOK_WORDS.has(lower) ? more : rest;
+  // A first word to look for that names one of the finder's subcommands
+  // (`icon add trash`, `icon search use lucide`, `icon --json map pin`) runs
+  // that subcommand, which may need inputs or write files: the answer names
+  // its help, never a run of it.
+  const first = plainWords(finderCmd, words)[0]?.toLowerCase();
+  const sub = visible(finderCmd).find(c => c.name() === first);
   if (sub)
     return [
       run(
@@ -595,8 +599,6 @@ async function iconRuns({before, after: rest}, program, iconFeatures) {
       ),
       guide,
     ];
-  const listWord = LIST_WORDS.has(lower);
-  const words = listWord || LOOK_WORDS.has(lower) ? more : rest;
   const reason =
     'the command is experimental icon (experimental): it finds the icon for what you mean in your icon sets';
   if (plainWords(finderCmd, words).length > 0)
@@ -841,8 +843,9 @@ async function pointed(
  *   `findEntry` finds which lookup command reads a name; without it, no name
  *   points at a command. `iconFeatures` says whether icon features are on;
  *   without it, they are off
- * @returns {Promise<{word: string, message: string, suggestions: Array<{name: string, reason: string}>} | null>}
- *   null when no word names a command
+ * @returns {Promise<{word: string, message: string, suggestions: Array<{name: string, reason: string}>, fallback?: true} | null>}
+ *   null when no word names a command; `fallback` when nothing fits and the
+ *   one suggestion is the help
  */
 export async function unknownCommandAnswer(
   program,
@@ -868,16 +871,22 @@ export async function unknownCommandAnswer(
     word,
     visible(program).map(c => c.name()),
   );
+  if (near.length > 0)
+    return {
+      word,
+      message,
+      suggestions: near.map(name => ({name, reason: 'did you mean this?'})),
+    };
   // When nothing fits, the help lists every command with what it does. A
   // bare list of names would put the first one (`init`, which writes files)
   // where a reader looks for the answer.
   return {
     word,
     message,
-    suggestions:
-      near.length > 0
-        ? near.map(name => ({name, reason: 'did you mean this?'}))
-        : [{name: 'help', reason: 'every command, with what it does'}],
+    suggestions: [
+      {name: 'astryx help', reason: 'every command, with what it does'},
+    ],
+    fallback: true,
   };
 }
 

@@ -1180,7 +1180,11 @@ async function answerStrayOption(err, rejected, message, exitCode) {
     ) {
       /** @param {Awaited<ReturnType<typeof unknownCommandAnswer>>} a */
       const withRun = a =>
-        a?.suggestions.some(s => s.name.startsWith('astryx ')) ? a : null;
+        a &&
+        !a.fallback &&
+        a.suggestions.some(s => s.name.startsWith('astryx '))
+          ? a
+          : null;
       // The whole run first: a command the words point at can take the
       // option (`migrate --from 0.6.0` is `upgrade --from 0.6.0`). Without a
       // run, the run without the option.
