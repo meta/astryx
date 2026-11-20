@@ -51,23 +51,23 @@ export const docs = {
       name: 'isTruncated',
       type: 'boolean',
       description:
-        'Whether the text is currently cut off. Drives composing a Tooltip with the full text: render the tooltip only when this is true, so a cell that fits shows none.',
+        'Whether the text is currently cut off. Gate your own truncation feedback on it, such as a Show more toggle, so a cell that fits shows none.',
     },
     {
       name: 'fullText',
       type: 'string',
       description:
-        "The element's current text content, captured on every measurement, for the tooltip a truncated cell shows. Follows content changes that resize nothing (a fixed-width status line whose text swaps).",
+        "The element's current text content, captured on every measurement. Follows content changes that resize nothing (a fixed-width status line whose text swaps).",
     },
   ],
   usage: {
     description:
-      "Detects whether an element's text is cut off — single-line overflow or clamped to several lines — and gives back the full text, updating when the size or the content changes. Built on a shared ResizeObserver and a shared MutationObserver, so hundreds of table cells create one observer of each kind, and a first measurement runs batched in a microtask after the commit instead of forcing a layout pass per text during mount. Use it wherever a truncated cell should show its full content only when it is actually truncated: compose a Tooltip off isTruncated and fullText instead of always rendering one. Text and Heading build their truncation tooltips on it; reach for it directly when composing truncation feedback into your own component.",
+      "Detects whether an element's text is cut off — single-line overflow or clamped to several lines — and gives back the full text, updating when the size or the content changes. Built on a shared ResizeObserver and a shared MutationObserver, so hundreds of table cells create one observer of each kind, and a first measurement runs batched in a microtask after the commit instead of forcing a layout pass per text during mount. For a tooltip with the full text, use Text's or Heading's maxLines: their truncation tooltip, built on this hook, shows only while the text is cut off and adds no second description. Reach for the hook directly to compose other truncation feedback into your own component, such as a Show more toggle shown only when the text is cut off.",
     bestPractices: [
       {
         guidance: true,
         description:
-          'Render the full-content Tooltip only when isTruncated is true, and read the tooltip text from fullText: a cell that fits shows no tooltip, and the text always matches what was measured.',
+          "For a full-text tooltip, use Text's or Heading's maxLines (hasTruncateTooltip is on by default) rather than this hook: that tooltip adds no second description, so a screen reader reads the text once.",
       },
       {
         guidance: true,
@@ -83,6 +83,11 @@ export const docs = {
         guidance: false,
         description:
           'Compare scrollHeight to offsetHeight yourself for clamped text: with -webkit-line-clamp active browsers report the clamped size, which is exactly the case the Range measurement exists for.',
+      },
+      {
+        guidance: false,
+        description:
+          'Wrap truncated text in a Tooltip whose content repeats that text: the Tooltip describes the text a second time, so a screen reader reads it twice.',
       },
     ],
   },
@@ -105,17 +110,18 @@ export const docsDense = {
   returnDescriptions: {
     ref: 'ref callback for the measured text element; swapping elements re-observes and cleans up.',
     isTruncated:
-      'true while the text is cut off; gate the full-content Tooltip on it.',
+      'true while the text is cut off; gate your own truncation feedback on it.',
     fullText:
-      'current text content for the tooltip; follows content changes that resize nothing.',
+      'current text content; follows content changes that resize nothing.',
   },
   usage: {
     description:
-      'Truncation detection + full text for tooltips. Gate a Tooltip on isTruncated and read its text from fullText so only actually-cut cells show one. Shared observers; batched first measurement. Text/Heading build their truncation tooltips on it; use directly when composing truncation feedback yourself.',
+      'Truncation detection + full text. For a full-text tooltip use Text/Heading maxLines (no second description); use the hook directly for other truncation feedback, e.g. a Show more toggle. Shared observers; batched first measurement.',
     bestPractices: [
       {
         guidance: true,
-        description: 'Tooltip only when isTruncated; text from fullText.',
+        description:
+          'Full-text tooltip: Text/Heading maxLines, not a Tooltip around the text.',
       },
       {
         guidance: true,
@@ -131,6 +137,11 @@ export const docsDense = {
         guidance: false,
         description:
           'Manual scrollHeight checks on clamped text — browsers report the clamped size.',
+      },
+      {
+        guidance: false,
+        description:
+          'A Tooltip repeating the text it wraps — screen readers hear it twice.',
       },
     ],
   },

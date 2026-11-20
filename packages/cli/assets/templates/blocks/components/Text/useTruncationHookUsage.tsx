@@ -2,8 +2,9 @@
 
 'use client';
 
-import {useTruncation} from '@astryxdesign/core/Text';
-import {Tooltip} from '@astryxdesign/core/Tooltip';
+import {useId, useState} from 'react';
+import {Button} from '@astryxdesign/core/Button';
+import {Text, useTruncation} from '@astryxdesign/core/Text';
 import {
   Table,
   TableBody,
@@ -37,42 +38,31 @@ const FILES: FileAsset[] = [
   },
 ];
 
+// A one-line cell: Text truncates the path and shows it in full in its own
+// tooltip only while it is cut off. That tooltip adds no second description,
+// so a screen reader reads the path once.
 function TruncatedCell({children}: {children: string}) {
-  const truncation = useTruncation({maxLines: 1});
   return (
-    <Tooltip
-      content={truncation.fullText}
-      placement="above"
-      isEnabled={truncation.isTruncated}>
-      <span
-        ref={truncation.ref}
-        tabIndex={truncation.isTruncated ? 0 : undefined}
-        style={{
-          display: 'block',
-          maxWidth: 120,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}>
-        {children}
-      </span>
-    </Tooltip>
+    <Text type="body" maxLines={1} style={{maxWidth: 120}}>
+      {children}
+    </Text>
   );
 }
 
+// A two-line cell that shows its full path in place: useTruncation reports
+// whether the clamp cuts the path, and the toggle shows only then.
 function ClampedCell({children}: {children: string}) {
-  const truncation = useTruncation({maxLines: 2});
+  const [isExpanded, setIsExpanded] = useState(false);
+  const truncation = useTruncation({maxLines: 2, isExpanded});
+  const pathId = useId();
   return (
-    <Tooltip
-      content={truncation.fullText}
-      placement="above"
-      isEnabled={truncation.isTruncated}>
+    <>
       <span
+        id={pathId}
         ref={truncation.ref}
-        tabIndex={truncation.isTruncated ? 0 : undefined}
         style={{
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
+          display: isExpanded ? 'block' : '-webkit-box',
+          WebkitLineClamp: isExpanded ? undefined : 2,
           WebkitBoxOrient: 'vertical',
           overflow: 'hidden',
           maxWidth: 120,
@@ -80,7 +70,17 @@ function ClampedCell({children}: {children: string}) {
         }}>
         {children}
       </span>
-    </Tooltip>
+      {truncation.isTruncated ? (
+        <Button
+          label={isExpanded ? 'Show less' : 'Show more'}
+          variant="ghost"
+          size="sm"
+          aria-expanded={isExpanded}
+          aria-controls={pathId}
+          onClick={() => setIsExpanded(expanded => !expanded)}
+        />
+      ) : null}
+    </>
   );
 }
 

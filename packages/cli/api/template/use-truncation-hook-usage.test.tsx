@@ -2,8 +2,9 @@
 // @vitest-environment jsdom
 
 /**
- * The useTruncation example demonstrates text truncation across table cells
- * with single-line and multi-line clamps.
+ * The useTruncation example demonstrates text truncation across table cells:
+ * Text's own truncation tooltip on one line, and a two-line clamp with a
+ * toggle that useTruncation shows only when the clamp cuts the text.
  */
 
 import {act} from 'react';
@@ -61,7 +62,7 @@ describe('useTruncationHookUsage example', () => {
     expect(container.textContent).toContain('README.md');
   });
 
-  it('renders measured text elements across all table cells', async () => {
+  it('wraps no cell in a Tooltip, so no path is described a second time', async () => {
     root = createRoot(container);
     act(() => {
       root!.render(<UseTruncationHookUsage />);
@@ -69,8 +70,18 @@ describe('useTruncationHookUsage example', () => {
 
     await act(async () => {});
 
-    // In the DOM, cells containing paths render span elements with truncation refs
-    const spans = Array.from(container.querySelectorAll('td span'));
-    expect(spans.length).toBe(3);
+    expect(container.querySelector('[aria-describedby]')).toBeNull();
+  });
+
+  it("shows the clamped cell's toggle only when the clamp cuts its path", async () => {
+    root = createRoot(container);
+    act(() => {
+      root!.render(<UseTruncationHookUsage />);
+    });
+
+    await act(async () => {});
+
+    // jsdom lays out nothing, so no path is cut and no toggle shows.
+    expect(container.querySelector('button')).toBeNull();
   });
 });
