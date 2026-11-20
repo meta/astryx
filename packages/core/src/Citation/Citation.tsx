@@ -149,7 +149,10 @@ const styles = stylex.create({
     backgroundColor: colorVars['--color-accent-muted'],
     borderRadius: radiusVars['--radius-full'],
     minWidth: spacingVars['--spacing-5'],
-    height: `max(${spacingVars['--spacing-5']}, 1lh)`,
+    // Its own digits plus its padding on each side, which is its spacing size
+    // at the default text size. A superscript badge grows with its own text,
+    // not with the line, so it raises the line as little as it can.
+    height: `max(${spacingVars['--spacing-5']}, calc(1em + 2 * ${spacingVars['--spacing-1']}))`,
     paddingInline: spacingVars['--spacing-1'],
     textDecoration: 'none',
     transitionProperty: 'background-color',
