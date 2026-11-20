@@ -159,6 +159,7 @@ import {
   BORDER_TO_COLOR,
   borderFor,
   broughtBorderAt,
+  turnsBorderOff,
   checkSetting,
   indicatorLines,
   selectedBoxes,
@@ -6587,13 +6588,8 @@ async function changeOnce(
     // undone none or zero: undoing the brought border itself, or a width
     // or style that drew, leaves the colors as they are.)
     if (
-      /^border(?:-[a-z-]+)?$/.test(s.thing) &&
-      !BORDER_COLOR_PROP.test(s.thing) &&
       String(prev?.value ?? s.value).trim() !== BORDER_TO_COLOR &&
-      String(prev?.value ?? s.value)
-        .trim()
-        .split(/\s+/)
-        .some(t => /^(?:none|hidden|0(?:px|rem|em)?)$/i.test(t))
+      turnsBorderOff({thing: s.thing, value: prev?.value ?? s.value})
     )
       for (const x of [...data.settings]) {
         if (

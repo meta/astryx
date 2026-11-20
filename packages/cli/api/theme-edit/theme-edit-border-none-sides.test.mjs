@@ -293,6 +293,44 @@ describe('undoing a border none', () => {
   );
 
   it(
+    'never brings a border on undoing a radius, spacing or image',
+    async () => {
+      await themeEditNew('s5', {cwd, like: 'neutral'});
+      await themeEditSet('s5', 'border-color', '#999999', {cwd, on: 'tab'});
+      await themeEditUndo('s5', {cwd, thing: 'border', on: 'tab'});
+      await themeEditSet('s5', 'border-radius', '0', {cwd, on: 'tab'});
+      const r = await themeEditUndo('s5', {
+        cwd,
+        thing: 'border-radius',
+        on: 'tab',
+      });
+      expect((r.data.notes ?? []).join('\n')).not.toContain('added a');
+    },
+    T,
+  );
+
+  it(
+    "brings a one-mode color's border for every mode where no look draws a seam",
+    async () => {
+      await themeEditNew('s6', {cwd, like: 'neutral'});
+      await themeEditSet('s6', 'border-color', '#999999', {
+        cwd,
+        on: 'tab',
+        mode: 'dark',
+      });
+      const saved = JSON.parse(
+        fs.readFileSync(path.join(cwd, 'themes/s6/s6.settings.json'), 'utf8'),
+      );
+      const border = saved.settings.find(
+        (/** @type {any} */ x) => x.thing === 'border' && x.on === 'tab',
+      );
+      expect(border).toBeTruthy();
+      expect(border.mode).toBeUndefined();
+    },
+    T,
+  );
+
+  it(
     'takes back the border set added, and does not write it again',
     async () => {
       await themeEditNew('s3', {cwd, like: 'neutral'});

@@ -3787,10 +3787,32 @@ export function borderFor(ctx, slug, data, s) {
     {on: s.on, when: s.when, only: s.only},
     false,
   );
-  // (In the color's own mode: a see-through border shows nothing in the
-  // other mode, and the other mode keeps the line Core draws there, a
-  // button group's seam.)
-  return s.mode ? {...edge, mode: s.mode} : edge;
+  // (In the color's own mode only where the look draws a line in the other
+  // mode, a button group's seam, which a border for every mode would hide;
+  // elsewhere for every mode, so the part keeps one size when the mode
+  // changes.)
+  const seam = parts.some(t =>
+    drawsLine(ctx.C, [t], 'border', null, s.when ?? defaultLook(ctx, t)),
+  );
+  return s.mode && seam ? {...edge, mode: s.mode} : edge;
+}
+
+/**
+ * Whether a setting turns a border side off: a border width, style or side
+ * shorthand (never a radius, spacing or image) whose value holds a none,
+ * hidden or zero.
+ * @param {{thing?: unknown, value?: unknown}} x
+ */
+export function turnsBorderOff(x) {
+  return (
+    /^border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?(?:-(?:width|style))?$/.test(
+      String(x.thing),
+    ) &&
+    String(x.value ?? '')
+      .trim()
+      .split(/\s+/)
+      .some(t => /^(?:none|hidden|0(?:px|rem|em)?)$/i.test(t))
+  );
 }
 
 /**
