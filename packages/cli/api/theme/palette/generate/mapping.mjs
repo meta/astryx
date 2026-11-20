@@ -25,16 +25,18 @@ import {
   generateTonalPalette,
   perceptualDelta,
 } from './generator.mjs';
+import {
+  deriveLookColors,
+  deriveStatusColors,
+  lookSeeds,
+  statusSeeds,
+} from './derive-look.mjs';
 
 /** @typedef {import('./types.mjs').TonalPaletteCandidate} TonalPaletteCandidate */
 
 /** @typedef {import('./types.mjs').TonalPaletteGenerationInput} TonalPaletteGenerationInput */
 
 /** @typedef {import('./derive-look.mjs').DerivedState} DerivedState */
-
-/** @typedef {import('./editor-look.mjs').EditorLookResult} EditorLookResult */
-
-/** @typedef {import('./editor-look.mjs').PaletteEditorRules} PaletteEditorRules */
 
 /** @typedef {'light' | 'dark'} PaletteMode */
 
@@ -94,7 +96,7 @@ import {
  * What the mapping reads around the palette.
  * @typedef {object} PaletteMappingContext
  * @property {PaletteBase} [base]
- * @property {PaletteEditorRules} [editor] * The theme editor's own rules, beyond `themePalette()`'s mapping: the colors a look grows (category and chart colors, the status roles a theme leaves unset, code colors), the slider track, and a base theme's own pairs kept readable for those colors. They never change a token `themePalette()` maps. The editor passes its own rules module (editor-look) here, so an app that imports only `themePalette()` ships none of them.
+ * @property {boolean} [editor] * The theme editor's own rules, beyond `themePalette()`'s mapping: the colors a look grows (category, chart, status roles left unset, code colors), the slider track and the inverted error fill, tinted inks, coloured cards keeping their own secondary text, and a base theme's own pairs kept readable.
  * @property {(token: string) => boolean} has Whether a token exists, so the mapping sets it.
  * @property {PaletteColorReader} reader
  * @property {(token: string, mode: PaletteMode) => string | undefined} [settingOf] The value a token is set to exactly in a mode, as written.
@@ -1079,6 +1081,54 @@ export const fillAt =
     ratio: 0,
   });
 /**
+ * The families the theme editor grows beside the theme's own colors, in
+ * order: the category and chart hues of the look (lookSeeds), then the
+ * status roles the theme leaves unset, from the base theme's color for
+ * each (statusSeeds). Empty without a color setting.
+ * @param {ReadonlyArray<PaletteDial>} dials
+ * @param {Pick<PaletteMappingContext, 'base' | 'reader'>} context
+ * @returns {{id: string; name: string; seed: string}[]}
+ */
+export function grownFamilies(dials, context) {
+  if (!dials.length) {
+    return [];
+  }
+  const named =
+    /**
+     * @param {string} id
+     * @param {string} seed
+     */
+    (id, seed) => ({
+      id,
+      name: id[0].toUpperCase() + id.slice(1),
+      seed,
+    });
+  const accent = dials.find(d => d.id === 'accent')?.seed;
+  const out = Object.entries(lookSeeds(accent)).map(([id, seed]) =>
+    named(id, seed),
+  );
+  /**
+   * @type {Record<string, string>}
+   */
+  const baseColors = {};
+  for (const d of Object.keys(STATUS_TOKEN)) {
+    if (dials.some(f => f.id === d)) {
+      continue;
+    }
+    const v = context.base?.light?.[`--color-${STATUS_TOKEN[d]}`];
+    const rgb = v ? context.reader.rgb(v) : null;
+    if (rgb && context.reader.alpha(v) >= 1) {
+      baseColors[d] = hex(rgb);
+    }
+  }
+  for (const [id, seed] of Object.entries(statusSeeds(baseColors, accent))) {
+    if (!out.some(f => f.id === id)) {
+      out.push(named(id, seed));
+    }
+  }
+  return out;
+}
+/**
  * The generation request for color settings with no palette config of the
  * author's: one family per setting in setting order, each seed anchored
  * exactly, in dark too where it reads there. Null without a setting.
@@ -1853,22 +1903,112 @@ export function mapPalette(candidate, dials, fills, context) {
     }
   }
   /**
-   * @type {EditorLookResult}
+   * @type {PaletteMapping['categories']}
    */
-  const {categories, statuses} = context.editor
-    ? context.editor.growLook({
-        candidate,
-        dials,
-        context,
-        tokens,
-        modes,
-        setExactly,
-        t,
-      })
-    : {
-        categories: {badges: 'none', chart: 'none', merged: [], unreadable: []},
-        statuses: {roles: {}, why: []},
+  const categories = context.editor
+    ? mapCategories()
+    : {badges: 'none', chart: 'none', merged: [], unreadable: []};
+  /**
+   * @type {PaletteMapping['statuses']}
+   */
+  const statuses = context.editor ? mapStatuses() : {roles: {}, why: []};
+  /**
+   * The status roles the theme leaves unset, from the palette's families of
+   * them (deriveStatusColors), written as its shades; a token set by hand
+   * keeps its value, and a role that cannot be drawn readable and apart
+   * from the accent keeps the base theme's.
+   * @returns {PaletteMapping['statuses']}
+   */
+  function mapStatuses() {
+    const pal =
+      /** @type {Record< string, Record<PaletteMode, Record<string | number, string>> >} */ (
+        /** @type {unknown} */ (candidate.palette)
+      );
+    const roles = Object.keys(STATUS_TOKEN).filter(
+      d => !dials.some(f => f.id === d) && pal[d],
+    );
+    if (!roles.length) {
+      return {roles: {}, why: []};
+    }
+    const derived = deriveStatusColors({
+      palette: pal,
+      stops,
+      modes,
+      roles,
+      grounds: m => surfaces(m, 'neutral').map(([, c]) => c),
+      inks: (m, id) =>
+        t.onChoices(id, m).map(r => ({
+          stop: r.stop,
+          color: r.color,
+          family: r.family ?? 'neutral',
+        })),
+      accent: m => tokens['--color-accent']?.[m]?.color ?? null,
+      wanted: k => has(k) && !setExactly(k),
+    });
+    for (const [k, v] of Object.entries(derived.tokens)) {
+      tokens[k] = {family: v.family, light: v.light, dark: v.dark};
+    }
+    return {roles: derived.roles, why: derived.why};
+  }
+  /**
+   * The category colors (Badge, Token and Card tints) and the chart colors
+   * the palette derives (deriveLookColors), written as its shades. A token
+   * the theme sets by hand keeps its value; a set the palette cannot
+   * draw readable and apart keeps the base theme's.
+   * @returns {PaletteMapping['categories']}
+   */
+  function mapCategories() {
+    /** The theme's color for a token in a mode. */
+    const themeColor =
+      /**
+       * @param {string} k
+       * @param {PaletteMode} m
+       * @returns {string | null}
+       */
+      (k, m) => {
+        const v =
+          exactOf(k, m) ??
+          tokens[k]?.[m]?.color ??
+          t.colorIn(base?.[m]?.[k] ?? '', m);
+        return v && parseColor(v) && alphaOf(v) >= 1 ? v : null;
       };
+    const derived = deriveLookColors({
+      palette:
+        /** @type {Record< string, Record<PaletteMode, Record<string | number, string>> >} */ (
+          /** @type {unknown} */ (candidate.palette)
+        ),
+      stops,
+      modes,
+      text: m =>
+        // Card text, secondary text and links all sit on a card tint.
+        [
+          '--color-text-primary',
+          '--color-text-secondary',
+          '--color-text-accent',
+        ]
+          .map(k => themeColor(k, m))
+          .filter(
+            /**
+             * @returns {c is string}
+             */
+            c => Boolean(c),
+          ),
+      grounds: m => surfaces(m, 'neutral').map(([, c]) => c),
+      wanted: k => has(k) && !setExactly(k),
+    });
+    for (const [k, v] of Object.entries(derived.tokens)) {
+      tokens[k] = {family: v.family, light: v.light, dark: v.dark};
+    }
+    return {
+      badges: derived.badges,
+      chart: derived.chart,
+      merged: derived.merged,
+      unreadable: derived.unreadable.map(
+        u =>
+          `${u.token} reads at only ${u.ratio}:1 in ${u.mode} (needs ${u.needs}:1)`,
+      ),
+    };
+  }
   return {
     tokens,
     contrast: checks.filter(c => c.note !== ''),

@@ -23,14 +23,7 @@ import ts from 'typescript';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const CORE_DIR = 'packages/core/src/palette';
 export const CLI_DIR = 'packages/cli/api/theme/palette/generate';
-const MODULES = [
-  'color',
-  'derive-look',
-  'editor-look',
-  'generator',
-  'mapping',
-  'types',
-];
+const MODULES = ['color', 'derive-look', 'generator', 'mapping', 'types'];
 
 /** @param {string} name */
 const header = name =>
