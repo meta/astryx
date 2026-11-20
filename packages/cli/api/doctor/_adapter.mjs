@@ -196,9 +196,9 @@ const CHECK_CODEC = {
  * A doctor check that reads only files, kept between runs through the kept
  * gather (foundation/fs/gather-cache.mjs): a later `doctor` with every file,
  * folder, module and environment variable it read unchanged reads the check
- * back. Only the docs checks, the theme-wiring scan and the Core-props scan
- * go through here; a check that depends on the time, the network or anything
- * else the stamps do not see never does.
+ * back. Only the docs checks, the theme-wiring scan, the Core-props scan and
+ * the Core-button scan go through here; a check that depends on the time, the
+ * network or anything else the stamps do not see never does.
  * @template T
  * @param {{name: string, cwd: string, coreDir: string | null}} where - The
  *   check, the project folder, and the Core folder the project loads.
@@ -268,6 +268,31 @@ export const CORE_PROPS_CODEC = {
         typeof prop.component === 'string' &&
         typeof prop.prop === 'string' &&
         (prop.suggestion === null || typeof prop.suggestion === 'string'),
+    ),
+};
+
+/**
+ * The Core-button scan's result ({@link findButtonsWithoutAction}), kept
+ * exactly, with its shape.
+ */
+export const BUTTON_ACTIONS_CODEC = {
+  encode: (/** @type {any} */ value) => value,
+  decode: (/** @type {any} */ value) => value,
+  valid: (/** @type {any} */ value) =>
+    value != null &&
+    Array.isArray(value.found) &&
+    Number.isInteger(value.files) &&
+    typeof value.incomplete === 'boolean' &&
+    (value.domListener === undefined || typeof value.domListener === 'string') &&
+    value.found.every(
+      (/** @type {any} */ button) =>
+        button != null &&
+        typeof button.file === 'string' &&
+        Number.isInteger(button.line) &&
+        Number.isInteger(button.column) &&
+        (button.component === 'Button' || button.component === 'IconButton') &&
+        (button.label === null || typeof button.label === 'string') &&
+        (button.note === null || typeof button.note === 'string'),
     ),
 };
 
