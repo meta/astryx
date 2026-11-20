@@ -335,12 +335,12 @@ describe('a color for each side and a radius for each corner', () => {
 
 describe('how keeps these asks to what they say', () => {
   it(
-    'offers both readings of small uppercase labels, and never a zero border for a bordered strip',
+    'reads small uppercase labels as the form field label, as main does, and never a zero border for a bordered strip',
     async () => {
       fs.writeFileSync(file(), fresh);
       const labels = JSON.stringify(await answer('uppercase small labels'));
-      expect(labels).toMatch(/how badge/);
-      expect(labels).toMatch(/how field-label/);
+      expect(labels).toMatch(/--on field-label/);
+      expect(labels).not.toMatch(/--on badge/);
       const strip = JSON.stringify(
         await answer('pagination pages in one bordered strip'),
       );
