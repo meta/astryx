@@ -43,6 +43,10 @@ const OFFICIAL_PACKAGES = 'packages/cli/assets/discover/official-packages.json';
 const LAB_STORY =
   /^apps\/storybook\/stories\/([A-Z][A-Za-z0-9]*)\.stories\.tsx$/;
 const LAB_COMPONENT_DIR = /^packages\/lab\/src\/([A-Z][A-Za-z0-9]*)\//;
+// The swizzle proof's Lab samples, which `pnpm lab:sync` writes.
+const LAB_SAMPLES = 'packages/lab/swizzle-samples.mjs';
+// A Lab component's own spec records.
+const LAB_SPEC_DIR = /^docs\/specs\/components\/([A-Z][A-Za-z0-9]*)\//;
 
 // The registry's route slug for a component name. It mirrors
 // slugifyRegistryName in apps/docsite/src/lib/shadcnRegistry.mjs (a test pins
@@ -165,6 +169,9 @@ function isLabEntryChange(change, {names, patches, officialPackagesBase}) {
   )
     return false;
   const slugs = new Set([...names].map(labRouteSlug));
+  if (change.filename === LAB_SAMPLES) return true;
+  const spec = LAB_SPEC_DIR.exec(change.filename);
+  if (spec) return names.has(spec[1]);
   if (change.filename === ROUTES_LOCK)
     return routesLockNamesLabOnly(patch, slugs);
   if (change.filename === OFFICIAL_PACKAGES)
@@ -576,6 +583,7 @@ if (require.main === module) {
 
 module.exports = {
   LAB_ROOT,
+  LAB_SAMPLES,
   OFFICIAL_PACKAGES,
   ROUTES_LOCK,
   NODE_TOOLING_PATHS,

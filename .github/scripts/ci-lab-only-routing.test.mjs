@@ -11,8 +11,10 @@
  * @position Workflow contract beside ci-tooling-routing.test.mjs.
  */
 
+import {execFileSync, spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import {createRequire} from 'node:module';
+import os from 'node:os';
 import path from 'node:path';
 
 import {describe, expect, it} from 'vitest';
@@ -123,11 +125,89 @@ describe('Lab-only lane (spec:AST-030 FR26)', () => {
     expect(official.run).toBe(
       'pnpm exec vitest run scripts/check-cli-official-packages.test.mjs --maxWorkers=1',
     );
-    for (const s of steps('test-node').filter(s => s !== official)) {
+    // Every Lab route-lock entry and swizzle sample is present.
+    const sync = step('test-node', 'Lab-only: Lab sync check');
+    expect(sync.if).toBe(`matrix.shard == 1 && ${LAB_TRUE}`);
+    expect(sync.run).toBe('node scripts/lab-sync.mjs --check');
+    for (const s of steps('test-node').filter(
+      s => s !== official && s !== sync,
+    )) {
       expect(String(s.if ?? ''), s.name ?? s.uses ?? s.run).not.toContain(
         'lab_only',
       );
       expect(s.run ?? '', s.name).not.toContain('LAB_ONLY');
+    }
+  });
+
+  it('always runs the swizzle samples test, a source-reading guard the scoped Node run lists', async () => {
+    const {fsGuardTests} = await import('./fs-guard-tests.mjs');
+    const file = 'packages/cli/test/swizzle-proof/samples.test.mjs';
+    expect(fsGuardTests([file], f => read(f))).toEqual([file]);
+  });
+
+  it('a Lab-only doc change with an unchanged lock still runs the route-lock check', () => {
+    const routeLock = step(
+      'build-storybook',
+      'Lab-only: check the ShadCN route lock',
+    );
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lab-route-lock-'));
+    const dir = path.join(tmp, 'repo');
+    fs.mkdirSync(dir);
+    const ran = path.join(tmp, 'ran');
+    const git = (...args) =>
+      execFileSync('git', args, {cwd: dir, encoding: 'utf8'}).trim();
+    const put = (file, text) => {
+      fs.mkdirSync(path.dirname(path.join(dir, file)), {recursive: true});
+      fs.writeFileSync(path.join(dir, file), text);
+    };
+    git('init', '-q');
+    put('internal/shadcn-registry/routes.lock.json', '{"items": []}\n');
+    put('packages/lab/src/Foo/Foo.doc.mjs', "export default {name: 'Foo'};\n");
+    put('packages/lab/src/Foo/Foo.tsx', 'export {};\n');
+    git('add', '-A');
+    git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'base');
+    const base = git('rev-parse', 'HEAD');
+    // A stand-in for node that records the generator run.
+    const bin = path.join(tmp, 'bin');
+    fs.mkdirSync(bin);
+    fs.writeFileSync(
+      path.join(bin, 'node'),
+      `#!/bin/sh\necho "$@" >> "${ran}"\n`,
+      {mode: 0o755},
+    );
+    const run = () => {
+      fs.rmSync(ran, {force: true});
+      spawnSync('bash', ['-c', routeLock.run], {
+        cwd: dir,
+        env: {
+          ...process.env,
+          MERGE_BASE: base,
+          PATH: `${bin}:${process.env.PATH}`,
+        },
+      });
+      return fs.existsSync(ran) ? fs.readFileSync(ran, 'utf8') : '';
+    };
+    const commit = (file, text) => {
+      put(file, text);
+      git('add', '-A');
+      git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', file);
+    };
+    // A source-only change leaves the lock alone: no check.
+    commit('packages/lab/src/Foo/Foo.tsx', 'export const x = 1;\n');
+    expect(run()).toBe('');
+    // A Lab doc change, a Lab entry module change or a lock change checks.
+    for (const [file, text] of [
+      ['packages/lab/src/Foo/Foo.doc.mjs', "export default {name: 'Foo2'};\n"],
+      ['packages/lab/src/index.ts', "export * from './Foo/Foo';\n"],
+      [
+        'packages/lab/blocks/FooBasic.doc.mjs',
+        "export default {name: 'Basic'};\n",
+      ],
+      ['internal/shadcn-registry/routes.lock.json', '{"items": [1]}\n'],
+    ]) {
+      git('reset', '-q', '--hard', base);
+      commit(file, text);
+      expect(run(), file).toContain('apps/docsite/scripts/generate-data.mjs');
     }
   });
 

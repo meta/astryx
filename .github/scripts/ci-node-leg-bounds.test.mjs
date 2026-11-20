@@ -84,6 +84,7 @@ describe('the Node legs inside their job limit', () => {
     expect(legOneOnly.sort()).toEqual([
       'Check out the change for the tests that read its records',
       'Lab-only: CLI official-packages check',
+      'Lab-only: Lab sync check',
       'List the tests that read a changed record',
     ]);
     expect(

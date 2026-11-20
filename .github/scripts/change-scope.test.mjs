@@ -960,6 +960,90 @@ describe('Lab entry files (spec:AST-030 FR26)', () => {
   });
 });
 
+describe('a new Lab component with its samples and spec folder (spec:AST-030 FR26)', () => {
+  const {ROUTES_LOCK, LAB_SAMPLES} = require('./change-scope.cjs');
+  const item = (name, path) => [
+    '+    {',
+    `+      "name": "${name}",`,
+    `+      "path": "${path}",`,
+    '+      "aliases": []',
+    '+    },',
+  ];
+  const lockPatch = items =>
+    ['@@ -98,6 +98,16 @@', ...items.flatMap(([n, p]) => item(n, p))].join('\n');
+  const added = text => `@@ -0,0 +1,1 @@\n+${text}`;
+  // One component named for its own folder, as a new Lab component lands
+  // once lab:sync has written its route entries and sample.
+  const rating = [
+    {filename: 'packages/lab/src/Rating/Rating.tsx', status: 'A'},
+    {filename: 'packages/lab/src/Rating/Rating.doc.mjs', status: 'A'},
+    {filename: 'packages/lab/src/index.ts', status: 'M'},
+    {filename: 'packages/lab/blocks/RatingBasic.doc.mjs', status: 'A'},
+    {filename: LAB_SAMPLES, status: 'M'},
+    {filename: 'docs/specs/components/Rating/Rating.spec.md', status: 'A'},
+    {filename: 'apps/storybook/stories/Rating.stories.tsx', status: 'A'},
+    {filename: ROUTES_LOCK, status: 'M'},
+    {filename: '.changeset/lab-rating.md', status: 'A'},
+  ];
+  const ratingPatches = {
+    [ROUTES_LOCK]: lockPatch([
+      ['component-lab-rating', 'components/lab/rating'],
+      ['example-rating-basic', 'examples/rating/basic'],
+    ]),
+    'apps/storybook/stories/Rating.stories.tsx': added(
+      "import {Rating} from '@astryxdesign/lab';",
+    ),
+    [LAB_SAMPLES]: added('  lab__Rating: () => null,'),
+    'docs/specs/components/Rating/Rating.spec.md': added('# Rating'),
+  };
+
+  it('stays in the Lab lane with its samples, its own spec folder and its routes', () => {
+    const result = classifyChanges(rating, {patches: ratingPatches});
+    expect(result.labOnly).toBe(true);
+    expect(result.fullSuite).toBe(false);
+  });
+
+  it("refuses another component's spec folder", () => {
+    const other = rating.map(f =>
+      f.filename.startsWith('docs/specs/')
+        ? {...f, filename: 'docs/specs/components/Drawer/Drawer.spec.md'}
+        : f,
+    );
+    expect(
+      classifyChanges(other, {
+        patches: {
+          ...ratingPatches,
+          'docs/specs/components/Drawer/Drawer.spec.md': added('x'),
+        },
+      }).labOnly,
+    ).toBe(false);
+  });
+
+  it('keeps the full suite for a family folder, as #9832 added MediaPlayer with AudioPlayer and VideoPlayer', () => {
+    const family = [
+      {filename: 'packages/lab/src/MediaPlayer/MediaPlayer.tsx', status: 'A'},
+      {filename: 'packages/lab/src/MediaPlayer/AudioPlayer.tsx', status: 'A'},
+      {
+        filename: 'packages/lab/src/MediaPlayer/MediaPlayer.doc.mjs',
+        status: 'A',
+      },
+      {filename: LAB_SAMPLES, status: 'M'},
+      {filename: ROUTES_LOCK, status: 'M'},
+    ];
+    const result = classifyChanges(family, {
+      patches: {
+        [LAB_SAMPLES]: added('  lab__MediaPlayer: () => null,'),
+        [ROUTES_LOCK]: lockPatch([
+          ['component-lab-audio-player', 'components/lab/audio-player'],
+          ['component-lab-media-player', 'components/lab/media-player'],
+        ]),
+      },
+    });
+    expect(result.labOnly).toBe(false);
+    expect(result.fullSuite).toBe(true);
+  });
+});
+
 describe('Lab component folders (spec:AST-030 FR26)', () => {
   it('reads a carried component only from a component folder, not a shared one', () => {
     const {ROUTES_LOCK} = require('./change-scope.cjs');
