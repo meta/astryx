@@ -265,6 +265,34 @@ describe('undoing a border none', () => {
   );
 
   it(
+    'brings it before a color saved earlier, which still draws',
+    async () => {
+      await themeEditNew('s4', {cwd, like: 'neutral'});
+      // (A color saved with no border, beside a bottom turned off.)
+      const file = path.join(cwd, 'themes/s4/s4.settings.json');
+      const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
+      saved.settings.push({
+        thing: 'border-color',
+        value: '#0000ff',
+        source: 'property',
+        on: 'tab',
+      });
+      fs.writeFileSync(file, JSON.stringify(saved, null, 2));
+      // (A side color brings the border: before the saved color.)
+      const r = await themeEditSet('s4', 'border-top-color', '#ff0000', {
+        cwd,
+        on: 'tab',
+      });
+      expect(r.data.notes.join('\n')).toContain('added a');
+      const built = fs.readFileSync(path.join(cwd, 'themes/s4/s4.css'), 'utf8');
+      expect(built).toMatch(
+        /\.astryx-tab \{\s*border: var\(--border-width\) solid transparent;\s*border-color: #0000ff;\s*border-top-color: #ff0000;/,
+      );
+    },
+    T,
+  );
+
+  it(
     'takes back the border set added, and does not write it again',
     async () => {
       await themeEditNew('s3', {cwd, like: 'neutral'});

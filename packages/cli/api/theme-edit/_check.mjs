@@ -3795,8 +3795,9 @@ export function borderFor(ctx, slug, data, s) {
 
 /**
  * Where a border a color brings goes in the theme's settings: before the
- * part's own border widths, styles and shorthands, so a side the theme
- * turns off or sizes itself keeps its own value.
+ * part's own border widths, styles, shorthands and colors, so a side the
+ * theme turns off or sizes itself keeps its own value and a color saved
+ * earlier still draws.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {any[]} settings
  * @param {import('./_settings.mjs').Setting} edge
@@ -3807,9 +3808,12 @@ export function broughtBorderAt(ctx, settings, edge) {
   const i = settings.findIndex(
     x =>
       x.source === 'property' &&
-      /^border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?(?:-(?:width|style))?$/.test(
+      // (A saved border color too: written before the brought border, the
+      // border's shorthand would reset it to see-through.)
+      (/^border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?(?:-(?:width|style))?$/.test(
         String(x.thing),
-      ) &&
+      ) ||
+        BORDER_COLOR_PROP.test(String(x.thing))) &&
       (!x.when || !edge.when || x.when === edge.when) &&
       partsOf(ctx, x).some(t => parts.includes(t)),
   );
