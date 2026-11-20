@@ -53,6 +53,7 @@ import {menuPressLitRowStyle} from '../privateAttributes/menuPressLit.stylex';
 import {focusMenuItemOnHover} from './menuItemHover';
 import {isModifiedClick, keepDisabledRowUnfocused} from './menuItemRoles';
 import {themeProps} from '../utils/themeProps';
+import {menuRowCornerStyles} from './menuRowCorners.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 
 const menuItemStyles = stylex.create({
@@ -61,9 +62,9 @@ const menuItemStyles = stylex.create({
     width: '100%',
     paddingBlock: spacingVars['--spacing-2'],
     paddingInline: spacingVars['--spacing-2'],
-    borderRadius: `max(0px, calc(var(--_dropdown-menu-radius, ${spacingVars['--spacing-2']}) - var(--_dropdown-menu-padding, ${spacingVars['--spacing-1']})))`,
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     color: colorVars['--color-text-primary'],
     backgroundColor: {
       default: 'transparent',
@@ -310,6 +311,7 @@ export function DropdownMenuItem({
       xstyle={[
         focusOutlineStyles.focusVisible,
         menuItemStyles.root,
+        menuRowCornerStyles.root,
         menuPressLitRowStyle,
         itemSizeStyles[menuSize],
         isDestructive && menuItemStyles.destructive,

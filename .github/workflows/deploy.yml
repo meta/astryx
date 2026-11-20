@@ -53,6 +53,7 @@ jobs:
       contents: read
     outputs:
       sha: ${{ steps.resolve.outputs.sha }}
+      node-shards: ${{ steps.node-legs.outputs.shards }}
     steps:
       - name: Resolve the commit under test
         id: resolve
@@ -102,12 +103,54 @@ jobs:
       # A `main` full check waits for room under CI's ceiling before its legs
       # start (spec:AST-030 FR16, DEC-16); every other job here needs this one.
       # `peak` is the most jobs this run holds at once (ci-admission.test.mjs).
+      # scripts/lib brings the scripts/ files beside it too: the Node leg
+      # planner, the modules it imports and the recorded Node times;
+      # .github/scripts/lib holds the glob matcher it shares.
+      # A checkout that hangs or fails stops here within five minutes and is tried
+      # once more, instead of using up the job (spec:AST-030 FR22).
       - name: Check out the admission action
+        id: checkout
         uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
         with:
-          sparse-checkout: .github/actions/ci-admission
+          sparse-checkout: |
+            .github/actions/ci-admission
+            .github/scripts/lib
+            scripts/lib
           path: .ci-admission
           persist-credentials: false
+
+      - name: Check out the admission action (second try)
+        id: checkout-again
+        if: steps.checkout.outcome != 'success'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: |
+            .github/actions/ci-admission
+            .github/scripts/lib
+            scripts/lib
+          path: .ci-admission
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout-again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within five minutes; the two checkout steps above show why."
+          exit 1
+
+      # The unit run's Node legs, from the recorded times: as many as shorten
+      # the slowest leg, at most twelve (spec:AST-030 FR22, DEC-17), with the
+      # swizzle proof's slices, which run in Main's Node legs. A plan that
+      # cannot run leaves test-node at its widest, twelve legs.
+      - name: Plan the Node legs
+        id: node-legs
+        if: github.event_name != 'push'
+        continue-on-error: true
+        working-directory: .ci-admission
+        run: node scripts/vitest-node-legs.mjs plan --main --github-output
 
       - name: Wait for room under the CI ceiling
         uses: ./.ci-admission/.github/actions/ci-admission
@@ -115,8 +158,9 @@ jobs:
         timeout-minutes: 125
         with:
           # A push runs only the fast checks (main-commit, sync-exports,
-          # typecheck, test); a dispatched unit run holds every leg.
-          peak: ${{ github.event_name == 'push' && 4 || 14 }}
+          # typecheck, test); a dispatched unit run holds every leg: six UI
+          # legs and at most twelve Node legs beside the other lanes.
+          peak: ${{ github.event_name == 'push' && 4 || 20 }}
           main: true
           # It waits for room, up to its own job's limit, looking about every
           # four minutes, and never yields to a pull-request run.
@@ -131,9 +175,30 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      # A checkout that hangs or fails stops here within five minutes and is tried
+      # once more, instead of using up the job (spec:AST-030 FR22).
+      - name: Check out the commit under test
+        id: checkout
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           ref: ${{ needs.main-commit.outputs.sha }}
+
+      - name: Check out the commit under test (second try)
+        id: checkout-again
+        if: steps.checkout.outcome != 'success'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ needs.main-commit.outputs.sha }}
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout-again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within five minutes; the two checkout steps above show why."
+          exit 1
 
       - name: Check package.json exports are in sync
         run: node scripts/sync-exports.js --check
@@ -154,11 +219,10 @@ jobs:
   # Both Vitest lanes split into legs that all run at once, with no
   # max-parallel hold: a validation of main may cost more runner-minutes to
   # finish sooner, so the release train can re-check a fix within minutes
-  # (spec:AST-030 FR22, DEC-17). At four legs each, test-node's slowest leg took ~8 minutes
-  # and test-ui's ~6. Six legs each bring every leg near the typecheck lane
-  # (~5 minutes); the leg that holds the longest Node test file (~6 minutes on
-  # its own) sets the floor, and more legs would not move it. `test` joins the
-  # legs.
+  # (spec:AST-030 FR22, DEC-17). Six UI legs bring every UI leg near the
+  # typecheck lane (~5 minutes). test-node runs as many legs as shorten its
+  # slowest leg, at most twelve, which main-commit plans from the recorded
+  # times. `test` joins the legs.
   # The unit lanes run the full suites only in a dispatched run (about hourly,
   # from main-heavy-lanes.yml; spec:AST-030 FR21), never on a push.
   test-ui:
@@ -173,9 +237,30 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      # A checkout that hangs or fails stops here within five minutes and is tried
+      # once more, instead of using up the job (spec:AST-030 FR22).
+      - name: Check out the commit under test
+        id: checkout
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           ref: ${{ needs.main-commit.outputs.sha }}
+
+      - name: Check out the commit under test (second try)
+        id: checkout-again
+        if: steps.checkout.outcome != 'success'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ needs.main-commit.outputs.sha }}
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout-again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within five minutes; the two checkout steps above show why."
+          exit 1
 
       - uses: ./.github/actions/setup
 
@@ -194,8 +279,9 @@ jobs:
     timeout-minutes: 15
     strategy:
       fail-fast: false
+      # The legs main-commit planned from the recorded times; at most twelve.
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: ${{ fromJSON(needs.main-commit.outputs.node-shards || '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]') }}
     # Vitest runs one test file per CPU beyond the first, so the 2-core runner
     # ran this suite one file at a time (~23 min). Four cores give it three.
     runs-on: ubuntu-latest
@@ -205,10 +291,32 @@ jobs:
       # Two commits: the swizzle proof diffs main's squash-merged commit
       # against its parent to prove only the copies that change affects
       # (spec:AST-110 FR7).
-      - uses: actions/checkout@v7
+      # A checkout that hangs or fails stops here within five minutes and is tried
+      # once more, instead of using up the job (spec:AST-030 FR22).
+      - name: Check out the commit under test
+        id: checkout
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           ref: ${{ needs.main-commit.outputs.sha }}
           fetch-depth: 2
+
+      - name: Check out the commit under test (second try)
+        id: checkout-again
+        if: steps.checkout.outcome != 'success'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ needs.main-commit.outputs.sha }}
+          fetch-depth: 2
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout-again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within five minutes; the two checkout steps above show why."
+          exit 1
 
       - uses: ./.github/actions/setup
 
@@ -217,12 +325,34 @@ jobs:
         if: inputs.recheck
         run: npx playwright install chromium
 
-      - run: pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+      # The legs draw the theme editor's pages as a pull request's tests do
+      # (stand-ins, and real drawing where a file asks for it): the recorded
+      # times the legs are planned from are measured that way. The shard
+      # watchdog (scripts/vitest-shard-watchdog.mjs) lists the test files
+      # still running a minute before the job's 15-minute limit, counted from
+      # the job's start, as a warning: it does not end the leg, so the limit
+      # still cancels it and the unit run stays incomplete for the scheduler,
+      # which runs it again (spec:AST-030 FR21).
+      - name: Run this shard of the Node tests
         env:
           # A release re-check proves every swizzle target, in Chromium too
           # (spec:AST-110 FR7).
           SWIZZLE_PROOF_ALL: ${{ inputs.recheck && '1' || '' }}
           SWIZZLE_PROOF_BROWSER: ${{ inputs.recheck && '1' || '' }}
+          VITEST_SHARD_WATCHDOG_NAME_ONLY: '1'
+        run: |
+          started=$(ps -o etimes= -C Runner.Worker 2>/dev/null | sort -n | tail -1 | tr -d ' ')
+          VITEST_SHARD_WATCHDOG_SECONDS=$(( 14 * 60 - ${started:-180} ))
+          export VITEST_SHARD_WATCHDOG_SECONDS
+          pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }} --reporter=default --reporter=github-actions --reporter=./scripts/vitest-shard-watchdog.mjs
+
+      # An early warning, never a failure: past one Node test file in twenty
+      # without a recorded time, the run's summary says so and names the
+      # count. The record refresh (node-record-refresh.yml) corrects it.
+      - name: Warn when the Node test record misses more than one file in twenty
+        if: ${{ always() && matrix.shard == 1 }}
+        continue-on-error: true
+        run: node .github/scripts/node-record-refresh.mjs warn
 
   # The typecheck mirroring the PR `build` job in ci.yml. ci.yml only runs
   # on pull_request/merge_group, so a typecheck error can land on main (its
@@ -235,9 +365,30 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      # A checkout that hangs or fails stops here within five minutes and is tried
+      # once more, instead of using up the job (spec:AST-030 FR22).
+      - name: Check out the commit under test
+        id: checkout
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           ref: ${{ needs.main-commit.outputs.sha }}
+
+      - name: Check out the commit under test (second try)
+        id: checkout-again
+        if: steps.checkout.outcome != 'success'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ needs.main-commit.outputs.sha }}
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout-again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within five minutes; the two checkout steps above show why."
+          exit 1
 
       - uses: ./.github/actions/setup
 

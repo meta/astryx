@@ -5,8 +5,10 @@
 import {Banner} from '@astryxdesign/core/Banner';
 import {Button} from '@astryxdesign/core/Button';
 import {Stack} from '@astryxdesign/core/Layout';
+import {useToast} from '@astryxdesign/core/Toast';
 
 export default function BannerSectionVariant() {
+  const showToast = useToast();
   return (
     <Stack direction="vertical" gap={3}>
       <Banner
@@ -22,7 +24,14 @@ export default function BannerSectionVariant() {
         description="We have redesigned the layout based on your feedback."
         container="section"
         endContent={
-          <Button label="Take a tour" variant="secondary" size="sm" />
+          <Button
+            label="Take a tour"
+            variant="secondary"
+            size="sm"
+            onClick={() =>
+              showToast({body: 'Demo: the dashboard tour would start here'})
+            }
+          />
         }
       />
     </Stack>

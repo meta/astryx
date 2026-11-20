@@ -284,9 +284,13 @@ const CASES = {
       writeIconSetProject(fs.mkdtempSync(path.join(tmp, 'app-')), {
         packages: [{}, {name: '@acme/lines'}],
       }),
-    values: {set: 'glyphs', 'options.backups': ['lines']},
+    values: {
+      set: 'glyphs',
+      'options.backups': ['lines'],
+      'options.variant': 'solid',
+    },
     refused: [],
-    composes: [],
+    composes: [['--backup', '--variant']],
   },
 };
 

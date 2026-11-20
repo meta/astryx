@@ -14,6 +14,7 @@ verified_by:
     packages/themes/matcha/src/matchaColorMapping.test.ts,
     scripts/generate-matcha-palette-refs.test.mjs,
     scripts/check-secondary-text-contrast.test.mjs,
+    scripts/check-text-contrast-by-role.test.mjs,
   ]
 package: '@astryxdesign/theme-matcha'
 source_theme: packages/themes/matcha/src/matchaTheme.ts
@@ -86,28 +87,28 @@ semantic and categorical states. A palette stop alone is not an accessibility
 claim; contextual component evidence remains authoritative.
 
 Light secondary text (`--color-text-secondary`, Neutral Light 30) measures
-5.11:1 on the body and 5.88:1 on the surface and card.
+5.11:1 on the body and 5.88:1 on the surface and card. Dark secondary text
+(Neutral Dark 70) reads at 4.5:1 or more on the body, surfaces, popovers, menus
+and the muted fill.
 
-Known normal-text exceptions in the maintained mappings are:
+The maintained mappings have no normal-text exceptions. Each role uses the
+nearest stop of its own family that reads at 4.5:1 where it is drawn:
 
-- light success, warning, and error Banner descriptions and FieldStatus text are
-  4.58:1, 5.01:1, and 4.73:1 when their translucent fills are composited over
-  white. Over the light body `#f0f0e0`, the same pairs are 4.03:1, 4.42:1, and
-  4.14:1. The status icon, title, and written description identify each state
-  independently of color;
-- light Green, Orange, Pink, Red, and Yellow categorical text is respectively
-  4.21:1, 4.03:1, 4.94:1, 4.14:1, and 2.41:1 when each translucent tint is
-  composited over white. Over the light body `#f0f0e0`, the same pairs are
-  3.73:1, 3.57:1, 4.37:1, 3.64:1, and 2.15:1. These pairings appear in 13px
-  Badge and Token labels and normal-sized Card content, where the written
-  category and component form remain independent cues; and
-- syntax text at 16px is below 4.5:1 for light comments and operators (3.83:1),
-  light properties (4.27:1), and dark comments (3.90:1). Source text and grammar
-  remain available without relying on color.
+- light status text on its translucent tint, composited over the light body
+  (Banner descriptions and FieldStatus): success and error at Green and Red
+  Light 30, warning at Yellow Light 40;
+- light categorical text on its own tint (Badge and Token labels, Card
+  content): Green, Pink and Red Light 30, Orange Light 25, Yellow Light 40;
+- syntax text on the code background and on the body: light comments and
+  operators at Neutral Light 30, light properties at Teal Light 50, dark
+  comments at Neutral Dark 45.
 
-This list covers root body text, inherited semantic Badges and Buttons, Banner
-descriptions, FieldStatus, categorical Badge/Token/Card content, and every syntax
-role rendered by the maintained Matcha mapping. Disabled text is excluded because
+`scripts/check-text-contrast-by-role.test.mjs` measures these pairs in both
+modes.
+
+These statements cover root body text, inherited semantic Badges and Buttons,
+Banner descriptions, FieldStatus, categorical Badge/Token/Card content, and every
+syntax role rendered by the maintained Matcha mapping. Disabled text is excluded because
 genuinely disabled controls are exempt from minimum text contrast.
 
 ## Build and artifact contract

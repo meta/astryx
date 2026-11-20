@@ -112,7 +112,7 @@ describe('--json shim: an option given without its value', () => {
     expect(parsed.code).toBe('ERR_MISSING_ARGUMENT');
     expect(parsed.error).toMatch(/--package <package>' argument missing/);
     expect(parsed.suggestions).toEqual([
-      {name: 'astryx theme add [options] [slug]', reason: 'usage'},
+      {name: 'astryx theme add --package <package> [options] [slug]', reason: 'usage'},
     ]);
   });
 
@@ -123,7 +123,7 @@ describe('--json shim: an option given without its value', () => {
       /^Error: option '-o, --out <path>' argument missing\n/,
     );
     expect(stderr).toMatch(
-      /Usage: astryx theme build \[options\] <files\.\.\.>/,
+      /Usage: astryx theme build --out <path> \[options\] <files\.\.\.>/,
     );
   });
 });

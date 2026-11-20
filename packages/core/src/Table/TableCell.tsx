@@ -25,7 +25,10 @@ import {
 } from '../theme/tokens.stylex';
 import type {StyleXStyles} from '../theme/types';
 import type {TableContextActions} from './types';
-import {wrapInTableContextMenu} from './tableContextMenu';
+import {
+  hasTableContextActions,
+  wrapInTableContextMenu,
+} from './tableContextMenu';
 import {
   overflowStyles,
   wrapStyles,
@@ -72,18 +75,21 @@ const densityStyles = stylex.create({
     paddingBlock: spacingVars['--spacing-1'],
     paddingInline: spacingVars['--spacing-2'],
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
     boxSizing: 'border-box',
   },
   balanced: {
     paddingBlock: spacingVars['--spacing-2'],
     paddingInline: spacingVars['--spacing-3'],
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
     boxSizing: 'border-box',
   },
   spacious: {
     paddingBlock: spacingVars['--spacing-3'],
     paddingInline: spacingVars['--spacing-4'],
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
     boxSizing: 'border-box',
   },
 });
@@ -96,14 +102,17 @@ const densityStyles = stylex.create({
 const densityTextStyles = stylex.create({
   compact: {
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
     boxSizing: 'border-box',
   },
   balanced: {
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
     boxSizing: 'border-box',
   },
   spacious: {
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
     boxSizing: 'border-box',
   },
 });
@@ -219,9 +228,7 @@ export function TableCell({
 }: TableCellProps) {
   const ctx = useTableContext();
 
-  const hasContextMenu =
-    typeof contextMenuActions === 'function' ||
-    (Array.isArray(contextMenuActions) && contextMenuActions.length > 0);
+  const hasContextMenu = hasTableContextActions(contextMenuActions);
 
   // When the cell owns a context menu, its density padding is relocated onto
   // the right-click trigger wrapper (see `content` below) so the entire cell —
