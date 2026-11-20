@@ -170,6 +170,21 @@ const ROWS = [
     },
   ],
   [
+    "a part a colon list's head cannot keep apart is the part's own ask",
+    {
+      q: 'cards: white background, rounder cards, compact tables, 8px radius, shadow-sm, ring-1 ring-gray-900/5',
+      has: ['corners more --on card', 'spacing less --on table-row'],
+    },
+  ],
+  [
+    "a piece a colon list's head holds stays the head's, never every one",
+    {
+      q: 'toasts: #322f35 background, rounder cards, compact tables, #f5eff7 text, #d0bcff action button text',
+      has: ['corners more --on card', 'spacing less --on table-row'],
+      never: / --on button\b/,
+    },
+  ],
+  [
     "a part's line said again after other parts' asks is that line",
     {
       q: 'inputs: 1px border #79747e, rounder cards, compact tables, 2px #6750a4 when focused',

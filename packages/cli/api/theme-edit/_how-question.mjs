@@ -2774,6 +2774,7 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
  * @property {string} [unbound] - the part said before a look that names none of its own, out of the binder's reach: the look is named, never written
  * @property {[number, number]} [colorRefSpan] - where the clause names its reference, with its own word ("the muted card")
  * @property {{holder: string, part: string}} [placeStrict] - an element named in a place it cannot be kept to: answered only when the answer holds there (a token on the place)
+ * @property {boolean} [placeGuessed] - the place is a colon list's head, not said with the part: an answer that cannot be kept there is the part's own
  * @property {{owner: string, child: string}} [possMiss] - a possessive owner's element it does not have ("the date picker's days")
  * @property {string} [colorRefWhen] - the reference's own status or variant ("the error banner": status:error; "?:error" for a word whose axis the part's values give)
  * @property {string} [colorRefProp] - the paint of the reference named ("the card border color": border-color)
@@ -10167,6 +10168,16 @@ export function draftAnswer(ctx, env, question) {
       ) {
         c.container = holder;
         c.placeStrict = {holder, part: c.parts[0].on};
+        // (A colon list only guesses the place. A part said in the plural,
+        // "compact tables", names that part across the app, so an item the
+        // head cannot keep is the part's own ask; a part said once, "action
+        // button text", is the head's own piece.)
+        const said = lex.parts
+          .filter(([, x]) => x.on === c.parts[0].on)
+          .map(([re]) => re.exec(` ${c.text} `)?.[0]?.trim())
+          .find(Boolean);
+        if (joinOf.get(c)?.list !== 'with' && said && /s$/i.test(said))
+          c.placeGuessed = true;
         continue;
       }
     }
@@ -18306,7 +18317,7 @@ export function draftAnswer(ctx, env, question) {
               options: [],
               lookup: `${HOW} ${box}`,
             };
-          } else {
+          } else if (!c.placeGuessed) {
             d = {
               text:
                 c.scopeWhy ??
@@ -18330,7 +18341,13 @@ export function draftAnswer(ctx, env, question) {
         // (An element named in a place that cannot be kept to it, "the
         // dialog's buttons", "the menu separators": a write that reaches
         // every such part is never offered; it is said.)
-        if (d && c.placeStrict && !keptInPlace.has(c) && d.options.length) {
+        if (
+          d &&
+          c.placeStrict &&
+          !c.placeGuessed &&
+          !keptInPlace.has(c) &&
+          d.options.length
+        ) {
           d.options = [];
           d.text = `${c.placeStrict.part} in ${c.placeStrict.holder} cannot be kept apart from every other ${c.placeStrict.part}: nothing is written (${d.text})`;
           d.lookup = `${HOW} ${c.placeStrict.holder}`;
