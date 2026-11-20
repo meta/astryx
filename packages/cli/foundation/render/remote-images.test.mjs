@@ -21,7 +21,7 @@ import {
   makeLinkedFixture,
   removeLinkedFixture,
 } from '../../test-utils/linked-fixture.mjs';
-import {pageDom, pageDrawn} from '../../test-utils/page-dom.mjs';
+import {pageDom, pageDrawn, pageTasks} from '../../test-utils/page-dom.mjs';
 
 /** A fetch answer. @param {any} body @param {ResponseInit} [init] */
 const respond = (body, init) => new globalThis.Response(body, init);
@@ -441,8 +441,7 @@ describe('imageSinks', () => {
     );
     // A style takes the carried data before the browser next draws: set on
     // an element in the page, or on one the script then adds.
-    const settle = () =>
-      new Promise(resolve => dom.window.setTimeout(resolve, 0));
+    const settle = () => pageTasks(dom);
     const box = doc.createElement('div');
     doc.body.append(box);
     box.style.backgroundImage = 'url("https://x.example/a.png")';
@@ -489,8 +488,7 @@ describe('imageSinks', () => {
  */
 async function opened(html) {
   const dom = await pageDom(html);
-  const settle = () =>
-    new Promise(resolve => dom.window.setTimeout(resolve, 100));
+  const settle = () => pageTasks(dom);
   await pageDrawn(dom);
   const doc = dom.window.document;
   return {
@@ -656,7 +654,7 @@ describe('a render with images from the web', () => {
       const box = dom.window.document.querySelector(`#${ROOT_ID} div`);
       /** @type {any} */ (box).style.backgroundImage =
         'url(https://example.com/bg.png)';
-      await new Promise(resolve => dom.window.setTimeout(resolve, 0));
+      await pageTasks(dom);
       expect(/** @type {any} */ (box).style.backgroundImage).toContain(data);
       dom.window.close();
     } finally {
@@ -1043,7 +1041,7 @@ describe('a render with images from the web', () => {
       // Each image's data is in the file once: in the first paint's srcset.
       for (const n of [1, 2, 3]) expect(page.html.split(dataOf(n)).length - 1, String(n)).toBe(1);
       const dom = await pageDom(page.html);
-      const settle = () => new Promise(resolve => dom.window.setTimeout(resolve, 100));
+      const settle = () => pageTasks(dom);
       await pageDrawn(dom);
       const doc = dom.window.document;
       expect(doc.querySelector(`#${ROOT_ID} img[alt="B"]`)?.getAttribute('srcset')).toBe(`${dataOf(1)} 2x`);
@@ -1088,7 +1086,7 @@ describe('a render with images from the web', () => {
       const page = await renderPage(file, {cwd: dir, remoteImages: {fetch}});
       const dataOf = (/** @type {number} */ n) => `data:image/png;base64,${Buffer.concat([PNG, Buffer.from([n])]).toString('base64')}`;
       const dom = await pageDom(page.html);
-      const settle = () => new Promise(resolve => dom.window.setTimeout(resolve, 100));
+      const settle = () => pageTasks(dom);
       await pageDrawn(dom);
       const doc = dom.window.document;
       expect(doc.querySelector(`#${ROOT_ID} img[alt="M"]`)?.getAttribute('srcset')).toBe(`${dataOf(4)} 1x, ${dataOf(5)} 2x`);
@@ -1129,7 +1127,7 @@ describe('a render with images from the web', () => {
       expect(script).not.toContain(data);
       expect(script).toContain('__astryxCarried[i]');
       const dom = await pageDom(page.html);
-      const settle = () => new Promise(resolve => dom.window.setTimeout(resolve, 100));
+      const settle = () => pageTasks(dom);
       await pageDrawn(dom);
       const doc = dom.window.document;
       expect(doc.querySelector(`#${ROOT_ID} img[alt="Now"]`)?.getAttribute('src')).toBe(data);
@@ -1792,8 +1790,7 @@ describe('a render with images from the web', () => {
       // Opened after the click, offline: the avatars draw from the carried data.
       fs.writeFileSync(path.join(dir, 'page.html'), page.html);
       const dom = await pageDom(page.html);
-      const settle = () =>
-        new Promise(resolve => dom.window.setTimeout(resolve, 100));
+      const settle = () => pageTasks(dom);
       await pageDrawn(dom);
       const doc = dom.window.document;
       expect(doc.querySelectorAll(`#${ROOT_ID} img`)).toHaveLength(0);
