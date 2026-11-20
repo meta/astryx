@@ -170,8 +170,10 @@ describe('status colors for color-blind readers', () => {
       );
       const results = /** @type {any[]} */ (r.data.results ?? []);
       const lines = results.flatMap(x => x.commands);
+      // (The color piece is a palette color, as it is said alone: "soft
+      // blue" is main's pale blue, the neutral.)
       expect(
-        lines.some(c => / set cb accent '#[0-9a-f]{6}'$/.test(c)),
+        lines.some(c => / set cb (?:accent|neutral) '#[0-9a-f]{6}'$/.test(c)),
         ask,
       ).toBe(true);
       expect(

@@ -204,9 +204,9 @@ describe('plain looks', () => {
     const offered = (await how('q0', 'warning text bigger'))
       .filter(r => /no part draws only/.test(r.text))
       .flatMap(r => r.commands);
-    expect(offered.some(l => /--on badge --when variant:warning$/.test(l))).toBe(
-      true,
-    );
+    expect(
+      offered.some(l => /--on badge --when variant:warning$/.test(l)),
+    ).toBe(true);
     expect(offered.some(l => /--on banner\b/.test(l))).toBe(false);
     expect(
       offered.some(l => /--on field-status --when type:warning$/.test(l)),
@@ -220,7 +220,7 @@ describe('plain looks', () => {
     expect(rs.some(r => /each set to 14px/.test(r.text))).toBe(true);
     expect(rs.some(r => /^not used/.test(r.text))).toBe(false);
   });
-  it('a color on a part is its text; a part placed in a screen owns its list; alerts take their hue', async () => {
+  it('a color on a part is its text; a part placed in a screen owns its list; alerts are filled in their color', async () => {
     for (const ask of ['white on the CTA', 'white on accent buttons']) {
       const w = writes(await how('q0', ask));
       expect(w[0], ask).toMatch(
@@ -243,10 +243,13 @@ describe('plain looks', () => {
     expect(
       writes(await how('q0', 'cards in the admin dashboard: 8px corners'))[0],
     ).toMatch(/--on card$/);
+    // (Alerts said in a color are filled in it, as main reads them.)
     const blue = writes(await how('q0', 'blue alerts'));
-    expect(blue[0]).toMatch(/^set q0 info /);
+    expect(blue[0]).toMatch(/^set q0 background-color '#2563eb' --on banner/);
     expect(blue.some(c => /danger|--color-error/.test(c))).toBe(false);
-    expect(writes(await how('q0', 'red alerts'))[0]).toMatch(/^set q0 danger /);
+    expect(writes(await how('q0', 'red alerts'))[0]).toMatch(
+      /^set q0 background-color '#dc2626' --on banner/,
+    );
   });
   it('a status color list ends at its own items; an accent is never a status', async () => {
     const corners = writes(
@@ -271,7 +274,7 @@ describe('plain looks', () => {
           'medical records table view: dense compact rows, calm muted blue-gray, small 13px text, clear status colors: green #15803d stable, amber #b45309 pending, red #b91c1c critical, striped table rows',
         ),
       ),
-    ).toContain(`set q0 neutral '#617090'`);
+    ).toContain(`set q0 neutral '#64748b'`);
     // (Only a gray: a hue said alone before a part is never the theme's.)
     expect(
       writes(await how('q0', 'red, blue buttons')).some(c =>
@@ -313,9 +316,8 @@ describe('plain looks', () => {
     expect(
       writes(await how('q0', 'light gray fill #F1F2F4 on cards'))[0],
     ).toMatch(/background-color '#f1f2f4' --on card/);
-    expect(writes(await how('q0', 'calm soft blue-gray'))[0]).toBe(
-      `set q0 neutral '#617090'`,
-    );
+    // (A soft blue-gray said alone writes nothing, as main reads it.)
+    expect(writes(await how('q0', 'calm soft blue-gray'))).toEqual([]);
     expect(top(await how('q0', 'clear error messages, larger text'))).toEqual([
       'set q0 text-size more',
     ]);
@@ -338,8 +340,9 @@ describe('plain looks', () => {
     expect(writes(await how('q0', 'deep teal accent'))[0]).toBe(
       `set q0 accent '#085952'`,
     );
+    // (Soft is a pale shade, as main reads it.)
     expect(writes(await how('q0', 'soft coral accent'))[0]).toBe(
-      `set q0 accent '#f87171'`,
+      `set q0 accent '#feeeee'`,
     );
     // (A soft color said as a tint is a pale wash of it, as main reads it.)
     const glass = writes(

@@ -119,7 +119,6 @@ import {
   radiusAt,
   radioCircle,
   radioMark,
-  selfSizedBox,
   radiusTokenOf,
   borderParts,
   cornerParts,
@@ -5835,10 +5834,7 @@ function checkOne(
     /^(hover|active|focus|focus-visible|focus-within)$/.test(String(s.state))
   ) {
     const all = partsOf(ctx, s);
-    // (A part whose input sits in a part the theme names takes the state
-    // from that part, and the build writes it so; only one whose input no
-    // themed part holds is refused.)
-    const under = all.filter(t => ctx.C.MAP[t]?.underInput === '');
+    const under = all.filter(t => ctx.C.MAP[t]?.underInput != null);
     if (under.length && under.length === all.length) {
       const holders = [
         ...new Set(under.map(t => ctx.C.MAP[t]?.underInput).filter(Boolean)),
@@ -6827,45 +6823,6 @@ function checkOne(
         const spaced = partsOf(ctx, s).filter(
           t => reads(t) || (ctx.C.MAP[t]?.contains ?? []).some(reads),
         );
-        // (A checkbox's box or a radio's circle sets its own width and
-        // height: the refusal names its size, the theme's first, and the
-        // ask that sizes it.)
-        const size = /^size:(.+)$/.exec(String(s.when ?? ''))?.[1];
-        const boxed = partsOf(ctx, s).map(t =>
-          selfSizedBox(ctx, data.settings, t, size),
-        );
-        if (!spaced.length && boxed.length && boxed.every(b => b)) {
-          // (Members of a group that differ are each named with their own
-          // size.)
-          const parts = partsOf(ctx, s);
-          const sized = boxed.map((b, i) => ({
-            t: parts[i],
-            .../** @type {{w: number, h: number}} */ (b),
-          }));
-          const same = sized.every(
-            b => b.w === sized[0].w && b.h === sized[0].h,
-          );
-          // (The size ask goes the way the spacing asked: more room, a
-          // roomier rung or a factor above 1 is bigger.)
-          const rung = SPACING.find(([n]) => n === String(v).toLowerCase());
-          const factor = /^x?(\d*\.?\d+)(%)?$/i.exec(commaNumbers(v));
-          const grows = rung
-            ? rung[1] > 1
-            : factor
-              ? Number(factor[1]) / (factor[2] ? 100 : 1) > 1
-              : /^(?:more|bigger|larger|loose|looser|airy|airier)$/i.test(
-                  String(v),
-                );
-          const way = grows ? 'bigger' : 'smaller';
-          const sizes = same
-            ? `${sized[0].w}px by ${sized[0].h}px`
-            : sized.map(b => `${b.t} ${b.w}px by ${b.h}px`).join(', ');
-          refuse(
-            E.ERR_THEME_NO_EFFECT,
-            `${s.on} sets its own width and height (${sizes}) and reads no spacing or control size, so spacing changes nothing you see there. Size it with width and height (how "${way} ${s.on}").`,
-            {run: [`${HOW} "${way} ${s.on}"`]},
-          );
-        }
         if (!spaced.length)
           refuse(
             E.ERR_THEME_NO_EFFECT,

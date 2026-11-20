@@ -19,7 +19,7 @@ Other fixes:
 
 - `astryx experimental theme editor`: a part Core marks open is drawn open, so `--state expanded` reaches a dropdown menu's submenu row (open while its flyout is, though it is highlighted too) and a top nav's menu trigger (a control on the page, now kept as drawn open).
 
-- `astryx experimental theme editor`: the states Core marks on a part's own element are the part's to set. A list item (and so a checkbox list's row) takes `--state selected`, written as the attribute Core marks; a checkbox's or radio's box takes `--state hover` and the other moment states, shown from the part holding its invisible input instead of refused; and a part the drawing shows open in an overlay records its open state for `--state expanded`.
+- `astryx experimental theme editor`: the states Core marks on a part's own element are the part's to set. A list item (and so a checkbox list's row) takes `--state selected`, written as the attribute Core marks; and a part the drawing shows open in an overlay records its open state for `--state expanded`.
 
 - `astryx experimental theme editor show` draws a doc sample's plain HTML text field as the theme's own text input, a submenu's flyout once beside the menu it opens from instead of a second time below it, a control drawn pressed at the moment of its press (a press flash no longer fades back to rest), a command palette with an item highlighted on the open states page, and the mobile navigation drawer's panel inside its cell.
 

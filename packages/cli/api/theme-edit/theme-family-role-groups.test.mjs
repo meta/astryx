@@ -161,64 +161,30 @@ const ruleOf = (css, sel) =>
     css,
   )?.[0] ?? '';
 
-describe('a family look said of one member (Bootstrap 1.4)', () => {
-  it('the button gradient reaches the toggle buttons', async ctx => {
+describe('a look said of one member stays on it (Bootstrap 1.4)', () => {
+  it('a gradient said of buttons stays on the button', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('b', {cwd, like: 'neutral'});
-    const lines = await first(
-      'buttons with a gradient from #ffffff to #e6e6e6',
-      'b',
-    );
-    expect(lines).toEqual([
-      "set b background 'linear-gradient(#ffffff, #e6e6e6)' --on button-like",
-    ]);
-    // The answer names the widening: the family and every member it reaches.
-    const {data} = /** @type {any} */ (
-      await themeEditHow('buttons with a gradient from #ffffff to #e6e6e6', {
-        cwd,
-        theme: 'b',
-      })
-    );
-    expect(String(data.results[0].text)).toMatch(
-      /\(on button-like: every part of that family that draws alike, [^)]*\bbutton\b[^)]*\btoggle-button\b/,
-    );
-    await themeEditSet('b', 'background', 'linear-gradient(#ffffff, #e6e6e6)', {
-      cwd,
-      on: 'button-like',
-    });
-    expect(ruleOf(cssOf('b'), '.astryx-toggle-button')).toMatch(
-      /linear-gradient\(#ffffff, #e6e6e6\)/,
-    );
-  }, 240_000);
-
-  it('the menu-row gradient reaches every option row', async ctx => {
-    if (needBases(ctx)) return;
-    await themeEditNew('o', {cwd, like: 'neutral'});
     expect(
-      await first('menu rows with a gradient from #049cdb to #0064cd', 'o'),
+      await first('buttons with a gradient from #ffffff to #e6e6e6', 'b'),
     ).toEqual([
-      "set o background 'linear-gradient(#049cdb, #0064cd)' --on option-rows",
+      "set b background 'linear-gradient(#ffffff, #e6e6e6)' --on button",
     ]);
-    await themeEditSet('o', 'background', 'linear-gradient(#049cdb, #0064cd)', {
-      cwd,
-      on: 'option-rows',
-    });
-    for (const p of ['typeahead-option', 'selector-option-row'])
-      expect(ruleOf(cssOf('o'), `.astryx-${p}`), p).toMatch(
-        /linear-gradient\(#049cdb, #0064cd\)/,
-      );
   }, 240_000);
 
-  it('the modal frame reaches the drawer, sheet, popover and hover card', async ctx => {
+  it("a border and a shadow said as items of the dialogs' list stay on the dialog", async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('d', {cwd, like: 'neutral'});
     const lines = await first(
       'dialogs with a 1px solid #4d4d4d border and a 0 3px 7px #4d4d4d shadow',
       'd',
     );
+    // (As main reads it: the items of a list a part leads stay on that
+    // part. The modal frame reaching the other overlays from such a list
+    // is a follow-up.)
     expect(lines).toEqual([
-      "set d border '1px solid #4d4d4d' --on overlays",
-      "set d box-shadow '0 3px 7px #4d4d4d' --on overlays",
+      "set d border '1px solid #4d4d4d' --on dialog",
+      "set d box-shadow '0 3px 7px #4d4d4d' --on dialog",
     ]);
     // (A shadow alone, or a removal, stays the dialog's.)
     expect(await first('no shadow on dialogs', 'd')).not.toEqual(
@@ -257,13 +223,13 @@ describe('a family look said of one member (Bootstrap 1.4)', () => {
 });
 
 describe('alerts and overlay headers (Bootstrap 1.4)', () => {
-  it('the alert gradient reaches the toasts; the header rule every overlay header', async ctx => {
+  it('the alert gradient stays on the banner; set names the header rule for every overlay header', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('a', {cwd, like: 'neutral'});
     expect(
       await first('banners with a gradient from #fceec1 to #eedc94', 'a'),
     ).toEqual([
-      "set a background 'linear-gradient(#fceec1, #eedc94)' --on status-surfaces",
+      "set a background 'linear-gradient(#fceec1, #eedc94)' --on banner",
     ]);
     const r = await themeEditSet('a', 'border-bottom', '1px solid #eeeeee', {
       cwd,

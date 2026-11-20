@@ -63,6 +63,17 @@ const answer = async q => {
  * @type {Array<[string, Row]>}
  */
 const ROWS = [
+  // (A text color on a checkbox is its check mark's, shown when checked,
+  // as main reads it.)
+  [
+    'a checkbox text color is the checked check mark',
+    {
+      q: 'in light mode, checkboxes white text',
+      has: [
+        "color '#ffffff' --on checkbox-indicator --state checked --mode light --only",
+      ],
+    },
+  ],
   // Named, never silent.
   [
     'a mood clause is named',
@@ -211,7 +222,7 @@ const ROWS = [
     'a softer, larger shadow is a bigger one',
     {
       q: 'Softer, larger card shadows only.',
-      has: ["box-shadow 'var(--shadow-low)' --on card"],
+      has: ["box-shadow 'var(--shadow-high)' --on card"],
     },
   ],
   [
@@ -383,7 +394,9 @@ const ROWS = [
     'the product word before the colon is no page',
     {
       q: 'live sports scores page: high energy, dense, bold headings, team colors red #c8102e and blue #003da5 as accents, live badge in red',
-      has: ["accent '#c8102e'", 'headings bold'],
+      // (Of two colors said as accents, the accent is the one said with
+      // the role, as main reads it.)
+      has: ["accent '#003da5'", 'headings bold'],
       never: /--color-background-body|--on app-shell|^color .* --on heading/,
     },
   ],

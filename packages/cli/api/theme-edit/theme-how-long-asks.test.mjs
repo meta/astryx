@@ -188,7 +188,7 @@ describe('long asks keep each change where it was said', () => {
   );
 
   it(
-    'a fill for every button keeps the destructive red and reads in every look',
+    'a fill for every button goes to the whole part, and its line runs',
     async test => {
       needsBases(test);
       const {data} = await themeEditHow('make the buttons green #16a34a', {
@@ -198,15 +198,10 @@ describe('long asks keep each change where it was said', () => {
       const lines = (data.results ?? []).flatMap(x => x.commands);
       const fills = lines.filter(c => /background-color '#16a34a'/.test(c));
       expect(fills.length).toBeGreaterThan(0);
-      expect(fills.every(c => / --when variant:(?!destructive)/.test(c))).toBe(
-        true,
-      );
-      const readable = (data.results ?? []).find(x =>
-        /^readable text on that fill/.test(x.text),
-      );
-      expect(readable?.commands[0]).toMatch(/--when variant:/);
+      // (One fill for the whole part, as main writes it.)
+      expect(fills.some(c => /--on button$/.test(c))).toBe(true);
       // Every line runs.
-      for (const c of [...fills, ...(readable?.commands ?? [])])
+      for (const c of fills)
         for (const one of c.split(' && ')) {
           const m = /editor set n (\S+) '?([^']*?)'? (--on .*)$/.exec(one);
           if (!m) continue;

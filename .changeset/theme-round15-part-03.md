@@ -13,7 +13,6 @@
 A part's list keeps its items on that part:
 
 - Looks after a part said first ("tooltips 4px corners and 12px text", "popovers 8px corners, 1px border, no shadow", "table header text uppercase, gray, 12px, bold") all go to that part.
-- A word naming a piece of the part ("progress bar: blue fill and gray track") goes to that piece.
 - An item led by a variant name that is not also a colour or a describing word ("buttons: primary #…, hover #…") goes to that variant, along with the states after it; a colour said first ("cards: blue #1d4ed8") is a value for every member.
 - A part named inside another part's list ("toasts: …, an action button text color") counts as inside it.
 - A mode said alone after a look ("pure white page, light only") or at the end of a color with-item applies to that look. Corners and sizes beside it stay the same in both modes.
@@ -43,11 +42,11 @@ Other readings fixed:
 - A color name before a typed value ("light gray fill #F1F2F4") uses the typed value. "blue-gray" for the theme's gray reaches the neutral color again.
 - "clear error messages" no longer resets the danger color.
 - "less contrast" softens the main text. "a gentle dark mode" softens the dark text and lightens the dark page. "big type" and "big readable text" mean larger text. "thin borders" means thinner borders, and "lots of white space" means more spacing.
-- "deep teal" is a deep teal, and "soft coral" is coral itself, not a near-white tint.
+- "deep teal" is a deep teal.
 
 - `astryx experimental theme editor how`:
 
-- A text color typed for a part is checked against the fill that part shows. That is the primary button's own fill, or the page under a see-through look such as a ghost or secondary button. The color goes to the mode where it can be read, and the answer says so.
+- A text color typed for a part is checked against the fill that part shows. That is the primary button's own fill, or the page under a see-through look such as a ghost or secondary button. When the color does not read on that fill, the answer says so and gives the ratio.
 - "ghost buttons gray text" colors the ghost buttons' text.
 - Tailwind class names are understood: "rounded-md" means 6px corners, and "text-sm" means 14px text.
 - "very compact" sets the tightest spacing, and "very roomy" the roomiest.

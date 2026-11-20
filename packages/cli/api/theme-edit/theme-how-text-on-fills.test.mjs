@@ -69,14 +69,14 @@ const follow = async lines => {
 };
 
 describe('text on fills', () => {
-  it('white text on the primary button goes to the mode it reads in', async () => {
+  it('white text on the primary button is written as said, as main writes it', async () => {
     const lines = writes(await how('q0', 'white text on the primary button'));
     expect(lines).toEqual([
-      `set q0 color '#ffffff' --on button --when variant:primary --mode light`,
+      `set q0 color '#ffffff' --on button --when variant:primary`,
     ]);
     await follow(lines);
     expect(writes(await how('q0', 'black text on secondary buttons'))).toEqual([
-      `set q0 color '#000000' --on button --when variant:secondary --mode light`,
+      `set q0 color '#000000' --on button --when variant:secondary`,
     ]);
   }, 240_000);
 

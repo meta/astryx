@@ -19,6 +19,6 @@
 
 - `astryx experimental theme editor set … corners 4px`: corners of an explicit size name the parts drawn as circles that keep their shape (a calendar's picked day, avatars), with the line that gives each of them those corners too, as square corners already did.
 
-- `astryx experimental theme editor set … --on status-surfaces|overlay-headers`: two more family groups read from each part's structure: `status-surfaces` (a message with a control of its own whose fill follows the theme's status roles: banners, toasts) and `overlay-headers` (an overlay's header holding its title and its close button). A gradient said of a banner reaches the toasts, and a rule under one overlay's header is offered for every overlay header.
+- `astryx experimental theme editor set … --on status-surfaces|overlay-headers`: two more family groups read from each part's structure: `status-surfaces` (a message with a control of its own whose fill follows the theme's status roles: banners, toasts) and `overlay-headers` (an overlay's header holding its title and its close button). A rule under one overlay's header is offered for every overlay header.
 
 @josephfarina
