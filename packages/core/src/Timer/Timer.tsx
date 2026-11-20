@@ -27,6 +27,7 @@ import {Text} from '../Text';
 import type {TextColor, TextSize, TextType, TextWeight} from '../theme/types';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
+import {TEXT_PART_DEFAULT_COLOR} from '../theme/sharedElementParts';
 import {formatElapsedDuration} from '../utils/timeFormat';
 
 const ONE_SECOND_MS = 1000;
@@ -182,7 +183,7 @@ export function Timer({
   format = 'elapsed',
   type = 'supporting',
   size,
-  color = 'secondary',
+  color = TEXT_PART_DEFAULT_COLOR.timer,
   weight,
   ref,
   xstyle,

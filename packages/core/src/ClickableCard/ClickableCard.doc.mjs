@@ -37,7 +37,7 @@ export const docs = {
   ],
   theming: {
     container: true,
-    targets: [{className: 'astryx-clickable-card', visualProps: ['variant']}],
+    targets: [{className: 'astryx-clickable-card', sitsOn: 'card', visualProps: ['variant']}],
     vars: [
       {name: '--_press-overlay', description: 'Colour of the ::after interaction overlay for the hover and mouse states: transparent at rest, the hover overlay token on hover (hover-capable pointers), the pressed overlay token while a mouse holds `:active`. A press the touch press controller paints (`data-astryx-press`) is the overlay\'s image instead, at the press\'s strength, and the colour yields to it. Set on the card element by its own interaction arms.', default: 'transparent', private: true},
     ],

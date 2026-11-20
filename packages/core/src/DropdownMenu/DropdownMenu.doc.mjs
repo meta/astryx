@@ -143,16 +143,18 @@ export const docs = {
       },
       {
         className: 'astryx-dropdown-menu-item',
+        sitsOn: 'item',
         visualProps: ['size', 'variant'],
       },
       {
         className: 'astryx-dropdown-menu-radio',
+        sitsOn: 'radio-indicator',
         visualProps: ['size'],
         states: ['checked', 'disabled'],
       },
       {className: 'astryx-dropdown-menu-section-heading'},
-      {className: 'astryx-dropdown-menu-divider'},
-      {className: 'astryx-dropdown-menu-indicator-icon'},
+      {className: 'astryx-dropdown-menu-divider', sitsOn: 'divider'},
+      {className: 'astryx-dropdown-menu-indicator-icon', sitsOn: 'icon'},
     ],
     vars: [
       {

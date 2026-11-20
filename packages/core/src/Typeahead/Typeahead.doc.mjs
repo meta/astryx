@@ -335,7 +335,7 @@ export const docs = {
     targets: [
       {className: 'astryx-typeahead', visualProps: ['status', 'size']},
       {className: 'astryx-typeahead-dropdown'},
-      {className: 'astryx-typeahead-popup'},
+      {className: 'astryx-typeahead-popup', sitsOn: 'popover'},
       {className: 'astryx-typeahead-empty-state'},
       {
         className: 'astryx-typeahead-option',
