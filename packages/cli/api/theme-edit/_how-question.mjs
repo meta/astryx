@@ -3297,9 +3297,11 @@ function clausesOf(q, partWords, words = null) {
       // right before a noun the editor knows as nothing, no property,
       // state, part, value or joining word, is one half of a compound
       // subject, never that part. The clause keeps the compound, which the
-      // unknown-subject guard names. Before a value, "make the radio
-      // station blue", the word is the ask's verb only if the reader knows
-      // it as one, "links turn red"; before another asking word, before
+      // unknown-subject guard names. Before a color said as a word, "make
+      // the radio station blue", the word is the ask's verb only if the
+      // reader knows it as one, "links turn red". A typed value, "kbd hints
+      // #2e3035", is the part's, as any asking word is; before another
+      // asking word, before
       // the next stop, it is a word between the part and what changes, "the
       // card zorp border", "secondary text fails contrast on white". A
       // compound that describes the product before a colon, "radio station
@@ -3313,10 +3315,10 @@ function clausesOf(q, partWords, words = null) {
         const beyond = tail.slice(after[0].length);
         const phrase = beyond.split(/[:;,.!?]/)[0];
         const next = phrase.trim().split(/\s+/)[0] ?? '';
-        const joined =
-          next && words.value(next)
-            ? !words.verb(after[1])
-            : !phrase.split(/\s+/).some(w => w && words.ask(w));
+        const colorWord = words.value(next) && !/^[#\d]/.test(next);
+        const joined = colorWord
+          ? !words.verb(after[1])
+          : !phrase.split(/\s+/).some(w => w && words.ask(w));
         const subject =
           phrase.trim() !== '' ||
           beyond

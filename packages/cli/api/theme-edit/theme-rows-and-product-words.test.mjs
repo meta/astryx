@@ -91,6 +91,24 @@ describe("a part's rows and a product's words", () => {
     ]);
   }, 240_000);
 
+  it("reads a typed value after a part and an unknown word as the part's", async ctx => {
+    if (needBases(ctx)) return;
+    const kbd = await answer(
+      'kbd hints #2e3035 with #8a8f98 text and 4px corners',
+      's',
+    );
+    expect(kbd.text).not.toMatch(/no part is called/);
+    expect(kbd.writes).toEqual(
+      expect.arrayContaining([
+        "set s background-color '#2e3035' --on kbd-key",
+        "set s --color-text-primary '#8a8f98' --on kbd",
+        'set s border-radius 4px --on kbd-key',
+      ]),
+    );
+    // (Nothing is written for the whole theme.)
+    expect(kbd.writes.filter(w => !/ --on /.test(w))).toEqual([]);
+  }, 240_000);
+
   it.each([
     // [ask, the parts read, a compound named, if any]
     ['make the radio buttons bold', ['radio-indicator'], null],
