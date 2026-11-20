@@ -4,21 +4,6 @@ domain:      component
 package:     @astryxdesign/core
 import:      @astryxdesign/core/AlertDialog
 command:     pnpm exec astryx component AlertDialog
-name:        Dialog
-domain:      component
-package:     @astryxdesign/core
-import:      @astryxdesign/core/Dialog
-command:     pnpm exec astryx component Dialog
-name:        DialogHeader
-domain:      component
-package:     @astryxdesign/core
-import:      @astryxdesign/core/Dialog
-command:     pnpm exec astryx component DialogHeader
-name:        Drawer
-domain:      component
-package:     @astryxdesign/core
-import:      @astryxdesign/core/Drawer
-command:     pnpm exec astryx component Drawer
 name:        DrawerHeader
 domain:      component
 package:     @astryxdesign/core
@@ -34,6 +19,16 @@ domain:      component
 package:     @astryxdesign/core
 import:      @astryxdesign/core/BottomSheet
 command:     pnpm exec astryx component BottomSheetSwitcher
+name:        DialogHeader
+domain:      component
+package:     @astryxdesign/core
+import:      @astryxdesign/core/Dialog
+command:     pnpm exec astryx component DialogHeader
+name:        Drawer
+domain:      component
+package:     @astryxdesign/core
+import:      @astryxdesign/core/Drawer
+command:     pnpm exec astryx component Drawer
 name:        DropdownMenuSubMenu
 domain:      component
 package:     @astryxdesign/core
@@ -102,4 +97,10 @@ section:     available-names
 domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs icons available-names
+parent:      pnpm exec astryx docs icons --index
+name:        icons
+section:     theme-overrides
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs icons theme-overrides
 parent:      pnpm exec astryx docs icons --index

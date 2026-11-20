@@ -20,6 +20,12 @@ const {search, searchCore} = require('./search.mjs');
 const {bandOf} = require('./_order.mjs');
 /** @type {typeof import('./_adapter.mjs')} */
 const {gatherCandidatesReused} = require('./_adapter.mjs');
+/** @type {typeof import('./_lexical.mjs')} */
+const {rankLexical} = require('./_lexical.mjs');
+/** @type {typeof import('./_named-keywords.mjs')} */
+const {searchView} = require('./_named-keywords.mjs');
+/** @type {typeof import('./_result.mjs')} */
+const {rootLeadsOf} = require('./_result.mjs');
 
 const cwd = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -46,11 +52,25 @@ const QUERIES = [
   'tab layout',
 ];
 
-/** Each family member's `domain:name`, mapped to its family's root. */
-const familyOf = async () => {
-  const {all} = await gatherCandidatesReused({cwd});
+/**
+ * Each part the lexical ranker marks as led by its family's root, as
+ * `domain:name` of the part mapped to the root's: the one cross-run move the
+ * order makes (spec:AST-083 FR2).
+ * @param {string} q
+ */
+const markedRootsOf = async q => {
+  const lexical = rankLexical(
+    q,
+    {limit: Number.MAX_SAFE_INTEGER},
+    searchView(await gatherCandidatesReused({cwd})),
+  );
+  /** @param {any} r */
+  const id = r => `${r.domain}:${r.name}`;
   return new Map(
-    all.flatMap(c => (c._family ? [[`${c.domain}:${c.name}`, c._family]] : [])),
+    [...(rootLeadsOf.get(lexical) ?? [])].map(([part, root]) => [
+      id(part),
+      id(root),
+    ]),
   );
 };
 
@@ -77,19 +97,15 @@ describe('search ordering invariants', () => {
         expect(r.reason).toBe(own?.reason);
       }
       // Two results of different runs (band or kind) keep the lexical order,
-      // except a family root directly before a part of its own family.
+      // except a family root the lexical ranker marks, directly before its
+      // part.
       const rs = ours.data.results;
-      const families = await familyOf();
+      const marked = await markedRootsOf(q);
+      /** @param {any} r */
+      const id = r => `${r.domain}:${r.name}`;
       /** @param {number} i */
       const rootOfNext = i =>
-        i + 1 < rs.length &&
-        rs[i + 1].domain === rs[i].domain &&
-        families.get(
-          keyOf(rs[i + 1])
-            .split(':')
-            .slice(0, 2)
-            .join(':'),
-        ) === rs[i].name;
+        i + 1 < rs.length && marked.get(id(rs[i + 1])) === id(rs[i]);
       for (let i = 0; i < rs.length; i++) {
         if (rootOfNext(i)) continue;
         for (let j = i + 1; j < rs.length; j++) {
@@ -105,9 +121,8 @@ describe('search ordering invariants', () => {
   }
 
   for (const [q, root, part] of [
-    ['title', 'Dialog', 'DialogHeader'],
-    ['page title', 'Dialog', 'DialogHeader'],
-    ['indicator', 'Field', 'FieldLabel'],
+    ['code layout', 'CodeBlock', 'Code'],
+    ['tab layout', 'TabList', 'Tab'],
   ]) {
     it(`keeps ${root} directly before ${part} for "${q}"`, async () => {
       const names = (await search(q, {cwd, limit: 20})).data.results.map(
@@ -116,6 +131,21 @@ describe('search ordering invariants', () => {
       const at = names.indexOf(root);
       expect(at).toBeGreaterThanOrEqual(0);
       expect(names[at + 1]).toBe(part);
+    }, 60_000);
+  }
+
+  // A root whose only hit is a mention in its guidance stays in its own run.
+  for (const [q, root, part] of [
+    ['title', 'Dialog', 'DialogHeader'],
+    ['page title', 'Dialog', 'DialogHeader'],
+    ['indicator', 'Field', 'FieldLabel'],
+  ]) {
+    it(`keeps ${root} out of ${part}'s run for "${q}"`, async () => {
+      const names = (await search(q, {cwd, limit: 50})).data.results.map(
+        r => r.name,
+      );
+      expect(names.indexOf(part)).toBeGreaterThanOrEqual(0);
+      expect(names.indexOf(root)).toBeGreaterThan(names.indexOf(part));
     }, 60_000);
   }
 
