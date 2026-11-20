@@ -685,6 +685,14 @@ one rule `set --only` follows, so a theme saved with one still opens; read so,
 an entry at the same place as a later entry of the same setting gives way to
 the later one, the one the build shows.
 
+A theme whose palette recipe the editor does not know (a newer CLI's) keeps
+its palette and settings module exactly as saved, and that CLI's build of the
+same settings counts as current; a change that leaves its colors alone keeps
+the shades it shows, and a change to what its palette is made from (a color
+dial, the vibrancy or the whole-theme accent token) is refused, saying what
+still works, with no update step, as a CLI that makes that recipe may not be
+released.
+
 Rejected: failing doctor on such a setting, which fails a working setup.
 
 ### DEC-12 — A shared theme is copied, because it has no package to import
