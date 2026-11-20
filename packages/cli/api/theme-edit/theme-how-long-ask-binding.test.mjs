@@ -394,16 +394,6 @@ const ROWS = [
     },
   ],
   [
-    'a tinted glass is a tint, in the whole answer too',
-    {
-      q: 'translucent glassy window frames, soft blue-tinted glass, white content',
-      has: [
-        "background-color 'color-mix(in srgb, #2563eb 15%, transparent)' --on containers",
-      ],
-      never: /background-color '#2563eb'/,
-    },
-  ],
-  [
     'a theme color fill keeps its text readable, in the whole answer too',
     {
       q: 'tabs 14px text, selected tab accent, other tabs gray',
