@@ -1992,14 +1992,16 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       case 'labels': {
         const displayed = selectedLabels.slice(0, 3);
         const remaining = selectedLabels.length - displayed.length;
-        const labels = formatList(displayed);
-        const text =
+        // The count is the list's last item, so the locale's conjunction goes
+        // before it and not between the shown labels.
+        const text = formatList(
           remaining > 0
-            ? t('@astryx.multiSelector.labelsOverflow', {
-                labels,
-                count: remaining,
-              })
-            : labels;
+            ? [
+                ...displayed,
+                t('@astryx.multiSelector.overflowCount', {count: remaining}),
+              ]
+            : displayed,
+        );
         return (
           <span {...stylex.props(styles.triggerText)}>
             {formatValue?.(selectedItems) ?? text}
@@ -2017,7 +2019,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
             ))}
             {remaining > 0 && (
               <span {...stylex.props(styles.triggerOverflow)}>
-                {t('@astryx.multiSelector.badgesOverflow', {count: remaining})}
+                {t('@astryx.multiSelector.overflowCount', {count: remaining})}
               </span>
             )}
           </span>

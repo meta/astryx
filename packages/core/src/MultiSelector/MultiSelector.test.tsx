@@ -459,8 +459,7 @@ describe('MultiSelector', () => {
         locale="de"
         overrides={{
           de: {
-            '@astryx.multiSelector.labelsOverflow':
-              '{labels} und {count} weitere',
+            '@astryx.multiSelector.overflowCount': '{count} weitere',
           },
         }}>
         <MultiSelector
@@ -472,7 +471,9 @@ describe('MultiSelector', () => {
         />
       </InternationalizationProvider>,
     );
-    expect(screen.getByText(/ und 2 weitere$/)).toBeInTheDocument();
+    expect(
+      screen.getByText('Apple, Banana, Orange und 2 weitere'),
+    ).toBeInTheDocument();
   });
 
   it('writes the badges overflow through one catalog message', () => {
@@ -480,7 +481,7 @@ describe('MultiSelector', () => {
       <InternationalizationProvider
         locale="de"
         overrides={{
-          de: {'@astryx.multiSelector.badgesOverflow': 'und {count} weitere'},
+          de: {'@astryx.multiSelector.overflowCount': '{count} weitere'},
         }}>
         <MultiSelector
           label="Obst"
@@ -492,7 +493,7 @@ describe('MultiSelector', () => {
         />
       </InternationalizationProvider>,
     );
-    expect(screen.getByText('und 3 weitere')).toBeInTheDocument();
+    expect(screen.getByText('3 weitere')).toBeInTheDocument();
   });
 
   it('formats the labels display with formatValue', () => {

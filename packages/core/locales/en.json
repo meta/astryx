@@ -2015,13 +2015,9 @@
     "defaultMessage": "{count, plural, one {# selected} other {# selected}}",
     "description": "Visible text on a closed MultiSelector's trigger when it shows a count of the chosen options (`triggerDisplay=\"count\"`), for example `2 selected`. `{count}` is the number of chosen options; use a plural form if your language needs one."
   },
-  "@astryx.multiSelector.labelsOverflow": {
-    "defaultMessage": "{labels}, +{count, number}",
-    "description": "Trigger text of a multi-select that shows selected option labels, when more are selected than it shows. `{labels}` is the shown labels already joined as a list; `{count}` is how many more are selected. Example: `Red, Green, Blue, +2`. Translators may reorder the two and replace the plus sign."
-  },
-  "@astryx.multiSelector.badgesOverflow": {
+  "@astryx.multiSelector.overflowCount": {
     "defaultMessage": "+{count, number}",
-    "description": "Overflow marker after the selected-option badges on a multi-select trigger, when more are selected than it shows. `{count}` is how many more. Example: `+2`. Translators may replace the plus sign."
+    "description": "How many more options are selected than a multi-select trigger shows: after its badges, and as the last item of its list of labels (`Red, Green, Blue, +2`). `{count}` is how many more. Translators may replace the plus sign."
   },
   "@astryx.multiSelector.createOption": {
     "defaultMessage": "Create \"{query}\"",
