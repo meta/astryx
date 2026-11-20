@@ -589,6 +589,28 @@ describe('per-side border asks', () => {
       expect(
         (await first('cards with a border on top, bottom margin 8px'))[0],
       ).toBe("border-top '1px solid var(--color-border)' --on card");
+      // (A comma and "and" ends it too.)
+      expect(
+        await first('cards with a border on top, and bottom padding 8px'),
+      ).toEqual([
+        "border-top '1px solid var(--color-border)' --on card",
+        'padding-bottom 8px --on card',
+      ]);
+      expect(
+        (await first('cards with a border on top, and bottom margin 8px'))[0],
+      ).toBe("border-top '1px solid var(--color-border)' --on card");
+      // (And a plain "and".)
+      expect(
+        await first('cards with a border on top and bottom padding 8px'),
+      ).toEqual([
+        "border-top '1px solid var(--color-border)' --on card",
+        'padding-bottom 8px --on card',
+      ]);
+      // (Two sides of one look stay a list.)
+      expect(await first('cards with a border on top and bottom')).toEqual([
+        "border-top '1px solid var(--color-border)' --on card",
+        "border-bottom '1px solid var(--color-border)' --on card",
+      ]);
     },
     T,
   );
