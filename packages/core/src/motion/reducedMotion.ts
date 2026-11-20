@@ -1,5 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+'use client';
+
 /**
  * @file reducedMotion.ts
  * @input The Reduced Motion preference, a theme's reducedMotion: 'always' mark
@@ -50,9 +52,11 @@
 import {use} from 'react';
 import {defaultIsCoarsePointer, defaultPrefersReducedMotion} from './animator';
 import {useMediaQuery} from '../hooks/useMediaQuery';
-import {ThemeReducesMotionContext} from '../theme/useTheme';
 import {resolveMotion} from './resolveMotion';
-import {themeReducesMotion} from '../privateAttributes/reducedMotion.stylex';
+import {
+  ThemeReducesMotionContext,
+  themeReducesMotion,
+} from '../privateAttributes/reducedMotion.stylex';
 import {
   reducedMotionCrossFade,
   registerReducedMotionCrossFade,
