@@ -18,6 +18,7 @@
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {cliError, assertOrExit, cliExit} from './cli-error.mjs';
 import {setJsonMode, API_VERSION} from '../../../foundation/response/json.mjs';
+import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
 
 describe('cliError — human mode', () => {
   let stderr;
@@ -61,6 +62,31 @@ describe('cliError — human mode', () => {
     expect(stderr[0]).toBe('Error: No component named "Buton"');
     expect(stderr).toContain('  Button  (closest match)');
     expect(stderr).toContain('  ButtonGroup  (related)');
+  });
+
+  it('keeps a change of folder in front of a suggested command it prefixes', () => {
+    expect(() =>
+      cliError('Outside the project', {
+        suggestions: [
+          {
+            name: "cd '/a b/it'\\''s' && astryx template blank ./x.tsx",
+            reason: 'here',
+          },
+          {
+            name: 'cd -LiteralPath C:\\w -ErrorAction Stop; astryx template blank ./x.tsx',
+          },
+        ],
+      }),
+    ).toThrow('__exit_1__');
+    const shown = (/** @type {string} */ dir) =>
+      formatCliCommand('astryx template blank ./x.tsx', dir);
+    expect(shown("/a b/it's")).not.toBe('astryx template blank ./x.tsx');
+    expect(stderr).toContain(
+      `  cd '/a b/it'\\''s' && ${shown("/a b/it's")}  (here)`,
+    );
+    expect(stderr).toContain(
+      `  cd -LiteralPath C:\\w -ErrorAction Stop; ${shown('C:\\w')}`,
+    );
   });
 
   it('omits "(reason)" when suggestion has no reason field', () => {

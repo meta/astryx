@@ -54,6 +54,7 @@ import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {
   NavHeadingCloseContext,
   NavHeadingDismissContext,
+  NavHeadingMenuHostContext,
 } from '../NavMenu/NavMenuContext';
 import {themeProps} from '../utils/themeProps';
 import {
@@ -591,7 +592,9 @@ export function SideNavHeading({
                 onPointerDown={headingMenuPointerDown}
                 {...headingMenuTouch}>
                 <NavHeadingCloseContext value={closeMenuCtx}>
-                  {menu}
+                  <NavHeadingMenuHostContext value>
+                    {menu}
+                  </NavHeadingMenuHostContext>
                 </NavHeadingCloseContext>
               </div>
             </div>,
@@ -825,7 +828,9 @@ export function SideNavHeading({
               onPointerDown={headingMenuPointerDown}
               {...headingMenuTouch}>
               <NavHeadingDismissContext value={dismissCtx}>
-                {menu}
+                <NavHeadingMenuHostContext value>
+                  {menu}
+                </NavHeadingMenuHostContext>
               </NavHeadingDismissContext>
             </div>
           </div>,
@@ -909,7 +914,9 @@ export function SideNavHeading({
               onPointerDown={headingMenuPointerDown}
               {...headingMenuTouch}>
               <NavHeadingDismissContext value={dismissCtx}>
-                {menu}
+                <NavHeadingMenuHostContext value>
+                  {menu}
+                </NavHeadingMenuHostContext>
               </NavHeadingDismissContext>
             </div>
           </div>,

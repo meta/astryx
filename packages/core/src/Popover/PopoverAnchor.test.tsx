@@ -7,7 +7,7 @@
  * @position Colocated with usePopover.tsx
  */
 
-import {act, fireEvent, render, screen} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import React, {
   StrictMode,
@@ -658,6 +658,100 @@ describe('usePopover anchor', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Open'}));
     expect(screen.getByTestId('state')).toHaveTextContent('closed');
     host.remove();
+  });
+
+  it('moves focus to the trigger when the anchor leaves the document with focus in the popover', async () => {
+    function Test() {
+      const [isMounted, setIsMounted] = useState(true);
+      const anchorRef = useRef<HTMLDivElement>(null);
+      const popover = usePopover({
+        anchorRef,
+        dialogLabel: 'Edit',
+        hasLightDismiss: false,
+      });
+      return (
+        <>
+          {isMounted && <div ref={anchorRef} />}
+          <button
+            type="button"
+            ref={popover.triggerRef}
+            onClick={popover.toggle}
+            {...popover.triggerProps}>
+            Edit
+          </button>
+          <button type="button" onClick={() => setIsMounted(true)}>
+            Restore row
+          </button>
+          {popover.render(
+            <button type="button" onClick={() => setIsMounted(false)}>
+              Remove row
+            </button>,
+          )}
+        </>
+      );
+    }
+    render(<Test />);
+    const trigger = screen.getByRole('button', {name: 'Edit'});
+    trigger.focus();
+    fireEvent.click(trigger);
+    const remove = screen.getByRole('button', {
+      name: 'Remove row',
+      hidden: true,
+    });
+    await waitFor(() => expect(remove).toHaveFocus());
+
+    // The surface hides without its anchor; focus does not stay inside it.
+    fireEvent.click(remove);
+    await waitFor(() => expect(trigger).toHaveFocus());
+
+    const layer = remove.closest('[popover]');
+    if (layer == null) {
+      throw new Error('No layer');
+    }
+    expect(getComputedStyle(layer).visibility).toBe('hidden');
+
+    // The anchor returns and the surface shows; focus is not moved back.
+    const restore = screen.getByRole('button', {name: 'Restore row'});
+    restore.focus();
+    fireEvent.click(restore);
+    expect(getComputedStyle(layer).visibility).not.toBe('hidden');
+    expect(restore).toHaveFocus();
+  });
+
+  it('moves focus along the return chain when a popover with no trigger loses its anchor', async () => {
+    function Test() {
+      const [isMounted, setIsMounted] = useState(true);
+      const anchorRef = useRef<HTMLDivElement>(null);
+      const popover = usePopover({
+        anchorRef,
+        dialogLabel: 'Note',
+        hasLightDismiss: false,
+      });
+      const {show} = popover;
+      return (
+        <main>
+          {isMounted && <div ref={anchorRef} />}
+          <button type="button" onClick={() => show()}>
+            Open
+          </button>
+          {popover.render(
+            <button type="button" onClick={() => setIsMounted(false)}>
+              Remove
+            </button>,
+          )}
+        </main>
+      );
+    }
+    render(<Test />);
+    const opener = screen.getByRole('button', {name: 'Open'});
+    opener.focus();
+    fireEvent.click(opener);
+    const remove = screen.getByRole('button', {name: 'Remove', hidden: true});
+    await waitFor(() => expect(remove).toHaveFocus());
+
+    fireEvent.click(remove);
+    // The chain starts at the element focused when the popover opened.
+    await waitFor(() => expect(opener).toHaveFocus());
   });
 
   it('keeps a popover that opens on mount anchored when effects run again', () => {

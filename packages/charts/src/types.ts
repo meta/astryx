@@ -8,6 +8,7 @@
 
 import type {ReactNode} from 'react';
 import type {ScaleLinear, ScaleBand} from 'd3-scale';
+import type {CalendarSystem, Locale} from '@astryxdesign/core/i18n';
 
 export type ChartScale = ScaleLinear<number, number> | ScaleBand<string>;
 
@@ -17,6 +18,26 @@ export type ChartScale = ScaleLinear<number, number> | ScaleBand<string>;
  */
 export type ColorAccessor =
   string | ((datum: Record<string, unknown>, index: number) => string);
+
+/**
+ * Turns one value into its display text.
+ *
+ * It receives the value, a locale, and a calendar. It returns the text for the
+ * value, an empty value included, or `null` or `undefined` to ask for the
+ * chart's default text. A format may ignore `locale` and `calendar`. The
+ * built-in formatters are formats.
+ *
+ * @example
+ * ```
+ * const format: ChartValueFormat = compactNumber;
+ * const custom: ChartValueFormat = value => `${String(value)} ms`;
+ * ```
+ */
+export type ChartValueFormat = (
+  value: unknown,
+  locale: Locale,
+  calendar: CalendarSystem,
+) => string | null | undefined;
 
 /**
  * Fallback series color used when a mark has neither an explicit color nor a

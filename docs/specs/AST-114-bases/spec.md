@@ -47,8 +47,8 @@ declares the adapters it serves (FR3, FR4), what a command declares it needs
   declarations are independent; FR6 fixes the order of their checks.
 - What each adapter step computes for a given platform: the base that ships
   the adapter owns that.
-- React Native platform commands: `spec:AST-112` FR13. This record adds no
-  command extension point; `spec:AST-112` OQ5 decides the `commands`
+- React Native platform commands: `spec:AST-142` FR1. This record adds no
+  command extension point; `spec:AST-142` OQ1 decides the `commands`
   contribution.
 - Equivalent internal implementations remain valid when they satisfy this
   contract.

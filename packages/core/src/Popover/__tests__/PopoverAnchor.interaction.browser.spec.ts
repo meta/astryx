@@ -7,8 +7,8 @@
  *   the interaction harness
  * @output Proofs that the popover sits on the element `anchorRef` holds, that
  *   setting the ref and calling `show()` moves the open popover with no close
- *   or remount, and that it shows no surface while its anchor is out of the
- *   document
+ *   or remount, that it shows no surface while its anchor is out of the
+ *   document, and that focus inside it then moves out
  * @position Browser proofs for Popover/usePopover.tsx's `anchorRef`
  */
 
@@ -82,4 +82,30 @@ test('the popover shows no surface while its anchor is out of the document', asy
   await expect(surface(page)).toBeVisible();
   await expectBeside(page, 'B');
   await expect(page.getByTestId('counts')).toHaveText('shows 1, hides 0');
+});
+
+test('focus leaves a surface whose anchor left the document', async ({
+  page,
+}) => {
+  await openStory(page, storybook(), 'core-popover-anchor-ref--rows');
+  const edit = page.getByRole('button', {name: 'Edit row B'});
+  await edit.focus();
+  await page.keyboard.press('Enter');
+  await expect(surface(page)).toBeVisible();
+
+  // A control inside the popover removes the popover's anchor.
+  await page.getByRole('button', {name: 'Delete value B'}).focus();
+  await page.keyboard.press('Enter');
+  await expect(surface(page)).toBeHidden();
+  // The element that held focus when the popover opened takes it back.
+  await expect(edit).toBeFocused();
+
+  // The cell returns and the caller shows again; focus is not moved back.
+  const restore = page.getByRole('button', {name: 'Restore row B value'});
+  await restore.focus();
+  await page.keyboard.press('Enter');
+  await edit.focus();
+  await page.keyboard.press('Enter');
+  await expect(surface(page)).toBeVisible();
+  await expect(edit).toBeFocused();
 });
