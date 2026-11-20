@@ -56,11 +56,14 @@ const PHONE = {width: 390, height: 844};
 const ROOT = '#storybook-root';
 const FIELD = `${ROOT} .astryx-power-search`;
 const COMBOBOX = `${FIELD} [role="combobox"]`;
-const TOKEN = `${FIELD} button[aria-haspopup="dialog"]:not([role="combobox"])`;
+/** Every filter token, interactive or display-only. */
+const ANY_TOKEN = `${FIELD} .astryx-token`;
+/** A token that opens its editor: the button inside an editable token. */
+const TOKEN = `${ANY_TOKEN} button[aria-haspopup="dialog"]`;
 const TRIGGER = `${FIELD} button[aria-haspopup="dialog"]`;
 /** WCAG 2.2 SC 1.4.3 text contrast. */
 const MIN_TEXT_CONTRAST = 4.5;
-/** The editor popover's readable floor (FR2), before the viewport cap. */
+/** The editor popover's readable floor, before the viewport cap. */
 const EDITOR_FLOOR = 400;
 
 test.describe.configure({retries: 0});
@@ -218,20 +221,29 @@ async function fields(page: Page) {
       return Array.from(document.querySelectorAll(field)).map(root => {
         const combobox = root.querySelector('[role="combobox"]');
         const trigger = root.querySelector('button[aria-haspopup="dialog"]');
-        const tokens = Array.from(root.querySelectorAll(token)).map(el => ({
-          name: nameOf(el),
-          expanded: el.getAttribute('aria-expanded'),
-        }));
+        const tokens = Array.from(root.querySelectorAll(token)).map(el => {
+          const opener = el.querySelector('button[aria-haspopup="dialog"]');
+          return {
+            name: nameOf(opener ?? el),
+            interactive: opener != null,
+            expanded: opener?.getAttribute('aria-expanded') ?? null,
+          };
+        });
         const removes = Array.from(root.querySelectorAll('button'))
           .map(b => nameOf(b))
           .filter(name => name.startsWith('Remove '));
         const input = combobox as HTMLInputElement | null;
-        const placeholderContrast =
+        // A placeholder color equal to the input's own text color means the
+        // pseudo-element was not read, so the contrast is left unmeasured.
+        const placeholderColor =
           input != null && !input.value && input.placeholder
-            ? ratio(
-                getComputedStyle(input, '::placeholder').color,
-                backdrop(input),
-              )
+            ? getComputedStyle(input, '::placeholder').color
+            : null;
+        const placeholderContrast =
+          input != null &&
+          placeholderColor != null &&
+          placeholderColor !== getComputedStyle(input).color
+            ? ratio(placeholderColor, backdrop(input))
             : null;
         const ariaDisabled =
           (combobox ?? trigger)?.getAttribute('aria-disabled') ?? null;
@@ -265,7 +277,7 @@ async function fields(page: Page) {
         };
       });
     },
-    {field: FIELD, token: TOKEN},
+    {field: FIELD, token: ANY_TOKEN},
   );
 }
 
@@ -315,10 +327,12 @@ function checkField(
   }
   for (const token of field.tokens) {
     check(token.name !== '', `${label} has an unnamed token`);
-    check(
-      token.expanded === 'false',
-      `${label} token ${token.name} aria-expanded ${token.expanded}`,
-    );
+    if (token.interactive) {
+      check(
+        token.expanded === 'false',
+        `${label} token ${token.name} aria-expanded ${token.expanded}`,
+      );
+    }
   }
   for (const run of field.text) {
     check(
@@ -515,7 +529,7 @@ for (const direction of ['ltr', 'rtl'] as const) {
       const dialog = await openDialog(page);
       check(dialog != null, 'no editor opened from the token');
       if (dialog != null) {
-        // AR3: every editor control stays horizontally reachable.
+        // Every editor control stays horizontally reachable.
         check(
           dialog.left >= 0 && dialog.right <= dialog.viewport,
           `editor ${dialog.left}..${dialog.right} leaves the ${dialog.viewport}px viewport`,
@@ -557,8 +571,8 @@ for (const mode of ['light', 'dark'] as const) {
         await page.mouse.move(0, 0);
         await settle(page);
 
-        // FR24: a token opens its editor, a dialog named by the token's
-        // visible text; Escape closes it and focus returns to the token.
+        // A token opens its editor, a dialog named by the token's visible
+        // text; Escape closes it.
         const token = page.locator(TOKEN).first();
         const tokenName = await accessibleName(page, TOKEN);
         await token.focus();
@@ -579,7 +593,7 @@ for (const mode of ['light', 'dark'] as const) {
             `editor name "${dialog.name}" is not the token text "${tokenName}"`,
           );
           check(dialog.containsFocus, 'focus did not move into the editor');
-          // FR2: the editor prefers at least 400 px, capped by the viewport.
+          // The editor prefers at least 400 px, capped by the viewport.
           check(
             dialog.width >= Math.min(EDITOR_FLOOR, dialog.viewport - 32) - 1,
             `editor width ${dialog.width}`,
@@ -691,7 +705,7 @@ for (const mode of ['light', 'dark'] as const) {
             els.map(e => e.getAttribute('aria-label') ?? e.textContent ?? ''),
           );
         check(
-          names.some(n => n.includes('audit')),
+          names.includes('Title: contains audit'),
           `no token reads the added value: ${JSON.stringify(names)}`,
         );
         await frame('added', {before, after, names, valueStep});
@@ -708,18 +722,20 @@ for (const mode of ['light', 'dark'] as const) {
       control: 'combobox',
       count: 1,
       run: async (page, check, frame) => {
-        // FR22: no remove control and Backspace removes nothing.
+        // A read-only field: no remove control, and Backspace removes
+        // nothing.
         const list = await fields(page);
         check(
           list[0]?.removes.length === 0,
           `read-only remove controls ${JSON.stringify(list[0]?.removes)}`,
         );
-        const before = await page.locator(TOKEN).count();
+        const before = await page.locator(ANY_TOKEN).count();
+        check(before === 2, `the read-only story shows ${before} tokens`);
         await page.locator(COMBOBOX).first().focus();
         await page.keyboard.press('Backspace');
         await page.keyboard.press('Backspace');
         await settle(page);
-        const after = await page.locator(TOKEN).count();
+        const after = await page.locator(ANY_TOKEN).count();
         check(after === before, `Backspace removed a filter: ${after}`);
         await frame('backspace', {before, after});
       },
@@ -775,8 +791,8 @@ for (const mode of ['light', 'dark'] as const) {
       control: 'trigger',
       count: 1,
       run: async (page, check, frame) => {
-        // FR11, FR12, AR4, AR5: the trigger opens the Filters sheet; Escape
-        // closes the flow and focus returns to the trigger.
+        // The trigger opens the Filters sheet; Escape closes the flow and
+        // focus returns to the trigger.
         const trigger = page.locator(TRIGGER).first();
         await trigger.focus();
         await page.keyboard.press('Enter');
@@ -917,8 +933,14 @@ async function runCase(page: Page, item: AuditCase) {
     }
     if (item.story === 'core-powersearch--with-preset-filters') {
       check(
-        list[0]?.tokens.length === 2 && list[0].text.length > 0,
+        list[0]?.tokens.length === 2 &&
+          list[0].tokens.every(t => t.interactive) &&
+          list[0].text.length > 0,
         `the preset tokens were not measured: ${JSON.stringify(list[0]?.tokens)}`,
+      );
+      check(
+        list[0]?.removes.length === 2,
+        `the preset tokens show ${list[0]?.removes.length} remove controls`,
       );
     }
     const rootAxe = await axe(page, ROOT, item.story.includes('--disabled'));

@@ -96,7 +96,7 @@ export const docs = {
       name: 'startIcon',
       type: 'ReactNode | IconType',
       description:
-        "Icon to display at the start of the input, before any filter tokens; pass a semantic icon name such as 'search' (see `astryx docs icons`), an icon component, or an icon element. Forwarded to the internal Tokenizer.",
+        'Icon to display at the start of the input, before any filter tokens; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element. Forwarded to the internal Tokenizer.',
       slotElements: [{__element: 'Icon', props: {icon: 'search', size: 'sm'}}],
     },
     {
@@ -274,25 +274,25 @@ export const docs = {
         name: 'Label',
         required: false,
         description:
-          "Names the search field for assistive technology. Defaults to 'Search' and is visually hidden unless isLabelHidden is false.",
+          "Names the search field for assistive technology. Defaults to the localized 'Search' and is visually hidden unless isLabelHidden is false.",
       },
       {
         name: 'Filter tokens',
         required: false,
         description:
-          'One token per filter, reading field, operator and value. Activating a token opens its editor; a remove button follows it unless the field or the filter is read-only.',
+          'One token per filter, reading field, operator and value. Activating a token opens its editor, except for an operator that takes no value. A remove button follows it unless the field is read-only or disabled, or the filter is read-only.',
       },
       {
         name: 'Search input',
         required: true,
         description:
-          'The combobox after the tokens. Typing lists fields, field-and-operator pairs and value matches; choosing one opens the editor.',
+          'The combobox after the tokens. Typing lists fields, field-and-operator pairs and value matches. Choosing a field opens the editor; a value match or an operator that takes no value adds the filter at once.',
       },
       {
         name: 'Filter editor',
         required: false,
         description:
-          'A popover dialog, named by the filter text, that picks the operator and the value and applies them.',
+          'A popover that picks the operator and the value and applies them. For a built-in token it opens as a dialog named by the token text.',
       },
       {
         name: 'Clear all',
@@ -310,7 +310,7 @@ export const docs = {
         name: 'Sheet trigger and sheets',
         required: false,
         description:
-          'In the bottom-sheet presentation the field is one button with display-only tokens. It opens the Filters sheet, with Add filter and a value step above it.',
+          'In the bottom-sheet presentation the field is one button with display-only tokens. It opens the Filters sheet when a filter exists or the field is read-only, otherwise the Add filter sheet; a value step opens above them.',
       },
     ],
     bestPractices: [
@@ -444,7 +444,7 @@ export const docsZh = {
       name: 'startIcon',
       type: 'ReactNode | IconType',
       description:
-        "在输入框开头（筛选 token 之前）显示的图标，转发给内部的 Tokenizer；可传语义图标名称（如 'search'，见 `astryx docs icons`）、图标组件或图标元素。",
+        '在输入框开头（筛选 token 之前）显示的图标，转发给内部的 Tokenizer；可传语义图标名称（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
     },
     {
       name: 'statusVariant',
@@ -557,24 +557,25 @@ export const docsZh = {
         name: '标签',
         required: false,
         description:
-          "为辅助技术命名搜索字段。默认为 'Search'，除非 isLabelHidden 为 false，否则在视觉上隐藏。",
+          '为辅助技术命名搜索字段。默认为本地化的「搜索」，除非 isLabelHidden 为 false，否则在视觉上隐藏。',
       },
       {
         name: '筛选标记',
         required: false,
         description:
-          '每个筛选一个标记，显示字段、运算符和值。激活标记会打开其编辑器；除非字段或筛选为只读，标记后带有移除按钮。',
+          '每个筛选一个标记，显示字段、运算符和值。激活标记会打开其编辑器（不取值的运算符除外）。除非字段为只读或已禁用，或筛选为只读，标记后带有移除按钮。',
       },
       {
         name: '搜索输入框',
         required: true,
         description:
-          '标记之后的组合框。输入时列出字段、字段与运算符组合以及值匹配；选择其一会打开编辑器。',
+          '标记之后的组合框。输入时列出字段、字段与运算符组合以及值匹配。选择字段会打开编辑器；选择值匹配或不取值的运算符会直接添加筛选。',
       },
       {
         name: '筛选编辑器',
         required: false,
-        description: '以筛选文本命名的弹出对话框，用于选择运算符和值并应用。',
+        description:
+          '用于选择运算符和值并应用的弹出层。编辑内置标记时，它是以标记文本命名的对话框。',
       },
       {
         name: '全部清除',
@@ -591,7 +592,7 @@ export const docsZh = {
         name: '面板触发按钮和面板',
         required: false,
         description:
-          '在底部面板呈现中，字段是一个显示只读标记的按钮。它打开「筛选」面板，「添加筛选」和取值步骤在其上方打开。',
+          '在底部面板呈现中，字段是一个显示只读标记的按钮。存在筛选或字段为只读时它打开「筛选」面板，否则打开「添加筛选」面板；取值步骤在其上方打开。',
       },
     ],
     bestPractices: [
@@ -630,25 +631,26 @@ export const docsDense = {
       {
         name: 'Label',
         required: false,
-        description: "Field name for AT; default 'Search', visually hidden.",
+        description:
+          "Field name for AT; default localized 'Search', visually hidden.",
       },
       {
         name: 'Filter tokens',
         required: false,
         description:
-          'field+operator+value; opens editor; remove button unless read-only.',
+          'field+operator+value; opens editor (not for no-value operators); remove button unless field read-only/disabled or filter read-only.',
       },
       {
         name: 'Search input',
         required: true,
         description:
-          'Combobox listing fields, field+operator pairs, value matches.',
+          'Combobox listing fields, field+operator pairs, value matches; a field opens the editor, a value match or no-value operator adds at once.',
       },
       {
         name: 'Filter editor',
         required: false,
         description:
-          'Popover dialog named by filter text; picks operator+value.',
+          'Popover picking operator+value; a dialog named by token text when editing a built-in token.',
       },
       {
         name: 'Clear all',
@@ -665,7 +667,7 @@ export const docsDense = {
         name: 'Sheet trigger and sheets',
         required: false,
         description:
-          'bottom-sheet: one button w/ display-only tokens; opens Filters, Add filter, value step.',
+          'bottom-sheet: one button w/ display-only tokens; opens Filters (a filter exists or read-only) or Add filter; value step above.',
       },
     ],
     bestPractices: [
@@ -706,7 +708,7 @@ export const docsDense = {
     isDisabled: 'Disables entire component.',
     status: 'Validation status object w/ type + optional message.',
     startIcon:
-      "Icon at input start, before filter tokens. Forwarded to internal Tokenizer; semantic icon name string OK, e.g. 'search' (`astryx docs icons`), or icon component/element.",
+      'Icon at input start, before filter tokens. Forwarded to internal Tokenizer; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     statusVariant:
       'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip shows on status icon.',
     maxTokenLength: 'Max char length for filter value display in tokens.',
