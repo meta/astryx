@@ -117,7 +117,7 @@ they are separately named.
   choose its own lane. The workflow MUST load the classifier and every classifier
   dependency from the trusted base ref, then apply that policy to the merge-base
   three-dot path set. For a Lab component's entry files (FR26), the trusted
-  classifier also reads GitHub's patch text for those three files. It reads
+  classifier also reads GitHub's patch text for those two files. It reads
   the text as data, matches each line against fixed patterns and never runs
   it, so a pull request supplies only data that the base policy judges, never
   the policy. Workflow changes use the broad lane unless they are an
