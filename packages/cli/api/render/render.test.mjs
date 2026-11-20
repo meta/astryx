@@ -260,7 +260,7 @@ describe('render(): page to one HTML file', () => {
     expect(renderedMarkupOf(html)).not.toMatch(/<script\b/i);
     expect(html.split('<script type="application/x-astryx-source">')).toHaveLength(2);
     // The page's script follows the note after the embedded source.
-    expect(html).toMatch(/ -->\n<script>[^<]/);
+    expect(html).toMatch(/ -->\n<script type="module">[^<]/);
   });
 
   it('keeps text safe and the page title from its heading', () => {
@@ -1403,7 +1403,9 @@ import '@astryxdesign/core/astryx.css';
     expect(first.data.files).toEqual(['page.tsx', 'public/pics/late.png']);
     const html = fs.readFileSync(path.join(dir, 'late-img/page.html'), 'utf8');
     // The script draws the image from the file's own data, not from its path.
-    expect(html.slice(html.lastIndexOf('<script>'))).not.toMatch(/["'`]\/pics\/late\.png["'`]/);
+    const scriptAt = html.lastIndexOf('<script type="module">');
+    expect(scriptAt).toBeGreaterThan(0);
+    expect(html.slice(scriptAt)).not.toMatch(/["'`]\/pics\/late\.png["'`]/);
     expect(back.data.exact).toBe(true);
   }, 120_000);
 

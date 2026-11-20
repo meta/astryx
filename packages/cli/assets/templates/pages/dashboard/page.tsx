@@ -30,11 +30,11 @@ import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 // ============= ICONS =============
 
 import {
-  ArrowPathIcon,
+  RefreshIcon,
   ArrowUpIcon,
   ArrowDownIcon,
-} from '@heroicons/react/24/outline';
-import {StopIcon} from '@heroicons/react/24/solid';
+} from '@astryxdesign/template-icons';
+import {StopIcon} from '@astryxdesign/template-icons/24/solid';
 
 // ============= DATA =============
 
@@ -750,7 +750,7 @@ export default function DashboardTemplate() {
                   label="Reload"
                   variant="secondary"
                   size="md"
-                  icon={<Icon icon={ArrowPathIcon} size="sm" />}
+                  icon={<Icon icon={RefreshIcon} size="sm" />}
                   onClick={() =>
                     // Demo only: replace this toast with the call that performs the action.
                     showToast({
