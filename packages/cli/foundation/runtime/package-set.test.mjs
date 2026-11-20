@@ -80,7 +80,7 @@ function packageSet(version, options = {}) {
 }
 
 describe('the versions a project would install', () => {
-  it('reads each declared @astryxdesign/* package with its lockfile and installed versions', () => {
+  it('reads each declared @astryxdesign/* package with its installed version, and its lockfile version when nothing is installed', () => {
     const root = project(tempDir(), {
       '@astryxdesign/core': '^0.7.0',
       '@astryxdesign/cli': '0.7.0',
@@ -105,7 +105,7 @@ describe('the versions a project would install', () => {
       {
         name: '@astryxdesign/cli',
         declared: '0.7.0',
-        locked: '0.7.0',
+        locked: null,
         installed: '0.7.0',
       },
     ]);

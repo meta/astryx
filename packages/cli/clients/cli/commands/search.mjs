@@ -217,7 +217,9 @@ export function registerSearch(program) {
 
 /**
  * The icon section's text: one line per icon, its id, set and import line.
- * The JSON has the score, reason and command.
+ * The set reads as the entry's `name` names it, so a set two packages ship
+ * shows its package (`@acme/glyphs/glyphs`). The JSON has the score, reason
+ * and command.
  * @param {import('../../../api/search/search.type.mjs').SearchIconSection | undefined} icons
  */
 function iconBlock(icons) {
@@ -229,7 +231,10 @@ function iconBlock(icons) {
         ? `Icons (${results.length} of ${matchCount})`
         : `Icons (${results.length})`,
       results
-        .map(icon => `${icon.id} (${icon.set}): ${icon.import}`)
+        .map(
+          icon =>
+            `${icon.id} (${icon.name.slice(0, -icon.id.length - 1)}): ${icon.import}`,
+        )
         .join('\n'),
     ),
   ];

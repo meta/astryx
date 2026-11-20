@@ -116,7 +116,9 @@ describe('BlogFeatureCard cover presentation', () => {
     expect(html).toContain('data-ratio="1.7777777777777777"');
     expect(html).toContain('data-fit="contain"');
     expect(html).toContain('flex-grow:0');
-    expect(html).toContain('src="/blog/cover-example/cover.png"');
+    expect(html).toContain(
+      'src="/_next/image?url=%2Fblog%2Fcover-example%2Fcover.png&amp;w=1920&amp;q=75"',
+    );
     expect(html).toContain('alt="The complete event artwork"');
   });
 

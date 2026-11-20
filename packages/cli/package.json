@@ -159,6 +159,7 @@
     "@astryxdesign/core": "*",
     "@astryxdesign/lab": "*",
     "@astryxdesign/theme-neutral": "*",
+    "@astryxdesign/template-icons": "*",
     "@heroicons/react": "^2.2.0",
     "@stylexjs/stylex": "catalog:",
     "@types/babel__core": "^7.20.5",

@@ -778,9 +778,9 @@ export const docsDense = {
     labelTooltip: 'Field-label tooltip.',
     changeAction:
       'Async action after each immediate commit or changed staged Apply.',
-    xstyle: 'External field StyleX override.',
-    className: 'External field class name.',
-    style: 'External field inline styles.',
+    controlXstyle: 'External control box StyleX override.',
+    controlClassName: 'External control box class name.',
+    controlStyle: 'External control box inline styles.',
     'data-testid': 'Selector trigger test ID.',
   },
   components: [

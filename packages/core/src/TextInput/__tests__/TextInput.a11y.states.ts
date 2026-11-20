@@ -157,8 +157,14 @@ export const TEXT_INPUT_BINDING_STATES = [
   {
     id: 'input-error-without-message',
     binding: 'TextInput',
-    summary: 'an invalid single-line control with no textual error feedback',
-    facts: facts({value: 'invalid@', invalid: true}),
+    summary:
+      'an invalid single-line control whose only error text is the hidden fallback',
+    facts: facts({
+      value: 'invalid@',
+      invalid: true,
+      description: 'Invalid value',
+      errorMessage: 'Invalid value',
+    }),
     visibleLabel: 'Email',
     storyId: 'a11y-text-input-pattern--input-error-without-message',
   },
@@ -302,8 +308,14 @@ export const TEXT_INPUT_BINDING_STATES = [
   {
     id: 'textarea-error-without-message',
     binding: 'TextArea',
-    summary: 'an invalid multi-line control with no textual error feedback',
-    facts: areaFacts({value: 'Invalid', invalid: true}),
+    summary:
+      'an invalid multi-line control whose only error text is the hidden fallback',
+    facts: areaFacts({
+      value: 'Invalid',
+      invalid: true,
+      description: 'Invalid value',
+      errorMessage: 'Invalid value',
+    }),
     visibleLabel: 'Description',
     storyId: 'a11y-text-input-pattern--textarea-error-without-message',
   },

@@ -6,6 +6,7 @@ package: @astryxdesign/cli
 
 <text>
 
+skill-places       <text>
 component-lookups  <text>
 host-entry         <text>
 

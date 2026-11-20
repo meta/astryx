@@ -22,6 +22,7 @@ import * as path from 'node:path';
 import {CLI_ROOT, findCoreDir} from '../../../foundation/fs/paths.mjs';
 import {
   assertWithin,
+  homeRelativePath,
   PathSafetyError,
 } from '../../../foundation/fs/path-safety.mjs';
 import {stripCopyrightHeader} from '../../../foundation/text/copyright-header.mjs';
@@ -65,17 +66,18 @@ export function templateCdn(options = {}) {
     },
   ];
   // An absolute path inside the project is the same write as its relative
-  // form.
+  // form. `~/…` names the home folder, as a shell reads it.
+  const target = homeRelativePath(targetPath) ?? targetPath;
   let resolved;
   try {
-    resolved = assertWithin(targetPath, cwd, {
+    resolved = assertWithin(target, cwd, {
       allowAbsolute: true,
       label: 'cdn template path',
     });
   } catch (err) {
     if (!(err instanceof PathSafetyError)) throw err;
     const outside =
-      path.isAbsolute(targetPath) &&
+      path.isAbsolute(target) &&
       err.code === ERROR_CODES.ERR_PATH_TRAVERSAL &&
       !err.viaSymlink;
     throw new AstryxError(

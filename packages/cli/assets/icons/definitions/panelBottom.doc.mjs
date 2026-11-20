@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'panelBottom',
+  group: 'panels',
   description: 'Show or hide a panel at the bottom edge.',
   words: ['bottom panel', 'toolbar', 'dock'],
 };

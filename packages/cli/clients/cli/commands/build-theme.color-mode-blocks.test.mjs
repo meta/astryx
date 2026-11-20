@@ -113,8 +113,14 @@ describe('theme build with color-mode blocks', () => {
     const css = await build('plain-theme', {
       button: {'variant:ghost': {backgroundColor: 'transparent'}},
     });
-    expect(css).not.toMatch(
+    // Only a flipped surface's dark-page rules read the page's mode; no
+    // component rule does.
+    const rules = css
+      .split('}')
+      .filter(rule => !rule.includes('data-astryx-media-dark-page'));
+    expect(rules.join('}')).not.toMatch(
       /prefers-color-scheme|data-theme=|:scope \[data-astryx-media/,
     );
+    expect(css).not.toMatch(/astryx-button[^{]*data-theme=/);
   });
 });

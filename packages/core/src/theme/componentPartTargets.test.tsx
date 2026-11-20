@@ -4,11 +4,11 @@
  * @file The theme targets of parts that paint inside another component's
  *   target: each key badge, the calendar's range bands, the alert dialog's
  *   title and description, a toggle inside a group, and the container a
- *   Layout header or footer sits in.
+ *   Layout header, content region or footer sits in.
  * @input Kbd, Calendar, AlertDialog, ToggleButton(Group), Card, Dialog and
  *   Layout rendered in jsdom; a theme built with defineTheme().
  * @output Failures naming a part that lost its target or reflection, or a
- *   container rule that reaches another container's header.
+ *   container rule that reaches another container's header or content region.
  * @position Beside themingTargets.test.ts, which checks the documented
  *   targets against the source; this checks what each part renders.
  */
@@ -23,9 +23,11 @@ import {Kbd} from '../Kbd/Kbd';
 import {Layout} from '../Layout/Layout';
 import {LayoutHeader} from '../Layout/LayoutHeader';
 import {LayoutFooter} from '../Layout/LayoutFooter';
+import {LayoutContent} from '../Layout/LayoutContent';
 import {ToggleButton} from '../ToggleButton/ToggleButton';
 import {ToggleButtonGroup} from '../ToggleButton/ToggleButtonGroup';
-import {defineTheme, generateThemeCSS} from './defineTheme';
+import {defineTheme} from './defineTheme';
+import {generateThemeCSS} from './generateThemeRules';
 
 describe('parts inside a component carry their own target', () => {
   it('gives each key badge kbd-key', () => {
@@ -135,10 +137,11 @@ describe('parts inside a component carry their own target', () => {
   });
 });
 
-describe('a Layout header and footer name their container', () => {
+describe('a Layout header, content region and footer name their container', () => {
   const layout = (
     <Layout
       header={<LayoutHeader>Title</LayoutHeader>}
+      content={<LayoutContent>Body</LayoutContent>}
       footer={<LayoutFooter>Actions</LayoutFooter>}
     />
   );
@@ -165,6 +168,27 @@ describe('a Layout header and footer name their container', () => {
       'dialog',
       null,
     ]);
+    const contents = container.querySelectorAll('.astryx-layout-content');
+    expect([...contents].map(c => c.getAttribute('data-container'))).toEqual([
+      'card',
+      'dialog',
+      null,
+    ]);
+  });
+
+  it("lets a theme pad a dialog's body without a card's", () => {
+    const {component} = generateThemeCSS(
+      defineTheme({
+        name: 'dialog-body-only',
+        components: {
+          'layout-content': {'container:dialog': {padding: '10px'}},
+        },
+      }),
+    );
+    expect(component).toContain(
+      '.astryx-layout-content[data-container="dialog"]',
+    );
+    expect(component).not.toContain('[data-container="card"]');
   });
 
   it("lets a theme style a dialog's header without a card's", () => {

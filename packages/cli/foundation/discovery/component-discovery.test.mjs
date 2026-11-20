@@ -18,6 +18,7 @@ import {recordReads} from '../fs/read-record.mjs';
 import {
   CORE_PACKAGE,
   discoverComponents,
+  documentedEntry,
   familyMember,
   findComponentReadme,
   findComponentSource,
@@ -291,6 +292,19 @@ describe('familyMember', () => {
     expect(familyMember(stack, 'Stack')).toBeNull();
     expect(familyMember({name: 'Button'}, 'Button')).toBeNull();
     expect(familyMember(stack, 'HStack')).toBeNull();
+  });
+});
+
+describe('documentedEntry', () => {
+  it("returns a doc with its own props, a family member's entry, or the entry a doc keeps its own props in", () => {
+    const button = {name: 'Button', props: [{name: 'label'}]};
+    expect(documentedEntry(button, 'Button')).toBe(button);
+    const stack = {name: 'Stack', components: [{name: 'Stack', props: []}, {name: 'VStack', props: [{name: 'gap'}]}]};
+    expect(documentedEntry(stack, 'VStack')).toEqual({name: 'VStack', props: [{name: 'gap'}]});
+    const link = {name: 'Link', components: [{name: 'Link', props: [{name: 'children'}]}]};
+    expect(documentedEntry(link, 'Link')).toEqual({name: 'Link', props: [{name: 'children'}]});
+    expect(documentedEntry(stack, 'HStack')).toBeNull();
+    expect(documentedEntry(null, 'Button')).toBeNull();
   });
 });
 

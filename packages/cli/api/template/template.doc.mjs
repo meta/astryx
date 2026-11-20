@@ -89,7 +89,7 @@ export const doc = {
       name: 'options.targetPath',
       type: 'string',
       description:
-        'Destination inside cwd to scaffold the template into: a relative path, or an absolute path inside cwd, which is written as its relative path and reported as data.givenPath. An absolute path in the system temp folder (os.tmpdir(), or /tmp on a POSIX system) takes a scratch copy, reported with its absolute data.outputDir. Any other path outside cwd is refused with ERR_PATH_TRAVERSAL. Its presence switches a named lookup into a copy. ' +
+        'Destination inside cwd to scaffold the template into: a relative path, or an absolute path inside cwd, which is written as its relative path and reported as data.givenPath. A path that starts with `~/` names the home folder, as a shell reads it. An absolute path in the system temp folder (os.tmpdir(), or /tmp on a POSIX system) takes a scratch copy, reported with its absolute data.outputDir. Any other path outside cwd is refused with ERR_PATH_TRAVERSAL. Its presence switches a named lookup into a copy. ' +
         "A path that ends in .tsx, .ts, .jsx, .js, .mjs, .cjs, .css, .scss, .json, .md or .html is the file to write; any other path is a directory, which receives page.tsx for a page template or the block's own file name for a block.",
     },
     {
