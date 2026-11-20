@@ -470,7 +470,8 @@ export function useMobileKeyboard(
           safeTop,
           safeBottom,
         );
-        if (distance > 0) {
+        // A distance within a pixel is the rects' rounding, so nothing moves.
+        if (distance > KEYBOARD_EPSILON) {
           // Chrome pans the page itself when the control is still below the
           // keyboard shortly after its report. So in Chrome the control clears
           // the keyboard in this commit. Safari leaves a claimed control in
@@ -486,7 +487,7 @@ export function useMobileKeyboard(
                 )
               : null,
           );
-        } else if (distance < 0) {
+        } else if (distance < -KEYBOARD_EPSILON) {
           scrollBodyBy(distance, smoothly, ride);
         }
       };

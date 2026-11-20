@@ -3869,7 +3869,12 @@ describe('BottomSheet', () => {
         subscribe.mockRestore();
       });
 
-      it('keeps the field\u2019s resting place when a reveal runs after a long task mid-ride, though WebKit keeps the ridden rects from before the task', async () => {
+      // A reveal that runs after a long task mid-ride, while WebKit keeps the
+      // ridden content's rects from before the task. `frozenAt` gives the
+      // ride's offset those rects keep.
+      const revealAfterLongTask = async (
+        frozenAt: (start: number, drawn: (time: number) => number) => number,
+      ) => {
         const guide = getKeyboardLayoutGuide(window);
         const {body, content, input, report, drawnTop} = renderIOSSheet();
         act(() => input.focus());
@@ -3889,7 +3894,7 @@ describe('BottomSheet', () => {
         // keep the translate of the content's last style resolution, the frame
         // after the report. Its computed translate follows the ride.
         const drawn = (time: number) => animatorFor(content).get('y', time);
-        const frozen = drawn(start + 36);
+        const frozen = frozenAt(start, drawn);
         vi.spyOn(content, 'getBoundingClientRect').mockImplementation(() =>
           rect({
             top: 100 - body.scrollTop + frozen,
@@ -3904,27 +3909,31 @@ describe('BottomSheet', () => {
         );
         const contentStyles = new WeakSet<CSSStyleDeclaration>();
         const computedStyle = window.getComputedStyle.bind(window);
-        vi.spyOn(window, 'getComputedStyle').mockImplementation(
-          (element, pseudo) => {
+        const styleSpy = vi
+          .spyOn(window, 'getComputedStyle')
+          .mockImplementation((element, pseudo) => {
             const style = computedStyle(element, pseudo);
             if (element === content) {
               contentStyles.add(style);
             }
             return style;
-          },
-        );
+          });
         const translate = Object.getOwnPropertyDescriptor(
           CSSStyleDeclaration.prototype,
           'translate',
         );
-        vi.spyOn(
-          CSSStyleDeclaration.prototype,
-          'translate',
-          'get',
-        ).mockImplementation(function (this: CSSStyleDeclaration): string {
-          return contentStyles.has(this)
-            ? `0px ${drawn(performance.now())}px`
-            : String(translate?.get?.call(this) ?? '');
+        const translateSpy = vi
+          .spyOn(CSSStyleDeclaration.prototype, 'translate', 'get')
+          .mockImplementation(function (this: CSSStyleDeclaration): string {
+            return contentStyles.has(this)
+              ? `0px ${drawn(performance.now())}px`
+              : String(translate?.get?.call(this) ?? '');
+          });
+        // The spies on the window and the style prototype end with the case, so
+        // the next case wraps the browser's own functions.
+        onTestFinished(() => {
+          styleSpy.mockRestore();
+          translateSpy.mockRestore();
         });
         // A long task holds the page until 286 ms into the slide. A reveal the
         // sheet's observers scheduled before it runs then.
@@ -3935,6 +3944,15 @@ describe('BottomSheet', () => {
         expect(body.scrollTop).toBe(248);
         await afterTheShow();
         expect(drawnTop()).toBe(-248);
+      };
+
+      it('keeps the field\u2019s resting place when a reveal runs after a long task mid-ride, though WebKit keeps the ridden rects from before the task', async () => {
+        await revealAfterLongTask((start, drawn) => drawn(start + 36));
+      });
+
+      it('moves nothing when the ride\u2019s offset read from the rects lands the field a rounding error below its resting place', async () => {
+        // This offset leaves the field 5.7e-14 px below the band\u2019s edge.
+        await revealAfterLongTask(() => 231.0146499375);
       });
 
       it('moves nothing at rest when the content sits a fraction of a pixel off the whole-pixel offsets', async () => {
