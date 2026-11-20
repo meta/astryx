@@ -3,7 +3,7 @@
 /**
  * @file A look said as a word takes that word's way: a dark gradient is
  * dark, with text that reads on it; small labels are smaller; "labels"
- * said bare reads two parts and writes neither. Every line offered is run.
+ * said bare is the form field label. Every line offered is run.
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
@@ -66,8 +66,6 @@ const follow = async lines => {
   }
 };
 
-/** @param {Array<{text: string}>} rs */
-const texts = rs => rs.map(r => r.text).join('\n');
 /** @param {string} c */
 const lum = c => {
   const h = c.replace('#', '');
@@ -94,12 +92,15 @@ describe('a look said as a word', () => {
     expect(Number(m?.[1])).toBeLessThan(0.875);
   }, 240_000);
 
-  it('"labels" said bare offers both readings and writes neither', async () => {
-    const rs = await how('q0', 'uppercase small labels');
-    expect(writes(rs)).toEqual([]);
-    expect(texts(rs)).toMatch(
-      /"labels" reads two parts: the form field labels \(field-label\), or badges/,
-    );
+  it('"labels" said bare is the form field label, as main reads it', async () => {
+    const lines = writes(await how('q0', 'uppercase small labels'));
+    expect(lines).toContain('set q0 text-transform uppercase --on field-label');
+    const m = /font-size ([\d.]+)rem --on field-label/.exec(lines.join(' '));
+    expect(Number(m?.[1])).toBeLessThan(0.875);
+    const bold = writes(await how('q0', 'bold labels, dark gray'));
+    expect(bold).toContain('set q0 font-weight 700 --on field-label');
+    expect(bold).toContain("set q0 color '#374151' --on field-label");
+    expect(bold.join('\n')).not.toMatch(/--on badge/);
     expect(writes(await how('q0', 'form labels bold'))[0]).toMatch(
       /--on field-label/,
     );

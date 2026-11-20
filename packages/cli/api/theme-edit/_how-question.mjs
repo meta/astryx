@@ -14144,29 +14144,6 @@ export function draftAnswer(ctx, env, question) {
         continue;
       }
     }
-    // ("uppercase small labels"): "labels" said bare, with no form, field
-    // or input beside it, reads two parts: a form field's label, or a
-    // badge, the small tag some kits call a label. Both are offered and
-    // neither is written.
-    if (
-      c.parts.length === 1 &&
-      c.parts[0].on === 'field-label' &&
-      /\blabels?\b/.test(c.text) &&
-      !/\b(?:field|form|input|checkbox|switch|radio|select)s?\b/.test(q) &&
-      TARGET.has('badge')
-    ) {
-      push({
-        text: `"labels" reads two parts: the form field labels (field-label), or badges, the small tags some kits call labels; nothing is written until you say which ("form labels …" or "badges …")`,
-        options: [],
-        lookup: `${HOW} field-label`,
-      });
-      push({
-        text: 'the badge reading: badges are the small tags',
-        options: [],
-        lookup: `${HOW} badge`,
-      });
-      continue;
-    }
     // The unknown-part guard: a clause whose part slot holds a word how
     // knows as no part ("from widgets") is never answered for the whole
     // theme or dropped; it says so.

@@ -3513,9 +3513,7 @@ const QUESTIONS_K = [
   ],
   ['no more than 2px borders', {top: /^set q --border-width 2px$/}],
   ['error text red', {top: null, text: /error text belong to the parts/}],
-  // ("labels" said bare reads a form label or a badge: both are offered,
-  // neither written; "form labels smaller" is the field label.)
-  ['labels smaller', {top: null, text: /"labels" reads two parts/}],
+  ['labels smaller', {top: /--on field-label$/}],
   ['form labels smaller', {top: /--on field-label$/}],
 ];
 

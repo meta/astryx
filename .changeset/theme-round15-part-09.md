@@ -24,7 +24,6 @@ The same goes for the line that keeps a theme to one mode when the ask only says
 
 - "dark gradient navbar" now gives a gradient between the theme's own dark surface colors, with text that reads on it. Before, it gave a light gradient.
 - "small form labels" now makes them smaller instead of larger.
-- "labels" on its own, with nothing about a form or field, offers both meanings (form field labels, or badges) and changes nothing until you choose.
 
 - More fixes in `astryx experimental theme editor how`:
 
