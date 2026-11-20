@@ -10,32 +10,17 @@
  */
 
 import {discoverBundledThemes} from '../../foundation/discovery/theme-discovery.mjs';
-import {collectUnloadedFonts} from '../theme/build/font-warning.mjs';
+import {
+  SYSTEM_FONTS_BY_PLATFORM,
+  appleFaceGeneric,
+  collectUnloadedFonts,
+  systemFontFamilies,
+} from '../theme/build/font-warning.mjs';
 
-/**
- * A lookup table that only answers for its own keys: a word typed by a
- * person (`constructor`, `__proto__`, `toString`) never reaches
- * `Object.prototype`. Plain objects inside it, in arrays too, get the same.
- * @template T
- * @param {T} table
- * @returns {T}
- */
-export function wordTable(table) {
-  /** @param {any} v @returns {any} */
-  const own = v => {
-    if (Array.isArray(v)) return v.map(own);
-    if (
-      !v ||
-      typeof v !== 'object' ||
-      Object.getPrototypeOf(v) !== Object.prototype
-    )
-      return v;
-    const out = Object.create(null);
-    for (const [k, x] of Object.entries(v)) out[k] = own(x);
-    return out;
-  };
-  return own(table);
-}
+export {appleFaceGeneric, systemFontFamilies};
+
+export {wordTable} from '../../foundation/runtime/word-table.mjs';
+import {wordTable} from '../../foundation/runtime/word-table.mjs';
 
 /** The command prefix every suggested command starts with. */
 export const P = 'astryx experimental theme editor';
@@ -106,6 +91,22 @@ export const familyOf = target =>
     members.includes(target),
   )?.[0] ?? null;
 
+/**
+ * What `--only` means on a place, the one rule `set --only` and the
+ * settings reader share: on a member of a group that spreads (a text input
+ * of inputs) it keeps the change on that member (`member`); on any other
+ * part it changes nothing, as the part is styled on its own already
+ * (`own`); on a group itself, or with no part, it means nothing at all
+ * (`group`).
+ * @param {string | undefined} on
+ * @returns {'member' | 'own' | 'group'}
+ */
+export const onlyMeans = on => {
+  if (!on || Object.hasOwn(FAMILIES, on)) return 'group';
+  const fam = familyOf(on);
+  return fam && AUTO_SPREAD.includes(fam) ? 'member' : 'own';
+};
+
 /** @type {Array<[string, number]>} */
 export const CORNERS = [
   ['square', 0],
@@ -115,6 +116,45 @@ export const CORNERS = [
   ['round', 16],
   ['pill', 9999],
 ];
+/**
+ * The step `corners more` and `less` take between round and pill: half as
+ * round again as round, so one step more from round is not a pill.
+ */
+export const ROUND_TO_PILL_STEP = `${(CORNERS.find(([n]) => n === 'round')?.[1] ?? 16) * 1.5}px`;
+/**
+ * The density words, the one table every reading of room uses: words for
+ * more room (roomy), for less (dense), and complaints that there is too
+ * little (crowded). An ask names the density it wants; after "too" the
+ * word names the density there is, so the change goes the other way.
+ */
+export const DENSITY = /** @type {const} */ ({
+  roomy: [
+    'airy',
+    'airier',
+    'spacious',
+    'roomy',
+    'roomier',
+    'loose',
+    'looser',
+    'relaxed',
+    'comfortable',
+    'sparse',
+    'padded',
+    'generous',
+    'spread out',
+  ],
+  dense: ['dense', 'denser', 'compact', 'tight', 'tighter', 'condensed'],
+  crowded: ['cramped', 'crowded', 'packed'],
+});
+
+/**
+ * The density words of the kinds given, as one alternation for a regular
+ * expression.
+ * @param {...keyof typeof DENSITY} kinds
+ */
+export const densityWords = (...kinds) =>
+  kinds.flatMap(k => DENSITY[k]).join('|');
+
 /** @type {Array<[string, number]>} */
 export const SPACING = [
   ['tight', 0.75],
@@ -151,14 +191,8 @@ export const FONTS = wordTable({
   rounded: ['Nunito', '"Varela Round", system-ui, sans-serif'],
   comic: ['Comic Sans MS', '"Comic Neue", cursive'],
 });
-/** The CSS-wide keywords: valid in any declaration, never a value of their own. */
-export const CSS_WIDE = [
-  'inherit',
-  'initial',
-  'unset',
-  'revert',
-  'revert-layer',
-];
+export {CSS_WIDE} from '../../foundation/color/css-color.mjs';
+import {CSS_WIDE} from '../../foundation/color/css-color.mjs';
 
 /** CSS-wide keywords, and `default`, which font-family reserves: never a family, and invalid inside a list. */
 export const CSS_WIDE_KEYWORDS = [...CSS_WIDE, 'default'];
@@ -181,42 +215,9 @@ export const isSystemFamily = family =>
  * not load everywhere.
  */
 const ONE_SYSTEM_FAMILIES = new Map(
-  Object.entries({
-    macOS: [
-      '-apple-system',
-      'blinkmacsystemfont',
-      'helvetica neue',
-      'sf mono',
-      'sf pro',
-      'sf pro text',
-      'sf pro display',
-      'monaco',
-      'menlo',
-      'palatino',
-      'lucida grande',
-      'gill sans',
-      'snell roundhand',
-    ],
-    Windows: [
-      'segoe ui',
-      'segoe ui emoji',
-      'segoe ui symbol',
-      'consolas',
-      'cambria',
-      'calibri',
-      'lucida console',
-      'brush script mt',
-      'old english text mt',
-    ],
-    'Android and ChromeOS': ['roboto'],
-    Linux: [
-      'liberation mono',
-      'liberation sans',
-      'liberation serif',
-      'dejavu sans',
-      'dejavu sans mono',
-    ],
-  }).flatMap(([system, names]) => names.map(n => [n, system])),
+  Object.entries(SYSTEM_FONTS_BY_PLATFORM)
+    .filter(([system]) => system !== 'everywhere')
+    .flatMap(([system, names]) => names.map(n => [n, system])),
 );
 
 /** @param {string} family */
@@ -238,7 +239,9 @@ export const oneSystemOf = family =>
  * @param {string} family without quotes
  */
 export const isDesktopFamily = family =>
-  isSystemFamily(family) && !ONE_SYSTEM_FAMILIES.has(familyKey(family));
+  isSystemFamily(family) &&
+  !ONE_SYSTEM_FAMILIES.has(familyKey(family)) &&
+  !appleFaceGeneric(family);
 
 /**
  * Presets that show a font every desktop has, so no font file is needed:
@@ -299,6 +302,25 @@ export const OPEN_FONTS = wordTable(
     ]),
   ),
 );
+
+/**
+ * The CSS font-family stack a font dial word stands for (a preset such as
+ * mono, or an open font such as inter): its family, quoted when it holds a
+ * space, then its fallbacks. Null for any other word. A part's font-family
+ * takes this stack, never the word itself, which names no family.
+ * @param {string} word
+ * @returns {string | null}
+ */
+export function fontStack(word) {
+  const w = String(word).trim().toLowerCase();
+  const [family, fallbacks] = FONTS[w]
+    ? FONTS[w]
+    : OPEN_FONTS[w]
+      ? [OPEN_FONTS[w].family.replace(/"/g, ''), OPEN_FONTS[w].fallbacks]
+      : [null, null];
+  if (!family) return null;
+  return `${/\s/.test(family) ? `"${family}"` : family}, ${fallbacks}`;
+}
 
 /**
  * Brand fonts no package loads, and the closest open font, for the warning
@@ -377,6 +399,33 @@ export const SURFACES = wordTable(
     },
   }),
 );
+/**
+ * The panels that float over the page (menus, popovers, dialogs): under
+ * `surfaces flat` they keep their own fill and a hairline edge
+ * ({@link FLOATING_SURFACES}), since a panel over content needs an edge to
+ * be seen.
+ */
+export const FLOATING_PANELS = [
+  'dialog',
+  'popover',
+  'drawer',
+  'hover-card',
+  'dropdown-menu',
+  'selector-popup',
+];
+
+/** A rung of the `surfaces` dial as the floating panels take it, where it differs. */
+export const FLOATING_SURFACES = wordTable(
+  /** @type {Record<string, Record<string, string>>} */ ({
+    flat: {
+      borderStyle: 'solid',
+      borderWidth: '1px',
+      borderColor: 'var(--color-border)',
+      boxShadow: 'none',
+    },
+  }),
+);
+
 /** The parts the `surfaces` dial moves. */
 export const SURFACE_PARTS = [
   'card',
@@ -404,6 +453,8 @@ export const TYPE_STYLES =
  * @property {string} values - The values it takes, `|`-separated.
  * @property {string[]} examples - Commands after the prefix; `my` is the theme.
  * @property {string} words - Words `how` matches to the dial.
+ * @property {'px'} [unit] - The unit its `<number>` is in: the number typed
+ *   with that unit (`24px`, `24 PX`) is the same number (dialNumber).
  */
 
 /** @type {Record<string, Dial>} */
@@ -411,10 +462,13 @@ export const DIALS = wordTable({
   corners: {
     help:
       'How round corners are. Rungs: ' +
-      CORNERS.map(
-        ([n, v]) => `${n} (${v === 9999 ? 'fully round' : `${v}px`})`,
-      ).join(', ') +
-      ", or a size like 6px. Whole theme: sets the 4 corner tokens in the base theme's proportions (containers and pages at most as round as at pill; inner corners at most as round as at round). With --on <part or group>: that part's border-radius. Corners are a size, so they are the same in light and dark.",
+      CORNERS.flatMap(([n, v]) => [
+        ...(n === 'pill'
+          ? [`${ROUND_TO_PILL_STEP} (the step between round and pill)`]
+          : []),
+        `${n} (${v === 9999 ? 'fully round' : `${v}px`})`,
+      ]).join(', ') +
+      `, or a size like 6px. more and less step through them in that order, ${ROUND_TO_PILL_STEP} included. Whole theme: sets the 4 corner tokens in the base theme's proportions (containers and pages at most as round as at pill; inner corners at most as round as at round), and gives the chat radius (--radius-chat: a composer, its drawer, message bubbles) back to the container radius, so it follows it. With --on <part or group>: that part's border-radius. Corners are a size, so they are the same in light and dark.`,
     values: 'square|small|medium|large|round|pill|more|less|<size like 6px>',
     examples: [
       'set my corners pill',
@@ -436,8 +490,7 @@ export const DIALS = wordTable({
       'set my spacing more',
       'set my spacing roomy --on card',
     ],
-    words:
-      'spacing space room roomy airy dense density compact tight padding gap gaps margin breathing cramped spread spacious',
+    words: `spacing space room density padding gap gaps margin breathing spread ${densityWords('roomy', 'dense', 'crowded').replace(/\|/g, ' ')}`,
   },
   accent: {
     help: 'The main brand color: primary buttons, links, selection and the focus ring. From the one color the editor generates its shades, light and dark, and points the accent tokens at them: --color-accent, --color-on-accent, --color-text-accent, --color-icon-accent, --color-accent-muted and --focus-outline-color. The fill keeps the exact color you gave in light, and in dark too when text on it reads at 4.5:1 and it stands out from the dark page at 3:1; otherwise dark mode uses shade 70, where the official themes put a dark fill, or the shade nearest it that passes both, and the result says so. Text on the fill is the neutral color\'s white or near-black (pure white or black without a neutral color), whichever reads on it. The fill never moves: when no text reads on it, or a pale fill does not stand out from the light page, the result says so. Other tokens move to a nearby shade when they must read: text at 4.5:1, the focus ring at 3:1. `how colors` explains it; the Colors preview page (`preview add`) shows every shade. For an exact color, set the token itself (set my --color-accent "#7c3aed"): an exact token always wins over the generated colors.',
@@ -447,7 +500,7 @@ export const DIALS = wordTable({
       'accent brand primary main color colour key highlight link selection seed',
   },
   neutral: {
-    help: 'The gray of the theme: surfaces (cards, panels, popovers, muted fills), text, icons, borders, skeletons and hover tints. The page background stays the base theme\'s (often a light gray), so a tinted gray never tints the page; the result names it, and for a white or off-white page set --color-background-body "#ffffff" (with --mode light in a theme with both modes). From the one color the editor generates light and dark shades; your exact color sits at its own shade in both modes, and the shades around it follow it. The surface, text, icon, border, skeleton and overlay tokens point at those shades. Secondary text and icons move to a shade that reads on the surfaces. Give a gray with a little color ("#64748b") for a cool or warm neutral; a strong color makes colored surfaces. `how colors` explains it.',
+    help: "The gray of the theme: surfaces (cards, panels, popovers, muted fills), text, icons, borders, skeletons and hover tints. The page background follows it too, at the official theme's page shade of the gray; a colored gray's pale shades fade toward white as a gray scale's do, so the page and the cards on it carry only a faint tint of it. For a clearly tinted page (cream, a pale blue) or a white one, set --color-background-body to that color (with --mode light in a theme with both modes), which then keeps its color. From the one color the editor generates light and dark shades; your exact color sits at its own shade in both modes, and the shades around it follow it. The surface, text, icon, border, skeleton and overlay tokens point at those shades. Secondary text and icons move to a shade that reads on the surfaces. Give a gray with a little color (\"#64748b\") for a cool or warm neutral; a strong color makes colored surfaces. `how colors` explains it.",
     values: '<color>',
     examples: ['set my neutral "#64748b"', 'set my neutral "#78716c"'],
     words:
@@ -486,11 +539,11 @@ export const DIALS = wordTable({
   },
   font: {
     help:
-      'The typeface. System presets (always show): ' +
+      'The typeface. System presets (fonts systems ship, so no package loads them; a system with none of a stack shows its own font of that kind, and a picture says when this machine draws a serif, monospace or cursive stack in a font of another kind): ' +
       SYSTEM_FONTS.join(', ') +
       '. Open fonts with a loading package: ' +
       Object.keys(OPEN_FONTS).join(', ') +
-      ' (previews show them when the package is installed; the result names the import line for the app). Also: rounded, comic, any family name in quotes, or a whole stack with commas ("Inter, Helvetica, sans-serif"). Whole theme: body and headings. With --on heading|body|code: only that role. An open font loads only once its package is installed (the result of set names the install line for your package manager, and the closest font that needs no install); any other font must be loaded by the app.',
+      ' (previews show them when the package is installed; the result names the import line for the app). Also: rounded (Nunito, an open font: it loads once its package is installed, and until then shows Varela Round or the system font), any family name in quotes, or a whole stack with commas ("Inter, Helvetica, sans-serif"). Whole theme: body and headings. With --on heading|body|code: only that role. An open font loads only once its package is installed (the result of set names the install line for your package manager, and the closest font that needs no install); any other font must be loaded by the app.',
     values: `${[...Object.keys(FONTS), ...Object.keys(OPEN_FONTS)].join('|')}|"<family or stack>"`,
     examples: [
       'set my font mono',
@@ -520,7 +573,7 @@ export const DIALS = wordTable({
       'heading headings title titles display headline bold heavy weight tracking letter spacing tight',
   },
   surfaces: {
-    help: 'How panels (cards, dialogs, popovers, menus, the banner) sit on the page. flat: no border, no shadow, a tinted fill. outlined: a 1px border, no shadow. raised: no border, a soft shadow. glass: see-through fill with a blur and a faint light edge. Moves every container at once.',
+    help: 'How panels (cards, dialogs, popovers, menus, the banner) sit on the page. flat: no border, no shadow, a tinted fill (menus, popovers and dialogs, which float over the page, keep their own fill and a hairline border instead). outlined: a 1px border, no shadow. raised: no border, a soft shadow. glass: see-through fill with a blur and a faint light edge. Moves every container at once.',
     values: Object.keys(SURFACES).join('|'),
     examples: ['set my surfaces outlined', 'set my surfaces raised'],
     words:
@@ -545,6 +598,7 @@ export const DIALS = wordTable({
       TEXT_SIZE.map(([n, v]) => `${n} (${v}px)`).join(', ') +
       ', or a number of pixels from 10 to 32. Phones (touch screens below 1024px wide) keep the base theme reading sizes.',
     values: 'small|medium|large|larger|more|less|<number>',
+    unit: 'px',
     examples: ['set my text-size small', 'set my text-size more'],
     words: 'text size font size small big large scale',
   },
@@ -607,6 +661,14 @@ export const GROUPS = wordTable(
       'margin',
       'margin-block',
       'margin-inline',
+      'margin-top',
+      'margin-bottom',
+      'margin-left',
+      'margin-right',
+      'margin-block-start',
+      'margin-block-end',
+      'margin-inline-start',
+      'margin-inline-end',
     ],
     font: [
       'font-family',
@@ -718,9 +780,11 @@ export const THING_HINTS = wordTable({
     const w = v.trim().toLowerCase();
     const rung = SPACING.some(([n]) => n === w)
       ? w
-      : /^(airy|loose|relaxed|comfortable|open|sparse|generous)$/.test(w)
+      : new RegExp(`^(?:${densityWords('roomy')})$`).test(w)
         ? 'roomy'
-        : /^(dense|cramped|condensed|packed|small|less)$/.test(w)
+        : new RegExp(
+              `^(?:${densityWords('dense', 'crowded')}|small|less)$`,
+            ).test(w)
           ? 'compact'
           : null;
     return [
@@ -741,6 +805,7 @@ export const DESIGN = wordTable(
     gradient: '"linear-gradient(#ffffff, #d1d5db)"',
     glossy: '"linear-gradient(#ffffff 0%, #c7d2fe 45%, #6366f1 100%)"',
     bevel: '"inset 1px 1px 0 #ffffff, inset -1px -1px 0 #9ca3af"',
+    'sunken bevel': '"inset 1px 1px 0 #9ca3af, inset -1px -1px 0 #ffffff"',
     raised: '"0 1px 2px rgb(0 0 0 / 0.3)"',
     flat: 'none',
     sunken: '"inset 1px 1px 2px rgb(0 0 0 / 0.3)"',
@@ -764,6 +829,145 @@ export const WRAPPED_PARTS = /** @type {Record<string, {box: string}>} */ ({
   'chat-composer': {box: 'the rounded composer body'},
 });
 
+/**
+ * The pseudo-classes of CSS Selectors (Level 4 and 5, and the HTML, media,
+ * view-transition, scroll-marker and interest states browsers ship), by
+ * name: the names a part's `:name` block is read against, so one a typo
+ * away from a name here is named as that typo.
+ */
+export const CSS_PSEUDO_CLASSES = new Set([
+  'active',
+  'active-view-transition',
+  'active-view-transition-type',
+  'any-link',
+  'autofill',
+  'blank',
+  'buffering',
+  'checked',
+  'closed',
+  'current',
+  'default',
+  'defined',
+  'dir',
+  'disabled',
+  'empty',
+  'enabled',
+  'first',
+  'first-child',
+  'first-of-type',
+  'focus',
+  'focus-visible',
+  'focus-within',
+  'fullscreen',
+  'future',
+  'has',
+  'has-slotted',
+  'heading',
+  'host',
+  'host-context',
+  'hover',
+  'in-range',
+  'indeterminate',
+  'interest-source',
+  'interest-target',
+  'invalid',
+  'is',
+  'lang',
+  'last-child',
+  'last-of-type',
+  'left',
+  'link',
+  'local-link',
+  'modal',
+  'muted',
+  'not',
+  'nth-child',
+  'nth-col',
+  'nth-last-child',
+  'nth-last-col',
+  'nth-last-of-type',
+  'nth-of-type',
+  'only-child',
+  'only-of-type',
+  'open',
+  'optional',
+  'out-of-range',
+  'past',
+  'paused',
+  'picture-in-picture',
+  'placeholder-shown',
+  'playing',
+  'popover-open',
+  'read-only',
+  'read-write',
+  'required',
+  'right',
+  'root',
+  'scope',
+  'seeking',
+  'stalled',
+  'state',
+  'target',
+  'target-after',
+  'target-before',
+  'target-current',
+  'target-within',
+  'user-invalid',
+  'user-valid',
+  'valid',
+  'visited',
+  'volume-locked',
+  'where',
+  'xr-overlay',
+]);
+
+/**
+ * The pseudo-elements of CSS (the `::name` forms browsers ship), by name: the
+ * names a part's `::name` block is read against. The four CSS 2 ones also
+ * take one colon.
+ */
+export const CSS_PSEUDO_ELEMENTS = new Set([
+  'after',
+  'backdrop',
+  'before',
+  'checkmark',
+  'column',
+  'cue',
+  'cue-region',
+  'details-content',
+  'file-selector-button',
+  'first-letter',
+  'first-line',
+  'grammar-error',
+  'highlight',
+  'marker',
+  'part',
+  'picker',
+  'picker-icon',
+  'placeholder',
+  'scroll-button',
+  'scroll-marker',
+  'scroll-marker-group',
+  'search-text',
+  'selection',
+  'slotted',
+  'spelling-error',
+  'target-text',
+  'view-transition',
+  'view-transition-group',
+  'view-transition-image-pair',
+  'view-transition-new',
+  'view-transition-old',
+]);
+
+/** The pseudo-elements CSS 2 wrote with one colon, which browsers still read. */
+export const ONE_COLON_PSEUDO_ELEMENTS = new Set([
+  'after',
+  'before',
+  'first-letter',
+  'first-line',
+]);
+
 /** States every part takes, beyond the ones its doc lists. */
 export const COMMON_STATES = [
   'hover',
@@ -773,6 +977,18 @@ export const COMMON_STATES = [
   'focus-within',
   'disabled',
 ];
+
+/**
+ * Words for a mode, and the mode each means, beside the mode's own name in
+ * its written forms (dark-only, darkmode, mode dark), which modeWord reads:
+ * the table of the one mode reader.
+ */
+export const MODE_WORDS = /** @type {Record<string, 'light' | 'dark'>} */ ({
+  day: 'light',
+  daytime: 'light',
+  night: 'dark',
+  nighttime: 'dark',
+});
 
 // These tables are looked up by words people type: with no prototype,
 // `constructor` or `__proto__` is never found in them.
@@ -790,5 +1006,19 @@ for (const table of [
   DIRECT,
   THING_HINTS,
   DESIGN,
+  MODE_WORDS,
 ])
   Object.setPrototypeOf(table, null);
+
+/** The groups of the theme-building page (its sections), in order. */
+export const SHOWCASE_GROUPS = Object.freeze([
+  'actions',
+  'inputs',
+  'selection',
+  'navigation',
+  'feedback',
+  'data',
+  'containers',
+  'overlays',
+  'pages',
+]);

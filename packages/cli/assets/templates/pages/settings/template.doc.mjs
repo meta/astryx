@@ -10,5 +10,4 @@ export const doc = {
   keywords: ['settings', 'preferences', 'configuration', 'options', 'account'],
   isReady: true,
   category: 'Settings - Form',
-  icons: {MagnifyingGlassIcon: 'search'},
 };

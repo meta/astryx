@@ -3,7 +3,7 @@
 /**
  * @file The integration subject's access to the environment (INV21): reading
  * one package's component docs and sources with the project's own TypeScript,
- * and its topics.
+ * its topics, and the scope its examples are read against.
  *
  * @input a loaded integration and the directory the command runs in
  * @output the reports the integration checks attach to their results
@@ -15,7 +15,12 @@ import {
   forEachIntegrationDoc,
   integrationSourceForDoc,
 } from '../../foundation/discovery/component-discovery.mjs';
-import {Project} from '../../foundation/config/project.mjs';
+import {
+  computerIntegrationCandidates,
+  Project,
+  providerLedgerOf,
+} from '../../foundation/config/project.mjs';
+import {iconFeatureGate} from '../../foundation/integrations/icon-features.mjs';
 import {discoverIntegrationDocs} from '../../foundation/discovery/docs-discovery.mjs';
 import {packageDocTargets} from '../docs/_adapter.mjs';
 import {comparePropDocs} from '../../foundation/discovery/prop-drift.mjs';
@@ -23,6 +28,15 @@ import {findCopiedPassages} from '../../foundation/discovery/copied-passages.mjs
 import {findFluff} from '../../foundation/discovery/doc-fluff.mjs';
 import {findDocCommands} from '../../foundation/discovery/runner-commands.mjs';
 import {findStrayPointers} from '../../foundation/discovery/stray-pointers.mjs';
+import {findPackageRoot} from '../../foundation/fs/paths.mjs';
+import {
+  loadLocalIntegration,
+  resolveInstalledIntegrationDir,
+} from '../../foundation/integrations/integrations.mjs';
+import {
+  exampleCodeCheck,
+  exampleScopeFor,
+} from '../../foundation/integrations/example-code.mjs';
 
 /**
  * Each component doc's props compared with the component's TypeScript props,
@@ -159,18 +173,126 @@ export async function integrationDocCommands(integration) {
 }
 
 /**
- * Whether the project at `cwd` opts in to icon sets (`experimental.iconSet`).
- * An installed package's experimental root is read only then
- * (spec:AST-017 FR27, spec:AST-084 FR0): a project without it gets what a CLI
- * without icon sets reports. A config that does not load opts in to nothing.
+ * Whether icon features are on in the project at `cwd` (the icon feature
+ * gate). An installed package's experimental root is read only then
+ * (spec:AST-017 FR27, spec:AST-084 FR0): a project where they are off gets
+ * what a CLI without icon sets reports. A config that does not load has them
+ * off.
  * @param {string} cwd
  * @returns {Promise<boolean>}
  */
 export async function projectUsesIconSets(cwd) {
   try {
     const project = await Project.load(cwd);
-    return Boolean(project.config?.experimental?.iconSet);
+    return iconFeatureGate(project).on;
   } catch {
     return false;
   }
+}
+
+/**
+ * @typedef {object} LoadedExampleScope
+ * @property {boolean} found whether an integration manifest loaded
+ * @property {string | null} name
+ * @property {string | null} version
+ * @property {import('../../authoring/example/type.ts').ExampleScope | null} scope
+ * @property {string} [reason] why there is no scope
+ * @property {string} [incomplete] why names Core or React give were not read
+ */
+
+/**
+ * The scope a package's component examples are read against: the local
+ * package rooted at `cwd` (no `pkg`), or a package installed beside it.
+ * Throws when `pkg` is not a bare package name.
+ * @param {string | undefined} pkg
+ * @param {string} cwd
+ * @returns {Promise<LoadedExampleScope>}
+ */
+export async function loadExampleScope(pkg, cwd) {
+  const packageDir = pkg
+    ? resolveInstalledIntegrationDir(pkg, cwd)
+    : findPackageRoot(cwd);
+  /** @type {any} */
+  let integration = null;
+  /** @type {string | undefined} */
+  let reason;
+  if (packageDir) {
+    try {
+      integration = await loadLocalIntegration(packageDir);
+    } catch (err) {
+      reason = /** @type {Error} */ (err).message;
+    }
+  }
+  if (integration?.__loadError) reason = integration.__loadError;
+  if (!integration || reason) {
+    return {
+      found: false,
+      name: integration?.name ?? null,
+      version: integration?.version ?? null,
+      scope: null,
+      reason:
+        reason ??
+        (packageDir
+          ? `No astryx.integration.{ts,mjs,js} next to the package.json in ${packageDir}.`
+          : 'No package.json found.'),
+    };
+  }
+  const read = await exampleScopeFor(integration);
+  return {
+    found: true,
+    name: integration.name ?? null,
+    version: integration.version ?? null,
+    scope: read.scope,
+    ...(read.reason ? {reason: read.reason} : {}),
+    ...(read.incomplete ? {incomplete: read.incomplete} : {}),
+  };
+}
+
+/**
+ * Each of the package's component examples that cannot run on its own, as a
+ * note with its fix, and the examples that could not be judged.
+ * @param {any} integration a loaded integration
+ */
+export function integrationExampleCode(integration) {
+  return exampleCodeCheck(integration);
+}
+
+/**
+ * The copy of `spec` that `cwd` loads outside a project, as doctor reports
+ * it: the folder of the folder's own source (`own`) or a package it lists or
+ * declares, loaded or not, else of the copy installed for the computer whose peer ranges
+ * admit this CLI (one that fails to load included); else the computer copy
+ * the folder skips for its peer ranges. Null when there is none.
+ * @param {string} spec
+ * @param {string} cwd
+ * @returns {Promise<{dir: string, own: boolean} | {skipped: import('../../foundation/integrations/computer-integrations.mjs').ComputerIntegrationCandidate} | null>}
+ */
+export async function loadedCopy(spec, cwd) {
+  try {
+    const project = await Project.load(cwd, {core: 'project'});
+    /** @type {Array<{name?: string, __packageDir?: string, __local?: boolean}>} */
+    const loaded = project.loadedIntegrations;
+    const entry = loaded.find(i => i.name === spec);
+    if (entry?.__packageDir) {
+      return {dir: entry.__packageDir, own: entry.__local === true};
+    }
+    // A copy that did not load still decides: Project.load keeps the
+    // computer's copy out when the folder claims the name, so a declared copy
+    // whose manifest throws is the one to check.
+    for (const claim of providerLedgerOf(project).values()) {
+      const {candidate} = claim;
+      if (candidate.spec === spec || candidate.integration?.name === spec) {
+        return {dir: claim.key, own: candidate.source === 'local'};
+      }
+    }
+  } catch {
+    // The folder's own integrations cannot be read; the computer's still can.
+  }
+  const computer = computerIntegrationCandidates(cwd).filter(
+    c => c.name === spec,
+  );
+  const usable = computer.find(c => !c.incompatible);
+  if (usable) return {dir: usable.packageDir, own: false};
+  const skipped = computer.find(c => c.incompatible);
+  return skipped ? {skipped} : null;
 }

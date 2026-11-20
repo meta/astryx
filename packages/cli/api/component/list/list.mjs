@@ -25,7 +25,6 @@ import {
 import {EXACT_CODEC} from '../../../foundation/fs/exact-codec.mjs';
 import {persistedGather} from '../../../foundation/fs/gather-cache.mjs';
 import {CLI_ROOT, discoverExternalPackages, realDir} from '../../../foundation/fs/paths.mjs';
-import {hostedRun} from '../../../foundation/runtime/package-root.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {AstryxError} from '../../error.mjs';
 import {
@@ -34,6 +33,7 @@ import {
   loadIntegrationsSafely,
   withOwnership,
 } from '../_adapter.mjs';
+import {compareText} from '../../../foundation/text/compare-text.mjs';
 
 /**
  * @typedef {import('../component.type.mjs').ComponentListResponse} ComponentListResponse
@@ -46,7 +46,7 @@ import {
  * same way (`withOwnership`) so list and detail agree.
  * @param {{name: string, docsDir: string}} ext
  * @param {string} name
- * @param {string} coreDir
+ * @param {string | null} coreDir
  * @param {{zh: boolean, lang: string|null}} docOpts
  * @returns {Promise<string>}
  */
@@ -77,7 +77,7 @@ const coreEntry = doc => ({name: doc.name, package: CORE_PACKAGE, ...doc});
  * full entry. Null when the doc is the component's own.
  * @param {any} docs
  * @param {string} name
- * @param {string} coreDir
+ * @param {string | null} coreDir
  * @returns {any}
  */
 function memberEntry(docs, name, coreDir) {
@@ -155,7 +155,7 @@ async function replacementEntry(replacement, detail, {zh, dense, lang}) {
  * Build the `component.list` envelope. The list taxonomy is collapsed: all
  * three detail levels emit ONE `component.list` type; the depth rides in
  * `data.detail` and the grouped map in `data.components`.
- * @param {string} coreDir
+ * @param {string | null} coreDir
  * @param {object} opts
  * @param {string} opts.cwd
  * @param {string} [opts.category] - Filter to a single category (group key).
@@ -177,7 +177,6 @@ export async function componentList(coreDir, opts) {
         realDir(cwd),
         coreDir,
         CLI_ROOT,
-        hostedRun()?.integrations ?? [],
         category ?? null,
         detail,
         zh,
@@ -204,7 +203,7 @@ const COMPONENT_LIST_CODEC = {
 
 /**
  * componentList, worked out now.
- * @param {string} coreDir
+ * @param {string | null} coreDir
  * @param {Parameters<typeof componentList>[1]} options
  * @returns {Promise<ComponentListResponse>}
  */
@@ -472,7 +471,7 @@ async function componentListNow(coreDir, {cwd, category, detail, zh, dense, lang
       });
     }
     for (const [key, members] of byGroup) {
-      members.sort((a, b) => a.name.localeCompare(b.name));
+      members.sort((a, b) => compareText(a.name, b.name));
       listData[key] = members;
     }
   }

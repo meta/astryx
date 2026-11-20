@@ -172,7 +172,7 @@ export const docs = {
       name: 'width',
       type: 'SizeValue',
       description:
-        "Width of the button. Numbers are treated as pixels, strings are used as-is (e.g., '100%' for a full-width button). By default the button sizes to its content, never grows past its container, and truncates its label with an ellipsis when a row is too narrow; icon-only buttons stay square.",
+        "Width of the button. Numbers are treated as pixels, strings are used as-is (e.g., '100%' for a full-width button). By default the button sizes to its content, never grows past its container, and truncates its label with an ellipsis when a row is too narrow, showing the full label in a tooltip on keyboard focus; icon-only buttons stay square.",
     },
     {
       name: 'children',
@@ -218,6 +218,12 @@ export const docs = {
       type: 'ComponentType',
       description:
         'Custom link component to use when href is provided (e.g. Next.js Link).',
+    },
+    {
+      name: 'ref',
+      type: 'Ref<HTMLButtonElement>',
+      description:
+        'In link mode (with `href` and not disabled) the ref receives the link element, the anchor or the link component\'s element, although the type names `HTMLButtonElement`; otherwise it receives the button.',
     },
     {
       name: 'target',
@@ -355,7 +361,7 @@ export const docsZh = {
       default: 'false',
     },
     {name: 'icon', type: 'ReactNode', description: '图标元素。未显式指定尺寸的 Astryx Icon 在 sm/md 按钮中默认为 sm，在 lg 按钮中默认为 md。仅提供 icon 而不提供 children 时，按钮渲染为正方形的纯图标按钮。'},
-    {name: 'width', type: 'SizeValue', description: "按钮宽度。数字按像素处理，字符串按原样使用（如 '100%' 表示全宽按钮）。默认按内容自适应宽度，不会超出容器；行宽不足时标签以省略号截断；纯图标按钮保持正方形。"},
+    {name: 'width', type: 'SizeValue', description: "按钮宽度。数字按像素处理，字符串按原样使用（如 '100%' 表示全宽按钮）。默认按内容自适应宽度，不会超出容器；行宽不足时标签以省略号截断，键盘聚焦时在提示中显示完整标签；纯图标按钮保持正方形。"},
     {name: 'children', type: 'ReactNode', description: '可选的可见内容覆盖；label 仍然是必需的（用于无障碍名称）。大多数情况使用 <Button label="Save" />。'},
     {
       name: 'endContent',
@@ -424,7 +430,7 @@ export const docsDense = {
     isLoading: 'shows spinner, blocks re-activation but stays focusable (aria-disabled, not native disabled); announces via live region',
     icon: 'icon element rendered before label text; unsized Astryx Icon defaults to sm for sm/md buttons and md for lg',
     isIconOnly: 'when true, renders square icon-only button; label becomes aria-label',
-    width: "Width of button. Numbers=pixels, strings=as-is (e.g. '100%' for full-width). Default: content width, capped at the container; label truncates w/ ellipsis in a narrow row; icon-only stays square.",
+    width: "Width of button. Numbers=pixels, strings=as-is (e.g. '100%' for full-width). Default: content width, capped at the container; label truncates w/ ellipsis in a narrow row (full label in a tooltip); icon-only stays square.",
     children: 'optional visible override; label is still required for a11y. Prefer <Button label="Save" /> over using children',
     endContent: 'trailing icon/badge after label; ignored when isIconOnly; color inherited',
     tooltip: 'tooltip on hover',

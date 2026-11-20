@@ -7,8 +7,14 @@ import {pathToFileURL} from 'node:url';
 import * as util from 'node:util';
 import {afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
 import {CLI_ROOT} from '../fs/paths.mjs';
+import {importUrl} from '../fs/import-url.mjs';
 import {importDocModule} from './import.mjs';
-import {storedKey, storedParseKey, STORED_DOCS_FILE} from './stored-docs.mjs';
+import {
+  docParserZodVersion,
+  storedKey,
+  storedParseKey,
+  STORED_DOCS_FILE,
+} from './stored-docs.mjs';
 import {parseReadableDoc} from './parse-readable.mjs';
 import {storedDocsText} from '../../scripts/generate-stored-docs.mjs';
 import {
@@ -21,8 +27,14 @@ import {ASTRYX_DEFINITIONS_DIR} from '../discovery/icon-definition-discovery.mjs
 
 // The file is written at `prepack`, so a checkout has none. These tests
 // serve its text from memory to the importer's read of it: writing it into
-// the tree would change what other suites, running alongside, read.
-const memory = vi.hoisted(() => ({file: '', text: ''}));
+// the tree would change what other suites, running alongside, read. When
+// `zod` is set, a read of zod's package.json gives that version, as when an
+// install loads another zod release.
+const memory = vi.hoisted(() => ({
+  file: '',
+  text: '',
+  /** @type {string | null} */ zod: null,
+}));
 vi.mock('node:fs', async importOriginal => {
   const actual = /** @type {typeof import('node:fs')} */ (
     await importOriginal()
@@ -34,7 +46,10 @@ vi.mock('node:fs', async importOriginal => {
         ? rest[0]
           ? memory.text
           : Buffer.from(memory.text)
-        : actual.readFileSync(file, ...rest)
+        : memory.zod != null &&
+            String(file).endsWith(`${path.sep}zod${path.sep}package.json`)
+          ? JSON.stringify({name: 'zod', version: memory.zod})
+          : actual.readFileSync(file, ...rest)
   );
   return {...actual, default: {...actual, readFileSync}, readFileSync};
 });
@@ -123,7 +138,8 @@ describe('stored doc exports', () => {
     ]) {
       const exports = stored[storedKey(fs.readFileSync(file, 'utf-8'))];
       if (!exports) continue;
-      const native = await import(`${pathToFileURL(file).href}?native`);
+      // Node loads these directly, without a request per doc to Vitest's main process.
+      const native = await importUrl(`${pathToFileURL(file).href}?native`);
       expect(exports, file).toEqual({...native});
       checked++;
     }
@@ -226,6 +242,7 @@ describe('stored doc exports', () => {
     const key = storedParseKey(
       storedKey(fs.readFileSync(GUIDE, 'utf-8')),
       name,
+      /** @type {string} */ (docParserZodVersion()),
     );
     expect(stored[key]).toBeDefined();
     docParses.count = 0;
@@ -246,6 +263,39 @@ describe('stored doc exports', () => {
     // A parse gives a new value each time, never the shared export.
     expect(read).not.toBe(mod[name]);
     expect(parseReadableDoc(mod[name], 'guide')).not.toBe(read);
+  });
+
+  it('answer a stored parse only to an install that loads the zod release that made it', async () => {
+    const zod = docParserZodVersion();
+    expect(zod).toMatch(/^\d+\.\d+\.\d+/);
+    /** @param {string | null} version */
+    const readGuide = async version => {
+      // A new run, whose doc parsers load zod `version` (null: the installed
+      // one).
+      vi.resetModules();
+      memory.zod = version;
+      try {
+        const {importDocModule: importDoc} = await import('./import.mjs');
+        const {parseReadableDoc: parseReadable} =
+          await import('./parse-readable.mjs');
+        const mod = /** @type {any} */ (await importDoc(GUIDE));
+        const name = mod.docs ? 'docs' : 'default';
+        docParses.count = 0;
+        const read = parseReadable(mod[name], 'guide');
+        return {read, parses: docParses.count, value: mod[name]};
+      } finally {
+        memory.zod = null;
+      }
+    };
+    const {parseDoc} = await import('../../authoring/doctypes/parse.mjs');
+    const other = await readGuide('0.0.0-other');
+    expect(other.parses).toBe(1);
+    expect(JSON.stringify(other.read)).toBe(
+      JSON.stringify(parseDoc(structuredClone(other.value), 'guide')),
+    );
+    const same = await readGuide(zod);
+    expect(same.parses).toBe(0);
+    expect(JSON.stringify(same.read)).toBe(JSON.stringify(other.read));
   });
 
   it('import a doc that is not shipped, as before', async () => {

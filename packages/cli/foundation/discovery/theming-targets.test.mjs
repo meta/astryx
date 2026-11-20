@@ -46,6 +46,7 @@ import {
   collectThemingVars,
   targetsByKey,
 } from './theming-targets.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 const coreDir = /** @type {string} */ (findCoreDir(process.cwd()));
 const coreSrc = path.join(coreDir, 'src');
@@ -153,7 +154,7 @@ describe('collectThemingTargets', () => {
 
   it('is sorted by key, so a diff of two runs is readable', async () => {
     const keys = (await enumerated).map(t => t.key);
-    expect(keys).toEqual([...keys].sort((a, b) => a.localeCompare(b)));
+    expect(keys).toEqual([...keys].sort((a, b) => compareText(a, b)));
   });
 
   // The listing and `theme build`'s override validation read this one
@@ -341,7 +342,7 @@ describe('collectThemingVars', () => {
     const names = (await enumeratedVars).map(v => v.name);
     expect(names.length).toBeGreaterThan(0);
     expect(names.every(n => !n.startsWith('--_'))).toBe(true);
-    expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
+    expect(names).toEqual([...names].sort((a, b) => compareText(a, b)));
     expect(names).toEqual([...new Set(names)]);
   });
 

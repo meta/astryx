@@ -13,8 +13,10 @@ import {
 import {Card} from '@astryxdesign/core/Card';
 import {Button} from '@astryxdesign/core/Button';
 import {Heading, Text} from '@astryxdesign/core/Text';
+import {useToast} from '@astryxdesign/core/Toast';
 
 export default function LayoutBasicCardLayout() {
+  const showToast = useToast();
   return (
     <Card height={300} width="100%" style={{maxWidth: 400}}>
       <Layout
@@ -50,10 +52,20 @@ export default function LayoutBasicCardLayout() {
         footer={
           <LayoutFooter hasDivider>
             <HStack gap={2} hAlign="end">
-              <Button label="Cancel" variant="secondary">
+              <Button
+                label="Cancel"
+                variant="secondary"
+                onClick={() =>
+                  showToast({body: 'Demo: your edits would be discarded here'})
+                }>
                 Cancel
               </Button>
-              <Button label="Save" variant="primary">
+              <Button
+                label="Save"
+                variant="primary"
+                onClick={() =>
+                  showToast({body: 'Demo: your changes would be saved here'})
+                }>
                 Save
               </Button>
             </HStack>

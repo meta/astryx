@@ -8,7 +8,11 @@ import {Badge} from '@astryxdesign/core/Badge';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Text} from '@astryxdesign/core/Text';
 import {Stack} from '@astryxdesign/core/Layout';
-import {UserIcon, DocumentIcon, BellIcon} from '@heroicons/react/24/outline';
+import {
+  UserIcon,
+  FileIcon,
+  NotificationIcon,
+} from '@astryxdesign/template-icons';
 
 export default function ItemShowcase() {
   return (
@@ -21,7 +25,7 @@ export default function ItemShowcase() {
         onClick={() => {}}
       />
       <Item
-        startContent={<Icon icon={BellIcon} size="sm" />}
+        startContent={<Icon icon={NotificationIcon} size="sm" />}
         label="Build completed successfully"
         description="Pipeline #4521 — all 42 tests passed"
         endContent={<Text color="secondary">5h ago</Text>}
@@ -29,7 +33,7 @@ export default function ItemShowcase() {
         onClick={() => {}}
       />
       <Item
-        startContent={<Icon icon={DocumentIcon} size="sm" />}
+        startContent={<Icon icon={FileIcon} size="sm" />}
         label="design-spec.pdf"
         description="Modified 2 hours ago"
         endContent={<Text color="secondary">2.4 MB</Text>}

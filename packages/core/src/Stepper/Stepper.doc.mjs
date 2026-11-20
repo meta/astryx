@@ -120,14 +120,20 @@ export const docs = {
       },
       {className: 'astryx-stepper-frame'},
       {className: 'astryx-stepper-summary'},
-      {className: 'astryx-step', visualProps: ['progress', 'status']},
+      {
+        className: 'astryx-step',
+        visualProps: ['progress', 'status'],
+        states: ['selected'],
+      },
       {
         className: 'astryx-step-indicator',
         visualProps: ['progress', 'status', 'disabled'],
+        states: ['selected'],
       },
       {
         className: 'astryx-step-label',
         visualProps: ['progress', 'status', 'disabled'],
+        states: ['selected'],
       },
       {
         className: 'astryx-step-description',
@@ -336,14 +342,20 @@ export const docsZh = {
       },
       {className: 'astryx-stepper-frame'},
       {className: 'astryx-stepper-summary'},
-      {className: 'astryx-step', visualProps: ['progress', 'status']},
+      {
+        className: 'astryx-step',
+        visualProps: ['progress', 'status'],
+        states: ['selected'],
+      },
       {
         className: 'astryx-step-indicator',
         visualProps: ['progress', 'status', 'disabled'],
+        states: ['selected'],
       },
       {
         className: 'astryx-step-label',
         visualProps: ['progress', 'status', 'disabled'],
+        states: ['selected'],
       },
       {
         className: 'astryx-step-description',

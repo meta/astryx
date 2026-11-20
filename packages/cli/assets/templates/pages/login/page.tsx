@@ -11,7 +11,7 @@ import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Banner} from '@astryxdesign/core/Banner';
-import {CubeIcon} from '@heroicons/react/24/outline';
+import {PackageIcon} from '@astryxdesign/template-icons';
 
 // Standalone auth page paints its own body background (no host shell).
 const pageStyle: CSSProperties = {
@@ -42,11 +42,11 @@ export default function LoginPage() {
   };
 
   return (
-    <Center axis="both" padding={6} style={pageStyle}>
+    <Center role="main" axis="both" padding={6} style={pageStyle}>
       <VStack gap={4} hAlign="center" style={contentStyle}>
         {/* Logo */}
         <VStack gap={2} hAlign="center">
-          <Icon icon={CubeIcon} size="lg" />
+          <Icon icon={PackageIcon} size="lg" />
           <Text type="body" weight="bold" size="lg">
             Product Inc.
           </Text>
@@ -56,7 +56,9 @@ export default function LoginPage() {
         <Card padding={8} width="100%">
           <VStack gap={4} hAlign="stretch">
             <VStack gap={1} hAlign="center">
-              <Heading level={2}>Sign in</Heading>
+              <Heading level={2} accessibilityLevel={1}>
+                Sign in
+              </Heading>
               <Text type="body" color="secondary" size="sm">
                 Enter your credentials to continue
               </Text>
