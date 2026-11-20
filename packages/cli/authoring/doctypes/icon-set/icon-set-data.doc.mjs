@@ -14,7 +14,7 @@ export const doc = {
   namespace: 'authoring',
   stability: 'experimental',
   description:
-    "Experimental: may change or be removed in a patch release. An icon set's data file: which icons exist, the export that draws each one, the words a person might search for, and which icon draws each icon definition (`map`). `astryx experimental icon`, template icon mapping, and the checks read this file and nothing else.",
+    "Experimental: may change or be removed in a patch release. An icon set's data file: which icons exist, the export that draws each one, the words a person might search for, and which icon draws each icon meaning (`map`). `astryx experimental icon`, template icon mapping, and the checks read this file and nothing else.",
   appliesTo: '<iconSetsRoot>/<name>/<name>.icons.json',
   fields: [
     {
@@ -61,7 +61,7 @@ export const doc = {
       name: 'variants',
       type: 'string[]',
       description:
-        "The named looks the set offers, in lower-kebab case, such as `outline` and `filled`. Icon size is never a variant: CSS sets it. Omit it when the set has one look. A project's `experimental.iconVariant` names one of these, so call each look what it draws rather than the library's word for it.",
+        "The named variants the set offers, in lower-kebab case, such as `outline` and `filled`. Icon size is never a variant: CSS sets it. Omit it when the set has one variant. A project's `experimental.iconVariant` names one of these, so name each variant for what it draws rather than the library's word for it.",
       example: "['outline', 'filled']",
     },
     {
@@ -75,14 +75,14 @@ export const doc = {
       name: 'themeMap',
       type: 'string',
       description:
-        "The export that maps each built-in icon definition to its artwork, keyed by exactly the built-in definitions in `map`. When it is `themeIcons`, the generated module writes it, and beside it one map for each other variant an icon draws, `themeIcons<Variant>` (`themeIconsFilled`), whose entries draw that variant, or an icon's own export when it has none.",
+        "The export that maps each built-in icon meaning to its artwork, keyed by exactly the built-in meanings in `map`. When it is `themeIcons`, the generated module writes it, and beside it one map for each other variant an icon draws, `themeIcons<Variant>` (`themeIconsFilled`), whose entries draw that variant, or an icon's own export when it has none.",
       example: "'themeIcons'",
     },
     {
       name: 'map',
       type: 'Record<string, string>',
       description:
-        "Which of this set's icons draws each icon definition: definition name to icon `id`. Keys are Astryx's definitions (`astryx docs cli/experimental/icon-definitions`) or ones the set declares in its `definitions` folder, one file per definition. One icon may draw several definitions; each definition maps to one icon. Every built-in definition must be mapped.",
+        "Which of this set's icons draws each icon meaning: meaning name to icon `id`. Keys are Astryx's meanings (`astryx docs cli/experimental/icon-definitions`) or ones the set declares in its `definitions` folder, one file per meaning. One icon may draw several meanings; each meaning maps to one icon. Every built-in meaning must be mapped.",
       example: '{"close": "x", "delete": "trash", "remove": "trash"}',
     },
     {
@@ -116,7 +116,7 @@ export const doc = {
           name: 'icons[].words',
           type: 'string[]',
           description:
-            "Lower-case terms a person might search for, the words of the icon's own name included; at least one. Do not copy the words of the definitions `map` names the icon for: search already matches the icon by them.",
+            "Lower-case terms a person might search for, the words of the icon's own name included; at least one. Do not copy the words of the meanings `map` names the icon for: search already matches the icon by them.",
           required: true,
           example: "['trash', 'delete', 'remove', 'bin']",
         },
@@ -165,7 +165,7 @@ export const doc = {
     },
     {
       type: 'prose',
-      text: "A template declares the icon definition each icon it imports draws. With a project icon set, each declared icon maps to the icon whose `matches` name it with `exact` or `strong` confidence (for an icon another installed set ships), else to the icon this file's `map` names for its definition. Nothing is guessed from names or words.",
+      text: "A template declares the icon meaning each icon it imports draws. With a project icon set, each declared icon maps to the icon whose `matches` name it with `exact` or `strong` confidence (for an icon another installed set ships), else to the icon this file's `map` names for its meaning. Nothing is guessed from names or words.",
     },
     {
       type: 'prose',
