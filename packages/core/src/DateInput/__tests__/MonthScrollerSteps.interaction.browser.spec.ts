@@ -5,12 +5,11 @@
  * @input The built "Default" DateInput story, shown in a bottom sheet, the
  *   arrows clicked from the page, real mouse and trackpad input and the
  *   interaction harness
- * @output Interaction proofs for the month scroller's steps: after the month
- *   and year wheels close, a trackpad scroll still pages to the next month and
- *   Reset from four months on still rests on today's month; an arrow step
- *   through a stalled frame moves exactly one month; under a finger, a swipe
- *   that crosses the middle of a month as it lifts keeps scroll snapping on
- *   until it rests on the next month.
+ * @output Interaction proofs for the month scroller's steps. After the month
+ *   and year wheels close, a trackpad scroll still pages to the next month.
+ *   Reset from four months on still rests on today's month. An arrow step
+ *   through a stalled frame moves exactly one month. Under a primary finger
+ *   the calendar is MonthPager (MonthPager.interaction.browser.spec.ts).
  *   (A second arrow step late in the first one's scroll, which WebKit cuts
  *   short, is proven in MonthScrollerSettle.test.tsx: a loaded page's frames
  *   are too far apart to aim a click at a share of a 300 ms scroll.)
@@ -26,9 +25,7 @@ import {
 } from '@astryxdesign/a11y-spec/playwright';
 import {
   blockMainThread,
-  drag,
   openStory,
-  touchDriver,
   withStorybook,
 } from '@astryxdesign/interaction-harness';
 
@@ -276,81 +273,4 @@ test('after the month and year wheels close, Reset from four months on rests on 
   await waitForRestOnMonth(viewport);
   expect(await monthAtRest(viewport)).toBe(today);
   await expect(toggle).toHaveAccessibleName(new RegExp(today));
-});
-
-/** The scroller's snapping pauses and its rest after the lift (page clock, ms). */
-interface SnapRecord {
-  pauses: number[];
-  liftedAt: number | null;
-  restAt: number | null;
-}
-
-test.describe('under a finger', () => {
-  test.use({hasTouch: true, isMobile: true});
-
-  /**
-   * A swipe whose last move crosses the middle of the month makes the
-   * scroller re-center as the finger lifts. The finger drives that scroll, so
-   * snapping stays on until the scroll comes to rest (turning it off drops the
-   * snap target iOS tracks for the gesture, and the swipe coasted past the
-   * month), and the swipe comes to rest on the next month.
-   *
-   * A re-center that commits only after the rest may still pause snapping:
-   * that is the stalled-frame protection, and at rest it moves nothing.
-   * WebKit's injected touches drive no native scroll, so its scroll is the
-   * glide after the lift, and under load the glide's last scroll event and its
-   * `scrollend` land in one frame: the re-center then commits after the rest.
-   */
-  test('a swipe that crosses the middle of a month as it lifts keeps snapping on until it rests on the next month', async ({
-    page,
-  }) => {
-    const viewport = await openCalendar(page);
-    const start = await monthAtRest(viewport);
-    const box = await viewport.boundingBox();
-    if (box == null) {
-      throw new Error('no month scroller');
-    }
-    // Each pause of the scroller's snapping, and the first time its scroll
-    // comes to rest after the lift, both on the page's clock.
-    await viewport.evaluate(element => {
-      const record: SnapRecord = {pauses: [], liftedAt: null, restAt: null};
-      (window as unknown as {snapRecord: SnapRecord}).snapRecord = record;
-      new MutationObserver(() => {
-        if ((element as HTMLElement).style.scrollSnapType === 'none') {
-          record.pauses.push(performance.now());
-        }
-      }).observe(element, {attributes: true, attributeFilter: ['style']});
-      window.addEventListener(
-        'touchend',
-        () => {
-          record.liftedAt ??= performance.now();
-        },
-        {capture: true, passive: true},
-      );
-      element.addEventListener('scrollend', () => {
-        if (record.liftedAt != null) {
-          record.restAt ??= performance.now();
-        }
-      });
-    });
-    const driver = await touchDriver(page);
-    const y = box.y + box.height / 2;
-    const from = {x: box.x + box.width * 0.8, y};
-    // 55 % of a month toward the next one, the middle crossed by the last
-    // move, lifting a quarter frame after it.
-    await driver.play(
-      drag(from, {x: from.x - box.width * 0.55, y}, {durationMs: 300}),
-    );
-    await waitForRestOnMonth(viewport);
-    const rest = await monthAtRest(viewport);
-    expect(rest).not.toBe('');
-    expect(rest).not.toBe(start);
-    const {pauses, restAt} = await page.evaluate(
-      () => (window as unknown as {snapRecord: SnapRecord}).snapRecord,
-    );
-    // The scroll came to rest after the lift, and snapping stayed on until it
-    // did.
-    expect(restAt).not.toBeNull();
-    expect(pauses.filter(at => at < (restAt ?? 0))).toEqual([]);
-  });
 });
