@@ -352,6 +352,22 @@ describe('the base theme asked for by name', () => {
   }, 240_000);
 });
 
+describe('a lone color that names a role or variant', () => {
+  it('is left to the role and variant readers', async () => {
+    const run = writes(
+      await how('q0', 'bigger buttons, red and blue accents'),
+    ).join('\n');
+    expect(run).toMatch(/spacing more --on button/);
+    // (One accent: the run's colors never contradict each other.)
+    expect(new Set(run.match(/^set q0 accent .*$/gm) ?? []).size).toBe(1);
+    const primary = writes(
+      await how('q0', 'bigger buttons, primary blue'),
+    ).join('\n');
+    expect(primary).toMatch(/background-color '#2563eb' --on button/);
+    expect(primary).not.toMatch(/^set q0 accent /m);
+  }, 240_000);
+});
+
 describe('a lone color with a part said after it', () => {
   it('keeps its reading whatever part follows', async () => {
     const green = writes(

@@ -8658,6 +8658,20 @@ export function draftAnswer(ctx, env, question) {
       const members = (FAMILIES[p.on] ?? [p.on]).filter(m => C.MAP[m]);
       return members.length > 0 && members.every(drawsWithAccent);
     });
+  // ("red and blue accents", "primary blue": a piece that names a role or
+  // a variant is read by the colors-before-role pass, never as a lone
+  // color.)
+  const ROLE_OR_VARIANT =
+    /\b(?:accents?|brand|primary|secondary|tertiary|ghost|destructive|success|warnings?|danger|errors?|info|neutral|status(?:es)?|highlights?)\b/;
+  // ("red and blue accents": a color in a run that ends at a role word is
+  // that role's too.)
+  const namesARole = (/** @type {Clause} */ c) => {
+    const n = clauses[clauses.indexOf(c) + 1];
+    return (
+      ROLE_OR_VARIANT.test(c.text) ||
+      Boolean(n?.colors.length && ROLE_OR_VARIANT.test(n.text))
+    );
+  };
   /**
    * The clause-scope reader: whether a clause that names no part takes the
    * part (and state) of the clause before it, or is the whole theme's.
@@ -8706,6 +8720,7 @@ export function draftAnswer(ctx, env, question) {
     // rounder and red" is still the buttons'.)
     if (
       accentParts(before.parts) &&
+      !namesARole(c) &&
       j.sep === 'comma' &&
       j.list == null &&
       c.colors.length &&
@@ -9291,7 +9306,8 @@ export function draftAnswer(ctx, env, question) {
     }
     // (Only after a part that draws with the accent is a lone color the
     // accent; after any other part it reads as it always has.)
-    const ownPiece = pieceOfList && !own && accentParts(prevParts);
+    const ownPiece =
+      pieceOfList && !own && accentParts(prevParts) && !namesARole(c);
     if (
       !ownLook &&
       !ownPiece &&
