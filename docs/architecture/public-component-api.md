@@ -71,6 +71,7 @@ deciding_specs:
 ```
 
 This record defines the shared public API contract for stable Astryx components.
+Its handle-ref rule (INV8, DEC-7) applies in every package.
 
 ## Purpose
 
@@ -154,9 +155,9 @@ guidance owns the process used to propose and test APIs.
   behavior only where that public API promises cancellation. A component that
   moves a handler to another element keeps the order and cancellation it
   released for that handler and documents it (`family:input-fields` DEC-8).
-- **INV8 — Refs follow React 19.** In every package, a public DOM component
-  accepts `ref` as a prop and connects it to the element promised by its
-  contract. A public ref through which a component or a definition exposes an
+- **INV8 — Refs follow React 19.** A public DOM component accepts `ref` as a
+  prop and connects it to the element promised by its contract. In every
+  package, a public ref through which a component or a definition exposes an
   imperative handle takes `Ref<Handle>`, so it accepts an object ref or a
   callback ref (DEC-7). React calls a callback ref with the handle when the
   handle attaches, so the caller learns when the handle is ready. When the
@@ -342,7 +343,9 @@ guidance owns the process used to propose and test APIs.
   change coupling step 6 describes. A removed or renamed row follows INV9.
 
 This record applies to stable public packages, and INV23 also applies to Lab
-source. Lab components are not stable public promises until promotion.
+source. INV8's handle-ref rule (DEC-7) applies in every package, Lab, Charts
+and Vega included. Lab components are not stable public promises until
+promotion.
 
 ## Change coupling
 
