@@ -42,9 +42,12 @@ describe('FieldLabel', () => {
     );
     const label = screen.getByText('Email').closest('label') as Element;
     expect(declaredValue(label, 'color')).toBe('var(--color-text-primary)');
-    expect(declaredValue(screen.getByText('We never share it'), 'color')).toBe(
-      'var(--color-text-secondary)',
-    );
+    expect(
+      declaredValue(
+        screen.getByText('We never share it').parentElement,
+        'color',
+      ),
+    ).toBe('var(--color-text-secondary)');
     const marker = screen.getByText('Optional').closest('span') as Element;
     expect(declaredValue(marker, 'color')).toBe('var(--color-text-secondary)');
   });
