@@ -215,6 +215,16 @@ function seedFailure(cacheDir, version, record) {
   return file;
 }
 
+/**
+ * The npm runs that install, leaving out the `npm config get` read that
+ * checks whether the registries changed since the failure.
+ * @param {string[][]} calls
+ * @returns {string[][]}
+ */
+function installRuns(calls) {
+  return calls.filter(args => args[0] !== 'config');
+}
+
 describe('failedInstallWaitMs', () => {
   it('waits 2 minutes after a first failure and 10 after a second in a row', () => {
     expect(failedInstallWaitMs(1)).toBe(2 * MINUTE);
@@ -242,6 +252,7 @@ describe('recentFailedInstall', () => {
       at: now - (2 * MINUTE - 1),
       reason: 'offline',
       failures: 1,
+      registries: null,
       waitMs: 2 * MINUTE,
     });
     seedFailure(cacheDir, '0.6.8', {
@@ -336,7 +347,7 @@ describe('ensureRelease after a failed install (FR2)', () => {
     // start npm and wait for it on every run.
     const second = fakeNpm();
     const again = ensureRelease('0.6.8', {cacheDir, run: second.run});
-    expect(second.calls).toHaveLength(0);
+    expect(installRuns(second.calls)).toHaveLength(0);
     expect('reason' in failed && 'reason' in again).toBe(true);
     // The new reason keeps the old one, and says when it tried and how long
     // until it tries again.
@@ -358,7 +369,7 @@ describe('ensureRelease after a failed install (FR2)', () => {
     });
     const npm = fakeNpm();
     const result = ensureRelease('0.6.8', {cacheDir, run: npm.run});
-    expect(npm.calls).toHaveLength(0);
+    expect(installRuns(npm.calls)).toHaveLength(0);
     const reason = 'reason' in result ? result.reason : '';
     expect(reason.startsWith('the registry could not be reached; ')).toBe(true);
     expect(reason).toMatch(/last tried 2 minutes ago/);
@@ -388,7 +399,7 @@ describe('ensureRelease after a failed install (FR2)', () => {
     });
     const held = fakeNpm();
     const result = ensureRelease('0.6.8', {cacheDir, run: held.run});
-    expect(held.calls).toHaveLength(0);
+    expect(installRuns(held.calls)).toHaveLength(0);
     expect('reason' in result && result.reason).toMatch(/after 10 minutes$/);
 
     seedFailure(cacheDir, '0.6.8', {
