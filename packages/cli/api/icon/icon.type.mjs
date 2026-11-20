@@ -88,7 +88,7 @@
  * @property {number} data.matchCount - Every match, before `limit`.
  * @property {IconMatchEntry[]} data.matches - The ranked matches, at most `limit`.
  * @property {string} [data.reason] - Present when no icon set is installed: why nothing matches.
- * @property {IconSearchDefinition[]} [data.definitions] - Present when no icon set is installed: the Astryx icon definitions that match, built-in ones first, with the built-in one each matching refined meaning falls back to, at most `limit`.
+ * @property {IconSearchDefinition[]} [data.definitions] - Present when no icon set is installed: the Astryx icon definitions that match, built-in ones first, with the built-in that draws in place of a matching definition Core does not draw (`help` brings `info`), at most `limit`.
  * @property {string} [data.next] - Present when no icon set is installed: how to get one.
  */
 

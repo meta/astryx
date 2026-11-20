@@ -189,6 +189,11 @@ describe('astryx experimental icon with no icon set installed', () => {
     expect(review[0]).toBe('check');
     expect(review.indexOf('info')).toBeGreaterThan(review.indexOf('success'));
     expect(review.indexOf('info')).toBeLessThan(review.indexOf('review'));
+    // A better match that Core cannot draw at all keeps a weaker match's
+    // fallback out: `settings` has no built-in, and `columnSettings`, which
+    // falls back to `viewColumns`, matches it less well.
+    expect(await names('settings')).not.toContain('viewColumns');
+    expect((await names('column settings'))[0]).toBe('viewColumns');
   });
 
   it('lists built-in names before other definitions, at most --limit', async () => {
