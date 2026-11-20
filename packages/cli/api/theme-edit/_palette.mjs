@@ -1542,9 +1542,10 @@ export function syncPaletteRefs(cwd, slug, source, pal) {
 
 /**
  * A palette made with a recipe this CLI does not know, with the file left as
- * it is, never as a fault to fix by hand. A newer CLI's recipe gets the
+ * it is. A newer CLI's recipe is no fault to fix by hand: it gets the
  * refusal `theme palette generate` gives, with the update step that fits
- * where the CLI runs; any other recipe is named as no recipe Astryx makes.
+ * where the CLI runs. Any other recipe is named as no recipe Astryx makes,
+ * and the file is the fix: its `recipe` set to one this CLI knows.
  * @param {any} config
  * @param {string} file the config's path, for the refusal
  * @param {string} [cwd] the project, for the step that updates the CLI
@@ -1554,9 +1555,12 @@ function refuseUnknownRecipe(config, file, cwd) {
   if (recipe == null || PALETTE_RECIPES.includes(recipe)) return;
   if (newerRecipe(recipe))
     throw newerRecipeRefusal({recipe, file, cwd: cwd ?? process.cwd()});
+  // Every command that reads the theme builds this plan and meets this
+  // refusal again, so the way out is the file itself, and no command is
+  // offered.
   throw new AstryxError(
-    `${file}: this theme's colors name the palette recipe ${String(recipe)}, which no Astryx CLI makes; this CLI (${cliVersion()}) knows ${PALETTE_RECIPES.join(', ')}. The file is left as it is. Nothing was changed.`,
-    [{name: `${P} how colors`, reason: 'how the colors are made'}],
+    `${file}: this theme's colors name the palette recipe ${String(recipe)}, which no Astryx CLI makes. Fix that part of the file by hand: set "recipe" to one of the recipes this CLI (${cliVersion()}) knows, ${PALETTE_RECIPES.join(', ')}. Nothing was changed.`,
+    [],
     ERROR_CODES.ERR_PALETTE_GENERATION,
   );
 }

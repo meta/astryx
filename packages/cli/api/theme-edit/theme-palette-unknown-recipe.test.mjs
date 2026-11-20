@@ -20,6 +20,7 @@ import {
 import {cliVersion} from '../../foundation/release/run-context.mjs';
 import {PALETTE_RECIPES} from '../theme/palette/generate/generator.mjs';
 import {newerRecipeRefusal} from '../theme/palette/generate/newer-recipe.mjs';
+import {P} from './_tables.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -81,7 +82,18 @@ describe('a palette recipe this CLI does not know', () => {
         expect(e.message).toContain('palette recipe made-up-recipe-zz9');
         expect(e.message).toContain(`this CLI (${cliVersion()})`);
         expect(e.message).toMatch(/no Astryx CLI makes/);
-        expect(e.message).not.toMatch(/by hand|update the CLI/);
+        expect(e.message).toMatch(/Fix that part of the file by hand/);
+        expect(e.message).toContain(
+          `set "recipe" to one of the recipes this CLI (${cliVersion()}) knows, ${PALETTE_RECIPES.join(', ')}`,
+        );
+        expect(e.message).not.toMatch(/update the CLI/);
+        // Every editor command reads the theme and meets this refusal
+        // again, so none is offered as the way out.
+        expect(
+          (e.suggestions ?? []).filter((/** @type {any} */ s) =>
+            String(s.name).startsWith(P),
+          ),
+        ).toEqual([]);
         expect(fs.readFileSync(config).equals(before)).toBe(true);
       }
     },
@@ -109,6 +121,13 @@ describe('a palette recipe this CLI does not know', () => {
       expect(
         (e.suggestions ?? []).map((/** @type {any} */ s) => s.name),
       ).toContainEqual(expect.stringMatching(/@astryxdesign\/cli@/));
+      // None of its steps is an editor command, which would meet this
+      // refusal again.
+      expect(
+        (e.suggestions ?? []).filter((/** @type {any} */ s) =>
+          String(s.name).startsWith(P),
+        ),
+      ).toEqual([]);
       expect(fs.readFileSync(config).equals(before)).toBe(true);
     },
     T,
