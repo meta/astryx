@@ -25771,22 +25771,27 @@ export function draftAnswer(ctx, env, question) {
         // color said of a part whose variants the answer names elsewhere
         // goes to those variants only, in its own mode, as main reads it;
         // the lines offered for the variants kept apart name none.)
-        const namedVariants = [
-          ...new Set(
-            result
-              .filter(r => !keptLines.includes(r))
-              .flatMap(r => r.options.flat())
-              .filter(
-                x =>
-                  x !== st &&
-                  x.on === st.on &&
-                  /^variant:/.test(String(x.when ?? '')),
-              )
-              .map(x => String(x.when)),
-          ),
-        ];
-        if (namedVariants.length) {
-          o.splice(i, 1, ...namedVariants.map(when => ({...st, when})));
+        // (Each named variant keeps the mode its step there is in: a fill
+        // asked for dark mode puts the text on it in dark mode only.)
+        /** @type {Map<string, any>} */
+        const namedVariants = new Map();
+        for (const x of result
+          .filter(r => !keptLines.includes(r))
+          .flatMap(r => r.options.flat()))
+          if (
+            x !== st &&
+            x.on === st.on &&
+            /^variant:/.test(String(x.when ?? ''))
+          ) {
+            const mode = st.mode ?? x.mode;
+            namedVariants.set(`${x.when}\0${mode ?? ''}`, {
+              ...st,
+              when: String(x.when),
+              ...(mode ? {mode} : {}),
+            });
+          }
+        if (namedVariants.size) {
+          o.splice(i, 1, ...namedVariants.values());
           continue;
         }
         // (A text color asked alone, "buttons with red text", with no fill or
