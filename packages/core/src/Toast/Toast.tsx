@@ -127,8 +127,8 @@ const styles = stylex.create({
   variantError: {
     backgroundColor: colorVars['--color-background-error-inverted'],
   },
-  // The card's text takes the on-color of the side it picks (FR14). The
-  // restated token reaches a caller's text too.
+  // Restate the token as well as the color, so a caller's text follows the
+  // side too.
   sideText: {
     display: 'contents',
   },
@@ -488,10 +488,32 @@ export function ToastSurface({
     pickInvertedSide,
   );
   const mediaMode = measuredMediaMode ?? fallbackMediaMode;
-  // Before the measurement, a page whose side is not yet known keeps the
-  // ambient text until the card is measured.
-  const textSide =
-    measuredMediaMode != null || darkPageSide == null ? mediaMode : 'off';
+  // Before the measurement, a system-mode page whose two sides differ (its
+  // reader's scheme unknown) keeps the ambient text until the card is
+  // measured. With no theme, Core's defaults give the two sides.
+  const textSides = useMemo(
+    () =>
+      sides ??
+      (isSchemeUnknown
+        ? {
+            light: invertedSideIn(
+              resolveThemeTokens(null, {mode: 'light'}),
+              surfaceToken,
+            ),
+            dark: invertedSideIn(
+              resolveThemeTokens(null, {mode: 'dark'}),
+              surfaceToken,
+            ),
+          }
+        : null),
+    [sides, isSchemeUnknown, surfaceToken],
+  );
+  const isSideUnknown =
+    measuredMediaMode == null &&
+    isSchemeUnknown &&
+    textSides != null &&
+    textSides.light !== textSides.dark;
+  const textSide = isSideUnknown ? 'off' : mediaMode;
 
   return (
     <div

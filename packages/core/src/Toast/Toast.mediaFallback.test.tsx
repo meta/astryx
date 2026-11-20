@@ -154,13 +154,21 @@ describe('Toast text on its media side', () => {
       />,
     );
 
-  it("gives a dark error or info card the dark side's on-color text", () => {
-    for (const type of ['error', 'info'] as const) {
-      const html = markup(type);
-      const inside = html.slice(html.indexOf('data-astryx-media='));
-      for (const name of onDarkText) {
-        expect(inside, type).toContain(name);
-      }
+  it("gives a dark error card the dark side's on-color text", () => {
+    const html = markup('error');
+    const inside = html.slice(html.indexOf('data-astryx-media='));
+    for (const name of onDarkText) {
+      expect(inside).toContain(name);
+    }
+  });
+
+  it('keeps the ambient text on a server render whose two sides differ', () => {
+    // Core's info surface is dark in light mode and light in dark mode, so a
+    // system-mode server render does not know the reader's side.
+    const html = markup('info');
+    const inside = html.slice(html.indexOf('data-astryx-media='));
+    for (const name of onDarkText) {
+      expect(inside).not.toContain(name);
     }
   });
 });
