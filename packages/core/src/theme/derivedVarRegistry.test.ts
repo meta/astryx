@@ -402,8 +402,9 @@ const CROSS_COMPONENT_VARS: Record<string, string[]> = {
   // documents and reads both slots.
   DropdownMenu: ['--_item-label-color', '--_item-description-color'],
   // List's edge="flush" zeroes the inline inset of the Item each ListItem
-  // renders; Item owns, documents and reads it.
-  List: ['--_item-inset-inline'],
+  // renders, and a reorderable row that stays put sets the room after its
+  // marker; Item owns, documents and reads both.
+  List: ['--_item-inset-inline', '--_item-marker-room'],
   // A layer content root stops an outer Stepper's connector gap; Stepper owns,
   // documents and reads it.
   Layer: ['--step-connector-gap'],
@@ -440,6 +441,16 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // The ::after layer adds it to its offset, so the band starts past the
   // border. It is the layer's geometry, not a property a theme author sets. A
   // theme changes the divider through `--border-width`, which this follows.
+  // A reorderable list's values for its rows' handle room: whether the
+  // handles take a place, their targets' reach, and a bleeding list's start
+  // padding. They are reorder layout, not properties a theme author sets.
+  '--_reorder-shown',
+  '--_reorder-reach',
+  '--_reorder-bleed-start',
+  // The room a row keeps after its list marker for its neighbours' reorder
+  // handles: a reorderable List row that stays put sets it, and Item pads the
+  // content after the marker by it.
+  '--_item-marker-room',
   '--_hit-border-bottom',
   // The interaction overlay's colour on the ::after layer of the cards:
   // written by the component's own hover and mouse `:active` arms, never a

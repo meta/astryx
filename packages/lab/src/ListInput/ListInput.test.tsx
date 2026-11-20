@@ -19,7 +19,7 @@ import path from 'node:path';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {useMemo, useState} from 'react';
 import userEvent from '@testing-library/user-event';
-import {createReorderable} from '@astryxdesign/core';
+import {createReorderable, type ReorderHandleOptions} from '@astryxdesign/core';
 import {
   fireEvent,
   render,
@@ -139,12 +139,16 @@ function reorderableFor(
 function OwnedList({
   onReorder,
   isReorderable,
+  handle,
   ...props
 }: Partial<ListInputProps<Guest>> & {
   onReorder?: (move: {key: string | number; to: number}) => void;
   isReorderable?: (key: string | number) => boolean;
+  handle?: ReorderHandleOptions;
 }) {
   const [value, setValue] = useState(props.value ?? guests);
+  const placement = handle?.placement;
+  const revealBehavior = handle?.revealBehavior;
   const reorderable = useMemo(
     () =>
       createReorderable({
@@ -160,8 +164,9 @@ function OwnedList({
           });
         },
         isReorderable,
+        handle: {placement, revealBehavior},
       }),
-    [onReorder, isReorderable],
+    [onReorder, isReorderable, placement, revealBehavior],
   );
   return (
     <ListInput<Guest>
@@ -219,6 +224,8 @@ function revealClasses() {
   return {
     container,
     grip,
+    // The fade's own tokens (its transition), without its opacity.
+    fade: grip.filter(token => gripShown.includes(token)),
     onlyInactive: containerInactive.filter(token => !container.includes(token)),
     onlyShown: gripShown.filter(token => !grip.includes(token)),
   };
@@ -843,6 +850,68 @@ describe('ListInput', () => {
     expect(handle).not.toHaveAttribute('tabindex', '-1');
   });
 
+  it("starts each record with the handle, before its first field, when the owner's object places handles at the start", () => {
+    const reveal = revealClasses();
+    const {container} = renderListInput({
+      reorderable: createReorderable({
+        onReorder: () => {},
+        handle: {placement: 'start'},
+      }),
+    });
+    const row = container.querySelector<HTMLElement>('[data-list-input-row]');
+    const handle = screen.getByRole('button', {name: 'Reorder guest 1'});
+    const remove = screen.getByRole('button', {name: 'Remove guest 1'});
+    // The handle is the record's first control, beside its first field.
+    expect(within(row!).getAllByRole('button')).toEqual([handle, remove]);
+    expect(
+      row!.querySelector('[data-list-input-cell="0"]')?.contains(handle),
+    ).toBe(true);
+    // ListInput's handles fade with their record unless the object says
+    // otherwise. Hidden, the handle keeps its tab stop.
+    expect(classTokens(row)).toEqual(expect.arrayContaining(reveal.container));
+    expect(reveal.fade.length).toBeGreaterThan(0);
+    expect(classTokens(handle)).toEqual(expect.arrayContaining(reveal.fade));
+    expect(handle).not.toHaveAttribute('tabindex', '-1');
+  });
+
+  it("always shows the handle, and Remove beside it, when the owner's object says so at the end", () => {
+    const reveal = revealClasses();
+    renderListInput({
+      reorderable: createReorderable({
+        onReorder: () => {},
+        handle: {revealBehavior: 'always'},
+      }),
+    });
+    const handle = screen.getByRole('button', {name: 'Reorder guest 1'});
+    const remove = screen.getByRole('button', {name: 'Remove guest 1'});
+    const cell = handle.parentElement;
+    expect(remove.parentElement).toBe(cell);
+    // The cell they share does not fade.
+    expect(classTokens(cell)).not.toEqual(expect.arrayContaining(reveal.grip));
+  });
+
+  it("focuses an added record's first field, not the handle that starts it", () => {
+    render(
+      <OwnedList
+        handle={{placement: 'start'}}
+        columns={[
+          {
+            key: 'vip',
+            header: 'VIP',
+            renderInput: ({item, label}) => (
+              <button type="button" aria-pressed={false}>
+                {`${label} ${item.name}`}
+              </button>
+            ),
+          },
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Add guest'}));
+
+    expect(screen.getByRole('button', {name: /Linus/})).toHaveFocus();
+  });
+
   it('reveals Remove on hover or focus, with or without reordering', () => {
     const reveal = revealClasses();
     for (const reorderable of [undefined, reorderableFor()]) {
@@ -1070,7 +1139,13 @@ describe('ListInput', () => {
         .split(',')
         .map(name => name.trim())
         .filter(name => name !== '');
-    expect(names?.sort()).toEqual(['ListReorderScope', 'useListReorderScope']);
+    // `isReorderHandle` reads the handle's private attribute, not the
+    // reorder engine.
+    expect(names?.sort()).toEqual([
+      'ListReorderScope',
+      'isReorderHandle',
+      'useListReorderScope',
+    ]);
     expect(source).not.toMatch(/ListReorderHandle/);
   });
 
