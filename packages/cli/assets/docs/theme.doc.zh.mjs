@@ -4,7 +4,7 @@
 
 export const docsZh = {
   description:
-    'Astryx 主题的工作方式：用主题包裹应用，并用 `astryx experimental theme editor new <name> --like neutral` 创建或修改主题（让应用更紧凑或更宽松、修改某一类部件，也用它）。下面先给出步骤，然后说明如何发布主题供其他团队使用。',
+    "Astryx 主题的工作方式：用主题包裹应用，用特征描述外观来创建主题（`astryx experimental theme create <name> --traits '<json>'`），然后编辑它写出的主题文件，并在每次编辑后运行 `astryx experimental theme check <name> --fix`。下面先给出步骤，然后说明如何发布主题供其他团队使用。",
   sections: [
     {
       section: 'Make or change a theme',
@@ -12,17 +12,17 @@ export const docsZh = {
       content: [
         {
           type: 'prose',
-          text: '请使用实验性主题编辑器：`astryx experimental theme editor new <name> --like neutral`，然后使用 `editor set` / `editor how "<你想要的效果>"`，并用 `astryx theme add <name>` 接入应用。',
+          text: "用特征描述外观并运行 `astryx experimental theme create <name> --traits '<json>'`（它的 `--help` 列出字段：look、page、surface、text、accent、bar、font、corners、density、borders、shadows、surfaces，以及优先生效的精确 `tokens` 和 `components`）。它写出完整的主题文件（每种颜色都有浅色和深色值，且可读），构建它，并设为应用的主题。之后文件归你所有：可以手动修改任何一行。`astryx theme targets <part>` 列出某个部件的主题名称、状态和变体；在文件的 `components['<part>']` 下修改该部件。由实验性主题编辑器创建的主题则通过编辑器修改：`astryx experimental theme editor how \"<要求>\"` 会给出某一个部件对应的 `set … --on <part>` 命令。",
         },
       ],
     },
     {
-      section: 'Look after each change',
-      title: '每次修改后查看',
+      section: 'Check after each edit',
+      title: '每次编辑后检查',
       content: [
         {
           type: 'prose',
-          text: '每次修改后用 `astryx experimental theme editor show <name> --png` 查看（生成真实组件的图片，不改动应用）：看过图片之前，主题修改不算完成。',
+          text: '每次编辑后运行 `astryx experimental theme check <name> --fix`。它构建主题，并在浅色和深色模式下检查用户会看到的问题：无法阅读的文字、透明的菜单、看不见的边框、一半浅一半深的页面。`--fix` 把它补全或修复的每个值作为普通的一行写入你的文件；对于只有一种外观的主题或未着色的页面，它还会在应用的 `<Theme>` 上设置模式，并把页面规则加入应用的样式表。检查通过之前，主题修改不算完成。',
         },
       ],
     },
@@ -32,7 +32,7 @@ export const docsZh = {
       content: [
         {
           type: 'prose',
-          text: '更紧凑或更宽松的应用也是主题修改，而不是页面代码：`astryx experimental theme editor set <name> spacing tight`（或 `roomy`），然后再查看一次。',
+          text: '更紧凑或更宽松的应用也是主题修改，而不是页面代码：用 `astryx experimental theme create` 创建主题时设置 `density`（`compact` 或 `roomy`），或修改已有主题文件中的间距令牌；然后再检查一次。',
         },
       ],
     },
@@ -42,7 +42,7 @@ export const docsZh = {
       content: [
         {
           type: 'prose',
-          text: '修改某一类部件（侧边栏、它的选中项、表单中的间距）也是主题修改，而不是某个页面上的属性或样式：`astryx experimental theme editor how "<要求>"` 会给出对应的 `set … --on <part>` 命令。',
+          text: "修改某一类部件（侧边栏、它的选中项、表单中的间距）也是主题修改，而不是某个页面上的属性或样式：在主题文件的 `components['<part>']` 下设置样式（`astryx theme targets` 列出各部件及其读取的内容），然后再检查一次。",
         },
       ],
     },

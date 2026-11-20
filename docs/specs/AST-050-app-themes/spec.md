@@ -907,6 +907,24 @@ base draws it; a heading font still gives it the heading font. A plain
 
 Rejected: the heading font after a body font on every base, which moves a two-family base's title.
 
+### DEC-21 — A theme starts as a complete file from traits, and every edit is checked
+
+**Reference:** `spec:AST-050/DEC-21`
+**Decider:** `josephfarina`, `2026-11-20`
+
+The theme docs, the agent block, and the theme help lead with one path:
+`experimental theme create <name> --traits` writes a complete theme file
+from a few typed traits (every color with a light and a dark value), the
+builder or agent edits any line of that file, and `experimental theme check
+<name> --fix` runs after every edit. The file is the builder's own source;
+the commands complete, repair, and check it, and write each value as a normal
+line in it. The theme editor's commands keep working, and its `how` reader
+keeps the readings it has: a new kind of theme ask is served by the file and
+the check, not by a new reading.
+
+Rejected: growing the `how` reader for each new ask, which an agent writing the file needs no reader for.
+Rejected: a file regenerated from the traits on every change, which drops the builder's own edits.
+
 ## Open questions
 
 None.

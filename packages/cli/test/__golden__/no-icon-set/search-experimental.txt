@@ -1,4 +1,4 @@
-Results for "experimental" (19)
+Results for "experimental" (18)
 name:        author-a-theme
 domain:      doc
 package:     @astryxdesign/cli
@@ -87,12 +87,6 @@ section:     denser-or-roomier
 domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs theme denser-or-roomier
-parent:      pnpm exec astryx docs theme --index
-name:        theme
-section:     one-kind-of-part
-domain:      doc
-package:     @astryxdesign/cli
-command:     pnpm exec astryx docs theme one-kind-of-part
 parent:      pnpm exec astryx docs theme --index
 name:        theme
 section:     values-a-part-shows

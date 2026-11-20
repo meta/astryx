@@ -93,9 +93,9 @@ describe('show', () => {
 });
 
 describe('docs', () => {
-  it("the author-a-theme guide's first words point to the editor", () => {
+  it("the author-a-theme guide's first words point to theme create", () => {
     const first = /** @type {any} */ (authorDocs).sections[0].content[0];
-    expect(first.text).toContain('experimental theme editor new');
+    expect(first.text).toContain('experimental theme create');
   });
 
   it('the theme topic is found by brand and color words', () => {
