@@ -2853,7 +2853,11 @@ function checkLines(d, name, fix) {
           `[warn] text on the components was not measured (${d.unmeasured.code}): ${d.unmeasured.cause}`,
         ]
       : []),
-    record({file: d.file, modes: d.modes.join(', ')}),
+    record({
+      file: d.file,
+      modes: d.modes.join(', '),
+      accepted: String(d.accepted),
+    }),
   ];
   if (d.fixed.length)
     out.push(

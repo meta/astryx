@@ -115,6 +115,7 @@ import {LOCAL_THEME_ROOT} from '../../foundation/config/theme-state.mjs';
 import {discoverThemeDirectory} from '../../foundation/discovery/theme-discovery.mjs';
 import {lookProblems, lookRepair} from './_look.mjs';
 import {withThemeValues} from './_source-values.mjs';
+import {acceptedFileName, parseAccepted} from './_accepted.mjs';
 import {
   appThemeUse,
   paintAppPage,
@@ -2118,6 +2119,16 @@ async function lookOf(ctx, root, file, built) {
   const {theme, exportName} = await loadThemeExport(file, {cwd: root});
   const {core} = ctx.project;
   const app = await appThemeUse(root, built);
+  const acceptedFile = path.join(
+    path.dirname(path.resolve(root, file)),
+    acceptedFileName(String(theme.name)),
+  );
+  const accepted = fs.existsSync(acceptedFile)
+    ? parseAccepted(
+        fs.readFileSync(acceptedFile, 'utf8'),
+        path.relative(root, acceptedFile),
+      )
+    : [];
   /** @type {Array<'light' | 'dark'>} */
   const modes = app?.pinned ? [app.pinned] : ['light', 'dark'];
   const base = await baseResolved(ctx.project, undefined);
@@ -2133,6 +2144,7 @@ async function lookOf(ctx, root, file, built) {
     base: {light: base.light, dark: base.dark},
     defaults: core.tokenDefaults ?? {},
     pairs: ctx.parts.pairs,
+    accepted,
     map: ctx.C.MAP,
     contrast: ctx.C.contrast,
     // The side Core's media surface takes, by the editor's own reading of
@@ -2201,7 +2213,8 @@ export async function themeEditCheck(target, options = {}) {
   const first = await lookOf(ctx, root, file, built);
   const {exportName, app} = first;
   let {look} = first;
-  let problems = lookProblems(look);
+  let measured = lookProblems(look);
+  let problems = measured.problems;
   /** @type {import('./theme-edit.type.mjs').ThemeEditCheckResponse['data']['fixed']} */
   const fixed = [];
   /** @type {string[]} */
@@ -2215,12 +2228,9 @@ export async function themeEditCheck(target, options = {}) {
     path.relative(from, path.resolve(root, f)).split(path.sep).join('/');
   if (options.fix) {
     const repair = lookRepair(look, problems);
-    const tree = /** @type {import('./_source-values.mjs').ValueTree} */ ({
-      ...(Object.keys(repair.tokens).length ? {tokens: repair.tokens} : {}),
-      ...(Object.keys(repair.components).length
-        ? {components: repair.components}
-        : {}),
-    });
+    const tree = /** @type {import('./_source-values.mjs').ValueTree} */ (
+      Object.keys(repair.tokens).length ? {tokens: repair.tokens} : {}
+    );
     if (Object.keys(tree).length) {
       const before = fs.readFileSync(abs, 'utf8');
       /** @type {string} */
@@ -2275,7 +2285,8 @@ export async function themeEditCheck(target, options = {}) {
     }
     if (files.length) {
       ({look} = await lookOf(ctx, root, file, built));
-      problems = lookProblems(look);
+      measured = lookProblems(look);
+      problems = measured.problems;
     }
   }
   return {
@@ -2284,6 +2295,7 @@ export async function themeEditCheck(target, options = {}) {
       file: shown(file),
       modes: look.modes,
       problems,
+      accepted: measured.accepted,
       fixed,
       files: [...new Set(files)],
       notes,

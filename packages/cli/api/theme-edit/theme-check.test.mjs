@@ -128,6 +128,7 @@ describe('experimental theme check', () => {
           'modes',
           'notes',
           'problems',
+          'accepted',
           'protectedFiles',
         ].sort(),
       );
@@ -228,6 +229,17 @@ describe('experimental theme check', () => {
         token: '--color-text-primary',
       });
       expect(leak?.parts?.length).toBeGreaterThan(0);
+      // The repair is the bar's own line: fix names it and writes no part line.
+      expect(leak?.message).toMatch(
+        /In top-nav's base style, replace '--color-text-primary': "#ffffff" with color: "#ffffff"/,
+      );
+      const barFile = path.join(cwd, 'bar', 'barTheme.ts');
+      const barFixed = await check('bar/barTheme.ts', {fix: true});
+      expect(barFixed.problems.some(p => p.kind === 'bar-text')).toBe(true);
+      expect(barFixed.fixed.some(x => x.part)).toBe(false);
+      expect(fs.readFileSync(barFile, 'utf8').match(/"base":/g)).toHaveLength(
+        1,
+      );
     },
     T,
   );
@@ -284,11 +296,7 @@ describe('experimental theme check', () => {
         '--color-text-secondary': ['#cfcfcf', '#34363a'],
         '--color-text-accent': ['#a9c1f7', '#22356b'],
       };
-      const file = themeFile('repair', set, {
-        'top-nav': {
-          base: {'--color-text-primary': '#ffffff', backgroundColor: '#101010'},
-        },
-      });
+      const file = themeFile('repair', set);
       const before = await check(file);
       expect(before.problems.length).toBeGreaterThan(0);
       const fixed = await check(file, {fix: true});
@@ -442,6 +450,52 @@ describe('experimental theme check', () => {
       if (!secondary) throw new Error('the secondary text was not repaired');
       expect(Array.isArray(secondary.value)).toBe(true);
       expect(secondary.value[1]).toBe('#b0b0b0');
+    },
+    T,
+  );
+
+  it(
+    'keeps a color the author set as designed when an accepted record covers it, and names that record when it moves one',
+    async () => {
+      const set = {
+        ...READABLE,
+        '--color-text-secondary': ['#bdbdbd', '#4a4a4a'],
+      };
+      // The repair moves the author's color in the open: its old value and
+      // the records that would keep it.
+      const moved = await check(themeFile('kept', set), {fix: true});
+      const line = moved.fixed.find(x => x.token === '--color-text-secondary');
+      if (!line?.accept) throw new Error('the move names no accept record');
+      expect(line.from).toEqual(set['--color-text-secondary']);
+      expect(line.accept.length).toBeGreaterThan(0);
+      // The same theme with those records, a reason each: kept, counted,
+      // and no problem.
+      const file = themeFile('designed', set);
+      fs.writeFileSync(
+        path.join(cwd, 'designed', 'designed.accepted.json'),
+        `${JSON.stringify({accepted: line.accept.map(r => ({...r, reason: 'brand gray kept as designed'}))}, null, 2)}\n`,
+      );
+      // (The records describe the theme as the repair leaves it, its unset
+      // colors filled: the repair keeps the author's color there.)
+      const d = await check(file, {fix: true});
+      expect(d.accepted).toBeGreaterThan(0);
+      expect(d.fixed.some(x => x.token === '--color-text-secondary')).toBe(
+        false,
+      );
+      expect(
+        d.problems.some(
+          p => p.kind === 'text' && p.token === '--color-text-secondary',
+        ),
+      ).toBe(false);
+      // A file that is not one accepted list is refused, naming it.
+      fs.writeFileSync(
+        path.join(cwd, 'designed', 'designed.accepted.json'),
+        '{"accepted": [{"part": "text"}]}\n',
+      );
+      await expect(check(file)).rejects.toMatchObject({
+        code: 'ERR_THEME_INVALID',
+        message: expect.stringContaining('designed.accepted.json'),
+      });
     },
     T,
   );

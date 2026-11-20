@@ -28,6 +28,7 @@ import {
   ratio,
   splitTop,
 } from './_color.mjs';
+import {acceptCovers} from './_accepted.mjs';
 import {
   NON_TEXT,
   STATUS_TOKEN,
@@ -59,6 +60,8 @@ import {
  * @property {number} [needs]
  */
 
+/** @typedef {import('./_accepted.mjs').AcceptRecord} AcceptRecord */
+
 /**
  * What the check reads.
  * @typedef {object} Look
@@ -72,6 +75,7 @@ import {
  * @property {Record<string, import('./_parts.mjs').PartRecord>} map the part data
  * @property {(value: any, base: any, modes: string[], helpers: any) => {problems: any[]}} contrast the compiler's contrast measure
  * @property {{themed: boolean, pinned: Mode | null, painted: boolean} | null} app what the app does with the theme; null outside an app
+ * @property {AcceptRecord[]} accepted the contrast the theme keeps as designed
  * @property {(part: string, fill: string | null, tokens: Record<string, string>, mode: Mode) => 'off' | 'dark' | 'light' | null} mediaSide
  *   the side Core's media surface in a part draws its text in on a fill, by
  *   Core's own rule; null for a part with no media surface, `off` where it
@@ -175,13 +179,20 @@ function inside(map, part) {
 }
 
 /**
+ * The record that would keep each text problem's pairs as designed, by
+ * problem: what a repair names beside a color it moves.
+ * @type {WeakMap<LookProblem, Array<Omit<AcceptRecord, 'reason'>>>}
+ */
+const ACCEPT = new WeakMap();
+
+/**
  * Text problems: every real pair below 4.5:1 now, measured with the
  * theme's tokens and its own part styles, and lower than in Core's own
  * look. (A pair Core's own look draws as low is one the part data does not
  * see as drawn, such as text on a toast's inverted surface, which sets its
  * own text.) Grouped by what draws the text, what it sits on and the mode.
  * @param {Look} look
- * @returns {LookProblem[]}
+ * @returns {{problems: LookProblem[], accepted: number}}
  */
 function textProblems(look) {
   const {res, base, components} = look;
@@ -237,12 +248,27 @@ function textProblems(look) {
   );
   /** @type {Map<string, LookProblem>} */
   const out = new Map();
+  const drawn = drawnBy(res, components);
+  let accepted = 0;
   for (const x of problems) {
     /** @type {TextPair} */
     const p = x.pair;
     const mode = /** @type {Mode} */ (x.mode);
     const when = /** @type {any} */ (p).when ?? null;
     const block = when ? String(when).replace(/^(\w+)=/, '$1:') : null;
+    const fg = shown(drawn(p, 'fg', mode), x.ground);
+    /** @type {Omit<AcceptRecord, 'reason'> | null} */
+    const record = fg
+      ? {
+          part: p.text,
+          ground: p.bg.target ?? 'page',
+          ...(block ? {when: block} : {}),
+          mode,
+          ratio: x.ratio,
+          color: hex(fg),
+          groundColor: hex(x.ground),
+        }
+      : null;
     const ownFg = partValue(components, p.fg.target, ['color'], mode, block);
     const ownBg = partValue(
       components,
@@ -255,15 +281,27 @@ function textProblems(look) {
       ownBg != null ? p.bg.target : ownFg != null ? p.fg.target : null;
     const token = ownFg == null ? (p.fg.tokens[0] ?? null) : null;
     const on = ownBg == null ? (p.bg.tokens[0] ?? null) : null;
+    // A record keeps only a color the theme's author set: a color the
+    // check or compile made that does not read is a fault, never a design.
+    const authored = ownFg != null || (token != null && look.own.has(token));
+    if (
+      record &&
+      authored &&
+      look.accepted.some(a => acceptCovers(a, record))
+    ) {
+      accepted += 1;
+      continue;
+    }
     const key = `${part ?? ''}|${token ?? ''}|${on ?? ''}|${mode}`;
     const had = out.get(key);
     const where = p.text;
     if (had) {
       if (!had.parts?.includes(where)) had.parts?.push(where);
       if (x.ratio < /** @type {number} */ (had.ratio)) had.ratio = x.ratio;
+      if (record) ACCEPT.get(had)?.push(record);
       continue;
     }
-    out.set(key, {
+    const problem = /** @type {LookProblem} */ ({
       kind: part ? 'part-text' : 'text',
       mode,
       message: '',
@@ -274,6 +312,8 @@ function textProblems(look) {
       ratio: x.ratio,
       needs: TEXT,
     });
+    out.set(key, problem);
+    ACCEPT.set(problem, record ? [record] : []);
   }
   for (const p of out.values()) {
     const what = p.part
@@ -281,7 +321,7 @@ function textProblems(look) {
       : `${p.token ?? 'text'} on ${p.on ?? 'its part'}`;
     p.message = `${what} is ${p.ratio}:1 in ${p.mode} (needs ${TEXT}), in ${(p.parts ?? []).slice(0, 3).join(', ')}${(p.parts ?? []).length > 3 ? ` and ${(p.parts ?? []).length - 3} more` : ''}`;
   }
-  return [...out.values()];
+  return {problems: [...out.values()], accepted};
 }
 
 /**
@@ -383,20 +423,33 @@ function barTextProblems(look) {
       }
     }
   }
-  for (const p of out.values())
-    p.message = `${p.part} sets ${p.token}, so ${(p.parts ?? []).slice(0, 3).join(', ')} inside it draw that text on their own fill: ${p.ratio}:1 in ${p.mode}`;
+  for (const p of out.values()) {
+    const value = JSON.stringify(
+      String(
+        partValue(
+          look.components,
+          String(p.part),
+          [String(p.token)],
+          /** @type {Mode} */ (p.mode),
+        ),
+      ),
+    );
+    p.message = `${p.part} sets ${p.token}, so ${(p.parts ?? []).slice(0, 3).join(', ')} inside it draw that text on their own fill: ${p.ratio}:1 in ${p.mode}. In ${p.part}'s base style, replace '${p.token}': ${value} with color: ${value}`;
+  }
   return [...out.values()];
 }
 
 /**
- * Everything a person would see as broken, in each mode.
+ * Everything a person would see as broken, in each mode, and how many
+ * measured pairs the theme's accepted records keep as designed.
  * @param {Look} look
- * @returns {LookProblem[]}
+ * @returns {{problems: LookProblem[], accepted: number}}
  */
 export function lookProblems(look) {
   const {res, base, modes, own, app} = look;
+  const text = textProblems(look);
   /** @type {LookProblem[]} */
-  const out = [...textProblems(look), ...barTextProblems(look)];
+  const out = [...text.problems, ...barTextProblems(look)];
   for (const m of modes) {
     const at = (/** @type {string} */ t) => colorIn(`var(${t})`, res[m], m);
     const page = shown(at(PAGE), null);
@@ -481,7 +534,7 @@ export function lookProblems(look) {
       token: PAGE,
       message: `the app's page is not painted: outside an AppShell the browser's white shows. Paint html and body with var(${PAGE})`,
     });
-  return out;
+  return {problems: out, accepted: text.accepted};
 }
 
 /**
@@ -502,8 +555,10 @@ function colorlessValue(res, t) {
  * The values that repair what can be repaired without a decision.
  * @typedef {object} LookRepair
  * @property {Record<string, string | [string, string]>} tokens token values to write
- * @property {Record<string, Record<string, Record<string, string>>>} components part styles to write
- * @property {Array<{token?: string, part?: string, value: string | [string, string], why: string}>} lines what each written value is for
+ * @property {Array<{token?: string, part?: string, value: string | [string, string], why: string, from?: string | [string, string], accept?: AcceptRecord[]}>} lines
+ *   what each written value is for; a color the author set that a line
+ *   moves names its old value (`from`) and the records that would keep it
+ *   as designed instead (`accept`, with the reason left to write)
  * @property {Mode | null} pin the mode to pin the app to
  * @property {boolean} paint whether to paint the app's page
  */
@@ -602,7 +657,9 @@ export function lookRepair(look, problems) {
   for (const [t, mv] of Object.entries(perMode))
     for (const m of modes) if (mv[m]) res[m][t] = /** @type {string} */ (mv[m]);
   const filled = new Set(Object.keys(perMode));
-  const now = lookProblems({...look, res});
+  /** @type {Record<string, Array<Omit<AcceptRecord, 'reason'>>>} */
+  const keep = {};
+  const now = lookProblems({...look, res}).problems;
   // Text the theme sets, and edges the fill set, that do not read: the
   // grounds each fails on, by token and mode, and the nearest color that
   // reads on all of them. Only grounds on the page's side count: text on
@@ -645,6 +702,12 @@ export function lookRepair(look, problems) {
     why[token] = own.has(token)
       ? 'did not read on every surface it sits on'
       : 'unset: filled, then moved until it shows on every surface';
+    // A color the author set is moved in the open: the line names the
+    // record that keeps it as designed instead.
+    if (own.has(token))
+      for (const p of now)
+        if (p.token === token && p.mode === mode && p.kind === 'text')
+          (keep[token] ??= []).push(...(ACCEPT.get(p) ?? []));
   }
   /** @type {Record<string, string | [string, string]>} */
   const tokens = {};
@@ -661,7 +724,20 @@ export function lookRepair(look, problems) {
     /** @type {string | [string, string]} */
     const value = light === dark ? light : [light, dark];
     tokens[t] = value;
-    lines.push({token: t, value, why: why[t]});
+    const was = (/** @type {Mode} */ m) => colorIn(`var(${t})`, look.res[m], m);
+    const from =
+      was('light') === was('dark') ? was('light') : [was('light'), was('dark')];
+    lines.push({
+      token: t,
+      value,
+      why: why[t],
+      ...(keep[t]
+        ? {
+            from: /** @type {string | [string, string]} */ (from),
+            accept: keep[t].map(r => ({...r, reason: ''})),
+          }
+        : {}),
+    });
   }
   const {defaults} = look;
   for (const p of problems)
@@ -675,29 +751,10 @@ export function lookRepair(look, problems) {
             why: "menus blended into the page: Core's own overlay shadow",
           });
         }
-  // Each part inside a bar draws the theme's own text again.
-  /** @type {LookRepair['components']} */
-  const components = {};
-  for (const p of problems) {
-    if (p.kind !== 'bar-text' || !p.token) continue;
-    const l = colorIn(`var(${p.token})`, res.light, 'light');
-    const d = colorIn(`var(${p.token})`, res.dark, 'dark');
-    const value = l && d && l !== d ? `light-dark(${l}, ${d})` : (l ?? d);
-    if (!value) continue;
-    for (const q of p.parts ?? []) {
-      ((components[q] ??= {}).base ??= {})[p.token] = value;
-      lines.push({
-        part: q,
-        value,
-        why: `inside ${p.part}: its own text on its own fill`,
-      });
-    }
-  }
   const one = problems.find(p => p.kind === 'one-look');
   const darkPage = shown(colorIn(`var(${PAGE})`, res.dark, 'dark'), null);
   return {
     tokens,
-    components,
     lines,
     pin: one && darkPage ? sideOf(darkPage) : null,
     paint: problems.some(p => p.kind === 'page'),
