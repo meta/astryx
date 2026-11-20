@@ -248,7 +248,12 @@ describe('which runs defer the heavy suites (spec:AST-030 FR20, DEC-32)', () => 
                   return state == null ? null : {state};
                 },
                 ownerHandles: text => [String(text)],
-                reviewPasses: async ({pull, engOwners, reviewApp}) => {
+                // The heavy turn reads its own predicate (DEC-32), never
+                // the merge gate's.
+                reviewPasses: async () => {
+                  throw new Error('the heavy turn read reviewPasses');
+                },
+                heavyReviewPasses: async ({pull, engOwners, reviewApp}) => {
                   expect(pull).toEqual({number: 7, head: {sha: 'h1'}});
                   expect(engOwners).toEqual(['@owner1']);
                   expect(reviewApp).toBe('astracat-bot[bot]');
@@ -265,10 +270,13 @@ describe('which runs defer the heavy suites (spec:AST-030 FR20, DEC-32)', () => 
     expect(await passes([null, 'pending', 'success'])).toEqual(['true', 3]);
     // The gate passed at the author's own push, with no review: defer.
     expect(await passes(['success'], false)).toEqual(['false', 1]);
-    // A failing gate defers at once; a gate still pending after three
-    // minutes defers.
-    expect(await passes(['failure'])).toEqual(['false', 1]);
-    expect(await passes(['pending'])).toEqual(['false', 12]);
+    // The heavy turn reads the gate's halves itself: a failing gate defers
+    // when the heavy turn does not pass. A gate still pending after three
+    // minutes (a fork's code half waits for an engineering owner) leaves the
+    // decision to the heavy turn; no gate at all defers.
+    expect(await passes(['failure'], false)).toEqual(['false', 1]);
+    expect(await passes(['pending'])).toEqual(['true', 12]);
+    expect(await passes([null])).toEqual(['false', 12]);
     vi.useRealTimers();
   });
 

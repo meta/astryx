@@ -117,6 +117,47 @@ describe('planChecks', () => {
   });
 });
 
+describe('the interaction specs step', () => {
+  // Playwright's --project takes every value after it, so the selected
+  // spec files go before it.
+  const run = selection => {
+    const dir = tmp();
+    const checks = planChecks({
+      scope: classify([change('packages/core/src/Button/Button.tsx')]),
+      mergeBase: 'abc123',
+      changed: ['packages/core/src/Button/Button.tsx'],
+      browser: true,
+      tmp: dir,
+      chromiumScope: '^packages/',
+    });
+    const step = byId(checks, 'interaction specs');
+    const ran = [];
+    runChecks([step], {
+      exec: (argv, {stdout}) => {
+        if (argv.includes('select-chromium'))
+          fs.writeFileSync(argv[argv.indexOf('--out') + 1], selection);
+        ran.push(argv.join(' '));
+        if (stdout) fs.writeFileSync(stdout, '');
+        return 0;
+      },
+      now: () => 0,
+    });
+    return ran.at(-1);
+  };
+
+  it('passes the selected specs before --project chromium', () => {
+    expect(run('{"full": false, "specs": ["a.spec.ts", "b.spec.ts"]}')).toBe(
+      'pnpm test:interaction a.spec.ts b.spec.ts --project chromium',
+    );
+  });
+
+  it('runs every Chromium spec when the selection is full', () => {
+    expect(run('{"full": true, "reason": "shared"}')).toBe(
+      'pnpm test:interaction --project chromium',
+    );
+  });
+});
+
 describe('the formatting check', () => {
   it("passes Prettier only the TypeScript and Markdown files CI's step checks", () => {
     const lint = argvs(

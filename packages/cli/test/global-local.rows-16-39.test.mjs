@@ -692,6 +692,21 @@ describe.skipIf(!POSIX)(
         'Otherwise, a newer release of @acme/broken needs to fix it.',
       );
       expect(after.fix).toContain('@acme/broken@latest');
+      // Outside a project, `doctor integration validate` finds the copy
+      // installed for the computer, as doctor's fixes expect.
+      const validated = run(
+        g.bin,
+        ['doctor', 'integration', 'validate', '@acme/broken'],
+        {cwd: empty, pc},
+      );
+      expect(validated.stdout + validated.stderr).not.toContain(
+        'Could not find installed integration package',
+      );
+      expect(validated.stdout + validated.stderr).toContain('Thing.tsx');
+      expect(validated.stdout + validated.stderr).toContain(
+        'TypeScript is not installed here, so docs were not checked',
+      );
+      expect(validated.stdout + validated.stderr).not.toContain('npm install');
       // One whose template replaces a template that Core does not have.
       // Core's templates come with the CLI, so doctor names this issue too.
       const tpl = acmeWidgets(path.resolve(g.dir, '..', '..', '..'), {
@@ -717,6 +732,196 @@ describe.skipIf(!POSIX)(
       expect(withTpl.status).toBe('warn');
       expect(withTpl.message).toContain('@acme/tpl@1.0.0 has');
       expect(withTpl.message).toContain('which is not a Core template id.');
+      // One whose CLI peer range excludes this CLI: the other commands skip
+      // it, and validate checks it with a note that says so and fails
+      // nothing.
+      acmeWidgets(path.resolve(g.dir, '..', '..', '..'), {
+        topic: 'old-guide',
+        name: '@acme/old',
+        peers: {'@astryxdesign/cli': '>=10.0.0'},
+      });
+      const old = run(
+        g.bin,
+        ['doctor', 'integration', 'validate', '@acme/old'],
+        {cwd: empty, pc},
+      );
+      expect(old.status).toBe(0);
+      expect(old.stdout + old.stderr).toContain(
+        'Validating integration: @acme/old@1.0.0',
+      );
+      expect(old.stdout + old.stderr).toContain(
+        'Outside a project, the other commands skip @acme/old@1.0.0: it needs @astryxdesign/cli >=10.0.0',
+      );
+      expect(old.stdout + old.stderr).toContain(
+        'Install a release of @acme/old that supports this CLI.',
+      );
+      expect(old.stdout + old.stderr).not.toContain('upgrade --from');
+      // One whose Core peer range alone excludes this CLI's release: skipped
+      // the same way, and validate says so under its own note code.
+      acmeWidgets(path.resolve(g.dir, '..', '..', '..'), {
+        topic: 'old-core-guide',
+        name: '@acme/old-core',
+        peers: {'@astryxdesign/core': '>=10.0.0'},
+      });
+      const skippedCopy = JSON.parse(
+        run(g.bin, ['doctor', '--json'], {cwd: empty, pc}).stdout,
+      ).data.checks.find(
+        (/** @type {any} */ c) => c.id === 'computer-integrations',
+      );
+      expect(skippedCopy.message).toContain('@acme/old-core');
+      const oldCore = run(
+        g.bin,
+        ['doctor', 'integration', 'validate', '@acme/old-core', '--json'],
+        {cwd: empty, pc},
+      );
+      expect(oldCore.status).toBe(0);
+      // One both of whose ranges exclude it: the CLI note, naming both.
+      acmeWidgets(path.resolve(g.dir, '..', '..', '..'), {
+        topic: 'old-both-guide',
+        name: '@acme/old-both',
+        peers: {
+          '@astryxdesign/core': '>=10.0.0',
+          '@astryxdesign/cli': '>=10.0.0',
+        },
+      });
+      const oldBoth = run(
+        g.bin,
+        ['doctor', 'integration', 'validate', '@acme/old-both', '--json'],
+        {cwd: empty, pc},
+      );
+      expect(oldBoth.status).toBe(0);
+      expect(JSON.parse(oldBoth.stdout).data.notes).toContainEqual({
+        code: 'cli_peer_version',
+        message:
+          "Outside a project, the other commands skip @acme/old-both@1.0.0: it needs @astryxdesign/core >=10.0.0 and @astryxdesign/cli >=10.0.0, and this computer's CLI is 9.0.0. Install a release of @acme/old-both that supports this CLI.",
+      });
+      expect(JSON.parse(oldCore.stdout).data.notes).toContainEqual({
+        code: 'core_peer_version',
+        message:
+          "Outside a project, the other commands skip @acme/old-core@1.0.0: it needs @astryxdesign/core >=10.0.0, and this computer's CLI is 9.0.0. Install a release of @acme/old-core that supports this CLI.",
+      });
+      // One that fails to load: doctor names validate for it, and validate
+      // checks that copy and says why.
+      acmeWidgets(path.resolve(g.dir, '..', '..', '..'), {
+        topic: 'throws-guide',
+        name: '@acme/throws',
+        manifest: "throw new Error('acme manifest broke');\n",
+      });
+      const failing = JSON.parse(
+        run(g.bin, ['doctor', '--json'], {cwd: empty, pc}).stdout,
+      ).data.checks.find(
+        (/** @type {any} */ c) => c.id === 'computer-integrations',
+      );
+      expect(failing.message).toContain(
+        '@acme/throws@1.0.0 could not be loaded.',
+      );
+      expect(failing.fix).toContain('doctor integration validate @acme/throws');
+      const throws = run(
+        g.bin,
+        ['doctor', 'integration', 'validate', '@acme/throws'],
+        {cwd: empty, pc},
+      );
+      expect(throws.stdout + throws.stderr).toContain('acme manifest broke');
+      expect(throws.stdout + throws.stderr).not.toContain(
+        'Could not find installed integration package',
+      );
+      // A folder that declares one itself uses its own copy, even one that
+      // fails to load: validate checks that copy and prints its error, not
+      // the healthy computer copy the folder keeps out.
+      const declared = tempDir('declared');
+      fs.writeFileSync(
+        path.join(declared, 'package.json'),
+        JSON.stringify({
+          name: 'declared-app',
+          dependencies: {'@acme/nav': '1.0.0'},
+        }),
+      );
+      acmeWidgets(declared, {
+        topic: 'declared-nav-guide',
+        name: '@acme/nav',
+        manifest: "throw new Error('declared copy broke');\n",
+      });
+      const ownBroken = run(
+        g.bin,
+        ['doctor', 'integration', 'validate', '@acme/nav'],
+        {cwd: declared, pc},
+      );
+      expect(ownBroken.stdout + ownBroken.stderr).toContain(
+        'declared copy broke',
+      );
+      // A copy in a node_modules above the folder that nothing declares is
+      // not loaded there, so validate checks the copy the folder uses.
+      const stray = path.join(empty, 'node_modules', '@acme', 'broken');
+      fs.mkdirSync(stray, {recursive: true});
+      writeJson(path.join(stray, 'package.json'), {
+        name: '@acme/broken',
+        version: '0.0.1',
+      });
+      fs.writeFileSync(
+        path.join(stray, 'astryx.integration.mjs'),
+        'export default {};\n',
+      );
+      const inner = path.join(empty, 'inner');
+      fs.mkdirSync(inner, {recursive: true});
+      const used = run(
+        g.bin,
+        ['doctor', 'integration', 'validate', '@acme/broken'],
+        {cwd: inner, pc},
+      );
+      expect(used.stdout + used.stderr).toContain(
+        'Validating integration: @acme/broken@1.0.0',
+      );
+      // A global copy with no Core yet (Core is an optional peer, and this
+      // computer cannot fetch it) has nothing to compare a replacement with:
+      // a valid one is no issue, printed or counted.
+      const bareComputer = computer();
+      const bare = globalCli('npm', '9.0.0', {
+        root: bareComputer.home,
+        withoutCore: true,
+      });
+      const bareNav = acmeWidgets(path.resolve(bare.dir, '..', '..', '..'), {
+        topic: 'bare-nav-guide',
+        name: '@acme/bare-nav',
+        peers: {'@astryxdesign/cli': `>=${COMPONENT_REPLACES_CLI}`},
+        manifest:
+          "export default {docs: './docs', components: './components'};\n",
+      });
+      fs.mkdirSync(path.join(bareNav, 'components'), {recursive: true});
+      fs.writeFileSync(
+        path.join(bareNav, 'components', 'AcmeSideNav.doc.mjs'),
+        `export default ${JSON.stringify({
+          type: 'component',
+          name: 'AcmeSideNav',
+          displayName: 'AcmeSideNav',
+          import: '@acme/bare-nav/components/AcmeSideNav',
+          replaces: 'SideNav',
+          keywords: ['acme'],
+          usage: {description: 'AcmeSideNav for Acme apps.'},
+          props: [],
+        })};\n`,
+      );
+      fs.writeFileSync(
+        path.join(bareNav, 'components', 'AcmeSideNav.tsx'),
+        'export function AcmeSideNav() {\n  return null;\n}\n',
+      );
+      const bareEmpty = tempDir('bare-empty');
+      const bareNudge = run(bare.bin, ['discover'], {
+        cwd: bareEmpty,
+        pc: bareComputer,
+      }).stderr;
+      expect(bareNudge).not.toContain('which is not a Core component');
+      expect(bareNudge).not.toContain('@acme/bare-nav has');
+      // It is loaded there: doctor lists it as used.
+      expect(
+        JSON.parse(
+          run(bare.bin, ['doctor', '--json'], {
+            cwd: bareEmpty,
+            pc: bareComputer,
+          }).stdout,
+        ).data.checks.find(
+          (/** @type {any} */ c) => c.id === 'computer-integrations',
+        ).message,
+      ).toContain('@acme/bare-nav@1.0.0');
     });
 
     it("G36 inside a project: an integration installed for the computer adds nothing, and discover and doctor list it as available with the project's install command", () => {
