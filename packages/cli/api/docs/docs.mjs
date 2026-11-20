@@ -46,15 +46,17 @@ import {
 
 /**
  * Run a docs read with `{@pm}` steps rendered for the project in `cwd`, the
- * folder the read is about, not the process's working directory. A host that
- * already chose a package manager keeps its choice.
+ * folder the read is about, not the process's working directory: its package
+ * manager, and its Core release for the packages that move with Core. A host
+ * that already chose a package manager keeps its choice and its project.
  * @template T
  * @param {string | undefined} cwd
  * @param {() => T} fn
  * @returns {T}
  */
 function inProject(cwd, fn) {
-  return runWithDocPackageManager(docPackageManager(cwd ?? process.cwd()), fn);
+  const dir = cwd ?? process.cwd();
+  return runWithDocPackageManager(docPackageManager(dir), fn, dir);
 }
 
 /** @type {typeof listRead} */

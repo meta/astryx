@@ -68,7 +68,7 @@ export type TableDensity = 'compact' | 'balanced' | 'spacious';
 
 export type TableDividers = 'rows' | 'columns' | 'grid' | 'none';
 
-/** How body cell text behaves when it exceeds column width */
+/** How cell text behaves when it exceeds column width; header cells follow the same mode */
 
 export type TableTextOverflow = 'wrap' | 'truncate';
 
@@ -97,13 +97,14 @@ interface TableAppearanceProps<T extends Record<string, unknown>> extends Omit<
    */
   verticalAlign?: TableVerticalAlign;
   /**
-   * How body cell text behaves when it exceeds the column width.
+   * How cell text behaves when it exceeds the column width.
    *
    * - `'wrap'` — text wraps and the row grows taller. No content is hidden.
    * - `'truncate'` — text is clipped with an ellipsis. Default-rendered cells
    *   show a tooltip on hover when truncated.
    *
-   * Header cells always truncate regardless of this setting.
+   * Header cells follow the same mode: under `'wrap'` a long heading wraps in
+   * a data-driven table, and in children mode its column grows to fit it.
    *
    * @default 'wrap'
    *

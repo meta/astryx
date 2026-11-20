@@ -432,10 +432,10 @@ function asAstryxError(e, pageDir, cwd = process.cwd()) {
       const pageRoot = findPackageRoot(pageDir);
       const runRoot = findPackageRoot(cwd);
       const samePackage = pageRoot !== null && runRoot !== null && path.resolve(runRoot) === path.resolve(pageRoot);
-      // At installCommandFor's versions: a package Astryx releases with Core
-      // at the project's Core release, in the guidance too; any other at the
-      // CLI's range in the command, bare in the guidance; no command when the
-      // project's lockfiles disagree.
+      // At installCommandFor's versions: Core, the CLI and a package Astryx
+      // releases with Core at the project's Core release, in the guidance
+      // too; any other at the CLI's range in the command, bare in the
+      // guidance; no command when the project's lockfiles disagree.
       const step = pageRoot == null ? null : installCommandFor(packages, pageDir, cwd);
       const guidance = samePackage ? step?.installGuidance : null;
       if (guidance) {
@@ -567,11 +567,12 @@ async function propValueWarnings(values, page) {
 
 /**
  * Render a page module to one HTML file and write it.
- * @param {{cwd: string, input: string, output: string, title?: string, absolute?: boolean}} args absolute paths;
- *   `absolute`: the caller named the output by an absolute path
+ * @param {{cwd: string, input: string, output: string, title?: string, keepClassNames?: boolean, absolute?: boolean}} args absolute paths;
+ *   `absolute`: the caller named the output by an absolute path;
+ *   `keepClassNames`: keep every class of the first paint as written
  * @returns {Promise<import('./render.type.mjs').RenderPageResponse['data']>}
  */
-export async function renderToFile({cwd, input, output, title, absolute = false}) {
+export async function renderToFile({cwd, input, output, title, keepClassNames = false, absolute = false}) {
   readInput(input, cwd);
   // An absolute --out is the caller's choice of place, also outside the
   // current folder (cli-surface DEC-16). The file there is still never one a
@@ -583,7 +584,7 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
   try {
     const set = servedSet(input);
     try {
-      page = await renderPage(input, {title, version: cliVersion(), served: set && 'dir' in set ? set : null, output, cwd, cutFontFaces: true});
+      page = await renderPage(input, {title, version: cliVersion(), served: set && 'dir' in set ? set : null, output, cwd, cutFontFaces: true, keepClassNames});
     } catch (e) {
       // A page that needs the Core the CLI could not obtain says why.
       const detail = /** @type {any} */ (e)?.code === 'ERR_RENDER_MISSING_DEPENDENCY' ? /** @type {any} */ (e).detail : null;

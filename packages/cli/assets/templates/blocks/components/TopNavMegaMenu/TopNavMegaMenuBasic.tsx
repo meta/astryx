@@ -9,7 +9,7 @@ import {
   TopNavMegaMenu,
   TopNavMegaMenuItem,
 } from '@astryxdesign/core/TopNav';
-import {RocketLaunchIcon, BookOpenIcon} from '@heroicons/react/24/outline';
+import {RocketIcon, BookIcon} from '@astryxdesign/template-icons';
 
 export default function TopNavMegaMenuBasic() {
   return (
@@ -27,13 +27,13 @@ export default function TopNavMegaMenuBasic() {
                 <TopNavMegaMenuItem
                   title="Deploy"
                   description="Ship to production in seconds"
-                  icon={<RocketLaunchIcon width={20} height={20} />}
+                  icon={<RocketIcon width={20} height={20} />}
                   href="#deploy"
                 />
                 <TopNavMegaMenuItem
                   title="Documentation"
                   description="Guides, references, and tutorials"
-                  icon={<BookOpenIcon width={20} height={20} />}
+                  icon={<BookIcon width={20} height={20} />}
                   href="#docs"
                 />
               </>
