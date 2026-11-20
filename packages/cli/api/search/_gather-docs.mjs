@@ -17,9 +17,11 @@ import {nodeView} from '../docs/node/node.mjs';
 import {
   sectionKey,
   sectionSummary,
+  sectionTitleKey,
 } from '../../foundation/discovery/docs-section-key.mjs';
 import {sectionProse, codeTerms, headings, plain} from './_doc-text.mjs';
 import {loadAuthoringSelfDocs} from '../../foundation/discovery/authoring-self-docs.mjs';
+import {readDocAsData} from '../../foundation/discovery/docs-discovery.mjs';
 
 /** @typedef {import('./_lexical.mjs').Candidate} Candidate */
 
@@ -40,8 +42,9 @@ import {loadAuthoringSelfDocs} from '../../foundation/discovery/authoring-self-d
 export async function gatherDocs(cwd) {
   /** @type {Candidate[]} */
   const candidates = [];
-  // Experimental docs (spec:AST-017 FR27) are never search results: they are
-  // read on their own routes, so search answers as it would without them.
+  // Experimental docs (spec:AST-017 FR27) are read on their own routes, so
+  // search answers as it would without them; the CLI's own guides that set
+  // `searchable: true` are FR27's named exception, one entry each.
   const hidden = new Set(
     (await loadAuthoringSelfDocs()).loaded
       .filter(({doc}) => isExperimentalDoc(doc))
@@ -73,12 +76,24 @@ export async function gatherDocs(cwd) {
     }
     const read = lowered?.doc ?? null;
     if (isExperimentalDoc(read)) continue;
+    const experimental = await experimentalSections(entry.extensions);
+    /** @param {any} section */
+    const isHidden = section => {
+      if (hidden.has(section.id)) return true;
+      const provider = lowered?.sectionProviders?.[section.id];
+      const titleKey = sectionTitleKey(lowered?.sourceTitles?.[section.id]);
+      return [section.id, titleKey].some(key =>
+        experimental.has(sectionOf(provider, key)),
+      );
+    };
     const doc =
-      read && hidden.size > 0 && Array.isArray(read.sections)
+      read &&
+      (hidden.size > 0 || experimental.size > 0) &&
+      Array.isArray(read.sections)
         ? {
             ...read,
             sections: read.sections.filter(
-              (/** @type {any} */ section) => !hidden.has(section.id),
+              (/** @type {any} */ each) => !isHidden(each),
             ),
           }
         : read;
@@ -120,7 +135,9 @@ export async function gatherDocs(cwd) {
   for (const node of tree.nodes.values()) {
     // A flat topic is indexed above, as a topic.
     if (node.ref?.flatTopic) continue;
-    if (isExperimentalNode(tree, node)) continue;
+    const experimental = isExperimentalNode(tree, node);
+    // An experimental guide may still answer: read its doc to see.
+    if (experimental && node.kind !== 'generic') continue;
     // A tree hit names where it lives: its ancestors' titles, then its own.
     const path = [...tree.ancestors(node).map(a => a.title), node.title];
     if (node.kind === 'generic') {
@@ -138,17 +155,21 @@ export async function gatherDocs(cwd) {
       } catch {
         // As above: the owning commands report it.
       }
+      if (experimental && !isSearchableGuide(node, doc)) continue;
+      const found = topicCandidates(
+        node.route,
+        doc,
+        node.title,
+        node.summary,
+        path.join(' › '),
+        node.parent == null ? undefined : `astryx docs ${node.parent}`,
+        entry.package,
+        sectionPackage,
+      );
+      // A searchable experimental guide answers as one short entry, its
+      // topic, so its sections' text does not move other entries' ranks.
       candidates.push(
-        ...topicCandidates(
-          node.route,
-          doc,
-          node.title,
-          node.summary,
-          path.join(' › '),
-          node.parent == null ? undefined : `astryx docs ${node.parent}`,
-          entry.package,
-          sectionPackage,
-        ),
+        ...(experimental ? [{...found[0], _experimentalGuide: true}] : found),
       );
       continue;
     }
@@ -192,6 +213,55 @@ export async function gatherDocs(cwd) {
     });
   }
   return candidates;
+}
+
+/**
+ * The sections that experimental extensions add to a topic: like an
+ * experimental topic, they are read on their own and never searched. Each is
+ * named by its provider and the key its file gives it, because the merged
+ * topic may read it by a key that names its package.
+ * @param {ReadonlyArray<{package: string, path: string, providerId?: string}>} extensions
+ * @returns {Promise<Set<string>>}
+ */
+async function experimentalSections(extensions) {
+  /** @type {Set<string>} */
+  const sections = new Set();
+  for (const extension of extensions) {
+    let doc;
+    try {
+      doc = /** @type {any} */ (await readDocAsData(extension.path));
+    } catch {
+      continue;
+    }
+    if (!isExperimentalDoc(doc) || !Array.isArray(doc.sections)) continue;
+    const provider = extension.providerId ?? extension.package;
+    for (const section of doc.sections) {
+      sections.add(sectionOf(provider, sectionKey(section)));
+    }
+  }
+  return sections;
+}
+
+/**
+ * @param {string | undefined} provider
+ * @param {string} key
+ */
+const sectionOf = (provider, key) => `${provider}\u0000${key}`;
+
+/**
+ * Is this experimental guide one that search returns (spec:AST-017 FR27): a
+ * CLI guide whose own doc sets `searchable: true` beside
+ * `stability: 'experimental'`? Another package's doc that sets it is still
+ * left out: FR27 governs the CLI's own experimental surfaces.
+ * @param {any} node a generic docs tree node
+ * @param {any} doc its lowered doc
+ */
+function isSearchableGuide(node, doc) {
+  return (
+    node.provider === '@astryxdesign/cli' &&
+    doc?.searchable === true &&
+    isExperimentalDoc(doc)
+  );
 }
 
 /**

@@ -21,6 +21,7 @@
  */
 
 import {useCallback, useRef, useState} from 'react';
+import {useComponentTranslator} from '../i18n/useComponentTranslator';
 import {defaultToToken} from './useChatPasteAsToken';
 import {
   ensureCaretInside,
@@ -134,6 +135,7 @@ export function useChatComposerTokensInternal({
   editableRef,
   onEmitChange,
 }: UseChatComposerTokensOptions) {
+  const t = useComponentTranslator();
   const [tokenPortals, setTokenPortals] = useState<TokenPortal[]>([]);
   const defaultPasteSpansRef = useRef(new WeakSet<HTMLElement>());
   const isDefaultPasteToken = useCallback(
@@ -244,7 +246,7 @@ export function useChatComposerTokensInternal({
       let offset = 0;
       for (const {start, end} of pastedTextRanges) {
         appendText(value.slice(offset, start), offset);
-        appendToken(defaultToToken(value.slice(start, end)), true);
+        appendToken(defaultToToken(value.slice(start, end), t), true);
         offset = end;
       }
       appendText(value.slice(offset), offset);
@@ -256,7 +258,7 @@ export function useChatComposerTokensInternal({
       editable.replaceChildren(fragment);
       setTokenPortals(portals);
     },
-    [editableRef],
+    [editableRef, t],
   );
 
   // --- Backspace near tokens ---

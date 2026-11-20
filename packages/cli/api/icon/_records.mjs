@@ -14,6 +14,7 @@
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 export {
   answeringMatches,
   iconRecord,
@@ -23,6 +24,7 @@ export {
   rankIcons,
   scoreIcon,
 } from './_adapter.mjs';
+import {ICON_SET_GUIDE_COMMAND, ICON_USE_COMMAND} from './_adapter.mjs';
 
 /** @typedef {import('../../foundation/discovery/icon-set-discovery.mjs').DiscoveredIconSet} DiscoveredIconSet */
 /** @typedef {import('../../authoring/doctypes/icon-set/type').IconSetIcon} IconSetIcon */
@@ -60,16 +62,42 @@ export function withdrawnReason(withdrawn, selector) {
  * The one error every icon entry point gives for a set selector that names
  * no valid installed set (AST-084 FR17): withdrawn, with its reason, when it
  * names an installed set that was withdrawn; else not installed. Both are
- * `ERR_NOT_FOUND`, with the closest valid sets as suggestions.
+ * `ERR_NOT_FOUND`, with the closest valid sets as suggestions. With no set
+ * installed at all, it says so and how to get one; with only withdrawn sets,
+ * it points at `--list`, which says why each is withdrawn.
  * @param {Array<{name: string, package: string}>} sets the valid sets
  * @param {Array<{name: string, package: string, reason: string}>} withdrawn
  * @param {string} selector
  * @returns {AstryxError}
  */
 export function unusableSet(sets, withdrawn, selector) {
+  const reason = withdrawnReason(withdrawn, selector);
+  if (reason == null && sets.length === 0) {
+    return withdrawn.length === 0
+      ? new AstryxError(
+          `No icon set named "${selector}": no icon set is installed.`,
+          [
+            {
+              name: ICON_USE_COMMAND,
+              reason: 'after you install a package that ships an icon set',
+            },
+            {name: ICON_SET_GUIDE_COMMAND, reason: 'make your own icon set'},
+          ],
+          ERROR_CODES.ERR_NOT_FOUND,
+        )
+      : new AstryxError(
+          `No installed icon set named "${selector}"`,
+          [
+            {
+              name: 'astryx experimental icon --list',
+              reason: 'why each installed set is withdrawn',
+            },
+          ],
+          ERROR_CODES.ERR_NOT_FOUND,
+        );
+  }
   return new AstryxError(
-    withdrawnReason(withdrawn, selector) ??
-      `No installed icon set named "${selector}"`,
+    reason ?? `No installed icon set named "${selector}"`,
     closest(
       selector,
       sets.flatMap(each => [each.name, `${each.package}/${each.name}`]),
@@ -115,7 +143,7 @@ export function oneNamedSet(sets, withdrawn, selector) {
 export function closest(wanted, candidates, reason, max = 5) {
   return [...new Set(candidates)]
     .map(name => ({name, distance: levenshteinDistance(wanted, name)}))
-    .sort((a, b) => a.distance - b.distance || a.name.localeCompare(b.name))
+    .sort((a, b) => a.distance - b.distance || compareText(a.name, b.name))
     .slice(0, max)
     .map(({name}) => ({name, reason}));
 }

@@ -19,6 +19,10 @@
  * (notices.mjs); a global copy also starts the daily update check, which
  * installs nothing (global-state.mjs).
  *
+ * In a Yarn Plug'n'Play project, a copy started without the project's runtime
+ * first runs again with it preloaded, as Yarn starts a command, so that run
+ * sees the project's packages (pnp-runtime.mjs).
+ *
  * A programmatic host that found the project's own CLI and did not run it
  * passes the reason (spec AST-081 FR1, FR2). That run is never handed to the
  * project's CLI: this copy answers in its place when it is that CLI's release,
@@ -53,7 +57,8 @@ import {
   runningCopy,
 } from './choose.mjs';
 import {readReleaseFacts} from './project.mjs';
-import {ensureRelease, userCacheDir} from './cache.mjs';
+import {cliBinOf, ensureRelease, userCacheDir} from './cache.mjs';
+import {runtimeToPreload, withPnpRuntime} from './pnp-runtime.mjs';
 import {
   maybeFetchCore,
   maybeKeepAgentText,
@@ -188,6 +193,28 @@ export async function startRun({cliRoot, argv, declinedProjectCli}) {
   // A host carries its own CLI and keeps it current itself: a hosted copy
   // runs none of the global copy's background work, and installs nothing.
   const hosted = hostedRun();
+  // A Yarn Plug'n'Play project shows its packages only to a run that preloads
+  // its runtime. A copy started without the runtime runs again with it, as
+  // Yarn starts a command, and that run makes the choice below (FR9). A host's
+  // door runs the project's own CLI itself (FR1).
+  if (!hosted) {
+    const runtime = runtimeToPreload(process.cwd(), process.env.NODE_OPTIONS);
+    const bin = runtime ? cliBinOf(cliRoot) : null;
+    if (runtime && bin) {
+      await handOff(bin, argv, {
+        json,
+        env: withPnpRuntime(process.env, runtime),
+        // The run started again passes an interrupt on to the CLI it hands
+        // the run to, after the grace.
+        interruptAtOnce: true,
+        // The runtime's loader makes Node warn once per process; the CLI the
+        // run is handed to warns, as under Yarn, and this run stays quiet.
+        nodeArgs: ['--disable-warning=ExperimentalWarning'],
+        failure: error =>
+          `This CLI could not start with the project's Plug'n'Play runtime (${runtime.file}): ${error.message}.`,
+      });
+    }
+  }
   const global = !hosted && isGlobalCopy(cliRoot, cacheDir);
   if (global) {
     try {
@@ -403,7 +430,14 @@ export async function startRun({cliRoot, argv, declinedProjectCli}) {
     }
   }
 
-  await handOff(bin, argv, choice, json, notify);
+  await handOff(bin, argv, {
+    json,
+    notify,
+    failure: error =>
+      choice.copy === 'project'
+        ? `This project's CLI ${choice.version} could not be started: ${error.message}. Reinstall the project's dependencies.`
+        : `CLI release ${choice.version} could not be started: ${error.message}.`,
+  });
 }
 
 /**
@@ -466,16 +500,38 @@ async function answerInPackageSet(hostEntry, root, {argv, declinedProjectCli}) {
  * Run `bin` as this run and end with its exit status.
  * @param {string} bin
  * @param {string[]} argv
- * @param {import('./choose.mjs').ReleaseChoice} choice
- * @param {boolean} json
- * @param {() => void} [notify] prints update notices after a successful run
+ * @param {object} options
+ * @param {boolean} options.json
+ * @param {(error: Error) => string} options.failure the message when `bin`
+ *   cannot be started
+ * @param {() => void} [options.notify] prints update notices after a
+ *   successful run
+ * @param {NodeJS.ProcessEnv} [options.env] the environment `bin` gets, when it
+ *   is not this run's
+ * @param {boolean} [options.interruptAtOnce] pass an interrupt on at once, not
+ *   after the grace: `bin` is this copy started again, which passes it on to
+ *   the CLI it hands the run to after the grace itself
+ * @param {string[]} [options.nodeArgs] Node options for `bin`'s process alone,
+ *   which the processes it starts do not inherit
  * @returns {Promise<never>}
  */
-function handOff(bin, argv, choice, json, notify = () => {}) {
+function handOff(
+  bin,
+  argv,
+  {
+    json,
+    failure,
+    notify = () => {},
+    env,
+    interruptAtOnce = false,
+    nodeArgs = [],
+  },
+) {
   return new Promise(() => {
-    const child = spawn(process.execPath, [bin, ...argv], {
+    const child = spawn(process.execPath, [...nodeArgs, bin, ...argv], {
       stdio: 'inherit',
       windowsHide: false,
+      ...(env ? {env} : {}),
     });
     /** @param {NodeJS.Signals} signal */
     const forward = signal => {
@@ -494,6 +550,10 @@ function handOff(bin, argv, choice, json, notify = () => {}) {
     // process only outlives it.
     const onInterrupt = () => {
       if (process.platform === 'win32' || !running()) return;
+      if (interruptAtOnce) {
+        forward('SIGINT');
+        return;
+      }
       setTimeout(() => {
         if (running()) forward('SIGINT');
       }, INTERRUPT_GRACE_MS).unref();
@@ -502,12 +562,7 @@ function handOff(bin, argv, choice, json, notify = () => {}) {
     process.on('SIGTERM', forward);
     process.on('SIGHUP', forward);
     child.on('error', error => {
-      failUnavailable(
-        choice.copy === 'project'
-          ? `This project's CLI ${choice.version} could not be started: ${error.message}. Reinstall the project's dependencies.`
-          : `CLI release ${choice.version} could not be started: ${error.message}.`,
-        json,
-      );
+      failUnavailable(failure(error), json);
     });
     child.on('exit', (code, signal) => {
       process.off('SIGINT', onInterrupt);

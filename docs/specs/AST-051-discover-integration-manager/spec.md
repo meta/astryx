@@ -56,39 +56,64 @@ discover sources follow it except where this record says otherwise.
   supplies (FR11) that the project's own `package.json`, the nearest one above
   the folder discover runs in, declares in `dependencies`, `devDependencies` or
   `optionalDependencies`, under its name or an npm alias, each with its
-  version, what it adds as one list per kind, and the latest release a source
-  knows. It MUST then list, once per integration, every package its sources
+  version, its description (a loaded integration's from its `package.json`
+  when that is not blank, with terminal escape sequences and control and
+  format characters removed; a declared official package's from its source),
+  what it adds as one list per kind, and the latest release a source knows.
+  The text view shows a description's first sentence. It MUST then list, once per integration, every package its sources
   offer that the project neither loads nor declares as a dependency, each with
-  the package-manager command that adds it (FR2), and MUST NOT offer a package
+  what adds it (FR2), and MUST NOT offer a package
   whose integration the project has under another name. Official packages come
   first in both lists. An integration that failed to load is left out, even an
-  official one; the integration-issues warning and Doctor report it.
+  official one; the integration-issues warning and Doctor report it. An
+  integration's docs MUST be named as `astryx docs` opens them, and for a doc
+  that adds sections to a topic or guide another package owns, the text view
+  MUST print beside it the read that opens each of those sections
+  (`astryx docs <name> <key>`). Only sections such a read opens are listed: a
+  topic that cannot be read lists none, and the list still answers.
 - **FR2 — A package page shows its versions and what they add.** `discover
-<package>` MUST show what the shown version adds, grouped by kind, whether
-  the project has the package, its latest release, and its releases newest
+<package>` MUST show its description (for the installed version, the
+  `description` in the installed `package.json`, as FR1 cleans it; for any
+  other version, a source's), what the shown version adds, grouped by kind, whether the project has the package, its latest release, and its releases newest
   first with their dates and any unreadable status, and MUST count its
   prereleases. `discover <package>@<version>` shows any version, prerelease
   included; the default is the installed version, else the latest release. A
   version no source lists MUST fail with `ERR_NOT_FOUND` and suggest releases.
   For a package the project does not have, discover MUST print the
-  package-manager command that adds it, as text, and MUST NOT run it; for an
+  package-manager command that adds it, or in its place the install guidance
+  a loaded integration gives (`spec:AST-039` FR16) for the same package and
+  version, as text, and MUST NOT run it; for an
   alias of a package the project has, it names that package instead. For a
   package the official list supplies, that command pins what FR11 names and
   quotes a range for the shell.
 - **FR3 — An item page shows one item.** `discover <package>/<Component>` for an
   installed component keeps printing its doc. Any other item a package adds,
   installed or listed by a source, MUST resolve to its kind, name, package,
-  version, and whether the project has it.
+  version, and whether the project has it. A doc that adds sections to a topic
+  or guide another package owns MUST also carry those sections' keys, and its
+  text MUST print the read that opens each.
 - **FR4 — Search covers every kind and every source.** `discover <words>` MUST
   match installed components, the project's other installed items, package
   names and descriptions, and every item a source lists for a package the
   project could add, by name, title, summary, and keywords. It MUST answer with
   the list of matches, even when one name matches exactly or only one item
   matches, so the response type depends on the form of the query and never on
-  what the project has. Matches are ranked by how closely the name matches,
-  with installed items first among equals. Each match states its kind and
-  whether the project has its package. One item opens by its package path
-  (FR3).
+  what the project has. Every word typed after `discover` is part of the
+  query; a scoped package name followed by one word names that item (FR3).
+  The query MUST match word by word, with the word scorer `astryx search`
+  uses: an item matches by the words of its name, title, summary, and
+  keywords, and its package's description adds only words the item's own
+  text lacks. When an item matches every word, only such items are listed.
+  Matches are ranked by how many words they match, then by how strongly
+  (a word of the name above a word of the summary), with installed items
+  first among equals. Each match states its kind and whether the project has
+  its package. One item opens by its package path (FR3). When nothing
+  matches, the not-found error MUST suggest the first Core component or hook
+  that `astryx search` gives for the query, through the lookups'
+  other-command hint, after its own near names, when search answers the
+  whole query with it by a name or keyword: one word at search's keyword
+  strength, or every word of a longer query. It suggests nothing more when
+  search gives no such entry.
 - **FR5 — Filters follow the CLI's existing options.** `--type <kind>` keeps one
   kind (`component`, `template`, `doc`, `theme`, `codemod`, `agent-doc`): in the
   list, packages that add it; in a search, items of that kind. `--installed`
@@ -96,9 +121,13 @@ discover sources follow it except where this record says otherwise.
   `ERR_INVALID_OPTION`. `--limit <n>` caps search results (default 20) and the
   response reports the total when it cut the list. An unknown kind or a limit
   that is not a positive integer MUST fail with `ERR_INVALID_OPTION`.
-  In a project that sets `experimental.iconSet`, `icon-set` is an additional
-  kind (`spec:AST-084/DEC-8`); without it discover keeps the six kinds and
-  refuses `--type icon-set` with `ERR_INVALID_OPTION`.
+  In a project that installs an icon-set package or sets
+  `experimental.iconSet`, `icon-set` is an additional kind
+  (`spec:AST-084/DEC-8`, DEC-13); in any other project discover keeps the six kinds and
+  refuses `--type icon-set` with `ERR_INVALID_OPTION`. One exception: with icon
+  features off, the list and a search still show the `icon-set` items of
+  packages the project could add, each marked experimental (FR7,
+  `spec:AST-084/FR17`).
 - **FR6 — Sources are functions a project, an integration, or a door
   provides.** A source is an async function that receives
   `{signal, package?, version?}` and resolves to a catalog; `package` asks for
@@ -124,26 +153,37 @@ source, packages}`. `source` has `name`, `generatedAt`, and `complete`. Each
   MUST refuse any other `schemaVersion`, and MUST show versions newest first by
   publish time whatever order the source returned them in. When two sources
   list the same package, the earlier source's entry is used.
-  In a project that sets `experimental.iconSet`, an `icon-set` contribution
-  MAY also carry `iconCount` and `definitions` (`spec:AST-084/DEC-8`); without
-  it discover ignores `icon-set` entries and those fields as unknown.
+  An `icon-set` contribution MAY also carry `iconCount`, `license`, and
+  `definitions` (`spec:AST-084/DEC-8`, DEC-13); on any other kind those fields
+  are unknown. In a project that installs an icon-set package or sets
+  `experimental.iconSet`, discover reads `icon-set` entries in full. In any
+  other project, discover reads the `icon-set` entries of packages the project
+  could add, marked experimental, shows none of their `definitions`, answers
+  no installed set, and reads a catalog whose `icon-set` entries do not
+  validate with that kind and those fields unknown.
 - **FR8 — A saved copy covers an unreachable source.** After a source answers,
   discover MUST save that answer, per source and per request, in the per-user
-  cache directory of the platform, never in the project. When the source later
+  cache directory of the platform, never in the project. A project's own
+  source (its `astryx.config` `discover`) is saved per project root, so one
+  project's answer never stands for another's. When the source later
   fails, discover MUST use the saved answer for the same request and say when
   it was saved. With no saved answer, the source adds nothing and discover says
   so. Installed integrations always appear, with or without a source.
 - **FR9 — JSON stays compatible.** Existing response types and fields keep their
   meaning; new information is additive. `discover.list` `data` lists what the
-  project has (FR1), with optional per-kind lists and `latest`;
+  project has (FR1), with optional per-kind lists, `latest`, and an optional
+  `description` that holds an installed package's whole description;
   `meta.available` lists what the project could add and `meta.sources` reports
   each source, the official list last. `discover.detail` carries
-  `installed` and, with a source, `latest`, `aliases`, `source`, `versions`,
-  and `install` or `installedAs`. Items other than installed components use the
+  `installed`, the optional `description` FR2 shows, and, with a source,
+  `latest`, `aliases`, `source`, `versions`, and `install` or `installedAs`. Items other than installed components use the
   `discover.item` type. `discover.search` matches carry `kind` and `installed`,
   `component` holds the item name for every kind, and `data.total` appears when
   `--limit` cut the list. A free-text query returns `discover.search`, never
-  `discover.detail.doc` (FR4).
+  `discover.detail.doc` (FR4). An installed entry MAY carry `docSections`: for
+  each name in its `docs` whose topic or guide another package owns, the keys
+  of the sections the package adds there, in reading order, each opening with
+  `astryx docs <name> <key>`; a doc item carries the same keys as `sections`.
 - **FR10 — A package can link its docs site.** An integration manifest MAY
   set `docsiteUrl`, a URL of the package's docs site, so catalogs that list
   the package can link to it. The CLI MUST accept it as a known key, without
@@ -191,6 +231,22 @@ source, packages}`. `source` has `name`, `generatedAt`, and `complete`. Each
   check, with or without `--strict` or `--next`; they are separate from the
   component example notes, which are `next` notes.
 
+- **FR13 — Search points at discover only when discover would answer.**
+  `astryx search` text output ends with "More in packages you could add" and
+  the `discover` command for the query, except for `--type hook`; with
+  `--type <kind>` the command keeps the same `--type <kind>`. When a saved
+  copy of a discover source's full catalog exists (FR8), search MUST print
+  that line exactly when that `discover` command would list a match:
+  discover's own search (FR4), with the packages the project has, the
+  integrations it loads included, and the items of every package those
+  copies list and of the official packages no source covers (FR11), kept to
+  that kind when one is given, gives at least one match. Search applies no
+  rule of its own, except that an `icon-set` item counts only where icon
+  features are on (`spec:AST-017/FR27`: search is a stable command). When no
+  saved copy exists, search prints the line. Search
+  MUST NOT call a discover source to decide; it reads only the saved copies
+  and the official list. Its JSON output carries no such line.
+
 ### Platform support
 
 - Supported feature/engine floor: every supported CLI runtime.
@@ -229,20 +285,21 @@ source, packages}`. `source` has `name`, `generatedAt`, and `complete`. Each
 
 ## Verification
 
-| Contract | Verification                                                   | Representative states                                                                                                                                                                                                                                                                                         | Mutation or failure expectation                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| -------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | list leaf, catalog view, adapter, command tests                | installed only; available only; both; latest known; alias of an installed package; declared dependency; declared official package; official and other packages together; a query in a project with no integration and no source of its own                                                                    | an available package is missing, an alias or declared package is offered, latest is absent, a declared official package is not installed, an official package does not come first, or that query does not answer with the list                                                                                                                                                                                                                                              |
-| FR2      | detail leaf, adapter, and command tests                        | installed; not installed; `@version`; prerelease; unpublished version; alias; official entry with and without Core                                                                                                                                                                                            | a version is dropped, the default is wrong, the add command runs, an alias is offered, or an official entry's add command is not pinned                                                                                                                                                                                                                                                                                                                                     |
-| FR3      | item leaf and dispatcher tests                                 | installed component; installed template; listed item; unknown item                                                                                                                                                                                                                                            | an installed component loses its doc, or a listed item is not found                                                                                                                                                                                                                                                                                                                                                                                                         |
-| FR4      | search leaf and command tests                                  | components, templates, docs, packages; installed and available; title and summary matches; an exact installed name; a single match                                                                                                                                                                            | a kind is not searched, installed state is wrong, a weak match ranks first, or a free-text query returns a doc instead of the list                                                                                                                                                                                                                                                                                                                                          |
-| FR5      | dispatcher, leaf, and command tests                            | each kind; `--installed`; `--available`; both; `--limit`; bad values                                                                                                                                                                                                                                          | a filter is ignored, the pair is accepted, or a bad value passes                                                                                                                                                                                                                                                                                                                                                                                                            |
-| FR6      | adapter source tests                                           | project and two integrations, then the official list; a shared function; a throw; a timeout; invalid data                                                                                                                                                                                                     | a failure hides other sources, a function runs twice, order changes, or the signal never aborts                                                                                                                                                                                                                                                                                                                                                                             |
-| FR7      | catalog schema tests                                           | unknown field; unknown kind; `schemaVersion: 2`; duplicate package across sources; misordered versions                                                                                                                                                                                                        | an unknown field fails, another version is accepted, the later source wins, or versions keep the source order                                                                                                                                                                                                                                                                                                                                                               |
-| FR8      | adapter saved-copy and command tests                           | fresh answer; failure with a saved copy; failure with none; another request                                                                                                                                                                                                                                   | a stale copy hides a fresh answer, the saved date is missing, or a project file is written                                                                                                                                                                                                                                                                                                                                                                                  |
-| FR9      | existing discover JSON tests                                   | each response type with and without a source                                                                                                                                                                                                                                                                  | an existing field changes type or meaning                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| FR10     | manifest parser and validate tests                             | no field; a URL; a value that is not a URL                                                                                                                                                                                                                                                                    | the key raises an unknown-key warning, or a valid URL is refused                                                                                                                                                                                                                                                                                                                                                                                                            |
-| FR11     | official list generator, drift test, adapter and command tests | stable and canary CLI; Core older and newer than the CLI; Core declared exactly, as a range, and as a path; canary Core; no Core; private package; package that adds nothing; theme folder that does not match its file; empty folder; subfolder; another source lists an official package or its integration | a private or empty package is listed, an unreadable theme package is skipped, the committed list drifts from the repository, latest is older than a release the CLI knows, the project's Core version cannot be looked up, a declared range is not pinned or not quoted, a canary-only package shows on a stable CLI or beside a released Core, an official entry replaces a source's entry for the same integration, or a version it does not list fails with another code |
-| FR12     | manifest parser, package listing and integration check tests   | no logo; a packed light logo; light and dark; a bare path; a missing or non-image file; a logo the manifest names and one only package.json names; components with and without a showcase; a themes-only, docs-only and icon-set-only package                                                                 | the key raises an unknown-key warning, a bare path is accepted, a missing logo or example draws no note, an exempt package draws one, either note fails a check under any flag, or package.json wins over the manifest                                                                                                                                                                                                                                                      |
+| Contract | Verification                                                               | Representative states                                                                                                                                                                                                                                                                                                                      | Mutation or failure expectation                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| -------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | list leaf, catalog view, adapter, command tests                            | installed only; available only; both; latest known; alias of an installed package; declared dependency; declared official package; official and other packages together; a query in a project with no integration and no source of its own; a doc that adds sections to another package's topic or guide; such a topic that cannot be read | an available package is missing, an alias or declared package is offered, latest is absent, a declared official package is not installed, an official package does not come first, or that query does not answer with the list, a listed section that does not open, or a list that fails because one topic cannot be read                                                                                                                                                  |
+| FR2      | detail leaf, adapter, and command tests                                    | installed; not installed; `@version`; prerelease; unpublished version; alias; official entry with and without Core                                                                                                                                                                                                                         | a version is dropped, the default is wrong, the add command runs, an alias is offered, or an official entry's add command is not pinned                                                                                                                                                                                                                                                                                                                                     |
+| FR3      | item leaf and dispatcher tests                                             | installed component; installed template; listed item; unknown item; a doc item that adds sections to another package's topic                                                                                                                                                                                                               | an installed component loses its doc, or a listed item is not found, a doc item that does not name the read for a section it adds                                                                                                                                                                                                                                                                                                                                           |
+| FR4      | search leaf, dispatcher and command tests                                  | components, templates, docs, packages; installed and available; title and summary matches; an exact installed name; a single match; several words across name, summary and package description; an identifier; unquoted words; a miss with and without a Core match                                                                        | a kind is not searched, installed state is wrong, a weak match ranks first, a free-text query returns a doc instead of the list, a package description matches on its own, or a miss names anything but search's first Core component or hook                                                                                                                                                                                                                               |
+| FR5      | dispatcher, leaf, and command tests                                        | each kind; `--installed`; `--available`; both; `--limit`; bad values                                                                                                                                                                                                                                                                       | a filter is ignored, the pair is accepted, or a bad value passes                                                                                                                                                                                                                                                                                                                                                                                                            |
+| FR6      | adapter source tests                                                       | project and two integrations, then the official list; a shared function; a throw; a timeout; invalid data                                                                                                                                                                                                                                  | a failure hides other sources, a function runs twice, order changes, or the signal never aborts                                                                                                                                                                                                                                                                                                                                                                             |
+| FR7      | catalog schema tests                                                       | unknown field; unknown kind; `schemaVersion: 2`; duplicate package across sources; misordered versions                                                                                                                                                                                                                                     | an unknown field fails, another version is accepted, the later source wins, or versions keep the source order                                                                                                                                                                                                                                                                                                                                                               |
+| FR8      | adapter saved-copy and command tests                                       | fresh answer; failure with a saved copy; failure with none; another request                                                                                                                                                                                                                                                                | a stale copy hides a fresh answer, the saved date is missing, or a project file is written                                                                                                                                                                                                                                                                                                                                                                                  |
+| FR9      | existing discover JSON tests                                               | each response type with and without a source; an entry whose integration adds sections to another package's doc                                                                                                                                                                                                                            | an existing field changes type or meaning, a `docSections` key that does not open                                                                                                                                                                                                                                                                                                                                                                                           |
+| FR10     | manifest parser and validate tests                                         | no field; a URL; a value that is not a URL                                                                                                                                                                                                                                                                                                 | the key raises an unknown-key warning, or a valid URL is refused                                                                                                                                                                                                                                                                                                                                                                                                            |
+| FR11     | official list generator, drift test, adapter and command tests             | stable and canary CLI; Core older and newer than the CLI; Core declared exactly, as a range, and as a path; canary Core; no Core; private package; package that adds nothing; theme folder that does not match its file; empty folder; subfolder; another source lists an official package or its integration                              | a private or empty package is listed, an unreadable theme package is skipped, the committed list drifts from the repository, latest is older than a release the CLI knows, the project's Core version cannot be looked up, a declared range is not pinned or not quoted, a canary-only package shows on a stable CLI or beside a released Core, an official entry replaces a source's entry for the same integration, or a version it does not list fails with another code |
+| FR12     | manifest parser, package listing and integration check tests               | no logo; a packed light logo; light and dark; a bare path; a missing or non-image file; a logo the manifest names and one only package.json names; components with and without a showcase; a themes-only, docs-only and icon-set-only package                                                                                              | the key raises an unknown-key warning, a bare path is accepted, a missing logo or example draws no note, an exempt package draws one, either note fails a check under any flag, or package.json wins over the manifest                                                                                                                                                                                                                                                      |
+| FR13     | adapter saved-catalog, search leaf, search command, and kept-catalog tests | no saved copy; a saved copy with and without a match; an official-only match; an integration the project loads without declaring it; `--type hook`; `--type <kind>`, with and without a match of that kind; `--json` with a saved copy; an edit to an installed package's doc; a cache folder that cannot be written                       | the line shows when discover would list no match, or hides when it would list one; a source is called; the `--type` it names differs from the search's; the JSON carries the line; or any other output changes                                                                                                                                                                                                                                                              |
 
 ## Decision log
 

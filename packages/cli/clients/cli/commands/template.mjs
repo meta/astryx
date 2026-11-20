@@ -4,8 +4,11 @@
  * @file template command — thin CLI wrapper around api/template.mjs
  */
 
+import path from 'node:path';
 import {jsonOut} from '../../../foundation/response/json.mjs';
+import {isFilePathArg} from '../../../foundation/fs/path-safety.mjs';
 import {
+  docText,
   emit,
   section,
   text,
@@ -18,6 +21,8 @@ import {template as templateApi} from '../../../api/template/template.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
 import {warnOnIntegrationIssues} from '../../../foundation/integrations/integration-warnings.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
+import {firstSentence} from '../../../foundation/text/string-utils.mjs';
+import {markNotReady} from '../lib/not-ready.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {NO_RESULT_SET, resultSet} from '../../../foundation/debug/index.mjs';
 import {doc as templateCommand} from './template.doc.mjs';
@@ -41,6 +46,18 @@ export {
  *   import('../../../api/template/template.type.mjs').TemplateCdnResponse
  * )} TemplateResponse
  */
+
+/**
+ * The line naming the one `component` call that reads every component a
+ * template uses, or null when it uses none.
+ * @param {string} run the CLI invocation
+ * @param {string[]} components
+ * @returns {string | null}
+ */
+function componentsLine(run, components) {
+  if (components.length === 0) return null;
+  return `Read the components it uses in one call: \`${run} component ${components.join(' ')}\``;
+}
 
 /**
  * The line saying how many docs-only demo content elements became a
@@ -234,14 +251,15 @@ export function registerTemplate(program) {
               break;
             }
 
-            // Project each entry to its JSON-mirroring fields; the WIP marker is
-            // folded into `name` (as before) and the package is shown only when it
-            // isn't the built-in core package.
+            // Project each entry to its JSON-mirroring fields; the not-ready
+            // marker is folded into `name` (as before) and the package is shown only when it
+            // isn't the built-in core package. The text keeps a description's
+            // first sentence; --json keeps it whole.
             /** @param {import('../../../api/template/template.type.mjs').TemplateListEntry} t */
             const toRow = t => ({
               id: t.id,
-              name: t.isReady ? t.name : `${t.name} (WIP)`,
-              description: t.description,
+              name: markNotReady(t.name, t.isReady),
+              description: docText(firstSentence(t.description ?? '')),
               package:
                 t.package && t.package !== '@astryxdesign/core'
                   ? t.package
@@ -274,11 +292,12 @@ export function registerTemplate(program) {
               description,
               components,
               skeleton,
+              isReady,
             } = result.data;
             emit(
               record({package: result.package}),
               text(
-                `# ${tName}${description ? ' — ' + description : ''}\n` +
+                `# ${markNotReady(tName, isReady)}${description ? ' — ' + docText(description) : ''}\n` +
                   `# Components: ${components.join(', ')}`,
               ),
               code(skeleton),
@@ -291,10 +310,21 @@ export function registerTemplate(program) {
             // from (cli-surface INV28) and the note about replaced demo media go
             // to stderr, the note in the copy receipt's words. (Text mode only:
             // --json returned above with both in the envelope.)
-            const {source, demoMediaReplaced, demoContentReplaced, icons} =
-              result.data;
+            const {
+              template: tName,
+              source,
+              demoMediaReplaced,
+              demoContentReplaced,
+              icons,
+              isReady,
+              componentsToRead,
+            } = result.data;
             console.error(`package: ${result.package}`);
+            if (isReady === false)
+              console.error(`template: ${markNotReady(tName, isReady)}`);
             emit(code(source));
+            const readLine = componentsLine(run, componentsToRead);
+            if (readLine) console.error(readLine);
             if (demoMediaReplaced > 0) {
               console.error(
                 `Replaced ${demoMediaReplaced} Astryx demo media reference${demoMediaReplaced === 1 ? '' : 's'}: ` +
@@ -311,17 +341,35 @@ export function registerTemplate(program) {
 
           case 'template.copy': {
             const {
+              template: tName,
+              isReady,
               outputDir,
               fileName,
               demoMediaReplaced,
               demoContentReplaced,
               notes,
               icons,
+              givenPath,
+              components,
             } = result.data;
             const file = `${outputDir}/${fileName}`;
+            const givenRelative =
+              givenPath !== undefined && isFilePathArg(givenPath)
+                ? path.join(outputDir, fileName)
+                : outputDir;
             const iconText = iconLines(icons);
+            const readLine = componentsLine(run, components);
             emit(
-              text(`Copied template to ${file}`),
+              text(
+                isReady === false
+                  ? `Copied template ${markNotReady(tName, isReady)} to ${file}`
+                  : `Copied template to ${file}`,
+              ),
+              readLine !== null && text(readLine),
+              givenPath !== undefined &&
+                text(
+                  `${givenPath} is inside the project, so it was written as its relative path, ${givenRelative}.`,
+                ),
               record({package: result.package}),
               demoMediaReplaced > 0 &&
                 text(

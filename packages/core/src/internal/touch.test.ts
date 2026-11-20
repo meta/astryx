@@ -120,6 +120,9 @@ describe('internal/touch', () => {
     expect(entry).not.toHaveProperty('springs');
     expect(entry.focusForLastInput).toBe(focusReturn.focusForLastInput);
     expect(entry.isFocusLost).toBe(focusReturn.isFocusLost);
+    expect(entry.prepareFocusReturnOnRemoval).toBe(
+      focusReturn.prepareFocusReturnOnRemoval,
+    );
     expect(entry.useInteractionModalityTracking).toBe(
       modality.useInteractionModalityTracking,
     );
@@ -130,6 +133,7 @@ describe('internal/touch', () => {
       'toSpring',
       'focusForLastInput',
       'isFocusLost',
+      'prepareFocusReturnOnRemoval',
       'useInteractionModalityTracking',
     ]) {
       expect(typeof entry[name], name).toBe('function');
@@ -214,4 +218,13 @@ describe('internal/touch', () => {
     expect(onWindow).not.toHaveBeenCalled();
     expect(onDocument).not.toHaveBeenCalled();
   });
+});
+
+it('re-exports the shared group tracking that Lab Rating reads', async () => {
+  const entry = await import('./touch');
+  const group = await import('../hooks/useGroupPressTracking');
+  const marker = await import('../privateAttributes/pressGroupItem.stylex');
+  expect(entry.useGroupPressTracking).toBe(group.useGroupPressTracking);
+  expect(entry.GROUP_PRESS_POINTERS).toBe(group.GROUP_PRESS_POINTERS);
+  expect(entry.pressGroupItemProps).toBe(marker.pressGroupItemProps);
 });

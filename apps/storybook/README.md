@@ -33,6 +33,11 @@ A11y/<pattern or component>
 - **An internationalization page** checks one locale behavior across several
   components, such as dates in Calendar, DateInput and Timestamp, so it sits in
   its package's `Internationalization/` group rather than beside one component.
+- **A few groups are deliberate sub-groupings**, so their pages sit one level
+  deeper: `Charts/Chrome/<Component>` for chart chrome, `Charts/Marks/<Mark>`
+  for the marks a chart is built from, and `Lab/3DChart/` and
+  `Lab/ChartTheming/`. The story-tree check allows these group names after any
+  package.
 - **Accessibility contract fixtures live under `A11y/`.** They are test
   fixtures the a11y audit and its browser specs open by story id, not component
   docs. Storybook ids lowercase titles, so `A11y/` and `a11y/` share ids, and

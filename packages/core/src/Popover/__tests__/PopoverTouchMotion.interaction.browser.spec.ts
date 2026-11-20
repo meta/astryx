@@ -14,7 +14,8 @@
  *   neither motion does Layout or Paint per frame. Reduce Motion
  *   cross-fades, opacity only, in 200 ms or less. A mouse keeps the layer's
  *   own entrance. A tap, a pan or a pinch while it grows does nothing but a
- *   pinch's zoom. Storyboards.
+ *   pinch's zoom. It grows from where it meets its trigger, after a flip and
+ *   when it overlaps the trigger. Storyboards.
  * @position Evidence for Popover's touch presentation; the model itself is
  *   unit-tested in popoverSurfaceMotion.test.ts
  */
@@ -117,9 +118,12 @@ interface OpenStory {
   triggerBox: Box;
 }
 
-async function openDefault(page: Page): Promise<OpenStory> {
+async function openDefault(page: Page, css?: string): Promise<OpenStory> {
   await installLongTaskLog(page);
   await openStory(page, storybook(), 'core-popover--default');
+  if (css != null) {
+    await page.addStyleTag({content: css});
+  }
   const driver = await touchDriver(page);
   const trigger = page.getByRole('button', {name: 'Settings'});
   const triggerBox = await trigger.boundingBox();
@@ -498,6 +502,139 @@ test('the presentation grows out of the trigger on the theme\u2019s entrance tok
     );
   }
 });
+
+/**
+ * The surface's presented scale and its `transform-origin`, in px, at each
+ * time of its held growth.
+ */
+async function sampleGrowth(locator: Locator, times: ReadonlyArray<number>) {
+  return locator.evaluate((element, ts) => {
+    const held =
+      (window as unknown as {__harnessHeld?: Animation[]}).__harnessHeld ?? [];
+    if (held.length === 0) {
+      throw new Error('sampleGrowth: no held animations');
+    }
+    return ts.map(t => {
+      for (const animation of held) {
+        const end = Number(
+          animation.effect?.getComputedTiming().endTime ?? Infinity,
+        );
+        animation.currentTime = Math.min(t, end - 0.5);
+      }
+      const style = getComputedStyle(element);
+      const [sx, sy = sx] =
+        style.scale === 'none' ? [1, 1] : style.scale.split(' ').map(Number);
+      const [ox, oy] = style.transformOrigin
+        .split(' ')
+        .map(value => parseFloat(value));
+      return {t, sx, sy, ox, oy};
+    });
+  }, times);
+}
+
+// The story root pinned so the trigger has no room below it.
+const AT_BOTTOM =
+  '#storybook-root { position: fixed !important; inset: auto; margin: 0 !important; bottom: 12px; left: 16px; }';
+// The story root pinned so a layer forced over the trigger fits the page.
+const AT_MIDDLE =
+  '#storybook-root { position: fixed !important; inset: auto; margin: 0 !important; top: 280px; left: 140px; }';
+// The story root pinned so a layer forced beside the trigger fits the page.
+const AT_LEFT =
+  '#storybook-root { position: fixed !important; inset: auto; margin: 0 !important; top: 280px; left: 0; }';
+
+/**
+ * Pins the open layer at `left`, `top` in the viewport. No anchored layer
+ * lands over its trigger on its own, so the overlap cases place it there.
+ */
+async function placeLayer(page: Page, left: number, top: number) {
+  await page.addStyleTag({
+    content: `[popover]:has(.astryx-popover) { position-area: none !important; position-try-fallbacks: none !important; inset: auto !important; left: ${left}px !important; top: ${top}px !important; margin: 0 !important; }`,
+  });
+}
+
+const LANDINGS = [
+  {name: 'flipped above its trigger', side: 'above', root: AT_BOTTOM},
+  {name: 'over its trigger\u2019s center', side: 'over', root: AT_MIDDLE},
+  {
+    name: 'a few pixels over its trigger\u2019s side',
+    side: 'right',
+    root: AT_LEFT,
+  },
+] as const;
+
+for (const landing of LANDINGS) {
+  test(`a popover ${landing.name} grows from where it meets its trigger`, async ({
+    page,
+  }) => {
+    const story = await openDefault(page, landing.root);
+    const trigger = story.triggerBox;
+    const center = {
+      x: trigger.x + trigger.width / 2,
+      y: trigger.y + trigger.height / 2,
+    };
+    // The default story's popover is 280 x 229.
+    if (landing.side === 'over') {
+      await placeLayer(page, center.x - 140, center.y - 100);
+    } else if (landing.side === 'right') {
+      await placeLayer(page, trigger.x + trigger.width - 4, center.y - 115);
+    }
+    await openWithTap(story);
+    await waitForRest(story.surface);
+    const final = await story.surface.boundingBox();
+    if (final == null) {
+      throw new Error('no popover box');
+    }
+    await page.keyboard.press('Escape');
+    await expect(story.trigger).toHaveAttribute('aria-expanded', 'false');
+    await expect(exitCopyOf(page)).toHaveCount(0);
+    await openHeldWhileGrowing(page, story);
+    const samples = await sampleGrowth(story.surface, [0, 60, 120]);
+    await releaseAnimations(page, {finish: true});
+
+    const viewport = page.viewportSize();
+    expect(viewport).not.toBeNull();
+    expect(final.x).toBeGreaterThanOrEqual(0);
+    expect(final.x + final.width).toBeLessThanOrEqual(viewport?.width ?? 0);
+    const inside = {x: center.x - final.x, y: center.y - final.y};
+    let origin: {x: number; y: number};
+    if (landing.side === 'above') {
+      expect(final.y + final.height).toBeLessThanOrEqual(trigger.y);
+      origin = {
+        x: Math.min(final.width, Math.max(0, inside.x)),
+        y: final.height,
+      };
+    } else if (landing.side === 'over') {
+      expect(inside.x).toBeGreaterThan(0);
+      expect(inside.x).toBeLessThan(final.width);
+      expect(inside.y).toBeGreaterThan(0);
+      expect(inside.y).toBeLessThan(final.height);
+      origin = inside;
+    } else {
+      expect(final.x).toBeLessThan(trigger.x + trigger.width);
+      expect(final.x).toBeGreaterThan(trigger.x + trigger.width - 8);
+      origin = {x: 0, y: inside.y};
+    }
+    for (const sample of samples) {
+      expect(
+        Math.abs(sample.ox - origin.x),
+        JSON.stringify(sample),
+      ).toBeLessThanOrEqual(1);
+      expect(
+        Math.abs(sample.oy - origin.y),
+        JSON.stringify(sample),
+      ).toBeLessThanOrEqual(1);
+    }
+    const [start] = samples;
+    if (landing.side === 'over') {
+      // No side to lengthen along: it only scales.
+      expect(start.sx).toBeCloseTo(start.sy, 3);
+    } else if (landing.side === 'right') {
+      expect(start.sx).toBeLessThan(start.sy);
+    } else {
+      expect(start.sy).toBeLessThan(start.sx);
+    }
+  });
+}
 
 test('the dismissal shrinks back into the trigger on the theme\u2019s exit tokens, on screen through the light dismiss', async ({
   page,

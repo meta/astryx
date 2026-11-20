@@ -446,6 +446,10 @@ describe('swizzle.copy — the module graph (spec:AST-110 FR1, FR2)', () => {
       );
       expect(r.data.filesCopied).toBe(r.data.files.length);
       expect(r.data.files).not.toContain('../i18n/InternationalizationContext.ts');
+      // The translator's English default comes from the package's public entry.
+      expect(r.data.files).not.toContain('../i18n/translatingContext.ts');
+      expect(r.data.files).not.toContain('../i18n/resolve.ts');
+      expect(r.data.dependencies).not.toHaveProperty('intl-messageformat');
       const files = filesUnder(out())
         .filter(rel => /\.tsx?$/.test(rel) && !rel.startsWith('node_modules'))
         .map(rel => path.join(out(), rel));

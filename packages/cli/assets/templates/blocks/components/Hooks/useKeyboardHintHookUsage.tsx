@@ -8,8 +8,8 @@ import {Card} from '@astryxdesign/core/Card';
 import {useKeyboardHint, useListFocus} from '@astryxdesign/core/hooks';
 import {Icon} from '@astryxdesign/core/Icon';
 import {HStack} from '@astryxdesign/core/Layout';
-import {StarIcon as StarOutline} from '@heroicons/react/24/outline';
-import {StarIcon as StarSolid} from '@heroicons/react/24/solid';
+import {StarIcon as StarOutline} from '@astryxdesign/template-icons';
+import {StarIcon as StarSolid} from '@astryxdesign/template-icons/24/solid';
 
 const STARS = [1, 2, 3, 4, 5];
 

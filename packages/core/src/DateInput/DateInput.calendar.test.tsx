@@ -156,9 +156,8 @@ describe('DateInput typed entry with a calendar', () => {
       max: '2026-12-31',
     });
     fireEvent.change(input, {target: {value: 'abc'}});
-    expect(within(container).getByRole('alert')).toHaveTextContent(
-      'Invalid date',
-    );
+    fireEvent.blur(input);
+    expectShown(input, container, 'Invalid date');
     fireEvent.change(input, {target: {value: '12/30/1404 AP'}});
     expectShown(input, container, 'Enter a real date (Persian Calendar)');
     fireEvent.change(input, {target: {value: '1/1/1406 AP'}});
@@ -362,7 +361,7 @@ describe('DateInput onChange while typing a Gregorian date', () => {
     fireEvent.change(input, {target: {value: '12/01/2026 10:00'}});
     fireEvent.blur(input);
     expect(onChange).not.toHaveBeenCalled();
-    expect(input).toHaveValue('');
+    expect(input).toHaveValue('12/01/2026 10:00');
   });
 
   it.each(['blur', 'Enter'])(

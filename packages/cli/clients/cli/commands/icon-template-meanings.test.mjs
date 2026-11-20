@@ -19,6 +19,7 @@ import {
   writeIconSetProject,
 } from '../../../test-utils/icon-set-fixture.mjs';
 import {templateIconMeanings} from '../../../foundation/discovery/template-icon-meanings.mjs';
+import {meaningWithFallbacks} from '../../../foundation/discovery/template-placeholders.mjs';
 import {astryxIconDefinitions} from '../../../foundation/discovery/icon-definition-discovery.mjs';
 
 /** @type {string} */
@@ -221,18 +222,50 @@ describe('experimental icon --definitions marks template use and the set', () =>
     expect(byName.get('close').mapped).toBe(true);
     expect(byName.get('document').mapped).toBe(false);
     expect(byName.get('document').templates).toBeGreaterThan(0);
+    // A definition the set does not map names the fallback it draws by.
+    for (const [name, each] of byName) {
+      const drawnBy = each.mapped
+        ? undefined
+        : meaningWithFallbacks(name)
+            .slice(1)
+            .find(other => byName.get(other)?.mapped);
+      expect(each.fallback).toBe(drawnBy);
+    }
 
     const text = await runCli(['experimental', 'icon', '--definitions'], pkg);
     expect(text.stdout).toContain('checked against @acme/glyphs/glyphs');
     expect(text.stdout).toMatch(
       new RegExp(
-        `- document \\[optional, ${counts.get('document')} templates, not mapped\\]`,
+        `- document \\[optional, group files, ${counts.get('document')} templates, not mapped\\]`,
         'u',
       ),
     );
     expect(text.stdout).toMatch(
       /- close \[built-in, (\d+ templates?, )?mapped\]/u,
     );
+  });
+
+  it('names the fallback a set draws for a definition it does not map', async () => {
+    // The set maps `home` but not `house`, which falls back to `home`.
+    const data = glyphsData();
+    writeIconPackage(pkg, {data: {...data, map: {...data.map, home: 'home'}}});
+    const {code, body} = await json(['experimental', 'icon', '--definitions']);
+    expect(code).toBe(0);
+    /** @type {Map<string, any>} */
+    const byName = new Map(
+      body.data.definitions.map((/** @type {any} */ each) => [each.name, each]),
+    );
+    expect(meaningWithFallbacks('house')).toEqual(['house', 'home']);
+    expect(byName.get('house')).toMatchObject({
+      mapped: false,
+      fallback: 'home',
+    });
+    expect(byName.get('home')).toMatchObject({mapped: true});
+    expect(byName.get('home').fallback).toBeUndefined();
+    expect(byName.get('document').fallback).toBeUndefined();
+
+    const text = await runCli(['experimental', 'icon', '--definitions'], pkg);
+    expect(text.stdout).toMatch(/- house \[[^\]]*drawn as home\]/u);
   });
 
   it("in a project: the project's main set, or the set --set names", async () => {
@@ -313,7 +346,10 @@ describe('integration check lists the template meanings a set leaves unmapped', 
     const [coverage] = validate.response.data.iconSets;
     const mapped = new Set(Object.keys(complete.data.map));
     expect(coverage.templateMeanings.unmapped).toEqual(
-      meanings.filter(each => !mapped.has(each.definition)),
+      meanings.filter(
+        each =>
+          !meaningWithFallbacks(each.definition).some(name => mapped.has(name)),
+      ),
     );
     expect(
       coverage.templateMeanings.unmapped.map(

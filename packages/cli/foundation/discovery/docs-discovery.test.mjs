@@ -169,9 +169,7 @@ describe('discoverIntegrationDocs', () => {
             {
               id: 'steps',
               title: 'Steps',
-              content: [
-                {type: 'collection', source: {slot: 'guides'}},
-              ],
+              content: [{type: 'collection', source: {slot: 'guides'}}],
             },
           ],
         }),
@@ -457,6 +455,34 @@ describe('DocsCatalog', () => {
     expect(catalog.resolve('tokens').package).toBe('@acme/later');
   });
 
+  it('keeps an extension when a package configured later replaces its topic', () => {
+    // Configured order alone must not decide whether an extension shows: a
+    // theme package's sections on `theme` stay when the app's base library,
+    // configured after it, replaces `theme`.
+    const catalog = DocsCatalog.fromBuiltins({theme: '/cli/theme.doc.mjs'});
+    catalog.add(
+      record({
+        name: 'glyph-theme',
+        package: '@acme/glyph-theme',
+        path: '/glyph/docs/glyph-theme.doc.mjs',
+        extendsTopic: 'theme',
+      }),
+    );
+    catalog.add(
+      record({
+        name: 'theme',
+        package: '@acme/base',
+        path: '/base/docs/theme.doc.mjs',
+        replaces: 'theme',
+      }),
+    );
+    const theme = catalog.resolve('theme');
+    expect(theme.package).toBe('@acme/base');
+    expect(theme.extensions).toEqual([
+      {package: '@acme/glyph-theme', path: '/glyph/docs/glyph-theme.doc.mjs'},
+    ]);
+  });
+
   it('records an extension against its target rather than adding a topic', () => {
     const catalog = DocsCatalog.fromBuiltins({theme: '/cli/theme.doc.mjs'});
     expect(
@@ -614,6 +640,44 @@ describe('mergeTopic', () => {
     });
     expect(merged.title).toBe('Theme');
     expect(merged.description).toBe('Theming.');
+  });
+
+  it('never lets one package replace a section another package added', () => {
+    const install = (/** @type {string} */ text) => ({
+      title: 'Install',
+      content: [{type: 'prose', text}],
+    });
+    const ocean = mergeTopic(
+      {...base, sections: [{title: 'Tokens', content: []}]},
+      {sections: [install('ocean')]},
+      {contributor: '@acme/ocean-theme'},
+    );
+    const both = mergeTopic(
+      ocean,
+      {sections: [install('dune')]},
+      {contributor: '@acme/dune-theme'},
+    );
+    expect(both.sections.map(s => [s.title, s.content[0]?.text])).toEqual([
+      ['Tokens', undefined],
+      ['Install', 'ocean'],
+      ['Install', 'dune'],
+    ]);
+    // The base topic's own sections, and a package's own sections, still
+    // take a replacement.
+    const again = mergeTopic(
+      mergeTopic(
+        both,
+        {sections: [install('ocean v2')]},
+        {contributor: '@acme/ocean-theme'},
+      ),
+      {sections: [{title: 'Tokens', content: [{type: 'prose', text: 'dune'}]}]},
+      {contributor: '@acme/dune-theme'},
+    );
+    expect(again.sections.map(s => [s.title, s.content[0]?.text])).toEqual([
+      ['Tokens', 'dune'],
+      ['Install', 'ocean v2'],
+      ['Install', 'dune'],
+    ]);
   });
 });
 

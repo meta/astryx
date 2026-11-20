@@ -18,6 +18,7 @@ import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 import runnerLabels from './lib/runner-labels.cjs';
+import {TIGHT_NODE_LEGS} from '../../scripts/vitest-node-legs.mjs';
 
 const {STANDARD_RUNNERS, labelsOf} = runnerLabels;
 
@@ -58,6 +59,7 @@ const RELEASE_CHECK_JOBS = [
   'pr-a11y-shard',
   'pr-a11y-audit',
   'pr-a11y-guards',
+  'pr-a11y-plan',
   'pr-a11y-specs',
   'a11y-contracts-shard',
   'visual-scout',
@@ -157,10 +159,21 @@ describe('runner labels', () => {
     );
   });
 
-  it('caps a pull request at two unit-test legs at a time', () => {
+  it('caps a pull request at two unit-test legs at a time, unless admission found room for more', () => {
     const ci = Object.fromEntries(workflows)['ci.yml'];
-    for (const id of ['test-ui', 'test-node']) {
-      expect(ci.jobs[id].strategy['max-parallel'], id).toBe(2);
-    }
+    expect(ci.jobs['test-ui'].strategy['max-parallel']).toBe(2);
+    // test-node runs the width admission picks: two when CI is tight
+    // (ci-admission.test.mjs), from room's Node leg plan.
+    expect(
+      ci.jobs.admission.steps.find(step => step.with?.['leg-widths']).with[
+        'leg-widths'
+      ],
+    ).toBe(
+      "${{ github.event_name == 'workflow_dispatch' && '{}' || needs.room.outputs.leg-widths }}",
+    );
+    expect(TIGHT_NODE_LEGS).toBe(2);
+    expect(ci.jobs['test-node'].strategy['max-parallel']).toBe(
+      "${{ fromJSON(needs.admission.outputs.widths)['test-node'] }}",
+    );
   });
 });

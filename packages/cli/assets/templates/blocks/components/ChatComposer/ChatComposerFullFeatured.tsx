@@ -16,14 +16,16 @@ import {ProgressBar} from '@astryxdesign/core/ProgressBar';
 import {Stack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 import {
-  AtSymbolIcon,
-  Cog6ToothIcon,
+  MentionIcon,
+  SettingsIcon,
   MicrophoneIcon,
-  PaperClipIcon,
+  AttachIcon,
   SparklesIcon,
-} from '@heroicons/react/24/outline';
+} from '@astryxdesign/template-icons';
+import {useToast} from '@astryxdesign/core/Toast';
 
 export default function ChatComposerFullFeatured() {
+  const showToast = useToast();
   const [isStreaming, setIsStreaming] = useState(false);
 
   return (
@@ -53,17 +55,23 @@ export default function ChatComposerFullFeatured() {
         headerActions={
           <>
             <Button
+              onClick={() =>
+                showToast({body: 'Demo: a mention picker would open here'})
+              }
               label="Mention"
               variant="ghost"
               size="sm"
-              icon={<Icon icon={AtSymbolIcon} />}
+              icon={<Icon icon={MentionIcon} />}
               isIconOnly
             />
             <Button
+              onClick={() =>
+                showToast({body: 'Demo: a file picker would open here'})
+              }
               label="Attach file"
               variant="ghost"
               size="sm"
-              icon={<Icon icon={PaperClipIcon} />}
+              icon={<Icon icon={AttachIcon} />}
               isIconOnly
             />
           </>
@@ -94,7 +102,7 @@ export default function ChatComposerFullFeatured() {
                 label: 'Settings',
                 variant: 'ghost',
                 size: 'md',
-                icon: <Icon icon={Cog6ToothIcon} size="sm" />,
+                icon: <Icon icon={SettingsIcon} size="sm" />,
                 children: 'Settings',
               }}
               menuWidth={200}
@@ -113,6 +121,9 @@ export default function ChatComposerFullFeatured() {
             size="md"
             icon={<Icon icon={MicrophoneIcon} />}
             isIconOnly
+            onClick={() =>
+              showToast({body: 'Demo: voice input would start here'})
+            }
           />
         }
       />

@@ -13,6 +13,9 @@
  *   docs(route)                           -> node    -> docs.node
  *   docs(route, undefined, {depth: 2})    -> node    -> docs.node, two levels
  *
+ * `list` names the list read. It is the same as no topic, so docs() refuses
+ * a topic or section beside it instead of dropping it.
+ *
  * A topic read returns the whole doc, as it always has; `index` returns its
  * sections, so a reader can open one by its key (spec:AST-047). The CLI's text
  * view lists the sections by default. A route names a node
@@ -23,6 +26,7 @@
  * overlay loading, and resolution they share sit in _adapter.mjs.
  */
 
+import {SKILLS_ROUTE, isSkillsRoute, skill, skills} from './skills/skills.mjs';
 import {list as listRead} from './list/list.mjs';
 import {index as indexRead} from './index/index.mjs';
 import {detail as detailRead} from './detail/detail.mjs';
@@ -42,15 +46,17 @@ import {
 
 /**
  * Run a docs read with `{@pm}` steps rendered for the project in `cwd`, the
- * folder the read is about, not the process's working directory. A host that
- * already chose a package manager keeps its choice.
+ * folder the read is about, not the process's working directory: its package
+ * manager, and its Core release for the packages that move with Core. A host
+ * that already chose a package manager keeps its choice and its project.
  * @template T
  * @param {string | undefined} cwd
  * @param {() => T} fn
  * @returns {T}
  */
 function inProject(cwd, fn) {
-  return runWithDocPackageManager(docPackageManager(cwd ?? process.cwd()), fn);
+  const dir = cwd ?? process.cwd();
+  return runWithDocPackageManager(docPackageManager(dir), fn, dir);
 }
 
 /** @type {typeof listRead} */
@@ -114,6 +120,8 @@ function depthRead(options) {
  * @param {string} [options.lang]
  * @param {boolean} [options.zh]
  * @param {boolean} [options.dense]
+ * @param {boolean} [options.list] return the topic list, the same as giving
+ *   no topic; docs() refuses a topic or section beside it
  * @param {boolean} [options.index] return the topic's section index instead of
  *   the whole doc
  * @param {number | 'all'} [options.depth] how many levels below a docs-tree
@@ -126,7 +134,9 @@ function depthRead(options) {
  *   import('./docs.type.mjs').DocsIndexResponse |
  *   import('./docs.type.mjs').DocsDetailResponse |
  *   import('./docs.type.mjs').DocsDetailSectionResponse |
- *   import('./docs.type.mjs').DocsNodeResponse
+ *   import('./docs.type.mjs').DocsNodeResponse |
+ *   import('./docs.type.mjs').DocsSkillsResponse |
+ *   import('./docs.type.mjs').DocsSkillResponse
  * >}
  */
 export async function docs(topic, section, options = {}) {
@@ -143,13 +153,35 @@ export async function docs(topic, section, options = {}) {
  *   import('./docs.type.mjs').DocsIndexResponse |
  *   import('./docs.type.mjs').DocsDetailResponse |
  *   import('./docs.type.mjs').DocsDetailSectionResponse |
- *   import('./docs.type.mjs').DocsNodeResponse
+ *   import('./docs.type.mjs').DocsNodeResponse |
+ *   import('./docs.type.mjs').DocsSkillsResponse |
+ *   import('./docs.type.mjs').DocsSkillResponse
  * >}
  */
 async function docsRead(topic, section, options = {}) {
   const read = depthRead(options);
+  if (options.list && (topic || section)) {
+    throw new AstryxError(
+      'Ask for the topic list or one topic, not both: --list takes no topic or section.',
+      undefined,
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
   if (!topic) return list(options);
   const found = await resolveDocsArgument(topic, options);
+  // The skills route answers unless a doc holds that name itself.
+  if (found.kind === 'unknown' && isSkillsRoute(topic)) {
+    if (section) {
+      throw new AstryxError(
+        'A skill has no sections: read it whole.',
+        undefined,
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    }
+    return topic === SKILLS_ROUTE
+      ? skills(options)
+      : skill(topic.slice(SKILLS_ROUTE.length + 1), options);
+  }
   if (found.kind === 'node') {
     if (section) {
       // A namespace answers a section read from the one guide below it that
