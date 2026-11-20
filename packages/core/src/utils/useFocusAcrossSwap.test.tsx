@@ -10,11 +10,12 @@
 import {
   Activity,
   StrictMode,
+  Suspense,
   createRef,
   useImperativeHandle,
   type Ref,
 } from 'react';
-import {render, renderHook, screen} from '@testing-library/react';
+import {act, render, renderHook, screen} from '@testing-library/react';
 import {describe, expect, it, vi} from 'vitest';
 import {useFocusAcrossSwap} from './useFocusAcrossSwap';
 
@@ -55,6 +56,35 @@ function ContentExample({
       <span ref={ref}>Owned content</span>
     </div>
   );
+}
+
+function OptionalContentExample({
+  hasContent,
+  revision,
+}: {
+  hasContent: boolean;
+  revision: number;
+}) {
+  const ref = useFocusAcrossSwap(undefined, {
+    getFocusTarget: getContentOwner,
+  });
+  return (
+    <div key={revision} role="button" tabIndex={-1}>
+      {hasContent ? <span ref={ref}>Owned content</span> : null}
+    </div>
+  );
+}
+
+const NEVER = new Promise<never>(() => {});
+
+function Suspender({isSuspended}: {isSuspended: boolean}) {
+  if (isSuspended) {
+    // A thrown promise suspends in the same render, so the row is hidden and
+    // shown again within one task. `use` would retry it in a later task.
+    // eslint-disable-next-line @typescript-eslint/only-throw-error
+    throw NEVER;
+  }
+  return null;
 }
 
 function ImperativeRef({target, ref}: {target: object; ref?: Ref<unknown>}) {
@@ -225,5 +255,35 @@ describe('useFocusAcrossSwap', () => {
     expect(document.activeElement).toBe(document.body);
     rerender(fixture(false, true));
     expect(document.activeElement).toBe(document.body);
+  });
+
+  it('does not focus a replacement for a row that Suspense hid before the handoff expired', () => {
+    const fixture = (isSuspended: boolean, isDisabled: boolean) => (
+      <Suspense fallback={<span>Loading</span>}>
+        <DirectExample isDisabled={isDisabled} forwardedRef={createRef()} />
+        <Suspender isSuspended={isSuspended} />
+      </Suspense>
+    );
+    const {rerender} = render(fixture(false, false));
+    screen.getByRole('button').focus();
+    // Suspense hides the focused row and detaches its ref, but keeps the
+    // hook's Effect connected. The row comes back replaced in the same task.
+    rerender(fixture(true, false));
+    rerender(fixture(false, true));
+    expect(screen.getByRole('button')).not.toHaveFocus();
+  });
+
+  it('expires a handoff from a descendant ref that detaches while its Effect stays connected', async () => {
+    const {rerender} = render(
+      <OptionalContentExample hasContent revision={0} />,
+    );
+    screen.getByRole('button').focus();
+    // The owned content leaves; the row keeps focus and the hook stays mounted.
+    rerender(<OptionalContentExample hasContent={false} revision={0} />);
+    await act(async () => {});
+    screen.getByRole('button').blur();
+    // A later replacement must not take focus from the earlier handoff.
+    rerender(<OptionalContentExample hasContent revision={1} />);
+    expect(screen.getByRole('button')).not.toHaveFocus();
   });
 });
