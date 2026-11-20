@@ -57,8 +57,6 @@ Real asks said next to a question ("set font to Inter; does that need an import?
 
 - `astryx experimental theme editor set`: a step past a dial's last rung names an exact line only where one setting does it. On a part, spacing goes on in the control height the part reads ("bigger buttons" at the top rung offers `--size-element-md 46px --on button`); the text size offers a size it takes; the whole theme's spacing, which no one setting carries, claims no exact line. A one-mode theme reads its own mode named with `--mode` (`--mode dark` on a dark-only theme) as the same as no `--mode`, in `set` as in `undo`, and says so. A control height offered past the top rung is measured from the base theme's own height, so a base with taller controls offers a taller line.
 
-- The pictures `astryx experimental theme editor show --png` takes of the sheet give text a part cuts with an ellipsis when narrow, such as a stepper's step names, the room it needs, so a picture shows the names whole. A part whose own width is fixed keeps it.
-
 - `astryx experimental theme editor`: a role color the theme sets now reaches a badge or other part the base theme draws for that role in a color of another family (stone's info badge in its categorical blue): the part takes the role token the base gives that same color, so its look stays and it follows the role.
 
 - `astryx experimental theme editor`: the fix line for a loading placeholder that does not show now offers the theme's own gray nearest the placeholder's color (else a darker or lighter shade of that color), not a plain gray.
