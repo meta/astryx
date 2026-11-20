@@ -17,8 +17,24 @@ import {loadDocs} from '../../../foundation/discovery/component-loader.mjs';
 import {
   formatAccessibility,
   formatBestPractices,
+  formatBrief,
+  formatCompact,
+  formatFull,
   mdCell,
 } from './component-format.mjs';
+
+/**
+ * Whether a hook doc documents its options as `props`, as a component doc
+ * does, with no `params` or `returns`. A read of such a doc prints it the
+ * way a component read does, so its description, props and examples show.
+ * @param {any} docs
+ * @returns {boolean}
+ */
+function isPropsShaped(docs) {
+  return (
+    Array.isArray(docs.props) && !('params' in docs) && !('returns' in docs)
+  );
+}
 
 /**
  * Build a signature string from hook docs.
@@ -95,6 +111,17 @@ function formatReturnsTable(returns) {
 }
 
 /**
+ * The `## Parameters` section: what the hook takes, one row per parameter. A
+ * hook read prints it, and so does a component read that resolves to a hook.
+ * @param {any} docs
+ * @returns {string[]}
+ */
+export function formatHookParameters(docs) {
+  if (!docs.params?.length) return [];
+  return ['## Parameters\n', formatParamsTable(docs.params) + '\n'];
+}
+
+/**
  * The `## Returns` section: what the hook returns, one row per field. A hook
  * read prints it, and so does a component read that resolves to a hook.
  * @param {any} docs
@@ -113,6 +140,22 @@ export function formatHookReturns(docs) {
  * @returns {string}
  */
 export function formatHookFull(docs) {
+  if (isPropsShaped(docs)) {
+    // The component read prints the usage text in place of the description;
+    // the whole hook read prints both, description first.
+    const usage = docs.usage?.description;
+    const both =
+      usage && docs.description && usage !== docs.description
+        ? {
+            ...docs,
+            usage: {
+              ...docs.usage,
+              description: `${docs.description}\n\n${usage}`,
+            },
+          }
+        : docs;
+    return formatFull(both);
+  }
   /** @type {string[]} */
   const sections = [];
 
@@ -126,11 +169,7 @@ export function formatHookFull(docs) {
 
   sections.push(...formatAccessibility(docs.usage?.accessibility));
 
-  // Parameters (analogous to ## Props)
-  if (docs.params?.length) {
-    sections.push('## Parameters\n');
-    sections.push(formatParamsTable(docs.params) + '\n');
-  }
+  sections.push(...formatHookParameters(docs));
 
   sections.push(...formatHookReturns(docs));
 
@@ -143,9 +182,16 @@ export function formatHookFull(docs) {
  *   # Name, description, ## Import, ## Best Practices, ## Parameters, ## Returns
  * @param {any} docs
  * @param {string} [importPath]
+ * @param {{propsCommand?: string | null, fullCommand?: string | null}} [options]
+ *   - for a hook documented with props: the commands its short answer names,
+ *   as a component read's does
  * @returns {string}
  */
-export function formatHookCompact(docs, importPath) {
+export function formatHookCompact(docs, importPath, options = {}) {
+  // The caller's fallback import names the hooks entry point, which a hook
+  // documented with a component (useTableSelection) is not exported from.
+  if (isPropsShaped(docs))
+    return formatCompact(docs, docs.name, docs.importPath, options);
   /** @type {string[]} */
   const sections = [];
 
@@ -169,11 +215,7 @@ export function formatHookCompact(docs, importPath) {
 
   sections.push(...formatAccessibility(docs.usage?.accessibility));
 
-  // Parameters (matches ## Props in component compact)
-  if (docs.params?.length) {
-    sections.push('## Parameters\n');
-    sections.push(formatParamsTable(docs.params) + '\n');
-  }
+  sections.push(...formatHookParameters(docs));
 
   sections.push(...formatHookReturns(docs));
 
@@ -205,6 +247,7 @@ export function formatHookCompact(docs, importPath) {
  * @returns {string}
  */
 export function formatHookBrief(docs) {
+  if (isPropsShaped(docs)) return formatBrief(docs, docs.name, docs.importPath);
   /** @type {string[]} */
   const output = [];
 
@@ -275,8 +318,6 @@ export async function formatHookBriefAll(coreDir) {
  * @returns {string}
  */
 export function formatHookParams(docs) {
-  if (docs.params?.length) {
-    return `## Parameters\n\n${formatParamsTable(docs.params)}\n`;
-  }
+  if (docs.params?.length) return formatHookParameters(docs).join('\n');
   return `No parameters documentation found for ${docs.name}.\n`;
 }

@@ -34,6 +34,7 @@ import {
   useTransition,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputRowSizeStyles} from '../Field/inputStyles.stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {BottomSheet} from '../BottomSheet';
 import {Button} from '../Button';
@@ -172,17 +173,7 @@ function getDefaultTime(hasSeconds: boolean): ISOTimeString {
   );
 }
 
-const sizeStyles = stylex.create({
-  sm: {
-    height: sizeVars['--size-element-sm'],
-  },
-  md: {
-    height: sizeVars['--size-element-md'],
-  },
-  lg: {
-    height: sizeVars['--size-element-lg'],
-  },
-});
+const sizeStyles = inputRowSizeStyles;
 
 const HORIZONTAL_SEGMENT_BASIS = 196;
 

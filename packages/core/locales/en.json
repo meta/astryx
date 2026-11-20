@@ -831,6 +831,10 @@
     "defaultMessage": "Link copied",
     "description": "Accessible name on the Markdown heading copy button and text announced to a polite live region for ~1.5s after a successful copy. Sentence meaning \"Link copied\"; pairs with `markdownHeadingLinks.copy`."
   },
+  "@astryx.markdownHeadingLinks.copyFailed": {
+    "defaultMessage": "Failed to copy value to clipboard.",
+    "description": "Accessible name on the Markdown heading copy button and text announced once to the assertive live region after the clipboard write fails; the name shows for ~1.5s. Pairs with `markdownHeadingLinks.copy` and `markdownHeadingLinks.copied`."
+  },
   "@astryx.markdownHeadingLinks.copy": {
     "defaultMessage": "Copy link to {heading}",
     "description": "Accessible name on the Markdown heading copy button in its default state. `{heading}` is the heading's plain text, or its generated id when the text is empty; pairs with `markdownHeadingLinks.copied`."
@@ -1022,6 +1026,10 @@
   "@astryx.slider.maximumThumb": {
     "defaultMessage": "Maximum value",
     "description": "Accessible name of the upper thumb of a range Slider (two thumbs), announced together with the Slider's own label, for example \"Price range, Maximum value, 80\". Never shown on screen."
+  },
+  "@astryx.slider.required": {
+    "defaultMessage": "Required",
+    "description": "Screen-reader-only text that a required Slider adds to its description. One word, neutral tone."
   },
   "@astryx.tabBar.badgedItem": {
     "defaultMessage": "{label}, {badge}",
@@ -1507,6 +1515,10 @@
     "defaultMessage": "{count} tool calls",
     "description": "Summary label shown in the group header when multiple tool calls are expanded. {count} is the number of calls."
   },
+  "@astryx.chatTriggerMenu.noResults": {
+    "defaultMessage": "No results",
+    "description": "Shown in a chat composer's @-mention or slash-command menu when the typed query matches no suggestion and the trigger sets no empty message of its own. Very short (2 words); neutral tone."
+  },
   "@astryx.chatTriggerMenu.searching": {
     "defaultMessage": "Searching…",
     "description": "Shown, and announced politely to screen readers, while a chat composer's @-mention or slash-command menu waits for async search results. Present participle; trailing `…` is one character."
@@ -1534,6 +1546,10 @@
   "@astryx.codeBlock.code": {
     "defaultMessage": "Code",
     "description": "Screen-reader-only fallback name for a code-snippet scroll container when the code's language is unknown. \"Code\" = source code, not secret code or code of conduct."
+  },
+  "@astryx.codeBlock.diffLabel": {
+    "defaultMessage": "{language} diff",
+    "description": "Header label of a CodeBlock that shows a diff of code in a language, for example `tsx diff`. {language} is the language's name. \"diff\" is also the name of the diff code format and is usually left untranslated; reorder if your language needs it."
   },
   "@astryx.field.optional": {
     "defaultMessage": "Optional",
@@ -2010,6 +2026,10 @@
   "@astryx.typeahead.resultCount": {
     "defaultMessage": "{count, number} {count, plural, one {result} other {results}}",
     "description": "Polite screen-reader announcement of how many suggestions a Typeahead search returned. Live-region text, never shown on screen; example: `1 result`, `12 results`."
+  },
+  "@astryx.tokenizer.overflowCount": {
+    "defaultMessage": "+{count, number} more",
+    "description": "Shown at the end of a one-line Tokenizer when tokens do not fit, for example `+3 more`. {count} is the number of hidden tokens. Keep it short."
   },
   "@astryx.tokenizer.tokenAdded": {
     "defaultMessage": "Added {label}",

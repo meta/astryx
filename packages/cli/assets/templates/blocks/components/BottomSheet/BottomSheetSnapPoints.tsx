@@ -18,10 +18,10 @@ import {
   ArrowLeftIcon,
   ArrowRightIcon,
   ArrowUpIcon,
-  ArrowUturnLeftIcon,
+  UndoIcon,
   FlagIcon,
-  MapPinIcon,
-} from '@heroicons/react/24/outline';
+  LocationIcon,
+} from '@astryxdesign/template-icons';
 
 // Half the viewport is a working surface — the sheet lays its content out at
 // that height and keeps a full scrim. The 96px stop is a peek: a sliver, so the
@@ -30,7 +30,7 @@ const SNAP_POINTS: ReadonlyArray<BottomSheetSnapPoint> = ['96px', '50%'];
 
 const steps = [
   {
-    icon: MapPinIcon,
+    icon: LocationIcon,
     label: 'Head northeast on Mission St',
     detail: 'Toward 3rd St',
     distance: '350 ft',
@@ -66,7 +66,7 @@ const steps = [
     distance: '0.5 mi',
   },
   {
-    icon: ArrowUturnLeftIcon,
+    icon: UndoIcon,
     label: 'Make a U-turn at Washington St',
     detail: 'Construction detour until March',
     distance: '150 ft',

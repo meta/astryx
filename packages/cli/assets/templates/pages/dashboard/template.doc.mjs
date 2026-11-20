@@ -24,10 +24,4 @@ export const doc = {
   ],
   isReady: true,
   category: 'Dashboard - Analytics',
-  icons: {
-    ArrowDownIcon: 'arrowDown',
-    ArrowPathIcon: 'refresh',
-    ArrowUpIcon: 'arrowUp',
-    StopIcon: 'stop',
-  },
 };

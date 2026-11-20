@@ -50,7 +50,7 @@ import {
   keptReason,
   managedFileState,
   removeManagedFile,
-  withHash,
+  renderSkillFile,
   writeNoFollow,
 } from './managed-skill-file.mjs';
 import {
@@ -320,21 +320,13 @@ export function renderComputerAgentText({
   command = computerAgentCommand(),
   install = COMPUTER_INSTALL_STEP,
 } = {}) {
-  return withHash(
-    [
-      '---',
-      'name: astryx',
-      // Quoted: the description holds `: ` and `;`, which strict YAML parsers
-      // can misread, and an agent tool that fails to parse drops the skill.
-      `description: ${JSON.stringify(COMPUTER_SKILL_DESCRIPTION)}`,
-      '---',
-      '',
-      MARKER_START,
-      ...bodyLines(command, install),
-      MARKER_END,
-      '',
-    ].join('\n'),
-  );
+  return renderSkillFile({
+    name: 'astryx',
+    description: COMPUTER_SKILL_DESCRIPTION,
+    block: [MARKER_START, ...bodyLines(command, install), MARKER_END].join(
+      '\n',
+    ),
+  });
 }
 
 /**

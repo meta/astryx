@@ -28,7 +28,11 @@
  */
 
 import {describe, it, expect} from 'vitest';
-import {derivedVarRegistry, getDerivedVars} from './derivedVarRegistry';
+import {
+  derivedVarRegistry,
+  getDerivedVars,
+  radiusCornerVars,
+} from './derivedVarRegistry';
 import {readdirSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
 
@@ -48,6 +52,7 @@ type DerivedDocEntry = {
   property: string;
   vars?: string[];
   expand?: string;
+  corners?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -106,6 +111,10 @@ const STRUCTURAL_VARS = new Set([
   // The word-break a wrap cell takes for its table's layout (Table/BaseTable.tsx,
   // Table/table.stylex.ts). Private runtime plumbing, never authored by a theme.
   '--_table-cell-word-break',
+  // The white-space a header cell takes for its table's layout under wrap
+  // (Table/BaseTable.tsx, Table/table.stylex.ts). Private runtime plumbing,
+  // never authored by a theme.
+  '--_table-header-white-space',
   '--separator-display',
   '--astryx-section-padding',
   // Private counterpart of the public token above: one ancestor Section's
@@ -202,7 +211,7 @@ interface ComponentInfo {
   dir: string;
   sourceVars: string[];
   docVars: string[];
-  docDerived: {property: string; vars?: string[]; expand?: string}[];
+  docDerived: DerivedDocEntry[];
   docTargetKeys: string[];
 }
 
@@ -339,11 +348,25 @@ const PRIVATE_SYSTEM_VARS = new Set([
   // windowed Table includes the parent padding that it bleeds across.
   '--_table-bleed-block-start',
   '--_table-bleed-block-end',
-  // The container-padding record's corner geometry: a rounded Card, Dialog,
-  // or BottomSheet hands its block-edge radius to the shared corner
-  // publication beside container().
-  '--_container-corner-block-start',
-  '--_container-corner-block-end',
+  // The container-padding record's corner geometry: a rounded Card or Dialog
+  // hands the radius of each of its corners to the shared corner publication
+  // beside container().
+  '--_container-corner-start-start',
+  '--_container-corner-start-end',
+  '--_container-corner-end-start',
+  '--_container-corner-end-end',
+  // A rounded host's radius, copied for the shared corner reading in
+  // Layout/containerCorners.stylex.ts. The host's own radius variables are
+  // the theme surface.
+  '--_container-host-radius',
+  '--_container-host-radius-top-left',
+  '--_container-host-radius-top-right',
+  '--_container-host-radius-bottom-right',
+  '--_container-host-radius-bottom-left',
+  '--_container-host-radius-start-start',
+  '--_container-host-radius-start-end',
+  '--_container-host-radius-end-start',
+  '--_container-host-radius-end-end',
   // The container-padding record's block-edge bleed: a padding publisher
   // gives its block padding only to a direct first or last Table.
   '--_container-bleed-block-start',
@@ -366,7 +389,11 @@ const CROSS_COMPONENT_VARS: Record<string, string[]> = {
   // owns and documents it (and sets it itself when it is the group root).
   AvatarGroup: ['--_avatar-group-overlap'],
   // BreadcrumbItem tunes the DropdownMenu it opens.
-  Breadcrumbs: ['--_dropdown-menu-radius', '--_dropdown-menu-padding'],
+  Breadcrumbs: [
+    '--_dropdown-menu-radius',
+    '--_dropdown-menu-padding',
+    ...radiusCornerVars('--_dropdown-menu-radius'),
+  ],
   // SelectableCard draws its selection ring through the Card shadow slot.
   SelectableCard: ['--_card-ring'],
   // Toolbar offsets the TabList indicator it hosts.
@@ -500,12 +527,20 @@ describe('component CSS vars are documented and themeable', () => {
 
   for (const {dir, sourceVars, docVars, docDerived} of components) {
     const crossVars = new Set(CROSS_COMPONENT_VARS[dir] || []);
+    // The theme pipeline writes each corner variable of a `corners` entry, so
+    // the entry documents them.
+    const cornerVars = new Set(
+      docDerived
+        .filter(d => d.corners)
+        .flatMap(d => (d.vars || []).flatMap(radiusCornerVars)),
+    );
 
     it(`${dir}: all source vars are in doc file`, () => {
       const undocumented = sourceVars.filter(
         v =>
           !docVars.includes(v) &&
           !crossVars.has(v) &&
+          !cornerVars.has(v) &&
           !PRIVATE_SYSTEM_VARS.has(v),
       );
       expect(

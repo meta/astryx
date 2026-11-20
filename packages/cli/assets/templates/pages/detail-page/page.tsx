@@ -35,12 +35,12 @@ import {
   CalendarIcon,
   FlagIcon,
   FunnelIcon,
-  HandThumbUpIcon,
+  ThumbsUpIcon,
   HeartIcon,
-  PencilSquareIcon,
+  ComposeIcon,
   ArrowLeftIcon,
   ViewColumnsIcon,
-} from '@heroicons/react/24/outline';
+} from '@astryxdesign/template-icons';
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 import type {CSSProperties} from 'react';
@@ -555,7 +555,7 @@ function TimelineSection() {
                             {item.changes.map((change, j) => (
                               <HStack key={j} gap={2} vAlign="center">
                                 <Icon
-                                  icon={PencilSquareIcon}
+                                  icon={ComposeIcon}
                                   size="sm"
                                   color="secondary"
                                 />
@@ -571,7 +571,7 @@ function TimelineSection() {
                     <HStack gap={3} vAlign="center">
                       <HStack gap={1} vAlign="center">
                         <Icon
-                          icon={HandThumbUpIcon}
+                          icon={ThumbsUpIcon}
                           size="xsm"
                           color="secondary"
                         />

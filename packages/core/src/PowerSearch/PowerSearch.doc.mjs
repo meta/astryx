@@ -103,7 +103,7 @@ export const docs = {
       name: 'statusVariant',
       type: "'attached' | 'detached' | 'tooltip'",
       description:
-        'How the status message is placed relative to the input. attached overlaps directly below the input (bordered treatment); detached floats below as a separate element with spacing; tooltip shows no message box and PowerSearch draws no status icon, so the message is not shown on screen (screen readers still announce it; the border still shows the status type).',
+        'How the status message is placed relative to the input. attached overlaps directly below the input (bordered treatment); detached floats below as a separate element with spacing; tooltip reveals the message in an info-tip button.',
       default: "'attached'",
     },
     {
@@ -412,7 +412,7 @@ export const docsZh = {
       name: 'statusVariant',
       type: "'attached' | 'detached' | 'tooltip'",
       description:
-        '状态消息相对于输入框的放置方式。attached 直接叠加在输入框下方（带边框处理）；detached 作为独立元素浮于下方并留有间距；tooltip 不显示消息框，且 PowerSearch 不绘制状态图标，因此消息不会显示在屏幕上（屏幕阅读器仍会播报；边框仍显示状态类型）。',
+        '状态消息相对于输入框的放置方式。attached 直接叠加在输入框下方（带边框处理）；detached 作为独立元素浮于下方并留有间距；tooltip 在状态图标的提示气泡中显示消息。',
       default: "'attached'",
     },
     {
@@ -563,7 +563,7 @@ export const docsDense = {
     startIcon:
       'Icon at input start, before filter tokens. Forwarded to internal Tokenizer; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     statusVariant:
-      'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip: no box and no status icon, so the message is not shown (screen readers still announce it).',
+      'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip shows on status icon.',
     maxTokenLength: 'Max char length for filter value display in tokens.',
     maxOperatorMenuItems:
       'Max suggestions in string/entity value typeaheads; excludes main field search + enum menus.',

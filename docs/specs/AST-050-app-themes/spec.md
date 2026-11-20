@@ -188,7 +188,9 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
   `./themes/<slug>.fonts.css`, or `./fonts.css` for a single theme. Beside each
   theme, the package exports `colorModes`, the modes the theme draws:
   `['light', 'dark']`, or `['light']` or `['dark']` for a theme that draws
-  one mode on every page. A theme that exports none draws both. The font
+  one mode on every page. In an app, a theme that exports none draws both; a
+  rendered file can still keep such a theme in one mode by its root colors
+  (`architecture:cli-surface` DEC-19). The font
   stylesheet owns loading its fonts: it may ship the font files with
   `@font-face` rules or import them from a font service. An import MUST fail,
   naming what is missing, when a theme has no resolvable built module and
@@ -677,7 +679,11 @@ such a setting still opens. The check passes only when every local theme's
 build check ran. A file that says a tool generates it (a marker in its
 leading comments) is not where such a fix goes: its settings are one note
 per file, with their count and the tool, in `theme build` and in this check
-alike, and `settingIssues` still lists each.
+alike, and `settingIssues` still lists each. A saved `only` on a part styled
+on its own (one no group spreads to) is read as absent, with one note, by the
+one rule `set --only` follows, so a theme saved with one still opens; read so,
+an entry at the same place as a later entry of the same setting gives way to
+the later one, the one the build shows.
 
 Rejected: failing doctor on such a setting, which fails a working setup.
 

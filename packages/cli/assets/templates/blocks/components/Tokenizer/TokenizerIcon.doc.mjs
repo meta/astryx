@@ -10,5 +10,4 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Tokenizer', 'Layout', 'Text'],
-  icons: {MagnifyingGlassIcon: 'search'},
 };

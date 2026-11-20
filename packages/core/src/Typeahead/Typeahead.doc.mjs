@@ -45,6 +45,12 @@ const anatomy = [
       'Shared clear action that removes the selected item when hasClear is enabled.',
   },
   {
+    name: 'Status icon',
+    required: false,
+    description:
+      'Error, warning, or success icon at the end of the input. With statusVariant tooltip it is a button that reveals the status message.',
+  },
+  {
     name: 'Popup surface',
     required: false,
     description:

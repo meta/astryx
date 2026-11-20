@@ -411,7 +411,7 @@ export const docs = {
             [
               'Self-contained imports',
               '2',
-              'Every import resolves from the copied location through React, a public Astryx path, a public integration-package export, or an app dependency the template explicitly requires.',
+              'Every import resolves from the copied location through React, a public Astryx path, a public integration-package export, or an app dependency the template explicitly requires. Grade a template placeholder import as the library import its copy writes.',
             ],
             [
               'Realistic example data',

@@ -38,7 +38,11 @@ import {
   type ResolvedThemeAdaptationRule,
 } from './themeAdaptations';
 import {parseStyleKey} from '../utils/parseStyleKey';
-import {getDerivedVars} from './derivedVarRegistry';
+import {
+  LOGICAL_RADIUS_CORNERS,
+  PHYSICAL_RADIUS_CORNERS,
+  getDerivedVars,
+} from './derivedVarRegistry';
 import {
   STATUS_NAMES,
   deriveStatusRoleTokens,
@@ -342,6 +346,67 @@ const CONTAINER_PADDING_PROPS = new Set([
   ...PADDING_PROPS,
   ...Object.keys(PHYSICAL_BLOCK_PADDING_PROPS),
 ]);
+
+/**
+ * The corner longhands of `border-radius`, each with the corner name its
+ * derived variable takes. Physical and logical corners stay apart: which
+ * physical corner a logical one is depends on the direction, which only the
+ * component reading them knows (as with paddingLeft above).
+ */
+const RADIUS_CORNER_PROPS: Record<string, string> = {
+  borderTopLeftRadius: 'top-left',
+  borderTopRightRadius: 'top-right',
+  borderBottomRightRadius: 'bottom-right',
+  borderBottomLeftRadius: 'bottom-left',
+  borderStartStartRadius: 'start-start',
+  borderStartEndRadius: 'start-end',
+  borderEndStartRadius: 'end-start',
+  borderEndEndRadius: 'end-end',
+};
+
+/**
+ * The four corners of a `border-radius` value, as its longhands take them
+ * (top-left first, clockwise; an elliptical corner keeps both radii,
+ * `8px 4px`), or null when it is not one radius of one to four corners on
+ * each side of an optional `/`.
+ *
+ * @example radiusCorners('0 0 6px 6px') -> ['0', '0', '6px', '6px']
+ * @example radiusCorners('8px 4px / 2px') -> ['8px 2px', '4px 2px', '8px 2px', '4px 2px']
+ */
+export function radiusCorners(value: string): string[] | null {
+  // The `/` between the horizontal and the vertical radii, outside
+  // parentheses (`calc(1rem / 2)` is one length).
+  let depth = 0;
+  let slash = -1;
+  for (let i = 0; i < value.length; i++) {
+    const char = value[i];
+    if (char === '(') {
+      depth++;
+    } else if (char === ')') {
+      depth--;
+    } else if (char === '/' && depth === 0) {
+      if (slash !== -1) {
+        return null;
+      }
+      slash = i;
+    }
+  }
+  const sides = (
+    slash === -1 ? [value] : [value.slice(0, slash), value.slice(slash + 1)]
+  ).map(side => {
+    const parts = splitTopLevelWhitespace(side.trim());
+    if (parts.length < 1 || parts.length > 4) {
+      return null;
+    }
+    const [a, b = a, c = a, d = b] = parts;
+    return [a, b, c, d];
+  });
+  if (sides.some(side => side == null)) {
+    return null;
+  }
+  const [h, v] = sides as string[][];
+  return h.map((x, i) => (v && v[i] !== x ? `${x} ${v[i]}` : x));
+}
 
 interface ParsedPadding {
   blockStart?: string;
@@ -1447,7 +1512,43 @@ function expandComponentDeclarations(
   let containerExpanded = false;
   const replacedProps = new Set<string>();
 
+  // A radius of each corner, written to the corner variables of a
+  // `corners` entry. A later radius in the block replaces what an earlier one
+  // gave a corner, as the cascade does on the element.
+  const cornerProps = new Map<string, string>();
+  const cornerVarRoots = getDerivedVars(component, 'borderRadius')
+    .filter(entry => entry.corners)
+    .flatMap(entry => entry.vars ?? []);
+
   for (const [prop, value] of props) {
+    if (cornerVarRoots.length > 0) {
+      if (prop === 'borderRadius') {
+        // The shorthand sets every corner: each physical one, and no
+        // logical one (a component reads a logical corner first), here or
+        // from a rule it overrides. `initial` leaves a variable without a
+        // value, so the reader falls back to the physical corner.
+        const corners = radiusCorners(value);
+        for (const varName of cornerVarRoots) {
+          for (const name of Object.values(RADIUS_CORNER_PROPS)) {
+            cornerProps.delete(`${varName}-${name}`);
+          }
+          if (corners) {
+            PHYSICAL_RADIUS_CORNERS.forEach((name, i) => {
+              cornerProps.set(`${varName}-${name}`, corners[i]);
+            });
+            for (const name of LOGICAL_RADIUS_CORNERS) {
+              cornerProps.set(`${varName}-${name}`, 'initial');
+            }
+          }
+        }
+      } else if (prop in RADIUS_CORNER_PROPS) {
+        for (const varName of cornerVarRoots) {
+          const name = `${varName}-${RADIUS_CORNER_PROPS[prop]}`;
+          cornerProps.delete(name);
+          cornerProps.set(name, value);
+        }
+      }
+    }
     const derived = getDerivedVars(component, prop);
     // Padding longhands (paddingBlock, paddingInline, etc.) also
     // match the 'padding' derived entry for container expansion.
@@ -1501,6 +1602,7 @@ function expandComponentDeclarations(
     finalProps = finalProps.filter(([p]) => !replacedProps.has(p));
   }
 
+  derivedProps.push(...cornerProps);
   if (derivedProps.length > 0) {
     finalProps = [...finalProps, ...derivedProps];
   }

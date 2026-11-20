@@ -553,6 +553,14 @@
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
     },
+    "packages/core/src/utils/timeFormat.ts:unitFormats": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/utils/timeFormat.ts:unitLists": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
     "packages/core/src/utils/touchHitArea.ts:heldWatches": {
       "status": "open",
       "group": "triage"

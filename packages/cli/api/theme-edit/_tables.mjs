@@ -19,30 +19,8 @@ import {
 
 export {appleFaceGeneric, systemFontFamilies};
 
-/**
- * A lookup table that only answers for its own keys: a word typed by a
- * person (`constructor`, `__proto__`, `toString`) never reaches
- * `Object.prototype`. Plain objects inside it, in arrays too, get the same.
- * @template T
- * @param {T} table
- * @returns {T}
- */
-export function wordTable(table) {
-  /** @param {any} v @returns {any} */
-  const own = v => {
-    if (Array.isArray(v)) return v.map(own);
-    if (
-      !v ||
-      typeof v !== 'object' ||
-      Object.getPrototypeOf(v) !== Object.prototype
-    )
-      return v;
-    const out = Object.create(null);
-    for (const [k, x] of Object.entries(v)) out[k] = own(x);
-    return out;
-  };
-  return own(table);
-}
+export {wordTable} from '../../foundation/runtime/word-table.mjs';
+import {wordTable} from '../../foundation/runtime/word-table.mjs';
 
 /** The command prefix every suggested command starts with. */
 export const P = 'astryx experimental theme editor';
@@ -112,6 +90,22 @@ export const familyOf = target =>
   Object.entries(FAMILIES).find(([, members]) =>
     members.includes(target),
   )?.[0] ?? null;
+
+/**
+ * What `--only` means on a place, the one rule `set --only` and the
+ * settings reader share: on a member of a group that spreads (a text input
+ * of inputs) it keeps the change on that member (`member`); on any other
+ * part it changes nothing, as the part is styled on its own already
+ * (`own`); on a group itself, or with no part, it means nothing at all
+ * (`group`).
+ * @param {string | undefined} on
+ * @returns {'member' | 'own' | 'group'}
+ */
+export const onlyMeans = on => {
+  if (!on || Object.hasOwn(FAMILIES, on)) return 'group';
+  const fam = familyOf(on);
+  return fam && AUTO_SPREAD.includes(fam) ? 'member' : 'own';
+};
 
 /** @type {Array<[string, number]>} */
 export const CORNERS = [
@@ -197,14 +191,8 @@ export const FONTS = wordTable({
   rounded: ['Nunito', '"Varela Round", system-ui, sans-serif'],
   comic: ['Comic Sans MS', '"Comic Neue", cursive'],
 });
-/** The CSS-wide keywords: valid in any declaration, never a value of their own. */
-export const CSS_WIDE = [
-  'inherit',
-  'initial',
-  'unset',
-  'revert',
-  'revert-layer',
-];
+export {CSS_WIDE} from '../../foundation/color/css-color.mjs';
+import {CSS_WIDE} from '../../foundation/color/css-color.mjs';
 
 /** CSS-wide keywords, and `default`, which font-family reserves: never a family, and invalid inside a list. */
 export const CSS_WIDE_KEYWORDS = [...CSS_WIDE, 'default'];
