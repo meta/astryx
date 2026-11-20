@@ -48,8 +48,10 @@ export interface OverlayScrimProps {
 // =============================================================================
 
 const FADE = durationVars['--duration-fast'];
-// On hide, the clip path applies when the fade ends. On reveal it lifts at once.
+// On hide, the clip path applies when the fade ends. On a hover reveal it
+// lifts at half the fade, so a transparent action takes no click.
 const CLIP_DELAY_ON_HIDE = '0s, 0s, 0s, ' + FADE;
+const CLIP_DELAY_ON_HOVER = '0s, 0s, 0s, calc(' + FADE + ' / 2)';
 
 const styles = stylex.create({
   base: {
@@ -130,8 +132,12 @@ const styles = stylex.create({
     },
     transitionDelay: {
       default: CLIP_DELAY_ON_HIDE,
+      // The two media keys never match together, so their order does not
+      // matter.
       [stylex.when.ancestor(':hover', overlayScope)]: {
-        '@media (hover: hover)': '0s',
+        '@media (hover: hover) and (prefers-reduced-motion: no-preference)':
+          CLIP_DELAY_ON_HOVER,
+        '@media (hover: hover) and (prefers-reduced-motion: reduce)': '0s',
       },
       [stylex.when.ancestor(':focus-within', overlayScope)]: '0s',
       '@media (prefers-reduced-motion: reduce)': '0s',

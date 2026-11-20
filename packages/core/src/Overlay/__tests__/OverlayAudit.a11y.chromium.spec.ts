@@ -560,6 +560,84 @@ for (const reducedMotion of ['reduce', 'no-preference'] as const) {
   });
 }
 
+/**
+ * Samples each animation frame after the pointer enters the media: the
+ * scrim's opacity and whether the action takes a click at its centre.
+ */
+async function hoverFrames(page: Page) {
+  await page.mouse.move(1, 1);
+  await page.waitForTimeout(400);
+  const box = await page.locator('#storybook-root img').first().boundingBox();
+  if (box == null) {
+    throw new Error('no media box');
+  }
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  return page.evaluate(
+    async () =>
+      new Promise<{t: number; opacity: number; hit: boolean}[]>(resolve => {
+        const samples: {t: number; opacity: number; hit: boolean}[] = [];
+        const start = performance.now();
+        const scrim = document.querySelector(
+          '#storybook-root .astryx-overlay-scrim',
+        ) as HTMLElement;
+        const action = scrim.querySelector('button') as HTMLElement;
+        const tick = () => {
+          const r = action.getBoundingClientRect();
+          const hitEl = document.elementFromPoint(
+            r.left + r.width / 2,
+            r.top + r.height / 2,
+          );
+          samples.push({
+            t: Math.round(performance.now() - start),
+            opacity: Number(getComputedStyle(scrim).opacity),
+            hit: hitEl != null && action.contains(hitEl),
+          });
+          if (performance.now() - start < 500) {
+            requestAnimationFrame(tick);
+          } else {
+            resolve(samples);
+          }
+        };
+        requestAnimationFrame(tick);
+      }),
+  );
+}
+
+for (const reducedMotion of ['reduce', 'no-preference'] as const) {
+  addCase({
+    key: `hover-frames-${reducedMotion}`,
+    group: 'motion',
+    story: 'core-overlay--hover-on-image',
+    ready: '#storybook-root .astryx-overlay img',
+    mode: 'light',
+    direction: 'ltr',
+    viewport: DESKTOP,
+    pointer: 'fine',
+    reducedMotion,
+    run: async (page, check, frame) => {
+      const samples = await hoverFrames(page);
+      const early = samples.filter(x => x.hit && x.opacity < 0.1);
+      check(
+        early.length === 0,
+        `the action takes a click while transparent: ${JSON.stringify(early)}`,
+      );
+      const last = samples.at(-1);
+      check(
+        last != null && last.hit && last.opacity === 1,
+        `after the fade the action is not shown and hit: ${JSON.stringify(last)}`,
+      );
+      if (reducedMotion === 'reduce') {
+        const first = samples[0];
+        check(
+          first != null && first.hit && first.opacity === 1,
+          `under reduced motion the first frame is ${JSON.stringify(first)}`,
+        );
+      }
+      await frame('settled', {samples});
+    },
+  });
+}
+
 for (const direction of ['ltr', 'rtl'] as const) {
   addCase({
     key: `narrow-${direction}`,
