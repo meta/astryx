@@ -20,8 +20,10 @@ async function loadTracker() {
 }
 
 /** The rings come back at the start of the next frame. */
-function nextFrame(view: Window): Promise<void> {
-  return new Promise(resolve => view.requestAnimationFrame(() => resolve()));
+async function nextFrame(view: Window): Promise<void> {
+  await new Promise<void>(resolve =>
+    view.requestAnimationFrame(() => resolve()),
+  );
 }
 
 afterEach(() => {
