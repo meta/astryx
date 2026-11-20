@@ -46,6 +46,10 @@
       "contributions": [
         {
           "kind": "component",
+          "name": "AudioPlayer"
+        },
+        {
+          "kind": "component",
           "name": "ChartArea"
         },
         {
@@ -158,6 +162,46 @@
         },
         {
           "kind": "component",
+          "name": "MediaCaptionsButton"
+        },
+        {
+          "kind": "component",
+          "name": "MediaFullscreenButton"
+        },
+        {
+          "kind": "component",
+          "name": "MediaPlaybackRate"
+        },
+        {
+          "kind": "component",
+          "name": "MediaPlayButton"
+        },
+        {
+          "kind": "component",
+          "name": "MediaPlayer"
+        },
+        {
+          "kind": "component",
+          "name": "MediaPlayerElement"
+        },
+        {
+          "kind": "component",
+          "name": "MediaSeekButton"
+        },
+        {
+          "kind": "component",
+          "name": "MediaTime"
+        },
+        {
+          "kind": "component",
+          "name": "MediaTimeSlider"
+        },
+        {
+          "kind": "component",
+          "name": "MediaVolume"
+        },
+        {
+          "kind": "component",
           "name": "NavigationScreen"
         },
         {
@@ -238,7 +282,19 @@
         },
         {
           "kind": "component",
+          "name": "VideoPlayer"
+        },
+        {
+          "kind": "component",
           "name": "WeightedSVGIcon"
+        },
+        {
+          "kind": "template",
+          "name": "AudioPlayerShowcase"
+        },
+        {
+          "kind": "template",
+          "name": "AudioPlayerVoiceMemo"
         },
         {
           "kind": "template",
@@ -303,6 +359,22 @@
         {
           "kind": "template",
           "name": "ListInputShowcase"
+        },
+        {
+          "kind": "template",
+          "name": "MediaPlayerInlineNote"
+        },
+        {
+          "kind": "template",
+          "name": "MediaPlayerShowcase"
+        },
+        {
+          "kind": "template",
+          "name": "VideoPlayerAutoplayLoop"
+        },
+        {
+          "kind": "template",
+          "name": "VideoPlayerShowcase"
         }
       ]
     },

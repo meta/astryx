@@ -81,6 +81,12 @@
         "fix": "<text>"
       },
       {
+        "id": "button-actions",
+        "label": "<text>",
+        "status": "pass",
+        "message": "<text> 1"
+      },
+      {
         "id": "core-props",
         "label": "<text>",
         "status": "pass",
@@ -146,7 +152,7 @@
       }
     ],
     "summary": {
-      "pass": 12,
+      "pass": 13,
       "warn": 4,
       "fail": 0,
       "info": 5

@@ -304,6 +304,7 @@ export const StatusVariantComparison: Story = {
   render: () => {
     const [a, setA] = useState<SearchableItem | null>(null);
     const [b, setB] = useState<SearchableItem | null>(null);
+    const [c, setC] = useState<SearchableItem | null>(null);
     return (
       <div
         style={{display: 'flex', flexDirection: 'column', gap: 24, width: 300}}>
@@ -321,6 +322,14 @@ export const StatusVariantComparison: Story = {
           onChange={setB}
           status={{type: 'error', message: 'Please make a selection'}}
           statusVariant="detached"
+        />
+        <Typeahead
+          label="Tooltip"
+          searchSource={fruitSource}
+          value={c}
+          onChange={setC}
+          status={{type: 'error', message: 'Please make a selection'}}
+          statusVariant="tooltip"
         />
       </div>
     );

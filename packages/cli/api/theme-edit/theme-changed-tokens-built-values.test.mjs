@@ -8,6 +8,7 @@
  * moves a few (font), in the JSON and the text.
  */
 
+import {isLookToken} from './_palette.mjs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import postcss from 'postcss';
@@ -95,9 +96,15 @@ describe('changedTokens', () => {
           ...r.data.changedTokens,
           ...(r.data.changedPartTokens ?? []),
         ]);
-        // The theme's own tokens keep their line shape.
+        // The theme's own tokens keep their line shape; the category and
+        // chart colors that move with the look are counted in one line each.
+        const look =
+          /^(?:category colors \(badges, tokens and card tints\)|chart colors|code colors and the overlay|status colors \([a-z, ]+\)): \d+ values moved with the look$/;
         for (const line of r.data.changedTokens)
-          expect(line).toMatch(/^--[\w-]+(?: \((?:light|dark)\))?: .* -> .*$/s);
+          if (!look.test(line))
+            expect(line).toMatch(
+              /^--[\w-]+(?: \((?:light|dark)\))?: .* -> .*$/s,
+            );
         const all = moved(before, css());
         expect(all.length).toBeGreaterThan(0);
         for (const prop of all)
@@ -109,7 +116,21 @@ describe('changedTokens', () => {
                 // The root's derived values share one line.
                 (x.includes(' on the theme root') &&
                   x.split(' on the theme root')[0].split(', ').includes(prop)),
-            ),
+            ) ||
+              (isLookToken(prop) &&
+                changed.some(x =>
+                  x.startsWith(
+                    prop.startsWith('--color-data-')
+                      ? 'chart colors:'
+                      : /^--color-(?:syntax-|overlay$)/.test(prop)
+                        ? 'code colors'
+                        : 'category colors',
+                  ),
+                )) ||
+              (/^--color-(?:(?:on|text|icon|border)-)?(?:info|success|warning|error)(?:-muted)?$/.test(
+                prop,
+              ) &&
+                changed.some(x => x.startsWith('status colors ('))),
             prop,
           ).toBe(true);
         if (dial === 'vibrancy') {

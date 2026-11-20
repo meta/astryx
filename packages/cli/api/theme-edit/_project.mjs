@@ -72,7 +72,7 @@ import {installGuidanceFor} from '../../foundation/env/cli-command.mjs';
  * @property {boolean} deprecated - Its doc marks it deprecated: another part replaces it.
  * @property {string | null} subComponentOf - The component it is a part of, or null.
  * @property {string[]} keywords - The doc's search keywords.
- * @property {Record<string, {type: string, required: boolean, default: string | null, slots: Array<{__element: string, props?: Record<string, unknown>, children?: unknown}>}>} props - Each prop's declared type, whether it is required, its documented default (as the doc writes it), and the elements the doc suggests for it.
+ * @property {Record<string, {type: string, required: boolean, default: string | null, slots: Array<{__element: string, props?: Record<string, unknown>, children?: unknown}>, description: string}>} props - Each prop's declared type, whether it is required, its documented default (as the doc writes it), the elements the doc suggests for it, and its description.
  * @property {Array<{className: string, states: string[], values: Record<string, string[]>}>} targets
  */
 
@@ -80,7 +80,7 @@ import {installGuidanceFor} from '../../foundation/env/cli-command.mjs';
 const projects = new Map();
 
 /** Bump when the shape of the cached component docs changes. */
-const DOCS_VERSION = 9;
+const DOCS_VERSION = 10;
 
 /**
  * The theme editor's cache folder for a project: the `.cache/astryx-theme`
@@ -285,6 +285,8 @@ async function readComponents(coreDir) {
               required: p.required === true,
               default: typeof p.default === 'string' ? p.default : null,
               slots: Array.isArray(p.slotElements) ? p.slotElements : [],
+              description:
+                typeof p.description === 'string' ? p.description : '',
             },
           ]),
         ),
@@ -454,12 +456,29 @@ function readInputFields(themeDir) {
  */
 export function importPathOf(project, name) {
   const spec =
-    project.components[name]?.importPath ??
-    oncePerListing(`importPath ${project.coreDir} ${name}`, () =>
-      resolveImportPath(project.coreDir, name),
-    );
+    project.components[name]?.importPath ?? coreImportPath(project, name);
   return spec && spec !== '@astryxdesign/core' ? spec : null;
 }
+
+/**
+ * Where a component's own module is in the installed Core: the same for as
+ * long as that Core is installed (its key names its version and files), so
+ * it is found once in a process for each Core and name.
+ * @param {ThemeProject} project
+ * @param {string} name
+ * @returns {string | null | undefined}
+ */
+function coreImportPath(project, name) {
+  const key = `${project.coreKey}\0${project.coreDir}\0${name}`;
+  if (CORE_IMPORT_PATHS.has(key)) return CORE_IMPORT_PATHS.get(key);
+  const spec = oncePerListing(`importPath ${project.coreDir} ${name}`, () =>
+    resolveImportPath(project.coreDir, name),
+  );
+  if (project.coreKey) CORE_IMPORT_PATHS.set(key, spec);
+  return spec;
+}
+/** @type {Map<string, string | null | undefined>} */
+const CORE_IMPORT_PATHS = new Map();
 
 /**
  * The built module of a base's theme package, resolved the way the theme
@@ -548,7 +567,7 @@ export function baseThemeFile(project, like) {
  * Resolved tokens of the base theme in both modes.
  * @param {ThemeProject} project
  * @param {string | undefined} like
- * @returns {Promise<{light: Record<string, string>, dark: Record<string, string>, components: Record<string, any>}>}
+ * @returns {Promise<{light: Record<string, string>, dark: Record<string, string>, components: Record<string, any>, onDark: Record<string, string>}>}
  */
 export async function baseResolved(project, like) {
   const {core} = project;
@@ -567,6 +586,14 @@ export async function baseResolved(project, like) {
     // The base theme's own part styles (neutral's pale destructive button),
     // which a one-mode setting keeps in the other mode.
     components: theme.components ?? {},
+    // The tokens the base's dark media rule (`[data-astryx-media="dark"]`:
+    // the lightbox, what sits on the overlay scrim) replaces, with their
+    // values there; Core's own when the base sets none.
+    onDark: Object.fromEntries(
+      Object.entries(theme.__onDark?.tokens ?? {}).filter(
+        ([k, v]) => k.startsWith('--') && typeof v === 'string',
+      ),
+    ),
   };
   return out;
 }

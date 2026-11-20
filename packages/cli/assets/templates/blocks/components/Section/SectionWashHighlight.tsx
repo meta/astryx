@@ -8,7 +8,7 @@ import {Text} from '@astryxdesign/core/Text';
 import {Button} from '@astryxdesign/core/Button';
 import {Icon} from '@astryxdesign/core/Icon';
 import {useToast} from '@astryxdesign/core/Toast';
-import {CheckIcon} from '@heroicons/react/24/solid';
+import {CheckIcon} from '@astryxdesign/template-icons/24/solid';
 
 const FEATURES = [
   '10 team members',

@@ -12,7 +12,14 @@
  *   settings. `themePalette()` runs it, and the CLI theme editor runs its
  *   generated copy
  */
-import {hexToOklch, luminance, normalizeColor} from './color.mjs';
+import {
+  compositeOver,
+  contrastRatio,
+  hexToOklch,
+  normalizeColor,
+  ratioDown,
+} from './color.mjs';
+export {compositeOver};
 import {
   PALETTE_BLACK,
   PALETTE_WHITE,
@@ -23,6 +30,12 @@ import {
 /** @typedef {import('./types.mjs').TonalPaletteCandidate} TonalPaletteCandidate */
 
 /** @typedef {import('./types.mjs').TonalPaletteGenerationInput} TonalPaletteGenerationInput */
+
+/** @typedef {import('./derive-look.mjs').DerivedState} DerivedState */
+
+/** @typedef {import('./editor-look.mjs').EditorLookResult} EditorLookResult */
+
+/** @typedef {import('./editor-look.mjs').PaletteEditorRules} PaletteEditorRules */
 
 /** @typedef {'light' | 'dark'} PaletteMode */
 
@@ -36,6 +49,7 @@ import {
  * @property {string} [alpha] Two hex digits of opacity.
  * @property {string} [family] The family the stop is from when it is not the token's own: `neutral` for text on a fill, `black` or `white` for the palette's own ends, `literal` for a color outside the palette.
  * @property {boolean} [exact] The stop holds the seed's exact color (an exact anchor).
+ * @property {boolean} [base] The half is the base theme's own value in that mode (family `literal`): the generated module reads it from the base, so the mode follows the base theme.
  */
 
 /**
@@ -82,7 +96,9 @@ import {
  * What the mapping reads around the palette.
  * @typedef {object} PaletteMappingContext
  * @property {PaletteBase} [base]
+ * @property {PaletteEditorRules} [editor] * The theme editor's own rules, beyond `themePalette()`'s mapping: the colors a look grows (category and chart colors, the status roles a theme leaves unset, code colors) and a base theme's own pairs kept readable for those colors. They never change a token `themePalette()` maps. The editor passes its own rules module (editor-look) here, so an app that imports only `themePalette()` ships none of them.
  * @property {(token: string) => boolean} has Whether a token exists, so the mapping sets it.
+ * @property {Readonly<Record<string, unknown>>} [defaults] Core's default value of each token, as written: a token the official theme leaves to Core follows the family at Core's lightness.
  * @property {PaletteColorReader} reader
  * @property {(token: string, mode: PaletteMode) => string | undefined} [settingOf] The value a token is set to exactly in a mode, as written.
  * @property {(value: string, mode: PaletteMode) => string | null} [colorIn] The fixed color a written value gives in a mode, or null.
@@ -95,12 +111,14 @@ import {
  * @typedef {object} PaletteDial
  * @property {string} id
  * @property {string} seed
+ * @property {PaletteMode} [only] Set for one mode only (an accent token): the editor keeps the other mode as it was.
  */
 
 /**
  * A family of a palette config: the generator's family input, and any key of the author's.
  * @typedef {object} ConfigFamily
  * @property {unknown} [id]
+ * @property {unknown} [name] The family's name, as a look's own family carries it.
  * @property {unknown} [seed]
  * @property {{mode: string; stop: number; [key: string]: unknown}[]} [anchors]
  */
@@ -119,6 +137,11 @@ import {
  * @property {Record<string, Partial<Record<PaletteMode, string>>>} exact Main tokens set exactly, per mode: the color's fill gives way to them.
  * @property {Record<string, string>} unread Main tokens set exactly to a value that is not one readable color in some mode, as written.
  * @property {Record<string, Partial<Record<PaletteMode, StopRef>>> | null} lift Lifted secondary text per background token of LIFT_PARTS, per mode; null without one.
+ * @property {{ a: string; b: string; vision: 'red-weak' | 'green-weak'; mode: PaletteMode; colors: [string, string]; page?: string; pages?: string[]; }[]} cvd Status fills someone red-weak or green-weak may not tell apart.
+ * @property {string[]} code The code colors that keep the base theme's because none of their family's stops reads on the code background and the page.
+ * @property {{token: string; mode: PaletteMode; pair: BasePair; ratio: number}[]} kept The look's colors kept at the base theme's in a mode, because a text/fill pair the base theme draws with them would not read.
+ * @property {{ roles: Record<string, 'derived' | 'unreadable' | 'alike'>; why: string[]; }} statuses The status roles the theme leaves unset, each derived from the look or kept at the base theme's, and why.
+ * @property {{ badges: DerivedState; chart: DerivedState; merged: string[]; unreadable: string[]; }} categories Whether the category colors (Badge, Token, Card tints) and the chart colors follow the look, and the hues a refused mapping would draw alike.
  */
 
 /** A value a mapping table holds. */
@@ -135,6 +158,13 @@ import {
  * @property {{ recipe?: string; vibrancy?: number; modeStrategy: 'light-and-dark'; families: ConfigFamily[]; }} config
  * @property {Record<string, PaletteFill>} fills
  */
+
+/**
+ * A text/fill pair a base theme draws: a category's text on its fill, a
+ * status's text on its fill or its tint, or the text a part's rule block
+ * sets on its fill. The editor words it.
+ */
+/** @typedef {| {kind: 'category'; hue: string} | {kind: 'status'; role: string; tint: boolean} | {kind: 'part'; part: string; block: string; prop: string}} BasePair */
 
 /**
  * A palette config as the generator's request. The generator checks every
@@ -505,28 +535,10 @@ export const hex =
  * @returns {number}
  */
 export function ratio(a, b) {
-  const [x, y] = [luminance(hex(a)), luminance(hex(b))].sort((p, q) => q - p);
-  return (x + 0.05) / (y + 0.05);
+  return contrastRatio(hex(a), hex(b));
 }
-/**
- * A color drawn at `alpha` over `under`, as the opaque color the eye sees.
- * @param {ReadonlyArray<number>} over
- * @param {number} alpha
- * @param {ReadonlyArray<number>} under
- * @returns {ColorTriple}
- */
-export function compositeOver(over, alpha, under) {
-  return /** @type {ColorTriple} */ (
-    over.map((c, i) => c * alpha + under[i] * (1 - alpha))
-  );
-}
-/** A ratio to two decimals. */
-export const round =
-  /**
-   * @param {number} r
-   * @returns {number}
-   */
-  r => Math.round(r * 100) / 100;
+/** A ratio cut down to two decimals, never rounded up past a need. */
+export const round = ratioDown;
 /** A stop as text: a layout may hold 16.666666666666668. */
 export const shade =
   /**
@@ -892,6 +904,7 @@ export function paletteTools(candidate, context) {
     at,
     atInside,
     ref,
+    colorIn,
     exactOf,
     settingOf,
     rawOf,
@@ -899,6 +912,7 @@ export function paletteTools(candidate, context) {
     solid,
     surfaces,
     onFor,
+    onChoices,
     page,
     neutral,
     contrast,
@@ -1108,6 +1122,33 @@ export function planPaletteRequest(dials, options, context) {
   }
   return {config, fills};
 }
+/**
+ * Whether a token is one the look derives: a category color (Badge, Token,
+ * Card tint), a chart color, a code color or the overlay scrim.
+ */
+export const isLookToken =
+  /**
+   * @param {string} token
+   * @returns {boolean}
+   */
+  token =>
+    /^--color-(?:(?:background|text|icon|border)-(?:red|orange|yellow|green|teal|cyan|blue|purple|pink|gray)|data-[a-z0-9-]+|syntax-(?:keyword|string|comment|number|function|type|variable|operator|constant|tag|attribute|property|punctuation|background)|overlay)$/.test(
+      token,
+    );
+/** The text roles a rule block can set for what it draws. */
+export const TEXT_PROPS = [
+  'color',
+  '--color-text-primary',
+  '--color-text-secondary',
+  '--color-text-accent',
+];
+/** Two decimals. */
+export const round2 =
+  /**
+   * @param {number} n
+   * @returns {number}
+   */
+  n => Math.round(n * 100) / 100;
 /**
  * The token mapping of a generated palette: each color token's stop in
  * light and dark, as the official Neutral theme maps its families, with the
@@ -1840,12 +1881,42 @@ export function mapPalette(candidate, dials, fills, context) {
       lift = found;
     }
   }
+  /**
+   * @type {EditorLookResult}
+   */
+  const {categories, statuses, code, cvd, keptAtBase} = context.editor
+    ? context.editor.growLook({
+        candidate,
+        dials,
+        context,
+        tokens,
+        modes,
+        setExactly,
+        t,
+      })
+    : {
+        categories: {
+          badges: 'none',
+          chart: 'none',
+          merged: [],
+          unreadable: [],
+        },
+        statuses: {roles: {}, why: []},
+        code: [],
+        cvd: [],
+        keptAtBase: [],
+      };
   return {
     tokens,
     contrast: checks.filter(c => c.note !== ''),
     exact,
     unread,
     lift,
+    categories,
+    statuses,
+    cvd,
+    code,
+    kept: keptAtBase,
   };
 }
 /**

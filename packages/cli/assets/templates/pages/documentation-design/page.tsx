@@ -26,10 +26,10 @@ import {Center} from '@astryxdesign/core/Center';
 import {Outline, type OutlineItem} from '@astryxdesign/core/Outline';
 import {useToast} from '@astryxdesign/core/Toast';
 import {
-  ArrowTopRightOnSquareIcon,
-  ArrowsPointingOutIcon,
-  PlusIcon,
-} from '@heroicons/react/24/outline';
+  ExternalLinkIcon,
+  ExpandIcon,
+  AddIcon,
+} from '@astryxdesign/template-icons';
 
 const tabListFlush: CSSProperties = {marginInlineStart: '-12px'};
 const outlinePanel: CSSProperties = {
@@ -529,7 +529,7 @@ function ComponentDetailView({activeNav}: {activeNav: string}) {
       <Button
         label="Button"
         variant="secondary"
-        icon={<Icon icon={PlusIcon} />}
+        icon={<Icon icon={AddIcon} />}
         endContent={<Badge label="New" variant="info" />}
       />
     ),
@@ -672,7 +672,7 @@ function ComponentDetailView({activeNav}: {activeNav: string}) {
                             label="Open in Craft"
                             variant="ghost"
                             size="sm"
-                            icon={<Icon icon={ArrowTopRightOnSquareIcon} />}
+                            icon={<Icon icon={ExternalLinkIcon} />}
                             onClick={() =>
                               showToast({
                                 body: 'Demo: this example would open in Craft here',
@@ -693,7 +693,7 @@ function ComponentDetailView({activeNav}: {activeNav: string}) {
                             label="Fullscreen"
                             variant="ghost"
                             size="sm"
-                            icon={<Icon icon={ArrowsPointingOutIcon} />}
+                            icon={<Icon icon={ExpandIcon} />}
                             onClick={() =>
                               showToast({
                                 body: 'Demo: this example would open full screen here',

@@ -111,6 +111,10 @@ const STRUCTURAL_VARS = new Set([
   // The word-break a wrap cell takes for its table's layout (Table/BaseTable.tsx,
   // Table/table.stylex.ts). Private runtime plumbing, never authored by a theme.
   '--_table-cell-word-break',
+  // The white-space a header cell takes for its table's layout under wrap
+  // (Table/BaseTable.tsx, Table/table.stylex.ts). Private runtime plumbing,
+  // never authored by a theme.
+  '--_table-header-white-space',
   '--separator-display',
   '--astryx-section-padding',
   // Private counterpart of the public token above: one ancestor Section's

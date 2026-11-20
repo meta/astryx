@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {expect, waitFor} from 'storybook/test';
 import * as stylex from '@stylexjs/stylex';
@@ -12,7 +13,9 @@ import {
   TableBody,
   proportional,
   pixel,
+  useTableSortable,
 } from '@astryxdesign/core/Table';
+import type {TableSortState} from '@astryxdesign/core/Table';
 import type {TableColumn} from '@astryxdesign/core/Table';
 import {Card} from '@astryxdesign/core/Card';
 import {Section} from '@astryxdesign/core/Section';
@@ -1052,6 +1055,101 @@ export const ResponsiveScrollInCard: Story = {
           textOverflow="truncate"
         />
       </Card>
+    </div>
+  ),
+};
+
+interface AppComparison extends Record<string, unknown> {
+  id: string;
+  criterion: string;
+  obsidian: string;
+  notion: string;
+  apple: string;
+}
+
+const appComparison: AppComparison[] = [
+  {
+    id: 'best',
+    criterion: 'Best at',
+    obsidian: 'Linked notes',
+    notion: 'Team docs',
+    apple: 'Quick capture',
+  },
+  {
+    id: 'data',
+    criterion: 'Your data',
+    obsidian: 'Local files',
+    notion: 'Their cloud',
+    apple: 'iCloud',
+  },
+  {
+    id: 'offline',
+    criterion: 'Offline',
+    obsidian: 'Full',
+    notion: 'Partial',
+    apple: 'Full',
+  },
+];
+
+const appComparisonColumns: TableColumn<AppComparison>[] = [
+  {key: 'criterion', header: 'Criterion'},
+  {key: 'obsidian', header: 'Obsidian'},
+  {key: 'notion', header: 'Notion'},
+  {key: 'apple', header: 'Apple Notes'},
+];
+
+function SortableHeadingTable() {
+  const [sort, setSort] = useState<TableSortState>([]);
+  const sortPlugin = useTableSortable<AppComparison>({
+    sort,
+    onSortChange: setSort,
+  });
+  return (
+    <Table
+      data={appComparison}
+      columns={appComparisonColumns.map(column => ({
+        ...column,
+        sortable: column.key !== 'criterion',
+      }))}
+      idKey="id"
+      density="compact"
+      dividers="grid"
+      plugins={{sort: sortPlugin}}
+    />
+  );
+}
+
+/**
+ * Column headings follow the Table's `textOverflow`, like the body cells. On a
+ * phone, a heading longer than its column wraps by default, so the reader
+ * still sees what each column is. Under `textOverflow="truncate"` the heading
+ * stays on one line and ends in an ellipsis.
+ */
+export const HeadingOverflow: Story = {
+  render: () => (
+    <div style={{display: 'flex', flexDirection: 'column', gap: '32px'}}>
+      <div data-heading-overflow="wrap">
+        <Table
+          data={appComparison}
+          columns={appComparisonColumns}
+          idKey="id"
+          density="compact"
+          dividers="grid"
+        />
+      </div>
+      <div data-heading-overflow="sortable">
+        <SortableHeadingTable />
+      </div>
+      <div data-heading-overflow="truncate">
+        <Table
+          data={appComparison}
+          columns={appComparisonColumns}
+          idKey="id"
+          density="compact"
+          dividers="grid"
+          textOverflow="truncate"
+        />
+      </div>
     </div>
   ),
 };
