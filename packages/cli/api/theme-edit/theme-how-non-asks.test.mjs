@@ -99,6 +99,8 @@ describe('still writes', () => {
       'make the buttons blue, just do it',
       "background-color '#2563eb' --on button",
     ],
+    // ("after that" is the ask's next step, never a later event.)
+    ['Make it compact. After that, make headings bold.', 'headings bold'],
   ])(
     '%s',
     async (q, line, test) => {
