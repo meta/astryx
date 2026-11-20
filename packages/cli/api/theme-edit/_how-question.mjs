@@ -21761,17 +21761,26 @@ export function draftAnswer(ctx, env, question) {
         // of four is written.)
         {
           const named = on ? cornersNamed(c.text, on, partNames(on)) : null;
-          // (A corner ask said in the negative, "no rounding on the bottom
-          // corners", squares those corners: never rounder.)
-          // (Square said as a word, in the negative, or as taking the
-          // rounding away: "take the rounding off", "remove the rounding",
-          // "unrounded".)
+          // (Square said as a word, as taking the rounding away ("take the
+          // rounding off", "remove the rounding", "unrounded"), or as a
+          // negation of the rounding itself ("no rounding on the bottom
+          // corners", "cards not rounded at the bottom"). A negation of
+          // another look, "cards rounded on top without a border", leaves
+          // the corners as asked.)
           const square =
             /\b(square[ds]?|sharp|squared off|unround\w*)\b/.test(c.text) ||
             /\b(?:take|takes|taking|took|strip|strips)\s+(?:the\s+)?(?:rounding|roundness|round|curves?|curvature)\s+off\b|\b(?:remove|removes|drop|drops|lose|loses)\s+(?:the\s+)?(?:rounding|roundness|curves?|curvature)\b/.test(
               c.text,
             ) ||
-            Boolean(c.neg);
+            (Boolean(c.neg) &&
+              /\b(?:no|not|never|without|none)\s+(?:\w+\s+){0,2}?(?:round\w*|radius|radii|curv\w*)\b/.test(
+                c.text,
+              ));
+          // (A negation of another look, "… without a border", is that
+          // look's: the corners are measured as a corner ask, never as a
+          // removal.)
+          const cornerIntent =
+            c.neg && !square ? {intent: intentOf({...c, neg: false}, [])} : {};
           // (A bare 0 is square: "the top-left corner 0", "the top corners
           // of tabs to 0". A pill is the pill token's round ends.)
           const sidePx =
@@ -21981,6 +21990,7 @@ export function draftAnswer(ctx, env, question) {
                   ),
                 ],
                 offer: true,
+                ...cornerIntent,
               };
             }
             if (!changing.length)
@@ -22000,6 +22010,7 @@ export function draftAnswer(ctx, env, question) {
               text: `${sideWords(named.corners)} on ${on}: ${rounded ? `rounded (${fill === nowAt?.[ALL.filter(roundedAt)[0] ?? ''] ? `the part's own rounded corner, ${fill}` : tokRounds && fill === `var(${tok})` ? tok : `the round corners, ${fill}`}; now ${nowSaid})` : sidePx === '0' ? 'square' : sidePx}${!others.length ? '' : squareRest ? `, ${sideWords(others)} square` : ', the other corners as they are'}`,
               options: [steps],
               ...(steps.length > 1 ? {sequence: true} : {}),
+              ...cornerIntent,
             };
           }
         }

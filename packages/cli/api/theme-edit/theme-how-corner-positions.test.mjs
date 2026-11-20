@@ -508,4 +508,31 @@ describe('the corners an ask names', () => {
       'border-start-end-radius 0 --on tab',
     ]);
   }, 240_000);
+
+  it('squares on a negation of the rounding only, never on a negation of another look', async ctx => {
+    if (needBases(ctx)) return;
+    const all = async (/** @type {string} */ q) =>
+      /** @type {Array<{commands: string[]}>} */ (
+        (await themeEditHow(q, {cwd, theme: 'k'})).data.results ?? []
+      )
+        .flatMap(r => r.commands)
+        .filter(c => / editor set /.test(c))
+        .map(c => c.replace(/^.*? editor set k /, ''));
+    // ("without a border" is about the border: the top corners stay
+    // rounded, never squared.)
+    expect(
+      (await all('cards rounded on top without a border')).some(c =>
+        /radius 0\b|radius '0 0/.test(c),
+      ),
+    ).toBe(false);
+    // (The 8px is the top corners'; the negation is the border's.)
+    const sized = await all('cards top corners 8px without a border');
+    expect(sized).toContain('border-start-start-radius 8px --on card');
+    expect(sized).toContain('border-start-end-radius 8px --on card');
+    // (A negation of the rounding itself still squares.)
+    expect(await writes('no rounding on the bottom corners of tabs')).toEqual([
+      'border-end-start-radius 0 --on tab',
+      'border-end-end-radius 0 --on tab',
+    ]);
+  }, 240_000);
 });
