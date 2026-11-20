@@ -652,9 +652,14 @@ function joinSideLists(q) {
       // padding's bottom. The sides before that comma are the earlier look's.)
       const lastComma =
         /(?:\s*,\s*(?:and\s+)?|\s+and\s+)(?:on\s+)?(?:the\s+)?[a-z]+$/i.exec(m);
-      // (Only a list said as where the earlier look goes, "on top": "a
-      // border and top and bottom padding 6px" lists the padding's sides.)
-      const placed = /\b(?:on|at)(?:\s+the)?\s*$/i.test(text.slice(0, at));
+      // (Only a list said as where the earlier look goes, "on top", or right
+      // after it, "border top": "a border and top and bottom padding 6px"
+      // lists the padding's sides.)
+      const placed =
+        /\b(?:on|at)(?:\s+the)?\s*$/i.test(text.slice(0, at)) ||
+        /\b(?:borders?|bordered|edges?|outlines?|lines?|padding|margins?|spacing|space)\s*$/i.test(
+          text.slice(0, at),
+        );
       if (nextLook && owner && placed && lastComma) {
         const head = m.slice(0, lastComma.index);
         const joinedHead = sided.test(owner)

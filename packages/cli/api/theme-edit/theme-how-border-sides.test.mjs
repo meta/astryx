@@ -606,6 +606,23 @@ describe('per-side border asks', () => {
         "border-top '1px solid var(--color-border)' --on card",
         'padding-bottom 8px --on card',
       ]);
+      // (A side right after the look word ends there too.)
+      expect(await first('cards with border top, bottom padding 8px')).toEqual([
+        "border-top '1px solid var(--color-border)' --on card",
+        'padding-bottom 8px --on card',
+      ]);
+      expect(
+        (await first('cards with border left, right padding 12px'))[0],
+      ).toBe("border-left '1px solid var(--color-border)' --on card");
+      expect(await first('cards with padding top, bottom border')).toContain(
+        "border-bottom '1px solid var(--color-border)' --on card",
+      );
+      expect(
+        await first('cards with an outline top, bottom padding 8px'),
+      ).toEqual([
+        "border-top '1px solid var(--color-border)' --on card",
+        'padding-bottom 8px --on card',
+      ]);
       // (Two sides of one look stay a list.)
       expect(await first('cards with a border on top and bottom')).toEqual([
         "border-top '1px solid var(--color-border)' --on card",
