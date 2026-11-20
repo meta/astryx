@@ -55,7 +55,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: "The theme's page color, `--color-background-body`, paints inside `AppShell`; `Theme` sets the tokens but paints no page of its own. A page without `AppShell` keeps the browser's white until its own CSS adds one line: `body { background: var(--color-background-body) }`.",
+          text: "The theme's page color, `--color-background-body`, paints inside `AppShell`; `Theme` sets the tokens but paints no page of its own. A page without `AppShell` keeps the browser's own page color until its own CSS adds one line: `body { background: var(--color-background-body) }`.",
         },
         {
           type: 'prose',

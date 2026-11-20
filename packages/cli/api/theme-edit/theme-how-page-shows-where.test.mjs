@@ -84,7 +84,7 @@ describe('where the page color shows', () => {
         /the page color shows only where a part draws it \([^)]*app-shell/,
       );
       expect(t).toMatch(
-        /the theme's page color paints inside AppShell; a page without AppShell keeps the browser's white until its own CSS adds one line: body \{ background: var\(--color-background-body\) \}/,
+        /the theme's page color paints inside AppShell; a page without AppShell keeps the browser's own page color until its own CSS adds one line: body \{ background: var\(--color-background-body\) \}/,
       );
     }, 240_000);
 

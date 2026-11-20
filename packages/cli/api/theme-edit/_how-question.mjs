@@ -30326,7 +30326,7 @@ export function draftAnswer(ctx, env, question) {
       !result.some(d => /shows only where a part draws it/.test(d.text))
     )
       result.push({
-        text: `the page color shows only where a part draws it (${[...new Set([...(TARGET.has('app-shell') ? ['app-shell'] : []), ...pageReaders])].slice(0, 6).join(', ')}): the theme's page color paints inside AppShell; a page without AppShell keeps the browser's white until its own CSS adds one line: body { background: var(--color-background-body) }`,
+        text: `the page color shows only where a part draws it (${[...new Set([...(TARGET.has('app-shell') ? ['app-shell'] : []), ...pageReaders])].slice(0, 6).join(', ')}): the theme's page color paints inside AppShell; a page without AppShell keeps the browser's own page color until its own CSS adds one line: body { background: var(--color-background-body) }`,
         options: [],
         lookup: TARGET.has('app-shell') ? `${HOW} app-shell` : undefined,
       });
