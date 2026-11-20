@@ -53,7 +53,7 @@ async function describedBy(page: Page, caseName: string) {
   }, caseName);
 }
 
-test('a tooltip describes its trigger from a hidden copy, before and after it shows, once', async ({
+test('a tooltip describes its trigger from a hidden copy before it first shows, then from its content, once', async ({
   page,
 }) => {
   await openPaths(page);
@@ -73,16 +73,27 @@ test('a tooltip describes its trigger from a hidden copy, before and after it sh
   const tooltip = page.getByRole('tooltip', {includeHidden: true});
   await expect(tooltip).toBeVisible();
   await expect(tooltip).toHaveText('Saves your changes to this draft');
-  // The shown text is hidden from assistive technology, so the description
-  // is still read once.
+  // Once the tooltip is mounted, its content is the description and the
+  // copy is gone, so the text renders once and is read once.
   await expect(save).toHaveAccessibleDescription(
     'Saves your changes to this draft',
   );
+  expect(await describedBy(page, 'wrapped')).toEqual({
+    isHidden: false,
+    role: null,
+    text: 'Saves your changes to this draft',
+    isInsideTrigger: false,
+  });
   expect(
-    await tooltip.evaluate(
-      element => element.querySelector('[aria-hidden="true"]') != null,
-    ),
+    await tooltip.evaluate(element => {
+      const trigger = document.querySelector('[data-case="wrapped"] button');
+      const id = trigger?.getAttribute('aria-describedby') ?? '';
+      return element.contains(document.getElementById(id));
+    }),
   ).toBe(true);
+  await expect(
+    page.locator('[data-case="wrapped"] [hidden][id$="-description"]'),
+  ).toHaveCount(0);
 });
 
 test('a tooltip that adds to the name describes the button; one that repeats it does not', async ({
