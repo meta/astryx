@@ -18,6 +18,10 @@
 import {devWarn} from '../utils/devWarning';
 import {settledBox} from './settledBox';
 
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
+
 /** A horizontal step toward the anchor: -1 left, 0, or 1 right. */
 export const LAYER_ENTER_X_PROPERTY = '--_astryx-layer-enter-x';
 /** A vertical step toward the anchor: -1 up, 0, or 1 down. */

@@ -12,16 +12,37 @@ import {
 
 // Mock ResizeObserver (not available in jsdom)
 class MockResizeObserver {
-  /** The shared observer, so a test can deliver a resize. */
-  static last: MockResizeObserver | null = null;
+  static all: MockResizeObserver[] = [];
+  /**
+   * The newest observer that watches `target`, so a test can deliver a
+   * resize. A shown layer makes observers of its own, so the newest observer
+   * is not always the carousel's.
+   */
+  static watching(target: Element): MockResizeObserver | null {
+    for (let index = MockResizeObserver.all.length - 1; index >= 0; index--) {
+      const observer = MockResizeObserver.all[index];
+      if (observer.targets.has(target)) {
+        return observer;
+      }
+    }
+    return null;
+  }
+
   callback: ResizeObserverCallback;
+  targets = new Set<Element>();
   constructor(callback: ResizeObserverCallback) {
     this.callback = callback;
-    MockResizeObserver.last = this;
+    MockResizeObserver.all.push(this);
   }
-  observe() {}
-  unobserve() {}
-  disconnect() {}
+  observe(target: Element) {
+    this.targets.add(target);
+  }
+  unobserve(target: Element) {
+    this.targets.delete(target);
+  }
+  disconnect() {
+    this.targets.clear();
+  }
 }
 vi.stubGlobal('ResizeObserver', MockResizeObserver);
 
@@ -162,7 +183,10 @@ describe('Carousel', () => {
 
       // The one slide's content grows past the scroll area.
       grown = 100;
-      const observer = MockResizeObserver.last;
+      const observer = MockResizeObserver.watching(
+        scroller.firstElementChild as Element,
+      );
+      expect(observer).not.toBeNull();
       act(() => {
         observer?.callback(
           [
