@@ -27,7 +27,7 @@ import * as path from 'node:path';
 import {themeFileImports} from '../../foundation/discovery/theme-discovery.mjs';
 import {pathToFileURL} from 'node:url';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
-import {AstryxError} from '../error.mjs';
+import {AstryxError, brokenInstallError} from '../error.mjs';
 import {logger} from '../logger.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {cssUnescape} from '../../foundation/text/css-escape.mjs';
@@ -13993,7 +13993,8 @@ export async function commitTheme(
         ],
         ERROR_CODES.ERR_WRITE_FAILED,
       );
-    // The color config's own refusals already name the file and the fix.
+    // The color config's own refusals already name the file and the fix,
+    // as a broken install's refusal names the package and the install.
     if (
       e instanceof AstryxError &&
       (e.code === ERROR_CODES.ERR_UNKNOWN_THEME ||
@@ -14001,9 +14002,14 @@ export async function commitTheme(
         e.code === ERROR_CODES.ERR_PALETTE_GENERATION ||
         e.code === ERROR_CODES.ERR_WRITE_FAILED ||
         e.code === ERROR_CODES.ERR_THEME_BUSY ||
-        e.code === ERROR_CODES.ERR_THEME_BAD_VALUE)
+        e.code === ERROR_CODES.ERR_THEME_BAD_VALUE ||
+        e.code === ERROR_CODES.ERR_DEP_MISSING)
     )
       throw e;
+    // A package the build loads that the install lacks is not the theme's
+    // fault: named as the broken install it is.
+    const broken = brokenInstallError(e, cwd, 'Nothing was changed.');
+    if (broken) throw broken;
     // A folder where a built file goes: named for the editor, which has no
     // --out to pick.
     const folder =
