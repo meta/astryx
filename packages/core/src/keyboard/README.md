@@ -357,8 +357,9 @@ edge, the bar's top, with no bar height subtracted.
   content's last box (after its own children, so it adds scroll range in
   Firefox too, which keeps the content box at the body's height); it reveals the
   focused field in the keyboard report's own event, and rides the content box
-  on the keyboard's own motion, Gboard's slides in Chrome and UIKit's spring
-  in Safari on iOS (`rideKeyboard`, from the guide's transitions).
+  on the keyboard's motion: Gboard's slides in Chrome, and in Safari on iOS
+  Core's leading spring up and UIKit's keyboard spring down (`rideKeyboard`,
+  from the guide's transitions).
 
 ## Files
 
