@@ -216,7 +216,7 @@ describe('--only, as set writes it and the reader reads it', () => {
   );
 
   it(
-    'a saved only on a family role opens, read as without it, with one note',
+    'a saved only on a family role is refused as on any group, and the file is left as it is',
     async () => {
       write([
         {
@@ -228,10 +228,20 @@ describe('--only, as set writes it and the reader reads it', () => {
         },
       ]);
       const before = fs.readFileSync(file(), 'utf8');
-      const r = await themeEditShow('n', {cwd});
-      expect(notes(r)).toMatch(
-        /on button-like was saved with only, which changes nothing there \(button-like is a family role/,
+      /** @type {any} */
+      let err = null;
+      try {
+        await themeEditShow('n', {cwd});
+      } catch (e) {
+        err = e;
+      }
+      expect(err?.code).toBe('ERR_THEME_INVALID');
+      // (The words main's reader says for an only on a group; what follows
+      // them depends on the theme's history.)
+      expect(String(err?.message)).toMatch(
+        /^themes\/n\/n\.settings\.json: background-color on button-like has only, which is for one member of a group \(not the button-like group itself\)\. Remove that setting with astryx experimental theme editor undo n background-color --on button-like; nothing else needs to change\b/,
       );
+      expect(String(err?.message)).not.toMatch(/family role/);
       expect(fs.readFileSync(file(), 'utf8')).toBe(before);
     },
     T,
