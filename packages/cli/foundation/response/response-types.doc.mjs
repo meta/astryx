@@ -161,6 +161,12 @@ export const doc = {
         'A new starter app with the theme preview inside: the app `folder`, the `theme` copied into it that the pages wear (null for its own neutral theme), the preview `pages`, the `files` written, `notes`, and how to `open` it (install, run, then the page). Experimental: may change or be removed in a patch release.',
     },
     {
+      value: 'themeEdit.check',
+      stability: 'experimental',
+      description:
+        "A theme check: the theme `file`, the `modes` checked (both, or the one the app pins), the `problems` a person would see (each with its `kind`, `mode`, `message`, and where it applies `token`, `on`, `part`, `parts`, `ratio` and `needs`; after the repair with fix), each value fix wrote (`fixed`: `token` or `part`, `value`, a [light, dark] pair when the modes differ, and `why`), the `files` it wrote and `notes`. Experimental: may change or be removed in a patch release.",
+    },
+    {
       value: 'themeEdit.previewList',
       stability: 'experimental',
       description:

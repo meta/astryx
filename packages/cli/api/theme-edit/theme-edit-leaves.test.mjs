@@ -20,6 +20,7 @@ const adapter = vi.hoisted(() => ({
   themeEditPreviewList: vi.fn(),
   themeEditPreviewRemove: vi.fn(),
   themeEditHow: vi.fn(),
+  themeEditCheck: vi.fn(),
   parsePoints: vi.fn(),
 }));
 
@@ -48,6 +49,7 @@ const LEAVES = [
   {name: 'themeEditPreviewApp', args: ['theme-app'], optionsAt: 1},
   {name: 'themeEditPreviewRemove', args: ['components'], optionsAt: 1},
   {name: 'themeEditHow', args: ['banner'], optionsAt: 1},
+  {name: 'themeEditCheck', args: ['brand'], optionsAt: 1},
 ];
 
 describe('theme-edit leaves', () => {
@@ -124,9 +126,10 @@ describe('theme-edit leaves', () => {
 });
 
 describe('theme-edit.mjs', () => {
-  it('exports exactly the nine public leaves', () => {
+  it('exports exactly the ten public leaves', () => {
     expect(Object.keys(api).sort()).toEqual(
       [
+        'themeEditCheck',
         'themeEditHow',
         'themeEditNew',
         'themeEditPreviewAdd',

@@ -104,8 +104,10 @@ import {
   hex,
   isColorValue,
   isSafeValue,
+  LOOKS_ALIKE,
   parseColor,
   oklabDistance,
+  plainOn,
   ratio,
   splitTop,
 } from './_color.mjs';
@@ -10833,17 +10835,6 @@ export async function contrastProblems(ctx, data, res) {
  */
 
 /**
- * The plain black or white that stands out most from a drawn color: what a
- * fix sets text or a border to so it reads.
- * @param {[number, number, number]} rgb
- */
-function plainOn(rgb) {
-  return ratio([0, 0, 0], rgb) >= ratio([255, 255, 255], rgb)
-    ? '#000000'
-    : '#ffffff';
-}
-
-/**
  * The contrast under which a border no longer differs from the page at all
  * (the page's own color, within rounding). Where the base's own border is a
  * hairline under 3:1, the theme's hairline is a choice of how faint, a
@@ -11605,12 +11596,6 @@ export function isCheckNote(x) {
     x.text.startsWith("the base theme's ")
   );
 }
-
-/**
- * How close two button fills may look before a person cannot tell them
- * apart at a glance: their OKLab distance.
- */
-const LOOKS_ALIKE = 0.1;
 
 /**
  * Loading placeholders (the parts that paint --color-skeleton) a person

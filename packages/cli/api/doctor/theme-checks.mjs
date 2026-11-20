@@ -62,6 +62,7 @@ import {
   formatCliCommand,
 } from '../../foundation/env/package-manager.mjs';
 import {logger} from '../logger.mjs';
+import {CORE_THEME_SOURCES} from '../../foundation/config/theme-state.mjs';
 import {stylesheetLinkHrefs} from './built-checks.mjs';
 
 /** @typedef {import('./doctor.mjs').DoctorCheck} DoctorCheck */
@@ -780,11 +781,6 @@ function importsTheme(specifier, file, theme) {
   }
   return specifier === theme.module || specifier === theme.stylesheet;
 }
-
-const CORE_THEME_SOURCES = new Set([
-  '@astryxdesign/core',
-  '@astryxdesign/core/theme',
-]);
 
 /**
  * The base a `defineTheme({extends: base})` call extends, for

@@ -1071,6 +1071,19 @@ const CASES = [
     },
   },
   {
+    name: 'experimental theme check',
+    args: ['experimental', 'theme', 'check', 'checked/checkedTheme.ts'],
+    prepare: async () => {
+      const dir = await themeProject();
+      fs.mkdirSync(path.join(dir, 'checked'), {recursive: true});
+      fs.writeFileSync(
+        path.join(dir, 'checked', 'checkedTheme.ts'),
+        "import {defineTheme} from '@astryxdesign/core/theme';\nexport const checkedTheme = defineTheme({\n  name: 'checked',\n  tokens: {'--color-text-secondary': ['#d4d4d4', '#3a3a3a']},\n});\n",
+      );
+      return dir;
+    },
+  },
+  {
     name: 'experimental theme preview list',
     args: ['experimental', 'theme', 'preview', 'list'],
     prepare: themeProject,

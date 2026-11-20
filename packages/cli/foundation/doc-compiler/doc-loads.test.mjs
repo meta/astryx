@@ -166,6 +166,7 @@ const RUNNERS = {
   'clients/cli/commands/experimental/theme.mjs': {
     runs: SELF_DOCS,
     sites: [
+      'import ../../../../api/theme-edit/themeEditCheck.doc.mjs',
       'import ../../../../api/theme-edit/themeEditHow.doc.mjs',
       'import ../../../../api/theme-edit/themeEditNew.doc.mjs',
       'import ../../../../api/theme-edit/themeEditPreviewAdd.doc.mjs',
@@ -176,6 +177,7 @@ const RUNNERS = {
       'import ../../../../api/theme-edit/themeEditShow.doc.mjs',
       'import ../../../../api/theme-edit/themeEditUndo.doc.mjs',
       'import ../experimental-theme-add.doc.mjs',
+      'import ../experimental-theme-check.doc.mjs',
       'import ../experimental-theme-compile.doc.mjs',
       'import ../experimental-theme-editor-how.doc.mjs',
       'import ../experimental-theme-editor-new.doc.mjs',
