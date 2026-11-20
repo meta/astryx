@@ -306,7 +306,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Compose rich cell content with Astryx components like Text, StatusDot, and Avatar via renderCell. Pair a StatusDot with Text, and keep a solid Badge for the rare cell that needs action.',
+          'Compose rich cell content with Astryx components like Text, StatusDot, and Avatar via renderCell. Pair a StatusDot with Text, and keep a solid Badge for the rare cell that needs attention.',
       },
       {
         guidance: true,
@@ -362,7 +362,7 @@ export const docsZh = {
       {
         guidance: true,
         description:
-          'Compose rich cell content with Astryx components like Text, StatusDot, and Avatar via renderCell. Pair a StatusDot with Text, and keep a solid Badge for the rare cell that needs action.',
+          'Compose rich cell content with Astryx components like Text, StatusDot, and Avatar via renderCell. Pair a StatusDot with Text, and keep a solid Badge for the rare cell that needs attention.',
       },
       {
         guidance: false,
@@ -400,7 +400,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Compose cells via renderCell w/ Text, StatusDot, Avatar. Pair StatusDot w/ Text; solid Badge only for the rare cell that needs action.',
+          'Compose cells via renderCell w/ Text, StatusDot, Avatar. Pair StatusDot w/ Text; solid Badge only for the rare cell that needs attention.',
       },
       {
         guidance: true,
