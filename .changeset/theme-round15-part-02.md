@@ -8,7 +8,7 @@
 
 - `astryx experimental theme editor how`: "the active nav item should be a #e8def8 pill" again gives pill corners on the selected item only. There is now a single reader for a color and shape, so the item's state is kept.
 
-- `astryx experimental theme editor how` now gives a text color for every variant of a part whose variants each take a color of their own ("buttons with white text", "badges with dark text") to each variant only in the modes where it reads; text a part's variants read from shared tokens (a card's) is not measured this way unless the same answer gives them a fill. It measures against the variant's own fill, see-through fills over the page, or the fill the same answer gives it. Variants it can't read on keep their own text, and the answer says which.
+- `astryx experimental theme editor how` now gives a text color asked together with a fill for a part's variants ("gold buttons with black text", "buttons with a navy background in dark mode and white text") to each variant only in the modes where it reads on that fill. It measures against the fill the same answer gives it, or see-through fills over the page. Variants it can't read on keep their own text, and the answer says which.
 
 Other fixes:
 
