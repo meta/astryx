@@ -694,7 +694,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
   );
 
   it.skipIf(!hasModuleHooks)(
-    "keeps doctor's Core-button scan, and a change to a page, a script that listens for a press, an MDX page, a package root or a package's name or imports shows on the very next run",
+    "keeps doctor's Core-button scan, and a change to a page, a script that listens for a press, an installed package, an MDX page, a package root or a package's name or imports shows on the very next run",
     () => {
       const tmp = keptTmp('button-actions');
       const other = makeProject();
@@ -774,6 +774,37 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
         expect(scansAgain().status).toBe('info');
         fs.rmSync(script);
         expect(scansAgain().status).toBe('pass');
+        // A package the page imports, installed after a run without it, then
+        // removed: each is a change, as a fresh run reads it.
+        fs.writeFileSync(
+          page,
+          [
+            "import {Button} from '@astryxdesign/core';",
+            "import {Panel} from 'acme-panel';",
+            'export default function App() {',
+            '  return <Panel><Button label="Begin" /></Panel>;',
+            '}',
+            '',
+          ].join('\n'),
+        );
+        scansAgain();
+        const panel = path.join(other.dir, 'node_modules', 'acme-panel');
+        fs.mkdirSync(panel, {recursive: true});
+        fs.writeFileSync(
+          path.join(panel, 'package.json'),
+          JSON.stringify({
+            name: 'acme-panel',
+            version: '1.0.0',
+            main: 'index.js',
+          }),
+        );
+        fs.writeFileSync(
+          path.join(panel, 'index.js'),
+          'export const Panel = () => null;\n',
+        );
+        scansAgain();
+        fs.rmSync(panel, {recursive: true, force: true});
+        scansAgain();
         // Inputs beyond the pages: an MDX page that names the app, a
         // `dist` folder that is skipped only once its folder is a package
         // root, and, once that package has source of its own, which the scan
