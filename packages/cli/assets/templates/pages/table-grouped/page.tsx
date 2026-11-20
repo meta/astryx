@@ -47,16 +47,16 @@ import {useToast} from '@astryxdesign/core/Toast';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {
-  PencilIcon,
-  DocumentDuplicateIcon,
+  EditIcon,
+  CopyIcon,
   ArrowRightIcon,
   TagIcon,
   UserIcon,
-  TrashIcon,
-  EllipsisHorizontalIcon,
-} from '@heroicons/react/24/outline';
-import {XMarkIcon} from '@heroicons/react/24/outline';
-import {ChartBarIcon} from '@heroicons/react/24/solid';
+  DeleteIcon,
+  MoreHorizontalIcon,
+} from '@astryxdesign/template-icons';
+import {CloseIcon} from '@astryxdesign/template-icons';
+import {ChartIcon} from '@astryxdesign/template-icons/24/solid';
 
 // Types
 type TaskStatus = 'in_progress' | 'todo' | 'backlog' | 'done';
@@ -621,7 +621,7 @@ function getColumns({
       renderCell: task => (
         <HStack gap={3} vAlign="center">
           <Icon
-            icon={ChartBarIcon}
+            icon={ChartIcon}
             size="sm"
             color={PRIORITY_COLOR[task.priority]}
           />
@@ -690,14 +690,14 @@ function getColumns({
             label: 'Actions',
             variant: 'ghost',
             size: 'sm',
-            icon: <Icon icon={EllipsisHorizontalIcon} size="sm" />,
+            icon: <Icon icon={MoreHorizontalIcon} size="sm" />,
             isIconOnly: true,
           }}
           hasChevron={false}
           items={[
             {
               label: 'Edit issue',
-              icon: PencilIcon,
+              icon: EditIcon,
               onClick: () => onEdit(task),
             },
             {
@@ -712,7 +712,7 @@ function getColumns({
             },
             {
               label: 'Duplicate',
-              icon: DocumentDuplicateIcon,
+              icon: CopyIcon,
               onClick: () => onDuplicate(task),
             },
             {
@@ -730,7 +730,7 @@ function getColumns({
             {type: 'divider' as const},
             {
               label: 'Delete issue',
-              icon: TrashIcon,
+              icon: DeleteIcon,
               onClick: () => onDelete(task),
             },
           ]}
@@ -847,7 +847,7 @@ function TaskDetailPanel({
             label="Close panel"
             variant="ghost"
             size="sm"
-            icon={<Icon icon={XMarkIcon} size="sm" />}
+            icon={<Icon icon={CloseIcon} size="sm" />}
             isIconOnly
             onClick={onClose}
           />
@@ -875,7 +875,7 @@ function TaskDetailPanel({
           <MetadataListItem label="Priority">
             <HStack gap={2} vAlign="center">
               <Icon
-                icon={ChartBarIcon}
+                icon={ChartIcon}
                 size="sm"
                 color={PRIORITY_COLOR[task.priority]}
               />

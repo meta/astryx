@@ -39,7 +39,6 @@ import {
   stateSpelling,
 } from './_normal.mjs';
 import {
-  AUTO_SPREAD,
   COMMON_STATES,
   CORNERS,
   CSS_PSEUDO_CLASSES,
@@ -57,6 +56,7 @@ import {
   TYPE_STYLES,
   familyOf,
   wordTable,
+  onlyMeans,
 } from './_tables.mjs';
 import {
   commitTheme,
@@ -2361,8 +2361,7 @@ function leftOutParts(ctx, slug, data, sub, s) {
       ctx.project.core.tokenDefaults?.['--radius-full'] ?? '9999px',
     );
     /** @param {string} m */
-    const only = m =>
-      !FAMILIES[m] && AUTO_SPREAD.includes(familyOf(m) ?? '') ? ' --only' : '';
+    const only = m => (onlyMeans(m) === 'member' ? ' --only' : '');
     if (pills.length)
       out.push({
         note: `the parts drawn as pills stay round (${pills.join(', ')}): they read --radius-full, which corners leaves as it is; ${radios.length ? `these square them and keep the radio marks round (${radios.join(', ')})` : 'this squares them'}:`,
@@ -4431,7 +4430,15 @@ function carryTyped(e, sub, slug, thing, typed, data, cwd = process.cwd()) {
       },
     });
   });
-  const covered = coversTyped(reads, typedText, String(thing));
+  const covered = coversTyped(
+    reads,
+    typedText,
+    String(thing),
+    e.suggestions.map(x => {
+      const m = head.exec(x.name);
+      return m ? (m[3] ?? m[4]) : undefined;
+    }),
+  );
   /** @type {Set<string>} */
   const dropped = new Set();
   const lines = e.suggestions.filter((x, i) => {
@@ -7045,10 +7052,10 @@ async function changeOnce(
     );
   // A group kept alike (inputs share one height) loses that when one member
   // changes its height alone.
-  const family = s.on && s.only ? familyOf(s.on) : null;
+  const family =
+    s.on && s.only && onlyMeans(s.on) === 'member' ? familyOf(s.on) : null;
   if (
     family &&
-    AUTO_SPREAD.includes(family) &&
     (s.thing === 'spacing' ||
       /^--size-element-/.test(s.thing) ||
       /^(min-|max-)?(height|block-size)$|^padding(-block(-start|-end)?|-top|-bottom)?$/.test(
@@ -7369,7 +7376,7 @@ async function changeOnce(
         ? {
             name: group,
             members: parts,
-            onlyHint: !FAMILIES[s.on ?? ''] && AUTO_SPREAD.includes(group),
+            onlyHint: onlyMeans(s.on) === 'member',
           }
         : null,
       changedTokens: r.changed,
