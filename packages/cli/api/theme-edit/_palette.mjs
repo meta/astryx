@@ -33,7 +33,7 @@ import {
   PALETTE_BLACK,
   PALETTE_GENERATOR_VERSION,
   PALETTE_RECIPE,
-  PALETTE_RECIPE_NEWEST,
+  PALETTE_RECIPE_V2,
   PALETTE_RECIPES,
   PALETTE_WHITE,
   generateTonalPalette,
@@ -45,7 +45,7 @@ import {
   BORDER,
   DARK_FILL,
   LIFT_GROUNDS,
-  EDITOR_LIFT_PARTS as LIFT_PARTS,
+  LIFT_PARTS,
   NEUTRAL_INSIDE,
   NEUTRAL_STOPS,
   NEUTRAL_TINTS,
@@ -61,7 +61,6 @@ import {
   dialFamily,
   fillAt,
   grownGrays,
-  grownFamilies,
   isGray,
   isLookToken,
   mapPalette,
@@ -70,6 +69,7 @@ import {
   sameColor,
   shade,
 } from '../theme/palette/generate/mapping.mjs';
+import * as editorLook from '../theme/palette/generate/editor-look.mjs';
 import {
   cvdClashes,
   isLookFamily,
@@ -316,9 +316,8 @@ export function tempFor(file) {
 /**
  * A color dial's family: its seed, and the source token that gives it when
  * the theme's own source sets the family's fill (null when the setting does).
- * An accent set as a token carries its own dark value and the one mode it is
- * for.
- * @typedef {{id: string, dial: string, seed: string, value: string, source: string | null, dark?: string, only?: 'light' | 'dark'}} DialFamily
+ * An accent set as a token carries the one mode it is for.
+ * @typedef {{id: string, dial: string, seed: string, value: string, source: string | null, only?: 'light' | 'dark'}} DialFamily
  */
 
 /**
@@ -491,8 +490,7 @@ function dialFamilies(data, own = {}) {
   }
   // A whole-theme --color-accent set as a token is the accent too: the
   // accent's shades (links, selected rows, tints) grow from it as from the
-  // dial, and the token itself keeps the exact value it was given. A dark
-  // value of its own anchors the dark shades (planPalette).
+  // dial, and the token itself keeps the exact value it was given.
   if (!out.some(f => f.id === 'accent')) {
     const raws = data.settings.filter(
       x =>
@@ -505,9 +503,7 @@ function dialFamilies(data, own = {}) {
     const last = (/** @type {(m: unknown) => boolean} */ ok) =>
       [...raws].reverse().find(x => ok(x.mode));
     const light = last(m => !m || m === 'light') ?? last(m => m === 'dark');
-    const dark = last(m => m === 'dark');
     const seed = light && seedOf(light.value);
-    const darkSeed = dark && dark !== light ? seedOf(dark.value) : null;
     // Set for one mode only, it moves that mode only.
     const modes = new Set(raws.map(x => x.mode ?? 'both'));
     const only =
@@ -521,7 +517,6 @@ function dialFamilies(data, own = {}) {
         seed,
         value: light.value,
         source: null,
-        ...(darkSeed && !sameColor(darkSeed, seed) ? {dark: darkSeed} : {}),
         ...(only ? {only} : {}),
       });
   }
@@ -840,8 +835,9 @@ function paletteContext(cwd, slug, data, base, tokenDefaults = {}) {
   return {
     base,
     has: token => token in tokenDefaults,
-    // The editor's own rules (Core's context.editor).
-    editor: true,
+    // The editor's own rules (Core's context.editor), which only the
+    // editor loads.
+    editor: editorLook,
     defaults: tokenDefaults,
     reader: {
       rgb: value =>
@@ -904,7 +900,7 @@ function planPalette(cwd, slug, data, base) {
   // already has keeps the one it was made with (none named is the first),
   // so its colors never move with a CLI upgrade. Moving it is a choice
   // made in its config.
-  const config = own ? {...existing} : {recipe: PALETTE_RECIPE_NEWEST};
+  const config = own ? {...existing} : {recipe: PALETTE_RECIPE_V2};
   const {settings: saved, mode: savedMode} = savedSettings(cwd, slug);
   // Every theme's palette has both modes: a one-mode theme keeps both
   // halves of its colors (its mode is the one the app's <Theme> is given),
@@ -1085,11 +1081,11 @@ function planPalette(cwd, slug, data, base) {
     slots.forEach((i, k) => (families[i] = inOrder[k]));
   config.families = families;
   // The category and chart hues grow with the look, after the theme's own
-  // colors, and so do the status roles the theme leaves unset (Core's
-  // grownFamilies); a family the author's config already holds stays
+  // colors, and so do the status roles the theme leaves unset (the
+  // editor's own grownFamilies); a family the author's config already holds stays
   // theirs. A status family that is not a setting is the editor's, grown
   // again at every plan.
-  for (const family of grownFamilies(fams, {
+  for (const family of editorLook.grownFamilies(fams, {
     base,
     reader: {rgb: parseColor, alpha: alphaOf},
   }))
@@ -1110,7 +1106,7 @@ function planPalette(cwd, slug, data, base) {
     colorsOf(existing) !== colorsOf(config)
   )
     notes.push(
-      `${file} makes its colors with the ${PALETTE_RECIPE} recipe it was made with, whose pale shades stay at the edge of what a screen shows whatever the vibrancy; "recipe": "${PALETTE_RECIPE_NEWEST}" there makes them follow the vibrancy and each color's own strength (its colors change once)`,
+      `${file} makes its colors with the ${PALETTE_RECIPE} recipe it was made with, whose pale shades stay at the edge of what a screen shows whatever the vibrancy; "recipe": "${PALETTE_RECIPE_V2}" there makes them follow the vibrancy and each color's own strength (its colors change once)`,
     );
   const dead = deadKeys(config);
   if (dead.length)

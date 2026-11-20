@@ -88,7 +88,7 @@ describe('color dials through the palette generator', () => {
     );
     expect({...config, families: config.families.slice(0, 1)}).toEqual({
       // A new palette is made with the newest recipe.
-      recipe: 'astryx-oklch-v3',
+      recipe: 'astryx-oklch-v2',
       modeStrategy: 'light-and-dark',
       families: [
         {
