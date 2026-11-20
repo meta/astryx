@@ -317,7 +317,7 @@ export const LOCK = [
   [
     'tooltips #0f0f0f with white text, rounder cards, compact tables, 4px corners and 12px text',
     [],
-    ['tooltip'],
+    ['tooltip', 'card', 'table-row'],
   ],
   [
     'side nav #08090a, rounder cards, compact tables, items 13px text, selected item #1c1d1f with #f7f8f8 text',
@@ -332,22 +332,28 @@ export const LOCK = [
   [
     'list items: 1px #dee2e6 border, rounder cards, compact tables, 8px 16px padding, active item #0d6efd with white text',
     [],
-    ['list-item'],
+    ['list-item', 'card', 'table-row'],
   ],
   [
     'navigation bar: #f3edf7 background, rounder cards, compact tables, 80px tall; the selected item gets a #e8def8 pill',
     [],
-    ['app-shell-header', 'table-header-cell', 'top-nav-item'],
+    [
+      'app-shell-header',
+      'table-header-cell',
+      'top-nav-item',
+      'card',
+      'table-row',
+    ],
   ],
   [
     'outline buttons: 1px border #0d6efd, rounder cards, compact tables, blue text, filled blue on hover with white text',
     [],
-    ['button'],
+    ['button', 'card', 'table-row'],
   ],
   [
     'cards: rounded-lg, rounder cards, compact tables, shadow and ring-1 ring-black/5',
     [],
-    ['card'],
+    ['card', 'table-row'],
   ],
   [
     'badges pill shaped, rounder cards, compact tables, 12px text, gray #E3E3E3 background',
@@ -392,27 +398,27 @@ export const LOCK = [
   [
     'code #eb5757 text on #f7f6f3, rounder cards, compact tables, 4px corners',
     [],
-    ['code'],
+    ['code', 'card', 'table-row'],
   ],
   [
     'filled buttons: pill shaped, rounder cards, compact tables, 40px tall, 14px medium text, 24px horizontal padding',
     [],
-    ['button'],
+    ['button', 'card', 'table-row'],
   ],
   [
     'segmented buttons: pill shaped, rounder cards, compact tables, 1px #79747e border, and #e8def8 when selected',
     [],
-    ['segmented-control', 'segmented-control-item'],
+    ['segmented-control', 'segmented-control-item', 'card', 'table-row'],
   ],
   [
     'pagination: 6px radius, rounder cards, compact tables, 1px #dee2e6 border, and the active page #0d6efd with white text',
     [],
-    ['pagination', 'pagination-item', 'pagination-dot'],
+    ['pagination', 'pagination-item', 'pagination-dot', 'card', 'table-row'],
   ],
   [
     'tabs: 2px #4f46e5 underline on the selected tab, rounder cards, compact tables, #6b7280 text on the rest, 14px medium text',
     [],
-    ['tab', 'tab-indicator'],
+    ['tab', 'tab-indicator', 'card', 'table-row'],
   ],
   [
     'make dialogs wider, rounder cards, compact tables, their titles bigger, and the backdrop darker',
@@ -459,32 +465,32 @@ export const LOCK = [
   [
     'cards: white background, rounder cards, compact tables, 8px radius, shadow-sm, ring-1 ring-gray-900/5',
     [],
-    ['card'],
+    ['card', 'table-row'],
   ],
   [
     'tables: 1px #dee2e6 borders, rounder cards, compact tables, 8px cell padding, #f8f9fa header background, and a #f8f9fa hover',
     [],
-    ['table-cell', 'table-header', 'table-row'],
+    ['table-cell', 'table-header', 'table-row', 'card'],
   ],
   [
     'label badges: pill shaped, rounder cards, compact tables, 12px medium text, 1px #d1d9e0 border, transparent background',
     [],
-    ['badge'],
+    ['badge', 'card', 'table-row'],
   ],
   [
     'underline nav: 2px #fd8c73 underline on the selected item, rounder cards, compact tables, #59636e text on the rest, 14px text',
     [],
-    ['tab'],
+    ['tab', 'card', 'table-row'],
   ],
   [
     'navigation rail: #fef7ff background, rounder cards, compact tables, 80px wide; the selected item gets a #e8def8 pill',
     [],
-    ['side-nav', 'side-nav-item'],
+    ['side-nav', 'side-nav-item', 'card', 'table-row'],
   ],
   [
     'the top nav: #111827 background, rounder cards, compact tables, white text, and the current item #1f2937 with white text',
     [],
-    ['top-nav', 'top-nav-item'],
+    ['top-nav', 'top-nav-item', 'card', 'table-row'],
   ],
   [
     'selected tab text white, rounder cards, compact tables, other tabs gray',
@@ -494,7 +500,7 @@ export const LOCK = [
   [
     'table header: uppercase 12px text, rounder cards, compact tables, gray #6b7280',
     [],
-    ['table-header-cell'],
+    ['table-header-cell', 'card', 'table-row'],
   ],
   [
     'white page, rounder cards, compact tables, never use pure black for text',
@@ -504,12 +510,12 @@ export const LOCK = [
   [
     'lozenges: subtle gray background, rounder cards, compact tables, bold uppercase 11px text',
     [],
-    ['badge'],
+    ['badge', 'card', 'table-row'],
   ],
   [
     'toasts: #322f35 background, rounder cards, compact tables, #f5eff7 text, #d0bcff action button text',
     [],
-    ['toast'],
+    ['toast', 'card', 'table-row'],
   ],
   [
     'table header text uppercase, rounder cards, compact tables, gray, 12px, bold',
@@ -539,7 +545,7 @@ export const LOCK = [
   [
     'status badges: green stable, rounder cards, compact tables, amber pending, red critical',
     [],
-    ['badge'],
+    ['badge', 'card', 'table-row'],
   ],
   [
     'cards 8px corners, rounder cards, compact tables, brighter and more cheerful',

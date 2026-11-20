@@ -10135,19 +10135,22 @@ export function draftAnswer(ctx, env, question) {
           x => x.on === holder || (FAMILIES[holder] ?? []).includes(x.on),
         ) &&
         !(FAMILIES[c.parts[0].on] ?? []).includes(holder) &&
-        // (In a with-list, only a part the head holds: "cards tinted blue
-        // with a navy header" names the app's header, which no card holds.
-        // A part that sits in running text, a link, is held where that text
-        // is: "dark navigation bar with white links". A colon list is the
-        // head's own: "alerts like Bootstrap 1: …, bold title" is the
-        // alert's title.)
-        (joinOf.get(c)?.list !== 'with' ||
-          [c.parts[0].on, ...(FAMILIES[c.parts[0].on] ?? [])].some(
-            x =>
-              (C.MAP[holder].contains ?? []).includes(x) ||
-              ((C.MAP[holder].contains ?? []).includes('text') &&
-                (C.MAP.text?.contains ?? []).includes(x)),
-          ))
+        // (Only a part the head holds: "cards tinted blue with a navy
+        // header" names the app's header, which no card holds, and
+        // "navigation rail: …, rounder cards" names the app's cards, which
+        // no rail holds. A part that sits in running text, a link, is held
+        // where that text is: "dark navigation bar with white links". In a
+        // colon list it is the head's even where the head holds no text:
+        // "tabs: …, blue links" asks for links in the tabs.)
+        [c.parts[0].on, ...(FAMILIES[c.parts[0].on] ?? [])].some(x => {
+          const holds = C.MAP[holder].contains ?? [];
+          const inText = (C.MAP.text?.contains ?? []).includes(x);
+          return (
+            holds.includes(x) ||
+            (inText &&
+              (holds.includes('text') || joinOf.get(c)?.list !== 'with'))
+          );
+        })
       ) {
         c.container = holder;
         c.placeStrict = {holder, part: c.parts[0].on};

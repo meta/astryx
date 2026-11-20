@@ -163,6 +163,13 @@ const ROWS = [
     },
   ],
   [
+    "a part a colon list's head does not hold is its own, as main reads it",
+    {
+      q: 'navigation rail: #fef7ff background, rounder cards, compact tables, 80px wide; the selected item gets a #e8def8 pill',
+      has: ['corners more --on card', 'spacing less --on table-row'],
+    },
+  ],
+  [
     'links in tabs, which hold no link, are named, never written on the tab',
     {
       q: 'tabs: 14px text, blue links',
