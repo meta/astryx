@@ -4430,7 +4430,15 @@ function carryTyped(e, sub, slug, thing, typed, data, cwd = process.cwd()) {
       },
     });
   });
-  const covered = coversTyped(reads, typedText, String(thing));
+  const covered = coversTyped(
+    reads,
+    typedText,
+    String(thing),
+    e.suggestions.map(x => {
+      const m = head.exec(x.name);
+      return m ? (m[3] ?? m[4]) : undefined;
+    }),
+  );
   /** @type {Set<string>} */
   const dropped = new Set();
   const lines = e.suggestions.filter((x, i) => {
