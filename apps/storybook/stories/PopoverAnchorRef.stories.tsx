@@ -5,8 +5,9 @@
  * @input usePopover, Button and TextInput from @astryxdesign/core
  * @output A story with one popover shared by three table rows. Each row's
  *   edit button sets `anchorRef` to that row's value cell and calls `show()`.
- *   A button removes and restores row B's value cell. A counter shows how
- *   often the popover reported a show and a hide
+ *   A button removes and restores row B's value cell, and a button inside
+ *   the popover removes it. A counter shows how often the popover reported a
+ *   show and a hide
  * @position Fixture for Popover/__tests__/PopoverAnchor.interaction.browser.spec.ts
  */
 
@@ -71,15 +72,24 @@ function RowEditor() {
           ))}
         </tbody>
       </table>
-      <Button
-        label={isRowBShown ? 'Remove row B value' : 'Restore row B value'}
-        onClick={() => setIsRowBShown(isShown => !isShown)}
-      />
-      <output data-testid="counts">
-        shows {counts.shows}, hides {counts.hides}
-      </output>
+      {/* Far enough below the table that the open popover never covers it. */}
+      <div style={{marginBlockStart: 240}}>
+        <Button
+          label={isRowBShown ? 'Remove row B value' : 'Restore row B value'}
+          onClick={() => setIsRowBShown(isShown => !isShown)}
+        />
+        <output data-testid="counts">
+          shows {counts.shows}, hides {counts.hides}
+        </output>
+      </div>
       {popover.render(
-        <TextInput label="Value" value={value} onChange={setValue} />,
+        <>
+          <TextInput label="Value" value={value} onChange={setValue} />
+          <Button
+            label="Delete value B"
+            onClick={() => setIsRowBShown(false)}
+          />
+        </>,
       )}
     </div>
   );
