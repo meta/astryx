@@ -143,6 +143,19 @@ describe('--only, as set writes it and the reader reads it', () => {
       expect(fs.readFileSync(file(), 'utf8')).toBe(before);
       const css = fs.readFileSync(path.join(cwd, 'themes/n/n.css'), 'utf8');
       expect(css).toContain('rgba(0, 0, 0, 0.25)');
+      // An undo by name, without --only, finds the saved entry itself.
+      await themeEditUndo('n', {
+        cwd,
+        thing: 'text-shadow',
+        on: 'segmented-control-item',
+        state: 'selected',
+      });
+      expect(
+        read().settings.filter(
+          (/** @type {any} */ x) => x.state === 'selected',
+        ),
+      ).toEqual([]);
+      write(settings);
       // The line a refusal would offer, without --only, replaces it: one
       // entry for the place, never a twin; a bare undo removes it.
       await themeEditSet('n', 'text-shadow', 'none', {
@@ -193,6 +206,18 @@ describe('--only, as set writes it and the reader reads it', () => {
       ]);
       const r = await themeEditShow('n', {cwd});
       expect(notes(r)).toMatch(/the earlier one is left out/);
+      const css = fs.readFileSync(path.join(cwd, 'themes/n/n.css'), 'utf8');
+      expect(css).toContain('#111111');
+      // The next change saves only the later entry.
+      await themeEditSet('n', 'corners', 'round', {cwd});
+      expect(
+        read().settings.filter(
+          (/** @type {any} */ x) => x.on === 'pagination-item',
+        ),
+      ).toEqual([expect.objectContaining({value: '#111111'})]);
+      expect(read().settings.some((/** @type {any} */ x) => x.only)).toBe(
+        false,
+      );
     },
     T,
   );
@@ -210,7 +235,10 @@ describe('--only, as set writes it and the reader reads it', () => {
         },
       ]);
       const r = await themeEditShow('n', {cwd});
-      expect(JSON.stringify(r)).not.toMatch(/--on card --only/);
+      const text = JSON.stringify(r);
+      // (A line for the card is offered, and it carries no --only.)
+      expect(text).toMatch(/ --on card\b/);
+      expect(text).not.toMatch(/--on card --only/);
     },
     T,
   );

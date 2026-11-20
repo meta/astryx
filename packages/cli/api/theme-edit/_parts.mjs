@@ -2019,13 +2019,6 @@ export function familyRoles(
 const BLOCK_BOX =
   /^(height|min-height|max-height|(min-|max-)?block-size|padding(-(top|bottom|block(-start|-end)?))?|margin-(top|bottom|block(-start|-end)?))$/;
 
-/**
- * The properties that make a part a bar when set on it: its height, and
- * its vertical padding (see barRows).
- */
-export const BAR_REACH_THINGS =
-  /^(height|min-height|block-size|padding(-block|-top|-bottom)?(-start|-end)?)$/;
-
 /** The elements a control is drawn as: never a bar, nor a bar's row. */
 const CONTROL_TAGS = new Set(['button', 'a', 'input', 'select', 'textarea', 'label']);
 
