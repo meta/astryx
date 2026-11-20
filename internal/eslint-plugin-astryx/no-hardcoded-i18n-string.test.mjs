@@ -152,6 +152,19 @@ ruleTester.run('no-hardcoded-i18n-string', noHardcodedI18nStringRule, {
         },
       ],
     },
+    // An exemption for another file is not judged here.
+    {
+      code: "const thumbLabel = 'Minimum value';",
+      filename: '/repo/packages/core/src/Slider/Slider.tsx',
+      options: [
+        {
+          allowedStringsByFile: {
+            'Slider/Slider.tsx': ['Minimum value'],
+            'Timer/Timer.tsx': ['h '],
+          },
+        },
+      ],
+    },
     {
       code: 'const ariaLabel = `Resize column ${key}`;',
       filename: 'C:\\repo\\Table\\useTableColumnResize.tsx',
@@ -437,6 +450,15 @@ ruleTester.run('no-hardcoded-i18n-string', noHardcodedI18nStringRule, {
         },
       ],
     },
+    // An exemption that matches nothing in its file is reported.
+    {
+      code: "const thumbLabel = t('slider.minimum');",
+      filename: '/repo/packages/core/src/Slider/Slider.tsx',
+      options: [
+        {allowedStringsByFile: {'Slider/Slider.tsx': ['Minimum value']}},
+      ],
+      errors: [{messageId: 'staleExemption', data: {value: '"Minimum value"'}}],
+    },
     // An exempted chunk does not exempt the rest of its template.
     {
       code: 'const ariaLabel = `Resize column ${h} of ${total} total`;',
@@ -462,6 +484,8 @@ ruleTester.run('no-hardcoded-i18n-string', noHardcodedI18nStringRule, {
         {allowedStringsByFile: {'PowerSearch/PowerSearch.tsx': ['items']}},
       ],
       errors: [
+        // The trimmed value matches nothing, so the entry is stale too.
+        {messageId: 'staleExemption', data: {value: '"items"'}},
         {
           messageId: 'hardcodedString',
           data: {value: '" items"', name: 'children'},

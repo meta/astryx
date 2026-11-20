@@ -186,6 +186,21 @@ async function readMenu(page: Page, scope: string) {
       size: menu?.getAttribute('data-size') ?? null,
       width: menuBox ? Math.round(menuBox.width * 10) / 10 : null,
       nestedInMenu: menu?.parentElement?.closest('[role="menu"]') != null,
+      // The accessible name of the menu around this element, if any.
+      hostMenuName: (() => {
+        const host = menu?.parentElement?.closest<HTMLElement>('[role="menu"]');
+        if (host == null) {
+          return null;
+        }
+        const labelledBy = host.getAttribute('aria-labelledby');
+        const byText = labelledBy
+          ?.split(/\s+/)
+          .map(id => document.getElementById(id)?.textContent?.trim() ?? '')
+          .join(' ')
+          .trim();
+        return byText || host.getAttribute('aria-label');
+      })(),
+      innerMenus: menu?.querySelectorAll('[role="menu"]').length ?? 0,
       rows: rows.map(row => {
         const rect = row.getBoundingClientRect();
         const icon = row.querySelector('svg');
@@ -217,8 +232,8 @@ async function readMenu(page: Page, scope: string) {
 type Menu = Awaited<ReturnType<typeof readMenu>>;
 
 /** The standing row contract: roles, tab stops, target, size, and text. */
-function checkRows(check: Check, menu: Menu, size: string) {
-  check(menu.role === 'menu', `menu role ${menu.role}`);
+function checkRows(check: Check, menu: Menu, size: string, role = 'menu') {
+  check(menu.role === role, `menu role ${menu.role}`);
   check(menu.size === size, `menu data-size ${menu.size}`);
   check(menu.rows.length > 0, 'no menuitem rows');
   for (const row of menu.rows) {
@@ -414,11 +429,17 @@ for (const mode of ['light', 'dark'] as const) {
       await page.locator('.astryx-nav-heading-menu').waitFor();
       await settle(page);
       const open = await readMenu(page, 'body');
-      checkRows(check, open, 'md');
+      // Inside a heading, the element is presentational: the heading's own
+      // "Acme Suite" menu holds the rows, and no menu sits inside it.
+      checkRows(check, open, 'md', 'none');
+      check(open.nestedInMenu, 'rows are not in the heading menu');
+      check(
+        open.hostMenuName?.includes('Acme Suite') === true,
+        `host menu name ${open.hostMenuName}`,
+      );
+      check(open.innerMenus === 0, `${open.innerMenus} menus inside`);
       const openAxe = await axe(page);
       checkAxe(check, openAxe);
-      // The menu sits inside the heading's own menu and has no name of its
-      // own. The receipt records both facts and does not fail on them.
       await frame('open', {
         open,
         focus: focusedRow(open),

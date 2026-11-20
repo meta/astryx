@@ -495,8 +495,8 @@ const RUNNERS = {
     sites: ['import(<computed>)'],
   },
   'foundation/render/render-page.mjs': {
-    runs: "the render host process, so a page that never finishes can be stopped and a crash of Node ends only that process, a one-line Intl.Segmenter check after a crash, and the naming module of the page's own Core, to keep the theme rules for the class names Core builds while the page runs",
-    sites: ['child_process.fork', 'child_process.spawnSync', 'importUrl'],
+    runs: "the render host process, so a page that never finishes can be stopped and a crash of Node ends only that process, a one-line Intl.Segmenter check after a crash, the naming module of the page's own Core, to keep the theme rules for the class names Core builds while the page runs, and a parse check of the page's script once it reads its images from the first paint",
+    sites: ['child_process.fork', 'child_process.spawnSync', 'importUrl', 'vm.Script'],
   },
   'foundation/render/page-host.mjs': {
     runs: 'the render worker, in a thread of the host process, so the host can exit with the CLI or at its own time limit while a page loops',

@@ -143,7 +143,10 @@ const styles = stylex.create({
     transform: 'translateY(-50%)',
     overflow: 'hidden',
     borderRadius: radiusVars['--radius-full'],
-    backgroundColor: colorVars['--color-track'],
+    // The theme's track color can match a dark frosted surface. Such a
+    // surface, like the video control bar, sets a track color that shows on
+    // it.
+    backgroundColor: `var(--_media-timeline-track, ${colorVars['--color-track']})`,
   }),
   buffered: (width: number) => ({
     position: 'absolute',

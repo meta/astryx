@@ -13,10 +13,16 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {spawnSync} from 'node:child_process';
+import {execFileSync, spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {afterEach, describe, expect, it} from 'vitest';
-import {pinReleasePlan, versionAtDeclared} from './version-packages.mjs';
+import {
+  createRepository,
+  importCommits,
+  workingTreeFiles,
+} from '../lib/git-fixture.mjs';
+import {buildMarker, buildPlan} from './active-release.mjs';
+import {main, pinReleasePlan, versionAtDeclared} from './version-packages.mjs';
 
 const REPO = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -28,6 +34,10 @@ const FIXED = [
   '@astryxdesign/theme-neutral',
 ];
 const roots = [];
+
+function git(root, ...args) {
+  return execFileSync('git', args, {cwd: root, encoding: 'utf8'}).trim();
+}
 
 function write(root, file, contents) {
   fs.mkdirSync(path.dirname(path.join(root, file)), {recursive: true});
@@ -203,6 +213,56 @@ describe('pinReleasePlan', () => {
 });
 
 describe('versioning runs only on a release branch', () => {
+  it('admits a matching owner recut and refuses after its tag moves', async () => {
+    const root = workspace('0.6.5', {'fix-it': FIX});
+    const branch = 'release/v0.6.5';
+    const {cut} = createRepository(
+      root,
+      [
+        {
+          ref: `refs/heads/${branch}`,
+          name: 'cut',
+          message: 'cut',
+          snapshot: true,
+          files: workingTreeFiles(root),
+        },
+      ],
+      {branch},
+    );
+    git(root, 'tag', 'v0.6.4', cut);
+    git(root, 'tag', 'v0.6.5', cut);
+    const ownerRecut = {
+      version: '0.6.5',
+      tagName: 'v0.6.5',
+      tagSha: cut,
+      receiptSha256: 'a'.repeat(64),
+    };
+    const plan = buildPlan({
+      root,
+      version: '0.6.5',
+      branch,
+      cutSha: cut,
+      ownerRecut,
+    });
+    write(root, '.release/plan.json', plan);
+    write(root, '.release/active.json', buildMarker(plan));
+
+    await expect(main([], root)).resolves.toBeUndefined();
+
+    const {movedTagTarget} = importCommits(root, [
+      {
+        ref: `refs/heads/${branch}`,
+        parent: `refs/heads/${branch}`,
+        name: 'movedTagTarget',
+        message: 'move archived tag',
+      },
+    ]);
+    git(root, 'tag', '-f', 'v0.6.5', movedTagTarget);
+    await expect(main([], root)).rejects.toThrow(
+      'archived owner-recut tag no longer matches its bound commit',
+    );
+  });
+
   it('refuses on a checkout with no active release marker, such as main', () => {
     if (fs.existsSync(path.join(REPO, '.release/active.json'))) return;
     const result = spawnSync(
