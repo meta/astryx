@@ -188,7 +188,8 @@ export function projectLooks(choice) {
  * definition names also has its meaning import. With no set installed, not
  * even a withdrawn one, the answer names the Astryx icon definitions that
  * match, built-in ones first, with the built-in that draws in place of a
- * matching definition Core does not draw, and how to get a set.
+ * matching definition Core does not draw (unless a better match has none),
+ * and how to get a set.
  * @param {Parameters<typeof rankIcons>[0]} sets in tie order
  * @param {Array<{name: string, package: string, reason: string}>} withdrawn
  * @param {string} query
