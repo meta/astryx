@@ -559,10 +559,9 @@ export function usePackedCli() {
     // No run starts the global copy's background Core step, as placeCli
     // leaves it out: once this version is published, the step installs its
     // Core into a kept temp folder's release cache, and later runs there then
-    // name a Core that a fresh run does not.
-    fs.rmSync(path.join(packed, 'foundation', 'release', 'core-worker.mjs'), {
-      force: true,
-    });
+    // name a Core that a fresh run does not. The removal fails when the step
+    // is not there, so a renamed step fails here, not at the next release.
+    fs.rmSync(path.join(packed, 'foundation', 'release', 'core-worker.mjs'));
     // What `prepack` writes for a published package.
     fs.writeFileSync(
       path.join(packed, BUILD_ID),
