@@ -37,7 +37,7 @@
 
 /**
  * @typedef {object} TonalPaletteGenerationInput
- * @property {'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3'} [recipe] The recipe to run: astryx-oklch-v1 when none is named, so a request or config made before v2 keeps its colors; astryx-oklch-v2 makes pale stops follow the vibrancy and the seed's own chroma; astryx-oklch-v3 is v2 with a dusty seed's palest tints (shade 90 and paler) kept at or below its own chroma. New palettes name the newest, v3 (the theme editor records it); a config pins its recipe by naming it.
+ * @property {'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3'} [recipe] The recipe to run: astryx-oklch-v1 when none is named, so a request or config made before v2 keeps its colors; astryx-oklch-v2 makes pale stops follow the vibrancy and the seed's own chroma; astryx-oklch-v3 is v2 with a dusty seed's palest tints (shade 90 and paler) kept at or below its own chroma. The theme editor names the newest, v3, for a new palette; a config pins its recipe by naming it.
  * @property {TonalPaletteFamilyInput[]} families
  * @property {number} [vibrancy] Chroma control from 0 (most muted) through 50 (default) to 100 (most vivid).
  * @property {'neutral-v1' | 'warm-v1' | 'cool-v1' | 'custom'} [neutralProfile] Hue treatment for `neutral` families: `neutral-v1` is fully achromatic, `warm-v1` and `cool-v1` add a slight tint, and `custom` derives the hue from the family's own seed. Defaults to `neutral-v1`.

@@ -272,9 +272,9 @@
  * run: astryx-oklch-v1 when none is named, so a request or config made
  * before v2 keeps its colors; astryx-oklch-v2 makes pale stops
  * follow the vibrancy and the seed's own chroma; astryx-oklch-v3 is v2 with
- * a dusty seed's pale tints kept at or below its own chroma. New palettes
- * name the newest, v3 (the theme editor records it); a config pins its
- * recipe by naming it.
+ * a dusty seed's palest tints (shade 90 and paler) kept at or below its own chroma. The theme editor
+ * names the newest, v3, for a new palette; a config pins its recipe by
+ * naming it.
  * @property {TonalPaletteFamilyInput[]} families
  * @property {number} [vibrancy] Chroma control from 0 (most muted) through 50
  * (default) to 100 (most vivid).

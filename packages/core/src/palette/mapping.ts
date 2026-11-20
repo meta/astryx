@@ -1399,8 +1399,8 @@ export function mapPalette(
         : over(names.muted, muted[m] as StopRef, surfaces(m, f.id));
     };
 
-    // Accent text and icons are the color given where it reads on what
-    // they sit on (the surfaces and the tint), in each mode its fill is
+    // Accent text is the color given where it reads on what it sits on
+    // on (the surfaces and the tint), in each mode its fill is
     // the exact color; only where it does not do they move, to the nearest
     // shade that reads, and the check says so.
     const text = each(m => {
@@ -1452,7 +1452,7 @@ export function mapPalette(
             .map(([n, x]) => `${round(x)}:1 on ${n}`)
             .join(
               ', ',
-            )} (text needs ${TEXT}:1), so ${f.id === 'accent' ? 'links and accent text' : `${f.id} text and icons`} use shade ${shade(moved.stop)} (${moved.color}), the nearest that reads; the fill keeps your color, and an exact ${names.text} keeps any color you give it`;
+            )} (text needs ${TEXT}:1), so ${f.id === 'accent' ? 'links and accent text use' : `${f.id} text uses`} shade ${shade(moved.stop)} (${moved.color}), the nearest that reads; the fill keeps your color, and an exact ${names.text} keeps any color you give it`;
         }
         return moved;
       }

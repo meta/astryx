@@ -318,7 +318,7 @@ const V2_SHARED_FROM = 1.3;
 /**
  * From this tone v3 starts to draw a tint at the seed's own chroma; by
  * V3_PALE_FROM + V3_PALE_SPAN it draws it wholly. The middle of a ramp, up
- * to tone 70, stays as v1 draws it.
+ * to tone 70, stays as v2 draws it.
  */
 const V3_PALE_FROM = 70;
 const V3_PALE_SPAN = 15;
