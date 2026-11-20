@@ -19,7 +19,7 @@ import {
   generateTonalPalette,
   perceptualDelta,
 } from './generator.mjs';
-import {deriveLookColors, lookSeeds} from './derive-look.mjs';
+import {deriveLookColors} from './derive-look.mjs';
 
 /** @typedef {import('./types.mjs').TonalPaletteCandidate} TonalPaletteCandidate */
 
@@ -1118,21 +1118,6 @@ export function planPaletteRequest(dials, options, context) {
   }
   if (Object.keys(fills).length) {
     config.families = anchorDarkFills(config, dials, fills, context);
-  }
-  // The editor grows more families (context.editor).
-  if (context.editor) {
-    // The category and chart hues grow with the look, after the theme's own
-    // colors.
-    const derived = lookSeeds(dials.find(d => d.id === 'accent')?.seed);
-    for (const [id, seed] of Object.entries(derived)) {
-      if (!config.families.some(f => f?.id === id)) {
-        config.families.push({
-          id,
-          name: id[0].toUpperCase() + id.slice(1),
-          seed,
-        });
-      }
-    }
   }
   return {config, fills};
 }

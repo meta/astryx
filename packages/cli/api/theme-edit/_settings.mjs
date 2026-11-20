@@ -6821,13 +6821,6 @@ export function compileTheme(ctx, data, base) {
             // build by an earlier editor, or a step back) are kept, as the
             // colors are: they change only when corners or the base does.
             putTok(token, ctx.keepRadii?.[token] ?? derived(token));
-          // Chat surfaces (a composer, its drawer, a message bubble) read
-          // --radius-chat, which Core defaults to the container radius and
-          // the bundled themes pin to a value of their own: the dial gives it
-          // back to the container radius, as Core's own default does, so it
-          // follows whatever container radius the theme ends up with (the
-          // dial's, or an exact one set after it).
-          putTok('--radius-chat', 'var(--radius-container)');
           // A part rule of the base theme that gives a radius other than the
           // dial token the part reads (a length, or a token the dial never
           // moves, such as --radius-full) would keep it over the dial: the
