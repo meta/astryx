@@ -277,7 +277,7 @@ const ROWS = [
     {
       q: 'Make the cards rounder. Make the headings bold. Undo the card change and the heading change.',
       has: ['corners more --on card', 'headings bold'],
-      says: /names more than one change[\s\S]*one at a time/,
+      says: /names more than one change, so none is taken back and each stays written/,
     },
   ],
   [
@@ -285,7 +285,7 @@ const ROWS = [
     {
       q: 'Make the headings bold. Undo the card change and the heading change.',
       has: ['headings bold'],
-      says: /names more than one change[\s\S]*one at a time/,
+      says: /names more than one change, so none is taken back and each stays written/,
     },
   ],
   [
@@ -310,6 +310,21 @@ const ROWS = [
       q: 'Make the headings 20px. Undo the heading change. A blue accent.',
       has: ["accent '#2563eb'"],
       says: /^(?![\s\S]*not used)/,
+    },
+  ],
+  [
+    "an undo of a part's color takes back its fill",
+    {
+      q: 'Make the buttons blue. Undo the button color change.',
+      never: /--on button/,
+    },
+  ],
+  [
+    "an undo of a part's color takes back its fill and its text",
+    {
+      q: 'Blue buttons with white text. Undo the button color change.',
+      never: /--on button/,
+      says: /taken back by its undo/,
     },
   ],
   [

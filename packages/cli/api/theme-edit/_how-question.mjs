@@ -27707,6 +27707,11 @@ export function draftAnswer(ctx, env, question) {
     const [, what, part] =
       /^(.+?)(?: on ([a-z0-9-]+))?$/.exec(String(unmet.unmet ?? '')) ?? [];
     const undoAt = clauses.indexOf(/** @type {any} */ (draftClause.get(unmet)));
+    // ("Undo the button color change": a part's color is its fill and its
+    // text, and the readable text a fill brings.)
+    const colorSaid = /\bcolou?rs?\b/i.test(
+      String(/** @type {any} */ (draftClause.get(unmet))?.text ?? ''),
+    );
     const undone = result.filter(d => {
       const c = /** @type {any} */ (draftClause.get(d));
       if (d === unmet || d.unmet || !d.options.length || !c) return false;
@@ -27722,6 +27727,8 @@ export function draftAnswer(ctx, env, question) {
         onPart &&
         (what === 'everything' ||
           c.aspects?.includes(what) ||
+          (colorSaid &&
+            ['text', 'background'].some(a => c.aspects?.includes(a))) ||
           d.options
             .flat()
             .some(
@@ -27752,6 +27759,7 @@ export function draftAnswer(ctx, env, question) {
     const looksSaid = [
       ...(uc?.aspects ?? []),
       ...(what === 'everything' ? [] : [what]),
+      ...(colorSaid ? ['text', 'background'] : []),
       ...(/\b(?:sizes?|weights?|bold|colou?rs?|spacing|padding|corners?|radius|shadows?|borders?|fonts?|leading|line[- ]height)\b/i.test(
         String(uc?.text ?? ''),
       )
@@ -27785,7 +27793,7 @@ export function draftAnswer(ctx, env, question) {
         undone.some(d => !looksSaid.some(a => lookOf(d).includes(a))));
     if (unsure) {
       unmet.text = several
-        ? `the undo names more than one change, so nothing is taken back; undo them one at a time`
+        ? `the undo names more than one change, so none is taken back and each stays written; undo them one at a time`
         : loose
           ? `the undo does not say which earlier change it means, so nothing is taken back; name the part ("undo the card corners")`
           : `the undo could mean more than one earlier change, so nothing is taken back; undo them one at a time`;
@@ -27816,6 +27824,32 @@ export function draftAnswer(ctx, env, question) {
       result.length,
       ...result.filter(d => d !== unmet && !undone.includes(d)),
     );
+    // (A color taken back leaves no line of it anywhere: the fill, its text
+    // and the readable text the fill brought.)
+    if (colorSaid && part) {
+      const COLOR_THINGS =
+        /^(?:color|background|background-color|--color-(?:text|background)-[a-z0-9-]+)$/;
+      const onIt = (/** @type {Step} */ st) =>
+        (st.on === part || (FAMILIES[part] ?? []).includes(String(st.on))) &&
+        COLOR_THINGS.test(String(st.thing));
+      for (const d of result)
+        if (d.options.length)
+          d.options = d.options
+            .map(o => o.filter(st => !onIt(st)))
+            .filter(o => o.length);
+      result.splice(
+        0,
+        result.length,
+        ...result.filter(
+          d =>
+            d.options.length ||
+            d.unmet ||
+            !/^(?:readable text on that fill|the background on|text color on)/.test(
+              d.text,
+            ),
+        ),
+      );
+    }
     for (const d of [unmet, ...undone]) {
       const c = draftClause.get(/** @type {any} */ (d));
       if (c) answeredByUndo.add(c);
