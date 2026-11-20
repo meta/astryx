@@ -1294,7 +1294,10 @@ export function createMotionEngine(
   element: HTMLElement | null,
   options: AnimatorOptions = {},
 ): Animator {
-  const now = options.now ?? (() => motionNow(element?.ownerDocument));
+  // The document of the element it moves now: an engine made without its
+  // element reads the one an attach gives it.
+  const now =
+    options.now ?? (() => motionNow((target ?? element)?.ownerDocument));
   const frameSource =
     options.requestFrame ??
     (typeof requestAnimationFrame === 'function'
@@ -3117,7 +3120,7 @@ export function createMotionEngine(
    */
   const startAfterBlock = (group: StartGroup, start: number): number => {
     const doc =
-      element?.ownerDocument ??
+      (target ?? element)?.ownerDocument ??
       (typeof document === 'undefined' ? undefined : document);
     const timeline = doc?.timeline?.currentTime as number | null | undefined;
     // A start well after the animations were created is the browser's

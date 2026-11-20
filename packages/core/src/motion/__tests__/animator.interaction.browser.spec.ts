@@ -1815,9 +1815,15 @@ test('restoring full timeline speed mid-flight, get and stop stay on screen', as
 });
 
 // In another document, such as an iframe made after the page loaded, the
-// clock is that document's own: its timeline, on its own time origin.
-for (const rate of [1, 0.25]) {
-  test(`in an iframe made after the page, at ${rate}x timeline speed, get and stop give the value on screen`, async ({
+// clock is that document's own: its timeline, on its own time origin. An
+// engine made without its element reads the document it is attached in.
+for (const [rate, made] of [
+  [1, 'with its element'],
+  [0.25, 'with its element'],
+  [1, 'without one, then attached'],
+  [0.25, 'without one, then attached'],
+] as const) {
+  test(`in an iframe made after the page, an engine made ${made}, at ${rate}x timeline speed, get and stop give the value on screen`, async ({
     page,
     browserName,
   }) => {
@@ -1831,7 +1837,7 @@ for (const rate of [1, 0.25]) {
       await setTimelineSpeed(page, rate);
     }
     const result = await page.evaluate(
-      async ({spring, travel}) => {
+      async ({spring, travel, attachedLater}) => {
         const iframe = document.createElement('iframe');
         iframe.style.cssText =
           'position: absolute; top: 120px; left: 0; width: 400px; height: 200px; border: 0';
@@ -1846,7 +1852,12 @@ for (const rate of [1, 0.25]) {
         await loaded;
         const view = iframe.contentWindow as Window & typeof globalThis;
         const box = view.document.getElementById('box') as HTMLElement;
-        const animator = Motion.createMotionEngine(box);
+        // An engine made without its element, as `useAnimator` makes one,
+        // and attached to it later.
+        const animator = Motion.createMotionEngine(attachedLater ? null : box);
+        if (attachedLater) {
+          animator.attach(box);
+        }
         const x = () =>
           Number.parseFloat(
             view.getComputedStyle(box).translate.split(' ')[0],
@@ -1887,10 +1898,14 @@ for (const rate of [1, 0.25]) {
           requestAnimationFrame(step);
         });
       },
-      {spring: SLOW, travel: TRAVEL},
+      {
+        spring: SLOW,
+        travel: TRAVEL,
+        attachedLater: made !== 'with its element',
+      },
     );
     test.info().annotations.push({
-      type: `iframe at ${rate}x`,
+      type: `iframe, an engine made ${made}, at ${rate}x`,
       description: JSON.stringify(result),
     });
     expect(result.originGap).toBeGreaterThan(500);
