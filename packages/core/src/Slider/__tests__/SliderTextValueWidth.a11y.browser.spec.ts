@@ -41,11 +41,17 @@ async function mount(page: Page, story: string, direction: 'ltr' | 'rtl') {
 }
 
 /** The width of the control that holds a thumb's track. */
+/**
+ * The track's width to a quarter pixel. Layout rounds a text run's width to
+ * 1/64 px, so a text box padded to its widest text can differ by that much,
+ * which no one can see.
+ */
 async function trackWidth(thumb: Locator): Promise<number> {
-  return thumb.evaluate(
+  const width = await thumb.evaluate(
     el =>
       el.closest('.astryx-slider-control')?.getBoundingClientRect().width ?? 0,
   );
+  return Math.round(width * 4) / 4;
 }
 
 /** Presses a key on a thumb `count` times and records the track width each time. */
@@ -162,6 +168,59 @@ test('a value text wider in the middle than at the ends does not clip', async ({
   }
 });
 
+/** The value text box's width, and its text's own width. */
+async function textBox(thumb: Locator) {
+  return thumb.evaluate(el => {
+    const box = el
+      .closest('.astryx-slider')
+      ?.querySelector<HTMLElement>('.astryx-slider-control ~ span');
+    if (box == null) {
+      return null;
+    }
+    const range = document.createRange();
+    range.selectNodeContents(box);
+    return {
+      box: box.getBoundingClientRect().width,
+      text: range.getBoundingClientRect().width,
+    };
+  });
+}
+
+test('a unit around the digits reserves no blank space, and the track keeps its length', async ({
+  page,
+}) => {
+  await mount(page, 'core-slider--with-format-value', 'ltr');
+  const thumb = page.getByRole('slider', {name: 'Temperature'});
+  await thumb.focus();
+  await page.keyboard.press('Home');
+  const widths = new Set<number>();
+  for (let i = 0; i < 4; i++) {
+    const measured = await textBox(thumb);
+    expect(measured).not.toBeNull();
+    expect(
+      Math.abs((measured?.box ?? 0) - (measured?.text ?? Infinity)),
+    ).toBeLessThan(0.5);
+    widths.add(await trackWidth(thumb));
+    await page.keyboard.press('PageUp');
+  }
+  expect([...widths]).toHaveLength(1);
+});
+
+test('a word value reserves no blank space', async ({page}) => {
+  await mount(page, 'core-slider--text-value-widths', 'ltr');
+  const thumb = page.getByRole('slider', {name: 'Rating'});
+  await thumb.focus();
+  await page.keyboard.press('Home');
+  for (let i = 0; i < 5; i++) {
+    const measured = await textBox(thumb);
+    expect(measured).not.toBeNull();
+    expect(
+      Math.abs((measured?.box ?? 0) - (measured?.text ?? Infinity)),
+    ).toBeLessThan(0.5);
+    await page.keyboard.press('ArrowRight');
+  }
+});
+
 test('a dragged thumb stays under the pointer across 90 to 100', async ({
   page,
 }) => {
@@ -184,7 +243,7 @@ test('a dragged thumb stays under the pointer across 90 to 100', async ({
   if (control == null) {
     throw new Error('control has no box');
   }
-  const startWidth = control.width;
+  const startWidth = await trackWidth(thumb);
   const endX = control.x + control.width - 2;
   const steps = 10;
   const startX = box.x + box.width / 2;
