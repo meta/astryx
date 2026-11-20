@@ -703,18 +703,20 @@ export default function PaymentFormPage() {
                               controlStyle={fullWidth}
                             />
                           </StackItem>
-                          <Button
-                            label="Apply"
-                            variant="secondary"
-                            size="lg"
-                            onClick={() =>
-                              // Demo only: replace this toast with the call that applies the promo code.
-                              showToast({
-                                body: 'Demo: the promo code would be applied here',
-                                uniqueID: 'apply-promo',
-                              })
-                            }
-                          />
+                          <StackItem>
+                            <Button
+                              label="Apply"
+                              variant="secondary"
+                              size="lg"
+                              onClick={() =>
+                                // Demo only: replace this toast with the call that applies the promo code.
+                                showToast({
+                                  body: 'Demo: the promo code would be applied here',
+                                  uniqueID: 'apply-promo',
+                                })
+                              }
+                            />
+                          </StackItem>
                         </HStack>
                       </VStack>
 
