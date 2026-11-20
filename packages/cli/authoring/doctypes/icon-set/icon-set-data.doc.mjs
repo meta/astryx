@@ -82,7 +82,7 @@ export const doc = {
       name: 'map',
       type: 'Record<string, string>',
       description:
-        "Which of this set's icons draws each icon meaning: meaning name to icon `id`. Keys are Astryx's meanings (`astryx docs cli/experimental/icon-definitions`) or ones the set declares in its `definitions` folder, one file per meaning. One icon may draw several meanings; each meaning maps to one icon. Every built-in meaning must be mapped.",
+        "Which of this set's icons draws each icon meaning: meaning name to icon `id`. Keys are Astryx's meanings (`astryx docs cli/experimental/icon-meanings`) or ones the set declares in its `definitions` folder, one file per meaning. One icon may draw several meanings; each meaning maps to one icon. Every built-in meaning must be mapped.",
       example: '{"close": "x", "delete": "trash", "remove": "trash"}',
     },
     {

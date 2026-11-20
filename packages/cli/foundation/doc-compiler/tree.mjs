@@ -881,7 +881,7 @@ export async function loadTreeInputs({
     }
   }
   if (selfDocs) {
-    // Astryx's icon definitions, adopted by the `icon-definitions` namespace with
+    // Astryx's icon definitions, adopted by the `icon-meanings` namespace with
     // every installed set's own.
     const definitions = astryxIconDefinitions();
     for (const {file, message} of definitions.errors) {
@@ -964,7 +964,7 @@ export const ICON_DEFINITIONS_GROUP = 'icon-definitions';
 
 /**
  * One icon definition as a docs-tree input: grouped for the CLI's
- * `icon-definitions` namespace, which adopts them from every package.
+ * `icon-meanings` namespace, which adopts them from every package.
  * @param {import('../../authoring/doctypes/icon-definition/type').IconDefinitionDoc} doc
  * @param {string} file
  * @param {string} provider

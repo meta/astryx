@@ -110,8 +110,8 @@ export async function iconAdd(exportName, options) {
   refuseIgnoredPairs(
     {
       'an export name': passed(exportName),
-      '--definition': passed(givenDefinition),
-      '--new-definition': passed(newDefinition),
+      '--meaning': passed(givenDefinition),
+      '--new-meaning': passed(newDefinition),
       '--description': passed(description),
       '--words': passed(words),
       '--default': passed(useDefault),
@@ -120,15 +120,15 @@ export async function iconAdd(exportName, options) {
     },
     [
       ['--all', 'an export name'],
-      ['--all', '--definition'],
-      ['--all', '--new-definition'],
+      ['--all', '--meaning'],
+      ['--all', '--new-meaning'],
       ['--all', '--description'],
       ['--all', '--words'],
       ['--all', '--default'],
       ['--all', '--id'],
-      ['--definition', '--new-definition'],
-      ['--definition', '--description'],
-      ['--definition', '--words'],
+      ['--meaning', '--new-meaning'],
+      ['--meaning', '--description'],
+      ['--meaning', '--words'],
     ],
   );
   for (const [flag, value] of /** @type {const} */ ([
@@ -137,10 +137,10 @@ export async function iconAdd(exportName, options) {
   ])) {
     if (passed(value) && !passed(newDefinition)) {
       throw new AstryxError(
-        `${flag} describes a new meaning, so it needs --new-definition`,
+        `${flag} describes a new meaning, so it needs --new-meaning`,
         [
           {
-            name: `--new-definition <name> --description '<what it is for>' --words a,b`,
+            name: `--new-meaning <name> --description '<what it is for>' --words a,b`,
             reason: 'add your own meaning',
           },
         ],
@@ -311,12 +311,12 @@ export async function iconAdd(exportName, options) {
         [
           ...closestNames(definition, [...mappableDefinitions(set)]).map(
             name => ({
-              name: `--definition ${name}`,
+              name: `--meaning ${name}`,
               reason: 'a known icon meaning',
             }),
           ),
           {
-            name: `--new-definition ${definitionNameFromInput(definition)} --description '<what it is for>' --words a,b`,
+            name: `--new-meaning ${definitionNameFromInput(definition)} --description '<what it is for>' --words a,b`,
             reason: 'add it as your own meaning',
           },
         ],
@@ -559,7 +559,7 @@ function definitionMatches(set, exportName, from, id, passed = {}) {
         source,
         score: hit.score,
         reason: hit.reason,
-        command: `${base} --definition ${doc.name}`,
+        command: `${base} --meaning ${doc.name}`,
       };
     })
     .sort(
@@ -589,7 +589,7 @@ function definitionMatches(set, exportName, from, id, passed = {}) {
       matches,
       newDefinition: fits
         ? null
-        : `${base} --new-definition ${/^[a-z]/u.test(name) ? name : `icon${name}`} --description '<what the icon is for>' --words <word>,<word>`,
+        : `${base} --new-meaning ${/^[a-z]/u.test(name) ? name : `icon${name}`} --description '<what the icon is for>' --words <word>,<word>`,
       ...(asLook ? {variant: asLook} : {}),
     },
   };

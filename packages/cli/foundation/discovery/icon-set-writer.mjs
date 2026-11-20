@@ -330,7 +330,7 @@ export function writeIconSetData(set, next, {extraDefinitions = []} = {}) {
   for (const name of Object.keys(parsed.map ?? {})) {
     if (!known.has(name)) {
       throw new IconSetAuthoringError(
-        `"${name}" is not an icon meaning. Use an Astryx icon meaning (astryx docs cli/experimental/icon-definitions), or add your own.`,
+        `"${name}" is not an icon meaning. Use an Astryx icon meaning (astryx docs cli/experimental/icon-meanings), or add your own.`,
         'ERR_INVALID_ARGUMENT',
         [
           ...closestNames(name, [...known]).map(each => ({
@@ -338,7 +338,7 @@ export function writeIconSetData(set, next, {extraDefinitions = []} = {}) {
             reason: 'a known icon meaning',
           })),
           {
-            name: `astryx experimental icon new-definition ${name} --set ${set.name}`,
+            name: `astryx experimental icon new-meaning ${name} --set ${set.name}`,
             reason: 'add it as your own meaning',
           },
         ],
@@ -1288,7 +1288,7 @@ export function checkNewDefinition(set, given) {
     throw new IconSetAuthoringError(
       `Astryx already has the icon meaning "${doc.name}"; map to it instead of adding your own.`,
       'ERR_INVALID_ARGUMENT',
-      [{name: `--definition ${doc.name}`, reason: "use Astryx's meaning"}],
+      [{name: `--meaning ${doc.name}`, reason: "use Astryx's meaning"}],
     );
   }
   const description = (doc.description ?? '').trim();

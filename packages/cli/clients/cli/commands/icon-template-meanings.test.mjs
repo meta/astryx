@@ -2,7 +2,7 @@
 
 /**
  * @file Template icon meanings while authoring a set (AST-084 FR13, FR15):
- * the authoring receipts, `experimental icon --definitions`, and
+ * the authoring receipts, `experimental icon --meanings`, and
  * `integration check` name the icon definitions the bundled templates use
  * that the set leaves unmapped, most used first, and never fail a check.
  */
@@ -155,7 +155,7 @@ describe('authoring receipts name the template meanings a set leaves unmapped', 
       './icons/home.js',
       '--id',
       'house',
-      '--definition',
+      '--meaning',
       'document',
     ]);
     expect(code).toBe(0);
@@ -203,10 +203,10 @@ describe('authoring receipts name the template meanings a set leaves unmapped', 
   });
 });
 
-describe('experimental icon --definitions marks template use and the set', () => {
+describe('experimental icon --meanings marks template use and the set', () => {
   it('in an icon-set package: each definition has its template count and whether the set maps it', async () => {
     writeIconPackage(pkg);
-    const {code, body} = await json(['experimental', 'icon', '--definitions']);
+    const {code, body} = await json(['experimental', 'icon', '--meanings']);
     expect(code).toBe(0);
     expect(body.data.set).toBe('@acme/glyphs/glyphs');
     /** @type {Map<string, any>} */
@@ -232,7 +232,7 @@ describe('experimental icon --definitions marks template use and the set', () =>
       expect(each.fallback).toBe(drawnBy);
     }
 
-    const text = await runCli(['experimental', 'icon', '--definitions'], pkg);
+    const text = await runCli(['experimental', 'icon', '--meanings'], pkg);
     expect(text.stdout).toContain('checked against @acme/glyphs/glyphs');
     expect(text.stdout).toMatch(
       new RegExp(
@@ -249,13 +249,10 @@ describe('experimental icon --definitions marks template use and the set', () =>
     const project = writeIconSetProject(tmp, {
       config: {experimental: {iconSet: 'glyphs'}},
     });
-    const chosen = await json(
-      ['experimental', 'icon', '--definitions'],
-      project,
-    );
+    const chosen = await json(['experimental', 'icon', '--meanings'], project);
     expect(chosen.body.data.set).toBe('@acme/glyphs/glyphs');
     const named = await json(
-      ['experimental', 'icon', '--definitions', '--set', 'glyphs'],
+      ['experimental', 'icon', '--meanings', '--set', 'glyphs'],
       project,
     );
     expect(named.body.data.set).toBe('@acme/glyphs/glyphs');
@@ -264,7 +261,7 @@ describe('experimental icon --definitions marks template use and the set', () =>
     );
     expect(search.mapped).toBe(true);
     const missing = await json(
-      ['experimental', 'icon', '--definitions', '--set', 'nope'],
+      ['experimental', 'icon', '--meanings', '--set', 'nope'],
       project,
     );
     expect(missing.code).not.toBe(0);
@@ -279,7 +276,7 @@ describe('experimental icon --definitions marks template use and the set', () =>
     ]) {
       fs.writeFileSync(path.join(project, 'astryx.config.mjs'), config);
       const {code, body} = await json(
-        ['experimental', 'icon', '--definitions'],
+        ['experimental', 'icon', '--meanings'],
         project,
       );
       expect(code, JSON.stringify(body)).toBe(0);
@@ -294,7 +291,7 @@ describe('experimental icon --definitions marks template use and the set', () =>
       path.join(pkg, 'package.json'),
       JSON.stringify({name: 'app', private: true}),
     );
-    const {body} = await json(['experimental', 'icon', '--definitions']);
+    const {body} = await json(['experimental', 'icon', '--meanings']);
     expect(body.data.set).toBeNull();
     expect(
       body.data.definitions.some((/** @type {any} */ each) => 'mapped' in each),

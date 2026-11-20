@@ -91,7 +91,7 @@ export default {
   notes: [
     {
       type: 'prose',
-      text: "A set's own meanings sit in a `definitions` folder in the set's directory, one file per meaning. Its `map` registers icons for them like for Astryx's. `astryx docs cli/experimental/icon-definitions` lists every meaning: Astryx's and, where icon features are on (an installed icon-set package or `experimental.iconSet`), each installed icon set's own. A meaning file refuses a field it does not know.",
+      text: "A set's own meanings sit in a `definitions` folder in the set's directory, one file per meaning. Its `map` registers icons for them like for Astryx's. `astryx docs cli/experimental/icon-meanings` lists every meaning: Astryx's and, where icon features are on (an installed icon-set package or `experimental.iconSet`), each installed icon set's own. A meaning file refuses a field it does not know.",
     },
     {
       type: 'prose',

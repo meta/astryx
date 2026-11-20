@@ -1150,7 +1150,7 @@ function findHint(set, doc) {
       return ` (icons matching "${query}": \`astryx experimental icon ${shellArg(query)} --set ${set.name}\`)`;
     }
   }
-  return ` (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with \`astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition ${doc.name} --set ${set.name}\`)`;
+  return ` (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with \`astryx experimental icon add <Name> --from ./src/icons/<name>.js --meaning ${doc.name} --set ${set.name}\`)`;
 }
 
 /**

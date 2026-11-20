@@ -72,7 +72,7 @@ describe('a bare icon subcommand', () => {
     expect(res.stdout).toContain('Icons for "map" (1)');
     expect(res.stdout).toMatch(/id: +home/);
     expect(res.stdout).toMatch(
-      /`map` is also a subcommand: .*experimental icon map \[options\] \[definition\] \[icon\]/,
+      /`map` is also a subcommand: .*experimental icon map \[options\] \[meaning\] \[icon\]/,
     );
   });
 
@@ -136,7 +136,7 @@ describe('a bare icon subcommand', () => {
   });
 
   it('keeps an authoring error that finds nothing, and names the search', async () => {
-    const res = await icon(['new-definition', '--json']);
+    const res = await icon(['new-meaning', '--json']);
     expect(res.code).toBe(1);
     expect(JSON.parse(res.stdout)).toMatchObject({
       error: "missing required argument 'name'",

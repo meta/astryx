@@ -14,7 +14,7 @@ export const doc = {
     "Run inside an icon-set package. Sets `map[<meaning>]` to the icon's id in the set's data file; name the icon by its id, its export name in any case, or another name its library exports it as (`trash-2` or `Trash2`), never by one word of its id, and the icon meaning by its name or kebab id; `integration check` prints these commands for meanings your set already has a fitting icon for. Experimental: it may change or be removed in a patch release.",
   fn: 'iconMap',
   args: [
-    {name: 'definition', param: 'definition', required: false},
+    {name: 'meaning', param: 'definition', required: false},
     {name: 'icon', param: 'icon', required: false},
   ],
   options: [
