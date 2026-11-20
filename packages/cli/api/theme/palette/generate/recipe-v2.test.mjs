@@ -14,6 +14,7 @@ import {describe, expect, it} from 'vitest';
 import {
   PALETTE_RECIPE,
   PALETTE_RECIPE_V2,
+  PALETTE_RECIPE_V3,
   generatePaletteSet,
 } from './generator.mjs';
 import {hexToOklch} from './color.mjs';
@@ -172,6 +173,21 @@ describe('palette recipes', () => {
     expect(hexToOklch(amber(PALETTE_RECIPE_V2)).C).toBeGreaterThan(0.09);
   });
 
+  it("v3 keeps a dusty seed's pale tints at or below its own chroma, where its gamut is wide", () => {
+    // A muted olive: yellow-greens hold a lot of chroma when pale, so the
+    // tint is not shared, and coordination must not raise it to chartreuse.
+    const olive = '#66662e';
+    const seed = hexToOklch(olive).C;
+    const v3 = ramp(olive, 50, PALETTE_RECIPE_V3).families[0].light.colors;
+    const v2 = ramp(olive, 50, PALETTE_RECIPE_V2).families[0].light.colors;
+    for (const stop of [85, 90, 95])
+      expect(hexToOklch(v3[stop]).C, `stop ${stop}`).toBeLessThanOrEqual(seed);
+    // v2 stays as it shipped: it draws the tint above its middle stronger.
+    expect(hexToOklch(v2[85]).C).toBeGreaterThan(seed);
+    // The middle of the ramp is still v2's (and so v1's).
+    for (const stop of [30, 50, 70]) expect(v3[stop]).toBe(v2[stop]);
+  });
+
   it('v1 and v2 draw byte for byte what they first shipped with, across seeds, vibrancies and kinds', () => {
     // Digests of every family's ramps over this grid, as the release that
     // first shipped v2 drew them: a recipe never changes once released.
@@ -260,7 +276,7 @@ describe('palette recipes', () => {
 
   it('refuses a recipe it does not know, naming the ones it does', () => {
     expect(() => ramp(VIVID, 50, 'astryx-oklch-v9')).toThrow(
-      /Unknown palette recipe: astryx-oklch-v9 \(known: astryx-oklch-v1, astryx-oklch-v2\)/,
+      /Unknown palette recipe: astryx-oklch-v9 \(known: astryx-oklch-v1, astryx-oklch-v2, astryx-oklch-v3\)/,
     );
   });
 });
