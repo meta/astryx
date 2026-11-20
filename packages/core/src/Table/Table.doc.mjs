@@ -426,7 +426,9 @@ const columns = [
     },
     {
       label: 'Open a row by clicking anywhere on it',
-      code: `import {Table, type TableColumn, type TablePlugin} from '@astryxdesign/core/Table';
+      code: `import {useMemo, useState} from 'react';
+import {Button} from '@astryxdesign/core/Button';
+import {Table, type TableColumn, type TablePlugin} from '@astryxdesign/core/Table';
 import {hasInteractiveAncestor, hasTextSelection} from '@astryxdesign/core/hooks';
 
 const [openId, setOpenId] = useState<string | null>(null);
@@ -452,6 +454,9 @@ const rowClick = useMemo<TablePlugin<User>>(
       htmlProps: {
         ...props.htmlProps,
         onClick: event => {
+          // Earlier row handlers run first and can cancel the open.
+          props.htmlProps.onClick?.(event);
+          if (event.defaultPrevented) return;
           const row = event.currentTarget;
           const target = event.target;
           // Leave clicks on cell controls, editable text and selections alone.
@@ -459,7 +464,6 @@ const rowClick = useMemo<TablePlugin<User>>(
           if (target !== row && hasInteractiveAncestor(target, row)) return;
           if (target.closest('[contenteditable]:not([contenteditable="false"])')) return;
           if (hasTextSelection(row)) return;
-          props.htmlProps.onClick?.(event);
           setOpenId(user.id);
         },
       },
