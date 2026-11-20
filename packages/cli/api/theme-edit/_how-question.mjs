@@ -8600,6 +8600,22 @@ export function draftAnswer(ctx, env, question) {
     'case',
     'italic',
   ];
+  // (A part draws with the accent when its family is a button-like or
+  // accent-fill group, or a state of it fills with the accent, a checked
+  // box; a group does when every member the census records does.)
+  const drawsWithAccent = (/** @type {string} */ on) =>
+    ['button-like', 'accent-fills'].some(g =>
+      (groupsOf(ctx)[g] ?? []).includes(on),
+    ) ||
+    Object.values(C.MAP[on]?.at?.['background-color'] ?? {}).some(v =>
+      /--color-accent\b/.test(String(v)),
+    );
+  const accentParts = (/** @type {Array<{on: string}>} */ parts) =>
+    parts.length > 0 &&
+    parts.every(p => {
+      const members = (FAMILIES[p.on] ?? [p.on]).filter(m => C.MAP[m]);
+      return members.length > 0 && members.every(drawsWithAccent);
+    });
   /**
    * The clause-scope reader: whether a clause that names no part takes the
    * part (and state) of the clause before it, or is the whole theme's.
@@ -8643,10 +8659,11 @@ export function draftAnswer(ctx, env, question) {
     )
       return 'inherit';
     // ("big buttons, a sky blue, high contrast": a list piece that is only a
-    // color, with no look or part word of its own, is the theme's, never
-    // a fill on the part a piece before it named; "buttons rounder and
-    // red" is still the buttons'.)
+    // color, with no look or part word of its own, after a part that draws
+    // with the accent, is the theme's, never a fill on that part; "buttons
+    // rounder and red" is still the buttons'.)
     if (
+      accentParts(before.parts) &&
       j.sep === 'comma' &&
       j.list == null &&
       c.colors.length &&
@@ -9137,11 +9154,6 @@ export function draftAnswer(ctx, env, question) {
     // button, leaves the color to the accent; a color said with a role,
     // "amber warnings", is that role's.)
     const prevParts = clauses[i - 1]?.parts ?? [];
-    const accentRoles = groupsOf(ctx);
-    const drawsAccent = (/** @type {string} */ on) =>
-      ['button-like', 'accent-fills'].some(g =>
-        (accentRoles[g] ?? []).includes(on),
-      );
     // (Judged from resting fills only: a link's press overlay, an `:active`
     // fill, is no fill it paints at rest.)
     /** A part's fills at rest. @param {string} on */
@@ -9153,30 +9165,15 @@ export function draftAnswer(ctx, env, question) {
     const textOnly = (/** @type {string} */ on) =>
       /(?:^|-)(?:heading|title|label|link|text|description)s?$/.test(on) &&
       !restFills(on).length;
-    // (A part with a state that fills with the accent, a checked box,
-    // draws with the accent too.)
-    const accentFill = (/** @type {string} */ on) =>
-      drawsAccent(on) ||
-      Object.values(C.MAP[on]?.at?.['background-color'] ?? {}).some(v =>
-        /--color-accent\b/.test(String(v)),
-      );
+    const accentFill = drawsWithAccent;
     const plainFill = (/** @type {string} */ on) =>
       restFills(on).some(v => !/--color-accent\b/.test(v)) && !accentFill(on);
     // (A group is judged by the members the census has a record of.)
-    // ("bold labels, dark gray": "labels" said bare reads two parts and
-    // writes nothing until one is chosen, so the color is not given to it.)
-    const bareLabels =
-      prevParts.length === 1 &&
-      prevParts[0].on === 'field-label' &&
-      /\blabels?\b/.test(clauses[i - 1]?.text ?? '') &&
-      !clauses.some(o =>
-        /\b(?:field|form|input|checkbox|switch|radio|select)s?\b/.test(o.text),
-      );
     const takesItself = (
       /** @type {string} */ aspect,
       /** @type {(on: string) => boolean} */ test,
     ) => {
-      if (!prevParts.length || bareLabels) return null;
+      if (!prevParts.length) return null;
       const ok = prevParts.every(p => {
         // (For a fill, a member that draws none of its own, a date-time
         // input whose boxes are its pieces, is not judged.)
@@ -9187,11 +9184,15 @@ export function draftAnswer(ctx, env, question) {
       });
       return ok ? aspect : null;
     };
-    /** Whether a color has no hue: white, black or a gray. @param {string | undefined} v */
-    const neutralInk = v => {
+    // (Whether the color has no hue: white, black or a gray, by its value
+    // or by its word, "dark gray", "slate", whose value keeps a little
+    // blue.)
+    const neutralInk = (/** @type {string | undefined} */ v) => {
       const rgb = parseColor(String(v ?? ''));
       return Boolean(
-        rgb && Math.max(...rgb.slice(0, 3)) - Math.min(...rgb.slice(0, 3)) < 24,
+        /\b(?:gr[ae]y|white|black|charcoal|silver|slate)\b/.test(c.text) ||
+        (rgb &&
+          Math.max(...rgb.slice(0, 3)) - Math.min(...rgb.slice(0, 3)) < 24),
       );
     };
     const pieceOfList =
@@ -9243,7 +9244,9 @@ export function draftAnswer(ctx, env, question) {
       ownAspects.set(c, [own]);
       continue;
     }
-    const ownPiece = pieceOfList && !own;
+    // (Only after a part that draws with the accent is a lone color the
+    // accent; after any other part it reads as it always has.)
+    const ownPiece = pieceOfList && !own && accentParts(prevParts);
     if (
       !ownLook &&
       !ownPiece &&
