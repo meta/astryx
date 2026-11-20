@@ -256,7 +256,11 @@ export const LOCK = [
   ['status badges: green stable, amber pending, red critical', [], ['badge']],
   ['inputs 32px tall with a 2px border when focused', [], ['inputs']],
   ['cards 8px corners, brighter and more cheerful', [], ['card']],
-  ['bold headings, red #c8102e and blue #003da5 accents', ['accent'], []],
+  [
+    'bold headings, red #c8102e and blue #003da5 accents',
+    ['accent', 'headings'],
+    ['heading', 'alert-dialog-title', 'empty-state-title', 'markdown-heading'],
+  ],
   [
     'big touch targets, large bold text, thick borders',
     ['--border-width', '--text-body-weight'],
@@ -554,8 +558,8 @@ export const LOCK = [
   ],
   [
     'bold headings, rounder cards, compact tables, red #c8102e and blue #003da5 accents',
-    ['accent'],
-    [],
+    ['accent', 'headings'],
+    ['card', 'table-row'],
   ],
   [
     'big touch targets, rounder cards, compact tables, large bold text, thick borders',
