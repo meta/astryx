@@ -23,7 +23,6 @@ import {
   ratioWords,
 } from './_color.mjs';
 import {luminance} from '../theme/palette/generate/color.mjs';
-import {coversProperty} from '../../foundation/runtime/css-tree.mjs';
 import {OVERRIDES} from './_part-words.mjs';
 import {
   DESIGN,
@@ -23548,7 +23547,24 @@ export function draftAnswer(ctx, env, question) {
         // (A width said with them, "border 2px #eee #eee #ddd", is the
         // line they color: its width and style, never a shorthand, which
         // would reset the color in a mode the colors are not for.)
-        const perSide = outline ? null : sideColorsIn(c.text);
+        const perSide0 = outline ? null : sideColorsIn(c.text);
+        // (A light run with no width or style said, "buttons border #eee
+        // #eee #ddd", is read as one border, as it always was: the light
+        // mode's color with the dark mode keeping its own, a line drawn
+        // in both.)
+        const perSide =
+          perSide0 &&
+          !c.lengths.length &&
+          !/\b(dashed|dotted|double|solid)\b/.test(c.text) &&
+          !/\bborder-colou?r\b/.test(c.text) &&
+          modal &&
+          !c.mode &&
+          perSide0.some(x => {
+            const rgb = parseColor(x);
+            return !!rgb && alphaOf(x) >= 1 && ratio(rgb, [0, 0, 0]) >= 12;
+          })
+            ? null
+            : perSide0;
         if (perSide && c.lengths.length <= 1)
           return {
             text: `the border colors${where}, one per side as written (${SIDE_ORDER[perSide.length]}): ${c.lengths.length ? 'border-width and border-style, then ' : /\b(dashed|dotted|double|solid)\b/.test(c.text) ? 'border-style, then ' : ''}border-color`,
@@ -28882,23 +28898,6 @@ export function draftAnswer(ctx, env, question) {
             )
           ),
       );
-    // A shorthand said after a side of it on the same part ("selected tab:
-    // transparent bottom, #dddddd border") goes first, so the side said
-    // stays: a later shorthand would replace it.
-    for (let i = 1; i < all.length; i++) {
-      const st = all[i];
-      const first = all.findIndex(
-        (x, k) =>
-          k < i &&
-          x.on === st.on &&
-          x.state === st.state &&
-          x.when === st.when &&
-          (!st.mode || x.mode === st.mode) &&
-          x.thing !== st.thing &&
-          coversProperty(st.thing, x.thing),
-      );
-      if (first >= 0) all.splice(first, 0, ...all.splice(i, 1));
-    }
     // At most MAX_STEPS in one sequence, cut only between clauses: a
     // clause's steps (its write and the keeps it needs, a status's border
     // written back) run together or not at all. The rest follow as the next

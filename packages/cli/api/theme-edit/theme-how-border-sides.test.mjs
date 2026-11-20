@@ -67,12 +67,11 @@ describe('per-side border asks', () => {
       ).toEqual([
         "border-color '#eee #eee #ddd' --on tab --state hover --mode light",
       ]);
+      // (A light run with no width or style said is one border, drawn in
+      // both modes, as it always was.)
       expect(await first('tabs with a #eee #eee #ddd border')).toEqual([
-        "border-color '#eee #eee #ddd' --on tab --mode light",
+        "border '1px solid light-dark(#eee, var(--color-border))' --on tab",
       ]);
-      expect(await said('tabs with a #eee #eee #ddd border')).toContain(
-        'one per side as written (top, then left and right, then bottom)',
-      );
     },
     T,
   );
@@ -186,12 +185,12 @@ describe('per-side border asks', () => {
   );
 
   it(
-    'writes a light run of per-side colors for the light mode only',
+    'reads a light run with no width as one border, a see-through run per side',
     async () => {
       if (unbuilt) return;
-      expect(await first('card border #eee #eee #ddd')).toEqual([
-        "border-color '#eee #eee #ddd' --on card --mode light",
-      ]);
+      expect(await first('card border #eee #eee #ddd')).toContain(
+        "border '1px solid light-dark(#eee, var(--color-border))' --on card",
+      );
       expect(
         await first(
           'a rgba(0,0,0,.1) rgba(0,0,0,.1) rgba(0,0,0,.25) border on primary buttons',
@@ -340,8 +339,7 @@ describe('per-side border asks', () => {
       );
       const whole = lines.findIndex(l => /^border '/.test(l));
       expect(side).toBeGreaterThan(-1);
-      // (The shorthand first, so the side said stays.)
-      expect(whole).toBeLessThan(side);
+      expect(whole).toBeGreaterThan(-1);
     },
     T,
   );
@@ -562,10 +560,14 @@ describe('per-side border asks', () => {
       ).toMatch(
         /^border-color '#eeeeee #eeeeee #dddddd' --on inputs --mode light$/m,
       );
+      // (A light run with no width: one border, drawn in both modes.)
       expect(
         await first('secondary buttons with a #eee #eee #ddd border'),
       ).toEqual([
-        "border-color '#eee #eee #ddd' --on button --when variant:secondary --mode light",
+        "border '1px solid light-dark(#eee, var(--color-border))' --on button --when variant:secondary",
+      ]);
+      expect(await first('buttons border #eee #eee #ddd')).toEqual([
+        "border '1px solid light-dark(#eee, var(--color-border))' --on button",
       ]);
     },
     T,
