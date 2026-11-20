@@ -467,7 +467,7 @@ function iconDefinitionSection(doc, index) {
   if (doc.replaces) {
     rows.push([
       'Replaces',
-      `\`${doc.replaces}\`: that name answers with this definition.`,
+      `\`${doc.replaces}\`: that name answers with this meaning.`,
     ]);
   }
   if (doc.builtIn) {
@@ -500,17 +500,17 @@ function iconDefinitionSection(doc, index) {
       ? [
           {
             type: 'prose',
-            text: `Read the other definitions in its group: ${groupRoutes.join(', ')}.`,
+            text: `Read the other meanings in its group: ${groupRoutes.join(', ')}.`,
           },
         ]
       : []),
     {
       type: 'prose',
-      text: `An icon set registers the icon that draws this definition in its data file: \`"map": {"${doc.name}": "<icon id>"}\`. Find it in each installed set: \`astryx experimental icon ${doc.name}\`.`,
+      text: `An icon set maps this meaning to the icon that draws it, in its data file: \`"map": {"${doc.name}": "<icon id>"}\`. Find it in each installed set: \`astryx experimental icon ${doc.name}\`.`,
     },
     {
       type: 'prose',
-      text: 'Icon definitions are experimental: they may change or be removed in a patch release.',
+      text: 'Icon meanings are experimental: they may change or be removed in a patch release.',
     },
   ];
   return {id: routeSegment(doc.name), title: doc.name, content};

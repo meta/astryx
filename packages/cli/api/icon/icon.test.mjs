@@ -49,10 +49,10 @@ describe('icon.search ranking', () => {
   const byId = (/** @type {string} */ id) =>
     /** @type {any} */ (icons.find(each => each.id === id));
 
-  it('scores each tier: definition, exact in the leading reading, exact in the other, prefix, partial', () => {
+  it('scores each tier: meaning, exact in the leading reading, exact in the other, prefix, partial', () => {
     expect(scoreIcon('close', byId('x'), 'meaning', ['close'])).toEqual({
       score: 100,
-      reason: 'definition "close"',
+      reason: 'meaning "close"',
     });
     expect(scoreIcon('trash', byId('trash'), 'name')).toEqual({
       score: 90,
@@ -279,7 +279,7 @@ describe('icon.search: an exact query reads as a name or a meaning', () => {
     ]);
   });
 
-  it("an icon definition the set's map names comes first", () => {
+  it("an icon meaning the set's map names comes first", () => {
     const lines = set([['trash', ['trash', 'delete']]]);
     lines.data.icons.push({
       id: 'x',
@@ -287,10 +287,10 @@ describe('icon.search: an exact query reads as a name or a meaning', () => {
       words: ['x', 'close'],
     });
     lines.data.map = {close: 'x'};
-    expect(ranked(lines, 'close')[0]).toEqual(['x', 100, 'definition "close"']);
+    expect(ranked(lines, 'close')[0]).toEqual(['x', 100, 'meaning "close"']);
   });
 
-  it('an icon matches the words of every definition it is mapped to, after its own words', () => {
+  it('an icon matches the words of every meaning it is mapped to, after its own words', () => {
     // The data file lists only the icon's own name; `delete`'s words
     // (trash, bin, discard) and its name come from the definition.
     const lines = set([
@@ -344,7 +344,7 @@ describe('icon.detail', () => {
 });
 
 describe('icon.list', () => {
-  it('lists each set with how many icon definitions its map covers', async () => {
+  it('lists each set with how many icon meanings its map covers', async () => {
     const result = await icon(undefined, {cwd, list: true});
     if (result.type !== 'icon.list') throw new Error(result.type);
     expect(result.data).toMatchObject({
@@ -779,7 +779,7 @@ describe('a word matches whole words (FR6)', () => {
     ).toBe(2);
   });
 
-  it('counts the words of a definition the icon is mapped to, and their plural or singular', () => {
+  it('counts the words of a meaning the icon is mapped to, and their plural or singular', () => {
     const set = setOf([{id: 'trash'}, {id: 'pencil'}, {id: 'stars'}], {
       delete: 'trash',
     });
@@ -787,7 +787,7 @@ describe('a word matches whole words (FR6)', () => {
     expect(answer(set, 'star rating widget')).toEqual(['stars']);
   });
 
-  it('counts twice the words that name a definition the set maps the icon for', () => {
+  it('counts twice the words that name a meaning the set maps the icon for', () => {
     const set = setOf(
       [
         {id: 'bin-copy'},
@@ -832,7 +832,7 @@ describe('a word matches whole words (FR6)', () => {
 });
 
 describe('a match names the import that calls it by its meaning (FR6)', () => {
-  it('imports the export under the name of the definition the set maps it for', async () => {
+  it('imports the export under the name of the meaning the set maps it for', async () => {
     expect((await search('close')).matches[0]).toMatchObject({
       id: 'x',
       import: "import {XIcon} from '@acme/glyphs';",
@@ -852,13 +852,13 @@ describe('a match names the import that calls it by its meaning (FR6)', () => {
     });
   });
 
-  it('leaves the field out for an icon that no definition names', async () => {
+  it('leaves the field out for an icon that no meaning names', async () => {
     const {matches} = await search('delete');
     expect(matches.map(match => match.id)).toEqual(['trash']);
     expect(matches[0]).not.toHaveProperty('meaningImport');
   });
 
-  it('takes the definition the query ranks first when the set maps the icon for several', async () => {
+  it('takes the meaning the query ranks first when the set maps the icon for several', async () => {
     const {data, modules} = completeGlyphs();
     cwd = writeIconSetProject(path.join(tmp, 'complete'), {
       packages: [{data, modules}],
@@ -879,7 +879,7 @@ describe('a match names the import that calls it by its meaning (FR6)', () => {
     );
   });
 
-  it('ranks a definition the set declares itself with the Astryx ones', async () => {
+  it('ranks a meaning the set declares itself with the Astryx ones', async () => {
     const data = glyphsData();
     cwd = writeIconSetProject(path.join(tmp, 'own'), {
       packages: [
@@ -899,7 +899,7 @@ describe('a match names the import that calls it by its meaning (FR6)', () => {
     });
     expect((await search('farewell')).matches[0]).toMatchObject({
       id: 'x',
-      reason: 'definition "farewell"',
+      reason: 'meaning "farewell"',
       meaningImport: "import {XIcon as FarewellIcon} from '@acme/glyphs';",
     });
     // A word of the set's own definition names it too.
@@ -919,7 +919,7 @@ describe('a match names the import that calls it by its meaning (FR6)', () => {
     });
   });
 
-  it("names the set's own definition for a name it replaced", async () => {
+  it("names the set's own meaning for a name it replaced", async () => {
     const data = glyphsData();
     cwd = writeIconSetProject(path.join(tmp, 'replaced'), {
       packages: [
@@ -951,7 +951,7 @@ describe('a match names the import that calls it by its meaning (FR6)', () => {
     });
   });
 
-  it('names the export of the look the project picks', async () => {
+  it('names the export of the variant the project picks', async () => {
     const data = glyphsData();
     cwd = writeIconSetProject(path.join(tmp, 'solid'), {
       packages: [{data: {...data, map: {...data.map, delete: 'trash'}}}],

@@ -33,5 +33,5 @@ export function templateMeaningsLine(unmapped, set, run = 'astryx') {
     .join(', ');
   const more =
     unmapped.length > SHOWN ? `, and ${unmapped.length - SHOWN} more` : '';
-  return `Templates use ${unmapped.length} ${unmapped.length === 1 ? 'meaning' : 'meanings'} this set does not map: ${named}${more}. Map one: \`${run} experimental icon map <definition> <icon id> --set ${set}\`.`;
+  return `Templates use ${unmapped.length} ${unmapped.length === 1 ? 'meaning' : 'meanings'} this set does not map: ${named}${more}. Map one: \`${run} experimental icon map <meaning> <icon id> --set ${set}\`.`;
 }

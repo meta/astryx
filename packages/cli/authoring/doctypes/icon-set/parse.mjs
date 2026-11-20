@@ -258,7 +258,7 @@ function buildSchemas() {
           ctx.addIssue({
             code: 'custom',
             path: ['map', name],
-            message: `"${name}" is not an icon definition name: definitions are camelCase`,
+            message: `"${name}" is not an icon meaning name: meanings are camelCase`,
           });
         }
         if (!ids.has(id)) {

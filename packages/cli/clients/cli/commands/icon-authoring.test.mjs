@@ -214,7 +214,7 @@ describe('experimental icon new-set --from', () => {
     });
   });
 
-  it('maps a definition only by its exact name, and prints the rest as suggestions', async () => {
+  it('maps a meaning only by its exact name, and prints the rest as suggestions', async () => {
     // A library icon named after a definition (`close`) maps; a word (`bin`)
     // does not.
     fs.writeFileSync(
@@ -375,7 +375,7 @@ describe('icon add', () => {
     await runCli(['experimental', 'icon', 'new-set', 'outline'], pkg);
   });
 
-  it('lists the definitions that fit an export, and writes nothing', async () => {
+  it('lists the meanings that fit an export, and writes nothing', async () => {
     const {code, body} = await json([
       'experimental',
       'icon',
@@ -459,7 +459,7 @@ describe('icon add', () => {
     expect(refused.code).toBe(1);
     expect(refused.body.code).toBe('ERR_INVALID_ARGUMENT');
     expect(refused.body.error).toBe(
-      'Icon set "outline" declares no variant "solid". Declare it first, and name the look its icons draw now as the default variant in place of <default>.',
+      'Icon set "outline" declares no variant "solid". Declare it first, and name the variant its icons draw now as the default variant in place of <default>.',
     );
     expect(refused.body.suggestions[0].name).toBe(
       'astryx experimental icon new-set outline --variants <default>,solid --default-variant <default>',
@@ -500,7 +500,7 @@ describe('icon add', () => {
     ).toContain("export {Cross as BinSolidIcon} from '@acme/glyph-library';");
   });
 
-  it("adds the set's own definition with --new-definition, refusing one Astryx has", async () => {
+  it("adds the set's own meaning with --new-definition, refusing one Astryx has", async () => {
     const added = await json([
       'experimental',
       'icon',
@@ -560,7 +560,7 @@ describe('icon add', () => {
     );
   });
 
-  it('--new-definition that cannot write its definition leaves the generated module, its types, and the set data unchanged', async () => {
+  it('--new-definition that cannot write its meaning leaves the generated module, its types, and the set data unchanged', async () => {
     const set = path.join(pkg, 'icon-sets', 'outline');
     const first = await json([
       'experimental',
@@ -602,7 +602,7 @@ describe('icon add', () => {
     );
   });
 
-  it('refuses an export the module lacks, with close names, and an unknown definition', async () => {
+  it('refuses an export the module lacks, with close names, and an unknown meaning', async () => {
     const missing = await json([
       'experimental',
       'icon',
@@ -713,7 +713,7 @@ describe('experimental icon map and new-definition', () => {
     );
   });
 
-  it('maps, remaps, and removes an entry; refuses an unknown definition or icon', async () => {
+  it('maps, remaps, and removes an entry; refuses an unknown meaning or icon', async () => {
     const mapped = await json([
       'experimental',
       'icon',
@@ -762,7 +762,7 @@ describe('experimental icon map and new-definition', () => {
     );
   });
 
-  it("adds the set's own definition, mapped with --icon", async () => {
+  it("adds the set's own meaning, mapped with --icon", async () => {
     const {code, body} = await json([
       'experimental',
       'icon',
@@ -797,7 +797,7 @@ describe('experimental icon map and new-definition', () => {
 });
 
 describe('experimental icon use', () => {
-  it('prints the look with --variant, each set that draws another, the theme map, and the variant it removes', async () => {
+  it('prints the variant with --variant, each set that draws another, the theme map, and the variant it removes', async () => {
     const {variants, default: _default, ...plain} = glyphsData();
     const app = writeIconSetProject(tmp, {
       packages: [
@@ -833,13 +833,13 @@ describe('experimental icon use', () => {
     );
     expect(used.code).toBe(0);
     expect(used.stdout).toContain(
-      '[ok] experimental.iconVariant is now "solid": every icon draws its solid look where its set has one.',
+      '[ok] experimental.iconVariant is now "solid": every icon draws its solid variant where its set has one.',
     );
     expect(used.stdout).toContain(
-      '[note] @acme/lines/lines declares no variants: its icons draw its one look.',
+      '[note] @acme/lines/lines declares no variants, so its icons draw as they are.',
     );
     expect(used.stdout).toContain(
-      "A theme draws the built-in icons in this look with `icons: themeIconsSolid` (import {themeIconsSolid} from '@acme/glyphs').",
+      "A theme draws the built-in icons in this variant with `icons: themeIconsSolid` (import {themeIconsSolid} from '@acme/glyphs').",
     );
     const removed = await runCli(
       ['experimental', 'icon', 'use', 'glyphs', '--backup', 'lines'],
@@ -849,7 +849,7 @@ describe('experimental icon use', () => {
       '[ok] experimental.iconSet already names main set "glyphs" (@acme/glyphs/glyphs), then "lines" (@acme/lines/lines)',
     );
     expect(removed.stdout).toContain(
-      '[ok] Removed experimental.iconVariant (it was "solid"): each set draws its default look.',
+      '[ok] Removed experimental.iconVariant (it was "solid"): each set draws its default variant.',
     );
     const refused = await json(
       ['experimental', 'icon', 'use', 'lines', '--variant', 'solid'],
@@ -1103,7 +1103,9 @@ describe('a library of icon data, through the adapter', () => {
     );
     // icon map rewrites the theme map.
     await json(['experimental', 'icon', 'map', 'close', 'trash']);
-    expect(generated()).toContain('close: /* @__PURE__ */ createElement(TrashIcon,');
+    expect(generated()).toContain(
+      'close: /* @__PURE__ */ createElement(TrashIcon,',
+    );
     // Integration check reads it all: no parse error, no missing export, no
     // theme-map or types mismatch.
     const check = await runCli(['integration', 'check', '--json'], pkg);
@@ -1119,7 +1121,7 @@ describe('a library of icon data, through the adapter', () => {
     // The optional definitions left unmapped are listed, never issues.
     expect(codes).not.toContain('"severity":"info"');
     const printed = await runCli(['integration', 'check'], pkg);
-    expect(printed.stdout).toContain('Unmapped icon definitions (optional)');
+    expect(printed.stdout).toContain('Unmapped icon meanings (optional)');
     expect(printed.stdout).toContain(
       'Mapping these is optional and never fails',
     );
@@ -1802,7 +1804,7 @@ describe('blind run 4 fixes', () => {
     });
   });
 
-  it('--definitions lists every definition, marking built-ins', async () => {
+  it('--definitions lists every meaning, marking built-ins', async () => {
     const {code, body} = await json(['experimental', 'icon', '--definitions']);
     expect(code).toBe(0);
     expect(body.type).toBe('icon.definitions');
@@ -3349,7 +3351,7 @@ describe('a refresh from a library root over icons added one per file', () => {
     await expectStableRefreshes('weights', weightsRefreshArgs);
   });
 
-  it('moves a moved icon to a new default look with the other glyphs, and keeps its id and export', async () => {
+  it('moves a moved icon to a new default variant with the other glyphs, and keeps its id and export', async () => {
     await weightsWith([
       [
         'add',

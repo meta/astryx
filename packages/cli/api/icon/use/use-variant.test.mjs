@@ -73,7 +73,7 @@ const configText = dir =>
   fs.readFileSync(path.join(dir, 'astryx.config.mjs'), 'utf8');
 
 describe('iconUse with a variant', () => {
-  it('writes the variant beside the sets in one write, and names the look each set draws', async () => {
+  it('writes the variant beside the sets in one write, and names the variant each set draws', async () => {
     const dir = project();
     const result = await iconUse('glyphs', {
       cwd: dir,
@@ -99,7 +99,7 @@ describe('iconUse with a variant', () => {
     expect(choice.variant).toBe('solid');
   });
 
-  it("names the main set's theme map for the look: its own map, or themeIcons for the default look", async () => {
+  it("names the main set's theme map for the variant: its own map, or themeIcons for the default variant", async () => {
     const dir = project({
       glyphs: {generated: './icon-sets/glyphs/glyphs.generated.js'},
     });
@@ -145,7 +145,7 @@ describe('iconUse with a variant', () => {
     expect(result.data).not.toHaveProperty('themeMap');
   });
 
-  it('changes nothing when the config already names the sets and the look', async () => {
+  it('changes nothing when the config already names the sets and the variant', async () => {
     const dir = project({
       config: {experimental: {iconSet: 'glyphs', iconVariant: 'solid'}},
     });
@@ -155,7 +155,7 @@ describe('iconUse with a variant', () => {
     expect(configText(dir)).toBe(before);
   });
 
-  it('refuses a variant the main set does not declare, names each of its looks with the command that picks it, and writes nothing', async () => {
+  it('refuses a variant the main set does not declare, names each of its variants with the command that picks it, and writes nothing', async () => {
     const dir = project();
     await expect(
       iconUse('glyphs', {cwd: dir, backups: ['lines'], variant: 'filled'}),
@@ -166,11 +166,11 @@ describe('iconUse with a variant', () => {
       suggestions: [
         {
           name: 'astryx experimental icon use glyphs --backup lines --variant outline',
-          reason: 'its default look, outline',
+          reason: 'its default variant, outline',
         },
         {
           name: 'astryx experimental icon use glyphs --backup lines --variant solid',
-          reason: 'its solid look',
+          reason: 'its solid variant',
         },
       ],
     });
@@ -180,11 +180,11 @@ describe('iconUse with a variant', () => {
     ).rejects.toMatchObject({
       code: 'ERR_INVALID_ARGUMENT',
       message:
-        'Icon set "@acme/lines/lines" declares no variants: it draws one look, so it takes no --variant.',
+        'Icon set "@acme/lines/lines" declares no variants, so it takes no --variant.',
       suggestions: [
         {
           name: 'astryx experimental icon use lines --backup glyphs',
-          reason: 'use it in its one look',
+          reason: 'use it as it is',
         },
       ],
     });
@@ -233,14 +233,14 @@ describe('iconUse with a variant', () => {
 });
 
 describe('the project variant in astryx.config and icon --list', () => {
-  it('refuses a variant without the sets it is the look of', async () => {
+  it('refuses a variant without the sets it is the variant of', async () => {
     const dir = project({config: {experimental: {iconVariant: 'solid'}}});
     await expect(Project.load(dir)).rejects.toThrow(
-      /experimental\.iconVariant.*iconVariant is the look of the icon sets experimental\.iconSet names/su,
+      /experimental\.iconVariant.*iconVariant is the variant of the icon sets experimental\.iconSet names/su,
     );
   });
 
-  it('lists the variant and the look each set draws', async () => {
+  it('lists the variant and the variant each set draws', async () => {
     const dir = project({
       config: {experimental: {iconSet: 'glyphs', iconVariant: 'solid'}},
     });
@@ -283,8 +283,8 @@ function runUseCommand(command, cwd) {
   return iconUse(main, {cwd, backups, variant});
 }
 
-describe('every use command printed for a choice with a look', () => {
-  it('adds the unlisted sets and keeps the look, so running it keeps experimental.iconVariant', async () => {
+describe('every use command printed for a choice with a variant', () => {
+  it('adds the unlisted sets and keeps the variant, so running it keeps experimental.iconVariant', async () => {
     const dir = project({
       config: {experimental: {iconSet: 'glyphs', iconVariant: 'solid'}},
     });

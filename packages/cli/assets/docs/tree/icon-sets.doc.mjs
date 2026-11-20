@@ -382,7 +382,7 @@ export const brand = defineTheme({name: 'brand', icons: themeIcons});`,
         },
         {
           type: 'prose',
-          text: 'The other Astryx meanings your set leaves unmapped are not issues: a library need not draw every meaning. They are listed under "Unmapped icon definitions (optional)", and in the JSON as the validate result\'s `iconSets`: for each set, `unmappedDefinitions` (each `{name, description, words}`) and `suggestions` (each `{definition, icon}`, for any unmapped meaning one of your icons fits). They are never counted and never fail a check.',
+          text: 'The other Astryx meanings your set leaves unmapped are not issues: a library need not draw every meaning. They are listed under "Unmapped icon meanings (optional)", and in the JSON as the validate result\'s `iconSets`: for each set, `unmappedDefinitions` (each `{name, description, words}`) and `suggestions` (each `{definition, icon}`, for any unmapped meaning one of your icons fits). They are never counted and never fail a check.',
         },
         {
           type: 'prose',

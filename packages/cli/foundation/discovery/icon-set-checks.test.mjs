@@ -587,7 +587,7 @@ describe('iconSetIssues', () => {
       ]);
     });
 
-    it('a set that maps built-in definitions but has no themeMap is an error', () => {
+    it('a set that maps built-in meanings but has no themeMap is an error', () => {
       const issues = issuesOf({data: data(d => delete d.themeMap)});
       expect(issues).toEqual([
         expect.objectContaining({code: 'icon_theme_map_mismatch'}),
@@ -691,8 +691,8 @@ describe('iconSetIssues', () => {
   });
 });
 
-describe('icon definitions (map)', () => {
-  it('every built-in definition missing from map is an error; the optional ones are listed, never issues, with a suggestion only when an icon id is its name or a word', () => {
+describe('icon meanings (map)', () => {
+  it('every built-in meaning missing from map is an error; the optional ones are listed, never issues, with a suggestion only when an icon id is its name or a word', () => {
     const issues = issuesOf({}, {coverage: true});
     const builtIn = issues.filter(
       issue => issue.code === 'icon_builtin_definition_missing',
@@ -765,7 +765,7 @@ describe('icon definitions (map)', () => {
     ).toBeDefined();
   });
 
-  it('a set mapping every built-in definition has no error', () => {
+  it('a set mapping every built-in meaning has no error', () => {
     const {data: complete, modules: completeModules} = completeGlyphs();
     const issues = issuesOf(
       {data: {...complete, module: '@acme/glyphs'}, modules: completeModules},
@@ -774,17 +774,17 @@ describe('icon definitions (map)', () => {
     expect(issues.filter(issue => issue.severity === 'error')).toEqual([]);
   });
 
-  it("a map key that is neither Astryx's definition nor the set's own is an error", () => {
+  it("a map key that is neither Astryx's meaning nor the set's own is an error", () => {
     const issues = issuesOf({data: data(d => (d.map.orbit = 'home'))});
     expect(issues).toEqual([
       expect.objectContaining({code: 'invalid_icon_set', severity: 'error'}),
     ]);
     expect(issues[0].message).toMatch(
-      /map "orbit" \(icon "home"\) is not an icon definition\. Declare it in definitions\/orbit\.doc\.mjs/,
+      /map "orbit" \(icon "home"\) is not an icon meaning\. Declare it in definitions\/orbit\.doc\.mjs/,
     );
   });
 
-  it("the set's own definitions: mapped is fine, unmapped warns with a suggestion, and one Astryx has warns", () => {
+  it("the set's own meanings: mapped is fine, unmapped warns with a suggestion, and one Astryx has warns", () => {
     const issues = issuesOf({
       data: data(d => (d.map.orbit = 'home')),
       definitions: {
@@ -829,7 +829,7 @@ describe('icon definitions (map)', () => {
     ).toContain('Astryx now has');
   });
 
-  it('a definition file that does not read makes the set invalid', () => {
+  it('a meaning file that does not read makes the set invalid', () => {
     const issues = issuesOf({
       definitions: {orbit: definitionSource('Orbit')},
     });
@@ -866,7 +866,7 @@ describe('integration check over an icon set', () => {
     expect(JSON.stringify(broken.data)).toContain('icon_export_missing');
   }, 60_000);
 
-  it('a set that maps every built-in definition passes --strict: other unmapped Astryx definitions are listed, not issues', async () => {
+  it('a set that maps every built-in meaning passes --strict: other unmapped Astryx meanings are listed, not issues', async () => {
     const complete = completeGlyphs();
     writeIconPackage(dir, {
       modules: complete.modules,
@@ -1029,7 +1029,7 @@ describe('suggestions join a plural only to its singular', () => {
   });
 });
 
-describe('suggestions from a definition word never bridge to another meaning', () => {
+describe('suggestions from a meaning word never bridge to another meaning', () => {
   const definitions = new Map(
     astryxIconDefinitions().definitions.map(({doc}) => [doc.name, doc]),
   );
@@ -1062,14 +1062,14 @@ describe('suggestions from a definition word never bridge to another meaning', (
     expect(suggest('add', ['plus-circle'])).toEqual(['plus-circle']);
   });
 
-  it('finds the glyph a library names in two words through the definition’s words', () => {
+  it('finds the glyph a library names in two words through the meaning’s words', () => {
     expect(suggest('raiseHand', ['hand-raised'])).toEqual(['hand-raised']);
     expect(suggest('location', ['map-pin'])).toEqual(['map-pin']);
     expect(suggest('textCase', ['case-sensitive'])).toEqual(['case-sensitive']);
   });
 });
 
-describe('suggestions prefer the icon the definition names over a longer id', () => {
+describe('suggestions prefer the icon the meaning names over a longer id', () => {
   const definitions = new Map(
     astryxIconDefinitions().definitions.map(({doc}) => [doc.name, doc]),
   );
@@ -1095,7 +1095,7 @@ describe('suggestions prefer the icon the definition names over a longer id', ()
     expect(suggest('add', ['add-circle', 'plus'])[0]).toBe('add-circle');
   });
 
-  it('puts a word another definition shares after the words only this one has', () => {
+  it('puts a word another meaning shares after the words only this one has', () => {
     // `store` is a word of save and of a shopping bag.
     expect(suggest('save', ['store', 'floppy-disk'])).toEqual([
       'floppy-disk',

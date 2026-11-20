@@ -9,9 +9,9 @@ export const doc = {
   displayName: 'astryx experimental icon new-definition',
   namespace: 'cli/commands',
   stability: 'experimental',
-  summary: "Add your icon set's own icon definition",
+  summary: "Add your icon set's own icon meaning",
   description:
-    "Run inside an icon-set package. Writes one icon definition file for a meaning Astryx's definitions do not cover, and with --icon maps it to an icon of the set. Experimental: it may change or be removed in a patch release.",
+    "Run inside an icon-set package. Writes the file of one icon meaning Astryx's shared list does not cover (`<set>/definitions/<name>.doc.mjs`), and with --icon maps it to an icon of the set. Experimental: it may change or be removed in a patch release.",
   fn: 'iconNewDefinition',
   args: [
     {
@@ -19,7 +19,7 @@ export const doc = {
       param: 'name',
       required: true,
       description:
-        'The definition name, in camelCase (rocketLaunch) or kebab-case (rocket-launch)',
+        "The meaning's name, in camelCase (rocketLaunch) or kebab-case (rocket-launch)",
     },
   ],
   options: [
@@ -36,7 +36,7 @@ export const doc = {
     {
       flag: '--description <text>',
       param: 'options.description',
-      description: 'One sentence on what an icon with this definition is for',
+      description: 'One sentence on what an icon with this meaning is for',
     },
     {
       flag: '--words <list>',
@@ -51,7 +51,7 @@ export const doc = {
   ],
   examples: [
     {
-      label: "Add a set's own icon definition",
+      label: "Add a set's own icon meaning",
       cli: "astryx experimental icon new-definition random --description 'Pick something at random.' --words dice,shuffle,chance --icon dice-5",
     },
   ],
@@ -59,7 +59,7 @@ export const doc = {
   exitCodes: [
     {
       code: 0,
-      when: 'the definition is written or the dry run succeeds, or, typed alone, an icon (or, with no icon set installed, an icon definition) matches its whole name: it answers that search (`icon.search`) and writes nothing',
+      when: 'the icon meaning is written or the dry run succeeds, or, typed alone, an icon (or, with no icon set installed, an icon meaning) matches its whole name: it answers that search (`icon.search`) and writes nothing',
     },
     {
       code: 1,

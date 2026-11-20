@@ -8,9 +8,9 @@ export const doc = {
   namespace: 'cli/api',
   stability: 'experimental',
   displayName: 'iconNewDefinition()',
-  summary: "Add one of an icon set's own icon definitions.",
+  summary: "Add one of an icon set's own icon meanings.",
   description:
-    "Run inside an icon-set package. Writes `<set>/definitions/<name>.doc.mjs`, a strongly typed IconDefinitionDoc with the description and words, and, with `icon`, the set's `map` entry for it. A name Astryx already has is refused: map to Astryx's definition instead. The file is never overwritten, and a write that fails is undone. Experimental: it may change or be removed in a patch release.",
+    "Run inside an icon-set package. Writes `<set>/definitions/<name>.doc.mjs`, a strongly typed IconDefinitionDoc with the description and words, and, with `icon`, the set's `map` entry for it. A name Astryx already has is refused: map to Astryx's icon meaning instead. The file is never overwritten, and a write that fails is undone. Experimental: it may change or be removed in a patch release.",
   importPath: '@astryxdesign/cli/api',
   signature:
     'iconNewDefinition(name: string, options?: IconNewDefinitionOptions): Promise<IconNewDefinitionResponse>',
@@ -20,13 +20,13 @@ export const doc = {
       name: 'name',
       type: 'string',
       description:
-        'The definition name, in camelCase (`rocketLaunch`) or kebab-case (`rocket-launch`); it is written in camelCase.',
+        'The meaning name, in camelCase (`rocketLaunch`) or kebab-case (`rocket-launch`); it is written in camelCase.',
       required: true,
     },
     {
       name: 'options.description',
       type: 'string',
-      description: 'One sentence on what an icon with this definition is for.',
+      description: 'One sentence on what an icon with this meaning is for.',
       required: true,
     },
     {
@@ -38,7 +38,7 @@ export const doc = {
     {
       name: 'options.icon',
       type: 'string',
-      description: 'An icon id in the set to map the definition to.',
+      description: 'An icon id in the set to map the meaning to.',
     },
     {
       name: 'options.set',
@@ -73,7 +73,7 @@ export const doc = {
       code: 'ERR_MISSING_ARGUMENT',
       when: 'the description or words are missing',
     },
-    {code: 'ERR_FILE_EXISTS', when: 'the definition file already exists'},
+    {code: 'ERR_FILE_EXISTS', when: "the icon meaning's file already exists"},
     {
       code: 'ERR_NOT_FOUND',
       when: 'the package ships no icon set, `set` names no set in it or one that is withdrawn (with why), or the set has no such icon',
@@ -88,12 +88,12 @@ export const doc = {
     },
     {
       code: 'ERR_WRITE_FAILED',
-      when: 'the definition file or data file cannot be written; every write before it is undone',
+      when: "the icon meaning's file or the data file cannot be written; every write before it is undone",
     },
   ],
   examples: [
     {
-      label: 'Add and map a definition',
+      label: 'Add and map a meaning',
       code: "await iconNewDefinition('random', {description: 'Pick something at random.', words: ['dice', 'shuffle', 'chance'], icon: 'dice-5'});",
     },
   ],

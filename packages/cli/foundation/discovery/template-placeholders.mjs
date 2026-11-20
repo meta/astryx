@@ -239,7 +239,7 @@ function fillPlainImports(source) {
   /** @type {Record<string, string>} */
   const meanings = {};
   let references = 0;
-  for (let at = source.indexOf(PLACEHOLDER_MODULE); at !== -1; ) {
+  for (let at = source.indexOf(PLACEHOLDER_MODULE); at !== -1;) {
     references += 1;
     at = source.indexOf(PLACEHOLDER_MODULE, at + 1);
   }
@@ -267,7 +267,9 @@ function fillPlainImports(source) {
         return whole;
       }
       drawnModule = drawn.module;
-      filled.push(drawn.export === local ? local : `${drawn.export} as ${local}`);
+      filled.push(
+        drawn.export === local ? local : `${drawn.export} as ${local}`,
+      );
       meanings[local] = /** @type {string} */ (meaning);
     }
     return drawnModule ? printImport(drawnModule, filled) : whole;
@@ -442,7 +444,7 @@ export function templatePlaceholderProblems(templates, definitions) {
             : null;
         if (!meaning || !definitions.has(meaning)) {
           problems.push(
-            `${id}: ${name} names no icon meaning. Fix: import <Meaning>Icon for an icon definition (astryx experimental icon <words> finds it), or add the definition in the same change.`,
+            `${id}: ${name} names no icon meaning. Fix: import <Meaning>Icon for an icon meaning (astryx experimental icon <words> finds it), or add the meaning in the same change.`,
           );
           continue;
         }

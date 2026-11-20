@@ -127,7 +127,7 @@ export async function templateIconUndeclaredNotes(loaded, packageDir) {
   return {
     notes: undeclared.map(({id, key, module}) => ({
       code: TEMPLATE_ICON_UNDECLARED,
-      message: `${id} imports icon "${key}" from ${module}, but ${docOf.get(id)} does not declare it in \`icons\`, so it never follows a project's icon set. Add \`${key}: '<definition>'\` to \`icons\` (\`astryx experimental icon --definitions\` lists the definitions).`,
+      message: `${id} imports icon "${key}" from ${module}, but ${docOf.get(id)} does not declare it in \`icons\`, so it never follows a project's icon set. Add \`${key}: '<meaning>'\` to \`icons\` (\`astryx experimental icon --definitions\` lists the meanings).`,
     })),
     unchecked: unchecked.map(({id, key, module, why}) => ({
       file: id,
@@ -135,10 +135,10 @@ export async function templateIconUndeclaredNotes(loaded, packageDir) {
       module,
       reason:
         why === 'renderer'
-          ? `"${key}" is a generic renderer: it is a bare \`Icon\`, or every use gives it an icon prop, so it draws no one icon definition and needs no \`icons\` key.`
+          ? `"${key}" is a generic renderer: it is a bare \`Icon\`, or every use gives it an icon prop, so it draws no one icon meaning and needs no \`icons\` key.`
           : why === 'use'
             ? `"${key}" is not rendered as an icon: the template never renders it as an element without children or passes it as a value, so it needs no \`icons\` key. Declaring it would make \`astryx template\` swap it for an icon.`
-            : `"${key}" matches an icon by its name only: no template in the package declares an icon from ${module}, so the check cannot tell whether it draws one icon definition. Declare an icon from ${module} in a template's \`icons\` to have its imports checked.`,
+            : `"${key}" matches an icon by its name only: no template in the package declares an icon from ${module}, so the check cannot tell whether it draws one icon meaning. Declare an icon from ${module} in a template's \`icons\` to have its imports checked.`,
     })),
   };
 }

@@ -84,7 +84,7 @@ const GOLDEN_REPO = process.env.GOLDEN_CLI_ROOT
 const GOLDEN = path.join(CLI_ROOT, 'test', '__golden__', 'no-icon-set');
 /** Words an experimental surface's text uses; a stable doc that gains one leaks. */
 const LEAK_WORDS =
-  /\bexperimental\b|\bicon[- ]?sets?\b|\bicon[- ]definitions?\b/iu;
+  /\bexperimental\b|\bicon[- ]?sets?\b|\bicon[- ]definitions?\b|\bicon[- ]meanings?\b/iu;
 /**
  * The one named exception (AST-017 FR27): stable theme help and docs may
  * point at the experimental theme editor (`experimental theme editor`,
