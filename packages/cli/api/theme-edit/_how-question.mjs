@@ -24349,8 +24349,9 @@ export function draftAnswer(ctx, env, question) {
       /^(?:it|its|me|my|you|your|ur|we|us|our|they|them|their|this|that|these|those|thx|thanks|thank|plz|pls|please|lol|okay|ok|yeah|yes|hey|hi)$/.test(
         w,
       ) ||
-      // (A joining or helping word: "buttons with", "cards should".)
-      /^(?:and|or|nor|but|so|yet|with|without|in|on|of|for|to|at|by|from|into|onto|over|under|below|above|between|inside|outside|within|around|near|after|before|across|like|than|then|as|if|when|while|the|a|an|is|are|was|were|be|been|being|should|must|can|could|would|will|shall|may|might|do|did|look|looks|feel|feels|have|had|get|gets|need|needs|use|uses|stand|stands|appear|appears|seem|seems|that|which|who|only|also|too|all|not|no|just|please|pls|now|still|again|instead|both|either|neither|here|there)$/.test(
+      // (A joining or helping word: "buttons with", "cards should". A keep
+      // word says the part stays as it is: "except h1 keeps h1 as it is".)
+      /^(?:and|or|nor|but|so|yet|with|without|in|on|of|for|to|at|by|from|into|onto|over|under|below|above|between|inside|outside|within|around|near|after|before|across|like|than|then|as|if|when|while|the|a|an|is|are|was|were|be|been|being|should|must|can|could|would|will|shall|may|might|do|did|look|looks|feel|feels|have|had|get|gets|need|needs|use|uses|stand|stands|appear|appears|seem|seems|keep|keeps|kept|leave|leaves|stay|stays|remain|remains|that|which|who|only|also|too|all|not|no|just|please|pls|now|still|again|instead|both|either|neither|here|there)$/.test(
         w,
       ),
     );
