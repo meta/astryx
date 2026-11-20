@@ -46,6 +46,7 @@ import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
 import {useClickableContainer} from '../hooks/useClickableContainer';
 import {useTooltip} from '../Tooltip';
+import {useCutTextOnKeyboardFocus} from '../Text/TruncationTooltip';
 
 export type {
   InputStatus as FileInputStatus,
@@ -201,7 +202,7 @@ const styles = stylex.create({
     alignItems: 'center',
     gap: spacingVars['--spacing-2'],
     // The padding is what the row leaves after the prompt's line and the
-    // borders. A larger or wrapped prompt grows the row from there.
+    // borders. A larger prompt grows the row from there.
     paddingBlock: {
       default: `max(0px, calc((${sizeVars['--size-element-md']} - ${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
       '@media (pointer: coarse)': {
@@ -307,6 +308,9 @@ const styles = stylex.create({
     textAlign: 'start',
     flex: 1,
     minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
 });
 
@@ -839,6 +843,17 @@ export function FileInput({
       : (optimisticValue?.name ?? '')
     : null;
 
+  // Input mode keeps its prompt on one line, as a Button keeps its label. A
+  // prompt that a narrow field cuts shows in full on keyboard focus. The
+  // disabled reason's tooltip opens on that focus too, so it wins.
+  const promptRef = useRef<HTMLSpanElement | null>(null);
+  const cutPrompt = useCutTextOnKeyboardFocus({
+    anchorRef: containerRef,
+    measureRef: promptRef,
+    isEnabled: mode === 'input' && !hasFiles && !isBusy,
+    isSuppressed: () => showsDisabledMessage,
+  });
+
   // The tooltip placement renders no message box: its focusable status button
   // is the only place the message lives, and the trigger's aria-describedby
   // points at that button's tooltip. Every content branch that can show a
@@ -902,6 +917,7 @@ export function FileInput({
           {...themeProps('file-input-icon', {mode})}
         />
         <span
+          ref={hasFiles ? undefined : promptRef}
           {...stylex.props(
             hasFiles ? styles.fileNameText : styles.placeholderText,
             hasFiles ? styles.fileNameCompact : styles.placeholderCompact,
@@ -959,6 +975,9 @@ export function FileInput({
         }}
         onClick={!isSelectionDisabled ? onContainerClick : undefined}
         onMouseUp={!isSelectionDisabled ? onContainerMouseUp : undefined}
+        onFocus={cutPrompt.onFocus}
+        onBlur={cutPrompt.onBlur}
+        onPointerDown={cutPrompt.onPointerDown}
         {...dragDropProps}
         {...mergeProps(
           themeProps('file-input', {mode, status: status?.type ?? null}),
@@ -1046,6 +1065,13 @@ export function FileInput({
       )}
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}
+      {cutPrompt.cutText != null && cutPrompt.Tooltip ? (
+        <cutPrompt.Tooltip
+          anchorRef={containerRef}
+          content={cutPrompt.cutText}
+          onHide={cutPrompt.hide}
+        />
+      ) : null}
     </Field>
   );
 }
