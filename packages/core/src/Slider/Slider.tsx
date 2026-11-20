@@ -512,14 +512,14 @@ const styles = stylex.create({
     fontSize: typeScaleVars['--text-label-size'],
     lineHeight: typeScaleVars['--text-label-leading'],
     fontVariantNumeric: 'tabular-nums',
+    // Kerning would change a digit pair's width ("11").
+    fontKerning: 'none',
     color: colorVars['--color-text-primary'],
     whiteSpace: 'nowrap',
     flexShrink: 0,
   },
   // The width the widest end text needs, so the box keeps one width.
   textValueReserve: (minInlineSize: string) => ({minInlineSize}),
-  // The digits the current text lacks against the end text with the most.
-  textValueDigitPad: (paddingInlineStart: string) => ({paddingInlineStart}),
   marksContainer: {
     position: 'absolute',
   },
@@ -1680,51 +1680,38 @@ export function Slider({ref, ...props}: SliderProps) {
   const fillEnd = getPercent(values[isRange ? 1 : 0], min, max) / 100;
   const fillStyle: FillStyle = {[FILL_START]: fillStart, [FILL_END]: fillEnd};
 
-  // Text value display. The box keeps the width of the widest text at, or
-  // one step in from, each end of the range, so the track keeps its length
-  // while the value changes and a dragged thumb stays under the pointer.
-  // Digits are tabular, each 1ch wide. When every text has the same
-  // characters around its digits (a unit such as "°F", a range's dash), the
-  // box pads only the digits the current text lacks, so it is exactly as wide
-  // as the widest end text. When those characters differ (a decimal point at
-  // some values), the box reserves 1ch per digit or space and 1em per other
-  // character, plus 1px for rounding. Text with no digits (words) reserves
-  // nothing, so its width follows the text.
-  const textOf = (vs: ReadonlyArray<number>): string =>
-    vs.map(displayValue).join(' – ');
-  const digitCount = (text: string) => text.replace(/\D/g, '').length;
-  const skeletonOf = (text: string) => text.replace(/\d/g, '');
+  // Text value display. When the two ends of the range show digits and have
+  // different shapes (digit counts, or other characters around them), the box
+  // reserves the width of the wider end, so the track keeps its length while
+  // the value changes and a dragged thumb stays under the pointer. A digit or
+  // a space counts as 1ch, the width of the font's own zero, and any other
+  // character as 1em, plus 1px for rounding. Ends of the same shape (60°F and
+  // 90°F) and words reserve nothing, so the text keeps its own width.
   let textDisplay = null;
   if (valueDisplay === 'text') {
-    const reach = (value: number) =>
-      Math.min(max, Math.max(min, snapToStep(value, min, step)));
-    const ends = [min, reach(min + step), reach(max - step), max];
-    const endTexts = ends.flatMap(a =>
-      isRange ? ends.map(b => textOf([a, b])) : [textOf([a])],
+    const texts = values.map(displayValue);
+    const ends = [min, max].map(value => {
+      const text = displayValue(value);
+      return isRange ? `${text} – ${text}` : text;
+    });
+    const shape = (text: string) => text.replace(/\d/g, '0');
+    const [ch, em] = ends.reduce(
+      ([c, e], text) => {
+        const n = text.replace(/[^\d ]/g, '').length;
+        return [Math.max(c, n), Math.max(e, text.length - n)];
+      },
+      [0, 0],
     );
-    const text = textOf(values);
-    const skeleton = skeletonOf(text);
-    let widthStyle = null;
-    if (endTexts.some(endText => digitCount(endText) > 0)) {
-      if (endTexts.every(endText => skeletonOf(endText) === skeleton)) {
-        const missing =
-          Math.max(...endTexts.map(digitCount)) - digitCount(text);
-        widthStyle =
-          missing > 0 ? styles.textValueDigitPad(`${missing}ch`) : null;
-      } else {
-        // The most ch and the most em any end text needs.
-        const [ch, em] = endTexts.reduce(
-          ([c, e], endText) => {
-            const n = endText.replace(/[^\d ]/g, '').length;
-            return [Math.max(c, n), Math.max(e, endText.length - n)];
-          },
-          [0, 0],
-        );
-        widthStyle = styles.textValueReserve(`calc(${ch}ch + ${em}em + 1px)`);
-      }
-    }
     textDisplay = (
-      <span {...stylex.props(styles.textValue, widthStyle)}>{text}</span>
+      <span
+        {...stylex.props(
+          styles.textValue,
+          /\d/.test(ends.join('')) &&
+            shape(ends[0]) !== shape(ends[1]) &&
+            styles.textValueReserve(`calc(${ch}ch + ${em}em + 1px)`),
+        )}>
+        {texts.join(' – ')}
+      </span>
     );
   }
 

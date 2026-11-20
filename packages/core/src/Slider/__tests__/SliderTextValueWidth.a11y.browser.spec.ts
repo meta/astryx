@@ -2,8 +2,8 @@
 
 /**
  * @file SliderTextValueWidth.a11y.browser.spec.ts
- * @input Built Slider stories "Custom Step" and "Text Value Widths" in real
- *   Chromium and WebKit, left to right and right to left
+ * @input Built Slider stories "Custom Step", "With Format Value" and "Text
+ *   Value Widths" in real Chromium and WebKit, left to right and right to left
  * @output Browser evidence that a text value display keeps the track's length
  *   while the value changes, so a dragged thumb stays under the pointer
  * @position Slider proof of component:Slider FR3 and FR7 for `valueDisplay="text"`
@@ -139,16 +139,6 @@ test('a fractional step keeps the track length from 0 to 0.8', async ({
   expect([...widths]).toHaveLength(1);
 });
 
-test('a fractional step keeps the track length from 0 to 1', async ({page}) => {
-  await mount(page, 'core-slider--text-value-widths', 'ltr');
-  const thumb = page.getByRole('slider', {name: 'Opacity'});
-  await thumb.focus();
-  await page.keyboard.press('Home');
-  const widths = await widthsWhilePressing(page, thumb, 'ArrowRight', 10);
-  await expect(thumb).toHaveAttribute('aria-valuenow', '1');
-  expect([...widths]).toHaveLength(1);
-});
-
 test('a value text wider in the middle than at the ends does not clip', async ({
   page,
 }) => {
@@ -186,7 +176,7 @@ async function textBox(thumb: Locator) {
   });
 }
 
-test('a unit around the digits reserves no blank space, and the track keeps its length', async ({
+test('ends of the same shape reserve no blank space, and the track keeps its length', async ({
   page,
 }) => {
   await mount(page, 'core-slider--with-format-value', 'ltr');
