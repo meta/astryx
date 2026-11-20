@@ -44,6 +44,7 @@ import type {ListReorderOptions, ReorderRows} from '../List/listReorderContext';
 import {markReorderHandle} from '../privateAttributes/listReorder.stylex';
 import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
 import {readAccessibleName} from '../utils/accessibleName';
+import {sharedSequence} from '../utils/sharedRealm';
 import {devWarn} from '../utils/devWarning';
 
 registerEnglishFallback(english);
@@ -93,7 +94,7 @@ interface WiredHandle {
   readonly unwire: () => void;
 }
 
-let nextHintId = 0;
+const nextHintId = sharedSequence('reorderable/attach-reorderable/hint-id', 1);
 
 /**
  * A wired handle's own naming: the `aria-label` and `aria-labelledby` it
@@ -175,7 +176,7 @@ export function attachReorderable(
 ): ReorderableAttachment {
   const doc = container.ownerDocument;
   const t = getResolve('en', {});
-  const hintId = `astryx-reorder-attach-hint-${(nextHintId += 1)}`;
+  const hintId = `astryx-reorder-attach-hint-${nextHintId()}`;
   const wired = new Map<HTMLElement, WiredHandle>();
   // Each wired handle's own naming, apart from what `attach` writes.
   const naming = new WeakMap<HTMLElement, OwnNaming>();
