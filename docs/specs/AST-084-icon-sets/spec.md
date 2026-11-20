@@ -125,8 +125,8 @@ draws each meaning a bundled template imports.
   current folder is not installed there, so its own sets turn nothing on. One function in the CLI,
   `iconFeatureGate`, decides it, and every icon surface outside
   `astryx experimental icon` reads it: discover, Doctor and its
-  `doctor integration` subcommands, `astryx docs icons`, and `astryx search`
-  for its icons block (FR11). Template
+  `doctor integration` subcommands, `astryx docs icons`, `astryx search`
+  for its icons block (FR11), and the answer to an unknown command. Template
   copies read sets only where it is on, and follow one only with
   `experimental.iconSet` (FR9). One constant, `ICON_FEATURES_RELEASED`, is
   off; on, it turns icon features on in every project, which is the
@@ -139,10 +139,12 @@ draws each meaning a bundled template imports.
   `astryx upgrade` write carries one more line, right under its runner line:
   "Need an icon? Run `astryx experimental icon <what it means>` and paste the
   import it prints, instead of copying one from a template or other code."
-  Where they are off, the block has no such line. Where icon features are
-  on, the answer to an unknown top-level word `icon` or `icons` also names
-  `astryx experimental icon` with the words that follow it; where they are
-  off, it names only `astryx docs icons`.
+  Where they are off, the block has no such line. The answer to an unknown
+  top-level word `icon` or `icons` names `astryx docs icons`; where icon
+  features are on, it also names `astryx experimental icon`: with the words
+  to look for that follow it (a first word that only asks to look or list
+  is left out), with `--list` when the words ask only for the list, as the
+  help of the subcommand the next word names, and as its help otherwise.
 
   With no such package loaded and no `experimental.iconSet`, help (apart from
   the marked `experimental` group line), `astryx manifest` (apart from that group: its command, and its

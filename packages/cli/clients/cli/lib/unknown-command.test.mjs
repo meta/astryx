@@ -67,11 +67,13 @@ function program() {
   const doctor = root.command('doctor');
   doctor.command('integration').command('validate').argument('[pkg]');
   const experimental = root.command('experimental');
-  experimental
+  const icon = experimental
     .command('icon')
     .argument('[query...]')
     .option('--list', 'list')
     .option('--set <set>', 'set');
+  icon.command('add').argument('[export]').option('--from <library>', 'from');
+  icon.command('use').argument('<set>');
   experimental
     .command('export')
     .argument('[page]')
@@ -265,6 +267,16 @@ describe('an icon word', () => {
     expect(await names(['icon', '--set', 'lucide'], on)).toEqual([
       'astryx docs icons',
       'astryx experimental icon --help',
+    ]);
+    // A word that names a subcommand of the finder asks for its help: the
+    // subcommand may need inputs or write files, so no run of it is named.
+    expect(await names(['icon', 'add', 'trash'], on)).toEqual([
+      'astryx experimental icon add --help',
+      'astryx docs icons',
+    ]);
+    expect(await names(['icon', 'use', 'lucide'], on)).toEqual([
+      'astryx experimental icon use --help',
+      'astryx docs icons',
     ]);
     // With no words to look for, the guide comes first, then the finder's help.
     expect(await names(['icon'], on)).toEqual([

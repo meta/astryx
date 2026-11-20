@@ -551,9 +551,10 @@ function plainWords(cmd, words) {
  * word that only asks to look or list is left out, and so is `--list`, which
  * takes no words (`icon list arrows` is `experimental icon arrows`). A list
  * word or `--list` with nothing to look for asks for `experimental icon
- * --list`. With neither, the guide comes first, then the finder's help. Where
- * icon features are off, the answer names no experimental command
- * (spec:AST-017 FR27).
+ * --list`, and a word that names a subcommand of the finder asks for that
+ * subcommand's help. With neither, the guide comes first, then the finder's
+ * help. Where icon features are off, the answer names no experimental
+ * command (spec:AST-084 FR0).
  * @param {{word: string, before: string[], after: string[]}} run the word,
  *   and the words of the run before and after it
  * @param {CommandLike} program
@@ -582,6 +583,18 @@ async function iconRuns({before, after: rest}, program, iconFeatures) {
   );
   const [lead, ...more] = rest;
   const lower = lead?.toLowerCase() ?? '';
+  // A word that names one of the finder's subcommands (`icon add trash`,
+  // `icon use lucide`) is that subcommand, which may need inputs or write
+  // files: the answer names its help, never a run of it.
+  const sub = visible(finderCmd).find(c => c.name() === lower);
+  if (sub)
+    return [
+      run(
+        [...finder, sub.name(), '--help'],
+        `the command is experimental icon ${sub.name()} (experimental); its help says what it takes`,
+      ),
+      guide,
+    ];
   const listWord = LIST_WORDS.has(lower);
   const words = listWord || LOOK_WORDS.has(lower) ? more : rest;
   const reason =
