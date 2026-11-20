@@ -514,13 +514,15 @@ function CourseHead() {
             alt="Course preview: a laptop showing the extraction pipeline built in the project"
           />
         </AspectRatio>
-        <HStack gap={2} vAlign="center">
-          <Button
-            label="See the preview lessons"
-            variant="secondary"
-            icon={<Icon icon={BookIcon} size="sm" />}
-            onClick={() => setPreviewOpen(true)}
-          />
+        <HStack gap={2} vAlign="center" wrap="wrap">
+          <StackItem>
+            <Button
+              label="See the preview lessons"
+              variant="secondary"
+              icon={<Icon icon={BookIcon} size="sm" />}
+              onClick={() => setPreviewOpen(true)}
+            />
+          </StackItem>
           <Text type="supporting" color="secondary">
             {`${capitalize(previewLessons(PREVIEW_LESSONS.length))} · no card needed`}
           </Text>
@@ -588,8 +590,9 @@ function SyllabusSection() {
   );
 
   // The search owns the result count. A hit opens the module that holds it,
-  // so the lesson is not hidden behind a closed header, and core
-  // `useAnnounce` speaks the count, so the page carries no live region.
+  // and an open module lists only the matching lessons, so what shows is
+  // what the count says. Core `useAnnounce` speaks the count, so the page
+  // carries no live region.
   const handleQueryChange = (value: string) => {
     const next = fold(value.trim());
     setQuery(value);
@@ -666,29 +669,33 @@ function SyllabusSection() {
                 </VStack>
               }>
               <VStack gap={2}>
-                {module.lessons.map(lesson => (
-                  <HStack
-                    key={lesson.title}
-                    gap={2}
-                    vAlign="center"
-                    hAlign="between">
-                    <HStack gap={2} vAlign="center">
-                      <Icon icon={PlayIcon} size="sm" />
-                      <Text type="body">{lesson.title}</Text>
-                      {lesson.badge && (
-                        <Badge
-                          label={lesson.badge}
-                          variant={
-                            lesson.badge === 'Project' ? 'warning' : 'info'
-                          }
-                        />
-                      )}
+                {module.lessons
+                  .filter(lesson => !needle || matches(lesson, needle))
+                  .map(lesson => (
+                    <HStack
+                      key={lesson.title}
+                      gap={2}
+                      vAlign="center"
+                      hAlign="between">
+                      <HStack gap={2} vAlign="center">
+                        <Icon icon={PlayIcon} size="sm" />
+                        <Text type="body">{lesson.title}</Text>
+                        {lesson.badge && (
+                          <StackItem>
+                            <Badge
+                              label={lesson.badge}
+                              variant={
+                                lesson.badge === 'Project' ? 'warning' : 'info'
+                              }
+                            />
+                          </StackItem>
+                        )}
+                      </HStack>
+                      <Text type="supporting" color="secondary">
+                        {lesson.duration}
+                      </Text>
                     </HStack>
-                    <Text type="supporting" color="secondary">
-                      {lesson.duration}
-                    </Text>
-                  </HStack>
-                ))}
+                  ))}
               </VStack>
             </Collapsible>
           ))}
@@ -1085,12 +1092,12 @@ function ReviewsSection() {
           </Card>
         </Grid>
         <HStack gap={3} vAlign="center" hAlign="between" wrap="wrap">
-          <StackItem size="fill">
+          <StackItem>
             <TextInput
               label="Search reviews"
               isLabelHidden
               size="md"
-              width="100%"
+              width={200}
               placeholder="Search reviews"
               value={query}
               onChange={handleQueryChange}
@@ -1182,7 +1189,9 @@ function FaqSection() {
               value={faq.q}
               trigger={
                 <HStack gap={3} vAlign="center">
-                  <Badge label={String(index + 1)} />
+                  <StackItem>
+                    <Badge label={String(index + 1)} />
+                  </StackItem>
                   <Text type="large" weight="bold">
                     {faq.q}
                   </Text>
