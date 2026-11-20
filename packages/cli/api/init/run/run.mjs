@@ -108,7 +108,7 @@ export function getNextSteps(invocation, cwd = process.cwd()) {
     "       import { themes, defaultThemeSlug } from './astryx-themes'",
     '       <Theme theme={themes[defaultThemeSlug]}>...</Theme>',
     `       Extend an imported theme to customize it. Run \`${invocation} theme eject <slug>\` only to fork source.`,
-    `       To make or change a theme: the experimental theme editor, \`${invocation} experimental theme editor new <name> --like neutral\` (then editor set / editor how).`,
+    `       To make a theme: \`${invocation} experimental theme create <name> --traits '<json>'\` writes a complete theme file; edit it, then run \`${invocation} experimental theme check <name> --fix\`.`,
     `    5. ${invocation} --help for all commands`,
     '',
   ];

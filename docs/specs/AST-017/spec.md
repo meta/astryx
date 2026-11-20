@@ -494,12 +494,13 @@ one removal merged ahead of the decision to allow it.
   of them does not name. First, stable theme help and docs, one theme line of the agent
   docs block, one line of `init`'s next steps (beside, never instead of, its
   existing steps), and one line in each of the `theme eject` and
-  `theme palette generate` results MAY point at the experimental theme editor
-  (`experimental theme editor`, `experimental theme preview`) as the way to make
+  `theme palette generate` results MAY point at the experimental theme
+  authoring commands (`experimental theme create`, `experimental theme check`,
+  `experimental theme editor`, `experimental theme preview`) as the way to make
   and change a theme, and `experimental theme preview app <dir>` as the starter
   app that shows a theme when there is no app yet, phrased for theme work only
   and labeled experimental each time; these lines name no other experimental
-  surface, and this exception ends when the theme editor graduates or is
+  surface, and this exception ends when those commands graduate or are
   removed. Another named
   exception covers the command that writes a page as one HTML file: the
   answer to an unknown top-level word that asks for it (`export`, `render`,

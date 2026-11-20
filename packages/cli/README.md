@@ -118,7 +118,7 @@ Every run reads one base: Core, or an installed integration whose manifest decla
 | `search`       | Search components, hooks, docs, templates, and themes in one ranked list                                                                                                                      | `same`            |
 | `swizzle`      | Copy component source for customization                                                                                                                                                       | `refuse`          |
 | `template`     | List, show, or scaffold page and block templates                                                                                                                                              | `same`            |
-| `theme`        | Add, switch, build, and author themes (to make or change one, use experimental theme editor)                                                                                                  | by subcommand     |
+| `theme`        | Add, switch, build, and author themes (to make one, use experimental theme create --traits, then experimental theme check after every edit)                                                  | by subcommand     |
 | `upgrade`      | Update your code after upgrading Astryx, and refresh ShadCN-copied components                                                                                                                 | `own`             |
 
 <!-- END GENERATED: commands -->
