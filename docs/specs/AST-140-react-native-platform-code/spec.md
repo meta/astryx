@@ -199,7 +199,8 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
     (`spec:AST-130`), on both platforms with the same name, with
     `isSupported` false and a note on a platform that lacks one.
   - The package's public API reads the features a binary implements:
-    `contractFeatures(contract)` answers the sorted list of the contract's
+    `contractFeatures(contract)`, exported from the package's main entry `.`,
+    answers the sorted list of the contract's
     named features that the binary implements, or `null` when the binary does
     not carry the contract. Feature names are of a generated, typed
     `ContractFeature` union, so type checking catches an unknown or misspelt
@@ -373,7 +374,8 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
     method. An asynchronous method takes a typed resolve and a reject (a
     stable code and a message), and settles exactly once. A reject's code is
     one of the method's reasons (FR3), and the binding turns the reject into
-    FR3's result object with that code as its reason, so JavaScript always
+    FR3's result object, with status `cancelled` when the code is `cancelled`
+    and `error` otherwise, and that code as its reason, so JavaScript always
     receives a result value (DEC-2). An optional
     spec method is an optional member on iOS and, on Android, resolves `error`
     with reason `unsupported` by default. A module that emits events has `eventSink` and
@@ -394,7 +396,6 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
     | array                     | typed `NSArray`, scalars boxed                                       | `List<T>`                                                      |
     | untyped object            | `NSDictionary<NSString*, id>`                                        | `Map<String, Any?>`                                            |
     | `Promise<T>`              | `resolve(T)` and `reject(code, message)` blocks                      | a promise object with `resolve(T)` and `reject(code, message)` |
-    | callback                  | block                                                                | function type                                                  |
 
   - On a view, an optional scalar, enum, or array without a default reads as
     React Native's code generation reads it (false, 0, the first case, empty),
@@ -417,9 +418,9 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
     (`<Name>HostSet<Prop>(host, value)`, `<Name>Host<Command>(host, …)`) let a
     C caller reach a host directly.
   - On Android the seam is public Kotlin interfaces in one package, as on iOS,
-    where the seam headers are public headers; an engine outside the platform
-    module binds them. A class adopts its seam directly or through a host
-    object it owns.
+    where the seam headers are public headers. A class adopts its seam directly
+    or through a host object it owns, and an engine binding calls those
+    members.
   - A class adopts its seam and keeps its behavior. For React Native, the
     Fabric component or view manager compares old and new props, writes the
     changed ones through the host, calls `didUpdateProps`, and sets
@@ -470,7 +471,7 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
 | FR7      | The conformance suites on iOS, Android, and the JavaScript double; the frame recorder's behavior cases on the Simulator and unit tests of `recordFrames`                                                                                                                                                                                 | each contract; a binary with and without each feature; a push; a large title's collapse; an off-screen `testID`; a second recording; a step that never settles; a Release binary; VoiceOver on during a recording                                          | An implementation that fails its suite, a double that passes a case the device fails, a native behavior change without cases, a sample at a resting position during an animation, an off-screen `testID` that slows the recorded frames, two recordings at once, a recording past 60 seconds, a recorder in a Release binary, a `recordFrames` that passes without recording, or a recording that changes an element's label, value, or order                                                                                                                  |
 | FR8      | Check of each codegen spec against its engine-neutral description; source check of contract names and types                                                                                                                                                                                                                              | each contract                                                                                                                                                                                                                                              | A spec that differs from its description, a description without its owner, platforms, first version, stability, members, or named features, or a binding-layer name in a contract or an app-facing type                                                                                                                                                                                                                                                                                                                                                        |
 | FR9      | Symbol and runtime checks of the built binaries; the compatibility apps of `spec:AST-112/FR2` on iOS and Android                                                                                                                                                                                                                         | a binary with each listed library beside Astryx; an exception's self-check that fails                                                                                                                                                                      | An unprefixed symbol, a swizzled or exchanged method, a replaced delegate or appearance proxy, a conflict with a listed library, or a failed self-check without the public path                                                                                                                                                                                                                                                                                                                                                                                |
-| FR11     | The package's check of generated files; native builds on iOS and Android of every class against its seam; source check of each binding; unit tests of the generated type mapping; conformance suites run through the seam                                                                                                                | each native view and module; a spec change; a prop batch; an event with and without a payload; an optional value without a default; a member whose name a platform class already has; a C caller on iOS; a seam reject; a record with every declared field | A stale seam, a class that does not adopt its seam, a binding that reaches a class other than through its seam, an engine type, value box, or name lookup across it, a prop set out of spec order or unchanged, a missing `didUpdateProps` call, an event without its typed arguments, an optional view scalar that reads null, a generated name without the `Seam` infix, a colliding member name without `Prop` or `Field`, a seam reject that reaches JavaScript as a rejection, a record field its spec does not declare, or a behavior change on adoption |
+| FR11     | The package's check of generated files; native builds on iOS and Android of every class against its seam; source check of each binding; unit tests of the generated type mapping; conformance suites run through the seam                                                                                                                | each native view and module; a spec change; a prop batch; an event with and without a payload; an optional value without a default; a member whose name a platform class already has; a C caller on iOS; a seam reject; a record with every declared field | A stale seam, a class that does not adopt its seam, a binding that reaches a class other than through its seam, an engine type or any name lookup crossing the seam, a prop set out of spec order or unchanged, a missing `didUpdateProps` call, an event without its typed arguments, an optional view scalar that reads null, a generated name without the `Seam` infix, a colliding member name without `Prop` or `Field`, a seam reject that reaches JavaScript as a rejection, a record field its spec does not declare, or a behavior change on adoption |
 
 ## Decision log
 
