@@ -6,8 +6,7 @@
  * components each template source Astryx ships composes and the module paths
  * it imports, keyed by a hash of the source, so the published package reads a
  * shipped template's components and imports without parsing it. The imports
- * of a source's filled copy, with each icon placeholder replaced by the
- * library icon that draws it, are stored too, keyed by a hash of that copy:
+ * of a source's filled copy are stored too, keyed by a hash of that copy:
  * build's setup notes read the filled copy. The file is not committed; a
  * checkout without it parses every source, with the same result. `--clean`
  * (at `postpack`) removes it.

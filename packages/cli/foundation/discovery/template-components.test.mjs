@@ -45,6 +45,30 @@ describe('stored template component lists', () => {
     expect(filledChecked).toBeGreaterThan(0);
   });
 
+  it("hold the imports of each shipped block template's filled copy", () => {
+    /** @type {string[]} */
+    const files = [];
+    const walk = (/** @type {string} */ dir) => {
+      for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
+        const file = path.join(dir, entry.name);
+        if (entry.isDirectory()) walk(file);
+        else if (entry.name.endsWith('.tsx')) files.push(file);
+      }
+    };
+    walk(path.join(CLI_ROOT, 'assets', 'templates', 'blocks'));
+    let filledChecked = 0;
+    for (const file of files) {
+      const source = fs.readFileSync(file, 'utf-8');
+      const {source: filled} = fillTemplatePlaceholders(source);
+      if (filled === source) continue;
+      expect(stored[`imports:${storedKey(filled)}`], file).toEqual(
+        parsedSpecifiers(filled),
+      );
+      filledChecked++;
+    }
+    expect(filledChecked).toBeGreaterThan(0);
+  });
+
   it('answer a shipped source with what parsing it returns', () => {
     const file = path.join(
       CLI_ROOT,
