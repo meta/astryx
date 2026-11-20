@@ -46,8 +46,11 @@
  *   `notes`: information beside the issues. A note fails nothing by default;
  *   one with `next: true` counts as a warning under `integration check
  *   --next`, fails `integration check --strict --next`, and fails `--strict`
- *   from the next minor release. Notes include `invalid_cli_command`, a
- *   `cliCommand` that was ignored as malformed;
+ *   from the next minor release. Notes include `unknown_manifest_key`, a
+ *   manifest key the running CLI does not know (marked `next` only when it
+ *   is one letter from a known key); `invalid_cli_command`, a
+ *   `cliCommand` that was ignored as malformed; `invalid_install_guidance`,
+ *   an `installGuidance` that was ignored as malformed;
  *   `component_without_example`, `template_category`,
  *   `showcase_not_standalone` and `template_asset_not_packed`, what a
  *   package's examples need (next minor; a block's `alsoShowcaseFor` names
@@ -143,8 +146,9 @@
  *   (`entry`).
  * @property {{unmapped: Array<{definition: string, templates: number}>}} [templateMeanings]
  *   The icon definitions the bundled templates use that the set's `map`
- *   does not name, each with how many templates use it, most used first,
- *   then by name. A copied template renders a placeholder for each in a
+ *   does not name, leaving out one whose fallback (AST-084 FR23) it maps,
+ *   each with how many templates use it, most used first, then by name. A
+ *   copied template renders a placeholder for each in a
  *   project that uses only this set. Built-in ones are also error issues.
  */
 

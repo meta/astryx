@@ -220,4 +220,130 @@ describe('stable build typography values', () => {
       /1200 is a number that is no weight .*a type mismatch.*write '600'/,
     );
   });
+
+  it('warns a type scale with no base or ratio, or one that is no block', async () => {
+    for (const [scale, missing] of [
+      ['{ratio: 1.2}', /given no base.*NaNrem/],
+      ['{base: 16}', /given no ratio.*NaNrem/],
+      ['{}', /given no base/],
+      ['1.25', /typography\.scale is a block of a base and a ratio/],
+    ]) {
+      const r = await build(`{scale: ${scale}}`);
+      expect(typographyWarnings(r).join('\n'), String(scale)).toMatch(missing);
+    }
+  });
+
+  it('warns a weights that is no block of levels, once, by what Core reads', async () => {
+    for (const [weights, reads] of [
+      ["'bold'", /reads "bold" by its letters as levels/],
+      ['600', /finds no levels in 600, so it builds nothing/],
+      ["['800', '700']", /by its places as levels/],
+    ]) {
+      const r = await build(
+        `{scale: {base: 16, ratio: 1.25}, heading: {weights: ${weights}}}`,
+      );
+      const lines = typographyWarnings(r);
+      expect(lines, String(weights)).toHaveLength(1);
+      expect(lines[0], String(weights)).toMatch(reads);
+      expect(lines[0]).toMatch(/use heading\.weight/);
+    }
+  });
+
+  it('gives the no-scale reason for any weight without a scale, and the empty reason for an empty one', async () => {
+    const off = await build("{body: {weight: 'semi-bold'}}");
+    expect(typographyWarnings(off)).toHaveLength(1);
+    expect(typographyWarnings(off)[0]).toMatch(/only from a type scale/);
+    for (const weight of ["''", '0']) {
+      const r = await build(
+        `{scale: {base: 16, ratio: 1.25}, body: {weight: ${weight}}}`,
+      );
+      expect(typographyWarnings(r).join('\n'), weight).toMatch(
+        /is empty, and Core skips an empty weight and keeps its default, so it builds nothing/,
+      );
+    }
+  });
+
+  it('warns the key of a heading level written twice that builds nothing', async () => {
+    const r = await build(
+      "{scale: {base: 16, ratio: 1.25}, heading: {weights: {'01': '300', 1: '800'}}}",
+    );
+    expect(typographyWarnings(r).join('\n')).toMatch(
+      /typography\.heading\.weights\.1 .*1 and 01 are both heading level 1, and Core keeps the one it reads last \(01\)/,
+    );
+  });
+
+  it('judges a boxed value as its primitive, and a role or typography that is no block', async () => {
+    const boxed = await build(
+      "{scale: {base: new Number(16), ratio: new Number(1.25)}, body: {weight: new String('600'), family: new String('Lato')}}",
+    );
+    expect(typographyWarnings(boxed)).toEqual([]);
+    const role = await build("{body: 'Inter'}");
+    expect(typographyWarnings(role).join('\n')).toMatch(
+      /typography\.body is a block of fields/,
+    );
+    const whole = await buildSource(
+      "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'p', typography: 'Inter' as any});\n",
+    );
+    expect(whole.lines.join('\n')).toMatch(
+      /typography \(line 2\): typography is a block of roles/,
+    );
+  });
+
+  it('judges a plain-object theme on the values it loads', async () => {
+    const r = await buildSource(
+      "const fams = ['Inter', 'Arial'];\nexport default {name: 'p', typography: {body: {family: fams.join(', ')}}};\n",
+    );
+    expect(typographyWarnings(r).join('\n')).toMatch(
+      /typography\.body\.family .*one family name/,
+    );
+  });
+
+  it('reads a signed number weight as written', async () => {
+    const minus = await build(
+      '{scale: {base: 16, ratio: 1.25}, body: {weight: -100 as any}}',
+    );
+    expect(typographyWarnings(minus).join('\n')).toMatch(
+      /-100 is a number that is no weight/,
+    );
+    const plus = await build(
+      '{scale: {base: 16, ratio: 1.25}, body: {weight: +500 as any}}',
+    );
+    expect(typographyWarnings(plus).join('\n')).toMatch(
+      /500 is a number: a type mismatch/,
+    );
+  });
+
+  it('warns a radius scale with no base or multiplier, or one that is no number', async () => {
+    for (const [radius, why] of [
+      [
+        '{base: 8}',
+        /radius \(line 4\): the radius scale is given no multiplier.*NaNpx/,
+      ],
+      ['{multiplier: 2}', /given no base/],
+      ["{base: 'x', multiplier: 1}", /radius\.base .*is a number/],
+      // A falsy radius Core skips: the base's corners stay.
+      [
+        '0',
+        /Core skips a radius of 0 .*keeps its base theme's corners.*radius: \{base: 0, multiplier: 1\}/,
+      ],
+      ["''", /Core skips a radius of "" .*keeps its base theme's corners/],
+    ]) {
+      const r = await buildSource(
+        `import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({\n  name: 'p',\n  radius: ${radius},\n});\n`,
+      );
+      expect(r.lines.join('\n'), String(radius)).toMatch(why);
+    }
+    // A whole scale, and one whose base Core multiplies as a number (a
+    // boolean counts as 1 or 0), warn nothing.
+    for (const radius of [
+      '{base: 8, multiplier: 1}',
+      '{base: true, multiplier: 1}',
+      '{base: 4, multiplier: false}',
+    ]) {
+      const whole = await buildSource(
+        `import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'p', radius: ${radius}});\n`,
+      );
+      expect(whole.lines.join('\n'), radius).not.toMatch(/radius/);
+    }
+  });
 });

@@ -230,7 +230,8 @@ export function captureEnv({cliVersion, intl = intlNow} = {}) {
 /**
  * Snapshot the project the command ran against. Names of a user's private
  * packages are identifying, so this records only shape: whether a project is
- * present, whether it is configured, and how many integrations it loads.
+ * present, whether it is configured, and how many integrations its
+ * astryx.config names.
  *
  * @param {{hasConfig?: boolean, initialized?: boolean, integrationCount?: number, inProject?: boolean}} [facts]
  * @returns {import('../../authoring/debug/type').DebugEventProject}

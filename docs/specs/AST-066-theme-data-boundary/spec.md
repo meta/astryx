@@ -47,7 +47,7 @@ raw global data-token block. Unspecified data colors use the StyleX defaults and
 normal CSS inheritance; a nested theme changes only the subset it authors.
 
 The public CSS custom-property names, JavaScript token resolution, generated
-JavaScript marker, and three existing global `color-scheme` rules remain stable.
+JavaScript marker, and the two global `color-scheme` mode pins remain stable.
 Runtime and built theme compilation produce the same sparse scoped override.
 
 StyleX 0.19 tree-shakes `defineVars` at the module/group boundary, not per
@@ -63,8 +63,7 @@ contract does not claim token-granular pruning that the compiler does not provid
 - Adding a separate CSS defaults asset or keeping a parallel plain-JavaScript
   token family as an independent source of truth.
 - Making concrete themes repeat defaults they do not author.
-- Scoping, renaming, or redesigning the three existing global `color-scheme`
-  selectors.
+- Scoping, renaming, or redesigning the two global `color-scheme` mode pins.
 - Changing scoped prose defaults, non-data token declarations, component
   overrides, adaptations, MediaTheme rules, icon output, or type augmentation.
 - Defining the separate `@astryxdesign/build` source-build composition contract,
@@ -294,29 +293,30 @@ contract does not claim token-granular pruning that the compiler does not provid
   member's identity. A zero-data-delta member contributes no data declaration.
   The family file never repeats the canonical 56. Nested members follow FR8,
   switching follows FR10, and the family file emits the global color-scheme
-  policy at most once.
+  mode pins at most once.
 
 ### Global color-scheme compatibility
 
-- **FR16 — Complete bundles may keep one compatible global environment policy.**
-  A concrete bundle MAY continue to emit exactly these three rules:
+- **FR16 — Complete bundles pin only a mode the page forces.** A concrete
+  bundle MAY emit exactly these two rules:
 
   ```text
   @layer astryx-theme {
-    :root { color-scheme: light dark; }
     html[data-theme="light"] { color-scheme: light; }
     html[data-theme="dark"] { color-scheme: dark; }
   }
   ```
 
-  A standalone concrete bundle that emits the policy MUST emit all three
-  byte-equivalent selectors, declarations, and layer ownership. A theme MUST NOT
-  specialize, partially emit, reorder, or otherwise diverge from that policy. A
-  standalone bundle MAY omit the policy only as a complete set. Family
-  aggregation retains its existing identity-scoped color-scheme composition;
-  this specification neither redesigns that composition nor treats it as a new
-  concrete-theme policy. These environment declarations do not permit theme
-  build to emit data defaults globally.
+  A standalone concrete bundle that emits them MUST emit both byte-equivalent
+  selectors, declarations, and layer ownership, and MAY omit them only as a
+  pair. No theme bundle, standalone or family, declares `color-scheme: light
+dark` on the page root or on a theme's own scope: a theme follows the page's
+  scheme, and following the reader's device is the page's own choice, made by
+  `reset.css` or the host's own `color-scheme` on `html`. A host with no scheme
+  of its own keeps it when it loads a theme stylesheet. Family aggregation
+  pins each member's scope to a mode `html` forces, and declares nothing when
+  `html` forces none. These environment declarations do not permit theme build
+  to emit data defaults globally.
 
 ### Compatibility, migration, and documentation
 
@@ -372,8 +372,9 @@ PostCSS integration always emits it.
 
 Concrete standalone and family themes contain only authored scoped overrides.
 Nested themes inherit omissions, JavaScript resolution remains compatible, and
-the global `color-scheme` rules, built marker, filenames, and paired CSS/JS/type
-outputs are unchanged.
+the built marker, filenames, and paired CSS/JS/type outputs are unchanged.
+Theme bundles pin the page's color scheme only where `html` forces a mode
+(FR16, DEC-11).
 
 `architecture:theme-compilation` owns runtime/static sparse theme output.
 `architecture:theme-application` owns provider nesting and style lifetime.
@@ -422,10 +423,11 @@ Theme-output verification MUST enumerate all 56 canonical names and fail if an
 un-authored canonical value appears in standalone, multi-file, family, or runtime
 Theme CSS. It MUST fail on any raw `:root` data declaration from theme build and
 on removal of the explicit `reset, astryx-base, astryx-theme` order registration.
-Global color-scheme verification separately compares the complete standalone
-three-rule policy across representative emitting bundles, asserts that a
-non-emitting standalone bundle contains none of the three, and preserves existing
-family composition.
+Global color-scheme verification separately compares the two mode pins across
+representative emitting bundles, asserts that no bundle declares `color-scheme:
+light dark`, asserts that a non-emitting standalone bundle contains neither pin,
+and measures a host with no scheme of its own keeping its root scheme when it
+loads a built theme stylesheet without `reset.css`.
 
 ### Completion criteria
 
@@ -542,6 +544,8 @@ the complete set. Tests prevent specialization or partial emission.
 
 Rejected: scoping or splitting color-scheme packaging.
 
+DEC-11 replaces the root rule of this policy: bundles keep the two mode pins.
+
 ### DEC-8 — Migrate through an atomic stack and breaking minor
 
 **Reference:** `spec:AST-066/DEC-8`
@@ -588,40 +592,55 @@ without a `dataVars` import are unsupported (FR4).
 Rejected: an upgrade check that infers the build mode and requires fallbacks,
 since no project signal reliably separates prebuilt from source builds.
 
+### DEC-11 — A theme follows the page's color scheme
+
+**Reference:** `spec:AST-066/DEC-11`
+**Decider:** `josephfarina` (HQ, under his delegation), `2026-11-17`
+
+Theme bundles pin the scheme only where the page or the Theme provider forces a
+mode on `html`, and complete bundles repeat those two pins when identical or
+omit both (FR16). The page alone chooses to follow the reader's device, through
+`reset.css` or its own `color-scheme` on `html`, so installing a theme leaves a
+host's scheme alone. Tests prevent a root or scope `light dark` declaration and
+partial emission.
+
+Rejected: a theme declaring `:root { color-scheme: light dark; }`, which turns a
+host with no scheme of its own to the reader's device.
+
 ## Deprecation and cleanup records
 
 ### IFIX-0009 — Themes stop emitting raw global data-color defaults
 
-| Field         | Value                                                                                                                                                                                                                                                       |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| id            | `IFIX-0009`                                                                                                                                                                                                                                                 |
-| cleanup       | `CLN-0016`                                                                                                                                                                                                                                                  |
-| package       | `@astryxdesign/core`, `@astryxdesign/cli`                                                                                                                                                                                                                   |
-| surface       | The unscoped raw `:root` block of canonical data-color defaults that `Theme` runtime and `theme build` (standalone and family) emit for every theme                                                                                                         |
-| authority     | FR6 (concrete themes emit only explicitly authored data values), FR7 (theme build never emits raw global data defaults), and FR12 (availability follows compilation mode, not Theme presence). Owners: `spec:AST-066`: `cixzhang`                           |
-| reproducer    | With the latest stable packages, a theme that authors no data colors emits every canonical data default in an unscoped root block, in runtime CSS and in `theme build` output                                                                               |
-| affected      | CSS that reads a raw data-color custom property directly, relying on a theme to define it, without compiling a `dataVars` consumer; and stale generated theme CSS checked into an app                                                                       |
-| matrix        | Theme with no authored data colors: every canonical default before; none after. Authored override: emitted before and after, scoped to its theme. StyleX `dataVars` consumers: same painted values before and after. Global `color-scheme` rules: unchanged |
-| coexistence   | The public `dataVars` group supplies canonical values through retained source compilation or the prebuilt Core stylesheet; a compiled import alone does not emit CSS.                                                                                       |
-| migration     | Read data colors through the public `dataVars` group, or author the needed values in the theme. Regenerate built theme CSS                                                                                                                                  |
-| codemod       | `astryx upgrade` runs a validator that rejects stale generated CSS; direct raw consumers need no codemod                                                                                                                                                    |
-| downstream    | Maintained docs and templates read data colors through `dataVars`                                                                                                                                                                                           |
-| rollback      | Restore the raw default block in runtime and `theme build` output from the final-patch baseline                                                                                                                                                             |
-| harm of delay | Every theme keeps shipping a second global palette that survives without any consumer and can disagree with the canonical StyleX group                                                                                                                      |
-| harm of apply | CSS that reads a raw data variable without `dataVars` or an authored value paints with the variable unset until it migrates                                                                                                                                 |
-| transition    | no prior transition                                                                                                                                                                                                                                         |
-| state         | `proposed`                                                                                                                                                                                                                                                  |
-| open decision | None beyond approving this proposed record and its cleanup                                                                                                                                                                                                  |
+| Field         | Value                                                                                                                                                                                                                                                                       |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id            | `IFIX-0009`                                                                                                                                                                                                                                                                 |
+| cleanup       | `CLN-0016`                                                                                                                                                                                                                                                                  |
+| package       | `@astryxdesign/core`, `@astryxdesign/cli`                                                                                                                                                                                                                                   |
+| surface       | The unscoped raw `:root` block of canonical data-color defaults that `Theme` runtime and `theme build` (standalone and family) emit for every theme                                                                                                                         |
+| authority     | FR6 (concrete themes emit only explicitly authored data values), FR7 (theme build never emits raw global data defaults), and FR12 (availability follows compilation mode, not Theme presence). Owners: `spec:AST-066`: `cixzhang`                                           |
+| reproducer    | With the latest stable packages, a theme that authors no data colors emits every canonical data default in an unscoped root block, in runtime CSS and in `theme build` output                                                                                               |
+| affected      | CSS that reads a raw data-color custom property directly, relying on a theme to define it, without compiling a `dataVars` consumer; and stale generated theme CSS checked into an app                                                                                       |
+| matrix        | Theme with no authored data colors: every canonical default before; none after. Authored override: emitted before and after, scoped to its theme. StyleX `dataVars` consumers: same painted values before and after. Global `color-scheme` rules: the two mode pins of FR16 |
+| coexistence   | The public `dataVars` group supplies canonical values through retained source compilation or the prebuilt Core stylesheet; a compiled import alone does not emit CSS.                                                                                                       |
+| migration     | Read data colors through the public `dataVars` group, or author the needed values in the theme. Regenerate built theme CSS                                                                                                                                                  |
+| codemod       | `astryx upgrade` runs a validator that rejects stale generated CSS; direct raw consumers need no codemod                                                                                                                                                                    |
+| downstream    | Maintained docs and templates read data colors through `dataVars`                                                                                                                                                                                                           |
+| rollback      | Restore the raw default block in runtime and `theme build` output from the final-patch baseline                                                                                                                                                                             |
+| harm of delay | Every theme keeps shipping a second global palette that survives without any consumer and can disagree with the canonical StyleX group                                                                                                                                      |
+| harm of apply | CSS that reads a raw data variable without `dataVars` or an authored value paints with the variable unset until it migrates                                                                                                                                                 |
+| transition    | no prior transition                                                                                                                                                                                                                                                         |
+| state         | `proposed`                                                                                                                                                                                                                                                                  |
+| open decision | None beyond approving this proposed record and its cleanup                                                                                                                                                                                                                  |
 
 ### CLN-0016 — Remove raw global data-color defaults from theme output
 
-| Field     | Value                                                                                                                                              |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| id        | `CLN-0016`                                                                                                                                         |
-| lifecycle | `IFIX-0009`                                                                                                                                        |
-| delta     | Runtime and built themes emit only authored data values, scoped to their theme. Explicit layer order and global `color-scheme` rules are unchanged |
-| rollback  | Restore the raw default block from the final-patch baseline                                                                                        |
-| state     | `pending` — lands in a declared minor with its `[breaking]` Changeset                                                                              |
+| Field     | Value                                                                                                                                                              |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| id        | `CLN-0016`                                                                                                                                                         |
+| lifecycle | `IFIX-0009`                                                                                                                                                        |
+| delta     | Runtime and built themes emit only authored data values, scoped to their theme. Explicit layer order and global `color-scheme` rules are the two mode pins of FR16 |
+| rollback  | Restore the raw default block from the final-patch baseline                                                                                                        |
+| state     | `pending` — lands in a declared minor with its `[breaking]` Changeset                                                                                              |
 
 ## Open questions
 

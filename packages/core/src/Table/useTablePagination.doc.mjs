@@ -8,8 +8,29 @@ export const docs = {
   displayName: 'useTablePagination',
   description: 'Headless pagination plugin for Table. Call with a config object: `useTablePagination({ page, onPageChange, totalItems })`. Returns a TablePlugin to pass to `<Table plugins={{ pagination: paginationPlugin }} />`.',
   usage: {
-    description: 'Call useTablePagination with a config object containing page state and callback. Pass the returned plugin to Table via the plugins prop.',
+    description: 'Call useTablePagination with a config object containing page state and callback. T is the row type; TypeScript cannot infer it from the config, so it defaults to Record<string, unknown>, which a Table with typed rows rejects: pass it, as in `useTablePagination<Walk>(…)` for `<Table<Walk>>`. Pass the returned plugin to Table via the plugins prop.',
   },
+  examples: [
+    {
+      label: 'Typed rows, one page at a time',
+      code: `interface Walk extends Record<string, unknown> { id: string; name: string; km: number }
+const columns: TableColumn<Walk>[] = [{key: 'name', header: 'Name'}, {key: 'km', header: 'Km'}];
+
+const pageSize = 20;
+const [page, setPage] = useState(1);
+// Pass the row type: TypeScript cannot infer it from the config.
+const paginationPlugin = useTablePagination<Walk>({
+  page,
+  onPageChange: setPage,
+  totalItems: walks.length,
+  pageSize,
+});
+// The plugin draws the page controls; pass only the current page's rows.
+const pageRows = walks.slice((page - 1) * pageSize, page * pageSize);
+
+<Table data={pageRows} columns={columns} idKey="id" plugins={{pagination: paginationPlugin}} />;`,
+    },
+  ],
   props: [
     {
       name: 'page',
@@ -84,7 +105,7 @@ export const docs = {
 export const docsZh = {
   name: 'useTablePagination',
   displayName: 'useTablePagination',
-  description: '无头分页插件。支持客户端切片、服务器端分页和游标分页。自动渲染 Pagination 控件。',
+  description: '无头分页插件。T 是行类型；TypeScript 无法从配置推断它，因此默认为 Record<string, unknown>，带类型行的 Table 不接受：请传入，例如 `useTablePagination<Walk>(…)` 对应 `<Table<Walk>>`。支持客户端切片、服务器端分页和游标分页。自动渲染 Pagination 控件。',
   props: [
     {
       name: 'page',
@@ -127,7 +148,7 @@ export const docsZh = {
 export const docsDense = {
   name: 'useTablePagination',
   displayName: 'useTablePagination',
-  description: 'Headless pagination plugin. Client-side slicing, server-side, or cursor-based. Auto-renders Pagination above/below/both.',
+  description: 'Headless pagination plugin. T = row type, not inferred from config (defaults to Record<string, unknown>, rejected by typed Table): pass it, e.g. `useTablePagination<Walk>(…)`. Client-side slicing, server-side, or cursor-based. Auto-renders Pagination above/below/both.',
   propDescriptions: {
     page: 'Current page (1-based).',
     onPageChange: 'Called on page change.',

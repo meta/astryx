@@ -301,66 +301,89 @@ export const doc = {
         'The command needs a project (an app with Astryx installed, or an integration package) and was run outside one. Nothing was written.',
     },
 
+    // Bases
+    {
+      value: 'ERR_BASE_CAPABILITY',
+      description:
+        "The command, or an option or argument value given to it, needs a step the run's base does not serve. Nothing was written. The envelope's `requirement` names the command, the steps, and the base.",
+    },
+    {
+      value: 'ERR_BASE_NOT_FOUND',
+      description:
+        '`--base` names a package that is not installed where the run can read it, or that is not Core and does not declare `base`. Nothing was done.',
+    },
+    {
+      value: 'ERR_BASE_AMBIGUOUS',
+      description:
+        'The project installs two or more bases and no Core, and the run named none with `--base`. Nothing was done.',
+    },
+
     // Render (experimental: may change or be removed in a patch release)
     {
       value: 'ERR_RENDER_COMPILE',
       stability: 'experimental',
       description:
-        'The page given to render does not compile. A stylesheet the page imports that is not valid CSS is reported this way too, naming the file. Nothing was written. Raised only by the experimental render command.',
+        'The page given to render does not compile. A stylesheet the page imports that is not valid CSS is reported this way too, naming the file. Nothing was written. Raised only by the experimental export command.',
     },
     {
       value: 'ERR_RENDER_NO_DEFAULT_EXPORT',
       stability: 'experimental',
       description:
-        'The page given to render has no default export to render. Nothing was written. Raised only by the experimental render command.',
+        'The page given to render has no default export to render. Nothing was written. Raised only by the experimental export command.',
     },
     {
       value: 'ERR_RENDER_MISSING_DEPENDENCY',
       stability: 'experimental',
       description:
-        'The page imports a package that is not installed where the page is. Nothing was written. Raised only by the experimental render command.',
+        "The page imports a package that is not installed where the page is, or the esbuild the CLI depends on to build the page's script is missing from the CLI's install (install the CLI again). Nothing was written. For a package the page imports, the suggestion is the install command. Raised only by the experimental export command.",
     },
     {
       value: 'ERR_RENDER_BROWSER_API',
       stability: 'experimental',
       description:
-        'The page reads a browser-only API, such as window or document, while rendering. Nothing was written. Raised only by the experimental render command.',
+        'The page reads a browser-only API, such as window or document, while rendering. Nothing was written. Raised only by the experimental export command.',
     },
     {
       value: 'ERR_RENDER_ASSET_TOO_LARGE',
       stability: 'experimental',
       description:
-        'A local file the page uses is too large to inline into one file. Nothing was written. Raised only by the experimental render command.',
+        'A local file the page uses is too large to inline into one file. Nothing was written. Raised only by the experimental export command.',
     },
     {
       value: 'ERR_RENDER_TIMEOUT',
       stability: 'experimental',
       description:
-        'The page did not finish rendering in time and was stopped. Nothing was written. Raised only by the experimental render command.',
+        'The page did not finish rendering in time and was stopped. Nothing was written. Raised only by the experimental export command.',
     },
     {
       value: 'ERR_RENDER_FAILED',
       stability: 'experimental',
       description:
-        "The page threw while rendering, or Node crashed while it rendered the page. Raised by the experimental render command, which then writes nothing, and by the experimental theme editor when it cannot render a theme's pages (two copies of React, a component that throws, or a render past its time limit; the theme it built is kept, and the refusal says so). A React that is not installed is ERR_RENDER_MISSING_DEPENDENCY.",
+        "The page threw while rendering, or Node crashed while it rendered the page. Raised by the experimental export command, which then writes nothing, and by the experimental theme editor when it cannot render a theme's pages (two copies of React, a component that throws, or a render past its time limit; the theme it built is kept, and the refusal says so). A React that is not installed is ERR_RENDER_MISSING_DEPENDENCY.",
     },
     {
       value: 'ERR_RENDER_NOT_ASTRYX',
       stability: 'experimental',
       description:
-        '`render --reverse` was given a file that a render did not write, with no embedded source and no Astryx markup. Nothing was written. Raised only by the experimental render command.',
+        '`experimental export` was given a page that uses no Astryx components or styles (its script holds no module of an Astryx package and it imports no Astryx stylesheet), or `experimental import` (or `export --reverse`) was given a file that a render did not write, with no embedded source and no Astryx markup. Nothing was written; don\'t add Astryx to such an app to export it: share the page with the app\'s own build instead (for a Vite app, a single-file build). Raised only by the experimental import and export commands.',
     },
     {
       value: 'ERR_RENDER_SOURCE_DAMAGED',
       stability: 'experimental',
       description:
-        '`render --reverse` refused the received file, and nothing was written: its embedded source was removed (a file a render wrote, with no Astryx components left to rebuild from), is cut short (also a file a render wrote that ends before it), or is damaged (not valid, a file does not match its checksum, or it names a CLI version that is not a release version), the page holds merge conflict markers, lists a path twice, carries a module, stylesheet or JSON file the page does not reach through its own imports, or an image, font or media file whose bytes are not one, or carries a file a render never embeds: a dotfile or dot-folder, anything under node_modules, a package manifest, lockfile or tool configuration, a file a test, story or benchmark runner would run, or any kind but a module, stylesheet, JSON file or image. Raised only by the experimental render command.',
+        '`experimental import` (or `export --reverse`) refused the received file, and nothing was written: its embedded source was removed (a file a render wrote, with no Astryx components left to rebuild from), is cut short (also a file a render wrote that ends before it), or is damaged (not valid, a file does not match its checksum, or it names a CLI version that is not a release version), the page holds merge conflict markers, lists a path twice, carries a module, stylesheet or JSON file the page does not reach through its own imports, or an image, font or media file whose bytes are not one, or carries a file a render never embeds: a dotfile or dot-folder, anything under node_modules, a package manifest, lockfile or tool configuration, a file a test, story or benchmark runner would run, or any kind but a module, stylesheet, JSON file or image. Raised only by the experimental import and export commands.',
     },
     {
       value: 'ERR_RENDER_NEWER_FORMAT',
       stability: 'experimental',
       description:
-        '`render --reverse` was given a file in a newer render format than this CLI reads. Nothing was written. The message names the version of the CLI that wrote the file, which reads it. Raised only by the experimental render command.',
+        '`experimental import` (or `export --reverse`) was given a file in a newer render format than this CLI reads. Nothing was written. The message names the version of the CLI that wrote the file, which reads it. Raised only by the experimental import and export commands.',
+    },
+    {
+      value: 'ERR_RENDER_SCRIPT',
+      stability: 'experimental',
+      description:
+        "`render` could not build the page's script for the browser: a module the page loads needs Node (such as `fs` or `path`), or cannot be found or compiled for the browser. Nothing was written. The message names the module. Raised only by the experimental export command.",
     },
     {
       value: 'ERR_THEME_BAD_VALUE',

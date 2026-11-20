@@ -43,12 +43,14 @@ import {renderCommandTokens} from '../doc-compiler/doc-syntax.mjs';
 import {isValidSemver, semverGte} from '../env/semver.mjs';
 import {discoverComponents} from '../discovery/component-discovery.mjs';
 import {Project} from '../config/project.mjs';
+import {iconFeatureGate} from '../integrations/icon-features.mjs';
 import {cliRootNamespaceNames} from '../doc-compiler/tree.mjs';
 import {humanLog} from '../response/json.mjs';
 import {ERROR_CODES} from '../response/error-codes.mjs';
 import {
   AGENTS_MD,
   AGENT_DOC_PATHS,
+  holdsAstryxBlock,
   CLAUDE_MD,
   CLAUDE_DIR_MD,
   CURSOR_RULES,
@@ -94,6 +96,15 @@ export {
 } from './agent-docs-target.mjs';
 
 const MAX_PROJECT_AGENT_DOC_LINES = 32;
+
+/**
+ * The block's last line: how an agent removes the block. `--remove-agents`
+ * clears the project root and the working folder (cli-surface INV31); a copy
+ * it leaves, such as a file named with `--agent-docs-path`, comes out by hand.
+ */
+export const REMOVE_LINE =
+  'To remove this block, run `astryx init --remove-agents`, which removes it from the agent files at the project root and in the folder you run it in; from any other file it leaves, delete everything from ASTRYX:START to ASTRYX:END.';
+
 const MANAGED_MARKER_TEXT = /(?:ASTRYX|XDS):(START|END)/u;
 
 /** @param {unknown} value @returns {string} */
@@ -383,6 +394,9 @@ export function parseBlockVersion(content) {
  * @param {string} [installedVersion] Defaults to the installed core version.
  * @param {string} [expectedBlock] Fully rendered block for this project. When
  *   present, byte differences are stale even if the Core version is unchanged.
+ * @param {{paths?: string[]}} [options] `paths`: the files to read, relative to
+ *   `targetDir`, in place of the agent docs found there; a named file without
+ *   the block makes the status `stale` (or `missing` when none has one).
  * @returns {{
  *   installedVersion: string,
  *   status: 'missing' | 'stale' | 'current',
@@ -391,27 +405,39 @@ export function parseBlockVersion(content) {
  *   blockVersions: string[],
  * }}
  */
-export function inspectAgentDocs(targetDir, installedVersion, expectedBlock) {
-  const version = installedVersion ?? getXdsVersion(findCoreDir(targetDir));
+export function inspectAgentDocs(
+  targetDir,
+  installedVersion,
+  expectedBlock,
+  {paths} = {},
+) {
+  const version = installedVersion ?? agentDocsVersion(targetDir);
   /** @type {Array<{path: string, blockVersion: string|null, legacy: boolean, stale: boolean}>} */
   const files = [];
+  // Named files (init's --agent-docs-path) are the docs: one without the
+  // block keeps the set from being current.
+  let namedWithoutBlock = 0;
 
-  for (const rel of discoverAgentDocs(targetDir)) {
+  for (const rel of paths ?? discoverAgentDocs(targetDir)) {
     /** @type {string} */
     let content;
     try {
       content = fs.readFileSync(path.join(targetDir, rel), 'utf-8');
     } catch {
+      if (paths) namedWithoutBlock++;
       continue; // Unreadable — treat as absent.
     }
     const hasNew = content.includes(MARKER_START);
     const hasLegacy = content.includes(LEGACY_MARKER_START);
-    if (!hasNew && !hasLegacy) continue; // Not a block we manage.
+    if (!hasNew && !hasLegacy) {
+      if (paths) namedWithoutBlock++;
+      continue; // Not a block we manage.
+    }
     // An import of AGENTS.md names no version and never needs a refresh.
     if (isAgentsImportBlock(rel, content)) continue;
 
     const legacy = !hasNew && hasLegacy;
-    const blockVersion = parseBlockVersion(content);
+    const blockVersion = managedBlockVersion(content);
     let contentMatches = true;
     if (expectedBlock != null) {
       try {
@@ -440,7 +466,7 @@ export function inspectAgentDocs(targetDir, installedVersion, expectedBlock) {
   /** @type {'missing' | 'stale' | 'current'} */
   let status;
   if (files.length === 0) status = 'missing';
-  else if (staleFiles.length > 0) status = 'stale';
+  else if (staleFiles.length > 0 || namedWithoutBlock > 0) status = 'stale';
   else status = 'current';
 
   return {installedVersion: version, status, files, staleFiles, blockVersions};
@@ -565,6 +591,13 @@ export function projectHasBuiltCheck(dir) {
 }
 
 /**
+ * The agent-block line that sends an agent to the icon finder. Without it,
+ * agents copy icons from nearby code or a library instead of asking.
+ */
+export const ICON_FINDER_LINE =
+  'Need an icon? Run `astryx experimental icon <what it means>` and paste the import it prints, instead of copying one from a template or other code.';
+
+/**
  * Generate the agent cheat sheet from live CLI metadata.
  *
  * Structured as: workflow (behavioral) → rules (error prevention) → CLI reference.
@@ -587,8 +620,12 @@ export function projectHasBuiltCheck(dir) {
  * among them. An agent cannot ask for a topic it was never told about, and
  * `getting-started` is the one it should reach for first.
  *
+ * `iconFeatures` is the project's icon feature gate. Where it is on, the
+ * block tells the agent to ask the icon finder for an icon instead of copying
+ * one; where it is off, the block has no icon line.
+ *
  * @param {string | null} version the Core version
- * @param {{coreDir?: string|null, invocation?: string, stylingSystem?: 'stylex'|'tailwind'|'css', zh?: boolean, lang?: string, topics?: string[], agentDocs?: Array<{package: string, append: readonly string[]}>, builtCheck?: boolean}} [options]
+ * @param {{coreDir?: string|null, invocation?: string, stylingSystem?: 'stylex'|'tailwind'|'css', zh?: boolean, lang?: string, topics?: string[], agentDocs?: Array<{package: string, append: readonly string[]}>, skills?: ReadonlyArray<{package: string, name: string, description: string}>, builtCheck?: boolean, iconFeatures?: boolean}} [options]
  * @returns {string}
  */
 export function generateCompressedIndex(
@@ -599,7 +636,9 @@ export function generateCompressedIndex(
     stylingSystem = 'css',
     topics,
     agentDocs = [],
+    skills = [],
     builtCheck = false,
+    iconFeatures = false,
   } = {},
 ) {
   const run = invocation;
@@ -635,6 +674,7 @@ export function generateCompressedIndex(
   lines.push(
     `CLI: run every command as \`${run} <cmd>\` (shown below as \`astryx ...\`).`,
   );
+  if (iconFeatures) lines.push(ICON_FINDER_LINE);
   lines.push('');
 
   // Required setup — components ship precompiled CSS; without these imports
@@ -648,7 +688,7 @@ export function generateCompressedIndex(
   // template it names. build/template/component are covered here, so they are
   // intentionally omitted from the command reference below.
   lines.push(WORKFLOW_TITLE, ...WORKFLOW_STEPS);
-  lines.push('Changing an existing page? Keep it: skip step 2 and add blocks/components inside its sections.');
+  lines.push('Changing an existing page? Keep it: skip step 2 and add components inside its sections; read a block example when it helps.');
   // Only for a project whose recorded releases have `doctor --built`
   // (projectHasBuiltCheck): a newer copy may write this block in a project
   // whose install then brings an older CLI, which rejects the option. The computer-level
@@ -720,7 +760,7 @@ export function generateCompressedIndex(
     (count, contribution) => count + contribution.append.length,
     0,
   );
-  if (appendCount > 0) {
+  if (appendCount > 0 || skills.length > 0) {
     lines.push('');
     lines.push('INTEGRATIONS:');
     for (const contribution of agentDocs) {
@@ -728,10 +768,27 @@ export function generateCompressedIndex(
         lines.push(`- \`${contribution.package}\`: ${line}`);
       }
     }
+    // One line per integration skill; its whole text is in the skill places
+    // and `astryx docs skills/<name>`.
+    for (const each of skills) lines.push(skillPointerLine(each));
   }
+  // Last, so it follows any integration lines. Without it, an agent asked to
+  // take Astryx's text out deletes whole agent files or cuts one copy by hand
+  // and leaves the others.
+  lines.push(REMOVE_LINE);
   lines.push(MARKER_END);
 
   return lines.join('\n');
+}
+
+/**
+ * The block's line for one integration skill: who ships it, when to use it,
+ * and the command that reads it.
+ * @param {{package: string, name: string, description: string}} skill
+ * @returns {string}
+ */
+export function skillPointerLine({package: pkg, name, description}) {
+  return `- \`${pkg}\` skill \`${name}\`: ${description} Read it with \`astryx docs skills/${name}\`.`;
 }
 
 /**
@@ -741,15 +798,17 @@ export function generateCompressedIndex(
  * The returned bytes are reused for every target file.
  *
  * @param {string} targetDir
- * @param {{installedVersion?: string, fresh?: boolean}} [options]
+ * @param {{installedVersion?: string, fresh?: boolean, skills?: ReadonlyArray<{package: string, name: string, description: string}>}} [options]
+ *   `skills`: the integration skills the block points to, as the docs tree
+ *   keeps them (api/docs `projectIntegrationSkills`); none without it
  * @returns {Promise<string>}
  */
 export async function renderAgentDocsBlock(
   targetDir,
-  {installedVersion, fresh = false} = {},
+  {installedVersion, fresh = false, skills = []} = {},
 ) {
   const coreDir = findCoreDir(targetDir);
-  const version = installedVersion ?? getXdsVersion(coreDir);
+  const version = installedVersion ?? agentDocsVersion(targetDir);
   const project = await Project.load(targetDir, {fresh});
   const failedIntegration = project.loadedIntegrations.find(
     integration => integration.__loadError != null,
@@ -805,12 +864,28 @@ export async function renderAgentDocsBlock(
 
   return generateCompressedIndex(version, {
     coreDir,
+    skills: skills.map(({package: pkg, name, description}) => ({
+      package: validateIntegrationLabel(pkg),
+      name,
+      description,
+    })),
     builtCheck: projectHasBuiltCheck(targetDir),
     invocation: getCliInvocation(targetDir),
     stylingSystem: detectStylingSystem(targetDir),
     topics,
     agentDocs,
+    iconFeatures: iconFeatureGate(project).on,
   });
+}
+
+/**
+ * The version an agent-docs block names when no caller gives one, as `init`
+ * writes it: the Core the folder reads, else this CLI's own.
+ * @param {string} targetDir
+ * @returns {string}
+ */
+export function agentDocsVersion(targetDir) {
+  return getXdsVersion(findCoreDir(targetDir));
 }
 
 /**
@@ -1566,6 +1641,68 @@ function stripManagedBlock(filePath, compressedIndex) {
     injectXdsBlock(filePath, compressedIndex, {onlyReplace: true});
   }
   return false;
+}
+
+/**
+ * Each agent-doc file's text, or null when it does not exist. Init reads the
+ * files before and after it writes, so its receipt can say what changed.
+ * @param {string} dir
+ * @param {string[]} rels paths relative to `dir`
+ * @returns {Map<string, string | null>}
+ */
+export function readAgentDocTexts(dir, rels) {
+  return new Map(
+    rels.map(rel => {
+      try {
+        return [rel, fs.readFileSync(path.join(dir, rel), 'utf-8')];
+      } catch {
+        return [rel, null];
+      }
+    }),
+  );
+}
+
+/**
+ * The Astryx version the managed block in `content` names. Only the block is
+ * read, so a version that the project's own text mentions never counts. Null
+ * when there is no block, the block is malformed, or it has no version line.
+ * @param {string} content
+ * @returns {string | null}
+ */
+export function managedBlockVersion(content) {
+  try {
+    const block = findManagedBlock(content);
+    return block ? parseBlockVersion(content.slice(block.start, block.end)) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * What a write did to one agent-doc file, from its text before and after.
+ * `removed`: its Astryx block is gone. `created`: the file did not exist.
+ * `unchanged`: the text is the same. `updated`: anything else. `from` and
+ * `to` are the versions the block names before and after.
+ * @param {string | null} before
+ * @param {string | null} after
+ * @returns {{change: 'created' | 'updated' | 'unchanged' | 'removed', from: string | null, to: string | null}}
+ */
+export function agentDocChange(before, after) {
+  const had = before != null && holdsAstryxBlock(before);
+  const has = after != null && holdsAstryxBlock(after);
+  const change =
+    had && !has
+      ? 'removed'
+      : before == null
+        ? 'created'
+        : before === after
+          ? 'unchanged'
+          : 'updated';
+  return {
+    change,
+    from: had ? managedBlockVersion(/** @type {string} */ (before)) : null,
+    to: has ? managedBlockVersion(/** @type {string} */ (after)) : null,
+  };
 }
 
 /**

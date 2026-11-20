@@ -14,12 +14,13 @@ import {Layout, LayoutContent, LayoutPanel} from '@astryxdesign/core/Layout';
 import {Divider} from '@astryxdesign/core/Divider';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Outline, type OutlineItem} from '@astryxdesign/core/Outline';
-import {useMediaQuery} from '@astryxdesign/core/hooks';
+import {useClipboard, useMediaQuery} from '@astryxdesign/core/hooks';
+import {useToast} from '@astryxdesign/core/Toast';
 import {
   SparklesIcon,
-  ClipboardDocumentIcon,
+  ClipboardIcon,
   ChevronDownIcon,
-} from '@heroicons/react/24/outline';
+} from '@astryxdesign/template-icons';
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -43,6 +44,8 @@ const outlinePanel: CSSProperties = {
 const subscribeToNothing = () => () => {};
 
 export default function TechnicalDocumentationPage() {
+  const {copy} = useClipboard();
+  const showToast = useToast();
   // Mobile first: the server render and a shared static copy, which run no
   // script, get one column with the section links on top. That reads well at
   // every width; once script runs, wide screens move the links to the rail.
@@ -71,10 +74,12 @@ export default function TechnicalDocumentationPage() {
         )
       }
       content={
-        <LayoutContent isScrollable={false} padding={8}>
+        <LayoutContent role="main" isScrollable={false} padding={8}>
           <VStack gap={8}>
             <VStack gap={2}>
-              <Text type="display-1">Getting started with Product Name</Text>
+              <Text as="h1" type="display-1">
+                Getting started with Product Name
+              </Text>
               <Text type="supporting" color="secondary">
                 Last updated March 30, 2026
               </Text>
@@ -83,7 +88,7 @@ export default function TechnicalDocumentationPage() {
 
             <Card>
               <VStack gap={3}>
-                <HStack gap={2} vAlign="center">
+                <HStack wrap="wrap" gap={2} vAlign="center">
                   <StackItem size="fill">
                     <HStack gap={2} vAlign="center">
                       <Icon icon={SparklesIcon} size="sm" color="secondary" />
@@ -97,9 +102,9 @@ export default function TechnicalDocumentationPage() {
                       label="Copy prompt"
                       variant="ghost"
                       size="sm"
-                      icon={<Icon icon={ClipboardDocumentIcon} />}
+                      icon={<Icon icon={ClipboardIcon} />}
                       onClick={() => {
-                        void navigator.clipboard.writeText(
+                        void copy(
                           'Help me get set up with Product Name. Based on my project, do the following: 1. Install @astryxdesign/core and import its precompiled reset.css and astryx.css once at the app entry point. 2. Wrap my app in Theme with a theme package such as @astryxdesign/theme-neutral. 3. Replace one existing component with an Astryx equivalent. After setup, suggest relevant next steps based on my project.',
                         );
                       }}
@@ -114,10 +119,42 @@ export default function TechnicalDocumentationPage() {
                       icon: <Icon icon={ChevronDownIcon} />,
                     }}
                     items={[
-                      {label: 'Open in v0', onClick: () => {}},
-                      {label: 'Open in Claude', onClick: () => {}},
-                      {label: 'Open in ChatGPT', onClick: () => {}},
-                      {label: 'Open in Cursor', onClick: () => {}},
+                      {
+                        label: 'Open in v0',
+                        onClick: () =>
+                          // Demo only: replace this toast with the link that opens the prompt.
+                          showToast({
+                            body: 'Demo: this would open the prompt in v0 here',
+                            uniqueID: 'open-v0',
+                          }),
+                      },
+                      {
+                        label: 'Open in Claude',
+                        onClick: () =>
+                          // Demo only: replace this toast with the link that opens the prompt.
+                          showToast({
+                            body: 'Demo: this would open the prompt in Claude here',
+                            uniqueID: 'open-claude',
+                          }),
+                      },
+                      {
+                        label: 'Open in ChatGPT',
+                        onClick: () =>
+                          // Demo only: replace this toast with the link that opens the prompt.
+                          showToast({
+                            body: 'Demo: this would open the prompt in ChatGPT here',
+                            uniqueID: 'open-chatgpt',
+                          }),
+                      },
+                      {
+                        label: 'Open in Cursor',
+                        onClick: () =>
+                          // Demo only: replace this toast with the link that opens the prompt.
+                          showToast({
+                            body: 'Demo: this would open the prompt in Cursor here',
+                            uniqueID: 'open-cursor',
+                          }),
+                      },
                     ]}
                   />
                 </HStack>
@@ -137,9 +174,11 @@ export default function TechnicalDocumentationPage() {
                 Prerequisites
               </Heading>
               <List density="compact" listStyle="disc">
-                <ListItem label="Node.js 18+" />
-                <ListItem label="React 19 or later" />
-                <ListItem label="A package manager (npm, yarn, or pnpm)" />
+                {/* A node label wraps on a narrow screen; a string label
+                    truncates to one line. */}
+                <ListItem label={<>Node.js 18+</>} />
+                <ListItem label={<>React 19 or later</>} />
+                <ListItem label={<>A package manager (npm, yarn, or pnpm)</>} />
               </List>
             </VStack>
 
@@ -233,11 +272,39 @@ export default function App({ children }) {
                 Next steps
               </Heading>
               <List density="compact" listStyle="disc">
-                <ListItem label="Fundamental concepts — How theming, layout, and composition work" />
-                <ListItem label="Component API reference — Props, variants, and examples for every component" />
-                <ListItem label="Accessibility — Built-in a11y features and ARIA patterns" />
-                <ListItem label="CLI tools — Scaffold projects and manage templates" />
-                <ListItem label="Design tokens — Colors, spacing, typography, and sizing" />
+                <ListItem
+                  label={
+                    <>
+                      Fundamental concepts — How theming, layout, and
+                      composition work
+                    </>
+                  }
+                />
+                <ListItem
+                  label={
+                    <>
+                      Component API reference — Props, variants, and examples
+                      for every component
+                    </>
+                  }
+                />
+                <ListItem
+                  label={
+                    <>
+                      Accessibility — Built-in a11y features and ARIA patterns
+                    </>
+                  }
+                />
+                <ListItem
+                  label={
+                    <>CLI tools — Scaffold projects and manage templates</>
+                  }
+                />
+                <ListItem
+                  label={
+                    <>Design tokens — Colors, spacing, typography, and sizing</>
+                  }
+                />
               </List>
             </VStack>
           </VStack>

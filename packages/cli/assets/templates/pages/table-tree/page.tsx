@@ -136,6 +136,7 @@ import {
   useTableTreeState,
 } from '@astryxdesign/core/Table';
 import type {TableColumn, TablePlugin} from '@astryxdesign/core/Table';
+import {useToast} from '@astryxdesign/core/Toast';
 import * as stylex from '@stylexjs/stylex';
 /*
  * Lucide throughout, not Heroicons. A repository page needs a branch and a
@@ -144,20 +145,20 @@ import * as stylex from '@stylexjs/stylex';
  * stroke weights, sitting side by side in the same toolbar.
  */
 import {
-  BookOpen,
-  ChartColumn,
-  Code,
-  Eye,
-  File,
-  Folder,
-  GitBranch,
-  GitFork,
-  Scale,
-  Search,
-  ShieldCheck,
-  Star,
-  Tag,
-} from 'lucide-react';
+  BookIcon,
+  ChartIcon,
+  CodeIcon,
+  EyeIcon,
+  FileIcon,
+  FolderIcon,
+  GitBranchIcon,
+  GitForkIcon,
+  ScaleIcon,
+  SearchIcon,
+  ShieldIcon,
+  StarIcon,
+  TagIcon,
+} from '@astryxdesign/template-icons/lucide';
 
 // ============= DATA =============
 
@@ -189,12 +190,12 @@ const KIND_ICON: Record<
   EntryKind,
   React.ComponentType<React.SVGProps<SVGSVGElement>>
 > = {
-  folder: Folder,
-  typescript: File,
-  json: File,
-  yaml: File,
-  markdown: File,
-  text: File,
+  folder: FolderIcon,
+  typescript: FileIcon,
+  json: FileIcon,
+  yaml: FileIcon,
+  markdown: FileIcon,
+  text: FileIcon,
 };
 
 /**
@@ -924,12 +925,19 @@ const TOPICS = [
 ];
 
 const ABOUT_LINKS = [
-  {label: 'Readme', icon: BookOpen},
-  {label: 'MIT license', icon: Scale},
-  {label: 'Code of conduct', icon: ShieldCheck},
-  {label: 'Security policy', icon: ShieldCheck},
-  {label: 'Activity', icon: ChartColumn},
+  {label: 'Readme', icon: BookIcon},
+  {label: 'MIT license', icon: ScaleIcon},
+  {label: 'Code of conduct', icon: ShieldIcon},
+  {label: 'Security policy', icon: ShieldIcon},
+  {label: 'Activity', icon: ChartIcon},
 ];
+
+// Demo only: what each social count's button would do in a real app.
+const STAT_DEMO: Record<string, string> = {
+  stars: 'Demo: the repository would be starred here',
+  watching: 'Demo: you would watch the repository here',
+  forks: 'Demo: a fork would be created here',
+};
 
 /** The count reads as a noun; the button beside it has to read as a verb. */
 const STAT_ACTION: Record<string, string> = {
@@ -944,14 +952,14 @@ const STAT_ACTION: Record<string, string> = {
  * that is already busy.
  */
 const REF_COUNTS = [
-  {label: '171 Branches', icon: GitBranch},
-  {label: '56 Tags', icon: Tag},
+  {label: '171 Branches', icon: GitBranchIcon},
+  {label: '56 Tags', icon: TagIcon},
 ];
 
 const REPO_STATS = [
-  {label: 'stars', value: '12.6k', icon: Star},
-  {label: 'watching', value: '97', icon: Eye},
-  {label: 'forks', value: '1.3k', icon: GitFork},
+  {label: 'stars', value: '12.6k', icon: StarIcon},
+  {label: 'watching', value: '97', icon: EyeIcon},
+  {label: 'forks', value: '1.3k', icon: GitForkIcon},
 ];
 
 const CONTRIBUTORS = [
@@ -971,10 +979,13 @@ const CONTRIBUTORS = [
 
 /** The sidebar GitHub puts beside the file list. */
 function AboutPanel() {
+  const showToast = useToast();
   return (
     <VStack gap={6}>
       <VStack gap={3}>
-        <Heading level={3}>About</Heading>
+        <Heading level={3} accessibilityLevel={2}>
+          About
+        </Heading>
         <Text color="secondary">{REPO_DESCRIPTION}</Text>
         <Link href="#" isExternalLink>
           canvas-editor.dev
@@ -986,7 +997,18 @@ function AboutPanel() {
         */}
         <HStack gap={1} wrap="wrap">
           {TOPICS.map(topic => (
-            <Token key={topic} size="sm" label={topic} onClick={() => {}} />
+            <Token
+              key={topic}
+              size="sm"
+              label={topic}
+              onClick={() =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: `Demo: repositories tagged ${topic} would open here`,
+                  uniqueID: `topic-${topic}`,
+                })
+              }
+            />
           ))}
         </HStack>
         {/*
@@ -1024,9 +1046,11 @@ function AboutPanel() {
       <Divider />
 
       <VStack gap={3}>
-        <Heading level={3}>Releases</Heading>
+        <Heading level={3} accessibilityLevel={2}>
+          Releases
+        </Heading>
         <HStack gap={2} vAlign="center">
-          <Icon icon={Tag} size="sm" color="success" />
+          <Icon icon={TagIcon} size="sm" color="success" />
           <Text weight="bold">v2.4.0</Text>
           <Badge label="Latest" variant="success" />
         </HStack>
@@ -1038,7 +1062,9 @@ function AboutPanel() {
       <Divider />
 
       <VStack gap={3}>
-        <Heading level={3}>Contributors</Heading>
+        <Heading level={3} accessibilityLevel={2}>
+          Contributors
+        </Heading>
         {/*
           AvatarGroup overlaps its children by design, which fights a wrapping
           grid — so this is a plain wrapped row of avatars, which is the shape
@@ -1078,6 +1104,9 @@ function BranchBar({
   isSearchOpen: boolean;
   onSearchOpen: () => void;
 }) {
+  const showToast = useToast();
+  // Demo only: replace these toasts with the calls that perform each action.
+  const demo = (body: string, uniqueID: string) => showToast({body, uniqueID});
   return (
     /*
      * One height for the whole row. Toolbar gets this by wrapping its slots in
@@ -1092,14 +1121,29 @@ function BranchBar({
           button={{
             label: 'main',
             size: 'sm',
-            icon: <Icon icon={GitBranch} size="sm" />,
+            icon: <Icon icon={GitBranchIcon} size="sm" />,
           }}
           hasChevron
           items={[
-            {label: 'main', onClick: () => {}},
-            {label: 'next', onClick: () => {}},
+            {
+              label: 'main',
+              onClick: () =>
+                demo('Demo: switching to main would happen here', 'main'),
+            },
+            {
+              label: 'next',
+              onClick: () =>
+                demo('Demo: switching to next would happen here', 'next'),
+            },
             {type: 'divider'},
-            {label: 'View all branches', onClick: () => {}},
+            {
+              label: 'View all branches',
+              onClick: () =>
+                demo(
+                  'Demo: the branch list would open here',
+                  'view-all-branches',
+                ),
+            },
           ]}
         />
         {/*
@@ -1121,7 +1165,12 @@ function BranchBar({
                 size="sm"
                 icon={<Icon icon={ref.icon} size="sm" />}
                 label={ref.label}
-                onClick={() => {}}
+                onClick={() =>
+                  demo(
+                    `Demo: the list of ${ref.label.toLowerCase()} would open here`,
+                    ref.label,
+                  )
+                }
               />
             ) : (
               <Button
@@ -1129,7 +1178,12 @@ function BranchBar({
                 variant="ghost"
                 size="sm"
                 label={ref.label}
-                onClick={() => {}}
+                onClick={() =>
+                  demo(
+                    `Demo: the list of ${ref.label.toLowerCase()} would open here`,
+                    ref.label,
+                  )
+                }
               />
             ),
           )}
@@ -1145,7 +1199,7 @@ function BranchBar({
               <IconButton
                 variant="ghost"
                 size="sm"
-                icon={<Icon icon={Search} size="sm" />}
+                icon={<Icon icon={SearchIcon} size="sm" />}
                 label="Go to file"
                 onClick={onSearchOpen}
               />
@@ -1154,7 +1208,7 @@ function BranchBar({
                 label="Go to file"
                 isLabelHidden
                 placeholder="Go to file"
-                startIcon={Search}
+                startIcon={SearchIcon}
                 value={query}
                 onChange={onQueryChange}
                 hasClear
@@ -1165,14 +1219,28 @@ function BranchBar({
               button={{label: 'Add file', size: 'sm'}}
               hasChevron
               items={[
-                {label: 'Create new file', onClick: () => {}},
-                {label: 'Upload files', onClick: () => {}},
+                {
+                  label: 'Create new file',
+                  onClick: () =>
+                    demo('Demo: a new file would open here', 'create-new-file'),
+                },
+                {
+                  label: 'Upload files',
+                  onClick: () =>
+                    demo(
+                      'Demo: the file upload would open here',
+                      'upload-files',
+                    ),
+                },
               ]}
             />
             <Button
               label="Code"
               variant="primary"
-              icon={<Icon icon={Code} size="sm" />}
+              icon={<Icon icon={CodeIcon} size="sm" />}
+              onClick={() =>
+                demo('Demo: clone and download options would open here', 'code')
+              }
             />
           </HStack>
         </StackItem>
@@ -1269,6 +1337,7 @@ const TAB_PLACEHOLDER = {
 // ============= PAGE =============
 
 export default function FileTreeTemplate() {
+  const showToast = useToast();
   const [query, setQuery] = useState('');
   const [manualExpandedIds, setManualExpandedIds] = useState<
     ReadonlySet<string>
@@ -1613,7 +1682,13 @@ export default function FileTreeTemplate() {
                     size="sm"
                     icon={<Icon icon={stat.icon} size="sm" />}
                     label={`${stat.label}: ${stat.value}`}
-                    onClick={() => {}}
+                    onClick={() =>
+                      // Demo only: replace this toast with the call that performs the action.
+                      showToast({
+                        body: STAT_DEMO[stat.label],
+                        uniqueID: `stat-${stat.label}`,
+                      })
+                    }
                   />
                 ) : (
                   <Button
@@ -1622,6 +1697,13 @@ export default function FileTreeTemplate() {
                     label={STAT_ACTION[stat.label]}
                     icon={<Icon icon={stat.icon} size="sm" />}
                     endContent={<Badge label={stat.value} />}
+                    onClick={() =>
+                      // Demo only: replace this toast with the call that performs the action.
+                      showToast({
+                        body: STAT_DEMO[stat.label],
+                        uniqueID: `stat-${stat.label}`,
+                      })
+                    }
                   />
                 ),
               )}
@@ -1630,7 +1712,7 @@ export default function FileTreeTemplate() {
         />
       }
       content={
-        <LayoutContent padding={4}>
+        <LayoutContent role="main" padding={4}>
           {data.length === 0 ? (
             <EmptyState
               title="No matching files"

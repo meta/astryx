@@ -69,11 +69,11 @@ import {
 import {
   ArrowUpIcon,
   ArrowDownIcon,
-  BellAlertIcon,
-  CheckCircleIcon,
-  ServerStackIcon,
-} from '@heroicons/react/24/outline';
-import {StopIcon} from '@heroicons/react/24/solid';
+  NotificationActiveIcon,
+  SuccessIcon,
+  ServerIcon,
+} from '@astryxdesign/template-icons';
+import {StopIcon} from '@astryxdesign/template-icons/24/solid';
 
 // ============= TYPES =============
 
@@ -696,7 +696,7 @@ function ChartTooltip({
 
 const AXIS_TICK = {
   fontSize: 'var(--font-size-sm, 12px)',
-  fill: 'var(--color-text-secondary, #4E606F)',
+  fill: 'var(--color-text-secondary, #445564)',
 };
 const GRID_STROKE = 'var(--color-border, rgba(5, 54, 89, 0.1))';
 
@@ -958,7 +958,7 @@ function AlertsFeed({hasStickyHeader = false}: {hasStickyHeader?: boolean}) {
 
   return (
     <RailSection
-      icon={BellAlertIcon}
+      icon={NotificationActiveIcon}
       iconColor={firing > 0 ? 'error' : 'secondary'}
       title="Active alerts"
       subtitle={`${ALERTS.length} in the last 24h · newest first`}
@@ -973,7 +973,7 @@ function AlertsFeed({hasStickyHeader = false}: {hasStickyHeader?: boolean}) {
         <EmptyState
           title="All clear"
           description="No active alerts across the selected environment."
-          icon={<Icon icon={CheckCircleIcon} size="lg" color="success" />}
+          icon={<Icon icon={SuccessIcon} size="lg" color="success" />}
           isCompact
         />
       ) : (
@@ -1035,7 +1035,7 @@ function NoServices() {
     <EmptyState
       title="No services in this view"
       description="Nothing reports in the selected environment and region. Try widening the region filter."
-      icon={<Icon icon={ServerStackIcon} size="lg" />}
+      icon={<Icon icon={ServerIcon} size="lg" />}
       isCompact
     />
   );
@@ -1067,7 +1067,7 @@ function ServiceBreakdown({
 
   return (
     <RailSection
-      icon={ServerStackIcon}
+      icon={ServerIcon}
       iconColor="secondary"
       title="Service breakdown"
       subtitle={contextLabel}
@@ -1314,7 +1314,9 @@ function UptimeRow({entry}: {entry: ServiceUptime}) {
             label={STATUS_LABEL[entry.status]}
             isPulsing={entry.status === 'critical'}
           />
-          <Heading level={4}>{entry.service}</Heading>
+          <Heading level={4} accessibilityLevel={3}>
+            {entry.service}
+          </Heading>
         </HStack>
         <Text type="supporting" color="secondary">
           {entry.uptime.toFixed(2)}% uptime
@@ -1500,11 +1502,11 @@ export default function ServiceHealthMonitorPage() {
         </LayoutHeader>
       }
       content={
-        <LayoutContent padding={6}>
+        <LayoutContent role="main" padding={6}>
           <VStack gap={10}>
             <VStack gap={6}>
               {/* Traffic-light KPI tiles */}
-              <Grid columns={{minWidth: 240, repeat: 'fit'}} gap={3}>
+              <Grid columns={{minWidth: 240, max: 4, repeat: 'fit'}} gap={3}>
                 {kpis.map(kpi => (
                   <KpiTile
                     key={kpi.key}
@@ -1515,7 +1517,7 @@ export default function ServiceHealthMonitorPage() {
               </Grid>
 
               {/* Time-series charts */}
-              <Grid columns={{minWidth: 320, repeat: 'fit'}} gap={3}>
+              <Grid columns={{minWidth: 320, max: 2, repeat: 'fit'}} gap={3}>
                 <MetricChart
                   title="Response latency"
                   subtitle="Percentile latency across all services (ms)"
