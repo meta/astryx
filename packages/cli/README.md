@@ -54,7 +54,10 @@ or a template, search across all of them at once. Results are ranked by
 relevance: keyword and fuzzy matching (typos included) score each match.
 Between score bands results keep the lexical order, whose domain priority can
 put a weaker component, hook, template, or theme above a stronger doc, and a
-query that is an entry's exact name answers with that entry first. Inside a
+query that is an entry's exact name answers with that entry first. The one
+exception: a family's root can move directly before a part of its own family
+when the part adds nothing the query asked for (`code sample` lists CodeBlock
+before Code). Inside a
 band, fixed weights order the matches, so a description match can lead a
 keyword match in the same band. Each result is tagged with its domain plus the
 follow-up command to run:
@@ -552,7 +555,7 @@ Every response has a `type` discriminant. The full set is below (generated from 
 
 `astryx doctor` runs health checks against your project and environment. It
 changes nothing in the project; once the per-user cache folder exists, it
-keeps its docs checks, its theme-wiring scan and integration check results there. Each check prints on one
+keeps its docs checks, its theme-wiring scan, its Core-props scan and integration check results there. Each check prints on one
 line: its status (`[ok]`, `[warn]`, `[fail]`, or `[info]`), then its id, label and message, and an actionable
 `fix` when one is available. The legend under the heading names each field by its `--json` key. The exact
 checks and values depend on the project; the output shape is stable:

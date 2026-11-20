@@ -124,9 +124,11 @@ function eachAlone(mode, name, targetPath, packageFilter) {
 export async function template(name, options = {}) {
   // Doc `{@pm}` steps in a description render for the project the call
   // names, as search's do.
+  const dir = options.cwd ?? process.cwd();
   return runWithDocPackageManager(
-    docPackageManager(options.cwd ?? process.cwd()),
+    docPackageManager(dir),
     () => templateRead(name, options),
+    dir,
   );
 }
 

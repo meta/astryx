@@ -12,10 +12,10 @@ import {
   BoldIcon,
   ItalicIcon,
   UnderlineIcon,
-  ListBulletIcon,
+  ListIcon,
   LinkIcon,
-  PhotoIcon,
-} from '@heroicons/react/24/outline';
+  ImageIcon,
+} from '@astryxdesign/template-icons';
 
 export default function CenterHorizontal() {
   const showToast = useToast();
@@ -52,7 +52,7 @@ export default function CenterHorizontal() {
           />
           <IconButton
             label="List"
-            icon={<Icon icon={ListBulletIcon} />}
+            icon={<Icon icon={ListIcon} />}
             variant="ghost"
             size="sm"
             onClick={() => showToast({body: 'Demo: a list would start here'})}
@@ -68,7 +68,7 @@ export default function CenterHorizontal() {
           />
           <IconButton
             label="Image"
-            icon={<Icon icon={PhotoIcon} />}
+            icon={<Icon icon={ImageIcon} />}
             variant="ghost"
             size="sm"
             onClick={() =>
