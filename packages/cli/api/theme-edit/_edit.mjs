@@ -214,6 +214,7 @@ import {
   lookCollapsed,
   categoryNotes,
   derivedStatusWords,
+  paletteRecipeUnknown,
 } from './_palette.mjs';
 import {
   renderPreview,
@@ -8731,9 +8732,31 @@ function nowAppliesIn(ctx, data, removed, base) {
         compileTheme(ctx, d, base).tokens?.[removed.thing] ?? null,
       );
     const now = value(data);
+    // (A palette kept as saved cannot be made again without a color dial:
+    // the dial that writes the token is the one its saved mapping names.)
+    const kept = paletteRecipeUnknown(ctx.project.cwd, String(data.name));
+    const fed = kept
+      ? /** @type {any} */ (
+          paletteMapping(
+            ctx.project.cwd,
+            String(data.name),
+            data,
+            /** @type {any} */ (base),
+            ctx.project.core.tokenDefaults,
+          )?.tokens?.[removed.thing]
+        )?.family
+      : null;
     if (now !== 'null')
       for (const d of [...data.settings].reverse()) {
         if (d.source !== 'dial' || d.on) continue;
+        if (
+          kept &&
+          (PALETTE_DIALS.includes(d.thing) || d.thing === 'vibrancy')
+        ) {
+          if (fed === d.thing)
+            return `the generated ${d.thing} color (${describe(d)})`;
+          continue;
+        }
         const without = {...data, settings: data.settings.filter(x => x !== d)};
         if (value(without) !== now)
           return PALETTE_DIALS.includes(d.thing)
@@ -8871,10 +8894,40 @@ function otherModeNotes(data) {
  * @returns {Set<string>}
  */
 function dialTouched(ctx, data, s, base) {
+  // (A palette a newer CLI made is kept as saved, from its color settings
+  // as they are: they stay in both builds, so neither asks this CLI to
+  // make that palette again with other colors.)
+  const kept = paletteRecipeUnknown(ctx.project.cwd, String(data.name));
+  // (A color dial of a palette kept as saved touches the tokens its family
+  // gives, or every palette token for the vibrancy: the palette cannot be
+  // made again without it to compare.)
+  if (kept && (PALETTE_DIALS.includes(s.thing) || s.thing === 'vibrancy')) {
+    const pal = paletteMapping(
+      ctx.project.cwd,
+      String(data.name),
+      data,
+      /** @type {any} */ (base),
+      ctx.project.core.tokenDefaults,
+    );
+    return new Set(
+      Object.entries(pal?.tokens ?? {})
+        .filter(
+          ([k, v]) =>
+            k !== 'lifted parts' &&
+            (s.thing === 'vibrancy' ||
+              /** @type {any} */ (v)?.family === s.thing),
+        )
+        .map(([k]) => k),
+    );
+  }
   /** @param {import('./_settings.mjs').Setting[]} list */
   const dialsOnly = list => ({
     ...data,
-    settings: list.filter(x => x.source === 'dial'),
+    settings: list.filter(
+      x =>
+        x.source === 'dial' ||
+        (kept && x.source === 'token' && isColorToken(x.thing)),
+    ),
   });
   const withDial = compileTheme(ctx, dialsOnly(data.settings), base);
   const without = compileTheme(
@@ -9303,6 +9356,9 @@ const STATUS_DIALS = new Set(['info', 'success', 'warning', 'danger']);
  */
 function passingDialValue(ctx, slug, data, base, step) {
   if (step.on || !STATUS_DIALS.has(step.thing)) return step.value;
+  // (A palette a newer CLI made is kept as saved: this CLI cannot make it
+  // again with another color to see which reads.)
+  if (paletteRecipeUnknown(ctx.project.cwd, slug)) return step.value;
   const pal = paletteMapping(
     ctx.project.cwd,
     slug,
@@ -10259,6 +10315,25 @@ async function undoTheme(theme, options) {
           )
         )
       : null;
+  // (The shades a palette kept as saved showed at that step, each half a
+  // stop of a palette color, white or black, or a color.)
+  const half = (/** @type {any} */ h) =>
+    h &&
+    typeof h === 'object' &&
+    typeof h.family === 'string' &&
+    typeof h.stop === 'number';
+  const stops =
+    built?.stops &&
+    typeof built.stops === 'object' &&
+    Object.entries(built.stops).every(
+      ([k, v]) =>
+        k === 'lifted parts' ||
+        (/^--[\w-]+$/.test(k) &&
+          half(/** @type {any} */ (v)?.light) &&
+          half(/** @type {any} */ (v)?.dark)),
+    )
+      ? /** @type {Record<string, any>} */ (built.stops)
+      : null;
   // The step it goes back to is checked like the settings file itself. A
   // value the editor no longer accepts is left out of that step (with a
   // note); a step whose shape is broken is refused.
@@ -10312,6 +10387,7 @@ async function undoTheme(theme, options) {
     history: false,
     historyAfter: history,
     radii,
+    stops,
   });
   /** @type {string[]} */
   const undone = current

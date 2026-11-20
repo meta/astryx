@@ -130,6 +130,10 @@ import {
   paletteFiles,
   paletteImport,
   paletteMapping,
+  paletteKeptAsSaved,
+  paletteRecipeUnknown,
+  paletteColorKey,
+  noteSavedColors,
   syncPalette,
   syncPaletteRefs,
   refuseIfLockLost,
@@ -143,6 +147,7 @@ import {
   familyRamp,
   derivedStatusWords,
   STATUS_TOKEN,
+  settingsBeforeChange,
 } from './_palette.mjs';
 import {removeEmptyFolder} from '../../foundation/fs/empty-folder.mjs';
 import {EDITOR_STAMP, pngTexts} from './_png.mjs';
@@ -156,6 +161,7 @@ import {
   packageInstalled,
 } from './_project.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
+import {semverCompare} from '../../foundation/env/semver.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
 
 // The palette reads the tokens the own source sets through this module.
@@ -190,7 +196,7 @@ setOwnTokenReader((cwd, slug) => ownSourceTokenValues(cwd, slug));
 /** What lifted secondary text sits on: the contrast check measures it there. */
 const LIFT_GROUND_TOKENS = new Set(LIFT_PARTS.map(([, , g]) => g));
 
-/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, uncheckedCode?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}, keepStops?: Record<string, Record<'light' | 'dark', {family: string, stop: number, alpha?: string}>> | null, keepRadii?: Record<string, string> | null, sizeNotes?: string[], compileNotes?: string[], derived?: Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string, corners?: boolean}>>, takesPictures?: {sheet: string | null} | null}} Ctx */
+/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, uncheckedCode?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}, keepStops?: ReturnType<typeof stopsIn> | null, keepRadii?: Record<string, string> | null, sizeNotes?: string[], compileNotes?: string[], derived?: Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string, corners?: boolean}>>, takesPictures?: {sheet: string | null} | null}} Ctx */
 /** @typedef {import('./_parts.mjs').PaintSide} PaintSide */
 /** @typedef {import('./_parts.mjs').TextPair} TextPair */
 
@@ -1587,6 +1593,9 @@ export function loadTheme(
           : recover.run,
       ERROR_CODES.ERR_THEME_INVALID,
     );
+  // What its colors come from as saved, read as above, for a palette kept
+  // as saved to compare a change with.
+  noteSavedColors(cwd, slug, data);
   return data;
 }
 
@@ -4983,73 +4992,267 @@ export function moduleUnedited(text) {
 }
 
 /**
+ * One half of a palette token in a generated settings module: a palette
+ * stop (`family` and `stop`, with `alpha` for a see-through one), white or
+ * black, a color written out (`family: 'literal'`), or the base theme's
+ * own value (`family: 'literal', base: true`).
+ * @typedef {{family: string, stop: number, alpha?: string, color?: string, base?: true}} KeptHalf
+ */
+
+/**
  * The palette stops each token reads in a generated settings module, as
  * written there (`palette.accent.light[85]`, with ` + 'aa'` for a
- * see-through one): `[light, dark]` per token.
+ * see-through one): `[light, dark]` per token. A token with one mode drawn
+ * from the palette keeps its other half as written: a color, or the base
+ * theme's value (`baseIn(...)`). A token drawn from the palette in neither
+ * mode is not a palette token, except for a palette kept as saved
+ * (`literals`), whose module's tokens are the whole mapping.
  * @param {string} source
- * @returns {Record<string, Record<'light' | 'dark', {family: string, stop: number, alpha?: string}>>}
+ * @param {boolean} [literals] keep a token written as colors in both modes
+ * @returns {Record<string, Record<'light' | 'dark', KeptHalf>>}
  */
-export function stopsIn(source) {
-  /** @type {Record<string, Record<'light' | 'dark', {family: string, stop: number, alpha?: string}>>} */
+export function stopsIn(source, literals = false) {
+  /** @type {Record<string, Record<'light' | 'dark', KeptHalf>>} */
   const out = {};
-  const one = String.raw`palette(?:\.([a-z][\w]*)|\["([a-z][\w-]*)"\])\.(?:light|dark)\[(\d+(?:\.\d+)?)\](?: \+ '([0-9a-f]{2})')?`;
+  const half = String.raw`(palette(?:\.[a-z][\w]*|\["[a-z][\w-]*"\])\.(?:light|dark)\[\d+(?:\.\d+)?\](?: \+ '[0-9a-f]{2}')?|palette\.(?:white|black)|"[^"\\\n]*"|baseIn\("--[\w-]+", '(?:light|dark)'\))`;
   const pair = new RegExp(
-    String.raw`"(--[\w-]+)": \[\s*${one},\s*${one}\s*\]`,
+    String.raw`"(--[\w-]+)": \[\s*${half},\s*${half}\s*\]`,
     'g',
   );
+  const stop = new RegExp(
+    String.raw`^palette(?:\.([a-z][\w]*)|\["([a-z][\w-]*)"\])\.(?:light|dark)\[(\d+(?:\.\d+)?)\](?: \+ '([0-9a-f]{2})')?$`,
+  );
+  /** @param {string} text @returns {KeptHalf} */
+  const read = text => {
+    const m = stop.exec(text);
+    if (m)
+      return {
+        family: m[1] ?? m[2],
+        stop: Number(m[3]),
+        ...(m[4] ? {alpha: m[4]} : {}),
+      };
+    if (text === 'palette.white') return {family: 'white', stop: 100};
+    if (text === 'palette.black') return {family: 'black', stop: 0};
+    if (text.startsWith('baseIn('))
+      return {family: 'literal', stop: 0, base: true};
+    return {family: 'literal', stop: 0, color: JSON.parse(text)};
+  };
   // Whether the module lifts secondary text on parts (an earlier editor
   // did not): the key cannot be a token's name.
   out['lifted parts'] = /** @type {any} */ (
     /"components":[\s\S]*"--color-text-secondary"/.test(source)
   );
-  for (const m of source.matchAll(pair))
-    out[m[1]] = {
-      light: {
-        family: m[2] ?? m[3],
-        stop: Number(m[4]),
-        ...(m[5] ? {alpha: m[5]} : {}),
-      },
-      dark: {
-        family: m[6] ?? m[7],
-        stop: Number(m[8]),
-        ...(m[9] ? {alpha: m[9]} : {}),
-      },
-    };
+  for (const m of source.matchAll(pair)) {
+    const light = read(m[2]);
+    const dark = read(m[3]);
+    if (!literals && light.family === 'literal' && dark.family === 'literal')
+      continue;
+    out[m[1]] = {light, dark};
+  }
   return out;
 }
 
 /**
+ * The tokens each whole-theme color-token setting (any color token, the
+ * focus outline color too) writes, with its modes:
+ * the token it sets, and each token that follows it (FOLLOWS) where the
+ * theme does not set that token itself.
+ * @param {{settings?: Setting[]} | null | undefined} d
+ * @returns {Array<{token: string, modes: Array<'light' | 'dark'>}>}
+ */
+function tokenWrites(d) {
+  const settings = d?.settings ?? [];
+  /** @param {Setting} x */
+  const wholeTheme = x =>
+    x?.source === 'token' &&
+    isColorToken(x.thing) &&
+    !x.on &&
+    !x.when &&
+    !x.state;
+  const own = new Set(settings.filter(wholeTheme).map(x => x.thing));
+  return settings.filter(wholeTheme).flatMap(x => {
+    /** @type {Array<'light' | 'dark'>} */
+    const modes =
+      x.mode === 'light' || x.mode === 'dark' ? [x.mode] : ['light', 'dark'];
+    return [
+      x.thing,
+      ...Object.entries(FOLLOWS)
+        .filter(([k, to]) => to === x.thing && !own.has(k))
+        .map(([k]) => k),
+    ].map(token => ({token, modes}));
+  });
+}
+
+/**
+ * The kept stops of a palette kept as saved, with the shades a removed
+ * token setting hid: a setting for both modes leaves no palette half in
+ * the module, so the newest undo step whose build showed that token gives
+ * its halves. A half the module still shows stays.
+ * @param {Record<string, any>} kept
+ * @param {{settings?: Setting[]} | null} before the settings the module was built from
+ * @param {{settings?: Setting[]}} data the settings being built
+ * @param {string[]} steps the undo history, oldest first
+ * @returns {Record<string, any>}
+ */
+function withHiddenShades(kept, before, data, steps) {
+  const still = new Set(
+    tokenWrites(data).flatMap(w => w.modes.map(m => `${w.token}|${m}`)),
+  );
+  /** @type {Record<string, any>} */
+  const out = {...kept};
+  /** @param {any} h */
+  const shown = h => h && typeof h === 'object' && h.family !== 'mapped';
+  for (const {token, modes} of tokenWrites(before)) {
+    const gone = modes.filter(m => !still.has(`${token}|${m}`));
+    if (!gone.length || gone.every(m => shown(out[token]?.[m]))) continue;
+    for (const step of [...steps].reverse()) {
+      let h;
+      try {
+        h = /** @type {any} */ (settingsJson(step))?.built?.stops?.[token];
+      } catch {
+        continue;
+      }
+      if (!shown(h?.light) || !shown(h?.dark)) continue;
+      out[token] = {
+        light: shown(out[token]?.light) ? out[token].light : h.light,
+        dark: shown(out[token]?.dark) ? out[token].dark : h.dark,
+      };
+      break;
+    }
+  }
+  return out;
+}
+
+/**
+ * The kept stops less what a whole-theme color-token setting wrote: the
+ * module writes a setting's value after the palette, so it is the
+ * setting's, never a shade to keep. A setting for one mode leaves the other
+ * mode's half (the palette's); its own half is whatever the mapping gives
+ * (`mapped`), and a token with no half left is not kept.
+ * @template {Record<string, any> | null} K
+ * @param {K} kept
+ * @param {{settings?: Setting[]} | null | undefined} d the settings that module was built from
+ * @returns {K}
+ */
+function paletteStopsOnly(kept, d) {
+  if (!kept || !d?.settings) return kept;
+  /** @type {Record<string, any>} */
+  const out = {...kept};
+  for (const {token, modes} of tokenWrites(d)) {
+    // (A setting for both modes is written as one value, which the module
+    // reader does not read: its token is the mapping's own all the same.)
+    const next = out[token]
+      ? {...out[token]}
+      : {light: {family: 'mapped', stop: 0}, dark: {family: 'mapped', stop: 0}};
+    for (const m of modes) next[m] = {family: 'mapped', stop: 0};
+    out[token] = next;
+  }
+  return /** @type {K} */ (out);
+}
+
+/**
+ * The kept stops of a module built from other settings than the file holds
+ * now (a hand edit): a half written as a color may be a setting's that is
+ * gone, so each such half is the mapping's own.
+ * @template {Record<string, any> | null} K
+ * @param {K} kept
+ * @returns {K}
+ */
+function literalsMapped(kept) {
+  if (!kept) return kept;
+  /** @type {Record<string, any>} */
+  const out = {};
+  for (const [k, v] of Object.entries(kept)) {
+    if (k === 'lifted parts' || !v || typeof v !== 'object') {
+      out[k] = v;
+      continue;
+    }
+    /** @param {any} h */
+    const one = h =>
+      h?.family === 'literal' && !h.base ? {family: 'mapped', stop: 0} : h;
+    out[k] = {light: one(v.light), dark: one(v.dark)};
+  }
+  return /** @type {K} */ (out);
+}
+
+/**
  * The palette mapping with the shades a theme already shows kept, where
- * the palette still has them (see commitTheme).
+ * the palette still has them (see commitTheme). For a palette kept as
+ * saved (a newer CLI's), the module's tokens are the whole mapping: a token
+ * the module does not map stays unset, and each half stays as the module
+ * writes it, so a change that leaves the colors alone moves no color.
  * @param {import('./_palette.mjs').PaletteMapping | null} pal
  * @param {ReturnType<typeof stopsIn> | null | undefined} kept
+ * @param {{light: Record<string, string>, dark: Record<string, string>} | null | undefined} base the base theme's resolved colors, for a half the module reads from the base
  * @returns {import('./_palette.mjs').PaletteMapping | null}
  */
-function keepShades(pal, kept) {
+function keepShades(pal, kept, base) {
   if (!pal || !kept) return pal;
-  const tokens = {...pal.tokens};
-  for (const [k, v] of Object.entries(tokens)) {
-    if (k === 'lifted parts') continue;
+  /**
+   * A kept half as a stop of this palette, or null where the palette or
+   * the base theme does not have it.
+   * @param {string} k @param {'light' | 'dark'} m @param {KeptHalf} r
+   */
+  const shade = (k, m, r) => {
+    // (A half a setting wrote: the mapping's own.)
+    if (r.family === 'mapped')
+      return /** @type {any} */ (pal.tokens)[k]?.[m] ?? null;
+    if (r.family === 'literal') {
+      const color = r.base ? base?.[m]?.[k] : r.color;
+      return typeof color === 'string'
+        ? {stop: 0, color, family: 'literal', ...(r.base ? {base: true} : {})}
+        : null;
+    }
+    const color =
+      r.family === 'white' || r.family === 'black'
+        ? /** @type {any} */ (pal.candidate)[r.family]
+        : /** @type {any} */ (pal.candidate.palette)[r.family]?.[m]?.[r.stop];
+    if (typeof color !== 'string') return null;
+    return {
+      stop: r.stop,
+      color: r.alpha ? `${color}${r.alpha}` : color,
+      ...(r.alpha ? {alpha: r.alpha} : {}),
+      family: r.family,
+    };
+  };
+  /** @type {Record<string, any>} */
+  const tokens = {};
+  for (const [k, v] of Object.entries(pal.tokens)) {
     const old = kept[k];
-    if (!old) continue;
+    if (!old) {
+      if (!pal.stored) tokens[k] = v;
+      continue;
+    }
     /** @type {any} */
     const next = {...v};
     for (const m of /** @type {const} */ (['light', 'dark'])) {
-      // A half kept at the base theme's value stays it.
-      if (/** @type {any} */ (v)[m]?.family === 'literal') continue;
-      const r = old[m];
-      const color = /** @type {any} */ (pal.candidate.palette)[r.family]?.[m]?.[
-        r.stop
-      ];
-      if (typeof color !== 'string') continue;
-      next[m] = {
-        stop: r.stop,
-        color: r.alpha ? `${color}${r.alpha}` : color,
-        ...(r.alpha ? {alpha: r.alpha} : {}),
-        ...(r.family !== v.family ? {family: r.family} : {}),
-      };
+      // A half kept at the base theme's value stays it, unless the palette
+      // is kept as saved: then the module's half stands.
+      if (!pal.stored && /** @type {any} */ (v)[m]?.family === 'literal')
+        continue;
+      const r = shade(k, m, old[m]);
+      if (r) {
+        next[m] = r;
+      } else if (pal.stored) {
+        next[m] = null;
+      }
     }
-    tokens[k] = next;
+    if (next.light && next.dark) tokens[k] = next;
+  }
+  // A token the theme shows from its palette that this mapping does not
+  // give (one a newer editor mapped) keeps its shades too, where the
+  // palette has them: nothing the theme shows moves until a color does.
+  for (const [k, old] of Object.entries(kept)) {
+    if (k === 'lifted parts' || Object.hasOwn(pal.tokens, k)) continue;
+    const r = /** @type {Record<'light' | 'dark', KeptHalf>} */ (old);
+    const light = shade(k, 'light', r.light);
+    const dark = shade(k, 'dark', r.dark);
+    if (light && dark)
+      tokens[k] = {
+        family: r.light.family === 'literal' ? r.dark.family : r.light.family,
+        light,
+        dark,
+      };
   }
   // A theme built without lifted text keeps the base theme's own.
   return {...pal, tokens, lift: kept['lifted parts'] ? pal.lift : null};
@@ -6850,6 +7053,7 @@ export function compileTheme(ctx, data, base) {
   const pal = keepShades(
     paletteMapping(ctx.project.cwd, data.name, data, base, TOKENS),
     ctx.keepStops,
+    base,
   );
   for (const [k, v] of Object.entries(pal?.tokens ?? {}))
     putTok(k, [v.light.color, v.dark.color]);
@@ -8847,7 +9051,9 @@ function settingsSource(slug, data, theme, pal, cwd = '', baseParts = null) {
     for (const [k, v] of Object.entries(pal.tokens)) {
       const now = theme.tokens[k];
       const [l, d] = Array.isArray(now) ? now : [now, now];
-      if (l !== v.light.color || d !== v.dark.color) continue;
+      // (A setting for one mode writes that half itself; the other half
+      // stays the palette's reference, so the next build keeps its shade.)
+      if (l !== v.light.color && d !== v.dark.color) continue;
       // A half kept at the base theme's (family 'literal') is its color;
       // one that is the base theme's own value is read from the base, so
       // that mode follows the base theme as it changes.
@@ -8857,7 +9063,10 @@ function settingsSource(slug, data, theme, pal, cwd = '', baseParts = null) {
           : /** @type {any} */ (v[m]).family === 'literal'
             ? v[m].color
             : refOf(v.family, m, v[m]);
-      out.tokens[k] = [half('light'), half('dark')];
+      out.tokens[k] = [
+        l === v.light.color ? half('light') : l,
+        d === v.dark.color ? half('dark') : d,
+      ];
     }
   }
   // A lifted part reads the neutral color's stops too.
@@ -9664,12 +9873,49 @@ async function buildThemeSteps(ctx, slug, data) {
       : null) !== paletteBefore
   )
     ctx.keepStops = null;
+  // A palette kept as saved (a newer CLI's) has the shades its settings
+  // module shows, whatever else changed: its colors cannot change here.
+  if (
+    ctx.keepStops == null &&
+    fs.existsSync(f.settingsTs) &&
+    paletteKeptAsSaved(cwd, slug, data, base)
+  ) {
+    const kept = fs.readFileSync(f.settingsTs, 'utf8');
+    // (Less what a token setting wrote, as the settings the module was
+    // built from, or this change's, name it.)
+    if (moduleUnedited(kept) !== false) {
+      const builtFrom = settingsBeforeChange(cwd, slug);
+      const stamp = /\/\/ Built from settings ([0-9a-f]{16}) /.exec(kept)?.[1];
+      const read = stopsIn(kept, true);
+      ctx.keepStops = paletteStopsOnly(
+        paletteStopsOnly(
+          builtFrom && stamp === settingsStamp(builtFrom).split(' ')[0]
+            ? read
+            : literalsMapped(read),
+          data,
+        ),
+        builtFrom,
+      );
+    }
+  }
   const theme = compileTheme(ctx, data, base);
   const pal = keepShades(
     paletteMapping(cwd, slug, data, base, ctx.project.core.tokenDefaults),
     ctx.keepStops,
+    base,
   );
+  // A theme whose palette is kept as saved (made by a newer CLI) keeps the
+  // settings module that newer CLI wrote while it is current for these
+  // settings and unedited: writing it again here would map the saved
+  // colors this CLI's way and change how the theme looks. The theme is
+  // built from it as written, as `theme build` builds it.
+  const keepModule =
+    moduleKeptAsSaved(cwd, slug, data) &&
+    paletteKeptAsSaved(cwd, slug, data, base);
   await step(() => {
+    // (A theme module gone is written back either way.)
+    if (!fs.existsSync(f.ts)) writeWhole(f.ts, themeModuleSource(slug));
+    if (keepModule) return;
     writeWhole(
       f.settingsTs,
       settingsSource(
@@ -9682,7 +9928,6 @@ async function buildThemeSteps(ctx, slug, data) {
       ),
     );
     syncPaletteRefs(cwd, slug, fs.readFileSync(f.settingsTs, 'utf8'), pal);
-    if (!fs.existsSync(f.ts)) writeWhole(f.ts, themeModuleSource(slug));
   });
   // Files an earlier build wrote that this one may not: the variants types
   // of an older base, and the pictures the editor took of an older look
@@ -9796,7 +10041,8 @@ async function buildThemeSteps(ctx, slug, data) {
   );
   /** @type {string[]} */
   const lifted = [];
-  if (found.length) {
+  // (A kept module stays as written: see keepModule.)
+  if (found.length && !keepModule) {
     for (const x of found) {
       const t = theme.components[x.target];
       // The base value goes before the variant's own declarations, so a
@@ -13607,16 +13853,29 @@ export function readFields(data, cwd, fixing, slug) {
  * @param {string} text
  * @param {string} cwd
  * @param {Record<string, string> | null} radii the whole-theme radii it was built with
+ * @param {Record<string, any> | null} [stops] the shades a palette kept as saved showed
  */
-function stepText(text, cwd, radii) {
+function stepText(text, cwd, radii, stops = null) {
   const data = settingsJson(text);
   if (!entriesReadable(data)) return text;
   const asWritten = JSON.stringify(data);
   readAsMeant(data, cwd);
+  const built = builtOf(radii, stops);
   return JSON.stringify(data) !== asWritten
-    ? `${JSON.stringify(radii ? {...data, built: {radii}} : data, null, 2)}\n`
-    : withBuilt(text, radii);
+    ? `${JSON.stringify(built ? {...data, built} : data, null, 2)}\n`
+    : withBuilt(text, radii, stops);
 }
+
+/**
+ * What a history step's build showed, kept with it: its whole-theme radii,
+ * and for a palette kept as saved the shades its module wrote.
+ * @param {Record<string, string> | null | undefined} radii
+ * @param {Record<string, any> | null | undefined} stops
+ */
+const builtOf = (radii, stops) =>
+  radii || stops
+    ? {...(radii ? {radii} : {}), ...(stops ? {stops} : {})}
+    : null;
 
 /** The file's own top-level fields. */
 const TOP_FIELDS = ['name', 'mode', 'like', 'settings', 'lifted', 'palette'];
@@ -14824,12 +15083,14 @@ export function radiiIn(source) {
  * editor built). A step an older CLI wrote has none, and is read as before.
  * @param {string} text
  * @param {Record<string, string> | null} radii
+ * @param {Record<string, any> | null} [stops]
  */
-function withBuilt(text, radii) {
-  if (!radii) return text;
+function withBuilt(text, radii, stops = null) {
+  const built = builtOf(radii, stops);
+  if (!built) return text;
   const data = settingsJson(text);
   if (!settingsShapeOk(data)) return text;
-  return `${JSON.stringify({...data, built: {radii}}, null, 2)}\n`;
+  return `${JSON.stringify({...data, built}, null, 2)}\n`;
 }
 
 /**
@@ -15243,6 +15504,37 @@ export function settingsStamp(data) {
 }
 
 /**
+ * Whether the theme's settings module is one a newer CLI wrote for a
+ * palette recipe this CLI does not know, and still current: built from
+ * these same settings, on the base version installed, by a CLI no older
+ * than this one, and not edited by hand. Such a module is kept as written
+ * (building it again could only lose what that CLI knows), and a build
+ * that keeps it is current.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {ThemeData} data
+ */
+export function moduleKeptAsSaved(cwd, slug, data) {
+  const f = themeFiles(cwd, slug);
+  if (!fs.existsSync(f.settingsTs) || !paletteRecipeUnknown(cwd, slug))
+    return false;
+  const ts = fs.readFileSync(f.settingsTs, 'utf8');
+  const stamp =
+    /\/\/ Built from settings ([0-9a-f]{16}) \(CLI ([^)]+)\)\./.exec(ts);
+  if (!stamp || stamp[1] !== settingsStamp(data).split(' ')[0]) return false;
+  if (semverCompare(stamp[2], cliVersion()) < 0) return false;
+  if (moduleUnedited(ts) === false) return false;
+  if (data.like) {
+    const built = new RegExp(
+      `// Built on @astryxdesign/theme-${data.like} ([^.\\s]+(?:\\.[^.\\s]+)*)\\.`,
+    ).exec(ts)?.[1];
+    const now = baseVersionOf(cwd, data.like);
+    if (built && now && built !== now) return false;
+  }
+  return true;
+}
+
+/**
  * Why the theme's build does not match its settings, in words, or null when
  * it does: a file missing, another CLI version, settings changed since the
  * build (a hand edit), or a build left half done (a command stopped).
@@ -15264,7 +15556,10 @@ export function staleBuild(cwd, slug, data) {
   const stamp =
     /\/\/ Built from settings ([0-9a-f]{16}) \(CLI ([^)]+)\)\./.exec(ts);
   const [hash] = settingsStamp(data).split(' ');
-  if (stamp && stamp[1] === hash && stamp[2] !== cliVersion())
+  // (A module a newer CLI wrote for a palette this CLI keeps as saved is
+  // current: see moduleKeptAsSaved.)
+  const kept = moduleKeptAsSaved(cwd, slug, data);
+  if (stamp && stamp[1] === hash && stamp[2] !== cliVersion() && !kept)
     return `it was built by CLI ${stamp[2]}, and this is ${cliVersion()}`;
   if (!stamp || stamp[1] !== hash)
     return `${slug}.settings.json does not match the build (a command stopped part way, a hand edit, or another tool)`;
@@ -15299,7 +15594,8 @@ export function staleBuild(cwd, slug, data) {
     !ts.trimEnd().endsWith('});') ||
     [f.css, f.js].some(file => {
       const by = builtBy(file);
-      return by != null && by !== stamp[2];
+      // (Outputs this CLI built beside a kept module are its own.)
+      return by != null && by !== stamp[2] && !(kept && by === cliVersion());
     })
   )
     return 'the last build did not finish (a command stopped while building)';
@@ -15591,15 +15887,17 @@ function partTokenChanges(before, after, modes) {
  * @param {Ctx} ctx
  * @param {string} slug
  * @param {ThemeData} data
- * @param {{history: boolean, historyAfter?: string[], radii?: Record<string, string> | null}} options
+ * @param {{history: boolean, historyAfter?: string[], radii?: Record<string, string> | null, stops?: Record<string, any> | null}} options
  *   `historyAfter`: the history to write with the change (a step back pops it);
- *   `radii`: the whole-theme radii the step being restored was built with
+ *   `radii`: the whole-theme radii the step being restored was built with;
+ *   `stops`: the shades the step being restored showed, for a palette kept
+ *   as saved
  */
 export async function commitTheme(
   ctx,
   slug,
   data,
-  {history, historyAfter, radii},
+  {history, historyAfter, radii, stops},
 ) {
   const {cwd} = ctx.project;
   const f = themeFiles(cwd, slug);
@@ -15707,31 +16005,32 @@ export async function commitTheme(
   // theme already shows: a theme an earlier editor built keeps its colors
   // until a color, the mode or the base changes, and undo brings them back.
   /** @param {ThemeData | null} d */
-  const colorKey = d =>
-    d &&
-    JSON.stringify({
-      mode: d.mode ?? 'both',
-      like: d.like ?? null,
-      colors: d.settings.filter(
-        x =>
-          (x.source === 'dial' &&
-            (PALETTE_DIALS.includes(x.thing) || x.thing === 'vibrancy')) ||
-          (x.source === 'token' && isColorToken(x.thing)),
-      ),
-    });
+  const colorKey = paletteColorKey;
   // A module edited by hand (it says "do not edit") keeps nothing: it is
   // built over from the settings, as its header says.
   const moduleNow =
     !staleBefore && fs.existsSync(f.settingsTs)
       ? fs.readFileSync(f.settingsTs, 'utf8')
       : null;
+  // A palette kept as saved (a newer CLI's) cannot make a shade again: the
+  // shades each step showed go into its history step, and a step back
+  // shows them again, whatever the step changed.
+  const keptPalette = paletteRecipeUnknown(cwd, slug);
+  const stopsNow =
+    keptPalette && moduleNow && moduleUnedited(moduleNow) !== false
+      ? paletteStopsOnly(stopsIn(moduleNow, true), before)
+      : null;
+  // (A kept palette always keeps what its module showed, less what a token
+  // setting wrote: `stopsNow`.)
   ctx.keepStops =
-    before &&
+    stops ??
+    (stopsNow && withHiddenShades(stopsNow, before, data, past)) ??
+    (before &&
     colorKey(before) === colorKey(data) &&
     moduleNow &&
     moduleUnedited(moduleNow) !== false
-      ? stopsIn(moduleNow)
-      : null;
+      ? paletteStopsOnly(stopsIn(moduleNow, keptPalette), before)
+      : null);
   // The same for the whole-theme radii: kept while corners and the base
   // stay as they are; a step back restores the radii it was built with.
   /** @param {ThemeData | null} d */
@@ -15821,7 +16120,7 @@ export async function commitTheme(
         writeWhole(
           f.history,
           JSON.stringify(
-            [...past, stepText(snapBefore, cwd, radiiNow)].slice(
+            [...past, stepText(snapBefore, cwd, radiiNow, stopsNow)].slice(
               -HISTORY_STEPS,
             ),
           ),
