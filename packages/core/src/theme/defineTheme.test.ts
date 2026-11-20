@@ -7,12 +7,8 @@ import type {
   DefineThemeInput,
   ResolvedDefinedTheme,
 } from './defineTheme';
-import {
-  defineTheme,
-  generateThemeCSS,
-  generateThemeRules,
-  isDefinedTheme,
-} from './defineTheme';
+import {defineTheme, isDefinedTheme} from './defineTheme';
+import {generateThemeCSS, generateThemeRules} from './generateThemeRules';
 import {resolveThemeToken} from './tokens';
 
 function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {

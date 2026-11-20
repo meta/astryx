@@ -96,8 +96,8 @@ function reachableModules(entry) {
 
 /**
  * The issue codes and finding codes one module can raise: a `code:` it
- * writes (or its fallback), each code in the first argument of `issueError`
- * and `issueWarning` under any name it imports them as (both branches of a
+ * writes (or its fallback), each code in the first argument of `issueError`,
+ * `issueWarning` and `issueNote` under any name it imports them as (both branches of a
  * conditional), the code an error list is added under, the members of a
  * `code` property typed as a union of codes, and the members of a
  * finding-kind union whose members are all snake-case codes.
@@ -112,8 +112,10 @@ function codesIn(text) {
       ),
     ].map(m => [m[1], m[2]]),
   );
-  const raisers = ['issueError', 'issueWarning'];
-  for (const m of text.matchAll(/\bissue(?:Error|Warning)\s+as\s+(\w+)/g)) {
+  const raisers = ['issueError', 'issueWarning', 'issueNote'];
+  for (const m of text.matchAll(
+    /\bissue(?:Error|Warning|Note)\s+as\s+(\w+)/g,
+  )) {
     raisers.push(m[1]);
   }
   const raise = new RegExp(`\\b(?:${raisers.join('|')})\\(([^,]*),`, 'g');

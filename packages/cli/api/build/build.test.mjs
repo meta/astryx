@@ -308,7 +308,7 @@ describe('build kit — a thin kit says what to try next', () => {
       name: 'dashboard-scorecard',
       basis: 'closest',
       command:
-        'astryx template dashboard-scorecard --type page src/pages/dashboard-scorecard',
+        'astryx template dashboard-scorecard --type page src/pages/dashboard-scorecard.tsx',
     });
   });
 
@@ -364,7 +364,7 @@ describe('build kit — every page starts from a template', () => {
       name: 'shell-top-nav',
       basis: 'fallback',
       command:
-        'astryx template shell-top-nav --type page src/pages/shell-top-nav',
+        'astryx template shell-top-nav --type page src/pages/shell-top-nav.tsx',
     });
     expect(r.data.start?.description).toBeTruthy();
   });
@@ -563,7 +563,7 @@ describe('build kit — every page starts from a template', () => {
         expect(alt.name).not.toBe(r.data.start?.name);
         expect(alt.description).toBeTruthy();
         expect(alt.command).toBe(
-          `astryx template ${alt.name} --type page src/pages/${alt.name}`,
+          `astryx template ${alt.name} --type page src/pages/${alt.name}.tsx`,
         );
       }
     }

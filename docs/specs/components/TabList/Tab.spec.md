@@ -183,6 +183,7 @@ FR1–FR2.
 | FR3           | `TabList.test.tsx` single tab stop and roving tabindex tests                                                                                      | Selected                                                       | Extra tab stops, or a wrong starting stop, fail.                                                                                                | `audit:Tab/accessibility` |
 | FR4, FR5      | `TabList.test.tsx` onChange and disabled tests                                                                                                    | Click, disabled button                                         | Selection when disabled fails.                                                                                                                  | `audit:Tab/behavior`      |
 | FR6, FR7      | `TabList.test.tsx` icon, icon-only, and pressed-overlay tests                                                                                     | Icon, selected icon, hidden label                              | Wrong icon, name, or overlay fails.                                                                                                             | `audit:Tab/behavior`      |
+| FR6 wrapped   | `TabWrappedLabel.interaction.browser.spec.ts` at 320 and 390 px                                                                                   | A label that wraps through `xstyle`, unselected and selected   | A label off the center of its cell, or one that moves on selection, fails.                                                                      |                           |
 | AV1 text size | `TabListTextSize.interaction.browser.spec.ts` at a 200% and 250% default font size                                                                | Default, size variants, with menu                              | A tab or tab strip that clips its label, or a label outside its tab, fails.                                                                     | `audit:Tab/behavior`      |
 | RTL relation  | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `TabList / With icons`                                                   | Tab icon and label; LTR and RTL                                | An icon that is not at the inline start of its label fails D2.                                                                                  | `audit:Tab/i18n-rtl`      |
 | AR4           | `TabDescription.test.tsx`                                                                                                                         | A Tooltip anchored on a Tab with an info glyph in `endContent` | A tab without the tooltip's `aria-describedby`, a focusable element inside the tab, a tooltip inside the strip, or a development warning fails. | `audit:Tab/accessibility` |
@@ -194,7 +195,7 @@ Read from source, with no focused test yet:
 - FR4: the caller `onClick` running first, and its `preventDefault()`
   cancelling selection.
 - FR5: the absent hover and pressed treatment on a disabled Tab.
-- FR6: the reserved selected-width label.
+- FR6: the reserved selected-width label of a label on one line.
 - FR7: the `tab` and `tab-indicator` targets and their `selected` state.
 - FR8.
 

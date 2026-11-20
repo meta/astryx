@@ -55,6 +55,7 @@ import {
   currentGesture,
   isPressInFlight,
 } from '../Layer/gestureCounter';
+import {isHTMLElement} from '../utils/nodeType';
 import {Button, type ButtonProps} from '../Button';
 import {Heading} from '../Heading';
 import {Icon} from '../Icon';
@@ -182,6 +183,16 @@ const styles = stylex.create({
       MENU_MAX_BLOCK_SIZE_FALLBACK,
     ),
     '--_dropdown-menu-radius': radiusVars['--radius-container'],
+    // Theme corner variables inherit. Reset them, so a nested surface that the
+    // theme does not style hands out its own radius.
+    '--_dropdown-menu-radius-top-left': 'initial',
+    '--_dropdown-menu-radius-top-right': 'initial',
+    '--_dropdown-menu-radius-bottom-right': 'initial',
+    '--_dropdown-menu-radius-bottom-left': 'initial',
+    '--_dropdown-menu-radius-start-start': 'initial',
+    '--_dropdown-menu-radius-start-end': 'initial',
+    '--_dropdown-menu-radius-end-start': 'initial',
+    '--_dropdown-menu-radius-end-end': 'initial',
     '--_dropdown-menu-padding': spacingVars['--spacing-1'],
     padding: spacingVars['--spacing-1'],
     borderRadius: 'var(--_dropdown-menu-radius)',
@@ -727,7 +738,9 @@ function DropdownMenuBottomSheet({
       cancelAnimationFrame(frame);
       observer?.disconnect();
     };
-  }, [currentItems, isOpen]);
+    // Re-run only on open or a sub-menu change. A new `items` array from a
+    // parent render must not move focus.
+  }, [currentSubmenu, isOpen]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -1052,27 +1065,21 @@ function DropdownMenuPopover({
     if (!isControlled) {
       setInternalIsOpen(false);
     }
-    const trigger = buttonRef.current;
-    if (!trigger) {
-      return;
-    }
-    const active = document.activeElement;
-    const focusLandedElsewhere =
-      active instanceof HTMLElement &&
-      active !== document.body &&
-      active !== trigger &&
-      !contentRef.current?.contains(active);
-    if (focusLandedElsewhere) {
-      return;
-    }
-    prepareFocusReturn();
-    // After pointer input the trigger takes focus without the focus-visible
-    // ring (`component:DropdownMenu/DEC-1`). The style the helper above adds
-    // reaches only the design system's own Button; the browser's focus option
-    // also reaches a control the caller renders, which the browser would
-    // otherwise ring (Chromium after a mouse pick, WebKit after a touch).
-    returnFocusForLastInput(trigger);
-  }, [hideOpenFlyouts, isControlled, onOpenChange, prepareFocusReturn]);
+  }, [hideOpenFlyouts, isControlled, onOpenChange]);
+
+  // How returned focus moves. After pointer input the trigger takes focus
+  // without a ring. The helper's style reaches only the design system's own
+  // Button. The browser's focus option also reaches a control the caller
+  // renders, which Chromium rings after a mouse pick and WebKit after a touch.
+  const restoreFocusTo = useCallback(
+    (element: HTMLElement) => {
+      if (element === buttonRef.current) {
+        prepareFocusReturn();
+      }
+      returnFocusForLastInput(element);
+    },
+    [prepareFocusReturn],
+  );
 
   // Defer item focus until the layer has committed open, so focus restore
   // captures the trigger instead of the first menu item.
@@ -1144,6 +1151,7 @@ function DropdownMenuPopover({
         : undefined;
 
   const popover = usePopoverInternal({
+    restoreFocusTo,
     onHide: handleLayerHide,
     onShow: handleLayerShow,
     hasLightDismiss: true,
@@ -1507,7 +1515,7 @@ function DropdownMenuPopover({
       // model no longer tracks the press, and a settled release outside must
       // still close the menu.
       const layer = listRef.current?.closest('[popover]');
-      if (didOpen && pointerType === 'mouse' && layer instanceof HTMLElement) {
+      if (didOpen && pointerType === 'mouse' && isHTMLElement(layer)) {
         claimPress(layer, {releaseTarget: buttonRef.current});
       }
       return didOpen;

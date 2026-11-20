@@ -17,6 +17,9 @@ const path = require('node:path');
 const {
   replaceDemoContent,
 } = require('../packages/cli/foundation/discovery/template-adapter.mjs');
+const {
+  fillTemplatePlaceholders,
+} = require('../packages/cli/foundation/discovery/template-placeholders.mjs');
 
 const COPYRIGHT = '// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n';
 const ROOT = path.resolve(__dirname, '..');
@@ -179,9 +182,12 @@ function generateSourceRegistry(items) {
   const entries = items.map(t => {
     const sourcePath = path.join(t.sourceDir, t.sourceFile);
     // The code view hands out source, not a copy: demo content becomes the
-    // placeholder a copy writes, and fixture media stays. The preview route
-    // renders the original file.
-    const {source} = replaceDemoContent(fs.readFileSync(sourcePath, 'utf-8'));
+    // placeholder a copy writes, each icon placeholder the library import a
+    // copy writes, and fixture media stays. The preview route renders the
+    // original file.
+    const {source} = fillTemplatePlaceholders(
+      replaceDemoContent(fs.readFileSync(sourcePath, 'utf-8')).source,
+    );
     return `  ${JSON.stringify('/templates/' + t.dirName + '/')}: ${JSON.stringify(source)}`;
   });
 

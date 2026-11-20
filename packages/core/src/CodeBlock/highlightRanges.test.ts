@@ -37,12 +37,28 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function createCodeElement(lines: string[]): HTMLElement {
+// The released line shape: text directly inside each [data-line] element.
+function createPlainCodeElement(lines: string[]): HTMLElement {
   const code = document.createElement('code');
   for (let i = 0; i < lines.length; i++) {
     const div = document.createElement('div');
     div.setAttribute('data-line', String(i + 1));
     div.textContent = lines[i] || '\u200b';
+    code.appendChild(div);
+  }
+  return code;
+}
+
+function createCodeElement(lines: string[]): HTMLElement {
+  const code = document.createElement('code');
+  for (let i = 0; i < lines.length; i++) {
+    // Range-mode line: one dir="auto" content span holding the line's text.
+    const div = document.createElement('div');
+    div.setAttribute('data-line', String(i + 1));
+    const content = document.createElement('span');
+    content.setAttribute('dir', 'auto');
+    content.textContent = lines[i] || '\u200b';
+    div.appendChild(content);
     code.appendChild(div);
   }
   return code;
@@ -103,6 +119,24 @@ describe('applyHighlightRangesChunked', () => {
 
     cleanup();
     expect(kwHighlight!.size).toBe(0);
+  });
+
+  it('creates ranges when the text sits directly in each line element', () => {
+    const codeEl = createPlainCodeElement(['const x = 1;', 'let y = 2;']);
+    const tokenLines: TokenLine[] = [
+      [{type: 'keyword', start: 0, end: 5}],
+      [{type: 'keyword', start: 0, end: 3}],
+    ];
+    const mockStyle = document.createElement('style');
+    mockStyle.setAttribute('data-astryx-highlight-styles', '');
+    document.head.appendChild(mockStyle);
+
+    const cleanup = applyHighlightRangesChunked(codeEl, tokenLines);
+
+    const kwHighlight = mockHighlightsMap.get('astryx-keyword');
+    expect(kwHighlight).toBeDefined();
+    expect(kwHighlight!.size).toBe(2);
+    cleanup();
   });
 
   it('keeps every parser-accepted tokenizer type coloured under its raw name', () => {

@@ -31,7 +31,7 @@ vi.mock('node:fs', async importOriginal => {
 
 /** @type {string} */
 let dir;
-const PAGE = 'export default function Page() {\n  return <p>Raced page</p>;\n}\n';
+const PAGE = 'export default function Page() {\n  return <p>Raced page</p>;\n}\nimport "@astryxdesign/core/astryx.css";\n';
 
 beforeAll(async () => {
   dir = makeLinkedFixture('astryx-render-race-', ['@astryxdesign', '@stylexjs', 'react', 'react-dom']);

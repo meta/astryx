@@ -20,7 +20,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {DOCS_ROUTES_FILE} from '../foundation/doc-compiler/stored-docs.mjs';
-import {withPublishedCopy} from './published-copy.mjs';
+import {resolutionUnrecorded, withPublishedCopy} from './published-copy.mjs';
 
 /**
  * What builds the routes in the copy and prints them with their inputs.
@@ -30,7 +30,8 @@ import {withPublishedCopy} from './published-copy.mjs';
 function routesRunner(pkg) {
   const at = (/** @type {string} */ rel) =>
     JSON.stringify(pathToFileURL(path.join(pkg, rel)).href);
-  return `const {recordReads} = await import(${at('foundation/fs/read-record.mjs')});
+  return `${resolutionUnrecorded(pkg)}
+const {recordReads} = await import(${at('foundation/fs/read-record.mjs')});
 const {selfAuditInputs} = await import(${at('foundation/discovery/stored-self-audit.mjs')});
 const {cliDocsRoutesNow} = await import(${at('api/docs/_entry-names.mjs')});
 const seen = new Map();

@@ -1,12 +1,13 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * Each checkout step in ci.yml has its own time bound: 8 minutes, above the
- * slowest checkout that still succeeded in recent runs (445 s); 3 minutes in a
- * job capped at 8 minutes or less, so the step bound fires first; or the bound
- * its job names. A checkout that hangs in the git service then fails by name,
- * instead of using up the job's whole time before any code runs. The bound is
- * for the tool alone: it lowers no test budget.
+ * Each checkout step in ci.yml has its own time bound. A shallow checkout
+ * stops after 5 minutes (4 in a job of 10 minutes) and is tried once more,
+ * and the job stops with "checkout failed twice" when both tries failed, so a
+ * fetch that hangs in the git service costs one retry instead of the job. A
+ * checkout in a job capped at 8 minutes or less stops after 3 minutes, and a
+ * full-history checkout after the bound its job names; neither has room for a
+ * second try. The bounds are for the tool alone: they lower no test budget.
  */
 
 import fs from 'node:fs';
@@ -45,17 +46,36 @@ const shortJob = (/** @type {string} */ job) => {
   return typeof cap === 'number' && cap <= 8;
 };
 
+/** The bound of each try of a checkout that is tried twice in this job. */
+const retryBound = (/** @type {string} */ job) => {
+  const cap = ci.jobs[job]['timeout-minutes'];
+  return typeof cap === 'number' && cap <= 10 ? Math.floor((cap - 1) / 2) : 5;
+};
+
+/** A step condition without its `${{ }}`: the second try and the stop carry it over. */
+const unwrap = (/** @type {unknown} */ condition) =>
+  condition == null
+    ? ''
+    : String(condition)
+        .replace(/^\$\{\{\s*/, '')
+        .replace(/\s*\}\}$/, '');
+
+/** A checkout tried twice: neither a short job's nor a full-history one. */
+const retried = (/** @type {string} */ job) =>
+  !UNBOUNDED.has(job) && BOUND[job] === undefined && !shortJob(job);
+
 describe('ci.yml checkout steps', () => {
   it('exist', () => {
     expect(checkouts.length).toBeGreaterThan(0);
   });
 
-  it('each stop after 8 minutes, or the bound their job names', () => {
+  it('each stop after their bound: 5 minutes a try, 3 in a short job, or the bound their job names', () => {
     const wrong = checkouts
       .filter(({job, step}) =>
         UNBOUNDED.has(job)
           ? step['timeout-minutes'] !== undefined
-          : step['timeout-minutes'] !== (BOUND[job] ?? (shortJob(job) ? 3 : 8)),
+          : step['timeout-minutes'] !==
+            (BOUND[job] ?? (shortJob(job) ? 3 : retryBound(job))),
       )
       .map(({where}) => where);
     expect(wrong).toEqual([]);
@@ -73,5 +93,68 @@ describe('ci.yml checkout steps', () => {
       })
       .map(({where}) => where);
     expect(late).toEqual([]);
+  });
+
+  it('each try once more after a failure, and the job stops when both failed', () => {
+    const wrong = [];
+    for (const [job, spec] of Object.entries(ci.jobs)) {
+      if (!retried(job)) continue;
+      const steps = /** @type {any[]} */ (spec.steps ?? []);
+      steps.forEach((step, i) => {
+        if (!String(step.uses ?? '').startsWith('actions/checkout@')) return;
+        if (String(step.id ?? '').endsWith('_again')) return;
+        const where = `${job} step ${i + 1}`;
+        const again = steps[i + 1];
+        const stop = steps[i + 2];
+        const id = step.id;
+        const ok =
+          typeof id === 'string' &&
+          step['continue-on-error'] === true &&
+          again?.id === `${id}_again` &&
+          again.uses === step.uses &&
+          JSON.stringify(again.with) === JSON.stringify(step.with) &&
+          again['continue-on-error'] === true &&
+          again['timeout-minutes'] === step['timeout-minutes'] &&
+          String(again.if).endsWith(
+            `steps.${id}.outcome != 'success' && steps.${id}.outcome != 'skipped'`,
+          ) &&
+          String(again.if).includes(unwrap(step.if)) &&
+          stop?.name === 'Stop when the checkout failed twice' &&
+          String(stop.if).endsWith(
+            `steps.${id}.outcome != 'success' && steps.${id}.outcome != 'skipped' && steps.${id}_again.outcome != 'success'`,
+          ) &&
+          String(stop.if).includes(unwrap(step.if)) &&
+          /checkout failed twice/.test(stop.run) &&
+          /exit 1\s*$/.test(stop.run);
+        if (!ok) wrong.push(where);
+      });
+    }
+    expect(wrong).toEqual([]);
+  });
+
+  it('end both tries before their job does', () => {
+    const late = checkouts
+      .filter(({job, step}) => {
+        const cap = ci.jobs[job]['timeout-minutes'];
+        return (
+          retried(job) &&
+          typeof cap === 'number' &&
+          2 * step['timeout-minutes'] >= cap
+        );
+      })
+      .map(({where}) => where);
+    expect(late).toEqual([]);
+  });
+
+  it('give every step id once in a job', () => {
+    const dup = Object.entries(ci.jobs).flatMap(([job, spec]) => {
+      const ids = /** @type {any[]} */ (spec.steps ?? [])
+        .map(step => step.id)
+        .filter(Boolean);
+      return ids
+        .filter((id, i) => ids.indexOf(id) !== i)
+        .map(id => `${job}: ${id}`);
+    });
+    expect(dup).toEqual([]);
   });
 });
