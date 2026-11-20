@@ -205,7 +205,7 @@ export const docs = {
       name: 'columns',
       type: 'TableColumn<T>[]',
       description:
-        "Column definitions: each column has {key, header, width?, align?, renderCell?}, and Table has no onRowClick prop: to open a row, put a Link or Button in its main cell's renderCell; on a phone, column floors wider than the screen scroll sideways, so for a phone-first page also render a List and switch with a StyleX `display` rule under `@media` (Best practices). The `header` field sets the column heading text. If omitted, columns are auto-generated from data object keys. The `width` field is typed as `ColumnWidth` (not a number); use `proportional(n)` or `pixel(n)` helpers imported from `@astryxdesign/core/Table`. Omitting `width` keeps an equal flexible share with a compact 60px readability floor. To give one column a different floor, set `width: proportional(1, {minWidth: 80})`; its `minWidth` replaces the 60px floor for that column. Example: `width: pixel(120)` for 120px fixed, `width: proportional(1)` for a flexible column with a 120px default minimum.",
+        "Column definitions: each column has {key, header, width?, align?, renderCell?}, and Table has no onRowClick prop: open a row from a Link or Button in its main cell's renderCell, or make the whole row clickable with a plugin whose transformBodyRow adds onClick to the row's htmlProps, skipping clicks where hasInteractiveAncestor or hasTextSelection (from @astryxdesign/core/hooks) is true, and keep the Link or Button as the row's keyboard and screen-reader path (example below); on a phone, column floors wider than the screen scroll sideways, so for a phone-first page also render a List and switch with a StyleX `display` rule under `@media` (Best practices). The `header` field sets the column heading text. If omitted, columns are auto-generated from data object keys. The `width` field is typed as `ColumnWidth` (not a number); use `proportional(n)` or `pixel(n)` helpers imported from `@astryxdesign/core/Table`. Omitting `width` keeps an equal flexible share with a compact 60px readability floor. To give one column a different floor, set `width: proportional(1, {minWidth: 80})`; its `minWidth` replaces the 60px floor for that column. Example: `width: pixel(120)` for 120px fixed, `width: proportional(1)` for a flexible column with a 120px default minimum.",
     },
     {
       name: 'idKey',
@@ -423,6 +423,48 @@ const columns = [
   columns={columns}
   idKey="id"
 />;`,
+    },
+    {
+      label: 'Open a row by clicking anywhere on it',
+      code: `const [openId, setOpenId] = useState<string | null>(null);
+
+// The Button stays the keyboard and screen-reader way to open the row.
+const columns: TableColumn<User>[] = [
+  {
+    key: 'name',
+    header: 'Name',
+    renderCell: user => (
+      <Button label={user.name} variant="ghost" onClick={() => setOpenId(user.id)} />
+    ),
+  },
+  {key: 'role', header: 'Role'},
+];
+
+// A pointer click anywhere else on the row opens it too.
+const rowClick = useMemo<TablePlugin<User>>(
+  () => ({
+    rowModel: 'flat',
+    transformBodyRow: (props, user) => ({
+      ...props,
+      htmlProps: {
+        ...props.htmlProps,
+        onClick: event => {
+          const row = event.currentTarget;
+          const target = event.target;
+          // Leave clicks on cell controls and text selections alone.
+          if (!(target instanceof Element)) return;
+          if (target !== row && hasInteractiveAncestor(target, row)) return;
+          if (hasTextSelection(row)) return;
+          props.htmlProps.onClick?.(event);
+          setOpenId(user.id);
+        },
+      },
+    }),
+  }),
+  [],
+);
+
+<Table data={users} columns={columns} idKey="id" hasHover plugins={{rowClick}} />;`,
     },
   ],
 };
