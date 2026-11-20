@@ -364,7 +364,7 @@ const REVEAL_MODES = [
 /**
  * Each reveal mode over media that has no focusable element of its own, with
  * an action in the overlay. Tab reaches each action, and focus reveals its
- * overlay. The last focus overlay holds a Link with no href.
+ * overlay. The last focus and hover overlays each hold a Link with no href.
  */
 export const RevealModes: Story = {
   render: () => (
@@ -397,6 +397,18 @@ export const RevealModes: Story = {
             <img
               src={SAMPLE_IMAGE}
               alt="Focus link media"
+              {...stylex.props(styles.image)}
+            />
+          </AspectRatio>
+        </Overlay>
+        <Overlay
+          showOn="hover"
+          align="center"
+          content={<Link onClick={() => {}}>Hover link action</Link>}>
+          <AspectRatio ratio={16 / 9}>
+            <img
+              src={SAMPLE_IMAGE}
+              alt="Hover link media"
               {...stylex.props(styles.image)}
             />
           </AspectRatio>

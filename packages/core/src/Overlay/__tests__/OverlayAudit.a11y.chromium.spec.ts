@@ -130,6 +130,7 @@ async function overlays(page: Page) {
         transition: scrimStyle
           ? `${scrimStyle.transitionProperty} ${scrimStyle.transitionDuration}`
           : null,
+        transitionDelay: scrimStyle?.transitionDelay ?? null,
         rootRadius: getComputedStyle(root).borderTopLeftRadius,
         rootOverflow: getComputedStyle(root).overflow,
         scrimInsideRoot:
@@ -331,7 +332,7 @@ for (const mode of ['light', 'dark'] as const) {
     reducedMotion: 'reduce',
     run: async (page, check, frame) => {
       const rest = await overlays(page);
-      check(rest.length === 5, `${rest.length} overlays`);
+      check(rest.length === 6, `${rest.length} overlays`);
       for (const o of rest.slice(0, 3)) {
         check(o.opacity === '0', `${o.name} rest opacity ${o.opacity}`);
         check(
@@ -351,6 +352,14 @@ for (const mode of ['light', 'dark'] as const) {
         rest[4]?.action?.hitIsAction === false,
         'the hidden focus link takes a click',
       );
+      check(
+        rest[5]?.opacity === '0',
+        `hover link rest opacity ${rest[5]?.opacity}`,
+      );
+      check(
+        rest[5]?.action?.hitIsAction === false,
+        'the hidden hover link takes a click',
+      );
       const violations = await axe(page);
       check(violations.length === 0, `axe: ${violations.join(' | ')}`);
       await frame('rest', {overlays: rest, violations});
@@ -362,6 +371,7 @@ for (const mode of ['light', 'dark'] as const) {
         'Hover strip action',
         'Always action',
         'Focus link action',
+        'Hover link action',
       ];
       for (const label of expected) {
         await page.keyboard.press('Tab');
@@ -531,10 +541,19 @@ for (const reducedMotion of ['reduce', 'no-preference'] as const) {
       const [o] = await overlays(page);
       check(o.position === 'bottom', `position ${o.position}`);
       const duration = /\s([\d.]+)s/.exec(o.transition ?? '')?.[1];
+      const delays = (o.transitionDelay ?? '').split(',').map(d => d.trim());
       if (reducedMotion === 'reduce') {
         check(duration === '0', `reduced-motion transition ${o.transition}`);
+        check(
+          delays.every(d => d === '0s'),
+          `reduced-motion delays ${o.transitionDelay}`,
+        );
       } else {
         check(Number(duration) > 0, `no-preference transition ${o.transition}`);
+        check(
+          delays.length === 4 && delays[3] === `${duration}s`,
+          `the clip path does not wait for the fade: ${o.transitionDelay}`,
+        );
       }
       await frame('rest', {overlay: o});
     },

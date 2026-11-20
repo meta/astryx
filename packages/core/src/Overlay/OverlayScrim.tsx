@@ -47,6 +47,10 @@ export interface OverlayScrimProps {
 // Styles
 // =============================================================================
 
+const FADE = durationVars['--duration-fast'];
+// On hide, the clip path applies when the fade ends. On reveal it lifts at once.
+const CLIP_DELAY_ON_HIDE = '0s, 0s, 0s, ' + FADE;
+
 const styles = stylex.create({
   base: {
     position: 'absolute',
@@ -55,11 +59,14 @@ const styles = stylex.create({
     gap: spacingVars['--spacing-2'],
     padding: spacingVars['--spacing-3'],
     pointerEvents: 'none',
-    transitionProperty: 'opacity, visibility, transform',
+    transitionProperty: 'opacity, visibility, transform, clip-path',
     transitionDuration: {
-      default: durationVars['--duration-fast'],
+      default: FADE + ', ' + FADE + ', ' + FADE + ', 0s',
       '@media (prefers-reduced-motion: reduce)': '0s',
     },
+    // The clip path of a CSS-driven reveal is discrete. It waits for the fade
+    // on hide, so content fades out before the clip removes it.
+    transitionBehavior: 'allow-discrete',
     transitionTimingFunction: easeVars['--ease-standard'],
   },
 
@@ -110,7 +117,25 @@ const styles = stylex.create({
 
   // CSS-driven reveals hide with opacity, not visibility. Hidden content stays
   // in the tab order, so Tab can reach an action and focus-within can reveal it.
+  // At rest a clip path keeps the content out of hit-testing, even content that
+  // sets its own pointer-events, and even a touch tap that arrives before the
+  // hover state. A clip path keeps the content in the tab order.
   hoverReveal: {
+    clipPath: {
+      default: 'inset(50%)',
+      [stylex.when.ancestor(':hover', overlayScope)]: {
+        '@media (hover: hover)': 'none',
+      },
+      [stylex.when.ancestor(':focus-within', overlayScope)]: 'none',
+    },
+    transitionDelay: {
+      default: CLIP_DELAY_ON_HIDE,
+      [stylex.when.ancestor(':hover', overlayScope)]: {
+        '@media (hover: hover)': '0s',
+      },
+      [stylex.when.ancestor(':focus-within', overlayScope)]: '0s',
+      '@media (prefers-reduced-motion: reduce)': '0s',
+    },
     opacity: {
       default: 0,
       [stylex.when.ancestor(':hover', overlayScope)]: {
@@ -147,13 +172,16 @@ const styles = stylex.create({
     },
   },
 
-  // CSS-driven: focus-within only. Hover never reveals this overlay, so at
-  // rest a clip path also keeps its content out of hit-testing, even content
-  // that sets its own pointer-events. A clip path keeps it in the tab order.
+  // CSS-driven: focus-within only, with the same rest clip path as hoverReveal.
   focusReveal: {
     clipPath: {
       default: 'inset(50%)',
       [stylex.when.ancestor(':focus-within', overlayScope)]: 'none',
+    },
+    transitionDelay: {
+      default: CLIP_DELAY_ON_HIDE,
+      [stylex.when.ancestor(':focus-within', overlayScope)]: '0s',
+      '@media (prefers-reduced-motion: reduce)': '0s',
     },
     opacity: {
       default: 0,
