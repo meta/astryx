@@ -16,7 +16,8 @@ export const doc = {
   summary:
     'After bumping @astryxdesign/core, migrate project source with codemods and update copied compositions.',
   description:
-    'Runs the codemods between `from` and the installed Core version, then refreshes the ' +
+    'Runs the codemods between `from` and the installed version of the run\'s active base ' +
+    '(Core, or the base a project or `--base` names), then refreshes the ' +
     'managed agent-docs block. Dry-run by default; `apply` writes changes only after the ' +
     'selected codemods and hooks succeed. Config codemods run before astryx.config is ' +
     'loaded, so they can repair an invalid config. Also updates copied compositions from ' +
@@ -42,7 +43,7 @@ export const doc = {
       name: 'options.from',
       type: 'string',
       description:
-        'Version before the dependency bump; the target is the installed @astryxdesign/core (or legacy @xds/core). Required unless `list` or `registry` is set.',
+        'Version before the dependency bump; the target is the installed version of the run\'s active base: @astryxdesign/core (or legacy @xds/core) in a run on Core, or the base\'s package in a run on another base, which runs no Core codemod and checks no copied composition. Required unless `list` or `registry` is set.',
     },
     {
       name: 'options.apply',
@@ -143,7 +144,7 @@ export const doc = {
     },
     {
       code: 'ERR_VERSION_DETECT',
-      when: "the project has installed neither @astryxdesign/core nor legacy @xds/core in its own node_modules, nor, for a member its workspace lists, in a folder up to the workspace root (with no Astryx project, in `ctx.cwd`'s own node_modules); with `registry`, only when copied-composition receipts exist and @astryxdesign/core is not installed",
+      when: "the project has not installed the run's active base (in a run on Core, neither @astryxdesign/core nor legacy @xds/core) in its own node_modules, nor, for a member its workspace lists, in a folder up to the workspace root (with no Astryx project, in `ctx.cwd`'s own node_modules); with `registry`, only in a run on Core, when copied-composition receipts exist and @astryxdesign/core is not installed",
     },
     {
       code: 'ERR_DEP_MISSING',

@@ -2,7 +2,11 @@
 
 import type {Meta, StoryObj} from '@storybook/react';
 import {expect, userEvent} from 'storybook/test';
-import {ChatToolCalls, type ChatToolCallItem} from '@astryxdesign/core/Chat';
+import {
+  ChatMessage,
+  ChatToolCalls,
+  type ChatToolCallItem,
+} from '@astryxdesign/core/Chat';
 import {useState, useCallback} from 'react';
 import {CodeBlock} from '@astryxdesign/core/CodeBlock';
 
@@ -125,25 +129,33 @@ export const FocusedGroupedDetail: Story = {
   },
 };
 
-/** Narrow container — long metadata truncates without horizontal overflow */
+/**
+ * Narrow container — long metadata truncates without horizontal overflow, on
+ * its own and inside an assistant message, whose column aligns children to
+ * the start.
+ */
 export const Narrow: Story = {
   tags: ['no-visual'],
-  render: () => (
-    <div
-      data-chat-tool-calls-narrow
-      style={{boxSizing: 'border-box', width: 320, padding: 16}}>
-      <ChatToolCalls
-        calls={[
-          {
-            name: 'long_running_tool_name',
-            target: 'packages/core/src/Chat/ChatToolCalls.tsx',
-            status: 'running',
-            node: 'workspace',
-          },
-        ]}
-      />
-    </div>
-  ),
+  render: () => {
+    const calls: ChatToolCallItem[] = [
+      {
+        name: 'long_running_tool_name',
+        target: 'packages/core/src/Chat/ChatToolCalls.tsx',
+        status: 'running',
+        node: 'workspace',
+      },
+    ];
+    return (
+      <div
+        data-chat-tool-calls-narrow
+        style={{boxSizing: 'border-box', width: 320, padding: 16}}>
+        <ChatToolCalls calls={calls} />
+        <ChatMessage sender="assistant">
+          <ChatToolCalls calls={calls} />
+        </ChatMessage>
+      </div>
+    );
+  },
   play: async ({canvasElement}) => {
     const container = canvasElement.querySelector<HTMLElement>(
       '[data-chat-tool-calls-narrow]',

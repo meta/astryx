@@ -15,6 +15,14 @@ import {
 } from '../../foundation/discovery/template-adapter.mjs';
 import {sameWord, wordsOf} from './_words.mjs';
 
+/**
+ * The source file each template candidate's `weakKeywords` are read from,
+ * when it could be read, and the names if this run already read them: a
+ * gather kept between runs stores the names it has and the file for the rest
+ * (api/search/_adapter.mjs), so storing costs no parse.
+ * @type {WeakMap<object, {file: string, derivedSoFar: () => string[] | undefined}>}
+ */
+export const derivedFromSource = new WeakMap();
 /** @typedef {import('./_lexical.mjs').Candidate} Candidate */
 
 /**
@@ -75,14 +83,20 @@ export async function gatherTemplates(cwd) {
     let derive = () => [];
     /** @type {string[] | null} */
     let weakKeywordBound = null;
+    /** @type {string | null} */
+    let readSource = null;
+    /** @type {(() => string[] | undefined) | undefined} */
+    let derivedNow;
     if (t.type === 'page') {
       if (t.filePath) {
         try {
           const source = fs.readFileSync(t.filePath, 'utf-8');
+          readSource = t.filePath;
           // Parsing the source costs more than the rest of the page's gather.
           // It waits until a term could match a name the source can yield.
           /** @type {string[] | undefined} */
           let derived;
+          derivedNow = () => derived;
           derive = () => {
             if (derived === undefined) {
               try {
@@ -101,8 +115,8 @@ export async function gatherTemplates(cwd) {
       if (t.category)
         keywords.push(...t.category.split(/[^A-Za-z0-9]+/).filter(Boolean));
     }
-    return {
-      domain: 'template',
+    const candidate = {
+      domain: /** @type {const} */ ('template'),
       name: commandName,
       keywords,
       get weakKeywords() {
@@ -117,12 +131,25 @@ export async function gatherTemplates(cwd) {
       // A display name that names the block's subject is another name of it
       // and its title (subjectName).
       ...subjectName(t),
+      // The components a block uses, as its doc lists them: search reads
+      // them as what the block renders, not as its own keywords
+      // (_named-keywords.mjs).
+      ...(Array.isArray(t.componentsUsed) && t.componentsUsed.length
+        ? {_uses: [...t.componentsUsed]}
+        : {}),
       _displayName: t.name,
       _package: t.package ?? CORE_PACKAGE,
       _kind: t.type, // 'page' | 'block'
       _resultName: t.dirName,
       _commandName: commandName,
+      ...(t.isReady === false ? {_notReady: /** @type {const} */ (true)} : {}),
     };
+    if (readSource)
+      derivedFromSource.set(candidate, {
+        file: readSource,
+        derivedSoFar: () => derivedNow?.(),
+      });
+    return candidate;
   });
 }
 

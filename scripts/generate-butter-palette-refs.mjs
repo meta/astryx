@@ -2,69 +2,21 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 /* global process */
 
-import * as path from 'node:path';
-import {fileURLToPath, pathToFileURL} from 'node:url';
-import {
-  countSelectedRefs,
-  createSelectedPaletteRefGenerator,
-} from './generate-selected-palette-refs.mjs';
+import {pathToFileURL} from 'node:url';
+import {defineThemePaletteRefs} from './generate-selected-palette-refs.mjs';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-
-export const THEME_SOURCE_REL = 'packages/themes/butter/src/butterTheme.ts';
-export const FULL_PALETTE_REL =
-  'packages/themes/butter/src/butterPalettes.generated.ts';
-export const SELECTED_REFS_REL =
-  'packages/themes/butter/src/butterPaletteRefs.generated.ts';
-export const TEMPLATE_REFS_REL =
-  'packages/cli/assets/templates/themes/butter/butterPaletteRefs.generated.ts';
-
-const generator = createSelectedPaletteRefGenerator({
-  themeDisplayName: 'Butter',
-  paletteRefsIdentifier: 'butterPaletteRefs',
-  themeSourceRel: THEME_SOURCE_REL,
-  fullPaletteRel: FULL_PALETTE_REL,
-  selectedRefsRel: SELECTED_REFS_REL,
-  templateRefsRel: TEMPLATE_REFS_REL,
-  regenerateCommand: 'pnpm generate:butter-palette-refs',
+const theme = defineThemePaletteRefs({
+  slug: 'butter',
+  displayName: 'Butter',
 });
 
-export function generateButterPaletteRefs({root = ROOT, check = false} = {}) {
-  return generator.generateSelectedPaletteRefs({root, check});
-}
+export const THEME_SOURCE_REL = theme.themeSourceRel;
+export const FULL_PALETTE_REL = theme.fullPaletteRel;
+export const SELECTED_REFS_REL = theme.selectedRefsRel;
+export const TEMPLATE_REFS_REL = theme.templateRefsRel;
 
-function main() {
-  const check = process.argv.includes('--check');
-  const result = generateButterPaletteRefs({check});
-  const count = countSelectedRefs(result.selected);
-
-  if (check && result.problems.length > 0) {
-    process.stderr.write(
-      `\nButter selected palette refs are out of sync:\n` +
-        result.problems
-          .map(
-            problem =>
-              `  - ${path.relative(ROOT, problem.output)} ${problem.reason}`,
-          )
-          .join('\n') +
-        `\nRun: pnpm generate:butter-palette-refs\n\n`,
-    );
-    return 1;
-  }
-
-  if (check) {
-    process.stdout.write(
-      `Butter selected palette refs are in sync (${count} stops).\n`,
-    );
-  } else {
-    for (const output of result.outputs) {
-      process.stdout.write(`Wrote ${path.relative(ROOT, output)}\n`);
-    }
-    process.stdout.write(`Selected ${count} referenced palette stops.\n`);
-  }
-  return 0;
-}
+export const generateButterPaletteRefs = theme.generate;
 
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
-  process.exit(main());
+  process.exit(theme.main());
 }

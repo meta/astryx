@@ -28,8 +28,8 @@ import {
 } from '../motion/animator';
 import {holdInput} from '../Layer/inputHold';
 import {ENTRANCE_OPACITY_FLOOR} from '../motion/opacityFloor';
-import {easedProgress, mapProgress, mapRange} from '../motion/progress';
-import {readThemeTiming, type ThemeTimingTokens} from '../motion/themeTiming';
+import {mapProgress, mapRange} from '../motion/progress';
+import {readThemeTimingOrInstant} from '../motion/themeTiming';
 import {placePopoverExitCopy} from '../privateAttributes/popoverExit.stylex';
 import {
   frameOf,
@@ -77,11 +77,6 @@ export function surfaceCurves(
     scaleY: axis === 'y' ? along : across,
     opacity: mapProgress(progress, p => Math.max(opacityFloor, opacity(p))),
   };
-}
-
-/** A theme timing that does not resolve plays no motion. */
-function timingOn(element: Element, tokens: ThemeTimingTokens): MotionCurve {
-  return readThemeTiming(element, tokens) ?? easedProgress(0, x => x);
 }
 
 /**
@@ -262,7 +257,7 @@ export function createPopoverSurfaceMotion(
       // screen, about the same point. Both reads come before this task's
       // first write.
       const from = readState(exiting.animator, collapsed.axis);
-      const timing = timingOn(element, POPOVER_ENTRANCE_TOKENS);
+      const timing = readThemeTimingOrInstant(element, POPOVER_ENTRANCE_TOKENS);
       // A dismissal let the element go (exit, below).
       animator.attach(element);
       endExit();
@@ -279,7 +274,7 @@ export function createPopoverSurfaceMotion(
       // at full size: the opening task took the CSS entrance off, and a
       // dismissal leaves the element unscaled.
       const geometry = measure();
-      const timing = timingOn(element, POPOVER_ENTRANCE_TOKENS);
+      const timing = readThemeTimingOrInstant(element, POPOVER_ENTRANCE_TOKENS);
       present(null, geometry, timing);
     });
     // Without animation frames the presentation has already run: no frame
@@ -365,7 +360,7 @@ export function createPopoverSurfaceMotion(
       return;
     }
     const from = readState(animator, target.axis);
-    const timing = timingOn(element, POPOVER_EXIT_TOKENS);
+    const timing = readThemeTimingOrInstant(element, POPOVER_EXIT_TOKENS);
     presentHandle = null;
     // The copy stands where the surface is drawn, the growth's frame
     // included.

@@ -63,6 +63,7 @@ export type {
   ChartScale,
   YBaseline,
   ColorAccessor,
+  ChartValueFormat,
 } from './types';
 
 // Color palette — theme-aware data-visualization colors

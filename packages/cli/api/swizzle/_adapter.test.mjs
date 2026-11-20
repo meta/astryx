@@ -1,7 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Unit tests for the swizzle adapter's `checkGhCli()`.
+ * @file Unit tests for the swizzle adapter's `checkGhCli()` and its refusal
+ *   without Core.
  * @input temporary PATH folders; a `node:child_process` mock
  * @output `checkGhCli` finds an executable `gh` on PATH, through the shared
  *   search-path walk, without running it. A swizzle never waits on a process
@@ -14,7 +15,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {execFileSync, spawn, spawnSync} from 'node:child_process';
-import {checkGhCli} from './_adapter.mjs';
+import {checkGhCli, resolveCore} from './_adapter.mjs';
 
 vi.mock('node:fs', async importOriginal => {
   const actual = await importOriginal();
@@ -126,5 +127,36 @@ describe('checkGhCli', () => {
     const tools = dirWith({'gh.exe': 0o644});
     expect(checkGhCli({PATH: tools, PATHEXT: '.COM;.EXE'}, 'win32')).toBe(true);
     expect(checkGhCli({PATH: tools, PATHEXT: '.CMD'}, 'win32')).toBe(false);
+  });
+});
+
+describe('resolveCore without Core', () => {
+  it('outside a project, names the app project swizzle needs', () => {
+    const dir = dirWith({});
+    expect(() => resolveCore(dir)).toThrow(
+      expect.objectContaining({
+        code: 'ERR_CORE_NOT_FOUND',
+        message:
+          "Could not find @astryxdesign/core. This folder is outside a project; swizzle copies a component's source into an app project that installs @astryxdesign/core.",
+      }),
+    );
+  });
+
+  it('in a project that has not installed Core, says to install it', () => {
+    const dir = dirWith({});
+    fs.writeFileSync(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        name: 'app',
+        dependencies: {'@astryxdesign/core': '0.7.16'},
+      }),
+    );
+    expect(() => resolveCore(dir)).toThrow(
+      expect.objectContaining({
+        code: 'ERR_CORE_NOT_FOUND',
+        message:
+          'Could not find installed @astryxdesign/core. Install it in this project, then run swizzle again.',
+      }),
+    );
   });
 });

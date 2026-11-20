@@ -60,9 +60,9 @@ import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {
   useScrollableArea,
-  type ScrollAxisState,
   type UseScrollableAreaResult,
 } from '../hooks/useScrollableArea';
+import {scrollEdgeFadeStyles} from '../hooks/scrollEdgeFade';
 import {hasInteractiveAncestor} from '../hooks/useClickableContainer';
 import {TokenizerClearAllMessageContext} from './TokenizerClearAllMessageContext';
 import {TokenizerItemRemovableContext} from './TokenizerItemRemovableContext';
@@ -72,8 +72,10 @@ import {
   useAdaptivePresentation,
 } from '../hooks/useAdaptivePresentation';
 import {useIsHydrating} from '../hooks/useIsHydrating';
+import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
+import {isStatusButtonPress} from '../hooks/statusButtonPress';
 import {VisuallyHidden} from '../VisuallyHidden';
-import {warnOnce} from '../utils/devWarning';
+import {devPropError, warnOnce} from '../utils/devWarning';
 import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import type {SizeValue} from '../utils/types';
@@ -131,6 +133,10 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Tokenizer/Tokenizer.generated';
 import {isRenderable} from '../utils/isRenderable';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 
@@ -280,8 +286,8 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
   /**
    * Whether the input is disabled. The disabled input keeps its tab stop: it
    * is announced as disabled (`aria-disabled`), is read-only, and opens and
-   * picks nothing. With `tokenOverflowBehavior="unfocusedLayer"` and no
-   * `disabledMessage`, the input is natively disabled and out of the tab order.
+   * picks nothing. With `tokenOverflowBehavior="unfocusedLayer"`, the
+   * collapsed field's placeholder keeps that tab stop.
    * @default false
    */
   isDisabled?: boolean;
@@ -426,11 +432,13 @@ const TOKEN_ROW_INSET = `calc(${spacingVars['--spacing-1']} - 1px)`;
  * padding.
  */
 const TRACK_FADE_INSET = `calc(${TOKEN_ROW_INSET} + ${spacingVars['--spacing-6']})`;
-const TRACK_FADE_FROM_LEFT = `linear-gradient(to right, transparent ${TOKEN_ROW_INSET}, black ${TRACK_FADE_INSET})`;
-const TRACK_FADE_FROM_RIGHT = `linear-gradient(to left, transparent ${TOKEN_ROW_INSET}, black ${TRACK_FADE_INSET})`;
 // Kept in sync with useEndLaneReserve: wrapperWithTokens reads the custom
 // property directly, to keep token rows and the input short of the lane.
 const END_LANE_RESERVE_VAR = '--_tokenizer-end-lane-reserve';
+const INPUT_TEXT_INSET = `calc(${spacingVars['--spacing-2']} - ${spacingVars['--spacing-1']} + 1px)`;
+// The content width an empty, focused input has beyond its inset, so its
+// caret has room to draw.
+const INPUT_CARET_ROOM = '2px';
 
 const styles = stylex.create({
   wrapper: {
@@ -473,6 +481,11 @@ const styles = stylex.create({
     position: 'relative',
     zIndex: 1,
   },
+  // Holds the sheet field's status icon without a box of its own, so the icon
+  // stays a direct item of the end lane.
+  statusIconSlot: {
+    display: 'contents',
+  },
   endSection: {
     position: 'absolute',
     // Match the field's inline padding (inputWrapperStyles.base uses
@@ -506,14 +519,17 @@ const styles = stylex.create({
     boxSizing: 'border-box',
     zIndex: 0,
     // The input follows the last token in flow, so a focused empty input's
-    // caret sits where typed text will start. Empty, it asks only for that
-    // inset, and only while focused and editable: blurred or read-only (a
-    // disabled field with a disabledMessage stays focusable), it claims no
+    // caret sits where typed text will start. Empty, it takes only that inset
+    // from the row, and only while focused and editable: blurred or read-only
+    // (a disabled field with a disabledMessage stays focusable), it claims no
     // room at all, not even the column gap, so it never grows the field a
     // blank row. Typing restores the full editing width, which may wrap.
     minWidth: {
       default: '40px',
-      ':placeholder-shown': 0,
+      ':placeholder-shown:is(:not(:focus), :read-only)': 0,
+      // In a field with no spare room on the row, a zero-width content box
+      // hides the caret.
+      ':placeholder-shown:focus:not(:read-only)': `calc(${INPUT_TEXT_INSET} + ${INPUT_CARET_ROOM})`,
     },
     flex: {
       default: '1 1 40px',
@@ -524,10 +540,16 @@ const styles = stylex.create({
       default: 0,
       ':placeholder-shown:is(:not(:focus), :read-only)': `calc(-1 * ${spacingVars['--spacing-1']})`,
     },
+    // Gives the caret room back to the row, so the field keeps its width and
+    // the input does not wrap.
+    marginInlineEnd: {
+      default: 0,
+      ':placeholder-shown:focus:not(:read-only)': `calc(-1 * ${INPUT_CARET_ROOM})`,
+    },
     // Restore normal text inset when input follows tokens, since the
     // wrapper padding is reduced for border concentricity.
     paddingInlineStart: {
-      default: `calc(${spacingVars['--spacing-2']} - ${spacingVars['--spacing-1']} + 1px)`,
+      default: INPUT_TEXT_INSET,
       ':placeholder-shown:is(:not(:focus), :read-only)': 0,
     },
     // wrapperWithTokens already keeps the in-flow input short of the lane.
@@ -569,6 +591,10 @@ const styles = stylex.create({
       '@media (forced-colors: active)': 'thin',
     },
     scrollPaddingInline: TRACK_FADE_INSET,
+    // The shared edge fade keeps a clear band across the strip's focus-ring
+    // bleed, so a faded edge never paints into the row's focus ring.
+    '--_scroll-fade-inset': TOKEN_ROW_INSET,
+    '--_scroll-fade-length': spacingVars['--spacing-6'],
   },
   inGroupTrackContent: {
     display: 'flex',
@@ -582,34 +608,6 @@ const styles = stylex.create({
   inGroupTrackContentTruncated: {
     // The "+N more" summary measures this box, so it holds the track's width.
     width: '100%',
-  },
-  // Each fade masks an edge that hides tokens. Forced colors drop the fades,
-  // since the native scrollbar is back there.
-  trackFadeStart: {
-    maskImage: {
-      default: TRACK_FADE_FROM_LEFT,
-      ':dir(rtl)': {
-        default: TRACK_FADE_FROM_RIGHT,
-        '@media (forced-colors: active)': 'none',
-      },
-      '@media (forced-colors: active)': 'none',
-    },
-  },
-  trackFadeEnd: {
-    maskImage: {
-      default: TRACK_FADE_FROM_RIGHT,
-      ':dir(rtl)': {
-        default: TRACK_FADE_FROM_LEFT,
-        '@media (forced-colors: active)': 'none',
-      },
-      '@media (forced-colors: active)': 'none',
-    },
-  },
-  trackFadeBoth: {
-    maskImage: {
-      default: `linear-gradient(to right, transparent ${TOKEN_ROW_INSET}, black ${TRACK_FADE_INSET}, black calc(100% - ${TRACK_FADE_INSET}), transparent calc(100% - ${TOKEN_ROW_INSET}))`,
-      '@media (forced-colors: active)': 'none',
-    },
   },
   inGroupInput: {
     // Always in flow after the last token. The empty-query hit surface of
@@ -643,6 +641,7 @@ const styles = stylex.create({
     flexShrink: 0,
     whiteSpace: 'nowrap',
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
     color: colorVars['--color-text-secondary'],
     paddingInline: spacingVars['--spacing-1'],
   },
@@ -916,19 +915,6 @@ function EndLane({
   );
 }
 
-function trackFade(inline: ScrollAxisState) {
-  if (!inline.isScrollable) {
-    return null;
-  }
-  if (!inline.atStart && !inline.atEnd) {
-    return styles.trackFadeBoth;
-  }
-  if (!inline.atStart) {
-    return styles.trackFadeStart;
-  }
-  return inline.atEnd ? null : styles.trackFadeEnd;
-}
-
 /**
  * Keyboard focus in a grouped track brings the whole item it lands in into
  * view, clear of the fades: the track's scroll padding is the fade width.
@@ -976,7 +962,10 @@ function TokenTrack({
       {...scrollArea.getViewportProps<HTMLDivElement>({
         ref: trackRef,
         onFocus: revealFocusedItem,
-        xstyle: [styles.inGroupTrack, trackFade(scrollArea.state.inline)],
+        xstyle: [
+          styles.inGroupTrack,
+          scrollEdgeFadeStyles(scrollArea.state.inline, 'hidden'),
+        ],
       })}>
       <div
         {...scrollArea.getContentProps<HTMLDivElement>(
@@ -1054,6 +1043,13 @@ export function Tokenizer<T extends SearchableItem>({
   'aria-labelledby': ariaLabelledByProp,
   ...restProps
 }: TokenizerProps<T> | TokenizerAcceptedProps<T>): React.JSX.Element {
+  if (process.env.NODE_ENV !== 'production' && !Array.isArray(value)) {
+    throw devPropError(
+      'Tokenizer',
+      'value',
+      'must be an array of the selected items, for example value={selected} with onChange={setSelected} and useState([]).',
+    );
+  }
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const {rest, container} = useFieldInputStyling('Tokenizer', restProps, {
     containerXstyle,
@@ -1370,10 +1366,13 @@ export function Tokenizer<T extends SearchableItem>({
   // disabled-message tooltip, whose handlers are gated internally by
   // isEnabled, so attaching unconditionally is safe.
   const tooltipAnchorRef = disabledMessageTooltip.ref;
+  const anchorsOnWrapper = tokenOverflowBehavior !== 'unfocusedLayer';
   const wrapperCallbackRef = useCallback(
     (el: HTMLDivElement | null) => {
       wrapperRef.current = el;
-      tooltipAnchorRef(el);
+      if (anchorsOnWrapper) {
+        tooltipAnchorRef(el);
+      }
       if (el == null) {
         return;
       }
@@ -1383,11 +1382,13 @@ export function Tokenizer<T extends SearchableItem>({
           isFocusPendingHandOffRef.current = true;
         }
         wrapperRef.current = null;
-        tooltipAnchorRef(null);
+        if (anchorsOnWrapper) {
+          tooltipAnchorRef(null);
+        }
         releaseModality?.();
       };
     },
-    [tooltipAnchorRef, modalityRef],
+    [tooltipAnchorRef, modalityRef, anchorsOnWrapper],
   );
 
   // A swap also removes `endContent` and a custom token's remove. If focus is
@@ -1449,12 +1450,14 @@ export function Tokenizer<T extends SearchableItem>({
   const [laneRef, laneReserve] = useEndLaneReserve(END_LANE_INSET);
   // `laneRef` publishes the lane's width, so token rows and the placeholder
   // stop short of it. `sheetLaneRef` tells a tap in the lane from a tap on the
-  // field.
+  // field, and `sheetStatusIconRef` tells a tap on the plain status icon from
+  // a tap on `endContent`.
   const sheetLaneRef = useRef<HTMLDivElement | null>(null);
   const sheetLaneMergedRef = useMergedRefs<HTMLDivElement>(
     laneRef,
     sheetLaneRef,
   );
+  const sheetStatusIconRef = useRef<HTMLSpanElement | null>(null);
   // A composing component can lock tokens (PowerSearch's read-only filters
   // and read-only field). No remove path removes a locked token.
   const isItemRemovable = use(TokenizerItemRemovableContext);
@@ -1467,7 +1470,14 @@ export function Tokenizer<T extends SearchableItem>({
   // busy state during this render, which is exactly the re-render the store
   // exists to avoid.
   const hasClearButton = hasClear && !isDisabled && value.some(canRemoveItem);
-  const hasStaticEndLane = Boolean(endContent || hasClearButton);
+  const {statusIcon, describedBy: statusTooltipDescribedBy} =
+    useInputStatusIcon({
+      status,
+      statusVariant,
+      isInGroup: !!inputGroup,
+    });
+  const hasStaticEndLane =
+    Boolean(endContent || hasClearButton) || isRenderable(statusIcon);
   const [isFocusedWithin, setIsFocusedWithin] = useState(false);
   const isTruncated =
     !isFocusedWithin && tokenOverflowBehavior !== 'none' && value.length > 0;
@@ -1478,14 +1488,15 @@ export function Tokenizer<T extends SearchableItem>({
   const layer = useLayer({mode: 'context'});
   const layerContentRef = useRef<HTMLDivElement>(null);
 
-  // Anchor the layer to the placeholder element
+  // Anchor the layer, and the disabled-message tooltip, to the placeholder.
   const placeholderRef = useCallback(
     (el: HTMLElement | null) => {
       if (isLayerMode) {
         layer.ref(el);
+        tooltipAnchorRef(el);
       }
     },
-    [isLayerMode, layer],
+    [isLayerMode, layer, tooltipAnchorRef],
   );
 
   // For the layer variant, focus can be in either the placeholder or the
@@ -1526,8 +1537,9 @@ export function Tokenizer<T extends SearchableItem>({
         // Redirect to the input so the user doesn't have to tab through
         // every token remove button. A press on a token's own control, and
         // the menu returning focus to the token that opened it, keep focus
-        // where they put it. A disabled grouped track that takes focus keeps
-        // it: it is the keyboard path to its hidden tokens.
+        // where they put it. The status info-tip keeps focus from a press or
+        // Shift+Tab, as it does on TextInput. A disabled grouped track that
+        // takes focus keeps it: it is the keyboard path to its hidden tokens.
         // In a grouped row, a move to the input also scrolls the strip to its
         // end before the press releases, so a press on a token's remove
         // button keeps its focus too. A finger's tap on a remove button with
@@ -1536,6 +1548,7 @@ export function Tokenizer<T extends SearchableItem>({
         if (
           e.target !== inputRef.current &&
           e.target !== trackRef.current &&
+          !isStatusButtonPress(e.target, statusTooltipDescribedBy) &&
           !(
             readModality() === 'pointer' &&
             (findTokenControl(e.target) != null ||
@@ -1557,6 +1570,7 @@ export function Tokenizer<T extends SearchableItem>({
       readModality,
       findTokenControl,
       wasKeyboardDown,
+      statusTooltipDescribedBy,
     ],
   );
 
@@ -1830,8 +1844,12 @@ export function Tokenizer<T extends SearchableItem>({
     (event: React.MouseEvent) => {
       // The click has run, so a menu opened from it has read the control.
       pressedTokenControlRef.current = null;
-      // A click on a custom token's own control leaves focus on that control.
-      if (findTokenControl(event.target) != null) {
+      // A click on a custom token's own control or on the status info-tip
+      // leaves focus on that control.
+      if (
+        findTokenControl(event.target) != null ||
+        isStatusButtonPress(event.target, statusTooltipDescribedBy)
+      ) {
         return;
       }
       if (!isDisabled) {
@@ -1847,8 +1865,26 @@ export function Tokenizer<T extends SearchableItem>({
         }
       }
     },
-    [isDisabled, isLayerMode, layer, findTokenControl],
+    [
+      isDisabled,
+      isLayerMode,
+      layer,
+      findTokenControl,
+      statusTooltipDescribedBy,
+    ],
   );
+
+  // The collapsed placeholder is the field's tab stop. Its own focus opens
+  // the field and moves focus to the input, as a click does. A focused token
+  // inside it keeps focus.
+  const handlePlaceholderFocus = (event: React.FocusEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget || isDisabled) {
+      return;
+    }
+    layer.show();
+    setIsFocusedWithin(true);
+    inputRef.current?.focus();
+  };
 
   // Inside an InputGroup no Field renders the local description or status —
   // the group's are the ones shown — so neither is referenced or painted; the
@@ -1859,7 +1895,12 @@ export function Tokenizer<T extends SearchableItem>({
     inputLabelId,
     [
       !inputGroup && description ? descriptionId : null,
-      localStatus?.message ? statusMessageId : null,
+      // The tooltip variant renders no message box; the info-tip's tooltip
+      // describes the input instead.
+      localStatus?.message && statusVariant !== 'tooltip'
+        ? statusMessageId
+        : null,
+      statusTooltipDescribedBy,
       showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
     ],
     inputGroup,
@@ -2003,7 +2044,7 @@ export function Tokenizer<T extends SearchableItem>({
             behavior="observeParent"
             overflowRenderer={items => (
               <span {...stylex.props(styles.overflowText)}>
-                +{items.length} more
+                {t('@astryx.tokenizer.overflowCount', {count: items.length})}
               </span>
             )}>
             {tokens}
@@ -2040,12 +2081,9 @@ export function Tokenizer<T extends SearchableItem>({
                   minQueryLength={minQueryLength}
                   emptySearchText={emptySearchText}
                   isDisabled={isDisabled}
-                  // A disabled field keeps its tab stop (spec:AST-085 FR1), except in
-                  // unfocusedLayer mode, where the input lives in a layer a disabled
-                  // field never opens; how that field takes focus is undecided.
-                  isFocusableDisabled={
-                    showsDisabledMessage || (isDisabled && !isLayerMode)
-                  }
+                  // A disabled field keeps its tab stop (spec:AST-085 FR1). In
+                  // unfocusedLayer mode the placeholder is that stop.
+                  isFocusableDisabled={isDisabled}
                   hasAutoFocus={hasAutoFocus}
                   inputId={inputId}
                   ariaLabelledBy={inputLabelledBy}
@@ -2125,6 +2163,7 @@ export function Tokenizer<T extends SearchableItem>({
             }}
           />
         )}
+        {statusIcon}
       </EndLane>
     </div>
   );
@@ -2137,18 +2176,21 @@ export function Tokenizer<T extends SearchableItem>({
       triggerRef.current?.focus();
     }
   };
-  // A tap on a token, the placeholder or empty space opens the sheet, as a tap
-  // on the trigger does. The trigger, `endContent` and a custom token's
-  // controls handle their own clicks.
+  // A tap on a token, the placeholder, empty space or the plain status icon
+  // opens the sheet, as a tap on the trigger does. The trigger, `endContent`,
+  // the status info-tip and a custom token's controls handle their own clicks.
   const handleSheetFieldClick = (event: React.MouseEvent<HTMLDivElement>) => {
     const trigger = triggerRef.current;
     const target = event.target;
     if (trigger == null || !(target instanceof Element)) {
       return;
     }
+    const isInLane = sheetLaneRef.current?.contains(target) === true;
+    const isOnStatusIcon =
+      sheetStatusIconRef.current?.contains(target) === true;
     if (
       trigger.contains(target) ||
-      sheetLaneRef.current?.contains(target) ||
+      (isInLane && !isOnStatusIcon) ||
       hasInteractiveAncestor(target, event.currentTarget)
     ) {
       return;
@@ -2330,11 +2372,16 @@ export function Tokenizer<T extends SearchableItem>({
               />
             ),
           )}
-          {isRenderable(endContent) && (
+          {(isRenderable(endContent) || isRenderable(statusIcon)) && (
             <div
               ref={sheetLaneMergedRef}
               {...stylex.props(styles.endSection, endSectionSizeStyles[size])}>
               {endContent}
+              <span
+                ref={sheetStatusIconRef}
+                {...stylex.props(styles.statusIconSlot)}>
+                {statusIcon}
+              </span>
             </div>
           )}
         </div>
@@ -2394,6 +2441,19 @@ export function Tokenizer<T extends SearchableItem>({
         <div
           ref={placeholderRef}
           onClick={handleWrapperClick}
+          onFocus={handlePlaceholderFocus}
+          // One keyboard stop for the collapsed field, before its tokens. A
+          // named group, not a control: it holds the tokens' own controls.
+          role="group"
+          aria-labelledby={
+            inputGroup ? inputLabelledBy : (fieldLabelledBy ?? fieldLabelId)
+          }
+          aria-describedby={
+            [ariaDescribedByProp, ariaDescribedBy].filter(Boolean).join(' ') ||
+            undefined
+          }
+          aria-disabled={isDisabled || undefined}
+          tabIndex={isFocusedWithin ? -1 : 0}
           {...mergeProps(
             themeProps('tokenizer', {
               size,
@@ -2408,6 +2468,8 @@ export function Tokenizer<T extends SearchableItem>({
               placeholderSizeStyle,
               isTruncated && styles.truncatedWrapper,
               isDisabled && inputWrapperStyles.disabled,
+              // Keyboard focus on the disabled placeholder still shows the ring.
+              isDisabled && inputDisabledFocusStyles.selfRing,
               localStatus && inputStatusBorderStyles[localStatus.type],
               localStatus &&
                 !isDisabled &&
@@ -2432,7 +2494,9 @@ export function Tokenizer<T extends SearchableItem>({
                 behavior="observeParent"
                 overflowRenderer={items => (
                   <span {...stylex.props(styles.overflowText)}>
-                    +{items.length} more
+                    {t('@astryx.tokenizer.overflowCount', {
+                      count: items.length,
+                    })}
                   </span>
                 )}>
                 {tokens}
@@ -2478,7 +2542,11 @@ export function Tokenizer<T extends SearchableItem>({
       isLabelHidden={isLabelHidden}
       description={description}
       inputID={inputId}
-      labelID={ariaLabelledByProp != null ? fieldLabelId : undefined}
+      labelID={
+        ariaLabelledByProp != null || tokenOverflowBehavior === 'unfocusedLayer'
+          ? fieldLabelId
+          : undefined
+      }
       descriptionID={description ? descriptionId : undefined}
       isOptional={isOptional}
       isRequired={isRequired}

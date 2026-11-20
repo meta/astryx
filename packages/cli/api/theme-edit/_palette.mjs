@@ -15,31 +15,85 @@
  * @position api/theme-edit — imported by _settings.mjs, _check.mjs, _how.mjs
  */
 
-import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
-import {createRequire} from 'node:module';
 import * as path from 'node:path';
+import {
+  irregularFileKind,
+  readRegularFile,
+} from '../../foundation/fs/regular-file.mjs';
+import {isAlive} from '../../foundation/release/cache.mjs';
+import {stillHolds} from '../../foundation/release/folder-lock.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
+  ANCHOR_INPUT_KEYS,
   DEFAULT_21_STOPS,
+  FAMILY_INPUT_KEYS,
+  GENERATION_INPUT_KEYS,
   PALETTE_BLACK,
   PALETTE_GENERATOR_VERSION,
+  PALETTE_RECIPE,
+  PALETTE_RECIPE_V2,
+  PALETTE_RECIPES,
   PALETTE_WHITE,
   generateTonalPalette,
-  perceptualDelta,
+  modesForStrategy,
 } from '../theme/palette/generate/generator.mjs';
 import {themePaletteGenerate} from '../theme/palette/generate/generate.mjs';
-import {hexToOklch, normalizeColor} from '../theme/palette/generate/color.mjs';
 import {
-  alphaOf,
-  compositeOver,
-  hex,
-  isClipped,
-  parseColor,
-  ratio,
-} from './_color.mjs';
+  ACCENT_MUTED,
+  BORDER,
+  DARK_FILL,
+  LIFT_GROUNDS,
+  LIFT_PARTS,
+  NEUTRAL_INSIDE,
+  NEUTRAL_STOPS,
+  NEUTRAL_TINTS,
+  NON_TEXT,
+  ON_MUTED,
+  PALETTE_DIALS,
+  STATUS_MUTED,
+  STATUS_TOKEN,
+  TEXT,
+  TEXT_STOP,
+  VIBRANCY_DEFAULT,
+  anchorDarkFills,
+  dialFamily,
+  fillAt,
+  grownGrays,
+  isGray,
+  mapPalette,
+  nearestShade,
+  paletteToken,
+  sameColor,
+  shade,
+} from '../theme/palette/generate/mapping.mjs';
+/**
+ * How the page-wide tokens a theme's own source sets are read: given by
+ * _settings (which imports this module) when it loads.
+ * @type {(cwd: string, slug: string) => Record<string, string>}
+ */
+let ownSourceTokenValues = () => ({});
+
+/**
+ * Give the reader of the tokens a theme's own source sets.
+ * @param {(cwd: string, slug: string) => Record<string, string>} read
+ */
+export function setOwnTokenReader(read) {
+  ownSourceTokenValues = read;
+}
+import {alphaOf, hex, isClipped, parseColor} from './_color.mjs';
+import {splitTop} from './_css.mjs';
 import {P} from './_tables.mjs';
+import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
+import {sha256} from '../../foundation/render/source-block.mjs';
+import {cliVersion} from '../../foundation/release/run-context.mjs';
+import {
+  newerRecipe,
+  newerRecipeRefusal,
+} from '../theme/palette/generate/newer-recipe.mjs';
+
+export {readRegularFile};
 
 /**
  * Write a file whole: a temp file beside it, renamed into place, so a link
@@ -49,6 +103,34 @@ import {P} from './_tables.mjs';
  * @param {string | Buffer} text
  */
 export function writeWhole(file, text) {
+  // A folder where a file goes (a folder named preview.html) is never
+  // written through or replaced.
+  if (fs.lstatSync(file, {throwIfNoEntry: false})?.isDirectory())
+    throw new AstryxError(
+      `${[path.dirname(path.dirname(file)), path.dirname(file), file].map(p => path.basename(p)).join('/')} is a folder, so the editor cannot write that file there. Rename or move the folder, then run the command again.`,
+      [
+        {
+          name: `ls -la ${quoteCommandArgument(file)}`,
+          reason:
+            'see what is in the folder; move or rename it, then run the same command again',
+        },
+      ],
+      ERROR_CODES.ERR_WRITE_FAILED,
+    );
+  // A pipe, a device or a socket there is not the editor's: the rename
+  // below would replace it, so it is refused and left as it is.
+  const kind = irregularFileKind(file);
+  if (kind && kind !== 'a folder')
+    throw new AstryxError(
+      `${[path.dirname(path.dirname(file)), path.dirname(file), file].map(p => path.basename(p)).join('/')} is ${kind}, not a file, so the editor writes nothing over it. Move it, then run the command again.`,
+      [],
+      ERROR_CODES.ERR_WRITE_FAILED,
+    );
+  // The same bytes already there are not written again: a refused command
+  // that puts back what it built leaves the file as it was, time included.
+  if (sameBytes(file, text)) return;
+  sweepTemps(path.dirname(file));
+  refuseIfLockLost();
   const tmp = tempFor(file);
   try {
     fs.writeFileSync(tmp, text);
@@ -57,6 +139,124 @@ export function writeWhole(file, text) {
     fs.rmSync(tmp, {force: true});
   }
 }
+
+/**
+ * Whether a regular file (never a link) at `file` holds exactly `text`.
+ * @param {string} file
+ * @param {string | Buffer} text
+ */
+function sameBytes(file, text) {
+  const st = fs.lstatSync(file, {throwIfNoEntry: false});
+  if (!st?.isFile()) return false;
+  const want = Buffer.isBuffer(text) ? text : Buffer.from(text);
+  if (st.size !== want.length) return false;
+  try {
+    return readRegularFile(file).equals(want);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A command stopped long enough for another to take its lock (Ctrl-Z, a
+ * sleeping computer, a debugger) writes nothing more: refuse. Called right
+ * before each write.
+ */
+export function refuseIfLockLost() {
+  if (lockHeld()) return;
+  const error = new AstryxError(
+    `Another command took over the theme's lock while this one was stopped (Ctrl-Z, a sleeping computer, a debugger). This command's change was not applied, and it touched nothing more: the files stay as the other command left them. Run it again if you still want it.`,
+    [{name: `${P} how --list dials`, reason: 'what you can set'}],
+    ERROR_CODES.ERR_THEME_BUSY,
+  );
+  /** @type {any} */ (error).lockLost = true;
+  throw error;
+}
+
+/** Whether this command still holds its lock (true outside a lock). */
+export function lockHeld() {
+  try {
+    stillHolds();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** When this process started, for telling its own temp files from an earlier one's with the same id. */
+const STARTED_AT = Date.now() - process.uptime() * 1000;
+
+/**
+ * Remove the editor's own temp files a stopped command left in a folder:
+ * only names the editor makes (`.<name>.astryx-<pid>-<random>.tmp`) whose
+ * process is gone, or that are older than ten minutes, and a build's
+ * `.<name>.tmp-<id>` older than ten minutes. Links are never
+ * followed. A theme folder holds a few files, so every write looks.
+ * @param {string} dir
+ */
+function sweepTemps(dir) {
+  let names;
+  try {
+    names = fs.readdirSync(dir);
+  } catch {
+    return;
+  }
+  for (const n of names) {
+    // A build's own temp (`.<name>.tmp-<id>`) names no process: one older
+    // than ten minutes is a leftover of a command stopped mid-build (a
+    // build renames it in moments).
+    if (/^\..+\.tmp-[\w-]+$/.test(n)) {
+      const p = path.join(dir, n);
+      try {
+        const st = fs.lstatSync(p);
+        if (st.isFile() && Date.now() - st.mtimeMs >= 10 * 60_000)
+          fs.rmSync(p, {force: true});
+      } catch {
+        // Gone already.
+      }
+      continue;
+    }
+    // A picture taken under its own name (`.<picture>.part-<pid>.png`) by a
+    // run stopped while the browser ran.
+    const m =
+      /^\..+\.astryx-(\d+)-[a-z0-9]+\.tmp$/.exec(n) ??
+      /^\.[\w-]+\.part-(\d+)\.png$/.exec(n);
+    if (!m) continue;
+    const p = path.join(dir, n);
+    try {
+      const st = fs.lstatSync(p);
+      // Writes into a theme folder run under its lock, so a temp file
+      // whose process is gone is never one a live command still renames.
+      if (!st.isFile()) continue;
+      // A process id from another process space (pid 1 in a container)
+      // may look alive here: past ten minutes, an editor temp file is a
+      // leftover whatever its id says (a live writer renames it in
+      // moments, and holds the lock this write holds now).
+      // A temp named with this process's own id but older than this process
+      // is another one's (pid 1 in each container start).
+      const own = Number(m[1]) === process.pid;
+      const young = Date.now() - st.mtimeMs < 10 * 60_000;
+      if (
+        own ? st.mtimeMs >= STARTED_AT && young : isAlive(Number(m[1])) && young
+      )
+        continue;
+      fs.rmSync(p, {force: true});
+    } catch {
+      // Gone already, or not ours to judge.
+    }
+  }
+}
+
+/**
+ * Whether a file name is one of the editor's own temp files: a whole-file
+ * write's `.<name>.astryx-<pid>-<random>.tmp`, a build's `.<name>.tmp-<id>`,
+ * or a picture's `.<picture>.part-<pid>.png`. A command stopped part way can
+ * leave one behind.
+ * @param {string} name
+ */
+export const isEditorTemp = name =>
+  /^\..+\.(astryx-\d+-[a-z0-9]+\.tmp|tmp-[\w-]+)$/.test(name) ||
+  /^\.[\w-]+\.part-\d+\.png$/.test(name);
 
 /**
  * A temp file beside `file` for a whole write, named so only the editor
@@ -97,32 +297,40 @@ export function tempFor(file) {
  * @property {number} needs
  * @property {boolean} pass
  * @property {string} [note] - The whole sentence to report, when the check is not a plain stop move.
+ * @property {string[]} [dials] - The color dials whose notes report it, when its token belongs to none of them.
+ * @property {{thing: string, value: string, mode?: Mode}} [fix] - The nearest setting that passes it, when one does: a darker exact color for a pale fill.
+ */
+
+/**
+ * A color dial's family: its seed, and the source token that gives it when
+ * the theme's own source sets the family's fill (null when the setting does).
+ * @typedef {{id: string, dial: string, seed: string, value: string, source: string | null}} DialFamily
  */
 
 /**
  * The palette mapping of a theme.
  * @typedef {object} PaletteMapping
  * @property {Candidate} candidate
- * @property {Array<{id: string, dial: string, seed: string, value: string}>} families
+ * @property {DialFamily[]} families
  * @property {Record<string, {family: string, light: StopRef, dark: StopRef}>} tokens
  * @property {ContrastCheck[]} contrast
  * @property {number} vibrancy - The generator's vibrancy, 0 to 100.
  * @property {Record<string, Partial<Record<Mode, string>>>} exact - Main tokens the theme sets exactly, the value per mode: the dial's fill gives way to them.
+ * @property {Record<string, string>} [unread] - Main tokens the theme sets exactly to a value the editor cannot read as one color in some mode, as written: the text on them is not picked for that value.
  * @property {string[]} notes - What the config writer kept or replaced of a hand edit.
+ * @property {Record<string, Partial<Record<Mode, StopRef>>> | null} lift - Lifted secondary text per background token of LIFT_PARTS (the accent tint, the neutral track), per mode, from the neutral color; null without one.
  */
 
-/** The color dials. Each one is a palette family of the same id. */
-export const PALETTE_DIALS = [
-  'accent',
-  'neutral',
-  'success',
-  'warning',
-  'danger',
-  'info',
-];
-
-/** The generator's vibrancy when the theme sets none. */
-export const VIBRANCY_DEFAULT = 50;
+// The color dials, the vibrancy default, each dial's main token, the lifted
+// parts and the nearest shade of a ramp: the palette mapping's, which other
+// editor modules read through this one.
+export {
+  LIFT_PARTS,
+  PALETTE_DIALS,
+  VIBRANCY_DEFAULT,
+  nearestShade,
+  paletteToken,
+};
 
 /**
  * The vibrancy dial a settings list sets, or null.
@@ -140,99 +348,10 @@ function dialVibrancy(settings) {
     : null;
 }
 
-/** The Core token word of each status family. */
-const STATUS_TOKEN = /** @type {Record<string, string>} */ ({
-  success: 'success',
-  warning: 'warning',
-  danger: 'error',
-  info: 'info',
-});
-
-/**
- * The main token a color dial feeds: the exact-token escape hatch for it.
- * @param {string} dial
- */
-export const paletteToken = dial =>
-  dial === 'accent'
-    ? '--color-accent'
-    : dial === 'neutral'
-      ? '--color-background-surface'
-      : `--color-${STATUS_TOKEN[dial]}`;
-
-/** Text contrast and non-text contrast (fills, focus rings, icons). */
-const TEXT = 4.5;
-const NON_TEXT = 3;
-
-/**
- * The stop each token starts from, `[light, dark]`, as the official neutral
- * theme maps them. The page background, `--color-background-body`, stays
- * the base theme's, so a tinted gray never tints the page. A layout without
- * one of these stops uses the nearest one it has.
- */
-const NEUTRAL_STOPS = /** @type {Record<string, [number, number]>} */ ({
-  '--color-background-surface': [100, 15],
-  '--color-background-card': [100, 10],
-  '--color-background-popover': [100, 10],
-  '--color-background-muted': [95, 10],
-  '--color-text-primary': [0, 100],
-  '--color-text-secondary': [30, 65],
-  '--color-text-disabled': [60, 35],
-  '--color-icon-primary': [0, 100],
-  '--color-icon-secondary': [45, 65],
-  '--color-icon-disabled': [60, 35],
-  '--color-border-emphasized': [85, 35],
-  '--color-skeleton': [95, 35],
-});
-/** Neutral tints: a stop with an opacity, `[[stop, alpha], [stop, alpha]]`. */
-const NEUTRAL_TINTS =
-  /** @type {Record<string, [[number, string], [number, string]]>} */ ({
-    '--color-border': [
-      [0, '14'],
-      [100, '1a'],
-    ],
-    '--color-overlay-hover': [
-      [0, '0d'],
-      [100, '0d'],
-    ],
-    '--color-overlay-pressed': [
-      [0, '1a'],
-      [100, '1a'],
-    ],
-  });
-/**
- * Accent and status stops, `[light, dark]`, as the official neutral theme
- * maps its accent tint and its status families. The dark fill starts at 70,
- * where the theme authoring guide puts it, when the exact color does not
- * read in dark. A status tint is translucent in dark (`[stop, alpha]`).
- */
-const DARK_FILL = 70;
-const TEXT_STOP = /** @type {[number, number]} */ ([45, 80]);
-const ACCENT_MUTED = /** @type {[number, number]} */ ([85, 30]);
-const STATUS_MUTED = /** @type {[number, [number, string]]} */ ([
-  85,
-  [75, '3d'],
-]);
-const ON_MUTED = /** @type {[number, number]} */ ([25, 80]);
-const BORDER = /** @type {[number, number]} */ ([80, 65]);
-/**
- * Text on a fill, from the neutral family as the official themes take it:
- * white (100) first in light, near-black (5) first in dark, and near-black
- * first in both modes on warning. Without a neutral color, black and white.
- */
-const ON_FILL = /** @type {Record<Mode, [number, number]>} */ ({
-  light: [100, 5],
-  dark: [5, 100],
-});
 /** A layout needs this many stops between black and white to map every token. */
 const MIN_INNER_STOPS = 5;
 /** The widest gap between two stops that still maps every token near its stop. */
 const MAX_STOP_GAP = 25;
-
-/** Text on surfaces darkens in light mode and lightens in dark mode. */
-const TOWARD_CONTRAST = /** @type {Record<Mode, 1 | -1>} */ ({
-  light: -1,
-  dark: 1,
-});
 
 /** @param {string} slug */
 export function paletteFiles(slug) {
@@ -267,67 +386,145 @@ export function seedOf(value) {
   return rgb && alphaOf(value) >= 1 ? hex(rgb) : null;
 }
 
-/**
- * Below this OKLCH chroma a seed reads as gray: its family is generated as a
- * neutral, so no hue is invented for it in either mode.
- */
-const GRAY_CHROMA = 0.02;
-
-/** @param {string} seed */
-const isGray = seed => hexToOklch(seed).C < GRAY_CHROMA;
-
 /** Whether a seed (or no seed) has no color to saturate. @param {string | null} seed */
 export const isGraySeed = seed => !seed || isGray(seed);
 
-/** @param {unknown} a @param {unknown} b */
-function sameColor(a, b) {
-  try {
-    return normalizeColor(String(a)) === normalizeColor(String(b));
-  } catch {
-    return false;
-  }
+/**
+ * Whether a color dial's seed comes out different at two vibrancies: the
+ * ramp the generator grows from it, light and dark, compared shade by
+ * shade. A seed with no saturation to change (a pure gray) gives the same
+ * ramp at every vibrancy. A gray-ish seed is grown as the editor grows it
+ * (a neutral), so a warm or cool gray counts by what it shows.
+ * @param {string} dial
+ * @param {string | null} seed
+ * @param {number} from
+ * @param {number} to
+ */
+export function vibrancyMoves(dial, seed, from, to) {
+  if (!seed || from === to) return false;
+  const kind = dial === 'neutral' || isGray(seed) ? 'neutral' : 'chromatic';
+  const ramp = (/** @type {number} */ vibrancy) =>
+    JSON.stringify(
+      /** @type {any} */ (
+        generate({
+          vibrancy,
+          ...(kind === 'neutral' ? {neutralProfile: 'custom'} : {}),
+          families: [{id: 'seed', seed, kind}],
+        }).palette.seed
+      ),
+    );
+  return ramp(from) !== ramp(to);
 }
 
 /**
- * The modes a theme has.
+ * The modes a theme has: one for a one-mode theme, else light and dark.
  * @param {{mode?: string}} data
  * @returns {Mode[]}
  */
-function themeModes(data) {
-  return data.mode === 'light-only'
-    ? ['light']
-    : data.mode === 'dark-only'
-      ? ['dark']
-      : ['light', 'dark'];
+export function modesOf(data) {
+  return modesForStrategy(
+    data.mode === 'light-only' || data.mode === 'dark-only'
+      ? data.mode
+      : 'light-and-dark',
+  );
 }
 
 /**
- * The color dial settings of a theme, in dial order.
- * @param {{settings: Setting[]}} data
+ * The light-mode color of a token value the theme's own source writes: a
+ * plain color, or the first half of a light-dark() pair.
+ * @param {string | undefined} value
  */
-function dialFamilies(data) {
-  /** @type {Array<{id: string, dial: string, seed: string, value: string}>} */
+function lightHalf(value) {
+  const v = String(value ?? '').trim();
+  const pair = /^light-dark\((.*)\)$/is.exec(v);
+  return pair ? (splitTop(pair[1], ',')[0] ?? '').trim() : v;
+}
+
+/**
+ * The color dial settings of a theme, in dial order. A family whose fill
+ * token the theme's own source sets exactly takes that color, the one in
+ * effect, as its seed: the shades its text, icons and tints read come from
+ * the color the fill shows, never from a dial value the source overrides.
+ * The neutral family always takes its setting.
+ * @param {{settings: Setting[]}} data
+ * @param {Record<string, string>} [own] the tokens the theme's own source sets
+ */
+function dialFamilies(data, own = {}) {
+  /** @type {DialFamily[]} */
   const out = [];
   for (const dial of PALETTE_DIALS) {
     const s = [...data.settings]
       .reverse()
       .find(x => x?.source === 'dial' && x.thing === dial && !x.on && !x.mode);
-    const seed = s && seedOf(s.value);
-    if (s && seed) out.push({id: dial, dial, seed, value: s.value});
+    // The neutral family keeps its setting: a gray the source sets exactly
+    // is one surface, not the color every gray grows from.
+    const inEffect =
+      dial === 'neutral' ? null : seedOf(lightHalf(own[paletteToken(dial)]));
+    const seed = inEffect ?? (s && seedOf(s.value));
+    if (s && seed)
+      out.push({
+        id: dial,
+        dial,
+        seed,
+        value: s.value,
+        source: inEffect ? paletteToken(dial) : null,
+      });
   }
   return out;
 }
+
+/**
+ * The seed each color family grows from now: the fill the theme's own source
+ * sets as a fixed color, else the color setting.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {{settings: Setting[]}} data
+ */
+export function seedsInEffect(cwd, slug, data) {
+  return dialFamilies(data, ownSourceTokenValues(cwd, slug));
+}
+
+/** Notes for damaged color configs kept aside during one sync. @type {string[]} */
+const keptDamaged = [];
 
 /** @param {string} file */
 function readConfig(file) {
   if (!fs.existsSync(file)) return null;
   try {
     return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
-  } catch (e) {
-    throw new AstryxError(
-      `${path.basename(path.dirname(file))}/palette.config.json is not valid JSON (${e instanceof Error ? e.message : String(e)}). Fix it by hand. Nothing was changed.`,
-      [],
-      ERROR_CODES.ERR_THEME_INVALID,
+  } catch {
+    // A file that does not parse holds nothing the editor can keep: it is
+    // read as no config. Only a command that writes the theme keeps its
+    // text aside (keepDamaged), so a read writes nothing.
+    damagedConfigs.add(file);
+    return null;
+  }
+}
+
+/** Damaged configs read in this run, kept aside when a change is written. */
+const damagedConfigs = new Set();
+
+/**
+ * Keep a damaged config's text beside it (palette.config.damaged.json,
+ * then -2, -3 …; the same text once) before the editor writes the config
+ * again, and say where.
+ * @param {string} file
+ */
+function keepDamaged(file) {
+  if (!damagedConfigs.has(file) || !fs.existsSync(file)) return;
+  damagedConfigs.delete(file);
+  {
+    const text = fs.readFileSync(file);
+    let n = 1;
+    const name = (/** @type {number} */ k) =>
+      `palette.config.damaged${k > 1 ? `-${k}` : ''}.json`;
+    const at = (/** @type {number} */ k) =>
+      path.join(path.dirname(file), name(k));
+    // The same damaged text is kept once.
+    while (fs.existsSync(at(n)) && !fs.readFileSync(at(n)).equals(text)) n++;
+    if (!fs.existsSync(at(n))) fs.copyFileSync(file, at(n));
+    keptDamaged.push(
+      `palette.config.json was damaged, so it was made again from the settings; its text is kept in ${name(n)}`,
     );
   }
 }
@@ -361,84 +558,32 @@ function savedSettings(cwd, slug) {
 const strategyOf = modes =>
   modes.length > 1 ? 'light-and-dark' : `${modes[0]}-only`;
 
-/** The config fields the generator reads; anything else changes nothing. */
-const CONFIG_KEYS = [
-  'vibrancy',
-  'neutralProfile',
-  'modeStrategy',
-  'stops',
-  'families',
-];
-const FAMILY_KEYS = ['id', 'name', 'seed', 'kind', 'anchors'];
-const ANCHOR_KEYS = ['mode', 'stop', 'color', 'policy', 'maxDeltaE'];
-
 /**
- * The fields of a config the generator never reads (such as
- * `darkChromaTaper`), by path.
+ * The fields of a config the generator never reads, by path.
  * @param {any} config
  * @returns {string[]}
  */
 function deadKeys(config) {
   /** @type {string[]} */
-  const out = Object.keys(config).filter(k => !CONFIG_KEYS.includes(k));
+  const out = Object.keys(config).filter(
+    k => !GENERATION_INPUT_KEYS.includes(k),
+  );
   (Array.isArray(config.families) ? config.families : []).forEach(
     (/** @type {any} */ f, /** @type {number} */ i) => {
       if (!f || typeof f !== 'object') return;
       for (const k of Object.keys(f))
-        if (!FAMILY_KEYS.includes(k)) out.push(`families[${i}].${k}`);
+        if (!FAMILY_INPUT_KEYS.includes(k)) out.push(`families[${i}].${k}`);
       (Array.isArray(f.anchors) ? f.anchors : []).forEach(
         (/** @type {any} */ a, /** @type {number} */ j) => {
           if (a && typeof a === 'object')
             for (const k of Object.keys(a))
-              if (!ANCHOR_KEYS.includes(k))
+              if (!ANCHOR_INPUT_KEYS.includes(k))
                 out.push(`families[${i}].anchors[${j}].${k}`);
         },
       );
     },
   );
   return out;
-}
-
-/**
- * The light stop nearest a seed color in the ramp the generator grows from
- * it. The official themes anchor a brand color there, exactly, so the fill
- * keeps the color as given. The end stops are pure black and white and
- * never hold an anchor.
- * @param {string} seed
- * @param {any} config - Its `stops` and `vibrancy` shape the ramp.
- * @param {'chromatic' | 'neutral'} [kind]
- */
-function seedStop(seed, config, kind = 'chromatic') {
-  const {stops, palette} = generate({
-    ...(config.stops ? {stops: config.stops} : {}),
-    ...(config.vibrancy != null ? {vibrancy: config.vibrancy} : {}),
-    ...(kind === 'neutral' ? {neutralProfile: 'custom'} : {}),
-    modeStrategy: 'light-only',
-    families: [{id: 'seed', seed, kind}],
-  });
-  const ramp = /** @type {Record<number, string>} */ (
-    /** @type {any} */ (palette.seed).light
-  );
-  const inner = stops.filter(s => s > 0 && s < 100);
-  return inner.reduce((best, s) =>
-    perceptualDelta(ramp[s], seed) < perceptualDelta(ramp[best], seed)
-      ? s
-      : best,
-  );
-}
-
-/**
- * The stop of a layout nearest `n`; on a tie, the one nearer the middle.
- * @param {readonly number[]} stops
- * @param {number} n
- */
-function nearestStop(stops, n) {
-  return stops.reduce((best, s) => {
-    const d = Math.abs(s - n) - Math.abs(best - n);
-    return d < 0 || (d === 0 && Math.abs(s - 50) < Math.abs(best - 50))
-      ? s
-      : best;
-  });
 }
 
 /**
@@ -460,7 +605,7 @@ function usableStops(stops, slug) {
   const refuse = why => {
     throw new AstryxError(
       `themes/${slug}/palette.config.json: its stops (${shown}) ${why}. ${fix}`,
-      [],
+      [{name: `${P} how colors`, reason: 'how the shades are made'}],
       ERROR_CODES.ERR_THEME_INVALID,
     );
   };
@@ -488,29 +633,23 @@ function usableStops(stops, slug) {
 }
 
 /**
- * Look-ups shared by the config writer and the mapping, on one candidate:
- * the nearest stop, a stop's color, the surfaces text and fills sit on, the
- * text that reads on a fill, and the theme's exact color settings.
- * @param {Candidate} candidate
+ * What the palette mapping reads of a theme: its base colors, the tokens it
+ * has, its exact token settings (a page-wide token its own source sets wins,
+ * as the build shows it), the fixed color a value gives in a mode, and the
+ * command that sets a value.
+ * @param {string} cwd
+ * @param {string} slug
  * @param {{settings: Setting[]}} data
  * @param {{light: Record<string, string>, dark: Record<string, string>} | undefined} base
+ * @param {Record<string, unknown>} [tokenDefaults]
+ * @returns {import('../theme/palette/generate/mapping.mjs').PaletteMappingContext}
  */
-function tools(candidate, data, base) {
-  const {stops} = candidate;
-  /** @param {number} n */
-  const at = n => nearestStop(stops, n);
-  /** @param {string} id @param {Mode} m @param {number} stop @param {string} [alpha] @returns {StopRef} */
-  const ref = (id, m, stop, alpha) => {
-    const color = /** @type {any} */ (candidate.palette[id])[m][stop];
-    return alpha ? {stop, color: `${color}${alpha}`, alpha} : {stop, color};
-  };
-  const neutral = Boolean(/** @type {any} */ (candidate.palette).neutral);
-  /**
-   * The exact whole-theme color a token setting gives in a mode, or null.
-   * @param {string} token @param {Mode} m
-   */
-  const exactOf = (token, m) => {
-    const v = [...data.settings]
+function paletteContext(cwd, slug, data, base, tokenDefaults = {}) {
+  const own = ownSourceTokenValues(cwd, slug);
+  /** @param {string} token @param {Mode} m @returns {string | undefined} */
+  const settingOf = (token, m) =>
+    (Object.hasOwn(own, token) ? own[token] : undefined) ??
+    [...data.settings]
       .reverse()
       .find(
         s =>
@@ -521,185 +660,65 @@ function tools(candidate, data, base) {
           !s.state &&
           (!s.mode || s.mode === m),
       )?.value;
-    const rgb = v == null ? null : parseColor(v);
-    return rgb && alphaOf(v) >= 1 ? hex(rgb) : null;
-  };
   /**
-   * What text and fills sit on in a mode: the theme's exact surface
-   * colors, else the neutral color's surfaces, else the base theme's; the
-   * family's own surface stop when nothing else is known.
-   * @param {Mode} m @param {string} id
-   * @returns {Array<[string, string]>}
+   * The fixed color a value gives in a mode, as written when it is one
+   * already, or null: `light-dark()` takes its side for the mode, and a
+   * `var()` reads the theme's own setting, else the base theme's value.
+   * @param {unknown} value @param {Mode} m @param {Set<string>} [seen]
+   * @returns {string | null}
    */
-  const surfaces = (m, id) => {
-    /** @type {Array<[string, string]>} */
-    const out = [];
-    for (const n of [
-      '--color-background-surface',
-      '--color-background-body',
-      '--color-background-card',
-    ]) {
-      const own =
-        neutral && NEUTRAL_STOPS[n]
-          ? ref('neutral', m, at(NEUTRAL_STOPS[n][m === 'light' ? 0 : 1])).color
-          : null;
-      const v = exactOf(n, m) ?? own ?? base?.[m]?.[n];
-      if (v && parseColor(v) && alphaOf(v) >= 1)
-        out.push([n, hex(/** @type {number[]} */ (parseColor(v)))]);
+  const colorIn = (value, m, seen = new Set()) => {
+    const v = String(value ?? '').trim();
+    if (!v) return null;
+    if (parseColor(v)) return v;
+    const fn = /^([a-z-]+)\((.*)\)$/is.exec(v);
+    if (!fn) return null;
+    const name = fn[1].toLowerCase();
+    if (name === 'light-dark') {
+      const halves = splitTop(fn[2], ',');
+      return halves.length === 2
+        ? colorIn(halves[m === 'dark' ? 1 : 0], m, seen)
+        : null;
     }
-    if (!out.length) {
-      const s = at(
-        NEUTRAL_STOPS['--color-background-surface'][m === 'light' ? 0 : 1],
+    if (name !== 'var') {
+      // A color function of tokens (a color-mix() of two) reads each one.
+      const put = v.replace(
+        /var\(\s*(--[a-z0-9-]+)\s*\)/gi,
+        (whole, t) => colorIn(`var(${t})`, m, new Set(seen)) ?? whole,
       );
-      out.push([`${id} shade ${s}`, ref(id, m, s).color]);
+      return put !== v && parseColor(put) ? put : null;
     }
-    return out;
+    const [ref, ...rest] = splitTop(fn[2], ',');
+    const t = ref.trim();
+    if (!/^--[a-z0-9-]+$/i.test(t) || seen.has(t)) return null;
+    seen.add(t);
+    const set = settingOf(t, m);
+    const read =
+      set != null ? colorIn(set, m, seen) : colorIn(base?.[m]?.[t], m, seen);
+    return read ?? (rest.length ? colorIn(rest.join(','), m, seen) : null);
   };
-  /**
-   * The text shades for a fill, preferred first.
-   * @param {string} id @param {Mode} m
-   * @returns {StopRef[]}
-   */
-  const onChoices = (id, m) =>
-    (id === 'warning' ? [5, 100] : ON_FILL[m]).map(s =>
-      neutral
-        ? {...ref('neutral', m, at(s)), family: 'neutral'}
-        : s >= 50
-          ? {stop: 100, color: PALETTE_WHITE, family: 'white'}
-          : {stop: 0, color: PALETTE_BLACK, family: 'black'},
-    );
-  /**
-   * The text on a fill: the preferred shade when it reads at 4.5:1, else
-   * the one that reads better.
-   * @param {string} id @param {Mode} m @param {string} fill
-   */
-  const onFor = (id, m, fill) => {
-    const [a, b] = onChoices(id, m).map(on => ({
-      on,
-      r: contrast(on.color, fill),
-    }));
-    const best = a.r >= TEXT || a.r >= b.r ? a : b;
-    const other = best === a ? b : a;
-    return {
-      on: best.on,
-      r: best.r,
-      other: other.on,
-      otherR: other.r,
-      first: a.on,
-    };
-  };
-  /** The lowest contrast of a color on the surfaces. @param {string} color @param {Mode} m @param {string} id */
-  const page = (color, m, id) =>
-    Math.min(...surfaces(m, id).map(([, bg]) => contrast(color, bg)));
-  return {stops, at, ref, exactOf, surfaces, onFor, page, neutral};
-}
-
-/** @type {Partial<Record<Mode, number | null>>} */
-const citationCache = {};
-
-/**
- * How well citation text (`--color-text-secondary`) reads on the accent
- * tint (`--color-accent-muted`) in the official neutral theme, per mode:
- * both tokens' stops come from its theme source and their colors from its
- * selected palette stops, read from the installed package. Without the
- * package, the same official stops of a plain gray ramp from the
- * generator. Null when neither can be read.
- * @param {Mode} m
- * @returns {number | null}
- */
-export function officialCitation(m) {
-  if (m in citationCache)
-    return /** @type {number | null} */ (citationCache[m]);
-  const i = m === 'light' ? 0 : 1;
-  /** @type {number | null} */
-  let r = null;
-  try {
-    const dir = path.dirname(
-      path.dirname(
-        createRequire(import.meta.url).resolve('@astryxdesign/theme-neutral'),
+  return {
+    base,
+    has: token => token in tokenDefaults,
+    reader: {
+      rgb: value =>
+        /** @type {[number, number, number] | null} */ (parseColor(value)),
+      alpha: value => alphaOf(value),
+    },
+    settingOf,
+    colorIn: (value, m) => colorIn(value, m),
+    setExactly: token =>
+      data.settings.some(
+        s =>
+          s.source === 'token' &&
+          s.thing === token &&
+          !s.on &&
+          !s.when &&
+          !s.state,
       ),
-    );
-    const theme = fs.readFileSync(
-      path.join(dir, 'src/neutralTheme.ts'),
-      'utf8',
-    );
-    const refs = fs.readFileSync(
-      path.join(dir, 'src/neutralPaletteRefs.generated.ts'),
-      'utf8',
-    );
-    /** @param {string} token */
-    const stopOf = token =>
-      new RegExp(
-        `'${token}':\\s*\\[\\s*neutral\\.light\\[(\\d+)\\],\\s*neutral\\.dark\\[(\\d+)\\]\\s*\\]`,
-      ).exec(theme)?.[i + 1];
-    // The first ramp of each mode after `neutral: {` is the neutral one.
-    const from = refs.search(/\bneutral:\s*\{/);
-    const ramp =
-      from < 0
-        ? ''
-        : (new RegExp(`\\b${m}:\\s*\\{([^}]*)\\}`).exec(
-            refs.slice(from),
-          )?.[1] ?? '');
-    /** @param {string | undefined} stop */
-    const colorOf = stop =>
-      stop == null
-        ? null
-        : new RegExp(`\\b${stop}:\\s*'(#[0-9a-f]{6})'`).exec(ramp)?.[1];
-    const text = colorOf(stopOf('--color-text-secondary'));
-    const tint = colorOf(stopOf('--color-accent-muted'));
-    if (text && tint) r = contrast(text, tint);
-  } catch {
-    r = null;
-  }
-  if (r == null)
-    try {
-      const gray = /** @type {any} */ (
-        generateTonalPalette({
-          families: [{id: 'n', seed: '#808080', kind: 'neutral'}],
-        }).palette.n
-      )[m];
-      r = contrast(
-        gray[NEUTRAL_STOPS['--color-text-secondary'][i]],
-        gray[ACCENT_MUTED[i]],
-      );
-    } catch {
-      r = null;
-    }
-  citationCache[m] = r;
-  return r;
-}
-
-/** A text shade, named for a sentence. @param {StopRef} r */
-const textName = r =>
-  r.family === 'white' || (r.family === 'neutral' && r.stop >= 95)
-    ? 'white'
-    : r.family === 'black' || (r.family === 'neutral' && r.stop <= 10)
-      ? 'near-black'
-      : `shade ${r.stop}`;
-
-/**
- * Whether the exact seed color works as the dark fill: text on it reads at
- * 4.5:1 and it stands out from the dark surfaces at 3:1. Why not otherwise.
- * @param {ReturnType<typeof tools>} t
- * @param {string} id
- * @param {string} seed
- */
-function darkExact(t, id, seed) {
-  const on = t.onFor(id, 'dark', seed);
-  if (on.r < TEXT)
-    return {
-      ok: false,
-      ratio: round(on.r),
-      why: `your exact color reads at only ${round(on.r)}:1 with any text shade, and text needs ${TEXT}:1`,
-    };
-  const p = t.page(seed, 'dark', id);
-  if (p < NON_TEXT)
-    return {
-      ok: false,
-      ratio: round(p),
-      why: `your exact color stands out from the dark page at only ${round(p)}:1, and a fill needs ${NON_TEXT}:1`,
-    };
-  return {ok: true, ratio: round(on.r), why: ''};
+    setLine: (thing, value, mode) =>
+      `${P} set ${slug} ${thing} ${quoteCommandArgument(value)}${mode ? ` --mode ${mode}` : ''}`,
+  };
 }
 
 /**
@@ -722,23 +741,32 @@ function darkExact(t, id, seed) {
  * the author's own stay. Null when the config would hold no family.
  * @param {string} cwd
  * @param {string} slug
- * @param {{mode?: string, settings: Setting[]}} data
+ * @param {{mode?: string, settings: Setting[], palette?: string}} data
  * @param {{light: Record<string, string>, dark: Record<string, string>}} [base] the base theme's resolved colors, which the dark check reads
  * @returns {PalettePlan | null}
  */
 function planPalette(cwd, slug, data, base) {
   const file = paletteFiles(slug).config;
   const existing = readConfig(path.join(cwd, file));
-  const fams = dialFamilies(data);
+  // (Before anything reads it, so the refusal names this project's way to
+  // a newer CLI.)
+  refuseUnknownRecipe(existing, file, cwd);
+  const fams = dialFamilies(data, ownSourceTokenValues(cwd, slug));
   if (!existing && !fams.length) return null;
   /** @type {string[]} */
   const notes = [];
-  const config =
-    existing && typeof existing === 'object' && !Array.isArray(existing)
-      ? {...existing}
-      : {};
+  const own =
+    existing && typeof existing === 'object' && !Array.isArray(existing);
+  // A new palette is made with the newest recipe; a palette the theme
+  // already has keeps the one it was made with (none named is the first),
+  // so its colors never move with a CLI upgrade. Moving it is a choice
+  // made in its config.
+  const config = own ? {...existing} : {recipe: PALETTE_RECIPE_V2};
   const {settings: saved, mode: savedMode} = savedSettings(cwd, slug);
-  const modes = themeModes(data);
+  // Every theme's palette has both modes: a one-mode theme keeps both
+  // halves of its colors (its mode is the one the app's <Theme> is given),
+  // and a region Core draws in the other mode reads the other half.
+  const modes = modesForStrategy('light-and-dark');
 
   const vibrancy = dialVibrancy(data.settings);
   const savedVibrancy = dialVibrancy(saved);
@@ -761,7 +789,7 @@ function planPalette(cwd, slug, data, base) {
   const strategy = strategyOf(modes);
   // Only a value the editor did not write is a hand edit worth naming: the
   // one it wrote follows the theme's mode as it was saved.
-  const wrote = savedMode ? strategyOf(themeModes({mode: savedMode})) : null;
+  const wrote = savedMode ? strategyOf(modesOf({mode: savedMode})) : null;
   if (
     config.modeStrategy != null &&
     config.modeStrategy !== strategy &&
@@ -779,29 +807,35 @@ function planPalette(cwd, slug, data, base) {
     );
   /** @type {any[]} */
   const before = Array.isArray(config.families) ? config.families : [];
-  const savedSeeds = dialFamilies({settings: saved});
+  const savedSeeds = dialFamilies(
+    {settings: saved},
+    ownSourceTokenValues(cwd, slug),
+  );
+  // A config the editor wrote holds the seeds it gave, from the settings and
+  // the source as they were then: its seed is never a hand edit.
+  const configMine = configWrittenByEditor(cwd, slug, data);
 
   /**
    * One dial family: the author's family with the dial's seed and the
    * exact anchors of that seed in place of the old ones.
    * @param {any} prev
-   * @param {{id: string, seed: string}} f
+   * @param {DialFamily} f
    */
   const familyOf = (prev, f) => {
     const old = prev && typeof prev === 'object' ? prev : {};
     const neutral = f.id === 'neutral';
-    const wasSaved = savedSeeds.find(x => x.id === f.id)?.seed;
+    const wasSaved = configMine
+      ? old.seed
+      : savedSeeds.find(x => x.id === f.id)?.seed;
     if (old.seed != null && wasSaved && !sameColor(old.seed, wasSaved))
       notes.push(
-        `${file}: the ${f.id} seed ${old.seed} there is replaced by your ${f.id} setting, ${f.seed}`,
+        `${file}: the ${f.id} seed ${old.seed} there is replaced by ${f.source ? `the ${f.source} your theme source sets` : `your ${f.id} setting`}, ${f.seed}`,
       );
-    const gray = isGray(f.seed);
+    const {family: made, stop} = dialFamily(f, config, modes);
+    // The setting's family as a fresh palette has it; of the author's
+    // family, a chromatic kind stays.
     const kind =
-      neutral || gray
-        ? 'neutral'
-        : old.kind === 'chromatic'
-          ? 'chromatic'
-          : undefined;
+      made.kind ?? (old.kind === 'chromatic' ? 'chromatic' : undefined);
     if (
       old.kind === 'neutral' &&
       !kind &&
@@ -811,25 +845,8 @@ function planPalette(cwd, slug, data, base) {
       notes.push(
         `${file}: the ${f.id} kind "neutral" is dropped: your ${f.id} is not a gray, and a neutral kind turns its shades gray where no exact color holds them`,
       );
-    const stop = seedStop(
-      f.seed,
-      config,
-      kind === 'neutral' ? 'neutral' : 'chromatic',
-    );
-    // White and black already end every ramp, so a neutral of either holds
-    // no anchor of its own.
-    const ends =
-      neutral &&
-      (sameColor(f.seed, PALETTE_WHITE) || sameColor(f.seed, PALETTE_BLACK));
     /** @type {any[]} */
-    const mine = ends
-      ? []
-      : (neutral ? modes : modes.filter(m => m === 'light')).map(m => ({
-          mode: m,
-          stop,
-          color: f.seed,
-          policy: 'exact',
-        }));
+    const mine = made.anchors ?? [];
     /** @type {any[]} */
     const kept = [];
     const anchors = Array.isArray(old.anchors) ? old.anchors : [];
@@ -870,7 +887,7 @@ function planPalette(cwd, slug, data, base) {
     const out = {
       ...old,
       id: f.id,
-      name: old.name ?? f.id[0].toUpperCase() + f.id.slice(1),
+      name: old.name ?? made.name,
       seed: f.seed,
       ...(kind ? {kind} : {}),
       anchors: [...mine, ...kept].sort((a, b) =>
@@ -879,7 +896,13 @@ function planPalette(cwd, slug, data, base) {
     };
     if (!kind) delete out.kind;
     if (!out.anchors.length) delete out.anchors;
-    return {family: out, stop};
+    // The keys always in one order, so a change and its undo write the
+    // same bytes.
+    /** @type {Record<string, unknown>} */
+    const ordered = {};
+    for (const k of FAMILY_INPUT_KEYS) if (k in out) ordered[k] = out[k];
+    for (const k of Object.keys(out)) if (!(k in ordered)) ordered[k] = out[k];
+    return {family: /** @type {typeof out} */ (ordered), stop};
   };
 
   /** @type {PalettePlan['fills']} */
@@ -890,20 +913,46 @@ function planPalette(cwd, slug, data, base) {
       const mine = fams.find(x => x.id === f.id);
       if (!mine) return null;
       const {family, stop} = familyOf(f, mine);
-      if (mine.id !== 'neutral')
-        fills[mine.id] = {stop, dark: false, why: '', ratio: 0};
+      if (mine.id !== 'neutral') fills[mine.id] = fillAt(stop);
       return family;
     })
     .filter(Boolean);
   for (const f of fams)
     if (!families.some(x => x?.id === f.id)) {
       const {family, stop} = familyOf(null, f);
-      if (f.id !== 'neutral')
-        fills[f.id] = {stop, dark: false, why: '', ratio: 0};
+      if (f.id !== 'neutral') fills[f.id] = fillAt(stop);
       families.push(family);
     }
   if (!families.length) return null;
+  // The editor's colors stand in the order of their settings, wherever they
+  // sit among a config's own families, so a step back writes the same file.
+  const slots = families
+    .map((f, i) => (PALETTE_DIALS.includes(f?.id) ? i : -1))
+    .filter(i => i >= 0);
+  const inOrder = fams
+    .map(x => families.find(f => f?.id === x.id))
+    .filter(Boolean);
+  if (inOrder.length === slots.length)
+    slots.forEach((i, k) => (families[i] = inOrder[k]));
   config.families = families;
+  // A color change on a palette made with the first recipe says what the
+  // newer one does, and how to choose it.
+  /** @param {any} c */
+  const colorsOf = c =>
+    JSON.stringify([
+      c?.vibrancy ?? null,
+      (Array.isArray(c?.families) ? c.families : []).map(
+        (/** @type {any} */ f) => [f?.id, String(f?.seed ?? '').toLowerCase()],
+      ),
+    ]);
+  if (
+    own &&
+    (config.recipe ?? PALETTE_RECIPE) === PALETTE_RECIPE &&
+    colorsOf(existing) !== colorsOf(config)
+  )
+    notes.push(
+      `${file} makes its colors with the ${PALETTE_RECIPE} recipe it was made with, whose pale shades stay at the edge of what a screen shows whatever the vibrancy; "recipe": "${PALETTE_RECIPE_V2}" there makes them follow the vibrancy and each color's own strength (its colors change once)`,
+    );
   const dead = deadKeys(config);
   if (dead.length)
     notes.push(
@@ -925,55 +974,23 @@ function planPalette(cwd, slug, data, base) {
   // The exact color anchors dark mode too when it reads there, as the
   // official themes anchor a brand color in both modes.
   if (modes.includes('dark') && Object.keys(fills).length) {
-    const t = tools(generate(config, file), data, base);
-    /** @type {string[]} */
-    const add = [];
-    for (const [id, fill] of Object.entries(fills)) {
-      const seed = /** @type {string} */ (fams.find(f => f.id === id)?.seed);
-      const check = darkExact(t, id, seed);
-      Object.assign(fill, {why: check.why, ratio: check.ratio});
-      if (check.ok) add.push(id);
-    }
-    /** @param {string} id @param {any} cfg */
-    const withDark = (id, cfg) => ({
-      ...cfg,
-      families: cfg.families.map((/** @type {any} */ f) => {
-        if (f?.id !== id) return f;
-        const anchor = {
-          mode: 'dark',
-          stop: fills[id].stop,
-          color: f.seed,
-          policy: 'exact',
-        };
-        const others = (f.anchors ?? []).filter(
-          (/** @type {any} */ a) =>
-            !(a.mode === 'dark' && a.stop === anchor.stop),
-        );
-        if (others.length < (f.anchors ?? []).length)
+    try {
+      config.families = anchorDarkFills(
+        config,
+        fams,
+        fills,
+        paletteContext(cwd, slug, data, base),
+        (id, stop) =>
           notes.push(
-            `${file}: your dark anchor at shade ${shade(anchor.stop)} of ${id} is replaced by your exact ${id} color`,
-          );
-        return {
-          ...f,
-          anchors: [...others, anchor].sort((a, b) =>
-            a.mode === b.mode ? a.stop - b.stop : a.mode === 'light' ? -1 : 1,
+            `${file}: your dark anchor at shade ${shade(stop)} of ${id} is replaced by your exact ${id} color`,
           ),
-        };
-      }),
-    });
-    let next = config;
-    for (const id of add) {
-      const tried = withDark(id, next);
-      try {
-        generateTonalPalette(tried);
-        next = tried;
-        fills[id].dark = true;
-      } catch {
-        fills[id].why =
-          'the dark shades cannot hold your exact color and stay in order from dark to light';
-      }
+      );
+    } catch (error) {
+      // A config the generator refuses is refused as the editor refuses
+      // it, naming the file.
+      generate(config, file);
+      throw error;
     }
-    config.families = next.families;
   }
   return {config, notes, fills};
 }
@@ -990,9 +1007,6 @@ function planPalette(cwd, slug, data, base) {
 export function paletteConfig(cwd, slug, data, base) {
   return planPalette(cwd, slug, data, base)?.config ?? null;
 }
-
-/** @param {string} text */
-const sha256 = text => createHash('sha256').update(text).digest('hex');
 
 /**
  * Write the palette config, palette and receipt the settings ask for, with
@@ -1011,52 +1025,81 @@ const sha256 = text => createHash('sha256').update(text).digest('hex');
  * @returns {string[]}
  */
 export function syncPalette(cwd, slug, data, base) {
+  keptDamaged.length = 0;
+  // The config is read first, so a damaged one is kept aside before the
+  // sync writes it again.
+  const config = path.join(cwd, paletteFiles(slug).config);
+  readConfig(config);
+  keepDamaged(config);
+  const notes = syncPaletteFiles(cwd, slug, data, base);
+  return [...keptDamaged.splice(0), ...notes];
+}
+
+/**
+ * Whether the editor wrote the theme's palette config as it is now: its hash
+ * is the one the settings hold (`data.palette`, or the saved settings, which
+ * an undo may carry from before the palette existed), or the one the editor
+ * recorded writing (a color change stopped before its settings were saved).
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {{palette?: string}} data
+ */
+function configWrittenByEditor(cwd, slug, data) {
+  const file = path.join(cwd, paletteFiles(slug).config);
+  if (!fs.existsSync(file)) return false;
+  const hash = sha256(fs.readFileSync(file));
+  /** @type {string | undefined} */
+  let saved;
+  try {
+    saved = JSON.parse(
+      fs.readFileSync(
+        path.join(cwd, 'themes', slug, `${slug}.settings.json`),
+        'utf8',
+      ),
+    ).palette;
+  } catch {
+    saved = undefined;
+  }
+  return (
+    data.palette === hash ||
+    saved === hash ||
+    readWrittenRecord(cwd, slug)['palette.config.json'] === hash
+  );
+}
+
+/**
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {any} data
+ * @param {any} base
+ * @returns {string[]}
+ */
+function syncPaletteFiles(cwd, slug, data, base) {
   const f = paletteFiles(slug);
   const abs = (/** @type {string} */ p) => path.join(cwd, p);
   const plan = planPalette(cwd, slug, data, base);
   if (!plan) {
     // Only palette files the editor wrote go: a hand-made palette.config.json
     // (and what it generated) stays.
-    // The hash the saved settings recorded too: an undo may carry settings
-    // from before the palette existed.
-    /** @type {string | undefined} */
-    let saved;
-    try {
-      saved = JSON.parse(
-        fs.readFileSync(abs(`themes/${slug}/${slug}.settings.json`), 'utf8'),
-      ).palette;
-    } catch {
-      saved = undefined;
-    }
-    const hash = fs.existsSync(abs(f.config))
-      ? sha256(fs.readFileSync(abs(f.config), 'utf8'))
-      : null;
-    const mine = hash != null && (data.palette === hash || saved === hash);
+    const mine = configWrittenByEditor(cwd, slug, data);
     delete data.palette;
     if (!mine) return [];
-    // A file edited by hand is never deleted: it stays, and the result
-    // names it. Its config and receipt go, so the next color change asks
-    // whether to keep or discard it.
+    // A palette file edited by hand is never deleted: it stays, and the
+    // result names it. Its config and receipt go, so the next color change
+    // asks whether to keep or discard it.
+    // The selected-stops file is generated from the palette on every
+    // change, so it always goes.
     const editedPalette = paletteEdited(cwd, slug);
-    const shipped = fs.existsSync(abs(f.palette))
-      ? paletteData(fs.readFileSync(abs(f.palette), 'utf8'))?.palette
-      : null;
-    const editedRefs =
-      fs.existsSync(abs(f.refs)) && refsDiffer(cwd, slug, shipped) !== false;
     /** @type {string[]} */
     const notes = [];
-    for (const p of [f.config, f.receipt]) fs.rmSync(abs(p), {force: true});
+    for (const p of [f.config, f.receipt, f.refs])
+      fs.rmSync(abs(p), {force: true});
+    noteWritten(cwd, slug, 'palette.config.json', null);
     if (editedPalette)
       notes.push(
         `${f.palette} was edited by hand, so it stays: the theme no longer reads it. Move it out of tokens/ to keep it as your own, or delete it`,
       );
     else fs.rmSync(abs(f.palette), {force: true});
-    if (editedRefs) {
-      KEPT_REFS.add(abs(f.refs));
-      notes.push(
-        `${f.refs} was edited by hand, so it stays: the theme no longer reads it. Move it out of tokens/ to keep it as your own, or delete it`,
-      );
-    } else fs.rmSync(abs(f.refs), {force: true});
     const tokensDir = path.dirname(abs(f.palette));
     if (fs.existsSync(tokensDir) && !fs.readdirSync(tokensDir).length)
       fs.rmdirSync(tokensDir);
@@ -1078,12 +1121,18 @@ export function syncPalette(cwd, slug, data, base) {
   // Nothing to rewrite: no notes either, so a kept hand edit is named once,
   // when a color change touches the config.
   if (same) {
-    data.palette = sha256(text);
-    return [];
+    data.palette = sha256(Buffer.from(text));
+    // The theme reads only the selected shades, which come from the
+    // generator, so a hand edit to the palette file never shows: say so.
+    return paletteEdited(cwd, slug)
+      ? [
+          `${f.palette} was edited by hand, but the theme never reads it: it reads ${f.refs}, which the editor writes from the generator, so your edit does not show. The next color change asks whether to keep or discard it`,
+        ]
+      : [];
   }
   if (paletteEdited(cwd, slug)) {
     throw new AstryxError(
-      `${f.palette} was edited by hand, so the editor will not write over it. To keep your edits, move the file out of tokens/ (it is then yours: import it in ${slug}.theme.ts); to discard them, delete it. Then run the command again, and the editor writes the generated shades back. Only color changes wait for this; other changes still work. Nothing was changed.`,
+      `${f.palette} was edited by hand, so the editor will not write over it. The theme never read the edit: it reads ${f.refs}, which the editor writes from the generator. To keep your edits, move the file out of tokens/ (it is then yours: import it in ${slug}.theme.ts); to discard them, delete it. Then run the command again, and the editor writes the generated shades back. Only color changes wait for this; other changes still work. Nothing was changed.`,
       [
         {
           name: `${P} show ${slug}`,
@@ -1094,10 +1143,86 @@ export function syncPalette(cwd, slug, data, base) {
     );
   }
   fs.mkdirSync(path.dirname(abs(f.config)), {recursive: true});
+  // Recorded before it is written: a run stopped after this leaves a config
+  // the next build knows is the editor's.
+  noteWritten(cwd, slug, 'palette.config.json', sha256(Buffer.from(text)));
   writeWhole(abs(f.config), text);
-  data.palette = sha256(text);
+  data.palette = sha256(Buffer.from(text));
   themePaletteGenerate(f.config, {out: f.palette, overwrite: true}, {cwd});
   return plan.notes;
+}
+
+/**
+ * The record of the files the editor wrote into a theme folder,
+ * `themes/<theme>/<theme>.pictures.json`: each by name, with the hash of
+ * what was written (its pictures and its color config). The one reader and
+ * writer of that record.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {Record<string, string>}
+ */
+export function readWrittenRecord(cwd, slug) {
+  return readRecordIn(path.join(cwd, 'themes', slug), slug);
+}
+
+/**
+ * The record of what the editor wrote, read from a theme folder as it is
+ * (a copy of one included); empty when there is none or it is damaged.
+ * @param {string} dir
+ * @param {string} slug
+ * @returns {Record<string, string>}
+ */
+export function readRecordIn(dir, slug) {
+  try {
+    const json = JSON.parse(
+      readRegularFile(path.join(dir, `${slug}.pictures.json`), 'utf8'),
+    );
+    return json && typeof json === 'object' && !Array.isArray(json) ? json : {};
+  } catch {
+    return {};
+  }
+}
+
+/** @param {string} cwd @param {string} slug */
+const writtenRecordFile = (cwd, slug) =>
+  path.join(cwd, 'themes', slug, `${slug}.pictures.json`);
+
+/**
+ * Write the record whole, or remove it when it names nothing. A record that
+ * cannot be written leaves nothing removed later: the safe way round.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {Record<string, string>} map
+ */
+export function writeWrittenRecord(cwd, slug, map) {
+  const file = writtenRecordFile(cwd, slug);
+  // A link of the user's at the record's name is left as it is.
+  if (fs.lstatSync(file, {throwIfNoEntry: false})?.isSymbolicLink()) return;
+  try {
+    if (!Object.keys(map).length) fs.rmSync(file, {force: true});
+    else {
+      fs.mkdirSync(path.dirname(file), {recursive: true});
+      writeWhole(file, `${JSON.stringify(map, null, 2)}\n`);
+    }
+  } catch {
+    // Without the record, nothing it names is removed later.
+  }
+}
+
+/**
+ * Note a file the editor wrote into a theme folder, by name with the hash
+ * of what it wrote, or forget it (null).
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {string} name
+ * @param {string | null} hash
+ */
+export function noteWritten(cwd, slug, name, hash) {
+  const map = readWrittenRecord(cwd, slug);
+  if (hash) map[name] = hash;
+  else if (name in map) delete map[name];
+  else return;
+  writeWrittenRecord(cwd, slug, map);
 }
 
 /**
@@ -1211,6 +1336,14 @@ function samePalette(a, b) {
 }
 
 /**
+ * The first line of the empty palette module the preview writes for a
+ * Colors page it keeps (changed by hand) once the theme has no colors, so
+ * the app still builds. The editor replaces it freely.
+ */
+export const PALETTE_STAND_IN =
+  '// A stand-in for a preview page that imports this file: the theme has no generated colors.';
+
+/**
  * Whether a theme's palette file was edited by hand. Its bytes match its
  * receipt, or its colors (read as data, so formatting, a BOM or semicolons
  * never count) are the ones the generator gives for the request it came
@@ -1226,6 +1359,8 @@ export function paletteEdited(cwd, slug) {
   const file = path.join(cwd, f.palette);
   if (!fs.existsSync(file)) return false;
   const text = fs.readFileSync(file, 'utf8');
+  // The empty stand-in a kept preview page imports is the editor's own.
+  if (text.startsWith(PALETTE_STAND_IN)) return false;
   /** @type {any} */
   let receipt;
   try {
@@ -1233,7 +1368,7 @@ export function paletteEdited(cwd, slug) {
   } catch {
     receipt = null;
   }
-  if (receipt?.candidateSha256 === sha256(text)) return false;
+  if (receipt?.candidateSha256 === sha256(Buffer.from(text))) return false;
   const data = paletteData(text);
   if (!data) return true;
   /** @type {any} */
@@ -1248,7 +1383,7 @@ export function paletteEdited(cwd, slug) {
           'utf8',
         ),
       )?.palette;
-      configMine = saved == null || saved === sha256(configText);
+      configMine = saved == null || saved === sha256(Buffer.from(configText));
       request = JSON.parse(configText.replace(/^\uFEFF/, ''));
     } catch {
       request = null;
@@ -1295,9 +1430,6 @@ function refsDiffer(cwd, slug, palette) {
   }
   return false;
 }
-
-/** Selected-stops files an undo keeps because they were edited by hand. */
-const KEPT_REFS = new Set();
 
 /**
  * The stops a source reads: `palette.<family>.<mode>[<stop>]`, any number
@@ -1401,7 +1533,6 @@ export function syncPaletteRefs(cwd, slug, source, pal) {
   const file = path.join(cwd, paletteFiles(slug).refs);
   const text = pal ? paletteRefsSource(slug, pal.candidate, source) : null;
   if (text == null) {
-    if (KEPT_REFS.delete(file)) return;
     fs.rmSync(file, {force: true});
     return;
   }
@@ -1410,63 +1541,93 @@ export function syncPaletteRefs(cwd, slug, source, pal) {
 }
 
 /**
+ * A palette made with a recipe this CLI does not know, with the file left as
+ * it is. A newer CLI's recipe is no fault to fix by hand: it gets the
+ * refusal `theme palette generate` gives, with the update step that fits
+ * where the CLI runs. Any other recipe is named as no recipe Astryx makes,
+ * and the file is the fix: its `recipe` set to one this CLI knows.
+ * @param {any} config
+ * @param {string} file the config's path, for the refusal
+ * @param {string} [cwd] the project, for the step that updates the CLI
+ */
+function refuseUnknownRecipe(config, file, cwd) {
+  const recipe = config?.recipe;
+  if (recipe == null || PALETTE_RECIPES.includes(recipe)) return;
+  if (newerRecipe(recipe))
+    throw newerRecipeRefusal({recipe, file, cwd: cwd ?? process.cwd()});
+  // Every command that reads the theme builds this plan and meets this
+  // refusal again, so the way out is the file itself, and no command is
+  // offered.
+  throw new AstryxError(
+    `${file}: this theme's colors name the palette recipe ${String(recipe)}, which no Astryx CLI makes. Fix that part of the file by hand: set "recipe" to one of the recipes this CLI (${cliVersion()}) knows, ${PALETTE_RECIPES.join(', ')}. Nothing was changed.`,
+    [],
+    ERROR_CODES.ERR_PALETTE_GENERATION,
+  );
+}
+
+/**
  * @param {any} config
  * @param {string} [file] the config's path, for the refusal
+ * @param {string} [cwd] the project, for the command that updates the CLI
  * @returns {Candidate}
  */
-function generate(config, file = 'palette.config.json') {
+function generate(config, file = 'palette.config.json', cwd = undefined) {
+  refuseUnknownRecipe(config, file, cwd);
   try {
     return generateTonalPalette(config);
   } catch (e) {
     throw new AstryxError(
       `${file}: the colors could not be generated: ${(e instanceof Error ? e.message : String(e)).replace(/\.$/, '')}. Fix that part of the file by hand, or remove it. Nothing was changed.`,
-      [],
+      [{name: `${P} how colors`, reason: 'how the colors are made'}],
       ERROR_CODES.ERR_PALETTE_GENERATION,
     );
   }
 }
 
 /**
- * The contrast ratio of two opaque colors. A color that does not parse is
- * a bug in the mapping, never a ratio of 0.
- * @param {string} a @param {string} b
+ * A family's ramp in each mode, as the theme makes it: the palette's own
+ * family when its color settings define one; for the neutral family, else
+ * the grays grown from the theme's secondary text (every theme has its
+ * grays); null for another family the palette does not define.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} base
+ * @param {string} family
+ * @returns {{light: Record<string, string>, dark: Record<string, string>} | null}
  */
-function contrast(a, b) {
-  const x = parseColor(a);
-  const y = parseColor(b);
-  if (!x || !y) throw new Error(`No contrast between "${a}" and "${b}".`);
-  return ratio(x, y);
+export function familyRamp(cwd, slug, data, base, family) {
+  if (dialFamilies(data).some(f => f.id === family)) {
+    const plan = /** @type {PalettePlan} */ (
+      planPalette(cwd, slug, data, base)
+    );
+    const ramp = /** @type {any} */ (
+      generate(plan.config, paletteFiles(slug).config, cwd).palette
+    )[family];
+    if (ramp?.light && ramp?.dark) return ramp;
+  }
+  if (family !== 'neutral') return null;
+  /** (The secondary text the theme sets exactly in a mode, else its base's.) @param {Mode} m */
+  const grown = m => {
+    const set = data.settings.find(
+      s =>
+        s.source === 'token' &&
+        s.thing === '--color-text-secondary' &&
+        !s.on &&
+        !s.when &&
+        !s.state &&
+        (!s.mode || s.mode === m),
+    )?.value;
+    const v =
+      (set && parseColor(set) ? set : null) ??
+      base?.[m]?.['--color-text-secondary'];
+    const rgb = v ? parseColor(v) : null;
+    return rgb ? grownGrays(hex(/** @type {number[]} */ (rgb)), m) : null;
+  };
+  const light = grown('light');
+  const dark = grown('dark');
+  return light && dark ? {light, dark} : null;
 }
-
-/**
- * A translucent stop drawn over each surface, as the opaque colors the eye
- * sees; an opaque stop as it is.
- * @param {string} name @param {StopRef} r @param {Array<[string, string]>} under
- * @returns {Array<[string, string]>}
- */
-function over(name, r, under) {
-  if (!r.alpha) return [[name, r.color]];
-  const top = /** @type {[number, number, number]} */ (
-    parseColor(r.color.slice(0, 7))
-  );
-  const a = parseInt(r.alpha, 16) / 255;
-  return under.map(([n, bg]) => [
-    `${name} over ${n}`,
-    hex(
-      compositeOver(
-        top,
-        a,
-        /** @type {[number, number, number]} */ (parseColor(bg)),
-      ),
-    ),
-  ]);
-}
-
-/** @param {number} r */
-const round = r => Math.round(r * 100) / 100;
-
-/** A stop as text: a layout may hold 16.666666666666668. @param {number} s */
-const shade = s => String(round(s));
 
 /**
  * The colors and token mapping of a theme's palette, or null when it sets no
@@ -1480,404 +1641,27 @@ const shade = s => String(round(s));
  * @returns {PaletteMapping | null}
  */
 export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
-  const fams = dialFamilies(data);
+  const fams = dialFamilies(data, ownSourceTokenValues(cwd, slug));
   if (!fams.length) return null;
   const plan = /** @type {PalettePlan} */ (planPalette(cwd, slug, data, base));
   const {config} = plan;
-  const candidate = generate(config, paletteFiles(slug).config);
-  const t = tools(candidate, data, base);
-  const {stops, at, ref, exactOf, surfaces} = t;
-  const modes = themeModes(data);
-  /**
-   * The secondary text color in a mode: an exact setting, else the neutral
-   * color's, else the base theme's; null when it is not a fixed color.
-   * @param {Mode} m
-   */
-  const textSecondary = m => {
-    const v =
-      exactOf('--color-text-secondary', m) ??
-      tokens['--color-text-secondary']?.[m].color ??
-      base?.[m]?.['--color-text-secondary'];
-    return v && parseColor(v) && alphaOf(v) >= 1 ? v : null;
-  };
-  /** @type {PaletteMapping['tokens']} */
-  const tokens = {};
-  /** @type {ContrastCheck[]} */
-  const checks = [];
-  /** @type {PaletteMapping['exact']} */
-  const exact = {};
-  const has = (/** @type {string} */ k) => k in tokenDefaults;
-  /** A token the theme sets exactly in any mode: no check speaks for it. @param {string} k */
-  const setExactly = k =>
-    data.settings.some(
-      s =>
-        s.source === 'token' && s.thing === k && !s.on && !s.when && !s.state,
-    );
-  const reports = (/** @type {string} */ k) => has(k) && !setExactly(k);
-  /**
-   * Point a token at its stops. A theme with one mode has one ramp: the
-   * other side repeats it.
-   * @param {string} token @param {string} id @param {Partial<Record<Mode, StopRef>>} refs
-   */
-  const put = (token, id, refs) => {
-    if (!has(token)) return;
-    const one = /** @type {StopRef} */ (refs[modes[0]]);
-    tokens[token] = {
-      family: id,
-      light: refs.light ?? one,
-      dark: refs.dark ?? one,
-    };
-  };
-  /** @template T @param {(m: Mode) => T} fn @returns {Partial<Record<Mode, T>>} */
-  const each = fn => Object.fromEntries(modes.map(m => [m, fn(m)]));
-  /**
-   * The stop nearest `start` that reads at `needs` on every color in `on`,
-   * searched both ways (the usual way first on a tie: darker in light,
-   * lighter in dark), so a base with dark light-mode surfaces still finds
-   * one; the most contrasting stop of all when none does.
-   * @param {string} token @param {string} id @param {Mode} m @param {number} start
-   * @param {Array<[string, string]>} on - `[name, color]` pairs.
-   * @param {number} needs
-   */
-  const pick = (token, id, m, start, on, needs) => {
-    const usual = TOWARD_CONTRAST[m];
-    const order = [...stops].sort(
-      (a, b) =>
-        Math.abs(a - start) - Math.abs(b - start) ||
-        (Math.sign(b - a) === usual ? 1 : -1),
-    );
-    /** @param {number} stop */
-    const score = stop => {
-      const c = ref(id, m, stop).color;
-      return Math.min(...on.map(([, bg]) => contrast(c, bg)));
-    };
-    const scored = order.map(stop => ({stop, r: score(stop)}));
-    const b =
-      scored.find(x => x.r >= needs) ??
-      scored.reduce((x, y) => (y.r > x.r ? y : x));
-    if (reports(token))
-      checks.push({
-        token,
-        mode: m,
-        stop: b.stop,
-        preferred: start,
-        against: on.map(([n]) => n).join(', '),
-        ratio: round(b.r),
-        needs,
-        pass: b.r >= needs,
-      });
-    return ref(id, m, b.stop);
-  };
-
-  const neutral = fams.find(f => f.id === 'neutral');
-  if (neutral) {
-    for (const [token, pair] of Object.entries(NEUTRAL_STOPS)) {
-      if (
-        token === '--color-text-secondary' ||
-        token === '--color-icon-secondary'
-      )
-        continue;
-      put(
-        token,
-        'neutral',
-        each(m => ref('neutral', m, at(pair[m === 'light' ? 0 : 1]))),
-      );
-    }
-    for (const [token, pair] of Object.entries(NEUTRAL_TINTS))
-      put(
-        token,
-        'neutral',
-        each(m => {
-          const [s, a] = pair[m === 'light' ? 0 : 1];
-          return ref('neutral', m, at(s), a);
-        }),
-      );
-    for (const [token, needs] of /** @type {const} */ ([
-      ['--color-text-secondary', TEXT],
-      ['--color-icon-secondary', NON_TEXT],
-    ]))
-      put(
-        token,
-        'neutral',
-        each(m =>
-          pick(
-            token,
-            'neutral',
-            m,
-            at(NEUTRAL_STOPS[token][m === 'light' ? 0 : 1]),
-            surfaces(m, 'neutral'),
-            needs,
-          ),
-        ),
-      );
-    const surface = paletteToken('neutral');
-    const set = each(m => exactOf(surface, m));
-    if (Object.values(set).some(Boolean))
-      exact[surface] = /** @type {Partial<Record<Mode, string>>} */ (
-        Object.fromEntries(Object.entries(set).filter(([, v]) => v))
-      );
-  }
-
-  for (const f of fams) {
-    if (f.id === 'neutral') continue;
-    const word = f.id === 'accent' ? null : STATUS_TOKEN[f.id];
-    const names = word
-      ? {
-          fill: `--color-${word}`,
-          on: `--color-on-${word}`,
-          text: `--color-text-${word}`,
-          icon: `--color-icon-${word}`,
-          muted: `--color-${word}-muted`,
-          onMuted: `--color-on-${word}-muted`,
-          border: `--color-border-${word}`,
-          focus: null,
-        }
-      : {
-          fill: '--color-accent',
-          on: '--color-on-accent',
-          text: '--color-text-accent',
-          icon: '--color-icon-accent',
-          muted: '--color-accent-muted',
-          onMuted: null,
-          border: null,
-          focus: '--focus-outline-color',
-        };
-    const plain = plan.fills[f.id];
-    const S = plain.stop;
-    const fillWord = f.id;
-    /** @type {Partial<Record<Mode, string>>} */
-    const exactFill = {};
-    for (const m of modes) {
-      const v = exactOf(names.fill, m);
-      if (v) exactFill[m] = v;
-    }
-    if (Object.keys(exactFill).length) exact[names.fill] = exactFill;
-
-    /** @type {Partial<Record<Mode, StopRef>>} */
-    const fill = {};
-    for (const m of modes) {
-      if (m === 'light' || plain.dark) {
-        fill[m] = {...ref(f.id, m, S), exact: true};
-        continue;
-      }
-      // The dark fill when the exact color does not read there: shade 70,
-      // else the shade nearest 70 that passes, else 70.
-      const start = at(DARK_FILL);
-      const order = [...stops]
-        .filter(s => s > 0 && s < 100)
-        .sort((a, b) => Math.abs(a - start) - Math.abs(b - start) || b - a);
-      const found =
-        order.find(s => {
-          const c = ref(f.id, m, s).color;
-          return (
-            t.page(c, m, f.id) >= NON_TEXT && t.onFor(f.id, m, c).r >= TEXT
-          );
-        }) ?? start;
-      fill[m] = ref(f.id, m, found);
-      if (reports(names.fill))
-        checks.push({
-          token: names.fill,
-          mode: m,
-          stop: found,
-          preferred: S,
-          against: 'the dark page and the text on it',
-          ratio: plain.ratio,
-          needs: TEXT,
-          pass: true,
-          note: `in dark, ${names.fill} is shade ${shade(found)}, not your exact color: ${plain.why}${found === start ? '' : `; shade ${shade(start)} does not pass either, so it is the nearest shade that does`}`,
-        });
-    }
-    put(names.fill, f.id, fill);
-
-    // Text on the fill reads on the fill the theme really uses: the exact
-    // token setting when there is one. The exact color never moves; the
-    // text changes instead.
-    const on = each(m => {
-      const used = exactFill[m] ?? /** @type {StopRef} */ (fill[m]).color;
-      const o = t.onFor(fillWord, m, used);
-      const what = exactFill[m]
-        ? `your exact ${names.fill} (${used})`
-        : `${names.fill} (shade ${shade(Number(fill[m]?.stop))})`;
-      const moved = o.on !== o.first;
-      if (reports(names.on))
-        checks.push({
-          token: names.on,
-          mode: m,
-          stop: o.on.stop,
-          preferred: o.first.stop,
-          against: what,
-          ratio: round(o.r),
-          needs: TEXT,
-          pass: o.r >= TEXT,
-          ...(o.r < TEXT
-            ? {
-                note: `text on ${what} reads at only ${round(o.r)}:1 in ${m} with white or near-black text (needs ${TEXT}:1); the fill keeps your color: pick a lighter or darker ${f.id}, or set ${names.on} exactly`,
-              }
-            : moved
-              ? {
-                  note: `${names.on} uses ${textName(o.on)} text in ${m}, not ${textName(o.first)}, so it reads at ${round(o.r)}:1 on ${what}, where ${textName(o.other)} text reads at only ${round(o.otherR)}:1`,
-                }
-              : {}),
-        });
-      return o.on;
-    });
-    put(names.on, f.id, on);
-
-    // A pale fill in light can disappear into the page: say so, and keep
-    // the exact color, the dial's or the token's.
-    if (modes.includes('light') && has(names.fill)) {
-      const used = exactFill.light ?? /** @type {StopRef} */ (fill.light).color;
-      const p = t.page(used, 'light', f.id);
-      if (p < NON_TEXT)
-        checks.push({
-          token: names.fill,
-          mode: 'light',
-          stop: S,
-          preferred: S,
-          against: 'the light page',
-          ratio: round(p),
-          needs: NON_TEXT,
-          pass: false,
-          note: exactFill.light
-            ? `in light, your exact ${names.fill} (${used}) stands out from the page at only ${round(p)}:1, and a fill needs ${NON_TEXT}:1, so its buttons and badges may not show: give it a darker color`
-            : `in light, your exact ${f.id} stands out from the page at only ${round(p)}:1, and a fill needs ${NON_TEXT}:1, so ${names.fill} buttons and badges may not show: pick a darker ${f.id}`,
-        });
-    }
-
-    // The tint: never the fill's own shade, see-through or not. The accent
-    // tint keeps the official stop (85 light, 30 dark) unless Core's
-    // citation text (--color-text-secondary) reads on it below both 4.5:1
-    // and the official neutral theme's own pair (text-secondary on the
-    // accent tint, read from the installed theme); only then it takes the
-    // nearest shade that reads that well (darker first in dark, lighter
-    // first in light), so it never ships below the official theme.
-    const muted = each(m => {
-      const i = m === 'light' ? 0 : 1;
-      const spec = word ? STATUS_MUTED[i] : ACCENT_MUTED[i];
-      const [s, alpha] = Array.isArray(spec) ? spec : [spec, undefined];
-      // Nearest the official stop first, both ways; on a tie (a layout
-      // without that stop) lighter first in light, darker in dark.
-      const usual = m === 'light' ? 1 : -1;
-      const order = [...stops].sort(
-        (a, b) =>
-          Math.abs(a - s) - Math.abs(b - s) ||
-          (Math.sign(b - a) === usual ? 1 : -1),
-      );
-      const start = order[0];
-      const away = order.filter(x => x !== fill[m]?.stop);
-      const secondary = word ? null : textSecondary(m);
-      if (!secondary) return ref(f.id, m, away[0] ?? start, alpha);
-      const scored = away.map(x => ({
-        stop: x,
-        r: contrast(secondary, ref(f.id, m, x).color),
-      }));
-      const official = officialCitation(m);
-      if (official == null) return ref(f.id, m, away[0] ?? start, alpha);
-      // Readable text (4.5:1) or the official theme's own ratio, whichever
-      // asks less: in dark the official pair reads under 4.5:1, so that is
-      // the bar; in light it reads above, so the tint moves only for text
-      // that does not read.
-      const needs = Math.min(TEXT, official);
-      const b =
-        scored.find(x => x.r >= needs - 0.005) ??
-        scored.reduce((x, y) => (y.r > x.r ? y : x));
-      const pass = b.r >= needs - 0.005;
-      if (reports(names.muted) && (b.stop !== start || !pass))
-        checks.push({
-          token: names.muted,
-          mode: m,
-          stop: b.stop,
-          preferred: start,
-          against: 'citation text (--color-text-secondary)',
-          ratio: round(b.r),
-          needs: round(needs),
-          pass,
-          note: pass
-            ? `${names.muted} uses shade ${shade(b.stop)} in ${m}, not ${shade(start)}, so citation text (--color-text-secondary) reads at ${round(b.r)}:1 on it${needs < TEXT ? `, as well as in the official neutral theme (${round(needs)}:1)` : ''}`
-            : `citation text (--color-text-secondary) reads at only ${round(b.r)}:1 in ${m} on ${names.muted} even at shade ${shade(b.stop)}, the most contrasting one (needs ${round(needs)}:1): pick another ${f.id}, or set ${names.muted} exactly`,
-        });
-      return ref(f.id, m, b.stop, alpha);
-    });
-    put(names.muted, f.id, muted);
-    /** The tint the theme really shows: an exact setting wins. @param {Mode} m */
-    const mutedSeen = m => {
-      const own = exactOf(names.muted, m);
-      return own
-        ? [/** @type {[string, string]} */ ([`your exact ${names.muted}`, own])]
-        : over(
-            names.muted,
-            /** @type {StopRef} */ (muted[m]),
-            surfaces(m, f.id),
-          );
-    };
-
-    const text = each(m =>
-      pick(
-        names.text,
-        f.id,
-        m,
-        at(TEXT_STOP[m === 'light' ? 0 : 1]),
-        [...surfaces(m, f.id), ...mutedSeen(m)],
-        TEXT,
-      ),
-    );
-    put(names.text, f.id, text);
-    put(names.icon, f.id, text);
-    if (names.onMuted) {
-      const onMuted = /** @type {string} */ (names.onMuted);
-      put(
-        onMuted,
-        f.id,
-        each(m =>
-          pick(
-            onMuted,
-            f.id,
-            m,
-            at(ON_MUTED[m === 'light' ? 0 : 1]),
-            mutedSeen(m),
-            TEXT,
-          ),
-        ),
-      );
-    }
-    if (names.border)
-      put(
-        names.border,
-        f.id,
-        each(m => ref(f.id, m, at(BORDER[m === 'light' ? 0 : 1]))),
-      );
-    // The focus ring follows the fill; with an exact fill it keeps
-    // following that (Core's ring reads --color-accent).
-    if (names.focus && !Object.keys(exactFill).length) {
-      const focus = /** @type {string} */ (names.focus);
-      put(
-        focus,
-        f.id,
-        each(m =>
-          pick(
-            focus,
-            f.id,
-            m,
-            /** @type {StopRef} */ (fill[m]).stop,
-            surfaces(m, f.id),
-            NON_TEXT,
-          ),
-        ),
-      );
-    }
-  }
+  const candidate = generate(config, paletteFiles(slug).config, cwd);
+  const mapping = mapPalette(
+    candidate,
+    fams,
+    plan.fills,
+    paletteContext(cwd, slug, data, base, tokenDefaults),
+  );
   return {
     candidate,
     families: fams,
-    tokens,
-    contrast: checks,
+    ...mapping,
     vibrancy: config.vibrancy ?? VIBRANCY_DEFAULT,
-    exact,
     notes: [
       ...plan.notes,
       ...(paletteEdited(cwd, slug)
         ? [
-            `${paletteFiles(slug).palette} was edited by hand: the theme reads only the shades in ${paletteFiles(slug).refs}, which the editor writes, so the edit does not show, and the next color change asks whether to keep or discard it`,
+            `${paletteFiles(slug).palette} was edited by hand, but the theme never reads it: it reads ${paletteFiles(slug).refs}, which the editor writes from the generator, so the edit does not show. The next color change asks whether to keep or discard it`,
           ]
         : []),
     ],
@@ -1901,7 +1685,6 @@ export function paletteDialOf(token) {
 /** Every token a color dial can point at a generated shade. */
 export const PALETTE_TOKENS = new Set([
   ...Object.keys(NEUTRAL_STOPS),
-  '--color-background-body',
   ...Object.keys(NEUTRAL_TINTS),
   '--color-accent',
   '--color-on-accent',
@@ -1931,13 +1714,25 @@ export function mappingRows(dial) {
       'your exact color sits at its own shade, light and dark, and the shades around it follow it (white and black are already the ends of every ramp)',
       ...Object.entries(NEUTRAL_STOPS).map(
         ([t, [l, d]]) =>
-          `${t}: light shade ${l}, dark shade ${d}${t.endsWith('-secondary') ? ` (moves to a shade that reads at ${t.includes('icon') ? NON_TEXT : TEXT}:1 on the surfaces)` : ''}`,
+          `${t}: light shade ${l}, dark shade ${d}${t.endsWith('-secondary') ? ` (moves to a shade that reads at ${t.includes('icon') ? NON_TEXT : TEXT}:1 on the surfaces)` : NEUTRAL_INSIDE.includes(t) ? ' (the card surface of the other mode, for tooltips and toasts, at the nearest shade inside the ramp so it carries your color)' : ''}`,
       ),
       ...Object.entries(NEUTRAL_TINTS).map(
         ([t, [[l, la], [d, da]]]) =>
           `${t}: light shade ${l} at opacity ${la}, dark shade ${d} at opacity ${da}`,
       ),
-      "--color-background-body: the base theme's page color, so a tinted gray never tints the page",
+      ...Object.entries(LIFT_GROUNDS)
+        .filter(([g]) => !g.startsWith('--color-background-'))
+        .map(
+          ([, g]) =>
+            `--color-text-secondary on ${g.parts}: the shade nearest the secondary text's that reads at ${TEXT}:1 on ${g.what} and under a hover, as the official theme lifts it`,
+        ),
+      ...(Object.keys(LIFT_GROUNDS).some(g =>
+        g.startsWith('--color-background-'),
+      )
+        ? [
+            `--color-text-secondary on coloured cards: the shade nearest the secondary text's that reads at ${TEXT}:1 on each card's fill, as the official theme lifts it`,
+          ]
+        : []),
     ];
   const word = dial === 'accent' ? null : STATUS_TOKEN[dial];
   if (dial !== 'accent' && !word) return [];
@@ -1953,7 +1748,7 @@ export function mappingRows(dial) {
     `${t('--color-text-$', '--color-text-accent')} and ${t('--color-icon-$', '--color-icon-accent')}: light shade ${TEXT_STOP[0]}, dark shade ${TEXT_STOP[1]} (moves to the nearest shade, darker or lighter, that reads at ${TEXT}:1 on the surfaces and the muted tint)`,
     word
       ? `--color-${word}-muted: light shade ${STATUS_MUTED[0]}, dark shade ${STATUS_MUTED[1][0]} at opacity ${STATUS_MUTED[1][1]} over the surface, never the fill's own shade`
-      : `--color-accent-muted: light shade ${ACCENT_MUTED[0]}, dark shade ${ACCENT_MUTED[1]}, as the official neutral theme maps it; moved to the nearest shade only when citation text (--color-text-secondary) would read on it below both ${TEXT}:1 and the official theme's own ratio, and never the fill's own shade`,
+      : `--color-accent-muted: light shade ${ACCENT_MUTED[0]}, dark shade ${ACCENT_MUTED[1]}, as the official neutral theme maps it, never the fill's own shade; secondary text on the parts that sit on it (selected items and rows, a dropzone, numbered citations) is lifted instead, to the gray nearest it that reads at ${TEXT}:1 on the tint and under a hover: the neutral color's shades, else grays grown from the base theme's own secondary text`,
   ];
   if (word)
     rows.push(
@@ -1969,6 +1764,76 @@ export function mappingRows(dial) {
     `an exact ${t('--color-$', '--color-accent')} setting wins: the text on it is picked to read on your color, and the other tokens keep the generated shades`,
   );
   return rows;
+}
+
+/**
+ * The contrast checks of the colors a dial makes, in the theme's modes.
+ * @param {PaletteMapping} pal
+ * @param {string} dial
+ * @param {Mode[]} modes
+ */
+function dialChecks(pal, dial, modes) {
+  return pal.contrast.filter(
+    c =>
+      (pal.tokens[c.token]?.family === dial || c.dials?.includes(dial)) &&
+      // A theme with one mode never shows the other one's shades.
+      modes.includes(c.mode),
+  );
+}
+
+/**
+ * What one contrast check says: its own note, or for a failed one the
+ * ratio it reached.
+ * @param {PaletteMapping['contrast'][number]} c
+ * @param {string} dial
+ */
+function checkNote(c, dial) {
+  return (
+    c.note ||
+    `${c.token} reads at only ${c.ratio}:1 in ${c.mode} on ${c.against} (needs ${c.needs}:1) even at shade ${shade(c.stop)}, the most contrasting one: pick a lighter or darker ${dial}, or set ${c.token} exactly`
+  );
+}
+
+/**
+ * A contrast check's identity: its token, its mode and what it is measured
+ * on, whatever ratio or shade it reaches. The same check before and after a
+ * change has the same key, as a text or border problem's key does.
+ * @param {ContrastCheck} c
+ */
+export function paletteCheckKey(c) {
+  return `palette|${c.token}|${c.mode}|${c.against}`;
+}
+
+/**
+ * The contrast checks a dial's colors fail, as their notes say them, each
+ * with its identity ({@link paletteCheckKey}), to tell the checks a change
+ * made fail from the ones that failed before it.
+ * @param {PaletteMapping | null} pal
+ * @param {string} dial
+ * @param {Mode[]} [modes] the modes the theme has
+ * @returns {Array<{key: string, text: string}>}
+ */
+export function paletteFailures(pal, dial, modes = ['light', 'dark']) {
+  if (!pal) return [];
+  return dialChecks(pal, dial, modes)
+    .filter(c => !c.pass)
+    .map(c => ({
+      key: paletteCheckKey(c),
+      text: checkNote(c, dial),
+      ...(c.fix ? {fix: c.fix} : {}),
+    }));
+}
+
+/**
+ * The identities of every contrast check a palette fails, whatever its
+ * dial: what a change compares its own failures with.
+ * @param {PaletteMapping | null} pal
+ * @returns {Set<string>}
+ */
+export function paletteFailedKeys(pal) {
+  return new Set(
+    (pal?.contrast ?? []).filter(c => !c.pass).map(paletteCheckKey),
+  );
 }
 
 /**
@@ -1998,7 +1863,13 @@ export function paletteNotes(pal, dial, slug, modes = ['light', 'dark']) {
     notes.push(
       `${token} uses your exact setting (${shown}), not the generated ${dial} shade: an exact setting wins${dial === 'neutral' ? '' : '; the text on it is picked to read on your color'}${dial === 'accent' ? ', and the focus ring keeps following it' : ''}`,
     );
-  } else if (main) {
+  }
+  const unread = pal.unread?.[token];
+  if (unread) {
+    notes.push(
+      `${token} keeps your exact setting (${unread}), which the editor cannot read as one color${exact ? ' in every mode' : ''}: an exact setting wins, so the generated ${dial} shade does not show${dial === 'neutral' ? '' : ' there, and the text on it is not checked against your color: set a fixed color, or set the text color on it exactly'}`,
+    );
+  } else if (!exact && main) {
     /** @param {Mode} m */
     const part = m =>
       main[m].exact
@@ -2011,17 +1882,12 @@ export function paletteNotes(pal, dial, slug, modes = ['light', 'dark']) {
   const given = pal.families.find(x => x.dial === dial);
   if (given && isClipped(given.value))
     notes.push(
-      `your ${dial} ${given.value} is outside the colors every screen shows (sRGB), so the nearest one, ${given.seed}, is used`,
+      given.source
+        ? `your ${dial} ${given.value} is outside the colors every screen shows (sRGB); the nearest one is ${seedOf(given.value)}, but the ${given.source} your theme source sets, ${given.seed}, is used`
+        : `your ${dial} ${given.value} is outside the colors every screen shows (sRGB), so the nearest one, ${seedOf(given.value)}, is used`,
     );
-  for (const c of pal.contrast) {
-    if (pal.tokens[c.token]?.family !== dial) continue;
-    // A theme with one mode never shows the other one's shades.
-    if (!modes.includes(c.mode)) continue;
-    if (c.note) notes.push(c.note);
-    else if (!c.pass)
-      notes.push(
-        `${c.token} reads at only ${c.ratio}:1 in ${c.mode} on ${c.against} (needs ${c.needs}:1) even at shade ${shade(c.stop)}, the most contrasting one: pick a lighter or darker ${dial}, or set ${c.token} exactly`,
-      );
+  for (const c of dialChecks(pal, dial, modes)) {
+    if (c.note || !c.pass) notes.push(checkNote(c, dial));
     else if (c.stop !== c.preferred)
       notes.push(
         `${c.token} uses shade ${shade(c.stop)} in ${c.mode}, not ${shade(c.preferred)}, so it reads at ${c.ratio}:1 on ${c.against}`,

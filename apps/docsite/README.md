@@ -26,7 +26,8 @@ from the monorepo and writes typed TypeScript registries to `src/generated/`.
 
 | Registry                      | Source                                             | What it contains                                              |
 | ----------------------------- | -------------------------------------------------- | ------------------------------------------------------------- |
-| `packageRegistry.ts`          | `packages/*/package.json`                          | Name, version, description, README for each published package |
+| `packageRegistry.ts`          | `packages/*/package.json`                          | Name, version, description for each published package         |
+| `packageText.json`            | Each package's `README.md` and `CHANGELOG.md`      | README and changelog text of each package, for server modules |
 | `componentRegistry.ts`        | Core + CLI-configured integration `.doc.mjs` files | Props, usage docs, hooks, groups, per package                 |
 | `componentPreviewRegistry.ts` | Components from those same packages                | Runtime exports for the shared Properties preview             |
 | `blockRegistry.ts`            | CLI + integration template blocks                  | Showcase and example blocks with metadata                     |
@@ -100,9 +101,23 @@ them with an installed icon set instead, build with
 separated by commas: `DOCSITE_ICON_SET=<package>/<set>,<package>/<backup>`.
 Each icon comes from the first set in the list that has its meaning, the same
 rule `astryx template` uses, and an icon no set has draws a placeholder that
-the preview's source declares. Install each set's package in the docsite first. A changed setting rebuilds the previews; there is no need to delete `.next`. Unset, the build is
+the preview's source declares. Install each set's package in the docsite first.
+When a set's library is one huge barrel module, the build imports each icon from its own file, so a preview compiles only the icons the set uses. A changed setting rebuilds the previews; there is no need to delete `.next`. Unset, the build is
 unchanged. This setting is experimental: it may change or be removed in a
 patch release.
+
+## Template preview images
+
+Template and block previews load the PNG and JPEG files under
+`public/template-assets` through the Next.js image optimizer (`/_next/image`).
+`scripts/template-image-loader.mjs` rewrites the `/template-assets/` paths in
+the modules that a preview renders. The template sources and the code the site
+shows keep their paths. `astryx template` and the shadcn Install item still
+replace them with placeholders. Vector images, video, and a path with no file
+stay as written.
+
+Each image keeps its pixel size, up to 1920 pixels wide, and arrives in the
+format the browser accepts.
 
 ## Adding a New Theme
 

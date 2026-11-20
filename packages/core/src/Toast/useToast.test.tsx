@@ -232,6 +232,229 @@ describe('useToast fallback viewport theme mode', () => {
     ).toBe('light');
   });
 
+  it('draws a toast shown from a Theme under that Theme, whatever <html> says', async () => {
+    // A host page (an artifact viewer) can rewrite <html data-astryx-theme>
+    // to its own theme. A toast shown from inside the app's Theme still
+    // draws under that Theme and mode.
+    const caller = defineTheme({name: 'fallback-caller', tokens: {}});
+    render(
+      <Theme theme={caller} mode="light">
+        <ShowToastButton label="Trigger Caller" />
+      </Theme>,
+    );
+    document.documentElement.setAttribute('data-astryx-theme', 'host-page');
+    document.documentElement.setAttribute('data-theme', 'dark');
+    await act(async () => {
+      fireEvent.click(screen.getByText('Trigger Caller'));
+    });
+    await waitFor(() => {
+      expect(
+        document.querySelector(
+          '[data-astryx-toast-fallback] [data-astryx-theme="fallback-caller"]',
+        ),
+      ).not.toBeNull();
+    });
+    const scope = document.querySelector(
+      '[data-astryx-toast-fallback] [data-astryx-theme="fallback-caller"]',
+    ) as HTMLElement;
+    expect(scope).toHaveAttribute('data-theme', 'light');
+    // The toast card sits inside the caller's scope, so the caller's theme
+    // CSS reaches it and the host page's stops at the scope.
+    expect(scope.querySelector('[data-astryx-media]')).not.toBeNull();
+    // Light page: the inverted card is the dark side.
+    expect(newestMediaAttr(scope)).toBe('dark');
+  });
+
+  it('draws a toast shown from outside any Theme under <html>, with no scope of its own', async () => {
+    function ShowOutside() {
+      const toast = useToast();
+      return (
+        <button
+          type="button"
+          onClick={() => toast({body: 'outside any Theme', isAutoHide: false})}>
+          Trigger Outside
+        </button>
+      );
+    }
+    document.documentElement.setAttribute('data-astryx-theme', 'host-page');
+    document.documentElement.setAttribute('data-theme', 'dark');
+    render(<ShowOutside />);
+    await act(async () => {
+      fireEvent.click(screen.getByText('Trigger Outside'));
+    });
+    await waitFor(() => {
+      expect(screen.getByText('outside any Theme')).toBeInTheDocument();
+    });
+    const fallback = document.querySelector(
+      '[data-astryx-toast-fallback]',
+    ) as HTMLElement;
+    expect(fallback).toHaveAttribute('data-astryx-theme', 'host-page');
+    expect(fallback).toHaveAttribute('data-theme', 'dark');
+    // The nearest theme scope is the fallback container, which mirrors <html>.
+    expect(
+      screen.getByText('outside any Theme').closest('[data-astryx-theme]'),
+    ).toBe(fallback);
+  });
+
+  it('follows a theme or mode change of its caller while the toast shows', async () => {
+    const first = defineTheme({name: 'fallback-first', tokens: {}});
+    const second = defineTheme({name: 'fallback-second', tokens: {}});
+    const {rerender} = render(
+      <Theme theme={first} mode="light">
+        <ShowToastButton label="Trigger Follow" />
+      </Theme>,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByText('Trigger Follow'));
+    });
+    const scopeOf = (name: string) =>
+      document.querySelector(
+        `[data-astryx-toast-fallback] [data-astryx-theme="${name}"]`,
+      );
+    await waitFor(() => {
+      expect(scopeOf('fallback-first')).toHaveAttribute('data-theme', 'light');
+    });
+    rerender(
+      <Theme theme={first} mode="dark">
+        <ShowToastButton label="Trigger Follow" />
+      </Theme>,
+    );
+    await waitFor(() => {
+      expect(scopeOf('fallback-first')).toHaveAttribute('data-theme', 'dark');
+    });
+    rerender(
+      <Theme theme={second} mode="dark">
+        <ShowToastButton label="Trigger Follow" />
+      </Theme>,
+    );
+    await waitFor(() => {
+      expect(scopeOf('fallback-second')).toHaveAttribute('data-theme', 'dark');
+    });
+    expect(scopeOf('fallback-first')).toBeNull();
+  });
+
+  it('follows its Theme after the component that showed it unmounts', async () => {
+    const kept = defineTheme({name: 'fallback-kept', tokens: {}});
+    const {rerender} = render(
+      <Theme theme={kept} mode="light">
+        <ShowToastButton label="Trigger Kept" />
+      </Theme>,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByText('Trigger Kept'));
+    });
+    const scope = () =>
+      document.querySelector(
+        '[data-astryx-toast-fallback] [data-astryx-theme="fallback-kept"]',
+      );
+    await waitFor(() => {
+      expect(scope()).toHaveAttribute('data-theme', 'light');
+    });
+    rerender(
+      <Theme theme={kept} mode="light">
+        {null}
+      </Theme>,
+    );
+    rerender(
+      <Theme theme={kept} mode="dark">
+        {null}
+      </Theme>,
+    );
+    await waitFor(() => {
+      expect(scope()).toHaveAttribute('data-theme', 'dark');
+    });
+  });
+
+  it('draws an overwrite from a second Theme under that Theme', async () => {
+    const one = defineTheme({name: 'fallback-one', tokens: {}});
+    const two = defineTheme({name: 'fallback-two', tokens: {}});
+    function Show({label, body}: {label: string; body: string}) {
+      const toast = useToast();
+      return (
+        <button
+          type="button"
+          onClick={() =>
+            toast({body, uniqueID: 'two-themes', isAutoHide: false})
+          }>
+          {label}
+        </button>
+      );
+    }
+    // The second Theme is nested, so <html> keeps the first one's theme and
+    // mode: only the overwrite rule draws the second toast under the second
+    // Theme.
+    render(
+      <Theme theme={one} mode="light">
+        <Show label="From one" body="two-themes first" />
+        <Theme theme={two} mode="dark">
+          <Show label="From two" body="two-themes second" />
+        </Theme>
+      </Theme>,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByText('From one'));
+    });
+    await waitFor(() => {
+      expect(screen.getByText('two-themes first')).toBeInTheDocument();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText('From two'));
+    });
+    await waitFor(() => {
+      expect(screen.getByText('two-themes second')).toBeInTheDocument();
+    });
+    const scope = screen
+      .getByText('two-themes second')
+      .closest('[data-astryx-theme]');
+    expect(scope).toHaveAttribute('data-astryx-theme', 'fallback-two');
+    expect(scope).toHaveAttribute('data-theme', 'dark');
+    expect(document.documentElement).toHaveAttribute(
+      'data-astryx-theme',
+      'fallback-one',
+    );
+  });
+
+  it('keeps focus in place when a toast from outside any Theme overwrites one from inside', async () => {
+    const themed = defineTheme({name: 'fallback-mixed', tokens: {}});
+    function Show({label, body}: {label: string; body: string}) {
+      const toast = useToast();
+      return (
+        <button
+          type="button"
+          onClick={() => toast({body, uniqueID: 'mixed', isAutoHide: false})}>
+          {label}
+        </button>
+      );
+    }
+    render(
+      <>
+        <Theme theme={themed} mode="light">
+          <Show label="From inside" body="mixed first" />
+        </Theme>
+        <Show label="From outside" body="mixed second" />
+      </>,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByText('From inside'));
+    });
+    await waitFor(() => {
+      expect(screen.getByText('mixed first')).toBeInTheDocument();
+    });
+    const rowOf = (text: string) =>
+      screen.getByText(text).closest('[data-toast-id]') as HTMLElement;
+    const dismiss = rowOf('mixed first').querySelector('button')!;
+    dismiss.focus();
+    expect(document.activeElement).toBe(dismiss);
+    await act(async () => {
+      fireEvent.click(screen.getByText('From outside'));
+    });
+    await waitFor(() => {
+      expect(screen.getByText('mixed second')).toBeInTheDocument();
+    });
+    expect(rowOf('mixed second').querySelector('button')).toBe(dismiss);
+    expect(document.activeElement).toBe(dismiss);
+  });
+
   it('mirrors <html data-theme> and data-astryx-theme onto the fallback container', async () => {
     mockMatchMedia(false);
 

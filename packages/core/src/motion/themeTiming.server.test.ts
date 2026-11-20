@@ -39,6 +39,7 @@ describe('the theme-timing reader on the server', () => {
     expect(importOnServer(path.join(__dirname, 'themeTiming.ts'))).toEqual([
       'declaredTimingTokens',
       'readThemeTiming',
+      'readThemeTimingOrInstant',
       'readThemeTokenText',
       'readThemeTokens',
       'resolveTiming',

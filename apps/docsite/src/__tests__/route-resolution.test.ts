@@ -90,11 +90,12 @@ describe('route resolution', () => {
 
   it('lists the guides the sidebar listed before the splits, plus new topics only', () => {
     // The Guide section as it was before the CLI integration guide and the
-    // other topics were split into short guides. `styling-overview` and
-    // `cli-host-entry` are topics added since; `global` is the Global mode
+    // other topics were split into short guides. `styling-overview`,
+    // `cli-host-entry` and `cli-skill-places` are topics added since; `global` is the Global mode
     // page; `authoring` holds what CLI Integrations and Writing docs did;
     // `use-integrations` is the guide for apps that install one;
-    // `cli-experimental-render-pages` is the experimental render guide;
+    // `cli-experimental-export-pages` is the experimental export guide and
+    // `cli-experimental-share-a-page` the task guide that uses it;
     // `calendars` is the calendar systems page.
     // `styling` shows under `styling-overview`, and
     // `cli-experimental-icon-sets` and `cli-experimental-icon-set-files`
@@ -109,8 +110,10 @@ describe('route resolution', () => {
         'browser-support',
         'calendars',
         'cli-component-lookups',
-        'cli-experimental-render-pages',
+        'cli-experimental-export-pages',
+        'cli-experimental-share-a-page',
         'cli-host-entry',
+        'cli-skill-places',
         'global',
         'internationalization',
         'is-my-code-good',
@@ -127,7 +130,7 @@ describe('route resolution', () => {
     );
   });
 
-  it('shows Calendars as its own guide page, listed right after Internationalization', () => {
+  it('shows Calendars as its own guide page, under Internationalization in the sidebar', () => {
     const calendars = pageBySlug.get('calendars');
     expect(calendars?.category).toBe('guide');
     expect(calendars?.sections.map(section => section.id)).toContain(
@@ -140,13 +143,8 @@ describe('route resolution', () => {
     expect(docRedirects['internationalization-i18n-calendars']).toMatch(
       /^\/docs\/internationalization#/,
     );
-    // The sidebar lists guides by title (DocsShell).
-    const byTitle = docTopics
-      .filter(d => d.category === 'guide' && d.topic !== 'getting-started')
-      .sort((a, b) => a.title.localeCompare(b.title))
-      .map(d => d.topic);
-    expect(byTitle.indexOf('calendars')).toBe(
-      byTitle.indexOf('internationalization') + 1,
+    expect(docTopics.find(d => d.topic === 'calendars')?.parent).toBe(
+      'internationalization',
     );
   });
 

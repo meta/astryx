@@ -9,13 +9,24 @@ import {Card} from '@astryxdesign/core/Card';
 import {VStack} from '@astryxdesign/core/Layout';
 import {useOverlay} from '@astryxdesign/core/Overlay';
 import {Text} from '@astryxdesign/core/Text';
+import {useToast} from '@astryxdesign/core/Toast';
 
 export default function UseOverlayHookUsage() {
+  const showToast = useToast();
   const overlay = useOverlay({
     showOn: 'hover',
     position: 'bottom',
     align: 'center',
-    content: <Button label="Quick view" variant="secondary" size="sm" />,
+    content: (
+      <Button
+        label="Quick view"
+        variant="secondary"
+        size="sm"
+        onClick={() =>
+          showToast({body: 'Demo: a quick view of the product would open here'})
+        }
+      />
+    ),
   });
 
   return (

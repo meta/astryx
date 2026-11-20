@@ -67,7 +67,7 @@ function planIn(files, changed, map = MAP) {
 }
 
 const STORY = (title, component, folder) =>
-  `import {${component}} from '@astryxdesign/core/${folder}';\nimport {Button} from '@astryxdesign/core/Button';\nexport default {title: 'x'};\nconst meta = {\n  title: '${title}',\n  component: ${component},\n};\n`;
+  `import {${component}} from '@astryxdesign/core/${folder}';\nimport {Button} from '@astryxdesign/core/Button';\nconst meta = {\n  title: '${title}',\n  component: ${component},\n};\nexport default meta;\n`;
 
 const TREE = {
   [SPEC]:

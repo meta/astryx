@@ -11,7 +11,7 @@
  * @position CLI presentation adapter for project and integration health.
  */
 
-import {runChecks} from '../../../api/doctor/doctor.mjs';
+import {builtTarget, runChecks} from '../../../api/doctor/doctor.mjs';
 import {
   integrationComponentConflicts,
   integrationDocConflicts,
@@ -22,14 +22,7 @@ import {
   validateIntegration,
 } from '../../../api/integration/validate-integration.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
-import {
-  emit,
-  list,
-  section,
-  record,
-  records,
-  text,
-} from '../formatters/index.mjs';
+import {emit, list, section, records, text} from '../formatters/index.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {doc as doctorCommand} from './doctor.doc.mjs';
 import {doc as doctorIntegrationGroup} from './doctor-integration.doc.mjs';
@@ -45,7 +38,10 @@ import {doc as integrationDocConflictsFn} from '../../../api/integration/integra
 import {NO_RESULT_SET} from '../../../foundation/debug/index.mjs';
 import {cliError} from '../lib/cli-error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
-import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
+import {
+  formatCliCommand,
+  quoteCommandArgument,
+} from '../../../foundation/env/package-manager.mjs';
 import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
 import {templateMeaningsLine} from '../../../foundation/text/template-meanings-line.mjs';
 
@@ -57,6 +53,24 @@ const STATUS = {
   error: '[fail]',
   info: '[info]',
 };
+
+/** A doctor check's fields in text order: the status column, then the rest. */
+const CHECK_FIELDS = /** @type {const} */ ([
+  'status',
+  'id',
+  'label',
+  'message',
+  'fix',
+]);
+
+/**
+ * A check as text prints it: its brief, when it has one, in place of its
+ * message.
+ * @param {import('../../../api/doctor/doctor.mjs').DoctorCheck} check
+ */
+function briefInPlace({brief, ...check}) {
+  return brief == null ? check : {...check, message: brief};
+}
 
 /** @param {string} status */
 function statusToken(status) {
@@ -80,15 +94,25 @@ function printHuman(report) {
         ? 'No failures — but review the [warn] warnings above when you can.'
         : 'All checks passed. Your Astryx setup looks healthy.';
 
-  // Field names are the JSON keys, so text and --json map one to one.
+  // One check per line, status first so the counted value stays a column.
+  // The legend names each field by its JSON key, so text and --json map one
+  // to one. A check's brief takes its message's place; --json keeps both.
+  const summaryFields = /** @type {const} */ (['pass', 'warn', 'fail', 'info']);
+  const briefed = report.checks.some(check => check.brief != null);
+  const legend = CHECK_FIELDS.map(field =>
+    field === 'message' && briefed ? 'message (or brief)' : field,
+  );
   emit(
-    section('astryx doctor — diagnosing your setup'),
-    records(report.checks, {
-      fields: ['id', 'status', 'label', 'message', 'fix'],
-      format: {status: statusToken},
+    section('astryx doctor', `Each check: ${legend.join(', ')}`),
+    records(report.checks.map(briefInPlace), {
+      fields: [...CHECK_FIELDS],
+      layout: 'inline',
+      format: {status: statusToken, fix: fix => `fix: ${fix}`},
     }),
-    section('summary'),
-    record(report.summary, {fields: ['pass', 'warn', 'fail', 'info']}),
+    section(
+      'summary',
+      summaryFields.map(key => `${key}: ${report.summary[key]}`).join(', '),
+    ),
     text(closing),
   );
 }
@@ -305,6 +329,26 @@ function printIntegrationValidation(data, seen) {
           ),
           records(data.publicImports.unchecked, {
             fields: ['file', 'specifier', 'reason'],
+          }),
+        ]
+      : []),
+    ...(data.shippedImports && data.shippedImports.unchecked.length > 0
+      ? [
+          text(
+            `[info] Relative imports whose packing was not checked: ${data.shippedImports.unchecked.length}:`,
+          ),
+          records(data.shippedImports.unchecked, {
+            fields: ['file', 'specifier', 'reason'],
+          }),
+        ]
+      : []),
+    ...(data.exampleCode && data.exampleCode.unchecked.length > 0
+      ? [
+          text(
+            `[info] Examples not checked: ${data.exampleCode.unchecked.length}:`,
+          ),
+          records(data.exampleCode.unchecked, {
+            fields: ['file', 'example', 'reason'],
           }),
         ]
       : []),
@@ -843,6 +887,34 @@ function unknownWord(invoked) {
 }
 
 /**
+ * The refusal of paths given to `doctor` as words: a path is checked with
+ * `--built`, which takes one. One path without `--built` is that path with
+ * it; several paths are the folder that holds them all.
+ * @param {string | undefined} built the `--built` value, if any
+ * @param {string[]} paths every path given, the `--built` value first
+ * @param {string} target the path `--built` checks for them
+ * @returns {never}
+ */
+function pathWords(built, paths, target) {
+  const run = `astryx doctor --built ${quoteCommandArgument(target)}`;
+  if (built == null && paths.length === 1)
+    return cliError(
+      `doctor takes no path: ${paths[0]} is checked with --built`,
+      {
+        suggestions: [{name: run, reason: 'check that path'}],
+        code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,
+      },
+    );
+  return cliError(
+    `--built takes one path, and doctor was given ${paths.length}: ${paths.join(', ')}`,
+    {
+      suggestions: [{name: run, reason: 'the folder that holds them all'}],
+      code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,
+    },
+  );
+}
+
+/**
  * Report an unknown subcommand, in text as in JSON, with the ones the group has.
  * @param {import('commander').Command} group
  * @param {string} label the group's full name
@@ -870,6 +942,15 @@ export function registerDoctor(program) {
     // `doctor integrations` is a mistyped subcommand, not a project check.
     action: async (options, invoked) => {
       const word = unknownWord(invoked);
+      // Paths, not a subcommand: `doctor .` or `doctor --built a b`.
+      const paths = [
+        ...(options.built == null ? [] : [String(options.built)]),
+        ...(invoked?.args ?? [])
+          .map(String)
+          .filter((/** @type {string} */ w) => !w.startsWith('-')),
+      ];
+      const target = word == null ? null : builtTarget(paths);
+      if (target != null) return pathWords(options.built, paths, target);
       if (word != null) return unknownSubcommand(doctorCmd, 'doctor', word);
       return runProjectDoctor(program, options);
     },
