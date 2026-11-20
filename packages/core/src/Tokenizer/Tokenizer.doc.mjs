@@ -92,7 +92,7 @@ export const docs = {
       name: 'isDisabled',
       type: 'boolean',
       description:
-        'Disables the input and all token interactions. The input keeps its tab stop: it is announced as disabled (aria-disabled), is read-only, and opens and picks nothing. With tokenOverflowBehavior="unfocusedLayer" and no disabledMessage, the input is natively disabled and out of the tab order.',
+        'Disables the input and all token interactions. The input keeps its tab stop: it is announced as disabled (aria-disabled), is read-only, and opens and picks nothing. With tokenOverflowBehavior="unfocusedLayer", the placeholder of the collapsed field keeps that tab stop.',
       default: 'false',
     },
     {
@@ -415,6 +415,12 @@ export const docs = {
         required: false,
         description:
           'A button that removes all selected tokens at once. Shown when hasClear is true and tokens are present.',
+      },
+      {
+        name: 'Status icon',
+        required: false,
+        description:
+          'Error, warning, or success icon at the end of the field. With statusVariant tooltip it is a button that reveals the status message.',
       },
     ],
   },
@@ -779,6 +785,12 @@ export const docsZh = {
         required: false,
         description:
           'A button that removes all selected tokens at once. Shown when hasClear is true and tokens are present.',
+      },
+      {
+        name: 'Status icon',
+        required: false,
+        description:
+          'Error, warning, or success icon at the end of the field. With statusVariant tooltip it is a button that reveals the status message.',
       },
     ],
   },

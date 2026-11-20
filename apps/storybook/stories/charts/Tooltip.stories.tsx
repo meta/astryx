@@ -11,8 +11,17 @@ import {
   ChartGrid,
   ChartAxis,
   currency,
+  type ChartTooltipProps,
+  type TooltipSeriesValue,
 } from '@astryxdesign/charts';
-import {defineTheme, MediaTheme, Theme, useLocale} from '@astryxdesign/core';
+import {
+  defineTheme,
+  MediaTheme,
+  Text,
+  Theme,
+  useLocale,
+  VStack,
+} from '@astryxdesign/core';
 import {
   colorVars,
   radiusVars,
@@ -73,7 +82,12 @@ function TooltipChart({showLineDots = false}: {showLineDots?: boolean}) {
 }
 
 /** Hover the chart: a grouped tooltip shows every series value at that x, with a
- *  column highlight for bars and hover dots on lines. */
+ *  column highlight for bars and hover dots on lines. Today `placement`
+ *  defaults to `'auto'`, which puts the card to the right of the hovered x and
+ *  flips it left at the viewport edge; `'right'` and `'left'` pin the card to
+ *  that side, and `'top'` centers it on the hovered x above the plot's top
+ *  edge. Every value keeps the card inside the viewport. What placement should
+ *  mean is ChartTooltip open question OQ1. */
 export const Default: StoryObj = {
   render: () => <TooltipChart />,
   play: async ({canvasElement}) => {
@@ -162,6 +176,118 @@ export const Default: StoryObj = {
       expect(tooltipText()).toEqual([]);
     });
   },
+};
+
+/** Support tickets a help desk opened and resolved on each day of one week. */
+const SUPPORT_TICKETS_BY_DAY = [
+  {day: 'Mon', opened: 142, resolved: 128},
+  {day: 'Tue', opened: 156, resolved: 149},
+  {day: 'Wed', opened: 131, resolved: 140},
+  {day: 'Thu', opened: 148, resolved: 151},
+  {day: 'Fri', opened: 119, resolved: 133},
+  {day: 'Sat', opened: 54, resolved: 61},
+  {day: 'Sun', opened: 47, resolved: 50},
+];
+
+function SupportTicketsChart({
+  tooltip,
+}: {
+  tooltip: Omit<ChartTooltipProps, 'series'>;
+}) {
+  return (
+    <Chart
+      data={SUPPORT_TICKETS_BY_DAY}
+      xKey="day"
+      series={[
+        bar('opened', {label: 'Opened'}),
+        line('resolved', {label: 'Resolved'}),
+      ]}
+      title="Support tickets per day"
+      subtitle="Tickets opened and resolved, one week"
+      legend
+      tooltip={tooltip}
+      grid={<ChartGrid />}
+      axes={
+        <>
+          <ChartAxis position="bottom" />
+          <ChartAxis position="left" />
+        </>
+      }
+      height={320}
+    />
+  );
+}
+
+function BacklogTooltip({
+  day,
+  rows,
+}: {
+  day: unknown;
+  rows: TooltipSeriesValue[];
+}) {
+  const valueOf = (key: string) =>
+    Number(rows.find(row => row.key === key)?.value);
+  const opened = valueOf('opened');
+  const resolved = valueOf('resolved');
+  const change = opened - resolved;
+  return (
+    <VStack gap={1}>
+      <Text type="body" weight="semibold">
+        {String(day)}
+      </Text>
+      <Text type="supporting">Opened: {opened}</Text>
+      <Text type="supporting">Resolved: {resolved}</Text>
+      <Text type="supporting" weight="semibold">
+        Backlog change: {change > 0 ? `+${change}` : change}
+      </Text>
+    </VStack>
+  );
+}
+
+/**
+ * `tooltip.render` replaces the card body. It gets the hovered x value and one
+ * row per visible series, so the card can show a value the default card
+ * cannot. Here it adds the backlog change: tickets opened minus tickets
+ * resolved.
+ *
+ * To check: hover Wed. The card reads "Wed", "Opened: 131", "Resolved: 140" and
+ * "Backlog change: -9", with no color swatches.
+ */
+export const CustomRender: StoryObj = {
+  render: () => (
+    <SupportTicketsChart
+      tooltip={{
+        render: (day, rows) => <BacklogTooltip day={day} rows={rows} />,
+      }}
+    />
+  ),
+  parameters: {controls: {disable: true}},
+};
+
+/**
+ * `tooltip.hoverIndicator: false` removes the mark at the hovered x. A chart
+ * with bars draws a soft column highlight there; a chart without bars draws a
+ * vertical line. The card and the hover dots stay.
+ *
+ * To check: hover any day. The card and the ring on the Resolved line appear,
+ * but the column behind the bar is not shaded.
+ */
+export const HoverIndicatorOff: StoryObj = {
+  render: () => <SupportTicketsChart tooltip={{hoverIndicator: false}} />,
+  parameters: {controls: {disable: true}},
+};
+
+/**
+ * `tooltip.showHoverDots: false` removes the ring that marks the hovered point
+ * on each line, area and dot series. Bars never get a ring. The card and the
+ * column highlight stay.
+ *
+ * To check: hover any day. The card and the shaded column appear, but the
+ * Resolved line has no ring at that day.
+ */
+export const HoverDotsOff: StoryObj = {
+  render: () => <SupportTicketsChart tooltip={{showHoverDots: false}} />,
+  parameters: {controls: {disable: true}},
 };
 
 function ModalLayeringFixture() {

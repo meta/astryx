@@ -68,6 +68,7 @@ import {createSharedContext} from '../../../utils/sharedContext';
 
 registerEnglishFallback(english);
 import {TableContext} from '../../TableContext';
+import {defaultCellRenderer} from '../../columnUtils';
 import {registerCountIndependentPlugin} from '../../tableRowContextUsage';
 
 // =============================================================================
@@ -707,10 +708,7 @@ export function useTableTreeData<T extends Record<string, unknown>>(
                   <TreeCellContent item={item}>
                     {originalRenderCell
                       ? originalRenderCell(item)
-                      : String(
-                          (item[col.key] as
-                            string | number | null | undefined) ?? '',
-                        )}
+                      : defaultCellRenderer(item, col.key)}
                   </TreeCellContent>
                 ),
               };

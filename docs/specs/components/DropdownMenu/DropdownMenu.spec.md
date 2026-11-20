@@ -148,11 +148,6 @@ component-local concepts; each keeps its released default.
 | FR22 | Under a finger, in the touch modes, where the primary pointer is coarse (a phone or a tablet), a tap or a drag that lands while the pointer menu enters MUST reach nothing: it closes nothing, scrolls nothing, moves no focus and clicks nothing (`spec:AST-094` FR35). The finger that opened the menu still picks the row it lifts on (FR8). Keys and assistive technology stay live. A mouse, a pinned `'popover'` and a finger where the primary pointer is fine (a touchscreen laptop) hold nothing, as for `component:Drawer`. Implementation gap: after a finger, a still mouse's first press lands on the entering menu's shield unless the mouse rests where the page last heard it when the shield came up (`spec:AST-094` FR35).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `spec:AST-094` FR35; `architecture:layer-runtime`                              |
 | FR23 | Tab or Shift+Tab on a row at any level of a menu without `header` or `footer`, its own rows or an open sub-menu flyout's at any depth, closes every open level and the menu, calls `onOpenChange(false)` once, and leaves focus to move on from the trigger in page order (WAI-ARIA Menu Button). A level with a header or footer keeps FR15's and FR20's Tab cycle within it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | WAI-ARIA Menu Button pattern; current tests                                    |
 
-FR6 gap: the Trigger takes focus whenever focus is on the body at close, even
-when focus never entered the menu; a Dialog opened from a row returns focus to
-the removed row; and a missing Trigger leaves focus on the body
-(`spec:AST-116` FR17, FR19 and FR20 gaps).
-
 ### Allowed variation
 
 - **AV1 — Presentation.** `popover`, `bottom-sheet`, and resolved `adaptive`
@@ -583,6 +578,27 @@ Other composites, such as a toolbar, a button group or a
 listbox, keep their own navigation. Rejected: skipping disabled rows, which
 hides an unavailable action and its reason from keyboard and screen-reader
 users.
+
+### DEC-12 — Every pointer-menu row takes the menu's corner shape
+
+**Reference:** `component:DropdownMenu/DEC-12`
+**Decider:** `josephfarina`, engineering owner decision, 2026-11-18
+
+When a theme gives a menu corners of different radii, every row of the pointer
+menu takes the menu's shape, each corner less the menu's padding: with only the
+bottom corners rounded, each row is rounded at the bottom. This keeps the rows
+predictable and matches the uniform corners themes already give. A theme that
+wants other row corners styles the row part directly. The rule covers the item,
+checkbox, radio and sub-menu rows of DropdownMenu's popover and its sub-menu
+flyouts, and so ContextMenu, whose caller-rendered rows in its touch sheet are
+these rows too. DropdownMenu's touch sheet, and a ContextMenu built from
+`items`, draw their rows as List rows (FR4), which keep their own corners. A
+drilled-in sub-menu view with its own header or footer keeps the default
+corners. The menu's `derived` radius entry sets
+`corners: true` (`ComponentThemingDerivedVar.corners` in the authoring types),
+so the theme writes each corner to its own variable.
+
+Rejected: only the rows at a menu corner take that corner.
 
 ## Open questions
 

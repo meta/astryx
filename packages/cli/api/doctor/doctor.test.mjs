@@ -36,6 +36,7 @@ import {
   checkCoreStylesheets,
   checkPackageManager,
   checkComputerIntegrationsAvailable,
+  checkComputerIntegrations,
 } from './doctor.mjs';
 import {installCommandFor} from './_adapter.mjs';
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
@@ -333,7 +334,7 @@ describe('the core-installed check in a fresh clone', () => {
         configPath: null,
       }).fix,
     ).toBe(
-      'Install the design system: `npm install @astryxdesign/core`.',
+      'Install the design system: `npm install -E @astryxdesign/core@0.7.10`.',
     );
   });
 });
@@ -534,6 +535,77 @@ describe('the command that adds an integration installed for the computer', () =
     });
     expect(c.status).toBe('info');
     expect(c).not.toHaveProperty('fix');
+  });
+});
+
+describe('checkComputerIntegrations outside a project', () => {
+  const widgets = /** @type {any} */ ({
+    name: '@acme/widgets',
+    version: '1.0.0',
+  });
+  const ctx = (
+    /** @type {any[]} */ issues,
+    /** @type {any} */ update = null,
+    withTool = false,
+  ) =>
+    /** @type {any} */ ({
+      cwd: os.tmpdir(),
+      computerIntegrations: [widgets],
+      loadedComputerIntegrations: ['@acme/widgets'],
+      computerIntegrationIssues: issues,
+      integrationUpdate: update,
+      integrationsUpdateWithTool: withTool,
+    });
+  const thing = {
+    package: '@acme/widgets',
+    severity: 'warning',
+    message:
+      'Component source "Thing.tsx" has no same-stem metadata file Thing.doc.mjs, so Astryx ignores it.',
+  };
+
+  it('passes for an integration it uses whose contributions have no issues', () => {
+    expect(checkComputerIntegrations(ctx([]))).toMatchObject({
+      status: 'pass',
+      message: 'Used outside a project: @acme/widgets@1.0.0.',
+    });
+  });
+
+  // The everyday commands point at doctor for these issues
+  // (integration-warnings.mjs), so doctor names them.
+  it('warns and names each issue in the contributions of an integration it uses', () => {
+    const c = checkComputerIntegrations(
+      ctx([thing], (/** @type {string} */ name) => `npm i -g ${name}@latest`),
+    );
+    expect(c.status).toBe('warn');
+    expect(c.message).toBe(
+      'Used outside a project: @acme/widgets@1.0.0. @acme/widgets@1.0.0 has 1 integration issue: Component source "Thing.tsx" has no same-stem metadata file Thing.doc.mjs, so Astryx ignores it.',
+    );
+    expect(c.fix).toBe(
+      'If you maintain @acme/widgets, the fix in the issue is yours. Otherwise, a newer release of @acme/widgets needs to fix it. To get one, run `npm i -g @acme/widgets@latest`.',
+    );
+  });
+
+  it("counts several issues, and in a tool's package set says the tool updates it", () => {
+    const c = checkComputerIntegrations(
+      ctx(
+        [thing, {...thing, message: 'Template "x" names no source.'}],
+        null,
+        true,
+      ),
+    );
+    expect(c.message).toContain(
+      '@acme/widgets@1.0.0 has 2 integration issues: ',
+    );
+    expect(c.fix).toBe(
+      'If you maintain @acme/widgets, the fixes in the issues are yours. Otherwise, a newer release of @acme/widgets needs to fix them. It updates with the tool that runs this CLI.',
+    );
+  });
+
+  it('names no update step where none can be named, as under Volta', () => {
+    const c = checkComputerIntegrations(ctx([thing], () => null));
+    expect(c.fix).toBe(
+      'If you maintain @acme/widgets, the fix in the issue is yours. Otherwise, a newer release of @acme/widgets needs to fix it.',
+    );
   });
 });
 
