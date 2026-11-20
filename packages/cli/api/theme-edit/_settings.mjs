@@ -9416,11 +9416,12 @@ export async function resolvedTokens(ctx, slug) {
   // as the app's bundler and the build load it: Node's own loader resolves
   // no import without its ending, nor reads TypeScript.
   const local = /^\s*(import|export)\b[^;]*\bfrom\s+['"]\.\.?\//m.test(code);
-  if (!local)
+  const cache = ctx.project.cacheDir;
+  if (!local && cache)
     try {
-      fs.mkdirSync(ctx.project.cacheDir, {recursive: true});
-      fs.writeFileSync(path.join(ctx.project.cacheDir, name), source);
-      copy = path.join(ctx.project.cacheDir, name);
+      fs.mkdirSync(cache, {recursive: true});
+      fs.writeFileSync(path.join(cache, name), source);
+      copy = path.join(cache, name);
     } catch {
       // The cache folder is not writable: use the theme folder.
     }
