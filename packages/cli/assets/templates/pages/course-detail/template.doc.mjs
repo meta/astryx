@@ -23,15 +23,4 @@ export const doc = {
   ],
   isReady: true,
   category: 'Content - Course Detail',
-  icons: {
-    PlayIcon: 'play',
-    CheckIcon: 'check',
-    StarIcon: 'star',
-    ClockIcon: 'clock',
-    UsersIcon: 'users',
-    GlobeAltIcon: 'globe',
-    BoltIcon: 'bolt',
-    ArrowRightIcon: 'arrowRight',
-    BookOpenIcon: 'book',
-  },
 };

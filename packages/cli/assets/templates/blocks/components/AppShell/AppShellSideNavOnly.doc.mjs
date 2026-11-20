@@ -18,12 +18,4 @@ export const doc = {
     'VStack',
     'NavIcon',
   ],
-  icons: {
-    ChartBarIcon: 'chart',
-    Cog6ToothIcon: 'settings',
-    CubeIcon: 'package',
-    FolderIcon: 'folder',
-    HomeIcon: 'home',
-    UsersIcon: 'users',
-  },
 };
