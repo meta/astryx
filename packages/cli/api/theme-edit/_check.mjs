@@ -76,7 +76,6 @@ import {
   systemFontFamilies,
   isSystemFamily,
   fontStack,
-  onlyMeans,
 } from './_tables.mjs';
 import {
   COLOR_NAMES,
