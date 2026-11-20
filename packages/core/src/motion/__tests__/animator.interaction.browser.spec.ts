@@ -1512,6 +1512,88 @@ test('a dialog\u2019s ::backdrop plays the curve and holds its end state', async
   expect(result.held).toBeCloseTo(1, 6);
 });
 
+// The animator reads its curves on the clock that draws them. DevTools'
+// animation speed slows the document timeline that runs the curves, while
+// performance.now() keeps real time. `get` and `stop` still give the value on
+// screen, so a stop freezes the element where it is drawn. At full speed the
+// two clocks agree. The speed is set through the Chrome DevTools Protocol, as
+// DevTools sets it.
+for (const rate of [1, 0.25]) {
+  test(`at ${rate}x timeline speed, get and stop give the value on screen`, async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      rate !== 1 && browserName !== 'chromium',
+      'The timeline speed is set through the Chrome DevTools Protocol.',
+    );
+    await open(page);
+    if (rate !== 1) {
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send('Animation.enable');
+      await cdp.send('Animation.setPlaybackRate', {playbackRate: rate});
+    }
+    const result = await page.evaluate(
+      async ({spring, travel}) => {
+        const box = document.getElementById('box') as HTMLElement;
+        const x = () =>
+          Number.parseFloat(getComputedStyle(box).translate.split(' ')[0]) || 0;
+        // A timeline at real speed. In a frame callback it reads the frame's
+        // time, so it shows how late the callback runs after its frame.
+        const reference = new DocumentTimeline();
+        const frame = async () =>
+          new Promise<void>(resolve => {
+            requestAnimationFrame(() => resolve());
+          });
+        window.animator.animate({x: travel}, {spring});
+        for (let i = 0; i < 40; i++) {
+          await frame();
+        }
+        // A callback within 1 ms of its frame: there the frame's drawn value
+        // and the curve 1 ms on differ by well under 0.5 px.
+        return new Promise<Record<string, number>>(resolve => {
+          let tries = 0;
+          const step = () => {
+            const late = performance.now() - Number(reference.currentTime);
+            if (late > 1 && tries < 120) {
+              tries += 1;
+              requestAnimationFrame(step);
+              return;
+            }
+            const drawn = x();
+            const got = window.animator.get('x');
+            window.animator.stop();
+            resolve({
+              late,
+              tries,
+              drawn,
+              got,
+              committed: x(),
+              slowedBy:
+                Number(reference.currentTime) -
+                Number(document.timeline.currentTime),
+            });
+          };
+          requestAnimationFrame(step);
+        });
+      },
+      {spring: SLOW, travel: TRAVEL},
+    );
+    test.info().annotations.push({
+      type: `stop at ${rate}x`,
+      description: JSON.stringify(result),
+    });
+    // The case holds: the spring is mid-flight, on a timeline at the speed
+    // asked for.
+    expect(result.late).toBeLessThanOrEqual(1);
+    expect(result.slowedBy > 100).toBe(rate < 1);
+    expect(result.drawn).toBeGreaterThan(1);
+    expect(result.drawn).toBeLessThan(TRAVEL - 1);
+    expect(Math.abs(result.got - result.drawn)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(result.committed - result.drawn)).toBeLessThanOrEqual(0.5);
+  });
+}
+
 declare global {
   interface Window {
     animator: Animator;

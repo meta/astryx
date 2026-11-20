@@ -38,7 +38,7 @@
  *
  * The page never reads the DOM to know where something is: `get` and
  * `getVelocity` evaluate the curves at a time on the document timeline's
- * clock (`performance.now()` by default), so a finger can grab anything
+ * clock (`motionNow` by default), so a finger can grab anything
  * mid-flight from the value on screen, and a new target starts from the
  * current value with the current velocity (`spec:AST-094` FR6). A gesture's release velocity
  * can be handed in explicitly instead.
@@ -1205,9 +1205,67 @@ function expand(values: MotionValues): Partial<Record<MotionProperty, number>> {
   return out;
 }
 
-/** The time the motion clock reads (`performance.now()`'s time base). */
-export function motionNow(): number {
-  return typeof performance === 'undefined' ? Date.now() : performance.now();
+/**
+ * A timeline that runs at real speed, one per document, or null where the
+ * browser has no `DocumentTimeline` constructor. DevTools' animation speed
+ * slows only the document timeline, so the gap between the two is how far
+ * the document timeline runs behind real time.
+ */
+const realSpeedTimelines = new WeakMap<Document, AnimationTimeline | null>();
+
+/**
+ * Each document's last frame as both timelines read it, and the document
+ * timeline's speed against real time between its two last frames.
+ */
+const timelineFrames = new WeakMap<
+  Document,
+  {timeline: number; real: number; speed: number}
+>();
+
+function realSpeedTimeline(doc: Document): AnimationTimeline | null {
+  let timeline = realSpeedTimelines.get(doc);
+  if (timeline === undefined) {
+    const Timeline = doc.defaultView?.DocumentTimeline;
+    timeline = typeof Timeline === 'function' ? new Timeline() : null;
+    realSpeedTimelines.set(doc, timeline);
+  }
+  return timeline;
+}
+
+/**
+ * The time the motion clock reads: `performance.now()`, on the time of `doc`'s
+ * timeline, which draws the curves. At full speed the two are one clock.
+ * While DevTools slows the timeline, the clock reads the timeline's time for
+ * the current frame. It adds the real time since that frame, at the
+ * timeline's speed. Both timelines keep their frame's time for a whole task,
+ * so the clock still moves at real speed through a long task at full speed.
+ */
+export function motionNow(
+  doc: Document | undefined = typeof document === 'undefined'
+    ? undefined
+    : document,
+): number {
+  const now =
+    typeof performance === 'undefined' ? Date.now() : performance.now();
+  const timeline = doc?.timeline?.currentTime;
+  if (doc == null || typeof timeline !== 'number') {
+    return now;
+  }
+  const real = realSpeedTimeline(doc)?.currentTime;
+  if (typeof real !== 'number' || real === timeline) {
+    return now;
+  }
+  const last = timelineFrames.get(doc);
+  let speed = last?.speed ?? 1;
+  if (last != null && real > last.real) {
+    const measured = (timeline - last.timeline) / (real - last.real);
+    speed = Number.isFinite(measured) && measured >= 0 ? measured : speed;
+  }
+  if (last == null || real !== last.real) {
+    timelineFrames.set(doc, {timeline, real, speed});
+  }
+  const sinceFrame = (doc.defaultView?.performance ?? performance).now() - real;
+  return now - (real - timeline) - (1 - speed) * sinceFrame;
 }
 
 /**
@@ -1297,7 +1355,7 @@ export function createMotionEngine(
   element: HTMLElement | null,
   options: AnimatorOptions = {},
 ): Animator {
-  const now = options.now ?? motionNow;
+  const now = options.now ?? (() => motionNow(element?.ownerDocument));
   const frameSource =
     options.requestFrame ??
     (typeof requestAnimationFrame === 'function'

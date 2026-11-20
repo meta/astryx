@@ -21,6 +21,7 @@ import {
   animatorFor,
   createMotionEngine,
   END_HOLD_MS,
+  motionNow,
   PROMOTION_LINGER_MS,
   type Animator,
   type AnimatorOptions,
@@ -5625,5 +5626,72 @@ describe('rebase towards a new rest', () => {
     toward.animator.rebase({x: -16}, {towards: {x: 0}});
     expect(toward.animator.get('x')).toBe(plainX);
     expect(live('translate')).not.toContain(toward.animation);
+  });
+});
+
+describe('motionNow', () => {
+  // A document whose timeline DevTools can slow, and a second timeline that
+  // runs at real speed, as a browser has. Both read the current frame.
+  const page = (frame: {timeline: number; reference: number}) => {
+    const reading = {...frame};
+    class Reference {
+      get currentTime() {
+        return reading.reference;
+      }
+    }
+    const doc = {
+      timeline: {
+        get currentTime() {
+          return reading.timeline;
+        },
+      },
+      defaultView: {
+        DocumentTimeline: Reference,
+        performance: {now: () => performance.now()},
+      },
+    } as unknown as Document;
+    return {doc, reading};
+  };
+  let clock = 0;
+
+  beforeEach(() => {
+    vi.spyOn(performance, 'now').mockImplementation(() => clock);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('reads performance.now() while the document timeline runs at real speed', () => {
+    const {doc} = page({timeline: 400, reference: 400});
+    clock = 410;
+    expect(motionNow(doc)).toBe(410);
+  });
+
+  it('reads the document timeline while DevTools slows it, at its speed', () => {
+    const {doc, reading} = page({timeline: 100, reference: 400});
+    clock = 400;
+    expect(motionNow(doc)).toBe(100);
+    // The next frame, 16 ms later at a quarter speed, is 4 ms later on the
+    // timeline. 4 ms after that frame, the timeline is 1 ms further on.
+    reading.timeline = 104;
+    reading.reference = 416;
+    clock = 420;
+    expect(motionNow(doc)).toBeCloseTo(105, 9);
+  });
+
+  it('reads the slowed timeline at its frame, with no earlier frame to give its speed', () => {
+    const {doc} = page({timeline: 100, reference: 400});
+    clock = 400;
+    expect(motionNow(doc)).toBe(100);
+  });
+
+  it('reads performance.now() where the browser has no second timeline', () => {
+    const doc = {
+      timeline: {currentTime: 100},
+      defaultView: {performance},
+    } as unknown as Document;
+    clock = 400;
+    expect(motionNow(doc)).toBe(400);
   });
 });
