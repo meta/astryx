@@ -2,14 +2,16 @@
 
 import {describe, it, expect} from 'vitest';
 import {
-  deleteDigitAcrossGroupSeparator,
   formatEditableNumber,
-  formatGroupedEditableNumber,
   formatPercent,
-  groupEditableDraft,
-  typedGroupIndexes,
   parseLocaleNumber,
 } from './numberParser';
+import {
+  deleteDigitAcrossGroupSeparator,
+  formatGroupedEditableNumber,
+  groupEditableDraft,
+  typedGroupIndexes,
+} from './numberGrouping';
 
 const NBSP = '\u00A0';
 const NARROW_NBSP = '\u202F';

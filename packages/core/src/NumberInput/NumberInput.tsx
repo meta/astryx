@@ -10,6 +10,7 @@
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/NumberInput/numberParser.ts (locale-aware parsing)
+ * - /packages/core/src/NumberInput/numberGrouping.ts (grouping while editing, loaded by useNumberGrouping.ts)
  * - /packages/core/src/NumberInput/numberInputCommit.ts (draft commit policy)
  * - /packages/core/src/Field/useEntryErrorReport.ts (rejection status, alert, and report)
  * - /packages/core/src/Field/useValueReplacesEntry.ts (when a new value replaces a kept draft)
@@ -236,13 +237,8 @@ import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
 import {toAsciiDigits} from '../utils/unicodeDigits';
 import {useLocale} from '../i18n';
-import {
-  deleteDigitAcrossGroupSeparator,
-  formatEditableNumber,
-  formatGroupedEditableNumber,
-  groupEditableDraft,
-  typedGroupIndexes,
-} from './numberParser';
+import {formatEditableNumber} from './numberParser';
+import {useNumberGrouping} from './useNumberGrouping';
 import {
   getNumberInputRejection,
   type NumberInputRejection,
@@ -920,12 +916,14 @@ export function NumberInput({
     [isIntegerOnly, locale, max, min],
   );
 
+  const grouping = useNumberGrouping(isGroupedWhileEditing);
+
   const formatFocusedNumber = useCallback(
     (number: number) =>
-      isGroupedWhileEditing
-        ? formatGroupedEditableNumber(number, locale)
+      grouping
+        ? grouping.formatGroupedEditableNumber(number, locale)
         : formatEditableNumber(number, locale),
-    [isGroupedWhileEditing, locale],
+    [grouping, locale],
   );
 
   const formattedValue = useMemo(() => {
@@ -1006,9 +1004,9 @@ export function NumberInput({
       previousText?: string,
       previousTypedGroups: ReadonlyArray<number> = [],
     ) => {
-      const isGrouping = isGroupedWhileEditing && !isComposingRef.current;
-      const next = isGrouping
-        ? groupEditableDraft(
+      const activeGrouping = isComposingRef.current ? null : grouping;
+      const next = activeGrouping
+        ? activeGrouping.groupEditableDraft(
             text,
             caret,
             locale,
@@ -1018,8 +1016,13 @@ export function NumberInput({
         : {text, caret};
       // A draft that holds typed group characters stays as typed, so their
       // indexes still match `next.text`.
-      const indexes = isGrouping
-        ? typedGroupIndexes(text, locale, previousText, previousTypedGroups)
+      const indexes = activeGrouping
+        ? activeGrouping.typedGroupIndexes(
+            text,
+            locale,
+            previousText,
+            previousTypedGroups,
+          )
         : [];
       typedGroupDraftRef.current =
         indexes.length > 0 ? {text: next.text, indexes} : null;
@@ -1033,7 +1036,7 @@ export function NumberInput({
         commitDraftText(next.text);
       }
     },
-    [commitDraftText, isGroupedWhileEditing, locale],
+    [commitDraftText, grouping, locale],
   );
 
   // Keep the whole text edit as a draft until an explicit commit boundary.
@@ -1463,7 +1466,7 @@ export function NumberInput({
         return;
       }
       if (
-        isGroupedWhileEditing &&
+        grouping &&
         !isReadOnly &&
         !hasModifier &&
         (e.key === 'Backspace' || e.key === 'Delete')
@@ -1478,7 +1481,7 @@ export function NumberInput({
           start === end &&
           getTypedGroups(input.value).length === 0
         ) {
-          const result = deleteDigitAcrossGroupSeparator(
+          const result = grouping.deleteDigitAcrossGroupSeparator(
             input.value,
             start,
             e.key,
@@ -1510,8 +1513,8 @@ export function NumberInput({
       commitDraftText,
       commitPendingInput,
       getTypedGroups,
+      grouping,
       isDisabled,
-      isGroupedWhileEditing,
       isReadOnly,
       locale,
       onEnter,

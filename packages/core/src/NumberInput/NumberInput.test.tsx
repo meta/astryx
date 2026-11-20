@@ -9,7 +9,15 @@
  * SYNC: When NumberInput.tsx changes, update tests to match new behavior
  */
 
-import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeAll,
+  beforeEach,
+  afterEach,
+} from 'vitest';
 import {act, useState} from 'react';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -20,6 +28,7 @@ import {InternationalizationProvider} from '../i18n';
 import {registerIcons, resetIcons} from '../Icon';
 import {InputGroup} from '../InputGroup';
 import {NumberInput} from './NumberInput';
+import {loadNumberGrouping} from './useNumberGrouping';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
@@ -529,7 +538,29 @@ describe('NumberInput', () => {
     });
   });
 
+  it('groups the focused value once the grouping code loads', async () => {
+    render(
+      <InternationalizationProvider locale="en-US">
+        <NumberInput
+          label="Amount"
+          value={1500000}
+          onChange={() => {}}
+          isGroupedWhileEditing
+        />
+      </InternationalizationProvider>,
+    );
+    const input = screen.getByRole('spinbutton');
+    fireEvent.focus(input);
+    await waitFor(() => expect(input).toHaveValue('1,500,000'));
+  });
+
   describe('isGroupedWhileEditing', () => {
+    // The grouping code loads after the first render that sets the prop.
+    // Load it first, so each test starts with it in place.
+    beforeAll(async () => {
+      await loadNumberGrouping();
+    });
+
     function ignoreChange(_value: number) {}
 
     function GroupedField({
