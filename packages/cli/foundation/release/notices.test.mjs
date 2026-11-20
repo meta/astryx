@@ -18,6 +18,7 @@ import {
   availableLine,
   cliUpdateStep,
   globalBehind,
+  globalUpdateBesideCli,
   globalUpgradeCommand,
   noticeLines,
   oldGlobalCommand,
@@ -330,6 +331,45 @@ describe('the lines', () => {
         'home/a/.volta/tools/image/packages/@astryxdesign/cli/lib/node_modules/@astryxdesign/cli',
       ),
     ).toBe('volta install @astryxdesign/cli@latest');
+  });
+});
+
+describe('globalUpdateBesideCli', () => {
+  const linux = {
+    execPath: '/usr/bin/node',
+    home: '/home/a',
+    platform: /** @type {const} */ ('linux'),
+    env: {},
+  };
+
+  it('updates a package beside the CLI with the package manager and prefix that hold the CLI', () => {
+    expect(
+      globalUpdateBesideCli(
+        '/home/a/.npm-global/lib/node_modules/@astryxdesign/cli',
+        '@acme/widgets',
+        linux,
+      ),
+    ).toBe('npm i -g --prefix ~/.npm-global @acme/widgets@latest');
+  });
+
+  it("names no command for one of Astryx's own packages, which follows the CLI's releases", () => {
+    expect(
+      globalUpdateBesideCli(
+        '/home/a/.npm-global/lib/node_modules/@astryxdesign/cli',
+        '@astryxdesign/lab',
+        linux,
+      ),
+    ).toBeNull();
+  });
+
+  it('names no command under Volta, which keeps each package in a folder of its own', () => {
+    expect(
+      globalUpdateBesideCli(
+        '/home/a/.volta/tools/image/packages/@astryxdesign/cli/lib/node_modules/@astryxdesign/cli',
+        '@acme/widgets',
+        linux,
+      ),
+    ).toBeNull();
   });
 });
 
