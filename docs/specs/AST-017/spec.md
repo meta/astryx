@@ -794,13 +794,17 @@ one removal merged ahead of the decision to allow it.
   pin, the lockfile, and version-stamped compatibility asset to the successor plan. The
   default is the cut version's patch successor. The minor successor is used only when
   Cindy explicitly names that minor as the next plan; pending `[breaking]` Changesets
-  are not that decision. The plan MUST NOT merge before an immutable tag or stable
-  package publication makes the cut version non-reusable. After that point it may land
-  through normal gates before or after FR50; merge-back preserves an already-landed
-  newer plan. A terminal cut with neither an immutable tag nor stable package
-  publication closes its prepared plan unmerged. If main already carries a newer owner plan, the prepared change closes or
-  refreshes instead of duplicating or lowering it. Other main work need not wait, and
-  FR46 remains the independent canary-publication safety boundary. The plan remains
+  are not that decision. The plan MUST NOT merge before stable package publication or
+  an immutable tag makes the cut version non-reusable. Under DEC-34, a version tagged
+  but never published anywhere, whose tag is retired with a hashed deletion receipt
+  under an owner-recut authority, stays reusable for that recut; every other tag makes
+  the version non-reusable. After the version becomes non-reusable, the successor plan may land through normal gates
+  before or after FR50; merge-back preserves an already-landed newer plan. A terminal
+  cut that remains reusable under this owner-recut exception, or that has neither an
+  immutable tag nor stable package publication, closes its prepared plan unmerged. If
+  main already carries a newer owner plan, the prepared change closes or refreshes
+  instead of duplicating or lowering it. Other main work need not wait, and FR46
+  remains the independent canary-publication safety boundary. The plan remains
   malleable under FR46 until the next cut.
 - **FR52 — Repository evidence follows codemods through promotion.** A codemod staged
   for an unreleased change may move from `transforms/next/` into the immutable
@@ -1003,7 +1007,10 @@ Public lifecycle classification remains in force with these operational effects:
   lifecycle metadata and no migration of existing Changesets;
 - documentation catalog display names and routes remain mutable data while the stable
   `docs` command and machine-readable schemas stay contractual;
-- exact-main release comparison rejects unclassified deltas; and
+- exact-main release comparison rejects unclassified deltas;
+- under DEC-34, a version tagged but never published anywhere, whose tag is retired
+  with a hashed deletion receipt under an owner-recut authority, stays reusable for
+  that recut; every other tag makes the version non-reusable; and
 - a surface other than a component is classified by its own record's compatibility
   contract, and the release process here applies to the result;
 - touch work that changed fine-pointer behavior only as a side effect becomes
@@ -1476,6 +1483,10 @@ prepared change unmerged.
 Rejected: merging the successor before the cut version becomes non-reusable, which
 strands a terminal cut with neither a tag nor a publication on a skipped plan; and waiting until merge-back to
 prepare information already fixed at the cut.
+
+Amended by DEC-34: a version tagged but never published anywhere, whose tag is
+retired with a hashed deletion receipt under an owner-recut authority, stays reusable
+for that recut; every other tag makes the version non-reusable.
 
 ### DEC-22 — Each surface defines what breaks; this record owns the release process
 
