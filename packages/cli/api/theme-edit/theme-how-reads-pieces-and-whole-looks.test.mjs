@@ -660,6 +660,11 @@ describe('a plural display step when two or all looks are fluid', () => {
         const none = JSON.stringify((await answer('display headings bigger')).results);
         expect(none).toMatch(/display-1, display-2, display-3 not changed: their sizes are no length now/);
         expect(none).not.toMatch(/say it as a part and a look/);
+        // (A size said with a mode is no step ask: it keeps the answer for
+        // that mode, never "say a size".)
+        const darkOnly = JSON.stringify((await answer('display headings 72px in dark mode')).results);
+        expect(darkOnly).toMatch(/cannot be dark mode only/);
+        expect(darkOnly).not.toMatch(/say a size for them instead/);
         // (Only a size ask alone takes that answer: a font or an alignment
         // keeps its own, and a color said with the size is still named.)
         for (const ask of ['display headings in Georgia', 'display headings centered'])

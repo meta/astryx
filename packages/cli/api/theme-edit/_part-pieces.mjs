@@ -36,7 +36,7 @@ export function numberedLookValues(family, typed, drawn) {
  * their sizes now (`sizeOf`), so the type scale keeps its shape.
  * Changes `drafts` in place.
  * @template {{text: string, options: object[][], sequence?: boolean}} D
- * @template {{parts: Array<{on: string, when?: string}>, aspects?: string[], colors?: unknown[]}} C
+ * @template {{parts: Array<{on: string, when?: string}>, aspects?: string[], colors?: unknown[], lengths?: string[], mode?: string | null}} C
  * @param {D[]} drafts
  * @param {(d: D) => C | undefined} clauseOf
  * @param {C[]} clauses
@@ -75,13 +75,16 @@ export function oneAnswerPerFamily(drafts, clauseOf, clauses, families, sizeOf) 
       // answer names them all, never a "say it as a part and a look". The
       // caller adds it for the clause. Any other ask no look takes keeps
       // the usual answer.)
-      // (Only an ask about size alone, "display headings bigger": a font,
-      // an alignment or a color said with it keeps its own answers, and a
-      // draft that writes anything is never dropped.)
+      // (Only a step ask about size alone, "display headings bigger": a
+      // font, an alignment, a color, a size or a mode said with it keeps
+      // its own answers, and a draft that writes anything is never
+      // dropped.)
       const sizeOnly =
         (c.aspects ?? []).length > 0 &&
         (c.aspects ?? []).every(a => a === 'fontsize') &&
-        !(c.colors ?? []).length;
+        !(c.colors ?? []).length &&
+        !(c.lengths ?? []).length &&
+        !c.mode;
       const own = drafts.filter(d => clauseOf(d) === c);
       if (!noLength || !sizeOnly || own.some(d => d.options.length)) continue;
       const text = `${fam.whens.map(level).join(', ')} not changed: their sizes are no length now (a clamp() or calc() size), so no step can be taken from them; say a size for them instead ("${level(fam.whens[0]).replace(/-\d+$/, '')} headings 72px")`;
