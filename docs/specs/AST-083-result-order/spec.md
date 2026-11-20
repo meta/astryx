@@ -28,9 +28,9 @@ their counts. The order of matches that are equally strong is not. That order
 is a measured quality, and it may change whenever a measurement shows the new
 order is at least as good as the old one.
 
-The not-found errors of `astryx component`, `astryx template` and
-`astryx docs` work the same way: the facts of a suggestion list hold, and the
-order inside it is a measured quality (FR7).
+The not-found errors of `astryx component`, `astryx hook`,
+`astryx template` and `astryx docs` work the same way: the facts of a
+suggestion list hold, and the order inside it is a measured quality (FR7).
 
 This record owns that split: the facts every answer must keep, and the rule
 for changing the order inside them. Search owns its own matching.
@@ -42,7 +42,8 @@ owns response fields and compatibility.
 
 - Which ordering method or weights win. They are measured, and they change
   under FR6.
-- How search matches or scores an entry.
+- How search matches or scores an entry, beyond the reading of other
+  entries' names that FR1 states.
 - Build's start template, alternatives, and page call (`spec:AST-048`).
 - Equivalent internal implementations remain valid when they satisfy this
   contract.
@@ -52,15 +53,39 @@ owns response fields and compatibility.
 - **FR1 — search answers with the lexical matches.** Every result is an entry
   the lexical ranker matched, with that ranker's score and reason, and
   `matchCount` equals its match count. Search never returns more results than
-  the lexical ranker does for the same query and limit.
+  the lexical ranker does for the same query and limit. In search's reading of
+  the catalog, another entry's name is that entry's evidence: a component a
+  block uses never answers a query word for the block alone, and a title inside
+  the query reaches its tier only when no query word it leaves unanswered names
+  a component or hook and no doc. In that reading, a doc that opens a level (a
+  docs-tree namespace) does not answer a query word through its text (its prose,
+  or a code term or table cell its keywords gather) when a doc beneath its route
+  answers that word at least as strongly: the word is that doc's evidence. Its
+  name, title, description and declared keywords stay its own. `searchCore`,
+  which build reads, keeps the gathered reading.
+  Icons are not among the results: an icon ask's trailing `icons` section
+  (`spec:AST-084` FR6) changes neither `results` nor `matchCount`.
 - **FR2 — bands do not cross.** Search orders matches only inside a run of one
   score band and one kind (doc or not); a band is a range of lexical scores,
   so inside one a lower score can lead a higher one. A match never moves past a
   match of another band or kind; between runs, the lexical order holds,
-  including its domain priority.
+  including its domain priority. Inside a run, a family's root leads a part of
+  its own family when the part answers no query word the root does not, and no
+  query word, in any plural or stem form, is a word of the part's name that
+  does not start a word of the root's name. Among matches of the first
+  result's domain that tie with it on score and on the query words they
+  matched, the match whose own name holds more query words leads. A first
+  result that matched the whole query (a name, keyword, or title hit), or
+  whose title the query holds, keeps its place, and a part of the first result
+  never takes it.
 - **FR3 — a whole name keeps today's answer.** A query that is an entry's
   whole name or title, read with dashes and spaces alike, gets the lexical
-  ranker's answer unchanged.
+  ranker's answer unchanged. In search's reading, a match whose name of two
+  or more words a longer query writes as one word (`TableSortableTable`,
+  `table-sortable-table`) leads the lexical answer, and the order inside runs
+  keeps it first. It does not lead when a longer named run of the query
+  contains that word, or when a block's display name or a doc's title or
+  heading that the query holds contains it.
 - **FR4 — build orders the block catalog for its block slots.**
   `spec:AST-048` owns which blocks build lists and delegates their order here.
   Build's `blocks` hold as many blocks as build itself lists, each once, each
@@ -75,6 +100,8 @@ owns response fields and compatibility.
 - **FR5 — the order is local, deterministic, and static.** The order inside a
   run comes from plain code and fixed values shipped with the CLI. No model
   runtime runs, no network is used, and the same inputs give the same order.
+  Tied names order the same way on every host: the host's language setting
+  never changes the order of a result or a list.
 - **FR6 — the order changes only when measured.** A change to the order
   inside runs, whether new weights, a new searcher, or a new rule, ships only
   when measured against the held-out, fresh, synthetic, and cold-start
@@ -83,17 +110,58 @@ owns response fields and compatibility.
   worse when the paired 95% confidence interval of its change lies entirely
   below zero. FR1–FR5 hold for every change.
 - **FR7 — not-found suggestions keep their facts.** When `astryx component`,
-  `astryx template` or `astryx docs` names nothing, it suggests at most as
-  many entries as its candidate set gives: for a component, the near-top
-  matches of the component matcher (at most five, and at least two when two
-  exist); for a template, every template; for docs, the routes its error
-  gives (for an unknown route, the set `spec:AST-046` FR6 names). Every suggestion is a real catalog entry for that command, and a
-  name that resolves keeps resolving to the same entry. A component's exact
-  name in another case is that component's: a module that only shares its
-  spelling never resolves for it. Which candidates fill
-  a component list and the order of every list change only under FR6,
-  measured on the held-out and fresh failed-lookup evaluation sets. FR5 holds
-  for this order.
+  `astryx hook`, `astryx template` or `astryx docs` names nothing, it suggests
+  at most as many entries as its candidate set gives: for a component, the
+  near-top matches of the component matcher (at most five, and at least two
+  when two exist); for a hook, the hooks whose names are within five edits (at
+  most five); for a template, every template; for docs, the routes its error
+  gives (for an unknown route, the set `spec:AST-046` FR6 names). Every
+  suggestion is a real catalog entry for that command, with one exception, one
+  rule shared by the four commands. An entry's name is its full id: a
+  component, hook or template id, or a docs route; a template the command
+  suggests also matches by its human name, as the template matcher ranks it. A
+  name matches the argument at one of four tiers, best first: exact (the whole
+  name, in any case); folded (the whole name without spaces and hyphens, and a
+  hook with or without `use`); segment (only the last segment of a path name,
+  exact or folded); word cover (the name carries every word of the argument).
+  When the argument matches an entry another of the four commands reads at one
+  of the first three tiers, the command that reads that entry, by its full id
+  (`astryx hook useHotkeys`), joins the list. When no entry matches at those
+  three tiers and `astryx component` or `astryx template` misses, one hook can
+  join the same way at two more tiers, ranked after segment. Near hook: an
+  argument shaped like a hook name (`use`, then a capital letter or a digit)
+  means the closest hook whose name it nearly spells (one slip from five
+  letters, two from eight; an edit or two swapped neighboring letters count as
+  one slip) or whose name carries every word of the argument. Hook keyword, for
+  `astryx component` only: any other argument of two or more words means the one
+  hook whose doc declares a keyword with exactly those words. A tie, or a
+  keyword that more than one hook declares, means no hook. At these two tiers, a
+  suggestion also matches as well when one of its names is a near name or
+  carries every word of the argument, or, at hook keyword, when its doc's
+  keywords or its search card's synonyms hold the same keyword. A better tier
+  wins; inside a
+  tier, a component wins over a hook, a hook over a template, and a template
+  over a docs topic; among docs routes, the route with the fewest segments
+  wins, then the first in tree order. That command goes right after the last
+  suggestion that matches at its tier or a better one, so it goes first when
+  none does; a suggested component whose doc's keywords or search card's
+  synonyms hold the argument (in any case, without spaces and hyphens) matches
+  at folded. The list never grows: the last suggestion drops, and a command
+  that would come last is left out. That command is the only suggestion when
+  the list is otherwise empty, and, for docs, when no route it suggests shares
+  a word with the argument. A component error for an example block keeps its
+  suggestions, since its message already names `astryx template`. A keyword is
+  a word to find a component by, not another name for it: `astryx component`
+  resolves a name only by its file name or by a component's exact name in any
+  case, and never by a keyword. A name that is exactly one component's keyword,
+  where no other Core component matches within 20 points, does not resolve: it
+  gets the unknown-component error, and that component is its first
+  suggestion, ahead of any other command, in a list no longer than the
+  component list. Every other name that resolves keeps resolving to the same
+  entry. A component's exact name in another case is that component's: a
+  module that only shares its spelling never resolves for it. Which candidates fill a component list and the order
+  of every list change only under FR6, measured on the held-out and fresh
+  failed-lookup evaluation sets. FR5 holds for this order.
 
 ## Current-state impact
 
@@ -104,14 +172,14 @@ owns response fields and compatibility.
 
 ## Verification
 
-| Contract | Verification                                                                                                                        | Representative states                                            | Mutation or failure expectation                                                                                                                       |
-| -------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1, FR2 | `api/search/_order.test.mjs` against the lexical ranker; a replay over every real and synthetic query                               | multi-word queries, doc sections, domain-priority merges         | a non-lexical result, a changed score, reason, or count, a cross-band move, or extra results fail                                                     |
-| FR3      | `api/search/_main-searcher.test.mjs` whole-name cases                                                                               | exact names, names typed with spaces for dashes                  | an answer that differs from the lexical ranker's fails                                                                                                |
-| FR4      | `api/build/blocks/blocks.test.mjs`, `api/build/tree.test.mjs`                                                                       | exactly named blocks, integration blocks, unfitted blocks        | a block outside the catalog, a repeated block, a changed entry, an entry without a score and reason, a moved exactly named block, or more blocks fail |
-| FR5      | `_main-searcher.test.mjs` and `tree.test.mjs` offline and repeat checks                                                             | network stubbed to throw; repeated runs                          | a network call or a differing repeat fails                                                                                                            |
-| FR6      | measured comparison on the evaluation sets, reported in the change's description                                                    | held-out, fresh, synthetic, cold-start                           | a row whose paired CI lies below zero blocks the change                                                                                               |
-| FR7      | `foundation/text/suggest-order.test.mjs`; the component, docs and template command tests; a replay over every labeled failed lookup | compound names, other libraries' names, routes under a namespace | a longer list, a suggestion that is not an entry, a changed resolution, or a worse measured row fails                                                 |
+| Contract | Verification                                                                                                                                                                             | Representative states                                                                                     | Mutation or failure expectation                                                                                                                       |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1, FR2 | `api/search/_order.test.mjs` against the lexical ranker; a replay over every real and synthetic query                                                                                    | multi-word queries, doc sections, domain-priority merges                                                  | a non-lexical result, a changed score, reason, or count, a cross-band move, or extra results fail                                                     |
+| FR3      | `api/search/_main-searcher.test.mjs` whole-name cases                                                                                                                                    | exact names, names typed with spaces for dashes                                                           | an answer that differs from the lexical ranker's fails                                                                                                |
+| FR4      | `api/build/blocks/blocks.test.mjs`, `api/build/tree.test.mjs`                                                                                                                            | exactly named blocks, integration blocks, unfitted blocks                                                 | a block outside the catalog, a repeated block, a changed entry, an entry without a score and reason, a moved exactly named block, or more blocks fail |
+| FR5      | `_main-searcher.test.mjs` and `tree.test.mjs` offline and repeat checks; `component.host-locale.test.mjs` and `build.test.mjs` host-locale checks                                        | network stubbed to throw; repeated runs; the same commands under English, Czech and Hawaiian host locales | a network call or a differing repeat fails; an order that differs between host locales fails                                                          |
+| FR6      | measured comparison on the evaluation sets, reported in the change's description                                                                                                         | held-out, fresh, synthetic, cold-start                                                                    | a row whose paired CI lies below zero blocks the change                                                                                               |
+| FR7      | `foundation/text/suggest-order.test.mjs`; the shared hint's tests under `foundation/suggest/`; the component, docs and template command tests; a replay over every labeled failed lookup | compound names, other libraries' names, routes under a namespace                                          | a longer list, a suggestion that is not an entry, a changed resolution, or a worse measured row fails                                                 |
 
 ## Decision log
 

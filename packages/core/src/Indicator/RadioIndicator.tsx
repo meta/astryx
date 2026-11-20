@@ -14,7 +14,6 @@ import {
   colorVars,
   durationVars,
   easeVars,
-  radiusVars,
 } from '../theme/tokens.stylex';
 import {isRenderable} from '../utils/isRenderable';
 import {mergeProps} from '../utils/mergeProps';
@@ -31,11 +30,9 @@ const styles = stylex.create({
     flexShrink: 0,
     borderWidth: borderVars['--border-width'],
     borderStyle: 'solid',
-    // A circle, in tokens: --radius-full is the house "fully rounded" value
-    // (9999px) and renders pixel-identical to 50% on a square box, which the
-    // size styles below guarantee. Themeable through --radius-full, unlike a
-    // raw 50%.
-    borderRadius: radiusVars['--radius-full'],
+    // The circle marks a radio, so it ignores --radius-full.
+    // 50% draws a circle on the square box the size styles set.
+    borderRadius: '50%',
     transitionProperty: 'background-color, border-color',
     transitionDuration: {
       default: durationVars['--duration-fast'],
@@ -89,7 +86,7 @@ const styles = stylex.create({
     },
   },
   dot: {
-    borderRadius: radiusVars['--radius-full'],
+    borderRadius: '50%',
     backgroundColor: {
       default: colorVars['--color-on-accent'],
       // Forced colors (Windows High Contrast) strips painted backgrounds,
@@ -112,14 +109,41 @@ const circleSizeStyles = stylex.create({
   },
 });
 
+// The dot keeps its share of the circle, so a theme that sizes the circle
+// (`radio-indicator` width and height) gets a dot that stays centered inside
+// it. A percentage reads the circle's content box, so the border is added back
+// first: at the shipped 20px and 24px circles the dot stays exactly 8px and
+// 10px, whatever `--border-width` a theme sets. Where the browser has
+// `round()`, the share is rounded to whole pixels: Chromium draws a dot of a
+// fractional size (a 13px circle, or a border set directly rather than through
+// the token) as a rounded square despite its 50% radius. The rounded value
+// sits behind `@supports`, so a browser without `round()` keeps the exact
+// share instead of dropping the declaration (a value holding `var()` is only
+// checked once the variable is substituted).
+const share = (s: string) =>
+  `calc((100% + 2 * ${borderVars['--border-width']}) * ${s})`;
+const ROUND = '@supports (width: round(1px, 1px))';
+
 const dotSizeStyles = stylex.create({
   sm: {
-    width: 8,
-    height: 8,
+    width: {
+      default: share('8 / 20'),
+      [ROUND]: `round(${share('8 / 20')}, 1px)`,
+    },
+    height: {
+      default: share('8 / 20'),
+      [ROUND]: `round(${share('8 / 20')}, 1px)`,
+    },
   },
   md: {
-    width: 10,
-    height: 10,
+    width: {
+      default: share('10 / 24'),
+      [ROUND]: `round(${share('10 / 24')}, 1px)`,
+    },
+    height: {
+      default: share('10 / 24'),
+      [ROUND]: `round(${share('10 / 24')}, 1px)`,
+    },
   },
 });
 

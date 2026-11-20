@@ -176,6 +176,40 @@ describe('the weekly WebKit accessibility report', () => {
     expect(empty.markdown).toContain('no test ran');
   });
 
+  it('lists a run-level error and every result that ran, failures included', () => {
+    // A worker crash or a global setup error after some tests ran: the
+    // report keeps those tests' failures beside the error.
+    const result = buildReport(
+      {
+        ...report,
+        errors: [
+          {
+            message:
+              '\x1b[31mError: worker process exited unexpectedly\x1b[39m\n  at ...',
+          },
+        ],
+      },
+      {sha: 'abc123'},
+    );
+    expect(result.ok).toBe(false);
+    expect(result.counts).toMatchObject({failed: 1, flaky: 1, passed: 1});
+    expect(result.errors).toEqual([
+      'Error: worker process exited unexpectedly',
+    ]);
+    expect(result.markdown).toContain(
+      'The run stopped on an error, so this is not a pass:',
+    );
+    expect(result.markdown).toContain(
+      '- Error: worker process exited unexpectedly',
+    );
+    expect(result.markdown).toContain('returns focus to the trigger');
+    expect(result.markdown).toContain('expected button to be focused');
+    expect(result.markdown).not.toContain('left no results');
+    expect(result.markdown).not.toContain(
+      'Every WebKit accessibility contract passed',
+    );
+  });
+
   it('never reads a run that left no results as a pass', () => {
     const result = buildReport(null, {sha: 'abc123'});
     expect(result.ok).toBe(false);

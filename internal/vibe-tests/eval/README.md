@@ -62,8 +62,11 @@ run root; a recursive read of one of those roots, or of a folder that holds one,
 by `grep -r`, `rg`, `ag`, `ack`, `find -exec`, `find | xargs` or the Grep tool;
 and any use of a web tool or a sub-agent. Paths in shell commands resolve from
 the folder the agent's shell is in, which persists between commands. Heredoc
-bodies that are file content are skipped; shell heredocs are audited as shell
-text, and other interpreter heredocs are scanned for path literals. The agent's
+bodies that are file content are skipped, except the command substitutions
+(`$(…)`, backticks) that the shell runs in an unquoted heredoc; shell heredocs
+are audited as shell text, and other interpreter heredocs are scanned for path
+literals. The script or pattern of `sed` and search commands is text, not a
+path. The agent's
 own session folder, where it saves long tool output, is allowed. Any other
 outside path, including a root named by another command, is a warning, and
 `report.md` lists every run with warnings for a person to review. When the agent exits or times out, the runner kills its whole process
@@ -184,6 +187,9 @@ what the eval measures, so compare results only within one arm version.
   `tar -C`, a subshell `cd`, `pushd`, a symlink), a read behind a variable or
   an encoded path, and a script the agent writes and then runs give a warning
   at most. Running each agent in an isolated filesystem would close this.
+- The audit reads `sed` and search options from per-command lists. An option
+  missing from those lists can shift which word it reads as the script or
+  pattern, so a quoted path there can pass, or a correct pattern can fail.
 - One agent harness. Results describe that harness and model, not agents in
   general.
 - This folder writes its own record schema (`schemaVersion: 1` in `meta.json`).

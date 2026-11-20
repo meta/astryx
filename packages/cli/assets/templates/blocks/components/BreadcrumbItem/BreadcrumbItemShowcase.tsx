@@ -6,7 +6,7 @@ import {Breadcrumbs, BreadcrumbItem} from '@astryxdesign/core/Breadcrumbs';
 import {Icon} from '@astryxdesign/core/Icon';
 import {VStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
-import {HomeIcon} from '@heroicons/react/24/outline';
+import {HomeIcon} from '@astryxdesign/template-icons';
 
 export default function BreadcrumbItemShowcase() {
   return (
@@ -15,7 +15,7 @@ export default function BreadcrumbItemShowcase() {
         <Text type="supporting" color="secondary">
           With start icon
         </Text>
-        <Breadcrumbs>
+        <Breadcrumbs label="Breadcrumb with a start icon">
           <BreadcrumbItem
             href="/"
             startIcon={<Icon icon={HomeIcon} size="sm" />}>
@@ -29,7 +29,7 @@ export default function BreadcrumbItemShowcase() {
         <Text type="supporting" color="secondary">
           As current page (non-link)
         </Text>
-        <Breadcrumbs>
+        <Breadcrumbs label="Breadcrumb ending on the current page">
           <BreadcrumbItem href="/">Home</BreadcrumbItem>
           <BreadcrumbItem href="/settings">Settings</BreadcrumbItem>
           <BreadcrumbItem isCurrent>Profile</BreadcrumbItem>
@@ -39,7 +39,7 @@ export default function BreadcrumbItemShowcase() {
         <Text type="supporting" color="secondary">
           Supporting variant
         </Text>
-        <Breadcrumbs variant="supporting">
+        <Breadcrumbs label="Supporting breadcrumb" variant="supporting">
           <BreadcrumbItem href="/">Home</BreadcrumbItem>
           <BreadcrumbItem href="/admin">Admin</BreadcrumbItem>
           <BreadcrumbItem href="/admin/users">Users</BreadcrumbItem>
@@ -50,7 +50,7 @@ export default function BreadcrumbItemShowcase() {
         <Text type="supporting" color="secondary">
           With onClick handler (no href)
         </Text>
-        <Breadcrumbs>
+        <Breadcrumbs label="Breadcrumb with click handlers">
           <BreadcrumbItem onClick={() => {}}>Dashboard</BreadcrumbItem>
           <BreadcrumbItem onClick={() => {}}>Projects</BreadcrumbItem>
           <BreadcrumbItem isCurrent>Project Alpha</BreadcrumbItem>

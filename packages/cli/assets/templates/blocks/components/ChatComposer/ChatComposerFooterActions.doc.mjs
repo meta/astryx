@@ -17,9 +17,4 @@ export const doc = {
     'Layout',
     'Text',
   ],
-  icons: {
-    Cog6ToothIcon: 'settings',
-    MicrophoneIcon: 'microphone',
-    SparklesIcon: 'sparkles',
-  },
 };

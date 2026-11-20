@@ -7,6 +7,7 @@ import {Tokenizer} from '@astryxdesign/core/Tokenizer';
 import {Button} from '@astryxdesign/core/Button';
 import {Stack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
+import {useToast} from '@astryxdesign/core/Toast';
 import type {SearchableItem, SearchSource} from '@astryxdesign/core/Typeahead';
 
 const users: SearchableItem[] = [
@@ -25,6 +26,7 @@ const userSource: SearchSource = {
 };
 
 export default function TokenizerEndContent() {
+  const showToast = useToast();
   const [value, setValue] = useState<SearchableItem[]>([users[0], users[2]]);
 
   return (
@@ -39,7 +41,18 @@ export default function TokenizerEndContent() {
           searchSource={userSource}
           value={value}
           onChange={items => setValue(items)}
-          endContent={<Button label="Apply" variant="primary" size="sm" />}
+          endContent={
+            <Button
+              label="Apply"
+              variant="primary"
+              size="sm"
+              onClick={() =>
+                showToast({
+                  body: `Demo: ${value.length} ${value.length === 1 ? 'team member' : 'team members'} would be applied here`,
+                })
+              }
+            />
+          }
         />
       </Stack>
     </div>

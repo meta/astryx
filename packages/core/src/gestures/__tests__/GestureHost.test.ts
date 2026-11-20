@@ -2793,6 +2793,110 @@ describe('GestureHost', () => {
     expect(released.x).toBeCloseTo(2000, 0);
   });
 
+  it('ends a mouse press whose release went outside the document at the next pointer event that reports the button up', () => {
+    const {box} = mount('<div id="box"></div>');
+    const pan = new PanGestureRecognizer({name: 'pan'});
+    const states: string[] = [];
+    let released: {x: number; y: number} | null = null;
+    pan.addListener(r => {
+      states.push(r.state);
+      if (r.state === 'ended') {
+        released = r.translation();
+      }
+    });
+    detachers.push(host.attach(box, pan));
+    pointer('pointerdown', box, {
+      pointerType: 'mouse',
+      x: 0,
+      y: 0,
+      buttons: 1,
+      time: 0,
+    });
+    for (let t = 8; t <= 64; t += 8) {
+      pointer('pointermove', box, {
+        pointerType: 'mouse',
+        x: t * 2,
+        y: 0,
+        buttons: 1,
+        time: t,
+      });
+    }
+    expect(pan.state).toBe('changed');
+    const heldAt = pan.translation();
+    // The button went up over the page around this document: its pointerup
+    // never came here. The pointer comes back with no button down.
+    pointer('pointermove', document.body, {
+      pointerType: 'mouse',
+      x: 400,
+      y: 300,
+      buttons: 0,
+      time: 900,
+    });
+    expect(states).toContain('ended');
+    // A lift at its last place: the pointer's way back moves nothing.
+    expect(released).toEqual(heldAt);
+    expect(pan.state).toBe('possible');
+  });
+
+  it('ends a mouse press whose release went outside the document before the next press starts', () => {
+    const {box} = mount('<div id="box"></div>');
+    const pan = new PanGestureRecognizer({name: 'pan'});
+    const states: string[] = [];
+    pan.addListener(r => states.push(r.state));
+    detachers.push(host.attach(box, pan));
+    pointer('pointerdown', box, {
+      pointerType: 'mouse',
+      x: 0,
+      y: 0,
+      buttons: 1,
+      time: 0,
+    });
+    for (let t = 8; t <= 64; t += 8) {
+      pointer('pointermove', box, {
+        pointerType: 'mouse',
+        x: t * 2,
+        y: 0,
+        buttons: 1,
+        time: t,
+      });
+    }
+    // The next thing this document hears from the mouse is a new press.
+    pointer('pointerdown', box, {
+      pointerType: 'mouse',
+      x: 50,
+      y: 0,
+      buttons: 1,
+      time: 900,
+    });
+    expect(states.filter(state => state === 'ended')).toHaveLength(1);
+    pointer('pointerup', box, {pointerType: 'mouse', x: 50, y: 0, time: 950});
+    expect(pan.state).toBe('possible');
+  });
+
+  it('keeps a mouse press held while its button stays down', () => {
+    const {box} = mount('<div id="box"></div>');
+    const pan = new PanGestureRecognizer({name: 'pan'});
+    detachers.push(host.attach(box, pan));
+    pointer('pointerdown', box, {
+      pointerType: 'mouse',
+      x: 0,
+      y: 0,
+      buttons: 1,
+      time: 0,
+    });
+    for (let t = 8; t <= 64; t += 8) {
+      pointer('pointermove', box, {
+        pointerType: 'mouse',
+        x: t * 2,
+        y: 0,
+        // A second button pressed with the first, a chord, keeps the press.
+        buttons: t > 32 ? 3 : 1,
+        time: t,
+      });
+    }
+    expect(pan.state).toBe('changed');
+  });
+
   it('cancels the context menu while a long press owns the touch', () => {
     const {box} = mount('<div id="box"></div>');
     const press = new LongPressGestureRecognizer({name: 'press'});

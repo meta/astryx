@@ -50,10 +50,10 @@ function photoSvg(color: string): string {
 }
 
 const COLORS: Record<string, string> = {
-  '10': '#d22',
-  '15': '#2a2',
-  '20': '#22d',
-  '25': '#d80',
+  forest: '#d22',
+  lake: '#2a2',
+  beach: '#22d',
+  city: '#d80',
 };
 
 interface Gallery {
@@ -79,8 +79,9 @@ async function openGallery(
     trigger: triggerName = 'Open gallery with zoom',
   } = {},
 ): Promise<Gallery> {
-  await page.route('https://picsum.photos/**', async route => {
-    const id = /\/id\/(\d+)\//.exec(route.request().url())?.[1] ?? '10';
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route => {
+    const id =
+      /\/sample-([a-z]+)-/.exec(route.request().url())?.[1] ?? 'forest';
     await route.fulfill({
       contentType: 'image/svg+xml',
       body: photoSvg(COLORS[id] ?? '#888'),
@@ -523,7 +524,7 @@ for (const [label, hold] of [
       expect(
         await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
       ).toBe(false);
-      await page.route('https://picsum.photos/**', async route =>
+      await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
         route.fulfill({contentType: 'image/svg+xml', body: photoSvg('#888')}),
       );
       await openStory(page, storybook(), 'core-lightbox--gallery');
@@ -580,7 +581,7 @@ test('without zoom, a mouse press beside the photo that is released on it closes
     expect(
       await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
     ).toBe(false);
-    await page.route('https://picsum.photos/**', async route =>
+    await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
       route.fulfill({contentType: 'image/svg+xml', body: photoSvg('#888')}),
     );
     await openStory(page, storybook(), 'core-lightbox--gallery');
@@ -619,7 +620,7 @@ test('without zoom, a mouse press beside the photo that is released on it closes
   }
 });
 
-test('without zoom, a mouse click beside a photo narrower than its caption leaves the gallery open, as on main', async ({
+test('without zoom, a mouse click beside a photo narrower than its caption, level with it, closes the gallery', async ({
   browser,
 }) => {
   const context = await browser.newContext({
@@ -633,7 +634,7 @@ test('without zoom, a mouse click beside a photo narrower than its caption leave
       await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
     ).toBe(false);
     // A tall, narrow photo fits narrower than its caption.
-    await page.route('https://picsum.photos/**', async route =>
+    await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
       route.fulfill({
         contentType: 'image/svg+xml',
         body: '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="1200"><rect width="200" height="1200" fill="#888"/></svg>',
@@ -671,9 +672,10 @@ test('without zoom, a mouse click beside a photo narrower than its caption leave
         );
       }, beside),
     ).toBe(true);
+    // The caption's band sits under the photo, so this point is the
+    // backdrop's.
     await page.mouse.click(beside.x, beside.y);
-    await frames(page, 40);
-    await expect(dialog).toBeVisible();
+    await expect(dialog).toBeHidden();
   } finally {
     await context.close();
   }

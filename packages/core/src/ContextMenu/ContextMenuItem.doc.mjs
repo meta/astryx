@@ -11,8 +11,8 @@ export const docs = {
   props: [
     {
       name: 'icon',
-      type: 'IconType',
-      description: 'Icon to display before the label.',
+      type: 'ReactNode | IconType',
+      description: 'Icon to display before the label; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'label',
@@ -25,14 +25,64 @@ export const docs = {
       description: 'Secondary description text displayed below the label.',
     },
     {
+      name: 'onClick',
+      type: '(event: MouseEvent) => void',
+      description:
+        "Callback when the item is selected. A keyboard activation arrives as a synthesized click carrying the key's modifiers. On a row with `href` it runs before the browser navigates and is skipped for a modified click (⌘, Ctrl, Shift, Alt, middle button), which is left to the browser.",
+    },
+    {
+      name: 'href',
+      type: 'string',
+      description:
+        'Address the row navigates to. The row then renders as a real anchor with role="menuitem" (through LinkProvider), so a modified click or a middle click keeps the browser\'s meaning — a new tab — instead of running onClick.',
+    },
+    {
+      name: 'target',
+      type: "'_blank' | '_self'",
+      description: 'Link target. Only used with href.',
+    },
+    {
+      name: 'rel',
+      type: 'string',
+      description:
+        'Link relationship. noopener noreferrer is added for target="_blank". Only used with href.',
+    },
+    {
+      name: 'isDisabled',
+      type: 'boolean',
+      description:
+        'Whether the row is unavailable. Disabled rows expose aria-disabled, remove link destinations, and suppress activation.',
+      default: 'false',
+    },
+    {
       name: 'endContent',
       type: 'ReactNode',
       description: 'Additional content rendered after the label and description.',
     },
     {
+      name: 'hasCloseOnSelect',
+      type: 'boolean',
+      description:
+        'Whether activating the item closes the menu. Set false for an action that reports its result on the item itself.',
+      default: 'true',
+    },
+    {
+      name: 'variant',
+      type: "'default' | 'destructive'",
+      description:
+        "Visual variant. 'destructive' renders the label, description, and icon in the error color for dangerous actions (e.g. Delete).",
+      default: "'default'",
+    },
+    {
       name: 'xstyle',
       type: 'StyleXStyles',
       description: 'StyleX styles for layout customization.',
+    },
+    {
+      name: 'ref',
+      type: 'React.Ref<HTMLElement>',
+      description:
+        'Ref forwarded to the row root, the element carrying role="menuitem". Register the row with an element-keyed observer or overlay.',
     },
   ],
   playground: {
@@ -51,8 +101,8 @@ export const docsZh = {
   props: [
     {
       name: 'icon',
-      type: 'IconType',
-      description: '显示在标签前的图标。',
+      type: 'ReactNode | IconType',
+      description: '显示在标签前的图标；可传语义图标名称（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
     },
     {
       name: 'label',
@@ -83,7 +133,7 @@ export const docsDense = {
   displayName: 'Context Menu Item',
   description: 're-exported DropdownMenuItem for compound mode',
   propDescriptions: {
-    icon: 'icon before label',
+    icon: 'icon before label; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     label: 'primary label text',
     description: 'secondary text below label',
     endContent: 'additional content after label+description',

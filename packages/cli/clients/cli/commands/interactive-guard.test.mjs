@@ -95,10 +95,57 @@ describe('the harness holds stdin open', () => {
   });
 });
 
+/**
+ * Run a server command with stdin held open for 3 seconds; stdout and stderr
+ * apart, since stdout is its protocol stream.
+ * @param {string[]} args
+ * @param {string} cwd
+ * @returns {Promise<{signal: NodeJS.Signals | null, stdout: string, stderr: string}>}
+ */
+function runServing(args, cwd) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ['--import', OFFLINE, CLI, ...args], {
+      cwd,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: {...process.env, FORCE_COLOR: '0', CI: ''},
+    });
+    child.stdin.on('error', () => {});
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8').on('data', chunk => (stdout += chunk));
+    child.stderr.setEncoding('utf8').on('data', chunk => (stderr += chunk));
+    const timer = setTimeout(() => child.kill('SIGTERM'), 3_000);
+    child.on('error', error => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on('close', (_status, signal) => {
+      clearTimeout(timer);
+      resolve({signal, stdout, stderr});
+    });
+  });
+}
+
+/**
+ * `astryx mcp` reads the protocol requests an MCP client program writes to its
+ * stdin (spec:AST-121 FR1): it serves while stdin is open and asks nothing.
+ * mcp-server.test.mjs checks that it answers requests and exits once stdin
+ * ends.
+ */
+const SERVES_ON_STDIN = new Set(['mcp']);
+
 describe('every command exits without waiting on stdin', () => {
   it.concurrent.for(manifestInvocations())('%s', async ([label, args], {expect}) => {
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-interactive-guard-'));
     try {
+      if (SERVES_ON_STDIN.has(args[0])) {
+        // Still serving at the deadline, with nothing on stdout, the protocol
+        // stream: no question. Run-level lines go to stderr (INV12).
+        const r = await runServing(args, cwd);
+        expect(r.signal, `${label} stopped serving:\n${r.stderr.slice(-500)}`).toBe('SIGTERM');
+        expect(r.stdout, `${label} wrote to stdout before any request`).toBe('');
+        return;
+      }
       const r = await runCli(args, cwd);
       expect(r.signal, `${label} waited on stdin:\n${r.output.slice(-500)}`).toBeNull();
     } finally {

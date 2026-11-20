@@ -139,3 +139,42 @@ test.describe('with a mouse, a context menu', () => {
     await expect(dialog(page, 'Context popover')).toBeVisible();
   });
 });
+
+test.describe('with a finger, a context menu', () => {
+  test.skip(
+    ({browserName}) => browserName !== 'chromium',
+    'Chromium holds a finger for the long press through the DevTools protocol',
+  );
+  test.use({
+    hasTouch: true,
+    isMobile: true,
+    viewport: {width: 390, height: 844},
+  });
+
+  test('a ContextMenu row that opens a Popover leaves it open', async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), STORY);
+    const region = await page.getByTestId('context-region').boundingBox();
+    if (region == null) {
+      throw new Error('the context region has no rendered bounds');
+    }
+    const x = region.x + region.width / 2;
+    const y = region.y + region.height / 2;
+    const cdp = await page.context().newCDPSession(page);
+    // A long press opens the menu; the finger then lifts.
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [{x, y, id: 1}],
+    });
+    const row = page.getByRole('menuitem', {name: 'Open context popover'});
+    await expect(row).toBeVisible({timeout: 2000});
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchEnd',
+      touchPoints: [],
+    });
+    await row.tap();
+    await page.waitForTimeout(400);
+    await expect(dialog(page, 'Context popover')).toBeVisible();
+  });
+});

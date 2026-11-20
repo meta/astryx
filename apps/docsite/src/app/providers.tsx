@@ -9,10 +9,10 @@ import {
   useEffect,
   useState,
 } from 'react';
-import Link from 'next/link';
 import {useMediaQuery} from '@astryxdesign/core/hooks';
 import {Theme} from '@astryxdesign/core/theme';
 import {LinkProvider} from '@astryxdesign/core/Link';
+import {IntentPrefetchLink} from '../components/IntentPrefetchLink';
 import {astryxTheme} from '../themes/astryx';
 
 type ThemeMode = 'light' | 'dark';
@@ -99,7 +99,7 @@ export function Providers({children}: {children: React.ReactNode}) {
   return (
     <ThemeModeContext value={{themeMode: mode, toggleMode}}>
       <Theme theme={astryxTheme} mode={mode}>
-        <LinkProvider component={Link}>{children}</LinkProvider>
+        <LinkProvider component={IntentPrefetchLink}>{children}</LinkProvider>
       </Theme>
     </ThemeModeContext>
   );
