@@ -636,6 +636,21 @@ function joinSideLists(q) {
       // and bottom" are every corner, read by the corner reader.)
       const sided =
         /^(?:borders?|bordered|edges?|outlines?|lines?|padding|margins?|spacing|space)$/i;
+      // (A bare comma before the last side, with a look after it and
+      // another before the list, ends the first item there: "a border on
+      // top, bottom padding 8px" is the border's top and the padding's
+      // bottom. The sides before that comma are the earlier look's.)
+      const lastComma = /,\s*(?!and\b)(?:on\s+)?(?:the\s+)?[a-z]+$/i.exec(m);
+      if (nextLook && owner && lastComma) {
+        const head = m.slice(0, lastComma.index);
+        const joinedHead = sided.test(owner)
+          ? head.replace(
+              /\s*,\s*(?:and\s+)?(?:on\s+)?(?:the\s+)?|\s+and\s+(?:on\s+)?(?:the\s+)?/gi,
+              ' & ',
+            )
+          : head;
+        return joinedHead + m.slice(lastComma.index);
+      }
       // (Any look's list is kept whole, "top and bottom padding 6px", so
       // each side said takes the look: the border reader and the padding
       // reader each read the sides.)

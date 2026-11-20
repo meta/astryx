@@ -570,4 +570,21 @@ describe('per-side border asks', () => {
     },
     T,
   );
+
+  it(
+    'ends a side list at a comma when another look follows',
+    async () => {
+      if (unbuilt) return;
+      expect(
+        await first('cards with a border on top, bottom padding 8px'),
+      ).toEqual([
+        "border-top '1px solid var(--color-border)' --on card",
+        'padding-bottom 8px --on card',
+      ]);
+      expect(
+        (await first('cards with a border on top, bottom margin 8px'))[0],
+      ).toBe("border-top '1px solid var(--color-border)' --on card");
+    },
+    T,
+  );
 });
