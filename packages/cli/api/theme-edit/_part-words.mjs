@@ -34,7 +34,9 @@ export const OVERRIDES = [
     {on: 'calendar-range-preview'},
   ],
   [/\b(?:calendar\s+)?range\s+bands?\b/, {on: 'calendar-range'}],
-  [/\bnotifications?\b/, {on: 'toast'}],
+  // (Other design systems' names for the same parts: a snackbar is a
+  // toast, a lozenge a badge, the form controls the inputs.)
+  [/\b(?:notifications?|snack ?bars?)\b/, {on: 'toast'}],
   [/\b(focus (ring|outline)s?)\b/, {on: 'focus-ring'}],
   [/\b((modal |dialog )?(overlay|scrim|backdrop))\b/, {on: 'overlay'}],
   [/\bicons?\b/, {on: 'icons'}],
@@ -112,7 +114,7 @@ export const OVERRIDES = [
   ],
   [/\b(skeletons?( loaders?)?|loading placeholders?)\b/, {on: 'skeleton'}],
   [
-    /\b(inputs?|text ?box(es)?|text ?fields?|form fields?|fields?)\b/,
+    /\b(inputs?|text ?box(es)?|text ?fields?|form (fields?|controls?|elements?)|fields?)\b/,
     {on: 'inputs'},
   ],
   // A checkbox is the box itself; the checks group (checkbox and radio)
@@ -156,7 +158,7 @@ export const OVERRIDES = [
   ],
   // (Kbd's key badges, each key's own box, by their own name.)
   [/\bkey badges?\b/, {on: 'kbd-key'}],
-  [/\b(badges?|chips?|tags?)\b/, {on: 'badge'}],
+  [/\b(badges?|chips?|tags?|lozenges?)\b/, {on: 'badge'}],
   [/\bh([1-6])\b/, {on: 'heading'}],
   [/\b(headings?|titles?)\b/, {on: 'heading'}],
   [/\b(modals?|popups?)\b/, {on: 'dialog'}],

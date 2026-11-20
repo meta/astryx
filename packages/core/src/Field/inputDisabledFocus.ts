@@ -49,6 +49,24 @@ export const inputDisabledFocusStyles = stylex.create({
     },
   },
 
+  // The same ring for a disabled field box that takes keyboard focus itself
+  // (a collapsed layer-mode Tokenizer's placeholder).
+  selfRing: {
+    borderColor: {
+      default: colorVars['--color-border-emphasized'],
+      ':focus-visible': {
+        default: colorVars['--color-accent'],
+        // Forced colors repaint author borders in one system color and drop
+        // the inset shadow; Highlight keeps the focused field visible.
+        '@media (forced-colors: active)': 'Highlight',
+      },
+    },
+    boxShadow: {
+      default: 'none',
+      ':focus-visible': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
+    },
+  },
+
   // The same ring for a field that restores it while focus is anywhere inside
   // it (TimeInput, DateRangeInput, DateTimeInput and their touch fields).
   withinRing: {

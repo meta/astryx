@@ -156,7 +156,10 @@ const PART = [
     {
       q: 'sepia page #f6f0e4 in light mode, dark brown text',
       first: [
+        // (The page joins with its frame and main panel lines.)
         "--color-background-body '#f6f0e4' --mode light",
+        "background-color '#f6f0e4' --on app-shell --mode light",
+        "background-color '#f6f0e4' --on layout-content --mode light",
         "--color-text-primary '#92400e' --mode light",
       ],
     },
@@ -167,6 +170,8 @@ const PART = [
       q: 'black page with green text',
       first: [
         "--color-background-body '#000000' --mode dark",
+        "background-color '#000000' --on app-shell --mode dark",
+        "background-color '#000000' --on layout-content --mode dark",
         "--color-text-primary '#16a34a' --mode dark",
       ],
     },
@@ -177,6 +182,8 @@ const PART = [
       q: 'green text on a black page',
       first: [
         "--color-background-body '#000000' --mode dark",
+        "background-color '#000000' --on app-shell --mode dark",
+        "background-color '#000000' --on layout-content --mode dark",
         "--color-text-primary '#16a34a' --mode dark",
       ],
     },
@@ -237,6 +244,8 @@ const STATE_MODE = [
       q: 'in dark mode: page #202020, cards #2B2B2B, card border #1D1D1D, accent #4CC2FF',
       first: [
         "--color-background-body '#202020' --mode dark",
+        "background-color '#202020' --on app-shell --mode dark",
+        "background-color '#202020' --on layout-content --mode dark",
         "background-color '#2b2b2b' --on card --when variant:default --mode dark",
         "background-color '#2b2b2b' --on card --when variant:transparent --mode dark",
         "background-color '#2b2b2b' --on card --when variant:muted --mode dark",
