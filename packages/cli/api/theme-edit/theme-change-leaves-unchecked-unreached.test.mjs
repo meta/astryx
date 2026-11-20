@@ -122,9 +122,9 @@ describe("the base theme's own accent, written as a color", () => {
   );
 });
 
-describe('a status fill the status color does not reach', () => {
+describe('a status fill the status color reaches', () => {
   it(
-    'is listed once that status color is set, and its line ends it',
+    'the error toast follows the danger color: no miss for it',
     async () => {
       await themeEditNew('e', {
         cwd,
@@ -136,10 +136,10 @@ describe('a status fill the status color does not reach', () => {
           (/** @type {any} */ x) =>
             x.part === 'toast' && /does not reach/.test(x.why),
         );
-      const m = miss(await shown('e'));
-      expect(m?.line).toMatch(/--color-background-error-inverted/);
-      await follow(m.line);
       expect(miss(await shown('e'))).toBeUndefined();
+      expect(fs.readFileSync(path.join(cwd, 'themes/e/e.css'), 'utf8')).toMatch(
+        /--color-background-error-inverted: light-dark\(#[0-9a-f]{6}, #[0-9a-f]{6}\)/,
+      );
     },
     T,
   );
