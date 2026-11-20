@@ -298,6 +298,24 @@ const IMAGE = '[data-playground-editor] [data-playground-image] img';
 async function insertSampleImage(page: Page): Promise<void> {
   await page.locator(EDITOR).click();
   await page.keyboard.press('ControlOrMeta+End');
+  await $insertFromDialog(page);
+}
+
+/**
+ * Writes a right-to-left paragraph at the end of the document and puts the
+ * image in it. A block reads the way its own text reads, so an image in this
+ * document's last block would sit in left-to-right prose whatever the
+ * provider says, and its handle would be on the right.
+ */
+async function insertSampleImageIntoHebrew(page: Page): Promise<void> {
+  await page.locator(EDITOR).click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('\u05e9\u05dc\u05d5\u05dd \u05e2\u05d5\u05dc\u05dd');
+  await $insertFromDialog(page);
+}
+
+async function $insertFromDialog(page: Page): Promise<void> {
   await page.getByRole('button', {name: 'Image', exact: true}).click();
   // The dialog opens on its sample source, so this is one click away.
   await expect(page.getByRole('heading', {name: 'Insert image'})).toBeVisible();
@@ -435,7 +453,7 @@ test('the resize handle follows the drag in a right-to-left document', async ({
   // so dragging it outward lowers clientX. A width that followed the axis
   // rather than the drag would shrink the image instead.
   const errors = await openStory(page, 'rtl');
-  await insertSampleImage(page);
+  await insertSampleImageIntoHebrew(page);
   await page.locator(IMAGE).click();
   // Narrow it first: at its own width the picture is already near the
   // measure, and `max-width: 100%` would absorb the drag.
@@ -678,7 +696,7 @@ test('the insert dialog is tabbable, outside the toolbar roving tab stop', async
   // A Toolbar is a roving tab stop: everything inside it is tabindex="-1", so
   // a dialog rendered in its endContent could not be tabbed through at all.
   // The dialog goes in the editor's plugins slot instead, beside the toolbar
-  // — which is where RichTextEditorToolbar puts its own link dialog.
+  // — which is where RichTextEditorToolbar puts its own link popover.
   const insert = page.getByRole('button', {name: 'Insert image', exact: true});
   for (let press = 0; press < 12; press += 1) {
     if (await insert.evaluate(el => el === document.activeElement)) {

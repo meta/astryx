@@ -469,6 +469,19 @@ export interface TableRowContext {
 }
 
 /**
+ * An observable loading source a plugin hands to Table. Table reads it before
+ * it builds the table sections, so an empty table that is loading shows no
+ * default empty state. Keep the source and each snapshot object stable while
+ * the values do not change.
+ */
+export interface TablePluginRenderState {
+  subscribe(onChange: () => void): () => void;
+  /** `hasMore` is optional: an absent value makes no claim about more rows. */
+  getSnapshot(): Readonly<{isLoading: boolean; hasMore?: boolean}>;
+  getServerSnapshot(): Readonly<{isLoading: boolean; hasMore?: boolean}>;
+}
+
+/**
  * Table plugin — transforms render props at each structural level.
  * Plugins compose by sequential application (first plugin's output feeds next).
  *
@@ -501,6 +514,11 @@ export interface TablePlugin<
    * declaration makes the table's row model `custom`.
    */
   readonly rowModel?: TableRenderContext['rowModel'];
+  /**
+   * A loading source Table reads before it builds the sections. Table uses it
+   * only in data mode, with a flat row model and the default scroll wrapper.
+   */
+  readonly renderState?: TablePluginRenderState;
   /**
    * Transform the column definitions before rendering.
    * Runs before any element-level transforms. Use to filter, reorder,
@@ -617,8 +635,13 @@ export interface BaseTableProps<
   T extends Record<string, unknown>,
 > extends BaseProps<HTMLTableElement> {
   ref?: React.Ref<HTMLTableElement>;
-  /** Geometry-only, fixed-height capability; Styled Table owns its coordinated viewport. */
-  virtualization?: TableVirtualizationCapability;
+  /**
+   * Geometry-only windowing: one capability, or a list with at most one rows
+   * and one columns capability. Styled Table owns its coordinated viewport.
+   */
+  virtualization?:
+    | TableVirtualizationCapability
+    | ReadonlyArray<TableVirtualizationCapability>;
   /** Array of data items to render as rows */
   data?: T[];
   /** Column definitions. If omitted, auto-generated from data keys. */
@@ -687,7 +710,9 @@ export interface BaseTableProps<
     afterTable?: ReactNode;
   }>;
   /**
-   * How default-rendered body cell text behaves when it exceeds column width.
+   * How default-rendered cell text behaves when it exceeds column width.
+   * Header cells follow the same mode: under `'wrap'` a long heading wraps in
+   * a data-driven table, and in children mode its column grows to fit it.
    *
    * - `'wrap'` (default) — text wraps and the row grows taller
    * - `'truncate'` — text is clipped with an ellipsis; default-rendered cells

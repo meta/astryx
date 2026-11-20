@@ -93,7 +93,8 @@
  *     with the key. For grandfathered sites tracked for removal, and for
  *     developer diagnostics that are not interface copy. The value is the
  *     reported chunk: a literal, one template chunk, or trimmed JSX text.
- *     Default: {}.
+ *     An entry that the file's reports never reach is itself reported, so an
+ *     entry for text that is gone shows up. Default: {}.
  */
 
 /**
@@ -417,6 +418,9 @@ const rule = {
       hardcodedCallArg:
         'Hardcoded user-facing string {{value}} passed to `{{name}}()`. ' +
         'Route through `t(\'<namespace>.<component>.<key>\')` via `useTranslator()` so it can be localized.',
+      staleExemption:
+        'Exempted string {{value}} matches no report in this file. ' +
+        'Remove it from `allowedStringsByFile`.',
     },
     schema: [
       {
@@ -453,6 +457,7 @@ const rule = {
       filename,
       options.allowedStringsByFile,
     );
+    const usedAllowed = new Set();
     const context =
       allowedInFile.size === 0
         ? ruleContext
@@ -461,6 +466,7 @@ const rule = {
               value(descriptor) {
                 const value = descriptor.data?.value;
                 if (value != null && allowedInFile.has(JSON.parse(value))) {
+                  usedAllowed.add(JSON.parse(value));
                   return false;
                 }
                 ruleContext.report(descriptor);
@@ -470,6 +476,18 @@ const rule = {
           });
 
     return {
+      // An exemption that matched nothing names text that is gone.
+      'Program:exit'(node) {
+        for (const value of allowedInFile) {
+          if (usedAllowed.has(value)) continue;
+          ruleContext.report({
+            node,
+            messageId: 'staleExemption',
+            data: {value: JSON.stringify(value)},
+          });
+        }
+      },
+
       ReturnStatement(node) {
         let owner = node.parent;
         while (owner && !isFunction(owner)) owner = owner.parent;

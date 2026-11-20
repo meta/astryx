@@ -116,12 +116,9 @@ pnpm review:pre                       # the working tree against origin/main
 pnpm review:pre --base upstream/main  # a fork whose main remote is upstream
 pnpm review:pre --head HEAD           # committed work only
 pnpm review:pre --json                # the same report as JSON
-pnpm review:pre --body-file body.md   # also read the description for item h
-pnpm review:pre --pr 1234             # read the description with gh
 ```
 
-The report reads only the local repository, and the description when you pass
-one. It prints:
+The report reads only the local repository. It prints:
 
 - each changed file and its class: record, owner-gated record, published
   package code, other package file, Lab, or repository;
@@ -129,13 +126,53 @@ one. It prints:
   cite or that the added lines route;
 - the global baseline claims that the linked components' review triggers route,
   read at the merge base;
-- the authored line count, and whether the change merges into the base;
-- the findings for items h to l, each with its file and line, the rule, and
+- the authored line count, with advice when the lines outside templates are
+  over the size guideline, and whether the change merges into the base;
+- the findings for items i to l, each with its file and line, the rule, and
   the fix;
 - the checklist items that apply to this change, each with its reason.
 
 The report is a lookup. The records decide acceptance, not the report. A
 finding is a lead to check, not a verdict.
+
+### Before you mark ready
+
+```bash
+pnpm preflight                       # the committed change against origin/main
+pnpm preflight --base upstream/main  # a fork whose main remote is upstream
+pnpm preflight --browser             # also the browser specs the change selects
+pnpm preflight --quick               # minutes: the changed packages, files and tests alone
+```
+
+`pnpm preflight` runs `pnpm review:pre`, then the checks CI runs for this
+change, scoped the way CI scopes them: the typecheck of the changed packages
+and the packages that depend on them, ESLint on the changed files and Prettier on the changed TypeScript and Markdown files
+and `pnpm check:repo`, the Vitest tests the change reaches in each project,
+`pnpm check:knowledge` and `pnpm check:changesets`. With `--browser` it also
+builds Storybook and runs the accessibility and Chromium interaction specs the
+change selects. It prints one PASS, FAIL or SKIP line a check, the command of
+each failing check, and "ready to flip" or "not ready: N"; it exits 1 when a
+check fails. CI can run more for a change than preflight does (whole-repository
+lint, the build tests, and the browser, visual, WebKit, accessibility and
+docsite jobs), so a pass is a good sign, not CI's verdict. It checks committed work, as CI's test listers do: with uncommitted
+changes it stops and exits 2. `--wrap <command>` (or `PREFLIGHT_WRAP`) runs each heavy step as
+`<command> <build|test|knowledge> <step...>`, for a machine that limits heavy
+jobs.
+
+`--quick` runs `pnpm review:pre`, the typecheck of the changed packages alone,
+ESLint on the changed files, the changed test files alone, `pnpm check:knowledge`
+and `pnpm check:changesets`, in minutes. It is not CI-equivalent: it builds
+nothing, leaves out dependent packages, the tests the change reaches through an
+import, and the guards, and it ends with "run `pnpm preflight` before you flip"
+rather than "ready to flip". When every typecheck error names a workspace
+package's build output (`@astryxdesign/<package>/built` or a relative `dist` path), the
+typecheck reports SKIP ("workspace builds missing; run `pnpm build` first"),
+and the run ends "not checked" rather than a pass; any other TypeScript error
+fails it. A skipped typecheck checked nothing: run `pnpm build`, then run
+preflight again.
+
+Preflight is not a required step. It reproduces the pre-review checklist and
+CI's checks; it does not reproduce a reviewer's judgment.
 
 ### Find the governing records by hand
 
@@ -151,7 +188,7 @@ finding is a lead to check, not a verdict.
 
 First apply the protocol above: one primary intent, no tagalongs, and
 specifications last. Then check each item that the report lists. Item d applies
-to every pull request. The report checks items h to l automatically and lists
+to every pull request. The report checks items i to l automatically and lists
 each finding at its file and line.
 
 - **a. API delta.** A current record decides each added or changed row of the
@@ -214,23 +251,34 @@ each finding at its file and line.
   ([`architecture:knowledge-contracts`](../architecture/knowledge-contracts.md#dec-14--one-owner-approval-binds-a-pull-requests-spec-content)
   DEC-14). The description also reports `## Writing rubric results`
   ([Writing specification records](spec-writing.md)).
-- **h. Size (automatic).** More than 2,000 authored lines, without lockfiles,
-  snapshots, or generated files, is a finding. A description line that declares
-  a behavior-module pull request and names the module (`Behavior module: <name>`)
-  removes the limit. A `Batch:` row raises it to 8,000. For a stacked pull
-  request, pass `--base` the branch below it, so the count covers only its own
-  lines.
+- **h. Size (guideline).** Prefer pull requests under about 2,000 authored
+  lines, without lockfiles, snapshots, or generated files. A reviewer may
+  suggest a split when a smaller change would be easier to review. Size alone
+  is never a blocking finding. Templates under `packages/cli/assets/templates/`
+  may exceed this guideline, because each one is a complete example. For a
+  stacked pull request, pass `--base` the branch below it, so the count covers
+  only its own lines.
 - **i. Shared owners (automatic).** In Core source, an added resize observer,
   document or window listener, module-level warn-once set, or parent walk
   across shadow roots is a finding: call `observeResize`,
   `subscribeInput`, `useDevWarning`, or `parentAcrossShadow`
   ([`architecture:react-component-runtime`](../architecture/react-component-runtime.md#boundaries-and-invariants)
   INV16).
-- **j. Effects (automatic).** An added Effect with no comment that names the
-  system it syncs, an Effect that only copies a value into a ref, and a DOM node
-  in React state are findings
+- **j. Effects (automatic).** Interaction logic lives in callbacks, and no
+  Effect reacts to interaction state. These are findings: an added Effect with
+  no comment that names the system it syncs; an Effect that only copies props
+  or state into other state; an Effect that only copies a value into a ref
+  (keep a latest prop or callback with `useCommittedRef` or
+  `useCommittedRefInto` from `packages/core/src/hooks/useCommittedRef.ts`); a
+  read of such a ref's `current` during render or in `useMemo`; a `ref.current`
+  write during render, except lazy initialization such as
+  `if (ref.current == null) ref.current = value`; and a DOM node in React state
   ([`architecture:react-component-runtime`](../architecture/react-component-runtime.md#boundaries-and-invariants)
-  INV1 and INV3).
+  INV1, INV2, INV3 and INV17).
+  The check reads only the lines a change adds or changes. Two render-time
+  writes are not findings: Markdown's streaming fade-in refs, an exception that
+  `component:Markdown` DEC-7 allows, and `useTableSortable`'s config ref, exempt
+  as INV17's named gap until the owner decides.
 - **k. Release notes and records (automatic).** A package that ships a change
   with no Changeset, a `[fix]`, `[feat]`, or `[perf]` Changeset for a package
   where nothing that ships changes, such as a change to tests or tooling only,

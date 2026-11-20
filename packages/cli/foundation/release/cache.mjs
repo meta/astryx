@@ -41,7 +41,7 @@ import {fileURLToPath} from 'node:url';
 import {satisfiesRange} from '../env/semver.mjs';
 import {readJson} from './project.mjs';
 import {userCacheDir as userCacheDirFor} from '../env/user-dirs.mjs';
-import {foreignLockIsSilent} from './lock-lease.mjs';
+import {foreignLockIsSilent, LEASE_RENEW_MS} from './lock-lease.mjs';
 import {relativeWithin} from '../fs/path-compare.mjs';
 
 /**
@@ -367,6 +367,52 @@ export function isVersionRange(spec) {
  */
 
 /**
+ * The hosts npm is configured to reach without its proxy, its own `noproxy`
+ * setting (from its config files or `npm_config_noproxy`), as npm reports
+ * it; null when npm sets none or cannot say.
+ * @param {{command: string, prefix: string[]}} npm how npm is started
+ * @returns {string | null}
+ */
+export function readNpmNoProxy(npm) {
+  const result = spawnSync(
+    npm.command,
+    [...npm.prefix, 'config', 'get', 'noproxy'],
+    {
+      cwd: os.tmpdir(),
+      encoding: 'utf-8',
+      shell: false,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 30_000,
+      windowsHide: true,
+    },
+  );
+  const value = result.status === 0 ? String(result.stdout ?? '').trim() : '';
+  return value === '' || value === 'null' || value === 'undefined'
+    ? null
+    : value;
+}
+
+/**
+ * The environment npm runs in: `env`, with `NO_PROXY` and `no_proxy` set to
+ * the `noproxy` npm is configured with, when it has one. npm documents the
+ * variable as that setting's default only, but npm 11 lets the variable win.
+ * So when a shell's `NO_PROXY` names the registry's domain while npm's own
+ * settings send it through a proxy, as on some managed machines, npm goes
+ * straight to a registry it cannot reach and waits until the time limit.
+ * @param {NodeJS.ProcessEnv} env
+ * @param {string | null} noProxy npm's own setting ({@link readNpmNoProxy})
+ * @returns {NodeJS.ProcessEnv}
+ */
+export function npmEnvironment(env, noProxy) {
+  if (noProxy == null) return env;
+  if (env.NO_PROXY === noProxy && env.no_proxy === noProxy) return env;
+  return {...env, NO_PROXY: noProxy, no_proxy: noProxy};
+}
+
+/** @type {string | null | undefined} */
+let configuredNoProxy;
+
+/**
  * Run npm synchronously with no output on the caller's streams.
  * @param {string[]} args
  * npm runs under npm-guard.mjs, which gives it a process group of its own
@@ -375,18 +421,31 @@ export function isVersionRange(spec) {
  * outlives the run that started it.
  *
  * @param {string[]} args
- * @param {{cwd?: string, timeoutMs?: number, pidFile?: string, npm?: {command: string, prefix: string[], shell?: false}}} [options]
+ * @param {{cwd?: string, timeoutMs?: number, pidFile?: string, npm?: {command: string, prefix: string[], shell?: false}, noProxy?: string | null}} [options]
  *   `pidFile` receives npm's process id while it runs (the release lock's
- *   record); `npm` replaces how npm is started (tests).
+ *   record); `npm` replaces how npm is started, and `noProxy` the `noproxy`
+ *   setting read from it (tests). npm runs with its own `noproxy` setting
+ *   ({@link npmEnvironment}), read from npm once per run.
  * @returns {NpmResult}
  */
 export function runNpm(args, options = {}) {
-  const {command, prefix} = options.npm ?? npmCommand();
+  const npm = options.npm ?? npmCommand();
+  const {command, prefix} = npm;
+  const noProxy =
+    options.noProxy !== undefined
+      ? options.noProxy
+      : options.npm
+        ? null
+        : configuredNoProxy === undefined
+          ? (configuredNoProxy = readNpmNoProxy(npm))
+          : configuredNoProxy;
+  const env = npmEnvironment(process.env, noProxy);
   const timeoutMs = options.timeoutMs ?? 300_000;
   const direct = process.platform === 'win32';
   const result = direct
     ? spawnSync(command, [...prefix, ...args], {
         cwd: options.cwd ?? os.tmpdir(),
+        env,
         encoding: 'utf-8',
         // Never a shell: a declared range must not reach one.
         shell: false,
@@ -409,6 +468,7 @@ export function runNpm(args, options = {}) {
         ],
         {
           cwd: options.cwd ?? os.tmpdir(),
+          env,
           encoding: 'utf-8',
           stdio: ['ignore', 'pipe', 'pipe'],
           // A backstop only: the guard ends npm at the limit itself.
@@ -544,6 +604,54 @@ export function failedInstallWaitMs(failures) {
 }
 
 /**
+ * The registries npm installs releases from, as npm reads its user and
+ * global settings: the `@astryxdesign` scope's registry (the CLI and Core)
+ * and npm's registry (their other dependencies); each null when not set or
+ * when npm cannot say. A failed install is remembered for these registries
+ * only, so a run after either changes installs at once.
+ * @param {typeof runNpm} run
+ * @returns {{scoped: string | null, registry: string | null}}
+ */
+function npmRegistries(run) {
+  /** @type {Record<string, string>} */
+  const values = {};
+  try {
+    const result = run(['config', 'get', '@astryxdesign:registry', 'registry'], {timeoutMs: 15_000});
+    if (result.status === 0) {
+      for (const line of String(result.stdout ?? '').split('\n')) {
+        const at = line.indexOf('=');
+        if (at > 0) values[line.slice(0, at).trim()] = line.slice(at + 1).trim();
+      }
+    }
+  } catch {
+    // npm that cannot say leaves both unknown.
+  }
+  /** @param {string | undefined} v */
+  const url = v => (v && /^https?:\/\/\S+$/.test(v) ? v : null);
+  return {scoped: url(values['@astryxdesign:registry']), registry: url(values.registry)};
+}
+
+/**
+ * Whether two readings of npm's registries differ; an unknown reading
+ * differs from none.
+ * @param {{scoped: string | null, registry: string | null} | null} a
+ * @param {{scoped: string | null, registry: string | null} | null} b
+ */
+function registriesChanged(a, b) {
+  if (!readsRegistry(a) || !readsRegistry(b)) return false;
+  return a.scoped !== b.scoped || a.registry !== b.registry;
+}
+
+/**
+ * Whether a reading of npm's registries names one.
+ * @param {{scoped: string | null, registry: string | null} | null} r
+ * @returns {r is {scoped: string | null, registry: string | null}}
+ */
+function readsRegistry(r) {
+  return Boolean(r && (r.scoped || r.registry));
+}
+
+/**
  * The record of a failed install of `version`: a file in the release cache,
  * shared by every copy of the CLI that uses this cache.
  * @param {string} version
@@ -560,7 +668,7 @@ function failedRecordPath(version, cacheDir) {
  * @param {string} version
  * @param {string} cacheDir
  * @param {number} [now]
- * @returns {{at: number, reason: string, failures: number, waitMs: number} | null}
+ * @returns {{at: number, reason: string, failures: number, registries: {scoped: string | null, registry: string | null} | null, waitMs: number} | null}
  */
 export function recentFailedInstall(version, cacheDir, now = Date.now()) {
   const record = readFailedInstall(version, cacheDir);
@@ -574,7 +682,7 @@ export function recentFailedInstall(version, cacheDir, now = Date.now()) {
  * The record of failed installs of `version`, whatever its age, or null.
  * @param {string} version
  * @param {string} cacheDir
- * @returns {{at: number, reason: string, failures: number} | null}
+ * @returns {{at: number, reason: string, failures: number, registries: {scoped: string | null, registry: string | null} | null} | null}
  */
 function readFailedInstall(version, cacheDir) {
   const record = readJson(failedRecordPath(version, cacheDir));
@@ -589,7 +697,12 @@ function readFailedInstall(version, cacheDir) {
     Number.isInteger(record.failures) && record.failures > 0
       ? record.failures
       : 1;
-  return {at: record.at, reason: record.reason, failures};
+  const r = record.registries;
+  const registries =
+    r && typeof r === 'object'
+      ? {scoped: typeof r.scoped === 'string' ? r.scoped : null, registry: typeof r.registry === 'string' ? r.registry : null}
+      : null;
+  return {at: record.at, reason: record.reason, failures, registries};
 }
 
 /**
@@ -597,8 +710,10 @@ function readFailedInstall(version, cacheDir) {
  * @param {string} version
  * @param {string} cacheDir
  * @param {string | null} reason null forgets it
+ * @param {{scoped: string | null, registry: string | null} | null} [registries]
+ *   npm's registries when the install failed
  */
-function recordFailedInstall(version, cacheDir, reason) {
+function recordFailedInstall(version, cacheDir, reason, registries = null) {
   const file = failedRecordPath(version, cacheDir);
   try {
     if (reason === null) {
@@ -606,11 +721,12 @@ function recordFailedInstall(version, cacheDir, reason) {
       return;
     }
     fs.mkdirSync(path.dirname(file), {recursive: true});
-    const failures = (readFailedInstall(version, cacheDir)?.failures ?? 0) + 1;
+    const last = readFailedInstall(version, cacheDir);
+    const failures = (last && !registriesChanged(last.registries, registries) ? last.failures : 0) + 1;
     const tmp = `${file}.${process.pid}.tmp`;
     fs.writeFileSync(
       tmp,
-      `${JSON.stringify({at: Date.now(), reason, failures})}\n`,
+      `${JSON.stringify({at: Date.now(), reason, failures, ...(registries ? {registries} : {})})}\n`,
     );
     fs.renameSync(tmp, file);
   } catch {
@@ -650,11 +766,24 @@ const FOREIGN_LOCK_MS = 20 * 60_000;
 const UNOWNED_LOCK_MS = 10_000;
 
 /**
+ * This process's process-id space (Linux: the pid namespace), or null where
+ * process ids are one space for the whole computer.
+ * @returns {string | null}
+ */
+export function pidSpace() {
+  try {
+    return fs.readlinkSync('/proc/self/ns/pid');
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Is process `pid` on this computer still running?
  * @param {number} pid
  * @returns {boolean}
  */
-function isAlive(pid) {
+export function isAlive(pid) {
   try {
     process.kill(pid, 0);
     return true;
@@ -674,7 +803,7 @@ function isAlive(pid) {
  * @param {number} now
  * @returns {boolean}
  */
-function lockIsStale(lockDir, now) {
+function lockIsStale(lockDir, now, leased = false) {
   let age;
   try {
     age = now - fs.statSync(lockDir).mtimeMs;
@@ -688,7 +817,36 @@ function lockIsStale(lockDir, now) {
     return age > FOREIGN_LOCK_MS || foreignLockIsSilent(lockDir, now);
   }
   // A live holder on this computer is installing, however slowly.
-  return !isAlive(owner.pid);
+  if (isAlive(owner.pid)) return false;
+  // A leased lock's holder renews its record while it runs. A process id
+  // that looks gone may only be out of sight (a container that shares this
+  // computer's name, in its own process space): the record must also have
+  // stood unrenewed for three renewals.
+  if (!leased) return true;
+  // Recorded from this process space (or by a version that records none):
+  // the process id is judged right.
+  const ns = pidSpace();
+  if (ns === null || !owner.ns || owner.ns === ns) return true;
+  try {
+    return (
+      now - fs.statSync(path.join(lockDir, 'owner.json')).mtimeMs >
+      3 * LEASE_RENEW_MS
+    );
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * The text of a lock's owner record, or '' when it has none.
+ * @param {string} lockDir
+ */
+function ownerText(lockDir) {
+  try {
+    return fs.readFileSync(path.join(lockDir, 'owner.json'), 'utf-8');
+  } catch {
+    return '';
+  }
 }
 
 /**
@@ -697,10 +855,14 @@ function lockIsStale(lockDir, now) {
  * over at once, and one from another computer once its holder has stopped
  * renewing it. Throws when the cache folder cannot be written.
  * @param {string} lockDir
- * @param {{now?: number}} [options] the clock, for tests
+ * @param {{now?: number, leased?: boolean}} [options] the clock, for tests;
+ *   `leased` for a lock whose holder renews it (lock-lease.mjs): its record
+ *   names its process space, and a holder on this computer that looks gone
+ *   from another space (a container with the same computer name) is taken
+ *   over only once its record has stood unrenewed for three renewals.
  * @returns {boolean}
  */
-export function tryLock(lockDir, {now = Date.now()} = {}) {
+export function tryLock(lockDir, {now = Date.now(), leased = false} = {}) {
   fs.mkdirSync(path.dirname(lockDir), {recursive: true});
   try {
     fs.mkdirSync(lockDir);
@@ -708,10 +870,12 @@ export function tryLock(lockDir, {now = Date.now()} = {}) {
     if (/** @type {NodeJS.ErrnoException} */ (error).code !== 'EEXIST') {
       throw error;
     }
-    if (!lockIsStale(lockDir, now)) return false;
-    // The run that held it is gone; end the install it left running, if any,
-    // before starting another.
-    endRecordedInstall(lockDir, {now});
+    // The lock judged stale, read before the judgement: the folder moved
+    // aside must be that same folder (by its identity on disk, not only its
+    // record, which a new lock lacks for a moment), or another run took the
+    // lock in between.
+    const judged = lockIdentity(lockDir);
+    if (!judged || !lockIsStale(lockDir, now, leased)) return false;
     const aside = `${lockDir}.stale-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
     try {
       fs.renameSync(lockDir, aside);
@@ -719,6 +883,24 @@ export function tryLock(lockDir, {now = Date.now()} = {}) {
       // Another run took it over first.
       return false;
     }
+    if (lockIdentity(aside) !== judged) {
+      // A live lock taken after the judgement: put it back, and wait. When
+      // its place is taken again, it stays aside for its run: this run
+      // holds nothing and removes nothing.
+      try {
+        fs.renameSync(aside, lockDir);
+      } catch {
+        // Left for its run.
+      }
+      return false;
+    }
+    // The run that held it is gone; end the install it left running, if
+    // any, before starting another. The moved folder's name holds no
+    // version, so it is passed.
+    endRecordedInstall(aside, {
+      now,
+      version: /^\.lock-(.+)$/u.exec(path.basename(lockDir))?.[1],
+    });
     fs.rmSync(aside, {recursive: true, force: true});
     try {
       fs.mkdirSync(lockDir);
@@ -729,12 +911,34 @@ export function tryLock(lockDir, {now = Date.now()} = {}) {
   try {
     fs.writeFileSync(
       path.join(lockDir, 'owner.json'),
-      JSON.stringify({pid: process.pid, host: os.hostname(), at: Date.now()}),
+      JSON.stringify({
+        pid: process.pid,
+        host: os.hostname(),
+        at: Date.now(),
+        // A leased lock names the process space its id belongs to.
+        ...(leased && pidSpace() ? {ns: pidSpace()} : {}),
+      }),
     );
   } catch {
     // Without a record the lock still expires on its own.
   }
   return true;
+}
+
+/**
+ * Which lock folder this is: its device, inode and creation time, and its
+ * owner record. A rename keeps them all; a lock made again in its place
+ * differs, even before it has a record. Null when there is no folder.
+ * @param {string} lockDir
+ * @returns {string | null}
+ */
+export function lockIdentity(lockDir) {
+  try {
+    const st = fs.statSync(lockDir, {bigint: true});
+    return `${st.dev}:${st.ino}:${st.birthtimeNs}:${ownerText(lockDir)}`;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -866,13 +1070,15 @@ export function isReleaseInstall(
  * since a recorded process id can name an unrelated process once the install
  * ended.
  * @param {string} lockDir a `.lock-<version>` folder
- * @param {{now?: number, procRoot?: string, factsOf?: (pid: number) => {argv: string[] | null, startedAt: number | null}}} [options]
+ * @param {{now?: number, procRoot?: string, factsOf?: (pid: number) => {argv: string[] | null, startedAt: number | null}, version?: string}} [options]
+ *   `version` names the release when the folder's name does not (a lock
+ *   moved aside).
  *   the clock, the process table's folder, and the fact reader, for tests
  * @returns {'ended' | 'left'} whether a process group was ended
  */
 export function endRecordedInstall(
   lockDir,
-  {now = Date.now(), procRoot = '/proc', factsOf} = {},
+  {now = Date.now(), procRoot = '/proc', factsOf, version: named} = {},
 ) {
   let pid;
   try {
@@ -881,7 +1087,7 @@ export function endRecordedInstall(
     return 'left';
   }
   if (!Number.isInteger(pid) || pid <= 1 || !isAlive(pid)) return 'left';
-  const version = /^\.lock-(.+)$/u.exec(path.basename(lockDir))?.[1];
+  const version = named ?? /^\.lock-(.+)$/u.exec(path.basename(lockDir))?.[1];
   if (!version) return 'left';
   const owner = readJson(path.join(lockDir, 'owner.json'));
   const at = typeof owner?.at === 'number' ? owner.at : null;
@@ -923,6 +1129,7 @@ function removeAside(dir) {
  * @property {string} version
  * @property {string} reason one plain sentence
  * @property {NodeJS.Signals} [signal] the install was stopped by this signal
+ * @property {{scoped: string | null, registry: string | null}} [registries] npm's registries when the install failed
  */
 
 /**
@@ -957,12 +1164,15 @@ export function ensureRelease(version, options = {}) {
   }
   // A recent failed install is not retried: offline, every run would start
   // npm again and wait for it (FR2).
+  // It is retried at once when npm's registry changed since: the caller
+  // fixed what failed.
   const failed = recentFailedInstall(version, cacheDir);
-  if (failed) {
+  const registries = failed ? npmRegistries(run) : null;
+  if (failed && !registriesChanged(failed.registries, registries)) {
     const minutes = Math.max(1, Math.round((Date.now() - failed.at) / 60_000));
     return {
       version,
-      reason: `${failed.reason}; last tried ${minutes} minute${minutes === 1 ? '' : 's'} ago, tried again after ${failed.waitMs / 60_000} minutes`,
+      reason: `${failed.reason}; last tried ${minutes} minute${minutes === 1 ? '' : 's'} ago, tried again after ${failed.waitMs / 60_000} minutes${readsRegistry(failed.registries) ? " or at once when npm's registry changes" : ''}`,
     };
   }
   try {
@@ -983,7 +1193,14 @@ export function ensureRelease(version, options = {}) {
       !('signal' in result && result.signal) &&
       result.reason !== 'another run is still installing it'
     ) {
-      recordFailedInstall(version, cacheDir, result.reason);
+      // Every recorded failure carries a reading of npm's registries, so a
+      // change to them retries it whatever the failure was.
+      recordFailedInstall(
+        version,
+        cacheDir,
+        result.reason,
+        ('registries' in result ? result.registries : null) ?? registries ?? npmRegistries(run),
+      );
     }
     return result;
   } catch (error) {
@@ -1024,7 +1241,11 @@ function ensureLocked(
   // A run stopped mid-install (Ctrl-C, a closed terminal) frees the lock and
   // its scratch folder on the way out; a killed one is taken over by the
   // owner check in tryLock.
+  let released = false;
   const release = () => {
+    // Once freed, the lock may be another run's: it is never removed again.
+    if (released) return;
+    released = true;
     for (const entry of safeList(root)) {
       if (entry.startsWith(`.tmp-${version}-${process.pid}-`)) {
         fs.rmSync(path.join(root, entry), {recursive: true, force: true});
@@ -1047,6 +1268,8 @@ function ensureLocked(
     for (const signal of signals) process.off(signal, onSignal);
   };
   for (const signal of signals) process.on(signal, onSignal);
+  /** @type {CachedRelease | ReleaseUnavailable | undefined} */
+  let result;
   try {
     const again = cachedRelease(version, cacheDir);
     if (again) return again;
@@ -1055,8 +1278,7 @@ function ensureLocked(
     for (const entry of safeList(root)) {
       if (
         entry.startsWith(`.tmp-${version}-`) ||
-        entry.startsWith(`${version}.removing-`) ||
-        entry.startsWith(`.lock-${version}.stale-`)
+        entry.startsWith(`${version}.removing-`)
       ) {
         fs.rmSync(path.join(root, entry), {recursive: true, force: true});
       }
@@ -1064,11 +1286,41 @@ function ensureLocked(
     removeAside(path.join(root, version));
     verified.delete(`${cacheDir}\0${version}`);
     onProgress('install', version);
-    return installLocked(version, {cacheDir, run, nodeVersion});
+    result = installLocked(version, {cacheDir, run, nodeVersion});
+    return result;
   } finally {
-    removeSignalHandlers();
-    release();
+    try {
+      release();
+    } finally {
+      // An install a signal stopped re-raises it at once (ensureRelease), so
+      // its handlers go now. Otherwise npm ran synchronously: a signal sent to
+      // this process meanwhile waits for the event loop's poll phase, and the
+      // handlers stay until it has run (see settleSignals).
+      if (result && 'signal' in result && result.signal)
+        removeSignalHandlers();
+      else afterPoll(removeSignalHandlers);
+    }
   }
+}
+
+/**
+ * Call `fn` after the event loop's next poll phase, wherever this runs: two
+ * check phases away, since code that runs in an I/O callback reaches a check
+ * phase before the next poll.
+ * @param {() => void} fn
+ */
+function afterPoll(fn) {
+  setImmediate(() => setImmediate(fn));
+}
+
+/**
+ * Let a signal sent to this process while a release installed stop the run
+ * before it goes on: npm runs synchronously, so such a signal waits for the
+ * event loop.
+ * @returns {Promise<void>}
+ */
+export function settleSignals() {
+  return new Promise(resolve => afterPoll(resolve));
 }
 
 /**
@@ -1134,7 +1386,8 @@ function installLocked(version, {cacheDir, run, nodeVersion}) {
       return {version, reason: 'the install was stopped', signal: stoppedBy};
     }
     if (install.status !== 0) {
-      return {version, reason: npmFailure(install)};
+      const registries = npmRegistries(run);
+      return {version, reason: npmFailure(install, registries), registries};
     }
     const cliDir = path.join(tmp, 'node_modules', '@astryxdesign', 'cli');
     const cliPkg = readJson(path.join(cliDir, 'package.json'));
@@ -1201,24 +1454,36 @@ function installLocked(version, {cacheDir, run, nodeVersion}) {
 }
 
 /**
- * One sentence on why npm failed.
+ * One sentence on why npm failed, naming the registry: the one in npm's
+ * own error when it names a URL, else the one registry setting when only
+ * one is set or both agree; with two different settings and no URL, the
+ * sentence names none.
  * @param {NpmResult} result
+ * @param {{scoped: string | null, registry: string | null}} [registries]
  * @returns {string}
  */
-function npmFailure(result) {
+function npmFailure(result, registries = {scoped: null, registry: null}) {
   if (result.error && /** @type {any} */ (result.error).code === 'ENOENT') {
     return 'npm, which installs releases, was not found';
   }
   const text = `${result.stderr}\n${result.stdout}`;
+  // npm names the address it failed at in one of these forms; without one,
+  // the registry is named only when the two settings agree on it.
+  const named = text.match(/(?:request to|network timeout at:|GET)\s+(https?:\/\/[^\s/]+)/i);
+  const registry = named
+    ? `${named[1]}/`
+    : registries.scoped && registries.registry && registries.scoped !== registries.registry
+      ? null
+      : (registries.scoped ?? registries.registry);
   if (/E404|404 Not Found|No matching version|ETARGET/i.test(text)) {
-    return 'the registry does not have it';
+    return registry ? `the registry ${registry} does not have it` : 'the registry does not have it';
   }
   if (
     /ENOTFOUND|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ENETUNREACH|offline|network/i.test(
       text,
     )
   ) {
-    return 'the registry could not be reached';
+    return registry ? `the registry ${registry} could not be reached` : 'the registry could not be reached';
   }
   return 'the package manager could not install it';
 }

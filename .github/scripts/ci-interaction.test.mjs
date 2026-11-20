@@ -22,6 +22,7 @@ import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
 import {ungated} from './ci-pr-gate.mjs';
+import {withoutCheckoutRetries} from './lib/checkout-retries.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const ci = yaml.parse(
@@ -48,7 +49,7 @@ describe('interaction proof routing', () => {
     expect(proofs.if).toMatch(/^\$\{\{ \(github\.event_name != 'pull_request'/);
     // Main's nightly full run starts them too (spec:AST-030 FR31).
     expect(ungated(proofs.if)).toBe(
-      "(github.event_name != 'workflow_dispatch' || inputs.operation == 'interaction-full' && github.ref == 'refs/heads/main') && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true'",
+      "(github.event_name != 'workflow_dispatch' || inputs.operation == 'interaction-full' && github.ref == 'refs/heads/main') && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.room.outputs.superseded != 'true' && needs.admission.outputs.full != 'true'",
     );
     // Admission too: the Storybook build starts beside it (spec:AST-030 FR16).
     expect(proofs.needs).toEqual([
@@ -66,7 +67,7 @@ describe('interaction proof routing', () => {
       '.github/actions/test-scope',
     );
     expect(decide().uses).toBe('./.test-scope/.github/actions/test-scope');
-    expect(proofs.steps.indexOf(decide())).toBe(1);
+    expect(withoutCheckoutRetries(proofs.steps).indexOf(decide())).toBe(1);
     const guards = new Set([
       "Require this pull request's Storybook build",
       'Skip the proofs outside their scope',
@@ -74,8 +75,11 @@ describe('interaction proof routing', () => {
       'Require a leg for every share',
     ]);
     // Every step after the leg count also waits for this leg to have a share.
-    const counted = proofs.steps.indexOf(step(proofs, "Count this run's legs"));
-    for (const [index, candidate] of proofs.steps.entries()) {
+    // A checkout's second try and stop carry its own condition
+    // (ci-checkout-timeout.test.mjs).
+    const scoped = withoutCheckoutRetries(proofs.steps);
+    const counted = scoped.indexOf(step(proofs, "Count this run's legs"));
+    for (const [index, candidate] of scoped.entries()) {
       if (index < 2 || guards.has(candidate.name)) continue;
       const gate =
         index <= counted

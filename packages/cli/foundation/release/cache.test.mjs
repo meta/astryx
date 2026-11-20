@@ -1,8 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect, afterEach} from 'vitest';
-import {spawn} from 'node:child_process';
+import {spawn, spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
+import fsMutable from 'node:fs';
+import {syncBuiltinESMExports} from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
@@ -16,6 +18,8 @@ import {
   npmCommand,
   resolveLatestRelease,
   runNpm,
+  npmEnvironment,
+  readNpmNoProxy,
   tryLock,
   endRecordedInstall,
   isReleaseInstall,
@@ -153,6 +157,155 @@ describe('ensureRelease', () => {
       expect('reason' in result && result.reason).toMatch(reason);
       expect(cachedRelease('0.6.8', cacheDir)).toBeNull();
     }
+  });
+
+  it('remembers a failed install for its registry only, and names that registry', () => {
+    const cacheDir = tempDir('cache');
+    let registry = 'http://127.0.0.1:9/';
+    const offline = fakeNpm({outcome: 'offline'});
+    const online = fakeNpm();
+    /** @type {string[][]} */
+    const installs = [];
+    /** @type {import('./cache.mjs').runNpm} */
+    const run = (args, opts = {}) => {
+      if (args[0] === 'config') {
+        return {status: 0, stdout: `@astryxdesign:registry=undefined\nregistry=${registry}\n`, stderr: ''};
+      }
+      installs.push(args);
+      return (registry.startsWith('http://127.0.0.1') ? offline : online).run(args, opts);
+    };
+    const first = ensureRelease('0.6.8', {cacheDir, run});
+    expect('reason' in first && first.reason).toBe('the registry http://127.0.0.1:9/ could not be reached');
+    const again = ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(1);
+    expect('reason' in again && again.reason).toBe(
+      "the registry http://127.0.0.1:9/ could not be reached; last tried 1 minute ago, tried again after 2 minutes or at once when npm's registry changes",
+    );
+    registry = 'https://registry.npmjs.org/';
+    const fixed = ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(2);
+    expect('coreDir' in fixed && fixed.coreDir).toBeTruthy();
+    expect(fs.existsSync(path.join(releasesDir(cacheDir), '.failed-0.6.8.json'))).toBe(false);
+  });
+
+  it("reads the @astryxdesign scope's registry first: changing only that registry retries at once", () => {
+    const cacheDir = tempDir('cache');
+    let scoped = 'http://127.0.0.1:9/';
+    /** @type {string[][]} */
+    const installs = [];
+    /** @type {import('./cache.mjs').runNpm} */
+    const run = (args, opts = {}) => {
+      if (args[0] === 'config') {
+        return {status: 0, stdout: `@astryxdesign:registry=${scoped}\nregistry=https://registry.npmjs.org/\n`, stderr: ''};
+      }
+      installs.push(args);
+      return fakeNpm({outcome: scoped.startsWith('http://127.0.0.1') ? 'offline' : 'ok'}).run(args, opts);
+    };
+    const first = ensureRelease('0.6.8', {cacheDir, run});
+    // npm's error names no address and the two settings differ: no registry is named.
+    expect('reason' in first && first.reason).toBe('the registry could not be reached');
+    ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(1);
+    scoped = 'https://astryx.example/';
+    const fixed = ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(2);
+    expect('coreDir' in fixed && fixed.coreDir).toBeTruthy();
+  });
+
+  it("with a scope registry set, names the registry npm's error names, and changing only npm's registry retries at once", () => {
+    const cacheDir = tempDir('cache');
+    let registry = 'http://127.0.0.1:9/';
+    /** @type {string[][]} */
+    const installs = [];
+    /** @type {import('./cache.mjs').runNpm} */
+    const run = (args, opts = {}) => {
+      if (args[0] === 'config') {
+        return {status: 0, stdout: `@astryxdesign:registry=https://astryx.example/\nregistry=${registry}\n`, stderr: ''};
+      }
+      installs.push(args);
+      if (registry.startsWith('http://127.0.0.1')) {
+        return {
+          status: 1,
+          stdout: '',
+          stderr: 'npm error code ECONNREFUSED\nnpm error request to http://127.0.0.1:9/react failed, reason: connect ECONNREFUSED',
+        };
+      }
+      return fakeNpm().run(args, opts);
+    };
+    const first = ensureRelease('0.6.8', {cacheDir, run});
+    expect('reason' in first && first.reason).toBe('the registry http://127.0.0.1:9/ could not be reached');
+    ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(1);
+    registry = 'https://registry.npmjs.org/';
+    const fixed = ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(2);
+    expect('coreDir' in fixed && fixed.coreDir).toBeTruthy();
+  });
+
+  it("names the registry from npm's timeout and 404 forms, and none when npm names none and the settings differ", () => {
+    const cases = /** @type {const} */ ([
+      ['npm error code ETIMEDOUT\nnpm error network timeout at: https://deps.example/react', 'the registry https://deps.example/ could not be reached'],
+      ['npm error code E404\nnpm error 404 Not Found - GET https://deps.example/react - Not found', 'the registry https://deps.example/ does not have it'],
+      ['npm error code ENOTFOUND\nnpm error network request failed', 'the registry could not be reached'],
+    ]);
+    for (const [stderr, reason] of cases) {
+      const cacheDir = tempDir('cache');
+      /** @type {import('./cache.mjs').runNpm} */
+      const run = args =>
+        args[0] === 'config'
+          ? {status: 0, stdout: '@astryxdesign:registry=https://astryx.example/\nregistry=https://deps.example/\n', stderr: ''}
+          : {status: 1, stdout: '', stderr};
+      const result = ensureRelease('0.6.8', {cacheDir, run});
+      expect('reason' in result && result.reason).toBe(reason);
+    }
+  });
+
+  it('a failure without a registry error (the install time limit) still records the settings, and a registry change retries it', () => {
+    const cacheDir = tempDir('cache');
+    let registry = 'https://slow.example/';
+    /** @type {string[][]} */
+    const installs = [];
+    /** @type {import('./cache.mjs').runNpm} */
+    const run = (args, opts = {}) => {
+      if (args[0] === 'config') return {status: 0, stdout: `@astryxdesign:registry=undefined\nregistry=${registry}\n`, stderr: ''};
+      installs.push(args);
+      if (registry === 'https://slow.example/') {
+        return /** @type {any} */ ({status: null, signal: null, stdout: '', stderr: '', error: Object.assign(new Error('timed out'), {code: 'ETIMEDOUT'})});
+      }
+      return fakeNpm().run(args, opts);
+    };
+    const first = ensureRelease('0.6.8', {cacheDir, run});
+    expect('reason' in first && first.reason).toMatch(/did not finish within/);
+    const record = JSON.parse(fs.readFileSync(path.join(releasesDir(cacheDir), '.failed-0.6.8.json'), 'utf8'));
+    expect(record.registries).toEqual({scoped: null, registry: 'https://slow.example/'});
+    const again = ensureRelease('0.6.8', {cacheDir, run});
+    expect('reason' in again && again.reason).toMatch(/or at once when npm's registry changes$/);
+    registry = 'https://registry.npmjs.org/';
+    const fixed = ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(2);
+    expect('coreDir' in fixed && fixed.coreDir).toBeTruthy();
+  });
+
+  it('a record without registry settings (an older CLI wrote it) waits out its time and says nothing about registry changes', () => {
+    const cacheDir = tempDir('cache');
+    fs.mkdirSync(releasesDir(cacheDir), {recursive: true});
+    fs.writeFileSync(
+      path.join(releasesDir(cacheDir), '.failed-0.6.8.json'),
+      `${JSON.stringify({at: Date.now(), reason: 'the registry could not be reached', failures: 1})}\n`,
+    );
+    /** @type {string[][]} */
+    const installs = [];
+    /** @type {import('./cache.mjs').runNpm} */
+    const run = (args, opts = {}) => {
+      if (args[0] === 'config') return {status: 0, stdout: '@astryxdesign:registry=undefined\nregistry=https://registry.npmjs.org/\n', stderr: ''};
+      installs.push(args);
+      return fakeNpm().run(args, opts);
+    };
+    const result = ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(0);
+    expect('reason' in result && result.reason).toBe(
+      'the registry could not be reached; last tried 1 minute ago, tried again after 2 minutes',
+    );
   });
 
   it("refuses a release this computer's Node cannot run", () => {
@@ -445,6 +598,26 @@ describe.skipIf(process.platform === 'win32')(
       ).toBe('ended');
       expect(await until(() => !alive(npm))).toBe(true);
     });
+
+    it('ends the install of a lock moved aside when its version is passed', async () => {
+      const at = Date.now() - 1000;
+      const npm = startGroup(process.execPath, ['-e', SLEEP]);
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const lock = lockFor(npm, at);
+      const aside = `${lock}.stale-1-abcdef`;
+      fs.renameSync(lock, aside);
+      const facts = () => ({
+        argv: ['/usr/bin/node', '/x/npm/bin/npm-cli.js', ...INSTALL],
+        startedAt: at + 500,
+      });
+      // The moved folder's name holds no version.
+      expect(endRecordedInstall(aside, {factsOf: facts})).toBe('left');
+      expect(alive(npm)).toBe(true);
+      expect(
+        endRecordedInstall(aside, {factsOf: facts, version: '9.9.9'}),
+      ).toBe('ended');
+      expect(await until(() => !alive(npm))).toBe(true);
+    });
   },
 );
 
@@ -629,6 +802,121 @@ describe('resolvePublishedVersion', () => {
 });
 
 describe('tryLock', () => {
+  /**
+   * Run `fn` with fs.renameSync replaced by `rename`, which gets the real one.
+   * @param {(real: typeof fs.renameSync, from: string, to: string) => void} rename
+   * @param {() => void} fn
+   */
+  const withRename = (rename, fn) => {
+    const real = fsMutable.renameSync;
+    fsMutable.renameSync = (from, to) => rename(real, String(from), String(to));
+    syncBuiltinESMExports();
+    try {
+      fn();
+    } finally {
+      fsMutable.renameSync = real;
+      syncBuiltinESMExports();
+    }
+  };
+
+  it('puts back a new lock made between the judgement and the rename, before it has a record', () => {
+    const dir = path.join(tempDir('lock'), '.lock-fresh');
+    // An old lock with no record: stale once it is past the unowned bound.
+    fs.mkdirSync(dir, {recursive: true});
+    const old = new Date(Date.now() - 31 * 60_000);
+    fs.utimesSync(dir, old, old);
+    let first = true;
+    withRename(
+      (real, from, to) => {
+        if (first && from === dir) {
+          first = false;
+          // Another run removed the stale lock and made its own, and has
+          // not written its record yet.
+          fs.rmSync(dir, {recursive: true});
+          fs.mkdirSync(dir);
+          fs.writeFileSync(path.join(dir, 'mine'), '');
+        }
+        real(from, to);
+      },
+      () => expect(tryLock(dir)).toBe(false),
+    );
+    expect(fs.existsSync(path.join(dir, 'mine'))).toBe(true);
+  });
+
+  it('holds nothing and removes nothing when the put-back finds the name taken', () => {
+    const root = tempDir('lock');
+    const dir = path.join(root, '.lock-third');
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(
+      path.join(dir, 'owner.json'),
+      JSON.stringify({pid: 999999, host: os.hostname(), at: 1}),
+    );
+    const old = new Date(Date.now() - 31 * 60_000);
+    fs.utimesSync(dir, old, old);
+    let calls = 0;
+    withRename(
+      (real, from, to) => {
+        calls++;
+        if (calls === 1) {
+          // A second run takes the lock just before this one moves it.
+          fs.writeFileSync(
+            path.join(dir, 'owner.json'),
+            JSON.stringify({pid: process.pid, host: 'second', at: Date.now()}),
+          );
+        } else if (calls === 2) {
+          // A third run takes the free name before the put-back.
+          fs.mkdirSync(dir);
+          fs.writeFileSync(path.join(dir, 'owner.json'), '{"host":"third"}');
+        }
+        real(from, to);
+      },
+      () => expect(tryLock(dir)).toBe(false),
+    );
+    // The third run's lock stands, and the second run's lock stays aside
+    // for it.
+    expect(fs.readFileSync(path.join(dir, 'owner.json'), 'utf8')).toContain(
+      'third',
+    );
+    const aside = fs.readdirSync(root).filter(n => n.includes('.stale-'));
+    expect(aside).toHaveLength(1);
+    expect(
+      fs.readFileSync(path.join(root, aside[0], 'owner.json'), 'utf8'),
+    ).toContain('second');
+  });
+
+  it('puts back a lock another run took between the stale judgement and the rename', () => {
+    const dir = path.join(tempDir('lock'), '.lock-race');
+    fs.mkdirSync(dir, {recursive: true});
+    const owner = path.join(dir, 'owner.json');
+    fs.writeFileSync(
+      owner,
+      JSON.stringify({pid: 999999, host: os.hostname(), at: 1}),
+    );
+    const old = new Date(Date.now() - 31 * 60_000);
+    fs.utimesSync(dir, old, old);
+    // Another run takes the lock just as this one moves it aside.
+    const rename = fsMutable.renameSync;
+    let taken = false;
+    fsMutable.renameSync = (from, to) => {
+      if (!taken && from === dir) {
+        taken = true;
+        fs.writeFileSync(
+          owner,
+          JSON.stringify({pid: process.pid, host: 'other', at: Date.now()}),
+        );
+      }
+      return rename(from, to);
+    };
+    syncBuiltinESMExports();
+    try {
+      expect(tryLock(dir)).toBe(false);
+    } finally {
+      fsMutable.renameSync = rename;
+      syncBuiltinESMExports();
+    }
+    expect(JSON.parse(fs.readFileSync(owner, 'utf8')).host).toBe('other');
+  });
+
   it('takes a free lock once, keeps a live holder, and reclaims a stale one', () => {
     const dir = path.join(tempDir('lock'), '.lock-x');
     expect(tryLock(dir)).toBe(true);
@@ -878,6 +1166,79 @@ const waitFor = async (done, ms) => {
   return done();
 };
 
+describe("npm's own noproxy setting", () => {
+  /** npm as a script that answers `config get noproxy` with `answer`. */
+  const npmAnswering = (/** @type {string} */ answer, status = 0) => ({
+    command: process.execPath,
+    prefix: [
+      '-e',
+      `process.stdout.write(${JSON.stringify(answer)}); process.exit(${status});`,
+    ],
+    shell: /** @type {const} */ (false),
+  });
+
+  it('is read from npm, and is none when npm sets none or cannot say', () => {
+    expect(readNpmNoProxy(npmAnswering('localhost,127.0.0.1,::1\n'))).toBe(
+      'localhost,127.0.0.1,::1',
+    );
+    expect(readNpmNoProxy(npmAnswering('\n'))).toBeNull();
+    expect(readNpmNoProxy(npmAnswering('null\n'))).toBeNull();
+    expect(readNpmNoProxy(npmAnswering('localhost', 1))).toBeNull();
+  });
+
+  it('replaces a NO_PROXY that names the registry, so npm uses the proxy it is configured with', () => {
+    const shell = {
+      PATH: '/usr/bin',
+      NO_PROXY: 'localhost,.example.net',
+      no_proxy: 'localhost,.example.net',
+      npm_config_proxy: 'http://proxy.example:8080',
+    };
+    expect(npmEnvironment(shell, 'localhost')).toEqual({
+      ...shell,
+      NO_PROXY: 'localhost',
+      no_proxy: 'localhost',
+    });
+    // Nothing set in npm, or the same list: the shell's stands.
+    expect(npmEnvironment(shell, null)).toBe(shell);
+    expect(
+      npmEnvironment(
+        {NO_PROXY: 'localhost', no_proxy: 'localhost'},
+        'localhost',
+      ),
+    ).toEqual({NO_PROXY: 'localhost', no_proxy: 'localhost'});
+  });
+
+  it('reaches the npm runNpm starts, through the guard it runs under', () => {
+    const shell = {
+      NO_PROXY: process.env.NO_PROXY,
+      no_proxy: process.env.no_proxy,
+    };
+    process.env.NO_PROXY = '.example.net';
+    process.env.no_proxy = '.example.net';
+    try {
+      const result = runNpm(['view'], {
+        timeoutMs: 30_000,
+        noProxy: 'localhost',
+        npm: {
+          command: process.execPath,
+          prefix: [
+            '-e',
+            'process.stdout.write(`${process.env.NO_PROXY}|${process.env.no_proxy}`);',
+          ],
+          shell: false,
+        },
+      });
+      expect(result.status).toBe(0);
+      expect(result.stdout).toBe('localhost|localhost');
+    } finally {
+      for (const [name, value] of Object.entries(shell)) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
+  });
+});
+
 describe('runNpm time limit', () => {
   it('ends a package manager that ignores SIGTERM, leaving no process behind', async () => {
     const marker = tempDir('npm-pid');
@@ -983,4 +1344,63 @@ describe('no install outlives its run', () => {
       await waitFor(() => !alive(/** @type {number} */ (leftover.pid)), 5_000),
     ).toBe(true);
   }, 30_000);
+});
+
+describe('a stop signal during the install', () => {
+  const CACHE = new URL('./cache.mjs', import.meta.url).href;
+  /**
+   * Run `ensureRelease` in a child Node with a stand-in npm, at the top level
+   * or inside an I/O callback, and print what the run does after it.
+   * @param {'term-during-install' | 'npm-stopped'} what
+   * @param {'top' | 'io-callback'} where
+   */
+  const child = (what, where) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-stop-'));
+    const script = path.join(dir, 'run.mjs');
+    fs.writeFileSync(
+      script,
+      `import * as fs from 'node:fs';
+import {ensureRelease, settleSignals} from ${JSON.stringify(CACHE)};
+const run = args => {
+  if (args[0] !== 'install')
+    return {status: 0, stdout: 'https://registry.example/\\n', stderr: ''};
+  if (${JSON.stringify(what)} === 'npm-stopped')
+    return {status: null, signal: 'SIGINT', stdout: '', stderr: ''};
+  // A signal sent to this process while npm runs synchronously.
+  process.kill(process.pid, 'SIGTERM');
+  return {status: 1, stdout: '', stderr: 'npm error code ECONNREFUSED'};
+};
+const go = async () => {
+  const release = ensureRelease('0.6.8', {cacheDir: ${JSON.stringify(dir)}, run});
+  console.log('returned', 'reason' in release);
+  await settleSignals();
+  console.log('answered');
+};
+if (${JSON.stringify(where)} === 'io-callback') fs.readFile(${JSON.stringify(script)}, () => go());
+else go();
+`,
+    );
+    try {
+      return spawnSync(process.execPath, [script], {
+        encoding: 'utf-8',
+        timeout: 60_000,
+      });
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  };
+
+  for (const where of /** @type {const} */ (['top', 'io-callback'])) {
+    it(`stops the run before it answers (${where})`, () => {
+      const result = child('term-during-install', where);
+      expect(result.signal).toBe('SIGTERM');
+      expect(result.stdout).not.toContain('answered');
+    });
+  }
+
+  it('ends the run at once when the signal stopped npm', () => {
+    const result = child('npm-stopped', 'io-callback');
+    expect(result.signal).toBe('SIGINT');
+    expect(result.stdout).toBe('');
+  });
 });

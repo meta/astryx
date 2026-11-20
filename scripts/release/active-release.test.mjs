@@ -30,6 +30,8 @@ import {
   latestStableVersion,
   mergeBackEntries,
   nextPlannedVersion,
+  validateCodemodPromotionApplicabilityAtRef,
+  validateCodemodPromotionApplicabilityMove,
   validateReleaseDiff,
   validateReleaseTestRepair,
   validateHistoricalReleaseMergeBack,
@@ -37,6 +39,7 @@ import {
   validateReleaseState,
   writeAuthority,
 } from './active-release.mjs';
+import {classifyReleaseDiff} from './release-paths.mjs';
 
 const CUT = '1'.repeat(40);
 const HEAD = '2'.repeat(40);
@@ -454,6 +457,95 @@ describe('active release branch authority', () => {
         'R100\tpackages/core/CHANGELOG.md\tpackages/cli/CHANGELOG.md',
       ]),
     ).toEqual([]);
+  });
+
+  it('allows only the exact AST-057 pointers moved by codemod promotion', () => {
+    const spec = 'docs/specs/AST-057-row-actions/spec.md';
+    const sources = [
+      'packages/cli/assets/codemods/transforms/next/migrate-item-swipe-actions-to-swipe.mjs',
+      'packages/cli/assets/codemods/transforms/next/__tests__/migrate-item-swipe-actions-to-swipe.test.mjs',
+    ];
+    const destinations = sources.map(file =>
+      file.replace('/transforms/next/', '/transforms/v0.7.17/'),
+    );
+    const promotionEntries = sources.map(
+      (file, index) => `R100\t${file}\t${destinations[index]}`,
+    );
+    const entries = [`M\t${spec}`, ...promotionEntries];
+    const before = `{"paths":${JSON.stringify(sources)}}\n`;
+    const after = sources.reduce(
+      (text, file, index) => text.replace(file, destinations[index]),
+      before,
+    );
+    const validateMove = overrides =>
+      validateCodemodPromotionApplicabilityMove({
+        before,
+        after,
+        entries,
+        status: 'M',
+        version: '0.7.17',
+        ...overrides,
+      });
+
+    expect(classifyReleaseDiff(entries)).toBe('version-bump');
+    expect(validateMove()).toEqual([]);
+    expect(
+      validateReleaseDiff(entries, {
+        validatedCodemodPromotionPaths: new Set([spec]),
+      }),
+    ).toEqual([]);
+    expect(validateReleaseDiff(entries)).toContain(
+      `release bump contains an unvalidated codemod-promotion applicability move: ${spec}`,
+    );
+
+    expect(validateMove({entries: entries.slice(0, -1)})).toContain(
+      `codemod promotion does not rename ${sources[1]} to ${destinations[1]}`,
+    );
+    expect(validateMove({before: `${before}${sources[0]}\n`})).toContain(
+      `${spec} must contain the exact pre-promotion pointer once: ${sources[0]}`,
+    );
+    expect(validateMove({status: 'D'})).toContain(
+      `${spec} may only be modified by a generated codemod promotion`,
+    );
+    expect(validateMove({after: after.replace('{"paths"', '{"other"')})).toContain(
+      `${spec} may change only the exact applicability pointers moved by the codemod promotion`,
+    );
+    expect(classifyReleaseDiff(['M\tdocs/specs/AST-058/spec.md'])).toBe(
+      'invalid',
+    );
+  });
+
+  it('reports a missing AST-057 record instead of reading null bytes', () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'astryx-codemod-applicability-'),
+    );
+    roots.push(root);
+    const spec = 'docs/specs/AST-057-row-actions/spec.md';
+    const {base, deleted} = createRepository(root, [
+      {
+        ref: 'refs/heads/main',
+        name: 'base',
+        snapshot: true,
+        files: {[spec]: 'record\n'},
+      },
+      {
+        ref: 'refs/heads/candidate',
+        name: 'deleted',
+        parent: 'base',
+        files: {[spec]: null},
+      },
+    ]);
+
+    const result = validateCodemodPromotionApplicabilityAtRef(root, {
+      base,
+      head: deleted,
+      entries: [`D\t${spec}`],
+      version: '0.7.17',
+    });
+    expect(result.errors).toContain(
+      `${spec} must exist before and after the codemod promotion`,
+    );
+    expect(result.validatedPaths).toEqual(new Set());
   });
 
   it('admits one post-bump test repair whose patch already merged on main', () => {
@@ -1279,6 +1371,39 @@ describe('published release merge-back (FR50)', () => {
       }),
     ).toContain(
       `release merge-back rename does not match published branch: ${from} -> ${to}`,
+    );
+  });
+
+  it('admits only a byte-validated codemod applicability move', () => {
+    const spec = 'docs/specs/AST-057-row-actions/spec.md';
+    const entries = [
+      'D\t.changeset/frozen.md',
+      'M\tpackages/core/CHANGELOG.md',
+      `M\t${spec}`,
+    ];
+    const common = {
+      entries,
+      base: mainAt('0.7.0'),
+      head: mainAt('0.7.0'),
+    };
+
+    expect(
+      mergeBack({
+        ...common,
+        validatedCodemodPromotionPaths: new Set([spec]),
+      }),
+    ).toEqual([]);
+    expect(mergeBack(common)).toContain(
+      `release merge-back contains an unvalidated codemod-promotion applicability move: ${spec}`,
+    );
+    expect(
+      mergeBack({
+        ...common,
+        entries: [...entries.slice(0, -1), `D\t${spec}`],
+        validatedCodemodPromotionPaths: new Set([spec]),
+      }),
+    ).toContain(
+      `release merge-back contains an unvalidated codemod-promotion applicability move: ${spec}`,
     );
   });
 

@@ -5,12 +5,12 @@
  *
  * The browser-specs job runs its selection on one worker, and the files'
  * recorded times assume one browser per core, so more workers on one runner
- * only stretch each file. The job instead splits the selection into up to
- * three legs by recorded time, each about ten minutes or less, inside the
- * job's fifteen minutes. A leg the selection does not need stops after its
- * count step, after the Storybook download (a changed multi-component folder
- * resolves its components through its story index) and before the Chromium
- * install.
+ * only stretch each file. A plan job instead splits the selection into up
+ * to five legs by recorded time, each about ten minutes or less, inside a
+ * leg's fifteen minutes, after the Storybook download (a changed
+ * multi-component folder resolves its components through its story index).
+ * Only the legs it plans start. A plan whose longest leg is still over twelve
+ * minutes fails by name before any leg starts.
  */
 
 import {spawnSync} from 'node:child_process';
@@ -21,14 +21,23 @@ import path from 'node:path';
 import {afterAll, describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
-import {LEG_BUDGET_MS, planLegs} from './a11y-pr-contracts.mjs';
+import {
+  LEG_BUDGET_MS,
+  LEG_LIMIT_MS,
+  RELEASE_LEG_LIMIT_MS,
+  planLegs,
+  planOverLimit,
+} from './a11y-pr-contracts.mjs';
 import {matrixFor} from './ci-matrix.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
-const job = yaml.parse(
+const jobs = yaml.parse(
   fs.readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'),
-).jobs['pr-a11y-specs'];
+).jobs;
+const job = jobs['pr-a11y-specs'];
+const plan = jobs['pr-a11y-plan'];
 const step = name => job.steps.find(s => s.name === name);
+const planStep = name => plan.steps.find(s => s.name === name);
 const scratch = [];
 afterAll(() => {
   for (const dir of scratch) fs.rmSync(dir, {recursive: true, force: true});
@@ -84,69 +93,81 @@ describe('the opt-in accessibility specs split into legs', () => {
 });
 
 describe('the browser-specs job', () => {
-  it('runs three legs for a pull request and one job for a release check', () => {
-    expect(matrixFor(job.strategy.matrix.leg, 'pull_request')).toEqual([
-      1, 2, 3,
-    ]);
-    expect(matrixFor(job.strategy.matrix.leg, 'workflow_dispatch')).toEqual([
-      1,
-    ]);
+  it('starts only the legs the plan needs, up to five for a pull request, and one job for a release check', () => {
+    expect(job.strategy.matrix.leg).toBe(
+      "${{ fromJSON(needs.pr-a11y-plan.outputs.legs || '[1]') }}",
+    );
+    expect(planStep("Count this run's accessibility legs").run).toContain(
+      "--count-legs ${{ github.event_name == 'workflow_dispatch' && 1 || 5 }}",
+    );
     expect(job.strategy['fail-fast']).toBe(false);
+    expect(job.needs).toContain('pr-a11y-plan');
+    expect(job.if).toContain("needs.pr-a11y-plan.result == 'success'");
+    expect(plan.outputs).toEqual({
+      count: "${{ steps.legs.outputs.count || '0' }}",
+      legs: "${{ steps.legs.outputs.legs || '[1]' }}",
+      shares: "${{ steps.legs.outputs.shares || '[]' }}",
+    });
     // One parenthesized suffix, so status reports read the job as pr-a11y.
     expect(job.name).toBe(
       'pr-a11y (browser specs ${{ matrix.leg }}/${{ strategy.job-total }})',
     );
   });
 
-  it('counts the legs after the Storybook download and before the Chromium install, and only a leg with a share runs its share', () => {
-    const names = job.steps.map(s => s.name);
-    const count = step("Count this run's accessibility legs");
+  it('plans the legs once after the Storybook download, and a leg runs only the share the plan gave it', () => {
+    const names = plan.steps.map(s => s.name);
+    const count = planStep("Count this run's accessibility legs");
     // A pull request that changes a multi-component folder resolves its
-    // components through the built Storybook's story index, so every leg
+    // components through the built Storybook's story index, so the plan
     // downloads it before counting.
-    const download = step('Download Storybook artifact');
+    const download = planStep('Download Storybook artifact');
     expect(names.indexOf(download.name)).toBeLessThan(
       names.indexOf(count.name),
     );
     expect(download.if).toBe(count.if);
-    expect(names.indexOf(count.name)).toBeLessThan(
-      names.indexOf('Install Playwright'),
-    );
-    expect(count.run).toContain(
-      'node "$runner" --count-legs ${{ strategy.job-total }} --leg ${{ matrix.leg }} --share-out "$RUNNER_TEMP/a11y-leg-share.json"',
-    );
     // The runner imports the shared duration split, so it is copied beside it.
     expect(count.run).toContain(
       'git show "$WORKFLOW_SHA:scripts/lib/duration-split.mjs" > "$RUNNER_TEMP/a11y/scripts/lib/duration-split.mjs"',
     );
     expect(count.run).toContain('BASE_SHA=$(git rev-parse "$WORKFLOW_SHA^1")');
-    for (const name of [
-      'Install Playwright',
-      'Run browser accessibility specs',
-      'Upload browser accessibility evidence',
-    ]) {
-      expect(step(name).if, name).toContain(
-        "steps.legs.outputs.runs == 'true'",
-      );
-    }
+    // A leg the plan gave no share stops at its first step, before any
+    // checkout or install.
+    expect(job.env.RUNS).toBe(
+      '${{ needs.pr-a11y-plan.outputs.count >= matrix.leg }}',
+    );
+    expect(job.steps[0]).toMatchObject({
+      name: 'Stop a leg the plan gave no share',
+      if: "env.RUNS != 'true'",
+    });
+    for (const later of job.steps.slice(1))
+      expect(later.if, later.name).toContain("env.RUNS == 'true'");
+    const legNames = job.steps.map(s => s.name);
+    expect(legNames.indexOf("Write this leg's share")).toBeLessThan(
+      legNames.indexOf('Install Playwright'),
+    );
+    expect(step("Write this leg's share").env.SHARES).toBe(
+      '${{ needs.pr-a11y-plan.outputs.shares }}',
+    );
     const run = step('Run browser accessibility specs');
-    // The run step runs the share the count step wrote, never a selection
-    // of its own.
+    // The run step runs the share the plan wrote, never a selection of its
+    // own.
     expect(run.run).toContain(
-      'node "$runner" --share "$RUNNER_TEMP/a11y-leg-share.json" --leg ${{ steps.legs.outputs.leg }} --of ${{ steps.legs.outputs.count }}',
+      'node "$runner" --share "$RUNNER_TEMP/a11y-leg-share.json" --leg ${{ matrix.leg }} --of ${{ needs.pr-a11y-plan.outputs.count }}',
     );
     // One worker per leg: the recorded times assume one browser per core.
     expect(run.env.A11Y_CONTRACT_WORKERS).toBeUndefined();
     expect(step('Upload browser accessibility evidence').with.name).toBe(
       'pr-a11y-evidence-${{ needs.build-storybook.outputs.short_hash }}-${{ matrix.leg }}',
     );
+    // The join waits for the plan too, so a plan over the limit fails it.
+    expect(jobs['pr-a11y'].needs).toContain('pr-a11y-plan');
   });
 
   // Each count lists every spec through Playwright, a few seconds apiece.
   it("writes the leg count and this leg's share for the steps after it", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'a11y-legs-'));
     scratch.push(dir);
-    const count = (legs, leg, env = {}) => {
+    const count = (legs, leg, env = {}, status = 0) => {
       const output = path.join(dir, `output-${legs}-${leg}`);
       const result = spawnSync(
         process.execPath,
@@ -173,15 +194,17 @@ describe('the browser-specs job', () => {
           },
         },
       );
-      expect(result.status, result.stderr).toBe(0);
+      expect(result.status, result.stderr).toBe(status);
       return {
         stdout: result.stdout,
         output: Object.fromEntries(
-          fs
-            .readFileSync(output, 'utf8')
+          (fs.existsSync(output) ? fs.readFileSync(output, 'utf8') : '')
             .trim()
             .split('\n')
-            .map(line => line.split('=')),
+            .map(line => [
+              line.slice(0, line.indexOf('=')),
+              line.slice(line.indexOf('=') + 1),
+            ]),
         ),
       };
     };
@@ -191,23 +214,29 @@ describe('the browser-specs job', () => {
     expect(['1', '2', '3']).toContain(third.output.count);
     expect(third.output.runs).toBe(String(Number(third.output.count) >= 3));
     expect(third.stdout).toMatch(/^Accessibility legs: \d for \d+ spec files/m);
-    // A leg that cannot list the pull request's files runs the whole
-    // selection as the only leg, so no planned file is left out.
-    const lost = count(3, 2, {
-      GITHUB_EVENT_NAME: 'pull_request',
-      GITHUB_ACTIONS: 'true',
-    });
-    expect(lost.output).toEqual({count: '1', runs: 'true', leg: '1'});
+    // A plan that cannot list the pull request's files takes the whole
+    // selection as the only leg, so no planned file is left out; a selection
+    // that one leg cannot finish fails by name instead of at the cap.
+    const lost = count(
+      3,
+      2,
+      {GITHUB_EVENT_NAME: 'pull_request', GITHUB_ACTIONS: 'true'},
+      1,
+    );
     expect(lost.stdout).toContain(
       '::warning title=Accessibility scope unknown::',
     );
-    const lostShare = JSON.parse(
-      fs.readFileSync(path.join(dir, 'share-3-2.json'), 'utf8'),
+    expect(lost.stdout).toMatch(
+      /::error title=Accessibility specs over their leg's time::1 legs still leave/,
     );
-    expect(lostShare.scopeKnown).toBe(false);
-    expect(lostShare.run.length).toBeGreaterThan(0);
+    expect(lost.stdout).toMatch(/^Accessibility legs: 1 for \d+ spec files/m);
     const one = count(1, 1);
-    expect(one.output).toEqual({count: '1', runs: 'true', leg: '1'});
+    expect(one.output).toMatchObject({
+      count: '1',
+      runs: 'true',
+      leg: '1',
+      legs: '[1]',
+    });
     // One leg's share is the whole selection, each file with its reason.
     const share = JSON.parse(
       fs.readFileSync(path.join(dir, 'share-1-1.json'), 'utf8'),
@@ -217,4 +246,40 @@ describe('the browser-specs job', () => {
     for (const entry of share.run)
       expect(Object.keys(entry).sort()).toEqual(['file', 'reason']);
   }, 180_000);
+});
+
+describe('a plan over twelve minutes', () => {
+  // One pull request's opt-in selection: 77 of its 78 spec files, at the
+  // recorded times then. On three legs one leg was cut at fifteen minutes.
+  const replay = JSON.parse(
+    fs.readFileSync(
+      path.join(root, '.github/scripts/fixtures/a11y-selection-11205.json'),
+      'utf8',
+    ),
+  );
+
+  it('fails by name on three legs, and fits on five', () => {
+    expect(LEG_LIMIT_MS).toBe(12 * 60 * 1000);
+    const three = planLegs(replay.files, replay.seconds, 3);
+    expect(three.longestMs).toBeGreaterThan(LEG_LIMIT_MS);
+    expect(planOverLimit(three, true)).toMatch(
+      /^::error title=Accessibility specs over their leg's time::3 legs still leave \d+\.\d min .*more than the 12 minutes a leg's 15-minute job/,
+    );
+    const five = planLegs(replay.files, replay.seconds, 5);
+    expect(five.count).toBe(5);
+    expect(five.longestMs).toBeLessThanOrEqual(LEG_LIMIT_MS);
+    expect(planOverLimit(five, true)).toBe('');
+    expect(five.shares.flat().sort()).toEqual([...replay.files].sort());
+  });
+
+  it("fails a release check by name only past its own job's time", () => {
+    // The release check's one leg has a 360-minute job.
+    expect(RELEASE_LEG_LIMIT_MS).toBe(345 * 60 * 1000);
+    const one = planLegs(replay.files, replay.seconds, 1);
+    expect(one.longestMs).toBeGreaterThan(LEG_LIMIT_MS);
+    expect(planOverLimit(one, false)).toBe('');
+    expect(
+      planOverLimit({count: 1, longestMs: RELEASE_LEG_LIMIT_MS + 60000}, false),
+    ).toMatch(/more than the 345 minutes the release check's 360-minute job/);
+  });
 });

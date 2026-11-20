@@ -3,11 +3,16 @@
 
 /**
  * @file Writes assets/docs.generated.json at `prepack`: the exports of each doc
- * file Astryx ships that imports nothing, calls nothing as it loads, reads no
- * name it does not declare, and exports only plain data, keyed by a hash of
- * the file's text, so the published package
- * reads such a doc without importing it. The file is not committed; a checkout
- * without it imports every doc, with the same result. `--clean` (at
+ * file Astryx ships (the CLI's own and Core's) that imports nothing, calls
+ * nothing as it loads, reads no name it does not declare, and exports only
+ * plain data, keyed by a hash of the file's text, so the published package
+ * reads such a doc without importing it; and each typed descriptor's
+ * statically read value (themes, icon sets, icon definitions), keyed by the
+ * hash of its text and the type it is read as, so the published package reads
+ * it without parsing; and the CLI's own shipped docs' exports as the readers
+ * parse them, by the zod release that made each parse, so it reads the parse
+ * without running it. The file is not committed;
+ * a checkout without it imports every doc, with the same result. `--clean` (at
  * `postpack`) removes it.
  */
 
@@ -18,11 +23,20 @@ import {isDeepStrictEqual} from 'node:util';
 import {parse} from '@babel/parser';
 import {CLI_ROOT} from '../foundation/fs/paths.mjs';
 import {
+  docParserZodVersion,
   storedKey,
+  storedParseKey,
   STORED_DOCS_FILE,
 } from '../foundation/doc-compiler/stored-docs.mjs';
+import {parseReadableDoc} from '../foundation/doc-compiler/parse-readable.mjs';
+import {
+  descriptorStoreKey,
+  readDescriptorSource,
+  STATIC_DESCRIPTOR_TYPES,
+} from '../foundation/discovery/theme-discovery.mjs';
 
-const ASSETS = path.join(CLI_ROOT, 'assets');
+/** Core's docs, which publish from the same commit as the CLI. */
+const CORE_SRC = path.join(CLI_ROOT, '..', 'core', 'src');
 
 /**
  * Every `.doc.mjs` file under `dir`, sorted.
@@ -35,7 +49,9 @@ function docFilesIn(dir) {
     .flatMap(entry => {
       const file = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        return entry.name === 'node_modules' || entry.name === '__tests__'
+        return entry.name === 'node_modules' ||
+          entry.name === '__tests__' ||
+          entry.name.startsWith('.')
           ? []
           : docFilesIn(file);
       }
@@ -150,14 +166,37 @@ function runsCode(node, declared) {
 }
 
 /**
- * The file's text: each storable doc's exports, by key, in key order.
+ * The file's text: a first line mapping each storable doc's key to the byte
+ * range of its exports, then those exports as JSON, in key order.
  * @returns {Promise<string>}
  */
 export async function storedDocsText() {
   /** @type {Record<string, Record<string, unknown>>} */
   const byKey = {};
-  for (const file of docFilesIn(ASSETS)) {
+  // A parse is stored by the zod release that made it, and only when that
+  // release can be read: an install that loads another release parses.
+  const zod = docParserZodVersion();
+  const files = [
+    ...docFilesIn(CLI_ROOT),
+    ...(fs.existsSync(CORE_SRC) ? docFilesIn(CORE_SRC) : []),
+  ];
+  for (const file of files) {
     const text = fs.readFileSync(file, 'utf-8');
+    // Each typed descriptor's statically read value, which the published
+    // package reads instead of parsing the file (theme-discovery.mjs).
+    for (const [typeName, asData] of STATIC_DESCRIPTOR_TYPES) {
+      if (!text.includes(typeName)) continue;
+      let value;
+      try {
+        value = readDescriptorSource(text, file, typeName, asData);
+      } catch {
+        continue;
+      }
+      const plain = JSON.parse(JSON.stringify(value));
+      if (isDeepStrictEqual(plain, value)) {
+        byKey[descriptorStoreKey(text, typeName, asData)] = plain;
+      }
+    }
     if (!onlyDeclares(text)) continue;
     const exports = {...(await import(pathToFileURL(file).href))};
     let data;
@@ -168,16 +207,43 @@ export async function storedDocsText() {
     }
     if (!isDeepStrictEqual(data, exports)) continue;
     byKey[storedKey(text)] = data;
+    // Each export of the CLI's own shipped docs as the readers parse it
+    // (parse-readable.mjs), when the parse is plain data that reads back
+    // exactly, key order included. Core's component docs are left out: a read
+    // parses one or two of them, so storing them would cost far more bytes
+    // than time.
+    // Icon definitions are checked on their static value, never parsed here.
+    const parsedHere = file.startsWith(
+      path.join(CLI_ROOT, 'assets', 'docs') + path.sep,
+    );
+    for (const name of ['docs', 'default']) {
+      if (!parsedHere || zod == null) break;
+      if (!data[name] || typeof data[name] !== 'object') continue;
+      let parsed;
+      try {
+        parsed = parseReadableDoc(structuredClone(data[name]), file);
+      } catch {
+        // Parsed at run time, so it fails as it always did.
+        continue;
+      }
+      if (isDeepStrictEqual(JSON.parse(JSON.stringify(parsed)), parsed)) {
+        byKey[storedParseKey(storedKey(text), name, zod)] = parsed;
+      }
+    }
   }
-  return (
-    JSON.stringify(
-      Object.fromEntries(
-        Object.keys(byKey)
-          .sort()
-          .map(key => [key, byKey[key]]),
-      ),
-    ) + '\n'
-  );
+  /** @type {Record<string, [number, number]>} */
+  const ranges = {};
+  /** @type {string[]} */
+  const parts = [];
+  let offset = 0;
+  for (const key of Object.keys(byKey).sort()) {
+    const json = JSON.stringify(byKey[key]);
+    const length = Buffer.byteLength(json);
+    ranges[key] = [offset, length];
+    parts.push(json);
+    offset += length;
+  }
+  return JSON.stringify(ranges) + '\n' + parts.join('');
 }
 
 const isMain =

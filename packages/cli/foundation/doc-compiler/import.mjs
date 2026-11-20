@@ -28,6 +28,7 @@ import * as fs from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
 import {importUrl} from '../fs/import-url.mjs';
+import {jitiCacheOptions} from '../fs/jiti-cache.mjs';
 import {
   importUserModule,
   readFreshInTurn,
@@ -35,9 +36,9 @@ import {
 } from '../fs/module-loader.mjs';
 import {fileStamp, recordContentRead} from '../fs/read-record.mjs';
 import {
+  noteStoredExport,
   readStore,
   storedKey,
-  SHIPPED_ASSETS,
   STORED_DOCS_FILE,
 } from './stored-docs.mjs';
 
@@ -109,16 +110,14 @@ function loadFirst(file, load) {
 const storedModules = new Map();
 
 /**
- * The module of a shipped doc file whose text has stored exports: an object
+ * The module of a doc file whose text has stored exports: an object
  * shaped as its namespace (no prototype, the export names in order, tagged
  * `Module`, closed to new names). Null for any other file.
  * @param {string} file
  * @returns {Record<string, unknown> | null}
  */
 function storedModule(file) {
-  if (!file.startsWith(SHIPPED_ASSETS) || !file.endsWith('.doc.mjs')) {
-    return null;
-  }
+  if (!file.endsWith('.doc.mjs')) return null;
   let text;
   try {
     text = fs.readFileSync(file, 'utf-8');
@@ -138,6 +137,7 @@ function storedModule(file) {
       enumerable: true,
       writable: true,
     });
+    noteStoredExport(exports[name], key, name);
   }
   Object.defineProperty(module, Symbol.toStringTag, {value: 'Module'});
   Object.preventExtensions(module);
@@ -202,16 +202,21 @@ export function importTemplateModule(file) {
     'template',
     first => {
       if (first.endsWith('.ts')) {
-        jsxJiti ??= createJiti(import.meta.url, {jsx: true});
+        jsxJiti ??= createJiti(import.meta.url, {
+          ...jitiCacheOptions(),
+          jsx: true,
+        });
         return jsxJiti.import(first);
       }
       return importInTurn(first, `file://${first}`);
     },
     changed =>
       changed.endsWith('.ts')
-        ? createJiti(import.meta.url, {jsx: true, moduleCache: false}).import(
-            changed,
-          )
+        ? createJiti(import.meta.url, {
+            ...jitiCacheOptions(),
+            jsx: true,
+            moduleCache: false,
+          }).import(changed)
         : importFresh(changed),
   );
 }
