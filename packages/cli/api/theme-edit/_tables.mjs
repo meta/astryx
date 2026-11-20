@@ -136,6 +136,7 @@ export const GROUP_ROLES = /** @type {const} */ ([
   'inset-fields',
   'status-surfaces',
   'overlay-headers',
+  'controls',
 ]);
 
 /** @param {string} target @returns {string | null} */
@@ -149,7 +150,9 @@ export const familyOf = target =>
  * settings reader share: on a member of a group that spreads (a text input
  * of inputs) it keeps the change on that member (`member`); on any other
  * part it changes nothing, as the part is styled on its own already
- * (`own`); on a group itself, the editor's own (inputs) or a family role
+ * (`own`), except on a control's own height, which keeps the height on
+ * that control (onlyFits, and onlyHeightShape for the settings reader);
+ * on a group itself, the editor's own (inputs) or a family role
  * (button-like), or with no part, it means nothing at all (`group`).
  * @param {string | undefined} on
  * @returns {'member' | 'own' | 'group'}

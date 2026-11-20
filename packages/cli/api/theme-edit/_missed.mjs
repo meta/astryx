@@ -19,6 +19,7 @@ import {
   roleReach,
   cornersPlain,
   pillShapes,
+  controlHeightSplits,
 } from './_settings.mjs';
 import {borderlessSurfaces} from './_check.mjs';
 import {hex, parseColor, ratio, splitTop} from './_color.mjs';
@@ -26,7 +27,7 @@ import {hexToOklch} from '../theme/palette/generate/color.mjs';
 import {blurScaled} from './_how-question.mjs';
 
 /**
- * @typedef {{thing: string, value: string, on?: string, when?: string, state?: string, mode?: string}} MissedStep
+ * @typedef {{thing: string, value: string, on?: string, when?: string, state?: string, mode?: string, only?: boolean}} MissedStep
  * @typedef {{kind: number, part: string, state?: string, when?: string, why: string, steps: MissedStep[], aspect: string}} Missed
  */
 
@@ -944,6 +945,27 @@ export function missedSteps(ctx, data, res, base) {
     ))
       found.push({...x, kind: 5, aspect: 'border'});
 
+  // A control that keeps a height of its own at a size while the other
+  // controls take another: controls share one height at each size, and
+  // the line that set it, set again, makes it every control's height.
+  for (const split of controlHeightSplits(ctx, data, res[modes[0]] ?? {}))
+    found.push({
+      kind: 9,
+      part: split.part,
+      why: `${split.reaches.includes(split.part) ? `${split.part} is` : `${split.setting.thing} ${split.setting.value} on ${split.part} reaches ${split.reaches.join(', ')}, so ${split.reaches.length > 1 ? 'they are' : 'it is'}`} ${sizesText(split.at.map(a => [a.size, a.value]))}, while the other controls are ${sizesText(split.at.map(a => [a.size, a.others.join(' or ')]))}: buttons, inputs, selectors and input groups share one height at each size`,
+      aspect: 'size',
+      steps: [
+        {
+          thing: split.line.thing,
+          value: String(split.line.value),
+          on: String(split.line.on),
+          ...(split.line.when ? {when: split.line.when} : {}),
+          ...(split.line.only ? {only: true} : {}),
+          ...(split.line.mode ? {mode: split.line.mode} : {}),
+        },
+      ],
+    });
+
   // What the theme's role colors reach on their own (the compiler writes
   // them onto the parts where the base theme draws the role itself) is
   // not missed.
@@ -980,6 +1002,18 @@ export function missedSteps(ctx, data, res, base) {
       if (x) ordered.push(x);
     }
   return ordered;
+}
+
+/**
+ * Heights by size in words: one value at every size once, else each with
+ * its size (`31px at every size`, `28px at sm, 32px at md`).
+ * @param {Array<[string, string]>} bySize
+ */
+function sizesText(bySize) {
+  const values = [...new Set(bySize.map(([, v]) => v))];
+  return values.length === 1 && bySize.length === 3
+    ? `${values[0]} at every size`
+    : bySize.map(([size, v]) => `${v} at ${size}`).join(', ');
 }
 
 /**
