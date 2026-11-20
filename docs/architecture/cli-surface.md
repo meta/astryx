@@ -167,6 +167,9 @@ and remains available through explicit Core package selection.
   command that prints the whole doc.
   `component <Name> --props` prints each prop description whole. A list prints
   `brief` and a hook or docs read prints `full` when no `--detail` is given.
+  A hook whose doc lists its options as props prints that doc at each level
+  as the component read of it does, and at `full` both its description and
+  its usage text.
   The detail level never changes a component read's JSON. A field shown in
   one section of the text projection is not repeated in another: a read of
   one family member prints its props once, under Props. The stdout of `astryx mcp` carries protocol messages only, and

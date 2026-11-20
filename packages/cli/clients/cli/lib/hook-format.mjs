@@ -17,8 +17,24 @@ import {loadDocs} from '../../../foundation/discovery/component-loader.mjs';
 import {
   formatAccessibility,
   formatBestPractices,
+  formatBrief,
+  formatCompact,
+  formatFull,
   mdCell,
 } from './component-format.mjs';
+
+/**
+ * Whether a hook doc documents its options as `props`, as a component doc
+ * does, with no `params` or `returns`. A read of such a doc prints it the
+ * way a component read does, so its description, props and examples show.
+ * @param {any} docs
+ * @returns {boolean}
+ */
+function isPropsShaped(docs) {
+  return (
+    Array.isArray(docs.props) && !('params' in docs) && !('returns' in docs)
+  );
+}
 
 /**
  * Build a signature string from hook docs.
@@ -124,6 +140,22 @@ export function formatHookReturns(docs) {
  * @returns {string}
  */
 export function formatHookFull(docs) {
+  if (isPropsShaped(docs)) {
+    // The component read prints the usage text in place of the description;
+    // the whole hook read prints both, description first.
+    const usage = docs.usage?.description;
+    const both =
+      usage && docs.description && usage !== docs.description
+        ? {
+            ...docs,
+            usage: {
+              ...docs.usage,
+              description: `${docs.description}\n\n${usage}`,
+            },
+          }
+        : docs;
+    return formatFull(both);
+  }
   /** @type {string[]} */
   const sections = [];
 
@@ -150,9 +182,16 @@ export function formatHookFull(docs) {
  *   # Name, description, ## Import, ## Best Practices, ## Parameters, ## Returns
  * @param {any} docs
  * @param {string} [importPath]
+ * @param {{propsCommand?: string | null, fullCommand?: string | null}} [options]
+ *   - for a hook documented with props: the commands its short answer names,
+ *   as a component read's does
  * @returns {string}
  */
-export function formatHookCompact(docs, importPath) {
+export function formatHookCompact(docs, importPath, options = {}) {
+  // The caller's fallback import names the hooks entry point, which a hook
+  // documented with a component (useTableSelection) is not exported from.
+  if (isPropsShaped(docs))
+    return formatCompact(docs, docs.name, docs.importPath, options);
   /** @type {string[]} */
   const sections = [];
 
@@ -208,6 +247,7 @@ export function formatHookCompact(docs, importPath) {
  * @returns {string}
  */
 export function formatHookBrief(docs) {
+  if (isPropsShaped(docs)) return formatBrief(docs, docs.name, docs.importPath);
   /** @type {string[]} */
   const output = [];
 
