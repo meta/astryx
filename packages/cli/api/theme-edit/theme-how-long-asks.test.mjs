@@ -4,7 +4,7 @@
  * @file `editor how` on long asks keeps each change where it was said: a
  * table's headers listed after "tables with" are its header cells; "other
  * tabs <color>" after an underline clause is their text; the dark half of
- * a sidebar's mode pair is its fill, and the text after it the theme's; a
+ * a sidebar's mode pair is its fill, and the text after it the sidebar's; a
  * part's "<ink> text on <color>" is that part's fill; a fill for every
  * button keeps the destructive one's red, and each look whose text would
  * not read gets its text line. A hex counts as typed only in the clause
@@ -106,7 +106,7 @@ describe('long asks keep each change where it was said', () => {
   );
 
   it(
-    "a sidebar's dark half is its fill, and the text after it the theme's",
+    "a sidebar's dark half is its fill, and the text after it the sidebar's",
     async test => {
       needsBases(test);
       const r = await answer(
@@ -115,7 +115,7 @@ describe('long asks keep each change where it was said', () => {
       expect(r.first).toEqual([
         "background-color '#f7f7f5' --on side-nav --mode light",
         "background-color '#202020' --on side-nav --mode dark",
-        "--color-text-primary '#37352f' --mode light",
+        "--color-text-primary '#37352f' --on side-nav --mode light",
       ]);
     },
     T,

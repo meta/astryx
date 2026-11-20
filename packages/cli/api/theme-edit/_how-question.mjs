@@ -7709,13 +7709,35 @@ export function draftAnswer(ctx, env, question) {
       return 'theme';
     // A list item said subject first, "text #111827", "border #e5e7eb",
     // in a comma list of tokens: its own item, the theme's.
-    if (
-      j.sep === 'comma' &&
-      /^(?:text|muted text|secondary text|borders?|background|links?|accent)\s+(?:#|rgb|hsl|oklch|var\()/.test(
-        c.text.trim(),
+    // (A list of tokens has another token item or names several parts.
+    // After one part's own looks only, "sidebar #f7f7f5 in light mode and
+    // #202020 in dark mode, text #37352f in light mode", the text is that
+    // part's, as in "a dark card, white text".)
+    const TOKEN_ITEM =
+      /^(?:text|muted text|secondary text|borders?|background|links?|accent)\s+(?:#|rgb|hsl|oklch|var\()/;
+    if (j.sep === 'comma' && TOKEN_ITEM.test(c.text.trim())) {
+      /** @type {Clause[]} */
+      const sentence = [];
+      const at = clauses.indexOf(c);
+      for (let k = at - 1; k >= 0; k--) {
+        sentence.push(clauses[k]);
+        if (['none', 'break'].includes(String(joinOf.get(clauses[k])?.sep)))
+          break;
+      }
+      for (let k = at + 1; k < clauses.length; k++) {
+        if (['none', 'break'].includes(String(joinOf.get(clauses[k])?.sep)))
+          break;
+        sentence.push(clauses[k]);
+      }
+      const partsSaid = new Set(
+        sentence.flatMap(x => x.parts.map(p => first(p.on))),
+      );
+      if (
+        partsSaid.size !== 1 ||
+        sentence.some(x => TOKEN_ITEM.test(x.text.trim()))
       )
-    )
-      return 'theme';
+        return 'theme';
+    }
     // A text color: the part's, when it holds text.
     if (own.every(a => a === 'text'))
       return c.colors.length && !before.parts.every(p => textOnlyPart(p.on))
