@@ -86,8 +86,8 @@ const styles = stylex.create({
     // baseline, so its bottom edge sat on the line and the chip rode above
     // it. Centred, it sits on the line with or without an icon.
     verticalAlign: 'middle',
-    // Its spacing size at the default text size, where one line is shorter;
-    // it grows with its label when the text grows past it.
+    // A min-height would add the borders to the line and make the default
+    // pill 22 px tall. A taller line grows the pill.
     height: `max(${spacingVars['--spacing-5']}, 1lh)`,
     fontSize: typeScaleVars['--text-supporting-size'],
     fontWeight: typeScaleVars['--text-supporting-weight'],
@@ -144,15 +144,15 @@ const styles = stylex.create({
     verticalAlign: 'super',
     fontSize: typeScaleVars['--text-supporting-size'],
     fontWeight: fontWeightVars['--font-weight-semibold'],
-    lineHeight: typeScaleVars['--text-supporting-leading'],
+    lineHeight: 'normal',
     color: colorVars['--color-text-secondary'],
     backgroundColor: colorVars['--color-accent-muted'],
     borderRadius: radiusVars['--radius-full'],
     minWidth: spacingVars['--spacing-5'],
-    // Its own digits plus its padding on each side, which is its spacing size
-    // at the default text size. A superscript badge grows with its own text,
-    // not with the line, so it raises the line as little as it can.
-    height: `max(${spacingVars['--spacing-5']}, calc(1em + 2 * ${spacingVars['--spacing-1']}))`,
+    // The font's own line height makes 1lh the height of the digits' text
+    // box. So the superscript badge keeps its spacing size at the default text
+    // size and grows only with its own text, which raises the line less.
+    height: `max(${spacingVars['--spacing-5']}, 1lh)`,
     paddingInline: spacingVars['--spacing-1'],
     textDecoration: 'none',
     transitionProperty: 'background-color',
