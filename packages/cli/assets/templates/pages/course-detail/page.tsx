@@ -13,9 +13,9 @@
 // and every value rides a token or a component prop. The one custom block is
 // the sticky purchase rail below — Astryx layout primitives expose no sticky
 // prop yet (core issue #2613) — and nothing else in the file is styled by
-// hand. The glyphs draw from @astryxdesign/template-icons through the Icon
-// wrapper, each by meaning; directional icons mirror under RTL; sample
-// media rides the shipped fixture images.
+// hand. Every glyph goes through the Icon wrapper, each icon chosen for its
+// meaning so an icon set can draw it; directional icons mirror under RTL;
+// the images are sample fixtures a copy replaces with its own.
 
 'use client';
 
@@ -597,6 +597,14 @@ function SyllabusSection() {
     const next = fold(value.trim());
     setQuery(value);
     if (!next) {
+      // Clearing the query removes "No lessons match …" and brings every
+      // module back, so the restored syllabus is announced — the same words
+      // the section header shows.
+      announce(
+        `${MODULES.length} modules · ${COURSE.lessonCount} ${
+          COURSE.lessonCount === 1 ? 'lesson' : 'lessons'
+        }`,
+      );
       setOpen([MODULES[0].id]);
       return;
     }
@@ -1259,7 +1267,7 @@ function ClosingBand() {
           <AspectRatio ratio={4 / 3} fit="cover">
             <img
               src="/template-assets/colorful-working-horizontal-1.png"
-              alt="A desk with the course workbook open next to a laptop"
+              alt="An open-plan office with people working at laptops"
             />
           </AspectRatio>
         </Grid>
