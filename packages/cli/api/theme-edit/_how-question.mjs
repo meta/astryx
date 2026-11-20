@@ -31910,11 +31910,18 @@ export function draftAnswer(ctx, env, question) {
           continue;
         }
         // ("badges with a subtle colored background and dark text": a fill
-        // said for the part that the answer writes nowhere gives the text no
-        // ground to be measured on, so the text is not split by variant;
-        // the per-mode pass below keeps it to the mode it reads in.)
+        // said for the part, in a clause that names it or says the text,
+        // that the answer writes nowhere gives the text no ground to be
+        // measured on, so the text is not split by variant; the per-mode
+        // pass below keeps it to the mode it reads in. A fill said for
+        // another part, "cards with a light gray background", is that
+        // part's.)
         if (
-          /\b(?:background|fill)\b/.test(q) &&
+          clauses.some(
+            c =>
+              (c === draftClause.get(d) || c.parts.some(p => p.on === st.on)) &&
+              /\b(?:background|fill)\b/.test(c.text),
+          ) &&
           !result
             .flatMap(r => r.options.flat())
             .some(x => x.on === st.on && /^background/.test(x.thing))
