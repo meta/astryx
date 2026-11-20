@@ -14,16 +14,6 @@ import {colorDefaults} from './tokens.stylex';
 import {parseConcreteColor, solveLightness, toHex} from './statusColor';
 import {opaqueOver as over, resolveModes} from './statusRoleDerivation';
 import type {RGBA} from '../utils/color';
-import {setSelectionWash} from '../privateAttributes/selectionWash';
-
-/**
- * Marks a selected table row while it paints the selection wash, so its
- * secondary text takes the value measured on the tint only there. The table
- * selection plugin calls it each time it paints or clears a row.
- */
-export function markSelectionWash(row: HTMLElement, painted: boolean): void {
-  setSelectionWash(row, painted);
-}
 
 /** The private variable every part on the accent tint reads. */
 export const SELECTED_TEXT_SECONDARY = '--_selected-text-secondary';

@@ -62,7 +62,7 @@ import {
 import english from '../../../i18n/generated-english/Table/plugins/selection/useTableSelection.generated';
 import {createSharedContext} from '../../../utils/sharedContext';
 import {themeDataAttributes} from '../../../utils/themeProps';
-import {markSelectionWash} from '../../../theme/selectedTintText';
+import {markSelectionWash} from '../../../theme/selectionWash';
 
 registerEnglishFallback(english);
 import {registerFixedHeightColumn} from '../../tableColumnAdmission';

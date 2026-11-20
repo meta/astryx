@@ -23,6 +23,7 @@ applies_to:
     packages/core/src/privateAttributes/mediaDarkPage.ts,
     packages/core/src/privateAttributes/selectionWash.ts,
     packages/core/src/privateAttributes/selectionWash.stylex.ts,
+    packages/core/src/theme/selectionWash.ts,
     packages/core/src/theme/invertedSurfaceSide.ts,
     packages/cli/api/theme/build/build.mjs,
     packages/cli/api/theme/build/core-interception.mjs,
