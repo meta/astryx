@@ -29,11 +29,7 @@ import {
   isRecord,
   subpathDeclaration,
 } from '../../foundation/integrations/exports-subpaths.mjs';
-import {
-  recordReads,
-  recordStates,
-  unchangedSince,
-} from '../../foundation/fs/read-record.mjs';
+import {reusedWhileUnchangedSync} from '../../foundation/fs/read-record.mjs';
 
 /** The extensions an extensionless import may name, in resolution order. */
 const CODE_FILE = /\.[cm]?[jt]sx?$/;
@@ -382,38 +378,41 @@ function publicSurfaceOf(packageDir, srcRoot, originsOf) {
 }
 
 /**
- * Public surfaces read in this process, by package and source root, with
- * every file and folder each read. Reading one parses every module the
- * package exports, more than the parsed-module cache keeps, so without this
- * each copy from the same package parses them all again.
- * @type {Map<string, {reads: Map<string, string>, surface: PublicSurface}>}
+ * The read of each package's public surface, by package and source root.
+ * Reading one parses every module the package exports, more than the
+ * parsed-module cache keeps, so without this each copy from the same package
+ * in one process parses them all again.
+ * @type {Map<string, () => PublicSurface>}
  */
-const keptSurfaces = new Map();
+const surfaceReads = new Map();
 
 /**
- * {@link publicSurfaceOf}, kept while every file and folder it read is
- * unchanged. A kept surface counts as read by the running operation.
+ * {@link publicSurfaceOf}, reused while every file and folder it read is
+ * unchanged. Each read caches export origins for that read only, so a read
+ * after a change sees the package as it is then.
  * @param {string} packageDir
  * @param {string} srcRoot
- * @param {OriginsOf} originsOf
  * @returns {PublicSurface}
  */
-function keptPublicSurfaceOf(packageDir, srcRoot, originsOf) {
+function keptPublicSurfaceOf(packageDir, srcRoot) {
   const key = `${packageDir}\0${srcRoot}`;
-  const kept = keptSurfaces.get(key);
-  if (kept && unchangedSince(kept.reads)) {
-    recordStates(kept.reads);
-    return kept.surface;
+  let read = surfaceReads.get(key);
+  if (read == null) {
+    read = reusedWhileUnchangedSync(
+      () => {
+        const memos = {value: new Map(), type: new Map()};
+        return publicSurfaceOf(packageDir, srcRoot, (file, kind) =>
+          moduleExportOrigins(file, {
+            types: kind === 'type',
+            memo: memos[kind],
+          }),
+        );
+      },
+      {exact: true},
+    );
+    surfaceReads.set(key, read);
   }
-  /** @type {Map<string, string>} */
-  const reads = new Map();
-  const surface = recordReads(
-    reads,
-    () => publicSurfaceOf(packageDir, srcRoot, originsOf),
-    {exact: true},
-  );
-  keptSurfaces.set(key, {reads, surface});
-  return surface;
+  return read();
 }
 
 /**
@@ -461,8 +460,9 @@ export function planCopy({
   ownerPackage,
   entries,
 }) {
-  // Every read is cached for this copy only, so a later copy sees the
-  // package as it is then.
+  // Export reads are cached for this copy only, so a later copy sees the
+  // package as it is then. The package surface is kept across copies while
+  // what it read is unchanged.
   const exportMemos = {value: new Map(), type: new Map()};
   /** @type {OriginsOf} */
   const originsOf = (file, kind) =>
@@ -512,7 +512,7 @@ export function planCopy({
    * @param {{packageDir: string, srcRoot: string, ownerPackage: string}} pkg
    */
   function makeContext({packageDir, srcRoot, ownerPackage}) {
-    const surface = keptPublicSurfaceOf(packageDir, srcRoot, originsOf);
+    const surface = keptPublicSurfaceOf(packageDir, srcRoot);
     /** @param {string} file */
     const inSource = file => file.startsWith(srcRoot + path.sep);
     /**
