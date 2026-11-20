@@ -3510,12 +3510,16 @@ function bordersBeyondCore(ctx, data, s, part) {
   for (const [k, b] of Object.entries(blocks))
     if (k === 'base' || !wp || k === s.when) if (drawsIn(b)) return true;
   // The theme's own settings for it. (A width alone draws no line: Core's
-  // style stays none; a style or a shorthand with one draws.)
+  // style stays none; a style draws, and a shorthand only with a style word
+  // in it, as borderSidesOff reads it: `border-top 1px` draws nothing.)
+  const STYLE_WORD =
+    /(?:^|\s)(?:solid|dashed|dotted|double|groove|ridge|inset|outset)(?:\s|$)/i;
   return (data?.settings ?? []).some(
     (/** @type {any} */ x) =>
       x.source === 'property' &&
       edgeProp.test(String(x.thing)) &&
       !/-width$/.test(String(x.thing)) &&
+      (/-style$/.test(String(x.thing)) || STYLE_WORD.test(String(x.value))) &&
       !blank(x.value) &&
       (!x.when || !s.when || x.when === s.when) &&
       (!x.state || x.state === s.state) &&

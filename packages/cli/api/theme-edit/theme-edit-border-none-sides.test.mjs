@@ -182,6 +182,25 @@ describe("the border a color brings beside the part's own", () => {
 
 describe('a shorthand with no style', () => {
   it(
+    'is no line the theme draws: a color still brings its border',
+    async () => {
+      await themeEditSet('s', 'border-top', '1px', {cwd, on: 'tab'});
+      const r = await themeEditSet('s', 'border-color', '#999999', {
+        cwd,
+        on: 'tab',
+      });
+      expect(r.data.notes.join('\n')).toContain('added a');
+      const built = fs.readFileSync(path.join(cwd, 'themes/s/s.css'), 'utf8');
+      expect(built).toMatch(
+        /\.astryx-tab \{\s*border: var\(--border-width\) solid transparent;\s*border-top: 1px;\s*border-color: #999999;/,
+      );
+      await themeEditUndo('s', {cwd});
+      await themeEditUndo('s', {cwd});
+    },
+    T,
+  );
+
+  it(
     'draws no line on its side',
     async () => {
       await check(
