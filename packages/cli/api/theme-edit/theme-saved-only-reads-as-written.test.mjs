@@ -242,4 +242,36 @@ describe('--only, as set writes it and the reader reads it', () => {
     },
     T,
   );
+
+  it(
+    'a saved only on a family role is refused as on any group, and the file is left as it is',
+    async () => {
+      write([
+        {
+          thing: 'background-color',
+          value: '#123456',
+          source: 'property',
+          on: 'button-like',
+          only: true,
+        },
+      ]);
+      const before = fs.readFileSync(file(), 'utf8');
+      /** @type {any} */
+      let err = null;
+      try {
+        await themeEditShow('n', {cwd});
+      } catch (e) {
+        err = e;
+      }
+      expect(err?.code).toBe('ERR_THEME_INVALID');
+      // (The words main's reader says for an only on a group; what follows
+      // them depends on the theme's history.)
+      expect(String(err?.message)).toMatch(
+        /^themes\/n\/n\.settings\.json: background-color on button-like has only, which is for one member of a group \(not the button-like group itself\)\. Remove that setting with astryx experimental theme editor undo n background-color --on button-like; nothing else needs to change\b/,
+      );
+      expect(String(err?.message)).not.toMatch(/family role/);
+      expect(fs.readFileSync(file(), 'utf8')).toBe(before);
+    },
+    T,
+  );
 });

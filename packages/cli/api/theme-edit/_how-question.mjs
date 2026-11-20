@@ -42,8 +42,14 @@ import {
   isSystemFamily,
   LIKE,
   wordTable,
+  pageColorNote,
 } from './_tables.mjs';
-import {baseInstalled, installLine, packageInstalled} from './_project.mjs';
+import {
+  baseInstalled,
+  installLine,
+  literals,
+  packageInstalled,
+} from './_project.mjs';
 import {
   PALETTE_DIALS,
   STATUS_TOKEN,
@@ -58,6 +64,8 @@ import {
 import {isColorToken} from './_compiler.mjs';
 import {
   radioCircle,
+  selfSizedBoxLines,
+  sizesItsOwnBox,
   pillShapes,
   DIAL_RADII,
   borderParts,
@@ -97,6 +105,7 @@ import {cssProperties, keywordsOf, matchValue, splitTop} from './_css.mjs';
 
 import {render as renderStep} from './_how-commands.mjs';
 import {coversProperty} from '../../foundation/runtime/css-tree.mjs';
+import {numberedLookValues, oneAnswerPerFamily} from './_part-pieces.mjs';
 /** @typedef {import('./_how-commands.mjs').Step} Step */
 /** @typedef {import('./_how-commands.mjs').MeasureIntent} MeasureIntent */
 
@@ -108,7 +117,7 @@ const OVERRIDE_RES = new Set(OVERRIDES.map(([re]) => re));
  * steps run in order; most options are one step. `smallest`: the options
  * are one change in growing amounts, and the answer is the first the
  * measured check keeps.
- * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent, smallest?: boolean, modeInValue?: boolean, unmet?: string, offer?: boolean}} Draft
+ * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent, smallest?: boolean, modeInValue?: boolean, unmet?: string, offer?: boolean, already?: boolean}} Draft
  */
 
 /**
@@ -622,7 +631,7 @@ function joinSideLists(q) {
       const before = clause
         .slice(0, at - from)
         .match(
-          /\b(?:borders?|bordered|edges?|outlines?|padding|margins?|spacing|gaps?|radius|corners?|space)\b/gi,
+          /\b(?:borders?|bordered|edges?|outlines?|lines?|padding|margins?|spacing|gaps?|radius|corners?|space)\b/gi,
         );
       const owner = before?.at(-1) ?? '';
       // (A look said right after the list is its own: "a border and top
@@ -637,12 +646,23 @@ function joinSideLists(q) {
       // and bottom" are every corner, read by the corner reader.)
       const sided =
         /^(?:borders?|bordered|edges?|outlines?|lines?|padding|margins?|spacing|space)$/i;
-      // (A bare comma before the last side, with a look after it and
-      // another before the list, ends the first item there: "a border on
-      // top, bottom padding 8px" is the border's top and the padding's
-      // bottom. The sides before that comma are the earlier look's.)
-      const lastComma = /,\s*(?!and\b)(?:on\s+)?(?:the\s+)?[a-z]+$/i.exec(m);
-      if (nextLook && owner && lastComma) {
+      // (A comma or an "and" before the last side, with a look after it
+      // and another before the list, ends the first item there: "a border
+      // on top and bottom padding 8px" is the border's top and the
+      // padding's bottom. The sides before that comma are the earlier look's.)
+      const lastComma =
+        /(?:\s*,\s*(?:and\s+)?|\s+and\s+)(?:on\s+)?(?:the\s+)?[a-z]+$/i.exec(m);
+      // (Only a list said as where the earlier look goes, "on top", "along
+      // the top", "on its top", or right after it, "border top": "a border and top and bottom padding 6px"
+      // lists the padding's sides.)
+      const placed =
+        /\b(?:on|at|along|across|around|over|down|by)(?:\s+(?:the|its|their))?\s*$/i.test(
+          text.slice(0, at),
+        ) ||
+        /\b(?:borders?|bordered|edges?|outlines?|lines?|padding|margins?|spacing|space)\s*$/i.test(
+          text.slice(0, at),
+        );
+      if (nextLook && owner && placed && lastComma) {
         const head = m.slice(0, lastComma.index);
         const joinedHead = sided.test(owner)
           ? head.replace(
@@ -1008,6 +1028,42 @@ function ownWords(k) {
       row: 'row|line',
     })[last] ?? last
   );
+}
+
+/**
+ * The radius Core draws on a part's box in every variant and size, when it
+ * is one value and no square corner ("50%" on a status dot or a switch
+ * thumb), or null. States and pseudo-elements are not the box at rest.
+ * A value of a prop that every rule names but no rule matches draws no
+ * radius: an aspect ratio is round only in its ellipse shape, so its
+ * rectangle has square corners.
+ * @param {{MAP: Record<string, any>}} C
+ * @param {string} part
+ */
+function drawnRadius(C, part) {
+  const rules = C.MAP[part]?.at?.['border-radius'] ?? {};
+  const atRest = Object.entries(rules).filter(([cond]) => !/:/.test(cond));
+  /** @type {Record<string, string[]>} */
+  const attrs = C.MAP[part]?.attrs ?? {};
+  const pairsOf = (/** @type {string} */ cond) => {
+    const [first] = cond.split(' ');
+    return first.includes('=') ? first.split(',') : [];
+  };
+  const unruled = Object.entries(attrs).some(
+    ([prop, vals]) =>
+      atRest.length > 0 &&
+      atRest.every(([cond]) =>
+        pairsOf(cond).some(kv => kv.startsWith(`${prop}=`)),
+      ) &&
+      vals.some(
+        val =>
+          !atRest.some(([cond]) => pairsOf(cond).includes(`${prop}=${val}`)),
+      ),
+  );
+  if (unruled) return null;
+  const values = new Set(atRest.map(([, v]) => String(v).trim()));
+  const [v] = values;
+  return values.size === 1 && !/^0(?:px)?$/.test(v) ? v : null;
 }
 
 /**
@@ -2653,7 +2709,7 @@ export function exactFactor(text) {
 }
 
 /**
- * @typedef {{on: string, when?: string, role?: string, level?: string, missing?: string}} PartRef
+ * @typedef {{on: string, when?: string, role?: string, level?: string, missing?: string, plural?: boolean}} PartRef
  */
 
 /**
@@ -3126,7 +3182,7 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
  * @typedef {object} Clause
  * @property {string} text
  * @property {string} [joint] - the words that joined the clause to the one before ("with", "and", ",", ";")
- * @property {Array<{on: string, when?: string, role?: string, level?: string, missing?: string}>} parts
+ * @property {Array<{on: string, when?: string, role?: string, level?: string, missing?: string, plural?: boolean}>} parts
  * @property {string[]} aspects
  * @property {boolean} neg
  * @property {'more' | 'less' | null} dir
@@ -4007,6 +4063,9 @@ function clausesOf(q, partWords, words = null) {
       }
       const p = {...part};
       if (p.on === 'heading' && /^h[1-6]$/.test(m[0])) p.level = m[1];
+      // (A look of the part said in the plural, "display headings": read
+      // below as every look of its numbered family.)
+      if (p.when && /s$/.test(m[0].trim())) p.plural = true;
       // "the error banner": one status of the banner.
       const status =
         /\b(error|danger|warning|success|info)\s+(banners?|alerts?|notices?)\b/.exec(
@@ -8207,6 +8266,40 @@ export function draftAnswer(ctx, env, question) {
     );
     return asks.every(Boolean) ? each.flat() : [c];
   });
+  // ("display headings": a numbered look of a part said in the plural is
+  // every look of that numbered family the part draws, display-1 to
+  // display-3: the values its prop takes, as its component's doc types
+  // them, and any more Core's data saw it drawn in. The clause names each,
+  // so a clause that takes its part, "make them blue", takes them all; the
+  // answer says which, once the family is written.)
+  /** @type {Array<{label: string, text: string, on: string, whens: string[]}>} */
+  const pluralSaid = [];
+  for (const c of clauses) {
+    const p = c.parts.find(x => x.plural && /-\d+$/.test(x.when ?? ''));
+    const m = p && /^([\w-]+):(.+)-\d+$/.exec(p.when ?? '');
+    if (!p || !m) continue;
+    const values = numberedLookValues(
+      m[2],
+      partComponentDocs(ctx, p.on).flatMap(d =>
+        literals(d.doc.props?.[m[1]]?.type),
+      ),
+      /** @type {string[]} */ (C.MAP[p.on]?.attrs?.[m[1]] ?? []),
+    );
+    if (values.length < 2) continue;
+    c.parts = c.parts.flatMap(x =>
+      x === p ? values.map(v => ({...x, when: `${m[1]}:${v}`})) : [x],
+    );
+    const said = new RegExp(`\\b${m[2]}[\\s-]+[a-z]+s\\b`).exec(
+      c.text.toLowerCase(),
+    )?.[0];
+    const whens = values.map(v => `${m[1]}:${v}`);
+    pluralSaid.push({
+      label: said ?? `${m[2]} ${p.on}s`,
+      text: `${said ?? `${m[2]} ${p.on}s`}: ${values.join(', ')}`,
+      on: p.on,
+      whens,
+    });
+  }
   /** The aspects each clause names in its own words. @type {WeakMap<Clause, string[]>} */
   const ownAspects = new WeakMap();
   for (const c of clauses) ownAspects.set(c, [...c.aspects]);
@@ -14140,6 +14233,7 @@ export function draftAnswer(ctx, env, question) {
       ),
       ...(input.unmet ? {unmet: input.unmet} : {}),
       ...(d.offer || input.offer ? {offer: true} : {}),
+      ...(d.already || input.already ? {already: true} : {}),
     };
     drafts.push(pushed);
     if (clauseNow) draftClause.set(pushed, clauseNow);
@@ -22362,36 +22456,132 @@ export function draftAnswer(ctx, env, question) {
               (named.corners.length === 2 &&
                 (named.corners.every(k => k.startsWith('start-')) ||
                   named.corners.every(k => k.startsWith('end-'))));
+            // (A longhand the theme set before the part's last radius keeps
+            // that place when written again, so the radius still wins over
+            // it: such a corner is written in the radius, the other corners
+            // as they are now.)
+            const behindRadius = (/** @type {string} */ k) =>
+              ordered.some(
+                (st, n) => n < lastRadius && LONGHAND[st.thing] === k,
+              );
+            // (A corner longhand set after the part's last radius wins over
+            // it: then only the longhands of the corners that change are
+            // written; see longhandLast. When a corner to change has its
+            // longhand before the radius, the radius is written with every
+            // corner, and a changing corner whose longhand comes after the
+            // radius keeps its own longhand too.)
+            const afterRadius = (/** @type {string} */ k) =>
+              ordered.some(
+                (st, n) => n > lastRadius && LONGHAND[st.thing] === k,
+              );
             /** @param {Record<string, string | null>} at @param {string[]} keys */
-            const writeAll = (at, keys) =>
-              ALL.every(k => at[k] != null) && sameEitherWay
-                ? [
-                    set(
-                      'border-radius',
-                      radiusOf(ALL.map(k => String(at[k]))),
-                      {...f, ...modeOf(c)},
+            const writeAll = (at, keys) => {
+              const writes = [
+                'start-start',
+                'start-end',
+                'end-start',
+                'end-end',
+              ].filter(k => at[k] != null && keys.includes(k));
+              /** @param {string} k */
+              const longhand = k =>
+                set(`border-${k}-radius`, String(at[k]), {...f, ...modeOf(c)});
+              const whole =
+                (ALL.every(k => at[k] != null) &&
+                  sameEitherWay &&
+                  !longhandLast) ||
+                (nowAt != null && writes.some(behindRadius));
+              if (!whole) return writes.map(longhand);
+              return [
+                set(
+                  'border-radius',
+                  radiusOf(
+                    ALL.map(k =>
+                      String(
+                        at[k] ??
+                          /** @type {Record<string, string>} */ (nowAt)[k],
+                      ),
                     ),
-                  ]
-                : ['start-start', 'start-end', 'end-start', 'end-end']
-                    .filter(k => at[k] != null && keys.includes(k))
-                    .map(k =>
-                      set(`border-${k}-radius`, String(at[k]), {
-                        ...f,
-                        ...modeOf(c),
-                      }),
-                    );
-            const nowAt =
-              ownNow != null
-                ? fourOf(String(ownNow).trim())
-                : tok
-                  ? fourOf(`var(${tok})`)
-                  : null;
-            const resolvedAt =
-              ownNow != null
-                ? nowAt
-                : tok
-                  ? fourOf(String(current(tok)).trim())
-                  : null;
+                  ),
+                  {...f, ...modeOf(c)},
+                ),
+                ...writes.filter(afterRadius).map(longhand),
+              ];
+            };
+            // (Then each corner longhand the theme sets on the part, in the
+            // order it set them: a longhand after the radius changes its
+            // corner, a radius after a longhand replaces it. A physical
+            // corner is the logical one it is in a left-to-right page, as
+            // the side words are. The plain rule first, then the rule of
+            // the state or variant asked about.)
+            const LONGHAND = /** @type {Record<string, string>} */ ({
+              'border-start-start-radius': 'start-start',
+              'border-start-end-radius': 'start-end',
+              'border-end-start-radius': 'end-start',
+              'border-end-end-radius': 'end-end',
+              'border-top-left-radius': 'start-start',
+              'border-top-right-radius': 'start-end',
+              'border-bottom-left-radius': 'end-start',
+              'border-bottom-right-radius': 'end-end',
+            });
+            const scoped = Boolean(f.state || f.when);
+            const own = [...env.data.settings].filter(
+              st =>
+                st.on === on &&
+                !st.mode &&
+                (st.thing === 'border-radius' || st.thing in LONGHAND) &&
+                ((!st.state && !st.when) ||
+                  (scoped &&
+                    (st.state ?? null) === (f.state ?? null) &&
+                    (st.when ?? null) === (f.when ?? null))),
+            );
+            const ordered = [
+              ...own.filter(st => !st.state && !st.when),
+              ...own.filter(st => st.state || st.when),
+            ];
+            // (A corner longhand set after the part's last radius wins over
+            // it, and setting that radius again keeps its place before the
+            // longhand: then only longhands change those corners. A longhand
+            // set before the radius is already replaced by it.)
+            const lastRadius = ordered
+              .map(st => st.thing)
+              .lastIndexOf('border-radius');
+            const longhandLast = ordered.some(
+              (st, n) => st.thing !== 'border-radius' && n > lastRadius,
+            );
+            /** @param {Record<string, string> | null} base @param {(v: string) => string} read */
+            const layered = (base, read) => {
+              /** @type {Record<string, string> | null} */
+              let at = base ? {...base} : null;
+              for (const st of ordered) {
+                const v = read(String(st.value).trim());
+                if (st.thing === 'border-radius') at = fourOf(v);
+                else if (at) at[LONGHAND[st.thing]] = v;
+              }
+              return at;
+            };
+            // (A part that reads no corner token draws the radius Core gives
+            // it, a status dot or a switch thumb at 50%, else square corners:
+            // the theme's own longhands lay over those.)
+            const resolved = (/** @type {string} */ v) =>
+              v.replace(/var\(\s*(--[a-z0-9-]+)\s*(?:,[^)]*)?\)/gi, (m, t) =>
+                String(current(t) || m),
+              );
+            const drawn = tok
+              ? null
+              : drawnRadius(C, one(/** @type {string} */ (on)));
+            const SQUARE = Object.fromEntries(ALL.map(k => [k, '0']));
+            const nowAt = layered(
+              tok ? fourOf(`var(${tok})`) : drawn ? fourOf(drawn) : SQUARE,
+              v => v,
+            );
+            const resolvedAt = layered(
+              tok
+                ? fourOf(String(current(tok)).trim())
+                : drawn
+                  ? fourOf(resolved(drawn))
+                  : SQUARE,
+              resolved,
+            );
             const isZero = (/** @type {string | undefined} */ x) =>
               parseFloat(String(x)) === 0;
             const roundedAt = (/** @type {string} */ k) =>
@@ -22422,26 +22612,33 @@ export function draftAnswer(ctx, env, question) {
             );
             // (A rounded corner that is rounded now, or a corner squared by
             // "only" that is square now, needs no write.)
-            const changes = (/** @type {string} */ k) =>
-              target[k] != null &&
-              !(
-                (rounded && named.corners.includes(k) && roundedAt(k)) ||
-                (!named.corners.includes(k) &&
-                  resolvedAt != null &&
-                  isZero(resolvedAt[k]))
+            // (A corner already as asked needs no write: a rounded corner
+            // rounded now, a size or square it already has, a corner squared
+            // by "only" that is square now.)
+            const changes = (/** @type {string} */ k) => {
+              if (target[k] == null) return false;
+              if (!named.corners.includes(k))
+                return !(resolvedAt != null && isZero(resolvedAt[k]));
+              if (rounded) return !roundedAt(k);
+              return !(
+                resolvedAt != null &&
+                (nowAt?.[k] === target[k] ||
+                  (isZero(String(target[k])) && isZero(resolvedAt[k])))
               );
+            };
             const changing = [
               'start-start',
               'start-end',
               'end-start',
               'end-end',
             ].filter(changes);
-            const nowSaid =
-              ownNow != null
-                ? String(ownNow).trim()
-                : tok
-                  ? `${tok}, ${String(current(tok)).trim()}`
-                  : 'square';
+            const nowSaid = ordered.length
+              ? nowAt
+                ? radiusOf(ALL.map(k => nowAt[k]))
+                : String(ownNow ?? '').trim()
+              : tok
+                ? `${tok}, ${String(current(tok)).trim()}`
+                : (drawn ?? 'square');
             // (Rounded on one side, the part rounded all round: those corners
             // are as asked and the others stay as they are. The line that
             // squares the others, as "only" would, is offered, never written
@@ -22464,7 +22661,7 @@ export function draftAnswer(ctx, env, question) {
                 options: [
                   writeAll(
                     Object.fromEntries(ALL.map((k, n) => [k, squared[n]])),
-                    others,
+                    others.filter(roundedAt),
                   ),
                 ],
                 offer: true,
@@ -22475,6 +22672,7 @@ export function draftAnswer(ctx, env, question) {
               return {
                 text: `${sideWords(named.corners)} on ${on}: already ${rounded ? 'rounded' : sidePx === '0' ? 'square' : sidePx} (now ${nowSaid}), nothing to change`,
                 options: [],
+                already: true,
               };
             // (Every corner written: one radius of four, top-left first,
             // clockwise, as CSS gives them, elliptical where a corner has
@@ -22482,7 +22680,9 @@ export function draftAnswer(ctx, env, question) {
             /** @type {Step[]} */
             const steps = writeAll(
               target,
-              ALL.every(k => target[k] != null) ? ALL : changing,
+              ALL.every(k => target[k] != null) && !longhandLast
+                ? ALL
+                : changing,
             );
             return {
               text: `${sideWords(named.corners)} on ${on}: ${rounded ? `rounded (${fill === nowAt?.[ALL.filter(roundedAt)[0] ?? ''] ? `the part's own rounded corner, ${fill}` : tokRounds && fill === `var(${tok})` ? tok : `the round corners, ${fill}`}; now ${nowSaid})` : sidePx === '0' ? 'square' : sidePx}${!others.length ? '' : squareRest ? `, ${sideWords(others)} square` : ', the other corners as they are'}`,
@@ -25656,6 +25856,108 @@ export function draftAnswer(ctx, env, question) {
               options: [[set('width', len, f), set('height', len, f)]],
               sequence: true,
             };
+          // ("smaller checkboxes", "bigger radios": the square a member of
+          // the checks group sizes itself steps 4px, at each of its sizes
+          // from that size's own value, the theme's first (selfSizedBox);
+          // spacing never reaches it. A size whose value the editor does not
+          // know is named, never given another size's value.)
+          if (
+            !len &&
+            c.dir &&
+            !f.state &&
+            !tallIn(c.text) &&
+            !/\b(?:wide|wider|narrower|width|tall|taller|shorter|height)\b/.test(
+              c.text,
+            ) &&
+            sizesItsOwnBox(C, one(on))
+          ) {
+            // (A condition other than a size, "indeterminate checkboxes",
+            // is not stepped: the box's width and height hold under every
+            // state, and a size line would replace the condition.)
+            if (f.when && !/^size:/.test(String(f.when)))
+              return {
+                text: `${on} sets its own width and height at each size, the same in every state, so the editor does not step it under ${f.when}; ask without it ("${c.dir === 'less' ? 'smaller' : 'bigger'} ${on}") to size the box`,
+                options: [],
+              };
+            const all = C.variantValues(one(on)).size ?? [];
+            const named = /^size:(.+)$/.exec(String(f.when ?? ''))?.[1];
+            const sizes = named ? [named] : all.length > 1 ? all : [undefined];
+            const step = c.dir === 'less' ? -4 : 4;
+            // (A group's members step each from its own size: one group line
+            // where they agree, a line per member where they differ.)
+            /** @type {Step[]} */
+            const steps = [];
+            /** @type {string[]} */
+            const said = [];
+            /** @type {Array<{sz: string | undefined, why: string}>} */
+            const unknown = [];
+            const built = selfSizedBoxLines(
+              ctx,
+              env.data.settings,
+              FAMILIES[on] ? on : one(on),
+              sizes,
+              box =>
+                box.w + step > 0 && box.h + step > 0
+                  ? {w: box.w + step, h: box.h + step}
+                  : null,
+              all.length > 1,
+            );
+            unknown.push(...built.unknown);
+            const same = (/** @type {string | undefined} */ sz) =>
+              built.lines
+                .filter(l => l.sz === sz)
+                .every(l => l.m === (FAMILIES[on] ? on : one(on)));
+            for (const sz of sizes) {
+              const here = built.lines.filter(l => l.sz === sz);
+              if (!here.length) continue;
+              // (set adds the member's only itself.)
+              for (const l of here) {
+                const flags = {
+                  ...f,
+                  on: l.flags.on,
+                  ...(l.flags.when ? {when: l.flags.when} : {}),
+                };
+                steps.push(
+                  set('width', `${l.next.w}px`, flags),
+                  set('height', `${l.next.h}px`, flags),
+                );
+              }
+              said.push(
+                `${sz ? `${sz} ` : ''}${here
+                  .map(
+                    l =>
+                      `${same(sz) ? '' : `${l.m} `}${l.next.w === l.next.h ? `${l.next.w}px` : `${l.next.w}px by ${l.next.h}px`} (now ${l.box.w === l.box.h ? `${l.box.w}px` : `${l.box.w}px by ${l.box.h}px`})`,
+                  )
+                  .join(', ')}`,
+              );
+            }
+            // (A size it cannot read keeps its own, and says why, with the
+            // line that gives that size; with no size read at all, nothing
+            // is written: spacing never reaches the box.)
+            const give = (/** @type {string | undefined} */ sz) =>
+              `give its size in px, such as width 16px and height 16px --on ${on}${sz && all.length > 1 ? ` --when size:${sz}` : ''}${FAMILIES[on] ? '' : ' --only'}`;
+            // (One reason for every size is said once.)
+            const whys = [...new Set(unknown.map(u => u.why))];
+            const kept = !unknown.length
+              ? ''
+              : `${
+                  whys.length === 1 && (unknown.length > 1 || !unknown[0].sz)
+                    ? whys[0]
+                    : unknown
+                        .map(u => `${u.sz ? `${u.sz}: ` : ''}${u.why}`)
+                        .join('; ')
+                }, so it keeps its own (${unknown.length === 1 ? give(unknown[0].sz) : give(undefined)})`;
+            if (steps.length)
+              return {
+                text: `${on} ${c.dir === 'less' ? 'smaller' : 'bigger'}: width and height one 4px step at each size, as it sets them itself: ${said.join(', ')}${kept ? `; ${kept}` : ''}`,
+                options: [steps],
+                sequence: true,
+              };
+            return {
+              text: `${on} is sized by its own width and height, and the editor cannot read them to step: ${kept || give(named)}`,
+              options: [],
+            };
+          }
         }
         const tall =
           tallIn(c.text) ??
@@ -28732,6 +29034,39 @@ export function draftAnswer(ctx, env, question) {
     return toks.length ? `; ${one(on)} reads ${toks.join(', ')} for it` : '';
   }
 
+  // ("heavy display headings", "make them blue" after it: one answer.)
+  // (A look's size now: the font size the theme sets on that look, else the
+  // token it reads.)
+  // (Only the family's own part: a Text set at display-1 is no display
+  // heading. A set size that is no length, a clamp(), reads the token.)
+  const familyUnanswered = oneAnswerPerFamily(
+    drafts,
+    d => draftClause.get(d),
+    clauses,
+    pluralSaid,
+    (w, on) => {
+      const set = env.data.settings.find(
+        st =>
+          st.thing === 'font-size' &&
+          st.on === on &&
+          st.when === w &&
+          !st.state &&
+          !st.mode,
+      );
+      const token = `--text-${w.split(':')[1]}-size`;
+      return (
+        lengthPx(String(set?.value ?? '')) ??
+        lengthPx(String(resolvedValue(token) || current(token) || ''))
+      );
+    },
+  );
+  // (A family no look of which writes anything is named in one answer.)
+  for (const u of familyUnanswered) {
+    /** @type {Draft} */
+    const d = {text: u.text, options: []};
+    drafts.push(d);
+    draftClause.set(d, u.clause);
+  }
   /** @type {Draft[]} */
   const result = [];
   // Several changes in one question: one answer that runs them all first,
@@ -31558,6 +31893,19 @@ export function draftAnswer(ctx, env, question) {
       }
   for (const n of placeNotes)
     if (!keptInPlace.has(n.c)) result.push({text: n.text, options: []});
+  // (The looks line names the looks written, never one left out.)
+  for (const f of pluralSaid) {
+    const written = f.whens.filter(w =>
+      result.some(d =>
+        d.options.flat().some(st => st.on === f.on && st.when === w),
+      ),
+    );
+    if (written.length)
+      result.push({
+        text: `${f.label}: ${written.map(w => w.split(':')[1]).join(', ')}`,
+        options: [],
+      });
+  }
   // (The other reading of states said together, said last.)
   result.push(...otherReadings);
   // A panel's look written for every one (a card's) reaches the panels an
@@ -31629,7 +31977,7 @@ export function draftAnswer(ctx, env, question) {
     : undefined;
   if (named0)
     result.push({
-      text: `"${named0.text}" names ${named0.parts.map(p => p.on).join(' and ')} and what to look at, but no change (a value, or a way such as darker or more); how ${named0.parts[0].on} shows what it has now`,
+      text: `"${named0.text}" names ${[...new Set(named0.parts.map(p => p.on))].join(' and ')} and what to look at, but no change (a value, or a way such as darker or more); how ${named0.parts[0].on} shows what it has now`,
       options: [],
       lookup: `${HOW} ${named0.parts[0].on}`,
     });
@@ -31746,7 +32094,7 @@ export function draftAnswer(ctx, env, question) {
       !result.some(d => /shows only where a part draws it/.test(d.text))
     )
       result.push({
-        text: `the page color shows only where a part draws it (${[...new Set([...(TARGET.has('app-shell') ? ['app-shell'] : []), ...pageReaders])].slice(0, 6).join(', ')}): the theme's page color paints inside AppShell; a page without AppShell keeps the browser's own page color until its own CSS adds one line: body { background: var(--color-background-body) }`,
+        text: `${pageColorNote(env.data?.mode)} (The parts that paint it: ${[...new Set([...(TARGET.has('app-shell') ? ['app-shell'] : []), ...pageReaders])].slice(0, 6).join(', ')}.)`,
         options: [],
         lookup: TARGET.has('app-shell') ? `${HOW} app-shell` : undefined,
       });

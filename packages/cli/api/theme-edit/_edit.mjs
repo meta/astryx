@@ -56,6 +56,7 @@ import {
   familyOf,
   wordTable,
   onlyMeans,
+  pageColorNote,
 } from './_tables.mjs';
 import {
   commitTheme,
@@ -6125,6 +6126,11 @@ async function changeOnce(
   /** The border a border color brought to a part that drew none. @type {import('./_settings.mjs').Setting | null} */
   let borderAdded = null;
   let prev = prevIdx >= 0 ? data.settings[prevIdx] : null;
+  // (Whether the theme set its page color before this command: the note
+  // about where it shows is said once, the first time.)
+  const hadPageColor = data.settings.some(
+    x => x.thing === '--color-background-body' && !x.on,
+  );
   /** The other entries of a setting listed twice by hand that this command replaces or removes. @type {import('./_settings.mjs').Setting[]} */
   let alsoReplaced = [];
   // A value is compared as `set` reads it: case, spacing around commas,
@@ -7136,6 +7142,14 @@ async function changeOnce(
       /^--(font-size-|text-[a-z0-9-]+-(size|leading)$)/.test(s.thing))
       ? [PHONE_SIZES_NOTE]
       : []),
+    // The page color shows inside AppShell only: said once for the theme,
+    // with the first page color it sets.
+    ...(sub === 'set' &&
+    !s.on &&
+    s.thing === '--color-background-body' &&
+    !hadPageColor
+      ? [pageColorNote(data.mode)]
+      : []),
     // A scale step far outside reading sizes is named.
     ...(sub === 'set' && ['text-size', 'type'].includes(s.thing)
       ? extremeSteps(r.res.light)
@@ -7808,7 +7822,8 @@ async function changeOnce(
         ? {
             name: group,
             members: parts,
-            onlyHint: onlyMeans(s.on) === 'member',
+            onlyHint:
+              !groupsOf(ctx)[s.on ?? ''] && onlyMeans(s.on) === 'member',
           }
         : null,
       changedTokens: lookCollapsed(

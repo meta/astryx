@@ -25,6 +25,7 @@ import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {importPathOf, installLine, literals} from './_project.mjs';
 import {removeEmptyFolder} from '../../foundation/fs/empty-folder.mjs';
+import {sidesOf} from './_css.mjs';
 
 /** Text properties CSS inherits, which a part passes to the text inside it. */
 export const INHERITED_TEXT =
@@ -103,6 +104,7 @@ const LIFECYCLE_FLAGS = new Set([
  * @property {Record<string, string[]>} attrs - data attributes seen on the part
  * @property {string[]} contains - parts rendered inside it
  * @property {string[]} [repeats] - parts it holds more than one of side by side, as the nearest part around them (a shortcut's keys, a button group's buttons)
+ * @property {string[]} [listed] - the parts inside it drawn more than once in one of its elements (a menu's items), unlike a part drawn there once (a header's nav)
  * @property {Record<string, string[]>} [holdsVariants] - for a part rendered inside it, the variants it is drawn in there (a toast's close button: ghost)
  * @property {string[]} [tags] - the elements it is rendered as (`tr` for a table row)
  * @property {string} [underInput] - drawn under an invisible native input
@@ -1373,9 +1375,9 @@ function resolvePrivate(v, env, tokens, depth = 0) {
  * @returns {{map: Record<string, PartRecord>, pairs: TextPair[]}}
  */
 export function walkMarkup(html, decls, tokens, targets = new Map()) {
-  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, repeats: Set<string>, holdsVariants?: Record<string, Set<string>>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>, alone?: boolean, borrowed?: Record<string, Set<string>>, innerSets?: Record<string, Set<string>>, underInput?: string}>} */
+  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, repeats: Set<string>, holdsVariants?: Record<string, Set<string>>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>, alone?: boolean, borrowed?: Record<string, Set<string>>, listed?: Set<string>, innerSets?: Record<string, Set<string>>, underInput?: string}>} */
   const map = {};
-  /** @type {Array<{env: Record<string, string>, target: string | null, all?: string[], fg: PaintSide | null, bg: PaintSide | null, cond: string, kids?: string[], input?: boolean, owns?: boolean, seenParts?: Record<string, number>}>} */
+  /** @type {Array<{env: Record<string, string>, target: string | null, all?: string[], fg: PaintSide | null, bg: PaintSide | null, cond: string, kids?: string[], input?: boolean, owns?: boolean, seenParts?: Record<string, number>, seen?: Map<string, number>}>} */
   const stack = [{env: {}, target: null, fg: null, bg: null, cond: ''}];
   /** @type {Map<string, TextPair>} */
   const pairs = new Map();
@@ -1692,6 +1694,12 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         for (const at of anc.all ?? (anc.target ? [anc.target] : []))
           if (at !== t) {
             map[at].contains.add(t);
+            // (A part drawn a second time inside the same element is listed
+            // there: a menu's items, never a header's one nav.)
+            const seen = (anc.seen ??= new Map());
+            seen.set(`${at}\0${t}`, (seen.get(`${at}\0${t}`) ?? 0) + 1);
+            if (seen.get(`${at}\0${t}`) === 2)
+              (map[at].listed ??= new Set()).add(t);
             // (The variant each holds there: a toast's close button is a
             // ghost button.)
             if (dataAttrs.variant)
@@ -1816,6 +1824,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
       ),
       contains: [...v.contains],
       ...(v.repeats?.size ? {repeats: [...v.repeats]} : {}),
+      ...(v.listed?.size ? {listed: [...v.listed]} : {}),
       ...(v.holdsVariants
         ? {
             holdsVariants: Object.fromEntries(
@@ -2001,3 +2010,207 @@ export function familyRoles(
   }
   return /** @type {any} */ (out);
 }
+
+/**
+ * The properties that size a part in the block direction: a part that sets
+ * none of them (a layout region, which may draw a divider line) is a frame
+ * a bar's height passes through.
+ */
+const BLOCK_BOX =
+  /^(height|min-height|max-height|(min-|max-)?block-size|padding(-(top|bottom|block(-start|-end)?))?|margin-(top|bottom|block(-start|-end)?))$/;
+
+/** The elements a control is drawn as: never a bar, nor a bar's row. */
+const CONTROL_TAGS = new Set(['button', 'a', 'input', 'select', 'textarea', 'label']);
+
+/**
+ * The value a part draws a property with as the census saw it: the one it
+ * always has, else the one every condition it was drawn in agrees on; null
+ * when it sets none (or conditions differ).
+ * @param {PartRecord | undefined} rec
+ * @param {string} prop
+ * @returns {string | null}
+ */
+export function drawnValue(rec, prop) {
+  const at = rec?.at?.[prop];
+  if (!at) return null;
+  if (at.always != null) return at.always;
+  const values = [...new Set(Object.values(at))];
+  return values.length === 1 ? values[0] : null;
+}
+
+/**
+ * The bar rows a part holds, from the part map's `contains` relation: the
+ * parts drawn inside it that lay their own children out in one row,
+ * centered across its whole width (display flex, align-items center, width
+ * 100%: the top nav in the app's header) and holding items of more than
+ * one kind, drawn there once (a part listed inside it is a list's item,
+ * never its bar's row: a menu's items, a side nav's items), neither of them
+ * drawn as a control (a collapsible's trigger, an avatar's button), reached
+ * through frames that draw no box of their own (a layout region). A part
+ * holding such a row is laid out as a bar:
+ * a height or a vertical padding set on it makes the bar that row fills.
+ * @param {Record<string, PartRecord>} map
+ * @param {string} holder
+ * @returns {string[]}
+ */
+export function barRows(map, holder) {
+  const inside = map[holder]?.contains ?? [];
+  /** @param {string} p */
+  const frame = p => !Object.keys(map[p]?.at ?? {}).some(k => BLOCK_BOX.test(k));
+  /** A part drawn as a control (a button, a link, a field). @param {string} p */
+  const control = p =>
+    (map[p]?.tags ?? []).some(t => CONTROL_TAGS.has(t.toLowerCase()));
+  if (control(holder)) return [];
+  const listed = new Set(map[holder]?.listed ?? []);
+  return inside.filter(r => {
+    const rec = map[r];
+    if (listed.has(r) || control(r)) return false;
+    // (A bar's row lays out items: more than one kind of part inside it,
+    // where a menu's divider or a typeahead option's icon is one or none.)
+    if ((rec?.contains ?? []).length < 2) return false;
+    if (
+      !/^(inline-)?flex$/.test(drawnValue(rec, 'display') ?? '') ||
+      /^column/.test(drawnValue(rec, 'flex-direction') ?? '') ||
+      drawnValue(rec, 'align-items') !== 'center' ||
+      drawnValue(rec, 'width') !== '100%'
+    )
+      return false;
+    return inside
+      .filter(p => p !== r && (map[p]?.contains ?? []).includes(r))
+      .every(frame);
+  });
+}
+
+/**
+ * A pair of block-direction sides (top and bottom) one family of
+ * properties gives, read from `get(prop)`: the longhands win over
+ * `<family>-block`, which wins over the shorthand. Null sides are unset.
+ * @param {(prop: string) => string | null} get
+ * @param {'padding' | 'border-width'} family
+ * @returns {[string | null, string | null]}
+ */
+export function blockSides(get, family) {
+  const [head, tail] =
+    family === 'padding' ? ['padding', ''] : ['border', '-width'];
+  /** @param {string} side */
+  const name = side => `${head}-${side}${tail}`;
+  const whole = get(family);
+  const all = whole ? sidesOf(family, whole) : null;
+  const block = get(name('block'));
+  const ends = block ? sidesOf(name('block'), block) : null;
+  return [
+    get(name('top')) ??
+      get(name('block-start')) ??
+      ends?.[name('block-start')] ??
+      all?.[name('top')] ??
+      null,
+    get(name('bottom')) ??
+      get(name('block-end')) ??
+      ends?.[name('block-end')] ??
+      all?.[name('bottom')] ??
+      null,
+  ];
+}
+
+/**
+ * A part's measured height as it is drawn, in px: its own height or
+ * min-height when it gives one in px, else its vertical padding and
+ * borders around one line of its text (its line height: a length, or a
+ * number times its font size). The theme's own values (`own(prop)`) win
+ * over the ones Core draws it with (the part map's); `px(value)` reads a
+ * length, tokens resolved (null when the value is no length). Null when
+ * neither a height nor a line height reads.
+ * @param {Record<string, PartRecord>} map
+ * @param {string} part
+ * @param {(prop: string) => string | null} own
+ * @param {Record<string, unknown>} tokens the token values a var() reads
+ * @param {(value: string) => number | null} pxOf
+ * @returns {number | null}
+ */
+export function partHeightPx(map, part, own, tokens, pxOf) {
+  /** A value with the tokens it reads put in. @param {string} v */
+  const resolve = v => {
+    let out = String(v);
+    for (let i = 0; i < 6 && /var\(/.test(out); i++)
+      out = out.replace(
+        /var\(\s*(--[\w-]+)\s*(?:,\s*([^()]*))?\)/g,
+        (_, name, fallback) => {
+          const t = tokens[name];
+          const one = Array.isArray(t) ? t[0] : t;
+          return one != null ? String(one) : (fallback ?? '');
+        },
+      );
+    return out.trim();
+  };
+  /** @param {string} v */
+  const px = v => pxOf(resolve(v));
+  /**
+   * The value in effect: a property family the theme sets is all the
+   * theme's (its shorthand covers Core's longhands), else Core's.
+   * @param {RegExp} family
+   */
+  const reader = family => {
+    const ownsFamily = [...Object.keys(map[part]?.at ?? {}), ...FAMILY_PROPS]
+      .filter(k => family.test(k))
+      .some(k => own(k) != null);
+    return (/** @type {string} */ prop) =>
+      ownsFamily ? own(prop) : drawnValue(map[part], prop);
+  };
+  /** @param {string | null} v */
+  const len = v => (v == null ? 0 : (px(v) ?? 0));
+  const pad = blockSides(reader(/^padding/), 'padding');
+  const border = blockSides(reader(/^border/), 'border-width');
+  const sizes = reader(/^(min-)?height$|block-size$/);
+  const explicit = [sizes('height'), sizes('min-height'), sizes('block-size')]
+    .map(v => (v == null ? null : px(v)))
+    .filter(n => n != null);
+  const text = reader(/^(font-size|line-height)$/);
+  /** One line of text: a length, or a number times the font size. @param {string | null} size @param {string | null} leading */
+  const lineOf = (size, leading) => {
+    const fontPx = px(size ?? 'var(--text-body-size, 16px)') ?? 16;
+    const lh = resolve(leading ?? 'var(--text-body-leading)');
+    return /^[\d.]+$/.test(lh)
+      ? Number(lh) * fontPx
+      : lh === 'normal' || lh === ''
+        ? null
+        : px(lh);
+  };
+  // Text the part's own unnamed elements draw with a type of their own (a
+  // nav heading's title) is the line it holds; else its own text, or the
+  // body text it inherits.
+  const inner = Object.entries(map[part]?.inside ?? {})
+    .filter(([tok, props]) => props.includes('line-height') && /-leading$/.test(tok))
+    .map(([tok]) =>
+      lineOf(`var(${tok.replace(/-leading$/, '-size')})`, `var(${tok})`),
+    )
+    .filter(n => n != null);
+  const line =
+    text('line-height') == null && inner.length
+      ? Math.max(...inner)
+      : lineOf(text('font-size'), text('line-height'));
+  const box =
+    line == null
+      ? null
+      : len(pad[0]) + len(pad[1]) + len(border[0]) + len(border[1]) + line;
+  const all = [...explicit, ...(box == null ? [] : [box])];
+  return all.length ? Math.max(...all) : null;
+}
+
+/** The block-direction properties a theme may set on a part. */
+const FAMILY_PROPS = [
+  'padding',
+  'padding-block',
+  'padding-top',
+  'padding-bottom',
+  'padding-block-start',
+  'padding-block-end',
+  'border-width',
+  'border-block-width',
+  'border-top-width',
+  'border-bottom-width',
+  'height',
+  'min-height',
+  'block-size',
+  'font-size',
+  'line-height',
+];

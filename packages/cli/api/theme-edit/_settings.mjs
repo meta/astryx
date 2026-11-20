@@ -20,6 +20,7 @@ import {
   cssNumber,
   cssProperties,
   longhandsOf,
+  sidesOf,
 } from './_css.mjs';
 import postcss from 'postcss';
 import {createRequire} from 'node:module';
@@ -33,7 +34,14 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {cssUnescape} from '../../foundation/text/css-escape.mjs';
 import {TS_SOURCES} from '../../foundation/render/ts-paths.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
-import {coreVarValues, familyRoles} from './_parts.mjs';
+import {
+  barRows,
+  blockSides,
+  coreVarValues,
+  drawnValue,
+  familyRoles,
+  partHeightPx,
+} from './_parts.mjs';
 import {
   hexToOklch,
   oklabCoordinates,
@@ -86,6 +94,7 @@ import {
   SHOWCASE_GROUPS,
   COLOR_PROP_PARTS,
   onlyMeans,
+  GROUP_ROLES,
 } from './_tables.mjs';
 import {TOP_BAR_COMPONENTS} from './_catalog.mjs';
 import {
@@ -1700,7 +1709,7 @@ export function settingsProblem(
       return `${s.thing} has mode ${s.mode}, but a dial is the same in light and dark, so set takes no --mode for it`;
     if (s.only != null && s.only !== true)
       return `${s.thing} has only ${JSON.stringify(s.only)}, not true or false`;
-    if (s.only === true && !onlyFits(s))
+    if (s.only === true && !onlyReads(s))
       return `${describe({...s, only: undefined, value: '?'}).replace(' = ?', '')} has only, which is for one member of a group (${s.on ? `not the ${s.on} group itself` : 'it names no part'})`;
     const key = keyOf(s);
     // The command that changes or removes a setting listed twice keeps one
@@ -2347,7 +2356,8 @@ function readEntryWords(data, early = /** @type {string[]} */ ([])) {
 /**
  * An `only` that means nothing where it is saved (on a part styled on its
  * own, onlyMeans: an editor that took --only there saved it) is read as
- * without it, which is how the build applies it, and said once. Read so, an entry can fall on the place of another
+ * without it, which is how the build applies it, and said once with the
+ * line that removes it. Read so, an entry can fall on the place of another
  * (a plain one beside it): the later one is the one the build shows, so it
  * is kept, and the earlier one is named.
  * @param {any} data
@@ -2362,10 +2372,10 @@ function readMeaninglessOnly(data, notes) {
       !s ||
       typeof s.thing !== 'string' ||
       s.only !== true ||
-      typeof s.on !== 'string' ||
-      onlyMeans(s.on) !== 'own'
+      typeof s.on !== 'string'
     )
       continue;
+    if (onlyMeans(s.on) !== 'own') continue;
     delete s.only;
     read.add(s);
     notes.push(
@@ -2430,17 +2440,30 @@ export function entryDamage(s) {
   if (s.mode != null && s.mode !== 'light' && s.mode !== 'dark') return 'mode';
   // A dial is the same in light and dark: a mode on it means nothing.
   if (s.mode != null && s.source === 'dial') return 'mode';
-  if (s.only != null && (s.only !== true || !onlyFits(s))) return 'only';
+  if (s.only != null && (s.only !== true || !onlyReads(s))) return 'only';
   return null;
 }
 
 /**
- * Whether a saved `only` reads, as `set --only` reads it (onlyMeans): on a
- * part, a member of a group or not (on one styled on its own it changes
- * nothing, and the entry builds as without it); never on a group itself.
+ * Whether `only` fits a setting, as `set --only` takes it and the settings
+ * reader keeps it ({@link onlyMeans}): it names one member of a group that
+ * spreads (a text input of inputs). A bar's height or padding spreads
+ * through no group, so `only` changes nothing there.
  * @param {any} s
  */
-function onlyFits(s) {
+export function onlyFits(s) {
+  return onlyMeans(typeof s?.on === 'string' ? s.on : undefined) === 'member';
+}
+
+/**
+ * Whether a saved `only` reads, by the rule `set --only` follows (onlyFits):
+ * on a part where it does something, it is kept; on a part styled on its
+ * own, set saves the change without it, so a saved one there (as another
+ * editor saved it) is read as without it, and said; only on a group
+ * itself, or with no part, does it mean nothing at all.
+ * @param {any} s
+ */
+function onlyReads(s) {
   return typeof s.on === 'string' && onlyMeans(s.on) !== 'group';
 }
 
@@ -4468,17 +4491,7 @@ export function groupsOf(ctx) {
   return table;
 }
 
-/** The family roles `--on` takes as groups. */
-export const GROUP_ROLES = /** @type {const} */ ([
-  'button-like',
-  'overlays',
-  'option-rows',
-  'selected-items',
-  'accent-fills',
-  'inset-fields',
-  'status-surfaces',
-  'overlay-headers',
-]);
+export {GROUP_ROLES};
 
 /**
  * A part name or a group's members.
@@ -8017,6 +8030,7 @@ export function compileTheme(ctx, data, base) {
         },
       ],
     };
+  barReach(ctx, theme);
   // A longhand set after a shorthand that covers it is the one in effect,
   // as the result says. The build merges these blocks over the base
   // theme's, and a key the base holds keeps the base's (earlier) place, so
@@ -8042,6 +8056,157 @@ export function compileTheme(ctx, data, base) {
   if (!Object.keys(theme.tokens).length) delete theme.tokens;
   if (!Object.keys(theme.components).length) delete theme.components;
   return theme;
+}
+
+/**
+ * Whether a bar's height is a length a row can be given less the bar's
+ * padding: a non-zero length, or a calc(), var(), min(), max() or clamp()
+ * of one; never a keyword (auto, fit-content, 0).
+ * @param {string} v
+ */
+function barLength(v) {
+  const t = v.trim();
+  if (/^(calc|var|min|max|clamp)\(/i.test(t)) return true;
+  const n = sizePx(t);
+  return n != null && n > 0;
+}
+
+/** The block-direction padding keys of a compiled rule block. */
+const BLOCK_PADDING_KEYS = [
+  'padding',
+  'paddingBlock',
+  'paddingTop',
+  'paddingBottom',
+  'paddingBlockStart',
+  'paddingBlockEnd',
+];
+
+/**
+ * A bar's height and vertical padding reach the row it holds. A part's
+ * plain rule that gives it a height (or a vertical padding) makes it a bar;
+ * the one row the part map says it holds (a part laying its items out in a
+ * centered row across it, through frames that draw no box: the top nav in
+ * the app's header) then fills the bar: it is at least as tall as the bar
+ * leaves inside its padding, and the bar's padding stands for the row's own
+ * vertical padding. The items the row centers sit in the middle of the bar.
+ * A value the theme gives the row itself stays its own, and a bar holding
+ * more than one row writes none of them and names them. Each reach is said in the build notes.
+ * @param {Ctx} ctx
+ * @param {any} theme the compiled theme, changed in place
+ */
+function barReach(ctx, theme) {
+  const map = /** @type {Record<string, any> | undefined} */ (ctx.C?.MAP);
+  if (!map || !theme.components) return;
+  const comps = /** @type {Record<string, Record<string, any>>} */ (
+    theme.components
+  );
+  /** @type {Map<string, Array<{holder: string, said: string, height: string | null, set: Record<string, string>, written: string[]}>>} */
+  const byRow = new Map();
+  for (const [holder, keys] of Object.entries(comps)) {
+    const b = keys?.base;
+    if (!b || typeof b !== 'object') continue;
+    // (Only a length makes a bar's height: a keyword such as auto,
+    // fit-content or 0 sizes the bar by what it holds, and a row given
+    // calc(auto - …) would be dropped by the browser.)
+    const given = b.height ?? b.blockSize ?? b.minHeight;
+    const height = given != null && barLength(String(given)) ? given : null;
+    const pads = BLOCK_PADDING_KEYS.filter(k => b[k] != null);
+    /** @param {string} prop */
+    const ownSide = prop =>
+      b[prop.replace(/-([a-z])/g, (_, c) => c.toUpperCase())] ?? null;
+    // (A padding with no vertical side, such as '0 24px', is no bar's.)
+    const vertical = blockSides(ownSide, 'padding').some(
+      v => v != null && !/^0(px|rem|em)?$/.test(String(v).trim()),
+    );
+    if (height == null && !vertical) continue;
+    const said = height != null ? `height ${height}` : 'its vertical padding';
+    const rows = barRows(map, holder);
+    if (rows.length > 1) {
+      (ctx.compileNotes ??= []).push(
+        `${said} on ${holder} reaches none of the rows inside it, as more than one fills it (${rows.join(', ')}): set the height on the one you mean`,
+      );
+      continue;
+    }
+    if (!rows.length) continue;
+    const row = rows[0];
+    const rb = comps[row]?.base ?? {};
+    /** @type {Record<string, string>} */
+    const set = {};
+    /** @type {string[]} */
+    const written = [];
+    if (!BLOCK_PADDING_KEYS.some(k => rb[k] != null)) {
+      set.paddingBlock = '0';
+      written.push('padding-block 0');
+    }
+    if (
+      height != null &&
+      rb.height == null &&
+      rb.minHeight == null &&
+      rb.blockSize == null
+    ) {
+      // What the bar leaves inside its padding: the theme's padding when it
+      // gives one, else the padding Core draws the bar with.
+      const sides = blockSides(
+        prop =>
+          pads.length
+            ? (b[prop.replace(/-([a-z])/g, (_, c) => c.toUpperCase())] ?? null)
+            : drawnValue(map[holder], prop),
+        'padding',
+      ).filter(v => v != null && !/^0(px|rem|em)?$/.test(String(v).trim()));
+      // A bar of a fixed height holds its row at that height (its items
+      // center in it, and anything taller shows past both edges alike); a
+      // bar with a least height gives its row that least height.
+      const key = (b.height ?? b.blockSize) === height ? 'height' : 'minHeight';
+      set[key] = sides.length
+        ? `calc(${height} - ${sides.join(' - ')})`
+        : String(height);
+      written.push(`${key === 'height' ? 'height' : 'min-height'} ${set[key]}`);
+      // A row that wraps centers its lines too, so a part taller than the
+      // bar (a heading with roomy padding) leaves the others in the middle.
+      if (rb.alignContent == null) {
+        set.alignContent = 'center';
+        written.push('align-content center');
+      }
+    }
+    if (written.length)
+      byRow.set(row, [
+        ...(byRow.get(row) ?? []),
+        {
+          holder,
+          said,
+          height: height == null ? null : String(height),
+          set,
+          written,
+        },
+      ]);
+  }
+  // The row's rule is one for the whole theme, so it takes a bar's reach in
+  // every bar that holds it: written only when the bars given a height or
+  // padding agree on it, and named in each case.
+  for (const [row, reaches] of byRow) {
+    const holders = Object.keys(map).filter(h => {
+      const r = barRows(map, h);
+      return r.length === 1 && r[0] === row;
+    });
+    const named = reaches.map(r => `${r.said} on ${r.holder}`).join(', ');
+    if (new Set(reaches.map(r => JSON.stringify(r.set))).size > 1) {
+      // (The same height in bars that pad it differently, such as a safe
+      // area at the top of the app's header, still leaves the row a
+      // different height in each.)
+      const sameHeight = new Set(reaches.map(r => r.height)).size === 1;
+      (ctx.compileNotes ??= []).push(
+        sameHeight
+          ? `${named} reach ${row}, the row inside each, which takes one height in every bar that holds it (${holders.join(', ')}): the bars pad it differently (${reaches.map(r => `${r.holder} leaves ${r.set.height ?? r.set.minHeight ?? 'its own height'}`).join('; ')}), so it takes neither; set a height on ${row} itself`
+          : `${named} reach ${row}, the row inside each, which takes one height in every bar that holds it (${holders.join(', ')}): as their heights differ, it takes neither; give those bars the same height, or set one on ${row}`,
+      );
+      continue;
+    }
+    const [{set, written}] = reaches;
+    Object.assign(((comps[row] ??= {}).base ??= {}), set);
+    (ctx.compileNotes ??= []).push(
+      `${named} ${reaches.length > 1 ? 'reach' : 'reaches'} ${row}, the row inside it (${written.join(', ')}), so the items it holds sit in the middle of the bar${holders.length > 1 ? `; ${row} takes this in every bar that holds it (${holders.join(', ')})` : ''}; a value you set on ${row} itself stays yours`,
+    );
+  }
 }
 
 /**
@@ -8162,9 +8327,6 @@ function layerParts(layer) {
   return {image: all[at], position, size, repeat, other};
 }
 
-/** A side word in a longhand's name, in the order a box value lists sides. */
-const BOX_SIDES = ['top', 'right', 'bottom', 'left'];
-
 /**
  * The fills made from the surface: they follow a surface the theme sets,
  * at the base theme's lightness step from it.
@@ -8256,33 +8418,6 @@ function laterLonghandsAsSides(b, baseBlock) {
   if (!changed) return;
   for (const k of Object.keys(b)) delete b[k];
   Object.assign(b, out);
-}
-
-/**
- * A two-sided (start/end) or four-sided (top/right/bottom/left) longhand's
- * value, as each side's property and value by the shorthand rules; null for
- * any other property.
- * @param {string} prop kebab-case
- * @param {string} v
- * @returns {Record<string, string> | null}
- */
-function sidesOf(prop, v) {
-  const direct = [...longhandsOf(prop)].filter(p => longhandsOf(p).size === 0);
-  const w = splitTop(v.trim(), ' ').map(x => x.trim());
-  if (!w.length || /!important/i.test(v)) return null;
-  const start = direct.find(p => /-start(-|$)/.test(p));
-  const end = direct.find(p => /-end(-|$)/.test(p));
-  if (direct.length === 2 && start && end && w.length <= 2)
-    return {[start]: w[0], [end]: w[1] ?? w[0]};
-  const named = BOX_SIDES.map(side =>
-    direct.find(p => new RegExp(`-${side}(-|$)`).test(p)),
-  );
-  if (direct.length !== 4 || named.some(x => !x) || w.length > 4) return null;
-  const [t, r = t, bo = t, l = r] = w;
-  const vals = [t, r, bo, l];
-  return Object.fromEntries(
-    named.map((p, i) => [/** @type {string} */ (p), vals[i]]),
-  );
 }
 
 /** Core's default type scale ratio. */
@@ -11751,6 +11886,7 @@ export async function contrastProblems(ctx, data, res) {
     ...buttonStyleProblems(ctx, data, res),
     ...placeholderProblems(ctx, data, res, base),
     ...leakedButtonProblems(ctx, data, res),
+    ...barFitProblems(ctx, data, res),
     ...destructiveLookalike(),
     // Pairs styled for one state or condition whose colors cannot be read
     // as one color, and the button styles, are not measured yet.
@@ -11777,6 +11913,146 @@ export async function contrastProblems(ctx, data, res) {
         ]
       : []),
   ]);
+}
+
+/**
+ * Parts taller than the bar they sit in: for a part given a height on its
+ * plain rule that holds one bar row (see barReach), each part inside that
+ * row whose measured height (the part map's, with the theme's own values)
+ * is more than the bar leaves inside its padding and the row's own. The
+ * fix makes the part fit (its vertical padding, when its text fits) or the
+ * bar as tall as the part.
+ * @param {Ctx} ctx
+ * @param {ThemeData} data
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} res
+ * @returns {ThemeProblem[]}
+ */
+function barFitProblems(ctx, data, res) {
+  const map = /** @type {Record<string, any> | undefined} */ (ctx.C?.MAP);
+  if (!map) return [];
+  const tokens = {...ctx.project.core.tokenDefaults, ...res.light};
+  /** @param {string} v */
+  const pxOf = v => sizePx(v, /** @type {Record<string, string>} */ (tokens));
+  /**
+   * The theme's own value of a property on a part's plain rule (the latest
+   * setting), else null.
+   * @param {string} part @param {string} prop
+   */
+  const own = (part, prop) => {
+    const hit = [...data.settings]
+      .reverse()
+      .find(
+        x =>
+          x.source === 'property' &&
+          (propertySpelling(x.thing) ?? x.thing) === prop &&
+          !x.when &&
+          !x.state &&
+          (!x.mode || x.mode === 'light') &&
+          partsOf(ctx, x).includes(part),
+      );
+    return hit ? String(hit.value) : null;
+  };
+  /** @param {string | null} v */
+  const len = v => (v == null ? 0 : (pxOf(v) ?? 0));
+  /** @param {(prop: string) => string | null} get */
+  const padSum = get =>
+    blockSides(get, 'padding').reduce((a, v) => a + len(v), 0);
+  /** @param {string} part */
+  const ownsPadding = part =>
+    BLOCK_PADDING_KEYS.some(
+      k =>
+        own(
+          part,
+          k.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`),
+        ) != null,
+    );
+  /** @type {ThemeProblem[]} */
+  const out = [];
+  for (const holder of Object.keys(map)) {
+    const height = own(holder, 'height') ?? own(holder, 'block-size');
+    const barPx = height == null ? null : pxOf(height);
+    if (barPx == null || barPx <= 0) continue;
+    const rows = barRows(map, holder);
+    if (rows.length !== 1) continue;
+    const row = rows[0];
+    const holderPad = padSum(prop =>
+      ownsPadding(holder) ? own(holder, prop) : drawnValue(map[holder], prop),
+    );
+    // The row's vertical padding is the bar's (barReach), unless the theme
+    // gives the row one of its own.
+    const rowPad = ownsPadding(row) ? padSum(prop => own(row, prop)) : 0;
+    const room = barPx - holderPad - rowPad;
+    for (const child of map[row]?.contains ?? []) {
+      // The tokens set on the part itself feed its own values.
+      const at = {
+        ...tokens,
+        ...Object.fromEntries(
+          data.settings
+            .filter(
+              x =>
+                x.source === 'token' &&
+                x.on &&
+                !x.when &&
+                !x.state &&
+                partsOf(ctx, x).includes(child),
+            )
+            .map(x => [x.thing, String(x.value)]),
+        ),
+      };
+      /** @param {string} v */
+      const pxAt = v => sizePx(v, /** @type {Record<string, string>} */ (at));
+      const tall = partHeightPx(map, child, p => own(child, p), at, pxAt);
+      const bare = partHeightPx(
+        map,
+        child,
+        p => (/^padding/.test(p) ? '0' : own(child, p)),
+        at,
+        pxAt,
+      );
+      // A part that paints a box (a fill in some state, or a border) shows
+      // its whole box; one that paints none shows only its text.
+      const paints =
+        Object.entries(map[child]?.at ?? {}).some(
+          ([k, v]) =>
+            (/^background(-color|-image)?$/.test(k) &&
+              Object.values(/** @type {Record<string, string>} */ (v)).some(
+                x => !/^(transparent|none|initial|inherit)$/.test(String(x)),
+              )) ||
+            (/^border(-(top|bottom|block))?-width$/.test(k) &&
+              Object.values(/** @type {Record<string, string>} */ (v)).some(
+                x => (pxAt(String(x)) ?? 0) > 0,
+              )),
+        ) ||
+        data.settings.some(
+          x =>
+            x.source === 'property' &&
+            /^(background|background-color|border)$/.test(x.thing) &&
+            partsOf(ctx, x).includes(child),
+        );
+      const shown = paints ? tall : bare;
+      if (tall == null || shown == null || shown <= room + 0.5) continue;
+      // (The padding that fits is read from its line alone: a least
+      // height of its own, a control's, takes no room the padding needs.)
+      const line = partHeightPx(
+        map,
+        child,
+        p =>
+          /^padding|^(min-)?height$|block-size$/.test(p) ? '0' : own(child, p),
+        at,
+        pxAt,
+      );
+      const fix =
+        bare != null && bare <= room
+          ? `${P} set ${data.name} padding-block ${Math.floor((room - (line ?? bare)) / 2)}px --on ${child}`
+          : `${P} set ${data.name} height ${Math.ceil(tall + holderPad + rowPad)}px --on ${holder}`;
+      out.push({
+        key: `bar|${holder}|${row}|${child}`,
+        text: `${child} is ${Math.round(tall)}px tall, taller than the ${Math.round(room)}px ${holder} leaves for ${row} (its height ${height}${holderPad + rowPad ? ' less the padding' : ''}): it hangs out of the bar`,
+        fix,
+      });
+    }
+  }
+  return out;
 }
 
 /**
@@ -13662,6 +13938,184 @@ export function paddedParts(ctx, part) {
       Object.keys(ctx.C.MAP[t]?.own ?? {}).some(k => /^padding/.test(k)),
   );
   return inner.length ? inner : [part];
+}
+
+/**
+ * The square a member of the checks group sizes itself (a checkbox's box, a
+ * radio's circle), at a size: its width and height in px, from the theme's
+ * latest plain setting of each on the part or a group it is in (a setting
+ * for that size counts too), else what the part data records Core drawing at
+ * that size. Null for a part outside the checks group, one that reads a size
+ * token or sets no width and height of its own, and for a size neither the
+ * theme nor the part data gives in px.
+ * @param {Ctx} ctx the editor's context (its part census, ctx.C)
+ * @param {Setting[]} settings the theme's settings, in order
+ * @param {string} part
+ * @param {string} [size] the size value (`md`); none: the size drawn
+ * @returns {{w: number, h: number} | null}
+ */
+export function selfSizedBox(ctx, settings, part, size) {
+  const r = readSelfSized(ctx, settings, part, size);
+  return r && 'w' in r ? r : null;
+}
+
+/**
+ * Why a part that sizes its own square ({@link sizesItsOwnBox}) has no box
+ * the editor can step at a size: the theme's own width or height is not in
+ * px, or neither the theme nor the part data gives one at that size. Null
+ * when it has one.
+ * @param {Ctx} ctx the editor's context (its part census, ctx.C)
+ * @param {Setting[]} settings the theme's settings, in order
+ * @param {string} part
+ * @param {string} [size]
+ * @returns {string | null}
+ */
+export function selfSizedWhy(ctx, settings, part, size) {
+  const r = readSelfSized(ctx, settings, part, size);
+  return r && 'why' in r ? r.why : null;
+}
+
+/**
+ * The width and height lines that give a part or group its new box, from
+ * each member's own box (selfSizedBox) at each size: one line for the
+ * group where its members agree, else a line per member (with only, where
+ * the member's group spreads), and a size condition when `bySize`. A size
+ * a member has no box for is named in `unknown`, never given another's.
+ * @param {Ctx} ctx
+ * @param {Setting[]} settings the theme's settings, in order
+ * @param {string} on the part or group asked
+ * @param {Array<string | undefined>} sizes the sizes to write
+ * @param {(box: {w: number, h: number}) => {w: number, h: number} | null} next
+ *   the new box for an old one; null skips it
+ * @param {boolean} bySize whether each line names its size
+ */
+export function selfSizedBoxLines(ctx, settings, on, sizes, next, bySize) {
+  const C = /** @type {any} */ (ctx).C;
+  const members = (FAMILIES[on] ?? [on]).filter(m => sizesItsOwnBox(C, m));
+  /** @type {Array<{sz: string | undefined, m: string, box: {w: number, h: number}, next: {w: number, h: number}, flags: {on: string, only?: true, when?: string}}>} */
+  const lines = [];
+  /** @type {Array<{sz: string | undefined, why: string}>} */
+  const unknown = [];
+  for (const sz of sizes) {
+    const boxes = members.map(m => ({
+      m,
+      box: selfSizedBox(ctx, settings, m, sz),
+    }));
+    const missing = boxes.find(x => !x.box);
+    if (missing) {
+      unknown.push({
+        sz,
+        why:
+          selfSizedWhy(ctx, settings, missing.m, sz) ??
+          'no size the editor knows',
+      });
+      continue;
+    }
+    const first = /** @type {{w: number, h: number}} */ (boxes[0]?.box);
+    if (!first) continue;
+    const same = boxes.every(x => x.box?.w === first.w && x.box?.h === first.h);
+    for (const g of same ? [{m: on, box: first}] : boxes) {
+      const box = /** @type {{w: number, h: number}} */ (g.box);
+      const n = next(box);
+      if (!n) continue;
+      lines.push({
+        sz,
+        m: g.m,
+        box,
+        next: n,
+        flags: {
+          on: g.m,
+          ...(g.m !== on && onlyMeans(g.m) === 'member'
+            ? {only: /** @type {true} */ (true)}
+            : {}),
+          ...(sz && bySize ? {when: `size:${sz}`} : {}),
+        },
+      });
+    }
+  }
+  return {lines, unknown, members};
+}
+
+/**
+ * {@link selfSizedBox}'s reading, or why there is none.
+ * @param {Ctx} ctx
+ * @param {Setting[]} settings
+ * @param {string} part
+ * @param {string} [size]
+ * @returns {{w: number, h: number} | {why: string} | null}
+ */
+function readSelfSized(ctx, settings, part, size) {
+  const C = ctx.C;
+  if (!(FAMILIES.checks ?? []).includes(part)) return null;
+  if ((C.partReads(part, 'size') ?? []).length) return null;
+  const at = C.MAP[part]?.at ?? {};
+  if (!Object.hasOwn(at, 'width') || !Object.hasOwn(at, 'height')) return null;
+  // (A setting reaches this part where the build puts it: on the part, on
+  // a group holding it, or on another member without `--only`, which set
+  // spreads to the group; partsOf is that one rule.)
+  const reaches = (/** @type {Setting} */ x) => partsOf(ctx, x).includes(part);
+  /** @param {unknown} v */
+  const px = v => {
+    const m = /^\s*(\d*\.?\d+)px\s*$/.exec(String(v));
+    return m ? Number(m[1]) : null;
+  };
+  /** @param {string} k */
+  const core = k => {
+    const rows = Object.entries(at[k] ?? {}).filter(
+      ([cond, v]) =>
+        !/:/.test(cond) &&
+        px(v) != null &&
+        (size == null || cond.split(',').includes(`size=${size}`)),
+    );
+    rows.sort((a, b) => a[0].split(',').length - b[0].split(',').length);
+    return rows[0] ? px(rows[0][1]) : null;
+  };
+  // (The theme's own value: a setting for this size outranks a plain one,
+  // whatever their order, as its rule is the more specific; among the same
+  // kind, the latest wins.)
+  /** @param {string} k */
+  const own = k => {
+    const latest = (/** @type {(x: Setting) => boolean} */ ok) =>
+      [...settings]
+        .reverse()
+        .find(x => x.thing === k && reaches(x) && !x.state && !x.mode && ok(x));
+    const st =
+      (size != null ? latest(x => x.when === `size:${size}`) : undefined) ??
+      latest(x => !x.when);
+    return st ? {v: px(st.value), thing: k, value: String(st.value)} : null;
+  };
+  const ow = own('width');
+  const oh = own('height');
+  const w = ow ? ow.v : core('width');
+  const h = oh ? oh.v : core('height');
+  if (w != null && h != null) return {w, h};
+  // (Why no box: the theme's own width or height is not in px, or Core
+  // draws no px box at this size.)
+  const unread = [
+    ow && ow.v == null ? ow : null,
+    oh && oh.v == null ? oh : null,
+  ]
+    .filter(x => x != null)
+    .map(x => `${x.thing} ${x.value}`);
+  return {
+    why: unread.length
+      ? `its ${unread.join(' and ')} ${unread.length > 1 ? 'are' : 'is'} not in px`
+      : 'no size the editor knows',
+  };
+}
+
+/**
+ * Whether a part sizes its own square, the way a member of the checks group
+ * does: it sets its own width and height and reads no size token.
+ * @param {any} C the part census
+ * @param {string} part
+ * @returns {boolean}
+ */
+export function sizesItsOwnBox(C, part) {
+  if (!(FAMILIES.checks ?? []).includes(part)) return false;
+  if ((C.partReads(part, 'size') ?? []).length) return false;
+  const at = C.MAP[part]?.at ?? {};
+  return Object.hasOwn(at, 'width') && Object.hasOwn(at, 'height');
 }
 
 /**

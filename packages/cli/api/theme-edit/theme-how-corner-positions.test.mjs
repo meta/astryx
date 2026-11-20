@@ -381,6 +381,202 @@ describe('the corners an ask names', () => {
     ]);
   }, 240_000);
 
+  it('says a part already has the corners asked, and writes nothing', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('t', {cwd, like: 'neutral'});
+    await themeEditSet('t', 'border-radius', '4px 4px 0 0', {cwd, on: 'tab'});
+    const ask = async (/** @type {string} */ q) =>
+      (await themeEditHow(q, {cwd, theme: 't'})).data;
+    for (const q of [
+      'tabs rounded on top',
+      'tab corners 4px except the bottom',
+      'tabs square at the bottom',
+    ]) {
+      const data = await ask(q);
+      expect(
+        (data.results ?? []).flatMap((/** @type {any} */ r) => r.commands),
+        q,
+      ).toEqual([]);
+      expect(data.hint, q).toMatch(/is already so in t: nothing to change/);
+    }
+  }, 240_000);
+
+  it('reads a corner longhand the theme set after the radius', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('l', {cwd, like: 'neutral'});
+    await themeEditSet('l', 'border-radius', '4px 4px 0 0', {cwd, on: 'tab'});
+    await themeEditSet('l', 'border-end-end-radius', '8px', {cwd, on: 'tab'});
+    const {data} = await themeEditHow('tabs square at the bottom', {
+      cwd,
+      theme: 'l',
+    });
+    expect(data.hint ?? '').not.toMatch(/already so/);
+    expect(
+      (data.results?.[0]?.commands ?? []).map((/** @type {string} */ c) =>
+        c.replace(/^.*? editor set l /, ''),
+      ),
+    ).toEqual(['border-end-end-radius 0 --on tab']);
+    // (Rounded only on top: the later 8px bottom-right longhand is in
+    // effect, so the ask is not already so; that corner's longhand is
+    // squared, the radius before it left as it is.)
+    const only = await themeEditHow('tabs rounded only on top', {
+      cwd,
+      theme: 'l',
+    });
+    expect(only.data.hint ?? '').not.toMatch(/already so/);
+    expect(
+      (only.data.results?.[0]?.commands ?? []).map((/** @type {string} */ c) =>
+        c.replace(/^.*? editor set l /, ''),
+      ),
+    ).toEqual(['border-end-end-radius 0 --on tab']);
+    // (The same for an except or "only" ask, and for the offer beside
+    // "rounded on top": only the 8px corner's longhand is squared.)
+    const lines = async (/** @type {string} */ q) =>
+      /** @type {Array<{commands: string[]}>} */ (
+        (await themeEditHow(q, {cwd, theme: 'l'})).data.results ?? []
+      )
+        .flatMap(r => r.commands)
+        .filter(c => / editor set /.test(c))
+        .map(c => c.replace(/^.*? editor set l /, ''));
+    for (const q of [
+      'tab corners 4px except the bottom',
+      'round only the top corners of tabs',
+      'tabs rounded on top',
+    ])
+      expect(await lines(q), q).toEqual(['border-end-end-radius 0 --on tab']);
+  }, 240_000);
+
+  it('reads the corner longhands of a part that reads no corner token', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('hd', {cwd, like: 'neutral'});
+    for (const [thing, value] of [
+      ['background-color', '#eeeeee'],
+      ['border-start-start-radius', '8px'],
+      ['border-start-end-radius', '8px'],
+    ])
+      await themeEditSet('hd', thing, value, {cwd, on: 'heading'});
+    // (Its top corners are 8px already, laid over four square corners:
+    // nothing is rewritten to the round corners, and the answer says what
+    // they are now.)
+    const {data} = await themeEditHow('heading rounded on top', {
+      cwd,
+      theme: 'hd',
+    });
+    const rs = /** @type {Array<{text: string, commands: string[]}>} */ (
+      data.results ?? []
+    );
+    expect(
+      rs.flatMap(r => r.commands).filter(c => / editor set /.test(c)),
+    ).toEqual([]);
+    expect(rs.map(r => r.text).join('\n')).toMatch(/now 8px 8px 0 0\)/);
+  }, 240_000);
+
+  it('starts a part that reads no corner token from the radius Core draws', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('dot', {cwd, like: 'neutral'});
+    // (Core draws a status dot at 50%: its bottom corners are round, not
+    // already square.)
+    const {data} = await themeEditHow('status dots square at the bottom', {
+      cwd,
+      theme: 'dot',
+    });
+    expect(data.hint ?? '').not.toMatch(/already so/);
+    expect(
+      (data.results?.[0]?.commands ?? []).map((/** @type {string} */ c) =>
+        c.replace(/^.*? editor set dot /, ''),
+      ),
+    ).toEqual([
+      'border-end-start-radius 0 --on status-dot',
+      'border-end-end-radius 0 --on status-dot',
+    ]);
+  }, 240_000);
+
+  it('never takes a radius Core draws for one shape only as the radius of every shape', async ctx => {
+    if (needBases(ctx)) return;
+    // (Core rounds an aspect ratio at 50% only in its ellipse shape: the
+    // default rectangle is square, so its top corners take the round rung.)
+    const {data} = await themeEditHow('aspect-ratios rounded on top', {
+      cwd,
+      theme: 'k',
+    });
+    const text = (data.results ?? [])
+      .map((/** @type {any} */ r) => r.text)
+      .join('\n');
+    expect(text).not.toMatch(/already rounded/);
+    expect(
+      (data.results?.[0]?.commands ?? []).map((/** @type {string} */ c) =>
+        c.replace(/^.*? editor set k /, ''),
+      ),
+    ).toEqual([
+      'border-start-start-radius 16px --on aspect-ratio',
+      'border-start-end-radius 16px --on aspect-ratio',
+    ]);
+  }, 240_000);
+
+  it('writes a corner in the radius when its longhand was set before that radius', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('lb', {cwd, like: 'neutral'});
+    await themeEditSet('lb', 'border-end-end-radius', '8px', {cwd, on: 'tab'});
+    await themeEditSet('lb', 'border-radius', '4px 4px 0 0', {cwd, on: 'tab'});
+    // (The radius set later replaces the 8px corner. A longhand written
+    // again would keep its place before the radius and change nothing, so
+    // the answer writes the radius.)
+    const {data} = await themeEditHow('tabs rounded on the bottom', {
+      cwd,
+      theme: 'lb',
+    });
+    expect(
+      (data.results?.[0]?.commands ?? []).map((/** @type {string} */ c) =>
+        c.replace(/^.*? editor set lb /, ''),
+      ),
+    ).toEqual(['border-radius 4px --on tab']);
+    expect(
+      (await themeEditHow('tabs square at the bottom', {cwd, theme: 'lb'})).data
+        .hint,
+    ).toMatch(/is already so in lb: nothing to change/);
+  }, 240_000);
+
+  it('writes the radius and a later longhand when a corner longhand sits on each side of the radius', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('both', {cwd, like: 'neutral'});
+    for (const [thing, value] of [
+      ['border-end-start-radius', '2px'],
+      ['border-radius', '4px 4px 0 0'],
+      ['border-end-end-radius', '3px'],
+    ])
+      await themeEditSet('both', thing, value, {cwd, on: 'tab'});
+    const ask = async (/** @type {string} */ q) =>
+      /** @type {Array<{commands: string[]}>} */ (
+        (await themeEditHow(q, {cwd, theme: 'both'})).data.results ?? []
+      )
+        .flatMap(r => r.commands)
+        .filter(c => / editor set /.test(c))
+        .map(c => c.replace(/^.*? editor set both /, ''));
+    // (The bottom-left longhand sits before the radius, so the radius
+    // carries it; the bottom-right longhand comes after, so it is written
+    // too. Asked again, it is already so.)
+    const lines = await ask('tab corners 8px except the top');
+    expect(lines).toEqual([
+      "border-radius '0 0 8px 8px' --on tab",
+      'border-end-end-radius 8px --on tab',
+    ]);
+    for (const line of lines) {
+      const m = /^(\S+) '?([^']+?)'? --on (\S+)$/.exec(line);
+      await themeEditSet('both', String(m?.[1]), String(m?.[2]), {
+        cwd,
+        on: String(m?.[3]),
+      });
+    }
+    expect(
+      (
+        await themeEditHow('tab corners 8px except the top', {
+          cwd,
+          theme: 'both',
+        })
+      ).data.hint,
+    ).toMatch(/is already so in both: nothing to change/);
+  }, 240_000);
+
   it('set takes each answer, a menu included', async ctx => {
     if (needBases(ctx)) return;
     for (const q of [

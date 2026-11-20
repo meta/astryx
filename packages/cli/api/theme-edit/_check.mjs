@@ -70,13 +70,13 @@ import {
   THING_HINTS,
   TYPE_STYLES,
   familyOf,
+  onlyMeans,
   wordTable,
   WRAPPED_PARTS,
   CARD_LIKE,
   systemFontFamilies,
   isSystemFamily,
   fontStack,
-  onlyMeans,
 } from './_tables.mjs';
 import {
   COLOR_NAMES,
@@ -119,6 +119,7 @@ import {
   radiusAt,
   radioCircle,
   radioMark,
+  selfSizedBox,
   radiusTokenOf,
   borderParts,
   cornerParts,
@@ -151,6 +152,7 @@ import {
   dialNumber,
   dialValueFits,
   groupsOf,
+  onlyFits,
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
 import {
@@ -998,7 +1000,13 @@ export function storedProblems(ctx, slug, data, skip = '') {
         },
         s.thing,
         s.value,
-        {on: s.on, when: s.when, state: s.state, mode: s.mode, only: s.only},
+        {
+          on: s.on,
+          when: s.when,
+          state: s.state,
+          mode: s.mode,
+          only: s.only,
+        },
       );
     } catch (e) {
       if (!(e instanceof AstryxError)) throw e;
@@ -5349,14 +5357,16 @@ function checkOne(
   // for what the change does anyway: the change is made, without it, and
   // said, so the escape always works.
   if (s.only && (!s.on || TARGET.has(s.on) || groupsOf(ctx)[s.on])) {
-    const means = s.on ? onlyMeans(s.on) : 'group';
-    if (!s.on || groupsOf(ctx)[s.on] || means === 'group')
+    // (One predicate with the settings reader: onlyMeans.)
+    if (onlyMeans(s.on) === 'group')
       refuse(
         E.ERR_INVALID_ARGUMENT,
         '--only is for one member of a group, such as text-input (how --list groups).',
         {run: [`${HOW} --list groups`]},
       );
-    if (means === 'own') {
+    // (One predicate with the settings reader: a member of a group that
+    // spreads.)
+    if (!onlyFits(s)) {
       s.only = undefined;
       if (!unset)
         s.note = `${s.on} is styled on its own already (only the ${AUTO_SPREAD.join(' and ')} groups spread), so --only changes nothing: it is saved without it`;
@@ -6817,6 +6827,45 @@ function checkOne(
         const spaced = partsOf(ctx, s).filter(
           t => reads(t) || (ctx.C.MAP[t]?.contains ?? []).some(reads),
         );
+        // (A checkbox's box or a radio's circle sets its own width and
+        // height: the refusal names its size, the theme's first, and the
+        // ask that sizes it.)
+        const size = /^size:(.+)$/.exec(String(s.when ?? ''))?.[1];
+        const boxed = partsOf(ctx, s).map(t =>
+          selfSizedBox(ctx, data.settings, t, size),
+        );
+        if (!spaced.length && boxed.length && boxed.every(b => b)) {
+          // (Members of a group that differ are each named with their own
+          // size.)
+          const parts = partsOf(ctx, s);
+          const sized = boxed.map((b, i) => ({
+            t: parts[i],
+            .../** @type {{w: number, h: number}} */ (b),
+          }));
+          const same = sized.every(
+            b => b.w === sized[0].w && b.h === sized[0].h,
+          );
+          // (The size ask goes the way the spacing asked: more room, a
+          // roomier rung or a factor above 1 is bigger.)
+          const rung = SPACING.find(([n]) => n === String(v).toLowerCase());
+          const factor = /^x?(\d*\.?\d+)(%)?$/i.exec(commaNumbers(v));
+          const grows = rung
+            ? rung[1] > 1
+            : factor
+              ? Number(factor[1]) / (factor[2] ? 100 : 1) > 1
+              : /^(?:more|bigger|larger|loose|looser|airy|airier)$/i.test(
+                  String(v),
+                );
+          const way = grows ? 'bigger' : 'smaller';
+          const sizes = same
+            ? `${sized[0].w}px by ${sized[0].h}px`
+            : sized.map(b => `${b.t} ${b.w}px by ${b.h}px`).join(', ');
+          refuse(
+            E.ERR_THEME_NO_EFFECT,
+            `${s.on} sets its own width and height (${sizes}) and reads no spacing or control size, so spacing changes nothing you see there. Size it with width and height (how "${way} ${s.on}").`,
+            {run: [`${HOW} "${way} ${s.on}"`]},
+          );
+        }
         if (!spaced.length)
           refuse(
             E.ERR_THEME_NO_EFFECT,

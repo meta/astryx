@@ -126,6 +126,18 @@ export const FAMILIES = wordTable({
  */
 export const AUTO_SPREAD = ['inputs', 'checks'];
 
+/** The family roles `--on` takes as groups. */
+export const GROUP_ROLES = /** @type {const} */ ([
+  'button-like',
+  'overlays',
+  'option-rows',
+  'selected-items',
+  'accent-fills',
+  'inset-fields',
+  'status-surfaces',
+  'overlay-headers',
+]);
+
 /** @param {string} target @returns {string | null} */
 export const familyOf = target =>
   Object.entries(FAMILIES).find(([, members]) =>
@@ -137,13 +149,18 @@ export const familyOf = target =>
  * settings reader share: on a member of a group that spreads (a text input
  * of inputs) it keeps the change on that member (`member`); on any other
  * part it changes nothing, as the part is styled on its own already
- * (`own`); on a group itself, or with no part, it means nothing at all
- * (`group`).
+ * (`own`); on a group itself, the editor's own (inputs) or a family role
+ * (button-like), or with no part, it means nothing at all (`group`).
  * @param {string | undefined} on
  * @returns {'member' | 'own' | 'group'}
  */
 export const onlyMeans = on => {
-  if (!on || Object.hasOwn(FAMILIES, on)) return 'group';
+  if (
+    !on ||
+    Object.hasOwn(FAMILIES, on) ||
+    GROUP_ROLES.includes(/** @type {any} */ (on))
+  )
+    return 'group';
   const fam = familyOf(on);
   return fam && AUTO_SPREAD.includes(fam) ? 'member' : 'own';
 };
@@ -394,6 +411,25 @@ export const CLOSEST_OPEN_FONT = wordTable({
 });
 
 /** Heading weights (`headings` dial): rung -> font-weight. */
+/**
+ * Where the theme's page color shows, said by every answer that sets or
+ * names it: `--color-background-body` paints inside AppShell only.
+ */
+export const PAGE_COLOR_NOTE =
+  "Your theme's page color shows inside AppShell. Wrap the page in AppShell; if you can't, add `body { background: var(--color-background-body) }` to global CSS (doctor's purity check flags any stylesheet, so prefer AppShell). An Astryx area embedded in a page another app owns adds no body rule: that page is not its own.";
+
+/**
+ * The page color note for a theme in its mode: a theme that ships one mode
+ * draws its text for that mode's page, so the host page must take the
+ * theme's page color in every OS mode too.
+ * @param {string | undefined} mode the theme's mode setting
+ * @returns {string}
+ */
+export const pageColorNote = mode =>
+  /^(?:dark|light)-only$/.test(String(mode ?? ''))
+    ? `${PAGE_COLOR_NOTE} This theme has one mode (${mode}): its text is drawn for its own page, so the page must take the theme's page color in every OS mode, or its text lands on the browser's own page color in the other OS mode.`
+    : PAGE_COLOR_NOTE;
+
 export const HEADING_WEIGHTS = wordTable(
   /** @type {Record<string, string>} */ ({
     light: '300',

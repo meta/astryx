@@ -19,13 +19,16 @@ import {
   COLOR_PROPS,
   COMMON_PROPERTIES,
   DIALS,
+  FAMILIES,
   GROUPS,
   HOW,
   LIKE,
   P,
   familyOf,
+  pageColorNote,
 } from './_tables.mjs';
 import {colorsAt, decodePng, mainColors} from './_png.mjs';
+import {pixelScale, readTraits} from './_picture-traits.mjs';
 import {baseInstalled, installLine} from './_project.mjs';
 import {
   editedThemes,
@@ -40,6 +43,10 @@ import {
   themeSourceProblem,
   baseRedraws,
   groupsOf,
+  selfSizedBox,
+  selfSizedBoxLines,
+  selfSizedWhy,
+  sizesItsOwnBox,
 } from './_settings.mjs';
 import {missedSteps} from './_missed.mjs';
 import {ASPECTS, settableStates} from './_check.mjs';
@@ -114,7 +121,7 @@ function dialHelp(key, env) {
  * setting (a dial's rungs, a token's type and readers, a CSS property), an
  * aspect (text, corners...: the whole-theme tokens and dial), `colors` (how
  * the theme's colors are made), a plain-words question (exact commands), a
- * PNG picture (its main colors, or the color at points), or with `list` a
+ * PNG picture (its main colors and the look's traits measured from it, or the color at points), or with `list` a
  * list of dials, tokens, parts, groups or CSS properties.
  * @experimental
  * @param {string} subject a part, group, setting, aspect, question, or PNG file; with `list`, a filter
@@ -291,8 +298,16 @@ async function answer(subject, options, cwd, blindSaid = false) {
       };
     return {kind: 'list', subject: t, ...(await listItems(kind, t, cwd))};
   }
-  if (isPicture(t, cwd))
-    return {kind: 'picture', subject: t, ...pictureColors(t, cwd, at, count)};
+  if (isPicture(t, cwd)) {
+    const {traits, ...read} = pictureColors(t, cwd, at, count);
+    if (!traits) return {kind: 'picture', subject: t, ...read};
+    return {
+      kind: 'picture',
+      subject: t,
+      ...read,
+      ...(await pictureLook(cwd, options.theme, traits)),
+    };
+  }
   // What runs instead: the same subject without the picture option (a
   // real command), never a made-up file name.
   const without = t ? `${HOW} ${quoteCommandArgument(t)}` : `${HOW} --help`;
@@ -812,6 +827,7 @@ async function answer(subject, options, cwd, blindSaid = false) {
   }
   const results = finish(env, h.drafts);
   const empty = !results.some(r => r.commands.length);
+  const already = results.length > 0 && results.every(r => ALREADY.has(r));
   return {
     kind: 'question',
     subject: t,
@@ -819,21 +835,25 @@ async function answer(subject, options, cwd, blindSaid = false) {
     ...themeFields,
     results,
     ...unknown,
-    ...(empty
+    ...(empty && already
       ? {
-          hint: `${
-            results.length
-              ? `No command does all of "${t}" on ${env.slug}; each result says why.`
-              : `No match for "${t}". Name the part (header, nav links, card, button, banner, input...) and what to change (text color, background, gradient, corners, border, shadow, spacing, bold), in English.`
-          } See ${HOW} --help for the asks it understands.`,
-          run: [
-            `${HOW} --help`,
-            `${HOW} --list parts`,
-            `${HOW} "rounder buttons"`,
-            `${HOW} colors`,
-          ],
+          hint: `"${t}" is already so in ${env.slug}: nothing to change. Each result says what it found.`,
         }
-      : {}),
+      : empty
+        ? {
+            hint: `${
+              results.length
+                ? `No command does all of "${t}" on ${env.slug}; each result says why.`
+                : `No match for "${t}". Name the part (header, nav links, card, button, banner, input...) and what to change (text color, background, gradient, corners, border, shadow, spacing, bold), in English.`
+            } See ${HOW} --help for the asks it understands.`,
+            run: [
+              `${HOW} --help`,
+              `${HOW} --list parts`,
+              `${HOW} "rounder buttons"`,
+              `${HOW} colors`,
+            ],
+          }
+        : {}),
   };
 }
 
@@ -940,6 +960,13 @@ export function questionOnly(q) {
     .slice(1)
     .some(seg => seg.trim() && !QUESTION_LEAD.test(seg.trim()));
 }
+
+/**
+ * The results that say the theme already does what was asked: when every
+ * result is one, the answer leads with that, never with a failure.
+ * @type {WeakSet<object>}
+ */
+const ALREADY = new WeakSet();
 
 /**
  * Check each draft's commands and keep what passes; a draft whose commands
@@ -1080,6 +1107,13 @@ function finish(env, drafts) {
     }
     const {commands, refused} = checked(env, d.options);
     const lookups = d.lookup ? [d.lookup] : [];
+    // (The draft found it in place already: said, with no command.)
+    if (d.already) {
+      const r = {text: d.text, commands: lookups};
+      ALREADY.add(r);
+      out.push(r);
+      continue;
+    }
     if (!commands.length && !d.options.length && unmet.length) {
       out.push({text: d.text, commands: lookups});
       continue;
@@ -1096,10 +1130,12 @@ function finish(env, drafts) {
       const steps = d.options[0];
       const values = [...new Set(steps.map(st => String(st.value)))];
       const parts = [...new Set(steps.map(st => st.on).filter(Boolean))];
-      out.push({
+      const r = {
         text: `already ${values.join(', ')}${parts.length ? ` on the ${parts.join(', ')}` : ''} in ${env.slug}, nothing to change (${d.text})`,
         commands: lookups,
-      });
+      };
+      ALREADY.add(r);
+      out.push(r);
       continue;
     }
     if (!commands.length && d.options.length && !lookups.length) {
@@ -1498,6 +1534,10 @@ function tokenAnswer(ctx, env, subject, key, unknown, themeFields) {
   return {
     kind: 'setting',
     subject,
+    // (The page color shows inside AppShell only: said first.)
+    ...(key === '--color-background-body'
+      ? {note: pageColorNote(env.data?.mode)}
+      : {}),
     source: 'token',
     tokenType: type,
     default: String(ctx.project.core.tokenDefaults[key]),
@@ -2116,8 +2156,10 @@ function pictureColors(file, cwd, at, count) {
     );
   /** @type {import('./_png.mjs').Picture} */
   let pic;
+  /** @type {Buffer} */
+  let bytes;
   try {
-    pic = decodePng(fs.readFileSync(abs));
+    pic = decodePng((bytes = fs.readFileSync(abs)));
   } catch (e) {
     throw new AstryxError(
       `Could not read ${file} as a PNG picture: ${e instanceof Error ? e.message : String(e)}.`,
@@ -2149,6 +2191,8 @@ function pictureColors(file, cwd, at, count) {
     };
   }
   const colors = mainColors(pic, count ?? 14);
+  // The look's traits, measured from the same pixels.
+  const traits = colors.length ? readTraits(pic, pixelScale(bytes)) : null;
   // Every pixel see-through: no color shows, as with a 0-pixel picture.
   if (!colors.length)
     throw new AstryxError(
@@ -2162,5 +2206,165 @@ function pictureColors(file, cwd, at, count) {
     height: pic.height,
     colors,
     points: null,
+    traits,
+  };
+}
+
+/**
+ * The aspects a setting changes, so a dial and the tokens it writes count as
+ * one: corners (the corners dial and every radius token), the control size
+ * (its size tokens, and the spacing dial, which scales control heights), the
+ * spacing tokens (and the spacing dial), the line height (the leading
+ * tokens), the text size (the text-size dial and the text
+ * size tokens), and the heading weight (the headings dial, and the type
+ * dial, which sets it). A checks size is its box: its width and its height.
+ * Anything else is its own aspect.
+ * @param {string} thing
+ * @returns {string[]}
+ */
+function aspectsOf(thing) {
+  if (thing === 'corners' || /^--radius-/.test(thing)) return ['corners'];
+  if (/^--size-element-/.test(thing)) return ['control-size'];
+  if (thing === 'spacing') return ['control-size', 'spacing'];
+  if (/^--spacing-/.test(thing)) return ['spacing'];
+  if (/^--text-[\w-]*leading$|^--line-height/.test(thing)) return ['leading'];
+  if (thing === 'text-size' || /^--text-[\w-]*-size$/.test(thing))
+    return ['text-size'];
+  if (thing === 'headings' || thing === 'type') return ['heading-weight'];
+  if (thing === 'width' || thing === 'height') return ['box-size'];
+  return [thing];
+}
+
+/**
+ * The lines that give the checks a measured box: width and height at the
+ * same px on each member that sizes its own box (sizesItsOwnBox), so a box
+ * stays square and a radio stays round. The measured box is the size drawn;
+ * each size moves by the same step from its own box (selfSizedBox), with a
+ * `--when size:` line per size when the member has more than one, one
+ * `--on checks` line where every member has the same box, else a line per
+ * member. A size whose box the editor does not know keeps its own, named in
+ * `kept`. No steps, with why, when no size can be read.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').Setting[]} settings
+ * @param {number} px the measured box
+ * @returns {{steps: import('./_how-commands.mjs').Step[], kept: string[], why?: undefined} | {steps?: undefined, kept?: undefined, why: string}}
+ */
+function checksBoxSteps(ctx, settings, px) {
+  const C = /** @type {any} */ (ctx).C;
+  const members = (FAMILIES.checks ?? []).filter(m => sizesItsOwnBox(C, m));
+  if (!members.length) return {why: 'no member of checks sets its own box'};
+  const drawn = selfSizedBox(ctx, settings, members[0]);
+  if (!drawn)
+    return {
+      why:
+        selfSizedWhy(ctx, settings, members[0]) ?? 'no size the editor knows',
+    };
+  const step = px - drawn.h;
+  const sizes = /** @type {string[]} */ (
+    C.variantValues(members[0])?.size ?? []
+  );
+  const {lines, unknown} = selfSizedBoxLines(
+    ctx,
+    settings,
+    'checks',
+    sizes.length > 1 ? sizes : [undefined],
+    box => {
+      const side = Math.max(1, Math.round(Math.max(box.w, box.h) + step));
+      return {w: side, h: side};
+    },
+    sizes.length > 1,
+  );
+  const kept = unknown.map(u => `${u.sz ? `size ${u.sz}: ` : ''}${u.why}`);
+  /** @type {import('./_how-commands.mjs').Step[]} */
+  const steps = lines.flatMap(l => [
+    {verb: 'set', thing: 'width', value: `${l.next.w}px`, ...l.flags},
+    {verb: 'set', thing: 'height', value: `${l.next.h}px`, ...l.flags},
+  ]);
+  if (!steps.length) return {why: kept.join('; ')};
+  return {steps, kept};
+}
+
+/**
+ * The commands that make a picture's measured look, each checked as `set`
+ * checks it: one result per trait, saying where it was read and how sure.
+ * A trait the theme already sets keeps the theme's own value (what was typed
+ * wins) and is named with the picture's reading instead.
+ * @param {string} cwd
+ * @param {string | undefined} name the theme asked for
+ * @param {ReturnType<typeof readTraits>} read
+ */
+async function pictureLook(cwd, name, read) {
+  const ctx = await context(cwd);
+  const groups = groupsOf(ctx);
+  /** @param {string} family @param {string} on */
+  const familyHolds = (family, on) => {
+    const families =
+      family === 'controls' ? ['button-like', 'inputs'] : [family];
+    return families.some(f => on === f || (groups[f] ?? []).includes(on));
+  };
+  const env = await howTheme(ctx, cwd, name);
+  const own = env.data.settings;
+  /** @type {Array<{text: string, commands: string[], refused?: Array<{command: string, why: string, run?: string[]}>}>} */
+  const results = [];
+  const unsure = read.unsure.map(u => ({
+    text: `${u.trait} on ${u.on}: ${u.why}`,
+    ...(u.options ? {options: u.options.map(st => render(st, env.slug))} : {}),
+  }));
+  for (const tr of read.traits) {
+    const step = tr.step;
+    // What the theme sets itself wins over a reading of the same aspect
+    // (the corners dial and the radius tokens are one aspect, as are the
+    // control size tokens), unless the two are on different parts.
+    // A checks size is its box: width and height at the same px, per size.
+    const checksSize = step.on === 'checks' && step.thing === 'height';
+    // (A box the theme sizes, on the checks or on any one of them with
+    // --only, its width or its height, is the theme's own.)
+    const kept = own.find(s =>
+      checksSize
+        ? /^(?:width|height)$/.test(s.thing) &&
+          (s.on === 'checks' ||
+            (FAMILIES.checks ?? []).includes(String(s.on ?? '')))
+        : aspectsOf(s.thing).some(a => aspectsOf(step.thing).includes(a)) &&
+          // (A part's own setting keeps a reading only for the family the
+          // reading is of, or a member of it: `corners --on button` keeps a
+          // button-like reading, never a theme-wide radius the card sets
+          // apart from.)
+          (!s.on || familyHolds(step.on ?? tr.on, String(s.on))),
+    );
+    const box = checksSize
+      ? checksBoxSteps(ctx, own, Number.parseFloat(String(step.value)))
+      : null;
+    if (kept) {
+      unsure.push({
+        text: `${tr.trait} on ${tr.on}: the picture reads ${tr.value} (${tr.read}); ${env.slug} sets ${kept.thing}${kept.on ? ` on ${kept.on}` : ''} ${kept.value} already, which stays`,
+        options: (box?.steps ?? [step]).map(st => render(st, env.slug)),
+      });
+      continue;
+    }
+    if (box?.why) {
+      unsure.push({
+        text: `${tr.trait} on ${tr.on}: the picture reads ${tr.value} (${tr.read}); ${box.why}, so the box is not written`,
+      });
+      continue;
+    }
+    const {commands, refused} = checked(env, [box?.steps ?? [step]]);
+    results.push({
+      text: `${tr.trait} on ${tr.on}: ${tr.value}, read from ${tr.read}${tr.sure === 'about' ? ' (about: few boxes)' : ''}${box?.kept?.length ? `; width and height at each size, by the same step; kept: ${box.kept.join('; ')}` : box?.steps ? '; width and height at each size, by the same step' : ''}`,
+      commands,
+      ...(refused.length ? {refused} : {}),
+    });
+  }
+  return {
+    theme: env.slug,
+    themeChosenBy: env.chosenBy,
+    ...(env.note ? {themeNote: env.note} : {}),
+    look: {
+      source: 'picture',
+      scale: read.scale,
+      traits: read.traits.map(({step: _step, ...tr}) => tr),
+      slots: read.slots,
+    },
+    results,
+    unsure,
   };
 }
