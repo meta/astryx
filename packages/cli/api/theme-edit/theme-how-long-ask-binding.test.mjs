@@ -281,6 +281,22 @@ const ROWS = [
     },
   ],
   [
+    'an undo that names two changes, only one said earlier, takes nothing back and says so',
+    {
+      q: 'Make the headings bold. Undo the card change and the heading change.',
+      has: ['headings bold'],
+      says: /names more than one change[\s\S]*one at a time/,
+    },
+  ],
+  [
+    'a part-less undo of a look said on a part takes nothing back and says so',
+    {
+      q: 'Make the cards rounder. Undo the corner change.',
+      has: ['corners more --on card'],
+      says: /does not say which earlier change/,
+    },
+  ],
+  [
     'an undo whose look more than one earlier change could be takes nothing back',
     {
       q: 'Make the headings bigger. Make the headings bold. Undo the heading size change.',

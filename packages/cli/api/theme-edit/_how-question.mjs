@@ -27730,7 +27730,6 @@ export function draftAnswer(ctx, env, question) {
             ))
       );
     });
-    if (!undone.length) continue;
     // An undo that names more than one change ("Undo the card change and
     // the heading change"), or a look that more than one earlier change
     // could be ("the heading size change" after a size and a bold), is not
@@ -27761,13 +27760,35 @@ export function draftAnswer(ctx, env, question) {
     ];
     const looks = new Set(undone.flatMap(lookOf));
     const several = (uc?.parts?.length ?? 0) > 1 || alsoNamed;
+    // ("Make the cards rounder. Undo the corner change.": an earlier change
+    // the undo could mean, though it does not name it for sure.)
+    const loose =
+      !undone.length &&
+      looksSaid.some(a => a !== 'said') &&
+      result.some(d => {
+        const c = /** @type {any} */ (draftClause.get(d));
+        return (
+          d !== unmet &&
+          !d.unmet &&
+          d.options.length &&
+          c &&
+          (undoAt < 0 || clauses.indexOf(c) < undoAt) &&
+          looksSaid.some(a => lookOf(d).includes(a))
+        );
+      });
+    if (!undone.length && !several && !loose) continue;
     const unsure =
       several ||
+      loose ||
       (looksSaid.length > 0 &&
         looks.size > 1 &&
         undone.some(d => !looksSaid.some(a => lookOf(d).includes(a))));
     if (unsure) {
-      unmet.text = `the undo ${several ? 'names more than one change' : 'could mean more than one earlier change'}, so nothing is taken back; undo them one at a time`;
+      unmet.text = several
+        ? `the undo names more than one change, so nothing is taken back; undo them one at a time`
+        : loose
+          ? `the undo does not say which earlier change it means, so nothing is taken back; name the part ("undo the card corners")`
+          : `the undo could mean more than one earlier change, so nothing is taken back; undo them one at a time`;
       if (uc) answeredByUndo.add(uc);
       if (alsoNamed) answeredByUndo.add(next);
       continue;
