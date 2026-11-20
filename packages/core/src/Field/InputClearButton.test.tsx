@@ -245,7 +245,9 @@ describe('InputClearButton', () => {
     expect(source).toContain(
       "const NOT_TOUCH = '@media not (pointer: coarse)';",
     );
-    expect(source).toContain('content: {default: null, [NOT_TOUCH]: \'""\'}');
+    expect(source).toContain(
+      "'--_input-clear-target': {default: null, [NOT_TOUCH]: '\"\"'}",
+    );
   });
 
   it('exposes input-clear-button so a theme controls the button size and hover', () => {

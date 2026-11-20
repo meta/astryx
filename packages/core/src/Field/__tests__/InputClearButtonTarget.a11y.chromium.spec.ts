@@ -45,14 +45,19 @@ interface TargetReport {
   misses: string[];
   /** Whether the point 1 px before the button, toward the text, is its. */
   takesTextSide: boolean;
+  /** Whether the button's center reaches its glyph, so the glyph's hover applies. */
+  centerReachesGlyph: boolean;
 }
 
-for (const story of STORIES) {
-  test(`${story}: the clear button keeps its 20 px glyph and takes a 24 px target away from the text`, async ({
+for (const [story, dir] of [
+  ...STORIES.map(story => [story, 'ltr'] as const),
+  ['core-textinput--clearable', 'rtl'] as const,
+]) {
+  test(`${story} (${dir}): the clear button keeps its 20 px glyph and takes a 24 px target away from the text`, async ({
     page,
   }) => {
     await page.goto(
-      `${storybook.origin}/iframe.html?id=${story}&viewMode=story`,
+      `${storybook.origin}/iframe.html?id=${story}&viewMode=story&globals=direction:${dir}`,
     );
     const button = page.locator('.astryx-input-clear-button').first();
     await button.waitFor();
@@ -81,12 +86,19 @@ for (const story of STORIES) {
         // Chromium gives a point within a pixel before an element's
         // whole-pixel edge to that element, so the probe sits 1 px out.
         takesTextSide: hits(start - toEnd, centerY),
+        centerReachesGlyph:
+          element
+            .querySelector('.astryx-input-clear-icon')
+            ?.contains(
+              document.elementFromPoint(box.left + box.width / 2, centerY),
+            ) ?? false,
       };
     });
     expect(report.width).toBeCloseTo(20, 0);
     expect(report.height).toBeCloseTo(20, 0);
     expect(report.misses).toEqual([]);
     expect(report.takesTextSide).toBe(false);
+    expect(report.centerReachesGlyph).toBe(true);
   });
 }
 
