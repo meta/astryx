@@ -325,10 +325,8 @@ and a token fill.
   `material` member on React Native (`spec:AST-082/FR10`).
 - Relies on `spec:AST-112` FR3 (amended): Astryx's own native pieces, these
   four contracts included, link by default.
-- `spec:AST-082` DEC-2 gains one sentence, with **Decider:** cixzhang,
-  2026-11-18: `surface` on `Button` and `IconButton` is a situational,
-  per-call-site appearance choice, and the look of that surface stays the
-  native theme's `material` member (DEC-7).
+- Relies on `spec:AST-082` DEC-2 as amended: `surface` on `Button` and
+  `IconButton` is a component prop, a per-call-site appearance choice (DEC-7).
 - Relies on `spec:AST-140` FR5: contracts grow by named features the binary
   reports.
 
