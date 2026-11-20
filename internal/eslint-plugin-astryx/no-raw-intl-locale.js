@@ -132,6 +132,9 @@ const APPROVED_IMPLEMENTATION_FILES = [
 
 const APPROVED_TEST_ORACLE_FILES = [
   'packages/charts/src/formatters.test.ts',
+  // ChartAxis's tick text with each built-in, checked against platform Intl
+  // rather than against the built-in it renders.
+  'packages/charts/src/ChartAxis.test.tsx',
   'packages/core/src/Calendar/Calendar.test.tsx',
   'packages/core/src/NumberInput/NumberInput.test.tsx',
   'packages/core/src/NumberInput/numberParser.test.ts',

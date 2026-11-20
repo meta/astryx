@@ -5,8 +5,9 @@
  * @input The repository's ESLint config
  * @output Pins who may import Core's internal entries
  *   (`@astryxdesign/core/internal/*`, spec:AST-017 FR21,
- *   architecture:react-component-runtime INV13): only Core and Lab, through
- *   the shared `@astryx/no-core-internal-import` rule
+ *   architecture:react-component-runtime INV13): Core and Lab, and Charts
+ *   only its calendar entry, through the shared
+ *   `@astryx/no-core-internal-import` rule
  * @position Node test over the lint config, so it needs no build; the rule's
  *   own cases live beside it in internal/eslint-plugin-astryx
  */
@@ -14,18 +15,26 @@
 import {createRequire} from 'node:module';
 import path from 'node:path';
 import {describe, expect, it} from 'vitest';
+import astryxEslintPlugin from '../internal/eslint-plugin-astryx/index.js';
 
 const REPO = path.resolve(import.meta.dirname, '..');
 const require = createRequire(path.join(REPO, 'package.json'));
-const {ESLint} = require('eslint');
+const {ESLint, Linter} = require('eslint');
+const tseslint = require('typescript-eslint');
 
 const eslint = new ESLint({cwd: REPO});
 const RULE = '@astryx/no-core-internal-import';
+const CALENDAR = '@astryxdesign/core/internal/calendar-system';
+
+/** The rule's setting as the repository's config resolves it for `file`. */
+async function settingAt(file) {
+  const config = await eslint.calculateConfigForFile(path.join(REPO, file));
+  return config.rules?.[RULE];
+}
 
 /** The rule's severity as the repository's config resolves it for `file`. */
 async function severityAt(file) {
-  const config = await eslint.calculateConfigForFile(path.join(REPO, file));
-  const setting = config.rules?.[RULE];
+  const setting = await settingAt(file);
   const level = Array.isArray(setting) ? setting[0] : setting;
   return level === 2 || level === 'error'
     ? 'error'
@@ -34,14 +43,49 @@ async function severityAt(file) {
       : 'off';
 }
 
+/** The specifiers this rule reports in `code`, with `file`'s setting. */
+async function reportedAt(file, code) {
+  const linter = new Linter({configType: 'flat'});
+  const messages = linter.verify(
+    code,
+    {
+      files: ['**/*.tsx'],
+      languageOptions: {parser: tseslint.parser},
+      plugins: {'@astryx': astryxEslintPlugin},
+      rules: {[RULE]: await settingAt(file)},
+    },
+    {filename: file},
+  );
+  return messages.map(m => m.message.match(/^'([^']+)'/)?.[1] ?? m.message);
+}
+
 describe('core internal entries in lint', () => {
-  it('are refused outside Core and Lab', async () => {
-    for (const file of [
-      'apps/docsite/src/Example.tsx',
-      'packages/charts/src/Example.tsx',
-    ]) {
-      expect(await severityAt(file), file).toBe('error');
-    }
+  it('are refused outside Core, Lab and Charts', async () => {
+    expect(await severityAt('apps/docsite/src/Example.tsx')).toBe('error');
+    expect(await settingAt('apps/docsite/src/Example.tsx')).toEqual([2]);
+  });
+
+  it('are refused in Charts, except the calendar entry', async () => {
+    const file = 'packages/charts/src/Example.tsx';
+    expect(await settingAt(file)).toEqual([2, {allow: [CALENDAR]}]);
+    const reported = await reportedAt(
+      file,
+      [
+        `import {useCalendarSystem} from '${CALENDAR}';`,
+        `import {useReorderSession} from '@astryxdesign/core/internal/reorder';`,
+        `import {touch} from '@astryxdesign/core/internal/touch';`,
+        `import {spring} from '@astryxdesign/core/motion';`,
+        `import {GestureArena} from '@astryxdesign/core/gestures';`,
+        `import {x} from '../../core/src/internal/calendar-system';`,
+      ].join('\n'),
+    );
+    expect(reported).toEqual([
+      '@astryxdesign/core/internal/reorder',
+      '@astryxdesign/core/internal/touch',
+      '@astryxdesign/core/motion',
+      '@astryxdesign/core/gestures',
+      '../../core/src/internal/calendar-system',
+    ]);
   });
 
   it('are allowed in Core and Lab', async () => {

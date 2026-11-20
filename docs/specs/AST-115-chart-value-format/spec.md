@@ -215,9 +215,6 @@ calendar: CalendarSystem) => string | null | undefined`. A format returns the
   (`−20,000`).
 - FR14 gap: `heatmapGL` and `streamGL` each add a tooltip row that reads
   `undefined`.
-- FR15 gap: `ChartAxis` names its tick format `tickFormat`, typed
-  `(value: unknown) => string | null | undefined`, and passes it no locale or
-  calendar.
 - The `Chart`, `ChartTooltip`, and `ChartAxis` consumer docs and the formatter
   docs show the declaration once, with a mixed-unit example and an
   empty-value example.
