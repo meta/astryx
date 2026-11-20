@@ -223,6 +223,7 @@ const styles = stylex.create({
   triggerOverflow: {
     flexShrink: 0,
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     color: colorVars['--color-text-secondary'],
     fontWeight: fontWeightVars['--font-weight-medium'],
   },
@@ -433,6 +434,7 @@ const styles = stylex.create({
     // Matches Selector, whose option row owns its typography the same way.
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     fontWeight: fontWeightVars['--font-weight-medium'],
     color: colorVars['--color-text-primary'],
     backgroundColor: 'transparent',
@@ -517,6 +519,7 @@ const styles = stylex.create({
     color: colorVars['--color-text-secondary'],
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
   },
 });
 

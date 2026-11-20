@@ -10,7 +10,8 @@
  *   shorthand sets, by that data; `keptCssTreeAnswer`, an answer worked
  *   out with them and kept between runs.
  * @position The one loader of css-tree, for the theme editor's CSS
- *   knowledge and the theme build's style-key checks. The entry is resolved
+ *   knowledge, the theme build's style-key checks, and the shared color
+ *   reader the export uses. The entry is resolved
  *   before any command stats a file: after a stat of a named pipe, Node's
  *   realpath can return a package link's own path instead of its target,
  *   and css-tree's own dependencies are then looked for beside the link and

@@ -21,7 +21,7 @@ export const docs = {
       name: 'description',
       type: 'ReactNode',
       description:
-        'Secondary content below the label. A plain string gets single-line truncation automatically; a ReactNode lets child components control their own wrapping and line-clamp behavior.',
+        'Secondary content below the label: a plain string shows on one line and the row cuts long text with an ellipsis, so for full text pass a node, for example description={<Text type="supporting">…</Text>}. A node controls its own wrapping and line clamp.',
     },
     {
       name: 'startContent',
@@ -153,7 +153,7 @@ export const docsZh = {
       name: 'description',
       type: 'ReactNode',
       description:
-        '标签下方的次要内容。纯字符串会自动应用单行截断；ReactNode 允许子组件自行控制换行和多行截断行为。',
+        '标签下方的次要内容：纯字符串只显示一行，过长时以省略号截断；要显示完整文本，请传入节点，例如 description={<Text type="supporting">…</Text>}。节点自行控制换行和多行截断。',
     },
     {
       name: 'startContent',
@@ -251,7 +251,8 @@ export const docsDense = {
       "Start/end content alignment, passed to Item: 'center' (default), 'start', or 'first-line' (centered on the label's first line).",
     label:
       'Primary content. String auto-truncates; ReactNode renders as given.',
-    description: 'Secondary text below label.',
+    description:
+      'Secondary text below label: a string shows on one line (ellipsis); for full text pass a node, e.g. <Text type="supporting">.',
     startContent: 'Content before label area (e.g. icon, avatar).',
     endContent: 'Content after label area (e.g. badge, chevron).',
     onClick: 'Click handler; enables invisible button pattern.',

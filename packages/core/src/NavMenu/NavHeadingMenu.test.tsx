@@ -21,6 +21,17 @@ describe('NavHeadingMenu', () => {
     expect(screen.getByRole('menu')).toBeInTheDocument();
   });
 
+  it("is a menu named by the caller's aria-label when it stands alone", () => {
+    render(
+      <NavHeadingMenu aria-label="Workspace">
+        <NavHeadingMenuItem label="Item 1" />
+      </NavHeadingMenu>,
+    );
+    expect(screen.getByRole('menu', {name: 'Workspace'})).toContainElement(
+      screen.getByRole('menuitem', {name: 'Item 1'}),
+    );
+  });
+
   it('renders children as menuitems', () => {
     render(
       <NavHeadingMenu>

@@ -457,6 +457,24 @@ describe('Popover presentation', () => {
     await vi.waitFor(() => expect(document.activeElement).toBe(apply()));
   });
 
+  it('a sheet trigger names the sheet in aria-controls only while it is open (AR6)', async () => {
+    isCompactTouch = true;
+    render(<Filters presentation="bottom-sheet" />);
+    expect(trigger()).not.toHaveAttribute('aria-controls');
+    await tapTrigger();
+    await vi.waitFor(() => expect(sheetDialog()).toHaveAttribute('open'));
+    expect(
+      sheetDialog()!.contains(
+        document.getElementById(trigger().getAttribute('aria-controls') ?? ''),
+      ),
+    ).toBe(true);
+    await tapTrigger();
+    await vi.waitFor(() =>
+      expect(trigger()).toHaveAttribute('aria-expanded', 'false'),
+    );
+    expect(trigger()).not.toHaveAttribute('aria-controls');
+  });
+
   it('adaptive: a desktop keeps the anchored popover', async () => {
     render(<Filters presentation="adaptive" />);
     await tapTrigger();
