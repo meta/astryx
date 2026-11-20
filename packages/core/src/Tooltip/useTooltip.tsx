@@ -23,6 +23,7 @@ import {
   useState,
   type ReactNode,
   type RefCallback,
+  useSyncExternalStore,
 } from 'react';
 import {createPortal} from 'react-dom';
 import {useCommittedRef} from '../hooks/useCommittedRef';
@@ -337,8 +338,9 @@ export function isTooltipDescription(element: Element): boolean {
  * The trigger's description until the layer first mounts: a hidden copy of
  * the tooltip text (the `hidden` attribute). `aria-describedby` reads a hidden
  * node it names directly, and browse mode skips it. It is a sibling after the
- * trigger, never inside it, and the commit that mounts the layer removes it. Group rules that find the last member
- * (ButtonGroup's trailing radius) skip it. A Core component that renders the
+ * trigger, never inside it, and the commit that mounts the layer removes it.
+ * Group rules that find the last member (ButtonGroup's trailing radius) skip
+ * it. A Core component that renders the
  * tooltip under `TooltipDescribesContext` `false` gets none.
  */
 function TooltipDescription({
@@ -349,7 +351,14 @@ function TooltipDescription({
   children: ReactNode;
 }): ReactNode {
   const describes = use(TooltipDescribesContext);
-  const [host, setHost] = useState<HTMLElement | null>(null);
+  // The host span reaches render through a store, so no DOM node is in
+  // state.
+  const [hostStore] = useState(createHostStore);
+  const host = useSyncExternalStore(
+    hostStore.subscribe,
+    hostStore.get,
+    readNoHost,
+  );
   if (!describes) {
     return null;
   }
@@ -365,11 +374,43 @@ function TooltipDescription({
   // enclosing paragraph. So the copy starts empty, server markup included,
   // and the client renders the content into it through a portal.
   return (
-    <span ref={setHost} id={id} hidden>
+    <span ref={hostStore.set} id={id} hidden>
       {host != null ? createPortal(children, host) : null}
     </span>
   );
 }
+
+interface HostStore {
+  readonly get: () => HTMLElement | null;
+  readonly set: (host: HTMLElement | null) => void;
+  readonly subscribe: (onChange: () => void) => () => void;
+}
+
+/** The element a description renders its content into, once it exists. */
+function createHostStore(): HostStore {
+  let host: HTMLElement | null = null;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => host,
+    set: next => {
+      if (next === host) {
+        return;
+      }
+      host = next;
+      for (const listener of listeners) {
+        listener();
+      }
+    },
+    subscribe: onChange => {
+      listeners.add(onChange);
+      return () => {
+        listeners.delete(onChange);
+      };
+    },
+  };
+}
+
+const readNoHost = (): HTMLElement | null => null;
 
 /**
  * Whether tooltip content holds a component element, whose text only its own

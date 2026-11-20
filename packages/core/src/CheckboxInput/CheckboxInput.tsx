@@ -656,19 +656,17 @@ export function CheckboxInput({
           variant="detached"
         />
       )}
+      {/* The tooltip's description is the reason the input's
+          aria-describedby names: a hidden copy until the tooltip first
+          mounts, then the tooltip's text, so the reason renders once. */}
       {isDisabled && disabledMessage ? (
-        <>
-          {/* The tooltip's description is the reason the input's
-              aria-describedby names: a hidden copy until the tooltip first
-              mounts, then the tooltip's text, so the reason renders once. */}
-          <TooltipDescriptionIdContext value={disabledMessageID}>
-            <DisabledMessageTooltip
-              message={disabledMessage}
-              rowRef={rowElementRef}
-              inputRef={inputRef}
-            />
-          </TooltipDescriptionIdContext>
-        </>
+        <TooltipDescriptionIdContext value={disabledMessageID}>
+          <DisabledMessageTooltip
+            message={disabledMessage}
+            rowRef={rowElementRef}
+            inputRef={inputRef}
+          />
+        </TooltipDescriptionIdContext>
       ) : null}
     </div>
   );
