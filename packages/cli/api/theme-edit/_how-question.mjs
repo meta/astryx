@@ -5593,8 +5593,23 @@ export function draftAnswer(ctx, env, question) {
           !VERB.test(x.toLowerCase().replace(POLITE, '')) &&
           !/\b(?:please|pls|want|need|would like|make|set|give)\b/i.test(x),
       );
+  // (A tag that also reads as an ask's own words, "just do it", "have it",
+  // asks back only with a question mark or after a line that asks for
+  // nothing.)
+  const ASK_TAG =
+    /^(?:just\s+)?(?:do|did|have|has)\s+(?:it|that|this)\s*[!.]*$/i;
+  const asksElsewhere = (/** @type {string} */ x) =>
+    segments.some(
+      y =>
+        y !== x &&
+        (ASK_START.test(y.toLowerCase()) ||
+          VERB.test(y.toLowerCase().replace(POLITE, ''))),
+    );
+  const tagged = segments.some(
+    x => TAG.test(x.trim()) && !(ASK_TAG.test(x.trim()) && asksElsewhere(x)),
+  );
   const gateAll =
-    segments.some(x => TAG.test(x.trim())) ||
+    tagged ||
     SARCASM.test(question) ||
     shouted ||
     SARCASTIC_REPLY.test(question) ||

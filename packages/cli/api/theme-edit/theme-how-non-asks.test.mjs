@@ -94,6 +94,11 @@ describe('still writes', () => {
     // (A focus ring draws no shadow: "no shadows" after it is the theme's.)
     ['visible thick focus ring, no shadows', '--shadow-low none'],
     ['boutons arrondis, sans ombre', 'box-shadow none --on button'],
+    // ("just do it" after an ask is the ask's own push, never a tag.)
+    [
+      'make the buttons blue, just do it',
+      "background-color '#2563eb' --on button",
+    ],
   ])(
     '%s',
     async (q, line, test) => {
