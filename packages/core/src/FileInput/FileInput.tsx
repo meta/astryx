@@ -310,6 +310,7 @@ const styles = stylex.create({
     // A word wider than the field breaks inside itself, so the prompt wraps
     // inside the border and loses no text at large sizes.
     overflowWrap: 'anywhere',
+    '--_astryx-text-overflow-wrap': 'anywhere',
   },
 });
 
