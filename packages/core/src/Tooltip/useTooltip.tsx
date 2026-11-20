@@ -5,8 +5,9 @@
 /**
  * @file useTooltip.tsx
  * @input Uses useLayer, useTouchTriggerInternal, React hooks
- * @output Exports useTooltip hook with stable trigger refs for hover/focus/tap tooltips
- *   and imperative show() and hide() for an app-built toggle trigger
+ * @output Exports useTooltip hook with stable trigger refs for hover/focus/tap tooltips,
+ *   imperative show() and hide() for an app-built toggle trigger, and the internal
+ *   TooltipAttachment used by Button and Avatar
  * @position Layer hook; builds on useLayer for tooltip behavior
  *
  * SYNC: When modified, update:
@@ -295,6 +296,27 @@ export interface TooltipReturn {
  */
 
 export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
+  return useTooltipInternal(options);
+}
+
+/**
+ * Internal variant for sibling attachments that need to expose the layer id
+ * on their trigger during server rendering. It is intentionally not re-exported
+ * from the public Tooltip barrel.
+ *
+ * @internal
+ */
+function useTooltipWithId(
+  id: string,
+  options: TooltipOptions = {},
+): TooltipReturn {
+  return useTooltipInternal(options, id);
+}
+
+function useTooltipInternal(
+  options: TooltipOptions = {},
+  providedId?: string,
+): TooltipReturn {
   const {
     placement = 'above',
     alignment = 'center',
@@ -315,6 +337,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // fit inside the surface, which stays hoverable (spec:AST-059 FR4).
   const layer = useLayerInternal({
     mode: 'context',
+    id: providedId,
     onShow,
     onHide,
     keepsAnchorClear: true,
@@ -1059,4 +1082,53 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     show,
     hide,
   };
+}
+
+interface TooltipAttachmentProps {
+  content: ReactNode;
+  id: string;
+  triggerRef: {current: HTMLElement | null};
+}
+
+/**
+ * Internal sibling for core components that should not create tooltip behavior
+ * until they have tooltip content. The trigger stays in its existing tree slot.
+ *
+ * @internal
+ */
+export function TooltipAttachment({
+  content,
+  id,
+  triggerRef,
+}: TooltipAttachmentProps) {
+  const tooltip = useTooltipWithId(id, {placement: 'above'});
+  const attachedElementRef = useRef<HTMLElement | null>(null);
+  const detachRef = useRef<(() => void) | null>(null);
+
+  // Check after every render so an anchor/button/custom-link swap reattaches
+  // to the newly committed root. The identity check keeps ordinary renders
+  // from detaching and reinstalling listeners.
+  useIsomorphicLayoutEffect(() => {
+    const element = triggerRef.current;
+    if (element === attachedElementRef.current) {
+      return;
+    }
+    detachRef.current?.();
+    attachedElementRef.current = element;
+    const detach = element == null ? null : tooltip.ref(element);
+    detachRef.current = typeof detach === 'function' ? detach : null;
+  });
+
+  // The first effect intentionally has no per-commit cleanup; this cleanup
+  // releases the trigger only when this conditional attachment unmounts.
+  useIsomorphicLayoutEffect(
+    () => () => {
+      detachRef.current?.();
+      detachRef.current = null;
+      attachedElementRef.current = null;
+    },
+    [],
+  );
+
+  return <>{tooltip.renderTooltip(content)}</>;
 }

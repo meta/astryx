@@ -22,6 +22,7 @@ import {
   isValidElement,
   use,
   useEffect,
+  useId,
   useRef,
   useState,
   useTransition,
@@ -30,7 +31,7 @@ import {
 import type {BaseProps} from '../BaseProps';
 import type {Elevation, SizeValue} from '../utils/types';
 import * as stylex from '@stylexjs/stylex';
-import {useTooltip} from '../Tooltip/useTooltip';
+import {TooltipAttachment} from '../Tooltip/useTooltip';
 import {useCutTextOnKeyboardFocus} from '../Text/TruncationTooltip';
 import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {
@@ -929,15 +930,9 @@ export function Button({
   // (credit @AKnassa, #4879), which is exactly the bug this PR fixes.
   const renderAsLink = href != null && !isTrueDisabled;
 
-  // Attach tooltip behavior via the hook rather than wrapping the button in a
-  // <Tooltip> element. The hook adds hover/focus triggers to the button itself,
-  // so no extra DOM node is inserted — the button stays a direct child of its
-  // container (no layout shift, and edge-compensation markers remain
-  // discoverable through the container's direct-child `:has()` selector).
-  const tooltipHook = useTooltip({
-    placement: 'above',
-    isEnabled: tooltip != null,
-  });
+  const hasTooltip = Boolean(tooltip);
+  const tooltipId = useId();
+  const tooltipTriggerRef = useRef<HTMLElement | null>(null);
 
   // A label cut short by its row shows in full in a tooltip when keyboard
   // focus reaches the Button; a caller's own tooltip replaces it.
@@ -1138,24 +1133,22 @@ export function Button({
     accessibleName != null &&
     tooltip.trim() === accessibleName.trim();
 
-  // When a tooltip is attached via the hook, point aria-describedby at the
-  // tooltip content (composing with any consumer-provided value).
+  // When a tooltip is attached, point aria-describedby at its content while
+  // preserving any consumer-provided description.
   const describedByProp =
-    tooltip != null && !isTooltipName
+    hasTooltip && !isTooltipName
       ? {
           'aria-describedby':
-            [props['aria-describedby'], tooltipHook.describedBy]
-              .filter(Boolean)
-              .join(' ') || undefined,
+            [props['aria-describedby'], tooltipId].filter(Boolean).join(' ') ||
+            undefined,
         }
       : null;
 
-  // Merge the consumer ref with the tooltip hook's trigger ref so both point at
-  // the same element. useMergedRefs tolerates undefined, so this is a no-op for
-  // the tooltip side when no tooltip is set.
+  // Keep a ref to the stable trigger so TooltipAttachment can install its
+  // behavior only while a tooltip is present.
   const mergedButtonRef = useMergedRefs(
     ref,
-    tooltip != null ? tooltipHook.ref : undefined,
+    tooltipTriggerRef,
     hitAreaRef,
     buttonRef,
   );
@@ -1232,7 +1225,13 @@ export function Button({
   return (
     <>
       {element}
-      {tooltip ? tooltipHook.renderTooltip(tooltip) : null}
+      {hasTooltip ? (
+        <TooltipAttachment
+          content={tooltip}
+          id={tooltipId}
+          triggerRef={tooltipTriggerRef}
+        />
+      ) : null}
       {canShowCutLabel && cutLabel.cutText != null && cutLabel.Tooltip ? (
         <cutLabel.Tooltip
           anchorRef={buttonRef}

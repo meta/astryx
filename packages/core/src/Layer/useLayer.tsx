@@ -575,6 +575,8 @@ export interface FixedLayerReturn {
  * not part of the public `useLayer` options.
  */
 interface InternalContextLayerOptions extends ContextLayerOptions {
+  /** Caller-provided id for an internal layer owner that must share its id. */
+  id?: string;
   /**
    * The layer must never settle over its anchor (spec:AST-059 FR4). When the
    * standard fallback list settles it over its anchor, it switches to its
@@ -1386,7 +1388,8 @@ function useLayerImplementation(
     mode === 'context' && options.waitsForAnchor === true,
   );
   const onCloseStartRef = useCommittedRef(onCloseStart);
-  const id = useId();
+  const generatedId = useId();
+  const id = mode === 'context' ? (options.id ?? generatedId) : generatedId;
   const anchorId = `--astryx-layer-${id.replace(/:/g, '')}`;
 
   const [isOpen, setIsOpen] = useState(false);
