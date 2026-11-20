@@ -108,7 +108,10 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
-import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
+import {
+  InputGroupInternalContext,
+  useIsMemberInvalid,
+} from '../InputGroup/InputGroupInternalContext';
 import {VisuallyHidden} from '../VisuallyHidden';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {SelectorBottomSheet} from './SelectorBottomSheet';
@@ -1250,6 +1253,7 @@ export function Selector<T extends SelectorOptionType>(
     );
   }
   const inputGroup = useInputGroup();
+  const isMemberInvalid = useIsMemberInvalid(status);
   const inputGroupState = use(InputGroupInternalContext);
   const isDisabled = isDisabledProp || inputGroupState.isDisabled;
   const {rest, container} = useFieldInputStyling('Selector', restProps, {
@@ -2304,7 +2308,7 @@ export function Selector<T extends SelectorOptionType>(
       ? joinAriaIDs(triggerNameLabelId, valueTextId)
       : triggerLabelledBy,
     'aria-required': ariaRequired,
-    'aria-invalid': status?.type === 'error' ? 'true' : undefined,
+    'aria-invalid': isMemberInvalid ? 'true' : undefined,
     'aria-busy': isBusy || undefined,
     // The built-in keyboard model runs first; a caller handler sees the keys
     // it leaves uncancelled. A caller `onClick` arrives through `rest` and
