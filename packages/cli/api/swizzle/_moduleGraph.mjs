@@ -29,6 +29,11 @@ import {
   isRecord,
   subpathDeclaration,
 } from '../../foundation/integrations/exports-subpaths.mjs';
+import {
+  recordReads,
+  recordStates,
+  unchangedSince,
+} from '../../foundation/fs/read-record.mjs';
 
 /** The extensions an extensionless import may name, in resolution order. */
 const CODE_FILE = /\.[cm]?[jt]sx?$/;
@@ -377,6 +382,41 @@ function publicSurfaceOf(packageDir, srcRoot, originsOf) {
 }
 
 /**
+ * Public surfaces read in this process, by package and source root, with
+ * every file and folder each read. Reading one parses every module the
+ * package exports, more than the parsed-module cache keeps, so without this
+ * each copy from the same package parses them all again.
+ * @type {Map<string, {reads: Map<string, string>, surface: PublicSurface}>}
+ */
+const keptSurfaces = new Map();
+
+/**
+ * {@link publicSurfaceOf}, kept while every file and folder it read is
+ * unchanged. A kept surface counts as read by the running operation.
+ * @param {string} packageDir
+ * @param {string} srcRoot
+ * @param {OriginsOf} originsOf
+ * @returns {PublicSurface}
+ */
+function keptPublicSurfaceOf(packageDir, srcRoot, originsOf) {
+  const key = `${packageDir}\0${srcRoot}`;
+  const kept = keptSurfaces.get(key);
+  if (kept && unchangedSince(kept.reads)) {
+    recordStates(kept.reads);
+    return kept.surface;
+  }
+  /** @type {Map<string, string>} */
+  const reads = new Map();
+  const surface = recordReads(
+    reads,
+    () => publicSurfaceOf(packageDir, srcRoot, originsOf),
+    {exact: true},
+  );
+  keptSurfaces.set(key, {reads, surface});
+  return surface;
+}
+
+/**
  * A specifier that is either fixed (a public subpath) or computed from where
  * two copied files land.
  * @typedef {string | {from: string, to: string}} SpecifierChoice
@@ -472,7 +512,7 @@ export function planCopy({
    * @param {{packageDir: string, srcRoot: string, ownerPackage: string}} pkg
    */
   function makeContext({packageDir, srcRoot, ownerPackage}) {
-    const surface = publicSurfaceOf(packageDir, srcRoot, originsOf);
+    const surface = keptPublicSurfaceOf(packageDir, srcRoot, originsOf);
     /** @param {string} file */
     const inSource = file => file.startsWith(srcRoot + path.sep);
     /**
