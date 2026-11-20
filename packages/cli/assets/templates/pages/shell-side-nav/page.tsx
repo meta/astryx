@@ -21,17 +21,19 @@ import {StatusDot} from '@astryxdesign/core/StatusDot';
 import type {StatusDotVariant} from '@astryxdesign/core/StatusDot';
 import {Card} from '@astryxdesign/core/Card';
 import {Stack, VStack, HStack} from '@astryxdesign/core/Stack';
+import {useContainerReveal} from '@astryxdesign/core/hooks';
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {
   SparklesIcon,
-  PlusIcon,
-  MagnifyingGlassIcon,
-  BookOpenIcon,
-  Cog6ToothIcon,
+  AddIcon,
+  SearchIcon,
+  BookIcon,
+  SettingsIcon,
   UserCircleIcon,
   UserIcon,
-  BuildingOffice2Icon,
-  CodeBracketIcon,
-} from '@heroicons/react/24/outline';
+  BuildingIcon,
+  CodeIcon,
+} from '@astryxdesign/template-icons';
 
 type Conversation = {
   label: string;
@@ -70,7 +72,7 @@ const WORKSPACES: Workspace[] = [
   },
   {
     name: 'Acme Corp',
-    icon: BuildingOffice2Icon,
+    icon: BuildingIcon,
     chats: [
       {label: 'Q3 roadmap draft', status: 'accent', statusLabel: 'In progress'},
       {
@@ -88,7 +90,7 @@ const WORKSPACES: Workspace[] = [
   },
   {
     name: 'Open Source',
-    icon: CodeBracketIcon,
+    icon: CodeIcon,
     chats: [
       {
         label: 'StyleX migration notes',
@@ -126,10 +128,13 @@ function ConversationItem({
   statusLabel: string;
   isSelected?: boolean;
 }) {
-  const [isHovered, setIsHovered] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const showMenu = isHovered || isMenuOpen;
+  // The options button stays mounted and in the tab order. It shows on hover,
+  // on focus anywhere in the row, and under a coarse pointer, and stays shown
+  // while its menu is open.
+  const {getContainerProps, getContentRevealProps} = useContainerReveal();
   const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
   // Demo only: replace these toasts with the calls that act on the conversation.
   const demoAction = (verb: string) =>
     showToast({
@@ -139,14 +144,14 @@ function ConversationItem({
 
   return (
     <Stack
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}>
+      {...getContainerProps({forceState: isMenuOpen ? 'active' : undefined})}>
       <SideNavItem
         label={label}
         href="#"
         isSelected={isSelected}
-        endContent={
-          showMenu ? (
+        endContent={<StatusDot variant={status} label={statusLabel} />}
+        actions={
+          <span {...getContentRevealProps()}>
             <MoreMenu
               size="sm"
               label="Conversation options"
@@ -155,14 +160,25 @@ function ConversationItem({
                 {label: 'Pin', onClick: () => demoAction('pinned')},
                 {label: 'Rename', onClick: () => demoAction('renamed')},
                 {label: 'Archive', onClick: () => demoAction('archived')},
-                {label: 'Delete', onClick: () => {}},
+                {
+                  label: 'Delete',
+                  onClick: () =>
+                    confirm.show({
+                      title: `Delete ${label}?`,
+                      description: "This demo won't delete anything.",
+                      actionLabel: 'Delete',
+                      onAction: () => {
+                        confirm.hide();
+                        demoAction('deleted');
+                      },
+                    }),
+                },
               ]}
             />
-          ) : (
-            <StatusDot variant={status} label={statusLabel} />
-          )
+          </span>
         }
       />
+      {confirm.element}
     </Stack>
   );
 }
@@ -184,14 +200,14 @@ export default function ShellSideNav() {
           }
           footer={
             <SideNavSection title="Account" isHeaderHidden>
-              <SideNavItem label="Settings" icon={Cog6ToothIcon} href="#" />
+              <SideNavItem label="Settings" icon={SettingsIcon} href="#" />
               <SideNavItem label="Sarah Chen" icon={UserCircleIcon} href="#" />
             </SideNavSection>
           }>
           <SideNavSection title="Menu" isHeaderHidden>
-            <SideNavItem label="New chat" icon={PlusIcon} href="#" />
-            <SideNavItem label="Search" icon={MagnifyingGlassIcon} href="#" />
-            <SideNavItem label="Library" icon={BookOpenIcon} href="#" />
+            <SideNavItem label="New chat" icon={AddIcon} href="#" />
+            <SideNavItem label="Search" icon={SearchIcon} href="#" />
+            <SideNavItem label="Library" icon={BookIcon} href="#" />
           </SideNavSection>
           <Divider />
           <SideNavSection title="Workspaces" isHeaderHidden>

@@ -312,4 +312,10 @@ describe('ChatSendButton', () => {
       expect(onSubmit).toHaveBeenCalledWith('hello');
     });
   });
+
+  it('stays circular inside a composer, whose buttons take its concentric radius', () => {
+    render(<ChatComposer onSubmit={() => {}} />);
+    const send = screen.getByRole('button', {name: 'Send'});
+    expect(declaredValue(send, '--_button-radius')).toBe('var(--radius-full)');
+  });
 });

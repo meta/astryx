@@ -9,13 +9,13 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {
   StarIcon as StarOutline,
   BookmarkIcon as BookmarkOutline,
-  BellIcon,
-  BellSlashIcon,
-} from '@heroicons/react/24/outline';
+  NotificationIcon,
+  NotificationOffIcon,
+} from '@astryxdesign/template-icons';
 import {
   StarIcon as StarSolid,
   BookmarkIcon as BookmarkSolid,
-} from '@heroicons/react/24/solid';
+} from '@astryxdesign/template-icons/24/solid';
 
 export default function ToggleButtonShowcase() {
   const [isFavorited, setIsFavorited] = useState(false);
@@ -42,8 +42,8 @@ export default function ToggleButtonShowcase() {
       />
       <ToggleButton
         label="Notifications"
-        icon={<Icon icon={BellIcon} />}
-        pressedIcon={<Icon icon={BellSlashIcon} />}
+        icon={<Icon icon={NotificationIcon} />}
+        pressedIcon={<Icon icon={NotificationOffIcon} />}
         isPressed={isMuted}
         onPressedChange={setIsMuted}>
         Notifications

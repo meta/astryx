@@ -2,6 +2,7 @@
 
 'use client';
 
+import {HStack} from '@astryxdesign/core/Layout';
 import {Stepper, Step} from '@astryxdesign/core/Stepper';
 import {Text} from '@astryxdesign/core/Text';
 import {Icon} from '@astryxdesign/core/Icon';
@@ -14,7 +15,7 @@ export default function StepIndicator() {
   // last step is in progress instead, because the node it passes to `indicator`
   // is a spinner and a spinner only makes sense on work that is running.
   return (
-    <div style={{display: 'flex', flexWrap: 'wrap', gap: 24}}>
+    <HStack wrap="wrap" gap={6}>
       <div style={{width: 190}}>
         <Text type="label">auto (default)</Text>
         <Stepper activeStep={1} orientation="vertical">
@@ -55,6 +56,6 @@ export default function StepIndicator() {
           />
         </Stepper>
       </div>
-    </div>
+    </HStack>
   );
 }

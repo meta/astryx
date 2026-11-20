@@ -17,18 +17,33 @@
  */
 export const OVERRIDES = [
   [/\b(?:dividers?|separators?)\b/, {on: 'divider'}],
+  // (The page's main panel, the area its content sits in.)
+  [
+    /\b(?:main\s+)?content\s+(?:area|panel|region|pane)s?\b|\bmain\s+(?:area|panel|pane)s?\b/,
+    {on: 'layout-content'},
+  ],
   [
     /\baccordions? (headers?|triggers?|titles?|headings?)\b/,
     {on: 'collapsible-trigger'},
   ],
   [/\baccordions?\b/, {on: 'collapsible'}],
   [/\bcombo ?box(es)?\b/, {on: 'complex-selector'}],
-  [/\bnotifications?\b/, {on: 'toast'}],
+  // A calendar's range band, and the band a hover would select.
+  [
+    /\b(?:calendar\s+)?range\s+preview(?:\s+bands?)?\b|\bpreview\s+bands?\b/,
+    {on: 'calendar-range-preview'},
+  ],
+  [/\b(?:calendar\s+)?range\s+bands?\b/, {on: 'calendar-range'}],
+  // (Other design systems' names for the same parts: a snackbar is a
+  // toast, a lozenge a badge, the form controls the inputs.)
+  [/\b(?:notifications?|snack ?bars?)\b/, {on: 'toast'}],
   [/\b(focus (ring|outline)s?)\b/, {on: 'focus-ring'}],
   [/\b((modal |dialog )?(overlay|scrim|backdrop))\b/, {on: 'overlay'}],
   [/\bicons?\b/, {on: 'icons'}],
   [
-    /\b(table header|column headers?|table headings?)\b/,
+    // (The header row is the header cells: "table header row gray" is
+    // never every row.)
+    /\b(table header rows?|header rows?|table headers?|column headers?|table headings?)\b/,
     {on: 'table-header-cell'},
   ],
   [
@@ -53,6 +68,9 @@ export const OVERRIDES = [
   // A context menu is its own part in Core (its items are the dropdown
   // menu's items, which it reuses).
   [/\b(context ?menus?|right[- ]click menus?)\b/, {on: 'context-menu'}],
+  // (Menus said plainly are every menu, the menus group; a dropdown menu,
+  // or one menu, is the dropdown menu.)
+  [/\b(?<!dropdown )menus\b/, {on: 'menus'}],
   [/\b((dropdown )?menus?)\b/, {on: 'dropdown-menu'}],
   // A part's own header or footer ("dialog header", "card footer") is that
   // part's, never the app's top bar or footer.
@@ -80,7 +98,12 @@ export const OVERRIDES = [
     /\b(danger|destructive|delete) (buttons?|ones?|variant)\b/,
     {on: 'button', when: 'variant:destructive'},
   ],
-  [/\b(panels?|windows?|boxes|tiles?|containers?)\b/, {on: 'containers'}],
+  // (Never the operating system, "Windows 11 accent …": a window named
+  // with a version is a product.)
+  [
+    /\b(panels?|windows?(?!\s+(?:\d|xp\b|vista\b))|boxes|tiles?|containers?)\b/,
+    {on: 'containers'},
+  ],
   [/\b(banners?|alerts?|notices?|announcements?)\b/, {on: 'banner'}],
   // A sheet is Core's bottom sheet (never a style sheet).
   [/(?<!\bstyle[\s-]?)\b(?:bottom[\s-]?)?sheets?\b/, {on: 'bottom-sheet'}],
@@ -91,7 +114,7 @@ export const OVERRIDES = [
   ],
   [/\b(skeletons?( loaders?)?|loading placeholders?)\b/, {on: 'skeleton'}],
   [
-    /\b(inputs?|text ?box(es)?|text ?fields?|form fields?|fields?)\b/,
+    /\b(inputs?|text ?box(es)?|text ?fields?|form (fields?|controls?|elements?)|fields?)\b/,
     {on: 'inputs'},
   ],
   // A checkbox is the box itself; the checks group (checkbox and radio)
@@ -110,14 +133,32 @@ export const OVERRIDES = [
     /\b(?:toggle|switch)(?:e?s)?(?:'s)?\s+(?:thumbs?|knobs?|handles?)\b/,
     {on: 'switch-thumb'},
   ],
-  // "switch off", "switch the buttons to" are the verb, not the part.
+  // The buttons or items of a toggle group (its own possessive or not):
+  // Core's toggle buttons, never a switch's.
   [
-    /\b(toggles?|switch(?:e?s)?(?! (off|on|to|the|out|it|them|over|back|from)\b))\b/,
+    /\btoggle[- ]?(?:button[- ]?)?groups?(?:'s|s'|’s)?\s+(?:buttons?|items?|options?)\b/,
+    {on: 'toggle-button'},
+  ],
+  // A toggle group: the group of toggle buttons, never a switch.
+  [/\btoggle[- ]?(?:button[- ]?)?groups?\b/, {on: 'toggle-button-group'}],
+  // A toggle button: Core's toggle button, never a switch.
+  [/\btoggle[- ]?buttons?\b/, {on: 'toggle-button'}],
+  // "switch off", "switch the buttons to" are the verb, not the part; the
+  // switch's "on color" or "on state" (its checked look) is the part.
+  [
+    /\b(toggles?|switch(?:e?s)?(?! (?:off|on(?![- ](?:colou?r|state|look)\b)|to|the|out|it|them|over|back|from)\b))\b/,
     {on: 'switch'},
   ],
   [/\b((table )?cells?)\b/, {on: 'table-cell'}],
   [/\b(table rows?|rows?|tables?)\b/, {on: 'table-row'}],
-  [/\b(badges?|chips?|tags?)\b/, {on: 'badge'}],
+  // (A keyboard key, "the key chips", is Core's Kbd, never a badge.)
+  [
+    /\b(kbds?|keyboard (keys?|shortcuts?|chips?)|key ?(chips?|caps?)|shortcut keys?)\b/,
+    {on: 'kbd'},
+  ],
+  // (Kbd's key badges, each key's own box, by their own name.)
+  [/\bkey badges?\b/, {on: 'kbd-key'}],
+  [/\b(badges?|chips?|tags?|lozenges?)\b/, {on: 'badge'}],
   [/\bh([1-6])\b/, {on: 'heading'}],
   [/\b(headings?|titles?)\b/, {on: 'heading'}],
   [/\b(modals?|popups?)\b/, {on: 'dialog'}],

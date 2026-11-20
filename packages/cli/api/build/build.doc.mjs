@@ -22,7 +22,7 @@ export const doc = {
     "START from (always one: for a whole page, the template its page-pick model chooses from the page ranker's list and its own word tables, or the app shell when its word weights call the shell; for a part " +
     'of a page, the page it names; else the app shell, unless the idea reads as a whole page, which starts ' +
     'from the closest page template) and the next two templates, ' +
-    'and the unified search grouped around it: the other close page templates, drop-in blocks, and ' +
+    'and the unified search grouped around it: the other close page templates, block examples to read for reference, and ' +
     'idea-specific components/hooks, plus the always-on frame + foundation. A template carries the page ' +
     'frame and spacing, so the kit never recommends composing a page from components.',
   importPath: '@astryxdesign/cli/api',
@@ -40,7 +40,7 @@ export const doc = {
       name: 'options.cwd',
       type: 'string',
       description:
-        'Directory to resolve @astryxdesign/core and templates from.',
+        'Directory to resolve @astryxdesign/core and templates from, and whose theme wiring the playbook names.',
       default: 'process.cwd()',
     },
     {
@@ -65,7 +65,7 @@ export const doc = {
     {
       type: 'build.kit',
       description:
-        "The page template to start from and the kit around it: the echoed query, hasResults/matchCount/directMatch fields, `start` (the template to scaffold, the `template <id> --type page <path>` command that selects it and names where it goes in the project (`<path>` stays a placeholder outside a project), whether the start is also search's direct match, the closest page, or the fallback app shell, the next two `alternatives` in the order the start is chosen from, `fit` on a page-template start (the page-pick model's probability for it among the ready page templates, 0 to 1; 0.4 or more is a clear choice; absent for a template the word tables do not list), and optional `notes` — setup notes naming what the template needs that the project lacks, such as missing packages or a missing StyleX compiler), search's closest page templates that build could start from (≤3), drop-in block patterns (≤5) — each template, the start and its alternatives included, with `isReady` — idea-specific components/hooks (≤6), and the always-on frame + foundation component-name arrays. Carries `hint` only when the kit came back thin — what to try instead, so a caller does not read a near-empty kit as \"the package has nothing\".",
+        "The page template to start from and the kit around it: the echoed query, hasResults/matchCount/directMatch fields, `start` (the template to scaffold, the `template <id> --type page <path>` command that selects it and names where it goes in the project (`<path>` stays a placeholder outside a project), whether the start is also search's direct match, the closest page, or the fallback app shell, the next two `alternatives` in the order the start is chosen from, `fit` on a page-template start (the page-pick model's probability for it among the ready page templates, 0 to 1; 0.4 or more is a clear choice; absent for a template the word tables do not list), and optional `notes` — setup notes naming what the template needs that the project lacks, such as missing packages or a missing StyleX compiler), search's closest page templates that build could start from (≤3), block examples to read for reference, not sections to paste (≤5) — each template, the start and its alternatives included, with `isReady` — idea-specific components/hooks (≤6), and the always-on frame + foundation component-name arrays. Carries `hint` only when the kit came back thin — what to try instead, so a caller does not read a near-empty kit as \"the package has nothing\".",
     },
   ],
   throws: [

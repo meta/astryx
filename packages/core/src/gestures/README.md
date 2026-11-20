@@ -652,15 +652,18 @@ in `../utils/touchPresentation.ts`:
   themselves attach for every pointer (What the browser is told);
 - layout behaviours key on a compact viewport, below the theme's `md`
   width point (`spec:AST-012` FR9): `COMPACT_QUERY` spells the default
-  points for a style, and behaviour reads the active theme's definition, so
-  a theme that moves `md` moves compact with it;
+  points for script, a style uses `touchKeys.compact`, and behaviour reads
+  the active theme's definition, so a theme that moves `md` moves compact
+  with it;
 - a presentation that needs both, a sheet in place of a popover, asks for
   both (`COMPACT_TOUCH_QUERY`).
 
-Styles switch on the same conditions by writing the same query as a StyleX
-media key (`'@media (pointer: coarse)'`, and the compact-touch query spelled
-exactly as `COMPACT_TOUCH_QUERY`, which a test enforces), so the first paint
-is right. Behaviour reads
+Styles switch on the same conditions with StyleX media keys, so the first
+paint is right: `'@media (pointer: coarse)'` for touch, `touchKeys.compact`
+for compact, and the compact key nested inside the touch key for both, each
+spelled exactly as the constant, which a test enforces. The compact key
+negates the size edges, because StyleX rewrites a range query to a length
+that also matches at the edge. Behaviour reads
 `useTouchPresentation()` (SSR-safe), a component with no interaction to
 infer from included (UIKit timings under a finger, its own motion under a
 mouse), and a decision taken once reads `readTouchPresentation()`.

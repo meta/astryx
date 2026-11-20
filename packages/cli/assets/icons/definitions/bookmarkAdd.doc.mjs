@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'bookmarkAdd',
+  group: 'bookmarks',
   description: 'Save something new as a bookmark or a saved view.',
   words: ['add bookmark', 'bookmark plus', 'save view'],
 };

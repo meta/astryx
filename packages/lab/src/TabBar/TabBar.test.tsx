@@ -689,11 +689,13 @@ describe('TabBar More tab', () => {
         {tabs}
       </TabBarMoreList>,
     );
-    const rows = screen.getAllByRole('listitem');
-    const help = rows.find(row => row.textContent?.includes('Help'));
-    const settings = rows.find(row => row.textContent?.includes('Settings'));
-    expect(help).toHaveAttribute('aria-current', 'true');
-    expect(settings).not.toHaveAttribute('aria-current');
+    // The marker is on each row's button, the element that takes focus.
+    expect(screen.getByRole('button', {current: true})).toHaveTextContent(
+      'Help',
+    );
+    expect(screen.getByRole('button', {name: /Settings/})).not.toHaveAttribute(
+      'aria-current',
+    );
   });
 
   it('keeps a disabled tab past the fourth disabled in its More row, which a tap never chooses (spec:AST-085 FR2)', () => {

@@ -8,11 +8,12 @@ import {Button} from '@astryxdesign/core/Button';
 import {Section} from '@astryxdesign/core/Section';
 import {Stack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
+import {useToast} from '@astryxdesign/core/Toast';
 
-const BRIGHT_ROOM_IMAGE_URL =
-  '/template-assets/light-home-square-1.png';
+const BRIGHT_ROOM_IMAGE_URL = '/template-assets/light-home-square-1.png';
 
 export default function MediaThemeLightScrim() {
+  const showToast = useToast();
   return (
     <AspectRatio
       ratio={16 / 9}
@@ -46,7 +47,14 @@ export default function MediaThemeLightScrim() {
             <Text type="supporting" color="secondary">
               Use mode="light" when content sits on a light card or scrim.
             </Text>
-            <Button label="Open" variant="ghost" size="sm" />
+            <Button
+              label="Open"
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                showToast({body: 'Demo: the item would open here'})
+              }
+            />
           </Stack>
         </MediaTheme>
       </Section>

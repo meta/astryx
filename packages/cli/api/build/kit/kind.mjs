@@ -342,7 +342,7 @@ export function asksForNewPage(query, pages) {
  * @param {ComponentWords} component
  * @returns {string[]}
  */
-function nameTerms(component) {
+export function nameTerms(component) {
   return terms(component.name.replace(/([a-z0-9])([A-Z])/g, '$1 $2'));
 }
 

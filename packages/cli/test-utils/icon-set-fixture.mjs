@@ -229,7 +229,7 @@ export function writeIconPackage(dir, spec = {}) {
 /**
  * The source of one icon definition file.
  * @param {string} name
- * @param {{description?: string, words?: string[]}} [fields]
+ * @param {{description?: string, words?: string[], replaces?: string}} [fields]
  */
 export function definitionSource(name, fields = {}) {
   return `/** @type {import('@astryxdesign/cli/authoring').IconDefinitionDoc} */\nexport default ${JSON.stringify(
@@ -238,6 +238,7 @@ export function definitionSource(name, fields = {}) {
       name,
       description: fields.description ?? `The ${name} icon.`,
       words: fields.words ?? [name.toLowerCase()],
+      ...(fields.replaces ? {replaces: fields.replaces} : {}),
     },
     null,
     2,

@@ -6,12 +6,13 @@
  * integration. Drift that Core already had when the check arrived is listed
  * in `core-prop-docs.known-drift.json`; the list only shrinks. A new
  * difference fails here, and so does a listed one that is gone, so fixing a
- * doc means deleting its line.
+ * doc means deleting its line. The Chinese tables (`docsZh`) write their own
+ * types, so their types are held to the code too.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 import {describe, expect, it} from 'vitest';
 import {comparePropDocs} from '../foundation/discovery/prop-drift.mjs';
 
@@ -82,5 +83,27 @@ describe("Core's component docs match Core's props", () => {
       fixed,
       'These no longer differ: delete them from core-prop-docs.known-drift.json.',
     ).toEqual([]);
+  }, 120_000);
+
+  it('the Chinese tables document every type as the code declares it', async () => {
+    // A translation may cover only some props, so only types are compared.
+    const report = await comparePropDocs(corePairs(), {
+      packageDir: CORE,
+      resolveFrom: [CORE],
+      loadDoc: async docPath => {
+        const {docs, docsZh} = await import(pathToFileURL(docPath).href);
+        return {
+          name: docs?.name,
+          props: docsZh?.props,
+          components: docsZh?.components,
+        };
+      },
+    });
+    expect(report.status).toBe('checked');
+    expect(report.components).toBeGreaterThan(0);
+    const wrong = report.findings
+      .filter(f => f.kind === 'type_mismatch')
+      .map(f => `${f.doc} (zh) ${f.component}.${f.prop}: ${f.message}`);
+    expect(wrong, 'Fix these types in the docsZh tables.').toEqual([]);
   }, 120_000);
 });
