@@ -62,7 +62,7 @@ discover sources follow it except where this record says otherwise.
   what it adds as one list per kind, and the latest release a source knows.
   The text view shows a description's first sentence. It MUST then list, once per integration, every package its sources
   offer that the project neither loads nor declares as a dependency, each with
-  the package-manager command that adds it (FR2), and MUST NOT offer a package
+  what adds it (FR2), and MUST NOT offer a package
   whose integration the project has under another name. Official packages come
   first in both lists. An integration that failed to load is left out, even an
   official one; the integration-issues warning and Doctor report it. An
@@ -80,7 +80,9 @@ discover sources follow it except where this record says otherwise.
   included; the default is the installed version, else the latest release. A
   version no source lists MUST fail with `ERR_NOT_FOUND` and suggest releases.
   For a package the project does not have, discover MUST print the
-  package-manager command that adds it, as text, and MUST NOT run it; for an
+  package-manager command that adds it, or in its place the install guidance
+  a loaded integration gives (`spec:AST-039` FR16) for the same package and
+  version, as text, and MUST NOT run it; for an
   alias of a package the project has, it names that package instead. For a
   package the official list supplies, that command pins what FR11 names and
   quotes a range for the shell.
@@ -122,7 +124,10 @@ discover sources follow it except where this record says otherwise.
   In a project that installs an icon-set package or sets
   `experimental.iconSet`, `icon-set` is an additional kind
   (`spec:AST-084/DEC-8`, DEC-13); in any other project discover keeps the six kinds and
-  refuses `--type icon-set` with `ERR_INVALID_OPTION`.
+  refuses `--type icon-set` with `ERR_INVALID_OPTION`. One exception: with icon
+  features off, the list and a search still show the `icon-set` items of
+  packages the project could add, each marked experimental (FR7,
+  `spec:AST-084/FR17`).
 - **FR6 — Sources are functions a project, an integration, or a door
   provides.** A source is an async function that receives
   `{signal, package?, version?}` and resolves to a catalog; `package` asks for
@@ -148,10 +153,14 @@ source, packages}`. `source` has `name`, `generatedAt`, and `complete`. Each
   MUST refuse any other `schemaVersion`, and MUST show versions newest first by
   publish time whatever order the source returned them in. When two sources
   list the same package, the earlier source's entry is used.
-  In a project that installs an icon-set package or sets
-  `experimental.iconSet`, an `icon-set` contribution MAY also carry
-  `iconCount` and `definitions` (`spec:AST-084/DEC-8`, DEC-13); in any other
-  project discover ignores `icon-set` entries and those fields as unknown.
+  An `icon-set` contribution MAY also carry `iconCount`, `license`, and
+  `definitions` (`spec:AST-084/DEC-8`, DEC-13); on any other kind those fields
+  are unknown. In a project that installs an icon-set package or sets
+  `experimental.iconSet`, discover reads `icon-set` entries in full. In any
+  other project, discover reads the `icon-set` entries of packages the project
+  could add, marked experimental, shows none of their `definitions`, answers
+  no installed set, and reads a catalog whose `icon-set` entries do not
+  validate with that kind and those fields unknown.
 - **FR8 — A saved copy covers an unreachable source.** After a source answers,
   discover MUST save that answer, per source and per request, in the per-user
   cache directory of the platform, never in the project. A project's own
@@ -232,7 +241,9 @@ source, packages}`. `source` has `name`, `generatedAt`, and `complete`. Each
   integrations it loads included, and the items of every package those
   copies list and of the official packages no source covers (FR11), kept to
   that kind when one is given, gives at least one match. Search applies no
-  rule of its own. When no saved copy exists, search prints the line. Search
+  rule of its own, except that an `icon-set` item counts only where icon
+  features are on (`spec:AST-017/FR27`: search is a stable command). When no
+  saved copy exists, search prints the line. Search
   MUST NOT call a discover source to decide; it reads only the saved copies
   and the official list. Its JSON output carries no such line.
 

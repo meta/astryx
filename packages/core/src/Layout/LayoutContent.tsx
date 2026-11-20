@@ -4,7 +4,8 @@
 
 /**
  * @file LayoutContent.tsx
- * @input Uses React StyleX, LayoutSlotsContext, useScrollRegionProps
+ * @input Uses React StyleX, LayoutSlotsContext, LayoutContainerContext,
+ *   useScrollRegionProps
  * @output Exports LayoutContent component and LayoutContentProps
  * @position Scrollable main content area for Layout. Wraps the primary body content
  *   with automatic scroll containment and context-aware padding.
@@ -21,6 +22,7 @@ import {use} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import {LayoutSlotsContext} from './LayoutSlotsContext';
+import {LayoutContainerContext} from './LayoutContainerContext';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useScrollRegionProps} from '../hooks/useScrollRegionProps';
 import {mergeProps} from '../utils/mergeProps';
@@ -198,6 +200,7 @@ export function LayoutContent({
 
   const isZeroPadding = padding === 0;
   const region = useScrollRegionProps({isScrollable, role, label});
+  const container = use(LayoutContainerContext);
   const mergedRef = useMergedRefs(ref, region.ref);
 
   return (
@@ -206,7 +209,7 @@ export function LayoutContent({
       role={region.role}
       aria-label={region['aria-label']}
       {...mergeProps(
-        themeProps('layout-content'),
+        themeProps('layout-content', {container}),
         stylex.props(
           styles.content,
           // Outer padding on container edges (unless content is full bleed)

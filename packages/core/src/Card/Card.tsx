@@ -30,6 +30,7 @@ import type {Elevation, SizeValue, SpacingStep} from '../utils/types';
 import {mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
+import {LayoutContainerScope} from '../Layout/LayoutContainerScope';
 import type {CardVariantMap} from './index';
 
 // =============================================================================
@@ -60,6 +61,16 @@ export type CardVariant = keyof CardVariantMap;
 const styles = stylex.create({
   card: {
     '--_card-radius': radiusVars['--radius-container'],
+    // Theme corner variables inherit. Reset them, so a nested surface that the
+    // theme does not style hands out its own radius.
+    '--_card-radius-top-left': 'initial',
+    '--_card-radius-top-right': 'initial',
+    '--_card-radius-bottom-right': 'initial',
+    '--_card-radius-bottom-left': 'initial',
+    '--_card-radius-start-start': 'initial',
+    '--_card-radius-start-end': 'initial',
+    '--_card-radius-end-start': 'initial',
+    '--_card-radius-end-end': 'initial',
     borderRadius: 'var(--_card-radius)',
     // A card in a flex row or grid cell yields to its track instead of
     // holding it at the card's min-content width (a long ID or a nowrap row
@@ -94,8 +105,15 @@ const styles = stylex.create({
   },
   // A full-bleed child reaches under the border, so it takes the outer radius.
   corners: {
-    '--_container-corner-block-start': 'var(--_card-radius)',
-    '--_container-corner-block-end': 'var(--_card-radius)',
+    '--_container-host-radius': 'var(--_card-radius)',
+    '--_container-host-radius-top-left': 'var(--_card-radius-top-left)',
+    '--_container-host-radius-top-right': 'var(--_card-radius-top-right)',
+    '--_container-host-radius-bottom-right': 'var(--_card-radius-bottom-right)',
+    '--_container-host-radius-bottom-left': 'var(--_card-radius-bottom-left)',
+    '--_container-host-radius-start-start': 'var(--_card-radius-start-start)',
+    '--_container-host-radius-start-end': 'var(--_card-radius-start-end)',
+    '--_container-host-radius-end-start': 'var(--_card-radius-end-start)',
+    '--_container-host-radius-end-end': 'var(--_card-radius-end-end)',
   },
   // Fixed-height cards scroll content; overflow: auto also clips to border-radius
   scrollable: {
@@ -329,6 +347,7 @@ export function Card({
                 },
           ),
           styles.corners,
+          containerCornerStyles.fromHostRadius,
           containerCornerStyles.publish,
           // Applied after the container padding so the border-inset calc wins;
           // it reads the --container-padding-* vars set above.
@@ -339,7 +358,7 @@ export function Card({
         style,
       )}
       {...props}>
-      {children}
+      <LayoutContainerScope container="card">{children}</LayoutContainerScope>
     </div>
   );
 }

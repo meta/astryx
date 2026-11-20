@@ -4,7 +4,7 @@
 
 import {TopNavMegaMenuItem} from '@astryxdesign/core/TopNav';
 import {Grid} from '@astryxdesign/core/Grid';
-import {BoltIcon, CircleStackIcon} from '@heroicons/react/24/outline';
+import {BoltIcon, DatabaseIcon} from '@astryxdesign/template-icons';
 
 export default function TopNavMegaMenuItemBasic() {
   return (
@@ -18,7 +18,7 @@ export default function TopNavMegaMenuItemBasic() {
       <TopNavMegaMenuItem
         title="Storage"
         description="Object and file storage for your application"
-        icon={<CircleStackIcon width={20} height={20} />}
+        icon={<DatabaseIcon width={20} height={20} />}
         href="#storage"
       />
     </Grid>

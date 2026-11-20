@@ -207,6 +207,19 @@ describe.skipIf(!POSIX)(
         message:
           '@acme/widgets@1.0.0 is not used here: this folder loads its own copy of @acme/widgets.',
       });
+      // validate checks the copy the folder uses, its own, not the one
+      // installed for the computer; so does a folder inside that source.
+      fs.mkdirSync(path.join(source, 'docs'), {recursive: true});
+      for (const cwd of [source, path.join(source, 'docs')]) {
+        const validated = run(
+          g.bin,
+          ['doctor', 'integration', 'validate', '@acme/widgets'],
+          {cwd, pc},
+        );
+        expect(validated.stdout + validated.stderr).toContain(
+          'Validating integration: @acme/widgets@2.0.0',
+        );
+      }
     });
 
     it('G42 inside a project, an integration installed for the computer is offered only when its peer range admits the project release and it loads', () => {
@@ -494,7 +507,7 @@ describe.skipIf(!POSIX)(
               expect(installs(again)).toBe(0);
               expect(again.lines).toEqual([
                 expect.stringMatching(
-                  /^astryx: could not get Astryx 9\.0\.3 to match this project's Core \(.+; last tried 1 minute ago, tried again after 2 minutes\); answering with CLI 9\.0\.[01] instead$/u,
+                  /^astryx: could not get Astryx 9\.0\.3 to match this project's Core \(.+; last tried 1 minute ago, tried again after 2 minutes or at once when npm's registry changes\); answering with CLI 9\.0\.[01] instead$/u,
                 ),
               ]);
             }
@@ -512,7 +525,7 @@ describe.skipIf(!POSIX)(
             age(3);
             const waiting = await version();
             expect(installs(waiting)).toBe(0);
-            expect(waiting.lines[0]).toMatch(/tried again after 10 minutes\)/u);
+            expect(waiting.lines[0]).toMatch(/tried again after 10 minutes or at once when npm's registry changes\)/u);
           }),
         );
 

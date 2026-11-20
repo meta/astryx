@@ -88,4 +88,41 @@ describe('Toast media side before measurement', () => {
       media(withSurface('#f4f0e8', 'oklch(1 0 0)', '#111111'), 'light'),
     ).toBe('dark');
   });
+
+  it("a system page's card takes its light-page side, with its dark-page side beside it", () => {
+    const flipping = {
+      ...defineTheme({
+        name: 'toast-surface-flipping',
+        tokens: {
+          '--color-background-inverted': ['#0a1317', '#f4f0e8'],
+          '--color-on-dark': ['#ffffff', '#ffffff'],
+          '--color-on-light': ['#111111', '#111111'],
+        },
+      }),
+      __built: true as const,
+    };
+    const markup = (theme: typeof flipping, mode: 'system' | 'dark') =>
+      renderToStaticMarkup(
+        <Theme theme={theme} mode={mode}>
+          <Toast
+            type="info"
+            body="Changes saved"
+            isAutoHide={false}
+            autoHideDuration={0}
+            onDismiss={() => {}}
+          />
+        </Theme>,
+      );
+    const system = markup(flipping, 'system');
+    expect(/data-astryx-media="([a-z]+)"/.exec(system)?.[1]).toBe('dark');
+    expect(system).toContain('data-astryx-media-dark-page="light"');
+    // A forced mode is known on the server: one side, no dark-page side.
+    const dark = markup(flipping, 'dark');
+    expect(/data-astryx-media="([a-z]+)"/.exec(dark)?.[1]).toBe('light');
+    expect(dark).not.toContain('data-astryx-media-dark-page');
+    // A card that takes one side in both page modes needs none either.
+    expect(markup(withSurface('#0a1317'), 'system')).not.toContain(
+      'data-astryx-media-dark-page',
+    );
+  });
 });

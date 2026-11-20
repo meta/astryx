@@ -294,7 +294,7 @@ describe('a stored manifest', () => {
           ],
         },
         {name: 'experimental', available: true, subcommands: [
-          {name: 'experimental render', requires: ['render.page'], available: true},
+          {name: 'experimental export', requires: ['render.page'], available: true},
         ]},
       ],
     });
@@ -485,8 +485,9 @@ const DECLARED = {
   'theme add': ['themes.appModule'],
   'theme use': ['themes.appModule'],
   'theme remove': ['themes.appModule'],
-  'experimental render': ['render.page'],
-  'experimental render --reverse': ['render.reverse'],
+  'experimental export': ['render.page'],
+  'experimental export --reverse': ['render.reverse'],
+  'experimental import': ['render.reverse'],
   'experimental theme compile': ['themes.compile'],
   'experimental theme add': ['themes.appModule'],
   'experimental theme use': ['themes.appModule'],
@@ -587,6 +588,46 @@ describe('a project whose only base is not Core', () => {
       expect(template.stdout.trimEnd().split('\n').at(-1)).toBe(
         '2 options hidden: the active base @acme/native-ui does not provide the steps they need.',
       );
+    },
+    SLOW,
+  );
+
+  it(
+    'names in option help only what the base serves',
+    () => {
+      const dir = project({'@acme/native-ui': CONTENT_BASE});
+      const help = astryx(['template', '--help'], dir);
+      expect(help.status).toBe(0);
+      expect(help.stdout).toContain(
+        'do nothing else: <name>, <path> and --overwrite are refused',
+      );
+      expect(help.stdout).toContain(
+        'Narrow to templates from a specific package.',
+      );
+      expect(help.stdout).not.toContain('--skeleton');
+      expect(help.stdout).not.toContain('@astryxdesign/core');
+      const json = JSON.stringify(
+        astryx(['--json', 'template', '--help'], dir).json().data,
+      );
+      expect(json).not.toContain('--skeleton');
+      expect(json).not.toContain('@astryxdesign/core');
+      const mcp = astryx(['mcp', '--help'], dir);
+      expect(mcp.status).toBe(0);
+      expect(mcp.stdout).toContain('discover, theme list), one message at a time');
+      expect(mcp.stdout).not.toContain('theme targets');
+    },
+    SLOW,
+  );
+
+  it(
+    'suggests no experimental export for a share word where the base does not serve it',
+    () => {
+      const dir = project({'@acme/native-ui': CONTENT_BASE});
+      const run = astryx(['share', 'page.tsx'], dir);
+      expect(run.status).toBe(1);
+      expect(run.stdout + run.stderr).not.toContain('experimental export');
+      const json = astryx(['--json', 'share', 'page.tsx'], dir);
+      expect(JSON.stringify(json.json())).not.toContain('experimental export');
     },
     SLOW,
   );

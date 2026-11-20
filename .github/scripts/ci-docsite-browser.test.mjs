@@ -17,6 +17,7 @@ import {spawnSync} from 'node:child_process';
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 import {PR_CI_GATE, PR_REPORT_GATE, gated} from './ci-pr-gate.mjs';
+import {withoutCheckoutRetries} from './lib/checkout-retries.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const {jobs} = yaml.parse(
@@ -43,7 +44,9 @@ describe('docsite-build', () => {
         PR_CI_GATE,
       ),
     );
-    expect(build.steps.findIndex(s => s.id === 'scope')).toBe(1);
+    expect(
+      withoutCheckoutRetries(build.steps).findIndex(s => s.id === 'scope'),
+    ).toBe(1);
     const builds = Object.values(jobs).flatMap(job =>
       (job.steps ?? []).filter(s =>
         /pnpm -F @astryxdesign\/docsite build/.test(s.run ?? ''),
@@ -231,8 +234,11 @@ describe('docsite-browser', () => {
     expect(check.run).toContain('test "$built" = "$here"');
     // The checkout is the commit the build job checked out: no ref.
     expect(browser.steps[0]).toEqual({
+      name: 'Check out the repository',
+      id: 'checkout',
       uses: 'actions/checkout@v7',
-      'timeout-minutes': 8,
+      'timeout-minutes': 5,
+      'continue-on-error': true,
     });
     expect(
       browser.steps.some(s => /docsite build|next build/.test(s.run ?? '')),
@@ -307,7 +313,11 @@ describe('docsite-test, the required join', () => {
         PR_REPORT_GATE,
       ),
     );
-    expect(join.steps.slice(0, 6).map(s => s.name)).toEqual([
+    expect(
+      withoutCheckoutRetries(join.steps)
+        .slice(0, 6)
+        .map(s => s.name),
+    ).toEqual([
       'Require a branch in this repository or the ci:run label',
       'Stop when CI is full',
       'Check out the superseded-runs action',

@@ -27,10 +27,11 @@ import * as path from 'node:path';
 import {themeFileImports} from '../../foundation/discovery/theme-discovery.mjs';
 import {pathToFileURL} from 'node:url';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
-import {AstryxError} from '../error.mjs';
+import {AstryxError, brokenInstallError} from '../error.mjs';
 import {logger} from '../logger.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {cssUnescape} from '../../foundation/text/css-escape.mjs';
+import {TS_SOURCES} from '../../foundation/render/ts-paths.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {coreVarValues} from './_parts.mjs';
 import {
@@ -82,6 +83,7 @@ import {
   WRAPPED_PARTS,
   CARD_LIKE,
   SHOWCASE_GROUPS,
+  onlyMeans,
 } from './_tables.mjs';
 import {TOP_BAR_COMPONENTS} from './_catalog.mjs';
 import {
@@ -119,14 +121,15 @@ import {
   syncPaletteRefs,
   refuseIfLockLost,
   lockHeld,
-  removeEmptyFolder,
   writeWhole,
   setOwnTokenReader,
   readRecordIn,
   readRegularFile,
   readWrittenRecord,
   writeWrittenRecord,
+  familyRamp,
 } from './_palette.mjs';
+import {removeEmptyFolder} from '../../foundation/fs/empty-folder.mjs';
 import {EDITOR_STAMP, pngTexts} from './_png.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
 import {
@@ -172,7 +175,7 @@ setOwnTokenReader((cwd, slug) => ownSourceTokenValues(cwd, slug));
 /** What lifted secondary text sits on: the contrast check measures it there. */
 const LIFT_GROUND_TOKENS = new Set(LIFT_PARTS.map(([, , g]) => g));
 
-/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, uncheckedCode?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}, keepStops?: Record<string, Record<'light' | 'dark', {family: string, stop: number, alpha?: string}>> | null, keepRadii?: Record<string, string> | null, sizeNotes?: string[], compileNotes?: string[], derived?: Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string}>>, takesPictures?: {sheet: string | null} | null}} Ctx */
+/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, uncheckedCode?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}, keepStops?: Record<string, Record<'light' | 'dark', {family: string, stop: number, alpha?: string}>> | null, keepRadii?: Record<string, string> | null, sizeNotes?: string[], compileNotes?: string[], derived?: Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string, corners?: boolean}>>, takesPictures?: {sheet: string | null} | null}} Ctx */
 /** @typedef {import('./_parts.mjs').PaintSide} PaintSide */
 /** @typedef {import('./_parts.mjs').TextPair} TextPair */
 
@@ -1692,7 +1695,7 @@ export function settingsProblem(
     if (s.only != null && s.only !== true)
       return `${s.thing} has only ${JSON.stringify(s.only)}, not true or false`;
     if (s.only === true && !onlyFits(s))
-      return `${describe({...s, only: undefined, value: '?'}).replace(' = ?', '')} has only, which is for one member of a group styled alike (${AUTO_SPREAD.join(', ')})`;
+      return `${describe({...s, only: undefined, value: '?'}).replace(' = ?', '')} has only, which is for one member of a group (${s.on ? `not the ${s.on} group itself` : 'it names no part'})`;
     const key = keyOf(s);
     // The command that changes or removes a setting listed twice keeps one
     // value, or none, so it fixes the list. An entry with a twin is named
@@ -2331,7 +2334,58 @@ function readEntryWords(data, early = /** @type {string[]} */ ([])) {
       }
     }
   }
+  readMeaninglessOnly(data, notes);
   ENTRY_NOTES.set(data, notes);
+}
+
+/**
+ * An `only` that means nothing where it is saved (on a part styled on its
+ * own, onlyMeans: an editor that took --only there saved it) is read as
+ * without it, which is how the build applies it, and said once. Read so, an entry can fall on the place of another
+ * (a plain one beside it): the later one is the one the build shows, so it
+ * is kept, and the earlier one is named.
+ * @param {any} data
+ * @param {string[]} notes
+ */
+function readMeaninglessOnly(data, notes) {
+  if (!Array.isArray(data?.settings)) return;
+  /** @type {Set<any>} */
+  const read = new Set();
+  for (const s of data.settings) {
+    if (
+      !s ||
+      typeof s.thing !== 'string' ||
+      s.only !== true ||
+      typeof s.on !== 'string' ||
+      onlyMeans(s.on) !== 'own'
+    )
+      continue;
+    delete s.only;
+    read.add(s);
+    notes.push(
+      `${describe({...s, value: '?'}).replace(' = ?', '')} was saved with only, which changes nothing there (${s.on} is styled on its own already; only ${AUTO_SPREAD.join(' and ')} spread to their group), so it is read as without it; the next change saves it so`,
+    );
+  }
+  if (!read.size) return;
+  /** @type {Map<string, any>} */
+  const last = new Map();
+  for (const s of data.settings)
+    if (s && typeof s.thing === 'string') last.set(keyOf(s), s);
+  const dropped = data.settings.filter(
+    (/** @type {any} */ s) =>
+      s &&
+      typeof s.thing === 'string' &&
+      last.get(keyOf(s)) !== s &&
+      (read.has(s) || read.has(last.get(keyOf(s)))),
+  );
+  if (!dropped.length) return;
+  data.settings = data.settings.filter(
+    (/** @type {any} */ s) => !dropped.includes(s),
+  );
+  for (const s of dropped)
+    notes.push(
+      `${describe(s)} sits where a later entry of the same setting does, read without only, and that later one is the one that shows; the earlier one is left out`,
+    );
 }
 
 /** @type {WeakMap<object, string[]>} */
@@ -2375,15 +2429,13 @@ export function entryDamage(s) {
 }
 
 /**
- * Whether `only` fits a setting: it names one member of a group styled
- * alike (a text input of inputs), as `set --only` takes it.
+ * Whether a saved `only` reads, as `set --only` reads it (onlyMeans): on a
+ * part, a member of a group or not (on one styled on its own it changes
+ * nothing, and the entry builds as without it); never on a group itself.
  * @param {any} s
  */
 function onlyFits(s) {
-  const fam = typeof s.on === 'string' ? familyOf(s.on) : null;
-  return Boolean(
-    fam && !FAMILIES[s.on] && AUTO_SPREAD.includes(/** @type {string} */ (fam)),
-  );
+  return typeof s.on === 'string' && onlyMeans(s.on) !== 'group';
 }
 
 /**
@@ -4368,7 +4420,7 @@ export function partsOf(ctx, s) {
         : members;
   if (FAMILIES[s.on]) return spread(FAMILIES[s.on].filter(has));
   const fam = familyOf(s.on);
-  if (fam && AUTO_SPREAD.includes(fam) && !s.only)
+  if (fam && onlyMeans(s.on) === 'member' && !s.only)
     return spread(FAMILIES[fam].filter(has).filter(m => drawnAlike(ctx, s, m)));
   return [s.on];
 }
@@ -5024,7 +5076,7 @@ const ROLE_OF_DIAL = /** @type {const} */ ({
  * token) must be written onto a part for it to show, because the base theme
  * draws that role there on its own:
  * - a variant named for the role in a color of the base's palette written
- *   out (butter's success badge, stone's success progress fill) points at
+ *   out (butter's success badge) points at
  *   the role's token, as Core draws that variant;
  * - a role token the base points at another token on a part (stone's
  *   success banner at its green) takes the theme's own value there
@@ -5111,8 +5163,37 @@ export function roleReach(ctx, data, base) {
           ['color', 'text'],
         ])) {
           const v = look[prop];
-          if (typeof v !== 'string' || /var\(/.test(v)) continue;
-          if (!modes.every(m => literal(v, m) != null)) continue;
+          if (typeof v !== 'string') continue;
+          // A token of another family (stone's info badge on the
+          // categorical blue): the role token the base theme gives that same
+          // color takes its place, so the look stays and follows the role.
+          const ref = /^var\(\s*(--[\w-]+)\s*\)$/.exec(v.trim())?.[1];
+          if (ref) {
+            if (new RegExp(`-${named}(-|$)`).test(ref)) continue;
+            const same = (/** @type {string} */ k) =>
+              modes.filter(
+                m =>
+                  base?.[m]?.[k] != null &&
+                  String(base[m][k]).toLowerCase() ===
+                    String(base?.[m]?.[ref] ?? '').toLowerCase(),
+              ).length;
+            const pick = (
+              side === 'text'
+                ? [
+                    `--color-on-${named}-muted`,
+                    `--color-text-${named}`,
+                    `--color-on-${named}`,
+                  ]
+                : [`--color-${named}-muted`, `--color-${named}`]
+            )
+              .map(k => ({k, n: same(k)}))
+              .filter(x => x.n > 0)
+              .sort((x, y) => y.n - x.n)[0]?.k;
+            if (pick) {
+              add(prop, `var(${pick})`);
+              continue;
+            }
+          } else if (!modes.every(m => literal(v, m) != null)) continue;
           const core = (ctx.C.partReads(part, side) ?? []).find(
             (/** @type {any} */ r) => r.when.includes(`variant=${named}`),
           )?.token;
@@ -5447,7 +5528,9 @@ export function compileTheme(ctx, data, base) {
    * children), as each corner's own radius, so Core writes no copy of the
    * whole value there (where one corner reads it, and `10px / 20px` or four
    * values are wrong). The inner variable takes one radius, the first
-   * corner's across: Core gives the content one radius for every corner.
+   * corner's across. A Core whose entry has `corners` writes each corner's
+   * variable from the longhands, so the content takes each corner; an older
+   * Core gives the content the first corner's radius for all four.
    * Null for any other property, part or a single radius.
    * @param {string} target @param {Setting} s
    * @returns {Record<string, string> | null}
@@ -6643,6 +6726,13 @@ export function compileTheme(ctx, data, base) {
             // build by an earlier editor, or a step back) are kept, as the
             // colors are: they change only when corners or the base does.
             putTok(token, ctx.keepRadii?.[token] ?? derived(token));
+          // Chat surfaces (a composer, its drawer, a message bubble) read
+          // --radius-chat, which Core defaults to the container radius and
+          // the bundled themes pin to a value of their own: the dial gives it
+          // back to the container radius, as Core's own default does, so it
+          // follows whatever container radius the theme ends up with (the
+          // dial's, or an exact one set after it).
+          putTok('--radius-chat', 'var(--radius-container)');
           // A part rule of the base theme that gives a radius other than the
           // dial token the part reads (a length, or a token the dial never
           // moves, such as --radius-full) would keep it over the dial: the
@@ -8212,7 +8302,7 @@ const MODULE_EXTENSIONS = [
 /**
  * The file a relative import names, resolved as TypeScript resolves it: a
  * JavaScript extension names its TypeScript source (`.js` → `.ts`/`.tsx`,
- * `.jsx` → `.tsx`, `.mjs` → `.mts`, `.cjs` → `.cts`), then the path as
+ * `.jsx` → `.tsx`/`.ts`, `.mjs` → `.mts`, `.cjs` → `.cts`), then the path as
  * written, with each module extension, and as a folder's index file.
  * @param {string} dir
  * @param {string} spec
@@ -8222,12 +8312,7 @@ export function localModuleFile(dir, spec) {
   const base = path.resolve(dir, spec);
   const ext = path.extname(base);
   const stem = base.slice(0, base.length - ext.length);
-  const sourceFor = /** @type {Record<string, string[]>} */ ({
-    '.js': ['.ts', '.tsx'],
-    '.jsx': ['.tsx'],
-    '.mjs': ['.mts'],
-    '.cjs': ['.cts'],
-  })[ext];
+  const sourceFor = TS_SOURCES[ext];
   return [
     ...(sourceFor ?? []).map(x => stem + x),
     base,
@@ -11580,17 +11665,37 @@ function placeholderProblems(ctx, data, res, base) {
       });
       continue;
     }
-    // The nearest color, toward black or white (whichever stands out on
-    // the page), that shows on the page and the surface at the peak.
-    const end = /** @type {[number, number, number]} */ (
-      parseColor(plainOn(page))
+    // The theme's own gray nearest the placeholder's color that shows on
+    // the page and the surface at the peak; else the nearest shade of the
+    // placeholder's own color, darker or lighter (whichever stands out on
+    // the page), with its hue and colorfulness kept.
+    const lab = (/** @type {string} */ x) => oklabCoordinates(x);
+    const [l0, ca, cb] = lab(hex(c0));
+    const grays = Object.values(
+      familyRamp(ctx.project.cwd, data.name, data, base, 'neutral')?.[m] ?? {},
+    )
+      .filter(x => parseColor(String(x)))
+      .map(x => {
+        const [l, a1, b1] = lab(String(x));
+        return {x: String(x), d: Math.hypot(l - l0, a1 - ca, b1 - cb)};
+      })
+      .sort((p, q) => p.d - q.d);
+    let fix = /** @type {string | null} */ (
+      grays.find(
+        g =>
+          worst(/** @type {[number, number, number]} */ (parseColor(g.x))) >=
+          PLACEHOLDER_SHOWS,
+      )?.x ?? null
     );
-    let fix = /** @type {string | null} */ (null);
-    for (let i = 0; i <= 100 && !fix; i++) {
-      const c = /** @type {[number, number, number]} */ (
-        c0.map((x, k) => Math.round(x + ((end[k] - x) * i) / 100))
-      );
-      if (worst(c) >= PLACEHOLDER_SHOWS) fix = hex(c);
+    const away = plainOn(page) === '#000000' ? -1 : 1;
+    for (let i = 1; i <= 100 && !fix; i++) {
+      const shade = oklabCoordinatesToHex([
+        Math.max(0, Math.min(1, l0 + (away * i) / 200)),
+        ca,
+        cb,
+      ]);
+      const c = /** @type {[number, number, number]} */ (parseColor(shade));
+      if (worst(c) >= PLACEHOLDER_SHOWS) fix = shade;
     }
     out.push({
       key: `placeholder|${m}`,
@@ -11644,20 +11749,32 @@ function buttonStyleProblems(ctx, data, res) {
     style.value === 'soft'
       ? {fill: 'var(--color-accent-muted)', color: 'var(--color-text-accent)'}
       : {fill: 'transparent', color: 'var(--color-text-accent)'};
-  /** A later setting of a property on the primary button, in a mode. @param {RegExp} thing @param {string} m */
-  const later = (thing, m) =>
-    [...data.settings.slice(at + 1)]
-      .reverse()
-      .find(
-        y =>
-          y.source === 'property' &&
-          thing.test(y.thing) &&
-          !y.state &&
-          (!y.mode || y.mode === m) &&
-          y.on &&
-          (!y.when || y.when === 'variant:primary') &&
-          partsOf(ctx, y).includes('button'),
-      ) ?? null;
+  /**
+   * The setting of a property that wins on the primary button, in a mode:
+   * an exact property on the primary variant's own rule, set before the
+   * style or after (an exact property wins over a dial on the same rule);
+   * else a later one on the plain rule.
+   * @param {RegExp} thing @param {string} m
+   */
+  const later = (thing, m) => {
+    /** @param {import('./_settings.mjs').Setting} y */
+    const fits = y =>
+      y.source === 'property' &&
+      thing.test(y.thing) &&
+      !y.state &&
+      (!y.mode || y.mode === m) &&
+      !!y.on &&
+      partsOf(ctx, y).includes('button');
+    return (
+      [...data.settings]
+        .reverse()
+        .find(y => fits(y) && y.when === 'variant:primary') ??
+      [...data.settings.slice(at + 1)]
+        .reverse()
+        .find(y => fits(y) && !y.when) ??
+      null
+    );
+  };
   /** @type {ThemeProblem[]} */
   const out = [];
   for (const m0 of modes) {
@@ -12880,6 +12997,10 @@ export function radiusAt(base, value, token) {
     const atPill = Math.max(32, 1.5 * roundPx * ratio(token, 2.5));
     return Math.round(pill ? atPill : Math.min(atPill, px * ratio(token, 2.5)));
   }
+  // Chat surfaces are on the container step (Core's chat radius defaults to
+  // the container radius): the container radius at this value.
+  if (token === '--radius-chat')
+    return radiusAt(base, value, '--radius-container');
   return pill ? 9999 : px;
 }
 
@@ -13872,7 +13993,8 @@ export async function commitTheme(
         ],
         ERROR_CODES.ERR_WRITE_FAILED,
       );
-    // The color config's own refusals already name the file and the fix.
+    // The color config's own refusals already name the file and the fix,
+    // as a broken install's refusal names the package and the install.
     if (
       e instanceof AstryxError &&
       (e.code === ERROR_CODES.ERR_UNKNOWN_THEME ||
@@ -13880,9 +14002,14 @@ export async function commitTheme(
         e.code === ERROR_CODES.ERR_PALETTE_GENERATION ||
         e.code === ERROR_CODES.ERR_WRITE_FAILED ||
         e.code === ERROR_CODES.ERR_THEME_BUSY ||
-        e.code === ERROR_CODES.ERR_THEME_BAD_VALUE)
+        e.code === ERROR_CODES.ERR_THEME_BAD_VALUE ||
+        e.code === ERROR_CODES.ERR_DEP_MISSING)
     )
       throw e;
+    // A package the build loads that the install lacks is not the theme's
+    // fault: named as the broken install it is.
+    const broken = brokenInstallError(e, cwd, 'Nothing was changed.');
+    if (broken) throw broken;
     // A folder where a built file goes: named for the editor, which has no
     // --out to pick.
     const folder =

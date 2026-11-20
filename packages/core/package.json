@@ -724,6 +724,11 @@
       "types": "./dist/i18n/index.d.ts",
       "default": "./dist/i18n/index.js"
     },
+    "./palette": {
+      "source": "./src/palette/index.ts",
+      "types": "./dist/palette/index.d.ts",
+      "default": "./dist/palette/index.js"
+    },
     "./theme": {
       "source": "./src/theme/index.ts",
       "types": "./dist/theme/index.d.ts",

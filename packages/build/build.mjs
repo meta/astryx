@@ -44,6 +44,16 @@ content = content.replaceAll(
   'resolve(__dirname, "swizzle-marker.js")',
   'resolve(__dirname, "../src/swizzle-marker.js")',
 );
+// So do the prebuilt stylesheet names and the empty stylesheet that
+// replaces Core's prebuilt one.
+content = content.replaceAll(
+  'resolve(__dirname, "source-stylesheet.js")',
+  'resolve(__dirname, "../src/source-stylesheet.js")',
+);
+content = content.replaceAll(
+  'resolve(__dirname, "replaced-stylesheet.css")',
+  'resolve(__dirname, "../src/replaced-stylesheet.css")',
+);
 writeFileSync('dist/vite.mjs', content);
 
 console.log('Built dist/vite.mjs');
