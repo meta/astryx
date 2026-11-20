@@ -16,6 +16,7 @@ import {
   PALETTE_WHITE,
   serializeGenerationResult,
 } from './generator.mjs';
+import {newerRecipe, newerRecipeRefusal} from './newer-recipe.mjs';
 import {PALETTE_PREVIEW_VERSION, renderPalettePreview} from './preview.mjs';
 
 /** Format of the TypeScript candidate module written for a `.ts` output. */
@@ -348,6 +349,15 @@ export function themePaletteGenerate(
       undefined,
       ERROR_CODES.ERR_PALETTE_GENERATION,
     );
+  }
+
+  const newer = newerRecipe(request?.recipe);
+  if (newer) {
+    throw newerRecipeRefusal({
+      recipe: newer,
+      file: path.relative(cwd, resolvedConfig),
+      cwd,
+    });
   }
 
   /** @type {PaletteGenerationResult} */

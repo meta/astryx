@@ -189,22 +189,24 @@ describe('one-mode themes', () => {
     expect(cssOf('o2')).toMatch(/--shadow-high: none;/);
   }, 240_000);
 
-  it('keeps --when and --state in the command it offers for a refused --mode', async ctx => {
+  it("keeps --when and --state when a one-mode theme's own --mode is read as none", async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('o3', {cwd, like: 'neutral'});
     await themeEditSet('o3', 'mode', 'dark-only', {cwd});
-    // The theme's own mode needs no --mode; the other mode is taken for the
-    // regions Core draws in it.
-    const r = await refusal(() =>
-      themeEditSet('o3', 'background', '#ff0000', {
-        cwd,
-        on: 'button',
-        when: 'variant:primary',
-        state: 'hover',
-        mode: 'dark',
-      }),
-    );
-    expect(r.run[0]).toMatch(/--when variant:primary --state hover$/);
+    // The theme's own mode is the same as no --mode; the other mode is
+    // taken for the regions Core draws in it.
+    const r = await themeEditSet('o3', 'background', '#ff0000', {
+      cwd,
+      on: 'button',
+      when: 'variant:primary',
+      state: 'hover',
+      mode: 'dark',
+    });
+    expect(r.data.setting).toMatchObject({
+      on: 'button',
+      when: 'variant:primary',
+      state: 'hover',
+    });
   }, 240_000);
 });
 

@@ -4,6 +4,7 @@ import type {Meta, StoryObj} from '@storybook/react';
 import {expect, userEvent, waitFor, within} from 'storybook/test';
 import {useState} from 'react';
 import {Button} from '@astryxdesign/core/Button';
+import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {InputGroup, InputGroupText} from '@astryxdesign/core/InputGroup';
 import {MultiSelector} from '@astryxdesign/core/MultiSelector';
@@ -885,7 +886,7 @@ export const RowActions: Story = {
     const action = (label: string) => (
       <IconButton
         label={`Edit ${label}`}
-        icon="moreHorizontal"
+        icon={<Icon icon="moreHorizontal" />}
         variant="ghost"
         size="sm"
         tooltip={`Edit ${label}`}
@@ -948,7 +949,7 @@ export const RowActionsRtl: Story = {
               action: (
                 <IconButton
                   label="Edit Bug"
-                  icon="moreHorizontal"
+                  icon={<Icon icon="moreHorizontal" />}
                   variant="ghost"
                   size="sm"
                 />

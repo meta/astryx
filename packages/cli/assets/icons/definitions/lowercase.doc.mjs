@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'lowercase',
+  group: 'textCase',
   description: 'Make text all small letters.',
   words: ['lower case', 'small letters'],
 };

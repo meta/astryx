@@ -89,7 +89,7 @@ export async function buildHelp(options = {}) {
           title: 'Find the page template to start from',
           commands: [{command: 'build "<what you\'re building>"'}],
           returns:
-            'the [page] template to start from (always one: the closest match, or the app shell when nothing matches), the next two templates, and the [block]s and [component]s for the parts it lacks',
+            'the [page] template to start from (always one: the closest match, or the app shell when nothing matches), the next two templates, the [component]s for the parts it lacks, and [block] examples to read',
         },
         {
           title: 'Scaffold that template into your project',
@@ -106,7 +106,7 @@ export async function buildHelp(options = {}) {
             {
               command: 'template <BlockName>',
               purpose:
-                'print a block to put inside a section, for a part the template lacks',
+                "read a block example for a part the template lacks, then write that part in the template's style",
             },
             {
               command: 'component <Name>',
@@ -118,7 +118,7 @@ export async function buildHelp(options = {}) {
       ],
       rules: [
         'Start every page from a page template. Never lay out a page from scratch.',
-        'Changing a page you already have? Keep it. Add blocks and components inside its sections.',
+        'Changing a page you already have? Keep it. Add components inside its sections; read a block example when it helps.',
         "Keep the template's page frame, gap, and padding values. Replace its data, copy, and sections.",
         'No <div>/raw HTML for layout — use VStack/HStack/Grid/Stack/Card etc.',
         'No style={{}} — use component props, and design tokens for values.',

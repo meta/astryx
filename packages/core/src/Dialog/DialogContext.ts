@@ -24,11 +24,12 @@ export interface DialogContextValue {
    */
   titleId?: string;
   /**
-   * Checks the default aria-labelledby again. The dialog looks for its title
-   * when it mounts; a composed header whose title element appears, changes,
-   * or leaves after that calls this so the dialog's name follows it.
+   * Sets the dialog's default name from its header title: `true` when the
+   * title mounts, `false` when it unmounts. With no argument, the dialog
+   * looks for the title again. A caller's `aria-label` or `aria-labelledby`
+   * wins either way.
    */
-  syncDefaultName?: () => void;
+  syncDefaultName?: (isTitleMounted?: boolean) => void;
 }
 
 export const DialogContext = createSharedContext<DialogContextValue | null>(

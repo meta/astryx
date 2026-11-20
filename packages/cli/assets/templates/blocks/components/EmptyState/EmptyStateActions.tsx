@@ -5,14 +5,14 @@
 import {EmptyState} from '@astryxdesign/core/EmptyState';
 import {Button} from '@astryxdesign/core/Button';
 import {Icon} from '@astryxdesign/core/Icon';
-import {MagnifyingGlassIcon} from '@heroicons/react/24/outline';
+import {SearchIcon} from '@astryxdesign/template-icons';
 import {useToast} from '@astryxdesign/core/Toast';
 
 export default function EmptyStateActions() {
   const showToast = useToast();
   return (
     <EmptyState
-      icon={<Icon icon={MagnifyingGlassIcon} size="lg" />}
+      icon={<Icon icon={SearchIcon} size="lg" />}
       title="No results found"
       description="Try adjusting your search terms or clearing filters to see more results."
       actions={

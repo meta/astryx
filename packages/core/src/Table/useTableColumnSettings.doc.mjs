@@ -6,7 +6,7 @@ export const docs = {
   name: 'useTableColumnSettings',
   subComponentOf: 'Table',
   displayName: 'useTableColumnSettings',
-  description: 'Headless column visibility and ordering management for Table. Provides filtered columns, toggle helpers, and pre-built MultiSelector options for a column picker UI.',
+  description: 'Headless column visibility and ordering management for Table. T is the row type; TypeScript cannot infer it from the config, so it defaults to Record<string, unknown>, which a Table with typed rows rejects: pass it, as in `useTableColumnSettings<Walk>(…)` for `<Table<Walk>>`. When the column keys have a narrower type than string (a union, or keys that useTableColumnSettingsState infers from its columns), pass both: `useTableColumnSettings<Walk, WalkColumnKey>(…)`. Provides filtered columns, toggle helpers, and pre-built MultiSelector options for a column picker UI.',
   props: [
     {
       name: 'columns',
@@ -37,7 +37,7 @@ export const docs = {
 export const docsZh = {
   name: 'useTableColumnSettings',
   displayName: 'useTableColumnSettings',
-  description: '无头列可见性和排序管理。提供筛选后的列、切换帮助方法和 MultiSelector 选项。',
+  description: '无头列可见性和排序管理。T 是行类型；TypeScript 无法从配置推断它，因此默认为 Record<string, unknown>，带类型行的 Table 不接受：请传入，例如 `useTableColumnSettings<Walk>(…)` 对应 `<Table<Walk>>`。列键的类型比 string 更窄时（联合类型，或 useTableColumnSettingsState 从 columns 推断出的键），请传入两个类型参数：`useTableColumnSettings<Walk, WalkColumnKey>(…)`。提供筛选后的列、切换帮助方法和 MultiSelector 选项。',
   props: [
     {
       name: 'columns',
@@ -63,7 +63,7 @@ export const docsZh = {
 export const docsDense = {
   name: 'useTableColumnSettings',
   displayName: 'useTableColumnSettings',
-  description: 'Headless column visibility/ordering. Provides filtered columns, toggle helpers, MultiSelector options.',
+  description: 'Headless column visibility/ordering. T = row type, not inferred from config (defaults to Record<string, unknown>, rejected by typed Table): pass it, e.g. `useTableColumnSettings<Walk>(…)`; narrower column-key type => pass both: `useTableColumnSettings<Walk, WalkColumnKey>(…)`. Provides filtered columns, toggle helpers, MultiSelector options.',
   propDescriptions: {
     columns: 'All available columns w/ metadata (key, label, isAlwaysVisible, group).',
     activeColumnKeys: 'Active column keys in display order.',

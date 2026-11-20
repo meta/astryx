@@ -33,6 +33,42 @@ export interface DerivedVarEntry {
    * element both reads the var and applies the property, e.g. Chat/DropdownMenu).
    */
   replaces?: boolean;
+  /**
+   * A `borderRadius` entry whose component also reads each corner on its
+   * own. The theme pipeline writes each corner of the radius to its own
+   * variable, `<var>-<corner>` (see `radiusCornerVars`). A radius of
+   * different corners then reaches what the component hands each corner to,
+   * such as a full-bleed child of a Card.
+   */
+  corners?: boolean;
+}
+
+/** The physical corners of a radius, top-left first and clockwise. */
+export const PHYSICAL_RADIUS_CORNERS = [
+  'top-left',
+  'top-right',
+  'bottom-right',
+  'bottom-left',
+] as const;
+
+/** The logical corners of a radius, as `border-start-start-radius` names them. */
+export const LOGICAL_RADIUS_CORNERS = [
+  'start-start',
+  'start-end',
+  'end-start',
+  'end-end',
+] as const;
+
+/**
+ * The corner variables the theme pipeline writes for a `corners` entry's
+ * variable, physical corners first.
+ *
+ * @example radiusCornerVars('--_card-radius')[0] -> '--_card-radius-top-left'
+ */
+export function radiusCornerVars(varName: string): string[] {
+  return [...PHYSICAL_RADIUS_CORNERS, ...LOGICAL_RADIUS_CORNERS].map(
+    corner => `${varName}-${corner}`,
+  );
 }
 
 /**
@@ -48,24 +84,35 @@ export const derivedVarRegistry: Record<string, DerivedVarEntry[]> = {
   'bottom-sheet': [{property: 'padding', expand: 'container'}],
   button: [{property: 'borderRadius', vars: ['--_button-radius']}],
   card: [
-    {property: 'borderRadius', vars: ['--_card-radius']},
+    {property: 'borderRadius', vars: ['--_card-radius'], corners: true},
     {property: 'padding', expand: 'container'},
   ],
   'chat-composer': [
     {property: 'borderRadius', vars: ['--_chat-composer-radius']},
     {property: 'padding', vars: ['--_chat-composer-padding']},
   ],
+  'checkbox-input': [
+    {property: 'gap', vars: ['--_checkbox-input-gap'], replaces: true},
+  ],
   dialog: [
-    {property: 'borderRadius', vars: ['--_dialog-radius']},
+    {property: 'borderRadius', vars: ['--_dialog-radius'], corners: true},
     {property: 'padding', expand: 'container'},
   ],
   drawer: [{property: 'padding', expand: 'container'}],
   'context-menu': [
-    {property: 'borderRadius', vars: ['--_dropdown-menu-radius']},
+    {
+      property: 'borderRadius',
+      vars: ['--_dropdown-menu-radius'],
+      corners: true,
+    },
     {property: 'padding', vars: ['--_dropdown-menu-padding']},
   ],
   'dropdown-menu': [
-    {property: 'borderRadius', vars: ['--_dropdown-menu-radius']},
+    {
+      property: 'borderRadius',
+      vars: ['--_dropdown-menu-radius'],
+      corners: true,
+    },
     {property: 'padding', vars: ['--_dropdown-menu-padding']},
   ],
   field: [{property: 'borderRadius', vars: ['--_field-radius']}],
@@ -89,6 +136,16 @@ export const derivedVarRegistry: Record<string, DerivedVarEntry[]> = {
     {property: 'borderRadius', vars: ['--_segmented-control-radius']},
     {property: 'padding', vars: ['--_segmented-control-padding']},
   ],
+  'switch-field': [
+    {property: 'gap', vars: ['--_switch-field-gap'], replaces: true},
+  ],
+  'switch-thumb': [
+    {property: 'width', vars: ['--_switch-thumb-width'], replaces: true},
+    {property: 'height', vars: ['--_switch-thumb-height'], replaces: true},
+  ],
+  // A pinned column replays its row's fill from --table-row-overlay: a
+  // theme's row background reaches it through the same variable.
+  'table-row': [{property: 'backgroundColor', vars: ['--table-row-overlay']}],
   'text-area': [
     {
       property: 'paddingInline',
