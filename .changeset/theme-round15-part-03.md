@@ -14,7 +14,7 @@ A part's list keeps its items on that part:
 
 - Looks after a part said first ("tooltips 4px corners and 12px text", "popovers 8px corners, 1px border, no shadow", "table header text uppercase, gray, 12px, bold") all go to that part.
 - A word naming a piece of the part ("progress bar: blue fill and gray track") goes to that piece.
-- An item led by a variant ("buttons: primary #…, hover #…") goes to that variant, along with the states after it.
+- An item led by a variant name that is not also a colour or a describing word ("buttons: primary #…, hover #…") goes to that variant, along with the states after it; a colour said first ("cards: blue #1d4ed8") is a value for every member.
 - A part named inside another part's list ("toasts: …, an action button text color") counts as inside it.
 - A mode said alone after a look ("pure white page, light only") or at the end of a color with-item applies to that look. Corners and sizes beside it stay the same in both modes.
 - A size beside a state's line ("32px tall with a 2px border when focused") keeps no state.

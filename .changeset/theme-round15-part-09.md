@@ -16,7 +16,7 @@
 
 The same goes for the line that keeps a theme to one mode when the ask only says which mode the app shows first ("relaxed dark mode for night browsing"). It is now an offer, kept out of "all of it", so running the whole answer no longer drops the light mode, and the light page asked beside it is written. A color said for a theme the ask keeps to one mode ("black background, …, dark mode only") is that color, not a tone fitted to both modes' pages.
 
-- `astryx experimental theme editor how`: a page-color answer now also lists the parts that draw the page color (the app shell and the main panel). It also says that the page color paints inside `AppShell`, and that a page without `AppShell` keeps the browser's own page color (light or dark, as the OS asks) until its own CSS adds `body { background: var(--color-background-body) }`. The "Use a theme" guide says the same.
+- `astryx experimental theme editor how`: a page-color answer now also lists the parts that draw the page color (the app shell and the main panel).
 
 - `astryx experimental theme editor how`: a fill given to a part whose own section draws its own fill, such as a code block's header, now says the header keeps that fill, so the block shows two tones. It no longer says the header "would barely show". Words from a part's own name ("blocks" in "code blocks") are no longer listed as not taken.
 
