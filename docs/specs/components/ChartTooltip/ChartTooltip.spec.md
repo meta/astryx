@@ -15,7 +15,7 @@ verified_by:
     packages/charts/src/ChartTooltip.test.tsx,
     apps/storybook/stories/charts/Tooltip.stories.tsx,
   ]
-modules: []
+modules: [module:ChartTooltip/TooltipCard]
 families: []
 design_specs: []
 architecture:
