@@ -19,6 +19,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
   type RefCallback,
 } from 'react';
@@ -1002,11 +1003,11 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   }, [cancelHide]);
 
   const handleSurfaceMouseLeave = useCallback(
-    (event: Event) => {
+    (event: ReactMouseEvent<HTMLElement>) => {
       // React's simulated mouseleave can carry a non-Node relatedTarget
       // (the window), so only a Node inside the trigger counts as moving
       // back onto it.
-      const next = (event as MouseEvent).relatedTarget as Node | null;
+      const next = event.relatedTarget as Node | null;
       const trigger = triggerRef.current;
       if (next instanceof Node && trigger != null && trigger.contains(next)) {
         return;
