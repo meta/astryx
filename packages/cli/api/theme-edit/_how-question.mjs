@@ -24827,18 +24827,22 @@ export function draftAnswer(ctx, env, question) {
     const named = roleAnswer(c);
     if (named) return named;
     // A color with nothing else named, in a question about a look ("Duolingo
-    // vibes: green #58cc02"), is the brand color.
+    // vibes: green #58cc02"), is the brand color. A word that asks for a
+    // change beside it, "#161b22 surfaces", names what the color is for,
+    // so it is never the brand color.
+    const besides = c.text
+      .replace(/#[0-9a-f]+|\b(?:rgba?|hsla?|oklch)\([^)]*\)/g, '')
+      .replace(new RegExp(`\\b(${Object.keys(HUES).join('|')})\\b`, 'g'), '')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
     if (
       /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|oklch)\(/.test(c.text) &&
       !c.parts.length &&
       !c.aspects.length &&
       !c.lengths.length &&
-      c.text
-        .replace(/#[0-9a-f]+|\b(?:rgba?|hsla?|oklch)\([^)]*\)/g, '')
-        .replace(new RegExp(`\\b(${Object.keys(HUES).join('|')})\\b`, 'g'), '')
-        .trim()
-        .split(/\s+/)
-        .filter(Boolean).length <= 2 &&
+      besides.length <= 2 &&
+      !besides.some(w => askWord(w)) &&
       /\b(look|vibes?|style|like|feel|brand|theme)\b/.test(
         question.toLowerCase(),
       )

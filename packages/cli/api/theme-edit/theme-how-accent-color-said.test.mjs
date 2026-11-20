@@ -78,6 +78,19 @@ describe('a color said before the accent word with a part', () => {
     expect(lines.some(l => /^accent /.test(l))).toBe(false);
   }, 240_000);
 
+  it('"#161b22 surfaces" in a look names what the color is for, never the accent', async ctx => {
+    if (unbuilt) return ctx.skip();
+    const lines = await sets(
+      "Make it look like GitHub's dark theme (Primer dark): near-black #0d1117 page, #161b22 surfaces, gray borders, the system font stack, green primary buttons, blue links, 6px corners, dense layout.",
+    );
+    expect(lines).toContain("--color-background-body '#0d1117'");
+    expect(lines.some(l => /^(?:accent|--color-accent) /.test(l))).toBe(false);
+    // (A typed color alone in a look is still the brand color.)
+    expect(await sets('Duolingo vibes: green #58cc02')).toContain(
+      "accent '#58cc02'",
+    );
+  }, 240_000);
+
   it('"make it bigger" names no color and writes no accent', async ctx => {
     if (unbuilt) return ctx.skip();
     const lines = await sets('make it bigger');
