@@ -5355,21 +5355,9 @@ function checkOne(
         '--only is for one member of a group, such as text-input (how --list groups).',
         {run: [`${HOW} --list groups`]},
       );
-    // (One predicate with the settings reader: a group member, or a
-    // height or vertical padding on a bar, see barReach.)
-    if (
-      !onlyFits(
-        // (The source is read from the thing here: a CSS property is one.)
-        // (A property in any spelling, Height or paddingBlock, is the CSS
-        // property it names.)
-        {
-          ...s,
-          thing: propertySpelling(thing) ?? thing,
-          source: propertySpelling(thing) ? 'property' : s.source,
-        },
-        /** @type {any} */ (ctx.C?.MAP ?? {}),
-      )
-    ) {
+    // (One predicate with the settings reader: a member of a group that
+    // spreads.)
+    if (!onlyFits(s)) {
       s.only = undefined;
       if (!unset)
         s.note = `${s.on} is styled on its own already (only the ${AUTO_SPREAD.join(' and ')} groups spread), so --only changes nothing: it is saved without it`;

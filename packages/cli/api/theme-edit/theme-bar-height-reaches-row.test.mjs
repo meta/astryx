@@ -128,7 +128,7 @@ describe("a bar's height", () => {
   );
 
   it(
-    'with --only stays on the bar',
+    'with --only is saved without it, and says so; a saved one reads as absent',
     async () => {
       const r = /** @type {any} */ (
         await themeEditSet('b', 'height', '48px', {
@@ -137,13 +137,10 @@ describe("a bar's height", () => {
           only: true,
         })
       ).data;
-      expect(said(r)).not.toMatch(/saved without it/);
-      expect(said(r)).not.toMatch(/reaches top-nav/);
-      expect(built('top-nav')).not.toMatch(/calc\(48px/);
-      // (The saved --only is read back as saved: after show and after a
-      // later set the nav still keeps its own height, and the entry its
-      // only.)
-      const kept = () =>
+      // (A bar spreads through no group: --only changes nothing there.)
+      expect(said(r)).toMatch(/saved without it/);
+      expect(built('top-nav')).toMatch(/calc\(48px/);
+      const saved = () =>
         JSON.parse(
           fs.readFileSync(themeFiles(cwd, 'b').settings, 'utf8'),
         ).settings.find(
@@ -152,13 +149,19 @@ describe("a bar's height", () => {
             x.thing === 'height' &&
             x.value === '48px',
         );
+      expect(saved()).not.toHaveProperty('only');
+      // A saved one (as another editor saved it) reads as absent, said.
+      const file = themeFiles(cwd, 'b').settings;
+      const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+      for (const x of data.settings)
+        if (x.on === 'app-shell-header' && x.value === '48px') x.only = true;
+      fs.writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
       const shown = /** @type {any} */ (await themeEditShow('b', {cwd})).data;
-      expect(said(shown)).not.toMatch(/changes nothing there/);
-      expect(built('top-nav')).not.toMatch(/calc\(48px/);
-      await themeEditSet('b', 'color', '#222222', {cwd, on: 'top-nav-item'});
-      expect(built('top-nav')).not.toMatch(/calc\(48px/);
-      expect(kept()).toEqual(expect.objectContaining({only: true}));
-      await themeEditUndo('b', {cwd});
+      expect(said(shown)).toMatch(
+        /was saved with only, which changes nothing there/,
+      );
+      expect(built('top-nav')).toMatch(/calc\(48px/);
+      // (A step back, so the later tests' steps count as before.)
       await themeEditUndo('b', {cwd});
     },
     T,
@@ -198,7 +201,7 @@ describe("a bar's height", () => {
   );
 
   it(
-    'with --only stays on the bar in any spelling of the property',
+    'with --only is saved without it in any spelling of the property',
     async () => {
       for (const thing of ['Height', 'paddingBlock']) {
         const r = /** @type {any} */ (
@@ -208,9 +211,7 @@ describe("a bar's height", () => {
             only: true,
           })
         ).data;
-        expect(said(r)).not.toMatch(/saved without it/);
-        expect(said(r)).not.toMatch(/the row inside it/);
-        expect(built('top-nav')).not.toMatch(/"paddingBlock": "0"/);
+        expect(said(r)).toMatch(/saved without it/);
         await themeEditUndo('b', {cwd});
       }
     },

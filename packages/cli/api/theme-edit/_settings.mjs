@@ -35,7 +35,6 @@ import {cssUnescape} from '../../foundation/text/css-escape.mjs';
 import {TS_SOURCES} from '../../foundation/render/ts-paths.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {
-  BAR_REACH_THINGS,
   barRows,
   blockSides,
   coreVarValues,
@@ -2372,7 +2371,7 @@ function readMeaninglessOnly(data, notes) {
       typeof s.thing !== 'string' ||
       s.only !== true ||
       typeof s.on !== 'string' ||
-      onlyMeansFor(s) !== 'own'
+      onlyMeans(s.on) !== 'own'
     )
       continue;
     delete s.only;
@@ -2444,37 +2443,14 @@ export function entryDamage(s) {
 }
 
 /**
- * What `only` means on a setting, the one rule `set --only`, the settings
- * reader and the build follow: `member` where it keeps a change on one of
- * the parts the change would reach (a member of a group styled alike, by
- * {@link onlyMeans}; or a bar's height or vertical padding, which reaches
- * the row the bar holds, see barReach); `own` where it changes nothing (a
- * part styled on its own); `group` where it means nothing at all.
+ * Whether `only` fits a setting, as `set --only` takes it and the settings
+ * reader keeps it ({@link onlyMeans}): it names one member of a group that
+ * spreads (a text input of inputs). A bar's height or padding spreads
+ * through no group, so `only` changes nothing there.
  * @param {any} s
- * @param {Record<string, any> | null} [map] the part map, when there is one
- * @returns {'member' | 'own' | 'group'}
  */
-export function onlyMeansFor(s, map = null) {
-  const part = onlyMeans(typeof s?.on === 'string' ? s.on : undefined);
-  if (part !== 'own') return part;
-  // (Read without the part map, a saved entry's part may be such a bar;
-  // with it, only a part holding one row is.)
-  return s.source === 'property' &&
-    typeof s.thing === 'string' &&
-    BAR_REACH_THINGS.test(propertySpelling(s.thing) ?? s.thing) &&
-    (map == null || barRows(map, s.on).length === 1)
-    ? 'member'
-    : 'own';
-}
-
-/**
- * Whether `only` fits a setting: it keeps the change on one part
- * ({@link onlyMeansFor}).
- * @param {any} s
- * @param {Record<string, any> | null} [map] the part map, when there is one
- */
-export function onlyFits(s, map = null) {
-  return onlyMeansFor(s, map) === 'member';
+export function onlyFits(s) {
+  return onlyMeans(typeof s?.on === 'string' ? s.on : undefined) === 'member';
 }
 
 /**
@@ -8050,7 +8026,7 @@ export function compileTheme(ctx, data, base) {
         },
       ],
     };
-  barReach(ctx, theme, data);
+  barReach(ctx, theme);
   // A longhand set after a shorthand that covers it is the one in effect,
   // as the result says. The build merges these blocks over the base
   // theme's, and a key the base holds keeps the base's (earlier) place, so
@@ -8109,14 +8085,12 @@ const BLOCK_PADDING_KEYS = [
  * the app's header) then fills the bar: it is at least as tall as the bar
  * leaves inside its padding, and the bar's padding stands for the row's own
  * vertical padding. The items the row centers sit in the middle of the bar.
- * A value the theme gives the row itself stays its own, a setting made with
- * --only stays on its part, and a bar holding more than one row writes none
- * of them and names them. Each reach is said in the build notes.
+ * A value the theme gives the row itself stays its own, and a bar holding
+ * more than one row writes none of them and names them. Each reach is said in the build notes.
  * @param {Ctx} ctx
  * @param {any} theme the compiled theme, changed in place
- * @param {ThemeData} data
  */
-function barReach(ctx, theme, data) {
+function barReach(ctx, theme) {
   const map = /** @type {Record<string, any> | undefined} */ (ctx.C?.MAP);
   if (!map || !theme.components) return;
   const comps = /** @type {Record<string, Record<string, any>>} */ (
@@ -8139,16 +8113,6 @@ function barReach(ctx, theme, data) {
       v => v != null && !/^0(px|rem|em)?$/.test(String(v).trim()),
     );
     if (height == null && !vertical) continue;
-    const exact = data.settings.some(
-      x =>
-        x.only &&
-        x.source === 'property' &&
-        !x.when &&
-        !x.state &&
-        BAR_REACH_THINGS.test(propertySpelling(x.thing) ?? x.thing) &&
-        partsOf(ctx, x).includes(holder),
-    );
-    if (exact) continue;
     const said = height != null ? `height ${height}` : 'its vertical padding';
     const rows = barRows(map, holder);
     if (rows.length > 1) {
@@ -11974,21 +11938,7 @@ function barFitProblems(ctx, data, res) {
     );
     // The row's vertical padding is the bar's (barReach), unless the theme
     // gives the row one of its own.
-    // (A height set with --only stays on the bar: the row keeps its own.)
-    const exact = data.settings.some(
-      x =>
-        x.only &&
-        x.source === 'property' &&
-        !x.when &&
-        !x.state &&
-        BAR_REACH_THINGS.test(propertySpelling(x.thing) ?? x.thing) &&
-        partsOf(ctx, x).includes(holder),
-    );
-    const rowPad = ownsPadding(row)
-      ? padSum(prop => own(row, prop))
-      : exact
-        ? padSum(prop => drawnValue(map[row], prop))
-        : 0;
+    const rowPad = ownsPadding(row) ? padSum(prop => own(row, prop)) : 0;
     const room = barPx - holderPad - rowPad;
     for (const child of map[row]?.contains ?? []) {
       // The tokens set on the part itself feed its own values.
