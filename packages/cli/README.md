@@ -552,7 +552,7 @@ Every response has a `type` discriminant. The full set is below (generated from 
 
 `astryx doctor` runs health checks against your project and environment. It
 changes nothing in the project; once the per-user cache folder exists, it
-keeps its docs checks, its theme-wiring scan, its Core-props scan and integration check results there. Each check prints on one
+keeps its docs checks, its theme-wiring scan, its Core-props and Core-button scans and integration check results there. Each check prints on one
 line: its status (`[ok]`, `[warn]`, `[fail]`, or `[info]`), then its id, label and message, and an actionable
 `fix` when one is available. The legend under the heading names each field by its `--json` key. The exact
 checks and values depend on the project; the output shape is stable:
