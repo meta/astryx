@@ -5,7 +5,8 @@
 /**
  * @file useResolvedRequired.ts
  * @input Uses React, FormLayoutContext
- * @output Exports useResolvedOptionality and useResolvedRequired
+ * @output Exports useResolvedOptionality, useResolvedRequired and
+ *   resolveSearchTriggerRequired
  * @position Resolves a field's effective aria-required, and which optionality
  *   marker its label shows, against the form default
  *
@@ -89,4 +90,52 @@ export function useResolvedRequired({
   isOptional?: boolean;
 }): boolean {
   return useResolvedOptionality({isRequired, isOptional}).isRequired;
+}
+
+/** How a select trigger with search announces its required state. */
+export interface SearchTriggerRequired {
+  /** The trigger's `aria-required`. */
+  readonly ariaRequired: 'true' | undefined;
+  /** The trigger needs a hidden "Required" description. */
+  readonly hasRequiredDescription: boolean;
+}
+
+/**
+ * Resolve the required state of a Selector or MultiSelector trigger.
+ *
+ * With search, the editable trigger is a role-less button, where
+ * `aria-required` is not allowed. The closed trigger then states the required
+ * state in its name, through the Field label's visible marker, or else in a
+ * hidden description. The search combobox carries `aria-required` while open.
+ * Without search, or read-only, the trigger is the combobox and carries it.
+ */
+export function resolveSearchTriggerRequired({
+  hasSearch,
+  isReadOnly,
+  isRequired,
+  showsRequiredMarker,
+  isInInputGroup,
+  ariaLabel,
+  ariaLabelledBy,
+}: {
+  hasSearch: boolean;
+  isReadOnly: boolean;
+  isRequired: boolean;
+  /** `ResolvedOptionality.showsRequiredMarker`. */
+  showsRequiredMarker: boolean;
+  /** An InputGroup names the trigger instead of the Field label. */
+  isInInputGroup: boolean;
+  ariaLabel: string | undefined;
+  ariaLabelledBy: string | undefined;
+}): SearchTriggerRequired {
+  const isSearchTrigger = hasSearch && !isReadOnly;
+  const isLabelRequiredInName =
+    showsRequiredMarker &&
+    !isInInputGroup &&
+    (ariaLabel == null || ariaLabelledBy != null);
+  return {
+    ariaRequired: isRequired && !isSearchTrigger ? 'true' : undefined,
+    hasRequiredDescription:
+      isSearchTrigger && isRequired && !isLabelRequiredInName,
+  };
 }

@@ -64,6 +64,10 @@ registerEnglishFallback(english);
 const styles = stylex.create({
   base: {
     display: 'inline-flex',
+    // The root stops at its container, and the label below can shrink. Thus
+    // a label with no break opportunity, such as a bare URL, wraps inside the
+    // line and does not push past it.
+    maxWidth: '100%',
     alignItems: 'center',
     gap: spacingVars['--spacing-0-5'],
     fontFamily: 'inherit',
@@ -84,12 +88,15 @@ const styles = stylex.create({
     transitionDuration: durationVars['--duration-fast'],
     transitionTimingFunction: easeVars['--ease-standard'],
   },
-  // A truncating label needs a box that stops at its container: an
-  // inline-flex root otherwise grows to its whole text, so its Text never
-  // overflows and draws no ellipsis (`component:Link` FR6, `component:Text`
-  // FR4).
+  // A truncating root may shrink below its label's length inside a flex row,
+  // so its Text overflows and draws an ellipsis (`component:Link` FR6,
+  // `component:Text` FR4).
   truncating: {
-    maxWidth: '100%',
+    minWidth: 0,
+  },
+  // A flex item's min-width defaults to its longest word; zero lets the label
+  // shrink to the root, so its text wraps.
+  label: {
     minWidth: 0,
   },
   /**
@@ -162,8 +169,10 @@ const linkColorStyles = stylex.create({
   accent: {
     color: {
       default: colorVars['--color-text-accent'],
+      // Read with a fallback, never set here: a container or a theme sets
+      // --link-hover-color on an ancestor or the link, and the link takes it.
       ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
-        '@media (hover: hover)': `color-mix(in srgb, ${colorVars['--color-text-accent']}, ${colorVars['--color-tint-hover']} 15%)`,
+        '@media (hover: hover)': `var(--link-hover-color, color-mix(in srgb, ${colorVars['--color-text-accent']}, ${colorVars['--color-tint-hover']} 15%))`,
       },
     },
   },
@@ -404,7 +413,8 @@ export function Link({
         weight={weight}
         color={labelColor}
         display={display}
-        maxLines={maxLines}>
+        maxLines={maxLines}
+        xstyle={styles.label}>
         {children}
       </Text>
       {isExternalWithIcon && (

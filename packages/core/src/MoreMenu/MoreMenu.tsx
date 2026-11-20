@@ -35,6 +35,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/MoreMenu/MoreMenu.generated';
+import {pickDataAttributes} from '../utils/themeProps';
 
 registerEnglishFallback(english);
 
@@ -65,7 +66,8 @@ export interface MoreMenuProps extends Pick<
   variant?: ButtonVariant;
 
   /**
-   * Size of the trigger button.
+   * Size of the trigger button. Without it, the trigger takes the
+   * surrounding size, else `'md'`.
    * @default 'md'
    */
   size?: ButtonSize;
@@ -106,7 +108,7 @@ export interface MoreMenuProps extends Pick<
   presentation?: DropdownMenuPresentation;
 
   /**
-   * Controlled open state for the menu.
+   * Controlled open state for the menu. Pair it with `onOpenChange`.
    */
   isMenuOpen?: boolean;
 
@@ -151,6 +153,7 @@ export function MoreMenu({
   style,
   'data-testid': testId,
   ref,
+  ...rest
 }: MoreMenuProps) {
   const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.moreMenu.label');
@@ -172,6 +175,7 @@ export function MoreMenu({
       alignment={alignment}
       presentation={presentation}
       button={{
+        ...pickDataAttributes(rest),
         label,
         icon: icon ?? moreIcon,
         variant,

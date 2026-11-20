@@ -104,7 +104,12 @@ defineTheme({
   entrance and its exit, a sheet and its scrim, a menu's grow and its content, and a CSS fade
   paired with a JavaScript spring, such as MobileNav's close timed from its
   computed duration and BottomSheet's scrim, whose fade lasts the sheet's
-  computed settle time.
+  computed settle time. When the part must also follow the spring frame by
+  frame, as the scrim does under a touch flick's close, it takes the spring's
+  progress as CSS `linear()` easing. Core's `motion/linearEasing` samples that
+  progress into `linear()` stops, one per frame, for every part that does
+  this. The animator steps a spring in script, and CSS has no spring timing
+  of its own, so no existing module gives a CSS part these stops.
 - **FR4 — Some motion is fixed on purpose.** `tempo` and `character` do not
   move
   finger-following and drag motion, scroll momentum and decay, the rubber

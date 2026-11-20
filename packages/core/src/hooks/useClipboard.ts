@@ -4,7 +4,8 @@
 
 /**
  * @file useClipboard.ts
- * @input Uses React state/effect/callback; navigator.clipboard; useAnnounce
+ * @input Uses React state/effect/callback; navigator.clipboard (else the
+ *   copy command and its copy event); useAnnounce
  * @output Exports useClipboard hook plus its options/return types
  * @position Core behavior hook; owns the copy-to-clipboard behavior shared by
  *   CodeBlock and Timestamp — the clipboard write, the transient "copied"
@@ -27,6 +28,85 @@ import {useAnnounce} from './useAnnounce';
  * register without lingering.
  */
 const DEFAULT_RESET_AFTER_MS = 2000;
+
+/**
+ * Whether this document may use the async Clipboard API to write. A frame
+ * whose permissions policy does not allow `clipboard-write` (a sandboxed
+ * viewer or an embed) refuses it, and the browser logs a policy violation for
+ * each try. Without a policy API, the write is tried.
+ */
+function clipboardWriteAllowed(): boolean {
+  const doc = document as Document & {
+    permissionsPolicy?: {allowsFeature?: (feature: string) => boolean};
+    featurePolicy?: {allowsFeature?: (feature: string) => boolean};
+  };
+  const policy = doc.permissionsPolicy ?? doc.featurePolicy;
+  return typeof policy?.allowsFeature === 'function'
+    ? policy.allowsFeature('clipboard-write')
+    : true;
+}
+
+/**
+ * Copy text with the browser's copy command, which a click can still run where
+ * the async Clipboard API is refused. The text goes in through the `copy` event
+ * the command fires, so no element takes focus or the selection: a control in
+ * a hover card or an open modal dialog keeps both.
+ * @throws when the browser does not copy
+ */
+function copyThroughCopyCommand(text: string): void {
+  const activation = (
+    navigator as Navigator & {userActivation?: {isActive: boolean}}
+  ).userActivation;
+  if (activation?.isActive === false) {
+    throw new Error('The copy command runs only in a click or a key press.');
+  }
+  let written = false;
+  const write = (event: ClipboardEvent): void => {
+    if (event.clipboardData == null) {
+      return;
+    }
+    event.clipboardData.setData('text/plain', text);
+    event.preventDefault();
+    // The copy is the hook's own, so the page's copy handlers do not change it.
+    event.stopImmediatePropagation();
+    written = true;
+  };
+  window.addEventListener('copy', write, true);
+  let copied: boolean;
+  try {
+    copied = document.execCommand('copy');
+  } finally {
+    window.removeEventListener('copy', write, true);
+  }
+  if (!copied || !written) {
+    throw new Error('The browser did not copy the text.');
+  }
+}
+
+/**
+ * The async Clipboard API comes first. Where the frame refuses it, the copy
+ * command copies instead: the policy says so before a try, which the browser
+ * would log as a violation, and a write the browser refuses says so after.
+ */
+async function writeClipboardText(text: string): Promise<void> {
+  if (!clipboardWriteAllowed()) {
+    copyThroughCopyCommand(text);
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (error) {
+    if (!(error instanceof DOMException && error.name === 'NotAllowedError')) {
+      throw error;
+    }
+    try {
+      copyThroughCopyCommand(text);
+    } catch {
+      // The browser's refusal says more than the copy command's failure.
+      throw error;
+    }
+  }
+}
 
 /**
  * Options for {@link useClipboard}.
@@ -54,8 +134,10 @@ export interface UseClipboardReturn {
   /**
    * Write `text` to the clipboard. On success, flips `isCopied` to true,
    * announces the configured message, and (re)starts the reset timer;
-   * resolves `true`. A clipboard rejection is a silent no-op that leaves the
-   * copied state unchanged and resolves `false`.
+   * resolves `true`. Where the frame refuses the async Clipboard API, or the
+   * browser refuses the write, the text is copied with the browser copy
+   * command inside the reader's click or key press. A failed write is a silent
+   * no-op that leaves the copied state unchanged and resolves `false`.
    */
   copy: (text: string) => Promise<boolean>;
   /** True for `resetAfterMs` after the most recent successful copy. */
@@ -136,10 +218,14 @@ export function useClipboardCopy(
   const [isFailed, setIsFailed] = useState(false);
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const failedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMountedRef = useRef(true);
 
-  // Clear pending resets when the consumer unmounts.
+  // Syncs the reset timers with the consumer's mount: unmounting clears
+  // them, and a write still in flight then sets no state.
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
+      isMountedRef.current = false;
       if (resetTimerRef.current != null) {
         clearTimeout(resetTimerRef.current);
       }
@@ -152,8 +238,12 @@ export function useClipboardCopy(
   const copy = useCallback(
     async (text: string): Promise<boolean> => {
       try {
-        await navigator.clipboard.writeText(text);
+        await writeClipboardText(text);
       } catch (error) {
+        if (!isMountedRef.current) {
+          onError?.(error);
+          return false;
+        }
         // A failure leaves the copied state unchanged; it shows for as long
         // as a copy would.
         setIsFailed(true);
@@ -170,6 +260,9 @@ export function useClipboardCopy(
         }
         onError?.(error);
         return false;
+      }
+      if (!isMountedRef.current) {
+        return true;
       }
       if (failedTimerRef.current != null) {
         clearTimeout(failedTimerRef.current);

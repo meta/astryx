@@ -4,6 +4,9 @@
 
 export const docs = {
   name: 'Heading',
+  playground: {
+    defaults: {level: 1, children: 'Heading'},
+  },
   subComponentOf: 'Text',
   displayName: 'Heading',
   description:
@@ -21,7 +24,7 @@ export const docs = {
       name: 'level',
       type: '1 | 2 | 3 | 4 | 5 | 6',
       description:
-        'Heading level. Determines the semantic HTML element (h1-h6) and the visual styling from the theme (unless `type` is set).',
+        'Heading level. Determines the semantic HTML element (h1-h6) and the visual styling from the theme (unless `type` is set). Pass it on every heading: without a level from 1 to 6, the heading renders as `h2` and warns in development.',
       required: true,
     },
     {
@@ -146,7 +149,7 @@ export const docsZh = {
       name: 'level',
       type: '1 | 2 | 3 | 4 | 5 | 6',
       description:
-        '标题级别。决定语义 HTML 元素（h1–h6）和来自主题的样式（除非设置了 `type`）。',
+        '标题级别。决定语义 HTML 元素（h1–h6）和来自主题的样式（除非设置了 `type`）。每个标题都要传入：没有 1 到 6 的级别时，标题渲染为 `h2`，并在开发环境中发出警告。',
       required: true,
     },
     {

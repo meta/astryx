@@ -603,6 +603,29 @@ describe('Calendar', () => {
       expect(screen.getByText('March 2019 – April 2019')).toBeInTheDocument();
     });
 
+    it('keeps max in the last pane in the two-month layout when max is today (#9357)', () => {
+      render(<Calendar numberOfMonths={2} max="2026-08-21" />);
+
+      expect(screen.getByText('July 2026 – August 2026')).toBeInTheDocument();
+      expect(getDayButton(31, 'July', 2026)).not.toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
+    });
+
+    it('keeps max in the last pane in the two-month layout when the value starts in its month (#9357)', () => {
+      render(
+        <Calendar
+          mode="range"
+          numberOfMonths={2}
+          defaultValue={{start: '2026-06-02', end: '2026-06-10'}}
+          max="2026-06-30"
+        />,
+      );
+
+      expect(screen.getByText('May 2026 – June 2026')).toBeInTheDocument();
+    });
+
     it('still honors an explicit focusDate outside the window', () => {
       render(
         <Calendar focusDate="2026-01-01" min="2027-03-04" max="2027-06-30" />,

@@ -34,7 +34,7 @@ import React, {useCallback, type ComponentType, type SVGProps} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
-import {useThemeName} from '../theme/useTheme';
+import {useThemeDefinition} from '../theme/useTheme';
 import {resolveIcon} from './globalIconRegistry';
 import type {IconName, NamespacedIconName} from './globalIconRegistry';
 import type {IconVariant} from './index';
@@ -42,6 +42,7 @@ import {mergeProps} from '../utils/mergeProps';
 import {mergeRefs} from '../utils/mergeRefs';
 import {themeProps} from '../utils/themeProps';
 import {useIconSize} from './IconDefaultSizeContext';
+import {useDevWarning} from '../hooks/useDevWarning';
 import {iconSizeStyles, type IconSize} from './IconSize.stylex';
 
 export type {IconSize} from './IconSize.stylex';
@@ -308,7 +309,7 @@ function getIconA11yProps(label: string | undefined): IconA11yProps {
  * ```
  */
 export function Icon({
-  icon,
+  icon: iconProp,
   color = 'inherit',
   size: sizeProp,
   variant,
@@ -317,8 +318,14 @@ export function Icon({
   className,
   style,
   xstyle,
-  ...props
+  ...restProps
 }: IconProps) {
+  const {icon, props} = readGlyph(iconProp, restProps);
+  useDevWarning(
+    'Icon',
+    'takes its glyph in `icon`, not `name`. Pass it as icon, for example <Icon icon="close" />.',
+    icon !== iconProp,
+  );
   const size = useIconSize(sizeProp);
   // Derive ARIA from `label`: decorative (aria-hidden) by default, or a
   // meaningful image (role="img" + aria-label) when `label` is non-empty.
@@ -375,6 +382,37 @@ export function Icon({
 
 Icon.displayName = 'Icon';
 
+/** Other icon libraries call the glyph prop `name`. */
+function readGlyph<Rest extends object>(
+  icon: IconProps['icon'] | undefined,
+  rest: Rest,
+): {icon: IconProps['icon']; props: Rest} {
+  if (icon != null || !('name' in rest) || !isGlyphSource(rest.name)) {
+    return {icon: icon as IconProps['icon'], props: rest};
+  }
+  const {name, ...props} = rest as Rest & {name: IconProps['icon']};
+  return {icon: name, props: props as Rest};
+}
+
+/** React's component types that are objects: forwardRef, memo and lazy. */
+const objectComponentTypes = new Set<symbol>([
+  Symbol.for('react.forward_ref'),
+  Symbol.for('react.memo'),
+  Symbol.for('react.lazy'),
+]);
+
+function isGlyphSource(value: unknown): boolean {
+  return (
+    (typeof value === 'string' && value !== '') ||
+    typeof value === 'function' ||
+    (typeof value === 'object' &&
+      value !== null &&
+      objectComponentTypes.has(
+        (value as {$$typeof?: symbol}).$$typeof as symbol,
+      ))
+  );
+}
+
 // =============================================================================
 // Internal: Registry Icon Renderer
 // =============================================================================
@@ -410,8 +448,8 @@ function IconFromRegistry({
   svgRef?: React.Ref<SVGSVGElement>;
   spanProps?: Omit<SVGProps<SVGSVGElement>, 'ref' | 'color'>;
 }) {
-  const themeName = useThemeName();
-  const resolvedIcon = resolveIcon(name, themeName, {size, variant});
+  const theme = useThemeDefinition();
+  const resolvedIcon = resolveIcon(name, theme, {size, variant});
   // The glyph can change while the span stays. Attach the ref again when it
   // does.
   const attachSvgRef = useCallback(
@@ -420,7 +458,7 @@ function IconFromRegistry({
         ? undefined
         : mergeRefs(svgRef)(span?.querySelector('svg') ?? null),
     // eslint-disable-next-line @eslint-react/exhaustive-deps -- resolveIcon's inputs: a new glyph gets a new attach, and a function entry's new element each render does not.
-    [svgRef, name, themeName, size, variant],
+    [svgRef, name, theme, size, variant],
   );
 
   if (resolvedIcon == null) {

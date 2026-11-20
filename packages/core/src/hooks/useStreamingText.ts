@@ -15,7 +15,7 @@
  */
 
 import {useEffect, useMemo, useRef, useState} from 'react';
-import {useReducesMotion} from './useReducesMotion';
+import {useReducesMotion} from '../motion/reducedMotion';
 import {useTheme} from '../theme/useTheme';
 
 /**

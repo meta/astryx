@@ -6,6 +6,9 @@
  *
  * Every test owner the join waits on decides its own scope and reports
  * success whether it ran its work or skipped it, so each must have succeeded.
+ * The dependent-audit legs are the exception: they start only when their plan
+ * owes an audit, so they must succeed then and be skipped otherwise, and the
+ * plan itself must have succeeded.
  * The join's own scope outputs must be decided (true or false), never missing,
  * and a release-branch pull request must pass its release-bump validation.
  * Keeping this decision in an executable program lets tests prove every
@@ -16,6 +19,8 @@
 const requiredSuccess = [
   ['test-ui', process.env.TEST_UI_RESULT],
   ['test-node', process.env.TEST_NODE_RESULT],
+  ['node-browser-contracts', process.env.NODE_BROWSER_CONTRACTS_RESULT],
+  ['swizzle-proof-scope', process.env.SWIZZLE_PROOF_SCOPE_RESULT],
   ['test-build', process.env.TEST_BUILD_RESULT],
   ['test-native-swift', process.env.TEST_NATIVE_SWIFT_RESULT],
   ['pr-interaction', process.env.PR_INTERACTION_RESULT],
@@ -24,7 +29,6 @@ const requiredSuccess = [
     'pr-component-a11y-contracts',
     process.env.PR_COMPONENT_A11Y_CONTRACTS_RESULT,
   ],
-  ['pr-a11y-dependent-audits', process.env.PR_A11Y_DEPENDENT_AUDITS_RESULT],
 ];
 
 function fail(message) {
@@ -34,6 +38,44 @@ function fail(message) {
 
 for (const [name, result] of requiredSuccess) {
   if (result !== 'success') fail(`${name}: ${result ?? 'missing'}`);
+}
+
+// The swizzle proof's legs run exactly when its scope proves a target: they
+// must succeed then, and must not have run when it proves none.
+const proofMode = process.env.SWIZZLE_PROOF_MODE;
+if (!['none', 'affected', 'all'].includes(proofMode)) {
+  fail(`swizzle-proof scope: ${proofMode || 'missing'}`);
+} else {
+  const expectedProof = proofMode === 'none' ? 'skipped' : 'success';
+  if (process.env.SWIZZLE_PROOF_RESULT !== expectedProof) {
+    fail(
+      `swizzle-proof: ${process.env.SWIZZLE_PROOF_RESULT ?? 'missing'} ` +
+        `(expected ${expectedProof} for scope ${proofMode})`,
+    );
+  }
+}
+
+// The dependent audits: the plan must succeed. Its legs then run exactly when
+// it owes an audit: they must succeed when it planned a leg, and must not have
+// run when it planned none. A plan that did not succeed fails here, whatever
+// its one leg did.
+const planResult = process.env.A11Y_DEPENDENT_AUDITS_PLAN_RESULT;
+const auditLegs = process.env.A11Y_DEPENDENT_AUDITS_COUNT;
+const legsResult = process.env.PR_A11Y_DEPENDENT_AUDITS_RESULT;
+if (planResult !== 'success') {
+  fail(
+    `a11y-dependent-audits-plan: ${planResult ?? 'missing'} (the audits owed are unknown; re-run all jobs)`,
+  );
+} else if (!/^\d+$/.test(auditLegs ?? '')) {
+  fail(`a11y-dependent-audits-plan count: ${auditLegs || 'missing'}`);
+} else {
+  const expectedLegs = auditLegs === '0' ? 'skipped' : 'success';
+  if (legsResult !== expectedLegs) {
+    fail(
+      `pr-a11y-dependent-audits: ${legsResult ?? 'missing'} ` +
+        `(expected ${expectedLegs} for ${auditLegs} planned leg(s))`,
+    );
+  }
 }
 
 // A release-branch pull request must pass its bump validation; any other

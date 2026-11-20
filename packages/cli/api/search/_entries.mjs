@@ -8,6 +8,16 @@
 
 import {createHash} from 'node:crypto';
 import {DOMAINS, words, fold, nameWords} from './_query-words.mjs';
+import {fileURLToPath} from 'node:url';
+import {persistedDerived} from '../../foundation/fs/gather-cache.mjs';
+
+/** This module and the word rules it builds entries with, by path. */
+const ENTRIES_FILE = fileURLToPath(import.meta.url);
+const QUERY_WORDS_FILE = fileURLToPath(
+  new URL('./_query-words.mjs', import.meta.url),
+);
+/** The cards search reads (./_adapter.mjs), by path. */
+const CARDS_FILE = fileURLToPath(new URL('./_cards.json', import.meta.url));
 
 /** @param {string[]} list @returns {Map<string, number>} */
 const counts = list => {
@@ -23,7 +33,12 @@ const counts = list => {
  * @property {any[]} candidate one candidate per id, for its result
  * @property {number[]} domain domain index per id
  * @property {string[][]} name each id's name words
- * @property {Record<'name'|'desc'|'card', {post: Map<string, [number, number][]>, idf: Map<string, number>, len: number[], avg: number}>} fields
+ * @property {Record<'name'|'desc'|'card', {post: WordLookup<[number, number][]>, idf: WordLookup<number>, len: number[], avg: number, rarest: number}>} fields
+ */
+
+/**
+ * @template V
+ * @typedef {{get: (word: string) => V | undefined}} WordLookup
  */
 
 const tables = new WeakMap();
@@ -65,7 +80,16 @@ export function entryTable(all, cards) {
     tables.set(all, last.table);
     return last.table;
   }
-  const built = buildTable(all, cards);
+  // The table is a function of the text it is built from: kept beside the
+  // catalog, a later run with the same catalog reads it back.
+  const built = persistedDerived(
+    ['entry-table', key],
+    () => buildTable(all, cards),
+    tableCodec(all),
+    // The code that builds it, loaded or not when the table is kept, and the
+    // cards it reads, which search reads after the catalog is kept.
+    [ENTRIES_FILE, QUERY_WORDS_FILE, CARDS_FILE],
+  );
   last = {key, table: built};
   tables.set(all, built);
   return built;
@@ -73,6 +97,156 @@ export function entryTable(all, cards) {
 
 /** @type {{key: string, table: EntryTable} | null} */
 let last = null;
+
+/**
+ * A field's words and their values, kept as one text: a line per word, the
+ * word and its value after one space. A lookup reads only the line it asks
+ * for, so a run decodes the few words its query names, not every word.
+ * Words hold no whitespace (search splits text on it), so a line's first
+ * space ends its word.
+ * @template V
+ */
+class KeptWords {
+  /**
+   * @param {string} text
+   * @param {(value: string) => V} read
+   */
+  constructor(text, read) {
+    if (typeof text !== 'string') throw new TypeError('kept words are text');
+    this.text = text;
+    this.read = read;
+  }
+
+  /**
+   * @param {string} word
+   * @returns {V | undefined}
+   */
+  get(word) {
+    if (/\s/.test(word)) return undefined;
+    const at = this.text.indexOf(`\n${word} `);
+    if (at < 0) return undefined;
+    const from = at + word.length + 2;
+    return this.read(this.text.slice(from, this.text.indexOf('\n', from)));
+  }
+}
+
+/**
+ * A map's words and values as KeptWords text; a word with whitespace is
+ * refused, so its table is never kept.
+ * @template V
+ * @param {Map<string, V>} map
+ * @param {(value: V) => string} show
+ * @returns {string}
+ */
+function wordsText(map, show) {
+  let text = '';
+  for (const [word, value] of map) {
+    if (/\s/.test(word)) throw new Error(`a word with whitespace: ${word}`);
+    text += `\n${word} ${show(value)}`;
+  }
+  return `${text}\n`;
+}
+
+/** @param {[number, number][]} list */
+const showPostings = list => list.map(([k, c]) => `${k}:${c}`).join(',');
+
+/** @param {string} text @returns {[number, number][]} */
+const readPostings = text =>
+  text.split(',').map(pair => {
+    const cut = pair.indexOf(':');
+    return [Number(pair.slice(0, cut)), Number(pair.slice(cut + 1))];
+  });
+
+/**
+ * A table's plain-JSON form and back. Candidates are kept as their place in
+ * `all`, and each field's words as KeptWords text, so the table reads back
+ * the same: every word looks up the value it had.
+ * @param {any[]} all
+ * @returns {{encode: (table: EntryTable) => any, decode: (stored: any) => EntryTable, valid: (table: any) => boolean}}
+ */
+export function tableCodec(all) {
+  return {
+    /**
+     * The shape a read-back table needs: a candidate for every id, and its
+     * fields.
+     * @param {any} table
+     */
+    valid: table =>
+      table != null &&
+      Array.isArray(table.ids) &&
+      Array.isArray(table.candidate) &&
+      table.candidate.length === table.ids.length &&
+      table.candidate.every((/** @type {any} */ c) => c != null) &&
+      Array.isArray(table.domain) &&
+      table.domain.length === table.ids.length &&
+      Array.isArray(table.name) &&
+      table.name.length === table.ids.length &&
+      table.fields != null &&
+      ['name', 'desc', 'card'].every(f => {
+        const field = table.fields[f];
+        return (
+          field != null &&
+          field.post instanceof KeptWords &&
+          field.idf instanceof KeptWords &&
+          Array.isArray(field.len) &&
+          field.len.length === table.ids.length &&
+          typeof field.avg === 'number' &&
+          typeof field.rarest === 'number'
+        );
+      }),
+    encode(table) {
+      const place = new Map(all.map((c, k) => [c, k]));
+      const t = /** @type {any} */ (table);
+      return {
+        ids: t.ids,
+        candidate: t.candidate.map((/** @type {any} */ c) => place.get(c)),
+        domain: t.domain,
+        name: t.name,
+        fields: Object.fromEntries(
+          Object.entries(t.fields).map(([f, {post, idf, len, avg, rarest}]) => [
+            f,
+            {
+              post: wordsText(post, showPostings),
+              idf: wordsText(idf, String),
+              len,
+              avg,
+              rarest,
+            },
+          ]),
+        ),
+      };
+    },
+    decode(stored) {
+      return /** @type {EntryTable} */ (
+        /** @type {unknown} */ ({
+          ids: stored.ids,
+          index: new Map(
+            stored.ids.map(
+              (/** @type {string} */ id, /** @type {number} */ k) => [id, k],
+            ),
+          ),
+          candidate: stored.candidate.map((/** @type {number} */ k) => all[k]),
+          domain: stored.domain,
+          name: stored.name,
+          fields: Object.fromEntries(
+            Object.entries(stored.fields).map(
+              ([f, {post, idf, len, avg, rarest}]) => [
+                f,
+                {
+                  post: new KeptWords(post, readPostings),
+                  idf: new KeptWords(idf, Number),
+                  len,
+                  avg,
+                  rarest,
+                },
+              ],
+            ),
+          ),
+        })
+      );
+    },
+  };
+}
 /** @type {WeakMap<object, number>} */
 const cardIds = new WeakMap();
 let nextCardId = 0;
@@ -124,6 +298,17 @@ function fingerprint(all, cards) {
     );
   }
   return h.digest('hex');
+}
+
+/**
+ * The largest of a field's idf values, or 0 for a field with no words.
+ * @param {Map<string, number>} idf
+ * @returns {number}
+ */
+function largest(idf) {
+  let most = 0;
+  for (const value of idf.values()) if (value > most) most = value;
+  return most;
 }
 
 /**
@@ -226,7 +411,13 @@ export function buildTable(all, cards) {
     const idf = new Map();
     for (const [w, d] of df)
       idf.set(w, Math.log(1 + (n - d + 0.5) / (d + 0.5)));
-    table.fields[f] = {post, idf, len, avg: len.reduce((a, b) => a + b, 0) / n};
+    table.fields[f] = {
+      post,
+      idf,
+      len,
+      avg: len.reduce((a, b) => a + b, 0) / n,
+      rarest: largest(idf),
+    };
   }
   return table;
 }

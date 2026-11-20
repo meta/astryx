@@ -9,15 +9,22 @@ import {
   type UseChatStreamScrollReturn,
 } from './useChatStreamScroll';
 import {defineTheme} from '../theme/defineTheme';
-import {ALWAYS_TEMPO} from '../theme/reducedMotionAlways.testing';
 import {Theme} from '../theme/Theme';
+import type * as ThemeMotion from '../theme/themeMotion';
 
-// No public theme can set reducedMotion yet: a theme with ALWAYS_TEMPO
-// resolves to 'always' through this mock.
+// No public theme can set reducedMotion yet, so a theme whose motion has
+// tempo 0.76 resolves to 'always' through this mock.
 vi.mock('../theme/themeMotion', async importOriginal => {
-  const {resolvingAlways} =
-    await import('../theme/reducedMotionAlways.testing');
-  return resolvingAlways(await importOriginal());
+  const actual = await importOriginal<typeof ThemeMotion>();
+  return {
+    ...actual,
+    resolveMotionKnobs: (config?: {tempo?: number}) => {
+      const resolved = actual.resolveMotionKnobs(config);
+      return config?.tempo === 0.76
+        ? {...resolved, reducedMotion: 'always' as const}
+        : resolved;
+    },
+  };
 });
 
 // ---------------------------------------------------------------------------
@@ -203,10 +210,7 @@ describe("useChatStreamScroll — scrollToBottom({behavior: 'instant'})", () => 
 
 describe('useChatStreamScroll — prefers-reduced-motion', () => {
   it("under a theme with reducedMotion: 'always', streaming growth jumps with the setting off", () => {
-    const still = defineTheme({
-      name: 'ChatStill',
-      motion: {tempo: ALWAYS_TEMPO},
-    });
+    const still = defineTheme({name: 'ChatStill', motion: {tempo: 0.76}});
     const api: {current: UseChatStreamScrollReturn | null} = {current: null};
     const el = render(
       <Theme theme={still}>

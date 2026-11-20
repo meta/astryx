@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'panelRight',
+  group: 'panels',
   description:
     'Show or hide a side panel on the right, such as a details or inspector pane.',
   words: ['right panel', 'inspector', 'details pane', 'drawer'],

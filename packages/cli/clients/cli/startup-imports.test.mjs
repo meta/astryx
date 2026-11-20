@@ -6,8 +6,10 @@
  * schema and module-loader packages, and none of the CLI's own doc, discovery,
  * project and integration modules. The project, integration and contribution
  * modules use them. A component lookup loads no code-rewrite package, which
- * only patching an integration manifest uses. A module hook in the child
- * records every module that the run resolves.
+ * only patching an integration manifest uses, a search with icon features
+ * off loads none of the icon section's code, and a search loads no gzip
+ * code, which it never uses. A module hook in the child records every
+ * module that the run loads (resolving a package loads none).
  */
 
 import {spawnSync} from 'node:child_process';
@@ -16,6 +18,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {moduleRecorder} from '../../test-utils/module-recorder.mjs';
 
 const BIN = fileURLToPath(new URL('./bin/astryx.mjs', import.meta.url));
 const CLI_ROOT = fileURLToPath(new URL('../../', import.meta.url));
@@ -44,6 +47,25 @@ const LARGE_CLI_MODULES = [
   'foundation/fs/module-loader.mjs',
   'foundation/integrations/integrations.mjs',
 ];
+
+/**
+ * The CLI's own modules that only a run that resolves its base uses: the base
+ * resolver, and the identity code that brands provider names. A run whose
+ * base is plainly Core, as every run that prints the version is, answers
+ * without them.
+ */
+const BASE_RESOLUTION_MODULES = [
+  'foundation/bases/resolve.mjs',
+  'foundation/identity/provider-identity.mjs',
+  'foundation/identity/providers.mjs',
+];
+
+/**
+ * The most CLI modules a run that prints the version loads. Each one costs
+ * every run its load time, so a module new to this path takes the place of
+ * one, or raises this number on purpose.
+ */
+const VERSION_RUN_MODULE_LIMIT = 73;
 
 /** The runs that print the version, as text or as JSON. */
 const VERSION_RUNS = ['--version', '-V', '--version --json'];
@@ -74,48 +96,13 @@ function packageOf(url) {
 
 /**
  * Run the bin with `args` in an empty folder, with its own home folder, and
- * return the packages of the modules it resolved and the paths of the CLI's
+ * return the packages of the modules it loaded and the paths of the CLI's
  * own modules under the CLI root.
  * @param {string[]} args
  * @returns {{status: number | null, packages: Set<string>, cliModules: Set<string>}}
  */
 function modulesLoadedBy(args) {
-  const log = path.join(dir, 'resolved.txt');
-  fs.rmSync(log, {force: true});
-  const hook = path.join(dir, 'record-resolved.mjs');
-  fs.writeFileSync(
-    hook,
-    [
-      "import {appendFileSync} from 'node:fs';",
-      'export async function resolve(specifier, context, nextResolve) {',
-      '  const result = await nextResolve(specifier, context);',
-      `  appendFileSync(${JSON.stringify(log)}, result.url + '\\n');`,
-      '  return result;',
-      '}',
-      '',
-    ].join('\n'),
-  );
-  const preload = path.join(dir, 'register-resolved.mjs');
-  fs.writeFileSync(
-    preload,
-    [
-      "import {appendFileSync} from 'node:fs';",
-      "import Module, {register} from 'node:module';",
-      "import {isAbsolute} from 'node:path';",
-      "import {pathToFileURL} from 'node:url';",
-      // Async module hooks do not observe CommonJS require calls.
-      'const resolveFilename = Module._resolveFilename;',
-      'Module._resolveFilename = function (...args) {',
-      '  const file = resolveFilename.apply(this, args);',
-      '  if (isAbsolute(file)) {',
-      `    appendFileSync(${JSON.stringify(log)}, pathToFileURL(file).href + '\\n');`,
-      '  }',
-      '  return file;',
-      '};',
-      `register(${JSON.stringify(pathToFileURL(hook).href)});`,
-      '',
-    ].join('\n'),
-  );
+  const {preload, loads: log} = moduleRecorder(dir);
   const app = path.join(dir, 'app');
   const home = path.join(dir, 'home');
   fs.mkdirSync(app, {recursive: true});
@@ -142,9 +129,11 @@ function modulesLoadedBy(args) {
   );
   const packages = new Set();
   const cliModules = new Set();
+  const builtins = new Set();
   for (const url of fs.readFileSync(log, 'utf8').split('\n')) {
     const name = packageOf(url);
     if (name != null) packages.add(name);
+    else if (url.startsWith('node:')) builtins.add(url);
     else if (url.startsWith('file:')) {
       const file = fileURLToPath(url);
       if (file.startsWith(CLI_ROOT)) {
@@ -152,7 +141,7 @@ function modulesLoadedBy(args) {
       }
     }
   }
-  return {status: result.status, packages, cliModules};
+  return {status: result.status, packages, cliModules, builtins};
 }
 
 describe('a run of the bin that prints the version', () => {
@@ -160,7 +149,7 @@ describe('a run of the bin that prints the version', () => {
     const {status, packages, cliModules} = modulesLoadedBy(['--version']);
     expect(status).toBe(0);
     expect(packages.has('commander')).toBe(true);
-    expect(fs.readFileSync(path.join(dir, 'resolved.txt'), 'utf8')).toContain(
+    expect(fs.readFileSync(path.join(dir, 'loaded.txt'), 'utf8')).toContain(
       '/node_modules/commander/lib/command.js',
     );
     expect(cliModules.has('clients/cli/bin/astryx.mjs')).toBe(true);
@@ -192,6 +181,28 @@ describe('a run of the bin that prints the version', () => {
   );
 });
 
+describe('a run of the bin that prints the version, and its base', () => {
+  it.each(VERSION_RUNS)(
+    'loads no base resolver or identity module (astryx %s)',
+    run => {
+      const {status, cliModules} = modulesLoadedBy(run.split(' '));
+      expect(status).toBe(0);
+      expect(
+        BASE_RESOLUTION_MODULES.filter(file => cliModules.has(file)),
+      ).toEqual([]);
+    },
+  );
+
+  it.each(VERSION_RUNS)(
+    `loads at most ${VERSION_RUN_MODULE_LIMIT} of the CLI's own modules (astryx %s)`,
+    run => {
+      const {status, cliModules} = modulesLoadedBy(run.split(' '));
+      expect(status).toBe(0);
+      expect(cliModules.size).toBeLessThanOrEqual(VERSION_RUN_MODULE_LIMIT);
+    },
+  );
+});
+
 describe('a component lookup in a folder with no project', () => {
   it('loads no code-rewrite package (astryx component Buttn)', () => {
     const {status, packages, cliModules} = modulesLoadedBy([
@@ -203,6 +214,33 @@ describe('a component lookup in a folder with no project', () => {
     expect(cliModules.has('clients/cli/commands/component.mjs')).toBe(true);
     expect(
       ['jscodeshift', 'recast'].filter(name => packages.has(name)),
+    ).toEqual([]);
+  });
+});
+
+describe('a search in a folder with no project', () => {
+  it('loads no gzip code (astryx search tooltip)', () => {
+    const {status, cliModules, builtins} = modulesLoadedBy([
+      'search',
+      'tooltip',
+    ]);
+    expect(status).toBe(0);
+    expect(cliModules.has('clients/cli/commands/search.mjs')).toBe(true);
+    // Search reads no archive; the theme code it loads unpacks none.
+    expect(builtins.has('node:zlib')).toBe(false);
+  });
+
+  it("loads none of the icon section's code while icon features are off (astryx search tooltip)", () => {
+    const {status, cliModules} = modulesLoadedBy(['search', 'tooltip']);
+    expect(status).toBe(0);
+    expect(cliModules.has('clients/cli/commands/search.mjs')).toBe(true);
+    // The icon commands' docs are search results; their code is not.
+    expect(
+      [...cliModules].filter(
+        file =>
+          file === 'api/search/_icons.mjs' ||
+          (file.startsWith('api/icon/') && !file.endsWith('.doc.mjs')),
+      ),
     ).toEqual([]);
   });
 });

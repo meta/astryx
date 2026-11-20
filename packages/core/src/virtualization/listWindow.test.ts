@@ -2,13 +2,17 @@
 
 /**
  * @file listWindow.test.ts
- * @input The fixed-pitch range and anchor calculation
+ * @input The fixed-pitch range and anchor calculation, and the range for items of varying size
  * @output Range, gap, guard and anchor assertions
  * @position Colocated tests for the private list-windowing module
  */
 import {describe, it} from 'vitest';
 import assert from 'node:assert/strict';
-import {calculateListWindow, reconcileListAnchor} from './listWindow';
+import {
+  calculateListWindow,
+  calculateVariableListRange,
+  reconcileListAnchor,
+} from './listWindow';
 
 const defaults = {
   rowCount: 100,
@@ -352,5 +356,107 @@ describe('first-visible-key anchoring', () => {
       }),
       75,
     );
+  });
+});
+
+describe('calculateVariableListRange', () => {
+  // Items of 100, 50, 150, then seven of 100: starts 0, 100, 150, 300, ...
+  const sizes = [100, 50, 150, 100, 100, 100, 100, 100, 100, 100];
+  const offsets = sizes.reduce<number[]>(
+    (all, size) => [...all, all[all.length - 1] + size],
+    [0],
+  );
+  const startEnd = ({start, end}: {start: number; end: number}) => ({
+    start,
+    end,
+  });
+  const range = (
+    options: Partial<Parameters<typeof calculateVariableListRange>[0]>,
+  ) =>
+    calculateVariableListRange({
+      offsets,
+      viewportSize: 250,
+      scrollOffset: 0,
+      isMeasured: true,
+      overscan: 2,
+      ...options,
+    });
+
+  it('seeds the items that start inside the first viewport, plus overscan after them', () => {
+    // Items 0..2 start before 250.
+    assert.deepEqual(startEnd(range({isMeasured: false})), {start: 0, end: 5});
+  });
+
+  it('mounts the items that intersect the viewport, plus overscan on each side', () => {
+    // 320..570 shows items 3 (300..400) through 5 (500..600).
+    assert.deepEqual(startEnd(range({scrollOffset: 320})), {start: 1, end: 8});
+  });
+
+  it('reports the first visible item and the scrolled distance into it', () => {
+    const visible = range({scrollOffset: 320});
+    assert.equal(visible.firstVisibleIndex, 3);
+    assert.equal(visible.offset, 20);
+  });
+
+  it('clamps the scroll offset to the full extent', () => {
+    // The last 250px start inside item 7.
+    assert.deepEqual(startEnd(range({scrollOffset: 99999})), {
+      start: 5,
+      end: sizes.length,
+    });
+  });
+
+  it('mounts every item when the viewport holds the full extent', () => {
+    assert.deepEqual(
+      [range({viewportSize: 2000}).start, range({viewportSize: 2000}).end],
+      [0, sizes.length],
+    );
+  });
+
+  it('keeps one visible item when the viewport has no space', () => {
+    // Item 3 holds the scroll offset.
+    assert.deepEqual(startEnd(range({viewportSize: 0, scrollOffset: 320})), {
+      start: 1,
+      end: 6,
+    });
+  });
+
+  it('returns an empty range for no items', () => {
+    assert.deepEqual(startEnd(range({offsets: [0]})), {start: 0, end: 0});
+  });
+});
+
+describe('reconcileListAnchor with item offsets', () => {
+  // Widths 100, 150 and 50 after "a" is removed.
+  const anchor = (
+    overrides: Partial<Parameters<typeof reconcileListAnchor>[0]>,
+  ) =>
+    reconcileListAnchor({
+      previousKeys: ['a', 'b', 'c', 'd'],
+      keys: ['b', 'c', 'd'],
+      firstVisibleIndex: 2,
+      offset: 0.5,
+      offsets: [0, 100, 250, 300],
+      rowHeight: 0,
+      viewportHeight: 50,
+      startOffset: 0,
+      ...overrides,
+    });
+
+  it('keeps the first visible key and the fraction of its new size', () => {
+    // "c" now starts at 100 and is 150 wide.
+    assert.equal(anchor({}), 175);
+  });
+
+  it('moves to the next surviving key when the anchor is removed', () => {
+    // "d" now starts at 100 and is 50 wide.
+    assert.equal(
+      anchor({keys: ['b', 'd'], offsets: [0, 100, 150], viewportHeight: 10}),
+      125,
+    );
+  });
+
+  it('clamps to the end of the new extent', () => {
+    assert.equal(anchor({viewportHeight: 200}), 100);
   });
 });

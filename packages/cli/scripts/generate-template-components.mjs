@@ -3,10 +3,13 @@
 
 /**
  * @file Writes assets/templates/components.generated.json at `prepack`: the
- * components each template source Astryx ships composes, keyed by a hash of
- * the source, so the published package reads a shipped template's components
- * without parsing it. The file is not committed; a checkout without it parses
- * every source, with the same result. `--clean` (at `postpack`) removes it.
+ * components each template source Astryx ships composes and the module paths
+ * it imports, keyed by a hash of the source, so the published package reads a
+ * shipped template's components and imports without parsing it. The imports
+ * of a source's filled copy are stored too, keyed by a hash of that copy:
+ * build's setup notes read the filled copy. The file is not committed; a
+ * checkout without it parses every source, with the same result. `--clean`
+ * (at `postpack`) removes it.
  */
 
 import * as fs from 'node:fs';
@@ -18,6 +21,8 @@ import {
   TEMPLATE_COMPONENTS_FILE,
 } from '../foundation/discovery/template-adapter.mjs';
 import {storedKey} from '../foundation/doc-compiler/stored-docs.mjs';
+import {parsedSpecifiers} from '../foundation/discovery/template-needs.mjs';
+import {fillTemplatePlaceholders} from '../foundation/discovery/template-placeholders.mjs';
 
 const TEMPLATES_DIR = path.join(CLI_ROOT, 'assets', 'templates');
 /** Page and block templates: the sources whose components are read. */
@@ -50,7 +55,13 @@ export function templateComponentsText() {
   for (const sub of SOURCE_DIRS) {
     for (const file of sourcesIn(path.join(TEMPLATES_DIR, sub))) {
       const source = fs.readFileSync(file, 'utf-8');
-      byKey[storedKey(source)] = parsedComponents(source);
+      const key = storedKey(source);
+      byKey[key] = parsedComponents(source);
+      byKey[`imports:${key}`] = parsedSpecifiers(source);
+      const {source: filled} = fillTemplatePlaceholders(source);
+      if (filled !== source) {
+        byKey[`imports:${storedKey(filled)}`] = parsedSpecifiers(filled);
+      }
     }
   }
   const sorted = Object.fromEntries(

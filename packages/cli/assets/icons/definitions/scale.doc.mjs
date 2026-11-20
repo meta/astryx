@@ -4,7 +4,6 @@
 export default {
   type: 'icon-definition',
   name: 'scale',
-  description:
-    'A balance scale: law, fairness, or weighing one option against another.',
+  description: 'Law, fairness, or weighing one option against another.',
   words: ['balance', 'legal', 'justice', 'compare'],
 };

@@ -16,31 +16,63 @@
  * made a cycle across the layer boundary — Project reached up for discovery and
  * this module imported Project back. Nothing here depends on api/; every import
  * is node:*, jiti, foundation/*, or authoring/*, plus a lazily required
- * @babel/parser for extractComponents' local-declaration scan.
+ * @babel/parser for extractComponents' local-declaration scan, and Project,
+ * imported only when integration templates are discovered.
  *
  * @position packages/cli/foundation/discovery — shared template discovery/IO;
  *   consumed by Project and by the api/template leaves.
  */
 
+import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
 import {readDocView} from '../doc-compiler/read.mjs';
 import {importDocModule} from '../doc-compiler/import.mjs';
 import {readStore, storedKey} from '../doc-compiler/stored-docs.mjs';
-import {CLI_ROOT, discoverExternalPackages} from '../fs/paths.mjs';
-import {listDirEntries} from '../fs/listing-cache.mjs';
+import {CLI_ROOT, discoverExternalPackages, realDir} from '../fs/paths.mjs';
+import {listDirEntries, withListingCache} from '../fs/listing-cache.mjs';
 import {CORE_PROVIDER_ID} from '../identity/providers.mjs';
-import {Project} from '../config/project.mjs';
 import {
   isReference,
   parseTemplateSource,
   programPath,
   traverseTemplateSource,
+  walk,
   writtenNames,
+  TEMPLATE_COMPONENTS_FILE,
 } from './template-source-tree.mjs';
+import {persistedGather, persistedValue} from '../fs/gather-cache.mjs';
+import {packageOf} from '../render/served-packages.mjs';
+import {keptTreeSummary} from '../fs/kept-tree.mjs';
+import {
+  ALL_TEMPLATE_SUFFIXES,
+  BLOCKS_DIR,
+  PAGES_DIR,
+  TEMPLATE_SUFFIX_RE,
+  findIntegrationDocFiles,
+  matchedTemplateSuffix,
+} from './template-ids.mjs';
+import {EXACT_CODEC} from '../fs/exact-codec.mjs';
+import {
+  babelParser,
+  babelParserRelease,
+} from '../runtime/lazy-dependencies.mjs';
+import {
+  PLACEHOLDER_MODULE,
+  placeholderLook,
+  placeholderMeaning,
+  placeholderSource,
+  placeholderTable,
+} from './template-placeholders.mjs';
+import {compareText} from '../text/compare-text.mjs';
+import {currentNonCoreBase} from '../bases/state.mjs';
 
-const require = createRequire(import.meta.url);
+export {
+  coreTemplateIds,
+  integrationTemplateIds,
+  listTemplates,
+} from './template-ids.mjs';
 
 /** Identity used for core (built-in) templates in package-scoped listings. */
 const CORE_PACKAGE = CORE_PROVIDER_ID;
@@ -116,6 +148,8 @@ export function effectiveTemplateDiscovery(templates) {
  * @property {string} [category]
  * @property {boolean} [isReady]
  * @property {boolean} [scaffold]
+ * @property {boolean} [hidden] a Core page doc's `isHiddenFromOverview`: kept
+ *   off the gallery, so never taken as the app shell
  * @property {number} [aspectRatio]
  * @property {string} [exampleFor]
  * @property {string[]} [alsoExampleFor]
@@ -157,42 +191,6 @@ export function effectiveTemplateDiscovery(templates) {
  */
 
 /**
- * Released compatibility suffixes, in precedence order. Stable 0.6.0
- * documented `.template.*`, so discovery keeps reading those files while all
- * new authoring uses `.doc.mjs`.
- */
-const TEMPLATE_SUFFIXES = ['.template.ts', '.template.mjs', '.template.js'];
-
-/**
- * Descriptor suffixes for templates, in precedence order. New authoring always
- * emits `.doc.mjs`; the TypeScript and JavaScript variants remain readable.
- */
-const DOC_SUFFIXES = ['.doc.ts', '.doc.mjs', '.doc.js'];
-
-/**
- * Every template-spec suffix, in the released precedence a core page directory
- * uses to pick one file. Integration discovery never picks: every match is a
- * template, so two specs for one stem list twice and read as ambiguous.
- */
-const ALL_TEMPLATE_SUFFIXES = [...TEMPLATE_SUFFIXES, ...DOC_SUFFIXES];
-
-/**
- * The template-spec suffix present on `file`, or null if none matches.
- * Recognizes both the canonical `.doc.*` and released `.template.*` families.
- * @param {string} file
- * @returns {string | null}
- */
-function matchedTemplateSuffix(file) {
-  return ALL_TEMPLATE_SUFFIXES.find(suffix => file.endsWith(suffix)) ?? null;
-}
-
-/**
- * RegExp matching either template-spec suffix family at end of a basename.
- * Used where a per-file regex is convenient (e.g. block discovery walks).
- */
-const TEMPLATE_SUFFIX_RE = /\.(template|doc)\.(ts|mjs|js)$/;
-
-/**
  * Load an integration template doc module and validate it against the template
  * envelope at the load boundary. Default export only — `.ts` via jiti,
  * `.mjs`/`.js` via dynamic import. Throws (caught by discovery) if the default
@@ -212,10 +210,6 @@ async function loadIntegrationDoc(file, label) {
     value: 'parsed',
   });
 }
-
-const TEMPLATES_DIR = path.join(CLI_ROOT, 'assets', 'templates');
-const PAGES_DIR = path.join(TEMPLATES_DIR, 'pages');
-const BLOCKS_DIR = path.join(TEMPLATES_DIR, 'blocks');
 
 /**
  * Inline placeholder swapped in for demo imagery when scaffolding a template,
@@ -1069,19 +1063,6 @@ function expressionUse(source, open, close) {
   return null;
 }
 
-/** @type {typeof import('@babel/parser') | undefined} */
-let babelParser;
-
-/**
- * The template source parser, loaded on first use so listing templates
- * never pays for it.
- * @returns {typeof import('@babel/parser')}
- */
-function templateSourceParser() {
-  babelParser ??= require('@babel/parser');
-  return /** @type {typeof import('@babel/parser')} */ (babelParser);
-}
-
 /**
  * The [start, end) range of every comment in `source`, or none when it does
  * not parse as TSX.
@@ -1090,7 +1071,7 @@ function templateSourceParser() {
  */
 function commentRanges(source) {
   try {
-    const {comments} = templateSourceParser().parse(source, {
+    const {comments} = babelParser().parse(source, {
       sourceType: 'module',
       plugins: ['jsx', 'typescript'],
     });
@@ -1146,25 +1127,6 @@ async function loadDocModule(docPath) {
 }
 
 /**
- * List the core page-template directory names (sorted). The `template --list`
- * view discovers far more; this is the minimal core-page set `init` scaffolds
- * from.
- * @returns {string[]}
- */
-export function listTemplates() {
-  /** @type {string[]} */
-  const all = [];
-  if (fs.existsSync(PAGES_DIR)) {
-    all.push(
-      ...listDirEntries(PAGES_DIR)
-        .filter(e => e.isDirectory())
-        .map(e => e.name),
-    );
-  }
-  return all.sort();
-}
-
-/**
  * @param {string} dir
  * @param {RegExp} pattern
  * @returns {string[]}
@@ -1199,6 +1161,8 @@ export function findPageDocFile(dirPath) {
 }
 
 async function discoverPages() {
+  // Core's content shows only in a run whose base is Core.
+  if (currentNonCoreBase()) return [];
   if (!fs.existsSync(PAGES_DIR)) return [];
   const dirs = listDirEntries(PAGES_DIR).filter(e => e.isDirectory());
 
@@ -1218,6 +1182,7 @@ async function discoverPages() {
       keywords: doc?.keywords ?? [],
       isReady: doc?.isReady ?? true,
       scaffold: doc?.scaffold ?? false,
+      hidden: doc?.isHiddenFromOverview === true,
       ...(doc?.icons ? {icons: doc.icons} : {}),
       filePath: path.join(dirPath, 'page.tsx'),
       docPath,
@@ -1227,6 +1192,8 @@ async function discoverPages() {
 }
 
 async function discoverBlocks() {
+  // Core's content shows only in a run whose base is Core.
+  if (currentNonCoreBase()) return [];
   const docFiles = findDocFiles(BLOCKS_DIR, TEMPLATE_SUFFIX_RE);
   /** @type {DiscoveredTemplate[]} */
   const blocks = [];
@@ -1533,7 +1500,7 @@ export function applyTemplateReplacements(templates, declarationErrors = []) {
   });
 
   return {
-    templates: effective.sort((a, b) => a.name.localeCompare(b.name)),
+    templates: effective.sort((a, b) => compareText(a.name, b.name)),
     errors,
   };
 }
@@ -1564,9 +1531,21 @@ async function discoverAllSources(cwd = process.cwd()) {
  */
 export async function discoverAllUnresolved(cwd = process.cwd()) {
   return (await discoverAllSources(cwd)).templates.sort((a, b) =>
-    a.name.localeCompare(b.name),
+    compareText(a.name, b.name),
   );
 }
+
+/** Template discovery's records, kept exactly, with the shape they need. */
+const TEMPLATE_SOURCES_CODEC = {
+  ...EXACT_CODEC,
+  valid: (/** @type {any} */ value) =>
+    value != null &&
+    Array.isArray(value.templates) &&
+    Array.isArray(value.errors) &&
+    value.templates.every(
+      (/** @type {any} */ t) => t != null && typeof t.name === 'string',
+    ),
+};
 
 /**
  * Resolve replacement declarations while retaining package-addressable entries
@@ -1575,6 +1554,26 @@ export async function discoverAllUnresolved(cwd = process.cwd()) {
  * @returns {Promise<{templates: DiscoveredTemplate[], errors: Array<TemplateDiscoveryError | TemplateReplacementError>}>}
  */
 async function resolveAllSources(cwd = process.cwd()) {
+  // A function of the files discovery reads, which the kept gather stamps:
+  // a later run with every one unchanged reads the records back.
+  return /** @type {Awaited<ReturnType<typeof resolveAllSourcesNow>>} */ (
+    await persistedGather(
+      // The folder, and the copy of the CLI that answers: outside a project
+      // the integrations beside the answering copy load too. A host's inputs
+      // are in every entry's key (gather-cache.mjs).
+      ['template-sources', realDir(cwd), CLI_ROOT],
+      () => resolveAllSourcesNow(cwd),
+      TEMPLATE_SOURCES_CODEC,
+    )
+  );
+}
+
+/**
+ * resolveAllSources, worked out now.
+ * @param {string} cwd
+ * @returns {Promise<{templates: DiscoveredTemplate[], errors: Array<TemplateDiscoveryError | TemplateReplacementError>}>}
+ */
+async function resolveAllSourcesNow(cwd) {
   const discovered = await discoverAllSources(cwd);
   const replacementErrors = discovered.errors.filter(
     error => error.replacementTarget != null,
@@ -1626,33 +1625,58 @@ export async function discoverAllWithErrors(cwd = process.cwd()) {
   };
 }
 
+/** This module's own file: its code decides the kept summaries' shape. */
+const OWN_FILE = fileURLToPath(import.meta.url);
+
 /**
- * Recursively collect integration template-spec files under `root`.
- * Returns absolute paths to files ending in one of ALL_TEMPLATE_SUFFIXES
- * (canonical `.doc.*` or released `.template.*` compatibility files).
- *
- * @param {string} root
- * @returns {string[]}
+ * Code that lets a template doc declare a replacement: the field itself, or an
+ * import, a require or a spread that can bring it in. Comments do not count.
  */
-function findIntegrationDocFiles(root) {
-  /** @type {string[]} */
-  const results = [];
-  if (!fs.existsSync(root)) return results;
-  /** @param {string} dir */
-  const walk = dir => {
-    for (const entry of listDirEntries(dir)) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        walk(full);
-      } else if (
-        ALL_TEMPLATE_SUFFIXES.some(suffix => entry.name.endsWith(suffix))
-      ) {
-        results.push(full);
-      }
-    }
-  };
-  walk(root);
-  return results;
+const MAY_REPLACE_RE =
+  /\breplaces\b|^\s*import\b|\bimport\s*\(|\brequire\s*\(|\.\.\.\s*[A-Za-z_$]/m;
+
+/**
+ * Whether any template doc an integration ships can declare a replacement,
+ * read from its text without loading it.
+ * @param {{templates?: string}} integration
+ * @returns {boolean}
+ */
+export function integrationMayReplaceTemplate(integration) {
+  return integrationsMayReplaceTemplate([integration]);
+}
+
+/**
+ * Whether any template doc any of the integrations ships can declare a
+ * replacement, read from a kept summary of the docs' text.
+ * @param {Array<{templates?: string}>} integrations
+ * @returns {boolean}
+ */
+export function integrationsMayReplaceTemplate(integrations) {
+  const roots = integrations.flatMap(integration =>
+    typeof integration?.templates === 'string' && integration.templates !== ''
+      ? [integration.templates]
+      : [],
+  );
+  if (roots.length === 0) return false;
+  return keptTreeSummary(
+    {kind: 'integration-template-replaces', roots, code: [OWN_FILE]},
+    trees =>
+      trees.some(({folders, readText}) =>
+        folders.some(({rel, entries}) =>
+          entries.some(({name, isDir}) => {
+            if (isDir || !matchedTemplateSuffix(name)) return false;
+            try {
+              const code = readText(rel === '' ? name : path.join(rel, name))
+                .replace(/\/\*[\s\S]*?\*\//g, '')
+                .replace(/^\s*\/\/.*$/gm, '');
+              return MAY_REPLACE_RE.test(code);
+            } catch {
+              return true;
+            }
+          }),
+        ),
+      ),
+  );
 }
 
 /**
@@ -1676,6 +1700,9 @@ async function discoverIntegrationTemplates(cwd = process.cwd()) {
   /** @type {TemplateDiscoveryError[]} */
   const errors = [];
 
+  // Imported here, not at the top: the not-found hint reads Core's template
+  // ids from this module without the project's module graph.
+  const {Project} = await import('../config/project.mjs');
   let loadedIntegrations;
   try {
     const project = await Project.load(cwd);
@@ -1776,11 +1803,17 @@ function missingTemplateSourceFix(docPath, sourcePath) {
  * rules as {@link discoverIntegrationTemplates} (same-stem source required,
  * page|block type required); broken templates are recorded in `errors` rather
  * than thrown. Exposed for `doctor integration validate` and template authoring checks.
+ * With `keep`, only the template docs whose ids `keep` accepts are read, so
+ * the lookup commands' not-found hint checks a few ids as discovery does.
  *
  * @param {{name?: string, __spec?: string, __autolinked?: boolean, templates?: string}} integration
+ * @param {(id: string) => boolean} [keep]
  * @returns {Promise<{templates: DiscoveredTemplate[], errors: TemplateDiscoveryError[]}>}
  */
-export async function discoverIntegrationTemplatesForOne(integration) {
+export async function discoverIntegrationTemplatesForOne(
+  integration,
+  keep = () => true,
+) {
   /** @type {DiscoveredTemplate[]} */
   const templates = [];
   /** @type {TemplateDiscoveryError[]} */
@@ -1798,6 +1831,7 @@ export async function discoverIntegrationTemplatesForOne(integration) {
       .slice(0, -suffix.length)
       .split(path.sep)
       .join('/');
+    if (!keep(id)) continue;
 
     const sourcePath = docPath.slice(0, -suffix.length) + '.tsx';
     if (!fs.existsSync(sourcePath)) {
@@ -2078,7 +2112,7 @@ function topLevelBindings(src) {
   const astryxImports = new Map();
   let program;
   try {
-    program = templateSourceParser().parse(src, {
+    program = babelParser().parse(src, {
       sourceType: 'module',
       plugins: ['jsx', 'typescript'],
       errorRecovery: true,
@@ -2088,14 +2122,35 @@ function topLevelBindings(src) {
   }
   for (const statement of program.body) {
     if (statement.type === 'ImportDeclaration') {
-      if (!statement.source.value.startsWith(ASTRYX_PACKAGE_SCOPE)) continue;
+      if (!statement.source.value.startsWith(ASTRYX_PACKAGE_SCOPE)) {
+        // A filled placeholder (`TrashIcon as DeleteIcon`) reads as the
+        // library icon it imports, as the unfilled template does.
+        for (const specifier of statement.specifiers) {
+          if (specifier.type !== 'ImportSpecifier') continue;
+          const {imported} = specifier;
+          const name =
+            imported.type === 'Identifier' ? imported.name : imported.value;
+          if (drawsPlaceholder(specifier.local.name, name)) {
+            astryxImports.set(specifier.local.name, name);
+          }
+        }
+        continue;
+      }
+      // An icon placeholder names the library icon that draws it, as the
+      // template's copy renders it, so a placeholder never reads as a
+      // component name.
+      const look = placeholderLook(statement.source.value);
       for (const specifier of statement.specifiers) {
         if (specifier.type !== 'ImportSpecifier') continue;
         const {imported} = specifier;
-        astryxImports.set(
-          specifier.local.name,
-          imported.type === 'Identifier' ? imported.name : imported.value,
-        );
+        const name =
+          imported.type === 'Identifier' ? imported.name : imported.value;
+        const meaning = look == null ? null : placeholderMeaning(name);
+        const drawn =
+          meaning == null || look == null
+            ? null
+            : placeholderSource(meaning, look);
+        astryxImports.set(specifier.local.name, drawn?.export ?? name);
       }
       continue;
     }
@@ -2146,13 +2201,148 @@ export function componentsInSource(src) {
   return parsedComponents(src);
 }
 
-/** Where the component lists of the templates Astryx ships are stored. */
-export const TEMPLATE_COMPONENTS_FILE = path.join(
-  CLI_ROOT,
-  'assets',
-  'templates',
-  'components.generated.json',
-);
+/**
+ * The components a template source renders that `astryx component` answers
+ * in the project, in the order the source first renders them, each once, in
+ * the form that command reads them by. `ownersOf` names the packages whose
+ * doc `astryx component <name>` reads for a name, and none for a name it
+ * does not answer. A tag counts only when a named import binds it to a
+ * package that documents the name: a tag no import binds (a helper the file
+ * declares), one from another module (a chart library's `Tooltip`), one whose
+ * package does not document it, and text in a comment do not count. A part
+ * its package does not document counts as its family root when it is
+ * imported from that root's own module, so a `TableHeader` from
+ * `@astryxdesign/core/Table` that has no doc of its own names `Table`. With
+ * `qualified`, each name is written as `<package>/<Name>` for the package its
+ * import names, which reads exactly that package's doc; a project with an
+ * integration needs it, as another package may answer the bare name.
+ * `documents`, when given, answers whether a package documents a name
+ * without looking up every owner of it; it gives the answer `ownersOf` does.
+ * @param {string} src
+ * @param {{ownersOf: (name: string) => readonly string[], qualified: boolean, documents?: (pkg: string, name: string) => boolean}} lookup
+ * @returns {string[]}
+ */
+export function answeredComponentsInSource(
+  src,
+  {
+    ownersOf,
+    qualified,
+    documents = (pkg, name) => ownersOf(name).includes(pkg),
+  },
+) {
+  const syntax = keptTemplateSyntax(src);
+  if (syntax === null) return [];
+  /** @type {Map<string, {module: string, imported: string}>} */
+  const imports = new Map();
+  for (const [local, module, imported] of syntax.imports) {
+    imports.set(local, {module, imported});
+  }
+  /** @type {string[]} */
+  const found = [];
+  // One operation for every name: each lookup lists a folder and reads a
+  // doc once, not once per name.
+  withListingCache(() => {
+    for (const tag of syntax.tags) {
+      const binding = imports.get(tag);
+      if (!binding) continue;
+      const name = answeredName(binding, documents, qualified);
+      if (name !== null && !found.includes(name)) found.push(name);
+    }
+  });
+  return found;
+}
+
+/**
+ * What a template source names components from: its named imports, each as
+ * [local name, module, imported name] in source order, and the names of the
+ * tags it renders, in the order they open. Throws for a source that does not
+ * parse.
+ * @param {string} src
+ * @returns {{imports: Array<[string, string, string]>, tags: string[]}}
+ */
+function templateSyntax(src) {
+  const {program} = parseTemplateSource(src, {errorRecovery: true});
+  /** @type {Array<[string, string, string]>} */
+  const imports = [];
+  for (const statement of program.body) {
+    if (statement.type !== 'ImportDeclaration') continue;
+    for (const specifier of statement.specifiers) {
+      if (specifier.type !== 'ImportSpecifier') continue;
+      const {imported} = specifier;
+      imports.push([
+        specifier.local.name,
+        statement.source.value,
+        imported.type === 'Identifier' ? imported.name : imported.value,
+      ]);
+    }
+  }
+  /** @type {Array<{name: string, start: number}>} */
+  const tags = [];
+  walk(program, node => {
+    if (
+      node.type === 'JSXOpeningElement' &&
+      node.name.type === 'JSXIdentifier'
+    ) {
+      tags.push({name: node.name.name, start: node.start});
+    }
+  });
+  tags.sort((a, b) => a.start - b.start);
+  return {imports, tags: tags.map(tag => tag.name)};
+}
+
+/** A template source's syntax, kept exactly, with the shape it needs. */
+const TEMPLATE_SYNTAX_CODEC = {
+  ...EXACT_CODEC,
+  valid: (/** @type {any} */ value) =>
+    value != null && Array.isArray(value.imports) && Array.isArray(value.tags),
+};
+
+/**
+ * {@link templateSyntax}, kept between runs by the source's text and the
+ * parser's release (persistedValue), so a warm run loads no parser; null for
+ * a source that does not parse, which is never kept.
+ * @param {string} src
+ * @returns {{imports: Array<[string, string, string]>, tags: string[]} | null}
+ */
+function keptTemplateSyntax(src) {
+  try {
+    const parser = babelParserRelease();
+    if (parser === null) return templateSyntax(src);
+    return persistedValue(
+      [
+        'template-syntax',
+        createHash('sha256').update(src).digest('hex'),
+        parser,
+      ],
+      () => templateSyntax(src),
+      TEMPLATE_SYNTAX_CODEC,
+    );
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * How `astryx component` reads an imported tag, or null when the package its
+ * import names documents no such component: the imported name itself, else
+ * its family root (the last folder of the module it comes from, when the
+ * name starts with it), bare or, with `qualified`, as `<package>/<Name>`.
+ * @param {{module: string, imported: string}} binding
+ * @param {(pkg: string, name: string) => boolean} documents
+ * @param {boolean} qualified
+ * @returns {string | null}
+ */
+function answeredName({module, imported}, documents, qualified) {
+  const pkg = packageOf(module);
+  const root = module.split('/').at(-1) ?? '';
+  for (const name of [imported, root]) {
+    if (!imported.startsWith(name) || !documents(pkg, name)) continue;
+    return qualified ? `${pkg}/${name}` : name;
+  }
+  return null;
+}
+
+export {TEMPLATE_COMPONENTS_FILE} from './template-source-tree.mjs';
 
 /**
  * The components a template source composes, read from its syntax tree (see
@@ -2221,6 +2411,33 @@ function catalogNames(names) {
 }
 
 /**
+ * Whether a placeholder name stands for a library export: the table draws
+ * the placeholder's meaning with that export in some variant.
+ * @param {string} placeholder
+ * @param {string} exportName
+ * @returns {boolean}
+ */
+function drawsPlaceholder(placeholder, exportName) {
+  return placeholderDrawnNames(placeholder).includes(exportName);
+}
+
+/**
+ * The library exports that may draw a placeholder name, over every variant.
+ * @param {string} placeholder
+ * @returns {string[]}
+ */
+function placeholderDrawnNames(placeholder) {
+  const meaning = placeholderMeaning(placeholder);
+  if (meaning == null) return [];
+  const names = [];
+  for (const look of Object.keys(placeholderTable().looks)) {
+    const drawn = placeholderSource(meaning, look);
+    if (drawn) names.push(drawn.export);
+  }
+  return names;
+}
+
+/**
  * Every name componentsInSource can return for `src`, read without parsing
  * it, or null when it cannot be bounded so. It keeps the tag names a parse
  * would drop as page-local. It adds each name an `imported as local` pair
@@ -2236,6 +2453,10 @@ export function componentNameBound(src) {
   }
   const tags = Array.from(src.matchAll(JSX_TAG), m => m[2]);
   const local = new Set(tags);
+  // A placeholder tag reads as the library icon that draws it.
+  const drawnIcons = src.includes(PLACEHOLDER_MODULE)
+    ? [...local].flatMap(placeholderDrawnNames)
+    : [];
   // A pair adds a name only when its local name is a tag. Most sources have
   // no `as` before a tag's name, so they skip the slower pair scan. Each
   // match restarts one character on: a `/*` in a comment can hide a pair.
@@ -2245,7 +2466,7 @@ export function componentNameBound(src) {
     asLocal.lastIndex = m.index + 1;
     pairs = local.has(m[1]);
   }
-  if (!pairs) return catalogNames(tags);
+  if (!pairs) return catalogNames([...tags, ...drawnIcons]);
   /** @type {string[]} */
   const imported = [];
   // Each match restarts one character on, so no pair hides inside another.
@@ -2260,5 +2481,10 @@ export function componentNameBound(src) {
     if (name.includes('\\')) return null;
     imported.push(name);
   }
-  return catalogNames([...tags, ...imported]);
+  return catalogNames([
+    ...tags,
+    ...imported,
+    ...drawnIcons,
+    ...imported.flatMap(placeholderDrawnNames),
+  ]);
 }

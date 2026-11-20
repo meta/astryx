@@ -13,27 +13,41 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
-import {CSS_PROPERTIES} from './_css-properties.mjs';
+import {cssProperties} from './_css.mjs';
 import {
   AUTO_SPREAD,
   COLOR_PROPS,
   COMMON_PROPERTIES,
-  COMMON_STATES,
   DIALS,
   FAMILIES,
   GROUPS,
   HOW,
+  LIKE,
   P,
   familyOf,
 } from './_tables.mjs';
 import {colorsAt, decodePng, mainColors} from './_png.mjs';
-import {loadTheme, nearest, refuse} from './_settings.mjs';
-import {ASPECTS} from './_check.mjs';
+import {baseInstalled, installLine} from './_project.mjs';
+import {
+  editedThemes,
+  loadTheme,
+  nearest,
+  partComponentDocs,
+  partStates,
+  ARIA_STATES,
+  refuse,
+  resolvedTokens,
+  themeSourceParseError,
+  themeSourceProblem,
+  baseRedraws,
+} from './_settings.mjs';
+import {missedSteps} from './_missed.mjs';
+import {ASPECTS, settableStates} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
 import {PALETTE_DIALS, mappingRows, paletteFiles} from './_palette.mjs';
 import {requireProject, context} from './_context.mjs';
 import {checked, exampleStep, howTheme, render} from './_how-commands.mjs';
-import {draftAnswer} from './_how-question.mjs';
+import {draftAnswer, partLexicon, valueAsked} from './_how-question.mjs';
 import {
   getCliInvocation,
   quoteCommandArgument,
@@ -69,13 +83,15 @@ const PICTURE_NAME = /\.(png|jpe?g|gif|webp|bmp|avif|heic|tiff?|svg)$/i;
  * @param {string} cwd
  */
 export function isPicture(subject, cwd) {
-  if (!subject || /\s/.test(subject.trim())) return false;
-  if (PICTURE_NAME.test(subject)) return true;
+  if (!subject) return false;
+  // A file that exists is a picture whatever its name: macOS names every
+  // screenshot "Screenshot … at 1.23.45 PM.png".
   try {
-    return fs.statSync(path.resolve(cwd, subject)).isFile();
+    if (fs.statSync(path.resolve(cwd, subject.trim())).isFile()) return true;
   } catch {
-    return false;
+    // Not a file here.
   }
+  return !/\s/.test(subject.trim()) && PICTURE_NAME.test(subject);
 }
 
 /**
@@ -178,19 +194,87 @@ function withPrefix(value, cwd) {
  */
 async function answer(subject, options, cwd) {
   const {list, at = [], count} = options;
-  const t = (subject ?? '').trim();
+  // "½rem": a fraction is a number before anything reads the question.
+  const t = (subject ?? '')
+    .trim()
+    // "corners:", "var(--radius-element)": a setting pasted as written is
+    // a lookup of it.
+    .replace(/^([a-z][a-z -]*):\s*$/i, '$1')
+    .replace(/^var\(\s*(--[a-z0-9-]+)\s*\)$/i, '$1')
+    // A lone "½" with no unit after it is a share of now ("card padding
+    // ½"), never 0.5px.
+    .replace(
+      /(\d*)(?:½|1\u20442)(?!\s*(?:rem|px|em|%|x\b|×|times\b))/g,
+      (_, n) => (n ? `${n}½` : ' half '),
+    )
+    .replace(/(\d*)(?:½|1\u20442)/g, (_, n) => `${n ? Number(n) + 0.5 : '0.5'}`)
+    .replace(
+      /(\d*)(?:¼|1\u20444)/g,
+      (_, n) => `${n ? Number(n) + 0.25 : '0.25'}`,
+    )
+    .replace(
+      /(\d*)(?:¾|3\u20444)/g,
+      (_, n) => `${n ? Number(n) + 0.75 : '0.75'}`,
+    );
+  // "paddingLeft", "borderRadius": a property as JavaScript spells it is
+  // that CSS property, as set takes it.
+  if (/^[a-z]+(?:[A-Z][a-z]+)+$/.test(t)) {
+    const kebab = t.replace(/[A-Z]/g, ch => `-${ch.toLowerCase()}`);
+    if (cssProperties().has(kebab)) return answer(kebab, options, cwd);
+  }
+  // "explain spacing", "tell me about the accent": the lookup of what is
+  // named, never a change.
+  const explain =
+    /^(?:explain|describe|tell me about)\s+(?:the |my )?([a-z][a-z -]*?)\s*$/i.exec(
+      t,
+    );
+  if (explain && explain[1] !== t) return answer(explain[1], options, cwd);
   // --theme names a theme whatever the subject, so a bad one is refused
   // for a picture and a list too.
   if (options.theme === '')
     refuse(E.ERR_INVALID_ARGUMENT, '--theme was given no name.', {
       run: [`${HOW} ${t ? JSON.stringify(t) : 'card'}`],
     });
-  if (options.theme != null) loadTheme(cwd, options.theme);
+  if (options.theme != null) {
+    try {
+      loadTheme(cwd, options.theme);
+    } catch (e) {
+      // A theme name near the one typed: the same question for it, never
+      // only `show` (the question is kept).
+      const err = /** @type {any} */ (e);
+      // (A name typed in another case or as a path too.)
+      if (err?.suggestions)
+        for (const s of err.suggestions) {
+          const near = / show ([a-z][a-z0-9-]*)$/.exec(
+            String(s.name ?? ''),
+          )?.[1];
+          if (near)
+            s.name = `${HOW} ${quoteCommandArgument(t || 'card')} --theme ${near}`;
+        }
+      throw e;
+    }
+    // A theme whose source no longer extends its settings takes no setting:
+    // an answer would suggest commands that cannot run.
+    const parseError = themeSourceParseError(cwd, options.theme);
+    const broken = parseError
+      ? {
+          problem: parseError,
+          fix: `Fix themes/${options.theme}/${options.theme}.theme.ts.`,
+        }
+      : await themeSourceProblem(cwd, options.theme);
+    if (broken)
+      refuse(
+        E.ERR_THEME_INVALID,
+        `${broken.problem}, so settings cannot take effect and no command here would change the theme. ${broken.fix} Then ask again.`,
+        {run: [`${P} show ${options.theme}`]},
+      );
+  }
   if (list != null) {
     if (at.length)
       refuse(
         E.ERR_INVALID_ARGUMENT,
         '--at reads a picture; --list lists names, so drop one of them.',
+        {run: [`${HOW} --list ${quoteCommandArgument(String(list))}`]},
       );
     const kind = listKind(list);
     if (kind === 'kinds')
@@ -207,16 +291,21 @@ async function answer(subject, options, cwd) {
   }
   if (isPicture(t, cwd))
     return {kind: 'picture', subject: t, ...pictureColors(t, cwd, at, count)};
+  // What runs instead: the same subject without the picture option (a
+  // real command), never a made-up file name.
+  const without = t ? `${HOW} ${quoteCommandArgument(t)}` : `${HOW} --help`;
   if (at.length)
     refuse(
       E.ERR_INVALID_ARGUMENT,
-      '--at reads the color at points of a PNG picture; name the picture first.',
-      {run: [`${HOW} picture.png --at "40,20"`]},
+      `--at reads the color at points of a PNG picture; name your picture first (${HOW} <your .png file> --at x,y).`,
+      {run: [without]},
     );
   if (count != null)
-    refuse(E.ERR_INVALID_ARGUMENT, 'A count applies only to a picture.', {
-      run: [`${HOW} picture.png 5`],
-    });
+    refuse(
+      E.ERR_INVALID_ARGUMENT,
+      `A count applies only to a picture (${HOW} <your .png file> 5).`,
+      {run: [without]},
+    );
   if (!t) {
     refuse(
       E.ERR_MISSING_ARGUMENT,
@@ -230,6 +319,22 @@ async function answer(subject, options, cwd) {
       },
     );
   }
+  // "how b make buttons pill": a first word typed as its own argument that
+  // names an existing theme, with more words after it, is the theme, as for
+  // set, show and undo. A quoted question ("how 'accent red'") is one
+  // argument: its first word is never a theme.
+  const argv = /** @type {string[] | undefined} */ (options.words);
+  if (
+    !options.theme &&
+    argv &&
+    argv.length >= 2 &&
+    editedThemes(cwd).includes(argv[0])
+  )
+    return answer(
+      argv.slice(1).join(' '),
+      {...options, words: undefined, theme: argv[0]},
+      cwd,
+    );
   const ctx = await context(cwd);
   const {C} = ctx;
   const env = await howTheme(ctx, cwd, options.theme);
@@ -314,12 +419,27 @@ async function answer(subject, options, cwd) {
   }
   if (Object.hasOwn(DIALS, key)) {
     const d = DIALS[key];
+    // A base is named only when it is installed here; the others are
+    // listed with the line that installs them.
+    const installed = (/** @type {string} */ b) =>
+      baseInstalled(ctx.project, b);
+    const missing = key === 'base' ? LIKE.filter(b => !installed(b)) : [];
     return {
       kind: 'setting',
       subject: t,
       source: 'dial',
-      values: d.values,
-      help: dialHelp(key, env),
+      values:
+        key === 'base'
+          ? [...LIKE.filter(installed), 'none'].join('|')
+          : d.values,
+      help:
+        dialHelp(key, env) +
+        (missing.length
+          ? ` Not installed here: ${missing.join(', ')} (${installLine(
+              ctx.project.cwd,
+              missing.map(b => `@astryxdesign/theme-${b}`),
+            )}).`
+          : ''),
       ...(PALETTE_DIALS.includes(key) ? {shades: mappingRows(key)} : {}),
       ...themeFields,
       examples: dialCommands(key),
@@ -330,7 +450,7 @@ async function answer(subject, options, cwd) {
     Object.hasOwn(ctx.project.core.tokenDefaults, key)
   )
     return tokenAnswer(ctx, env, t, key, unknown, themeFields);
-  if (CSS_PROPERTIES.has(key)) {
+  if (cssProperties().has(key)) {
     const setters = Object.keys(C.MAP).filter(p => key in C.MAP[p].own);
     const value = exampleForProperty(key);
     const {commands, refused} = value
@@ -357,11 +477,126 @@ async function answer(subject, options, cwd) {
     };
   }
   // "What does --color-accent do", "what's the variable for card padding":
-  // a question about what something is gets the lookup, not a change.
+  // "--focus-outline-width: 3px": a token typed with a value is set exactly,
+  // or refused with the nearest names; never another token.
+  // "cards: --color-border red", "--color-border red on inputs": the token
+  // on that part.
+  const scopeLead = /^\s*([a-z][a-z -]*?)\s*:\s*(?=--)/i.exec(t)?.[1];
+  const scopeTail =
+    /\s+(?:on|for)\s+(?:the |my |all )?([a-z][a-z -]*?)\s*$/i.exec(t)?.[1];
+  const scopeWord = scopeLead ?? scopeTail;
+  const scopeOn = scopeWord
+    ? (() => {
+        const w = ` ${scopeWord.trim().toLowerCase()} `;
+        return (
+          partLexicon(ctx).parts.find(([re]) => re.test(w))?.[1].on ?? null
+        );
+      })()
+    : null;
+  const typedToken =
+    /^\s*(--[a-z][a-z0-9-]*)\s*(?::|\s+to\s+|\s+)\s*([^;]+?)\s*;?\s*(?:\bin (light|dark) mode\b.*)?$/i.exec(
+      t
+        .replace(/^\s*(?:change|set|make|token)\s+/i, ' ')
+        .replace(/^\s*[a-z][a-z -]*?\s*:\s*(?=--)/i, ' ')
+        .replace(
+          scopeOn && scopeTail
+            ? /\s+(?:on|for)\s+(?:the |my |all )?[a-z][a-z -]*?\s*$/i
+            : /$^/,
+          '',
+        ),
+    );
   if (
-    /^\s*(what|which|where)\b.*\b(variables?|tokens?|do|does|means?|controls?|for)\b|^\s*what('s| is) the (css )?(variable|token|property)/i.test(
-      t,
+    typedToken &&
+    (Object.hasOwn(
+      ctx.project.core.tokenDefaults,
+      typedToken[1].toLowerCase(),
+    ) ||
+      nearest(
+        typedToken[1].toLowerCase(),
+        Object.keys(ctx.project.core.tokenDefaults),
+      ).length > 0) &&
+    !/^--(on|when|state|mode|theme|list|at)$/.test(typedToken[1]) &&
+    // "what does --color-accent do" is a lookup.
+    !/^\s*(what|which|where|how|is|are|does|do|explain|why)\b/i.test(t) &&
+    !/^(do|does|mean|means|for|control|controls)\b/i.test(
+      typedToken[2].trim(),
     ) &&
+    // "--color-accent darker", "--a and --b bigger": a way to move it (or
+    // more tokens), never a value: the question reader answers it.
+    !/^(?:and\s+--|(?:a bit |slightly )?(?:darker|lighter|bigger|larger|smaller|thicker|thinner|wider|narrower)(?:$|\s+(?:and|,)))/i.test(
+      typedToken[2].trim(),
+    )
+  ) {
+    const token = typedToken[1].toLowerCase();
+    const mode = /\bin (light|dark) mode\b/i.exec(t)?.[1]?.toLowerCase();
+    const defaults = ctx.project.core.tokenDefaults;
+    const near = nearest(token, Object.keys(defaults));
+    // A token that does not exist is refused with the nearest real names;
+    // a flag-like word with none near is read as words.
+    if (!Object.hasOwn(defaults, token) && near.length)
+      return refuse(E.ERR_INVALID_ARGUMENT, `There is no token ${token}.`, {
+        run: near.map(k => `${HOW} ${k}`),
+      });
+    // Quotes come off only when the whole value is one quoted string: a
+    // font stack keeps its quoted family.
+    const typedValue = typedToken[2].trim();
+    const value = /^(["'])([^"']*)\1$/.test(typedValue)
+      ? typedValue.slice(1, -1)
+      : typedValue;
+    const {commands, refused} = checked(env, [
+      [
+        {
+          verb: 'set',
+          thing: token,
+          value,
+          ...(scopeOn ? {on: scopeOn} : {}),
+          ...(mode && env.data.mode === 'both' ? {mode} : {}),
+        },
+      ],
+    ]);
+    return {
+      kind: 'question',
+      subject: t,
+      understood: {parts: [], aspects: []},
+      ...themeFields,
+      results: [
+        {
+          text: commands.length
+            ? `the token ${token}, as you wrote it`
+            : `${token} ${value}: ${refused[0]?.why ?? 'no command does it'}`,
+          commands,
+          ...(refused.length ? {refused} : {}),
+        },
+      ],
+      ...unknown,
+    };
+  }
+  // A question about the tool itself gets the command that answers it.
+  const tool = toolAnswer(t, env, ctx.project.target);
+  if (tool === 'list') {
+    const kind =
+      /\b(dials?|tokens?|parts?|groups?|properties|property)\b/i
+        .exec(t)?.[1]
+        ?.toLowerCase() ?? 'kinds';
+    return answer('', {...options, list: kind}, cwd);
+  }
+  if (tool)
+    return {
+      kind: 'question',
+      subject: t,
+      understood: {parts: [], aspects: []},
+      ...themeFields,
+      results: tool,
+      ...unknown,
+    };
+  // a question about what something is gets the lookup, not a change; a
+  // question about a part's value now gets the value (draftAnswer).
+  if (
+    !valueAsked(t) &&
+    (/^\s*(what|which|where)\b.*\b(variables?|tokens?|do|does|means?|controls?|for)\b|^\s*what('s| is) the (css )?(variable|token|property)/i.test(
+      t,
+    ) ||
+      /^\s*(is there|are there|explain|what is|what's|what are)\b/i.test(t)) &&
     !/\b(command|make|makes|set|change)\b/i.test(t)
   ) {
     const tok = /--[a-z0-9-]+/i.exec(t)?.[0]?.toLowerCase();
@@ -369,11 +604,34 @@ async function answer(subject, options, cwd) {
       return tokenAnswer(ctx, env, t, tok, unknown, themeFields);
     // "what does spacing more do": the dial's own lookup, its values and
     // what each does.
+    // ("in dark mode" names a mode to read, never the mode dial; a dial
+    // word that names a part's thing, "the focus ring of buttons", is the
+    // part's.)
     const dial = Object.keys(DIALS).find(d =>
-      new RegExp(`\\b${d}\\b`, 'i').test(t.replace(/--[a-z0-9-]+/gi, ' ')),
+      new RegExp(`\\b${d}\\b`, 'i').test(
+        t
+          .replace(/--[a-z0-9-]+/gi, ' ')
+          .replace(/\b(?:in|for)\s+(?:the\s+)?(?:dark|light)\s+mode\b/gi, ' '),
+      ),
     );
-    if (dial && !/\b(on|for)\s+(the\s+)?[a-z]+s?\b/i.test(t))
-      return {...(await answer(dial, options, cwd)), subject: t};
+    // (Asked as a question, its example lines are said, never offered to
+    // run: "what does spacing less do" asks what a change would do.)
+    if (dial && !/\b(on|for|of)\s+(the\s+)?[a-z]+s?\b/i.test(t)) {
+      const looked = await answer(dial, options, cwd);
+      const results = /** @type {any} */ (looked).results;
+      if (Array.isArray(results))
+        for (const r of results) {
+          const runs = r.commands.filter((/** @type {string} */ c) =>
+            / editor (?:set|undo) /.test(c),
+          );
+          if (!runs.length) continue;
+          r.text += ` (for example: ${runs.map((/** @type {string} */ c) => c.replace(/^.* editor (?:set|undo) \S+ /, '')).join('; ')})`;
+          r.commands = r.commands.filter(
+            (/** @type {string} */ c) => !runs.includes(c),
+          );
+        }
+      return {...looked, subject: t};
+    }
     const q = draftAnswer(ctx, env, t);
     const groups = q.aspects.filter(a => Object.hasOwn(GROUPS, a));
     const results = q.parts
@@ -399,8 +657,128 @@ async function answer(subject, options, cwd) {
         results,
         ...unknown,
       };
+    // "which token sets the page background?": the token the answer would
+    // set, looked up.
+    const token = q.parts.includes('page')
+      ? '--color-background-body'
+      : q.drafts
+          .flatMap(d => d.options.flat())
+          .find(st => st.thing.startsWith('--'))?.thing;
+    if (token && Object.hasOwn(ctx.project.core.tokenDefaults, token))
+      return {
+        ...tokenAnswer(ctx, env, token, token, unknown, themeFields),
+        subject: t,
+      };
+  }
+  // "<part> match the theme": the steps show's missed list has for that
+  // part (what the theme's own changes should have reached on it), checked
+  // as every answer is; a part they reached already is said so.
+  const matchAsk =
+    /\b(?:match(?:es|ing)?|fits?|follows?)\s+(?:the|my|this)\s+(?:theme|look)\b/i.exec(
+      t,
+    );
+  if (matchAsk && env.exists) {
+    const q = draftAnswer(ctx, env, t.replace(matchAsk[0], ' '));
+    const parts = q.parts.flatMap(p =>
+      FAMILIES[p] ? FAMILIES[p] : ctx.project.target.has(p) ? [p] : [],
+    );
+    if (parts.length) {
+      const res = await resolvedTokens(ctx, env.slug).catch(() => null);
+      const missed = res ? missedSteps(ctx, env.data, res, env.base) : [];
+      const mine = missed.filter(x => parts.includes(x.part));
+      const drafts = mine.length
+        ? mine.map(x => ({
+            text: `${x.part}${x.state ? ` (${x.state})` : ''}: ${x.why}`,
+            options: [x.steps.map(st => ({verb: 'set', ...st}))],
+            ...(x.steps.length > 1 ? {sequence: true} : {}),
+          }))
+        : [
+            {
+              text: `${[...new Set(parts)].join(', ')} ${parts.length > 1 ? 'follow' : 'follows'} ${env.slug}'s changes already: show's missed list has nothing for ${parts.length > 1 ? 'them' : 'it'}; to change ${parts.length > 1 ? 'them' : 'it'} anyway, ask for the change ("${parts[0]} background #f0f0f0")`,
+              options: [],
+              lookup: `${P} show ${env.slug}`,
+            },
+          ];
+      return {
+        kind: 'question',
+        subject: t,
+        understood: {parts: q.parts, aspects: q.aspects},
+        ...themeFields,
+        results: finish(env, /** @type {any} */ (drafts)),
+        ...unknown,
+      };
+    }
   }
   const h = draftAnswer(ctx, env, t);
+  // The question guard: a question with no clause that asks for a change
+  // never writes. Decided once, for the whole question.
+  if (questionOnly(t))
+    for (const d of h.drafts)
+      if (d.options.some(o => o.length)) {
+        d.options = [];
+        d.text = `${d.text} (a question: nothing is changed; ask for the change to get its command)`;
+      }
+  // A part show's missed list has (a tooltip still on the base's dark
+  // surface), asked about for its look (its fill or text, or nothing more
+  // said: "tooltips grey like the rest"): the missed steps lead.
+  if (
+    env.exists &&
+    !questionOnly(t) &&
+    h.parts.length &&
+    (!h.aspects.length ||
+      h.aspects.some(a => a === 'background' || a === 'text'))
+  ) {
+    const parts = h.parts.flatMap(p =>
+      FAMILIES[p] ? FAMILIES[p] : ctx.project.target.has(p) ? [p] : [],
+    );
+    const res = await resolvedTokens(ctx, env.slug).catch(() => null);
+    // (A missed entry never says otherwise than the question: where the
+    // question gives the part a fill or a text color, the missed list's
+    // fill or text for it is not offered, "tooltips #1f2328 with white
+    // text"; and where the question writes the part at all, its own
+    // answer leads and the missed list follows, "secondary buttons white
+    // …" before a disabled-primary entry.)
+    const asked = h.drafts.flatMap(d => d.options.flat());
+    /** @param {any} st */
+    const family = st =>
+      /^background(?:-color)?$|^--color-background-|^--color-[a-z]+-muted$/.test(
+        String(st.thing),
+      )
+        ? 'fill'
+        : st.thing === 'color' || /^--color-(?:text|on)-/.test(String(st.thing))
+          ? 'text'
+          : null;
+    // (An ask to match the rest, "tooltips grey like the rest", is the
+    // missed list's own ask: it leads.)
+    const matching =
+      /\b(?:like the rest|like everything else|match(?:es|ing)? the (?:theme|rest)|same as the rest)\b/i.test(
+        t,
+      );
+    const mine = (res ? missedSteps(ctx, env.data, res, env.base) : []).filter(
+      x =>
+        parts.includes(x.part) &&
+        x.steps.length &&
+        (matching ||
+          !x.steps.some(st => {
+            const f = family(st);
+            return (
+              f != null && asked.some(a => a.on === x.part && family(a) === f)
+            );
+          })),
+    );
+    const entries = /** @type {any[]} */ (
+      mine.map(x => ({
+        text: `${x.part}${x.state ? ` (${x.state})` : ''}: ${x.why} (show's missed list)`,
+        options: [x.steps.map(st => ({verb: 'set', ...st}))],
+        ...(x.steps.length > 1 ? {sequence: true} : {}),
+      }))
+    );
+    const written = new Set(
+      matching ? [] : asked.map(a => a.on).filter(Boolean),
+    );
+    h.drafts.unshift(...entries.filter((_, k) => !written.has(mine[k].part)));
+    h.drafts.push(...entries.filter((_, k) => written.has(mine[k].part)));
+  }
   const results = finish(env, h.drafts);
   const empty = !results.some(r => r.commands.length);
   return {
@@ -412,10 +790,13 @@ async function answer(subject, options, cwd) {
     ...unknown,
     ...(empty
       ? {
-          hint: results.length
-            ? `No command does all of "${t}" on ${env.slug}; the lines above say why.`
-            : `No match for "${t}". Name the part (header, nav links, card, button, banner, input...) and what to change (text color, background, gradient, corners, border, shadow, spacing, bold), in English.`,
+          hint: `${
+            results.length
+              ? `No command does all of "${t}" on ${env.slug}; each result says why.`
+              : `No match for "${t}". Name the part (header, nav links, card, button, banner, input...) and what to change (text color, background, gradient, corners, border, shadow, spacing, bold), in English.`
+          } See ${HOW} --help for the asks it understands.`,
           run: [
+            `${HOW} --help`,
             `${HOW} --list parts`,
             `${HOW} "rounder buttons"`,
             `${HOW} colors`,
@@ -426,21 +807,243 @@ async function answer(subject, options, cwd) {
 }
 
 /**
+ * The commands a refusal names to run instead that answer the draft: the
+ * same thing set, accepted by set's check, and (for a draft that carries
+ * what its clause asks) measured to do it.
+ * @param {import('./_how-commands.mjs').HowTheme} env
+ * @param {import('./_how-question.mjs').Draft} d
+ * @param {Array<{command: string, why: string, run?: string[]}>} refused
+ * @returns {string[]}
+ */
+function insteadOf(env, d, refused) {
+  // (The same thing on the same part: another part is another ask.)
+  const things = new Set(
+    d.options.flat().map(st => `${st.thing}|${st.on ?? ''}`),
+  );
+  /** @type {string[]} */
+  const out = [];
+  for (const line of refused.flatMap(r => r.run ?? [])) {
+    const words = [
+      ...line
+        .replace(/^.*? editor /, '')
+        .matchAll(/'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)"|(\S+)/g),
+    ].map(m => m[1] ?? m[2] ?? m[3]);
+    const st = exampleStep(
+      words.map(w => (/\s/.test(w) ? `"${w}"` : w)).join(' '),
+    );
+    if (
+      !st ||
+      !things.has(`${st.thing}|${st.on ?? ''}`) ||
+      /[<>]/.test(String(st.value ?? ''))
+    )
+      continue;
+    if (!env.check([st]).ok) continue;
+    // Held to what the draft asks, else to the way its own dial step went
+    // ("more"): never offered unmeasured.
+    const way = d.options
+      .flat()
+      .map(x => x.value)
+      .find(v => v === 'more' || v === 'less');
+    const intent =
+      d.intent ??
+      (way
+        ? /** @type {import('./_how-commands.mjs').MeasureIntent} */ ({
+            families: [],
+            typed: [],
+            opacityDir: null,
+            dir: way,
+            zero: false,
+            lighter: null,
+            subjects: [],
+            keep: [],
+            mode: null,
+          })
+        : null);
+    if (!intent || typeof env.measure !== 'function') continue;
+    // A dial word the other way round from the one asked never answers it.
+    if (way && (st.value === 'more' || st.value === 'less') && st.value !== way)
+      continue;
+    if (env.measure([st], intent)) continue;
+    out.push(render(st, env.slug));
+  }
+  return out;
+}
+
+/**
+ * Whether a question only asks (how, what, which, is, does …) and has no
+ * clause that asks for a change: "how heavy is the text" asks; "how heavy
+ * are headings - set them bold", "what color is the page? make it white"
+ * and "can you make cards rounder?" ask for a change.
+ * @param {string} q
+ */
+export function questionOnly(q) {
+  const t = String(q).toLowerCase().trim();
+  // ("why not square buttons", "what about no borders": a suggestion is
+  // an ask.)
+  if (
+    !/^(?:how|what|what's|whats|which|is|are|does|do|did|why|where)\b/.test(
+      t,
+    ) ||
+    /^(?:why not|what about|how about|what if)\b/.test(t) ||
+    // ("why are my headings not bold": a complaint is an ask.)
+    /^why\b.*\b(?:not|n'?t)\b/.test(t)
+  )
+    return false;
+  // A verb that asks for a change anywhere after the question's first
+  // word ("whats the padding on cards make it 12").
+  if (
+    /\s(?:make|set|turn|give|change|add|remove|put|round|darken|lighten|increase|decrease|bump|apply)\s+(?:it|them|this|that|the|all|every|my|our|\w+s)\b/.test(
+      t,
+    )
+  )
+    return false;
+  if (/\b(?:can|could|would|will) (?:you|we|i)\b/.test(t)) return false;
+  // A clause after the question that does not ask again ("… underline
+  // them", "… - set them bold") is the change it asks for.
+  const QUESTION_LEAD =
+    /^(?:how|what|what's|whats|which|is|are|does|do|did|why|where|who|it|its|it's|they|the|a|an|my|our|or|and|i|im|i'm|that|this)\b/;
+  return !t
+    .split(/[?;!.]+|\s[-–—]+\s|,\s*/)
+    .slice(1)
+    .some(seg => seg.trim() && !QUESTION_LEAD.test(seg.trim()));
+}
+
+/**
  * Check each draft's commands and keep what passes; a draft whose commands
  * are all refused says why, and points to the lookup that helps.
  * @param {import('./_how-commands.mjs').HowTheme} env
  * @param {import('./_how-question.mjs').Draft[]} drafts
  */
 function finish(env, drafts) {
-  /** @type {Array<{text: string, commands: string[], sequence?: boolean, refused?: Array<{command: string, why: string}>}>} */
+  /** @type {Array<{text: string, commands: string[], sequence?: boolean, refused?: Array<{command: string, why: string, run?: string[]}>}>} */
   const out = [];
+  // The measured check runs first on the drafts that carry what their
+  // clause asks; a draft that joins them ("all of it, in order") then keeps
+  // only the steps some kept option still has, so it never brings back a
+  // step the check left out.
+  const key = (/** @type {import('./_how-commands.mjs').Step} */ st) =>
+    JSON.stringify([
+      st.verb,
+      st.thing,
+      st.value,
+      st.on,
+      st.when,
+      st.state,
+      st.mode,
+    ]);
+  /** @type {Set<string>} */
+  const dropped = new Set();
+  /** @type {Set<string>} */
+  const kept = new Set();
+  /** @type {Map<object, string[]>} */
+  const unmetOf = new Map();
+  if (typeof env.measure === 'function')
+    for (const d of drafts) {
+      if (!d.intent) continue;
+      const intent = d.intent;
+      /** @type {string[]} */
+      const unmet = [];
+      d.options = d.options.flatMap(o => {
+        const why = env.measure(o, intent);
+        if (why) {
+          // A change written per mode that goes the wrong way in one mode
+          // only ("warning text darker": the dark half lighter is what
+          // darker means against a dark page): the other mode's half is
+          // kept, and the dropped half is named.
+          const modes = new Set(o.map(st => st.mode).filter(Boolean));
+          if (modes.size === 2 && o.every(st => st.mode))
+            for (const m of /** @type {const} */ (['light', 'dark'])) {
+              const half = o.filter(st => st.mode !== m);
+              if (env.measure(half, intent)) continue;
+              for (const st of o) (st.mode === m ? dropped : kept).add(key(st));
+              unmet.push(`${why}, so only the other mode is changed`);
+              return [half];
+            }
+        }
+        for (const st of o) (why ? dropped : kept).add(key(st));
+        if (why) unmet.push(why);
+        return why ? [] : [o];
+      });
+      // One change in growing amounts: the first kept is the answer, and
+      // the smaller amounts that fell short are no reason to tell.
+      if (d.smallest && d.options.length) {
+        d.options = d.options.slice(0, 1);
+        unmet.length = 0;
+      }
+      unmetOf.set(d, unmet);
+    }
   for (const d of drafts) {
+    if (!d.intent && dropped.size) {
+      d.options = d.options
+        .map(o => o.filter(st => !dropped.has(key(st)) || kept.has(key(st))))
+        .filter(o => o.length);
+      // A joined answer left holding what another answer already says is
+      // that answer: it is not given twice (and never as "all of it").
+      const same = (/** @type {import('./_how-commands.mjs').Step[]} */ o) =>
+        drafts.some(
+          x =>
+            x !== d &&
+            x.options.some(
+              y =>
+                y.length === o.length &&
+                y.every((st, i) => key(st) === key(o[i])),
+            ),
+        );
+      if (d.options.length && d.options.every(same)) continue;
+    }
+    // The measured check: an option whose built result does not do what
+    // the question asks is left out, with a plain line saying why.
+    const unmet = unmetOf.get(d) ?? [];
+    if (unmet.length) {
+      if (unmet.length && !d.options.length)
+        d.text = `couldn't work out a command that does "${d.text}" as asked: ${[...new Set(unmet)].join('; ')}`;
+      else if (unmet.length)
+        d.text = `${d.text} (left out: ${[...new Set(unmet)].join('; ')})`;
+    }
+    // A joined answer ("all of it, in order") drops each step that alone
+    // changes nothing, as its own line says; written, it would pin that
+    // setting, so a later dial would not reach it.
+    if (d.sequence && d.options.some(o => o.length > 1)) {
+      /** @param {import('./_how-commands.mjs').Step} st */
+      const noOp = st => {
+        const r = env.check([st]);
+        return !r.ok && /^it changes nothing/.test(r.why);
+      };
+      const before = d.options.map(o => o.length);
+      d.options = d.options
+        .map(o => (o.length > 1 ? o.filter(st => !noOp(st)) : o))
+        .filter(o => o.length);
+      // (Left holding what another answer already says: not given twice.)
+      const narrowed = d.options.some((o, i) => o.length < (before[i] ?? 0));
+      if (
+        narrowed &&
+        d.options.every(o =>
+          drafts.some(
+            x =>
+              x !== d &&
+              x.options.some(
+                y =>
+                  y.length === o.length &&
+                  y.every((st, k) => key(st) === key(o[k])),
+              ),
+          ),
+        )
+      )
+        continue;
+    }
     const {commands, refused} = checked(env, d.options);
     const lookups = d.lookup ? [d.lookup] : [];
+    if (!commands.length && !d.options.length && unmet.length) {
+      out.push({text: d.text, commands: lookups});
+      continue;
+    }
     if (!commands.length && d.options.length && !lookups.length) {
       out.push({
         text: `${d.text}: no command does it on ${env.slug}${refused[0] ? `: ${refused[0].why}` : ''}`,
-        commands: [],
+        // The command the refusal itself names to run instead, when it
+        // sets the same thing, passes set's check and does what the
+        // question asks.
+        commands: insteadOf(env, d, refused),
         refused,
       });
       continue;
@@ -489,7 +1092,7 @@ function lookupKey(t, ctx) {
     ctx.project.target.has(x) ||
     ASPECTS.includes(x) ||
     Object.hasOwn(DIALS, x) ||
-    CSS_PROPERTIES.has(x) ||
+    cssProperties().has(x) ||
     x === 'colors' ||
     x === 'palette';
   if (known(k)) return k;
@@ -516,15 +1119,46 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
     ctx.project.target.get(key)
   );
   const group = familyOf(key);
-  const states = [...new Set([...target.states, ...COMMON_STATES])];
+  const states = settableStates(ctx, env.slug, env.data, key);
+  // A token the base theme points at another one on the part or a part
+  // around it (neutral's progress track reads the muted fill, which it
+  // points at the emphasized border there): that token is what it shows.
+  const blocks =
+    /** @type {{components?: Record<string, Record<string, Record<string, unknown>>>}} */ (
+      env.base
+    ).components ?? {};
+  const around = [
+    key,
+    ...Object.keys(C.MAP).filter(t => C.MAP[t]?.contains?.includes(key)),
+  ];
+  /** @param {string} token */
+  const pointedAt = token => {
+    for (const t of around) {
+      const v = blocks[t]?.base?.[token];
+      const to =
+        typeof v === 'string'
+          ? /^var\((--[\w-]+)\)$/.exec(v.trim())?.[1]
+          : null;
+      if (to) return {token: to, on: t};
+    }
+    return null;
+  };
   const reads = Object.fromEntries(
     Object.keys(GROUPS).map(g => [
       g,
-      C.partReads(key, g).map(r => ({
-        token: r.token,
-        props: r.props,
-        when: [...new Set(r.when.map(w => condition(ctx, key, w)))],
-      })),
+      C.partReads(key, g).map(r => {
+        const to = r.token ? pointedAt(r.token) : null;
+        return {
+          token: r.token,
+          ...(to
+            ? {
+                shows: `${to.token} (the ${env.data.like ?? 'base'} theme points ${r.token} at it on ${to.on})`,
+              }
+            : {}),
+          props: r.props,
+          when: [...new Set(r.when.map(w => condition(ctx, key, w, states)))],
+        };
+      }),
     ]),
   );
   const components = [
@@ -537,7 +1171,9 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
   const extra = {};
   if (!recorded && !ctx.unchecked) {
     const {commands} = checked(env, [
-      [{verb: 'set', thing: 'background', value: '#f3f4f6', on: key}],
+      // (A fill of one color is the background color: the shorthand would
+      // clear the image Core draws its hover tint with.)
+      [{verb: 'set', thing: 'background-color', value: '#f3f4f6', on: key}],
       [{verb: 'set', thing: 'color', value: '#111827', on: key}],
       [{verb: 'set', thing: 'border-radius', value: '8px', on: key}],
     ]);
@@ -550,6 +1186,9 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
     kind: 'part',
     subject,
     component: target.component ?? null,
+    // What the part is, from its component's doc (a side nav heading is the
+    // product or account heading at the top, not a section title).
+    is: partComponentDocs(ctx, key).at(-1)?.doc.description || null,
     components,
     recorded,
     group,
@@ -571,14 +1210,29 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} target
  * @param {string} cond
+ * @param {string[]} [settable] the states set takes on the part (the one
+ *   list its refusals and how name too), when known
  * @returns {string}
  */
-export function condition(ctx, target, cond) {
+export function condition(ctx, target, cond, settable) {
   if (!cond.trim()) return 'always';
   const t = ctx.project.target.get(target);
   const props = t?.props ?? [];
-  const states = [...(t?.states ?? []), ...COMMON_STATES];
+  const states = settable ?? partStates(ctx, target);
   const values = ctx.C.variantValues(target);
+  // An attribute the part has no prop for and is drawn with the same value
+  // in every render (a toggle button is always a ghost button): the part
+  // itself, not a condition.
+  /** @type {Map<string, Set<string>>} */
+  const seen = new Map();
+  for (const byCond of Object.values(ctx.C.MAP[target]?.at ?? {}))
+    for (const c of Object.keys(/** @type {object} */ (byCond)))
+      for (const m of c.matchAll(/(?:^|[\s,])([a-z][\w-]*)=([^\s,]*)/gi))
+        (seen.get(m[1]) ?? seen.set(m[1], new Set()).get(m[1]))?.add(m[2]);
+  /** @type {Record<string, string>} */
+  const ariaOf = Object.fromEntries(
+    Object.entries(ARIA_STATES).map(([name, {attr}]) => [attr, name]),
+  );
   const words = cond.trim().split(/\s+/);
   const isAttr = (/** @type {string} */ w) => /^[a-z][\w-]*=[^\s]*$/i.test(w);
   const attrs = words.filter(isAttr).flatMap(w => w.split(','));
@@ -589,21 +1243,62 @@ export function condition(ctx, target, cond) {
   let why = null;
   for (const kv of attrs) {
     const [k, v] = kv.split('=');
-    if (k === 'selected' && states.includes('selected'))
-      flags.push('--state selected');
+    // A state Core paints from an ARIA attribute: --state by its name.
+    if (ariaOf[k] && states.includes(ariaOf[k]) && v !== 'false')
+      flags.push(`--state ${ariaOf[k]}`);
+    else if (
+      !props.includes(k) &&
+      !states.includes(k) &&
+      !ariaOf[k] &&
+      seen.get(k)?.size === 1 &&
+      Object.values(ctx.C.MAP[target]?.at ?? {}).every(byCond =>
+        Object.keys(/** @type {object} */ (byCond)).every(
+          c => !c.trim() || new RegExp(`(^|[\\s,])${k}=`).test(c),
+        ),
+      )
+    )
+      continue;
+    // A state written as its own name (`checked=checked`) set takes as
+    // --state.
+    else if ((v === k || v === 'true') && states.includes(k))
+      flags.push(`--state ${k}`);
     else if (props.includes(k) && (!values[k]?.length || values[k].includes(v)))
       flags.push(`--when ${k}:${v}`);
+    // Another value of a state (a checkbox's `checked="indeterminate"`):
+    // set names it with --when.
+    else if (states.includes(k)) flags.push(`--when ${k}:${v}`);
     else why ??= `${target} has no ${k} prop or state that set can name`;
   }
   if (css) {
     const m = /^:([a-z-]+)$/.exec(css);
+    // An ARIA state Core writes as a selector of its own (an open menu
+    // button's `:is([aria-expanded="true"][aria-haspopup]…)`).
+    const aria = /^(?::is\()?\[(aria-[a-z]+)="?([\w-]+)"?\]/.exec(css);
     if (m && states.includes(m[1])) flags.push(`--state ${m[1]}`);
+    else if (
+      aria &&
+      ariaOf[aria[1]] &&
+      states.includes(ariaOf[aria[1]]) &&
+      aria[2] !== 'false' &&
+      !/::|:(?!is\(|not\()/.test(css.replace(/^:is\(|\)$/g, ''))
+    )
+      flags.push(`--state ${ariaOf[aria[1]]}`);
     else why ??= `${css} is a CSS selector that set cannot name`;
   }
   if (flags.filter(f => f.startsWith('--when')).length > 1)
     why ??= 'set names one --when at a time';
-  if (flags.filter(f => f.startsWith('--state')).length > 1)
-    why ??= 'set names one --state at a time';
+  // Several states at once (a checked and disabled box): one --state with
+  // each, joined by +.
+  const stateFlags = flags.filter(f => f.startsWith('--state'));
+  if (stateFlags.length > 1) {
+    const joined = `--state ${stateFlags.map(f => f.slice(8)).join('+')}`;
+    flags.splice(
+      0,
+      flags.length,
+      ...flags.filter(f => !f.startsWith('--state')),
+      joined,
+    );
+  }
   return why ? `${cond.trim()} (not settable: ${why})` : flags.join(' ');
 }
 
@@ -696,8 +1391,11 @@ function tokenAnswer(ctx, env, subject, key, unknown, themeFields) {
   const {C} = ctx;
   const readers = C.anyReader(key);
   const type = C.typeOf(key);
+  // The theme's own value (its settings applied), else the base theme's.
   const now =
-    env.base.light[key] ?? String(ctx.project.core.tokenDefaults[key]);
+    env.own?.light[key] ??
+    env.base.light[key] ??
+    String(ctx.project.core.tokenDefaults[key]);
   const value = exampleForToken(type, key, now);
   const {commands, refused} = value
     ? checked(env, [
@@ -720,6 +1418,9 @@ function tokenAnswer(ctx, env, subject, key, unknown, themeFields) {
   // a variant it does not render reads (heading level 5, an error toast)
   // shows no reader there; Core's stylesheet still names it.
   const inSheet = !readers.length && stylesheetReads(ctx, key);
+  // Where the theme's base draws past it: a part and condition whose own
+  // base rule sets the property this token feeds in Core.
+  const redrawn = ctx.unchecked ? [] : baseRedraws(C, env.base, key);
   return {
     kind: 'setting',
     subject,
@@ -735,6 +1436,14 @@ function tokenAnswer(ctx, env, subject, key, unknown, themeFields) {
             ? `no part in the part data reads ${key}, but Core's stylesheet does, in a variant or state the part data does not render; so readBy is incomplete`
             : `no part reads ${key}, and Core's stylesheet does not use it`,
         }),
+    ...(redrawn.length
+      ? {
+          notIn: redrawn.map(
+            r =>
+              `${r.part}${r.when ? ` (${r.when.replace(':', ' ')})` : ''}: the ${env.data.like ?? 'base'} theme draws its ${r.prop} from ${r.value}, so ${key} does not reach it; set ${r.prop} --on ${r.part}${r.when ? ` --when ${r.when}` : ''} there`,
+          ),
+        }
+      : {}),
     ...unknown,
     ...themeFields,
     examples: commands,
@@ -783,6 +1492,203 @@ function colorsAnswer(env, dialCommands) {
 }
 
 /**
+ * The answer to a question about the tool itself: help, a list, how to see
+ * a change, or the difference between two things it names. 'list' means
+ * the caller lists the kind the question names.
+ * @param {string} t
+ * @param {import('./_how-commands.mjs').HowTheme} env
+ * @param {Map<string, unknown>} targets the parts Core styles
+ * @returns {Array<{text: string, commands: string[]}> | 'list' | null}
+ */
+function toolAnswer(t, env, targets) {
+  const q = t
+    .trim()
+    .toLowerCase()
+    .replace(/[?.!]+$/, '');
+  if (
+    /^(help|usage|\?|how does (this|it) work|what can (i|you) (ask|do))$/.test(
+      q,
+    )
+  )
+    return [
+      {
+        text: 'how answers a part, a setting, a plain-words question or a PNG picture with the commands that make the change; set makes it, show lists what a theme sets',
+        commands: [`${HOW} --help`, `${HOW} --list kinds`],
+      },
+    ];
+  if (
+    /^(list|show)( me)? (all|every|the)? ?(the )?(dials?|tokens?|parts?|groups?|properties)\b/.test(
+      q,
+    )
+  )
+    return 'list';
+  if (/\b(see|view|preview|check) (my |the )?(changes?|theme|edits?)\b/.test(q))
+    return [
+      {
+        text: `show lists what ${env.slug} sets; a preview page shows the theme in the app`,
+        commands: [
+          `${P} show ${env.slug}`,
+          `${PREVIEW} add --theme ${env.slug}`,
+        ],
+      },
+    ];
+  // Questions about the theme's files and life.
+  if (
+    /\b(use|import|apply|add|load) (this|the|my) theme (in|to|into) (my|the) app\b/.test(
+      q,
+    )
+  )
+    return [
+      {
+        text: `the theme is a module in themes/${env.slug}/; show names it and its files, and the theme docs say how an app loads a theme`,
+        commands: [`${P} show ${env.slug}`, 'astryx docs theme'],
+      },
+    ];
+  if (/\brename\b/.test(q))
+    return [
+      {
+        text: 'no command renames a theme: make a new one, set what you need on it, and remove the old folder',
+        commands: [
+          `${P} new ${env.slug}-2 --like ${env.data.like ?? 'none'}`,
+          `${P} show ${env.slug}`,
+        ],
+      },
+    ];
+  if (
+    /\b(what|which) (changed|did i change|have i changed)\b|\bwhat (is|does) (my|this|the) theme set\b/.test(
+      q,
+    )
+  )
+    return [
+      {
+        text: `show lists every setting ${env.slug} has, in the order they were made`,
+        commands: [`${P} show ${env.slug}`],
+      },
+    ];
+  if (/\b(second|another|new|other) theme\b/.test(q))
+    return [
+      {
+        text: 'new makes a theme beside the ones you have; how and set take --theme to pick one',
+        commands: [`${P} new ${env.slug}-2 --like ${env.data.like ?? 'none'}`],
+      },
+    ];
+  // Screen-size, print and device conditions: the editor has none.
+  if (
+    /\bmedia quer|^(on|for) (mobile|phones?|tablets?|desktops?|print)$|^(print|printing|print styles?)$/.test(
+      q,
+    )
+  )
+    return [
+      {
+        text: 'the theme editor has no screen-size, print or device conditions: every setting applies on every screen; a media query needs your own CSS',
+        commands: [`${HOW} --help`],
+      },
+    ];
+  // Questions about what is set now, or the choices: a lookup, never a
+  // write.
+  const asks =
+    /^(how (round|big|small|large|thick|dark|light|bold|wide|tall) (is|are)|what (is|are) the (current|available)|which \w+ (does|do|is|are)|what (font|color|colour|radius|accent) (does|do|is|are)|what (values|options|choices))\b|\b(right now|currently|at the moment)\??$|\bnow\?$/.exec(
+      q,
+    );
+  // "is my theme valid", "how many dials", "list every change".
+  if (
+    /^(is|are) (my|the|this) theme (valid|ok|okay|broken|working)\b|^(check|validate) (my|the) theme\b/.test(
+      q,
+    )
+  )
+    return [
+      {
+        text: `show builds ${env.slug} and says what is wrong with it, if anything`,
+        commands: [`${P} show ${env.slug}`],
+      },
+    ];
+  if (
+    /^how many (dials|settings|tokens|parts)\b|^(list|show) (every|all|each) (dial|setting|token|part)s?\b/.test(
+      q,
+    )
+  )
+    return 'list';
+  if (/^(list|show) (every|all|my) (changes?|edits?|settings)\b/.test(q))
+    return [
+      {
+        text: `show lists every setting ${env.slug} has`,
+        commands: [`${P} show ${env.slug}`],
+      },
+    ];
+  if (
+    // A question about a part's value now is answered with that value.
+    (asks && !valueAsked(q)) ||
+    /^which parts (are|does|do)\b/.test(q) ||
+    (/^why (is|are|does|do)\b/.test(q) && !/\bnot\b|n'?t\b/.test(q))
+  ) {
+    // The part or setting the question names gets its own lookup.
+    const named = q
+      .split(/[^a-z-]+/)
+      .find(
+        w =>
+          w.length > 2 &&
+          (targets.has(w) ||
+            targets.has(w.replace(/s$/, '')) ||
+            ['inputs', 'checks'].includes(w)),
+      );
+    const key =
+      named && !targets.has(named) && !['inputs', 'checks'].includes(named)
+        ? named.replace(/s$/, '')
+        : named;
+    return [
+      {
+        text: key
+          ? `how ${key} says what ${key} reads and what sets it; show lists what ${env.slug} sets now`
+          : `show lists what ${env.slug} sets now; how <part> or how <setting> says what a part reads and the values a setting takes`,
+        commands: [...(key ? [`${HOW} ${key}`] : []), `${P} show ${env.slug}`],
+      },
+    ];
+  }
+  if (
+    /\b((astryx|cli) version|version of (the )?(cli|astryx)|which cli|what cli)\b/.test(
+      q,
+    )
+  )
+    return [{text: 'the CLI says its version', commands: ['astryx --version']}];
+  if (/\bwhere (are|is|do) .*\b(stored|saved|kept|live|files?)\b/.test(q))
+    return [
+      {
+        text: `everything is in themes/${env.slug}/: the settings file is the source, and the CSS and module are built from it`,
+        commands: [`${P} show ${env.slug}`],
+      },
+    ];
+  if (
+    /\b(edit|change) (the )?(css|module|theme)?( files?)? by hand\b|\bhand[- ]edit/.test(
+      q,
+    )
+  )
+    return [
+      {
+        text: `the CSS and module in themes/${env.slug}/ are built from the settings file, so a hand edit is lost at the next set; make the change with set`,
+        commands: [`${HOW} --help`],
+      },
+    ];
+  const diff = /\bdifference between (.+?) and (.+)$/.exec(q);
+  if (diff) {
+    const props = cssProperties();
+    return [diff[1], diff[2]].map(x => {
+      const w = x.trim().replace(/^(the|a) /, '');
+      return {
+        text: Object.hasOwn(DIALS, w)
+          ? `${w} is a dial: ${DIALS[w].help}`
+          : props.has(w)
+            ? `${w} is a CSS property: set it on one part with --on`
+            : w.startsWith('--')
+              ? `${w} is a token: one value the whole theme reads`
+              : `what ${w} is`,
+        commands: [`${HOW} ${w}`],
+      };
+    });
+  }
+  return null;
+}
+
+/**
  * The tokens most parts read for one aspect, for a whole-theme change.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {import('./_how-commands.mjs').HowTheme} env
@@ -796,17 +1702,22 @@ function wholeThemeTokens(ctx, env, aspect) {
     .sort((a, b) => C.anyReader(b).length - C.anyReader(a).length)
     .slice(0, 6);
   if (!toks.length) return [];
-  const value = exampleForToken(
-    C.typeOf(toks[0]),
-    toks[0],
-    env.base.light[toks[0]] ?? '',
-  );
+  // The example uses the most read token whose example changes what shows:
+  // a fully round corner (9999px) scaled up stays fully round.
+  /** @type {string[]} */
+  let commands = [];
+  for (const tok of toks) {
+    const now = env.own?.light[tok] ?? env.base.light[tok] ?? '';
+    if (parseFloat(now) >= 999) continue;
+    const value = exampleForToken(C.typeOf(tok), tok, now);
+    if (!value) continue;
+    commands = checked(env, [[{verb: 'set', thing: tok, value}]]).commands;
+    if (commands.length) break;
+  }
   return [
     {
       text: `whole-theme tokens for ${aspect}, most used first: ${toks.map(k => `${k} (${C.anyReader(k).length} parts)`).join(', ')}`,
-      commands: value
-        ? checked(env, [[{verb: 'set', thing: toks[0], value}]]).commands
-        : [`${HOW} ${toks[0]}`],
+      commands: commands.length ? commands : [`${HOW} ${toks[0]}`],
     },
   ];
 }
@@ -878,7 +1789,7 @@ async function listItems(kind, filter, cwd) {
     };
   if (kind === 'properties') {
     const props = filter
-      ? [...CSS_PROPERTIES].filter(x => f(x)).slice(0, 60)
+      ? [...cssProperties()].filter(x => f(x)).slice(0, 60)
       : COMMON_PROPERTIES;
     return {list: kind, items: props.map(name => ({name})), common: !filter};
   }
@@ -906,6 +1817,37 @@ async function listItems(kind, filter, cwd) {
     for (const s of x.states) if (!e.states.includes(s)) e.states.push(s);
     byKey.set(x.key, e);
   }
+  // A filter no part name holds lists the closest names, never nothing.
+  if (!byKey.size && filter) {
+    const word = filter.toLowerCase().replace(/s$/, '');
+    // The parts of components whose doc lists the word, else the names
+    // nearest it.
+    const owners = Object.entries(ctx.project.components)
+      .filter(([, info]) =>
+        (info.keywords ?? []).some(
+          k => k.toLowerCase().replace(/s$/, '') === word,
+        ),
+      )
+      .map(([name]) => name);
+    const close = new Set(
+      owners.length
+        ? ctx.project.targets
+            .filter(x => owners.includes(x.component))
+            .map(x => x.key)
+        : nearest(
+            word,
+            ctx.project.targets.map(x => x.key),
+            5,
+          ),
+    );
+    for (const x of ctx.project.targets) {
+      if (!close.has(x.key)) continue;
+      const e = byKey.get(x.key) ?? {key: x.key, components: [], states: []};
+      if (!e.components.includes(x.component)) e.components.push(x.component);
+      for (const st of x.states) if (!e.states.includes(st)) e.states.push(st);
+      byKey.set(x.key, e);
+    }
+  }
   return {
     list: kind,
     items: [...byKey.values()].map(x => ({
@@ -923,14 +1865,18 @@ async function listItems(kind, filter, cwd) {
  * Read `--at` points: "x,y;x,y", "x,y x,y", repeated, or a flat "a,b,c,d".
  * Each number is a whole pixel; anything else is refused by name.
  * @param {string[]} at
+ * @param {string | null} [file] the picture the points are on
  * @returns {Array<{x: number, y: number}>}
  */
-export function parsePoints(at) {
+export function parsePoints(at, file = null) {
   const words = at
     .join(' ')
     .split(/[;\s]+/)
     .filter(Boolean);
-  const example = `${HOW} picture.png --at "40,20;300,180"`;
+  // The picture named, never a made-up file.
+  const example = file
+    ? `${HOW} ${quoteCommandArgument(file)} --at "40,20;300,180"`
+    : `${HOW} --help`;
   if (!words.length)
     refuse(E.ERR_INVALID_ARGUMENT, '--at names no point; give x,y pairs.', {
       run: [example],
@@ -958,6 +1904,7 @@ export function parsePoints(at) {
     refuse(
       E.ERR_INVALID_ARGUMENT,
       `--at reads at most ${MAX_POINTS} points; it got ${points.length}.`,
+      {run: [example]},
     );
   return points;
 }
@@ -981,6 +1928,7 @@ function pictureColors(file, cwd, at, count) {
     refuse(
       E.ERR_INVALID_ARGUMENT,
       'A count lists main colors; --at reads points. Give one of them.',
+      {run: [`${HOW} ${quoteCommandArgument(file)} ${count}`]},
     );
   if (count != null && (!Number.isInteger(count) || count <= 0))
     refuse(
@@ -988,7 +1936,7 @@ function pictureColors(file, cwd, at, count) {
       `The count must be a positive whole number, not "${count}".`,
       {run: [`${HOW} ${file} 5`]},
     );
-  const points = at.length ? parsePoints(at) : null;
+  const points = at.length ? parsePoints(at, file) : null;
   // The header holds the size, so a huge picture is refused unread.
   const fd = fs.openSync(abs, 'r');
   const head = Buffer.alloc(8);
@@ -1001,6 +1949,7 @@ function pictureColors(file, cwd, at, count) {
     refuse(
       E.ERR_INVALID_ARGUMENT,
       `${file} is a ${other[0]} picture; how reads PNG only. Save or convert it as PNG.`,
+      {run: [`${HOW} --list`]},
     );
   /** @type {import('./_png.mjs').Picture} */
   let pic;
@@ -1009,7 +1958,7 @@ function pictureColors(file, cwd, at, count) {
   } catch (e) {
     throw new AstryxError(
       `Could not read ${file} as a PNG picture: ${e instanceof Error ? e.message : String(e)}.`,
-      [],
+      [{name: `${HOW} --list`, reason: 'what how reads'}],
       E.ERR_INVALID_ARGUMENT,
     );
   }
@@ -1026,6 +1975,7 @@ function pictureColors(file, cwd, at, count) {
           .join(
             '; ',
           )} ${outside.length > 1 ? 'are' : 'is'} outside the picture, which is ${pic.width}x${pic.height} (x from 0 to ${pic.width - 1}, y from 0 to ${pic.height - 1}).`,
+        {run: [`${HOW} ${quoteCommandArgument(file)} --at 0,0`]},
       );
     return {
       file,
@@ -1035,11 +1985,19 @@ function pictureColors(file, cwd, at, count) {
       points: colorsAt(pic, points),
     };
   }
+  const colors = mainColors(pic, count ?? 14);
+  // Every pixel see-through: no color shows, as with a 0-pixel picture.
+  if (!colors.length)
+    throw new AstryxError(
+      `Could not read ${file} as a PNG picture: every pixel is fully see-through, so it has no visible colors.`,
+      [{name: `${HOW} --list`, reason: 'what how reads'}],
+      E.ERR_INVALID_ARGUMENT,
+    );
   return {
     file,
     width: pic.width,
     height: pic.height,
-    colors: mainColors(pic, count ?? 14),
+    colors,
     points: null,
   };
 }

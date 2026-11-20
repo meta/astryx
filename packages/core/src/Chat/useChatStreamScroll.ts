@@ -35,7 +35,7 @@
  */
 
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {useReducesMotion} from '../hooks/useReducesMotion';
+import {useReducesMotion} from '../motion/reducedMotion';
 import {setScrollAnchoringOff} from '../privateAttributes/scrollAnchoring.stylex';
 import {subscribeInput} from '../utils/inputStream';
 import {
@@ -270,7 +270,6 @@ export function useChatStreamScroll({
     lastScrollTopRef.current = el.scrollTop;
   }, [scrollRef]);
 
-  // The setting, live, or a theme's reducedMotion: 'always'.
   const reducesMotion = useReducesMotion();
 
   // Every spring entry point (scrollToBottom, lock, scrollIfLocked growth

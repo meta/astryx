@@ -5,7 +5,7 @@
  * @input A flat map of token names to raw CSS values
  * @output `resolveTokenReferences`, which follows `var(--name[, fallback])`
  *   references through the map, and the CSS parsing helpers it shares
- *   (`splitTopLevelComma`, `findMatchingParen`)
+ *   (`splitTopLevelComma`, `splitTopLevelWhitespace`, `findMatchingParen`)
  * @position Theme utility with no imports: tokens.ts resolves a theme's token
  *   graph on it (evaluating color functions as it goes), and themeMotion.ts
  *   resolves motion tokens written as references on it. Pure; safe on the
@@ -14,13 +14,16 @@
  * SYNC: When modified, update:
  * - /packages/core/src/theme/tokens.ts
  * - /packages/core/src/theme/themeMotion.ts
+ * - /packages/core/src/theme/generateThemeRules.ts (padding shorthands)
  */
 
 /**
- * Split the arguments of a CSS function body on the first top-level comma.
- * Handles nested functions such as rgba(), color-mix(), var(), and quoted strings.
+ * Call `visit` for each top-level character of a CSS value. A top-level
+ * character is outside parentheses and outside quoted strings. In a quoted
+ * string, a backslash escapes the next character. The scan stops when `visit`
+ * returns true.
  */
-export function splitTopLevelComma(input: string): [string, string] | null {
+function scanTopLevel(input: string, visit: (index: number) => boolean): void {
   let depth = 0;
   let quote: '"' | "'" | null = null;
   let isEscaped = false;
@@ -54,12 +57,50 @@ export function splitTopLevelComma(input: string): [string, string] | null {
       continue;
     }
 
-    if (char === ',' && depth === 0) {
-      return [input.slice(0, i).trim(), input.slice(i + 1).trim()];
+    if (depth === 0 && visit(i)) {
+      return;
     }
   }
+}
 
-  return null;
+/**
+ * Split the arguments of a CSS function body on the first top-level comma.
+ * Handles nested functions such as rgba(), color-mix(), var(), and quoted strings.
+ */
+export function splitTopLevelComma(input: string): [string, string] | null {
+  let split: [string, string] | null = null;
+  scanTopLevel(input, i => {
+    if (input[i] !== ',') {
+      return false;
+    }
+    split = [input.slice(0, i).trim(), input.slice(i + 1).trim()];
+    return true;
+  });
+  return split;
+}
+
+/**
+ * Split a CSS value on the whitespace between its components. Whitespace
+ * inside parentheses or quotes belongs to one component, so
+ * `clamp(8px, 2vw, 16px)` and `var(--gap, 1px 2px)` each stay whole. An
+ * empty value has no components.
+ */
+export function splitTopLevelWhitespace(input: string): string[] {
+  const parts: string[] = [];
+  let start = 0;
+  scanTopLevel(input, i => {
+    if (/\s/.test(input[i])) {
+      if (i > start) {
+        parts.push(input.slice(start, i));
+      }
+      start = i + 1;
+    }
+    return false;
+  });
+  if (input.length > start) {
+    parts.push(input.slice(start));
+  }
+  return parts;
 }
 
 /** Index of the `)` matching the `(` at `openIndex`, or -1 when unbalanced. */

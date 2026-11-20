@@ -2,8 +2,11 @@
 
 /**
  * @file reducedMotion.ts
- * @input The Reduced Motion preference, the primary pointer, the motion tables
- * @output reducedMotionFade (the fade the animator would play, for motion it
+ * @input The Reduced Motion preference, a theme's reducedMotion: 'always' mark
+ *   and context, the primary pointer, the motion tables
+ * @output reducesMotion and useReducesMotion (whether motion is reduced, for
+ *   code that holds an element and for a hook that holds none),
+ *   reducedMotionFade (the fade the animator would play, for motion it
  *   does not drive), playReducedMotionDip, and the queries a transition spells
  * @position The one Reduced Motion policy (design:reduced-motion) for code
  *   beside the animator: a raw Web Animations fade, a CSS transition
@@ -26,31 +29,17 @@
  *   default: 'opacity, translate',
  *   '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': 'opacity',
  *   '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))': 'none',
- *   [stylex.when.ancestor('[data-astryx-reduced-motion]', reducedMotionScope)]: {
- *     default: null,
- *     '@media (pointer: coarse)': 'opacity',
- *     '@media (not (pointer: coarse))': 'none',
- *   },
  * },
  * transitionDuration: {
  *   default: '300ms',
  *   '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
  *     reducedMotionFadeConsts.duration,
  *   '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))': '0s',
- *   // The twin on a theme's reducedMotion: 'always' mark,
- *   // at the same pointer split; a bare arm's twin nests '@media all'. Its
- *   // `default: null` emits no rule, and lets StyleX's types read the twin's
- *   // values as the property's, which a typed `xstyle` requires.
- *   [stylex.when.ancestor('[data-astryx-reduced-motion]', reducedMotionScope)]: {
- *     default: null,
- *     '@media (pointer: coarse)': reducedMotionFadeConsts.duration,
- *     '@media (not (pointer: coarse))': '0s',
- *   },
  * },
  * ```
  *
  * reducedMotion.test.ts requires every such key in core to equal one of
- * `reducedMotionKeys`, exactly, and every Reduce Motion arm to have its twin.
+ * `reducedMotionKeys`, exactly.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/motion/reducedMotion.stylex.ts
@@ -58,7 +47,10 @@
  * - /packages/core/src/motion/animator.ts (its Reduced Motion path)
  */
 
+import {use} from 'react';
 import {defaultIsCoarsePointer, defaultPrefersReducedMotion} from './animator';
+import {useMediaQuery} from '../hooks/useMediaQuery';
+import {ThemeReducesMotionContext} from '../theme/useTheme';
 import {resolveMotion} from './resolveMotion';
 import {themeReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import {
@@ -86,12 +78,22 @@ export interface ReducedMotionFade {
 /**
  * Whether motion is reduced for `element`: the person's Reduce Motion setting,
  * or a theme's `reducedMotion: 'always'` mark on the element or an ancestor,
- * `<html>` included for the root theme. Code that holds an
- * element reads it here, as the Reduce Motion styles' twins read the mark;
- * a hook that holds none reads `useReducesMotion`.
+ * `<html>` included for the root theme.
  */
 export function reducesMotion(element?: Element | null): boolean {
   return defaultPrefersReducedMotion() || themeReducesMotion(element);
+}
+
+/**
+ * The hook form of `reducesMotion`, for a hook that holds no element: the
+ * person's Reduce Motion setting, followed live, or a theme above the caller
+ * with `reducedMotion: 'always'`.
+ */
+export function useReducesMotion(): boolean {
+  const prefersReducedMotion = useMediaQuery(
+    '(prefers-reduced-motion: reduce)',
+  );
+  return prefersReducedMotion || use(ThemeReducesMotionContext);
 }
 
 /**

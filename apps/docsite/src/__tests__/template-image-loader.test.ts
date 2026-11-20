@@ -67,6 +67,18 @@ describe('optimizeTemplateImages', () => {
     );
   });
 
+  it('asks for the width it is given', () => {
+    expect(
+      optimizeTemplateImages(
+        "const a = '/template-assets/light-product-1.png';",
+        () => true,
+        640,
+      ),
+    ).toBe(
+      "const a = '/_next/image?url=%2Ftemplate-assets%2Flight-product-1.png&w=640&q=75';",
+    );
+  });
+
   it('leaves vector images, video, other hosts, and text', () => {
     const source = [
       "const a = '/template-assets/placeholder.svg';",

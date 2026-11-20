@@ -164,16 +164,28 @@ function pullRequest(number) {
   };
 }
 
-/** The spec files a failed job's log names as failing. */
-function failingSpecs(job) {
-  const log = spawnSync(
-    'gh',
-    ['run', 'view', '--job', String(job), '--log', '-R', OWNER_REPO],
-    {
-      encoding: 'utf8',
-      maxBuffer: 1 << 28,
-    },
-  );
+/** Tries of one job log download; GitHub answers 502 now and then. */
+const LOG_ATTEMPTS = 4;
+
+const runGh = args =>
+  spawnSync('gh', args, {encoding: 'utf8', maxBuffer: 1 << 28});
+const pause = ms =>
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+/**
+ * The spec files a failed job's log names as failing, or null when the log
+ * cannot be read. A server error is tried again, up to `LOG_ATTEMPTS` times.
+ * @param {number} job
+ * @param {{run?: (args: string[]) => {status: number | null, stdout: string, stderr: string}, sleep?: (ms: number) => void}} [io]
+ * @returns {string[] | null}
+ */
+export function failingSpecs(job, {run = runGh, sleep = pause} = {}) {
+  let log = null;
+  for (let attempt = 1; attempt <= LOG_ATTEMPTS; attempt += 1) {
+    log = run(['run', 'view', '--job', String(job), '--log', '-R', OWNER_REPO]);
+    if (log.status === 0 || !/HTTP 5\d\d/.test(log.stderr ?? '')) break;
+    if (attempt < LOG_ATTEMPTS) sleep(5000 * attempt);
+  }
   if (log.status !== 0) return null;
   const specs = new Set();
   for (const line of log.stdout.split('\n')) {
@@ -305,7 +317,7 @@ function main(args) {
     const pr = pullRequest(number);
     const inScope = pr.files.some(file => scope.test(file));
     const picked = inScope ? replay(pr, {scope, selection, primitives}) : null;
-    const logs = pr.jobs.map(failingSpecs);
+    const logs = pr.jobs.map(job => failingSpecs(job));
     const unknown = logs.some(specs => specs == null);
     const failures = [...new Set(logs.flatMap(specs => specs ?? []))].sort();
     const missed =

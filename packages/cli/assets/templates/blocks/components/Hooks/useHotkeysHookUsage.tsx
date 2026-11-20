@@ -40,7 +40,7 @@ export default function UseHotkeysHookUsage() {
   ]);
 
   return (
-    <Card width={480} padding={4}>
+    <Card width={480} maxWidth="100%" padding={4}>
       <VStack gap={3}>
         <HStack gap={2} vAlign="center">
           <StackItem size="fill">
