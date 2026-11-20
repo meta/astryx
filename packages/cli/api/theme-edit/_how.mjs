@@ -179,12 +179,14 @@ export async function themeEditHow(subject, options = {}) {
  * @returns {T}
  */
 function withPrefix(value, cwd) {
-  const stem = `${getCliInvocation(cwd)} experimental theme`;
-  if (stem === 'astryx experimental theme') return value;
+  const cli = getCliInvocation(cwd);
+  if (cli === 'astryx') return value;
+  // (A line may name the stable theme commands too, "astryx theme add
+  // neutral"; each runs as the app runs the CLI.)
   /** @param {any} v @returns {any} */
   const walk = v =>
     typeof v === 'string'
-      ? v.split('astryx experimental theme').join(stem)
+      ? v.replace(/\bastryx (experimental theme|theme)\b/g, `${cli} $1`)
       : Array.isArray(v)
         ? v.map(walk)
         : v && typeof v === 'object'

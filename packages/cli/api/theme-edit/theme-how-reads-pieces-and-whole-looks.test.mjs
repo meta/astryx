@@ -162,7 +162,7 @@ describe('one variant made to look like another', () => {
       const use = JSON.stringify(
         (await answer('use the default theme')).results,
       );
-      expect(use).toMatch(/astryx theme use /);
+      expect(use).toMatch(/ theme use neutral/);
       expect(use).toMatch(/back to the base theme/);
       expect(use).not.toMatch(/steps back one change/);
       // (A going-back word said as a look describes: no undo, no theme
@@ -182,7 +182,7 @@ describe('one variant made to look like another', () => {
         expect(text, q).not.toMatch(
           /steps back one change|has no change to undo/,
         );
-        expect(text, q).not.toMatch(/astryx theme use /);
+        expect(text, q).not.toMatch(/ theme use /);
       }
     },
     T,
