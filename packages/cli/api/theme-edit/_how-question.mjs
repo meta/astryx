@@ -24012,7 +24012,8 @@ export function draftAnswer(ctx, env, question) {
           })
             ? null
             : perSide0;
-        // (With no width or style said, the colors show on the looks that
+        // (With no width or style said, a run still read per side (a light
+        // run is one border on every look, above) shows on the looks that
         // draw a border; the looks that draw none, a card's muted or color
         // looks, get no brought border, which would grow them: named, with
         // the line that gives one a border.)

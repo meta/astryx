@@ -714,11 +714,18 @@ describe('per-side border asks', () => {
     'names the card looks that draw no border, with the line that gives one',
     async () => {
       if (unbuilt) return;
-      const lines = await first('cards with a #eee #eee #ddd border');
+      // (A run read per side, not a light one: a light run is one border on
+      // every look.)
+      const ask = 'cards with a #999999 #999999 #777777 border';
+      const lines = await first(ask);
       // (No border brought: the default card draws one.)
       expect(lines.join('\n')).not.toMatch(/border-width|border-style/);
-      expect(await said('cards with a #eee #eee #ddd border')).toMatch(
-        /card looks .*draw no border, so the colors show on the others; to give one a border: .* border 'var\(--border-width\) solid #eee' --on card --when variant:/,
+      expect(await said(ask)).toMatch(
+        /card looks .*draw no border, so the colors show on the others; to give one a border: .* border 'var\(--border-width\) solid #999999' --on card --when variant:/,
+      );
+      // (A light run: one border, drawn on every card look, no note.)
+      expect(await said('cards with a #eee #eee #ddd border')).not.toMatch(
+        /draw no border/,
       );
     },
     T,
