@@ -821,11 +821,13 @@ jobs:
                 if (status != null && status.state !== 'pending') break;
                 await new Promise(resolve => setTimeout(resolve, 15_000));
               }
-              // The gate passes only as DEC-11 reads it: a review of this
-              // exact head, never the author's own push.
+              // The gate passes for the heavy turn (DEC-32): a review of this
+              // exact head, never the author's own push. A helper from before
+              // heavyReviewPasses reads it as DEC-11 does.
+              const heavyPasses = turn.heavyReviewPasses ?? turn.reviewPasses;
               passes =
                 status?.state === 'success' &&
-                (await turn.reviewPasses({
+                (await heavyPasses({
                   github,
                   ...context.repo,
                   pull: context.payload.pull_request,

@@ -9,11 +9,14 @@
  *
  * A pull-request push runs only the fast checks in its run's first attempt
  * and defers the heavy suites (the `heavy-ci` job). They run at a head whose
- * review passes as DEC-11 reads it (`reviewPasses`): the review app (for a
- * write-access author) or an engineering owner approved that exact head, and
- * the review-required status shows success. Then the deferred run is run again
- * in full, and a later attempt runs every suite. merge-guard's pre-merge
- * re-run is such a later attempt too.
+ * review passes for the heavy turn (`heavyReviewPasses`): the review-required
+ * status shows success, and the review app or an engineering owner approved
+ * that exact head. The review app's approval counts for a repository
+ * collaborator with read access or more, not only a write-access author as
+ * DEC-11 reads the merge gate (`reviewPasses`, unchanged). A fork's pull
+ * request first needs a maintainer's `ci:run` label. Then the deferred run is
+ * run again in full, and a later attempt runs every suite. merge-guard's
+ * pre-merge re-run is such a later attempt too.
  */
 
 import {createRequire} from 'node:module';
@@ -144,6 +147,91 @@ export async function reviewPasses({
   }).codeApproved;
 }
 
+/** The label a maintainer adds before a fork's pull request runs CI. */
+export const CI_RUN_LABEL = 'ci:run';
+
+const READ_OR_MORE = new Set(['read', 'triage', 'write', 'maintain', 'admin']);
+// GitHub reports read for anyone on a public repository, so the author's
+// association must also show that the repository granted them access.
+const COLLABORATOR_ASSOCIATIONS = new Set(['COLLABORATOR', 'MEMBER', 'OWNER']);
+
+/**
+ * Whether a pull request's review passes at its head for the heavy turn only
+ * (spec:AST-030/DEC-32): `review-required` succeeds there (its spec half
+ * included), and a review of that exact head cleared its code half: the review
+ * app's latest verdict for an author who is a repository collaborator with
+ * read access or more, or an engineering owner's approval. A fork's pull
+ * request without the `ci:run` label never passes, and the author's own review
+ * never counts. Merging still reads `reviewPasses`.
+ * @param {{
+ *   github: any,
+ *   owner: string,
+ *   repo: string,
+ *   pull: {
+ *     number: number,
+ *     head: {sha: string, repo?: {full_name?: string}},
+ *     user?: {login?: string},
+ *     author_association?: string,
+ *     labels?: Array<{name?: string}>,
+ *   },
+ *   engOwners: string[],
+ *   reviewApp?: string,
+ * }} input
+ */
+export async function heavyReviewPasses({
+  github,
+  owner,
+  repo,
+  pull,
+  engOwners,
+  reviewApp = '',
+}) {
+  const fork =
+    pull.head.repo?.full_name != null &&
+    pull.head.repo.full_name.toLowerCase() !== `${owner}/${repo}`.toLowerCase();
+  const labelled = (pull.labels ?? []).some(
+    label => label?.name === CI_RUN_LABEL,
+  );
+  if (fork && !labelled) return false;
+  const sha = pull.head.sha;
+  const status = await reviewStatus({github, owner, repo, sha});
+  if (status?.state !== 'success') return false;
+  const author = pull.user?.login?.toLowerCase() ?? '';
+  const reviews = (
+    await github.paginate(github.rest.pulls.listReviews, {
+      owner,
+      repo,
+      pull_number: pull.number,
+      per_page: 100,
+    })
+  ).filter(review => review.user?.login?.toLowerCase() !== author);
+  const app = reviewDecision.normalizeReviewApp(reviewApp);
+  let appCounts = false;
+  if (app && author) {
+    try {
+      const {data} = await github.rest.repos.getCollaboratorPermissionLevel({
+        owner,
+        repo,
+        username: pull.user.login,
+      });
+      appCounts =
+        reviewDecision.hasWritePermission(data) ||
+        (READ_OR_MORE.has(data?.permission) &&
+          COLLABORATOR_ASSOCIATIONS.has(pull.author_association ?? ''));
+    } catch {
+      // An unreadable permission leaves the app's verdict without effect.
+    }
+  }
+  return reviewDecision.resolveReviewApprovals({
+    reviews,
+    headSha: sha,
+    engOwners,
+    designOwners: [],
+    reviewApp: app,
+    authorHasWrite: appCounts,
+  }).codeApproved;
+}
+
 /**
  * Starts the heavy suites for a pull request whose review passes at its head:
  * re-runs its newest CI run there in full while that run's latest attempt
@@ -168,7 +256,16 @@ export async function startHeavy({
 }) {
   const sha = pull.head.sha;
   const at = `#${pull.number} at ${sha.slice(0, 8)}`;
-  if (!(await reviewPasses({github, owner, repo, pull, engOwners, reviewApp})))
+  if (
+    !(await heavyReviewPasses({
+      github,
+      owner,
+      repo,
+      pull,
+      engOwners,
+      reviewApp,
+    }))
+  )
     return `${at}: review has not passed`;
   const {data} = await github.rest.actions.listWorkflowRuns({
     owner,

@@ -248,7 +248,12 @@ describe('which runs defer the heavy suites (spec:AST-030 FR20, DEC-32)', () => 
                   return state == null ? null : {state};
                 },
                 ownerHandles: text => [String(text)],
-                reviewPasses: async ({pull, engOwners, reviewApp}) => {
+                // The heavy turn reads its own predicate (DEC-32), never
+                // the merge gate's.
+                reviewPasses: async () => {
+                  throw new Error('the heavy turn read reviewPasses');
+                },
+                heavyReviewPasses: async ({pull, engOwners, reviewApp}) => {
                   expect(pull).toEqual({number: 7, head: {sha: 'h1'}});
                   expect(engOwners).toEqual(['@owner1']);
                   expect(reviewApp).toBe('astracat-bot[bot]');

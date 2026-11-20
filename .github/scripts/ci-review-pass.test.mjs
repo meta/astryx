@@ -329,6 +329,99 @@ describe('starting the heavy suites', () => {
   });
 });
 
+describe("the heavy turn's review (DEC-32)", () => {
+  const FORK = {repo: {full_name: 'vjeux/r'}};
+  const CI_RUN = [{name: 'ci:run'}];
+  const read = (sha, extra = {}) =>
+    pull(1, sha, {
+      user: {login: 'vjeux'},
+      author_association: 'COLLABORATOR',
+      labels: CI_RUN,
+      ...extra,
+      head: {sha, ...FORK, ...extra.head},
+    });
+  const passes = async (pr, {reviews, permission = 'read'} = {}) => {
+    const stub = stubGithub({
+      pulls: [pr],
+      statuses: {[pr.head.sha]: passed},
+      permission,
+      ...(reviews ? {reviews: {1: reviews}} : {}),
+    });
+    const input = {...REVIEW, ...stub, owner: 'o', repo: 'r', pull: pr};
+    return [
+      await turn.heavyReviewPasses(input),
+      await turn.reviewPasses(input),
+    ];
+  };
+
+  it("admits a read-access collaborator's head the review app approved, while merging still needs an engineering owner", async () => {
+    // [heavy turn, merge gate (DEC-11, unchanged)]
+    expect(await passes(read('h1'))).toEqual([true, false]);
+    // A write-access author passes both, as before.
+    expect(
+      await passes(pull(1, 'h1', {author_association: 'MEMBER'}), {
+        permission: 'write',
+      }),
+    ).toEqual([true, true]);
+  });
+
+  it('does not admit an approval of an older head', async () => {
+    expect(await passes(read('h2'), {reviews: [appApproval('h1')]})).toEqual([
+      false,
+      false,
+    ]);
+  });
+
+  it("does not let a fork's author without repository access skip ci:run, or the review app clear it", async () => {
+    const outside = {author_association: 'CONTRIBUTOR', user: {login: 'x'}};
+    // No ci:run: never, whoever approved.
+    expect(
+      await passes(read('h1', {...outside, labels: []}), {
+        reviews: [
+          appApproval('h1'),
+          {user: {login: 'owner1'}, commit_id: 'h1', state: 'APPROVED'},
+        ],
+      }),
+    ).toEqual([false, true]);
+    // GitHub reports read for anyone on a public repository: with ci:run,
+    // the review app still does not clear an outside author's head.
+    expect(await passes(read('h1', outside))).toEqual([false, false]);
+    // A read collaborator's fork head waits for ci:run too.
+    expect(await passes(read('h1', {labels: []}))).toEqual([false, false]);
+  });
+
+  it("never counts the author's own approval", async () => {
+    const own = read('h1', {user: {login: 'owner1'}});
+    expect(
+      await passes(own, {
+        reviews: [
+          {user: {login: 'owner1'}, commit_id: 'h1', state: 'APPROVED'},
+        ],
+      }),
+    ).toEqual([false, true]);
+  });
+
+  it('starts the deferred run for such a head', async () => {
+    const pr = read('h1');
+    const stub = stubGithub({
+      pulls: [pr],
+      runs: [ciRun(11, 'h1')],
+      jobs: {11: deferredJobs},
+      statuses: {h1: passed},
+      permission: 'read',
+    });
+    const said = await turn.startHeavy({
+      ...REVIEW,
+      ...stub,
+      owner: 'o',
+      repo: 'r',
+      pull: pr,
+    });
+    expect(stub.calls.reRunWorkflow).toEqual([11]);
+    expect(said).toContain('started run 11 again in full');
+  });
+});
+
 describe('the workflow', () => {
   it("looks on a review, an /approve-spec comment, a CI run ending and a quarter-hourly schedule, with main's helper only", () => {
     expect(workflow.on).toMatchObject({
