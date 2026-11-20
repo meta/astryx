@@ -134,4 +134,16 @@ describe("a part said beside a mode, a role or a look is that part's", () => {
     );
     expect(calm.some(r => /not taken: "calm"/.test(r.text))).toBe(true);
   });
+  it('a variant of the part the ask names is read, never named as not taken', async () => {
+    const rs = await how(
+      'q0',
+      'make ghost buttons look like primary buttons on hover',
+    );
+    expect(
+      writes(rs).some(c =>
+        / --on button --when variant:ghost --state hover/.test(c),
+      ),
+    ).toBe(true);
+    expect(rs.some(r => /not taken: [^\n]*"primary"/.test(r.text))).toBe(false);
+  });
 });

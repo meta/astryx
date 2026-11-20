@@ -28670,7 +28670,14 @@ export function draftAnswer(ctx, env, question) {
             // contrast", "tabular-nums" in its line, is no word left out.)
             !answeredText.includes(w) &&
             !/^(?:dark|light|bright|pale|soft|subtle)$/.test(w) &&
-            !partsSeen.some(p => w.startsWith(String(p))),
+            !partsSeen.some(p => w.startsWith(String(p))) &&
+            // (A variant of a part the ask names, "primary buttons", is
+            // read as that variant.)
+            !partsSeen.some(p =>
+              Object.values(C.variantValues(one(String(p))))
+                .flat()
+                .includes(w),
+            ),
         ),
       ),
     ];
