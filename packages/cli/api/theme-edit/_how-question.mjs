@@ -12502,7 +12502,17 @@ export function draftAnswer(ctx, env, question) {
     const variants =
       C.variantValues(FAMILIES[holder]?.[0] ?? holder).variant ?? [];
     if (c.parts[0].when) continue;
-    if (variants.includes(lead0) && lead0 !== 'default')
+    // ("cards: green background", "badges: blue border": a color said
+    // before a look is that look's value, never the part's variant.)
+    const next0 =
+      c.text
+        .toLowerCase()
+        .replace(/^[^:]+:\s*/, '')
+        .trim()
+        .split(/\s+/)[1] ?? '';
+    const colorValue =
+      colorsIn(lead0).length > 0 && aspectsOf(next0).length > 0;
+    if (variants.includes(lead0) && lead0 !== 'default' && !colorValue)
       c.parts = [{...c.parts[0], when: `variant:${lead0}`}];
     else if (
       c.state &&

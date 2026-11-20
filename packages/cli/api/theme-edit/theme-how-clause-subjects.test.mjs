@@ -209,6 +209,42 @@ const ROWS = [
     {q: 'Windows 11 accent #0067c0', has: ["accent '#0067c0'"]},
   ],
   [
+    'a color before a look in a list is the value, never a variant',
+    {
+      q: 'cards: green background',
+      has: ["background-color '#16a34a' --on card --when variant:default"],
+      never: /--when variant:green/,
+    },
+  ],
+  [
+    'a color before borders in a list reaches every card',
+    {q: 'cards: blue borders', has: ["border-color '#2563eb' --on card"]},
+  ],
+  [
+    'a second item of a list: its color is the value too',
+    {
+      q: 'cards: white background, gray borders',
+      has: ["border-color '#9e9e9e' --on card"],
+      never: /--when variant:gray/,
+    },
+  ],
+  [
+    'a color before text in a list is every card text',
+    {
+      q: 'cards: red text',
+      has: ["--color-text-primary '#dc2626' --on card"],
+      never: /--when variant:red/,
+    },
+  ],
+  [
+    'a color before a border in a list reaches every badge',
+    {
+      q: 'badges: blue border',
+      has: ["border '1px solid #2563eb' --on badge"],
+      never: /--when variant:blue/,
+    },
+  ],
+  [
     'a size and corners together',
     {q: 'checkboxes 16px with 3px corners', never: /contradict/},
   ],
