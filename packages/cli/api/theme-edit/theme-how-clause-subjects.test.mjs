@@ -205,6 +205,10 @@ const ROWS = [
     {q: 'system blue accent #007AFF', has: ["accent '#007aff'"]},
   ],
   [
+    'a product and its version before the accent name no part',
+    {q: 'Windows 11 accent #0067c0', has: ["accent '#0067c0'"]},
+  ],
+  [
     'a size and corners together',
     {q: 'checkboxes 16px with 3px corners', never: /contradict/},
   ],
