@@ -47,6 +47,15 @@ export function recordRunChoice(choice) {
 }
 
 /**
+ * Whether the bin started this run. Only then is `process.argv` the CLI's
+ * own command: a program that drives the CLI in-process has its own.
+ * @returns {boolean}
+ */
+export function binStartedRun() {
+  return recorded != null;
+}
+
+/**
  * The choice that applies to `cwd`: the bin's, else one made now.
  * @param {string} [cwd]
  * @returns {import('./choose.mjs').ReleaseChoice}
