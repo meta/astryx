@@ -1962,25 +1962,37 @@ const GRAY_TEMPERATURE =
   /\b(?:warm(?:er)?|cool(?:er)?|slate|stone|zinc|sand|sandy|beige|blue|bluish|navy|green|greenish|brown|brownish)\s+$/i;
 
 /**
+ * A negation that governs the end of the text: no clause break (a comma,
+ * "and", "but") stands between them.
+ */
+const CLAUSE_NEGATION =
+  /\b(?:don'?t|do\s+not|never|not|no|without|avoid|stop)\b(?:(?!\b(?:and|but|then|plus)\b)[^,;.!?])*$/i;
+
+/**
  * "Neutral grays", "pure grays", "make the grays neutral", "grays with
  * no tint": grays without a hue of their own are the neutral color
  * without a tint (`neutral untinted`). A gray given a hue ("cool neutral
- * grays") or a color ("neutral grays #64748b") keeps its own words.
+ * grays") or a color ("neutral grays #64748b") keeps its own words. A
+ * negated clause ("don't make the grays neutral", "never neutral grays")
+ * also keeps its words, so the prohibition reader answers it.
  * @param {string} question
  * @returns {string}
  */
 export function untintedGraysWords(question) {
+  /** @param {string} text @param {number} at */
+  const negated = (text, at) => CLAUSE_NEGATION.test(text.slice(0, at));
   const untinted = question
     .replace(
       /\b(?:neutral|pure|plain|untinted|uncolou?red|true)\s+gr[ae]ys\b(?!\s*(?:#|rgb|hsl|oklch|oklab|lab|lch))/gi,
       (m, at, text) =>
-        GRAY_TEMPERATURE.test(String(text).slice(0, at))
+        GRAY_TEMPERATURE.test(String(text).slice(0, at)) ||
+        negated(String(text), at)
           ? m
           : 'neutral untinted',
     )
     .replace(
       /\b(?:make\s+)?the\s+gr[ae]ys\s+(?:neutral|untinted|pure)\b|\bgr[ae]ys\s+(?:that\s+are\s+|stay(?:ing)?\s+|kept\s+)?(?:neutral|untinted)\b|\bgr[ae]ys\s+with\s+no\s+(?:colou?r\s+)?tint\b/gi,
-      'neutral untinted',
+      (m, at, text) => (negated(String(text), at) ? m : 'neutral untinted'),
     );
   // ("pure neutral grays, no tint"): the "no tint" said with them is the
   // same ask, never the hover tint.

@@ -6,9 +6,10 @@
  * whose grays already have none, how says so and writes nothing; on a
  * tinted one (a warm gray), it gives the neutral color as a plain gray, and
  * the page, surfaces and secondary text lose their tint in both modes. The
- * hover tint is never the answer. A gray given a hue ("cool neutral grays")
- * keeps its own reading, and the clause keeps its line at the end of a long
- * ask.
+ * hover tint is never the answer, and a negated ask writes nothing. A gray
+ * given a hue ("cool neutral grays") keeps its own reading, and the clause
+ * keeps its line at the end of a long ask, while change lines still come
+ * before lookups.
  */
 
 import * as fs from 'node:fs';
@@ -111,7 +112,49 @@ describe('neutral grays', () => {
           results.flatMap(r => r.lines),
           q,
         ).toEqual([]);
+        const {data} = await themeEditHow(q, {cwd, theme: 'plain'});
+        expect(data.hint, q).toMatch(/is already so in plain/);
+        expect(data.hint, q).not.toMatch(/No command does all/);
       }
+    },
+    T,
+  );
+
+  it(
+    'a negated ask never makes the grays neutral',
+    async test => {
+      needsBases(test);
+      for (const q of ["don't make the grays neutral", 'never neutral grays']) {
+        const results = await answer(q, 'warm');
+        expect(
+          results.flatMap(r => r.lines),
+          q,
+        ).toEqual([]);
+        expect(
+          results.some(r => /grays without a tint/.test(r.text)),
+          q,
+        ).toBe(false);
+      }
+      const [kept] = await answer("don't make the grays neutral", 'warm');
+      expect(kept.text).toMatch(/you asked for it not to change/);
+    },
+    T,
+  );
+
+  it(
+    'a change line comes before a lookup line',
+    async test => {
+      needsBases(test);
+      const {data} = await themeEditHow('red buttons, rounder cards', {
+        cwd,
+        theme: 'plain',
+      });
+      const changes = /** @type {{commands: string[]}[]} */ (
+        data.results ?? []
+      ).map(r => r.commands.some(c => / editor (?:set|undo|new) /.test(c)));
+      expect(changes.filter(c => !c).length).toBeGreaterThan(0);
+      expect(changes.filter(c => c).length).toBeGreaterThan(2);
+      expect(changes.indexOf(false)).toBe(changes.lastIndexOf(true) + 1);
     },
     T,
   );

@@ -1163,9 +1163,13 @@ function finish(env, drafts) {
       commands: [`${P} new ${env.slug} --like ${env.data.like ?? 'neutral'}`],
     });
   const seen = new Set();
-  // Changes first; a lookup ("how card") after the commands that change.
+  // Changes first; a lookup ("how card") after the commands that change. A
+  // line that says the ask is in place already answers the ask, as a
+  // change does: it is never held back behind the lookups.
   const changes = (/** @type {{commands: string[]}} */ r) =>
-    r.commands.some(c => / editor (set|undo|new) /.test(c)) ? 0 : 1;
+    ALREADY.has(r) || r.commands.some(c => / editor (set|undo|new) /.test(c))
+      ? 0
+      : 1;
   // An offer, more than the ask, is never first or the answer: it follows
   // every other result; left alone, a first line says the ask itself
   // writes nothing here.
@@ -1182,22 +1186,27 @@ function finish(env, drafts) {
       seen.add(k);
       return true;
     });
-  // A line whose every command an earlier line already gives (a clause of
-  // a whole ask that its sequence runs) follows the lines that say
-  // something new, so the cut at ten never drops a clause's only line.
+  // In each group (changes, then lookups, then offers), a line whose every
+  // command an earlier line already gives (a clause of a whole ask that its
+  // sequence runs) follows the lines of that group that say something new.
+  // The cut at ten then drops a repeat before a clause's only line, and a
+  // change still comes before a lookup.
   /** @type {Set<string>} */
   const given = new Set();
-  /** @type {typeof sorted} */
-  const fresh = [];
-  /** @type {typeof sorted} */
-  const repeated = [];
+  /** @type {Map<number, {fresh: typeof sorted, repeated: typeof sorted}>} */
+  const groups = new Map();
   for (const r of sorted) {
+    const g = offered(r) * 2 + changes(r);
+    const group = groups.get(g) ?? {fresh: [], repeated: []};
+    groups.set(g, group);
     const repeats =
       r.commands.length > 0 && r.commands.every(c => given.has(c));
-    (repeats ? repeated : fresh).push(r);
+    (repeats ? group.repeated : group.fresh).push(r);
     for (const c of r.commands) given.add(c);
   }
-  return [...fresh, ...repeated].slice(0, 10);
+  return [...groups.values()]
+    .flatMap(g => [...g.fresh, ...g.repeated])
+    .slice(0, 10);
 }
 
 /**

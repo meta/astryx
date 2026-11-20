@@ -28196,8 +28196,8 @@ export function draftAnswer(ctx, env, question) {
         )
         .flatMap(t => perMode(t, t, {}, fn, c));
     // ("neutral grays", "grays with no tint"): grays without a hue. Grays
-    // that already have none are said so; tinted ones take a gray seed,
-    // whose shades are the same at any lightness (no hue).
+    // that already have none are said so; tinted ones take a mid gray
+    // seed. A gray seed has no hue, so no shade made from it has one.
     if (dial === 'neutral' && !c.mode && /\bneutral untinted\b/.test(t)) {
       /** @param {string} value */
       const chroma = value => {
@@ -28224,6 +28224,7 @@ export function draftAnswer(ctx, env, question) {
         : {
             text: `the grays of ${env.slug} are already neutral, with no tint in either mode: nothing to change`,
             options: [],
+            already: true,
           };
     }
     let color =
