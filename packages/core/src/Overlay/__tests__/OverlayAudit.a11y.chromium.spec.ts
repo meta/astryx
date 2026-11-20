@@ -574,8 +574,15 @@ async function hoverFrames(page: Page) {
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   return page.evaluate(
     async () =>
-      new Promise<{t: number; opacity: number; hit: boolean}[]>(resolve => {
-        const samples: {t: number; opacity: number; hit: boolean}[] = [];
+      new Promise<
+        {t: number; opacity: number; painted: boolean; hit: boolean}[]
+      >(resolve => {
+        const samples: {
+          t: number;
+          opacity: number;
+          painted: boolean;
+          hit: boolean;
+        }[] = [];
         const start = performance.now();
         const scrim = document.querySelector(
           '#storybook-root .astryx-overlay-scrim',
@@ -590,6 +597,7 @@ async function hoverFrames(page: Page) {
           samples.push({
             t: Math.round(performance.now() - start),
             opacity: Number(getComputedStyle(scrim).opacity),
+            painted: getComputedStyle(scrim).clipPath === 'none',
             hit: hitEl != null && action.contains(hitEl),
           });
           if (performance.now() - start < 500) {
@@ -616,10 +624,15 @@ for (const reducedMotion of ['reduce', 'no-preference'] as const) {
     reducedMotion,
     run: async (page, check, frame) => {
       const samples = await hoverFrames(page);
-      const early = samples.filter(x => x.hit && x.opacity < 0.1);
+      const early = samples.filter(x => x.hit && x.opacity < 0.4);
       check(
         early.length === 0,
-        `the action takes a click while transparent: ${JSON.stringify(early)}`,
+        `the action takes a click while mostly transparent: ${JSON.stringify(early)}`,
+      );
+      const firstPaint = samples.find(x => x.painted);
+      check(
+        firstPaint != null && firstPaint.t <= 40,
+        `the overlay does not paint from its first faded-in frame: ${JSON.stringify(firstPaint)}`,
       );
       const last = samples.at(-1);
       check(
