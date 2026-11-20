@@ -53,7 +53,7 @@ afterAll(() => {
 
 describe('the palette recipe of an editor theme', () => {
   it('a new palette names the newest recipe', () => {
-    expect(config('fresh').recipe).toBe('astryx-oklch-v2');
+    expect(config('fresh').recipe).toBe('astryx-oklch-v3');
   });
 
   it('a palette saved before it keeps the first through a color change, and says how to move it', async () => {
@@ -65,7 +65,7 @@ describe('the palette recipe of an editor theme', () => {
     expect(now.families[0].seed).toBe('#0f766e');
     expect(generatePaletteSet(now).recipe).toBe('astryx-oklch-v1');
     expect(data.notes.join('\n')).toMatch(
-      /makes its colors with the astryx-oklch-v1 recipe it was made with.*"recipe": "astryx-oklch-v2" there/,
+      /makes its colors with the astryx-oklch-v1 recipe it was made with.*"recipe": "astryx-oklch-v3" there/,
     );
   });
 });

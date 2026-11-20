@@ -21,7 +21,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 describe("the CLI's palette engine", () => {
   it("is byte-identical to what Core's source generates", async () => {
     const files = await renderCliPaletteEngine();
-    expect(Object.keys(files).length).toBe(6);
+    expect(Object.keys(files).length).toBe(5);
     for (const [file, text] of Object.entries(files)) {
       expect(fs.readFileSync(path.join(ROOT, file), 'utf8'), file).toBe(text);
     }

@@ -29,12 +29,12 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: "The smallest config is one color family: an `id` to name it and a `seed` color to grow it from, plus the recipe that grows it. A new palette names `astryx-oklch-v2`, whose pale shades follow each seed's own strength; a config that names none runs `astryx-oklch-v1`, so one written before v2 keeps its colors, and naming a recipe pins it. Save it as `themes/ocean/palette.config.json`:",
+          text: "The smallest config is one color family: an `id` to name it and a `seed` color to grow it from, plus the recipe that grows it. A new palette names the newest recipe, `astryx-oklch-v3`, whose pale shades follow each seed's own strength; a config that names none runs `astryx-oklch-v1`, so one written before v2 keeps its colors, and naming a recipe (v1, v2 or v3) pins it. Save it as `themes/ocean/palette.config.json`:",
         },
         {
           type: 'code',
           lang: 'json',
-          code: '{"recipe": "astryx-oklch-v2", "families": [{"id": "ocean", "seed": "#0074e2"}]}',
+          code: '{"recipe": "astryx-oklch-v3", "families": [{"id": "ocean", "seed": "#0074e2"}]}',
         },
         {
           type: 'code',
