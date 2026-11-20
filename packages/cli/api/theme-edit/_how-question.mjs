@@ -21029,8 +21029,8 @@ export function draftAnswer(ctx, env, question) {
             ];
             return {
               text: c.neg
-                ? `no stripe on the ${p} rows of ${parityOn}`
-                : `a stripe on the ${p} rows of ${parityOn} (the first body row is odd), in every data-driven table${steps.length > 1 ? `; the ${other} rows of a striped table, where Core paints its own stripe, are cleared` : ''}. On a table with hover the stripe covers Core's hover color; add --state striped to stripe only the tables the app marks isStriped`,
+                ? `no stripe on the ${p} rows of ${parityOn}. On a table with hover those rows lose Core's hover color too`
+                : `a stripe on the ${p} rows of ${parityOn} (the first body row is odd), in every data-driven table${steps.length > 1 ? `; the ${other} rows of a striped table, where Core paints its own stripe, are cleared` : ''}. On a table with hover the stripe${steps.length > 1 ? ' and the cleared rows' : ''} cover Core's hover color; add --state striped to stripe only the tables the app marks isStriped`,
               options: [steps],
               sequence: steps.length > 1,
             };

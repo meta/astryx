@@ -872,6 +872,14 @@ describe('stripe answers keep to the stripe', () => {
       /parity:|--color-background-muted|background/,
     );
   });
+  // A stripe removal names the hover it takes away, as a stripe does.
+  it.each(['no stripes on even rows', 'odd rows light gray #f9f9f9'])(
+    'names the hover cost for %s',
+    async question => {
+      const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+      expect(data.results[0].text).toMatch(/hover/);
+    },
+  );
   it("reads a stripe ask that names no part as a table row's", async () => {
     expect(await commandsFor('zebra stripes')).toMatch(
       /--on table-row --when parity:even/,
