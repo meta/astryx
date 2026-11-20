@@ -8660,6 +8660,18 @@ export function draftAnswer(ctx, env, question) {
       const members = (FAMILIES[p.on] ?? [p.on]).filter(m => C.MAP[m]);
       return members.length > 0 && members.every(drawsWithAccent);
     });
+  // ("warning banner title black, description dark gray": a clause led by
+  // another piece of the same part is that piece, never the piece said
+  // before.)
+  /** @param {Clause} to @param {{on: string}} p */
+  const pieceSaid = (to, p) => {
+    const lead = /^(?:the\s+|its\s+|their\s+)?([a-z]+)\b/.exec(
+      to.text.toLowerCase(),
+    )?.[1];
+    if (!lead || !p.on.includes('-')) return p.on;
+    const piece = `${p.on.slice(0, p.on.lastIndexOf('-'))}-${lead}`;
+    return piece !== p.on && ctx.project.target.has(piece) ? piece : p.on;
+  };
   // ("red and blue accents", "primary blue": a piece that names a role or
   // a variant is read by the colors-before-role pass, never as a lone
   // color.)
@@ -9298,7 +9310,7 @@ export function draftAnswer(ctx, env, question) {
             : null)
         : null;
     if (own && !c.aspects.length && !ownLook) {
-      c.parts = prevParts.map(p => ({...p}));
+      c.parts = prevParts.map(p => ({...p, on: pieceSaid(c, p)}));
       c.aspects = [own];
       // (The look this reader gives is the clause's own: a later reader
       // never swaps it for the part's look said before, "rounded
@@ -10273,7 +10285,8 @@ export function draftAnswer(ctx, env, question) {
     }
   for (const {c, p} of lookCopies) c.parts.push(p);
   for (const [from, to] of carriedParts)
-    if (from.parts.length) to.parts = from.parts.map(x => ({...x}));
+    if (from.parts.length)
+      to.parts = from.parts.map(x => ({...x, on: pieceSaid(to, x)}));
   // (A complaint answered by the ask after it writes nothing itself.)
   for (let i = clauses.length - 2; i >= 0; i--)
     if (complaints.has(clauses[i]) && clauses[i + 1]) clauses.splice(i, 1);

@@ -225,6 +225,20 @@ describe('a lone color after a piece', () => {
   }, 240_000);
 });
 
+describe('a color led by another piece of the part before', () => {
+  it('goes to that piece, never the piece said before', async () => {
+    const rs = await how(
+      'q0',
+      'warning banner title black, description dark gray',
+    );
+    const lines = writes(rs).join('\n');
+    expect(lines).toMatch(/color '#000000' --on banner-title\b/);
+    expect(lines).toMatch(/color '#374151' --on banner-description\b/);
+    expect(lines).not.toMatch(/color '#374151' --on banner-title\b/);
+    expect(JSON.stringify(rs)).not.toMatch(/contradict/);
+  }, 240_000);
+});
+
 describe('a lone color after a link, a group or labels', () => {
   it('is the link text, the group fill, and the form label text', async () => {
     const link = writes(await how('q0', 'bold links, red')).join('\n');
