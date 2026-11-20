@@ -3,7 +3,7 @@
 'use client';
 
 import type {ComponentProps} from 'react';
-import {Cog6ToothIcon, LifebuoyIcon} from '@heroicons/react/24/outline';
+import {HelpIcon, SettingsIcon} from '@astryxdesign/template-icons';
 import {
   SideNav,
   SideNavHeading,
@@ -85,8 +85,8 @@ export default function SideNavShowcase() {
       header={<SideNavHeading heading="My App" headingHref="/" />}
       footer={
         <SideNavSection title="Support" isHeaderHidden>
-          <SideNavItem label="Help & docs" icon={LifebuoyIcon} href="/help" />
-          <SideNavItem label="Settings" icon={Cog6ToothIcon} href="/settings" />
+          <SideNavItem label="Help & docs" icon={HelpIcon} href="/help" />
+          <SideNavItem label="Settings" icon={SettingsIcon} href="/settings" />
         </SideNavSection>
       }>
       <SideNavSection title="Main">
