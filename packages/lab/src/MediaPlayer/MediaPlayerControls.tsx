@@ -733,12 +733,15 @@ function MarkerButton({
         }
         // The popover mounts closed and attaches to the button first, so a
         // held press then opens it the way a later press does, growing out
-        // of the marker.
+        // of the marker. Both commits run in the task the module lands in,
+        // so the open waits for no extra frame.
         flushSync(() => {
           setLoadedPopover(() => module.default);
         });
         if (openOnLoad) {
-          setOpen(true);
+          flushSync(() => {
+            setOpen(true);
+          });
         }
       },
       (error: unknown) => {
