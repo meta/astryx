@@ -86,8 +86,6 @@ import {
 } from '../../foundation/discovery/button-actions.mjs';
 import {iconImportFindings} from '../../foundation/discovery/icon-imports.mjs';
 import {packageImportTarget} from '../../foundation/discovery/package-exports.mjs';
-import {scanCoreProps} from '../../foundation/discovery/core-props.mjs';
-import {readCorePropTypes} from '../../foundation/discovery/core-prop-types.mjs';
 import {projectAugmentations} from '../../foundation/discovery/core-augmentation-points.mjs';
 import {
   resolveProjectTypeScript,
@@ -95,7 +93,6 @@ import {
   unusableTypeScriptReason,
 } from '../../foundation/discovery/project-typescript.mjs';
 import {nameWords, orderByAffinity} from '../../foundation/text/suggest-order.mjs';
-import {COMPONENT_BATCH_SELECTOR_LIMIT, component as componentAnswer} from '../component/component.mjs';
 import {compilerOptionsFor, existingFile, pathsFor, projectMapsImport, resolvePath} from '../../foundation/render/ts-paths.mjs';
 import {
   resolveIconModule,
@@ -199,9 +196,9 @@ const CHECK_CODEC = {
  * A doctor check that reads only files, kept between runs through the kept
  * gather (foundation/fs/gather-cache.mjs): a later `doctor` with every file,
  * folder, module and environment variable it read unchanged reads the check
- * back. Only the docs checks and the theme-wiring scan go through here; a
- * check that depends on the time, the network or anything else the stamps do
- * not see never does.
+ * back. Only the docs checks, the theme-wiring scan and the Core-props scan
+ * go through here; a check that depends on the time, the network or anything
+ * else the stamps do not see never does.
  * @template T
  * @param {{name: string, cwd: string, coreDir: string | null}} where - The
  *   check, the project folder, and the Core folder the project loads.
@@ -247,6 +244,30 @@ export const THEME_WIRING_CODEC = {
     ) &&
     value.unconfirmed.every(
       (/** @type {any} */ u) => u != null && typeof u.file === 'string',
+    ),
+};
+
+/**
+ * The Core-props scan's result ({@link findUnknownCoreProps}), kept exactly,
+ * with its shape.
+ */
+export const CORE_PROPS_CODEC = {
+  encode: (/** @type {any} */ value) => value,
+  decode: (/** @type {any} */ value) => value,
+  valid: (/** @type {any} */ value) =>
+    value != null &&
+    Array.isArray(value.found) &&
+    Number.isInteger(value.uses) &&
+    (value.skipped === null || typeof value.skipped === 'string') &&
+    value.found.every(
+      (/** @type {any} */ prop) =>
+        prop != null &&
+        typeof prop.file === 'string' &&
+        Number.isInteger(prop.line) &&
+        Number.isInteger(prop.column) &&
+        typeof prop.component === 'string' &&
+        typeof prop.prop === 'string' &&
+        (prop.suggestion === null || typeof prop.suggestion === 'string'),
     ),
 };
 
@@ -903,6 +924,8 @@ export async function findUnknownCoreProps(projectDir) {
   const jsxDeclarations = [];
   /** @type {string[]} */
   const corePages = [];
+  /** @type {typeof import('../../foundation/discovery/core-props.mjs').scanCoreProps | null} */
+  let scanCoreProps = null;
   for (const file of files) {
     let text;
     try {
@@ -914,6 +937,8 @@ export async function findUnknownCoreProps(projectDir) {
     if (notPageCode(relative(file)) || !text.includes('@astryxdesign/core')) continue;
     corePages.push(file);
     if (OTHER_JSX_RUNTIME.test(text)) continue;
+    // The scanner loads only when a page imports Core.
+    scanCoreProps ??= (await import('../../foundation/discovery/core-props.mjs')).scanCoreProps;
     for (const use of scanCoreProps(text) ?? []) uses.push({...use, file: relative(file), path: file});
   }
   // Each page that imports Core is read with the config TypeScript reads for
@@ -981,6 +1006,7 @@ export async function findUnknownCoreProps(projectDir) {
   /** @type {UnknownCoreProp[]} */
   const found = [];
   for (const group of groups.values()) {
+    const {COMPONENT_BATCH_SELECTOR_LIMIT, component: componentAnswer} = await import('../component/component.mjs');
     // Batched reads of the props the docs of the group's Core list, as
     // `astryx component <Name> --props` prints them; a component they do not
     // describe is not judged.
@@ -1000,6 +1026,7 @@ export async function findUnknownCoreProps(projectDir) {
       return props != null && !props.includes(use.prop);
     });
     if (candidates.length === 0) continue;
+    const {readCorePropTypes} = await import('../../foundation/discovery/core-prop-types.mjs');
     // What augments Core for a page: the project's files and installed
     // packages, and those of the page's own package, as a workspace member
     // installs its own.

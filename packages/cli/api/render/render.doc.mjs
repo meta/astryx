@@ -72,6 +72,13 @@ export const doc = {
       type: 'string',
       description: 'Folder relative paths resolve from (default: the current directory).',
     },
+    {
+      name: 'options.keepClassNames',
+      type: 'boolean',
+      description:
+        "Keep every class of the first paint as written, for a caller that takes the file's markup and styles it with its own copy of the StyleX styles. By default, once the repeated lists of the StyleX classes Astryx's packages write (the `x…` classes) add up to 16 KB, each such list becomes one short alias class, whose rules only the file's own stylesheet holds; the page's own StyleX classes keep their names. Rendering only; refused with `reverse`.",
+      default: 'false',
+    },
   ],
   returns: [
     {
@@ -89,7 +96,7 @@ export const doc = {
     {code: 'ERR_MISSING_ARGUMENT', when: 'no file is given'},
     {
       code: 'ERR_INVALID_ARGUMENT',
-      when: 'the file or `out` has the wrong kind of extension, `out` is the input itself, `title` is given with `reverse`, or `overwrite` without it; with `reverse`, the page would land under a configuration name (`vite.config.ts`) or where a test, story or benchmark runner would run it (judged from the repository root)',
+      when: 'the file or `out` has the wrong kind of extension, `out` is the input itself, `title` or `keepClassNames` is given with `reverse`, or `overwrite` without it; with `reverse`, the page would land under a configuration name (`vite.config.ts`) or where a test, story or benchmark runner would run it (judged from the repository root)',
     },
     {code: 'ERR_FILE_NOT_FOUND', when: 'the file, or a local file the page imports, does not exist'},
     {code: 'ERR_READ_FAILED', when: 'the file is there but cannot be read: no read permission, a folder or a pipe given as the file, or another file-system error; the message names the reason'},
