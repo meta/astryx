@@ -4,8 +4,6 @@
 
 [experimental] Changes to `astryx experimental theme editor how` and its checks:
 
-- `astryx experimental theme editor how`: a feel word said for the whole theme now moves the dials whose help gives that feel, and each line says what it read. For example, "playful minimal recipe site" gives playful → corners round and vibrancy more, and minimal → spacing roomy and surfaces flat. The corners, spacing, surfaces, vibrancy and type help now says which feel each rung gives (see `how corners`). Words no help names are listed as not taken, and so is a feel the ask judges, negates or tones down ("the current theme looks busy"), which moves no dial. A dial the ask sets itself keeps its value, and a feel word said of one part stays with that part.
-
 - `astryx experimental theme editor how`:
 
 - "heavy condensed headings" now gives heavy headings. It used to give light ones.

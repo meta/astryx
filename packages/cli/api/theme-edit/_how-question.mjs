@@ -37,7 +37,6 @@ import {
   COLOR_PROPS,
   GROUPS,
   isSystemFamily,
-  FEELS,
   LIKE,
   wordTable,
 } from './_tables.mjs';
@@ -6125,16 +6124,6 @@ export function draftAnswer(ctx, env, question) {
         'i',
       ).test(x) &&
       !VETO.test(x)
-    )
-      return true;
-    // ("playful minimal recipe site": a feel word a dial's help gives, said
-    // bare, asks for that look.)
-    if (
-      !/\?\s*$/.test(x) &&
-      !VETO.test(x) &&
-      (x.toLowerCase().match(/[a-z][a-z-]*[a-z]/g) ?? []).some(w =>
-        FEELS.has(w),
-      )
     )
       return true;
     // ("the app should open in dark mode by default": the mode it shows
@@ -28736,15 +28725,10 @@ export function draftAnswer(ctx, env, question) {
   // (A list of three asks or more names the words none reads the same
   // way, parts among them or not: "page loud and fast: black background,
   // …, heavy condensed headings" names "fast".)
-  const qWords = q.toLowerCase().match(/[a-z][a-z-]*[a-z]/g) ?? [];
   const lookAsk =
     /\b(?:theme|vibe|palette|aesthetic|branding|feel)\b|\b[a-z]+-like\b|\blooks?\s+(?:like|as)\b|\ban?\s+[a-z]+\s+(?:look|style)\b/.test(
       q,
-    ) ||
-    q.split(/[,;:]|\band\b/).filter(x => x.trim()).length >= 3 ||
-    qWords.some(w => FEELS.has(w));
-  /** The feel words a dial's help read for the whole theme. @type {Set<string>} */
-  const felt = new Set();
+    ) || q.split(/[,;:]|\band\b/).filter(x => x.trim()).length >= 3;
   if (!gateAll && lookAsk) {
     const answeredText = result
       .map(d => `${d.text} ${JSON.stringify(d.options)}`)
@@ -28752,58 +28736,11 @@ export function draftAnswer(ctx, env, question) {
       .toLowerCase();
     const STOP =
       /^(?:theme|themes|look|looks|feel|vibe|style|palette|with|give|make|want|need|have|this|that|those|these|their|ours?|your|for|and|but|the|very|really|quite|some|more|less|less|like|into|from|only|both|mode|modes|site|sites|apps?|page|pages|product|website|please|also|plus|something|kind|sort|ish|using|uses|feeling|overall|while|keep|kept|just|still|then|than|colou?rs?|them|they|those|these|what|when|where|which|lighten|darken|soften|brighten|sharpen|tone|default|brand|color|deep|rich|success|warning|danger|info|accent|neutral|clear|status|statuses|high|low)$/;
-    // A feel word said for the whole theme ("playful", "minimal") moves the
-    // dials whose help gives that feel, each line saying what it read; a
-    // dial the ask sets itself keeps its value, and a word said of a part
-    // or of one thing ("soft shadows") is that one's.
-    const ownDials = new Set(
-      result
-        .flatMap(d => d.options.flat())
-        .filter(st => !st.on && Object.hasOwn(DIALS, String(st.thing)))
-        .map(st => String(st.thing)),
-    );
-    // A feel the ask judges, negates or tones down anywhere ("too playful",
-    // "the current theme looks busy", "it's busy; tone it down", "not
-    // loud") moves no dial: a move could go toward the feel the ask
-    // dislikes. Such a feel word is named as not used.
-    const judged =
-      /\b(?:too|less|not|no|never|overly|without|avoid\w*|don'?t|doesn'?t|isn'?t|aren'?t|shouldn'?t|nothing|stop|prevent\w*|reduce\w*|rid\s+of|clear\s+of|away\s+from|instead\s+of|rather\s+than|bad|awful|ugly|annoying|wrong|(?:looks|looked|looking|feels|felt|feeling|seems|seemed)\s+\w|(?:tone|tones|toned|toning|calm|calms|calmed|dial|dials|dialed|turn|turns|turned|tamp|tamps|tamped)\s+(?:it\s+|things\s+|that\s+|this\s+)?(?:down|back))/.test(
-        asked0,
-      );
-    for (const w of new Set(qWords)) {
-      if (judged) continue;
-      const moves = (FEELS.get(w) ?? []).filter(
-        m =>
-          !ownDials.has(m.dial) &&
-          !clauses.some(
-            c =>
-              // ("bright red errors", "a bright accent": a feel word said
-              // of a color, a status or the accent, describes that color.)
-              (c.parts.length ||
-                c.aspects.length ||
-                c.colors.length ||
-                /\b(?:accent|neutral|brand|primary|success|warnings?|danger|errors?|info|status(?:es)?)\b/.test(
-                  c.text,
-                )) &&
-              new RegExp(`\\b${w}\\b`).test(c.text),
-          ),
-      );
-      if (!moves.length) continue;
-      felt.add(w);
-      for (const m of moves) {
-        ownDials.add(m.dial);
-        result.push({
-          text: `${w} → ${m.dial} ${m.value} (the ${m.dial} dial's help: ${m.value} feels ${w})`,
-          options: [[set(m.dial, m.value)]],
-        });
-      }
-    }
     const notTaken = [
       ...new Set(
-        qWords.filter(
+        (q.toLowerCase().match(/[a-z][a-z-]*[a-z]/g) ?? []).filter(
           w =>
             w.length >= 4 &&
-            !felt.has(w) &&
             !STOP.test(w) &&
             !lex.vocab.includes(w) &&
             !Object.hasOwn(HUES, w) &&
@@ -28939,13 +28876,6 @@ export function draftAnswer(ctx, env, question) {
       if (!t || c.except || taken.has(c)) return false;
       if (!/[a-z]{3,}|#[0-9a-f]{3}|\d/i.test(t)) return false;
       if (texts.includes(t.toLowerCase())) return false;
-      // (A clause a feel word was read from, "playful theme", is taken.)
-      if (
-        (t.toLowerCase().match(/[a-z][a-z-]*[a-z]/g) ?? []).some(w =>
-          felt.has(w),
-        )
-      )
-        return false;
       const vals = steps.map(st => String(st.value ?? '').toLowerCase());
       if (
         [...c.colors, ...c.lengths].some(v =>
