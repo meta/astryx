@@ -6,9 +6,11 @@
  * as one word, another command line's word order (a verb before its group),
  * a word from the table in other-cli-words.mjs, a command's plural, an option
  * some commands take, a command deeper in the tree, or a name another command
- * reads; an icon word (`icon`, `icons`) points at the icons guide. Otherwise
- * it names the commands a typo of the word could be, else the help, never a
- * list of every command. It only suggests: it runs nothing, and it names no
+ * reads; an icon word (`icon`, `icons`) points at the icons guide. A word
+ * that names one of the project's own package.json scripts names that
+ * script's run first, with the project's package manager. Otherwise it names
+ * the commands a typo of the word could be, else the help, never a list of
+ * every command. It only suggests: it runs nothing, and it names no
  * experimental command except the ones spec:AST-017 FR27's shareable-page
  * exception lets a share word or a way-back word name, and the icon finder
  * for an icon word where icon features are on (spec:AST-084).
@@ -849,9 +851,11 @@ async function pointed(
 
 /**
  * The answer to a word the CLI has no command for: `unknown command
- * '<word>'`, with the runs the words point at ({@link pointed}), else the
- * commands a typo of the word could be, else the help. Suggestion names are
- * bare `astryx …` runs or command names, as cliError prints them.
+ * '<word>'`, with the run of the project's own script the word names first
+ * ({@link projectScript}), then the runs the words point at ({@link pointed}),
+ * else the commands a typo of the word could be, else the help. Suggestion
+ * names are bare `astryx …` runs, a script run with the project's package
+ * manager, or command names, as cliError prints them.
  * @param {CommandLike} program
  * @param {string[]} words the words of the run after the program name
  * @param {{findEntry?: FindEntry, iconFeatures?: IconFeatures, projectScript?: ProjectScript}} [context]
