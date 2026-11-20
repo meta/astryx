@@ -240,6 +240,17 @@ describe('plain looks', () => {
     expect(writes(await how('q0', 'soft coral accent'))[0]).toBe(
       `set q0 accent '#f87171'`,
     );
+    // (A soft color said as a tint is a pale wash of it, as main reads it.)
+    const glass = writes(
+      await how(
+        'q0',
+        'translucent glassy window frames, soft blue-tinted glass, white content',
+      ),
+    );
+    expect(glass).toContain(
+      `set q0 background-color '#eff6ff' --on containers --mode light`,
+    );
+    expect(glass.join('\n')).not.toMatch(/'#2563eb'/);
   }, 240_000);
 });
 

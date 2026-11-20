@@ -688,6 +688,9 @@ function colorsFound(c) {
       ' '.repeat(m[0].length) +
       c.slice((m.index ?? 0) + m[0].length);
   }
+  // ("soft blue-tinted glass": a soft color said as a tint is a pale wash
+  // of it; "soft coral" alone is coral itself.)
+  c = c.replace(/\bsoft(?=\s+[a-z]+(?:-tinted|\s+tint(?:ed)?)\b)/g, 'pale');
   const re = new RegExp(
     String.raw`#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color-mix)\([^)]*\)|\b(?:(${SHADE_WORDS})\s+)?([a-z]+)\b`,
     'g',
