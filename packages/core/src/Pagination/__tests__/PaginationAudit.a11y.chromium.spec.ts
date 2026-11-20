@@ -419,7 +419,9 @@ for (const mode of ['light', 'dark'] as const) {
         () => document.activeElement?.closest('nav.astryx-pagination') != null,
       );
       check(focusedInNav, 'a disabled control does not take focus');
-      await frame('focus', {pager: p});
+      const violations = await axe(page);
+      check(violations.length === 0, `axe: ${violations.join(' | ')}`);
+      await frame('focus', {pager: p, violations});
     },
   });
 }
@@ -438,6 +440,8 @@ addCase({
   run: async (page, check, frame) => {
     const rest = await dots(page);
     check(rest.count === 8, `${rest.count} dots`);
+    check(rest.checked === 1, `checked dot ${rest.checked}`);
+    check(rest.tabStops === 1, `${rest.tabStops} tab stops`);
     await frame('rest', {dots: rest});
   },
 });
