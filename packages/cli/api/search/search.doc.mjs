@@ -19,10 +19,11 @@ export const doc = {
     'The single "I\'m looking for X" entry point across every content domain. ' +
     'Matching and scores are keyword + fuzzy (not embeddings). Between score bands ' +
     'results keep the lexical order, whose domain priority can put a weaker ' +
-    'component, hook, template, or theme above a stronger doc, and a query that is an entry\'s exact name answers ' +
-    'with that entry first. Inside a band, fixed weights order the matches, so a ' +
+    "component, hook, template, or theme above a stronger doc, and a query that is an entry's exact name answers " +
+    "with that entry first. The one exception: a family's root can move directly before a part of its own " +
+    'family when the part adds nothing the query asked for. Inside a band, fixed weights order the matches, so a ' +
     'description match can lead a keyword match in the same band (55–99 holds both). ' +
-    'A component\'s usage guidance (its best practices) is indexed one tier below ' +
+    "A component's usage guidance (its best practices) is indexed one tier below " +
     'its description, so the words a reader types still find it.' +
     " In global mode: with `cwd` outside a project, items from integrations installed next to this CLI package globally are searched too, and theme results name no step that adds a theme to an app; inside a project, only the project's own integrations count. See {@link namespace:global} and {@link generic:computer-integrations}.",
   importPath: '@astryxdesign/cli/api',
@@ -72,7 +73,7 @@ export const doc = {
     },
     {
       code: 'ERR_VERSIONS_UNAVAILABLE',
-      when: "`type` names a domain that reads @astryxdesign/core, and outside a project, or in a project with nothing installed, the Core of the release that answers cannot be installed into the per-user cache; a search with no `type` answers with `meta.partial` instead",
+      when: '`type` names a domain that reads @astryxdesign/core, and outside a project, or in a project with nothing installed, the Core of the release that answers cannot be installed into the per-user cache; a search with no `type` answers with `meta.partial` instead',
     },
   ],
   examples: [

@@ -789,3 +789,32 @@ export function commandInFolder(dir, command, platform = process.platform) {
     ? `cd -LiteralPath ${folder} -ErrorAction Stop; ${command}`
     : `cd ${folder} && ${command}`;
 }
+
+/**
+ * The folder and the command of a line {@link commandInFolder} printed, in
+ * either form; null for any other line. A printer reads it to choose the CLI
+ * invocation for the folder the command runs in, not the current one.
+ *
+ * @param {string} line
+ * @returns {{dir: string, command: string} | null}
+ */
+export function splitCommandInFolder(line) {
+  const posix = /^cd ('(?:[^']|'\\'')*'|[^\s']+) && (.*)$/su.exec(line);
+  if (posix) {
+    const [, folder, command] = posix;
+    const dir = folder.startsWith("'")
+      ? folder.slice(1, -1).replace(/'\\''/gu, "'")
+      : folder;
+    return {dir, command};
+  }
+  const powershell =
+    /^cd -LiteralPath ('(?:[^']|'')*'|\S+) -ErrorAction Stop; (.*)$/su.exec(line);
+  if (powershell) {
+    const [, folder, command] = powershell;
+    const dir = folder.startsWith("'")
+      ? folder.slice(1, -1).replace(/(['\u2018\u2019\u201A\u201B])\1/gu, '$1')
+      : folder;
+    return {dir, command};
+  }
+  return null;
+}

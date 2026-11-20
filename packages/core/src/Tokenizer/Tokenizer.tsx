@@ -286,8 +286,8 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
   /**
    * Whether the input is disabled. The disabled input keeps its tab stop: it
    * is announced as disabled (`aria-disabled`), is read-only, and opens and
-   * picks nothing. With `tokenOverflowBehavior="unfocusedLayer"` and no
-   * `disabledMessage`, the input is natively disabled and out of the tab order.
+   * picks nothing. With `tokenOverflowBehavior="unfocusedLayer"`, the
+   * collapsed field's placeholder keeps that tab stop.
    * @default false
    */
   isDisabled?: boolean;
@@ -1366,10 +1366,13 @@ export function Tokenizer<T extends SearchableItem>({
   // disabled-message tooltip, whose handlers are gated internally by
   // isEnabled, so attaching unconditionally is safe.
   const tooltipAnchorRef = disabledMessageTooltip.ref;
+  const anchorsOnWrapper = tokenOverflowBehavior !== 'unfocusedLayer';
   const wrapperCallbackRef = useCallback(
     (el: HTMLDivElement | null) => {
       wrapperRef.current = el;
-      tooltipAnchorRef(el);
+      if (anchorsOnWrapper) {
+        tooltipAnchorRef(el);
+      }
       if (el == null) {
         return;
       }
@@ -1379,11 +1382,13 @@ export function Tokenizer<T extends SearchableItem>({
           isFocusPendingHandOffRef.current = true;
         }
         wrapperRef.current = null;
-        tooltipAnchorRef(null);
+        if (anchorsOnWrapper) {
+          tooltipAnchorRef(null);
+        }
         releaseModality?.();
       };
     },
-    [tooltipAnchorRef, modalityRef],
+    [tooltipAnchorRef, modalityRef, anchorsOnWrapper],
   );
 
   // A swap also removes `endContent` and a custom token's remove. If focus is
@@ -1483,14 +1488,15 @@ export function Tokenizer<T extends SearchableItem>({
   const layer = useLayer({mode: 'context'});
   const layerContentRef = useRef<HTMLDivElement>(null);
 
-  // Anchor the layer to the placeholder element
+  // Anchor the layer, and the disabled-message tooltip, to the placeholder.
   const placeholderRef = useCallback(
     (el: HTMLElement | null) => {
       if (isLayerMode) {
         layer.ref(el);
+        tooltipAnchorRef(el);
       }
     },
-    [isLayerMode, layer],
+    [isLayerMode, layer, tooltipAnchorRef],
   );
 
   // For the layer variant, focus can be in either the placeholder or the
@@ -1868,6 +1874,18 @@ export function Tokenizer<T extends SearchableItem>({
     ],
   );
 
+  // The collapsed placeholder is the field's tab stop. Its own focus opens
+  // the field and moves focus to the input, as a click does. A focused token
+  // inside it keeps focus.
+  const handlePlaceholderFocus = (event: React.FocusEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget || isDisabled) {
+      return;
+    }
+    layer.show();
+    setIsFocusedWithin(true);
+    inputRef.current?.focus();
+  };
+
   // Inside an InputGroup no Field renders the local description or status —
   // the group's are the ones shown — so neither is referenced or painted; the
   // disabled reason is input-local and stays.
@@ -2026,7 +2044,7 @@ export function Tokenizer<T extends SearchableItem>({
             behavior="observeParent"
             overflowRenderer={items => (
               <span {...stylex.props(styles.overflowText)}>
-                +{items.length} more
+                {t('@astryx.tokenizer.overflowCount', {count: items.length})}
               </span>
             )}>
             {tokens}
@@ -2063,12 +2081,9 @@ export function Tokenizer<T extends SearchableItem>({
                   minQueryLength={minQueryLength}
                   emptySearchText={emptySearchText}
                   isDisabled={isDisabled}
-                  // A disabled field keeps its tab stop (spec:AST-085 FR1), except in
-                  // unfocusedLayer mode, where the input lives in a layer a disabled
-                  // field never opens; how that field takes focus is undecided.
-                  isFocusableDisabled={
-                    showsDisabledMessage || (isDisabled && !isLayerMode)
-                  }
+                  // A disabled field keeps its tab stop (spec:AST-085 FR1). In
+                  // unfocusedLayer mode the placeholder is that stop.
+                  isFocusableDisabled={isDisabled}
                   hasAutoFocus={hasAutoFocus}
                   inputId={inputId}
                   ariaLabelledBy={inputLabelledBy}
@@ -2426,6 +2441,19 @@ export function Tokenizer<T extends SearchableItem>({
         <div
           ref={placeholderRef}
           onClick={handleWrapperClick}
+          onFocus={handlePlaceholderFocus}
+          // One keyboard stop for the collapsed field, before its tokens. A
+          // named group, not a control: it holds the tokens' own controls.
+          role="group"
+          aria-labelledby={
+            inputGroup ? inputLabelledBy : (fieldLabelledBy ?? fieldLabelId)
+          }
+          aria-describedby={
+            [ariaDescribedByProp, ariaDescribedBy].filter(Boolean).join(' ') ||
+            undefined
+          }
+          aria-disabled={isDisabled || undefined}
+          tabIndex={isFocusedWithin ? -1 : 0}
           {...mergeProps(
             themeProps('tokenizer', {
               size,
@@ -2440,6 +2468,8 @@ export function Tokenizer<T extends SearchableItem>({
               placeholderSizeStyle,
               isTruncated && styles.truncatedWrapper,
               isDisabled && inputWrapperStyles.disabled,
+              // Keyboard focus on the disabled placeholder still shows the ring.
+              isDisabled && inputDisabledFocusStyles.selfRing,
               localStatus && inputStatusBorderStyles[localStatus.type],
               localStatus &&
                 !isDisabled &&
@@ -2464,7 +2494,9 @@ export function Tokenizer<T extends SearchableItem>({
                 behavior="observeParent"
                 overflowRenderer={items => (
                   <span {...stylex.props(styles.overflowText)}>
-                    +{items.length} more
+                    {t('@astryx.tokenizer.overflowCount', {
+                      count: items.length,
+                    })}
                   </span>
                 )}>
                 {tokens}
@@ -2510,7 +2542,11 @@ export function Tokenizer<T extends SearchableItem>({
       isLabelHidden={isLabelHidden}
       description={description}
       inputID={inputId}
-      labelID={ariaLabelledByProp != null ? fieldLabelId : undefined}
+      labelID={
+        ariaLabelledByProp != null || tokenOverflowBehavior === 'unfocusedLayer'
+          ? fieldLabelId
+          : undefined
+      }
       descriptionID={description ? descriptionId : undefined}
       isOptional={isOptional}
       isRequired={isRequired}

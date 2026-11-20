@@ -319,5 +319,10 @@ async function templateRead(name, options = {}) {
     iconSets,
     components,
     command,
+    // An integration that replaces this id, even when the Core original is
+    // asked for by package.
+    replaced: templates.some(
+      t => t.replaces === match.dirName && !t.replacementRejected,
+    ),
   });
 }
