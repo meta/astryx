@@ -12513,10 +12513,7 @@ export function draftAnswer(ctx, env, question) {
         .split(/\s+/)[1] ?? '';
     // (A colour said as the list's first word, "cards: blue 2px border",
     // "badges: red", is a value for every member, as main reads it.)
-    const colorValue =
-      colorsIn(lead0).length > 0 ||
-      lead0 === 'transparent' ||
-      /^(?:top|bottom|left|right)$/.test(next0);
+    const colorValue = colorsIn(lead0).length > 0 || lead0 === 'transparent';
     if (variants.includes(lead0) && lead0 !== 'default' && !colorValue)
       c.parts = [{...c.parts[0], when: `variant:${lead0}`}];
     else if (
