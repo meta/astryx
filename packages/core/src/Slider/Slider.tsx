@@ -515,7 +515,7 @@ const styles = stylex.create({
     whiteSpace: 'nowrap',
     flexShrink: 0,
   },
-  // A floor wider than any end text, so the box keeps one width.
+  // A floor wider than any text a step shows, so the box keeps one width.
   textValueReserve: (minInlineSize: string) => ({minInlineSize}),
   marksContainer: {
     position: 'absolute',
