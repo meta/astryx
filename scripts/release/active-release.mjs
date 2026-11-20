@@ -25,6 +25,7 @@ import {expandWorkspaceDirs} from '../lib/workspace-globs.mjs';
 import {
   classifyReleaseDiff,
   diffEntryFiles,
+  isCodemodPromotionApplicabilityPath,
   isReleaseOutputPath,
   isReleaseTestRepairPath,
 } from './release-paths.mjs';
@@ -170,12 +171,13 @@ function changesetEntries(root) {
     });
 }
 
-function buildPlan({root, version, branch, cutSha}) {
+function buildPlan({root, version, branch, cutSha, ownerRecut = null}) {
   return {
     schemaVersion: 2,
     version,
     branch,
     cutSha,
+    ...(ownerRecut ? {ownerRecut} : {}),
     changesets: changesetEntries(root),
   };
 }
@@ -187,6 +189,7 @@ function buildMarker(plan) {
     version: plan.version,
     branch: plan.branch,
     cutSha: plan.cutSha,
+    ...(plan.ownerRecut ? {ownerRecut: plan.ownerRecut} : {}),
     planDigest: computePlanDigest(plan),
   };
 }
@@ -211,6 +214,20 @@ function validateIdentity(marker, plan) {
     if (plan?.[key] !== marker?.[key])
       errors.push(`plan ${key} must match marker`);
   }
+  if (
+    canonicalJson(plan?.ownerRecut ?? null) !==
+    canonicalJson(marker?.ownerRecut ?? null)
+  )
+    errors.push('plan ownerRecut must match marker');
+  const ownerRecut = plan?.ownerRecut ?? null;
+  if (
+    ownerRecut !== null &&
+    (ownerRecut.version !== marker?.version ||
+      ownerRecut.tagName !== `v${marker?.version}` ||
+      !SHA_RE.test(ownerRecut.tagSha ?? '') ||
+      !/^[0-9a-f]{64}$/.test(ownerRecut.receiptSha256 ?? ''))
+  )
+    errors.push('ownerRecut authority is invalid');
   if (computePlanDigest(plan) !== marker?.planDigest)
     errors.push('plan digest does not match marker');
   const seen = new Set();
@@ -586,10 +603,28 @@ function validateMergeBackAtRef(
     plan.cutSha,
     releaseRef,
   ]);
+  const releaseEntries = releaseDiff.split('\n').filter(Boolean);
+  const releasePromotion = validateCodemodPromotionApplicabilityAtRef(root, {
+    base: plan.cutSha,
+    head: releaseRef,
+    entries: releaseEntries,
+    version: marker.version,
+  });
+  const projectedPromotion = validateCodemodPromotionApplicabilityAtRef(root, {
+    base,
+    head,
+    entries,
+    version: marker.version,
+    workingTree,
+  });
+  errors.push(...releasePromotion.errors, ...projectedPromotion.errors);
+  const validatedCodemodPromotionPaths = new Set(
+    [...releasePromotion.validatedPaths].filter(file =>
+      projectedPromotion.validatedPaths.has(file),
+    ),
+  );
   const releaseRenames = new Set(
-    releaseDiff
-      .split('\n')
-      .filter(Boolean)
+    releaseEntries
       .map(entry => entry.split('\t'))
       .filter(
         ([status, ...files]) => status?.startsWith('R') && files.length === 2,
@@ -643,6 +678,7 @@ function validateMergeBackAtRef(
       releaseOutputs,
       headOutputs,
       releaseRenames,
+      validatedCodemodPromotionPaths,
       releaseVersion: marker.version,
       fixedNames: new Set((baseConfig?.fixed ?? []).flat()),
       cutManifests,
@@ -682,6 +718,10 @@ function markerAtRef(root, ref) {
   return JSON.parse(
     git(root, ['show', `${ref}:${RELEASE_DIR}/${MARKER_FILE}`]),
   );
+}
+
+function planAtRef(root, ref) {
+  return JSON.parse(git(root, ['show', `${ref}:${RELEASE_DIR}/${PLAN_FILE}`]));
 }
 
 function validateRefMarker(marker, branch) {
@@ -911,7 +951,9 @@ function validateReleaseTestRepair({
   for (const entry of entries) {
     const status = entry.split('\t', 1)[0];
     if (status !== 'M')
-      errors.push(`release test repair may only modify an existing test: ${entry}`);
+      errors.push(
+        `release test repair may only modify an existing test: ${entry}`,
+      );
     const files = diffEntryFiles(entry);
     if (files === null) {
       errors.push(`invalid diff entry: ${entry}`);
@@ -1009,11 +1051,7 @@ function validateReleaseTestRepairAtRef(
   ])
     .split('\n')
     .filter(Boolean);
-  const diff = gitRaw(root, [
-    'diff',
-    '--binary',
-    `${mergeBase}..${head}`,
-  ]);
+  const diff = gitRaw(root, ['diff', '--binary', `${mergeBase}..${head}`]);
   const changedStatements = changedStatementsFromDiff(
     git(root, ['diff', '--unified=20', `${mergeBase}..${head}`]),
   );
@@ -1118,12 +1156,14 @@ function patchBuildsHead(root, base, head, patch) {
     execFileSync('git', ['read-tree', base], {cwd: root, env, stdio: 'ignore'});
     execFileSync(
       'git',
-      ['apply', '--cached', '--unidiff-zero', '--whitespace=nowarn'], {
-      cwd: root,
-      env,
-      input: patch.endsWith('\n') ? patch : `${patch}\n`,
-      stdio: ['pipe', 'ignore', 'ignore'],
-    });
+      ['apply', '--cached', '--unidiff-zero', '--whitespace=nowarn'],
+      {
+        cwd: root,
+        env,
+        input: patch.endsWith('\n') ? patch : `${patch}\n`,
+        stdio: ['pipe', 'ignore', 'ignore'],
+      },
+    );
     const tree = execFileSync('git', ['write-tree'], {
       cwd: root,
       env,
@@ -1158,7 +1198,9 @@ function validateReleasePolicyCarryAtRef(
       'release policy carry must contain exactly one non-merge commit',
     );
   if (git(root, ['rev-parse', `${head}^`]) !== baseCommit)
-    errors.push('release policy carry commit must directly follow the release head');
+    errors.push(
+      'release policy carry commit must directly follow the release head',
+    );
   if (!isAncestor(root, source, mainRef))
     errors.push('release policy carry source is not merged on current main');
   if (
@@ -1259,7 +1301,103 @@ function validateReleasePolicyCarryAtRef(
   };
 }
 
-function validateReleaseDiff(entries, {plan, baseChangesets} = {}) {
+const CODEMOD_PROMOTION_SPEC_PATH = 'docs/specs/AST-057-row-actions/spec.md';
+const CODEMOD_PROMOTION_POINTERS = [
+  'packages/cli/assets/codemods/transforms/next/migrate-item-swipe-actions-to-swipe.mjs',
+  'packages/cli/assets/codemods/transforms/next/__tests__/migrate-item-swipe-actions-to-swipe.test.mjs',
+];
+
+function validateCodemodPromotionApplicabilityMove({
+  before,
+  after,
+  entries,
+  status,
+  version,
+}) {
+  const errors = [];
+  if (status !== 'M')
+    errors.push(
+      `${CODEMOD_PROMOTION_SPEC_PATH} may only be modified by a generated codemod promotion`,
+    );
+
+  let expected = before;
+  for (const from of CODEMOD_PROMOTION_POINTERS) {
+    const to = from.replace('/transforms/next/', `/transforms/v${version}/`);
+    if (before.split(from).length !== 2)
+      errors.push(
+        `${CODEMOD_PROMOTION_SPEC_PATH} must contain the exact pre-promotion pointer once: ${from}`,
+      );
+    const hasRename = entries.some(entry => {
+      if (!entry.startsWith('R')) return false;
+      const files = diffEntryFiles(entry);
+      return files?.[0] === from && files[1] === to;
+    });
+    if (!hasRename)
+      errors.push(`codemod promotion does not rename ${from} to ${to}`);
+    expected = expected.replace(from, to);
+  }
+  if (after !== expected)
+    errors.push(
+      `${CODEMOD_PROMOTION_SPEC_PATH} may change only the exact applicability pointers moved by the codemod promotion`,
+    );
+  return errors;
+}
+
+function validateCodemodPromotionApplicabilityAtRef(
+  root,
+  {base, head, entries, version, workingTree = false},
+) {
+  const matchingEntries = entries.filter(entry =>
+    (diffEntryFiles(entry) ?? []).some(isCodemodPromotionApplicabilityPath),
+  );
+  if (matchingEntries.length === 0)
+    return {errors: [], validatedPaths: new Set()};
+  if (matchingEntries.length !== 1)
+    return {
+      errors: [
+        `${CODEMOD_PROMOTION_SPEC_PATH} must have exactly one modified diff entry`,
+      ],
+      validatedPaths: new Set(),
+    };
+
+  const before = filesAtRef(root, base, [CODEMOD_PROMOTION_SPEC_PATH]).get(
+    CODEMOD_PROMOTION_SPEC_PATH,
+  );
+  const after = workingTree
+    ? fs.existsSync(path.join(root, CODEMOD_PROMOTION_SPEC_PATH))
+      ? fs.readFileSync(path.join(root, CODEMOD_PROMOTION_SPEC_PATH))
+      : null
+    : filesAtRef(root, head, [CODEMOD_PROMOTION_SPEC_PATH]).get(
+        CODEMOD_PROMOTION_SPEC_PATH,
+      );
+  if (before === null || after === null)
+    return {
+      errors: [
+        `${CODEMOD_PROMOTION_SPEC_PATH} must exist before and after the codemod promotion`,
+      ],
+      validatedPaths: new Set(),
+    };
+
+  const [status] = matchingEntries[0].split('\t');
+  const errors = validateCodemodPromotionApplicabilityMove({
+    before: before.toString('utf8'),
+    after: after.toString('utf8'),
+    entries,
+    status,
+    version,
+  });
+  return {
+    errors,
+    validatedPaths: errors.length
+      ? new Set()
+      : new Set([CODEMOD_PROMOTION_SPEC_PATH]),
+  };
+}
+
+function validateReleaseDiff(
+  entries,
+  {plan, baseChangesets, validatedCodemodPromotionPaths = new Set()} = {},
+) {
   const errors = [];
   const planned = plan
     ? new Map(plan.changesets.map(entry => [entry.path, entry.sha256]))
@@ -1273,8 +1411,16 @@ function validateReleaseDiff(entries, {plan, baseChangesets} = {}) {
       continue;
     }
     for (const file of files) {
-      if (!file.startsWith('.changeset/') && !isReleaseOutputPath(file))
-        errors.push(`release bump contains a non-generated path: ${file}`);
+      if (!file.startsWith('.changeset/') && !isReleaseOutputPath(file)) {
+        if (isCodemodPromotionApplicabilityPath(file)) {
+          if (!validatedCodemodPromotionPaths.has(file))
+            errors.push(
+              `release bump contains an unvalidated codemod-promotion applicability move: ${file}`,
+            );
+        } else {
+          errors.push(`release bump contains a non-generated path: ${file}`);
+        }
+      }
       if (file.startsWith('.changeset/')) {
         if (status !== 'D')
           errors.push(
@@ -1335,6 +1481,97 @@ function nextPlannedVersion(releaseVersion, ownerVersion = null) {
   if (patch === null || minor === null) return null;
   if (ownerVersion === null) return patch;
   return ownerVersion === patch || ownerVersion === minor ? ownerVersion : null;
+}
+
+/** FR51 — no tagged release can admit its successor before npm publication. */
+function successorPlanReadiness({version, stablePublished}) {
+  if (stablePublished) return [];
+  return [`successor plan waits until v${version} has a publication effect`];
+}
+
+function validateSuccessorPlanAtRef(root, releaseRef, releaseVersion) {
+  const marker = markerAtRef(root, releaseRef);
+  const plan = planAtRef(root, releaseRef);
+  validateRefMarker(marker, marker.branch);
+  if (marker.version !== releaseVersion)
+    throw new Error(
+      `successor plan for v${releaseVersion} cannot use ${marker.branch}`,
+    );
+  if (
+    plan?.schemaVersion !== 2 ||
+    plan.version !== marker.version ||
+    plan.branch !== marker.branch ||
+    plan.cutSha !== marker.cutSha ||
+    computePlanDigest(plan) !== marker.planDigest ||
+    canonicalJson(plan.ownerRecut ?? null) !==
+      canonicalJson(marker.ownerRecut ?? null)
+  )
+    throw new Error('successor plan authority does not match the release ref');
+  return plan.ownerRecut ?? null;
+}
+
+async function stablePublicationExists(
+  root,
+  version,
+  {registry, fetchImpl = fetch} = {},
+) {
+  const {DEFAULT_REGISTRY, fetchDistTags, fetchVersionDocument} =
+    await import('../npm/registry.mjs');
+  const manifests = packageManifestsByName(file => {
+    const absolute = path.join(root, file);
+    return fs.existsSync(absolute) ? readJson(absolute) : null;
+  }, root);
+  const names = [...manifests.values()]
+    .filter(isStableReleasePackage)
+    .map(manifest => manifest.name)
+    .sort();
+  if (names.length === 0)
+    throw new Error('successor plan cannot find a stable package to verify');
+
+  const failures = [];
+  for (const name of names) {
+    const npmRegistry = registry ?? DEFAULT_REGISTRY;
+    try {
+      const response = await fetchVersionDocument({
+        name,
+        version,
+        registry: npmRegistry,
+        fetchImpl,
+      });
+      if (response.status === 200) {
+        const document = await response.json();
+        if (document.version === version) return true;
+        failures.push(
+          `${name}@${version} reported ${document.version ?? 'no version'}`,
+        );
+      } else if (response.status !== 404) {
+        failures.push(`${name}@${version} returned HTTP ${response.status}`);
+      }
+    } catch (error) {
+      failures.push(`${name}@${version} failed: ${error.message}`);
+    }
+
+    try {
+      const response = await fetchDistTags({
+        name,
+        registry: npmRegistry,
+        fetchImpl,
+      });
+      if (response.status !== 200) {
+        failures.push(`${name} dist-tags returned HTTP ${response.status}`);
+        continue;
+      }
+      const tags = await response.json();
+      if (tags.latest === version) return true;
+    } catch (error) {
+      failures.push(`${name} dist-tags failed: ${error.message}`);
+    }
+  }
+  if (failures.length)
+    throw new Error(
+      `successor plan cannot verify npm stable publication:\n${failures.join('\n')}`,
+    );
+  return false;
 }
 
 /**
@@ -1410,6 +1647,7 @@ function validateReleaseMergeBack({
   releaseOutputs,
   headOutputs,
   releaseRenames = new Set(),
+  validatedCodemodPromotionPaths = new Set(),
   releaseVersion,
   fixedNames = new Set(),
   cutManifests = new Map(),
@@ -1455,6 +1693,11 @@ function validateReleaseMergeBack({
         if (!releaseManifestPaths.has(file))
           errors.push(
             `release merge-back changed a manifest not changed on the published branch: ${file}`,
+          );
+      } else if (isCodemodPromotionApplicabilityPath(file)) {
+        if (status !== 'M' || !validatedCodemodPromotionPaths.has(file))
+          errors.push(
+            `release merge-back contains an unvalidated codemod-promotion applicability move: ${file}`,
           );
       } else if (isReleaseOutputPath(file)) {
         if (!releaseOutputPaths.has(file) && !releaseRenamePaths.has(file))
@@ -1644,17 +1887,90 @@ function required(values, key) {
   return values[key];
 }
 
-function versionTagExists(root, version) {
+function validateOwnerRecutReceipt(root, reference, version) {
+  const match = /^(.+) SHA-256 ([0-9a-f]{64})$/.exec(reference ?? '');
+  if (!match)
+    throw new Error('existing tag requires a hashed owner-recut receipt');
+  let body;
   try {
-    execFileSync(
-      'git',
-      ['rev-parse', '--verify', '--quiet', `refs/tags/v${version}`],
-      {cwd: root, stdio: 'ignore'},
-    );
-    return true;
+    body = fs.readFileSync(match[1]);
   } catch {
-    return false;
+    throw new Error('owner-recut receipt is unavailable');
   }
+  const digest = crypto.createHash('sha256').update(body).digest('hex');
+  if (digest !== match[2])
+    throw new Error('owner-recut receipt SHA-256 does not match');
+  let receipt;
+  try {
+    receipt = JSON.parse(body);
+  } catch {
+    throw new Error('owner-recut receipt is not valid JSON');
+  }
+  const tag = receipt.priorTag;
+  const absence = receipt.publicationAbsence;
+  const tagSha = git(root, ['rev-parse', `refs/tags/v${version}^{commit}`]);
+  if (
+    receipt.schemaVersion !== 1 ||
+    receipt.kind !== 'tagged-unpublished-owner-recut-authority' ||
+    receipt.version !== version ||
+    tag?.name !== `v${version}` ||
+    tag?.objectType !== 'commit' ||
+    tag?.objectSha !== tagSha ||
+    !String(absence?.npmVersion ?? '').startsWith(`${version} absent`) ||
+    absence?.githubRelease !== 'absent' ||
+    absence?.deploy !== 'absent' ||
+    absence?.mainSync !== 'absent' ||
+    !receipt.ownerAuthority?.source ||
+    !receipt.ownerAuthority?.time ||
+    !receipt.ownerAuthority?.verbatim
+  )
+    throw new Error(
+      'owner-recut receipt does not match the release version and tag',
+    );
+  return {
+    version,
+    tagName: tag.name,
+    tagSha,
+    receiptSha256: digest,
+  };
+}
+
+function versionTagCommit(root, version) {
+  try {
+    return git(root, ['rev-parse', `refs/tags/v${version}^{commit}`]);
+  } catch {
+    return null;
+  }
+}
+
+function validateOwnerRecutTag(root, ownerRecut) {
+  if (ownerRecut === null) return;
+  const liveTagSha = versionTagCommit(root, ownerRecut.version);
+  if (liveTagSha !== ownerRecut.tagSha)
+    throw new Error(
+      'archived owner-recut tag no longer matches its bound commit',
+    );
+}
+
+function versionTagExists(root, version) {
+  return versionTagCommit(root, version) !== null;
+}
+
+function ownerRecutForCreate(root, values, version) {
+  if (versionTagExists(root, version)) {
+    if (!values['owner-recut-receipt'])
+      throw new Error(
+        `version v${version} already has an immutable tag; use a new release branch and version`,
+      );
+    return validateOwnerRecutReceipt(
+      root,
+      values['owner-recut-receipt'],
+      version,
+    );
+  }
+  if (values['owner-recut-receipt'])
+    throw new Error('owner-recut receipt requires the archived tag');
+  return null;
 }
 
 /**
@@ -1730,6 +2046,7 @@ function writeAuthority(root, values, refresh) {
   const planPath = path.join(dir, PLAN_FILE);
   const markerExists = fs.existsSync(markerPath);
   const planExists = fs.existsSync(planPath);
+  let ownerRecut = null;
 
   if (refresh) {
     if (!markerExists || !planExists)
@@ -1740,6 +2057,8 @@ function writeAuthority(root, values, refresh) {
     const existingPlan = readJson(planPath);
     const identityErrors = validateIdentity(existingMarker, existingPlan);
     if (identityErrors.length) throw new Error(identityErrors.join('\n'));
+    ownerRecut = existingPlan.ownerRecut ?? null;
+    validateOwnerRecutTag(root, ownerRecut);
     for (const [key, value] of [
       ['version', version],
       ['branch', branch],
@@ -1753,14 +2072,11 @@ function writeAuthority(root, values, refresh) {
       throw new Error(
         'release authority already exists; a release branch cannot be reused',
       );
-    if (versionTagExists(root, version))
-      throw new Error(
-        `version v${version} already has an immutable tag; use a new release branch and version`,
-      );
+    ownerRecut = ownerRecutForCreate(root, values, version);
   }
 
   fs.mkdirSync(dir, {recursive: true});
-  const plan = buildPlan({root, version, branch, cutSha});
+  const plan = buildPlan({root, version, branch, cutSha, ownerRecut});
   const marker = buildMarker(plan);
   fs.writeFileSync(planPath, `${JSON.stringify(plan, null, 2)}\n`);
   fs.writeFileSync(markerPath, `${JSON.stringify(marker, null, 2)}\n`);
@@ -1775,9 +2091,31 @@ async function main() {
   if (command === 'create' || command === 'refresh') {
     // FR48/FR49: admission runs where the plan is made. Loaded here so the
     // trusted CI copy of this file needs no other module.
+    const version = required(values, 'version');
+    let ownerRecut;
+    if (command === 'create') {
+      ownerRecut = ownerRecutForCreate(root, values, version);
+    } else {
+      const marker = readJson(path.join(root, RELEASE_DIR, MARKER_FILE));
+      const plan = readJson(path.join(root, RELEASE_DIR, PLAN_FILE));
+      const identityErrors = validateIdentity(marker, plan);
+      if (identityErrors.length) throw new Error(identityErrors.join('\n'));
+      ownerRecut = plan.ownerRecut ?? null;
+      validateOwnerRecutTag(root, ownerRecut);
+    }
+    if (ownerRecut !== null) {
+      const stablePublished = await stablePublicationExists(root, version, {
+        registry: values.registry,
+      });
+      if (stablePublished)
+        throw new Error(
+          `owner recut refuses v${version} because npm already has a publication effect`,
+        );
+    }
     const {admitRelease} = await import('./release-inputs.mjs');
     const admission = admitRelease(root, {
-      version: required(values, 'version'),
+      version,
+      archivedTag: ownerRecut?.tagName ?? null,
     });
     if (admission.problems.length)
       throw new Error(
@@ -1853,7 +2191,20 @@ async function main() {
       patchId = repair.patchId;
       diffErrors = repair.errors;
     } else if (kind === 'version-bump') {
-      diffErrors = validateReleaseDiff(entries, {plan, baseChangesets});
+      const promotion = validateCodemodPromotionApplicabilityAtRef(root, {
+        base,
+        head,
+        entries,
+        version: marker.version,
+      });
+      diffErrors = [
+        ...validateReleaseDiff(entries, {
+          plan,
+          baseChangesets,
+          validatedCodemodPromotionPaths: promotion.validatedPaths,
+        }),
+        ...promotion.errors,
+      ];
     } else {
       diffErrors = [
         'release candidate contains paths outside the generated version bump or test-repair classes',
@@ -1875,6 +2226,20 @@ async function main() {
   }
   if (command === 'next-plan-version') {
     const releaseVersion = required(values, 'released-version');
+    const releaseRef = required(values, 'release-ref');
+    validateSuccessorPlanAtRef(root, releaseRef, releaseVersion);
+    const stablePublished = await stablePublicationExists(
+      root,
+      releaseVersion,
+      {
+        registry: values.registry,
+      },
+    );
+    const readinessErrors = successorPlanReadiness({
+      version: releaseVersion,
+      stablePublished,
+    });
+    if (readinessErrors.length) throw new Error(readinessErrors.join('\n'));
     const ownerVersion = values['owner-version'] ?? null;
     const version = nextPlannedVersion(releaseVersion, ownerVersion);
     if (version === null)
@@ -1987,12 +2352,16 @@ export {
   declaredVersionAtRef,
   filesAtRef,
   nextPlannedVersion,
+  successorPlanReadiness,
   isReleaseTestRepairPath,
   isStableReleasePackage,
   latestStableVersion,
   listActiveBranches,
   mergeBackEntries,
+  validateCodemodPromotionApplicabilityAtRef,
+  validateCodemodPromotionApplicabilityMove,
   validateIdentity,
+  validateOwnerRecutTag,
   validateRefMarker,
   validateReleaseDiff,
   validateReleaseTestRepair,

@@ -13,6 +13,7 @@
  */
 
 import {defineTheme, defineSyntaxTheme} from '@astryxdesign/core/theme';
+import type {ComponentStyleMap} from '@astryxdesign/core/theme';
 import {gothicIconRegistry} from './icons';
 import {gothicPaletteRefs} from './gothicPaletteRefs.generated';
 
@@ -20,6 +21,100 @@ const {blue, cyan, green, neutral, orange, pink, purple, red, teal, yellow} =
   gothicPaletteRefs;
 
 const withAlpha = (color: string, alpha: string): string => `${color}${alpha}`;
+
+// The theme's own text and link colours, which a part that paints a fill
+// of its own sets again (OWN_FILL_RULES).
+const SURFACE_TEXT = {
+  '--color-text-primary': neutral.dark[95],
+  '--color-text-secondary': neutral.dark[75],
+  '--color-text-accent': neutral.dark[95],
+};
+
+/**
+ * Core's selector for a striped table's painted rows, under the row's
+ * `striped` state.
+ */
+const STRIPED_ROW = ':nth-child(even of :not([data-expansion-panel]))';
+
+/**
+ * The rules of the parts that paint a fill of their own (a surface, a
+ * popover, the muted fill or a card fill) and draw text on it, each as
+ * `[part, rule, selector?]`. A coloured card's ink must not reach them, so
+ * each sets the theme's own text and link colours again. A transparent card
+ * is left out: it paints nothing, so it keeps its parent's ink.
+ */
+const OWN_FILL_RULES: ReadonlyArray<readonly [string, string, string?]> = [
+  ['card', 'variant:default'],
+  ['card', 'variant:muted'],
+  ['clickable-card', 'variant:default'],
+  ['clickable-card', 'variant:muted'],
+  ['selectable-card', 'variant:default'],
+  ['selectable-card', 'variant:muted'],
+  ['section', 'variant:section'],
+  ['section', 'variant:muted'],
+  ['app-shell', 'variant:surface'],
+  ['app-shell', 'variant:section'],
+  ['app-shell-header', 'variant:surface'],
+  ['app-shell-sidenav', 'variant:surface'],
+  ['layout-panel', 'base'],
+  ['layout-content', 'base'],
+  ['code', 'base'],
+  ['avatar', 'base'],
+  ['avatar-group-overflow', 'base'],
+  ['segmented-control-item', 'selected'],
+  ['step-indicator', 'progress:not-started'],
+  ['table-row', 'striped', STRIPED_ROW],
+  ['banner-content', 'base'],
+  ['input-group-text', 'base'],
+  ['text-input', 'base'],
+  ['text-area', 'base'],
+  ['number-input', 'base'],
+  ['date-input', 'base'],
+  ['date-range-input', 'base'],
+  ['date-time-input-date-segment', 'base'],
+  ['date-time-input-time-segment', 'base'],
+  ['time-input', 'base'],
+  ['file-input', 'base'],
+  ['typeahead', 'base'],
+  ['tokenizer', 'base'],
+  ['selector', 'variant:input'],
+  ['multi-selector', 'variant:input'],
+  ['selector-popup', 'base'],
+  ['multi-selector-popup', 'base'],
+  ['dropdown-menu', 'base'],
+  ['dropdown-menu-radio', 'base'],
+  ['context-menu', 'base'],
+  ['popover', 'base'],
+  ['hover-card', 'base'],
+  ['dialog', 'base'],
+  ['drawer', 'base'],
+  ['bottom-sheet', 'base'],
+  ['chat-composer-drawer', 'base'],
+];
+
+/** Puts SURFACE_TEXT under each own-fill rule; a rule's own values win. */
+function withOwnFillText(components: ComponentStyleMap): ComponentStyleMap {
+  const out: ComponentStyleMap = {...components};
+  for (const [part, key, selector] of OWN_FILL_RULES) {
+    const rule = out[part]?.[key] ?? {};
+    out[part] = {
+      ...out[part],
+      [key]: selector
+        ? {
+            ...rule,
+            // A table sets its text color on its root, so a painted row
+            // sets it again as well as the tokens.
+            [selector]: {
+              ...SURFACE_TEXT,
+              color: 'var(--color-text-primary)',
+              ...((rule as Record<string, object>)[selector] ?? {}),
+            },
+          }
+        : {...SURFACE_TEXT, ...rule},
+    };
+  }
+  return out;
+}
 
 /**
  * Gothic syntax palette — atmospheric tones drawn from the gothic
@@ -81,6 +176,13 @@ const SECONDARY_SELECTOR = {
     borderWidth: SECONDARY_BUTTON.borderWidth,
   },
 } as const;
+
+/**
+ * Gothic draws one color mode, dark, in light and dark pages alike. Tools
+ * read this to judge it in that mode; the build writes it into the built
+ * module.
+ */
+export const colorModes = ['dark'] as const;
 
 export const gothicTheme = defineTheme({
   name: 'gothic',
@@ -237,6 +339,8 @@ export const gothicTheme = defineTheme({
     '--radius-element': '0.5rem',
     '--radius-container': '0.75rem',
     '--radius-page': '1.5rem',
+    // Chat surfaces stay rounder than cards.
+    '--radius-chat': '28px',
     '--radius-full': '9999px',
 
     // =========================================================================
@@ -252,7 +356,7 @@ export const gothicTheme = defineTheme({
     '--shadow-inset-error': `inset 0 0 0 1px ${withAlpha(red.dark[75], '50')}`,
   },
 
-  components: {
+  components: withOwnFillText({
     button: {
       'variant:secondary': SECONDARY_BUTTON,
       'variant:ghost': {
@@ -268,8 +372,12 @@ export const gothicTheme = defineTheme({
       },
     },
     // Secondary selector triggers match the secondary Button (AST-079 FR2).
-    selector: {'variant:secondary': SECONDARY_SELECTOR},
-    'multi-selector': {'variant:secondary': SECONDARY_SELECTOR},
+    selector: {
+      'variant:secondary': SECONDARY_SELECTOR,
+    },
+    'multi-selector': {
+      'variant:secondary': SECONDARY_SELECTOR,
+    },
     'complex-selector': {'variant:secondary': SECONDARY_BUTTON},
 
     badge: {
@@ -326,45 +434,59 @@ export const gothicTheme = defineTheme({
         padding: 'var(--spacing-3)',
         borderRadius: 'var(--radius-container)',
       },
+      // On the accent tint of a selected row or a numbered citation over the
+      // card's fill, secondary text needs the next stop.
+      'variant:default': {'--color-text-secondary': neutral.dark[80]},
+      'variant:muted': {'--color-text-secondary': neutral.dark[80]},
       // Categorical variants — flip --color-text-primary so child
       // XDSText labels stay readable against the dusty pastel bg.
       'variant:blue': {
+        '--color-text-accent': 'var(--color-text-blue)',
         '--color-text-primary': 'var(--color-text-blue)',
         '--color-text-secondary': 'var(--color-text-blue)',
       },
       'variant:cyan': {
+        '--color-text-accent': 'var(--color-text-cyan)',
         '--color-text-primary': 'var(--color-text-cyan)',
         '--color-text-secondary': 'var(--color-text-cyan)',
       },
       'variant:gray': {
+        '--color-text-accent': 'var(--color-text-gray)',
         '--color-text-primary': 'var(--color-text-gray)',
         '--color-text-secondary': 'var(--color-text-gray)',
       },
       'variant:green': {
+        '--color-text-accent': 'var(--color-text-green)',
         '--color-text-primary': 'var(--color-text-green)',
         '--color-text-secondary': 'var(--color-text-green)',
       },
       'variant:orange': {
+        '--color-text-accent': 'var(--color-text-orange)',
         '--color-text-primary': 'var(--color-text-orange)',
         '--color-text-secondary': 'var(--color-text-orange)',
       },
       'variant:pink': {
+        '--color-text-accent': 'var(--color-text-pink)',
         '--color-text-primary': 'var(--color-text-pink)',
         '--color-text-secondary': 'var(--color-text-pink)',
       },
       'variant:purple': {
+        '--color-text-accent': 'var(--color-text-purple)',
         '--color-text-primary': 'var(--color-text-purple)',
         '--color-text-secondary': 'var(--color-text-purple)',
       },
       'variant:red': {
+        '--color-text-accent': 'var(--color-text-red)',
         '--color-text-primary': 'var(--color-text-red)',
         '--color-text-secondary': 'var(--color-text-red)',
       },
       'variant:teal': {
+        '--color-text-accent': 'var(--color-text-teal)',
         '--color-text-primary': 'var(--color-text-teal)',
         '--color-text-secondary': 'var(--color-text-teal)',
       },
       'variant:yellow': {
+        '--color-text-accent': 'var(--color-text-yellow)',
         '--color-text-primary': 'var(--color-text-yellow)',
         '--color-text-secondary': 'var(--color-text-yellow)',
       },
@@ -398,7 +520,7 @@ export const gothicTheme = defineTheme({
           '"Manufacturing Consent", "UnifrakturMaguntia", "Old English Text MT", serif',
       },
     },
-  },
+  }),
 
   // Gothic's accent text and icons are one light color. On a media surface
   // they follow that surface's accent, so a dark surface inside a light one

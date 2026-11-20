@@ -554,6 +554,31 @@ describe('SideNavHeading', () => {
       );
     });
 
+    it("holds a NavHeadingMenu's items in its own named menu, with no menu inside it", async () => {
+      __resetMenuPressForTest();
+      const user = userEvent.setup();
+      render(
+        <SideNavHeading
+          heading="My App"
+          menu={
+            <NavHeadingMenu>
+              <NavHeadingMenuItem label="Docs" href="/docs" />
+              <NavHeadingMenuItem label="Status" href="/status" />
+            </NavHeadingMenu>
+          }
+        />,
+      );
+      await user.click(screen.getByRole('button', {name: /Open menu/}));
+      const menus = screen.getAllByRole('menu', {hidden: true});
+      expect(menus).toHaveLength(1);
+      expect(menus[0]).toHaveAccessibleName('My App');
+      for (const name of ['Docs', 'Status']) {
+        expect(menus[0]).toContainElement(
+          screen.getByRole('menuitem', {name, hidden: true}),
+        );
+      }
+    });
+
     it('moves focus one item per arrow key in a NavHeadingMenu (APG menu)', async () => {
       __resetMenuPressForTest();
       const user = userEvent.setup();

@@ -599,3 +599,27 @@ export function interceptCore(coreThemeModule, coreRootModule) {
     },
   };
 }
+
+/**
+ * The interception with `extra` virtual modules added, each replacing a
+ * module of the same specifier. The modules are copied by descriptor, so the
+ * root entry stays lazy: a spread would read its getter, which loads all of
+ * Core and React for a theme that never imports the root.
+ * @param {CoreInterception} interception
+ * @param {Record<string, any>} extra
+ * @returns {CoreInterception}
+ */
+export function withVirtualModules(interception, extra) {
+  const modules = Object.defineProperties(
+    {},
+    Object.getOwnPropertyDescriptors(interception.modules),
+  );
+  for (const [specifier, namespace] of Object.entries(extra))
+    Object.defineProperty(modules, specifier, {
+      value: namespace,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
+  return {...interception, modules};
+}

@@ -38,20 +38,21 @@ vi.mock('./_preview.mjs', async importOriginal => {
   return {
     ...stubbed,
     /** A picture stand-in: a tiny PNG at the path asked for. */
-    async screenshot(
+    async screenshots(
       /** @type {any} */ project,
-      /** @type {string} */ html,
-      /** @type {string} */ png,
+      /** @type {Array<{html: string, png: string}>} */ jobs,
     ) {
-      fs.writeFileSync(
-        png,
-        Buffer.from(
-          '89504e470d0a1a0a0000000d4948445200000001000000010806000000' +
-            '1f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082',
-          'hex',
-        ),
-      );
-      return {ok: true, file: path.relative(project.cwd, png)};
+      return jobs.map(({png}) => {
+        fs.writeFileSync(
+          png,
+          Buffer.from(
+            '89504e470d0a1a0a0000000d4948445200000001000000010806000000' +
+              '1f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082',
+            'hex',
+          ),
+        );
+        return {ok: true, file: path.relative(project.cwd, png)};
+      });
     },
   };
 });

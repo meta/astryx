@@ -19,6 +19,11 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Table/TableSelectionToolbar.generated';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 
@@ -51,6 +56,13 @@ export function TableSelectionToolbar({
   variant = 'muted',
   ...toolbarProps
 }: TableSelectionToolbarProps): ReactNode {
+  if (process.env.NODE_ENV !== 'production' && selection == null) {
+    throw devPropError(
+      'TableSelectionToolbar',
+      'selection',
+      'is required: the state from useTableSelectionState(), for example selection={selection}.',
+    );
+  }
   const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.table.selection.bulkActionsLabel');
   const clearLabel =

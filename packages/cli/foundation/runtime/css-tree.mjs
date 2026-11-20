@@ -6,10 +6,12 @@
  * @input Nothing; css-tree is resolved once, here.
  * @output `cssTree`, the css-tree module, and `mdnCssProperties` and
  *   `mdnCssSelectors`, the MDN property and selector data at the version
- *   css-tree pins; `keptCssTreeAnswer`, an answer worked out with them and
- *   kept between runs.
+ *   css-tree pins; `longhandsOf` and `coversProperty`, which properties a
+ *   shorthand sets, by that data; `keptCssTreeAnswer`, an answer worked
+ *   out with them and kept between runs.
  * @position The one loader of css-tree, for the theme editor's CSS
- *   knowledge and the theme build's style-key checks. The entry is resolved
+ *   knowledge, the theme build's style-key checks, and the shared color
+ *   reader the export uses. The entry is resolved
  *   before any command stats a file: after a stat of a named pipe, Node's
  *   realpath can return a package link's own path instead of its target,
  *   and css-tree's own dependencies are then looked for beside the link and
@@ -100,4 +102,45 @@ function loadedData() {
   return ['mdn-data/css/properties.json', 'mdn-data/css/selectors.json']
     .map(file => fromCssTree.resolve(file))
     .filter(file => fromCssTree.cache[file] !== undefined);
+}
+
+/** @type {Map<string, Set<string>>} */
+const longhandCache = new Map();
+
+/**
+ * Every longhand a shorthand sets, through shorthands inside it (border
+ * sets border-color, so border-top-color), as MDN's data lists them; empty
+ * for a property that is no shorthand.
+ * @param {string} prop
+ * @returns {Set<string>}
+ */
+export function longhandsOf(prop) {
+  const cached = longhandCache.get(prop);
+  if (cached) return cached;
+  /** @type {Set<string>} */
+  const out = new Set();
+  longhandCache.set(prop, out);
+  const computed = /** @type {any} */ (mdnCssProperties()[prop])?.computed;
+  if (Array.isArray(computed))
+    for (const p of computed) {
+      if (typeof p !== 'string' || p === prop) continue;
+      out.add(p);
+      for (const q of longhandsOf(p)) out.add(q);
+    }
+  return out;
+}
+
+/**
+ * Whether setting `a` sets `b` too: `b` is one of `a`'s longhands, or a
+ * shorthand whose every longhand `a` sets (border covers border-top).
+ * overflow-wrap is no part of overflow, nor transform-origin of transform.
+ * @param {string} a
+ * @param {string} b
+ */
+export function coversProperty(a, b) {
+  if (a === b) return false;
+  const of = longhandsOf(a);
+  if (of.has(b)) return true;
+  const sub = longhandsOf(b);
+  return sub.size > 0 && [...sub].every(x => of.has(x));
 }

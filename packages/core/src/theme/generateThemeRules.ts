@@ -38,19 +38,40 @@ import {
   type ResolvedThemeAdaptationRule,
 } from './themeAdaptations';
 import {parseStyleKey} from '../utils/parseStyleKey';
-import {getDerivedVars} from './derivedVarRegistry';
-import {STATUS_NAMES, deriveStatusRoleTokens} from './statusRoleDerivation';
+import {
+  LOGICAL_RADIUS_CORNERS,
+  PHYSICAL_RADIUS_CORNERS,
+  getDerivedVars,
+} from './derivedVarRegistry';
+import {
+  STATUS_NAMES,
+  deriveStatusRoleTokens,
+  resolveModes,
+} from './statusRoleDerivation';
 import {cssVar, classPrefix, dataAttrNamespace} from '../naming';
 import {
   analyzeDeclarationValue,
-  canonicalizeDeclarationName,
   checkDeclarationName,
   checkDeclarationValue,
 } from './declarationBoundary';
+import {
+  SCOPED_REFERENCE_DEFAULTS,
+  assignTokenCascade,
+  authoredStatusRoleEntries,
+  createTokenCascade,
+  effectiveAdaptationTokenValues,
+  generatedScopedStatusRoleDefaults,
+  reachableAdaptationMatchSets,
+  stringifyTokenValue,
+  tokenValuesWouldHaveCycleWithValue,
+} from './statusRoleDefaults';
 import {readerTextSizeEntries} from './dynamicType';
 import {splitTopLevelWhitespace} from './tokenReferences';
 import {withoutUnsetComponents} from './mergeComponents';
 import {PRESS_BELIEVED_SELECTOR} from '../privateAttributes/press';
+import {ROOT_SCHEME_UNNAMED, rootSchemeIs} from '../privateAttributes/scheme';
+import {mediaDarkPageIs} from '../privateAttributes/mediaDarkPage';
+import {darkPageSides} from './invertedSurfaceSide';
 
 /**
  * Theme @scope selectors.
@@ -68,9 +89,60 @@ function themeScopeStart(name: string): string {
 /** Scope limit matching the theme attribute (nested-theme boundary). */
 const THEME_SCOPE_TO = `[data-${dataAttrNamespace}-theme]`;
 
-/** Media-surface selector, e.g. for [data-astryx-media="dark"]. */
-function mediaSelector(surface: string): string {
-  return `[data-${dataAttrNamespace}-media="${surface}"]`;
+/**
+ * Media-surface selector, e.g. for [data-astryx-media="dark"]. A dark-page
+ * surface key (`light@dark-page`) selects a surface that takes that side on a
+ * dark page, under the conditions that make the page dark; its
+ * `-preference` form holds the conditions a `prefers-color-scheme` block
+ * must wrap.
+ */
+function mediaSelector(surface: MediaSurface): string {
+  const [side, page] = surface.split('@') as [MediaSide, string | undefined];
+  const own = `[data-${dataAttrNamespace}-media="${side}"]`;
+  if (page === undefined) {
+    return own;
+  }
+  if (page.startsWith('unflipped')) {
+    // The side a surface names for a light page, except where a dark page
+    // takes the other side on it: there, none of this side's rules applies.
+    const other: MediaSide = side === 'dark' ? 'light' : 'dark';
+    const flipped = [
+      ...darkPageConditions(false),
+      ...(page === 'unflipped-preference' ? darkPageConditions(true) : []),
+    ].map(condition => `${condition} ${mediaDarkPageIs(other)}`);
+    return `${own}:where(:not(${flipped.join(', ')}))`;
+  }
+  // The page's conditions add no specificity, as a root color-mode block's
+  // do: the copy weighs what the surface's own side selector weighs.
+  return darkPageConditions(page === 'dark-page-preference')
+    .map(condition => `:where(${condition}) ${mediaDarkPageIs(side)}`)
+    .join(', ');
+}
+
+/**
+ * The ancestors that make a theme's page dark, inside its `@scope`: a forced
+ * dark root, or a system root under no forced mode while the page root names
+ * dark. With `preference`, the conditions where the reader's preference
+ * decides instead, which a `prefers-color-scheme: dark` block wraps.
+ */
+function darkPageConditions(preference: boolean): string[] {
+  const system = `:scope:not([${THEME_MODE_ATTR}="light"], [${THEME_MODE_ATTR}="dark"])`;
+  const forcedAround = `:is([${THEME_MODE_ATTR}="light"], [${THEME_MODE_ATTR}="dark"])`;
+  const unforced = `${system}:not(${forcedAround} *)`;
+  return preference
+    ? [
+        `${unforced}:where(${ROOT_SCHEME_UNNAMED} *)`,
+        `${forcedAround} ${system}`,
+      ]
+    : [
+        `:scope[${THEME_MODE_ATTR}="dark"]`,
+        `${unforced}:where(${rootSchemeIs('dark')} *)`,
+      ];
+}
+
+/** The side a surface key draws. */
+function sideOf(surface: MediaSurface): MediaSide {
+  return surface.split('@')[0] as MediaSide;
 }
 
 /** Component base-class selector, e.g. '.astryx-button'. */
@@ -78,7 +150,18 @@ function componentClassSelector(component: string, suffix: string): string {
   return `.${classPrefix}-${component}${suffix}`;
 }
 
-type MediaSurface = 'dark' | 'light';
+type MediaSide = 'dark' | 'light';
+
+/**
+ * An on-media surface: a side, or a side a surface takes on a dark page
+ * (written beside the light-page side when the two differ).
+ */
+type MediaSurface =
+  | MediaSide
+  | `${MediaSide}@dark-page`
+  | `${MediaSide}@dark-page-preference`
+  | `${MediaSide}@unflipped`
+  | `${MediaSide}@unflipped-preference`;
 
 /** Scope a component selector to an inverted media surface when requested. */
 function componentSelector(
@@ -263,6 +346,67 @@ const CONTAINER_PADDING_PROPS = new Set([
   ...PADDING_PROPS,
   ...Object.keys(PHYSICAL_BLOCK_PADDING_PROPS),
 ]);
+
+/**
+ * The corner longhands of `border-radius`, each with the corner name its
+ * derived variable takes. Physical and logical corners stay apart: which
+ * physical corner a logical one is depends on the direction, which only the
+ * component reading them knows (as with paddingLeft above).
+ */
+const RADIUS_CORNER_PROPS: Record<string, string> = {
+  borderTopLeftRadius: 'top-left',
+  borderTopRightRadius: 'top-right',
+  borderBottomRightRadius: 'bottom-right',
+  borderBottomLeftRadius: 'bottom-left',
+  borderStartStartRadius: 'start-start',
+  borderStartEndRadius: 'start-end',
+  borderEndStartRadius: 'end-start',
+  borderEndEndRadius: 'end-end',
+};
+
+/**
+ * The four corners of a `border-radius` value, as its longhands take them
+ * (top-left first, clockwise; an elliptical corner keeps both radii,
+ * `8px 4px`), or null when it is not one radius of one to four corners on
+ * each side of an optional `/`.
+ *
+ * @example radiusCorners('0 0 6px 6px') -> ['0', '0', '6px', '6px']
+ * @example radiusCorners('8px 4px / 2px') -> ['8px 2px', '4px 2px', '8px 2px', '4px 2px']
+ */
+export function radiusCorners(value: string): string[] | null {
+  // The `/` between the horizontal and the vertical radii, outside
+  // parentheses (`calc(1rem / 2)` is one length).
+  let depth = 0;
+  let slash = -1;
+  for (let i = 0; i < value.length; i++) {
+    const char = value[i];
+    if (char === '(') {
+      depth++;
+    } else if (char === ')') {
+      depth--;
+    } else if (char === '/' && depth === 0) {
+      if (slash !== -1) {
+        return null;
+      }
+      slash = i;
+    }
+  }
+  const sides = (
+    slash === -1 ? [value] : [value.slice(0, slash), value.slice(slash + 1)]
+  ).map(side => {
+    const parts = splitTopLevelWhitespace(side.trim());
+    if (parts.length < 1 || parts.length > 4) {
+      return null;
+    }
+    const [a, b = a, c = a, d = b] = parts;
+    return [a, b, c, d];
+  });
+  if (sides.some(side => side == null)) {
+    return null;
+  }
+  const [h, v] = sides as string[][];
+  return h.map((x, i) => (v && v[i] !== x ? `${x} ${v[i]}` : x));
+}
 
 interface ParsedPadding {
   blockStart?: string;
@@ -516,250 +660,11 @@ function joinDeclarations(
   return lines.join('\n');
 }
 
-/**
- * Public tokens whose canonical default references another public token: the
- * status roles and `--duration-exit`. StyleX owns the document defaults. A
- * theme that authors a source repeats its omitted token at the theme root so
- * nested Theme regions bind the alias locally without changing authored-token
- * metadata.
- *
- * Conditional scopes repeat an omitted alias only when the source changes on
- * that scope. Explicit adaptation role writes are replayed after generated
- * aliases (and on media descendants) so authored role precedence survives
- * overlapping conditions without disabling the alias in non-matching states.
- */
-const SCOPED_REFERENCE_DEFAULTS: ReadonlyArray<
-  readonly [role: string, source: string]
-> = [
-  ['--color-text-info', '--color-text-blue'],
-  ['--color-text-success', '--color-text-green'],
-  ['--color-text-warning', '--color-text-yellow'],
-  ['--color-text-error', '--color-text-red'],
-  ['--color-on-info-muted', '--color-text-blue'],
-  ['--color-on-success-muted', '--color-text-green'],
-  ['--color-on-warning-muted', '--color-text-yellow'],
-  ['--color-on-error-muted', '--color-text-red'],
-  // Icon and border roles follow the text role, set or derived (INV17).
-  ['--color-icon-info', '--color-text-info'],
-  ['--color-icon-success', '--color-text-success'],
-  ['--color-icon-warning', '--color-text-warning'],
-  ['--color-icon-error', '--color-text-error'],
-  ['--color-border-info', '--color-text-info'],
-  ['--color-border-success', '--color-text-success'],
-  ['--color-border-warning', '--color-text-warning'],
-  ['--color-border-error', '--color-text-error'],
-  ['--duration-exit', '--duration-fast'],
-];
-
 const SCOPED_REFERENCE_SOURCES = new Map(SCOPED_REFERENCE_DEFAULTS);
 
 /** Colours INV17's derivation measures; a scope that sets one re-derives. */
 const STATUS_MEASURED =
   /^--color-(?:info|success|warning|error|on-|background-surface|background-card)/;
-
-const STATUS_ROLE_ORDER = new Map(
-  SCOPED_REFERENCE_DEFAULTS.map(([role], index) => [role, index]),
-);
-
-type TokenValues = Record<string, unknown>;
-
-function stringifyTokenValue(value: unknown): string {
-  if (typeof value === 'string') {
-    return value;
-  }
-  // Preserve the exact JavaScript interpolation behavior legacy themes received
-  // before declaration analysis accepted non-string token values.
-  return String(value);
-}
-
-interface TokenCascadeState {
-  values: TokenValues;
-  important: Set<string>;
-}
-
-function assignTokenCascade(
-  state: TokenCascadeState,
-  ...tokenSets: ReadonlyArray<TokenValues | undefined>
-): void {
-  for (const tokens of tokenSets) {
-    for (const [rawToken, rawValue] of Object.entries(tokens ?? {})) {
-      if (rawValue === undefined) {
-        continue;
-      }
-      const token = canonicalizeDeclarationName(rawToken);
-      const value = stringifyTokenValue(rawValue);
-      const analysis = analyzeDeclarationValue(value);
-      // Match joinDeclarations: declarations that cannot be emitted never
-      // participate in the browser cascade this safety model validates.
-      if (token === null || analysis.reason !== null) {
-        continue;
-      }
-      if (state.important.has(token) && !analysis.important) {
-        continue;
-      }
-      state.values[token] = value;
-      if (analysis.important) {
-        state.important.add(token);
-      } else {
-        state.important.delete(token);
-      }
-    }
-  }
-}
-
-function createTokenCascade(
-  ...tokenSets: ReadonlyArray<TokenValues | undefined>
-): TokenCascadeState {
-  const state: TokenCascadeState = {values: {}, important: new Set()};
-  assignTokenCascade(state, ...tokenSets);
-  return state;
-}
-
-/** Check whether one candidate value closes a cycle through its own role. */
-function tokenValuesWouldHaveCycleWithValue(
-  tokens: TokenValues,
-  relevantToken: string,
-  candidateValue: string,
-): boolean {
-  const stack = [...analyzeDeclarationValue(candidateValue).references];
-  const visited = new Set<string>();
-  while (stack.length > 0) {
-    const token = stack.pop();
-    if (token === undefined) {
-      continue;
-    }
-    if (token === relevantToken) {
-      return true;
-    }
-    if (
-      visited.has(token) ||
-      !Object.prototype.hasOwnProperty.call(tokens, token)
-    ) {
-      continue;
-    }
-    visited.add(token);
-    for (const reference of analyzeDeclarationValue(
-      stringifyTokenValue(tokens[token]),
-    ).references) {
-      if (
-        reference === relevantToken ||
-        Object.prototype.hasOwnProperty.call(tokens, reference)
-      ) {
-        stack.push(reference);
-      }
-    }
-  }
-  return false;
-}
-
-const WIDTH_CELL_RANK = {
-  sm: 1,
-  md: 2,
-  lg: 3,
-  xl: 4,
-  '2xl': 5,
-} as const;
-
-function adaptationConditionMatchesCell(
-  condition: ResolvedThemeAdaptationRule['when'],
-  widthRank: number,
-  pointer: 'coarse' | 'fine' | 'none',
-  contrast: 'more' | 'less' | 'no-preference' | 'custom',
-  motion: 'reduce' | 'no-preference',
-): boolean {
-  const from = condition.width?.from;
-  if (from !== undefined && widthRank < WIDTH_CELL_RANK[from]) {
-    return false;
-  }
-  const below = condition.width?.below;
-  if (below !== undefined && widthRank >= WIDTH_CELL_RANK[below]) {
-    return false;
-  }
-  return (
-    (condition.pointer === undefined || condition.pointer === pointer) &&
-    (condition.contrast === undefined || condition.contrast === contrast) &&
-    (condition.motion === undefined || condition.motion === motion)
-  );
-}
-
-const REACHABLE_MATCH_SET_CACHE = new WeakMap<
-  ReadonlyArray<ResolvedThemeAdaptationRule>,
-  number[][]
->();
-
-/** Every reachable ordered adaptation-rule match set, including the root. */
-function reachableAdaptationMatchSets(
-  rules: ReadonlyArray<ResolvedThemeAdaptationRule>,
-): number[][] {
-  const cached = REACHABLE_MATCH_SET_CACHE.get(rules);
-  if (cached !== undefined) {
-    return cached;
-  }
-  const matchSets = new Map<string, number[]>();
-  for (let widthRank = 0; widthRank <= 5; widthRank++) {
-    for (const pointer of ['coarse', 'fine', 'none'] as const) {
-      for (const contrast of [
-        'more',
-        'less',
-        'no-preference',
-        'custom',
-      ] as const) {
-        for (const motion of ['reduce', 'no-preference'] as const) {
-          const indexes = rules.flatMap((rule, index) =>
-            adaptationConditionMatchesCell(
-              rule.when,
-              widthRank,
-              pointer,
-              contrast,
-              motion,
-            )
-              ? [index]
-              : [],
-          );
-          matchSets.set(indexes.join(','), indexes);
-        }
-      }
-    }
-  }
-  const reachable = [...matchSets.values()];
-  REACHABLE_MATCH_SET_CACHE.set(rules, reachable);
-  return reachable;
-}
-
-function effectiveAdaptationTokenValues(
-  rootTokens: Record<string, string>,
-  rootLocalTokens: Record<string, string> | undefined,
-  rootAliases: ReadonlyArray<readonly [string, string]>,
-  rules: ReadonlyArray<ResolvedThemeAdaptationRule>,
-  matchingRuleIndexes: ReadonlyArray<number>,
-  conditionalAliases: ReadonlyArray<
-    ReadonlyArray<readonly [string, string]>
-  > = [],
-): TokenValues {
-  const effective = createTokenCascade(
-    rootTokens,
-    Object.fromEntries(rootAliases),
-    rootLocalTokens,
-  );
-  for (const index of matchingRuleIndexes) {
-    const rule = rules[index];
-    assignTokenCascade(
-      effective,
-      rule.tokens,
-      Object.fromEntries(conditionalAliases[index] ?? []),
-      rule.localTokens,
-    );
-  }
-  // Emission replays authored roles after every ordinary adaptation block so
-  // an explicit role beats aliases from any later overlapping rule.
-  for (const index of matchingRuleIndexes) {
-    assignTokenCascade(
-      effective,
-      Object.fromEntries(authoredStatusRoleEntries(rules[index].tokens)),
-    );
-  }
-  return effective.values;
-}
 
 function retainedAdaptationRules(
   theme: ThemeRuleSource,
@@ -768,76 +673,6 @@ function retainedAdaptationRules(
     return [];
   }
   return resolvedAdaptationRules(theme as DefinedTheme);
-}
-
-/** Root status roles a theme leaves unset: INV17-derived values and INV16 aliases. */
-export function generatedScopedStatusRoleDefaults(
-  tokens: Record<string, string>,
-  localTokens: Record<string, string> = {},
-  rules: ReadonlyArray<ResolvedThemeAdaptationRule> = [],
-): [string, string][] {
-  // INV17: roles a theme leaves unset while setting their status source are
-  // computed against the theme's own surfaces first; the aliases below then
-  // treat them as present, so icon and border roles follow a derived text role.
-  const entries: [string, string][] = deriveStatusRoleTokens(
-    tokens,
-    localTokens,
-  );
-  const authoredRoot = createTokenCascade(
-    tokens,
-    Object.fromEntries(entries),
-    localTokens,
-  ).values;
-  const states = reachableAdaptationMatchSets(rules).map(indexes => ({
-    indexes,
-    values: effectiveAdaptationTokenValues(
-      tokens,
-      localTokens,
-      entries,
-      rules,
-      indexes,
-    ),
-  }));
-
-  for (const [role, source] of SCOPED_REFERENCE_DEFAULTS) {
-    const alias = `var(${source})`;
-    if (
-      authoredRoot[role] !== undefined ||
-      (authoredRoot[source] === undefined &&
-        !entries.some(([emitted]) => emitted === source))
-    ) {
-      continue;
-    }
-    const isSafe = states.every(
-      ({values}) =>
-        values[role] !== undefined ||
-        !tokenValuesWouldHaveCycleWithValue(values, role, alias),
-    );
-    if (isSafe) {
-      entries.push([role, alias]);
-      for (const {values} of states) {
-        if (values[role] === undefined) {
-          values[role] = alias;
-        }
-      }
-    }
-  }
-  // One canonical order whether a role is derived or aliased, so themes that
-  // differ only in which roles needed computing still emit comparable rules.
-  return entries.sort(
-    ([a], [b]) =>
-      (STATUS_ROLE_ORDER.get(a) ?? 0) - (STATUS_ROLE_ORDER.get(b) ?? 0),
-  );
-}
-
-function authoredStatusRoleEntries(
-  tokens: Record<string, string>,
-): [string, string][] {
-  const canonicalTokens = createTokenCascade(tokens).values;
-  return SCOPED_REFERENCE_DEFAULTS.flatMap(([role]) => {
-    const value = canonicalTokens[role];
-    return value === undefined ? [] : [[role, stringifyTokenValue(value)]];
-  });
 }
 
 function tokenValueIsAliasOf(value: unknown, source: string): boolean {
@@ -1232,7 +1067,12 @@ export function generateThemeRules(
   // layer does: an undefined value is not set.
   const components = withoutUnsetComponents(theme.components);
   if (components) {
-    generateComponentRules(components, parts, {sink});
+    generateComponentRules(components, parts, {
+      sink,
+      darkPageSides: darkPageSides(
+        resolveModes({...theme.localTokens, ...theme.tokens}),
+      ),
+    });
   }
 
   // 3. Prose HTML element rules (h1-h6, p, small, code, hr)
@@ -1358,6 +1198,11 @@ interface ComponentRuleOptions {
   sink?: DiagnosticSink;
   /** Location prefix for diagnostics, e.g. `onDark.` or `adaptations[0].`. */
   location?: string;
+  /**
+   * The sides a media surface takes on a dark page beyond its light-page
+   * side, whose color-mode blocks follow that side there.
+   */
+  darkPageSides?: ReadonlySet<MediaSide>;
 }
 
 /**
@@ -1373,6 +1218,7 @@ function generateComponentRules(
     surface,
     sink = warnToConsole,
     location: locationPrefix = '',
+    darkPageSides = new Set<MediaSide>(),
   }: ComponentRuleOptions = {},
 ): void {
   for (const [component, rules] of Object.entries(components)) {
@@ -1427,11 +1273,46 @@ function generateComponentRules(
           parts.push(wrap(`  ${selector} {\n${declarations}\n  }`));
         }
         for (const [pseudo, pseudoStyles] of nested) {
-          const pseudoEntries = Object.entries(pseudoStyles);
+          // A pseudo-class block expands like its resting rule. A hovered
+          // row's fill then reaches pinned cells through --table-row-overlay.
+          // A pseudo-element block (`::before`) is another box. A derived
+          // variable set there never reaches the element that reads it, so
+          // the compiler writes the block as authored. This includes the CSS2
+          // one-colon forms (`:before`, `:after`, `:first-line`,
+          // `:first-letter`).
+          const pseudoClass =
+            pseudo.startsWith(':') &&
+            !pseudo.includes('::') &&
+            !/:(before|after|first-line|first-letter)(?![-\w])/i.test(pseudo);
+          // The boundary check reads the authored declarations first, as it
+          // does for the resting rule. So the author sees one warning for a
+          // rejected declaration, under the name the theme wrote.
+          const pseudoLocation = `${location}[${JSON.stringify(pseudo)}]`;
+          const accepted: [string, string][] = [];
+          if (pseudoClass) {
+            for (const [prop, value] of Object.entries(pseudoStyles)) {
+              if (value === undefined) {
+                continue;
+              }
+              const text = stringifyTokenValue(value);
+              if (
+                acceptDeclaration(toKebabCase(prop), text, pseudoLocation, sink)
+              ) {
+                accepted.push([prop, text]);
+              }
+            }
+          }
+          const pseudoEntries = pseudoClass
+            ? expandComponentDeclarations(
+                component,
+                accepted,
+                resetInheritedPaddingSpecificity,
+              )
+            : Object.entries(pseudoStyles);
           if (pseudo.startsWith(':') && pseudoEntries.length > 0) {
             const declarations = joinDeclarations(
               pseudoEntries,
-              `${location}[${JSON.stringify(pseudo)}]`,
+              pseudoLocation,
               sink,
               toKebabCase,
             );
@@ -1462,7 +1343,7 @@ function generateComponentRules(
             );
           if (surface) {
             // A media surface fixes the mode: only its own block applies.
-            if (surface === name) {
+            if (sideOf(surface) === name) {
               modeEmit(selector, wrap);
             }
             continue;
@@ -1477,17 +1358,61 @@ function generateComponentRules(
             `${inside(`:scope[${THEME_MODE_ATTR}="${name}"]`)}${outsideSurfaces}`,
             wrap,
           );
+          // A system root under no forced mode draws in the page's scheme.
+          // The root Theme names it on <html> when the page draws in one;
+          // while none is named, the reader's preference decides. Under a
+          // forced mode a system root follows the reader's preference.
+          const system = `:scope:not([${THEME_MODE_ATTR}="light"], [${THEME_MODE_ATTR}="dark"])`;
+          const forcedAround = `:is([${THEME_MODE_ATTR}="light"], [${THEME_MODE_ATTR}="dark"])`;
+          const preference = (rule: string) =>
+            wrap(`  @media (prefers-color-scheme: ${name}) {\n${rule}\n  }`);
+          const unforcedSystem = `${inside(`${system}:not(${forcedAround} *)`)}${outsideSurfaces}`;
+          modeEmit(`${unforcedSystem}:where(${rootSchemeIs(name)} *)`, wrap);
           modeEmit(
-            `${inside(
-              `:scope:not([${THEME_MODE_ATTR}="light"], [${THEME_MODE_ATTR}="dark"])`,
-            )}${outsideSurfaces}`,
-            rule =>
-              wrap(`  @media (prefers-color-scheme: ${name}) {\n${rule}\n  }`),
+            `${unforcedSystem}:where(${ROOT_SCHEME_UNNAMED} *)`,
+            preference,
           );
           modeEmit(
-            `:is(${selector}):where(${nearestSurfaceIs(name).join(', ')})`,
-            wrap,
+            `${inside(`${forcedAround} ${system}`)}${outsideSurfaces}`,
+            preference,
           );
+          const nearest = `:is(${selector}):where(${nearestSurfaceIs(name).join(', ')})`;
+          // A surface that takes another side on a dark page draws
+          // that side's block inside it there, and not this one, before any
+          // script names its side in `data-astryx-media`. A surface nested
+          // in it keeps its own side, as on the nearest-surface chain.
+          const onDarkPage = (side: MediaSide, preference: boolean) =>
+            darkPageConditions(preference).flatMap(condition =>
+              darkPageNearestIs(`${condition} ${mediaDarkPageIs(side)}`, side),
+            );
+          const byPreference = (rule: string) =>
+            wrap(`  @media (prefers-color-scheme: dark) {\n${rule}\n  }`);
+          const others = [...darkPageSides].filter(side => side !== name);
+          if (others.length === 0) {
+            modeEmit(nearest, wrap);
+          } else {
+            const plain = others.flatMap(side => onDarkPage(side, false));
+            const preferred = others.flatMap(side => onDarkPage(side, true));
+            modeEmit(`${nearest}:where(:not(${plain.join(', ')}))`, rule =>
+              wrap(
+                `  @media not all and (prefers-color-scheme: dark) {\n${rule}\n  }`,
+              ),
+            );
+            modeEmit(
+              `${nearest}:where(:not(${[...plain, ...preferred].join(', ')}))`,
+              byPreference,
+            );
+          }
+          if (darkPageSides.has(name)) {
+            modeEmit(
+              `:is(${selector}):where(${onDarkPage(name, false).join(', ')})`,
+              wrap,
+            );
+            modeEmit(
+              `:is(${selector}):where(${onDarkPage(name, true).join(', ')})`,
+              byPreference,
+            );
+          }
         }
       };
       emit(
@@ -1530,9 +1455,30 @@ const NEAREST_SURFACE_DEPTH = 5;
  * conditions 1 to NEAREST_SURFACE_DEPTH - 1, that reads R up to
  * NEAREST_SURFACE_DEPTH.
  */
-function nearestSurfaceIs(mode: MediaSurface): string[] {
-  const other: MediaSurface = mode === 'dark' ? 'light' : 'dark';
-  const chain = (length: number, last: MediaSurface) =>
+/**
+ * Selectors for elements whose nearest surface draws `side`, where `outer`
+ * is a surface that draws `side` (a flipped surface on a dark page): inside
+ * it and no nearer surface of the other side, or inside a nested surface of
+ * `side` that follows one of the other side, down to the same depth as
+ * nearestSurfaceIs.
+ */
+function darkPageNearestIs(outer: string, side: MediaSide): string[] {
+  const other: MediaSide = side === 'dark' ? 'light' : 'dark';
+  const pair = `${mediaSelector(other)} ${mediaSelector(side)}`;
+  return Array.from(
+    {length: Math.floor((NEAREST_SURFACE_DEPTH - 1) / 2)},
+    (_, depth) => {
+      const chain = [outer, ...Array.from({length: depth}, () => pair)].join(
+        ' ',
+      );
+      return `${chain} *:not(${chain} ${mediaSelector(other)} *)`;
+    },
+  );
+}
+
+function nearestSurfaceIs(mode: MediaSide): string[] {
+  const other: MediaSide = mode === 'dark' ? 'light' : 'dark';
+  const chain = (length: number, last: MediaSide) =>
     Array.from({length}, (_, i) =>
       mediaSelector(
         (length - 1 - i) % 2 === 0 ? last : last === mode ? other : mode,
@@ -1566,7 +1512,43 @@ function expandComponentDeclarations(
   let containerExpanded = false;
   const replacedProps = new Set<string>();
 
+  // A radius of each corner, written to the corner variables of a
+  // `corners` entry. A later radius in the block replaces what an earlier one
+  // gave a corner, as the cascade does on the element.
+  const cornerProps = new Map<string, string>();
+  const cornerVarRoots = getDerivedVars(component, 'borderRadius')
+    .filter(entry => entry.corners)
+    .flatMap(entry => entry.vars ?? []);
+
   for (const [prop, value] of props) {
+    if (cornerVarRoots.length > 0) {
+      if (prop === 'borderRadius') {
+        // The shorthand sets every corner: each physical one, and no
+        // logical one (a component reads a logical corner first), here or
+        // from a rule it overrides. `initial` leaves a variable without a
+        // value, so the reader falls back to the physical corner.
+        const corners = radiusCorners(value);
+        for (const varName of cornerVarRoots) {
+          for (const name of Object.values(RADIUS_CORNER_PROPS)) {
+            cornerProps.delete(`${varName}-${name}`);
+          }
+          if (corners) {
+            PHYSICAL_RADIUS_CORNERS.forEach((name, i) => {
+              cornerProps.set(`${varName}-${name}`, corners[i]);
+            });
+            for (const name of LOGICAL_RADIUS_CORNERS) {
+              cornerProps.set(`${varName}-${name}`, 'initial');
+            }
+          }
+        }
+      } else if (prop in RADIUS_CORNER_PROPS) {
+        for (const varName of cornerVarRoots) {
+          const name = `${varName}-${RADIUS_CORNER_PROPS[prop]}`;
+          cornerProps.delete(name);
+          cornerProps.set(name, value);
+        }
+      }
+    }
     const derived = getDerivedVars(component, prop);
     // Padding longhands (paddingBlock, paddingInline, etc.) also
     // match the 'padding' derived entry for container expansion.
@@ -1620,6 +1602,7 @@ function expandComponentDeclarations(
     finalProps = finalProps.filter(([p]) => !replacedProps.has(p));
   }
 
+  derivedProps.push(...cornerProps);
   if (derivedProps.length > 0) {
     finalProps = [...finalProps, ...derivedProps];
   }
@@ -1872,12 +1855,18 @@ export function generateOnMediaCSS(
     [string, string][]
   >();
 
-  for (const surface of ['dark', 'light'] as const) {
-    const onMedia = surface === 'dark' ? theme.__onDark : theme.__onLight;
+  // One surface's token and component rules, into `out`.
+  // A dark-page copy repeats rules already checked, so it reports nothing.
+  const quiet: DiagnosticSink = () => {};
+  const emitSurface = (surface: MediaSurface, out: string[]): void => {
+    const surfaceSink =
+      surface.includes('@') && !surface.endsWith('@unflipped') ? quiet : sink;
+    const side = sideOf(surface);
+    const onMedia = side === 'dark' ? theme.__onDark : theme.__onLight;
     if (!onMedia) {
-      continue;
+      return;
     }
-    const location = surface === 'dark' ? 'onDark.' : 'onLight.';
+    const location = side === 'dark' ? 'onDark.' : 'onLight.';
 
     // Token overrides. MediaTheme writes on a descendant surface, so a source
     // alias must be local unless an authored root/adaptation role owns it.
@@ -1888,7 +1877,7 @@ export function generateOnMediaCSS(
       rules,
       rootAliases,
     );
-    mediaStatusRoleDefaults.set(surface, statusRoleDefaults);
+    mediaStatusRoleDefaults.set(side, statusRoleDefaults);
     const tokenEntries = [
       ...Object.entries(onMedia.tokens),
       ...statusRoleDefaults,
@@ -1899,30 +1888,83 @@ export function generateOnMediaCSS(
       const declarations = joinDeclarations(
         readerTextSizeEntries(tokenEntries),
         `${location}tokens`,
-        sink,
+        surfaceSink,
       );
-      parts.push(`  ${mediaSelector(surface)} {\n${declarations}\n  }`);
+      out.push(`  ${mediaSelector(surface)} {\n${declarations}\n  }`);
     }
 
     // Component overrides use the same lowering as root and adaptations so a
     // surface writes the same derived leaf and can win by source order.
     if (onMedia.components) {
-      generateComponentRules(onMedia.components, parts, {
+      generateComponentRules(onMedia.components, out, {
         resetInheritedPaddingSpecificity: true,
         surface,
-        sink,
+        sink: surfaceSink,
         location,
       });
-      generateColorOverrides(onMedia.components, parts, surface);
-      generateSizeOverrides(onMedia.components, parts, surface);
+      generateColorOverrides(onMedia.components, out, surface);
+      generateSizeOverrides(onMedia.components, out, surface);
 
       // Apply the effective explicit Heading weight after media-specific type
       // rules. A surface-authored target wins, followed by the inherited main
       // target and then the built-in token fallback.
-      generateHeadingWeightOverrides(onMedia.components, parts, {
+      generateHeadingWeightOverrides(onMedia.components, out, {
         surface,
         inheritedComponents: theme.components,
       });
+    }
+  };
+  // A surface that takes another side on a dark page (a toast's card, whose
+  // fill flips with the page) carries that side as a second attribute, so
+  // its first paint is right before any script measures it. Its rules come
+  // after both sides' own and only for a theme whose surfaces flip.
+  const flipped = darkPageSides(
+    resolveModes({...theme.localTokens, ...theme.tokens}),
+  );
+  /** Every token this side writes, the other side's copy writes again. */
+  const coveredBy = (side: MediaSide, other: MediaSide): boolean => {
+    const own = side === 'dark' ? theme.__onDark : theme.__onLight;
+    const its = other === 'dark' ? theme.__onDark : theme.__onLight;
+    if (!own) {
+      return true;
+    }
+    if (!its || own.components) {
+      return false;
+    }
+    return Object.keys(own.tokens).every(token => token in its.tokens);
+  };
+  for (const side of ['dark', 'light'] as const) {
+    const other: MediaSide = side === 'dark' ? 'light' : 'dark';
+    if (!flipped.has(other) || coveredBy(side, other)) {
+      emitSurface(side, parts);
+      continue;
+    }
+    // Where a dark page flips the surface to the other side, this side's
+    // rules leave it out, so what only this side sets (a fill it gives a
+    // button) never reaches it there and the theme root's rules apply.
+    const byScheme: string[] = [];
+    emitSurface(`${side}@unflipped`, byScheme);
+    if (byScheme.length > 0) {
+      parts.push(
+        `  @media not all and (prefers-color-scheme: dark) {\n${byScheme.join('\n\n')}\n  }`,
+      );
+    }
+    const byPreference: string[] = [];
+    emitSurface(`${side}@unflipped-preference`, byPreference);
+    if (byPreference.length > 0) {
+      parts.push(
+        `  @media (prefers-color-scheme: dark) {\n${byPreference.join('\n\n')}\n  }`,
+      );
+    }
+  }
+  for (const side of flipped) {
+    emitSurface(`${side}@dark-page`, parts);
+    const byPreference: string[] = [];
+    emitSurface(`${side}@dark-page-preference`, byPreference);
+    if (byPreference.length > 0) {
+      parts.push(
+        `  @media (prefers-color-scheme: dark) {\n${byPreference.join('\n\n')}\n  }`,
+      );
     }
   }
 
@@ -1953,6 +1995,12 @@ export function generateOnMediaCSS(
         sink,
       );
       roleParts.push(`  ${mediaSelector(surface)} {\n${declarations}\n  }`);
+      if (flipped.has(surface)) {
+        roleParts.push(
+          `  ${mediaSelector(`${surface}@dark-page`)} {\n${declarations}\n  }`,
+          `  @media (prefers-color-scheme: dark) {\n  ${mediaSelector(`${surface}@dark-page-preference`)} {\n${declarations}\n  }\n  }`,
+        );
+      }
     }
     if (roleParts.length > 0) {
       adaptationMediaRoleBlocks.push(
@@ -1982,6 +2030,7 @@ function generateAdaptationRuleRules(
   location: string,
   sink: DiagnosticSink,
   statusRoleDefaults: [string, string][],
+  themeDarkPageSides: ReadonlySet<MediaSide>,
 ): string[] {
   const parts: string[] = [];
   const tokens = tokenBlock(rule, location, sink, [
@@ -1993,10 +2042,13 @@ function generateAdaptationRuleRules(
   }
 
   if (rule.components) {
+    // An adaptation's color-mode blocks follow a flipped surface's
+    // dark-page side as the root blocks do.
     generateComponentRules(rule.components, parts, {
       resetInheritedPaddingSpecificity: true,
       sink,
       location,
+      darkPageSides: themeDarkPageSides,
     });
     generateColorOverrides(rule.components, parts);
     generateSizeOverrides(rule.components, parts);
@@ -2055,6 +2107,9 @@ export function generateAdaptationCSS(
   );
 
   const statusRoleDefaults = adaptationStatusRoleDefaults(context);
+  const themeDarkPageSides = darkPageSides(
+    resolveModes({...theme.localTokens, ...theme.tokens}),
+  );
 
   // Emit ordinary rule writes first, without inherited Heading weight
   // fallbacks. Carrying an earlier weight into a later block makes that value
@@ -2067,6 +2122,7 @@ export function generateAdaptationCSS(
       `adaptations[${index}].`,
       sink,
       statusRoleDefaults[index],
+      themeDarkPageSides,
     );
     if (parts.length === 0) {
       continue;

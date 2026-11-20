@@ -28,6 +28,7 @@ import {normalizeProviderId} from '../identity/provider-identity.mjs';
 import {
   parseAgentDocsField,
   parseCliCommandField,
+  parseInstallGuidanceField,
   parseIntegrationBase,
   unknownIntegrationKeys,
   ignoredIntegrationFields,
@@ -71,6 +72,11 @@ import {unknownCapabilityKeys} from '../bases/steps.mjs';
  *   CLI with; read by the picker in foundation/env (see cli-command.mjs)
  * @property {string} [__cliCommandError] why a declared `cliCommand` was
  *   ignored; the rest of the manifest still contributes
+ * @property {string} [installGuidance] how an app that uses this package
+ *   adds a dependency; read by `installGuidanceFor` in
+ *   foundation/env/cli-command.mjs
+ * @property {string} [__installGuidanceError] why a declared
+ *   `installGuidance` was ignored; the rest of the manifest still contributes
  * @property {string} [__agentDocsError] contribution-specific validation
  *   failure; other manifest contributions remain available
  * @property {string} __spec
@@ -83,10 +89,11 @@ import {unknownCapabilityKeys} from '../bases/steps.mjs';
  * @property {string} __manifestFile
  * @property {string} [__loadError] set when the manifest failed to load/validate;
  *   such an integration contributes nothing and is surfaced via Project.issues()
- * @property {{providerId: import('../../authoring/identity/type').ProviderId, claimedBy: string, message: string}} [__providerConflict]
+ * @property {{providerId: import('../../authoring/identity/type').ProviderId, claimedBy: string, message: string, bothDeclare?: true}} [__providerConflict]
  *   set on a package whose provider ID an earlier-loaded package already
  *   claims; it contributes nothing and is reported as a `duplicate_provider`
- *   warning
+ *   warning. `bothDeclare` marks a conflict where both manifests write the
+ *   provider ID themselves
  * @property {string[]} [__declaredKeys] the keys the manifest object itself
  *   declares, before any is filled in (providerId from the package name)
  * @property {string[]} [__unknownKeys] manifest keys this CLI does not know —
@@ -115,7 +122,6 @@ import {unknownCapabilityKeys} from '../bases/steps.mjs';
  *   validated catalog source from the `discover` NAMED export.
  * @property {string} [__discoverError] isolated discover-source validation error.
  */
-
 
 /**
  * Normalize a package-owned provider ID without rejecting legacy unnamed local
@@ -161,7 +167,6 @@ export function markProviderConflicts(integrations) {
   ).integrations;
 }
 
-
 /**
  * Parse the optional named gap-report handler without making it part of the
  * default manifest schema. A malformed handler is isolated from every other
@@ -196,7 +201,9 @@ function parseGapReportHandlerExport(value, label) {
 function parseDiscoverSourceExport(value, label) {
   if (value === undefined) return {};
   try {
-    return {source: parseDiscoverSource(value, `${label} named export "discover"`)};
+    return {
+      source: parseDiscoverSource(value, `${label} named export "discover"`),
+    };
   } catch (error) {
     return {error: error instanceof Error ? error.message : String(error)};
   }
@@ -218,7 +225,7 @@ function parseDiscoverSourceExport(value, label) {
  * @param {string} file absolute manifest path
  * @param {string} [label] used in error messages
  * @param {{fresh?: boolean}} [options]
- * @returns {Promise<{manifest: import('../../authoring/integration/type').AstryxIntegration, unknownKeys: string[], ignoredFields: Array<{field: string, why: string}>, declaredKeys: string[], debug?: import('../../authoring/debug/type').DebugEventHandler, gapReport?: import('../../authoring/gap-report/type').GapReportHandler, gapReportError?: string, discover?: import('../../authoring/discover/type').DiscoverSource, discoverError?: string, agentDocsError?: string, cliCommandError?: string}>}
+ * @returns {Promise<{manifest: import('../../authoring/integration/type').AstryxIntegration, unknownKeys: string[], ignoredFields: Array<{field: string, why: string}>, declaredKeys: string[], debug?: import('../../authoring/debug/type').DebugEventHandler, gapReport?: import('../../authoring/gap-report/type').GapReportHandler, gapReportError?: string, discover?: import('../../authoring/discover/type').DiscoverSource, discoverError?: string, agentDocsError?: string, cliCommandError?: string, installGuidanceError?: string}>}
  */
 export async function loadManifest(
   file,
@@ -227,7 +234,8 @@ export async function loadManifest(
 ) {
   const mod = await importUserModule(file, {fresh});
   const raw = mod?.default;
-  if (raw === undefined) throw new Error(noDefaultExportMessage(file, label, mod));
+  if (raw === undefined)
+    throw new Error(noDefaultExportMessage(file, label, mod));
   const baseManifest = parseIntegrationBase(raw, label);
   const gapReport = parseGapReportHandlerExport(mod?.gapReport, label);
   const discover = parseDiscoverSourceExport(mod?.discover, label);
@@ -273,13 +281,36 @@ export async function loadManifest(
     }
   }
 
+  /** @type {string | undefined} */
+  let installGuidance;
+  /** @type {string | undefined} */
+  let installGuidanceError;
+  const rawInstallGuidance =
+    raw != null && typeof raw === 'object' && !Array.isArray(raw)
+      ? /** @type {{installGuidance?: unknown}} */ (raw).installGuidance
+      : undefined;
+  if (rawInstallGuidance !== undefined) {
+    try {
+      installGuidance = parseInstallGuidanceField(
+        rawInstallGuidance,
+        `${label} field "installGuidance"`,
+      );
+    } catch (err) {
+      installGuidanceError = err instanceof Error ? err.message : String(err);
+    }
+  }
+
   return {
     manifest: {
       ...baseManifest,
       ...(agentDocs == null ? {} : {agentDocs}),
       ...(cliCommand == null ? {} : {cliCommand}),
+      ...(installGuidance == null ? {} : {installGuidance}),
     },
-    unknownKeys: [...unknownIntegrationKeys(raw), ...unknownCapabilityKeys(raw)],
+    unknownKeys: [
+      ...unknownIntegrationKeys(raw),
+      ...unknownCapabilityKeys(raw),
+    ],
     ignoredFields: ignoredIntegrationFields(raw),
     declaredKeys:
       raw != null && typeof raw === 'object' ? Object.keys(raw) : [],
@@ -295,6 +326,7 @@ export async function loadManifest(
     discoverError: discover.error,
     agentDocsError,
     cliCommandError,
+    installGuidanceError,
   };
 }
 
@@ -466,6 +498,8 @@ export async function loadLocalIntegration(packageDir, {fresh = false} = {}) {
   let agentDocsError;
   /** @type {string | undefined} */
   let cliCommandError;
+  /** @type {string | undefined} */
+  let installGuidanceError;
   try {
     ({
       manifest,
@@ -479,6 +513,7 @@ export async function loadLocalIntegration(packageDir, {fresh = false} = {}) {
       discoverError,
       agentDocsError,
       cliCommandError,
+      installGuidanceError,
     } = await loadManifest(manifestFile, `Integration ${spec}`, {fresh}));
   } catch (err) {
     return {
@@ -520,8 +555,10 @@ export async function loadLocalIntegration(packageDir, {fresh = false} = {}) {
     logo: manifest.logo,
     agentDocs: manifest.agentDocs,
     cliCommand: manifest.cliCommand,
+    installGuidance: manifest.installGuidance,
     base: manifest.base,
     __cliCommandError: cliCommandError,
+    __installGuidanceError: installGuidanceError,
     __agentDocsError: agentDocsError,
     __unknownKeys: unknownKeys,
     __ignoredFields: ignoredFields,
@@ -594,6 +631,8 @@ export async function loadIntegrations(
     let agentDocsError;
     /** @type {string | undefined} */
     let cliCommandError;
+    /** @type {string | undefined} */
+    let installGuidanceError;
     try {
       ({
         manifest,
@@ -607,6 +646,7 @@ export async function loadIntegrations(
         discoverError,
         agentDocsError,
         cliCommandError,
+        installGuidanceError,
       } = await loadManifest(manifestFile, `Integration ${spec}`, {fresh}));
     } catch (err) {
       // A manifest that throws on import or fails schema validation must NOT take
@@ -655,8 +695,10 @@ export async function loadIntegrations(
       logo: manifest.logo,
       agentDocs: manifest.agentDocs,
       cliCommand: manifest.cliCommand,
+      installGuidance: manifest.installGuidance,
       base: manifest.base,
       __cliCommandError: cliCommandError,
+      __installGuidanceError: installGuidanceError,
       __agentDocsError: agentDocsError,
       __unknownKeys: unknownKeys,
       __ignoredFields: ignoredFields,

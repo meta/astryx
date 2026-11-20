@@ -103,3 +103,17 @@ describe('warnOnce', () => {
     expect(warn).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('devPropError', () => {
+  it('names the component, the prop and the fix', () => {
+    const error = diagnostics.devPropError(
+      'Kbd',
+      'keys',
+      'is required, for example keys="mod+k".',
+    );
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toBe(
+      'Kbd: `keys` is required, for example keys="mod+k".',
+    );
+  });
+});

@@ -11,6 +11,7 @@ import * as path from 'node:path';
 import {babelParse as parse} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {postcss} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {
+  addMatchingCore,
   collectUnloadedFonts,
   fontPackagesInstallLine,
   discoverDoctorThemes,
@@ -44,16 +45,24 @@ import {
   dependencyInstallFor,
   coreAddCommand,
   packageInstallCommand,
+  packageInstallStep,
+  generatedSource,
   themeBuild,
   themeRecordOwner,
   themeShippedImportFindings,
   validateThemePrivateInputs,
 } from './_adapter.mjs';
 import {
+  settingIssueLocation,
+  splitGeneratedIssues,
+  generatedNotesByFile,
+} from '../theme/build/setting-effects.mjs';
+import {
   getCliInvocation,
   formatCliCommand,
 } from '../../foundation/env/package-manager.mjs';
 import {logger} from '../logger.mjs';
+import {stylesheetLinkHrefs} from './built-checks.mjs';
 
 /** @typedef {import('./doctor.mjs').DoctorCheck} DoctorCheck */
 /** @typedef {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} DiscoveredTheme */
@@ -65,6 +74,7 @@ const CHECKS = [
   ['theme-module-import', 'App imports the theme module'],
   ['theme-stylesheet-imports', 'Built theme stylesheet imports'],
   ['theme-local-builds', 'Local theme build freshness'],
+  ['theme-setting-effects', 'Theme settings that show'],
   ['theme-private-variables', 'Private theme variables'],
   ['theme-core-peers', 'Theme Core peer compatibility'],
   ['theme-default', 'Default added theme'],
@@ -126,8 +136,21 @@ function refreshThemeCommand(projectDir, run, available, slug, owner) {
       ? null
       : dependencyInstallFor(projectDir, owner);
     if (install) return install;
-    const selector = theme?.package ?? owner;
-    return `npm install ${owner}@latest; ${run} theme add ${slug} --package ${selector}`;
+    // The package is added the way the project adds it, at the release its
+    // Core peer needs, then the theme again; by its owner only when another
+    // package owns the same slug. The recorded owner counts even when it is
+    // not installed, so a bundled theme with the same slug still needs it.
+    const owners = new Set([
+      owner,
+      ...available
+        .filter(candidate => candidate.slug === slug)
+        .map(themeRecordOwner),
+    ]);
+    const add =
+      owners.size > 1
+        ? `${run} theme add ${slug} --package ${owner}`
+        : `${run} theme add ${slug}`;
+    return `${addMatchingCore(projectDir, owner)}; ${add}`;
   }
   const source = theme
     ? relative(projectDir, path.join(theme.sourceDir, theme.entry))
@@ -167,11 +190,36 @@ function walkAst(value, visit) {
 }
 
 /**
+ * The string values a source file holds, object keys included, read from its
+ * syntax tree, so a commented-out copy never counts. A config names a plugin
+ * package this way (`plugins: {'@acme/postcss': {}}`).
+ * @param {string} source
+ * @returns {Set<string>}
+ */
+export function stringValues(source) {
+  const values = new Set();
+  walkAst(parseModule(source), node => {
+    if (node.type === 'StringLiteral') values.add(node.value);
+    if (
+      node.type === 'TemplateLiteral' &&
+      node.expressions?.length === 0 &&
+      typeof node.quasis?.[0]?.value?.cooked === 'string'
+    ) {
+      values.add(node.quasis[0].value.cooked);
+    }
+  });
+  return values;
+}
+
+/**
+ * The module specifiers a source file imports, re-exports, or loads with
+ * `import()` or `require()`, read from its syntax tree, so a commented-out
+ * or quoted copy never counts.
  * @param {string} source
  * @param {{runtimeOnly?: boolean}} [options] - skip type-only imports and
  *   re-exports, which the build erases
  */
-function moduleSpecifiers(source, options = {}) {
+export function moduleSpecifiers(source, options = {}) {
   const values = new Set();
   walkAst(parseModule(source), node => {
     if (
@@ -421,6 +469,109 @@ function themeImportPairEvidence(root, generatedModule, themes) {
   return {unpaired, unproven};
 }
 
+/**
+ * A known font service's stylesheet URL, whose `family=` names the families
+ * it loads (Google Fonts, and Bunny Fonts, which serves the same API).
+ */
+const FONT_SERVICE_HREF =
+  /^(?:https?:)?\/\/fonts\.(?:googleapis\.com|bunny\.net)\/css2?\?/iu;
+
+/** The app's page files a font `<link>` goes in, in the order frameworks keep them. */
+const PAGE_HEAD_FILES = [
+  'index.html',
+  'public/index.html',
+  'src/index.html',
+  ...[
+    'app/layout',
+    'src/app/layout',
+    'pages/_document',
+    'src/pages/_document',
+  ].flatMap(file =>
+    ['.tsx', '.jsx', '.js', '.mjs', '.ts'].map(ext => `${file}${ext}`),
+  ),
+];
+
+/**
+ * The font families the app's page head loads through a font service
+ * `<link>`, and the page file that holds its head (the first of the page
+ * files that exists), relative to the project.
+ * @param {string} projectDir
+ * @returns {{families: Set<string>, head: string | null}}
+ */
+function pageFontLinks(projectDir) {
+  /** @type {Set<string>} */
+  const families = new Set();
+  /** @type {string | null} */
+  let head = null;
+  for (const name of PAGE_HEAD_FILES) {
+    const file = path.join(projectDir, name);
+    const source = readTextFileIfExists(file);
+    if (source == null) continue;
+    head ??= name;
+    const hrefs = /\.html?$/i.test(name)
+      ? stylesheetLinkHrefs(source)
+      : jsxStylesheetHrefs(source);
+    for (const href of hrefs) {
+      if (!FONT_SERVICE_HREF.test(href)) continue;
+      for (const family of fontServiceFamilies(href)) families.add(family);
+    }
+  }
+  return {families, head};
+}
+
+/**
+ * The `href` of every stylesheet `<link>` a layout module renders, read from
+ * its syntax tree, so a link in any comment never counts. Only string
+ * attribute values are read; a `rel` must be the word `stylesheet`.
+ * @param {string} source
+ * @returns {string[]}
+ */
+function jsxStylesheetHrefs(source) {
+  let ast;
+  try {
+    ast = parseModule(source);
+  } catch {
+    return [];
+  }
+  /** @param {any} attribute @returns {string | null} */
+  const text = attribute => {
+    const v = attribute?.value;
+    if (v?.type === 'StringLiteral') return v.value;
+    const e = v?.type === 'JSXExpressionContainer' ? v.expression : null;
+    if (e?.type === 'StringLiteral') return e.value;
+    if (e?.type === 'TemplateLiteral' && !e.expressions.length)
+      return e.quasis[0]?.value?.cooked ?? null;
+    return null;
+  };
+  /** @type {string[]} */
+  const out = [];
+  walkAst(ast, node => {
+    if (
+      node.type !== 'JSXOpeningElement' ||
+      node.name?.type !== 'JSXIdentifier' ||
+      node.name.name !== 'link'
+    )
+      return;
+    /** @param {string} name */
+    const attr = name =>
+      text(
+        (node.attributes ?? []).find(
+          (/** @type {any} */ a) =>
+            a.type === 'JSXAttribute' && a.name?.name === name,
+        ),
+      );
+    const rel = attr('rel');
+    const href = attr('href');
+    if (
+      href &&
+      rel &&
+      rel.split(/\s+/u).some(word => /^stylesheet$/iu.test(word))
+    )
+      out.push(href);
+  });
+  return out;
+}
+
 /** @param {string} value */
 function normalizeFontName(value) {
   return value
@@ -579,7 +730,7 @@ function globalRules(css, slug) {
 
 /**
  * Report source copies made by the released `theme add` before it copied
- * descriptors. This is a migration notice, not one of the ten setup checks.
+ * descriptors. This is a migration notice, not one of the eleven setup checks.
  * @param {string} projectDir
  * @returns {DoctorCheck|null}
  */
@@ -993,6 +1144,19 @@ export async function themeImportWiring(cwd) {
 }
 
 /**
+ * The fix line for a project with no installed theme: the install guidance
+ * its integrations give, else the install command in the project's package
+ * manager, or `npm install` with a note when its lockfiles disagree.
+ * @param {string} cwd
+ * @param {string} run the CLI invocation stem
+ * @returns {string}
+ */
+function themeInstallFix(cwd, run) {
+  const {line, note} = packageInstallStep(['@astryxdesign/theme-neutral'], cwd);
+  return `Install a theme, e.g. \`${line}\`${note ? ` (${note})` : ''}, then add it to the app with \`${run} theme add neutral\`.`;
+}
+
+/**
  * The pass message's list of themes wired by import, each with the file that
  * imports it.
  * @param {Array<{slug: string, file: string, wiredBy?: string}>} wired
@@ -1126,7 +1290,7 @@ export function checkThemes(
       label,
       status: 'warn',
       message: 'No @astryxdesign/theme-* packages are installed.',
-      fix: `Install a theme, e.g. \`npm install @astryxdesign/theme-neutral\`, then add it to the app with \`${run} theme add neutral\`.`,
+      fix: themeInstallFix(cwd, run),
     };
   }
   const names = packages.join(', ');
@@ -1215,7 +1379,7 @@ function privateInputFile(theme, owner, projectDir) {
 }
 
 /**
- * Run all ten app-theme checks.
+ * Run all eleven app-theme checks.
  * @param {string} cwd
  * @returns {Promise<DoctorCheck[]>}
  */
@@ -1347,7 +1511,21 @@ export async function checkAppThemes(cwd) {
         unshippedImports.push({
           slug,
           owner,
-          message: `Theme "${slug}" from ${owner}: its built module loads, but ${unshipped.some(finding => finding.code === 'relative_import_not_shipped') ? 'it or its stylesheet names a file the package does not ship' : 'it imports TypeScript source'}, so an app's bundler cannot build it: ${unshipped.map(finding => finding.message).join(' ')}`,
+          // Each cause the findings hold is named: a theme can have both.
+          message: `Theme "${slug}" from ${owner}: its built module loads, but ${[
+            ...(unshipped.some(
+              finding => finding.code === 'relative_import_not_shipped',
+            )
+              ? ['it or its stylesheet names a file the package does not ship']
+              : []),
+            ...(unshipped.some(
+              finding => finding.code === 'built_module_imports_typescript',
+            )
+              ? ['it imports TypeScript source']
+              : []),
+          ].join(
+            ', and ',
+          )}, so an app's bundler cannot build it: ${unshipped.map(finding => finding.message).join(' ')}`,
         });
       }
       resolved.push(resolvedTheme);
@@ -1567,6 +1745,17 @@ export async function checkAppThemes(cwd) {
   }
 
   const localThemes = resolved.filter(theme => theme.source === 'local');
+  /**
+   * What each local theme's build check says does not show as written (the
+   * `settingIssues` of `theme build --check`), and whether the checks ran.
+   * Settings a generated file writes are one note per file instead.
+   * @type {Array<{slug: string, issues: Array<{message: string, fix: string, line: number | null, file?: string}>, notes: Array<{file: string, text: string}>}>}
+   */
+  const settingIssuesByTheme = [];
+  /** The local themes whose build check returned a receipt. @type {Set<string>} */
+  const settingsChecked = new Set();
+  /** Why a local theme's build check did not run, by its slug. @type {Map<string, string>} */
+  const uncheckedWhy = new Map();
   if (incompleteResolution) {
     checks.push({
       id: 'theme-local-builds',
@@ -1585,6 +1774,8 @@ export async function checkAppThemes(cwd) {
       message:
         "The project's Core isn't installed, so local theme builds were not checked. Install the project's dependencies, then run doctor again.",
     });
+    for (const theme of localThemes)
+      uncheckedWhy.set(theme.slug, "the project's Core isn't installed");
   } else if (localThemes.length === 0) {
     checks.push({
       id: 'theme-local-builds',
@@ -1621,6 +1812,38 @@ export async function checkAppThemes(cwd) {
             {check: true},
             {cwd: state.projectDir, projectCore: true},
           );
+          if (receipt?.type === 'theme.build.check') {
+            settingsChecked.add(theme.slug);
+            const issues = /** @type {any} */ (receipt).data.settingIssues;
+            if (Array.isArray(issues) && issues.length > 0) {
+              // A generated file's settings: one note, as the build says.
+              const own = path.relative(state.projectDir, sourceFile);
+              /** @param {string | undefined} file */
+              const absolute = file =>
+                path.resolve(state.projectDir, file ?? own);
+              const split = splitGeneratedIssues(
+                issues,
+                file => {
+                  const text = readTextFileIfExists(absolute(file));
+                  return text == null
+                    ? null
+                    : generatedSource(text, absolute(file));
+                },
+                file => file ?? own,
+                {
+                  listedBy: formatCliCommand(
+                    `theme build ${own} --check --json`,
+                    state.projectDir,
+                  ),
+                },
+              );
+              settingIssuesByTheme.push({
+                slug: theme.slug,
+                issues: split.listed,
+                notes: split.notes,
+              });
+            }
+          }
           if (
             receipt == null ||
             receipt.type !== 'theme.build.check' ||
@@ -1633,9 +1856,20 @@ export async function checkAppThemes(cwd) {
           // variables" check's to report, not a stale output.
           if (isPrivateVarRefusal(error)) {
             refused.push(theme.slug);
+            uncheckedWhy.set(theme.slug, 'it sets a private variable');
             continue;
           }
           const missing = missingThemePackage(error);
+          // What the build said: the first line of its refusal.
+          const said = String(
+            /** @type {any} */ (error)?.message ?? error,
+          ).split('\n')[0];
+          uncheckedWhy.set(
+            theme.slug,
+            missing
+              ? `it imports ${missing}, which the project lacks`
+              : `the build refused it: ${said.replace(/\.$/, '')}`,
+          );
           if (missing) {
             missingPackages.set(missing, [
               ...(missingPackages.get(missing) ?? []),
@@ -1677,7 +1911,8 @@ export async function checkAppThemes(cwd) {
                 '; ',
               )}.${stale.length > 0 ? ` Local theme outputs are also missing or stale: ${stale.join(', ')}.` : ''}${refused.length > 0 ? ` Not checked (a private theme variable; see theme-private-variables): ${refused.join(', ')}.` : ''}`,
             fix: [
-              install?.installCommand ??
+              install?.installGuidance ??
+                install?.installCommand ??
                 install?.noCommandReason ??
                 `Install ${packages.join(', ')}.`,
               ...refresh,
@@ -1709,6 +1944,81 @@ export async function checkAppThemes(cwd) {
               },
     );
   }
+
+  // Each setting of an added local theme the browser does not show as
+  // written, as its build check reports it: a warning with the theme, the
+  // setting and the fix, never a failure (the theme builds as before). It
+  // passes only when every local theme's build check ran.
+  const settingIssueCount = settingIssuesByTheme.reduce(
+    (n, t) => n + t.issues.length,
+    0,
+  );
+  // Each local theme whose build check did not run, with why (the cause
+  // the freshness check names).
+  const unchecked = localThemes
+    .map(theme => theme.slug)
+    .filter(slug => !settingsChecked.has(slug))
+    .map(
+      slug =>
+        `${slug} (${uncheckedWhy.get(slug) ?? 'its build check returned no result'})`,
+    );
+  const uncheckedNote =
+    unchecked.length > 0
+      ? `Not checked, because ${unchecked.length === 1 ? 'its build check' : 'their build checks'} did not run: ${unchecked.join('; ')}.`
+      : '';
+  // One note per generated file: a local theme that extends a generated one
+  // reports that file's settings too.
+  const generatedNotes = generatedNotesByFile(
+    settingIssuesByTheme.map(t => ({label: t.slug, notes: t.notes})),
+  ).map(note => `${note.labels.join(', ')}: ${note.text}`);
+  const notesText = generatedNotes.length
+    ? ` ${generatedNotes.join('; ')}.`
+    : '';
+  checks.push(
+    settingIssueCount > 0
+      ? {
+          id: 'theme-setting-effects',
+          label: 'Theme settings that show',
+          status: 'warn',
+          message: `${settingIssueCount} ${settingIssueCount === 1 ? 'setting does' : 'settings do'} not show as written: ${settingIssuesByTheme
+            .flatMap(t =>
+              t.issues.map(
+                i => `${t.slug}: ${i.message}${settingIssueLocation(i)}`,
+              ),
+            )
+            .join(
+              '; ',
+            )}.${notesText}${uncheckedNote ? ` ${uncheckedNote}` : ''}`,
+          fix: `${settingIssuesByTheme
+            .flatMap(t => t.issues.map(i => `${t.slug}: ${i.fix}`))
+            .join('; ')}.`,
+        }
+      : generatedNotes.length > 0
+        ? {
+            id: 'theme-setting-effects',
+            label: 'Theme settings that show',
+            status: 'info',
+            message: `${generatedNotes.join('; ')}.${uncheckedNote ? ` ${uncheckedNote}` : ''}`,
+          }
+        : incompleteResolution || unchecked.length > 0
+          ? {
+              id: 'theme-setting-effects',
+              label: 'Theme settings that show',
+              status: 'info',
+              message: incompleteResolution
+                ? 'Could not check that each local theme setting shows until every local output resolves.'
+                : uncheckedNote,
+            }
+          : {
+              id: 'theme-setting-effects',
+              label: 'Theme settings that show',
+              status: 'pass',
+              message:
+                localThemes.length > 0
+                  ? 'Every setting of the added local themes shows as written.'
+                  : 'No added local themes to check.',
+            },
+  );
 
   // The inputs load with Core, and doctor reads only the Core the project
   // installed, never the one the answering copy carries.
@@ -1906,6 +2216,10 @@ export async function checkAppThemes(cwd) {
       importedEvidence.set(theme, null);
     }
   }
+  // A font service stylesheet the app links in its page head (the setup a
+  // theme's README gives) loads its families for every added theme.
+  const pageFonts = pageFontLinks(state.projectDir);
+  for (const family of pageFonts.families) moduleLoaded.add(family);
   for (const theme of resolved) {
     const availableTheme = available.find(
       candidate =>
@@ -1982,7 +2296,7 @@ export async function checkAppThemes(cwd) {
     }
     if (packageWarnings.length > 0) {
       fontWarningFixes.push(
-        'Load the named package fonts in app HTML, or install a package version that exports <slug>.fonts.css (or fonts.css for a single-theme package).',
+        `Add the theme's font <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=…"> to the <head> of ${pageFonts.head ?? "the app's HTML page (index.html, or the root layout)"}, as the theme's README gives it, or install a package version that exports <slug>.fonts.css (or fonts.css for a single-theme package).`,
       );
     }
   }

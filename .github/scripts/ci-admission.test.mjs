@@ -28,6 +28,7 @@ import {
   readDurations,
   stepOutputs,
 } from '../../scripts/vitest-node-legs.mjs';
+import {withoutCheckoutRetries} from './lib/checkout-retries.mjs';
 
 const require = createRequire(import.meta.url);
 const root = path.resolve(import.meta.dirname, '../..');
@@ -41,9 +42,12 @@ const COUNT_MODULE = path.join(root, '.github/actions/ci-admission/count.mjs');
 const counter = fs.readFileSync(COUNT_MODULE, 'utf8');
 // Loaded once: under fake timers a fresh import inside the script would
 // resolve after the timers have run.
+// The release-critical label check, run for real against a stub GitHub.
+const RUN_LABELS_MODULE = path.join(root, '.github/scripts/run-labels.cjs');
 const preloaded = {
   'node:url': await import('node:url'),
   count: await import(COUNT_MODULE),
+  runLabels: await import(RUN_LABELS_MODULE),
 };
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
 const STEP = 'Wait for room under the CI ceiling';
@@ -158,7 +162,12 @@ describe('where runs wait', () => {
     // It cancels the run when its token can, and fails either way.
     expect(stop.run).toContain('gh run cancel "$GITHUB_RUN_ID"');
     expect(stop.run.trim().split('\n').at(-1)).toBe('exit 1');
-    expect(admission.permissions).toEqual({actions: 'read', contents: 'read'});
+    // It reads who applied a release-critical label.
+    expect(admission.permissions).toEqual({
+      actions: 'read',
+      contents: 'read',
+      'pull-requests': 'read',
+    });
     expect(String(ci.jobs['build-storybook'].if)).toContain(
       "needs.room.outputs.full != 'true'",
     );
@@ -328,7 +337,9 @@ describe('where runs wait', () => {
     // A pull request looks twice; the rare main run about every four minutes.
     expect(limit(wait.with['max-looks'], 'pull_request')).toBe(2);
     expect(limit(wait.with['max-looks'], 'workflow_dispatch')).toBe(30);
-    expect(admission.steps.filter(step => step !== wait)).toEqual([
+    expect(
+      withoutCheckoutRetries(admission.steps).filter(step => step !== wait),
+    ).toEqual([
       expect.objectContaining({name: 'Stop when CI is full'}),
       expect.objectContaining({uses: 'actions/checkout@v7'}),
       expect.objectContaining({name: WIDE_STEP}),
@@ -340,7 +351,11 @@ describe('where runs wait', () => {
     // superseded head (superseded-runs.test.mjs), the Node leg plan, which
     // never fails the job, and its name for other runs' count (below), and
     // its stop when it found no room (above).
-    expect(ci.jobs.room.steps.filter(step => step.name !== STEP)).toEqual([
+    expect(
+      withoutCheckoutRetries(ci.jobs.room.steps).filter(
+        step => step.name !== STEP,
+      ),
+    ).toEqual([
       expect.objectContaining({uses: 'actions/checkout@v7'}),
       expect.objectContaining({name: "Check the pull request's head"}),
       expect.objectContaining({name: 'Stop for a superseded head'}),
@@ -570,10 +585,14 @@ describe('peaks', () => {
     expect(stepOf(ci.jobs.admission).with['leg-widths']).toBe(
       "${{ github.event_name == 'workflow_dispatch' && '{}' || needs.room.outputs.leg-widths }}",
     );
-    const other = JSON.parse(/--other-widths '([^']*)'/.exec(planStep.run)[1]);
+    // Room plans the Node legs alone (no other widening matrix).
+    const other = JSON.parse(
+      /--other-widths '([^']*)'/.exec(planStep.run)?.[1] ?? '{}',
+    );
     const outputs = stepOutputs(nodePlan, other);
     const widths = JSON.parse(outputs['leg-widths']);
-    expect(Object.keys(widths).sort()).toEqual(['swizzle-proof', 'test-node']);
+    // The swizzle proof's legs run only with their label (label-legs).
+    expect(Object.keys(widths).sort()).toEqual(['test-node']);
     expect(widths['test-node'].full).toBe(nodePlan.legs);
     expect(ci.jobs['test-node'].strategy.matrix.shard).toBe(
       `\${{ fromJSON(needs.room.outputs.node-shards || '${JSON.stringify(Array.from({length: MAX_NODE_LEGS}, (_, i) => i + 1)).replaceAll(',', ', ')}') }}`,
@@ -628,8 +647,9 @@ describe('peaks', () => {
     const others = onPullRequest
       .map(name => legs(ci.jobs[name], 'pull_request'))
       .reduce((sum, count) => sum + count, 0);
-    // The widening matrices start with the first jobs: test-node needs only
-    // the waits, and swizzle-proof one slim scope job.
+    // The widening matrix counts with the first jobs: test-node needs only
+    // the waits and build-core, one short job, so counting its legs from the
+    // start covers it.
     const startedAt = mode =>
       Object.values(widths).reduce((sum, width) => sum + width[mode], others);
     const widen = Object.values(widths).reduce(
@@ -680,7 +700,10 @@ describe('peaks', () => {
         pull('pr-a11y-plan') +
         planLegsMax() +
         pull('pr-a11y'),
+      // Every swizzle-proof leg at once: the matrix holds none back.
+      'ci:run-swizzle': pull('swizzle-proof'),
     });
+    expect(ci.jobs['swizzle-proof'].strategy['max-parallel']).toBeUndefined();
   });
 });
 
@@ -690,7 +713,7 @@ describe('matrix legs held back', () => {
       ([, job]) => job.strategy?.['max-parallel'] != null,
     );
     expect(limited.map(([id]) => id).sort()).toEqual(
-      expect.arrayContaining(['swizzle-proof', 'test-node', 'test-ui']),
+      expect.arrayContaining(['test-node', 'test-ui']),
     );
     for (const [id, job] of limited) {
       const [first] = job.steps;
@@ -850,17 +873,40 @@ describe('ci admission', () => {
     next = '',
     legWidths = '{}',
     wide = '',
+    labelers = {},
+    permissions = {},
   } = {}) {
     vi.useFakeTimers({now: NOW});
     vi.spyOn(Math, 'random').mockReturnValue(random);
     const lookTimes = [];
     let looks = 0;
     let calls = 0;
-    const logs = {info: [], warning: []};
+    const logs = {info: [], warning: [], notice: []};
     const outputs = {};
     const runs = () => (typeof active === 'function' ? active(looks) : active);
     const github = {
+      // Who applied each label, newest last, as the pull request's timeline
+      // reads it.
+      graphql: async () => ({
+        repository: {
+          pullRequest: {
+            timelineItems: {
+              nodes: Object.entries(labelers).map(([name, login]) => ({
+                actor: {login},
+                label: {name},
+              })),
+            },
+          },
+        },
+      }),
       rest: {
+        repos: {
+          getCollaboratorPermissionLevel: async ({username}) => {
+            const permission = permissions[username];
+            if (permission instanceof Error) throw permission;
+            return {data: {permission: permission ?? 'none'}};
+          },
+        },
         actions: {
           listWorkflowRunsForRepo: async ({status, event, per_page}) => {
             if (error) throw error;
@@ -896,9 +942,11 @@ describe('ci admission', () => {
     const core = {
       info: message => logs.info.push(message),
       warning: message => logs.warning.push(message),
+      notice: message => logs.notice.push(message),
       setOutput: (name, value) => (outputs[name] = value),
     };
     const context = {
+      eventName: isMain || merge ? 'workflow_dispatch' : 'pull_request',
       repo: {owner: 'o', repo: 'r'},
       runId: OWN,
       payload:
@@ -915,6 +963,7 @@ describe('ci admission', () => {
     };
     Object.assign(process.env, {
       COUNT_MODULE,
+      RUN_LABELS_MODULE,
       PEAK: String(peak),
       MAIN: String(isMain),
       LABEL_LEGS: '{"ci:run-visual": 6}',
@@ -936,9 +985,12 @@ describe('ci admission', () => {
       'core',
       'importModule',
       script.replaceAll('await import(', 'await importModule('),
-    )(github, context, core, async specifier =>
-      specifier === 'node:url' ? preloaded['node:url'] : preloaded.count,
-    );
+    )(github, context, core, async specifier => {
+      if (specifier === 'node:url') return preloaded['node:url'];
+      return specifier.includes('run-labels')
+        ? preloaded.runLabels
+        : preloaded.count;
+    });
     // Observed here; `await done` below still rethrows a failure.
     done.catch(() => {});
     await vi.advanceTimersByTimeAsync(20 * 60_000);
@@ -1449,6 +1501,124 @@ describe('ci admission', () => {
     });
   });
 
+  describe('release-critical', () => {
+    const waiting = count =>
+      Array.from({length: count}, (_, i) => waitingRun(400 + i));
+    // CI over its ceiling (7 x 12 + 10 waiting + 18 = 112), ten pull-request
+    // runs and a main check waiting: no room for a run of 16 on any look.
+    const full = () => [
+      ...prs(7),
+      ...waiting(10),
+      waitingRun(499, {event: 'push', path: '.github/workflows/deploy.yml'}),
+    ];
+
+    it('starts a pull request labelled by someone with write access at once, on a full CI', async () => {
+      for (const phase of ['room', 'rest', 'whole']) {
+        const result = await admit({
+          active: full(),
+          peak: 16,
+          phase,
+          fits: phase === 'rest' ? 'false' : '',
+          maxWait: 12,
+          maxLooks: 2,
+          labels: ['release-critical'],
+          labelers: {'release-critical': 'maintainer'},
+          permissions: {maintainer: 'write'},
+        });
+        expect(result.outputs).toMatchObject({
+          fits: 'true',
+          looks: '1',
+          wide: 'false',
+        });
+        expect(result.outputs.full).toBeUndefined();
+        // One look, to pick its legs' width; no wait.
+        expect(result.looks).toBe(1);
+        expect(result.lookTimes[0]).toBeLessThan(60_000);
+        expect(result.notice.join('\n')).toContain(
+          'release-critical: this run starts at once',
+        );
+      }
+    });
+
+    it('runs its legs at full width when its look finds room for them, and at tight width when CI is full', async () => {
+      const trusted = {
+        peak: 16,
+        phase: 'room',
+        maxWait: 12,
+        maxLooks: 2,
+        labels: ['release-critical'],
+        labelers: {'release-critical': 'maintainer'},
+        permissions: {maintainer: 'write'},
+        legWidths: '{"test-node": {"tight": 2, "full": 8}}',
+      };
+      const empty = await admit({...trusted, active: []});
+      expect(empty.outputs).toMatchObject({fits: 'true', wide: 'true'});
+      expect(empty.notice.join('\n')).toContain('legs at full width');
+      // An unlabelled run on the same empty CI gets the same width.
+      const unlabelled = await admit({
+        ...trusted,
+        active: [],
+        labels: [],
+        labelers: {},
+      });
+      expect(unlabelled.outputs).toMatchObject({fits: 'true', wide: 'true'});
+      const busy = await admit({...trusted, active: full()});
+      expect(busy.outputs).toMatchObject({fits: 'true', wide: 'false'});
+      expect(busy.notice.join('\n')).toContain('legs at tight width');
+    });
+
+    it('ignores the label when someone without write access applied it last, or the lookup fails', async () => {
+      const unlabelled = await admit({
+        active: full(),
+        peak: 16,
+        phase: 'room',
+        maxWait: 12,
+        maxLooks: 2,
+      });
+      // Without the label the run waits for room: it looks.
+      expect(unlabelled.looks).toBeGreaterThan(0);
+      const cases = [
+        {
+          labelers: {'release-critical': 'reader'},
+          permissions: {reader: 'read'},
+        },
+        {labelers: {}, permissions: {}},
+        {
+          labelers: {'release-critical': 'maintainer'},
+          permissions: {maintainer: new Error('lookup failed')},
+        },
+      ];
+      for (const trust of cases) {
+        const result = await admit({
+          active: full(),
+          peak: 16,
+          phase: 'room',
+          maxWait: 12,
+          maxLooks: 2,
+          labels: ['release-critical'],
+          ...trust,
+        });
+        expect(result.outputs).toEqual(unlabelled.outputs);
+        expect(result.looks).toBe(unlabelled.looks);
+      }
+    });
+
+    it('changes nothing for a pull request without the label', async () => {
+      const result = await admit({
+        active: full(),
+        peak: 16,
+        phase: 'room',
+        maxWait: 12,
+        maxLooks: 2,
+        labels: ['ci:run-visual'],
+        labelers: {'ci:run-visual': 'maintainer'},
+        permissions: {maintainer: 'write'},
+      });
+      expect(result.looks).toBeGreaterThan(0);
+      expect(result.notice).toEqual([]);
+    });
+  });
+
   describe('one start at the longest wait at a time', () => {
     const at = minutes => new Date(NOW + minutes * 60_000).toISOString();
     /** A pull-request run admitted at `endedAt` minutes after its wait began `waited` minutes before. */
@@ -1826,7 +1996,7 @@ describe('ci admission', () => {
 
   it('queues waiting main runs by when they began, so two never block each other', async () => {
     // Two main dispatches waiting at once each counted the other's whole peak
-    // (39), so neither fit beside a quiet CI and both waited their two hours.
+    // (47), so neither fit beside a quiet CI and both waited their two hours.
     const mainSince = (id, minutes) => {
       const run = waitingRun(id, {event: 'workflow_dispatch'});
       run.jobs[0].steps[0].started_at = new Date(
@@ -1849,7 +2019,7 @@ describe('ci admission', () => {
       'ci 70 workflow_dispatch: 1 waiting',
     );
     // A main run that began waiting earlier still goes first: its whole peak
-    // counts. 2 x 12 + 39 + 18 + 37 = 118 does not fit.
+    // counts. 2 x 12 + 47 + 18 + 37 = 126 does not fit.
     const younger = await admit({
       active: look =>
         look < 2
@@ -1862,7 +2032,7 @@ describe('ci admission', () => {
     });
     expect(younger.looks).toBeGreaterThan(1);
     expect(younger.info.find(line => line.startsWith('Look 1:'))).toContain(
-      'ci 70 workflow_dispatch: 39 waiting',
+      'ci 70 workflow_dispatch: 47 waiting',
     );
   });
 
@@ -1902,7 +2072,7 @@ describe('ci admission', () => {
       maxLooks: 30,
     });
     expect(second.info.find(line => line.startsWith('Look 1:'))).toContain(
-      'ci 0 workflow_dispatch: 39 waiting',
+      'ci 0 workflow_dispatch: 47 waiting',
     );
   });
 
@@ -1916,7 +2086,7 @@ describe('ci admission', () => {
       maxLooks: 2,
     });
     expect(result.info.find(line => line.startsWith('Look 1:'))).toContain(
-      'ci 70 workflow_dispatch: 39 waiting',
+      'ci 70 workflow_dispatch: 47 waiting',
     );
   });
 
