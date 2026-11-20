@@ -6,7 +6,8 @@
  *   locally before the change is marked ready.
  * @input The committed change (`HEAD` against its merge base with `--base
  *   <ref>`, default `origin/main`), `--browser`, `--quick` (the
- *   changed packages, files and tests alone; not CI's scope), and `--wrap
+ *   changed packages, files and tests alone; not CI's scope; a typecheck
+ *   that fails only on missing workspace builds reports SKIP), and `--wrap
  *   <command>` (or `PREFLIGHT_WRAP`): a command that runs each heavy step as
  *   `<command> <build|test|knowledge> <step command...>`, such as a machine's
  *   job limiter. A working tree with uncommitted changes stops the run.
@@ -59,7 +60,7 @@ export function planChecks({
   chromiumScope,
   quick = false,
 }) {
-  if (quick) return quickChecks({scope, mergeBase, changed});
+  if (quick) return quickChecks({scope, mergeBase, changed, tmp});
   const at = name => path.join(tmp, name);
   const checks = [];
   const specOnly = scope.specOnly || scope.timesOnly;
@@ -387,7 +388,7 @@ function present(files) {
  * not CI's scope: no build, no dependent package, no test the change reaches
  * through an import, and no guard.
  */
-function quickChecks({scope, mergeBase, changed}) {
+function quickChecks({scope, mergeBase, changed, tmp}) {
   const specOnly = scope.specOnly || scope.timesOnly;
   const typechecks = !specOnly && !scope.docsiteOnly && !scope.toolingOnly;
   const linted = present(changed.filter(file => LINTED.test(file)));
@@ -414,6 +415,12 @@ function quickChecks({scope, mergeBase, changed}) {
                 'run',
                 'typecheck',
               ],
+              // Without a build, a package that reads a workspace package's
+              // build output fails to typecheck: that is not this change's
+              // error, so the check reports it as skipped.
+              stdout: path.join(tmp, 'typecheck.log'),
+              tee: true,
+              skipWhen: missingBuilds,
             },
           ],
         }
@@ -463,6 +470,28 @@ function quickChecks({scope, mergeBase, changed}) {
       commands: [{kind: 'light', argv: ['pnpm', 'check:changesets']}],
     },
   ];
+}
+
+const MISSING_BUILDS =
+  'skipped, workspace builds missing; run `pnpm build` first';
+
+/** A missing module that is a workspace package's build output. */
+const BUILD_OUTPUT =
+  /error TS2307: Cannot find module '(?:@astryxdesign\/[^']+\/built(?:\/[^']*)?|\.\.?\/(?:[^']*\/)?dist(?:\/[^']*)?)'/;
+
+/**
+ * Why a failed typecheck is skipped, or null: every TypeScript error names a
+ * workspace package's build output (`@astryxdesign/<pkg>/built`, or a relative
+ * path into a `dist` folder) that a run without `pnpm build` lacks. A
+ * third-party package's `dist` subpath is not one.
+ * @param {string} text the typecheck's output
+ * @returns {string | null}
+ */
+export function missingBuilds(text) {
+  const errors = text.split('\n').filter(line => /error TS\d+/.test(line));
+  if (errors.length === 0 || !errors.every(line => BUILD_OUTPUT.test(line)))
+    return null;
+  return MISSING_BUILDS;
 }
 
 function skip(id, why) {
@@ -516,7 +545,27 @@ export function runChecks(checks, {exec, wrap = [], now = Date.now} = {}) {
       }
       if (command.kind !== 'light' && wrap.length)
         argv = [...wrap, command.kind, ...argv];
-      const code = exec(argv, {env: command.env, stdout: command.stdout});
+      const code = exec(argv, {
+        env: command.env,
+        stdout: command.stdout,
+        tee: command.tee,
+      });
+      const skipped =
+        code !== 0 && command.skipWhen && command.stdout
+          ? command.skipWhen(
+              fs.existsSync(command.stdout)
+                ? fs.readFileSync(command.stdout, 'utf8')
+                : '',
+            )
+          : null;
+      if (skipped)
+        return {
+          id: check.id,
+          result: 'SKIP',
+          note: skipped,
+          failed: null,
+          seconds: Math.round((now() - started) / 1000),
+        };
       if (code !== 0)
         return {
           id: check.id,
@@ -553,13 +602,20 @@ export function formatTable(rows, {quick = false} = {}) {
     lines.push('', 'Failing commands:');
     for (const row of failed) lines.push(`  ${row.id}: ${row.failed}`);
   }
+  // A typecheck skipped for missing builds checked nothing, so the verdict
+  // says so instead of reading as a pass.
+  const unbuilt = rows.filter(
+    row => row.result === 'SKIP' && row.note === MISSING_BUILDS,
+  );
   lines.push(
     '',
     failed.length
       ? `not ready: ${failed.length}`
-      : quick
-        ? 'quick checks pass; run `pnpm preflight` before you flip'
-        : 'ready to flip',
+      : unbuilt.length
+        ? `not checked: ${unbuilt.map(row => row.id).join(', ')} (workspace builds missing); run \`pnpm build\`, then run again before you flip`
+        : quick
+          ? 'quick checks pass; run `pnpm preflight` before you flip'
+          : 'ready to flip',
     quick
       ? 'Quick mode is not CI-equivalent: it skips the build, dependent packages, the tests the change reaches and the guards.'
       : NOT_RUN,
@@ -675,8 +731,21 @@ async function main(argv) {
   });
   const rows = runChecks(checks, {
     wrap,
-    exec(command, {env, stdout}) {
+    exec(command, {env, stdout, tee}) {
       console.log(`\n== ${command.join(' ')}`);
+      if (stdout && tee) {
+        // Shows the output and keeps it for the check to read.
+        const result = spawnSync(command[0], command.slice(1), {
+          cwd: ROOT,
+          env: {...process.env, ...env},
+          stdio: ['ignore', 'pipe', 'pipe'],
+          maxBuffer: 256 * 1024 * 1024,
+        });
+        const text = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+        process.stdout.write(text);
+        fs.writeFileSync(stdout, text);
+        return result.status ?? 1;
+      }
       const out = stdout ? fs.openSync(stdout, 'w') : 'inherit';
       const result = spawnSync(command[0], command.slice(1), {
         cwd: ROOT,

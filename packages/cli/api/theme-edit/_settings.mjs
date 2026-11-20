@@ -27,7 +27,7 @@ import * as path from 'node:path';
 import {themeFileImports} from '../../foundation/discovery/theme-discovery.mjs';
 import {pathToFileURL} from 'node:url';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
-import {AstryxError} from '../error.mjs';
+import {AstryxError, brokenInstallError} from '../error.mjs';
 import {logger} from '../logger.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {cssUnescape} from '../../foundation/text/css-escape.mjs';
@@ -127,6 +127,7 @@ import {
   readRegularFile,
   readWrittenRecord,
   writeWrittenRecord,
+  familyRamp,
 } from './_palette.mjs';
 import {removeEmptyFolder} from '../../foundation/fs/empty-folder.mjs';
 import {EDITOR_STAMP, pngTexts} from './_png.mjs';
@@ -5162,8 +5163,37 @@ export function roleReach(ctx, data, base) {
           ['color', 'text'],
         ])) {
           const v = look[prop];
-          if (typeof v !== 'string' || /var\(/.test(v)) continue;
-          if (!modes.every(m => literal(v, m) != null)) continue;
+          if (typeof v !== 'string') continue;
+          // A token of another family (stone's info badge on the
+          // categorical blue): the role token the base theme gives that same
+          // color takes its place, so the look stays and follows the role.
+          const ref = /^var\(\s*(--[\w-]+)\s*\)$/.exec(v.trim())?.[1];
+          if (ref) {
+            if (new RegExp(`-${named}(-|$)`).test(ref)) continue;
+            const same = (/** @type {string} */ k) =>
+              modes.filter(
+                m =>
+                  base?.[m]?.[k] != null &&
+                  String(base[m][k]).toLowerCase() ===
+                    String(base?.[m]?.[ref] ?? '').toLowerCase(),
+              ).length;
+            const pick = (
+              side === 'text'
+                ? [
+                    `--color-on-${named}-muted`,
+                    `--color-text-${named}`,
+                    `--color-on-${named}`,
+                  ]
+                : [`--color-${named}-muted`, `--color-${named}`]
+            )
+              .map(k => ({k, n: same(k)}))
+              .filter(x => x.n > 0)
+              .sort((x, y) => y.n - x.n)[0]?.k;
+            if (pick) {
+              add(prop, `var(${pick})`);
+              continue;
+            }
+          } else if (!modes.every(m => literal(v, m) != null)) continue;
           const core = (ctx.C.partReads(part, side) ?? []).find(
             (/** @type {any} */ r) => r.when.includes(`variant=${named}`),
           )?.token;
@@ -11635,17 +11665,37 @@ function placeholderProblems(ctx, data, res, base) {
       });
       continue;
     }
-    // The nearest color, toward black or white (whichever stands out on
-    // the page), that shows on the page and the surface at the peak.
-    const end = /** @type {[number, number, number]} */ (
-      parseColor(plainOn(page))
+    // The theme's own gray nearest the placeholder's color that shows on
+    // the page and the surface at the peak; else the nearest shade of the
+    // placeholder's own color, darker or lighter (whichever stands out on
+    // the page), with its hue and colorfulness kept.
+    const lab = (/** @type {string} */ x) => oklabCoordinates(x);
+    const [l0, ca, cb] = lab(hex(c0));
+    const grays = Object.values(
+      familyRamp(ctx.project.cwd, data.name, data, base, 'neutral')?.[m] ?? {},
+    )
+      .filter(x => parseColor(String(x)))
+      .map(x => {
+        const [l, a1, b1] = lab(String(x));
+        return {x: String(x), d: Math.hypot(l - l0, a1 - ca, b1 - cb)};
+      })
+      .sort((p, q) => p.d - q.d);
+    let fix = /** @type {string | null} */ (
+      grays.find(
+        g =>
+          worst(/** @type {[number, number, number]} */ (parseColor(g.x))) >=
+          PLACEHOLDER_SHOWS,
+      )?.x ?? null
     );
-    let fix = /** @type {string | null} */ (null);
-    for (let i = 0; i <= 100 && !fix; i++) {
-      const c = /** @type {[number, number, number]} */ (
-        c0.map((x, k) => Math.round(x + ((end[k] - x) * i) / 100))
-      );
-      if (worst(c) >= PLACEHOLDER_SHOWS) fix = hex(c);
+    const away = plainOn(page) === '#000000' ? -1 : 1;
+    for (let i = 1; i <= 100 && !fix; i++) {
+      const shade = oklabCoordinatesToHex([
+        Math.max(0, Math.min(1, l0 + (away * i) / 200)),
+        ca,
+        cb,
+      ]);
+      const c = /** @type {[number, number, number]} */ (parseColor(shade));
+      if (worst(c) >= PLACEHOLDER_SHOWS) fix = shade;
     }
     out.push({
       key: `placeholder|${m}`,
@@ -11699,20 +11749,32 @@ function buttonStyleProblems(ctx, data, res) {
     style.value === 'soft'
       ? {fill: 'var(--color-accent-muted)', color: 'var(--color-text-accent)'}
       : {fill: 'transparent', color: 'var(--color-text-accent)'};
-  /** A later setting of a property on the primary button, in a mode. @param {RegExp} thing @param {string} m */
-  const later = (thing, m) =>
-    [...data.settings.slice(at + 1)]
-      .reverse()
-      .find(
-        y =>
-          y.source === 'property' &&
-          thing.test(y.thing) &&
-          !y.state &&
-          (!y.mode || y.mode === m) &&
-          y.on &&
-          (!y.when || y.when === 'variant:primary') &&
-          partsOf(ctx, y).includes('button'),
-      ) ?? null;
+  /**
+   * The setting of a property that wins on the primary button, in a mode:
+   * an exact property on the primary variant's own rule, set before the
+   * style or after (an exact property wins over a dial on the same rule);
+   * else a later one on the plain rule.
+   * @param {RegExp} thing @param {string} m
+   */
+  const later = (thing, m) => {
+    /** @param {import('./_settings.mjs').Setting} y */
+    const fits = y =>
+      y.source === 'property' &&
+      thing.test(y.thing) &&
+      !y.state &&
+      (!y.mode || y.mode === m) &&
+      !!y.on &&
+      partsOf(ctx, y).includes('button');
+    return (
+      [...data.settings]
+        .reverse()
+        .find(y => fits(y) && y.when === 'variant:primary') ??
+      [...data.settings.slice(at + 1)]
+        .reverse()
+        .find(y => fits(y) && !y.when) ??
+      null
+    );
+  };
   /** @type {ThemeProblem[]} */
   const out = [];
   for (const m0 of modes) {
@@ -13931,7 +13993,8 @@ export async function commitTheme(
         ],
         ERROR_CODES.ERR_WRITE_FAILED,
       );
-    // The color config's own refusals already name the file and the fix.
+    // The color config's own refusals already name the file and the fix,
+    // as a broken install's refusal names the package and the install.
     if (
       e instanceof AstryxError &&
       (e.code === ERROR_CODES.ERR_UNKNOWN_THEME ||
@@ -13939,9 +14002,14 @@ export async function commitTheme(
         e.code === ERROR_CODES.ERR_PALETTE_GENERATION ||
         e.code === ERROR_CODES.ERR_WRITE_FAILED ||
         e.code === ERROR_CODES.ERR_THEME_BUSY ||
-        e.code === ERROR_CODES.ERR_THEME_BAD_VALUE)
+        e.code === ERROR_CODES.ERR_THEME_BAD_VALUE ||
+        e.code === ERROR_CODES.ERR_DEP_MISSING)
     )
       throw e;
+    // A package the build loads that the install lacks is not the theme's
+    // fault: named as the broken install it is.
+    const broken = brokenInstallError(e, cwd, 'Nothing was changed.');
+    if (broken) throw broken;
     // A folder where a built file goes: named for the editor, which has no
     // --out to pick.
     const folder =

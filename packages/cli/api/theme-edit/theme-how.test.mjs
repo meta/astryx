@@ -210,9 +210,10 @@ const QUESTIONS = [
     {
       parts: ['app-shell-header'],
       aspects: ['text'],
-      // The title and items inside read the text tokens themselves.
-      top: /^set q --color-text-primary '#ffffff' --on app-shell-header/,
-      adds: /app-shell-header\.base\.--color-text-primary=#ffffff/,
+      // The title and items inside read the text tokens themselves; white
+      // reads on the header in dark mode only (it is light in light mode).
+      top: /^set q --color-text-primary '#ffffff' --on app-shell-header --mode dark/,
+      adds: /app-shell-header\.base\.@dark\.--color-text-primary=#ffffff/,
     },
   ],
   [
@@ -2137,7 +2138,8 @@ const QUESTIONS_F = [
   ],
   [
     'page should be off-white',
-    {top: /^set q --color-background-body '#fafafa' --mode light$/},
+    // (Off-white is a warm off-white.)
+    {top: /^set q --color-background-body '#faf8f3' --mode light$/},
   ],
   ['headings are way too big', {top: /^set q type compact$/}],
   [
