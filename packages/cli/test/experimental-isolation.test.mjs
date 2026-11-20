@@ -87,15 +87,18 @@ const LEAK_WORDS =
   /\bexperimental\b|\bicon[- ]?sets?\b|\bicon[- ]definitions?\b/iu;
 /**
  * The one named exception (AST-017 FR27): stable theme help and docs may
- * point at the experimental theme editor (`experimental theme editor`,
- * `experimental theme preview`) as the way to make and change a theme, until
- * it graduates or is removed. Only those two entry points are taken out
- * before the leak check; every other experimental surface a stable text
- * names still fails it.
+ * point at the experimental theme authoring commands (`experimental theme
+ * create`, `check`, `editor` and `preview`) as the way to make and change a
+ * theme, until they graduate or are removed. Only those four entry points are
+ * taken out before the leak check; every other experimental surface a stable
+ * text names still fails it.
  * @param {string} text
  */
-const withoutThemeEditor = text =>
-  text.replace(/\bexperimental theme (?:editor|preview)\b/giu, 'theme-editor');
+const withoutThemeAuthoring = text =>
+  text.replace(
+    /\bexperimental theme (?:create|check|editor|preview)\b/giu,
+    'theme-editor',
+  );
 /** Writing the goldens from main's CLI, not checking this branch's. */
 const REGENERATING = Boolean(process.env.GOLDEN_CLI_ROOT);
 /**
@@ -425,7 +428,7 @@ function leakMentions(value) {
   const visit = each => {
     if (typeof each === 'string') {
       for (const sentence of each.split(/(?<=[.!?])\s+/u)) {
-        if (LEAK_WORDS.test(withoutThemeEditor(sentence)))
+        if (LEAK_WORDS.test(withoutThemeAuthoring(sentence)))
           found.add(sentence.trim());
       }
     } else if (Array.isArray(each)) {
@@ -717,7 +720,7 @@ describe('with no icon set, stable output is unchanged', () => {
       const visit = each => {
         if (typeof each === 'string') {
           for (const sentence of each.split(/(?<=[.!?])\s+/u)) {
-            if (LEAK_WORDS.test(withoutThemeEditor(sentence)))
+            if (LEAK_WORDS.test(withoutThemeAuthoring(sentence)))
               found.add(sentence);
           }
         } else if (Array.isArray(each)) {
@@ -963,7 +966,7 @@ describe('with no icon set, stable output is unchanged', () => {
   it('help gains only the experimental group', async () => {
     const help = astryx(['help']).stdout.split('\n');
     const added = help.filter(line =>
-      /experimental|\bicon\b/i.test(withoutThemeEditor(line)),
+      /experimental|\bicon\b/i.test(withoutThemeAuthoring(line)),
     );
     if (!REGENERATING) {
       expect(added).toHaveLength(1);
@@ -1578,7 +1581,7 @@ describe.skipIf(REGENERATING)(
   },
 );
 
-describe('the theme editor exception is only the theme editor', () => {
+describe('the theme authoring exception is only those commands', () => {
   it.each([
     [
       'use the experimental theme editor: astryx experimental theme editor new b',
@@ -1587,8 +1590,11 @@ describe('the theme editor exception is only the theme editor', () => {
     ['look at it with astryx experimental theme preview add', false],
     ['run astryx experimental icon search', true],
     ['an experimental theme feature', true],
+    ['astryx experimental theme create b --traits', false],
     ['astryx experimental theme compile', true],
+    ['astryx experimental theme check b --fix', false],
+    ['astryx experimental theme targets', true],
   ])('%j leaks: %s', (sentence, leaks) => {
-    expect(LEAK_WORDS.test(withoutThemeEditor(sentence))).toBe(leaks);
+    expect(LEAK_WORDS.test(withoutThemeAuthoring(sentence))).toBe(leaks);
   });
 });

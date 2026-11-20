@@ -1,4 +1,4 @@
-Results for "experimental" (16)
+Results for "experimental" (14)
 name:        author-a-theme
 domain:      doc
 package:     @astryxdesign/cli
@@ -71,18 +71,6 @@ section:     look-after-each-change
 domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs theme look-after-each-change
-parent:      pnpm exec astryx docs theme --index
-name:        theme
-section:     denser-or-roomier
-domain:      doc
-package:     @astryxdesign/cli
-command:     pnpm exec astryx docs theme denser-or-roomier
-parent:      pnpm exec astryx docs theme --index
-name:        theme
-section:     one-kind-of-part
-domain:      doc
-package:     @astryxdesign/cli
-command:     pnpm exec astryx docs theme one-kind-of-part
 parent:      pnpm exec astryx docs theme --index
 name:        theme
 section:     no-app-yet

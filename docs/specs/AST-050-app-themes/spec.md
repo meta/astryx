@@ -742,6 +742,24 @@ container step.
 Rejected: the page radius; Core's chat default is the container radius.
 Rejected: a copied pixel value, which drifts from a container radius set later.
 
+### DEC-14 — A theme starts as a complete file from traits, and every edit is checked
+
+**Reference:** `spec:AST-050/DEC-14`
+**Decider:** `josephfarina`, `2026-11-20`
+
+The theme docs, the agent block, and the theme help lead with one path:
+`experimental theme create <name> --traits` writes a complete theme file
+from a few typed traits (every color with a light and a dark value), the
+builder or agent edits any line of that file, and `experimental theme check
+<name> --fix` runs after every edit. The file is the builder's own source;
+the commands complete, repair, and check it, and write each value as a normal
+line in it. The theme editor's commands keep working, and its `how` reader
+keeps the readings it has: a new kind of theme ask is served by the file and
+the check, not by a new reading.
+
+Rejected: growing the `how` reader for each new ask, which an agent writing the file needs no reader for.
+Rejected: a file regenerated from the traits on every change, which drops the builder's own edits.
+
 ## Open questions
 
 None.

@@ -7,14 +7,14 @@ export const docs = {
   title: 'Author a theme',
   category: 'guide',
   keywords: ['defineTheme', 'create theme', 'custom theme', 'extends', 'component overrides', 'custom variants', 'adaptations', 'breakpoints', 'theme build', 'theme family', 'tokenVar', 'resolveThemeTokens', 'useTheme', 'palette', 'generate palette', 'seed colors', 'color ramp', 'icon registry'],
-  description: 'Start here: the experimental theme editor makes and changes themes for you (`astryx experimental theme editor new <name> --like neutral`; see the theme doc), checked against what components read. By hand: create, customize, and build a theme: defineTheme, palette generation, token overrides, component style overrides, custom variants, responsive adaptations, and production builds.',
+  description: 'Start here: the theme doc shows how `astryx experimental theme create` writes a complete theme file from a few traits and how `astryx experimental theme check` checks each edit. This guide is that file\'s format: create, customize, and build a theme: defineTheme, palette generation, token overrides, component style overrides, custom variants, responsive adaptations, and production builds.',
 
   sections: [
     {
       id: 'creating-a-custom-theme',
       title: 'Custom themes',
       content: [
-        {type: 'prose', text: 'To make or change a theme (brand colors, fonts, corners), use the theme editor, which checks each change against what components read: `astryx experimental theme editor new <name> --like neutral`, then {@link generic:theme} for the rest. What follows is by hand.'},
+        {type: 'prose', text: 'To make a theme (brand colors, fonts, corners), start from {@link generic:theme}: `experimental theme create` writes a complete defineTheme file in this format, every color with a light and a dark value, and `experimental theme check` checks each edit. What follows is the format, for editing that file or writing one by hand.'},
         {type: 'prose', text: "Use an installed built theme as the base for ordinary customization. Import it into your source and pass it as `extends` to `defineTheme({extends: importedTheme, ...})`. Build the result, then add the local slug. Only eject when you need to own and maintain a full source fork."},
         {type: 'prose', text: "A local theme is a folder in `src/themes/<slug>/` holding a `<name>Theme.ts` source that exports `<name>Theme`, and a same-stem `<name>Theme.doc.mjs` descriptor that `theme add` reads. The stem must be a valid export name, so a hyphenated slug drops the hyphen: `brand-dark` lives in `src/themes/brand-dark/brandDarkTheme.ts` exporting `brandDarkTheme`, beside `brandDarkTheme.doc.mjs`. The descriptor's `name` is the folder's slug, and it must declare its type or `theme add` and `theme list` refuse it. {@command docs authoring theme-doc} lists every field."},
         {type: 'code', lang: 'js', label: 'src/themes/brand-dark/brandDarkTheme.doc.mjs', code: "/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {\n  type: 'theme',\n  name: 'brand-dark',\n  displayName: 'Brand Dark',\n  description: 'The brand accent, tuned for dark mode.',\n  maintained: false,\n};"},

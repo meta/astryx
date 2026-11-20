@@ -91,13 +91,11 @@ describe('init Next steps theme guidance', () => {
     expect(text).toContain('only to fork source');
   });
 
-  it('sends making or changing a theme to the theme editor', () => {
+  it('sends making a theme to create, then check after edits', () => {
     expect(text).toContain(
-      'To make or change a theme: the experimental theme editor',
+      "To make a theme: `npx astryx experimental theme create <name> --traits '<json>'`",
     );
-    expect(text).toContain(
-      'npx astryx experimental theme editor new <name> --like neutral',
-    );
+    expect(text).toContain('npx astryx experimental theme check <name> --fix');
   });
 
   it('does not teach a direct package theme import', () => {

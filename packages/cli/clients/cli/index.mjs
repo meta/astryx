@@ -661,19 +661,17 @@ export async function createProgram({argv} = {}) {
   );
   addBaseHelpText(program);
 
-  // The theme editor paragraph names commands, so help shows it only where
+  // The theme paragraph names commands, so help shows it only where
   // the run's base serves them.
   describeCommand(program, [
     'Design system CLI — components, themes, and tooling',
     {
       commands: [
-        'experimental theme editor new',
-        'experimental theme editor set',
-        'experimental theme editor how',
-        'experimental theme editor show',
+        'experimental theme create',
+        'experimental theme check',
         'experimental theme preview app',
       ],
-      text: '\n\nMaking or changing a theme? Use the experimental theme editor: astryx experimental theme editor new <name> --like neutral, then editor set / editor how "<what you want>"; after each change look at it with astryx experimental theme editor show <name> --png (takes pictures of real components): a theme change is not done until you have looked. No app yet: astryx experimental theme preview app <dir>.',
+      text: "\n\nMaking a theme? Describe the look as traits: astryx experimental theme create <name> --traits '<json>' writes a complete theme file (every color in light and dark), builds it and makes it the app's theme. Then edit any line of that file by hand, and run astryx experimental theme check <name> --fix after every edit: a theme change is not done until check passes. No app yet: astryx experimental theme preview app <dir>.",
     },
   ]);
 

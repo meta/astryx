@@ -22,7 +22,7 @@ export const docs = {
     'accent color',
   ],
   description:
-    'How Astryx themes work: wrap your app in a theme, and create or change one (also to make the app denser or roomier, or to change one kind of part) with `astryx experimental theme editor new <name> --like neutral`. The steps follow, then how to publish a theme so other teams can use it.',
+    "How Astryx themes work: wrap your app in a theme, and make one by describing its look as traits (`astryx experimental theme create <name> --traits '<json>'`); then edit the theme file it writes and run `astryx experimental theme check <name> --fix` after every edit. The steps follow, then how to publish a theme so other teams can use it.",
 
   sections: [
     {
@@ -31,17 +31,17 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Use the experimental theme editor: `astryx experimental theme editor new <name> --like neutral`, then `editor set` / `editor how "<what you want>"`, and wire it with `astryx theme add <name>`.',
+          text: "Describe the look as traits and run `astryx experimental theme create <name> --traits '<json>'` (its `--help` lists the fields: look, page, surface, text, accent, bar, font, corners, density, borders, shadows, surfaces, plus exact `tokens` and `components`, which win). It writes a complete theme file (every color in light and dark, readable), builds it, and makes it the app's theme. The file is then yours: change any line by hand. To see what one part reads (its tokens, states and variants), run `astryx theme targets <part>`, then change it under `components['<part>']` in the file.",
         },
       ],
     },
     {
       id: 'look-after-each-change',
-      title: 'Look after each change',
+      title: 'Check after each edit',
       content: [
         {
           type: 'prose',
-          text: 'After each change look at it with `astryx experimental theme editor show <name> --png` (takes pictures of real components): a theme change is not done until you have looked.',
+          text: 'After each edit run `astryx experimental theme check <name> --fix`. It builds the theme and checks, in light and dark, what a person sees as broken: text that cannot be read, see-through menus, edges that do not show, a half-painted page. `--fix` writes each value it fills or repairs as a normal line in your file. A theme change is not done until check passes.',
         },
       ],
     },
@@ -51,7 +51,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'A denser or roomier app is a theme change too, not page code: `astryx experimental theme editor set <name> spacing tight` (or `roomy`), then look again.',
+          text: 'A denser or roomier app is a theme change too, not page code: the `density` trait (`compact` or `roomy`), or the spacing tokens in the theme file; then check again.',
         },
       ],
     },
@@ -61,7 +61,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'A change to one kind of part (the sidebar, its selected item, the gaps in a form) is a theme change too, not props or styles on one page: `astryx experimental theme editor how "<ask>"` names the `set … --on <part>` line.',
+          text: "A change to one kind of part (the sidebar, its selected item, the gaps in a form) is a theme change too, not props or styles on one page: style it under `components['<part>']` in the theme file (`astryx theme targets` lists the parts and what each reads), then check again.",
         },
       ],
     },

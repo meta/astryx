@@ -26,8 +26,8 @@ export const doc = {
       cli: 'astryx experimental export page.tsx',
     },
     {
-      label: 'Change a theme, checked',
-      cli: 'astryx experimental theme editor set brand corners pill',
+      label: 'Make a theme from traits',
+      cli: 'astryx experimental theme create brand --traits \'{"accent": "#c2410c"}\'',
     },
   ],
   exitCodes: [
