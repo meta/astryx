@@ -26638,6 +26638,12 @@ export function draftAnswer(ctx, env, question) {
   const superseded = [];
   /** Steps folded into a later one's box-shadow layers. @type {Step[]} */
   const layered = [];
+  /**
+   * Clauses whose steps a later clause replaces or folds in: the later
+   * line answers them.
+   * @type {Set<Clause>}
+   */
+  const foldedClauses = new Set();
   // (An offer, more than the ask, never joins the whole.)
   for (let i = tops.length - 1; i >= 0; i--)
     if (drafts.some(d => d.offer && d.options.includes(tops[i].steps)))
@@ -26719,8 +26725,10 @@ export function draftAnswer(ctx, env, question) {
         // ring and a small shadow": one value holds both.)
         const isRing = (/** @type {Step} */ x) =>
           /^(?:inset\s+)?0 0 0 \S+ /.test(String(x.value));
-        if (/\bthen\b/i.test(clause.joint ?? '')) superseded.push(prior.step);
-        else if (
+        if (/\bthen\b/i.test(clause.joint ?? '')) {
+          superseded.push(prior.step);
+          foldedClauses.add(prior.clause);
+        } else if (
           st.thing === 'box-shadow' &&
           prior.step.thing === 'box-shadow' &&
           isRing(prior.step) !== isRing(st)
@@ -26733,6 +26741,7 @@ export function draftAnswer(ctx, env, question) {
             .concat(String(shade.value));
           const merged = {...shade, value: layers.join(', ')};
           layered.push(prior.step);
+          foldedClauses.add(prior.clause);
           steps.splice(k, 1, merged);
           last.delete(key);
           last.set(key, {step: merged, clause});
@@ -29979,17 +29988,21 @@ export function draftAnswer(ctx, env, question) {
     };
     /** @type {string[]} */
     const named = [];
-    for (const seg of raw0.split(/[,;\n]|\band\b|\bthen\b/i)) {
-      const words = seg.trim();
+    const typedSegments = raw0
+      .split(/[,;\n]|\band\b|\bthen\b/i)
+      .map(seg => seg.trim())
+      .filter(Boolean);
+    for (const words of typedSegments) {
       const typed = [
         ...(words.toLowerCase().match(/#[0-9a-f]{3,8}\b/g) ?? []),
         ...lengthsIn(words.toLowerCase()),
       ];
       if (typed.length && typed.some(v => !usedValue(v))) named.push(words);
     }
-    const taken = new Set(
-      result.map(d => draftClause.get(d)).filter(x => x != null),
-    );
+    const taken = new Set([
+      ...result.map(d => draftClause.get(d)).filter(x => x != null),
+      ...foldedClauses,
+    ]);
     const silent = clauses.filter(c => {
       const t = c.text.trim();
       if (!t || c.except || taken.has(c)) return false;
@@ -30032,9 +30045,30 @@ export function draftAnswer(ctx, env, question) {
         return false;
       return true;
     });
+    // A clause is quoted in the words as typed. Its text can be a reading
+    // ("glass" reads as "make the surfaces glass"), so a clause the question
+    // does not hold as typed is quoted by the typed segments that hold a
+    // word only this clause has.
+    /** @param {string} t */
+    const wordsOf = t =>
+      t.toLowerCase().match(/[a-z]{3,}|#[0-9a-f]{3,8}|\d+/g) ?? [];
+    /** @param {Clause} c */
+    const asTyped = c => {
+      const t = c.text.trim();
+      const at = raw0.toLowerCase().indexOf(t.toLowerCase());
+      if (at >= 0) return [raw0.slice(at, at + t.length)];
+      const others = new Set(
+        clauses.filter(o => o !== c).flatMap(o => wordsOf(o.text)),
+      );
+      const own = new Set(wordsOf(t).filter(w => !others.has(w)));
+      return typedSegments.filter(seg => wordsOf(seg).some(w => own.has(w)));
+    };
+    const silentTyped = [
+      ...new Set(silent.flatMap(asTyped).filter(w => !named.includes(w))),
+    ];
     const lines = [
       ...named.map(w => `"${w}"`),
-      ...(clauses.length > 1 ? silent.map(c => `"${c.text.trim()}"`) : []),
+      ...(clauses.length > 1 ? silentTyped.map(w => `"${w}"`) : []),
       // (An ask of one clause no answer took at all, "pagination pages in
       // one bordered strip", is named in its own words.)
       ...(clauses.length === 1 &&

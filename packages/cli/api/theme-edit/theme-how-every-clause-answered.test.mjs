@@ -316,6 +316,22 @@ const ROWS = [
       saysNot: /contradict/,
     },
   ],
+  [
+    'a clause not used is named in the words as typed',
+    {
+      q: 'glass windows, blue accent',
+      says: /not used: "glass windows"/,
+      saysNot: /make the surfaces/,
+    },
+  ],
+  [
+    'a clause a later "then" clause replaces is answered by that line',
+    {
+      q: 'compact, then roomy',
+      has: ['spacing more'],
+      saysNot: /not used/,
+    },
+  ],
 ];
 
 describe('every clause answered', () => {
