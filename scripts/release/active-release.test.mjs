@@ -362,15 +362,25 @@ describe('one branch per release lifecycle', () => {
     ).not.toThrow();
   });
 
-  it('runs create over an authenticated archived tag and binds the recut authority', () => {
+  it('runs create over an authenticated archived tag and binds the recut authority', async () => {
     const {root, cutSha} = cutFixture();
     git(root, 'tag', 'v0.6.4');
     git(root, 'tag', 'v0.6.5');
     const reference = ownerRecutReceipt(root);
+    const server = http.createServer((request, response) => {
+      if (request.url?.endsWith('/dist-tags')) {
+        response.writeHead(200, {'content-type': 'application/json'});
+        response.end(JSON.stringify({latest: '0.6.4'}));
+        return;
+      }
+      response.writeHead(404, {'content-type': 'application/json'});
+      response.end('{}');
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
 
-    execFileSync(
-      process.execPath,
-      [
+    try {
+      await execFileAsync(process.execPath, [
         ACTIVE_RELEASE,
         'create',
         '--root',
@@ -383,9 +393,12 @@ describe('one branch per release lifecycle', () => {
         cutSha,
         '--owner-recut-receipt',
         reference,
-      ],
-      {encoding: 'utf8'},
-    );
+        '--registry',
+        `http://127.0.0.1:${address.port}`,
+      ]);
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
 
     const plan = JSON.parse(
       fs.readFileSync(path.join(root, '.release/plan.json'), 'utf8'),
@@ -400,6 +413,47 @@ describe('one branch per release lifecycle', () => {
       receiptSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
     });
     expect(marker.ownerRecut).toEqual(plan.ownerRecut);
+  });
+
+  it('refuses an owner recut when npm already published the version', async () => {
+    const {root, cutSha} = cutFixture();
+    git(root, 'tag', 'v0.6.4');
+    git(root, 'tag', 'v0.6.5');
+    const reference = ownerRecutReceipt(root);
+    const server = http.createServer((_request, response) => {
+      response.writeHead(200, {'content-type': 'application/json'});
+      response.end(JSON.stringify({version: '0.6.5', latest: '0.6.5'}));
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+
+    try {
+      await expect(
+        execFileAsync(process.execPath, [
+          ACTIVE_RELEASE,
+          'create',
+          '--root',
+          root,
+          '--version',
+          '0.6.5',
+          '--branch',
+          BRANCH,
+          '--cut-sha',
+          cutSha,
+          '--owner-recut-receipt',
+          reference,
+          '--registry',
+          `http://127.0.0.1:${address.port}`,
+        ]),
+      ).rejects.toThrow(
+        /owner recut refuses v0\.6\.5 because npm already has a publication effect/,
+      );
+      expect(fs.existsSync(path.join(root, '.release/active.json'))).toBe(
+        false,
+      );
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
   });
 
   it('refuses refresh after the archived tag moves', () => {

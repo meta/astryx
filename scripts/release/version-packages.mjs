@@ -156,9 +156,8 @@ function currentBranch(root) {
   }).trim();
 }
 
-async function main(argv) {
+async function main(argv, root = ROOT) {
   const branchFlag = argv.indexOf('--branch');
-  const root = ROOT;
   const markerPath = path.join(root, MARKER);
   if (!fs.existsSync(markerPath)) {
     throw new Error(
@@ -192,6 +191,8 @@ async function main(argv) {
     `✓ consumed ${admission.entries.length} Changeset(s) into ${marker.version} changelogs (${admission.tier} release of ${admission.latestStable})`,
   );
 }
+
+export {main};
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   main(process.argv.slice(2)).catch(error => {

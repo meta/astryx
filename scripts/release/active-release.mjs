@@ -2103,6 +2103,15 @@ async function main() {
       ownerRecut = plan.ownerRecut ?? null;
       validateOwnerRecutTag(root, ownerRecut);
     }
+    if (ownerRecut !== null) {
+      const stablePublished = await stablePublicationExists(root, version, {
+        registry: values.registry,
+      });
+      if (stablePublished)
+        throw new Error(
+          `owner recut refuses v${version} because npm already has a publication effect`,
+        );
+    }
     const {admitRelease} = await import('./release-inputs.mjs');
     const admission = admitRelease(root, {
       version,
