@@ -306,7 +306,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Compose rich cell content with Astryx components like Text, StatusDot, and Avatar via renderCell. Show a status column as a StatusDot beside its Text label, so a status that repeats down every row stays quiet; keep Badge for a rare state that needs action.',
+          'Compose rich cell content with Astryx components like Text, StatusDot, and Avatar via renderCell. Pair a StatusDot with Text, and keep a solid Badge for the rare cell that needs action.',
       },
       {
         guidance: true,
@@ -331,7 +331,7 @@ export const docs = {
       {
         guidance: false,
         description:
-          'Put a solid status Badge (success, warning, error, info) in every row. The repeated fills compete with the data; use StatusDot with a Text label instead.',
+          'Put a solid Badge (success, warning, error, info) in every cell of a column. The repeated fills compete with the data; pair a StatusDot with Text instead.',
       },
       {
         guidance: false,
@@ -362,7 +362,7 @@ export const docsZh = {
       {
         guidance: true,
         description:
-          'Compose rich cell content with Astryx components like Text, StatusDot, and Avatar via renderCell. Show a status column as a StatusDot beside its Text label, so a status that repeats down every row stays quiet; keep Badge for a rare state that needs action.',
+          'Compose rich cell content with Astryx components like Text, StatusDot, and Avatar via renderCell. Pair a StatusDot with Text, and keep a solid Badge for the rare cell that needs action.',
       },
       {
         guidance: false,
@@ -372,7 +372,7 @@ export const docsZh = {
       {
         guidance: false,
         description:
-          'Put a solid status Badge (success, warning, error, info) in every row. The repeated fills compete with the data; use StatusDot with a Text label instead.',
+          'Put a solid Badge (success, warning, error, info) in every cell of a column. The repeated fills compete with the data; pair a StatusDot with Text instead.',
       },
       {
         guidance: false,
@@ -387,7 +387,7 @@ export const docsZh = {
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
 export const docsDense = {
   description:
-    'Data-driven table w/ rich cell content via renderCell. Compose cells w/ Text, StatusDot + label, Avatar, layout primitives. BaseTable provides unstyled structural core w/ composable plugin pipeline.',
+    'Data-driven table w/ rich cell content via renderCell. Compose cells w/ Text, StatusDot, Avatar, layout primitives. BaseTable provides unstyled structural core w/ composable plugin pipeline.',
   usage: {
     description:
       'Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.',
@@ -400,7 +400,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Compose cells via renderCell w/ Text, StatusDot, Avatar. Status column: StatusDot + Text label, quiet in every row; Badge only for a rare state that needs action.',
+          'Compose cells via renderCell w/ Text, StatusDot, Avatar. Pair StatusDot w/ Text; solid Badge only for the rare cell that needs action.',
       },
       {
         guidance: true,
