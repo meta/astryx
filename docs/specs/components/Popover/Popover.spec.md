@@ -89,8 +89,6 @@ rung, so a caller whose content owns its own edges can ask for a flush surface.
   popover through native auto light dismiss or the shared dismissal stack
   wherever focus is, and every sheet is modal (`spec:AST-116` FR12,
   FR15 and FR16 gaps).
-- AR4 gap: focus return falls to the body when the opener is gone
-  (`spec:AST-116` FR20 gap).
 
 ## Ownership boundary
 
