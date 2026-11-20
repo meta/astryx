@@ -12,8 +12,6 @@
 
 - `astryx experimental theme editor how`: a font family named before or after the text it's for, without the word "font", now sets that font. Examples: "Inter headings", "use Playfair Display for headings", "headings in Lora". Before the text, the family must be one the editor knows: a built-in or system font, an installed package, or a name of two or more words that Fontsource publishes. A one-word name such as "Stylish headings" may be a plain word, so it is offered, not written. After "in" or "use", any family `set` accepts works. A casing said in words ("titles in All Caps", "headings in Title Case") is never a family; caps said in words is the text's case. A mode said with capitals ("headings in Dark Mode white") is the mode, never a family.
 
-- In `astryx experimental theme editor how`, a list piece that is only a color, with no look or part word of its own ("big buttons, a sky blue, high contrast"), is the theme's accent when the part before it draws with the accent, such as a button or a checkbox, and the color has a hue. White, black or a gray there, which is never an accent, is that part's fill ("rounder buttons, white" fills the secondary and ghost buttons; "rounded checkboxes, white"). After a part that is only text, or one with a plain fill, the color is that part's text or fill ("bold headings, dark gray", "rounder cards, white"); after bare "labels", which names two parts, nothing is written. The color is never dropped. "buttons rounder and red" still reds the buttons, and a part's colon list ("badges: green, amber, red") still colors that part.
-
 - In `astryx experimental theme editor how`, an offer, meaning more than the ask (such as "to change the blue, green … card variants too"), is marked `offer: true` in the JSON result. It follows every other result and is never the first, so running the first result's commands never runs one. When what the ask writes is in place already, the first result now says so ("already #ffffff on the card …, nothing to change") with no command. Before, the offer could be the only result with commands. The response type and docs describe the new field.
 
 The same goes for the line that keeps a theme to one mode when the ask only says which mode the app shows first ("relaxed dark mode for night browsing"). It is now an offer, kept out of "all of it", so running the whole answer no longer drops the light mode, and the light page asked beside it is written. A color said for a theme the ask keeps to one mode ("black background, …, dark mode only") is that color, not a tone fitted to both modes' pages.
@@ -25,7 +23,7 @@ The same goes for the line that keeps a theme to one mode when the ask only says
 - `astryx experimental theme editor how`:
 
 - "dark gradient navbar" now gives a gradient between the theme's own dark surface colors, with text that reads on it. Before, it gave a light gradient.
-- "small labels" now makes them smaller instead of larger.
+- "small form labels" now makes them smaller instead of larger.
 - "labels" on its own, with nothing about a form or field, offers both meanings (form field labels, or badges) and changes nothing until you choose.
 
 - More fixes in `astryx experimental theme editor how`:

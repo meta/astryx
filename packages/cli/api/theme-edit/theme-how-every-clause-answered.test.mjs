@@ -62,14 +62,6 @@ const answer = async q => {
  * @type {Array<[string, Row]>}
  */
 const ROWS = [
-  // (A run of colors is one list.)
-  [
-    'a run of colors is one list, never a lone color piece',
-    {
-      q: "Use Slack's brand colors for accents: green, blue, red, yellow on badges and status.",
-      never: /accent '#2563eb'/,
-    },
-  ],
   // Named, never silent.
   [
     'a mood clause is named',
@@ -306,15 +298,6 @@ const ROWS = [
       q: 'esports page: black background, square corners, dark mode only',
       has: ["--color-background-body '#000000'", 'mode dark-only'],
       never: /'#1b1b1b'/,
-    },
-  ],
-  [
-    'a lone color after a part item never fills that part',
-    {
-      q: 'big buttons, a sky blue, high contrast',
-      has: ["accent '#38bdf8'"],
-      saysNot: /not used/,
-      never: /background-color .* --on button/,
     },
   ],
 ];
