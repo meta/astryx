@@ -930,8 +930,13 @@ function BaseTableInner<T extends Record<string, unknown>>({
       // Resolve header content from slots — plugins write to named slots
       // to avoid conflicts (e.g. sort writes `after`, resize writes `overlay`)
       const resolvedContent = cellRenderProps.content ?? headerContent;
+      // A truncating header discloses a cut heading only through its
+      // keyboard-focus tooltip, so it carries no native title, which the
+      // browser shows on hover.
       const headerTitleProp =
-        typeof resolvedContent === 'string' && resolvedContent.length > 0
+        textOverflow !== 'truncate' &&
+        typeof resolvedContent === 'string' &&
+        resolvedContent.length > 0
           ? {title: resolvedContent}
           : {};
       const {before, after, overlay, below} = cellRenderProps;
