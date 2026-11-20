@@ -55,7 +55,9 @@ import {importSpecifiers, moduleImports} from './embedded-imports.mjs';
 import {sha256} from './source-block.mjs';
 import {BundleError, CARRIED_MODULE, bundleForBrowser} from './client-bundle.mjs';
 import {droppedImports, importUses} from './value-uses.mjs';
-import {coreComponentOf} from '../discovery/core-elements.mjs';
+import {OTHER_JSX_RUNTIME, coreComponentOf} from '../discovery/core-elements.mjs';
+import {corePropUsesOf} from '../discovery/core-props.mjs';
+import {writtenValue} from '../discovery/written-prop-values.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates, separateIds} from './charts.mjs';
 import {LAYER_GLOBAL, LAYER_PLACEHOLDER, countQueuedImmediates, layerDocument, layerPlaceholder, openLayerMarkup, settled} from './layers.mjs';
 
@@ -183,11 +185,20 @@ const texts = [];
 /** @type {Record<string, string[]>} */
 const fnTexts = {};
 /**
- * Each string a page's own file gives a Core component's prop
- * (`<Button variant="danger">`), for the unknown-prop-value warning.
- * @type {{component: string, prop: string, value: string, file: string, line: number}[]}
+ * What a page's own file certainly gives a Core component's prop
+ * (`<Button variant="danger">`, each branch of
+ * `variant={busy ? 'ghost' : 'danger'}`, `status="error"`), for the
+ * unknown-prop-value warning.
+ * @type {(import('../discovery/written-prop-values.mjs').WrittenValue & {component: string, prop: string, file: string, line: number})[]}
  */
 const propValues = [];
+/**
+ * Each prop a page's own file gives a Core component by name, for the
+ * unknown-prop warning; a file that compiles its JSX with another runtime
+ * gives none.
+ * @type {(import('../discovery/core-props.mjs').CorePropUse & {file: string, element: {line: number, column: number}})[]}
+ */
+const propNames = [];
 /** Each media query the page's own code asks in JavaScript, for the screen-query warning. */
 /** @type {{call: string, file: string, line: number}[]} */
 const screenQueries = [];
@@ -1126,8 +1137,11 @@ function carriedName(p, t) {
  * recorded it already.
  * @param {string} filename
  * @param {boolean} [browser]
+ * @param {boolean} [reactJsx] whether the module compiles its JSX with
+ *   React's runtime, so its Core props are recorded for the unknown-prop
+ *   warning
  */
-function pagePlugin(filename, browser = false) {
+function pagePlugin(filename, browser = false, reactJsx = true) {
   const dir = path.dirname(filename);
   /**
    * Record an https image address the page builds in code (a template with
@@ -1319,16 +1333,17 @@ function pagePlugin(filename, browser = false) {
         if (browser) return;
         const component = coreComponentOf(p.node.name, p.scope);
         if (!component) return;
-        for (const attr of p.node.attributes) {
+        const attrs = p.node.attributes;
+        // A spread after an attribute can replace its value.
+        const lastSpread = attrs.findLastIndex((/** @type {any} */ a) => a.type === 'JSXSpreadAttribute');
+        for (const attr of attrs.slice(lastSpread + 1)) {
           if (attr.type !== 'JSXAttribute' || attr.name.type !== 'JSXIdentifier') continue;
-          const value =
-            attr.value?.type === 'StringLiteral'
-              ? attr.value.value
-              : attr.value?.type === 'JSXExpressionContainer' && attr.value.expression.type === 'StringLiteral'
-                ? attr.value.expression.value
-                : null;
-          if (value === null) continue;
-          propValues.push({component, prop: attr.name.name, value, file: filename, line: attr.loc?.start.line ?? 0});
+          const written = writtenValue(attr, p.scope);
+          if (written) propValues.push({component, prop: attr.name.name, ...written, file: filename, line: attr.loc?.start.line ?? 0});
+        }
+        if (reactJsx) {
+          const element = {line: p.node.loc?.start.line ?? 0, column: (p.node.loc?.start.column ?? 0) + 1};
+          for (const use of corePropUsesOf(p)) propNames.push({...use, file: filename, element});
         }
       },
       JSXText(/** @type {any} */ p) {
@@ -1754,7 +1769,7 @@ function compilePageModule(source, filename, browser = false) {
       compact: false,
       plugins: [
         aliasPlugin(),
-        pagePlugin(filename, browser),
+        pagePlugin(filename, browser, !OTHER_JSX_RUNTIME.test(source)),
         ...(source.includes('stylex') ? [stylexPluginFor(source, filename)] : []),
       ],
     });
@@ -2585,6 +2600,7 @@ try {
     remoteNamedOnly: [...namedOnlyLiterals].filter(url => !placedLiterals.has(url)),
     builtRemote,
     propValues: propValues.map(v => ({...v, file: path.relative(path.dirname(entry), v.file).split(path.sep).join('/')})),
+    propNames,
     logs,
     script: script?.code ?? null,
     scriptModules: script?.modules ?? 0,
