@@ -159,10 +159,13 @@ describe('browser-gated script tests in the workflows', () => {
     },
   );
 
-  it('runs the offline-media cases in the Node test job, with the browser required', () => {
+  it('runs the offline-media cases in the Node browser contracts job, with the browser required', () => {
     const [run, ...more] = stepsRunning(OFFLINE_MEDIA_TEST, WORKFLOWS);
     expect(more).toEqual([]);
-    expect([run.workflow, run.jobName]).toEqual(['ci.yml', 'test-node']);
+    expect([run.workflow, run.jobName]).toEqual([
+      'ci.yml',
+      'node-browser-contracts',
+    ]);
     expect(run.step.name).toBe('Offline-media browser cases');
     expect(run.step.env).toEqual({ASTRYX_OFFLINE_MEDIA_BROWSER: '1'});
     expect(run.step.run).toBe(
@@ -170,7 +173,7 @@ describe('browser-gated script tests in the workflows', () => {
     );
   });
 
-  it("runs theme-real-bases' text-direction render case in the Node test job, after the browser install, with the browser required", () => {
+  it("runs theme-real-bases' text-direction render case in the Node browser contracts job, after the browser install, with the browser required", () => {
     const source = fs.readFileSync(
       path.join(root, THEME_REAL_BASES_TEST),
       'utf8',
@@ -183,12 +186,12 @@ describe('browser-gated script tests in the workflows', () => {
     ).toEqual([]);
     const [run, ...more] = stepsRunning(THEME_REAL_BASES_TEST, WORKFLOWS);
     expect(more).toEqual([]);
-    expect(run.jobName).toBe('test-node');
+    expect(run.jobName).toBe('node-browser-contracts');
     expect(run.step.env).toEqual({ASTRYX_THEME_EDITOR_BROWSER: '1'});
     expect(run.step.run).toContain(
       "-t 'renders own and editor sides|names what it waited on'",
     );
-    // The case cannot vanish from both runs: the Node shard skips it by name
+    // The case cannot vanish from both runs: the Node legs skip it by name
     // (it.runIf on the switch), and this step, with the switch set, runs it.
     expect(source).toContain(
       "const BROWSER_STEP = process.env.ASTRYX_THEME_EDITOR_BROWSER === '1';",

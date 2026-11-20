@@ -33,7 +33,32 @@
  * @property {string} [parent] - Command that opens the level above a doc result — its topic's section list for a section, the docs-tree namespace it sits in for a tree node — so a reader can see the siblings and open another.
  * @property {string} [displayName] - Friendly display name — present for template and theme results.
  * @property {'page' | 'block'} [kind] - Template kind (`page` | `block`) — present for template results.
+ * @property {boolean} [isReady] - Whether the template is ready, as its doc's `isReady` says and `astryx template --list` reports it (`true` when the doc leaves it out) — present for template results.
  * @property {import('@astryxdesign/cli/authoring').ComponentDeprecation} [deprecated] - The replacement and modernization route — present for a deprecated component, from its doc's `deprecated`.
+ */
+
+/**
+ * One installed icon that answers a search that asks for an icon, as the icon
+ * finder (`astryx experimental icon <words>`) ranks it.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} IconSearchEntry
+ * @property {'icon'} domain
+ * @property {string} name - `<set>/<id>`.
+ * @property {string} set - The icon set's name.
+ * @property {string} id - The icon's id in its set.
+ * @property {string} package - The npm package that ships the set.
+ * @property {number} score - The icon finder's score (higher is stronger).
+ * @property {string} reason - Why the icon matched (e.g. `word "delete"`).
+ * @property {string} import - The import line for the icon.
+ * @property {string} command - Follow-up command that reads the icon and its variants (`astryx experimental icon <set>/<id>`).
+ */
+
+/**
+ * The icons that answer a search that asks for an icon.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} SearchIconSection
+ * @property {number} matchCount - How many installed icons answer, before the cap.
+ * @property {IconSearchEntry[]} results - The best of them, at most 3 (fewer when `limit` is smaller).
  */
 
 /**
@@ -44,6 +69,15 @@
  * @property {string} data.query
  * @property {number} data.matchCount - How many candidates matched the query in total, before `limit` was applied. `results` is the bounded slice of that set, so `matchCount > results.length` means the answer was capped.
  * @property {SearchResultEntry[]} data.results
+ * @property {SearchIconSection} [data.icons] - Experimental: may change or be
+ *   removed in a patch release. Present only when an icon set
+ *   is installed, the search has no `type`, the query asks for an icon (one
+ *   word as typed is `icon` or `icons`, an installed set's name, or an icon
+ *   export name such as `SearchIcon`, and is not a component or hook name;
+ *   an `icon` or `icons` right after `with`, with only `a`, `an` or `the`
+ *   between, that no `of` or `for` follows names a feature of an answered
+ *   component or template, as in `card with an icon`, and asks for none, while
+ *   `card with an icon of a star` still asks), and an icon answers it. It never changes `results` or `matchCount`.
  * @property {{partial?: {skipped: SearchDomain[], reason: string}}} [meta] -
  *   `partial`, when an open search could not get the Core that components,
  *   hooks, and templates are read from (such as outside a project, offline,

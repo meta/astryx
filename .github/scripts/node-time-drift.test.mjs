@@ -1,12 +1,20 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, expect, it} from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {describe, expect, it, vi} from 'vitest';
 import {
   MARGIN_S,
   MIN_PEERS,
   RATIO,
   drifted,
   legFactor,
+  NEW_FILE_S,
+  unrecorded,
+  parseNameStatus,
+  notices,
+  main,
 } from './node-time-drift.mjs';
 
 const CHANGES = 'packages/cli/test/packed-gather-cache.changes.test.mjs';
@@ -24,7 +32,7 @@ function leg(count, seconds, scale) {
 }
 
 describe('the recorded-time check for the test files a change touches', () => {
-  it('fails a changed file that runs far past its record while its leg runs at its record', () => {
+  it('names a changed file that runs far past its record while its leg runs at its record', () => {
     const {recorded, measured} = leg(8, 40, 1);
     recorded[CHANGES] = 207.8;
     measured[CHANGES] = 337.9;
@@ -46,7 +54,7 @@ describe('the recorded-time check for the test files a change touches', () => {
     expect(drifted(measured, recorded, [RECORDS])).toEqual([]);
   });
 
-  it('fails a changed file 2× slow when the rest of its leg runs at its record', () => {
+  it('names a changed file 2× slow when the rest of its leg runs at its record', () => {
     const {recorded, measured} = leg(8, 40, 1);
     recorded[RECORDS] = 107.3;
     measured[RECORDS] = 228.4;
@@ -126,7 +134,176 @@ describe('the recorded-time check for the test files a change touches', () => {
     expect(drifted(measured, recorded, [CHANGES])).toHaveLength(1);
   });
 
-  it('skips a changed file with no recorded time (the legs count it as the median)', () => {
+  it('skips a changed file with no recorded time (the legs book it at the ninetieth percentile)', () => {
     expect(drifted({'new.test.mjs': 400}, {}, ['new.test.mjs'])).toEqual([]);
+  });
+
+  describe('a changed test file with no recorded time', () => {
+    const NEW = 'packages/cli/api/theme-edit/theme-how.test.mjs';
+
+    it('fails when it ran more than NEW_FILE_S in an unslowed leg, naming the one entry to add', () => {
+      const {recorded, measured} = leg(8, 40, 1);
+      measured[NEW] = 120;
+      // The drift check alone passes it: it has no record to fall behind.
+      expect(drifted(measured, recorded, [NEW])).toEqual([]);
+      expect(unrecorded(measured, recorded, [NEW])).toEqual([
+        {file: NEW, measured: 120, factor: 1, suggested: 120},
+      ]);
+    });
+
+    it('takes out the leg slowdown: 120 s in a leg running 2x passes, 150 s fails at 75 s', () => {
+      const {recorded, measured} = leg(8, 40, 2);
+      measured[NEW] = 2 * NEW_FILE_S;
+      expect(unrecorded(measured, recorded, [NEW])).toEqual([]);
+      measured[NEW] = 150;
+      expect(unrecorded(measured, recorded, [NEW])).toEqual([
+        {file: NEW, measured: 150, factor: 2, suggested: 75},
+      ]);
+    });
+
+    it('passes a short new file, and never reports a file the change does not touch', () => {
+      const {recorded, measured} = leg(8, 40, 1);
+      measured[NEW] = 40;
+      measured['packages/cli/other-unrecorded.test.mjs'] = 200;
+      expect(unrecorded(measured, recorded, [NEW])).toEqual([]);
+    });
+
+    it('reports a renamed file by its new path, and names the old entry to move', () => {
+      const {recorded, measured} = leg(8, 40, 1);
+      const OLD = 'packages/cli/api/theme-edit/theme-how-old.test.mjs';
+      recorded[OLD] = 100;
+      measured[NEW] = 120;
+      // The leg split looks the record up by NEW's path, so NEW is unrecorded.
+      expect(unrecorded(measured, recorded, [NEW], [[OLD, NEW]])).toEqual([
+        {
+          file: NEW,
+          measured: 120,
+          factor: 1,
+          suggested: 120,
+          from: OLD,
+          fromRecorded: 100,
+        },
+      ]);
+    });
+
+    it('reports a rename from a path with no record as an entry to add', () => {
+      const {recorded, measured} = leg(8, 40, 1);
+      measured[NEW] = 120;
+      expect(
+        unrecorded(
+          measured,
+          recorded,
+          [NEW],
+          [['packages/cli/never-recorded.test.mjs', NEW]],
+        ),
+      ).toEqual([{file: NEW, measured: 120, factor: 1, suggested: 120}]);
+    });
+
+    it('passes a short renamed file whatever its old record', () => {
+      const {recorded, measured} = leg(8, 40, 1);
+      const OLD = 'packages/cli/api/theme-edit/theme-how-old.test.mjs';
+      recorded[OLD] = 30;
+      measured[NEW] = 30;
+      expect(unrecorded(measured, recorded, [NEW], [[OLD, NEW]])).toEqual([]);
+    });
+
+    it('reads changed paths and renames from git diff --name-status -M', () => {
+      expect(
+        parseNameStatus(
+          `M\tpackages/a.test.mjs\nA\t${NEW}\nR087\tpackages/old.test.mjs\tpackages/new.test.mjs\nD\tpackages/gone.test.mjs\n`,
+        ),
+      ).toEqual({
+        changed: [
+          'packages/a.test.mjs',
+          NEW,
+          'packages/new.test.mjs',
+          'packages/gone.test.mjs',
+        ],
+        renames: [['packages/old.test.mjs', 'packages/new.test.mjs']],
+      });
+    });
+  });
+});
+
+describe('judging every file, for a scheduled run', () => {
+  const recorded = {
+    'a.test.mjs': 10,
+    'b.test.mjs': 10,
+    'c.test.mjs': 10,
+    'd.test.mjs': 10,
+    'e.test.mjs': 10,
+    'f.test.mjs': 10,
+  };
+
+  it('reads the slowdown from every file, so a uniformly slow run names none', () => {
+    const measured = Object.fromEntries(
+      Object.keys(recorded).map(file => [file, 25]),
+    );
+    expect(drifted(measured, recorded, [], {all: true, margin: 10})).toEqual(
+      [],
+    );
+  });
+
+  it('names a file past its share of that slowdown, with the margin given', () => {
+    const measured = {
+      ...Object.fromEntries(Object.keys(recorded).map(file => [file, 10])),
+      'a.test.mjs': 40,
+    };
+    expect(
+      drifted(measured, recorded, [], {all: true, margin: 10}).map(
+        row => row.file,
+      ),
+    ).toEqual(['a.test.mjs']);
+    // Without `all`, only the changed files are judged.
+    expect(drifted(measured, recorded, [])).toEqual([]);
+  });
+});
+
+describe('notice mode: the check reports and never fails the leg', () => {
+  const {recorded, measured} = leg(8, 40, 1);
+  recorded[CHANGES] = 207.8;
+  measured[CHANGES] = 337.9;
+  measured[RECORDS] = 120;
+
+  it('reports a drifted and an unrecorded changed file as notices, never errors', () => {
+    const lines = notices(measured, recorded, [CHANGES, RECORDS]);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatch(
+      /^::notice file=.*title=Recorded Node test time is stale::/,
+    );
+    expect(lines[0]).toContain(`"${CHANGES}": 337.9`);
+    expect(lines[1]).toMatch(
+      /^::notice file=.*title=Node test file has no recorded time::/,
+    );
+    expect(lines[1]).toContain(`"${RECORDS}": 120`);
+    expect(lines.join('\n')).not.toContain('::error');
+  });
+
+  it('exits 0 for a leg with a drifted and an unrecorded changed file', () => {
+    // A path the repository's record has no entry for.
+    const NEW = 'packages/cli/test/not-yet-recorded.test.mjs';
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'node-time-drift-'));
+    const times = path.join(dir, 'times.json');
+    fs.writeFileSync(times, JSON.stringify({[NEW]: 600}));
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      expect(
+        main(['--times', times, '--changed', 'base'], {
+          diff: () => `A\t${NEW}\n`,
+        }),
+      ).toBe(0);
+      expect(log.mock.calls.flat().join('\n')).toContain(
+        `::notice file=${NEW},title=Node test file has no recorded time::`,
+      );
+    } finally {
+      log.mockRestore();
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
+  it('exits 2 only for missing arguments', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(main(['--times', 'x.json'])).toBe(2);
+    error.mockRestore();
   });
 });

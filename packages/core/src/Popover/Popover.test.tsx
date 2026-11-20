@@ -344,7 +344,7 @@ describe('Popover', () => {
     // explicit width is clamped to the viewport, never to the span beside
     // the trigger (FR2).
     expect(layer?.className).toContain('useLayer__styles.viewportFit');
-    expect(layer?.className).toContain('useLayer__styles.gutterInlineEnd');
+    expect(layer?.className).toContain('useLayer__styles.alignInlineStart');
     expect(layer?.className).toContain('Popover__styles.customWidth');
     expect(layer?.getAttribute('style')).toContain('min(640px, calc(100vw');
     expect(layer?.getAttribute('style')).not.toContain('100%');
@@ -526,10 +526,8 @@ describe('Popover', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Open'}));
 
     const layer = document.querySelector('[popover]');
-    expect(layer?.className).toContain('useLayer__styles.gutterInlineEnd');
-    expect(layer?.className).not.toContain(
-      'useLayer__styles.gutterInlineStart',
-    );
+    expect(layer?.className).toContain('useLayer__styles.alignInlineStart');
+    expect(layer?.className).not.toContain('useLayer__styles.alignInlineEnd');
     expect(layer?.className).toContain('Popover__styles.matchTrigger');
     expect(layer).toHaveStyle(
       'min-width: min(anchor-size(width),calc(100vi - calc(max(var(--spacing-4), env(safe-area-inset-left, 0px)) + var(--astryx-layer-inset-inline-start, 0px)) - calc(max(var(--spacing-4), env(safe-area-inset-right, 0px)) + var(--astryx-layer-inset-inline-end, 0px))))',
@@ -546,8 +544,8 @@ describe('Popover', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Open'}));
 
     const layer = document.querySelector('[popover]');
-    expect(layer?.className).toContain('useLayer__styles.gutterInlineStart');
-    expect(layer?.className).not.toContain('useLayer__styles.gutterInlineEnd');
+    expect(layer?.className).toContain('useLayer__styles.alignInlineEnd');
+    expect(layer?.className).not.toContain('useLayer__styles.alignInlineStart');
   });
 
   it('reserves both inline gutters for centered popovers', () => {
@@ -560,8 +558,7 @@ describe('Popover', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Open'}));
 
     const layer = document.querySelector('[popover]');
-    expect(layer?.className).toContain('useLayer__styles.gutterInlineStart');
-    expect(layer?.className).toContain('useLayer__styles.gutterInlineEnd');
+    expect(layer?.className).toContain('useLayer__styles.centerInline');
     // One match-trigger minimum for every alignment: the cap is the viewport.
     expect(layer?.className).toContain('Popover__styles.matchTrigger');
   });
@@ -580,8 +577,8 @@ describe('Popover', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Open'}));
 
     const layer = document.querySelector('[popover]');
-    expect(layer?.className).toContain('useLayer__styles.gutterBlockEnd');
-    expect(layer?.className).not.toContain('useLayer__styles.gutterInlineEnd');
+    expect(layer?.className).toContain('useLayer__styles.alignBlockStart');
+    expect(layer?.className).not.toContain('useLayer__styles.alignInlineStart');
   });
 
   it('preserves the dialog aria-haspopup contract for render-prop triggers', () => {
@@ -1221,6 +1218,47 @@ describe('Popover', () => {
       fireEvent.keyDown(document, {key: 'Escape'});
       expect(trigger).toHaveAttribute('aria-expanded', 'false');
       expect(trigger).toHaveFocus();
+    });
+
+    it('keeps the trigger as the return target when show() runs again with focus inside', async () => {
+      // A controlled popover's sync can call show() again after initial focus
+      // moved inside. That call comes before the open state turns on, so
+      // before the focus trap activates. It must keep the trigger as the
+      // opener, so a close returns focus to it.
+      const popoverRef: {current: UsePopoverReturn | null} = {current: null};
+      function Harness() {
+        const popover = usePopover({hasAutoFocus: true});
+        popoverRef.current = popover;
+        return (
+          <>
+            <button type="button" ref={popover.triggerRef}>
+              Open hook
+            </button>
+            {popover.render(<button type="button">Inside hook</button>)}
+          </>
+        );
+      }
+      render(<Harness />);
+      const trigger = screen.getByRole('button', {name: 'Open hook'});
+      // Mount the content once, so it is in the document as the layer shows.
+      act(() => popoverRef.current?.show());
+      act(() => popoverRef.current?.hide());
+      const inside = screen.getByRole('button', {
+        name: 'Inside hook',
+        hidden: true,
+      });
+      trigger.focus();
+
+      act(() => {
+        popoverRef.current?.show();
+        // Initial focus moves inside as the layer shows.
+        inside.focus();
+        popoverRef.current?.show();
+      });
+      expect(inside).toHaveFocus();
+      act(() => popoverRef.current?.hide());
+
+      await waitFor(() => expect(trigger).toHaveFocus());
     });
 
     it('leaves focus on a control inside that took it before the first frame', () => {

@@ -15,6 +15,8 @@ export const doc = {
     'reference',
     'api',
     'index',
+    'docs home',
+    'component catalog',
   ],
   isReady: true,
   category: 'Content - Documentation Catalog',

@@ -1,0 +1,160 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+
+# Starts the heavy suites of a pull request whose review passes at its head
+# (spec:AST-030/DEC-32, FR20, heavy-turn.mjs). A push runs only the fast
+# checks in its CI run's first attempt. Once the review app (for a
+# write-access author) or an engineering owner approves that exact head and
+# the review-required status shows success (its spec half included), this
+# workflow runs the deferred run again in full, and a later attempt runs every
+# suite. A success at an engineering owner's own push, with no review, does
+# not count (architecture:knowledge-contracts DEC-11). It
+# looks when a review is submitted or an /approve-spec comment lands (the
+# gate settles a moment later, so it waits for it), when a CI run ends (a
+# deferred run that finished after its review passed), when Review signal
+# ends after a review, and every quarter hour for a start it missed. A fork's
+# review event gets a read-only token that cannot start a run; Review signal's
+# end gives this workflow a write token for that review. Its helper comes from main, never from the pull
+# request; on a review event GitHub takes this script from the pull request's
+# own copy of this file.
+name: CI review pass
+
+on:
+  pull_request_review:
+    types: [submitted]
+  issue_comment:
+    types: [created]
+  workflow_run:
+    workflows: [CI, Review signal]
+    types: [completed]
+  schedule:
+    - cron: '11,26,41,56 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  # A fork's run lists no pull request: its head repository and branch name it.
+  group: ci-review-pass-${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number || (github.event.workflow_run && format('{0}-{1}', github.event.workflow_run.head_repository.full_name, github.event.workflow_run.head_branch)) || 'sweep' }}
+  cancel-in-progress: false
+
+jobs:
+  start:
+    # A review, an /approve-spec comment on a pull request, a pull-request
+    # run's end, Review signal's end after a review, or the schedule.
+    if: >-
+      github.event_name == 'pull_request_review' ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request != null && startsWith(github.event.comment.body, '/approve-spec')) ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.name == 'CI' && github.event.workflow_run.event == 'pull_request') ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Review signal' && github.event.workflow_run.event == 'pull_request_review') ||
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-slim
+    # Room for the gate to settle after a review (at most five minutes).
+    timeout-minutes: 8
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read
+      statuses: read
+    steps:
+      - name: Check out main's helper
+        uses: actions/checkout@v7
+        timeout-minutes: 3
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: .github/scripts/lib
+          path: .heavy-turn
+          persist-credentials: false
+
+      - name: Start the heavy suites where review passed
+        uses: actions/github-script@v9
+        env:
+          HEAVY_MODULE: ${{ github.workspace }}/.heavy-turn/.github/scripts/lib/heavy-turn.mjs
+          ENG_OWNERS: ${{ vars.ENGOWNERS }}
+          REVIEW_APP: ${{ vars.REVIEW_APP }}
+        with:
+          retries: 3
+          script: |
+            const {pathToFileURL} = await import('node:url');
+            const turn = await import(pathToFileURL(process.env.HEAVY_MODULE).href);
+            const intoMain = pull => pull.base?.ref === 'main';
+            const start = async pull => {
+              try {
+                core.info(
+                  await turn.startHeavy({
+                    github,
+                    ...context.repo,
+                    pull,
+                    engOwners: turn.ownerHandles(process.env.ENG_OWNERS),
+                    reviewApp: process.env.REVIEW_APP,
+                  }),
+                );
+              } catch (error) {
+                core.warning(`#${pull.number}: could not start its heavy suites (${error.message}).`);
+              }
+            };
+            const event = context.eventName;
+            // A fork's run lists no pull request: pullsForRun finds it by its
+            // head repository and branch.
+            const number =
+              context.payload.pull_request?.number ??
+              (context.payload.issue?.pull_request ? context.payload.issue.number : undefined) ??
+              (context.payload.workflow_run
+                ? (await turn.pullsForRun({github, ...context.repo, run: context.payload.workflow_run}))[0]
+                : undefined);
+            if (event === 'schedule' || event === 'workflow_dispatch' || number == null) {
+              // Every recent run that failed: a deferred run fails its required
+              // checks, and so does one re-run with "Re-run failed jobs", which
+              // keeps the deferral. Each page holds at most 100 runs.
+              const since = new Date(Date.now() - 6 * 60 * 60_000).toISOString();
+              const failed = [];
+              for (let page = 1; page <= 10; page += 1) {
+                const {data} = await github.rest.actions.listWorkflowRuns({
+                  ...context.repo,
+                  workflow_id: turn.CI_WORKFLOW,
+                  event: 'pull_request',
+                  status: 'failure',
+                  created: `>=${since}`,
+                  per_page: 100,
+                  page,
+                });
+                failed.push(...data.workflow_runs);
+                if (data.workflow_runs.length < 100) break;
+              }
+              const numbers = new Set();
+              // One failed lookup skips only its own run or pull request.
+              for (const run of failed) {
+                try {
+                  for (const n of await turn.pullsForRun({github, ...context.repo, run})) numbers.add(n);
+                } catch (error) {
+                  core.warning(`Run ${run.id}: could not find its pull request (${error.message}).`);
+                }
+              }
+              for (const n of numbers) {
+                try {
+                  const {data: pull} = await github.rest.pulls.get({...context.repo, pull_number: n});
+                  if (pull.state === 'open' && intoMain(pull)) await start(pull);
+                } catch (error) {
+                  core.warning(`#${n}: could not read it (${error.message}).`);
+                }
+              }
+              return;
+            }
+            const {data: pull} = await github.rest.pulls.get({...context.repo, pull_number: number});
+            if (pull.state !== 'open' || !intoMain(pull)) {
+              core.info(`#${number}: not an open pull request into main.`);
+              return;
+            }
+            // After a review or a comment the review gate settles a moment
+            // later (review-signal.yml): wait for it, up to five minutes.
+            const afterReview =
+              event === 'pull_request_review' ||
+              event === 'issue_comment' ||
+              context.payload.workflow_run?.name === 'Review signal';
+            if (afterReview) {
+              for (let look = 0; look < 10; look += 1) {
+                const status = await turn.reviewStatus({github, ...context.repo, sha: pull.head.sha});
+                if (status?.state === 'success') break;
+                await new Promise(resolve => setTimeout(resolve, 30_000));
+              }
+            }
+            await start(pull);

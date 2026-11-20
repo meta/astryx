@@ -1,0 +1,91 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * @file PopoverAnchorRef.stories.tsx
+ * @input usePopover, Button and TextInput from @astryxdesign/core
+ * @output A story with one popover shared by three table rows. Each row's
+ *   edit button sets `anchorRef` to that row's value cell and calls `show()`.
+ *   A button removes and restores row B's value cell. A counter shows how
+ *   often the popover reported a show and a hide
+ * @position Fixture for Popover/__tests__/PopoverAnchor.interaction.browser.spec.ts
+ */
+
+import {useRef, useState} from 'react';
+import type {Meta, StoryObj} from '@storybook/react';
+import {usePopover} from '@astryxdesign/core/Popover';
+import {Button} from '@astryxdesign/core/Button';
+import {TextInput} from '@astryxdesign/core/TextInput';
+
+const meta: Meta = {
+  title: 'Core/Popover Anchor Ref',
+  tags: ['no-visual'],
+  parameters: {layout: 'padded'},
+};
+export default meta;
+
+type Story = StoryObj;
+
+const ROWS = ['A', 'B', 'C'];
+
+function RowEditor() {
+  const anchorRef = useRef<Element | null>(null);
+  const [isRowBShown, setIsRowBShown] = useState(true);
+  const [value, setValue] = useState('');
+  const [counts, setCounts] = useState({shows: 0, hides: 0});
+  const popover = usePopover({
+    anchorRef,
+    dialogLabel: 'Edit value',
+    hasLightDismiss: false,
+    onShow: () => setCounts(c => ({...c, shows: c.shows + 1})),
+    onHide: () => setCounts(c => ({...c, hides: c.hides + 1})),
+  });
+  const {show} = popover;
+  return (
+    <div>
+      <table>
+        <tbody>
+          {ROWS.map(row => (
+            <tr key={row}>
+              {row === 'B' && !isRowBShown ? (
+                <td key="removed" />
+              ) : (
+                <td
+                  key="value"
+                  data-cell={row}
+                  style={{padding: 8, minWidth: 160}}>
+                  Value {row}
+                </td>
+              )}
+              <td style={{padding: 8}}>
+                <Button
+                  label={`Edit row ${row}`}
+                  onClick={() => {
+                    anchorRef.current = document.querySelector(
+                      `[data-cell="${row}"]`,
+                    );
+                    show();
+                  }}
+                />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <Button
+        label={isRowBShown ? 'Remove row B value' : 'Restore row B value'}
+        onClick={() => setIsRowBShown(isShown => !isShown)}
+      />
+      <output data-testid="counts">
+        shows {counts.shows}, hides {counts.hides}
+      </output>
+      {popover.render(
+        <TextInput label="Value" value={value} onChange={setValue} />,
+      )}
+    </div>
+  );
+}
+
+/** One popover that moves between rows; no outside press closes it. */
+export const Rows: Story = {
+  render: () => <RowEditor />,
+};

@@ -12,26 +12,6 @@
  *   serves; Item.tsx's deprecated path loads it with `import()`. Tested
  *   through Item.test.tsx and Item.source-build.test.mjs.
  *
- * The row's root stays the row's: it takes the root style the swipe brings, and
- * forwards its key events into the bridge this layer fills. The gesture
- * attaches to the root itself, and the layer holds
- * the root's press while the row is open. This layer renders the two panels as
- * out-of-flow children of that root. So no element is added to the row for the
- * swipe.
- *
- * A panel is two boxes and the entries themselves. Transforms move all three,
- * reading the travel the gesture writes on the root (see useSwipeAction). The
- * window sits over the row's resting box, reads the travel's negation, and
- * clips to that box. The track inside it moves with the row, and clips the
- * entries to the space the row vacates. Each entry is translated back from the
- * side's pin. So the entries stay at the outer edge until the row has uncovered
- * them all, then ride the row. Past the open width the outermost entry's
- * colour, painted beside it, fills the rest out to that edge. On a confirmed
- * full swipe it slides to the row's edge. While an entry covers the panel, its
- * colour fills the track and the others hide. So no entry's colour shows behind
- * or between other entries. No wrapper holds the entries, and the colours are
- * pseudo-elements.
- *
  * SYNC: the property names are useSwipeAction.ts's.
  */
 
@@ -253,6 +233,26 @@ function idsKeyOf(
 /**
  * The swipe half of a row with swipe actions: both panels, rendered into the
  * root the row owns, and the gesture that drives that root.
+ *
+ * The row's root stays the row's: it takes the root style the swipe brings, and
+ * forwards its key events into the bridge this layer fills. The gesture
+ * attaches to the root itself, and the layer holds
+ * the root's press while the row is open. This layer renders the two panels as
+ * out-of-flow children of that root. So no element is added to the row for the
+ * swipe.
+ *
+ * A panel is two boxes and the entries themselves. Transforms move all three,
+ * reading the travel the gesture writes on the root (see useSwipeAction). The
+ * window sits over the row's resting box, reads the travel's negation, and
+ * clips to that box. The track inside it moves with the row, and clips the
+ * entries to the space the row vacates. Each entry is translated back from the
+ * side's pin. So the entries stay at the outer edge until the row has uncovered
+ * them all, then ride the row. Past the open width the outermost entry's
+ * colour, painted beside it, fills the rest out to that edge. On a confirmed
+ * full swipe it slides to the row's edge. While an entry covers the panel, its
+ * colour fills the track and the others hide. So no entry's colour shows behind
+ * or between other entries. No wrapper holds the entries, and the colours are
+ * pseudo-elements.
  */
 export default function SwipeActionsLayer({
   onBridge,

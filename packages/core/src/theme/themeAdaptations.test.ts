@@ -21,6 +21,15 @@ import {
   type DefinedTheme,
 } from './index';
 
+/**
+ * Inverted surfaces that keep one side in both page modes, so a test about
+ * other rules sees no dark-page scoping (INV21 has its own tests).
+ */
+const KEEPS_SIDE = {
+  '--color-background-inverted': '#0a1317',
+  '--color-background-error-inverted': '#a8071e',
+};
+
 function adaptationInput(
   rules: NonNullable<NonNullable<DefineThemeInput['adaptations']>['rules']>,
 ): DefineThemeInput {
@@ -65,7 +74,7 @@ describe('width breakpoint metadata', () => {
       lg: 1100,
     });
     expect(generateAdaptationCSS(theme)).toEqual({prose: '', component: ''});
-    expect(generateThemeCSS(theme).component).not.toContain('@media');
+    expect(generateThemeCSS(theme).component).not.toMatch(/@media \(width/);
   });
 
   it('validates built breakpoint metadata even when there are no rules to emit', () => {
@@ -265,6 +274,95 @@ describe('rule order and writes', () => {
     );
   });
 
+  it('writes nothing for a part value a rule leaves undefined, and still refuses null', () => {
+    const theme = defineTheme(
+      adaptationInput([
+        {
+          when: {pointer: 'coarse'},
+          value: {
+            components: {
+              card: {
+                base: {
+                  padding: undefined as unknown as string,
+                  margin: '4px',
+                },
+              },
+            },
+          },
+        },
+      ]),
+    );
+    const css = generateAdaptationCSS(theme).component;
+    expect(css).toContain('margin: 4px');
+    expect(css).not.toMatch(/padding:\s*undefined/);
+    // A component or style key a rule leaves undefined is not set either.
+    const keys = defineTheme(
+      adaptationInput([
+        {
+          when: {pointer: 'coarse'},
+          value: {
+            components: {
+              card: {base: undefined as unknown as Record<string, string>},
+              button: undefined as unknown as Record<
+                string,
+                Record<string, string>
+              >,
+              link: {base: {color: 'red'}},
+            },
+          },
+        },
+      ]),
+    );
+    const keyCss = generateAdaptationCSS(keys).component;
+    expect(keyCss).toContain('color: red');
+    expect(keyCss).not.toContain('.astryx-card');
+    expect(keyCss).not.toContain('.astryx-button');
+    expect(() =>
+      defineTheme(
+        adaptationInput([
+          {
+            when: {pointer: 'coarse'},
+            value: {
+              components: {
+                card: {base: {padding: null as unknown as string}},
+              },
+            },
+          },
+        ]),
+      ),
+    ).toThrow(/must resolve to a concrete CSS string/);
+  });
+
+  it('takes a type-scale value a scale rule leaves undefined as no write, so an earlier rule keeps it', () => {
+    const theme = defineTheme({
+      name: 'scaled',
+      typography: {scale: {base: 16, ratio: 1.2}},
+      adaptations: {
+        rules: [
+          {
+            when: {pointer: 'coarse'},
+            value: {components: {text: {'type:body': {fontSize: '20px'}}}},
+          },
+          {
+            when: {pointer: 'coarse'},
+            value: {
+              typography: {scale: {base: 16, ratio: 1.3}},
+              components: {
+                text: {
+                  'type:body': {fontSize: undefined as unknown as string},
+                },
+              },
+            },
+          },
+        ],
+      },
+    });
+    const css = generateAdaptationCSS(theme).component;
+    const blocks = css.split('@media (pointer: coarse)');
+    expect(blocks[1]).toContain('font-size: 20px');
+    expect(blocks[2]).not.toMatch(/\[data-type="body"\][^}]*font-size/);
+  });
+
   it('uses declaration order rather than inferred condition specificity', () => {
     const theme = defineTheme(
       adaptationInput([
@@ -303,7 +401,7 @@ describe('rule order and writes', () => {
   it('keeps status aliases at the root so conditional authored roles win', () => {
     const theme = defineTheme({
       name: 'conditional-status-role-precedence',
-      tokens: {'--color-text-blue': '#0074e2'},
+      tokens: {...KEEPS_SIDE, '--color-text-blue': '#0074e2'},
       adaptations: {
         rules: [
           {
@@ -336,6 +434,7 @@ describe('rule order and writes', () => {
   it('replays authored status roles after overlapping adaptation and media aliases', () => {
     const theme = defineTheme({
       name: 'conditional-status-role-replay',
+      tokens: KEEPS_SIDE,
       adaptations: {
         rules: [
           {
@@ -1087,6 +1186,72 @@ describe('theme-local adaptation values', () => {
     expect(theme.__adaptationRules?.[0].tokens[name]).toBe('44px');
   });
 
+  it('names a token map that holds itself instead of overflowing the stack', () => {
+    const tokens: Record<string, string> = {'--color-accent': 'red'};
+    // A loop no theme writes on purpose: the map is its own value.
+    (tokens as Record<string, unknown>).self = tokens;
+    const base = defineTheme({
+      name: 'cycle-self-base',
+      adaptations: {
+        rules: [
+          {
+            when: {pointer: 'coarse'},
+            value: {tokens: {'--color-accent': 'blue'}},
+          },
+        ],
+      },
+    });
+    expect(() => defineTheme({name: 'cycle-self', tokens})).not.toThrow(
+      /call stack/,
+    );
+    expect(() =>
+      defineTheme({
+        name: 'cycle-self-child',
+        extends: base,
+        tokens,
+      }),
+    ).toThrow(
+      /tokens refers to itself: the value of self holds an object it sits in/,
+    );
+    // The theme's own tokens hold it, not the base's adaptation rule.
+    expect(() =>
+      defineTheme({
+        name: 'cycle-self-child',
+        extends: base,
+        tokens,
+      }),
+    ).toThrow(
+      /^defineTheme\("cycle-self-child"\)\.tokens: tokens refers to itself/,
+    );
+    // A rule's own tokens that hold it are still named by the rule.
+    const ruleTokens: Record<string, unknown> = {'--color-accent': 'blue'};
+    ruleTokens.self = ruleTokens;
+    expect(() =>
+      defineTheme({
+        name: 'cycle-self-rule',
+        adaptations: {
+          rules: [
+            {
+              when: {pointer: 'coarse'},
+              value: {tokens: ruleTokens},
+            },
+          ],
+        },
+      }),
+    ).toThrow(/rules\[0\]\.value\.tokens\.self holds an object it sits in/);
+    // A condition that holds itself is named by its rule's path too.
+    const width: Record<string, unknown> = {min: 'md'};
+    width.self = width;
+    expect(() =>
+      defineTheme({
+        name: 'cycle-self-when',
+        adaptations: {rules: [{when: {width}, value: {tokens: {}}}]},
+      }),
+    ).toThrow(
+      /defineTheme\("cycle-self-when"\)\.adaptations\.rules\[0\]\.when\.width\.self holds an object it sits in/,
+    );
+  });
+
   it('rejects conditional local-token cycles', () => {
     const a = '--astryx-theme-cycle-local-a';
     const b = '--astryx-theme-cycle-local-b';
@@ -1558,6 +1723,40 @@ describe('extension semantics and built metadata', () => {
         '--text-heading-1-weight'
       ],
     ).toBe(weightWithoutScale.tokens['--text-heading-1-weight']);
+  });
+
+  it("takes a numeric typography weight from untyped input, written as its text, through an extended base's rules", () => {
+    const base = defineTheme({
+      name: 'numeric-weight-base',
+      typography: {scale: {base: 14, ratio: 1.25}},
+      adaptations: {
+        rules: [
+          {
+            when: {width: {from: 'lg'}},
+            value: {typography: {scale: {base: 18}}},
+          },
+        ],
+      },
+    });
+    // A theme written in JavaScript has no types to stop a number.
+    const typography: unknown = {
+      scale: {base: 16, ratio: 1.2},
+      heading: {weight: 700, weights: {2: 800}},
+      body: {weight: 450},
+    };
+    const child = defineTheme({
+      name: 'numeric-weight-child',
+      extends: base,
+      typography: typography as DefineThemeInput['typography'],
+    });
+
+    expect(child.tokens['--text-heading-1-weight']).toBe('700');
+    expect(child.tokens['--text-heading-2-weight']).toBe('800');
+    expect(child.tokens['--text-body-weight']).toBe('450');
+    const ruleTokens = child.__adaptationRules?.[0].tokens;
+    expect(ruleTokens?.['--text-heading-1-weight']).toBe('700');
+    expect(ruleTokens?.['--text-heading-2-weight']).toBe('800');
+    expect(ruleTokens?.['--text-body-weight']).toBe('450');
   });
 
   it('ignores a child fallback that has no family, matching root resolution', () => {
