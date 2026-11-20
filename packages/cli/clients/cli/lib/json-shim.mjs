@@ -1165,8 +1165,9 @@ async function answerStrayOption(err, rejected, message, exitCode) {
   const stray = /unknown option '([^']+)'/.exec(message)?.[1] ?? '';
   const {strayOptionAnswer, withoutStray} = await import('./stray-option.mjs');
   if (!rejected.parent) {
-    const {findEntry, firstWord, unknownCommandAnswer} =
+    const {findEntry, firstWord, iconFeaturesOn, unknownCommandAnswer} =
       await import('./unknown-command.mjs');
+    const context = {findEntry, iconFeatures: iconFeaturesOn};
     // Only a word before the stray option is read as the command: after it,
     // the word may be the option's value (`astryx --format text component
     // Table`), and the unknown option stays the fault.
@@ -1184,8 +1185,8 @@ async function answerStrayOption(err, rejected, message, exitCode) {
       // option (`migrate --from 0.6.0` is `upgrade --from 0.6.0`). Without a
       // run, the run without the option.
       const answer =
-        withRun(await unknownCommandAnswer(rejected, words, {findEntry})) ??
-        (await unknownCommandAnswer(rejected, cleaned, {findEntry}));
+        withRun(await unknownCommandAnswer(rejected, words, context)) ??
+        (await unknownCommandAnswer(rejected, cleaned, context));
       setOutcome('parse-error', {
         exitCode: exitCode || 1,
         error: new Error(answer?.message ?? message),

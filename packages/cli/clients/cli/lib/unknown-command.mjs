@@ -6,10 +6,12 @@
  * as one word, another command line's word order (a verb before its group),
  * a word from the table in other-cli-words.mjs, a command's plural, an option
  * some commands take, a command deeper in the tree, or a name another command
- * reads. Otherwise it names the commands with a near name, else every
- * command. It only suggests: it runs nothing, and it names no experimental
- * command except the ones spec:AST-017 FR27's shareable-page exception lets a
- * share word or a way-back word name.
+ * reads; an icon word (`icon`, `icons`) points at the icons guide. Otherwise
+ * it names the commands a typo of the word could be, else the help, never a
+ * list of every command. It only suggests: it runs nothing, and it names no
+ * experimental command except the ones spec:AST-017 FR27's shareable-page
+ * exception lets a share word or a way-back word name, and the icon finder
+ * for an icon word where icon features are on (spec:AST-084).
  *
  * @input the program and the words of the run after the program name
  * @output the message and the suggestions the unknown-command error prints
@@ -48,6 +50,11 @@ import {
 /**
  * A name another command reads: the command and the entry's name.
  * @typedef {(name: string) => Promise<{command: string, name: string} | null>} FindEntry
+ */
+
+/**
+ * Whether icon features are on where the run is.
+ * @typedef {() => Promise<boolean>} IconFeatures
  */
 
 /**
@@ -215,22 +222,26 @@ function takesWords(cmd, words) {
 }
 
 /**
- * The near command names Commander's own rule accepts: at most three edits,
- * and more than 40% of the longer name left the same. Best first, three at
- * most.
+ * The command names a typo of the word could be: one edit away for a word of
+ * up to four letters, two for a longer one, two letters swapped counting as
+ * one edit. A looser likeness is no typo (`edit` is two edits from `init`),
+ * and naming it sends a reader to a command they did not mean, one that may
+ * write files. Best first, three at most.
  * @param {string} word
  * @param {string[]} names
  * @returns {string[]}
  */
 function nearNames(word, names) {
   const typed = word.toLowerCase();
+  const allowed = typed.length <= 4 ? 1 : 2;
   return names
-    .map(name => {
-      const distance = levenshteinDistance(typed, name.toLowerCase());
-      const length = Math.max(typed.length, name.length);
-      return {name, distance, similarity: (length - distance) / length};
-    })
-    .filter(s => s.distance <= 3 && s.similarity > 0.4)
+    .map(name => ({
+      name,
+      distance: levenshteinDistance(typed, name.toLowerCase(), allowed, {
+        swaps: true,
+      }),
+    }))
+    .filter(s => s.distance <= allowed)
     .sort((a, b) => a.distance - b.distance)
     .slice(0, 3)
     .map(s => s.name);
@@ -254,6 +265,12 @@ const PATH_OPTIONS = wordsOf(PATH_TABLE);
 
 /** Words that ask to run the command after them (`add template settings`). */
 const RUN_WORDS = new Set([...READ_WORDS, ...ADD_WORDS]);
+
+/**
+ * Words after an icon word that only ask to look (`icon search arrow`): the
+ * icon finder reads the words after them.
+ */
+const LOOK_WORDS = new Set(['search', 'find', ...READ_WORDS]);
 
 /**
  * Whether a word names an input to fill (`<old-version>`), not a value.
@@ -493,11 +510,54 @@ async function otherCliWords({word, before, after: rest}, program, findEntry) {
 }
 
 /**
+ * The runs an icon word (`icon`, `icons`) points at: the stable icons guide
+ * (`docs icons`), and where icon features are on, the icon finder with the
+ * words to look for (`icon search arrow` is `experimental icon arrow`, `icon
+ * list` is `experimental icon --list`). The finder comes first when there
+ * are words to look for; with none, the guide does, then the finder's help.
+ * Where icon features are off, the answer names no experimental command
+ * (spec:AST-017 FR27).
+ * @param {{word: string, before: string[], after: string[]}} run the word,
+ *   and the words of the run before and after it
+ * @param {CommandLike} program
+ * @param {IconFeatures} iconFeatures
+ * @returns {Promise<Array<{words: string[], reason: string}>>}
+ */
+async function iconRuns({before, after: rest}, program, iconFeatures) {
+  /** @param {string[]} parts @param {string} reason */
+  const run = (parts, reason) => ({words: [...before, ...parts], reason});
+  // The program's options written after the word stay with the guide
+  // (`icons --json`); the words to look for do not.
+  const options = rest.filter(w => w.startsWith('-'));
+  const guide = runParses(program, [...before, 'docs', 'icons', ...options])
+    ? run(['docs', 'icons', ...options], 'the guide to icons in Astryx')
+    : run(['docs', 'icons'], 'the guide to icons in Astryx');
+  const finder = ['experimental', 'icon'];
+  if (!served(program, finder) || !(await iconFeatures().catch(() => false)))
+    return [guide];
+  const [lead, ...more] = rest;
+  const lower = lead?.toLowerCase();
+  const asks =
+    lower !== undefined && LOOK_WORDS.has(lower)
+      ? more
+      : lower !== undefined && LIST_WORDS.has(lower)
+        ? ['--list', ...more]
+        : rest;
+  const reason =
+    'the command is experimental icon (experimental): it finds the icon for what you mean in your icon sets';
+  // With no words to look for, the guide answers first.
+  if (!asks.some(w => !w.startsWith('-')) && !asks.includes('--list'))
+    return [guide, run([...finder, '--help'], reason)];
+  return [run([...finder, ...asks], reason), guide];
+}
+
+/**
  * The commands the words point at, as runs (`astryx …`), best first, with
  * the reason each is offered; empty when they point at none. Rules, in
  * order: the word is an option of the program written after `--`
  * (`astryx -- --help`); the word holds a whole command (`"component Table"`
- * passed as one word); the words come from another command line (see
+ * passed as one word); the word asks for icons ({@link iconRuns}); the
+ * words come from another command line (see
  * {@link otherCliWords}: `add theme matcha` is `theme add matcha`); the
  * word, or its singular, is a command (`components Button`), a group named
  * alone is its list (`themes` is `theme list`), and a list word or a read
@@ -512,9 +572,15 @@ async function otherCliWords({word, before, after: rest}, program, findEntry) {
  *   and the words of the run before and after it
  * @param {CommandLike} program
  * @param {FindEntry} findEntry
+ * @param {IconFeatures} iconFeatures
  * @returns {Promise<Array<{words: string[], reason: string}>>}
  */
-async function pointed({word, before, after: rest}, program, findEntry) {
+async function pointed(
+  {word, before, after: rest},
+  program,
+  findEntry,
+  iconFeatures,
+) {
   const top = visible(program);
   const topNames = top.map(c => c.name());
   /** @param {string[]} parts @param {string} reason */
@@ -531,6 +597,8 @@ async function pointed({word, before, after: rest}, program, findEntry) {
     return [
       run([...parts, ...rest], 'the words of one command, passed as one word'),
     ];
+  if (spellings(word).includes('icon'))
+    return iconRuns({word, before, after: rest}, program, iconFeatures);
   // A borrowed run that does not parse leaves the word to the rules below
   // (`info theme` names a group alone, so it is `component Theme`).
   const borrowed = (
@@ -704,26 +772,28 @@ async function pointed({word, before, after: rest}, program, findEntry) {
 /**
  * The answer to a word the CLI has no command for: `unknown command
  * '<word>'`, with the runs the words point at ({@link pointed}), else the
- * commands with a near name, else every command. Suggestion names are bare
- * `astryx …` runs or command names, as cliError prints them.
+ * commands a typo of the word could be, else the help. Suggestion names are
+ * bare `astryx …` runs or command names, as cliError prints them.
  * @param {CommandLike} program
  * @param {string[]} words the words of the run after the program name
- * @param {{findEntry?: FindEntry}} [context] `findEntry` finds which lookup
- *   command reads a name; without it, no name points at a command
+ * @param {{findEntry?: FindEntry, iconFeatures?: IconFeatures}} [context]
+ *   `findEntry` finds which lookup command reads a name; without it, no name
+ *   points at a command. `iconFeatures` says whether icon features are on;
+ *   without it, they are off
  * @returns {Promise<{word: string, message: string, suggestions: Array<{name: string, reason: string}>} | null>}
  *   null when no word names a command
  */
 export async function unknownCommandAnswer(
   program,
   words,
-  {findEntry = async () => null} = {},
+  {findEntry = async () => null, iconFeatures = async () => false} = {},
 ) {
   const first = firstWord(words, program);
   if (!first) return null;
   const {word} = first;
   const message = `unknown command '${word}'`;
   // Only runs that parse: a line that fails again names nothing that works.
-  const runs = (await pointed(first, program, findEntry))
+  const runs = (await pointed(first, program, findEntry, iconFeatures))
     .filter(r => runParses(program, r.words))
     .map(r => ({
       name: [
@@ -733,15 +803,17 @@ export async function unknownCommandAnswer(
       reason: r.reason,
     }));
   if (runs.length > 0) return {word, message, suggestions: runs};
-  const names = visible(program).map(c => c.name());
-  const near = nearNames(word, names);
+  const near = nearNames(word, visible(program).map(c => c.name()));
+  // When nothing fits, the help lists every command with what it does. A
+  // bare list of names would put the first one (`init`, which writes files)
+  // where a reader looks for the answer.
   return {
     word,
     message,
     suggestions:
       near.length > 0
         ? near.map(name => ({name, reason: 'did you mean this?'}))
-        : names.map(name => ({name, reason: 'available command'})),
+        : [{name: 'help', reason: 'every command, with what it does'}],
   };
 }
 
@@ -764,4 +836,19 @@ export async function findEntry(name) {
   return words.length >= 3
     ? {command: words[1], name: words.slice(2).join(' ')}
     : null;
+}
+
+/**
+ * Whether icon features are on in the project the run is in, by the one gate
+ * that decides it (spec:AST-084), loaded only when an icon word needs it.
+ * @type {IconFeatures}
+ */
+export async function iconFeaturesOn() {
+  const [{Project}, {iconFeatureGate}] = await Promise.all([
+    import('../../../foundation/config/project.mjs'),
+    import('../../../foundation/integrations/icon-features.mjs'),
+  ]);
+  const cwd = process.cwd();
+  const project = Project.lastLoaded(cwd) ?? (await Project.load(cwd));
+  return iconFeatureGate(project).on;
 }

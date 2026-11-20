@@ -2,13 +2,18 @@
 
 /**
  * @file The answer to a word the CLI has no command for names the command
- * the run meant when the words point at one, else near names, else every
- * command. Each run it names parses, and the real CLI runs it.
+ * the run meant when the words point at one, else the names a typo of the
+ * word could be, else the help. Each run it names parses, and the real CLI
+ * runs it.
  */
 
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import {describe, it, expect} from 'vitest';
 import {Command} from 'commander';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {writeIconSetProject} from '../../../test-utils/icon-set-fixture.mjs';
 import {unknownCommandAnswer} from './unknown-command.mjs';
 import {
   ADD_WORDS,
@@ -62,7 +67,11 @@ function program() {
   const doctor = root.command('doctor');
   doctor.command('integration').command('validate').argument('[pkg]');
   const experimental = root.command('experimental');
-  experimental.command('icon').argument('[query...]');
+  experimental
+    .command('icon')
+    .argument('[query...]')
+    .option('--list', 'list')
+    .option('--set <set>', 'set');
   experimental
     .command('export')
     .argument('[page]')
@@ -83,9 +92,15 @@ const entries = async name =>
     tokens: {command: 'docs', name: 'tokens'},
   })[name] ?? null;
 
-/** @param {string[]} words */
-async function names(words) {
-  const a = await unknownCommandAnswer(program(), words, {findEntry: entries});
+/**
+ * @param {string[]} words
+ * @param {{iconFeatures?: boolean}} [options] whether icon features are on
+ */
+async function names(words, {iconFeatures = false} = {}) {
+  const a = await unknownCommandAnswer(program(), words, {
+    findEntry: entries,
+    iconFeatures: async () => iconFeatures,
+  });
   return a?.suggestions.map(s => s.name);
 }
 
@@ -124,8 +139,8 @@ describe('the command the words point at', () => {
     ]);
   });
 
-  it('names no experimental command, only the group in the list of commands', async () => {
-    for (const words of [['find-icon', 'grid'], ['icons']])
+  it('names no experimental command where icon features are off', async () => {
+    for (const words of [['find-icon', 'grid'], ['icons'], ['icon', 'arrow']])
       expect((await names(words)) ?? []).not.toContainEqual(
         expect.stringMatching(/^astryx experimental /),
       );
@@ -153,14 +168,79 @@ describe('the command the words point at', () => {
     expect(a?.suggestions.every(s => !s.name.startsWith('astryx '))).toBe(true);
   });
 
-  it('falls back to near names, else every command', async () => {
+  it('falls back to the names a typo of the word could be, else the help', async () => {
     expect(await names(['componet'])).toEqual(['component']);
     const far = await unknownCommandAnswer(program(), ['frobnicate'], {
       findEntry: entries,
     });
-    expect(far?.suggestions.map(s => s.reason)).toEqual(
-      Array(far?.suggestions.length).fill('available command'),
-    );
+    expect(far?.suggestions).toEqual([
+      {name: 'help', reason: 'every command, with what it does'},
+    ]);
+  });
+});
+
+describe('a typo of a command', () => {
+  it('names the command a typo makes: one edit in a short word, two in a longer one, a swap counting as one', async () => {
+    for (const [typo, meant] of [
+      ['templat', 'template'],
+      ['tempalte', 'template'],
+      ['compnent', 'component'],
+      ['compoennt', 'component'],
+      ['dcos', 'docs'],
+      ['doc', 'docs'],
+      ['inti', 'init'],
+      ['int', 'init'],
+      ['swizz', 'swizzle'],
+      ['upgarde', 'upgrade'],
+      ['biuld', 'build'],
+      ['hok', 'hook'],
+      ['experimantal', 'experimental'],
+    ])
+      expect(await names([typo]), typo).toEqual([meant]);
+  });
+
+  it('names no command that only a loose likeness connects, and no command at all when nothing fits', async () => {
+    // `edit` and `lint` are two edits from `init`, a command that writes
+    // files; `start` and `serve` are three from `search`; `icon` would be
+    // three from `init` too.
+    for (const word of ['edit', 'exit', 'lint', 'start', 'serve', 'frobnicate'])
+      expect(await names([word]), word).toEqual(['help']);
+  });
+});
+
+describe('an icon word', () => {
+  it('names the stable icons guide where icon features are off', async () => {
+    expect(await names(['icon'])).toEqual(['astryx docs icons']);
+    expect(await names(['icons'])).toEqual(['astryx docs icons']);
+    expect(await names(['icon', 'search', 'arrow'])).toEqual([
+      'astryx docs icons',
+    ]);
+    expect(await names(['--json', 'icons', 'arrow'])).toEqual([
+      'astryx --json docs icons',
+    ]);
+  });
+
+  it('names the icon finder with the words after it, then the guide, where icon features are on', async () => {
+    const on = {iconFeatures: true};
+    expect(await names(['icon', 'search', 'arrow'], on)).toEqual([
+      'astryx experimental icon arrow',
+      'astryx docs icons',
+    ]);
+    expect(
+      await names(['icons', 'trash', 'can', '--set', 'lucide'], on),
+    ).toEqual([
+      'astryx experimental icon trash can --set lucide',
+      'astryx docs icons',
+    ]);
+    expect(await names(['icon', 'list'], on)).toEqual([
+      'astryx experimental icon --list',
+      'astryx docs icons',
+    ]);
+    // With no words to look for, the guide comes first, then the finder's help.
+    expect(await names(['icon'], on)).toEqual([
+      'astryx docs icons',
+      'astryx experimental icon --help',
+    ]);
   });
 });
 
@@ -228,6 +308,9 @@ describe('words from another command line', () => {
     ]);
     expect(await names(['browse', 'integrations'])).toEqual([
       'astryx discover',
+    ]);
+    expect(await names(['update'])).toEqual([
+      'astryx upgrade --from <old-version>',
     ]);
   });
 
@@ -390,6 +473,61 @@ describe('the CLI', () => {
     expect(bare.suggestions[0].name).toMatch(
       / --json upgrade --from <old-version>$/,
     );
+  });
+
+  it('names the icons guide for an icon word outside a project, and that run works', async () => {
+    const {status, stdout} = await runCli([
+      '--json',
+      'icon',
+      'search',
+      'arrow',
+    ]);
+    expect(status).toBe(1);
+    const envelope = JSON.parse(stdout);
+    expect(envelope.code).toBe('ERR_UNKNOWN_COMMAND');
+    expect(envelope.suggestions).toEqual([
+      {
+        name: 'astryx --json docs icons',
+        reason: 'the guide to icons in Astryx',
+      },
+    ]);
+    const guide = await runCli(['--json', 'docs', 'icons']);
+    expect(guide.status).toBe(0);
+  });
+
+  it('names the icon finder for an icon word where icon features are on, and that run works', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-icon-word-'));
+    try {
+      const cwd = writeIconSetProject(tmp);
+      const {status, stdout} = await runCli(
+        ['--json', 'icon', 'search', 'trash'],
+        cwd,
+      );
+      expect(status).toBe(1);
+      expect(
+        JSON.parse(stdout).suggestions.map(
+          (/** @type {{name: string}} */ s) => s.name,
+        ),
+      ).toEqual([
+        'astryx --json experimental icon trash',
+        'astryx --json docs icons',
+      ]);
+      const found = await runCli(
+        ['--json', 'experimental', 'icon', 'trash'],
+        cwd,
+      );
+      expect(found.status).toBe(0);
+    } finally {
+      fs.rmSync(tmp, {recursive: true, force: true});
+    }
+  });
+
+  it('names the help, not a command that writes files, when nothing fits', async () => {
+    const {status, stdout} = await runCli(['--json', 'frobnicate']);
+    expect(status).toBe(1);
+    expect(JSON.parse(stdout).suggestions).toEqual([
+      {name: 'help', reason: 'every command, with what it does'},
+    ]);
   });
 
   it('reports an unknown command before an option the program does not take', async () => {

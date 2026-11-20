@@ -24,6 +24,7 @@ verified_by:
     packages/cli/foundation/discovery/icon-definition-replaces.test.mjs,
     packages/cli/foundation/agent-docs/agent-docs.test.mjs,
     packages/cli/foundation/discovery/template-placeholders.test.mjs,
+    packages/cli/clients/cli/lib/unknown-command.test.mjs,
   ]
 ---
 
@@ -138,7 +139,10 @@ draws each meaning a bundled template imports.
   `astryx upgrade` write carries one more line, right under its runner line:
   "Need an icon? Run `astryx experimental icon <what it means>` and paste the
   import it prints, instead of copying one from a template or other code."
-  Where they are off, the block has no such line.
+  Where they are off, the block has no such line. Where icon features are
+  on, the answer to an unknown top-level word `icon` or `icons` also names
+  `astryx experimental icon` with the words that follow it; where they are
+  off, it names only `astryx docs icons`.
 
   With no such package loaded and no `experimental.iconSet`, help (apart from
   the marked `experimental` group line), `astryx manifest` (apart from that group: its command, and its
