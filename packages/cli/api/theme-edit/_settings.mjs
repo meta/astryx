@@ -7663,23 +7663,39 @@ export function compileTheme(ctx, data, base) {
             // variants their own fill (a blue card stays blue under flat):
             // the fill goes on the variants that draw the plain surface.
             const keep = surfaceVariantsOf(t);
-            // (A fill the theme sets on the part itself, before or after
-            // the surfaces look, is the part's own: the look's fill never
-            // covers it, from a variant block or the part's own.)
-            const ownFill = data.settings.some(
+            // (A fill the theme sets on the part, itself or through a group
+            // it is in, before or after the surfaces look, is the part's
+            // own: the look's fill never covers it, from a variant block or
+            // the part's own, in the modes that fill is set for; in a mode
+            // it leaves, the look's fill stays.)
+            const ownFills = data.settings.filter(
               (/** @type {any} */ o) =>
-                o.on === t &&
                 !o.state &&
                 !o.when &&
-                /^(?:background-color|background)$/.test(kebab(o.thing)),
+                /^(?:background-color|background)$/.test(kebab(o.thing)) &&
+                (o.on === t || partsOf(ctx, o).includes(t)),
             );
-            if (ownFill && look.backgroundColor != null) {
+            if (ownFills.length && look.backgroundColor != null) {
               Object.assign(
                 block({...s, mode: undefined}, t),
                 Object.fromEntries(
                   Object.entries(look).filter(([k]) => k !== 'backgroundColor'),
                 ),
               );
+              const covered = new Set(
+                ownFills.flatMap((/** @type {any} */ o) =>
+                  o.mode ? [o.mode] : ['light', 'dark'],
+                ),
+              );
+              for (const mode of /** @type {const} */ ([
+                'light',
+                'dark',
+              ]).filter(m => !covered.has(m)))
+                for (const when of keep
+                  ? keep.plain.map(v => `${keep.axis}:${v}`)
+                  : [undefined])
+                  block({...s, mode, when}, t).backgroundColor =
+                    look.backgroundColor;
               continue;
             }
             if (keep && look.backgroundColor != null) {

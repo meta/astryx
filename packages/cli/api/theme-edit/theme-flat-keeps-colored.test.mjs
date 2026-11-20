@@ -85,4 +85,28 @@ describe('flat surfaces', () => {
         );
     }
   }, 240_000);
+  it('never covers a fill the theme sets on the card through a group it is in', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('i', {cwd, like: 'neutral'});
+    await themeEditSet('i', 'background-color', '#ffeecc', {cwd, on: 'containers'});
+    await themeEditSet('i', 'surfaces', 'flat', {cwd});
+    const css = fs.readFileSync(path.join(cwd, 'themes', 'i', 'i.css'), 'utf8');
+    for (const v of ['default', 'transparent', 'muted'])
+      expect(
+        new RegExp(`\\.astryx-card\\[data-variant="${v}"\\][^{]*\\{[^}]*background-color`).test(css),
+        v,
+      ).toBe(false);
+  }, 240_000);
+  it("keeps flat's fill in the mode a one-mode card fill leaves", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('j', {cwd, like: 'neutral'});
+    await themeEditSet('j', 'background-color', '#223344', {cwd, on: 'card', mode: 'dark'});
+    await themeEditSet('j', 'surfaces', 'flat', {cwd});
+    const css = fs.readFileSync(path.join(cwd, 'themes', 'j', 'j.css'), 'utf8');
+    // (Light: the flat fill on the plain cards; dark: the card's own.)
+    expect(css).toMatch(/\.astryx-card\[data-variant="default"\] \{[^}]*background-color:/);
+    expect(css).toMatch(
+      /:is\(\.astryx-card\[data-variant="default"\]\):where\(:scope\[data-theme="dark"\][^{]*\{[^}]*background-color: #223344/,
+    );
+  }, 240_000);
 });
