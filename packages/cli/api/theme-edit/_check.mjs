@@ -893,6 +893,7 @@ export function storedProblems(ctx, slug, data, skip = '') {
   const WHOLE_ONLY = [
     'surfaces',
     'buttons',
+    'badges',
     'base',
     'mode',
     'vibrancy',
@@ -2787,6 +2788,15 @@ const DIAL_WORDS = wordTable(
       outline: 'outlined',
       plain: 'flat',
       minimal: 'flat',
+    },
+    badges: {
+      tint: 'soft',
+      tinted: 'soft',
+      subtle: 'soft',
+      outlined: 'outline',
+      bordered: 'outline',
+      filled: 'solid',
+      fill: 'solid',
     },
     buttons: {
       uppercase: 'caps',
@@ -6259,7 +6269,7 @@ function checkOne(
     );
   if (DIALS[thing]) {
     s.source = 'dial';
-    if (['surfaces', 'buttons', 'type'].includes(thing)) {
+    if (['surfaces', 'buttons', 'badges', 'type'].includes(thing)) {
       if (s.on)
         refuse(
           E.ERR_THEME_BAD_VALUE,
@@ -6322,7 +6332,11 @@ function checkOne(
                             CORNERS.find(
                               ([n]) => lower.replace(/s$/, '') === n,
                             )?.[0] ?? lower,
-                            thing === 'buttons' ? {on: 'button'} : {},
+                            thing === 'buttons'
+                              ? {on: 'button'}
+                              : thing === 'badges'
+                                ? {on: 'badge'}
+                                : {},
                           ),
                         ]
                       : [

@@ -665,6 +665,13 @@ export const DIALS = wordTable({
     examples: ['set my buttons outline', 'set my buttons caps'],
     words: 'cta solid outline outlined soft tint caps uppercase filled',
   },
+  badges: {
+    help: "The badge style, the status and category badges together, in the theme's own status and category colors; the neutral badge keeps its look. solid: each status badge filled with its status color, its text in that color's on-color; each category badge filled with a strong color of its hue, its text in the page color or the primary text color. soft: each status badge a light tint of its color with text in that tint's on-color; the category badges keep their look. outline: each status and category badge a thin line in its own text color, with that text, on the surface it sits on. Each badge takes the first of its colors that reads at 4.5:1. A badge none of whose own colors read on the base falls back to a pair that reads, where one exists, and the set result names it: in solid it keeps its tint; in outline it draws the primary text inside a line of its color. show names a badge that still does not read. A property the theme sets on the badge itself stays, in the modes it is set for. Corners come from the corners dial (corners <value> --on badge).",
+    values: 'solid|soft|outline',
+    examples: ['set my badges soft', 'set my badges outline'],
+    words:
+      'badge badges tag tags label labels chip chips status solid filled soft tint tinted outline outlined',
+  },
   type: {
     help: 'The type personality: how far headings step up from body text and how they are set. compact: small steps (x1.15), semibold. standard: the default (x1.2). editorial: bigger steps (x1.3), tight tracking, semibold. display: big steps (x1.4), heavy weight, tighter tracking (a marketing feel). Text below the base size keeps its standard sizes, so small text stays readable. Works with text-size; a headings setting keeps its weight or tracking whatever the order. Phones (touch screens below 1024px wide) keep the base theme reading sizes.',
     values: Object.keys(TYPE_STYLES).join('|'),
