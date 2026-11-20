@@ -1023,16 +1023,34 @@ function ownWords(k) {
  * The radius Core draws on a part's box in every variant and size, when it
  * is one value and no square corner ("50%" on a status dot or a switch
  * thumb), or null. States and pseudo-elements are not the box at rest.
+ * A value of a prop that every rule names but no rule matches draws no
+ * radius: an aspect ratio is round only in its ellipse shape, so its
+ * rectangle has square corners.
  * @param {{MAP: Record<string, any>}} C
  * @param {string} part
  */
 function drawnRadius(C, part) {
   const rules = C.MAP[part]?.at?.['border-radius'] ?? {};
-  const values = new Set(
-    Object.entries(rules)
-      .filter(([cond]) => !/:/.test(cond))
-      .map(([, v]) => String(v).trim()),
+  const atRest = Object.entries(rules).filter(([cond]) => !/:/.test(cond));
+  /** @type {Record<string, string[]>} */
+  const attrs = C.MAP[part]?.attrs ?? {};
+  const pairsOf = (/** @type {string} */ cond) => {
+    const [first] = cond.split(' ');
+    return first.includes('=') ? first.split(',') : [];
+  };
+  const unruled = Object.entries(attrs).some(
+    ([prop, vals]) =>
+      atRest.length > 0 &&
+      atRest.every(([cond]) =>
+        pairsOf(cond).some(kv => kv.startsWith(`${prop}=`)),
+      ) &&
+      vals.some(
+        val =>
+          !atRest.some(([cond]) => pairsOf(cond).includes(`${prop}=${val}`)),
+      ),
   );
+  if (unruled) return null;
+  const values = new Set(atRest.map(([, v]) => String(v).trim()));
   const [v] = values;
   return values.size === 1 && !/^0(?:px)?$/.test(v) ? v : null;
 }

@@ -491,6 +491,28 @@ describe('the corners an ask names', () => {
     ]);
   }, 240_000);
 
+  it('never takes a radius Core draws for one shape only as the radius of every shape', async ctx => {
+    if (needBases(ctx)) return;
+    // (Core rounds an aspect ratio at 50% only in its ellipse shape: the
+    // default rectangle is square, so its top corners take the round rung.)
+    const {data} = await themeEditHow('aspect-ratios rounded on top', {
+      cwd,
+      theme: 'k',
+    });
+    const text = (data.results ?? [])
+      .map((/** @type {any} */ r) => r.text)
+      .join('\n');
+    expect(text).not.toMatch(/already rounded/);
+    expect(
+      (data.results?.[0]?.commands ?? []).map((/** @type {string} */ c) =>
+        c.replace(/^.*? editor set k /, ''),
+      ),
+    ).toEqual([
+      'border-start-start-radius 16px --on aspect-ratio',
+      'border-start-end-radius 16px --on aspect-ratio',
+    ]);
+  }, 240_000);
+
   it('writes a corner in the radius when its longhand was set before that radius', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('lb', {cwd, like: 'neutral'});
