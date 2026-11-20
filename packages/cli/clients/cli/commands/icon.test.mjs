@@ -69,6 +69,15 @@ describe('astryx experimental icon', () => {
     expect(JSON.parse(many.stdout).data.query).toBe('magni fier');
   });
 
+  it('prints the import that names the icon by its meaning when a definition names it', async () => {
+    const close = await runCli(['experimental', 'icon', 'close'], cwd);
+    expect(close.stdout).toMatch(
+      /meaningImport: +import \{XIcon as CloseIcon\} from '@acme\/glyphs';/,
+    );
+    const trash = await runCli(['experimental', 'icon', 'delete'], cwd);
+    expect(trash.stdout).not.toMatch(/meaningImport:/);
+  });
+
   it('answers icon.search, icon.detail, and icon.list as JSON', async () => {
     const search = JSON.parse(
       (await runCli(['experimental', 'icon', 'close', '--json'], cwd)).stdout,

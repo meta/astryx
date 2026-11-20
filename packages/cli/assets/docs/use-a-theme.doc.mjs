@@ -145,6 +145,10 @@ export const docs = {
           type: 'prose',
           text: 'To create a theme with custom dark mode colors, see {@link generic:author-a-theme}.',
         },
+        {
+          type: 'prose',
+          text: 'To make dark mode the default, pass `mode="dark"` to the root `Theme`. A server-rendered app also sets `<html data-theme="dark">` in its root layout, so the first paint is dark before the app runs.',
+        },
       ],
     },
     {

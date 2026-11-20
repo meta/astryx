@@ -19,6 +19,9 @@
  *   astryx search forms --limit 5        Cap the result count
  *   astryx search button --verbose       Also print score / reason, whole descriptions
  *   astryx search button --json          Typed JSON envelope
+ *
+ * A query that asks for an icon also lists the installed icons that answer
+ * it, last.
  */
 
 import {
@@ -130,6 +133,8 @@ export function registerSearch(program) {
           ]
         : [];
 
+      const icons = iconBlock(result.data.icons);
+
       // No matches is a valid, successful outcome — clean message, exit 0.
       if (results.length === 0) {
         emit(
@@ -139,6 +144,7 @@ export function registerSearch(program) {
             `Try a broader term, or browse: ${run} ${note.length > 0 ? 'docs' : 'component --list'}`,
           ),
           ...discoverHint(run, q, options.type, await addable()),
+          ...icons,
         );
         return answered;
       }
@@ -202,10 +208,36 @@ export function registerSearch(program) {
         }),
         ...note,
         ...discoverHint(run, q, options.type, await addable()),
+        ...icons,
       );
       return answered;
     },
   });
+}
+
+/**
+ * The icon section's text: one line per icon, its id, set and import line.
+ * The set reads as the entry's `name` names it, so a set two packages ship
+ * shows its package (`@acme/glyphs/glyphs`). The JSON has the score, reason
+ * and command.
+ * @param {import('../../../api/search/search.type.mjs').SearchIconSection | undefined} icons
+ */
+function iconBlock(icons) {
+  if (!icons) return [];
+  const {matchCount, results} = icons;
+  return [
+    section(
+      matchCount > results.length
+        ? `Icons (${results.length} of ${matchCount})`
+        : `Icons (${results.length})`,
+      results
+        .map(
+          icon =>
+            `${icon.id} (${icon.name.slice(0, -icon.id.length - 1)}): ${icon.import}`,
+        )
+        .join('\n'),
+    ),
+  ];
 }
 
 /**

@@ -27,6 +27,7 @@ import yaml from 'yaml';
 
 import {ungated} from './ci-pr-gate.mjs';
 import {isInteractionSpec, selectProofs} from './playwright-legs.mjs';
+import {withoutCheckoutRetries} from './lib/checkout-retries.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const ci = yaml.parse(
@@ -120,7 +121,9 @@ describe('WebKit interaction proof routing', () => {
     expect(decide(webkit).uses).toBe(
       './.test-scope/.github/actions/test-scope',
     );
-    expect(webkit.steps.indexOf(decide(webkit))).toBe(1);
+    expect(withoutCheckoutRetries(webkit.steps).indexOf(decide(webkit))).toBe(
+      1,
+    );
     expect(decide(webkit).with).toMatchObject({
       'outside-pull-request':
         "${{ inputs.operation == 'webkit-weekly' && 'run' || 'skip' }}",
@@ -139,11 +142,14 @@ describe('WebKit interaction proof routing', () => {
       'Require a leg for every share',
     ]);
     // Every step after the leg count also waits for this leg to have a share.
-    const counted = webkit.steps.indexOf(
+    // A checkout's second try and stop carry its own condition
+    // (ci-checkout-timeout.test.mjs).
+    const scoped = withoutCheckoutRetries(webkit.steps);
+    const counted = scoped.indexOf(
       step(webkit, "Count this run's WebKit legs"),
     );
     const share = "steps.legs.outputs.runs == 'true'";
-    for (const [index, candidate] of webkit.steps.entries()) {
+    for (const [index, candidate] of scoped.entries()) {
       if (index < 2 || guards.has(candidate.name)) continue;
       const gate = index <= counted ? applies : `${applies} && ${share}`;
       // Only the hint and the evidence upload run after a failed step, and

@@ -135,11 +135,14 @@ describe('a one-mode theme', () => {
       mode: 'light',
     });
     expect(light.data.notes.join(' ')).toMatch(/applies there/);
-    const own = await refusal(() =>
-      themeEditSet('om', 'color', '#00ff00', {cwd, on: 'button', mode: 'dark'}),
+    const own = await themeEditSet('om', 'color', '#00ff00', {
+      cwd,
+      on: 'button',
+      mode: 'dark',
+    });
+    expect(own.data.notes.join(' ')).toMatch(
+      /its own mode, the same as no --mode/,
     );
-    expect(own.code).toBe('ERR_THEME_NO_MODE');
-    expect(own.run[0]).toMatch(/set om color '#00ff00' --on button$/);
   }, 240_000);
 });
 

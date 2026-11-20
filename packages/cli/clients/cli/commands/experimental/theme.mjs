@@ -586,9 +586,15 @@ function changeBlocks(r) {
   const unchanged = /** @type {any} */ (d.notes ?? []).some(
     (/** @type {string} */ n) => n.startsWith('no change: '),
   );
+  const drawnAlready = /** @type {any} */ (d.notes ?? []).some(
+    (/** @type {string} */ n) =>
+      n.startsWith('no change: ') && n.includes(' already draws '),
+  );
   const done =
     unchanged && d.action === 'set'
-      ? `[ok] ${d.theme}: ${describe(s)} was already set; nothing changed`
+      ? drawnAlready
+        ? `[no change] ${d.theme}: ${describe(s)} already shows; nothing written`
+        : `[ok] ${d.theme}: ${describe(s)} was already set; nothing changed`
       : d.was != null
         ? `[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`
         : `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `removed ${describe(s)}${alsoRemovedText(d)}; now ${/** @type {any} */ (d).now ?? "the base theme's value"} applies`}`;
@@ -602,6 +608,7 @@ function changeBlocks(r) {
     missed: _missed,
     missedParts: _missedParts,
     missedOn: _missedOn,
+    missedWhere: _missedWhere,
     ...rest
   } = /** @type {any} */ (d);
   const status = newProblems.length
@@ -632,14 +639,15 @@ function changeBlocks(r) {
  * named, near the top of a change or a new theme, so a head of the
  * output keeps it; show names the first ones with their lines, and show
  * --json lists each.
- * @param {{missed?: number, missedParts?: number, missedOn?: string[]}} d
+ * @param {{missed?: number, missedParts?: number, missedOn?: string[], missedWhere?: string[]}} d
  */
 function missedLine(d) {
-  const {missed = 0, missedParts = missed, missedOn = []} = d;
+  const {missed = 0, missedParts = missed, missedOn = [], missedWhere = []} = d;
+  const named = missedWhere.length ? missedWhere : missedOn;
   if (!missed) return [];
   return [
     record({
-      missed: `${missed} miss${missed > 1 ? 'es' : ''} on ${missedParts} part${missedParts > 1 ? 's' : ''} the theme's changes did not reach${missedOn.length ? ` (${missedOn.join(', ')})` : ''}: show lists the first with their lines; show --json lists each`,
+      missed: `${missed} miss${missed > 1 ? 'es' : ''} on ${missedParts} part${missedParts > 1 ? 's' : ''} the theme's changes did not reach${named.length ? ` (${named.slice(0, 6).join(', ')}${named.length > 6 ? `, and ${named.length - 6} more` : ''})` : ''}: each still shows the base theme's own look there. Keep each one, or bring it in line with your changes: show lists the first misses with their lines, and show --json has every one`,
     }),
   ];
 }
@@ -1613,9 +1621,9 @@ function defineGroup(parent, doc) {
               commands: (cmd.commands ?? [])
                 .filter(command => commandAvailable(command, helpBase()))
                 .map(command => ({
-                name: command.name(),
-                summary: command.summary() || command.description(),
-              })),
+                  name: command.name(),
+                  summary: command.summary() || command.description(),
+                })),
             },
           }),
         );
@@ -1672,9 +1680,18 @@ export function registerExperimentalTheme(group, program) {
   explained(theme, groupDoc);
   // The run's base may not serve a line's command; help then leaves it out.
   const overrides = [
-    ['experimental theme targets', `  ${getCliInvocation()} experimental theme targets          Every themeable class, with its props and states\n`],
-    ['experimental theme editor how', `  ${getCliInvocation()} experimental theme editor how <part>  What one part reads, and the commands that change it\n`],
-    ['component <Name>', `  ${getCliInvocation()} component <Name>                    One component's theming table\n`],
+    [
+      'experimental theme targets',
+      `  ${getCliInvocation()} experimental theme targets          Every themeable class, with its props and states\n`,
+    ],
+    [
+      'experimental theme editor how',
+      `  ${getCliInvocation()} experimental theme editor how <part>  What one part reads, and the commands that change it\n`,
+    ],
+    [
+      'component <Name>',
+      `  ${getCliInvocation()} component <Name>                    One component's theming table\n`,
+    ],
   ];
   theme.addHelpText(
     'after',
@@ -2263,9 +2280,13 @@ export function registerExperimentalTheme(group, program) {
             ...missedLine(/** @type {any} */ (r.data)),
             ...changeFields(
               /** @type {any} */ (
-                (({missed: _m, missedParts: _p, missedOn: _o, ...x}) => x)(
-                  /** @type {any} */ (r.data),
-                )
+                (({
+                  missed: _m,
+                  missedParts: _p,
+                  missedOn: _o,
+                  missedWhere: _w,
+                  ...x
+                }) => x)(/** @type {any} */ (r.data))
               ),
             ),
             `Tip: ${EDITOR} set ${r.data.theme} <thing> <value>, or ${HOW} "<what you want>"`,

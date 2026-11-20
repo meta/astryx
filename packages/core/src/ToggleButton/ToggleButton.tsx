@@ -401,6 +401,7 @@ export function ToggleButton({
             themeProps('toggle-button', {
               isPressed: isPressed ? 'true' : 'false',
               elevation,
+              grouped: group != null ? 'grouped' : null,
             }),
             className,
           )}

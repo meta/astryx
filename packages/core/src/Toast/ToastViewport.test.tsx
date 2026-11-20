@@ -200,9 +200,7 @@ describe('Toast responsive layout', () => {
 
     const viewport = screen.getByRole('region', {name: 'Notifications'});
     const body = within(viewport).getByText(LONG_TOAST_BODY);
-    const toast = body.closest('[data-type]') as HTMLElement;
-    const mediaWrapper = toast.firstElementChild as HTMLElement;
-    const layoutRow = mediaWrapper.firstElementChild as HTMLElement;
+    const layoutRow = body.parentElement as HTMLElement;
     const endArea = body.nextElementSibling as HTMLElement;
     const actionControl = endArea.firstElementChild as HTMLElement;
     const dismissControl = within(endArea).getByRole('button', {

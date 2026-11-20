@@ -110,8 +110,8 @@ The CLI merges this onto `docs`: compressed descriptions replace English ones, b
 ## CLI Flags
 
 ```bash
-astryx component Button                       # Full docs (default)
-astryx --detail compact component Button       # Token-optimized format
+astryx component Button                       # Short answer (default, same as --detail compact)
+astryx --detail full component Button          # Full docs
 astryx --detail brief component Button         # Minimal one-line summary
 astryx --lang zh component Button              # Chinese prose, same structure
 astryx --lang dense component Button           # Compressed prose, same structure

@@ -96,14 +96,14 @@ export const docs = {
       name: 'startIcon',
       type: 'ReactNode | IconType',
       description:
-        'Icon to display at the start of the input, before any filter tokens. Forwarded to the internal Tokenizer. Accepts a semantic icon name, an SVG icon component, or a ReactNode directly.',
+        'Icon to display at the start of the input, before any filter tokens; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element. Forwarded to the internal Tokenizer.',
       slotElements: [{__element: 'Icon', props: {icon: 'search', size: 'sm'}}],
     },
     {
       name: 'statusVariant',
-      type: "'attached' | 'detached'",
+      type: "'attached' | 'detached' | 'tooltip'",
       description:
-        'How the status message is placed relative to the input. attached overlaps directly below the input (bordered treatment); detached floats below as a separate element with spacing.',
+        'How the status message is placed relative to the input. attached overlaps directly below the input (bordered treatment); detached floats below as a separate element with spacing; tooltip reveals the message in an info-tip button.',
       default: "'attached'",
     },
     {
@@ -406,13 +406,13 @@ export const docsZh = {
       name: 'startIcon',
       type: 'ReactNode | IconType',
       description:
-        '在输入框开头（筛选 token 之前）显示的图标，转发给内部的 Tokenizer。接受语义图标名称、SVG 图标组件或直接传入 ReactNode。',
+        '在输入框开头（筛选 token 之前）显示的图标，转发给内部的 Tokenizer；可传语义图标名称（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
     },
     {
       name: 'statusVariant',
-      type: "'attached' | 'detached'",
+      type: "'attached' | 'detached' | 'tooltip'",
       description:
-        '状态消息相对于输入框的放置方式。attached 直接叠加在输入框下方（带边框处理）；detached 作为独立元素浮于下方并留有间距。',
+        '状态消息相对于输入框的放置方式。attached 直接叠加在输入框下方（带边框处理）；detached 作为独立元素浮于下方并留有间距；tooltip 在状态图标的提示气泡中显示消息。',
       default: "'attached'",
     },
     {
@@ -561,9 +561,9 @@ export const docsDense = {
     isDisabled: 'Disables entire component.',
     status: 'Validation status object w/ type + optional message.',
     startIcon:
-      'Icon at input start, before filter tokens. Forwarded to internal Tokenizer.',
+      'Icon at input start, before filter tokens. Forwarded to internal Tokenizer; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     statusVariant:
-      'How status message is placed: attached overlaps below input; detached floats below w/ spacing.',
+      'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip shows on status icon.',
     maxTokenLength: 'Max char length for filter value display in tokens.',
     maxOperatorMenuItems:
       'Max suggestions in string/entity value typeaheads; excludes main field search + enum menus.',

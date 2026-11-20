@@ -143,9 +143,16 @@ describe("an input's focus ring, asked per mode, per status, as a question", () 
     });
     expect(
       (none.data.results ?? []).flatMap(x =>
-        x.commands.filter(c => / editor set /.test(c)),
+        x.commands
+          .filter(c => / editor set /.test(c))
+          .map(c => c.replace(/^.* editor /, '')),
       ),
-    ).toEqual([]);
+    ).toEqual([
+      'set f box-shadow none --on inputs --when status:error --state focus-within',
+    ]);
+    expect(JSON.stringify(none.data)).toMatch(
+      /Keyboard users then cannot see where they are/,
+    );
     expect(
       (await top('make the focus ring on inputs 50% more transparent', 'f'))
         .commands[0],
@@ -182,7 +189,7 @@ describe('a hover shadow on inputs', () => {
       /box-shadow: inset 0 0 0 2px var\(--color-accent-muted\)/,
     );
     expect(css).toMatch(
-      /\.astryx-text-input\[data-status="error"\]:focus-within \{\s*box-shadow: none;/,
+      /\.astryx-text-input\[data-status="error"\]:focus-within \{\s*box-shadow: inset 0 0 0 2px var\(--color-accent-muted\);/,
     );
   }, 240_000);
 });

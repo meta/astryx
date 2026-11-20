@@ -28,6 +28,7 @@ import {
   PICTURE_TAKEN,
   PICTURE_WINDOW,
   SETTLE_ANIMATIONS,
+  AWAIT_QUIET,
   eachAtOnce,
 } from './picture-window.mjs';
 import {FONT_PROBE_PREFIX, probeFonts} from './font-probe.mjs';
@@ -158,7 +159,9 @@ function event(method, sessionId) {
  * @param {number} i
  */
 async function picture({html, png, mode}, i) {
-  const {targetId} = await send('Target.createTarget', {url: 'about:blank'});
+  // Each page in a window of its own: a page in a background tab runs
+  // no animation frames, so a chart drawn over frames never finishes.
+  const {targetId} = await send('Target.createTarget', {url: 'about:blank', newWindow: true});
   const {sessionId} = await send('Target.attachToTarget', {
     targetId,
     flatten: true,
@@ -188,12 +191,20 @@ async function picture({html, png, mode}, i) {
   const loaded = event('Page.loadEventFired', sessionId);
   await send('Page.navigate', {url: pathToFileURL(html).href}, sessionId);
   await loaded;
+  // The page draws, at the window's size, until it is quiet (a chart's
+  // drawing over frames ends).
+  await send('Runtime.evaluate', {expression: AWAIT_QUIET, awaitPromise: true}, sessionId);
   // An overlay drawn open plays its opening animation (a fade-in) as the
   // page loads: it is run to its end, and a looping one held at a frame a
   // person sees (SETTLE_ANIMATIONS), before the picture.
   await send('Runtime.evaluate', {expression: SETTLE_ANIMATIONS}, sessionId);
   const metrics = await send('Page.getLayoutMetrics', {}, sessionId);
   const size = metrics.cssContentSize ?? metrics.contentSize;
+  // A picture beyond the window makes the page see a resize; a part that
+  // redraws on it (a responsive chart) would start over and be pictured
+  // empty. The page's script is held while the picture is taken; the page
+  // stays laid out for the window (its vh, fixed parts and media queries).
+  await send('Emulation.setScriptExecutionDisabled', {value: true}, sessionId);
   const {data} = await send(
     'Page.captureScreenshot',
     {
@@ -210,6 +221,7 @@ async function picture({html, png, mode}, i) {
     sessionId,
   );
   fs.writeFileSync(png, Buffer.from(data, 'base64'));
+  await send('Emulation.setScriptExecutionDisabled', {value: false}, sessionId);
   // The fonts the picture drew its text in, for the editor's note.
   const fonts = await probeFonts((method, params) =>
     send(method, params, sessionId),

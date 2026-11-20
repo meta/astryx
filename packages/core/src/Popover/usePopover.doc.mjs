@@ -17,6 +17,12 @@ export const docs = {
   ],
   params: [
     {
+      name: 'anchorRef',
+      type: 'React.RefObject<Element | null>',
+      description:
+        'External ref to use as the popover anchor: the element the popover sits on when it is not the trigger. Any element with a CSS box works (an HTML element or an <svg> element; a shape inside an <svg> warns in development). The trigger keeps its toggle and ARIA; the anchor gets neither and is never a trigger. The ref is read on open, on each render of your component, and on each show(). To move an open popover, set anchorRef.current and call show(). A show() while the ref holds no element waits, and opens when the ref is next read and holds one. With no trigger attached, open it with show(). Omit it and the trigger is the anchor.',
+    },
+    {
       name: 'onShow',
       type: '() => void',
       description: 'Callback fired when the popover becomes visible.',
@@ -25,7 +31,7 @@ export const docs = {
       name: 'onHide',
       type: '() => void',
       description:
-        'Callback fired when the popover is hidden. Use this to return focus to the trigger when needed.',
+        'Callback fired when the popover is hidden. Focus returns on its own as the popover closes, and there is no option to turn that off; to send focus somewhere else, focus that element here.',
     },
     {
       name: 'xstyle',
@@ -179,6 +185,11 @@ export const docs = {
       },
       {
         guidance: true,
+        description:
+          'Do not add your own focus return: the hook returns focus as the popover closes, to the opener or a stand-in, and has no option to turn that off.',
+      },
+      {
+        guidance: true,
         description: 'Use popover as the broad canonical surface target.',
       },
       {
@@ -204,8 +215,11 @@ export const docsDense = {
   description:
     'Headless click-triggered popovers w/ focus trap, auto-focus, light dismiss, Escape, optional hidden close button. Every surface emits the canonical popover target. Custom compositions needing a distinct seam pass/document an owned surfaceTarget.',
   paramDescriptions: {
+    anchorRef:
+      'ref to the element popover sits on when not the trigger; read on open, each render and each show(); position only, no trigger ARIA or handlers.',
     onShow: 'fires when popover becomes visible.',
-    onHide: 'fires when popover hides; use to return focus when needed.',
+    onHide:
+      'fires when popover hides; focus a specific element here to send focus there (focus return then leaves it).',
     xstyle: 'StyleX styles for content wrapper, after default surface.',
     hasLightDismiss: 'whether outside click dismisses popover.',
     hasEscapeDismiss:

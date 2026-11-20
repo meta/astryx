@@ -22,6 +22,7 @@ import {auditCliSelfDocs} from '../../foundation/discovery/cli-self-docs.mjs';
 import {
   doctor,
   checkCliCommand,
+  checkInstallGuidance,
   checkAuthoringDocs,
   checkCliDocs,
   checkDocsTree,
@@ -35,6 +36,7 @@ import {
   checkCoreStylesheets,
   checkPackageManager,
   checkComputerIntegrationsAvailable,
+  checkComputerIntegrations,
 } from './doctor.mjs';
 import {installCommandFor} from './_adapter.mjs';
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
@@ -332,7 +334,7 @@ describe('the core-installed check in a fresh clone', () => {
         configPath: null,
       }).fix,
     ).toBe(
-      'Install the design system: `npm install @astryxdesign/core` (or yarn/pnpm/bun).',
+      'Install the design system: `npm install -E @astryxdesign/core@0.7.10`.',
     );
   });
 });
@@ -536,6 +538,106 @@ describe('the command that adds an integration installed for the computer', () =
   });
 });
 
+describe('checkComputerIntegrations outside a project', () => {
+  const widgets = /** @type {any} */ ({
+    name: '@acme/widgets',
+    version: '1.0.0',
+  });
+  const ctx = (
+    /** @type {any[]} */ issues,
+    /** @type {any} */ update = null,
+    withTool = false,
+  ) =>
+    /** @type {any} */ ({
+      cwd: os.tmpdir(),
+      computerIntegrations: [widgets],
+      loadedComputerIntegrations: ['@acme/widgets'],
+      computerIntegrationIssues: issues,
+      integrationUpdate: update,
+      integrationsUpdateWithTool: withTool,
+    });
+  const thing = {
+    package: '@acme/widgets',
+    severity: 'warning',
+    message:
+      'Component source "Thing.tsx" has no same-stem metadata file Thing.doc.mjs, so Astryx ignores it.',
+  };
+
+  it('passes for an integration it uses whose contributions have no issues', () => {
+    expect(checkComputerIntegrations(ctx([]))).toMatchObject({
+      status: 'pass',
+      message: 'Used outside a project: @acme/widgets@1.0.0.',
+    });
+  });
+
+  // The everyday commands point at doctor for these issues
+  // (integration-warnings.mjs), so doctor names them.
+  it('warns and names each issue in the contributions of an integration it uses', () => {
+    const c = checkComputerIntegrations(
+      ctx([thing], (/** @type {string} */ name) => `npm i -g ${name}@latest`),
+    );
+    expect(c.status).toBe('warn');
+    expect(c.message).toBe(
+      'Used outside a project: @acme/widgets@1.0.0. @acme/widgets@1.0.0 has 1 integration issue: Component source "Thing.tsx" has no same-stem metadata file Thing.doc.mjs, so Astryx ignores it.',
+    );
+    expect(c.fix).toBe(
+      'If you maintain @acme/widgets, the fix in the issue is yours. Otherwise, a newer release of @acme/widgets needs to fix it. To get one, run `npm i -g @acme/widgets@latest`.',
+    );
+  });
+
+  it("counts several issues, and in a tool's package set says the tool updates it", () => {
+    const c = checkComputerIntegrations(
+      ctx(
+        [thing, {...thing, message: 'Template "x" names no source.'}],
+        null,
+        true,
+      ),
+    );
+    expect(c.message).toContain(
+      '@acme/widgets@1.0.0 has 2 integration issues: ',
+    );
+    expect(c.fix).toBe(
+      'If you maintain @acme/widgets, the fixes in the issues are yours. Otherwise, a newer release of @acme/widgets needs to fix them. It updates with the tool that runs this CLI.',
+    );
+  });
+
+  it('names no update step where none can be named, as under Volta', () => {
+    const c = checkComputerIntegrations(ctx([thing], () => null));
+    expect(c.fix).toBe(
+      'If you maintain @acme/widgets, the fix in the issue is yours. Otherwise, a newer release of @acme/widgets needs to fix it.',
+    );
+  });
+});
+
+describe('checkInstallGuidance', () => {
+  it('is left out when no integration gives guidance', () => {
+    expect(checkInstallGuidance({cwd: mkProject({}), integrations: [{name: '@acme/a'}]})).toBeNull();
+  });
+
+  it('passes and names the guidance and who gave it', () => {
+    const c = checkInstallGuidance({
+      cwd: mkProject({}),
+      integrations: [{name: '@acme/a', installGuidance: 'Add {packages}, then relock'}],
+    });
+    expect(c).toMatchObject({id: 'install-guidance', status: 'pass'});
+    expect(c.message).toContain('@acme/a');
+    expect(c.message).toContain('Add {packages}, then relock');
+  });
+
+  it('warns when integrations give different guidance', () => {
+    const c = checkInstallGuidance({
+      cwd: mkProject({}),
+      integrations: [
+        {name: '@acme/a', installGuidance: 'Add {packages}, then relock'},
+        {name: '@acme/b', installGuidance: 'Ask the platform team'},
+      ],
+    });
+    expect(c).toMatchObject({id: 'install-guidance', status: 'warn'});
+    expect(c.message).toContain('@acme/a (`Add {packages}, then relock`)');
+    expect(c.fix).toContain('installGuidance');
+  });
+});
+
 describe('checkCliCommand', () => {
   it('is informational when no integration declares a command', () => {
     const dir = mkProject({'pnpm-lock.yaml': ''});
@@ -689,7 +791,80 @@ describe('checkProviderIdentity', () => {
     });
     expect(c.status).toBe('warn');
     expect(c.message).toBe(message);
-    expect(c.fix).toContain('providerId');
+    expect(c.fix).toBe(
+      'Give each integration its own `providerId` in astryx.integration.*. ' +
+        "A renamed package may keep its predecessor's ID only when the " +
+        'predecessor is no longer installed.',
+    );
+  });
+
+  it('names both fixes when only some conflicts are declared by both', () => {
+    /** @param {string} name @param {boolean} bothDeclare */
+    const conflict = (name, bothDeclare) =>
+      loaded({
+        name,
+        __spec: name,
+        __providerConflict: {
+          providerId: '@acme/widgets',
+          claimedBy: '@acme/widgets',
+          message: `${name} message.`,
+          ...(bothDeclare ? {bothDeclare: true} : {}),
+        },
+      });
+    const c = checkProviderIdentity({
+      integrations: [
+        loaded(),
+        conflict('@acme/widgets-legacy', true),
+        conflict('@acme/renamed', false),
+      ],
+    });
+    expect(c.status).toBe('warn');
+    expect(c.message).toBe(
+      '@acme/widgets-legacy message. @acme/renamed message.',
+    );
+    expect(c.fix).toBe(
+      'Where both manifests declare the ID: Both manifests declare the same ' +
+        '`providerId`. If they are one integration installed under two ' +
+        'names, keep one of the two dependencies; if they are different ' +
+        'integrations, give each its own `providerId` in ' +
+        'astryx.integration.*. For the other conflicts: Give each ' +
+        'integration its own `providerId` in astryx.integration.*. A ' +
+        "renamed package may keep its predecessor's ID only when the " +
+        'predecessor is no longer installed.',
+    );
+  });
+
+  it('offers keeping one dependency when both manifests declare the ID', () => {
+    const message =
+      '@acme/widgets-legacy@1.0.0 and @acme/widgets@1.0.0 both claim ' +
+      'provider ID "@acme/widgets". @acme/widgets@1.0.0 loads first and is ' +
+      'used; @acme/widgets-legacy@1.0.0 contributes nothing. Both manifests ' +
+      'declare this provider ID. If they are one integration installed ' +
+      'under two names, keep one of the two dependencies; otherwise one ' +
+      'package must change its providerId.';
+    const c = checkProviderIdentity({
+      integrations: [
+        loaded(),
+        loaded({
+          name: '@acme/widgets-legacy',
+          __spec: '@acme/widgets-legacy',
+          __providerConflict: {
+            providerId: '@acme/widgets',
+            claimedBy: '@acme/widgets',
+            message,
+            bothDeclare: true,
+          },
+        }),
+      ],
+    });
+    expect(c.status).toBe('warn');
+    expect(c.message).toBe(message);
+    expect(c.fix).toBe(
+      'Both manifests declare the same `providerId`. If they are one ' +
+        'integration installed under two names, keep one of the two ' +
+        'dependencies; if they are different integrations, give each its ' +
+        'own `providerId` in astryx.integration.*.',
+    );
   });
 
   it('is part of the report doctor returns', async () => {

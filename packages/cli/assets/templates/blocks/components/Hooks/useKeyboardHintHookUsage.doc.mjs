@@ -11,5 +11,4 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Button', 'Icon', 'Card', 'Layout'],
-  icons: {StarIcon: 'star'},
 };

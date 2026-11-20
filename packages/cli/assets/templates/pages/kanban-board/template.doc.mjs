@@ -10,15 +10,4 @@ export const doc = {
   keywords: ['kanban', 'board', 'sprint', 'tasks', 'pipeline'],
   isReady: true,
   category: 'Tools - Kanban Board',
-  icons: {
-    ArrowPathIcon: 'refresh',
-    ArrowsUpDownIcon: 'arrowsUpDown',
-    CheckCircleIcon: 'success',
-    ClipboardDocumentCheckIcon: 'clipboard',
-    FunnelIcon: 'funnel',
-    InboxIcon: 'inbox',
-    InformationCircleIcon: 'info',
-    MagnifyingGlassIcon: 'search',
-    PlusIcon: 'add',
-  },
 };

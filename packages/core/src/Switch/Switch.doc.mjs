@@ -162,9 +162,9 @@ export const docs = {
     },
     {
       name: 'labelIcon',
-      type: 'IconType',
+      type: 'ReactNode | IconType',
       description:
-        'Icon displayed before the label text. See `astryx docs icons` for valid semantic names.',
+        "Icon displayed before the label text; pass a semantic icon name such as 'search' (see `astryx docs icons`), an icon component, or an icon element.",
     },
     {
       name: 'labelTooltip',
@@ -210,6 +210,33 @@ export const docs = {
         visualProps: ['labelPosition', 'labelSpacing'],
       },
       {className: 'astryx-switch-label'},
+    ],
+    vars: [
+      {
+        name: '--_switch-field-gap',
+        description:
+          'Room between the switch and its label; set by gap on the switch-field target',
+        default: 'var(--spacing-2)',
+        private: true,
+      },
+      {
+        name: '--_switch-thumb-width',
+        description:
+          "Thumb width; set by width on the switch-thumb target. The thumb's rest under a finger reads it",
+        default: '14px or 16px off, 16px or 20px on, by size',
+        private: true,
+      },
+      {
+        name: '--_switch-thumb-height',
+        description: 'Thumb height; set by height on the switch-thumb target',
+        default: '14px or 16px off, 16px or 20px on, by size',
+        private: true,
+      },
+    ],
+    derived: [
+      {property: 'gap', vars: ['--_switch-field-gap'], replaces: true},
+      {property: 'width', vars: ['--_switch-thumb-width'], replaces: true},
+      {property: 'height', vars: ['--_switch-thumb-height'], replaces: true},
     ],
   },
   usage: {
@@ -355,8 +382,9 @@ export const docsZh = {
     },
     {
       name: 'labelIcon',
-      type: 'IconType',
-      description: '显示在标签文本前面的图标。',
+      type: 'ReactNode | IconType',
+      description:
+        "显示在标签文本前面的图标；可传语义图标名称（如 'search'，见 `astryx docs icons`）、图标组件或图标元素。",
     },
     {
       name: 'labelTooltip',
@@ -394,6 +422,33 @@ export const docsZh = {
         visualProps: ['labelPosition', 'labelSpacing'],
       },
       {className: 'astryx-switch-label'},
+    ],
+    vars: [
+      {
+        name: '--_switch-field-gap',
+        description:
+          'Room between the switch and its label; set by gap on the switch-field target',
+        default: 'var(--spacing-2)',
+        private: true,
+      },
+      {
+        name: '--_switch-thumb-width',
+        description:
+          '滑块宽度；由 switch-thumb 目标上的 width 设置。触摸时滑块的停靠位置读取它',
+        default: '按尺寸：关闭时 14px 或 16px，开启时 16px 或 20px',
+        private: true,
+      },
+      {
+        name: '--_switch-thumb-height',
+        description: '滑块高度；由 switch-thumb 目标上的 height 设置',
+        default: '按尺寸：关闭时 14px 或 16px，开启时 16px 或 20px',
+        private: true,
+      },
+    ],
+    derived: [
+      {property: 'gap', vars: ['--_switch-field-gap'], replaces: true},
+      {property: 'width', vars: ['--_switch-thumb-width'], replaces: true},
+      {property: 'height', vars: ['--_switch-thumb-height'], replaces: true},
     ],
   },
   usage: {
@@ -481,7 +536,8 @@ export const docsDense = {
       'Status indicator w/ type + message; colored message box, sets aria-invalid on error.',
     onFocus: 'Fired when switch receives focus.',
     onBlur: 'Fired when switch loses focus.',
-    labelIcon: 'Icon before label text.',
+    labelIcon:
+      "Icon before label text; semantic icon name string OK, e.g. 'search' (`astryx docs icons`), or icon component/element.",
     labelTooltip: 'Tooltip text in info icon at label end.',
     labelPosition: 'Which side label appears; "start" places before switch.',
     labelSpacing:

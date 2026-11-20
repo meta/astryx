@@ -18,10 +18,11 @@ import {renderIconSlot, type IconType} from '../Icon';
 import {Text} from '../Text';
 import {
   colorVars,
-  spacingVars,
-  typographyVars,
-  typeScaleVars,
+  focusVars,
   radiusVars,
+  spacingVars,
+  typeScaleVars,
+  typographyVars,
 } from '../theme/tokens.stylex';
 import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {mergeProps} from '../utils/mergeProps';
@@ -32,6 +33,7 @@ import {useLinkComponent} from '../Link/useLinkComponent';
 import {themeProps} from '../utils/themeProps';
 import {isRenderable} from '../utils/isRenderable';
 import {keepDisabledRowUnfocused} from '../DropdownMenu/menuItemRoles';
+import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 
 const styles = stylex.create({
   root: {
@@ -46,6 +48,7 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-element'],
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     color: colorVars['--color-text-primary'],
     backgroundColor: {
       default: 'transparent',
@@ -61,7 +64,10 @@ const styles = stylex.create({
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
     textAlign: 'start',
-    outline: 'none',
+    // The fill alone does not reach 3:1 against the menu. The standard focus
+    // ring (focusOutlineStyles), drawn inside the row by its own width, marks
+    // the focused row after keyboard input.
+    outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
     textDecoration: 'none',
   },
   content: {
@@ -184,6 +190,7 @@ export function NavHeadingMenuItem({
       {...mergeProps(
         themeProps('nav-heading-menu-item', {size}),
         stylex.props(
+          focusOutlineStyles.focusVisible,
           styles.root,
           sizeStyles[size],
           isDisabled && styles.disabled,

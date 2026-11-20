@@ -18,5 +18,4 @@ export const doc = {
   ],
   isReady: true,
   category: 'Login - Split',
-  icons: {CheckCircleIcon: 'success', SquaresPlusIcon: 'apps'},
 };
