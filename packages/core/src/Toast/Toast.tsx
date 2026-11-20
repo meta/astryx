@@ -127,16 +127,18 @@ const styles = stylex.create({
   variantError: {
     backgroundColor: colorVars['--color-background-error-inverted'],
   },
-  // The card's text takes the on-color of the side it picks (FR14), so a
-  // caller's text follows it too.
+  // The card's text takes the on-color of the side it picks (FR14). The
+  // restated token reaches a caller's text too.
   sideText: {
     display: 'contents',
   },
   sideTextOnDark: {
     '--color-text-primary': colorVars['--color-on-dark'],
+    color: colorVars['--color-on-dark'],
   },
   sideTextOnLight: {
     '--color-text-primary': colorVars['--color-on-light'],
+    color: colorVars['--color-on-light'],
   },
   content: {
     flex: 1,
