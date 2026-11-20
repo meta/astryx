@@ -189,6 +189,23 @@ describe('a tint word', () => {
     T,
   );
 
+  it(
+    'names an ink that reads at 4.5:1, never one just short of it',
+    async test => {
+      needsBases(test);
+      // (#111827 reads at only 4.49:1 on #808080, white at 3.95:1: black,
+      // at 5.32:1, is the ink that reads.)
+      const {data} = await themeEditHow('buttons #808080 with white text', {
+        cwd,
+        theme: 'n',
+      });
+      const said = JSON.stringify(data.results ?? []);
+      expect(said).toMatch(/#000000 reads there at 5\.31:1/);
+      expect(said).not.toMatch(/#111827 reads there/);
+    },
+    T,
+  );
+
   for (const [q, part, state] of [
     ['cards tinted blue with white text', 'card', ''],
     [
