@@ -185,6 +185,14 @@ const ROWS = [
     },
   ],
   [
+    'two colors before one accent: the first is it, and the rest is kept',
+    {
+      q: 'bold headings, red #c8102e and blue #003da5 accents',
+      has: ['headings bold', "accent '#c8102e'"],
+      never: /^accent '#003da5'/,
+    },
+  ],
+  [
     'a size and corners together',
     {q: 'checkboxes 16px with 3px corners', never: /contradict/},
   ],
