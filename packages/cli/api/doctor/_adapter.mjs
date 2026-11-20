@@ -113,7 +113,6 @@ import {cssImports} from '../../foundation/render/embedded-imports.mjs';
 import {postcss} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {hostedRun} from '../../foundation/runtime/package-root.mjs';
 import {pointsToDoctor} from '../../foundation/integrations/integration-warnings.mjs';
-import {CORE_COMPARISON_CODES} from '../../foundation/discovery/component-replacement.mjs';
 import {isValidSemver, satisfiesRange} from '../../foundation/env/semver.mjs';
 import * as path from 'node:path';
 import {
@@ -1563,20 +1562,17 @@ export async function computerIntegrationsOutside(cwd) {
     .filter(i => i.__computer && !i.__loadError)
     .map(i => i.name);
   // The everyday commands count these issues when they point at doctor, so
-  // doctor names them. Doctor reads no Core outside a project, so it leaves
-  // out the comparisons with Core components; the everyday commands judge
-  // those against the Core they carry. Core's templates come with the CLI.
+  // doctor names them. Where doctor reads no Core, they name a comparison
+  // with Core components themselves.
   const names = new Set(used);
-  const noCore = project.coreDir() == null;
+  const doctorReadsCore = project.coreDir() != null;
   /** @type {Array<{package: string, severity: string, message: string}>} */
   let issues = [];
   try {
     issues = (await project.issues())
       .filter(
         issue =>
-          names.has(issue.package) &&
-          pointsToDoctor(issue) &&
-          !(noCore && CORE_COMPARISON_CODES.has(issue.code)),
+          names.has(issue.package) && pointsToDoctor(issue, {doctorReadsCore}),
       )
       .map(issue => ({
         package: issue.package,
