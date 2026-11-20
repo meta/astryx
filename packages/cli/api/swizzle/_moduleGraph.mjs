@@ -378,21 +378,28 @@ function publicSurfaceOf(packageDir, srcRoot, originsOf) {
 }
 
 /**
- * The read of each package's public surface, by package and source root.
- * Reading one parses every module the package exports, more than the
- * parsed-module cache keeps, so without this each copy from the same package
- * in one process parses them all again.
- * @type {Map<string, () => PublicSurface>}
+ * Export origins by module, as {@link moduleExportOrigins} memoizes them:
+ * value and type reads apart.
+ * @typedef {{value: Map<string, any>, type: Map<string, any>}} ExportMemos
+ */
+
+/**
+ * The read of each package's public surface, by package and source root,
+ * with the export origins that read found. Reading one parses every module
+ * the package exports, more than the parsed-module cache keeps, so without
+ * this each copy from the same package in one process parses them all again.
+ * @type {Map<string, () => {surface: PublicSurface, memos: ExportMemos}>}
  */
 const surfaceReads = new Map();
 
 /**
  * {@link publicSurfaceOf}, reused while every file and folder it read is
- * unchanged. Each read caches export origins for that read only, so a read
- * after a change sees the package as it is then.
+ * unchanged, with the export origins it found. Each read caches export
+ * origins for that read only, so a read after a change sees the package as
+ * it is then.
  * @param {string} packageDir
  * @param {string} srcRoot
- * @returns {PublicSurface}
+ * @returns {{surface: PublicSurface, memos: ExportMemos}}
  */
 function keptPublicSurfaceOf(packageDir, srcRoot) {
   const key = `${packageDir}\0${srcRoot}`;
@@ -400,13 +407,15 @@ function keptPublicSurfaceOf(packageDir, srcRoot) {
   if (read == null) {
     read = reusedWhileUnchangedSync(
       () => {
+        /** @type {ExportMemos} */
         const memos = {value: new Map(), type: new Map()};
-        return publicSurfaceOf(packageDir, srcRoot, (file, kind) =>
+        const surface = publicSurfaceOf(packageDir, srcRoot, (file, kind) =>
           moduleExportOrigins(file, {
             types: kind === 'type',
             memo: memos[kind],
           }),
         );
+        return {surface, memos};
       },
       {exact: true},
     );
@@ -512,7 +521,16 @@ export function planCopy({
    * @param {{packageDir: string, srcRoot: string, ownerPackage: string}} pkg
    */
   function makeContext({packageDir, srcRoot, ownerPackage}) {
-    const surface = keptPublicSurfaceOf(packageDir, srcRoot);
+    const kept = keptPublicSurfaceOf(packageDir, srcRoot);
+    const {surface} = kept;
+    // The surface read's origins hold while the surface is kept. Copy them in
+    // so this copy reads no exported module again; what this copy adds stays
+    // in its own memo, since the surface's change check does not cover it.
+    for (const kind of /** @type {const} */ (['value', 'type'])) {
+      for (const [file, origins] of kept.memos[kind]) {
+        if (!exportMemos[kind].has(file)) exportMemos[kind].set(file, origins);
+      }
+    }
     /** @param {string} file */
     const inSource = file => file.startsWith(srcRoot + path.sep);
     /**
