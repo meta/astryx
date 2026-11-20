@@ -3,7 +3,8 @@
 /**
  * @file `--only` means one thing to `set` and to the settings reader (one
  * rule, onlyMeans): every `only` set writes, the theme opens with again;
- * set takes none on a part styled on its own; and a saved one there (as
+ * set saves a change on a part styled on its own without it; and a saved
+ * one there (as
  * another editor saved it) is read and built as without it, named in one
  * note, never a refusal of the theme.
  */
@@ -91,24 +92,22 @@ describe('--only, as set writes it and the reader reads it', () => {
   );
 
   it(
-    'on a part styled on its own, set takes no --only and offers the line without it',
+    'on a part styled on its own, set saves the change without --only and says so',
     async () => {
       write([]);
-      /** @type {any} */
-      let e = null;
-      try {
+      const r = /** @type {any} */ (
         await themeEditSet('n', 'text-shadow', 'none', {
           cwd,
           on: 'segmented-control-item',
           state: 'selected',
           only: true,
-        });
-      } catch (x) {
-        e = x;
-      }
-      expect(e?.message).toMatch(/styled on its own already/);
-      expect(JSON.stringify(e)).toMatch(
-        /set n text-shadow none --on segmented-control-item --state selected"/,
+        })
+      );
+      expect(read().settings).toEqual([
+        expect.not.objectContaining({only: true}),
+      ]);
+      expect(notes(r)).toMatch(
+        /--only changes nothing: it is saved without it/,
       );
     },
     T,
