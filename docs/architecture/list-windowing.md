@@ -161,7 +161,7 @@ module stays private while OQ1 is open.
 ### DEC-2 — Virtualizers work in container and page scroll
 
 **Reference:** `architecture:list-windowing/DEC-2`
-**Decider:** `cixzhang`, `2026-11-09 05:52 PT`
+**Decider:** `cixzhang`, `2026-11-09 05:52:51 PT`
 
 Every virtualizer works inside a container scroll area and with page
 (document) scroll (INV4, FR4). No scroll-ref API is required.
@@ -171,7 +171,7 @@ Rejected: a caller-provided scroll ref.
 ### DEC-3 — Common engine requirements
 
 **Reference:** `architecture:list-windowing/DEC-3`
-**Decider:** `cixzhang`, `2026-11-09 05:51 PT`
+**Decider:** `cixzhang`, `2026-11-09 05:51:04 PT`
 
 The shared virtualizer has configurable anchoring and holds scroll positions
 while data streams in. Its engine is the candidate with the best performance
@@ -183,14 +183,14 @@ row-position accuracy.
 ### DEC-4 — The windowing engine and its adapters have a size budget
 
 **Reference:** `architecture:list-windowing/DEC-4`
-**Decider:** `cixzhang`, `2026-11-09 06:35 PT`
+**Decider:** `cixzhang`, `2026-11-09 06:35:51 PT`
 
 INV5's budget is set from the 2026-11-09 measurement of virtua's Virtualizer plus WindowVirtualizer, 4.9 KB with the same build settings.
 
 ### DEC-6 — Table's public windowing API changes only one name
 
 **Reference:** `architecture:list-windowing/DEC-6`
-**Decider:** `cixzhang`, `2026-11-09 06:52 PT`
+**Decider:** `cixzhang`, `2026-11-09 06:52:28 PT`
 
 Table's public windowing API changes only by the `initialViewportHeight`
 rename. `useTableRowsVirtualization` keeps `rowHeight` and renames
