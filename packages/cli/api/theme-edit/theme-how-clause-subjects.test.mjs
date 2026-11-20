@@ -256,6 +256,24 @@ const ROWS = [
     },
   ],
   [
+    'a typed shadow whose hex ends in letters is the shadow as typed',
+    {
+      q: 'shadow 0 2px 6px #0000004d',
+      has: ["--shadow-med '0 2px 6px #0000004d'"],
+    },
+  ],
+  [
+    'a typed ring shadow is the shadow as typed',
+    {
+      q: 'use the shadow 0 0 0 1px #e5e7eb',
+      has: ["--shadow-med '0 0 0 1px #e5e7eb'"],
+    },
+  ],
+  [
+    'a shadow value alone is the shadow as typed',
+    {q: '0 2px 6px #0000004d', has: ["--shadow-med '0 2px 6px #0000004d'"]},
+  ],
+  [
     'a size and corners together',
     {q: 'checkboxes 16px with 3px corners', never: /contradict/},
   ],

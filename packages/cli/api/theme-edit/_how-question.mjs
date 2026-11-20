@@ -960,7 +960,8 @@ function shadowIn(c) {
       .replace(/\u2e34/g, ',') ?? null;
   // ("5px 16px padding": lengths before a word that is no color are no
   // shadow.)
-  const last = found ? /([a-z]+)$/.exec(found)?.[1] : null;
+  // (Only a whole word: a hex color's last digits, "#0000004d", are none.)
+  const last = found ? /(?:^|\s)([a-z]+)$/.exec(found)?.[1] : null;
   if (
     last &&
     last !== 'transparent' &&
