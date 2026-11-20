@@ -25,12 +25,12 @@ export const doc = {
     {
       value: 'init.run',
       description:
-        'The install receipt: the `mode` (`default` | `features`), the features run, agent-doc files written, `agentDocsStatus` (`missing` | `stale` | `current`: the agent docs before the write; null when agent docs were not installed or the write failed), what changed in each (`docsChanges`: `{path, change, from, to}`), any soft `docsError`, whether theme guidance was emitted, the template outcome (`workflow` | `created` | `skipped`) plus its path, and whether the next-steps were emitted (false outside a project, and when `agentDocsStatus` was `current`).',
+        'The install receipt: the `mode` (`default` | `features`), the features run, agent-doc files written, `agentDocsStatus` (`missing` | `stale` | `current`: the agent docs before the write; null when agent docs were not installed or the write failed), what changed in each (`docsChanges`: `{path, change, from, to}`), any soft `docsError`, whether theme guidance was emitted, the template outcome (`workflow` | `created` | `skipped`) plus its path, whether the next-steps were emitted (false outside a project, and when `agentDocsStatus` was `current`), and `to`, `skills`, `user` and `once` (see `init()`).',
     },
     {
       value: 'init.remove',
       description:
-        'The removal receipt — returned when --remove-agents is set: `data.removed` is true when a managed agent-docs block was found and removed, and false when there was none to remove.',
+        'The removal receipt (--remove, or --remove-agents): `removed` (an Astryx block or skill file was removed), `from` (the places removed from), `skills` (`{path, place, action, reason?}` rows), `user` (the `init.user` data, or null).',
     },
     {
       value: 'init.user',
@@ -99,6 +99,17 @@ export const doc = {
       value: 'docs.node',
       description:
         "One node of the docs tree, read by its route: its id, kind, package, title, summary, and breadcrumb, plus a namespace's slots with their children (one level down, each naming its package, and a guide an integration replaced its replaces and replacedPackage) or a typed doc's content, and links ({up, previous, next, related}: the commands that open its parent, its neighbors, and the docs it names).",
+    },
+
+    {
+      value: 'docs.skills',
+      description:
+        'Each skill here: {name, description, package}[].',
+    },
+    {
+      value: 'docs.skill',
+      description:
+        'One skill: {name, description, text}.',
     },
 
     // blog (read from the published RSS feed)
@@ -172,7 +183,7 @@ export const doc = {
       value: 'render.page',
       stability: 'experimental',
       description:
-        'A page rendered to one self-contained file: `input`, `output`, `bytes`, the local files embedded (`files`: modules, stylesheets, images and JSON), the package `stylesheets` cut and inlined, `classes`, `cssBytes`, `images` inlined, the page\u2019s script (`scriptBytes`, and `scriptModules`: how many modules it holds), and `warnings` (`{code, message}`; empty when nothing looked wrong). Experimental: may change or be removed in a patch release.',
+        'A page rendered to one self-contained file: `input`, `output`, `bytes`, the local files embedded (`files`: modules, stylesheets, images and JSON), the package `stylesheets` cut and inlined, `classes`, `cssBytes`, `markupBytes` (the page\u2019s inlined images included), `sourceBytes` (the embedded source), `images` inlined, the page\u2019s script (`scriptBytes`, and `scriptModules`: how many modules it holds), the https images the page names (`remoteImages`: each address `fetched` into the file, and each one `failed`, with its `reason`; present when the page names one), `warnings` (`{code, message}`; empty when nothing looked wrong), and `checks` run on the written file (`outside`: every reference its markup and stylesheets load from outside the file, a remote address or a file beside it, empty when the file stands alone; `roundTrip`: `{exact, files, differs}`, whether the embedded source gives back every carried file byte for byte, and the carried paths that differ or are missing on either side). Experimental: may change or be removed in a patch release.',
     },
     {
       value: 'render.reverse',
@@ -187,7 +198,7 @@ export const doc = {
       value: 'icon.search',
       stability: 'experimental',
       description:
-        'The echoed query, `matchCount` (every match, before `limit`), and matches: icons from the installed icon sets ranked by meaning, each {set, id, package, module, export, import, words, definitions, variants, reason, score}.',
+        "The echoed query, `matchCount` (every match, before `limit`), and matches: icons from the installed icon sets ranked by meaning, each {set, id, package, module, export, import, words, definitions, variants, reason, score}, plus `meaningImport` when a definition names the icon: its import under the meaning name (`import {TrashIcon as DeleteIcon} from '…'`).",
     },
     {
       value: 'icon.detail',
@@ -336,28 +347,28 @@ export const doc = {
     {
       value: 'template.list',
       description:
-        'The effective discovered TemplateListEntry[] for pages and blocks. A winning replacement entry includes optional `replaces`, naming the Core id omitted from the default list.',
+        'The effective TemplateListEntry[] for pages and blocks; a replacement carries `replaces`, the Core id it hides from the default list.',
     },
     {
       value: 'template.show',
       description:
-        "The resolved template's source, exactly as a copy writes it, plus its description, kind, the component names it composes, and demoMediaReplaced (how many Astryx demo media references were replaced with placeholders for you to swap for your own media), and demoContentReplaced (how many Astryx docs-only demo content elements were replaced with a Text placeholder for your own content), and isReady (false when the template's doc sets isReady: false).",
+        "The template's source, as a copy writes it, with its description, kind, components (a sorted summary, without common ones such as Text), componentsToRead (what it renders, in the form `astryx component` takes, in first-use order), demoMediaReplaced and demoContentReplaced (demo media and content replaced with placeholders), and isReady (false when its doc says so).",
     },
     {
       value: 'template.skeleton',
       description:
-        "A layout skeleton (structural tags with spatial annotations) plus the template's description, the components it composes, and isReady. The envelope's package names the npm package that owns the template.",
+        "A layout skeleton (structural tags with spatial annotations) with the template's description, components, and isReady.",
     },
     {
       value: 'template.copy',
       description:
-        "A scaffold receipt: template id, output directory (relative to the project; absolute for a scratch copy in the system temp folder), written file name, file count, givenPath (optional; the absolute path as given, present only when it was inside the project), demoMediaReplaced (how many Astryx demo media references were replaced with placeholders), demoContentReplaced (how many Astryx docs-only demo content elements were replaced with a Text placeholder), notes (setup notes naming what the template needs that the project lacks — missing packages, missing StyleX compiler; empty when satisfied), missingPackages (external package names the template imports that are not in the project), and installCommand (a ready-to-run install command with the detected package manager and workspace version ranges; null when nothing is missing, when several lockfiles leave the package manager undetermined, or when no package.json holds the folder, where an install would make the folder a project), installGuidance (only when a loaded integration gives one: how this project adds the missing packages, followed in place of installCommand), and isReady. The envelope's package names the npm package that owns the template.",
+        'A scaffold receipt: template id, outputDir (absolute for a scratch copy), fileName, filesCopied, givenPath (the absolute path given, only when inside the project), demoMediaReplaced, demoContentReplaced, notes (what the project lacks, such as missing packages or a StyleX compiler; empty when nothing), missingPackages, installCommand (null when nothing is missing, the package manager is undetermined, or no package.json holds the folder), installGuidance (how an integration adds them, used instead of installCommand), components (what it renders, in the form `astryx component` takes, in first-use order), and isReady.',
     },
 
     {
       value: 'template.cdn',
       description:
-        'A write receipt for the no-build-step CDN starter page: the path (relative to cwd), the Astryx version every CDN URL was pinned to, whether it was written, and the reason it was not. `exists` when a file was already there, which is a success.',
+        'A write receipt for the no-build CDN starter page: path (relative to cwd), the Astryx version its CDN URLs pin, written, and reason (`exists`, a success, when a file was already there).',
     },
 
     // hook
@@ -381,12 +392,12 @@ export const doc = {
     {
       value: 'theme.build',
       description:
-        'A theme build receipt: name, tokenCount and componentCount (override counts), sizeKB, the written outputs {css, cssDts, js, dts, and variantsDts when applicable}, warnings (defects to fix), notices (advisories about a correct theme, such as a named font it does not load), and settingIssues (the page-rule settings the browser does not show as written, also among the warnings; their fields are in the themeBuild doc). A --family build whose root extends a theme the family does not select adds base {theme, package (the installed package it comes from, or null for a local base: a file of the project or a theme defined in the file of the root), export (the name the root imports it by, or null for a theme defined in the file of the root)}: a requirement of the outputs.',
+        'A theme build receipt: name, tokenCount and componentCount (override counts), sizeKB, the written outputs {css, cssDts, js, dts, and variantsDts when applicable}, warnings (defects to fix), notices (advisories, such as an unloaded font), and settingIssues (page-rule settings the browser does not show as written, each also a warning or, from a generated file, in one notice; fields in the themeBuild doc). A --family build whose root extends a theme the family does not select adds base {theme, package (the installed package it comes from, or null for a local base: a file of the project or a theme defined in the file of the root), export (the name the root imports it by, or null for a theme defined in the file of the root)}: a requirement of the outputs.',
     },
     {
       value: 'theme.build.check',
       description:
-        'The --check receipt: theme name, an upToDate flag, the stale outputs (each {path, reason: missing | outdated}), the full list of checked paths, when any is stale or missing, code ERR_THEME_STALE, and settingIssues as on the build receipt when any. Writes nothing.',
+        'The --check receipt: theme name, an upToDate flag, the stale outputs (each {path, reason: missing | outdated}), the full list of checked paths, when any is stale or missing, code ERR_THEME_STALE, and settingIssues and notices as on the build receipt when any. Writes nothing.',
     },
     {
       value: 'theme.build.batch',

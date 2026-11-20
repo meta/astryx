@@ -139,10 +139,24 @@ export const docs = {
       {className: 'astryx-table-header'},
       {className: 'astryx-table-body'},
       {className: 'astryx-table-footer'},
-      {className: 'astryx-table-row', states: ['selected']},
+      {
+        className: 'astryx-table-row',
+        states: ['selected', 'striped'],
+        visualProps: ['parity'],
+      },
       {className: 'astryx-table-cell', visualProps: ['density']},
       {className: 'astryx-table-header-cell', visualProps: ['density']},
     ],
+    vars: [
+      {
+        name: '--table-row-overlay',
+        description:
+          "The row's current fill (its stripe, hover or selection wash), which a pinned column's cells replay over their opaque base. A theme's background on `table-row` sets it too, so a themed stripe or hover reaches pinned columns.",
+        default: 'unset (a pinned cell shows its base)',
+        private: true,
+      },
+    ],
+    derived: [{property: 'backgroundColor', vars: ['--table-row-overlay']}],
     componentIcons: [
       {
         slot: 'table-sort-indicator',
@@ -214,7 +228,8 @@ export const docs = {
     {
       name: 'isStriped',
       type: 'boolean',
-      description: 'Applies a background wash to even-numbered rows.',
+      description:
+        "Stripes alternate rows (every other row, zebra striping): a background wash on the even-numbered body and footer rows. A theme restyles either stripe of a data-driven table through the `table-row` target's `parity` (odd or even); every row a striped table may stripe (body and footer rows, not the header row) carries the `striped` state. A pinned column (`useTableStickyColumns`) follows the row's stripe.",
       default: 'false',
     },
     {
@@ -235,7 +250,7 @@ export const docs = {
       name: 'textOverflow',
       type: "'wrap' | 'truncate'",
       description:
-        "How body cell text behaves when it exceeds the column width. 'wrap' lets text wrap and the row grow taller; 'truncate' clips with an ellipsis (default-rendered cells show a tooltip on hover when truncated). Header cells always truncate.",
+        "How cell text behaves when it exceeds the column width. 'wrap' lets text wrap and the row grow taller; 'truncate' clips with an ellipsis (default-rendered cells show a tooltip on hover when truncated). Header cells follow the same mode: under 'wrap' a long heading wraps in a data-driven table, and in children mode its column grows to keep it on one line. When you pass `columns`, a data-driven table sizes them from their definitions, not their content, so under 'wrap' a token longer than its column, such as a code identifier or a URL, breaks inside the token where the line ends. To keep such tokens whole, give that column a floor that fits them, or compose the table in children mode, whose columns follow their content.",
       default: "'wrap'",
     },
     {
@@ -341,6 +356,11 @@ export const docs = {
           'When filters or a search can leave no rows, set emptyState to say so and offer a way out, for example an EmptyState with a "Clear filters" Button.',
       },
       {
+        guidance: true,
+        description:
+          'Keep long tokens such as code identifiers whole. When you pass `columns`, a data-driven table sizes them from their definitions, not their content, so a token that does not fit its column breaks inside the token. Give that column proportional(1, {minWidth}) or pixel() wide enough for the token, or compose the table in children mode, whose columns follow their content.',
+      },
+      {
         guidance: false,
         description:
           'Use a table for data without consistent columns. Use a list or card layout for heterogeneous content.',
@@ -424,6 +444,11 @@ export const docsZh = {
           '当筛选或搜索可能导致没有行时，设置 emptyState 说明情况并提供出路，例如带“清除筛选”Button 的 EmptyState。',
       },
       {
+        guidance: true,
+        description:
+          'Keep long tokens such as code identifiers whole. When you pass `columns`, a data-driven table sizes them from their definitions, not their content, so a token that does not fit its column breaks inside the token. Give that column proportional(1, {minWidth}) or pixel() wide enough for the token, or compose the table in children mode, whose columns follow their content.',
+      },
+      {
         guidance: false,
         description:
           'Use a table for data without consistent columns. Use a list or card layout for heterogeneous content.',
@@ -480,6 +505,11 @@ export const docsDense = {
         guidance: true,
         description:
           'Filtered/searched data can be empty: set emptyState (e.g. EmptyState + "Clear filters" Button).',
+      },
+      {
+        guidance: true,
+        description:
+          'Long tokens (IDs, URLs) under explicit `columns` break inside the token when the column is narrower (sized from definitions, not content). Keep them whole w/ proportional(1, {minWidth}) or pixel() wide enough, or children mode (columns follow content).',
       },
       {
         guidance: false,

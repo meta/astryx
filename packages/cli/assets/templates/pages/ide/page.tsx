@@ -26,9 +26,9 @@ import type {TreeListItemData} from '@astryxdesign/core/TreeList';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {
   FolderIcon,
-  DocumentTextIcon,
-  MagnifyingGlassIcon,
-} from '@heroicons/react/24/outline';
+  DocumentIcon,
+  SearchIcon,
+} from '@astryxdesign/template-icons';
 
 const styles: Record<string, CSSProperties> = {
   contentFill: {
@@ -142,7 +142,7 @@ function buildFileTree(
   const file = (id: string): TreeListItemData => ({
     id,
     label: label(id),
-    startContent: <Icon icon={DocumentTextIcon} size="xsm" />,
+    startContent: <Icon icon={DocumentIcon} size="xsm" />,
     onClick: () => onFileClick(id),
   });
   return [
@@ -262,7 +262,7 @@ export default function ResizableWorkspacePage() {
                           value=""
                           placeholder="Search"
                           size="md"
-                          startIcon={MagnifyingGlassIcon}
+                          startIcon={SearchIcon}
                         />
                         <TreeList items={fileTree} density="compact" />
                       </Stack>

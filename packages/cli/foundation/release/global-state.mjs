@@ -42,7 +42,10 @@ import {
 } from './cache.mjs';
 import {readJson} from './project.mjs';
 import {userConfigDir} from '../env/user-dirs.mjs';
-import {computerAgentTextSettings} from '../env/user-settings.mjs';
+import {
+  computerAgentTextSettings,
+  computerSkillFolders,
+} from '../env/user-settings.mjs';
 import {isCi, updateNoticesOff} from './update-notice-env.mjs';
 
 /** How often a check may start: once a day, as `gh` and update-notifier do. */
@@ -270,7 +273,12 @@ export function maybeKeepAgentText({
   now = Date.now(),
   start = startWorker,
 }) {
-  if (!computerAgentTextSettings(configDir).install) return false;
+  if (
+    !computerAgentTextSettings(configDir).install &&
+    computerSkillFolders(configDir).length === 0
+  ) {
+    return false;
+  }
   const {agentText} = readGlobalState(stateDir);
   if (agentText?.writtenBy === release.version) return false;
   if (
