@@ -10,7 +10,12 @@
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
-import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
+import {
+  themeEditHow,
+  themeEditNew,
+  themeEditSet,
+  themeEditUndo,
+} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -342,5 +347,24 @@ describe('a lone color with a part said after it', () => {
     expect(writes(await how('q0', 'red, blue buttons')).join('\n')).not.toMatch(
       /accent '#dc2626'/,
     );
+  }, 240_000);
+});
+
+describe('the base theme asked for by name', () => {
+  it('adds the base before it is used', async () => {
+    const answer = JSON.stringify(await how('q0', 'use the default theme'));
+    expect(answer).toMatch(/astryx theme add neutral\b/);
+    expect(answer).toMatch(/then astryx theme use neutral/);
+  }, 240_000);
+
+  it('says plainly when the theme has no base', async () => {
+    await themeEditSet('q0', 'base', 'none', {cwd});
+    try {
+      const answer = JSON.stringify(await how('q0', 'use the default theme'));
+      expect(answer).toMatch(/has no base theme/);
+      expect(answer).not.toMatch(/theme use neutral/);
+    } finally {
+      await themeEditUndo('q0', {cwd, thing: 'base'});
+    }
   }, 240_000);
 });
