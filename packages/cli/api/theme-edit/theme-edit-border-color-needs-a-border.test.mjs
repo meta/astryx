@@ -9,7 +9,7 @@
  * result, so one undo takes back both.
  * Where the theme itself turns the whole border off, the color is refused,
  * naming the none and its undo; a none on one side or in a list of values
- * is no conflict, and brings no border. Whether a part draws a border is read
+ * is no conflict: the border comes before the part's own settings. Whether a part draws a border is read
  * one way for set and how: drawsLine, by the variant asked, with a side
  * cleared only on the first or last child still drawn on the others.
  */
@@ -210,7 +210,7 @@ describe('a border none read exactly', () => {
 
 describe('a none that turns off only part of the border', () => {
   it(
-    'is no conflict, and brings no border: the color is saved as written',
+    "is no conflict: the color is saved, with the border it needs before the part's own",
     async () => {
       for (const [thing, value] of [
         ['border-width', '0 0 1px'],
@@ -224,7 +224,7 @@ describe('a none that turns off only part of the border', () => {
           on: 'tab',
         });
         expect(r.data.setting.thing).toBe('border-color');
-        expect(r.data.notes.join('\n')).not.toContain('added a');
+        expect(r.data.notes.join('\n')).toContain('added a');
         await themeEditUndo('u', {cwd});
         await themeEditUndo('u', {cwd});
       }
@@ -233,9 +233,9 @@ describe('a none that turns off only part of the border', () => {
   );
 });
 
-describe('a one-mode color on a look that draws a group seam', () => {
+describe('a one-mode color on a part that draws no border', () => {
   it(
-    "brings no border, so the other mode keeps Core's seam",
+    'brings the border in its own mode, so the other mode keeps its line',
     async () => {
       const light = await themeEditSet('u', 'border-color', '#eeeeee', {
         cwd,
@@ -243,15 +243,23 @@ describe('a one-mode color on a look that draws a group seam', () => {
         when: 'variant:secondary',
         mode: 'light',
       });
-      expect(light.data.notes.join('\n')).not.toContain('added a');
-      await themeEditUndo('u', {cwd});
-      // (For every mode, the border is brought.)
-      const both = await themeEditSet('u', 'border-color', '#999999', {
-        cwd,
-        on: 'button',
-        when: 'variant:secondary',
-      });
-      expect(both.data.notes.join('\n')).toContain('added a');
+      expect(light.data.notes.join('\n')).toContain('added a');
+      const saved = JSON.parse(
+        fs.readFileSync(path.join(cwd, 'themes/u/u.settings.json'), 'utf8'),
+      );
+      expect(
+        saved.settings.find(
+          (/** @type {any} */ x) => x.thing === 'border' && x.on === 'button',
+        )?.mode,
+      ).toBe('light');
+      // (Built in the light page only: the dark page keeps its own line.)
+      const built = fs.readFileSync(path.join(cwd, 'themes/u/u.css'), 'utf8');
+      expect(built).toMatch(
+        /scheme="light"\] \*\) \{\s*border: var\(--border-width\) solid transparent;/,
+      );
+      expect(built).not.toMatch(
+        /scheme="dark"\] \*\) \{\s*border: var\(--border-width\) solid transparent;/,
+      );
       await themeEditUndo('u', {cwd});
     },
     T,

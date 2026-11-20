@@ -3509,11 +3509,13 @@ function bordersBeyondCore(ctx, data, s, part) {
     );
   for (const [k, b] of Object.entries(blocks))
     if (k === 'base' || !wp || k === s.when) if (drawsIn(b)) return true;
-  // The theme's own settings for it.
+  // The theme's own settings for it. (A width alone draws no line: Core's
+  // style stays none; a style or a shorthand with one draws.)
   return (data?.settings ?? []).some(
     (/** @type {any} */ x) =>
       x.source === 'property' &&
       edgeProp.test(String(x.thing)) &&
+      !/-width$/.test(String(x.thing)) &&
       !blank(x.value) &&
       (!x.when || !s.when || x.when === s.when) &&
       (!x.state || x.state === s.state) &&
@@ -3749,10 +3751,6 @@ export function borderFor(ctx, slug, data, s) {
    */
   const draws = t =>
     drawsLineAround(ctx, t, s.state, s.when) ||
-    // (A color for one mode on a look that draws a group seam brings no
-    // border: one written for every mode would hide the other mode's seam.)
-    (!!s.mode &&
-      drawsLine(ctx.C, [t], 'border', null, s.when ?? defaultLook(ctx, t))) ||
     bordersBeyondCore(
       ctx,
       data,
@@ -3764,13 +3762,12 @@ export function borderFor(ctx, slug, data, s) {
     parts.some(
       t =>
         draws(t) ||
-        // (Any side the theme turns off there: the color is saved as
-        // written, and no border is brought.)
-        borderSidesOff(ctx, data, s, t).size > 0,
+        // (Every side the color is on turned off: set refuses it.)
+        borderSetToNone(ctx, data, s, t) != null,
     )
   )
     return null;
-  return checkSetting(
+  const edge = checkSetting(
     ctx,
     slug,
     structuredClone(data),
@@ -3779,6 +3776,33 @@ export function borderFor(ctx, slug, data, s) {
     {on: s.on, when: s.when, only: s.only},
     false,
   );
+  // (In the color's own mode: a see-through border shows nothing in the
+  // other mode, and the other mode keeps the line Core draws there, a
+  // button group's seam.)
+  return s.mode ? {...edge, mode: s.mode} : edge;
+}
+
+/**
+ * Where a border a color brings goes in the theme's settings: before the
+ * part's own border widths, styles and shorthands, so a side the theme
+ * turns off or sizes itself keeps its own value.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {any[]} settings
+ * @param {import('./_settings.mjs').Setting} edge
+ * @returns {number}
+ */
+export function broughtBorderAt(ctx, settings, edge) {
+  const parts = partsOf(ctx, edge);
+  const i = settings.findIndex(
+    x =>
+      x.source === 'property' &&
+      /^border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?(?:-(?:width|style))?$/.test(
+        String(x.thing),
+      ) &&
+      (!x.when || !edge.when || x.when === edge.when) &&
+      partsOf(ctx, x).some(t => parts.includes(t)),
+  );
+  return i < 0 ? settings.length : i;
 }
 
 /**
@@ -8458,6 +8482,9 @@ function checkOne(
       s.mode &&
       !COLOR_PROPS.test(prop) &&
       !(prop === 'background' && isColorValue(v)) &&
+      // (The see-through border a border color brings, in that color's
+      // mode: it shows nothing, and the other mode keeps its own line.)
+      !(prop === 'border' && v.trim() === BORDER_TO_COLOR) &&
       // A gradient background (no image file) goes per mode: its colors
       // are each painted in that mode only (compileTheme).
       !(

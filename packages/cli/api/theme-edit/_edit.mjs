@@ -157,6 +157,7 @@ import {
 import {
   BORDER_COLOR_PROP,
   borderFor,
+  broughtBorderAt,
   checkSetting,
   indicatorLines,
   selectedBoxes,
@@ -6643,7 +6644,12 @@ async function changeOnce(
     // needs, written before it in the same change.
     if (sub === 'set') {
       borderAdded = borderFor(ctx, slug, data, s);
-      if (borderAdded) data.settings.push(borderAdded);
+      if (borderAdded)
+        data.settings.splice(
+          broughtBorderAt(ctx, data.settings, borderAdded),
+          0,
+          borderAdded,
+        );
     }
     data.settings.push(s);
     sidesMoved.add(s);

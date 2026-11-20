@@ -5,9 +5,10 @@
  * the sides are read in the order the settings are written, a width or
  * style of several values names each side, a logical pair its start and
  * end. A color on sides the theme turned off is refused, naming the none;
- * a color with a side that still draws is saved as written, and no border
- * is brought while the theme turns any side off. Undoing that none brings
- * the border a saved color needs.
+ * a color with a side that still draws is saved, and on a part Core draws
+ * no border on it brings the border before the part's own border settings,
+ * so the sides the theme turns off or sizes keep theirs. Undoing that none
+ * brings the border a saved color needs.
  */
 
 import * as fs from 'node:fs';
@@ -59,8 +60,6 @@ async function check(nones, colors) {
     if (saved) {
       const r = await run();
       expect(r.data.setting.thing, thing).toBe(thing);
-      // (No border is brought while the theme turns a side off.)
-      expect(r.data.notes.join('\n'), thing).not.toContain('added a');
       await themeEditUndo('s', {cwd});
     } else {
       const r = await refusal(run);
@@ -151,6 +150,31 @@ describe('a border none on some sides', () => {
           ['border-top-color', false],
         ],
       );
+    },
+    T,
+  );
+});
+
+describe("the border a color brings beside the part's own", () => {
+  it(
+    'goes before them: a side turned off stays off, a side sized keeps its size',
+    async () => {
+      const css = () =>
+        fs.readFileSync(path.join(cwd, 'themes/s/s.css'), 'utf8');
+      await themeEditSet('s', 'border-bottom', 'none', {cwd, on: 'tab'});
+      await themeEditSet('s', 'border-color', '#999999', {cwd, on: 'tab'});
+      expect(css()).toMatch(
+        /\.astryx-tab \{\s*border: var\(--border-width\) solid transparent;\s*border-bottom: none;\s*border-color: #999999;/,
+      );
+      await themeEditUndo('s', {cwd});
+      await themeEditUndo('s', {cwd});
+      await themeEditSet('s', 'border-top-width', '2px', {cwd, on: 'tab'});
+      await themeEditSet('s', 'border-color', '#999999', {cwd, on: 'tab'});
+      expect(css()).toMatch(
+        /\.astryx-tab \{\s*border: var\(--border-width\) solid transparent;\s*border-top-width: 2px;\s*border-color: #999999;/,
+      );
+      await themeEditUndo('s', {cwd});
+      await themeEditUndo('s', {cwd});
     },
     T,
   );
