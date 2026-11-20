@@ -6,8 +6,8 @@
  * @output localeTextDirection: the `dir` for an element that shows text a
  *   locale formats, such as a time or a date. localeTextStyles: `isolate`
  *   for inline formatted text and `pageAlign` for a field that shows it
- * @position Internal helper for TimeInput, DateTimeInput and their touch
- *   fields; not part of the public surface
+ * @position Internal helper for TimeInput, DateTimeInput, their touch
+ *   fields and the native time segment; not part of the public surface
  *
  * The page direction would reorder text a locale formats: an English
  * "9:00 AM" would show as "AM 9:00" on a right-to-left page. The field's
