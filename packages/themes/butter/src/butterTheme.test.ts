@@ -132,7 +132,7 @@ describe('butter color token mapping completeness', () => {
       ['info status', neutral.light[15], accent.light[55]],
       ['error status', neutral.light[15], red.light[60]],
       ['neutral badge', accent.light[35], yellow.light[90]],
-      ['light top nav', accent.light[40], neutral.light[95]],
+      ['light top nav', accent.light[35], neutral.light[95]],
       ['selected light top nav', accent.light[35], neutral.light[95]],
     ] as const;
 
@@ -171,7 +171,7 @@ describe('butter color token mapping completeness', () => {
     ).toMatchObject({backgroundColor: red.light[60], color: neutral.light[15]});
     expect(butterTheme.components?.['top-nav-item']).toMatchObject({
       base: {
-        color: `light-dark(${accent.light[40]}, ${yellow.dark[90]}cc)`,
+        color: `light-dark(${accent.light[35]}, ${yellow.dark[90]}cc)`,
       },
       selected: {
         color: `light-dark(${accent.light[35]}, ${yellow.dark[90]})`,

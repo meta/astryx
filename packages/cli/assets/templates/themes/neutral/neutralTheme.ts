@@ -387,6 +387,14 @@ export const neutralTheme = defineTheme({
       },
     },
 
+    // A nav item's secondary text reads at 4.5:1 on the pressed fill over
+    // the dark top bar.
+    'top-nav-item': {
+      base: {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[70]})`,
+      },
+    },
+
     switch: {
       base: {
         '--color-background-gray': 'var(--color-border-emphasized)',
