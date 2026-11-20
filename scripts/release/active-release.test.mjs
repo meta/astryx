@@ -10,9 +10,11 @@
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import {execFileSync} from 'node:child_process';
+import {execFile, execFileSync} from 'node:child_process';
+import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import {afterEach, describe, expect, it} from 'vitest';
 import {
@@ -31,6 +33,7 @@ import {
   latestStableVersion,
   mergeBackEntries,
   nextPlannedVersion,
+  successorPlanReadiness,
   validateCodemodPromotionApplicabilityAtRef,
   validateCodemodPromotionApplicabilityMove,
   validateReleaseDiff,
@@ -49,6 +52,7 @@ const ACTIVE_RELEASE = fileURLToPath(
   new URL('./active-release.mjs', import.meta.url),
 );
 const BRANCH = 'release/v0.6.5';
+const execFileAsync = promisify(execFile);
 const roots = [];
 
 function fixture({withChangeset = false, changesetText = null} = {}) {
@@ -396,6 +400,63 @@ describe('one branch per release lifecycle', () => {
       receiptSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
     });
     expect(marker.ownerRecut).toEqual(plan.ownerRecut);
+  });
+
+  it('refuses the successor command until npm stable publication', async () => {
+    const {root, cutSha} = cutFixture();
+    git(root, 'tag', 'v0.6.5');
+    writeAuthority(
+      root,
+      {
+        ...identity(cutSha),
+        'owner-recut-receipt': ownerRecutReceipt(root),
+      },
+      false,
+    );
+    const {releaseHead} = importCommits(root, [
+      {
+        ref: `refs/heads/${BRANCH}`,
+        parent: 'refs/heads/main',
+        name: 'releaseHead',
+        message: 'owner recut authority',
+        snapshot: true,
+        files: workingTreeFiles(root),
+      },
+    ]);
+    let latest = '0.6.4';
+    const server = http.createServer((_request, response) => {
+      response.writeHead(200, {'content-type': 'application/json'});
+      response.end(JSON.stringify({latest}));
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    const args = [
+      ACTIVE_RELEASE,
+      'next-plan-version',
+      '--root',
+      root,
+      '--released-version',
+      '0.6.5',
+      '--release-ref',
+      `refs/heads/${BRANCH}`,
+      '--registry',
+      `http://127.0.0.1:${address.port}`,
+    ];
+
+    try {
+      await expect(execFileAsync(process.execPath, args)).rejects.toThrow(
+        /successor plan waits until v0\.6\.5 has a publication effect/,
+      );
+      git(root, 'tag', '-f', 'v0.6.5', releaseHead);
+      await expect(execFileAsync(process.execPath, args)).rejects.toThrow(
+        /successor plan waits until v0\.6\.5 has a publication effect/,
+      );
+      latest = '0.6.5';
+      const {stdout} = await execFileAsync(process.execPath, args);
+      expect(stdout.trim()).toBe('0.6.6');
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
   });
 
   it('refuses an owner recut receipt when the archived tag is absent', () => {
@@ -1866,6 +1927,24 @@ describe('published release merge-back (FR50)', () => {
     expect(nextPlannedVersion('0.7.0', '0.8.0')).toBe('0.8.0');
     expect(nextPlannedVersion('0.7.0', '0.7.2')).toBeNull();
     expect(nextPlannedVersion('0.7.0-canary.1')).toBeNull();
+  });
+
+  it('holds the successor plan until an owner recut has a publication effect', () => {
+    const ownerRecut = {
+      version: '0.7.17',
+      tagName: 'v0.7.17',
+      tagSha: CUT,
+      receiptSha256: 'a'.repeat(64),
+    };
+    expect(
+      successorPlanReadiness({ownerRecut, stablePublished: false}),
+    ).toEqual(['successor plan waits until v0.7.17 has a publication effect']);
+    expect(successorPlanReadiness({ownerRecut, stablePublished: true})).toEqual(
+      [],
+    );
+    expect(
+      successorPlanReadiness({ownerRecut: null, stablePublished: false}),
+    ).toEqual([]);
   });
 });
 

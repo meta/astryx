@@ -720,6 +720,10 @@ function markerAtRef(root, ref) {
   );
 }
 
+function planAtRef(root, ref) {
+  return JSON.parse(git(root, ['show', `${ref}:${RELEASE_DIR}/${PLAN_FILE}`]));
+}
+
 function validateRefMarker(marker, branch) {
   const match = BRANCH_RE.exec(branch);
   if (
@@ -1480,6 +1484,80 @@ function nextPlannedVersion(releaseVersion, ownerVersion = null) {
 }
 
 /**
+ * FR51 — an owner-recut version stays reusable until npm records its first
+ * stable publication effect. Tag replacement alone does not admit the plan.
+ */
+function successorPlanReadiness({ownerRecut, stablePublished}) {
+  if (ownerRecut === null || stablePublished) return [];
+  return [
+    `successor plan waits until v${ownerRecut.version} has a publication effect`,
+  ];
+}
+
+function validateSuccessorPlanAtRef(root, releaseRef, releaseVersion) {
+  const marker = markerAtRef(root, releaseRef);
+  const plan = planAtRef(root, releaseRef);
+  validateRefMarker(marker, marker.branch);
+  if (marker.version !== releaseVersion)
+    throw new Error(
+      `successor plan for v${releaseVersion} cannot use ${marker.branch}`,
+    );
+  if (
+    plan?.schemaVersion !== 2 ||
+    plan.version !== marker.version ||
+    plan.branch !== marker.branch ||
+    plan.cutSha !== marker.cutSha ||
+    computePlanDigest(plan) !== marker.planDigest ||
+    canonicalJson(plan.ownerRecut ?? null) !==
+      canonicalJson(marker.ownerRecut ?? null)
+  )
+    throw new Error('successor plan authority does not match the release ref');
+  return plan.ownerRecut ?? null;
+}
+
+async function stablePublicationExists(
+  root,
+  version,
+  {registry, fetchImpl = fetch} = {},
+) {
+  const {DEFAULT_REGISTRY, fetchDistTags} = await import('../npm/registry.mjs');
+  const manifests = packageManifestsByName(file => {
+    const absolute = path.join(root, file);
+    return fs.existsSync(absolute) ? readJson(absolute) : null;
+  }, root);
+  const names = [...manifests.values()]
+    .filter(isStableReleasePackage)
+    .map(manifest => manifest.name)
+    .sort();
+  if (names.length === 0)
+    throw new Error('successor plan cannot find a stable package to verify');
+
+  const failures = [];
+  for (const name of names) {
+    try {
+      const response = await fetchDistTags({
+        name,
+        registry: registry ?? DEFAULT_REGISTRY,
+        fetchImpl,
+      });
+      if (response.status !== 200) {
+        failures.push(`${name} dist-tags returned HTTP ${response.status}`);
+        continue;
+      }
+      const tags = await response.json();
+      if (tags.latest === version) return true;
+    } catch (error) {
+      failures.push(`${name} dist-tags failed: ${error.message}`);
+    }
+  }
+  if (failures.length)
+    throw new Error(
+      `successor plan cannot verify npm stable publication:\n${failures.join('\n')}`,
+    );
+  return false;
+}
+
+/**
  * Apply only the generated manifest delta from the published branch to current
  * main. This preserves post-cut main fields while carrying an allowed release
  * version or exact-internal-pin change byte-for-byte.
@@ -1840,17 +1918,16 @@ function validateOwnerRecutReceipt(root, reference, version) {
   };
 }
 
-function versionTagExists(root, version) {
+function versionTagCommit(root, version) {
   try {
-    execFileSync(
-      'git',
-      ['rev-parse', '--verify', '--quiet', `refs/tags/v${version}`],
-      {cwd: root, stdio: 'ignore'},
-    );
-    return true;
+    return git(root, ['rev-parse', `refs/tags/v${version}^{commit}`]);
   } catch {
-    return false;
+    return null;
   }
+}
+
+function versionTagExists(root, version) {
+  return versionTagCommit(root, version) !== null;
 }
 
 function ownerRecutForCreate(root, values, version) {
@@ -2112,6 +2189,23 @@ async function main() {
   }
   if (command === 'next-plan-version') {
     const releaseVersion = required(values, 'released-version');
+    const releaseRef = required(values, 'release-ref');
+    const ownerRecut = validateSuccessorPlanAtRef(
+      root,
+      releaseRef,
+      releaseVersion,
+    );
+    const stablePublished =
+      ownerRecut === null
+        ? true
+        : await stablePublicationExists(root, releaseVersion, {
+            registry: values.registry,
+          });
+    const readinessErrors = successorPlanReadiness({
+      ownerRecut,
+      stablePublished,
+    });
+    if (readinessErrors.length) throw new Error(readinessErrors.join('\n'));
     const ownerVersion = values['owner-version'] ?? null;
     const version = nextPlannedVersion(releaseVersion, ownerVersion);
     if (version === null)
@@ -2224,6 +2318,7 @@ export {
   declaredVersionAtRef,
   filesAtRef,
   nextPlannedVersion,
+  successorPlanReadiness,
   isReleaseTestRepairPath,
   isStableReleasePackage,
   latestStableVersion,
