@@ -156,6 +156,7 @@ import {
 } from './_settings.mjs';
 import {
   BORDER_COLOR_PROP,
+  BORDER_TO_COLOR,
   borderFor,
   broughtBorderAt,
   checkSetting,
@@ -6582,10 +6583,17 @@ async function changeOnce(
     alsoReplaced = data.settings.filter(x => keyOf(x) === k);
     data.settings = data.settings.filter(x => keyOf(x) !== k);
     // A border the theme turned off, undone: a border color it hid on
-    // those parts brings the border it needs now, so it shows.
+    // those parts brings the border it needs now, so it shows. (Only an
+    // undone none or zero: undoing the brought border itself, or a width
+    // or style that drew, leaves the colors as they are.)
     if (
       /^border(?:-[a-z-]+)?$/.test(s.thing) &&
-      !BORDER_COLOR_PROP.test(s.thing)
+      !BORDER_COLOR_PROP.test(s.thing) &&
+      String(prev?.value ?? s.value).trim() !== BORDER_TO_COLOR &&
+      String(prev?.value ?? s.value)
+        .trim()
+        .split(/\s+/)
+        .some(t => /^(?:none|hidden|0(?:px|rem|em)?)$/i.test(t))
     )
       for (const x of [...data.settings]) {
         if (

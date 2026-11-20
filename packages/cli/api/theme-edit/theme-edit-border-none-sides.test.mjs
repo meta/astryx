@@ -180,6 +180,22 @@ describe("the border a color brings beside the part's own", () => {
   );
 });
 
+describe('a shorthand with no style', () => {
+  it(
+    'draws no line on its side',
+    async () => {
+      await check(
+        [
+          ['border', 'none'],
+          ['border-top', '1px'],
+        ],
+        [['border-top-color', false]],
+      );
+    },
+    T,
+  );
+});
+
 describe('undoing a border none', () => {
   it(
     'brings the border a saved border color needs',
@@ -193,6 +209,24 @@ describe('undoing a border none', () => {
       );
       expect(built).toContain('border-color: #999999;');
       await themeEditUndo('s', {cwd});
+    },
+    T,
+  );
+
+  it(
+    'takes back the border set added, and does not write it again',
+    async () => {
+      await themeEditSet('s', 'border-color', '#999999', {cwd, on: 'tab'});
+      await themeEditUndo('s', {cwd, thing: 'border', on: 'tab'});
+      const saved = JSON.parse(
+        fs.readFileSync(path.join(cwd, 'themes/s/s.settings.json'), 'utf8'),
+      );
+      expect(
+        saved.settings.filter(
+          (/** @type {any} */ x) => x.thing === 'border' && x.on === 'tab',
+        ),
+      ).toEqual([]);
+      await themeEditUndo('s', {cwd, thing: 'border-color', on: 'tab'});
     },
     T,
   );

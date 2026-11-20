@@ -3689,8 +3689,15 @@ function borderSidesOff(ctx, data, s, part) {
         if (blank(tokenAt(i))) off.set(side, x);
         else off.delete(side);
       } else {
-        // (A shorthand writes the side's width and style together.)
-        const none = tokens.some(t => /^(?:none|hidden)$/i.test(t));
+        // (A shorthand writes the side's width and style together; with no
+        // style in it, the style is none: `border-top 1px` draws no line.)
+        const none =
+          tokens.some(t => /^(?:none|hidden)$/i.test(t)) ||
+          !tokens.some(t =>
+            /^(?:solid|dashed|dotted|double|groove|ridge|inset|outset)$/i.test(
+              t,
+            ),
+          );
         const zero = tokens.some(t => /^0(?:px|rem|em)?$/i.test(t));
         if (none || zero) {
           if (none) styleOff.set(side, x);
