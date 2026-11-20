@@ -280,10 +280,13 @@ describe('the presentations that move onto the morph are the same rect at every 
       left: {x: -59, y: 100, width: 200, height: 160},
       overlapping: {x: 41, y: 100, width: 140, height: 200},
     };
-    // A popover that overlaps its source grows from below: from its top edge.
+    // A popover that overlaps its source grows from the edge where it meets
+    // the source, as the layer entrance finds it: here its right edge, at the
+    // middle of the source.
     expect(popoverState(surfaces.overlapping, source)).toMatchObject({
-      axis: 'y',
-      originY: 0,
+      axis: 'x',
+      originX: 140,
+      originY: 82,
     });
     for (const surface of Object.values(surfaces)) {
       const state = popoverState(surface, source);
