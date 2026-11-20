@@ -507,7 +507,11 @@ they are separately named.
   report failure with "Heavy CI deferred: runs when review passes and before
   merge", never success, so nothing merges on that run; the PR report says the
   same. When the review and spec gates (FR15) pass at a head, that event runs
-  every suite at that head (the review-pass run). Each head whose gates pass
+  every suite at that head (the review-pass run). For the review-pass run
+  only, the review app's approval of that exact head also clears the review
+  gate's code half when the author is a repository collaborator with read
+  access or more; merging still needs the review gate as FR15 reads it, and a
+  fork head still needs its `ci:run` first (FR17). Each head whose gates pass
   gets its own review-pass run, a later head as well as an earlier one. A head whose gates pass while it cannot run CI gets its review-pass run when it can first run CI. Such a head is a draft, or a fork head before its `ci:run` takes effect (FR17, FR29). Marking it ready or admitting its run then starts every suite at that head. Any
   later attempt of a run (the pre-merge re-run of all jobs) also runs every
   suite at that head. Otherwise marking the pull request ready, opening it and
@@ -1509,6 +1513,14 @@ admitted with `ci:run` follows the same rule (FR17, FR29).
 
 Rejected: running the heavy suites when a pull request is marked ready, opened
 or reopened (most of those heads never merge).
+
+Amended 2026-11-20 by the Chief: for the review-pass run only, the review
+app's approval of the exact head clears the review gate's code half for a
+repository collaborator with read access or more, as it does for a
+write-access author. A read-access author's head the app approved otherwise
+waits for an engineering owner before its heavy suites run, though merging
+still needs that owner. A fork head still needs `ci:run` first, so an outside
+author gains no path.
 
 ## Open questions
 
