@@ -9,7 +9,7 @@
  * length said for every side is that one length.
  */
 
-import {readFileSync, writeFileSync} from 'node:fs';
+import {readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet, themeEditUndo} from './theme-edit.mjs';
@@ -427,6 +427,35 @@ describe('a padding of several lengths where only one works', () => {
         saved().some(x => /^padding-(top|bottom|block|inline)/.test(x)),
       ).toBe(false);
       while (saved().length) await themeEditUndo('t', {cwd});
+    },
+    T,
+  );
+
+  it(
+    'says once that a state word was read as another state',
+    async () => {
+      const r = await themeEditSet('t', 'padding', '5px 0', {
+        cwd,
+        on: 'dropdown-menu',
+        state: 'hovered',
+      });
+      expect(r.data.notes.join('\n')).toMatch(/read as --state hover/);
+      await themeEditUndo('t', {cwd});
+      expect(saved()).toEqual([]);
+    },
+    T,
+  );
+
+  it(
+    'claims no undo step for a repeat over a missing build',
+    async () => {
+      await set('5px 0');
+      rmSync(join(cwd, 'themes', 't', 't.js'), {force: true});
+      const notes = (await set('5px 0')).join('\n');
+      expect(notes).not.toMatch(/undo t/);
+      expect(notes).toMatch(/no undo step was added/);
+      await themeEditUndo('t', {cwd});
+      expect(saved()).toEqual([]);
     },
     T,
   );

@@ -7134,8 +7134,16 @@ async function changeOnce(
       n.includes('could not be read') || n.includes('there was no last build'),
   );
   /** @type {string[]} */
+  // A sides change that moved no side and removed nothing (a repeat over a
+  // stale build) adds no undo step, so its note claims none.
+  const sidesStep = Boolean(
+    sidesChanged.length ||
+    typedBefore.length ||
+    longhands.length ||
+    alsoReplaced.length,
+  );
   const notes = [
-    ...(shorthand && !r.unchanged
+    ...(shorthand && !r.unchanged && sidesStep
       ? [
           `wrote ${shorthand.thing} ${quoteCommandArgument(String(shorthand.value))} as its sides, ${written.map(x => `${x.thing} ${x.value}`).join(', ')}: ${shorthand.on} reads ${shorthand.thing} inside calc(), where one length works; undo ${slug} ${[
             sidesChanged.length === written.length
@@ -7327,6 +7335,11 @@ async function changeOnce(
           `${shorthand ? `${shorthand.thing} ${quoteCommandArgument(String(shorthand.value))}` : s.thing} comes after ${longhands.map(x => x.thing).join(', ')} on ${s.on}, so it replaces them there`,
         ]
       : []),
+    ...(shorthand && !r.unchanged && !sidesStep
+      ? [
+          `no change: ${describe({...s, thing: shorthand.thing, value: String(shorthand.value)})} (${written.map(x => `${x.thing} ${x.value}`).join(', ')}) is already set; the theme was built again, and no undo step was added`,
+        ]
+      : []),
     ...(r.unchanged
       ? [
           drawnAlready
@@ -7364,7 +7377,10 @@ async function changeOnce(
     [shorthand?.note, ...written.map(w => w.note)].filter(Boolean),
   ))
     notes.push(/** @type {string} */ (note));
-  if (s.stateNote) notes.push(s.stateNote);
+  // (A state word the typed shorthand's check read as another state is
+  // said once, for every side written.)
+  const stateNote = shorthand?.stateNote ?? s.stateNote;
+  if (stateNote) notes.push(stateNote);
   // A fill on the plain part covers the paints Core gives its variants and
   // states (a primary button's accent, a checked box's): said, with the
   // lines that change one of them, or only the part at rest.
