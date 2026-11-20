@@ -613,6 +613,29 @@ describe('useTooltip — Escape dismissal', () => {
     expect(tooltipElement().matches(':popover-open')).toBe(true);
   });
 
+  it('shows on hover after a keyboard-focus Escape', () => {
+    const onShow = vi.fn();
+    render(<Harness delay={0} onShow={onShow} />);
+    const matches = trigger().matches.bind(trigger());
+    vi.spyOn(trigger(), 'matches').mockImplementation(
+      selector => selector === ':focus-visible' || matches(selector),
+    );
+    // Keyboard focus opens the tooltip with the pointer nowhere near it.
+    act(() => trigger().focus());
+    expect(onShow).toHaveBeenCalledTimes(1);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+
+    fireEvent.keyDown(document, {key: 'Escape'});
+    expect(tooltipElement().matches(':popover-open')).toBe(false);
+
+    // The pointer was never over the trigger, so this is a first real hover:
+    // it shows, unlike the no-move mouseenter after a hover dismissal.
+    fireEvent.mouseEnter(trigger());
+    tick(1000);
+    expect(onShow).toHaveBeenCalledTimes(2);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+  });
+
   it('ignores an Escape that carries the IME keyCode 229', () => {
     const onHide = vi.fn();
     render(<Harness delay={0} onHide={onHide} />);

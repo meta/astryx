@@ -344,10 +344,14 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     disabledRendersRef.current += 1;
   }
 
-  // Set by an Escape dismissal. While set, a mouseenter does not schedule a
-  // show: the pointer never left the trigger, so the enter is the surface
-  // closing, not a new hover. Pointer leave or focus leave clears it.
+  // An Escape dismissal sets this flag. Closing the surface can give the
+  // trigger a mouseenter with no pointer movement. While the flag is set, that
+  // enter shows nothing. A pointer leave or a focus leave clears the flag.
   const dismissedByEscapeRef = useRef(false);
+  // Whether the pointer is over the trigger or the tooltip surface. An
+  // Escape dismissal arms the flag above only while this is set, so a
+  // keyboard-focus dismissal does not swallow the next hover.
+  const isPointerOverRef = useRef(false);
 
   // Clear all timeouts
   const clearTimeouts = useCallback(() => {
@@ -542,6 +546,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     if (isTouchPointerRef.current) {
       return;
     }
+    isPointerOverRef.current = true;
     // A tooltip dismissed with Escape stays closed while the pointer rests
     // on its trigger.
     if (dismissedByEscapeRef.current) {
@@ -570,6 +575,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       if (surface != null && surface.contains(next)) {
         return;
       }
+      isPointerOverRef.current = false;
       scheduleHide();
     },
     [isTouchPointerRef, layerId, scheduleHide],
@@ -637,7 +643,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       if (!focusGate.focusOut(e, focusTrigger)) {
         return;
       }
-      // Focus left the trigger, so a later focus is a new entry.
+      // Focus left the trigger. The next hover can show the tooltip again.
       dismissedByEscapeRef.current = false;
       scheduleHide();
     },
@@ -974,7 +980,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       }
     },
     onDismiss: () => {
-      dismissedByEscapeRef.current = true;
+      dismissedByEscapeRef.current = isPointerOverRef.current;
       clearTimeouts();
       clearTapOpen();
       dropHold();
@@ -985,6 +991,32 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       hideLayer();
     },
   });
+
+  // The surface is part of the trigger's hover zone: while the pointer is
+  // over it, an Escape dismissal still counts as a dismissal under the
+  // pointer. Leaving the surface for anywhere but the trigger leaves the
+  // zone, so a later hover is a new entry.
+  const handleSurfaceMouseEnter = useCallback(() => {
+    isPointerOverRef.current = true;
+    cancelHide();
+  }, [cancelHide]);
+
+  const handleSurfaceMouseLeave = useCallback(
+    (event: Event) => {
+      // React's simulated mouseleave can carry a non-Node relatedTarget
+      // (the window), so only a Node inside the trigger counts as moving
+      // back onto it.
+      const next = (event as MouseEvent).relatedTarget as Node | null;
+      const trigger = triggerRef.current;
+      if (next instanceof Node && trigger != null && trigger.contains(next)) {
+        return;
+      }
+      isPointerOverRef.current = false;
+      dismissedByEscapeRef.current = false;
+      scheduleHide();
+    },
+    [scheduleHide, triggerRef],
+  );
 
   // Render function that wraps layer.render with tooltip styling
   const renderTooltip = useCallback(
@@ -1004,8 +1036,8 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         // (WCAG 1.4.13 hoverable). These sit on the layer container — the
         // element the user actually hovers — not the inner content div, since
         // mouseenter/leave do not bubble.
-        onMouseEnter: cancelHide,
-        onMouseLeave: scheduleHide,
+        onMouseEnter: handleSurfaceMouseEnter,
+        onMouseLeave: handleSurfaceMouseLeave,
       };
 
       return renderLayer(
@@ -1026,8 +1058,8 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       placement,
       alignment,
       popoverXstyle,
-      cancelHide,
-      scheduleHide,
+      handleSurfaceMouseEnter,
+      handleSurfaceMouseLeave,
       contentRefs,
     ],
   );
