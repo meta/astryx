@@ -8,6 +8,7 @@
     "fileName": "page.tsx",
     "filesCopied": 1,
     "demoMediaReplaced": 0,
+    "demoContentReplaced": 0,
     "notes": [
       "<text>",
       "<text>"
@@ -15,7 +16,41 @@
     "missingPackages": [
       "@heroicons/react"
     ],
-    "installCommand": "pnpm add @heroicons/react@\"^2.2.0\""
+    "installCommand": "pnpm add @heroicons/react@\"^2.2.0\"",
+    "components": [
+      "VStack",
+      "Text",
+      "Card",
+      "Divider",
+      "Stack",
+      "StackItem",
+      "HStack",
+      "Icon",
+      "TextInput",
+      "Selector",
+      "Switch",
+      "Button",
+      "Token",
+      "Theme",
+      "AspectRatio",
+      "Grid",
+      "SelectableCard",
+      "SegmentedControl",
+      "SegmentedControlItem",
+      "IconButton",
+      "Kbd",
+      "Tooltip",
+      "ListItem",
+      "SideNav",
+      "Heading",
+      "SideNavSection",
+      "SideNavItem",
+      "LayoutContent",
+      "Center",
+      "Dialog",
+      "Layout"
+    ],
+    "isReady": true
   },
   "meta": {
     "answeredBy": {

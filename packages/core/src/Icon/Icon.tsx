@@ -30,17 +30,19 @@
  * - /packages/cli/assets/templates/blocks/components/Icon/ (showcase blocks)
  */
 
-import React, {type ComponentType, type SVGProps} from 'react';
+import React, {useCallback, type ComponentType, type SVGProps} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
-import {useThemeName} from '../theme/useTheme';
+import {useThemeDefinition} from '../theme/useTheme';
 import {resolveIcon} from './globalIconRegistry';
 import type {IconName, NamespacedIconName} from './globalIconRegistry';
 import type {IconVariant} from './index';
 import {mergeProps} from '../utils/mergeProps';
+import {mergeRefs} from '../utils/mergeRefs';
 import {themeProps} from '../utils/themeProps';
 import {useIconSize} from './IconDefaultSizeContext';
+import {useDevWarning} from '../hooks/useDevWarning';
 import {iconSizeStyles, type IconSize} from './IconSize.stylex';
 
 export type {IconSize} from './IconSize.stylex';
@@ -176,7 +178,11 @@ export interface IconProps extends Omit<
   SVGProps<SVGSVGElement>,
   'ref' | 'color'
 > {
-  /** Ref forwarded to the root element */
+  /**
+   * Ref to the rendered SVG element. For a semantic or namespaced name it is
+   * the `<svg>` inside Icon's wrapper, or `null` when the resolved glyph has
+   * no `<svg>`.
+   */
   ref?: React.Ref<SVGSVGElement>;
   /**
    * Icon to render. Can be:
@@ -267,22 +273,26 @@ export interface IconProps extends Omit<
   xstyle?: StyleXStyles;
 }
 
+type IconA11yProps =
+  | {role: 'img'; 'aria-label': string; 'aria-hidden': undefined}
+  | {'aria-hidden': 'true'};
+
 /**
  * Derives the ARIA attributes for an icon from its `label` prop.
  *
  * - Non-empty `label` → meaningful image: `role="img"` + `aria-label`, and no
  *   `aria-hidden` (an `aria-hidden` element is removed from the accessibility
- *   tree, so its accessible name would be ignored).
+ *   tree, so its accessible name would be ignored). Icon passes
+ *   `aria-hidden: undefined`. Many icon components, such as Heroicons, write
+ *   `aria-hidden="true"` unless a prop replaces it.
  * - Omitted or empty `label` → decorative default: `aria-hidden="true"`.
  *
  * The result is spread BEFORE `{...props}` in both render modes so an explicit
  * `aria-hidden` / `role` / `aria-label` from the consumer always wins.
  */
-function getIconA11yProps(
-  label: string | undefined,
-): {role: 'img'; 'aria-label': string} | {'aria-hidden': 'true'} {
+function getIconA11yProps(label: string | undefined): IconA11yProps {
   return label != null && label !== ''
-    ? {role: 'img', 'aria-label': label}
+    ? {role: 'img', 'aria-label': label, 'aria-hidden': undefined}
     : {'aria-hidden': 'true'};
 }
 
@@ -299,7 +309,7 @@ function getIconA11yProps(
  * ```
  */
 export function Icon({
-  icon,
+  icon: iconProp,
   color = 'inherit',
   size: sizeProp,
   variant,
@@ -308,8 +318,14 @@ export function Icon({
   className,
   style,
   xstyle,
-  ...props
+  ...restProps
 }: IconProps) {
+  const {icon, props} = readGlyph(iconProp, restProps);
+  useDevWarning(
+    'Icon',
+    'takes its glyph in `icon`, not `name`. Pass it as icon, for example <Icon icon="close" />.',
+    icon !== iconProp,
+  );
   const size = useIconSize(sizeProp);
   // Derive ARIA from `label`: decorative (aria-hidden) by default, or a
   // meaningful image (role="img" + aria-label) when `label` is non-empty.
@@ -327,6 +343,7 @@ export function Icon({
         className={className}
         style={style}
         xstyle={xstyle}
+        svgRef={ref}
         spanProps={props}
       />
     );
@@ -365,6 +382,37 @@ export function Icon({
 
 Icon.displayName = 'Icon';
 
+/** Other icon libraries call the glyph prop `name`. */
+function readGlyph<Rest extends object>(
+  icon: IconProps['icon'] | undefined,
+  rest: Rest,
+): {icon: IconProps['icon']; props: Rest} {
+  if (icon != null || !('name' in rest) || !isGlyphSource(rest.name)) {
+    return {icon: icon as IconProps['icon'], props: rest};
+  }
+  const {name, ...props} = rest as Rest & {name: IconProps['icon']};
+  return {icon: name, props: props as Rest};
+}
+
+/** React's component types that are objects: forwardRef, memo and lazy. */
+const objectComponentTypes = new Set<symbol>([
+  Symbol.for('react.forward_ref'),
+  Symbol.for('react.memo'),
+  Symbol.for('react.lazy'),
+]);
+
+function isGlyphSource(value: unknown): boolean {
+  return (
+    (typeof value === 'string' && value !== '') ||
+    typeof value === 'function' ||
+    (typeof value === 'object' &&
+      value !== null &&
+      objectComponentTypes.has(
+        (value as {$$typeof?: symbol}).$$typeof as symbol,
+      ))
+  );
+}
+
 // =============================================================================
 // Internal: Registry Icon Renderer
 // =============================================================================
@@ -386,20 +434,32 @@ function IconFromRegistry({
   className,
   style,
   xstyle,
+  svgRef,
   spanProps,
 }: {
   name: IconName | NamespacedIconName;
   color: IconColor;
   size: IconSize;
   variant: IconVariant | undefined;
-  a11yProps: {role: 'img'; 'aria-label': string} | {'aria-hidden': 'true'};
+  a11yProps: IconA11yProps;
   className?: string;
   style?: React.CSSProperties;
   xstyle?: StyleXStyles;
+  svgRef?: React.Ref<SVGSVGElement>;
   spanProps?: Omit<SVGProps<SVGSVGElement>, 'ref' | 'color'>;
 }) {
-  const themeName = useThemeName();
-  const resolvedIcon = resolveIcon(name, themeName, {size, variant});
+  const theme = useThemeDefinition();
+  const resolvedIcon = resolveIcon(name, theme, {size, variant});
+  // The glyph can change while the span stays. Attach the ref again when it
+  // does.
+  const attachSvgRef = useCallback(
+    (span: HTMLSpanElement | null) =>
+      svgRef == null
+        ? undefined
+        : mergeRefs(svgRef)(span?.querySelector('svg') ?? null),
+    // eslint-disable-next-line @eslint-react/exhaustive-deps -- resolveIcon's inputs: a new glyph gets a new attach, and a function entry's new element each render does not.
+    [svgRef, name, theme, size, variant],
+  );
 
   if (resolvedIcon == null) {
     return null;
@@ -415,6 +475,7 @@ function IconFromRegistry({
 
   return (
     <span
+      ref={svgRef == null ? undefined : attachSvgRef}
       // Derived a11y — decorative (aria-hidden) by default, or a meaningful
       // image (role="img" + aria-label) when `label` is set. Placed BEFORE the
       // prop spread so consumers can still override it with explicit

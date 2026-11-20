@@ -74,6 +74,28 @@ describe('useImageMode', () => {
     vi.unstubAllGlobals();
   });
 
+  it('samples once for an inline region object across re-renders', async () => {
+    stubSamplingPipeline([250, 250, 250]);
+    const fetchSpy = vi.mocked(globalThis.fetch);
+
+    // The documented call shape writes the region inline, so every render
+    // hands the hook a new object. That must not re-fetch and re-sample.
+    const {result, rerender} = renderHook(() =>
+      useImageMode('https://example.com/hero.jpg', {
+        region: {x: 0, y: 0.7, width: 1, height: 0.3},
+      }),
+    );
+
+    await waitFor(() => expect(result.current).toBe('light'));
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    rerender();
+    rerender();
+    await act(async () => {});
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('returns the fallback while no src is provided', () => {
     const {result} = renderHook(() => useImageMode(null, {fallback: 'dark'}));
     expect(result.current).toBe('dark');

@@ -23,6 +23,11 @@ import type {SearchableItem} from './types';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 // =============================================================================
 // Types
@@ -54,7 +59,8 @@ export interface TypeaheadItemProps<
   isDisabled?: boolean;
 
   /**
-   * Group label for grouping items visually.
+   * This prop has no effect. Set `item.auxiliaryData.group` on search-source
+   * items to group results in Typeahead or BaseTypeahead.
    */
   group?: string;
 }
@@ -138,6 +144,13 @@ export function TypeaheadItem<T extends SearchableItem>({
   style,
   ...rest
 }: TypeaheadItemProps<T>) {
+  if (process.env.NODE_ENV !== 'production' && item == null) {
+    throw devPropError(
+      'TypeaheadItem',
+      'item',
+      "is required: the item to show, for example item={{id: 'nyc', label: 'New York'}}.",
+    );
+  }
   // If item has a pre-rendered element, use it
   if (item.element) {
     return <>{item.element}</>;

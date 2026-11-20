@@ -10,12 +10,18 @@
  * @position Chromium proof for the sheet's touch-action and pinch hand-off
  */
 
-import {expect, test, type CDPSession, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type CDPSession,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
+import {openStory} from '@astryxdesign/interaction-harness';
 
 let storybook: StaticServer;
 test.beforeAll(async () => {
@@ -39,9 +45,10 @@ const sleep = async (ms: number) =>
   new Promise(resolve => setTimeout(resolve, ms));
 
 async function openSheet(page: Page) {
-  await page.goto(
-    `${storybook.origin}/iframe.html?id=core-bottomsheet--text-only&viewMode=story`,
-  );
+  // The story's modules load after the page's load event, and a slow runner
+  // can take longer than the dialog check's 5 s to load them. So the wait is
+  // for Storybook to finish rendering the story, which opens the sheet.
+  await openStory(page, storybook.origin, 'core-bottomsheet--text-only');
   const dialog = page.getByRole('dialog', {name: 'Reading details'});
   await expect(dialog).toBeVisible();
   const sheet = dialog.locator('.astryx-bottom-sheet').first();
@@ -225,7 +232,13 @@ test('one finger still drags the handle and scrolls the body, without zooming', 
   await openSheet(page);
   const body = sheet.locator('[role="group"]').first();
   const before = await body.evaluate(el => el.scrollTop);
-  const startY = box.y + box.height - 100;
+  // The sheet's box reaches below the screen, so start from the content's
+  // visible end.
+  const bodyBox = await body.boundingBox();
+  if (bodyBox == null) {
+    throw new Error('no body box');
+  }
+  const startY = bodyBox.y + bodyBox.height - 100;
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchStart',
     touchPoints: [{x, y: startY}],

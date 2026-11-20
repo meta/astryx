@@ -8,7 +8,7 @@ export const docs = {
   displayName: 'Checkbox List Item',
   isHiddenFromOverview: true,
   description:
-    'Individual checkbox item with label, description, and end content slot. Works in collection mode (inside a CheckboxList with a value array) or standalone mode (inside List, or inside a CheckboxList without value, such as a select-all item).',
+    'Individual checkbox item with label, description, and end content slot. Works in collection mode (inside a CheckboxList with a value array) or standalone mode (inside List, or inside a CheckboxList without value, such as a select-all item). On a touch screen (a coarse primary pointer), a toggleable row is one press target: a touch on the label, the description or the box itself shows the pressed state on the row and its checkbox together. Where the primary pointer is fine, the box keeps its own press.',
   props: [
     {
       name: 'label',
@@ -33,7 +33,7 @@ export const docs = {
       name: 'description',
       type: 'ReactNode',
       description:
-        "Secondary content below the label. String or ReactNode. Exposed as the checkbox's accessible description through aria-describedby, so assistive technology can tell it is the explanation for that choice.",
+        "Secondary content below the label: a string shows on one line and the row cuts long text with an ellipsis, so for full text pass a node, for example description={<Text type=\"supporting\">…</Text>}. String or ReactNode. The description is the checkbox's accessible description through aria-describedby, so assistive technology can tell it is the explanation for that choice.",
     },
     {
       name: 'endContent',
@@ -105,7 +105,7 @@ export const docsZh = {
   isHiddenFromOverview: true,
   displayName: 'Checkbox List Item',
   description:
-    '单个复选框选项，包含标签、描述和尾部内容插槽。可在集合模式（位于带 value 数组的 CheckboxList 内）或独立模式（位于 List 内，或位于不带 value 的 CheckboxList 内，例如“全选”选项）下使用。',
+    '单个复选框选项，包含标签、描述和尾部内容插槽。可在集合模式（位于带 value 数组的 CheckboxList 内）或独立模式（位于 List 内，或位于不带 value 的 CheckboxList 内，例如“全选”选项）下使用。在触摸屏上，可切换的行是一个整体的按压目标：手指按在标签、描述或复选框本身上，行与其复选框会一起显示按下状态。主指针为精细指针时，复选框保留自己的按下效果。',
   props: [
     {
       name: 'label',
@@ -130,7 +130,7 @@ export const docsZh = {
       name: 'description',
       type: 'ReactNode',
       description:
-        '标签下方的辅助内容。可为字符串或 ReactNode。会通过 aria-describedby 作为复选框的无障碍描述暴露，便于辅助技术识别它是该选项的说明。',
+        '标签下方的辅助内容：字符串只显示一行，过长时以省略号截断；要显示完整文本，请传入节点，例如 description={<Text type="supporting">…</Text>}。可为字符串或 ReactNode。会通过 aria-describedby 作为复选框的无障碍描述暴露，便于辅助技术识别它是该选项的说明。',
     },
     {
       name: 'endContent',
@@ -177,7 +177,7 @@ export const docsDense = {
   isHiddenFromOverview: true,
   displayName: 'Checkbox List Item',
   description:
-    'Individual checkbox item w/ label, description, end content slot. Collection mode inside CheckboxList with value; standalone inside List or CheckboxList without value.',
+    'Individual checkbox item w/ label, description, end content slot. Collection mode inside CheckboxList with value; standalone inside List or CheckboxList without value. On a touch screen a toggleable row presses as one target, box included; with a fine primary pointer the box keeps its own press.',
   propDescriptions: {
     align:
       "Start/end content alignment, passed to Item: 'center' (default), 'start', or 'first-line' (centered on the label's first line).",
@@ -188,7 +188,7 @@ export const docsDense = {
     value:
       'Identity key. Required when parent CheckboxList has a value array (throws without it).',
     description:
-      "Secondary content below label. String or ReactNode. Exposed as the checkbox's accessible description via aria-describedby.",
+      "Secondary content below label: a string shows on one line (ellipsis); for full text pass a node, e.g. <Text type=\"supporting\">. String or ReactNode. Exposed as the checkbox's accessible description via aria-describedby.",
     endContent: 'Content rendered after label area.',
     isDisabled: 'Whether this individual item is disabled.',
     isLoading:

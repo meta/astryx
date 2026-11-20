@@ -19,6 +19,7 @@
  * @property {string} label - Human-readable check name.
  * @property {DoctorStatus} status
  * @property {string} message - One-line result summary.
+ * @property {string} [brief] - A short form of a long message, which text output prints in its place. It names the command that prints the whole message (`astryx doctor --json`).
  * @property {string} [fix] - Actionable remediation: always present on 'warn' and 'fail'; some 'info' checks carry one too.
  */
 
@@ -46,7 +47,8 @@
  * @property {string} [cwd]
  * @property {string} [built] A finished build to check for Astryx use: a
  *   project folder, a build output folder, or one built file. Adds the
- *   `built-astryx-usage` and `built-astryx-purity` checks.
+ *   `built-astryx-usage`, `built-astryx-styles` (when the output uses
+ *   Astryx) and `built-astryx-purity` checks.
  */
 
 export {};

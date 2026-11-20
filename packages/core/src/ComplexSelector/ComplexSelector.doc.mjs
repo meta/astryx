@@ -37,9 +37,9 @@ const anatomy = [
   },
   {
     name: 'Indicator icon',
-    required: true,
+    required: false,
     description:
-      'Trailing chevron that rotates to reflect whether the popup is open.',
+      'Trailing chevron shown when status presentation does not replace it; rotates to reflect whether the popup is open.',
   },
   {
     name: 'Popup',
@@ -128,9 +128,43 @@ export const docs = {
           default: "'Select...'",
         },
         {
+          name: 'isLabelHidden',
+          type: 'boolean',
+          description: 'Visually hides the label while keeping it accessible.',
+          default: 'false',
+        },
+        {
+          name: 'description',
+          type: 'string',
+          description: 'Helper text displayed below the label.',
+        },
+        {
+          name: 'labelTooltip',
+          type: 'string',
+          description: 'Tooltip text displayed next to the label.',
+        },
+        {
+          name: 'isOptional',
+          type: 'boolean',
+          description: 'Marks the field as optional.',
+          default: 'false',
+        },
+        {
+          name: 'isRequired',
+          type: 'boolean',
+          description: 'Marks the field as required.',
+          default: 'false',
+        },
+        {
           name: 'isDisabled',
           type: 'boolean',
           description: 'Disables the selector.',
+        },
+        {
+          name: 'disabledMessage',
+          type: 'string',
+          description:
+            "Explains why the selector is disabled. With isDisabled, shows the reason in a tooltip on hover and keyboard focus, and the reason describes the trigger through aria-describedby. The disabled trigger keeps its tab stop and still cannot open. Works with renderTrigger too: the tooltip and the description go to the control you render; drop the tooltip of that control while disabled, for example tooltip={isDisabled ? undefined : 'Filter'}. Use this instead of wrapping a disabled ComplexSelector in Tooltip, whose text would not describe the trigger.",
         },
         {
           name: 'isLoading',
@@ -166,7 +200,7 @@ export const docs = {
         {
           name: 'startIcon',
           type: 'ReactNode | IconType',
-          description: 'Icon displayed at the start of the trigger.',
+          description: 'Icon displayed at the start of the trigger; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
         },
         {
           name: 'width',
@@ -307,6 +341,11 @@ export const docs = {
         description:
           'Do not use ComplexSelector for a plain single-column text list; use Selector instead.',
       },
+      {
+        guidance: false,
+        description:
+          'Wrap a disabled ComplexSelector in Tooltip to explain why it is disabled; the text would not describe the trigger. Use the disabledMessage prop instead.',
+      },
     ],
   },
 };
@@ -368,6 +407,11 @@ export const docsDense = {
         description:
           'Do not use ComplexSelector for a plain single-column text list; use Selector instead.',
       },
+      {
+        guidance: false,
+        description:
+          'Wrap a disabled ComplexSelector in Tooltip to explain why it is disabled; the text would not describe the trigger. Use the disabledMessage prop instead.',
+      },
     ],
   },
   propDescriptions: {
@@ -375,11 +419,13 @@ export const docsDense = {
     value: 'Controlled value.',
     onChange: 'Commit value.',
     changeAction: 'Async action after onChange; drives optimistic value/busy.',
+    disabledMessage:
+      'why disabled; w/ isDisabled shows tooltip on hover/focus and describes the trigger; use instead of Tooltip wrapper',
     children: 'Render custom dialog content from (value,onChange,close,state).',
     triggerLabel: 'Closed trigger label/content.',
     variant:
       'input for forms; secondary beside secondary buttons; ghost beside ghost buttons.',
-    startIcon: 'Leading trigger icon.',
+    startIcon: 'Leading trigger icon; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     placement: 'Popup placement.',
     alignment: 'Popup alignment.',
     renderTrigger:

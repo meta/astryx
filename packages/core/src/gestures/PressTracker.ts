@@ -14,9 +14,9 @@
  * UIControl semantics, event for event:
  *
  * - `touchDown` when the finger lands; the highlight comes on in the same
- *   frame, unless the control sits in a scroller, where it waits
- *   `contentTouchDelay` (UIScrollView.delaysContentTouches) so a flick
- *   paints nothing.
+ *   frame, unless the control sits in a scroller. There it waits
+ *   `contentTouchDelay` (UIScrollView.delaysContentTouches) from the touch's
+ *   own time, so a flick paints nothing.
  * - `touchDragInside` / `touchDragOutside` on every move, `touchDragExit` /
  *   `touchDragEnter` when the finger crosses the control's bounds EXPANDED
  *   by `trackingExpansion` (a fingertip dragged a little off a button is
@@ -47,7 +47,9 @@
  */
 
 import {UIKIT_CONTROL, UIKIT_PAN, UIKIT_PRESS} from '../motion/uikit/gestures';
-import {timing} from '../motion/uikit/timing';
+// Importing the whole table bundles its curves into each press-tracking control.
+import {press as pressClocks} from '../motion/uikit/timing';
+import {msSinceInput} from '../utils/inputAge';
 import {travel} from './geometry';
 import type {GestureRecognizer, SelectionLock} from './GestureRecognizer';
 import type {TapGestureRecognizer} from './TapGestureRecognizer';
@@ -95,6 +97,12 @@ export interface PressTrackerOptions {
    * does nothing passes none. @default undefined
    */
   selectionLock?: SelectionLock;
+  /**
+   * Whether the press of `touchId` holds the browser's context menu closed
+   * now; the host then cancels it. For a control whose hold acts, such as a
+   * switch. @default undefined
+   */
+  holdsContextMenu?: (touchId: number) => boolean;
   trackingExpansion?: number;
   /**
    * When the highlight waits `contentTouchDelay`: inside a scroller (a
@@ -148,7 +156,7 @@ export const PRESS_PROFILES = {
     // The shared press styles release every surface on the deselect clock
     // until a control runs its own release (UIButton's 250 ms), so a
     // painter's `fading` never outlasts the fade it shows.
-    releaseMs: timing.press.highlightOutMs,
+    releaseMs: pressClocks.highlightOutMs,
   },
   /**
    * A table or collection cell: inside a scroll view it highlights after the
@@ -159,7 +167,7 @@ export const PRESS_PROFILES = {
     highlightDelay: 'inScrollers',
     cancelTravel: UIKIT_PAN.hysteresis.value,
     quickTapFlash: 0,
-    releaseMs: timing.press.highlightOutMs,
+    releaseMs: pressClocks.highlightOutMs,
   },
 } as const satisfies Record<string, PressProfile>;
 
@@ -312,6 +320,10 @@ export function createPressTracker(options: PressTrackerOptions): PressTracker {
       return options.isEnabled?.() !== false;
     },
 
+    holdsContextMenu(id: number): boolean {
+      return options.holdsContextMenu?.(id) === true;
+    },
+
     touchBegan(touch: GestureTouch): void {
       if (
         touchId != null ||
@@ -334,12 +346,20 @@ export function createPressTracker(options: PressTrackerOptions): PressTracker {
         (delay === 'always' ||
           (delay === 'inScrollers' && touch.scroll?.isInsideScroller === true));
       if (delays) {
+        // The delay counts from the touch, so the time a busy main thread
+        // took to deliver it comes off the wait. The touch's time is on the
+        // clock of its own window, which can be an iframe's.
+        const wait = Math.max(
+          0,
+          PRESS.contentTouchDelay.value -
+            msSinceInput(touch.time, touch.target),
+        );
         highlightTimer = setTimeout(() => {
           highlightTimer = null;
           if (state.isTouchInside) {
             setHighlighted(true);
           }
-        }, PRESS.contentTouchDelay.value);
+        }, wait);
       } else {
         setHighlighted(true);
       }

@@ -19,10 +19,11 @@ import type {
   MouseEvent as ReactMouseEvent,
   SyntheticEvent,
 } from 'react';
-import {createContext} from 'react';
+
 import type {BaseProps} from '../BaseProps';
 import type {DialogPurpose} from '../Dialog';
 import type {BottomSheetStackView} from './bottomSheetStack';
+import {createSharedContext} from '../utils/sharedContext';
 
 export type BottomSheetSwitcherPhase =
   | 'entering'
@@ -92,6 +93,11 @@ export interface BottomSheetSwitcherContextValue {
    */
   onBeforeSheetPresent: (sheetId: string) => void;
   /**
+   * Called by a sheet host just before it shows its dialog without the scrim,
+   * so the switcher can remember the page element that opened the flow.
+   */
+  onBeforeSheetShow: () => void;
+  /**
    * Whether a modal sheet dialog that is already open sits beneath another
    * open sheet dialog in the top layer, so it must re-present to become the
    * topmost layer again.
@@ -115,6 +121,10 @@ export interface BottomSheetSwitcherContextValue {
 }
 
 export const BottomSheetSwitcherContext =
-  createContext<BottomSheetSwitcherContextValue | null>(null);
+  createSharedContext<BottomSheetSwitcherContextValue | null>(
+    'BottomSheetSwitcherContext',
+    1,
+    null,
+  );
 
 BottomSheetSwitcherContext.displayName = 'BottomSheetSwitcherContext';

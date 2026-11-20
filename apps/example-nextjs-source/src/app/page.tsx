@@ -42,7 +42,9 @@ const styles = stylex.create({
   },
   card: {
     borderRadius: 8,
-    border: '1px solid var(--color-border)',
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'var(--color-border)',
     padding: '1rem',
     backgroundColor: 'var(--color-background-body)',
   },

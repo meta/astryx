@@ -15,7 +15,7 @@ import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {Button} from '../../Button/Button';
 import {Icon} from '../../Icon';
-import {useClipboard} from '../../hooks/useClipboard';
+import {useClipboardCopy} from '../../hooks/useClipboard';
 import {useContainerReveal} from '../../hooks/useContainerReveal';
 import {colorVars, sizeVars, spacingVars} from '../../theme/tokens.stylex';
 import {mergeProps, rtlStyles} from '../../utils';
@@ -113,6 +113,8 @@ interface HeadingLinksRendererProps {
   readonly contentAlign: 'start' | 'center';
   readonly headingTextStyle: StyleXStyles;
   readonly blockSpacingStyle: StyleXStyles;
+  /** The heading's own direction; the copy control follows its inline end. */
+  readonly dir?: 'ltr' | 'rtl';
 }
 
 function isUnmodifiedPrimaryActivation(
@@ -137,14 +139,17 @@ export function HeadingLinksRenderer({
   contentAlign,
   headingTextStyle,
   blockSpacingStyle,
+  dir,
 }: HeadingLinksRendererProps): ReactElement {
   const t = useComponentTranslator();
   const copiedLabel = t('@astryx.markdownHeadingLinks.copied');
+  const copyFailedLabel = t('@astryx.markdownHeadingLinks.copyFailed');
   const copyLabel = t('@astryx.markdownHeadingLinks.copy', {
     heading: headingLabel || headingId,
   });
-  const {copy, isCopied} = useClipboard({
+  const {copy, isCopied, isFailed} = useClipboardCopy({
     announce: copiedLabel,
+    announceFailure: copyFailedLabel,
     resetAfterMs: COPY_FEEDBACK_MS,
   });
   const {getContainerProps, getContentRevealProps} = useContainerReveal();
@@ -163,6 +168,7 @@ export function HeadingLinksRenderer({
 
   return (
     <div
+      dir={dir}
       {...mergeProps(
         getContainerProps(),
         stylex.props(
@@ -184,10 +190,18 @@ export function HeadingLinksRenderer({
           type="button"
           variant="ghost"
           size="sm"
-          label={isCopied ? copiedLabel : copyLabel}
+          label={
+            isFailed ? copyFailedLabel : isCopied ? copiedLabel : copyLabel
+          }
           icon={
             <span aria-hidden="true" {...stylex.props(styles.glyph)}>
-              {isCopied ? <Icon icon="check" size="sm" color="inherit" /> : '#'}
+              {isFailed ? (
+                <Icon icon="close" size="sm" color="inherit" />
+              ) : isCopied ? (
+                <Icon icon="check" size="sm" color="inherit" />
+              ) : (
+                '#'
+              )}
             </span>
           }
           isIconOnly

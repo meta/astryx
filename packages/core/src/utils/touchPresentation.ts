@@ -23,9 +23,12 @@
 //   compact by its height.
 // - A presentation that needs both asks for both. No platform is chosen.
 //
-// A style that changes with these conditions uses the same query as a StyleX
-// media key, so the right rule paints before hydration. The iOS gate is two
-// nested keys, the media query outside and the supports query inside:
+// A style that changes with these conditions uses the same condition as a
+// StyleX media key, so the right rule paints before hydration. Touch uses
+// TOUCH_QUERY as written. Compact uses `touchKeys.compact`, not the range
+// query: StyleX rewrites a range query to a length that matches at the edge.
+// Compact touch nests the compact key inside the touch key. The iOS gate is
+// two nested keys, the media query outside and the supports query inside:
 //
 //   '@media (pointer: coarse)': {
 //     '@supports (-webkit-touch-callout: none)': value,
@@ -34,8 +37,8 @@
 // One combined `@supports` never matches, because `pointer` is not a
 // property. The iOS gate is only for a style that iOS WebKit requires (the
 // 16px input floor). Core spells the keys literally, because an imported
-// `defineConsts` key gets a different StyleX priority. Tests keep the
-// literals equal to these queries and to `touchKeys`. The hook answers the
+// `defineConsts` key gets a different StyleX priority. Tests pin the
+// literals to `touchKeys`. The hook answers the
 // server default until hydrated, unless the caller passes a hint.
 
 import {useMemo} from 'react';
@@ -54,8 +57,8 @@ export {TOUCH_QUERY};
 
 /**
  * The viewport is compact at the default width points: layout behaviours.
- * A StyleX media key, which cannot read the theme,
- * spells this; behaviour reads the active theme's definition
+ * A StyleX key, which cannot read the theme, spells the same condition as
+ * `touchKeys.compact`; behaviour reads the active theme's definition
  * (useCompactDefinition), so a theme that moves `md` moves compact with it.
  */
 export const COMPACT_QUERY = DEFAULT_COMPACT_DEFINITION.query;

@@ -13,7 +13,7 @@
  * SYNC: When modified, update the AR2 Verification row in TreeList.spec.md.
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,

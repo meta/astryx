@@ -9,10 +9,17 @@
 import {describe, it, expect} from 'vitest';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {runTree} from '../../foundation/route/route.mjs';
-import {gatherCandidates, loadSearchData} from './_adapter.mjs';
-import {routeProbs, ROUTES} from './_query-words.mjs';
-import {SEARCH_TREE} from './tree.mjs';
+import {requireNatively} from '../../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('../../foundation/route/route.mjs')} */
+const {runTree} = require('../../foundation/route/route.mjs');
+/** @type {typeof import('./_adapter.mjs')} */
+const {gatherCandidates, loadSearchData} = require('./_adapter.mjs');
+/** @type {typeof import('./_query-words.mjs')} */
+const {routeProbs, ROUTES} = require('./_query-words.mjs');
+/** @type {typeof import('./tree.mjs')} */
+const {SEARCH_TREE} = require('./tree.mjs');
 
 const REPO = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),

@@ -5,11 +5,12 @@ import {spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {integrationPackCheck} from './pack-check.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-pack-check-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-pack-check-'));
 });
 
 afterEach(() => {

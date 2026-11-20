@@ -13,6 +13,7 @@
  * hidden data table (slices in pie mode, axis values in spider mode).
  */
 
+import * as stylex from '@stylexjs/stylex';
 import {
   type ReactNode,
   useMemo,
@@ -74,6 +75,12 @@ export interface RadialChartProps {
  */
 const MAX_TABLE_POINTS = 100;
 
+const styles = stylex.create({
+  interactive: {
+    touchAction: 'none',
+  },
+});
+
 /**
  * Row header for a spider-mode table row: the first string field in the row
  * (the same heuristic RadialArea uses to match its `dataKey`), else the index.
@@ -110,6 +117,7 @@ export function RadialChart({
   labelKey,
   innerRadius: innerRadiusFraction = 0,
   padAngle = 0.02,
+  interactive = false,
   label,
   children,
 }: RadialChartProps) {
@@ -225,10 +233,21 @@ export function RadialChart({
       innerRadius: innerRadiusPx,
       data,
       mode,
+      interactive,
       ...spiderCtx,
       ...pieCtx,
     }),
-    [cx, cy, outerRadius, innerRadiusPx, data, mode, spiderCtx, pieCtx],
+    [
+      cx,
+      cy,
+      outerRadius,
+      innerRadiusPx,
+      data,
+      mode,
+      interactive,
+      spiderCtx,
+      pieCtx,
+    ],
   );
 
   const accessibleLabel =
@@ -248,7 +267,10 @@ export function RadialChart({
     data.length * axes.length <= MAX_TABLE_POINTS;
 
   return (
-    <div ref={containerRef} style={{width: '100%'}}>
+    <div
+      ref={containerRef}
+      {...stylex.props(interactive && styles.interactive)}
+      style={{width: '100%'}}>
       {containerWidth > 0 && (
         <svg
           role="img"

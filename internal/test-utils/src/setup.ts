@@ -16,6 +16,7 @@ import '@testing-library/jest-dom/vitest';
 import {configure} from '@testing-library/react';
 import {afterEach} from 'vitest';
 import {__resetClickGuardForTest} from '../../../packages/core/src/utils/clickGuard';
+import {GROUP_LAST_MEMBER} from './jsdomRefusedRules';
 
 // Text queries (getByText/findByText/…) target VISIBLE text. Astryx's
 // `useAnnounce` renders a visually-hidden aria-live region
@@ -47,7 +48,6 @@ afterEach(() => {
 // group corners in a real browser, and jsdom tests assert group
 // membership only. Other `of S` rules, such as Table's zebra striping, still
 // reach jsdom.
-const GROUP_LAST_MEMBER = ':nth-last-child(1 of ';
 const insertRule = CSSStyleSheet.prototype.insertRule;
 CSSStyleSheet.prototype.insertRule = function insertRuleWithoutGroupLastMember(
   rule: string,

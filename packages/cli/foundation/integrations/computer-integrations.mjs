@@ -40,6 +40,7 @@ import {
 import {installPlaceOf} from '../release/choose.mjs';
 import {isInReleaseCache} from '../release/cache.mjs';
 import {satisfiesRange} from '../env/semver.mjs';
+import {ownPackageDir} from '../runtime/package-root.mjs';
 
 /** Packages that are the CLI itself, never an integration of it. */
 const NOT_INTEGRATIONS = new Set(['@astryxdesign/cli', '@astryxdesign/core']);
@@ -206,6 +207,8 @@ function installedNames(root) {
 export function peerProblem(pkg, release) {
   const peers = pkg.peerDependencies;
   if (!peers || typeof peers !== 'object') return null;
+  /** @type {string[]} */
+  const excluding = [];
   for (const peer of RELEASE_PEERS) {
     const range = peers[peer];
     if (typeof range !== 'string') continue;
@@ -216,11 +219,11 @@ export function peerProblem(pkg, release) {
       // A range this CLI cannot read never keeps the integration out.
       admits = true;
     }
-    if (!admits) {
-      return `it needs ${peer} ${range}, and this computer's CLI is ${release}`;
-    }
+    if (!admits) excluding.push(`${peer} ${range}`);
   }
-  return null;
+  return excluding.length === 0
+    ? null
+    : `it needs ${excluding.join(' and ')}, and this computer's CLI is ${release}`;
 }
 
 /**
@@ -256,11 +259,9 @@ export function scanComputerIntegrations({
  * @param {string} root
  * @returns {{packageDir: string, hostDir: string} | null}
  */
-function ownPackageDir(name, root) {
-  const packageDir = path.join(root, 'node_modules', ...name.split('/'));
-  return fs.existsSync(path.join(packageDir, 'package.json'))
-    ? {packageDir, hostDir: root}
-    : null;
+function ownInstall(name, root) {
+  const packageDir = ownPackageDir(name, root);
+  return packageDir ? {packageDir, hostDir: root} : null;
 }
 
 /**
@@ -280,7 +281,7 @@ function scanRoot(root, {self, release, found, seen}, approved = null) {
   for (const name of declared) {
     if (NOT_INTEGRATIONS.has(name)) continue;
     const resolved = approved
-      ? ownPackageDir(name, root)
+      ? ownInstall(name, root)
       : resolveInstalledPackageDir(name, root);
     if (!resolved) continue;
     const identity = real(resolved.packageDir);

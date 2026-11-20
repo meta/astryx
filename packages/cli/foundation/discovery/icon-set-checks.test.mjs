@@ -632,12 +632,60 @@ describe('iconSetIssues', () => {
       expect(withUpstream('1.2.0')).toEqual([]);
     });
 
-    it('no license notice for a set with an upstream warns', () => {
-      expect(withUpstream('1.2.0', false)).toEqual([
+    it('no license notice for a set with an upstream warns, and names the NOTICE file to add and every name that counts', () => {
+      const issues = withUpstream('1.2.0', false);
+      expect(issues).toEqual([
         expect.objectContaining({
           code: 'icon_license_notice_missing',
           severity: 'warning',
         }),
+      ]);
+      expect(issues[0].message).toContain(
+        'Add a NOTICE (or LICENSE) file to icon-sets/glyphs that names upstream-icons@1.2.0 and its license: `icon-sets/glyphs/NOTICE`.',
+      );
+      expect(issues[0].message).toContain(
+        'A file named LICENSE, LICENCE, NOTICE, or COPYING, in any case and with an optional suffix such as NOTICE.md or LICENSE-MIT, counts in the set directory or the package root.',
+      );
+    });
+
+    it('each file name the message lists silences the warning', () => {
+      expect(withUpstream('1.2.0', false)).toHaveLength(1);
+      const recheck = () =>
+        iconSetIssues(
+          dir,
+          {name: '@acme/glyphs', iconSets: path.join(dir, 'icon-sets')},
+          new Map(),
+        ).filter(issue => !COVERAGE.has(issue.code));
+      for (const name of [
+        'NOTICE',
+        'notice.md',
+        'LICENSE',
+        'LICENCE.txt',
+        'COPYING',
+        'LICENSE-MIT',
+      ]) {
+        const file = path.join(dir, 'icon-sets', 'glyphs', name);
+        fs.writeFileSync(file, 'x\n');
+        expect(recheck(), name).toEqual([]);
+        fs.rmSync(file);
+      }
+      expect(recheck()).toHaveLength(1);
+    });
+
+    it('a directory named LICENSE counts in neither the set directory nor the package root', () => {
+      expect(withUpstream('1.2.0', false)).toHaveLength(1);
+      const recheck = () =>
+        iconSetIssues(
+          dir,
+          {name: '@acme/glyphs', iconSets: path.join(dir, 'icon-sets')},
+          new Map(),
+        ).filter(issue => !COVERAGE.has(issue.code));
+      for (const where of [dir, path.join(dir, 'icon-sets', 'glyphs')]) {
+        fs.mkdirSync(path.join(where, 'LICENSE'));
+        fs.mkdirSync(path.join(where, 'NOTICE.d'));
+      }
+      expect(recheck()).toEqual([
+        expect.objectContaining({code: 'icon_license_notice_missing'}),
       ]);
     });
   });
@@ -655,16 +703,20 @@ describe('icon definitions (map)', () => {
     // Each names the command that maps it, never a hand edit of the data.
     const error = builtIn.find(issue => issue.message.includes('"error"'));
     expect(error?.message).toContain(
-      '`astryx experimental icon map error <icon id>`',
+      '`astryx experimental icon map error <icon id> --set glyphs`',
     );
     expect(error?.message).not.toContain('add it to "map"');
     // A find hint names a search only when that search finds icons.
     for (const issue of builtIn) {
       const query =
-        /icons matching "([^"]+)": `astryx experimental icon \1 --set glyphs`/u.exec(
+        /icons matching "([^"]+)": `astryx experimental icon ('[^']+'|\S+) --set glyphs`/u.exec(
           issue.message,
         );
       if (query) {
+        // A query of several words is one shell word, so it runs as printed.
+        expect(query[2]).toBe(
+          query[1].includes(' ') ? `'${query[1]}'` : query[1],
+        );
         expect(rankIcons([readSet()], query[1]).length).toBeGreaterThan(0);
       } else {
         expect(issue.message).toContain(
@@ -758,7 +810,7 @@ describe('icon definitions (map)', () => {
     );
     const rubbish = unused.find(issue => issue.message.includes('"rubbish"'));
     expect(rubbish?.message).toContain(
-      'Suggested: astryx experimental icon map rubbish trash.',
+      'Suggested: astryx experimental icon map rubbish trash --set glyphs.',
     );
     const [coverage] = iconSetCoverage({
       name: '@acme/glyphs',
@@ -1014,5 +1066,46 @@ describe('suggestions from a definition word never bridge to another meaning', (
     expect(suggest('raiseHand', ['hand-raised'])).toEqual(['hand-raised']);
     expect(suggest('location', ['map-pin'])).toEqual(['map-pin']);
     expect(suggest('textCase', ['case-sensitive'])).toEqual(['case-sensitive']);
+  });
+});
+
+describe('suggestions prefer the icon the definition names over a longer id', () => {
+  const definitions = new Map(
+    astryxIconDefinitions().definitions.map(({doc}) => [doc.name, doc]),
+  );
+  /** @param {string} name @param {string[]} ids */
+  const suggest = (name, ids) =>
+    suggestedIcons(
+      {data: {icons: ids.map(id => ({id, words: id.split('-')})), map: {}}},
+      /** @type {any} */ (definitions.get(name)),
+    ).map(each => each.icon);
+
+  it('puts an id whose other words name something else after the icons its words name', () => {
+    // A backspace key and a pattern lock are not delete and unlock.
+    expect(suggest('delete', ['delete-left', 'trash'])).toEqual([
+      'trash',
+      'delete-left',
+    ]);
+    expect(suggest('unlock', ['unlock-pattern', 'unlocked'])).toEqual([
+      'unlocked',
+      'unlock-pattern',
+    ]);
+    // Other words that are the definition's own, or a size or shape, still
+    // come first.
+    expect(suggest('add', ['add-circle', 'plus'])[0]).toBe('add-circle');
+  });
+
+  it('puts a word another definition shares after the words only this one has', () => {
+    // `store` is a word of save and of a shopping bag.
+    expect(suggest('save', ['store', 'floppy-disk'])).toEqual([
+      'floppy-disk',
+      'store',
+    ]);
+  });
+
+  it('suggests the building for bank, never a shelf of books', () => {
+    expect(suggest('bank', ['library', 'building-library'])).toEqual([
+      'building-library',
+    ]);
   });
 });

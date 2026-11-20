@@ -12,8 +12,9 @@
  * - /packages/core/src/NavMenu/index.ts
  */
 
-import {createContext, use} from 'react';
+import {use} from 'react';
 import {createLayerScopedContext} from '../Layer/layerScopedContext';
+import {createSharedContext} from '../utils/sharedContext';
 
 export type NavHeadingMenuSize = 'sm' | 'md' | 'lg';
 
@@ -27,7 +28,11 @@ export interface NavHeadingCloseContextValue {
 }
 
 export const NavHeadingCloseContext =
-  createContext<NavHeadingCloseContextValue | null>(null);
+  createSharedContext<NavHeadingCloseContextValue | null>(
+    'NavHeadingCloseContext',
+    1,
+    null,
+  );
 NavHeadingCloseContext.displayName = 'NavHeadingCloseContext';
 
 export function useNavHeadingCloseContext(): NavHeadingCloseContextValue | null {
@@ -40,10 +45,23 @@ export function useNavHeadingCloseContext(): NavHeadingCloseContextValue | null 
  * expanded SideNavHeading, FR7). NavHeadingMenu calls it for a mouse released
  * outside, never on an item's selection.
  */
-export const NavHeadingDismissContext = createContext<{
+export const NavHeadingDismissContext = createSharedContext<{
   dismiss: () => void;
-} | null>(null);
+} | null>('NavHeadingDismissContext', 1, null);
 NavHeadingDismissContext.displayName = 'NavHeadingDismissContext';
+
+/**
+ * Internal (not exported from the NavMenu entry): true inside the named
+ * `role="menu"` region a SideNavHeading or TopNavHeading popover wraps around
+ * its `menu`. A NavHeadingMenu there renders no menu of its own, so its items
+ * belong to the heading's menu.
+ */
+export const NavHeadingMenuHostContext = createSharedContext<boolean>(
+  'NavHeadingMenuHostContext',
+  1,
+  false,
+);
+NavHeadingMenuHostContext.displayName = 'NavHeadingMenuHostContext';
 
 /**
  * Size and close context provided by NavHeadingMenu to its children.
@@ -55,7 +73,11 @@ export interface NavHeadingMenuContextValue {
 }
 
 export const NavHeadingMenuContext =
-  createLayerScopedContext<NavHeadingMenuContextValue | null>(null);
+  createLayerScopedContext<NavHeadingMenuContextValue | null>(
+    'NavHeadingMenuContext',
+    1,
+    null,
+  );
 NavHeadingMenuContext.displayName = 'NavHeadingMenuContext';
 
 export function useNavHeadingMenuContext(): NavHeadingMenuContextValue | null {

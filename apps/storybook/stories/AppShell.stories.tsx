@@ -13,6 +13,7 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {Text} from '@astryxdesign/core/Text';
 import {MobileNav} from '@astryxdesign/core/MobileNav';
 import {TopNav, TopNavHeading, TopNavItem} from '@astryxdesign/core/TopNav';
+import {BreadcrumbItem, Breadcrumbs} from '@astryxdesign/core/Breadcrumbs';
 import {NavIcon} from '@astryxdesign/core/NavIcon';
 import {
   SideNav,
@@ -23,6 +24,7 @@ import {
 import {useMediaQuery} from '@astryxdesign/core/hooks';
 import {TextArea} from '@astryxdesign/core/TextArea';
 import {TextInput} from '@astryxdesign/core/TextInput';
+import {StackItem} from '@astryxdesign/core/Stack';
 import * as stylex from '@stylexjs/stylex';
 import {
   HomeIcon,
@@ -31,6 +33,7 @@ import {
   UserGroupIcon,
   FolderIcon,
   BellIcon,
+  BugAntIcon,
   QuestionMarkCircleIcon,
   UserCircleIcon,
   Bars3Icon,
@@ -62,6 +65,9 @@ const styles = stylex.create({
     display: 'flex',
     flexDirection: 'column' as const,
     gap: 32,
+  },
+  barSearch: {
+    width: 240,
   },
 });
 
@@ -97,9 +103,11 @@ function MockContent({paragraphs = 3}: {paragraphs?: number}) {
 function AppTopNav({
   endContent,
   heading = 'Acme App',
+  headingHref,
 }: {
   endContent?: React.ReactNode;
   heading?: string;
+  headingHref?: string;
 }) {
   return (
     <TopNav
@@ -107,6 +115,7 @@ function AppTopNav({
       heading={
         <TopNavHeading
           heading={heading}
+          headingHref={headingHref}
           logo={<NavIcon icon={<CubeIcon style={{width: 16, height: 16}} />} />}
         />
       }
@@ -325,9 +334,37 @@ export const TopNavWithSideNav: Story = {
   ),
 };
 
+/** The end controls of a product header: report a bug, notifications, profile. */
+function ProductHeaderControls() {
+  return (
+    <>
+      <Button
+        label="Report a bug"
+        variant="ghost"
+        icon={<BugAntIcon style={{width: 16, height: 16}} />}
+        isIconOnly
+      />
+      <Button
+        label="Notifications"
+        variant="ghost"
+        icon={<BellIcon style={{width: 16, height: 16}} />}
+        isIconOnly
+      />
+      <Button
+        label="Profile"
+        variant="ghost"
+        icon={<UserCircleIcon style={{width: 16, height: 16}} />}
+        isIconOnly
+      />
+    </>
+  );
+}
+
 /**
- * A long app name on a phone. The heading truncates with an ellipsis so the
- * end content and the menu toggle stay inside the bar.
+ * A long app name on a phone, in a product header: a linked heading with a
+ * logo, three end controls, and the menu toggle. The heading truncates to one
+ * line with an ellipsis, so the end controls and the menu toggle keep their
+ * size and stay inside the bar.
  */
 export const LongHeadingOnMobile: Story = {
   globals: {viewport: {value: 'mobile1', isRotated: false}},
@@ -337,20 +374,98 @@ export const LongHeadingOnMobile: Story = {
       topNav={
         <AppTopNav
           heading="Northwind Internal Usage Analytics"
+          headingHref="#/"
+          endContent={<ProductHeaderControls />}
+        />
+      }
+      sideNav={<SideNavWithoutHeader />}>
+      <MockContent />
+    </AppShell>
+  ),
+};
+
+/**
+ * A long app name passed to TopNav as plain text, without TopNavHeading, on a
+ * phone. The compact bar keeps it on one line and ends it in an ellipsis, so
+ * the bar does not grow taller.
+ */
+export const LongTextHeadingOnMobile: Story = {
+  globals: {viewport: {value: 'mobile1', isRotated: false}},
+  render: () => (
+    <AppShell
+      contentPadding={6}
+      topNav={
+        <TopNav
+          label="Main navigation"
+          heading="Northwind Internal Usage Analytics"
+          endContent={<ProductHeaderControls />}
+        />
+      }
+      sideNav={<SideNavWithoutHeader />}>
+      <MockContent />
+    </AppShell>
+  ),
+};
+
+/**
+ * A search field and three end controls on a phone. The field asks for 240px
+ * but may narrow. The heading yields first, then the field narrows, so the end
+ * controls and the menu toggle keep their size and stay inside the bar.
+ */
+export const SearchInEndContentOnMobile: Story = {
+  globals: {viewport: {value: 'mobile1', isRotated: false}},
+  render: () => (
+    <AppShell
+      contentPadding={6}
+      topNav={
+        <TopNav
+          label="Main navigation"
+          heading="Northwind"
           endContent={
             <>
-              <Button
-                label="Notifications"
-                variant="ghost"
-                icon={<BellIcon style={{width: 16, height: 16}} />}
-                isIconOnly
-              />
-              <Button
-                label="Profile"
-                variant="ghost"
-                icon={<UserCircleIcon style={{width: 16, height: 16}} />}
-                isIconOnly
-              />
+              <StackItem size="fill" xstyle={styles.barSearch}>
+                <TextInput
+                  label="Search"
+                  isLabelHidden
+                  size="sm"
+                  width="100%"
+                  placeholder="Search files and commands"
+                  value=""
+                  onChange={() => {}}
+                />
+              </StackItem>
+              <ProductHeaderControls />
+            </>
+          }
+        />
+      }
+      sideNav={<SideNavWithoutHeader />}>
+      <MockContent />
+    </AppShell>
+  ),
+};
+
+/**
+ * Breadcrumbs in TopNav's start content on a phone. Below the breakpoint they
+ * render in the mobile drawer; a crumb link closes the drawer, like the
+ * TopNav and SideNav rows beside it, and the current crumb leaves it open.
+ */
+export const BreadcrumbsInMobileDrawer: Story = {
+  globals: {viewport: {value: 'mobile1', isRotated: false}},
+  render: () => (
+    <AppShell
+      contentPadding={6}
+      topNav={
+        <TopNav
+          label="Main navigation"
+          heading={<TopNavHeading heading="Acme App" headingHref="#/" />}
+          startContent={
+            <>
+              <Breadcrumbs>
+                <BreadcrumbItem href="#/projects">Projects</BreadcrumbItem>
+                <BreadcrumbItem isCurrent>Detail</BreadcrumbItem>
+              </Breadcrumbs>
+              <TopNavItem label="Docs" href="#/docs" />
             </>
           }
         />
@@ -841,6 +956,30 @@ export const WithBanner: Story = {
         />
       }>
       <MockContent />
+    </AppShell>
+  ),
+};
+
+/**
+ * Auto height with a banner and a side nav but no top nav. Below the mobile
+ * breakpoint, the side nav shows as the phone top bar under the banner. Both
+ * stick to the top as the page scrolls.
+ */
+export const AutoHeightSideNavBanner: Story = {
+  render: () => (
+    <AppShell
+      contentPadding={6}
+      sideNav={<SideNavWithHeader />}
+      height="auto"
+      banner={
+        <Banner
+          status="info"
+          container="section"
+          title="System maintenance scheduled"
+          description="The system will undergo maintenance tonight at 10pm UTC."
+        />
+      }>
+      <MockContent paragraphs={20} />
     </AppShell>
   ),
 };

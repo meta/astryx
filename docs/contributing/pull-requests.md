@@ -103,6 +103,203 @@ public retained copy outside the implementation branch. Keep reusable fixtures,
 accepted baselines, and media used by public documentation in their owning source
 paths. Evidence storage does not relax the matching template's evidence bar.
 
+## Review your change before you ask for review
+
+Review reads each pull request against the current records and the checklist
+below. Run the same pass first. Each finding you fix before review saves a
+review round.
+
+### Run the pre-review report
+
+```bash
+pnpm review:pre                       # the working tree against origin/main
+pnpm review:pre --base upstream/main  # a fork whose main remote is upstream
+pnpm review:pre --head HEAD           # committed work only
+pnpm review:pre --json                # the same report as JSON
+```
+
+The report reads only the local repository. It prints:
+
+- each changed file and its class: record, owner-gated record, published
+  package code, other package file, Lab, or repository;
+- the current records that govern those files, and the claims that the files
+  cite or that the added lines route;
+- the global baseline claims that the linked components' review triggers route,
+  read at the merge base;
+- the authored line count, with advice when the lines outside templates are
+  over the size guideline, and whether the change merges into the base;
+- the findings for items i to l, each with its file and line, the rule, and
+  the fix;
+- the checklist items that apply to this change, each with its reason.
+
+The report is a lookup. The records decide acceptance, not the report. A
+finding is a lead to check, not a verdict.
+
+### Before you mark ready
+
+```bash
+pnpm preflight                       # the committed change against origin/main
+pnpm preflight --base upstream/main  # a fork whose main remote is upstream
+pnpm preflight --browser             # also the browser specs the change selects
+pnpm preflight --quick               # minutes: the changed packages, files and tests alone
+```
+
+`pnpm preflight` runs `pnpm review:pre`, then the checks CI runs for this
+change, scoped the way CI scopes them: the typecheck of the changed packages
+and the packages that depend on them, ESLint on the changed files and Prettier on the changed TypeScript and Markdown files
+and `pnpm check:repo`, the Vitest tests the change reaches in each project,
+`pnpm check:knowledge` and `pnpm check:changesets`. With `--browser` it also
+builds Storybook and runs the accessibility and Chromium interaction specs the
+change selects. It prints one PASS, FAIL or SKIP line a check, the command of
+each failing check, and "ready to flip" or "not ready: N"; it exits 1 when a
+check fails. CI can run more for a change than preflight does (whole-repository
+lint, the build tests, and the browser, visual, WebKit, accessibility and
+docsite jobs), so a pass is a good sign, not CI's verdict. It checks committed work, as CI's test listers do: with uncommitted
+changes it stops and exits 2. `--wrap <command>` (or `PREFLIGHT_WRAP`) runs each heavy step as
+`<command> <build|test|knowledge> <step...>`, for a machine that limits heavy
+jobs.
+
+`--quick` runs `pnpm review:pre`, the typecheck of the changed packages alone,
+ESLint on the changed files, the changed test files alone, `pnpm check:knowledge`
+and `pnpm check:changesets`, in minutes. It is not CI-equivalent: it builds
+nothing, leaves out dependent packages, the tests the change reaches through an
+import, and the guards, and it ends with "run `pnpm preflight` before you flip"
+rather than "ready to flip". When every typecheck error names a workspace
+package's build output (`@astryxdesign/<package>/built` or a relative `dist` path), the
+typecheck reports SKIP ("workspace builds missing; run `pnpm build` first"),
+and the run ends "not checked" rather than a pass; any other TypeScript error
+fails it. A skipped typecheck checked nothing: run `pnpm build`, then run
+preflight again.
+
+Preflight is not a required step. It reproduces the pre-review checklist and
+CI's checks; it does not reproduce a reviewer's judgment.
+
+### Find the governing records by hand
+
+| Command                                                                                                            | What it answers                                                                           |
+| ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `pnpm specs:for <path>`                                                                                            | The records linked to one path, the specs that decided them, and the routed global claims |
+| `pnpm specs:for --diff origin/main`                                                                                | The same for every changed file, with the claims that the added lines route first         |
+| `node scripts/review-global-baselines.mjs --authority-commit <base-sha> --review-head <head-sha> --triggers <a,b>` | The current global claims for the review triggers, read at the merge base                 |
+| `pnpm check:knowledge`                                                                                             | Whether records and templates are valid after you edit one                                |
+| `git diff --name-only origin/main... \| node .github/scripts/change-scope.cjs --classify-paths`                    | Which changed paths are spec records, and which need a spec owner's approval              |
+
+### Pre-review checklist
+
+First apply the protocol above: one primary intent, no tagalongs, and
+specifications last. Then check each item that the report lists. Item d applies
+to every pull request. The report checks items i to l automatically and lists
+each finding at its file and line.
+
+- **a. API delta.** A current record decides each added or changed row of the
+  pull request's API delta, which the review bot posts at the start of its
+  summary notes. The record is current at the merge base or changes in the
+  same pull request. A row that no record decides goes to an owner for a
+  decision; review does not ask you to remove it
+  ([`architecture:public-component-api`](../architecture/public-component-api.md#boundaries-and-invariants)
+  INV24 and INV25).
+  A new internal module or hook that another component can import (a package
+  `internal/` export, or a hook used outside the component that owns it) and
+  that no record defines gets REQUEST_CHANGES:
+  it needs an owner API decision, with the delta as usage, why it is needed,
+  and why existing modules are not enough
+  ([`architecture:knowledge-contracts`](../architecture/knowledge-contracts.md#contract-before-escalation)
+  step 5 and DEC-22).
+- **b. Behavior.** Each observable behavior change in a published package
+  cites the current record and clause that settle it. If nothing changes
+  behavior, write "No behavior change" in the description. A clause settles
+  only what its text states. A clause that only names a prop, key, or slot, or
+  a general baseline such as a WCAG level, does not settle the wording, default,
+  fallback, or result that ships. Catalogs, Changesets, stories, and comments
+  are not records. An unsettled behavior goes to an owner. Lab is not a stable
+  public promise, so a Lab-only change skips this item
+  ([Authority](../../AGENTS.md#authority);
+  [`architecture:knowledge-contracts` contract before escalation](../architecture/knowledge-contracts.md#contract-before-escalation)).
+- **c. Behavior props.** A prop that chooses how a component responds to input
+  is named `<thing>Behavior` and takes a closed union of behavior names. Its
+  name holds no input word (press, touch, tap, hover, mouse, click) when its
+  values can name the behavior. One behavior is one prop. When the behavior
+  differs by device, the prop offers `'adaptive'` or `'adaptive-<target>'`. A
+  new behavior prop defaults to the shipped behavior. An `is…` or `has…`
+  boolean names only a true on/off
+  ([`architecture:public-component-api`](../architecture/public-component-api.md#boundaries-and-invariants)
+  INV2 and INV3).
+- **d. Public boundary.** No internal or private context in source, tests,
+  fixtures, Changesets, commit messages, branch names, or pull request text
+  ([Public repository boundary](#public-repository-boundary)).
+- **e. New public hook.** Each public hook has a minimal, runnable example: a
+  live template block that names the hook in `exampleFor` or `alsoExampleFor`.
+  A public hook is a hook that a package exports from a published entry point,
+  so a new hook export makes one. Motion and gesture
+  hooks count. A public hook without a conforming example is a docs gap that an
+  issue tracks
+  ([`architecture:knowledge-contracts`](../architecture/knowledge-contracts.md#consumer-docs)
+  INV28 and DEC-16).
+- **f. Comments.** New or changed comments in `packages/*/src/**`, Lab
+  included, explain only a reason, a constraint, an invariant, or a platform
+  quirk. They do not narrate the code, restate names, or cite pull requests,
+  issues, dates, or records. They follow ASD-STE100 Simplified Technical
+  English: at most 20 words in an instruction and 25 in a description, one
+  topic per sentence, and active voice. A file header stays within about 12
+  lines
+  ([`architecture:knowledge-contracts`](../architecture/knowledge-contracts.md#source-comments)
+  INV29).
+- **g. Records.** A change to an owner-gated path waits on `review-required`
+  until a spec owner approves its spec content, with `/approve-spec <sha>` or an
+  approving review. Base merges, rebases, and commits to other paths keep that
+  approval. A later change to the approved spec text resets it
+  ([`architecture:knowledge-contracts`](../architecture/knowledge-contracts.md#dec-14--one-owner-approval-binds-a-pull-requests-spec-content)
+  DEC-14). The description also reports `## Writing rubric results`
+  ([Writing specification records](spec-writing.md)).
+- **h. Size (guideline).** Prefer pull requests under about 2,000 authored
+  lines, without lockfiles, snapshots, or generated files. A reviewer may
+  suggest a split when a smaller change would be easier to review. Size alone
+  is never a blocking finding. Templates under `packages/cli/assets/templates/`
+  may exceed this guideline, because each one is a complete example. For a
+  stacked pull request, pass `--base` the branch below it, so the count covers
+  only its own lines.
+- **i. Shared owners (automatic).** In Core source, an added resize observer,
+  document or window listener, module-level warn-once set, or parent walk
+  across shadow roots is a finding: call `observeResize`,
+  `subscribeInput`, `useDevWarning`, or `parentAcrossShadow`
+  ([`architecture:react-component-runtime`](../architecture/react-component-runtime.md#boundaries-and-invariants)
+  INV16).
+- **j. Effects (automatic).** Interaction logic lives in callbacks, and no
+  Effect reacts to interaction state. These are findings: an added Effect with
+  no comment that names the system it syncs; an Effect that only copies props
+  or state into other state; an Effect that only copies a value into a ref
+  (keep a latest prop or callback with `useCommittedRef` or
+  `useCommittedRefInto` from `packages/core/src/hooks/useCommittedRef.ts`); a
+  read of such a ref's `current` during render or in `useMemo`; a `ref.current`
+  write during render, except lazy initialization such as
+  `if (ref.current == null) ref.current = value`; and a DOM node in React state
+  ([`architecture:react-component-runtime`](../architecture/react-component-runtime.md#boundaries-and-invariants)
+  INV1, INV2, INV3 and INV17).
+  The check reads only the lines a change adds or changes. Two render-time
+  writes are not findings: Markdown's streaming fade-in refs, an exception that
+  `component:Markdown` DEC-7 allows, and `useTableSortable`'s config ref, exempt
+  as INV17's named gap until the owner decides.
+- **k. Release notes and records (automatic).** A package that ships a change
+  with no Changeset, a `[fix]`, `[feat]`, or `[perf]` Changeset for a package
+  where nothing that ships changes, such as a change to tests or tooling only,
+  and a gap row left in a record for a claim this change builds are findings.
+- **l. Mergeable (automatic).** A conflict with the base branch is a finding.
+  For the working tree, the check merges the last commit. It writes nothing to
+  the repository.
+
+### Use a fresh session for an agent's change
+
+The author of a change reads intent into it. A reviewer reads only the diff.
+When an agent wrote the change:
+
+1. Start a new agent session that has no memory of writing the change. Check
+   out the pull request branch.
+2. Run `pnpm review:pre`.
+3. Read every record and claim that the report lists.
+4. Apply the protocol above and each listed checklist item to the diff.
+5. Fix each finding, or split it out. Run `pnpm review:pre` again.
+6. Request review when no finding is left.
+
 ## Public repository boundary
 
 Descriptions, screenshots, commits, tests, and specification records are public. Do not include internal links, identifiers, hostnames, tools, or operational context.

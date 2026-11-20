@@ -20,7 +20,7 @@ export const docs = {
     'swap',
   ],
   description:
-    'Decorative control visuals: the mark on a chosen option, the box a checkbox draws, the circle a radio draws. Rendered by Selector, CheckboxInput, RadioList, and menu selection rows. Replace one by name through defineTheme({indicators}) and every component drawing it follows.',
+    'Decorative control visuals: the mark on a chosen option, the box a checkbox draws, the circle a radio draws. Rendered by Selector, CheckboxInput, RadioList, and menu selection rows. Replace one by name through defineTheme({indicators}) and every component drawing it follows. Two names have no built-in: `spinner` (state `busy`) replaces the ring a Spinner turns, and `tree-disclosure` (states `collapsed` and `expanded`) replaces the chevron of a TreeList row.',
   components: [
     {
       name: 'CheckboxIndicator',

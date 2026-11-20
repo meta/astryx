@@ -13,12 +13,20 @@ import React from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Token} from '../Token';
 import {useLocale} from '../i18n/useLocale';
+import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import {fontWeightVars} from '../theme/tokens.stylex';
 import {formatFilterValue} from './formatFilterValue';
 import {resolveOperatorLabel} from './resolveOperatorLabel';
 import {useInternalConfig} from './useInternalConfig';
 import type {PowerSearchTokenProps} from './types';
 import {useComponentTranslator} from '../i18n/useComponentTranslator';
+import {formatTokenLabel} from './formatTokenValue';
+import {pickDataAttributes} from '../utils/themeProps';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 const tokenValueStyles = stylex.create({
   value: {
@@ -42,17 +50,24 @@ export function PowerSearchToken({
   onClick,
   onRemove,
   isDisabled,
+  timezoneID,
+  ...rest
 }: PowerSearchTokenProps) {
+  if (process.env.NODE_ENV !== 'production' && configProp == null) {
+    throw devPropError(
+      'PowerSearchToken',
+      'config',
+      'is required: the same config as the PowerSearch it belongs to.',
+    );
+  }
   const config = useInternalConfig(configProp);
   const t = useComponentTranslator();
   const locale = useLocale();
+  const calendar = useCalendarSystem(undefined, 'PowerSearchToken');
 
   const fieldLabel = field.label;
   const resolvedOperatorLabel = resolveOperatorLabel(operator, t);
-  const operatorLabel = resolvedOperatorLabel
-    ? `: ${resolvedOperatorLabel}`
-    : '';
-  const tokenLabel = `${fieldLabel}${operatorLabel}`;
+  const tokenLabel = formatTokenLabel(t, fieldLabel, resolvedOperatorLabel);
 
   const adjustedMaxLength = Math.max(
     maxLength - fieldLabel.length - resolvedOperatorLabel.length,
@@ -66,6 +81,8 @@ export function PowerSearchToken({
     adjustedMaxLength,
     t,
     locale,
+    timezoneID,
+    calendar,
   );
 
   const valueContent = valueStr ? (
@@ -74,6 +91,7 @@ export function PowerSearchToken({
 
   return (
     <Token
+      {...pickDataAttributes(rest)}
       label={tokenLabel}
       endContent={valueContent}
       onClick={

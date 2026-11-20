@@ -44,7 +44,9 @@ import type {
   IconEntry,
   IconName,
   NamespacedIconName,
+  StoredComponentIconValue,
 } from '../Icon/globalIconRegistry';
+import type {ComponentIconMap, ComponentIconStaticMap} from '../Icon/index';
 
 /**
  * Icon overrides a theme may declare: any built-in semantic name, plus the
@@ -97,12 +99,13 @@ type ThemeIconOverrides = Partial<
 >;
 import type {IndicatorRegistry} from '../Indicator/types';
 import type {TypographyConfig} from './types';
+import type {ThemePalette} from '../palette/types';
 import {
   resolveOnMedia,
   type OnMediaOverrides,
   type ResolvedOnMedia,
 } from './onMediaTokens';
-import {
+import type {
   colorDefaults,
   spacingDefaults,
   sizeDefaults,
@@ -133,7 +136,8 @@ import {
 } from './themeAdaptations';
 
 import type {DomainTokenName} from './domainTokens';
-import {domainTokenDefaults} from './domainTokens/domainTokenDefaults';
+import {deepMergeComponents} from './mergeComponents';
+import {tokenDefaults} from './tokenDefaults';
 import type {SyntaxThemeDefinition} from './syntax';
 import {registerTheme} from './themeRegistry';
 import {resolveLocalTokenContract} from './localTokens';
@@ -182,16 +186,48 @@ export type TokenValue = string | [light: string, dark: string];
  * `:hover` would otherwise still match. Style the disabled state through
  * `:disabled` instead.
  *
+ * An `:active` override follows the touch press model: it applies to a mouse
+ * press, and under a coarse primary pointer it applies while Astryx believes
+ * the press, not on the touch or through a scroll.
+ *
+ * The `@light` and `@dark` keys hold a style block (properties and
+ * pseudo-class overrides) that applies only where the element's color mode is
+ * that mode: the mode a `Theme` sets with `light` or `dark`, or a `MediaTheme`
+ * surface. Under a `system` Theme a block follows the scheme the page root
+ * draws in (its `color-scheme`, else its color-scheme meta; not a scheme set
+ * on `body` or a container): on a page that draws in one scheme, once the
+ * root Theme has mounted, that scheme's block applies whatever the reader
+ * prefers. On a page that follows the reader, and at the first paint of a
+ * server-rendered page, the reader's preference decides. Under a Theme that
+ * forces a mode, a `system` Theme's block follows the reader's preference.
+ * Inside media surfaces the nearest
+ * surface decides, so a light `MediaTheme` inside a dark one takes only the
+ * light block, for up to five surfaces of alternating modes nested one in
+ * another. Where no enclosing mode matches, the block writes nothing, so every other
+ * rule applies there as it would without it. Use it
+ * for a value that is not a color, or to leave the other mode untouched; a
+ * color that differs per mode can also be one `light-dark()` value.
+ *
  * @example
  * ```ts
  * {
  *   borderColor: '#8F9296',
  *   ':hover': { borderColor: 'color-mix(in srgb, #8F9296, black 20%)' },
  *   ':focus-visible': { outline: '2px solid var(--color-accent)' },
+ *   '@dark': { backgroundImage: 'linear-gradient(#141821, #1d2533)' },
  * }
  * ```
  */
-export type StyleOverrides = Record<string, string | Record<string, string>>;
+export type StyleOverrides = Record<
+  string,
+  string | Record<string, string> | StyleBlock
+>;
+
+/**
+ * A style block: CSS properties and pseudo-class overrides, as in a style
+ * key's value. A color-mode key (`@light`, `@dark`) of a style key holds one.
+ */
+export type StyleBlock = Record<string, string | Record<string, string>>;
 
 /**
  * Component style overrides.
@@ -274,7 +310,9 @@ export interface DefineThemeInput<
    * Unified typography configuration — fonts, scale, and weights.
    *
    * Scale controls sizing; roles (body, heading, code) declare
-   * fonts, fallbacks, and weights. Heading inherits from body if omitted.
+   * fonts, fallbacks, and weights. A heading with no `family` takes the
+   * body's whole font list; with its own `family`, only its own
+   * `fallbacks`. `fallbacks` with no `family` build nothing.
    *
    * Font loading is the consumer's responsibility — add a <link> or
    * @import for your fonts before rendering the theme.
@@ -293,8 +331,8 @@ export interface DefineThemeInput<
   /**
    * Motion configuration: two knobs (spec:AST-108), a motion scale, or both.
    *
-   * - `tempo` (default 1, clamped to 0.75–1.5) scales every motion duration
-   *   token; touch motion's springs don't read it yet.
+   * - `tempo` (default 1, clamped to 0.75–1.5) scales every motion duration:
+   *   the duration tokens and touch motion's springs.
    * - `character` (`'crisp'`, `'standard'` or `'expressive'`) sets the
    *   entrance and move curves; exits and fades never overshoot.
    *
@@ -382,6 +420,25 @@ export interface DefineThemeInput<
    *  Values can be a string or [light, dark] tuple.
    *  Only include tokens you want to override; defaults fill the rest. */
   tokens?: Partial<Record<TokenName, TokenValue>>;
+  /**
+   * Colors made from a few seeds by `themePalette()` from
+   * `@astryxdesign/core/palette`: the color tokens the theme editor maps for
+   * its color settings, and the part styles that keep secondary text
+   * readable on the accent tint, the neutral track and the colored cards.
+   * `tokens` and
+   * `components` still win, one by one.
+   *
+   * @example
+   * ```
+   * import {themePalette} from '@astryxdesign/core/palette';
+   *
+   * defineTheme({
+   *   name: 'acme',
+   *   palette: themePalette({accent: '#5b3cc4', neutral: '#6b6b70'}),
+   * });
+   * ```
+   */
+  palette?: ThemePalette;
   /** Theme-family-local values keyed by any valid CSS custom-property name;
    *  prefixes do not establish ownership. */
   localTokens?: Record<string, TokenValue>;
@@ -448,6 +505,32 @@ export interface DefineThemeInput<
    * ```
    */
   iconVariants?: IconVariants;
+  /**
+   * Component icon slots — which shared icon a component's own icon role
+   * uses, separate from `icons`, which chooses the artwork for each shared
+   * name. Keys are the slots in `ComponentIconSlotMap`, such as
+   * `code-block-copy`.
+   *
+   * A value is a shared icon name, `null` to hide the icon, a partial request
+   * of `icon`, `variant`, and `size`, or, for a slot with state, a pure
+   * synchronous function of that state that returns a request. A missing
+   * request field keeps the component's own value; a function that returns
+   * `null` hides the icon and one that returns `undefined` changes nothing.
+   * A request `size` changes only the icon, never the control around it.
+   * `variant` is typed as the names in `iconVariants` (or the inherited
+   * list).
+   *
+   * An entry replaces the inherited entry for the same slot whole; an omitted
+   * or `undefined` entry is inherited.
+   *
+   * @example
+   * ```
+   * componentIcons: {
+   *   'code-block-copy': ({copied}) => ({icon: copied ? 'checkDouble' : 'copy'}),
+   * },
+   * ```
+   */
+  componentIcons?: ComponentIconMap<ThemeIconEntryVariant<IconVariants, Base>>;
   /**
    * Indicator overrides — replaces the components that draw stateful control
    * visuals with the theme's own, by name.
@@ -560,6 +643,17 @@ export interface DefinedTheme {
    * @internal
    */
   __iconEntryVariants?: Record<string, ReadonlyArray<string> | undefined>;
+  /**
+   * Component icon slots as a static view: names, `null`, and static
+   * requests. Slots the theme resolves with a function are left out; the
+   * component's slot resolution calls them with its state.
+   */
+  componentIcons?: ComponentIconStaticMap;
+  /**
+   * Component icon slot values with their functions, present when any value
+   * is a function. Only component slot resolution reads it.
+   */
+  __componentIcons?: Partial<Record<string, StoredComponentIconValue>>;
   /** Indicator overrides for stateful control visuals, keyed by name */
   indicators?: IndicatorRegistry;
   /** Whether this theme has been pre-compiled by theme build CLI */
@@ -623,27 +717,22 @@ export type ResolvedDefinedTheme<IconVariant extends string = string> =
 // All defaults merged into a single flat map
 // =============================================================================
 
-/** All Astryx token defaults as a flat map. Useful for resolving full token sets. */
-export const tokenDefaults: Record<string, string> = {
-  ...colorDefaults,
-  ...spacingDefaults,
-  ...sizeDefaults,
-  ...borderDefaults,
-  ...focusDefaults,
-  ...radiusDefaults,
-  ...shadowDefaults,
-  ...durationDefaults,
-  ...easeDefaults,
-  ...typographyDefaults,
-  ...textSizeDefaults,
-  ...fontWeightDefaults,
-  ...typeScaleDefaults,
-  ...domainTokenDefaults,
-};
+export {tokenDefaults} from './tokenDefaults';
 
 // =============================================================================
 // defineTheme
 // =============================================================================
+
+/**
+ * Whether a theme carries a field the theme builders write (`__inputTokens`,
+ * always present on the result of defineTheme() and defineSyntaxTheme()) or a
+ * built theme module's `__built`. A plain object with a name and tokens is
+ * theme input, not a theme: its values are not built (a light/dark pair is
+ * still an array), so it is no base.
+ */
+function isBuiltTheme(theme: DefinedTheme): boolean {
+  return '__inputTokens' in theme || theme.__built === true;
+}
 
 /**
  * Describe a rejected `extends` value for the error message — enough to tell a
@@ -731,6 +820,66 @@ function assertCompleteMotionScale(
 }
 
 /**
+ * The theme's palette, when it has one. A palette that `themePalette()` did
+ * not make is refused: a plain object of seeds is palette input, and
+ * `defineTheme` does not run the generator itself, so that apps without a
+ * palette never ship it.
+ */
+function readPalette(input: {
+  name: string;
+  palette?: unknown;
+}): ThemePalette | undefined {
+  const {palette} = input;
+  if (palette === undefined) {
+    return undefined;
+  }
+  if (
+    palette !== null &&
+    typeof palette === 'object' &&
+    (palette as {kind?: unknown}).kind === 'theme-palette' &&
+    typeof (palette as {tokens?: unknown}).tokens === 'object'
+  ) {
+    return palette as ThemePalette;
+  }
+  throw new Error(
+    `defineTheme("${input.name}"): \`palette\` must be made by themePalette() from @astryxdesign/core/palette, got ${palette === null ? 'null' : typeof palette === 'object' ? 'a plain object' : typeof palette}. ` +
+      `Wrap the seeds: palette: themePalette({accent: '#5b3cc4'}).`,
+  );
+}
+
+/**
+ * The palette's part styles under the theme's own: a part style the theme
+ * sets wins, property by property. The palette writes each mode in its own
+ * color-mode block, so a property the theme sets for both modes leaves those
+ * blocks first.
+ */
+function withPaletteComponents(
+  palette: ThemePalette,
+  own: ComponentStyleMap | undefined,
+): ComponentStyleMap | undefined {
+  const lifted: ComponentStyleMap = {};
+  for (const [part, blocks] of Object.entries(palette.components)) {
+    lifted[part] = {};
+    for (const [block, lift] of Object.entries(blocks)) {
+      const ownStyle = own?.[part]?.[block];
+      const set = (property: string): boolean =>
+        ownStyle != null && ownStyle[property] !== undefined;
+      const style: Record<string, Record<string, string>> = {};
+      for (const mode of ['@light', '@dark'] as const) {
+        const values = Object.entries(lift[mode]).filter(
+          ([property]) => !set(property),
+        );
+        if (values.length) {
+          style[mode] = Object.fromEntries(values);
+        }
+      }
+      lifted[part][block] = style;
+    }
+  }
+  return deepMergeComponents(lifted, own);
+}
+
+/**
  * Create an Astryx theme.
  *
  * Pass only the tokens you want to override — everything else
@@ -752,6 +901,16 @@ export function defineTheme<
   // import silently resolving to the wrong module hands over, and the theme
   // then built into a plausible-looking stylesheet missing everything it was
   // supposed to inherit.
+  if (
+    'extends' in input &&
+    isDefinedTheme(input.extends) &&
+    !isBuiltTheme(input.extends)
+  ) {
+    throw new Error(
+      `defineTheme("${input.name}"): \`extends\` must be a theme from defineTheme(), got a plain object named "${input.extends.name}", which is theme input, not a theme. ` +
+        `Pass it through defineTheme() first (extends: defineTheme({...})), or import the theme its own file defines.`,
+    );
+  }
   if ('extends' in input && !isDefinedTheme(input.extends)) {
     throw new Error(
       `defineTheme("${input.name}"): \`extends\` must be a theme from defineTheme(), got ${describeBadBase(input.extends)}. ` +
@@ -760,6 +919,7 @@ export function defineTheme<
     );
   }
   const base = input.extends;
+  const palette = readPalette(input);
 
   // The theme's own value axes and the resolved base an `extends` supplies.
   // The same axis metadata is retained so adaptation rules can complete partial
@@ -792,9 +952,13 @@ export function defineTheme<
     syntax: input.syntax,
     tokens:
       inheritedScale != null && Object.keys(inheritedScale).length > 0
-        ? {...inheritedScale, ...input.tokens}
-        : input.tokens,
-    components: input.components,
+        ? {...inheritedScale, ...palette?.tokens, ...input.tokens}
+        : palette
+          ? {...palette.tokens, ...input.tokens}
+          : input.tokens,
+    components: palette
+      ? withPaletteComponents(palette, input.components)
+      : input.components,
   };
   const ownAxes: ThemeGenerativeAxes = {
     typography: input.typography,
@@ -868,6 +1032,14 @@ export function defineTheme<
     iconVariants,
   );
 
+  // The base's static `componentIcons` view omits its slot functions, so read
+  // its `__componentIcons` first.
+  const componentIconValues = mergeComponentIcons(
+    base?.__componentIcons ?? base?.componentIcons,
+    input.componentIcons,
+  );
+  const componentIcons = staticComponentIcons(componentIconValues);
+
   // Indicator overrides merge by name, like icons: a child theme replacing one
   // indicator keeps the ones its base replaced.
   const indicators =
@@ -892,10 +1064,14 @@ export function defineTheme<
     ...(iconEntryVariants !== undefined
       ? {__iconEntryVariants: iconEntryVariants}
       : {}),
+    ...(componentIcons !== undefined ? {componentIcons} : {}),
+    ...(componentIcons !== componentIconValues
+      ? {__componentIcons: componentIconValues}
+      : {}),
     indicators,
     __inputTokens:
-      base?.__inputTokens || input.tokens
-        ? {...base?.__inputTokens, ...input.tokens}
+      base?.__inputTokens || palette || input.tokens
+        ? {...base?.__inputTokens, ...palette?.tokens, ...input.tokens}
         : undefined,
     __onDark,
     __onLight,
@@ -944,6 +1120,51 @@ function resolveIconEntryVariants(
 }
 
 /**
+ * A theme's slot values: the base's, then this theme's own, by slot. An own
+ * entry replaces the inherited one whole; an `undefined` entry is omitted, so
+ * the inherited one stays.
+ */
+function mergeComponentIcons(
+  inherited: Partial<Record<string, StoredComponentIconValue>> | undefined,
+  own: object | undefined,
+): Partial<Record<string, StoredComponentIconValue>> | undefined {
+  if (own == null) {
+    return inherited;
+  }
+  const merged: Partial<Record<string, StoredComponentIconValue>> = {
+    ...inherited,
+  };
+  for (const [slot, value] of Object.entries(own)) {
+    if (value !== undefined) {
+      merged[slot] = value as StoredComponentIconValue;
+    }
+  }
+  return merged;
+}
+
+/**
+ * The static view of a theme's slot values, without its slot functions.
+ * Values without a function are returned as the same object.
+ */
+function staticComponentIcons(
+  values: Partial<Record<string, StoredComponentIconValue>> | undefined,
+): ComponentIconStaticMap | undefined {
+  if (
+    values == null ||
+    !Object.values(values).some(value => typeof value === 'function')
+  ) {
+    return values;
+  }
+  const view: Partial<Record<string, StoredComponentIconValue>> = {};
+  for (const [slot, value] of Object.entries(values)) {
+    if (typeof value !== 'function') {
+      view[slot] = value;
+    }
+  }
+  return view;
+}
+
+/**
  * The node-valued view of a theme's icon entries: each function entry read at
  * `{size: 'md'}`. Entries without a function are returned as the same object.
  */
@@ -962,20 +1183,6 @@ function readThemeIconNodes(
   }
   return nodes as ThemeIconOverrides;
 }
-
-// =============================================================================
-// CSS generation — re-exported from ./generateThemeRules.ts
-// =============================================================================
-
-export {
-  generateThemeRules,
-  generateThemeRulesSplit,
-  generateOnMediaCSS,
-  generateAdaptationCSS,
-  generateThemeCSS,
-  type ThemeRulesSplit,
-  type ThemeCSSOutput,
-} from './generateThemeRules';
 
 // =============================================================================
 // Type guard

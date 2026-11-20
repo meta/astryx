@@ -7,8 +7,8 @@ export const doc = {
   name: 'useStreamingText — Streaming Response',
   displayName: 'useStreamingText — Streaming Response',
   description:
-    'Smooth bursty generated text into a steady reveal with useStreamingText.',
+    'A chat-style reply card: while the response streams in bursts, useStreamingText reveals it steadily character by character; when streaming ends the full text snaps into place. Regenerate replays the stream.',
   isReady: true,
   aspectRatio: 4 / 3,
-  componentsUsed: ['Card', 'Text', 'Layout'],
+  componentsUsed: ['Button', 'Card', 'Text', 'Layout'],
 };

@@ -28,7 +28,7 @@ const coreSrc = path.join(root, 'packages/core/src');
  * the press paint's styles).
  */
 const ENTRY = `
-export {createAnimator, animatorFor, SETTLE_THRESHOLD} from './motion/animator';
+export {createMotionEngine, animatorFor, SETTLE_THRESHOLD} from './motion/animator';
 export {reducedMotionFade} from './motion/reducedMotion';
 export {resolveMotion} from './motion/resolveMotion';
 export {solveSpring, toSpring} from './motion/spring';
@@ -66,7 +66,14 @@ describe('the touch motion foundation in plain Node', () => {
   it('reaches no StyleX module and no theme module', async () => {
     const {metafile} = await bundleFoundation();
     const inputs = Object.keys(metafile.inputs);
-    const stylex = inputs.filter(file => /\.stylex\.[cm]?[jt]sx?$/.test(file));
+    // A private attribute's owner module carries the .stylex name by the
+    // private-attribute rule but may call no StyleX at load: the
+    // stylexImports check below holds it to that.
+    const stylex = inputs.filter(
+      file =>
+        /\.stylex\.[cm]?[jt]sx?$/.test(file) &&
+        !/\/src\/privateAttributes\//.test(file),
+    );
     const theme = inputs.filter(file => file.includes('/src/theme/'));
     const stylexImports = inputs.flatMap(file =>
       metafile.inputs[file].imports
@@ -98,10 +105,10 @@ describe('the touch motion foundation in plain Node', () => {
           '-e',
           `const m = await import(${JSON.stringify(pathToFileURL(file).href)});
            m.registerSpringsTable();
-           const animator = m.createAnimator(null);
+           const animator = m.createMotionEngine(null);
            const pan = new m.PanGestureRecognizer({});
            console.log(JSON.stringify({
-             createAnimator: typeof m.createAnimator,
+             createMotionEngine: typeof m.createMotionEngine,
              set: typeof animator.set,
              sheet: m.springs.sheetPresent != null,
              pan: typeof pan.state,
@@ -110,7 +117,7 @@ describe('the touch motion foundation in plain Node', () => {
         {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']},
       );
       expect(JSON.parse(out.trim().split('\n').at(-1))).toEqual({
-        createAnimator: 'function',
+        createMotionEngine: 'function',
         set: 'function',
         sheet: true,
         pan: 'string',

@@ -19,6 +19,7 @@ import {mergeProps} from '../utils';
 import {isApplePlatform} from '../utils/isApplePlatform';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
+import {devPropError} from '../utils/devWarning';
 import type {TranslatorFn} from '../i18n';
 import {
   colorVars,
@@ -33,6 +34,10 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Kbd/Kbd.generated';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 
@@ -49,6 +54,9 @@ const styles = stylex.create({
     justifyContent: 'center',
     minWidth: spacingVars['--spacing-5'],
     height: spacingVars['--spacing-5'],
+    // The theme height holds while one line of text fits. A taller line
+    // grows the badge.
+    minHeight: '1lh',
     paddingInline: spacingVars['--spacing-1'],
     borderRadius: radiusVars['--radius-inner'],
     backgroundColor: colorVars['--color-neutral'],
@@ -64,15 +72,8 @@ const styles = stylex.create({
   },
 });
 
-/**
- * Map of modifier key names to display symbols.
- * Note: `mod` is not in this map — it resolves dynamically via platform
- * detection inside the component.
- */
+/** Symbols that every platform shows. Modifier text depends on the platform. */
 const KEY_DISPLAY = new Map<string, string>([
-  ['ctrl', '\u2303'], // ⌃
-  ['alt', '\u2325'], // ⌥
-  ['shift', '\u21E7'], // ⇧
   ['enter', '\u21B5'], // ↵
   ['backspace', '\u232B'], // ⌫
   ['tab', '\u21E5'], // ⇥
@@ -83,19 +84,37 @@ const KEY_DISPLAY = new Map<string, string>([
   ['plus', '+'],
 ]);
 
+const APPLE_MODIFIER_DISPLAY = new Map<string, string>([
+  ['mod', '\u2318'], // ⌘
+  ['meta', '\u2318'], // ⌘ — the Command key
+  ['ctrl', '\u2303'], // ⌃
+  ['alt', '\u2325'], // ⌥
+  ['shift', '\u21E7'], // ⇧
+]);
+
+/** Catalog keys for the modifiers' short text elsewhere and before hydration. */
+const MODIFIER_SHORT_TEXT = new Map<string, string>([
+  ['mod', '@astryx.kbd.key.controlShort'],
+  ['ctrl', '@astryx.kbd.key.controlShort'],
+  ['alt', '@astryx.kbd.key.altShort'],
+  ['shift', '@astryx.kbd.key.shiftShort'],
+  ['meta', '@astryx.kbd.key.windowsShort'],
+]);
+
 const KBD_KEY_ALIASES = new Map<string, string>([
   ['esc', 'escape'],
   ['return', 'enter'],
 ]);
 
-/**
- * Resolves a key name to its display string. Handles the platform-aware
- * `mod` key (⌘ on macOS, Ctrl on other platforms) and falls back to
- * KEY_DISPLAY or uppercased key name.
- */
+/** The server render has no platform, so it uses the non-Apple text. */
 function getKeyDisplay(key: string, isMac: boolean, t: TranslatorFn): string {
-  if (key === 'mod') {
-    return isMac ? '\u2318' : t('@astryx.kbd.key.controlShort');
+  const appleSymbol = isMac ? APPLE_MODIFIER_DISPLAY.get(key) : undefined;
+  if (appleSymbol != null) {
+    return appleSymbol;
+  }
+  const shortText = isMac ? undefined : MODIFIER_SHORT_TEXT.get(key);
+  if (shortText != null) {
+    return t(shortText);
   }
   if (key === 'escape') {
     return t('@astryx.kbd.key.escapeShort');
@@ -143,8 +162,9 @@ export interface KbdProps extends BaseProps<HTMLSpanElement> {
   ref?: React.Ref<HTMLSpanElement>;
   /**
    * Keyboard shortcut string. Use "+" to separate keys.
-   * Special keys: mod (Cmd on Mac), ctrl, alt, shift, enter, backspace, escape,
-   * tab, up, down, left, and right.
+   * Special keys: mod, ctrl, alt and shift (Apple symbols on Apple platforms,
+   * short text such as "Ctrl" elsewhere and before hydration), meta (⌘ on
+   * Apple platforms, "Win" text elsewhere and before hydration), enter, backspace, escape, tab, up, down, left, and right.
    * Aliases: "esc" for "escape" and "return" for "enter".
    * Use "plus" to render a literal "+" key (e.g. "shift+plus").
    *
@@ -162,8 +182,9 @@ export interface KbdProps extends BaseProps<HTMLSpanElement> {
 /**
  * Displays a keyboard shortcut as styled <kbd> elements.
  *
- * A general-purpose component for rendering keyboard shortcuts
- * anywhere in the system — tooltips, menus, documentation, etc.
+ * A general-purpose component for rendering keyboard shortcuts in menus,
+ * help text and documentation. In a Tooltip, write the shortcut in the
+ * tooltip's text instead.
  *
  * Platform-aware: `mod` renders as ⌘ on macOS and Ctrl elsewhere.
  * SSR-safe — defers platform detection through useSyncExternalStore to avoid
@@ -175,6 +196,13 @@ export interface KbdProps extends BaseProps<HTMLSpanElement> {
  * ```
  */
 export function Kbd({keys, ref, xstyle, className, style, ...rest}: KbdProps) {
+  if (process.env.NODE_ENV !== 'production' && typeof keys !== 'string') {
+    throw devPropError(
+      'Kbd',
+      'keys',
+      'must be a string of keys joined by "+", for example <Kbd keys="mod+k" />. Kbd does not read children.',
+    );
+  }
   const t = useComponentTranslator();
   const isMac = useSyncExternalStore(
     subscribeToPlatformChanges,
@@ -218,7 +246,10 @@ export function Kbd({keys, ref, xstyle, className, style, ...rest}: KbdProps) {
         style,
       )}>
       {parts.map(({key, reactKey}) => (
-        <kbd key={reactKey} aria-hidden="true" {...stylex.props(styles.kbd)}>
+        <kbd
+          key={reactKey}
+          aria-hidden="true"
+          {...mergeProps(themeProps('kbd-key'), stylex.props(styles.kbd))}>
           {getKeyDisplay(key, isMac, t)}
         </kbd>
       ))}

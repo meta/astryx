@@ -25,6 +25,7 @@ import {glidingDividerStyles} from './glidingDivider';
 import {TableContext} from './TableContext';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
+import {TableRowPlacementContext} from './TableRowPlacementContext';
 
 /** Props for TableRow — thin `<tr>` wrapper */
 export interface TableRowProps extends BaseProps<HTMLTableRowElement> {
@@ -53,6 +54,30 @@ export interface TableRowProps extends BaseProps<HTMLTableRowElement> {
  * the rows keep their parity whatever is open.
  */
 const NOT_PANEL_ROW = ':nth-child(even of :not([data-expansion-panel]))';
+
+const logicalStripedRowStyles = stylex.create({
+  row: {
+    backgroundColor: colorVars['--color-background-muted'],
+    '--table-row-overlay': colorVars['--color-background-muted'],
+  },
+  hover: {
+    backgroundColor: {
+      default: colorVars['--color-background-muted'],
+      ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
+        '@media (hover: hover)': colorVars['--color-overlay-hover'],
+      },
+    },
+    '--table-row-overlay': {
+      default: colorVars['--color-background-muted'],
+      ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
+        '@media (hover: hover)': colorVars['--color-overlay-hover'],
+      },
+    },
+    transitionProperty: 'background-color',
+    transitionDuration: durationVars['--duration-fast'],
+    transitionTimingFunction: easeVars['--ease-standard'],
+  },
+});
 
 const stripedRowStyles = stylex.create({
   row: {
@@ -148,6 +173,7 @@ export function TableRow({
   ...props
 }: TableRowProps) {
   const ctx = use(TableContext);
+  const placement = use(TableRowPlacementContext);
 
   if (!ctx) {
     return (
@@ -171,7 +197,20 @@ export function TableRow({
   // pick up the hover highlight (or striping) even when hasHover/isStriped.
   if (!isHeaderRow) {
     // Handle striped + hover combination to avoid backgroundColor conflicts
-    if (ctx.isStriped && ctx.hasHover) {
+    const logicalIndex = (props as Record<string, unknown>)[
+      'data-table-logical-index'
+    ];
+    if (logicalIndex != null) {
+      if (ctx.isStriped && Number(logicalIndex) % 2 === 1) {
+        rowStyles.push(
+          ctx.hasHover
+            ? logicalStripedRowStyles.hover
+            : logicalStripedRowStyles.row,
+        );
+      } else if (ctx.hasHover) {
+        rowStyles.push(hoverRowStyles.row);
+      }
+    } else if (ctx.isStriped && ctx.hasHover) {
       rowStyles.push(stripedHoverRowStyles.row);
     } else if (ctx.isStriped) {
       rowStyles.push(stripedRowStyles.row);
@@ -191,12 +230,17 @@ export function TableRow({
     rowStyles.push(...xstyle);
   }
 
+  // Every row Core may stripe carries `striped`, footer rows included. Only
+  // a body row whose place Core knows carries `parity`.
   return (
     <tr
       ref={ref}
       {...props}
       {...mergeProps(
-        themeProps('table-row'),
+        themeProps('table-row', {
+          parity: placement.isBodyRow && !isHeaderRow ? placement.parity : null,
+          striped: ctx.isStriped && !isHeaderRow ? 'striped' : null,
+        }),
         stylex.props(tableRowMarker, ...rowStyles),
         incomingClassName,
         incomingStyle,

@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'desktop',
+  group: 'devices',
   description: 'A desktop computer, or the desktop layout of a page.',
   words: ['computer', 'monitor', 'screen', 'computer desktop'],
 };

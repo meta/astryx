@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "checkout-wizard",
+  "source": "wd-1",
+  "title": "Three-step checkout with validation",
+  "prompt": "Build a three-step checkout form. Step 1, \"Contact\", has the fields \"Full name\" and \"Email\". Step 2, \"Shipping\", has the fields \"Street\" and \"City\". Step 3, \"Review\", shows the entered name, email, street and city as text. A line above the form reads \"Step 1 of 3\", \"Step 2 of 3\" or \"Step 3 of 3\", and the current step's title is a heading. A \"Next\" button moves forward only when every field on the current step is filled in. Otherwise each empty field shows the error \"Required\" next to it and is marked as invalid with aria-invalid=\"true\", and the step does not change. A \"Back\" button, not shown on step 1, returns to the previous step and keeps what was typed. On step 3, a \"Place order\" button replaces the form with the heading \"Order placed\"."
+}

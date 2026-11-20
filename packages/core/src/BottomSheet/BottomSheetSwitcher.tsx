@@ -67,7 +67,7 @@ import {dispatchLayerEscapeKeyDown} from '../Layer/layerStack';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {composeEventHandlers} from '../utils';
 import {mergeRefs} from '../utils/mergeRefs';
-import {useModalOutlet} from '../Layer/modalOutlet';
+import {useModalOutletWithoutRef} from '../Layer/modalOutlet';
 import {BottomSheetHostContext} from './BottomSheetHostContext';
 import {
   BOTTOM_SHEET_STACK_DEFAULT_VIEW,
@@ -94,6 +94,10 @@ import {
   type BottomSheetSwitcherPhase,
   type BottomSheetSwitcherTransitionEvent,
 } from './BottomSheetSwitcherContext';
+import {
+  prepareFocusRepairOnRemoval,
+  returnFocusForLastInput,
+} from '../utils/focusReturn';
 
 const styles = stylex.create({
   // A scrim flow's dialogs live in the top layer; the wrapper has no box.
@@ -358,6 +362,7 @@ export function BottomSheetSwitcher({
   const stackViewRef = useRef(stackView);
   stackViewRef.current = stackView;
   const scrimWriteRef = useRef<BottomSheetScrimWrite>({frame: null});
+  // Releases the pending scrim write frame on unmount.
   useEffect(() => () => cancelScrimWrite(scrimWriteRef.current), []);
   // What the flow's place in the stack was when it left the registry: its
   // depth and the open sheet beneath it. React runs the registration
@@ -539,7 +544,10 @@ export function BottomSheetSwitcher({
   // `hostSheet` across a handoff, and the fading retained dialog is never the
   // outlet. A closing flow stops supplying at once. Passive: it runs after the
   // layout effects that present the step dialogs.
-  useModalOutlet(
+  // The flow has no element for the outlet's ref. Its wrapper's ref is the
+  // sheet stack's tree-order anchor, which the stack reads in the closing
+  // commit, and the element of its host step changes on a handoff.
+  useModalOutletWithoutRef(
     hostDialogRef,
     isModal && isFlowOpen,
     stackView.isTop || !stackView.isStacked,
@@ -564,6 +572,39 @@ export function BottomSheetSwitcher({
     presentationCounterRef.current += 1;
     presentationOrderRef.current.set(sheetId, presentationCounterRef.current);
   }, []);
+  // The step dialogs can render outside the flow's element, so focus counts as
+  // inside the flow when the flow or one of its step dialogs holds it.
+  const holdsFocus = useCallback(
+    (active: Element | null): boolean =>
+      active != null &&
+      (flowRef.current?.contains(active) === true ||
+        [...sheetDialogsRef.current.values()].some(dialog =>
+          dialog.contains(active),
+        )),
+    [],
+  );
+  // Whether focus was in the flow when the flow closed. Read in the commit
+  // that closes it: the closing step is marked inert in that commit, and the
+  // browser moves focus out of it only when it next renders.
+  const hadFocusAtCloseRef = useRef(false);
+  const previousActiveSheetRef = useRef(activeSheet);
+  // Syncs with document focus: records whether the flow held it in the commit
+  // that closes the flow.
+  useLayoutEffect(() => {
+    const wasOpen = previousActiveSheetRef.current != null;
+    previousActiveSheetRef.current = activeSheet;
+    if (wasOpen && activeSheet == null) {
+      hadFocusAtCloseRef.current = holdsFocus(document.activeElement);
+    }
+  }, [activeSheet, holdsFocus]);
+  const onBeforeSheetShow = useCallback(() => {
+    if (triggerRef.current == null) {
+      triggerRef.current = document.activeElement as HTMLElement | null;
+    }
+  }, []);
+  // Syncs document focus with the flow's visibility. When the flow hides, focus
+  // goes to the opener, to the sheet now on top, or to the target of the
+  // registry.
   useLayoutEffect(() => {
     if (isFlowVisible) {
       if (!hasScrim) {
@@ -600,11 +641,47 @@ export function BottomSheetSwitcher({
           trigger?.focus({preventScroll: true});
         }
       }
+    } else if (!hasScrim) {
+      // A flow without the scrim keeps the native dialog's return rule: focus
+      // goes back to the opener only while it is still inside the flow.
+      const trigger = triggerRef.current;
+      const active = document.activeElement;
+      const isFocusLeftInFlow =
+        active == null || active === document.body || holdsFocus(active);
+      if (
+        hadFocusAtCloseRef.current &&
+        isFocusLeftInFlow &&
+        trigger?.isConnected === true
+      ) {
+        returnFocusForLastInput(trigger);
+      }
     }
+    hadFocusAtCloseRef.current = false;
     triggerRef.current = null;
     modalFlowRef.current = false;
     presentationOrderRef.current.clear();
-  }, [hasScrim, isFlowVisible]);
+  }, [hasScrim, holdsFocus, isFlowVisible]);
+
+  // A flow removed while a sheet is open runs no close, so focus would drop to
+  // the page. After the commit, the shared repair returns focus to the opener
+  // when the removal lost it, as a standalone sheet's does.
+  useLayoutEffect(() => {
+    const flow = flowRef.current;
+    if (!isFlowVisible || flow == null) {
+      return;
+    }
+    const repairOnRemoval = prepareFocusRepairOnRemoval(flow, {
+      keepRestingFocus: true,
+    });
+    return () => {
+      const opener = triggerRef.current;
+      repairOnRemoval(() => {
+        if (opener != null && opener.isConnected) {
+          returnFocusForLastInput(opener);
+        }
+      });
+    };
+  }, [isFlowVisible]);
 
   // A scrim flow is one level of the bottom-sheet stack while it is visible.
   // The step hosts present their own dialogs; the registry re-presents the
@@ -694,6 +771,7 @@ export function BottomSheetSwitcher({
       unregister();
     };
   }, [hasScrim, isFlowVisible, onBeforeSheetPresent]);
+  // Syncs the open state of this flow in the sheet stack registry.
   useLayoutEffect(() => {
     if (isFlowVisible && hasScrim) {
       setBottomSheetOpen(stackKeyRef.current, isFlowOpen);
@@ -1028,6 +1106,7 @@ export function BottomSheetSwitcher({
       registerSheetDialog,
       registerSheetPurpose,
       onBeforeSheetPresent,
+      onBeforeSheetShow,
       isCoveredInTopLayer,
       onSheetEnterStart,
       onSheetTransitionComplete,
@@ -1050,6 +1129,7 @@ export function BottomSheetSwitcher({
       isScrimOwner,
       onActiveSheetChange,
       onBeforeSheetPresent,
+      onBeforeSheetShow,
       onDialogCancel,
       onDialogClick,
       onDialogKeyDown,

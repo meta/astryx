@@ -11,16 +11,24 @@
  * @output fail-closed receipts plus the cut-time release description frozen in the plan digest
  * @position single authority used by release CI, stable publishing, and branch cleanup
  *
- * CI copies this file and lib/workspace-globs.mjs alone as trusted policy, so
- * it imports nothing else at module load.
+ * CI copies this file, release-paths.mjs, and lib/workspace-globs.mjs as
+ * trusted policy.
  */
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {expandWorkspaceDirs} from '../lib/workspace-globs.mjs';
+import {
+  classifyReleaseDiff,
+  diffEntryFiles,
+  isCodemodPromotionApplicabilityPath,
+  isReleaseOutputPath,
+  isReleaseTestRepairPath,
+} from './release-paths.mjs';
 
 const ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -163,12 +171,13 @@ function changesetEntries(root) {
     });
 }
 
-function buildPlan({root, version, branch, cutSha}) {
+function buildPlan({root, version, branch, cutSha, ownerRecut = null}) {
   return {
     schemaVersion: 2,
     version,
     branch,
     cutSha,
+    ...(ownerRecut ? {ownerRecut} : {}),
     changesets: changesetEntries(root),
   };
 }
@@ -180,6 +189,7 @@ function buildMarker(plan) {
     version: plan.version,
     branch: plan.branch,
     cutSha: plan.cutSha,
+    ...(plan.ownerRecut ? {ownerRecut: plan.ownerRecut} : {}),
     planDigest: computePlanDigest(plan),
   };
 }
@@ -204,6 +214,20 @@ function validateIdentity(marker, plan) {
     if (plan?.[key] !== marker?.[key])
       errors.push(`plan ${key} must match marker`);
   }
+  if (
+    canonicalJson(plan?.ownerRecut ?? null) !==
+    canonicalJson(marker?.ownerRecut ?? null)
+  )
+    errors.push('plan ownerRecut must match marker');
+  const ownerRecut = plan?.ownerRecut ?? null;
+  if (
+    ownerRecut !== null &&
+    (ownerRecut.version !== marker?.version ||
+      ownerRecut.tagName !== `v${marker?.version}` ||
+      !SHA_RE.test(ownerRecut.tagSha ?? '') ||
+      !/^[0-9a-f]{64}$/.test(ownerRecut.receiptSha256 ?? ''))
+  )
+    errors.push('ownerRecut authority is invalid');
   if (computePlanDigest(plan) !== marker?.planDigest)
     errors.push('plan digest does not match marker');
   const seen = new Set();
@@ -360,8 +384,18 @@ function validateReleaseState({
   return errors;
 }
 
+const GIT_MAX_BUFFER = 64 * 1024 * 1024;
+
+function gitRaw(root, args) {
+  return execFileSync('git', args, {
+    cwd: root,
+    encoding: 'utf8',
+    maxBuffer: GIT_MAX_BUFFER,
+  });
+}
+
 function git(root, args) {
-  return execFileSync('git', args, {cwd: root, encoding: 'utf8'}).trim();
+  return gitRaw(root, args).trim();
 }
 
 /** The highest local stable vX.Y.Z tag, or null when none exists. */
@@ -375,9 +409,57 @@ function latestStableVersion(root) {
   return versions.at(-1) ?? null;
 }
 
-function fileDigestAtRef(root, ref, file) {
+// A found object's header line in `git cat-file --batch` output: its id,
+// type and size in bytes.
+const FOUND_OBJECT = /^[0-9a-f]{40,64} [a-z]+ (\d+)$/;
+
+/**
+ * Each file's bytes at `ref`, or null when the ref lacks it, read with one
+ * `git cat-file --batch` instead of one `git show` per file. This module
+ * imports nothing beyond its own lib (see the header), so it carries its own
+ * reader.
+ * @param {string} root
+ * @param {string} ref
+ * @param {string[]} files
+ * @returns {Map<string, Buffer | null>}
+ */
+function filesAtRef(root, ref, files) {
+  const contents = new Map();
+  if (files.length === 0) return contents;
+  const out = execFileSync('git', ['cat-file', '--batch'], {
+    cwd: root,
+    input: files.map(file => `${ref}:${file}\n`).join(''),
+    maxBuffer: 1024 * 1024 * 1024,
+  });
+  let at = 0;
+  for (const file of files) {
+    const end = out.indexOf(0x0a, at);
+    const found = FOUND_OBJECT.exec(out.toString('utf8', at, end));
+    at = end + 1;
+    if (found === null) {
+      contents.set(file, null);
+      continue;
+    }
+    const size = Number(found[1]);
+    contents.set(file, out.subarray(at, at + size));
+    at += size + 1;
+  }
+  return contents;
+}
+
+function fileDigestsAtRef(root, ref, files) {
+  const contents = filesAtRef(root, ref, files);
+  return new Map(
+    files.map(file => {
+      const content = contents.get(file);
+      return [file, content ? sha256(content) : null];
+    }),
+  );
+}
+
+function parseJson(content) {
   try {
-    return sha256(execFileSync('git', ['show', `${ref}:${file}`], {cwd: root}));
+    return content ? JSON.parse(content.toString('utf8')) : null;
   } catch {
     return null;
   }
@@ -392,7 +474,9 @@ function changesetMapAtRef(root, ref) {
     '--',
     '.changeset',
   ]);
-  return new Map(
+  return fileDigestsAtRef(
+    root,
+    ref,
     files
       .split('\n')
       .filter(
@@ -400,8 +484,7 @@ function changesetMapAtRef(root, ref) {
           file.startsWith('.changeset/') &&
           file.endsWith('.md') &&
           file !== '.changeset/README.md',
-      )
-      .map(file => [file, fileDigestAtRef(root, ref, file)]),
+      ),
   );
 }
 
@@ -416,11 +499,12 @@ function releaseOutputPathsAtRef(root, plan, releaseRef) {
 }
 
 function releaseOutputMapAtRef(root, plan, releaseRef) {
-  return new Map(
+  return fileDigestsAtRef(
+    root,
+    releaseRef,
     releaseOutputPathsAtRef(root, plan, releaseRef)
       .filter(isReleaseOutputPath)
-      .filter(file => !isPackageManifestPath(file))
-      .map(file => [file, fileDigestAtRef(root, releaseRef, file)]),
+      .filter(file => !isPackageManifestPath(file)),
   );
 }
 
@@ -439,7 +523,8 @@ function jsonAtRef(root, ref, file) {
 }
 
 function manifestMapAtRef(root, ref, files) {
-  return new Map([...files].map(file => [file, jsonAtRef(root, ref, file)]));
+  const contents = filesAtRef(root, ref, [...files]);
+  return new Map([...files].map(file => [file, parseJson(contents.get(file))]));
 }
 
 function currentManifestMap(root, files) {
@@ -463,10 +548,180 @@ function currentOutputMap(root, files) {
   );
 }
 
+/**
+ * The merge-back's changes against `base`: `git diff --name-status` lines.
+ * `base` must be the merge commit's first parent, the main commit the merge
+ * was built on. A later main would show every file it gained as a deletion.
+ */
+function mergeBackEntries(root, base, head = 'HEAD') {
+  const raw = git(root, [
+    'diff',
+    '--name-status',
+    '--find-renames',
+    base,
+    head,
+  ]);
+  return raw ? raw.split('\n') : [];
+}
+
+/**
+ * Validate one merge-back projection against its immutable release tag.
+ *
+ * The live PR path also binds the still-active release branch. A historical
+ * coverage audit has no branch to bind after cleanup, so it replays the same
+ * structural validation against the committed head and immutable tag.
+ */
+function validateMergeBackAtRef(
+  root,
+  {base, head = 'HEAD', releaseRef, activeBranches = null, workingTree = false},
+) {
+  const marker = markerAtRef(root, releaseRef);
+  const plan = JSON.parse(
+    git(root, ['show', `${releaseRef}:${RELEASE_DIR}/${PLAN_FILE}`]),
+  );
+  const errors = validateIdentity(marker, plan);
+  if (releaseRef !== `v${marker.version}`)
+    errors.push('release merge-back must use the immutable version tag');
+
+  const releaseHead = git(root, ['rev-parse', releaseRef]);
+  if (activeBranches !== null) {
+    const branchHead = git(root, ['rev-parse', `origin/${marker.branch}`]);
+    if (releaseHead !== branchHead)
+      errors.push('version tag does not match the active release branch head');
+    const sortedBranches = [...activeBranches].sort();
+    if (sortedBranches.length !== 1 || sortedBranches[0] !== marker.branch)
+      errors.push(
+        'release merge-back requires exactly the marked active branch',
+      );
+  }
+
+  const entries = mergeBackEntries(root, base, head);
+  const releaseDiff = git(root, [
+    'diff',
+    '--name-status',
+    '--find-renames',
+    plan.cutSha,
+    releaseRef,
+  ]);
+  const releaseEntries = releaseDiff.split('\n').filter(Boolean);
+  const releasePromotion = validateCodemodPromotionApplicabilityAtRef(root, {
+    base: plan.cutSha,
+    head: releaseRef,
+    entries: releaseEntries,
+    version: marker.version,
+  });
+  const projectedPromotion = validateCodemodPromotionApplicabilityAtRef(root, {
+    base,
+    head,
+    entries,
+    version: marker.version,
+    workingTree,
+  });
+  errors.push(...releasePromotion.errors, ...projectedPromotion.errors);
+  const validatedCodemodPromotionPaths = new Set(
+    [...releasePromotion.validatedPaths].filter(file =>
+      projectedPromotion.validatedPaths.has(file),
+    ),
+  );
+  const releaseRenames = new Set(
+    releaseEntries
+      .map(entry => entry.split('\t'))
+      .filter(
+        ([status, ...files]) => status?.startsWith('R') && files.length === 2,
+      )
+      .map(([, ...files]) => files.join('\t')),
+  );
+  const releaseOutputs = releaseOutputMapAtRef(root, plan, releaseRef);
+  const releaseManifestFiles = releaseOutputPathsAtRef(
+    root,
+    plan,
+    releaseRef,
+  ).filter(isPackageManifestPath);
+  const cutManifests = manifestMapAtRef(
+    root,
+    plan.cutSha,
+    releaseManifestFiles,
+  );
+  const releaseManifests = manifestMapAtRef(
+    root,
+    releaseRef,
+    releaseManifestFiles,
+  );
+  const mainManifestFiles = git(root, [
+    'ls-tree',
+    '-r',
+    '--name-only',
+    base,
+    '--',
+    'packages',
+  ])
+    .split('\n')
+    .filter(isPackageManifestPath);
+  const baseManifests = manifestMapAtRef(root, base, mainManifestFiles);
+  const baseConfig = jsonAtRef(root, base, '.changeset/config.json');
+  const headChangesets = workingTree
+    ? new Map(changesetEntries(root).map(entry => [entry.path, entry.sha256]))
+    : changesetMapAtRef(root, head);
+  const headOutputs = workingTree
+    ? currentOutputMap(root, releaseOutputs.keys())
+    : fileDigestsAtRef(root, head, [...releaseOutputs.keys()]);
+  const headManifests = workingTree
+    ? currentManifestMap(root, mainManifestFiles)
+    : manifestMapAtRef(root, head, mainManifestFiles);
+
+  errors.push(
+    ...validateReleaseMergeBack({
+      entries,
+      plan,
+      baseChangesets: changesetMapAtRef(root, base),
+      headChangesets,
+      releaseOutputs,
+      headOutputs,
+      releaseRenames,
+      validatedCodemodPromotionPaths,
+      releaseVersion: marker.version,
+      fixedNames: new Set((baseConfig?.fixed ?? []).flat()),
+      cutManifests,
+      releaseManifests,
+      baseManifests,
+      headManifests,
+    }),
+  );
+  return {
+    errors,
+    receipt: {
+      branch: marker.branch,
+      head: releaseHead,
+      version: marker.version,
+      planDigest: marker.planDigest,
+      base,
+      releaseRef,
+    },
+  };
+}
+
+/** Replay the merge-back validator over a closed, one-parent merge commit. */
+function validateHistoricalReleaseMergeBack(root, {head, releaseRef}) {
+  const lineage = git(root, ['rev-list', '--parents', '-n', '1', head])
+    .trim()
+    .split(/\s+/);
+  if (lineage.length !== 2)
+    return ['historical release merge-back must be a one-parent squash commit'];
+  return validateMergeBackAtRef(root, {
+    base: lineage[1],
+    head,
+    releaseRef,
+  }).errors;
+}
+
 function markerAtRef(root, ref) {
   return JSON.parse(
     git(root, ['show', `${ref}:${RELEASE_DIR}/${MARKER_FILE}`]),
   );
+}
+
+function planAtRef(root, ref) {
+  return JSON.parse(git(root, ['show', `${ref}:${RELEASE_DIR}/${PLAN_FILE}`]));
 }
 
 function validateRefMarker(marker, branch) {
@@ -508,40 +763,664 @@ function listActiveBranches(root) {
   return active.sort();
 }
 
-const RELEASE_OUTPUT_PATTERNS = [
-  /^packages\/(?:[^/]+|themes\/[^/]+)\/package\.json$/,
-  /^packages\/(?:[^/]+|themes\/[^/]+)\/CHANGELOG\.md$/,
-  /^packages\/cli\/assets\/codemods\/registry\.mjs$/,
-  /^packages\/cli\/assets\/codemods\/__tests__\/registry\.test\.mjs$/,
-  /^packages\/cli\/assets\/codemods\/transforms\/(?:next|v\d+\.\d+\.\d+)\//,
-  /^pnpm-lock\.yaml$/,
-];
+const RELEASE_TEST_REPAIR_FORBIDDEN_STATEMENT =
+  /(?:unbounded changed statement|\b(?:expect|assert)\s*[.(]|\b(?:expect|assert)[A-Z]\w*\s*\(|\.(?:not\.)?to[A-Z]\w*\s*\(|\b(?:skip|fixme|fail|slow)\s*\(|\b(?:test|it|describe)(?:\.[A-Za-z]+)*\.(?:skip|fixme|fail|slow|skipIf|runIf)\b|\b(?:skip|fixme)\s*:\s*true\b|\breturn\b|timeout|retr(?:y|ies)|\b(?:disableRules|disabledRules|excludeRules)\b|\btoMatch(?:Inline)?Snapshot\b)/i;
 
-function isReleaseOutputPath(file) {
-  return RELEASE_OUTPUT_PATTERNS.some(pattern => pattern.test(file));
+function changedStatementsFromDiff(diff) {
+  const statements = [];
+  let oldLines = [];
+  let newLines = [];
+
+  const statementData = text => {
+    const masked = [...text];
+    const stack = [];
+    const pairs = [];
+    let quote = null;
+    let escaped = false;
+    let lineComment = false;
+    let blockComment = false;
+    for (let index = 0; index < text.length; index += 1) {
+      const character = text[index];
+      const next = text[index + 1];
+      if (lineComment) {
+        masked[index] = ' ';
+        if (character === '\n') lineComment = false;
+        continue;
+      }
+      if (blockComment) {
+        masked[index] = ' ';
+        if (character === '*' && next === '/') {
+          masked[index + 1] = ' ';
+          blockComment = false;
+          index += 1;
+        }
+        continue;
+      }
+      if (quote) {
+        masked[index] = ' ';
+        if (escaped) escaped = false;
+        else if (character === '\\') escaped = true;
+        else if (character === quote) quote = null;
+        continue;
+      }
+      if (character === '/' && next === '/') {
+        masked[index] = ' ';
+        masked[index + 1] = ' ';
+        lineComment = true;
+        index += 1;
+        continue;
+      }
+      if (character === '/' && next === '*') {
+        masked[index] = ' ';
+        masked[index + 1] = ' ';
+        blockComment = true;
+        index += 1;
+        continue;
+      }
+      if (character === "'" || character === '"' || character === '`') {
+        masked[index] = ' ';
+        quote = character;
+        continue;
+      }
+      if ('([{'.includes(character)) {
+        stack.push({character, index});
+        continue;
+      }
+      if (')]}'.includes(character)) {
+        const expected = {')': '(', ']': '[', '}': '{'}[character];
+        const opening = stack.at(-1);
+        if (opening?.character === expected) {
+          stack.pop();
+          pairs.push({
+            close: index,
+            open: opening.index,
+            type: opening.character,
+          });
+        }
+      }
+    }
+    return {masked: masked.join(''), pairs};
+  };
+
+  const addChangedStatements = lines => {
+    const text = lines.map(line => line.text).join('\n');
+    const ranges = [];
+    let offset = 0;
+    for (const line of lines) {
+      ranges.push({end: offset + line.text.length, start: offset});
+      offset += line.text.length + 1;
+    }
+    const {masked, pairs} = statementData(text);
+    for (let index = 0; index < lines.length; index += 1) {
+      if (!lines[index].changed) continue;
+      const range = ranges[index];
+      const enclosingCall = pairs
+        .filter(
+          pair =>
+            pair.type === '(' &&
+            pair.open <= range.start &&
+            pair.close >= range.end,
+        )
+        .sort((a, b) => a.close - a.open - (b.close - b.open))[0];
+      const changedCode = masked.slice(range.start, range.end).trim();
+      if (!changedCode) {
+        if (
+          /@(?:vitest-environment|jest-environment|ts-check|ts-nocheck)|(?:eslint|prettier)-(?:disable|enable)/i.test(
+            lines[index].text,
+          )
+        ) {
+          statements.push('<unbounded changed statement>');
+        }
+        continue;
+      }
+      if (!enclosingCall) {
+        if (!changedCode.includes(';')) {
+          statements.push('<unbounded changed statement>');
+          continue;
+        }
+        for (const statement of changedCode.split(';')) {
+          if (statement.trim()) statements.push(`${statement.trim()};`);
+        }
+        continue;
+      }
+      const previousSemicolon = masked.lastIndexOf(';', enclosingCall.open - 1);
+      if (previousSemicolon === -1) {
+        statements.push('<unbounded changed statement>');
+        continue;
+      }
+      const start = previousSemicolon + 1;
+      const semicolon = masked.indexOf(';', enclosingCall.close);
+      if (semicolon === -1) {
+        statements.push('<unbounded changed statement>');
+        continue;
+      }
+      statements.push(text.slice(start, semicolon + 1).trim());
+    }
+  };
+  const flush = () => {
+    addChangedStatements(oldLines);
+    addChangedStatements(newLines);
+    oldLines = [];
+    newLines = [];
+  };
+
+  for (const line of diff.split('\n')) {
+    if (line.startsWith('@@')) {
+      flush();
+      continue;
+    }
+    if (/^(?:diff --git |index |--- |\+\+\+ )/.test(line)) continue;
+    const marker = line[0];
+    const text = line.slice(1);
+    if (marker === ' ') {
+      oldLines.push({changed: false, text});
+      newLines.push({changed: false, text});
+    } else if (marker === '-') {
+      oldLines.push({changed: true, text});
+    } else if (marker === '+') {
+      newLines.push({changed: true, text});
+    }
+  }
+  flush();
+  return [...new Set(statements)];
 }
 
-function validateReleaseDiff(entries, {plan, baseChangesets} = {}) {
+function validateReleaseTestRepair({
+  entries,
+  changedLines,
+  changedStatements,
+  commitCount,
+  mergeCommitCount,
+  patchId,
+  changeDigest,
+  mainPatches,
+  baseChangesets,
+}) {
+  const errors = [];
+  if (entries.length === 0)
+    errors.push('release test repair has no changed files');
+  if (commitCount !== 1 || mergeCommitCount !== 0)
+    errors.push(
+      'release test repair must contain exactly one non-merge commit',
+    );
+  if (baseChangesets.size !== 0)
+    errors.push(
+      'release test repair requires the generated version bump to be merged first',
+    );
+
+  for (const entry of entries) {
+    const status = entry.split('\t', 1)[0];
+    if (status !== 'M')
+      errors.push(
+        `release test repair may only modify an existing test: ${entry}`,
+      );
+    const files = diffEntryFiles(entry);
+    if (files === null) {
+      errors.push(`invalid diff entry: ${entry}`);
+      continue;
+    }
+    for (const file of files) {
+      if (!isReleaseTestRepairPath(file))
+        errors.push(`release test repair contains a non-test path: ${file}`);
+    }
+  }
+  for (const statement of changedStatements ?? changedLines ?? []) {
+    if (RELEASE_TEST_REPAIR_FORBIDDEN_STATEMENT.test(statement))
+      errors.push(
+        `release test repair changes an assertion, test control, timeout, retry, or snapshot: ${statement}`,
+      );
+  }
+
+  const source = patchId
+    ? (mainPatches.get(patchId) ?? []).find(
+        candidate =>
+          candidate.changeDigest === changeDigest && candidate.presentAtMain,
+      )
+    : null;
+  if (!patchId || !changeDigest || !source)
+    errors.push(
+      'release test repair does not exactly match a non-merge commit still present on main',
+    );
+  return {errors, sourceCommit: source?.commit ?? null};
+}
+
+function stablePatchId(root, diff) {
+  if (!diff.trim()) return null;
+  const output = execFileSync('git', ['patch-id', '--stable'], {
+    cwd: root,
+    encoding: 'utf8',
+    input: diff,
+  }).trim();
+  return output.split(/\s+/)[0] || null;
+}
+
+function exactChangeDigest(diff) {
+  const change = diff
+    .split('\n')
+    .filter(
+      line =>
+        /^(?:diff --git |new file mode |deleted file mode |rename (?:from|to) |copy (?:from|to) )/.test(
+          line,
+        ) ||
+        (/^[+-]/.test(line) && !/^(?:\+\+\+|---)/.test(line)),
+    )
+    .join('\n');
+  return change ? sha256(change) : null;
+}
+
+function patchIsPresentAtRef(root, ref, diff) {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-release-index-'));
+  const index = path.join(temp, 'index');
+  const env = {...process.env, GIT_INDEX_FILE: index};
+  try {
+    execFileSync('git', ['read-tree', ref], {
+      cwd: root,
+      env,
+      stdio: 'ignore',
+    });
+    execFileSync(
+      'git',
+      ['apply', '--cached', '--reverse', '--check', '--whitespace=nowarn'],
+      {
+        cwd: root,
+        env,
+        input: diff.endsWith('\n') ? diff : `${diff}\n`,
+        stdio: ['pipe', 'ignore', 'ignore'],
+      },
+    );
+    return true;
+  } catch {
+    return false;
+  } finally {
+    fs.rmSync(temp, {recursive: true, force: true});
+  }
+}
+
+function validateReleaseTestRepairAtRef(
+  root,
+  {base, head, mainRef, entries, baseChangesets},
+) {
+  const mergeBase = git(root, ['merge-base', base, head]);
+  const commits = git(root, ['rev-list', `${mergeBase}..${head}`])
+    .split('\n')
+    .filter(Boolean);
+  const mergeCommits = git(root, [
+    'rev-list',
+    '--min-parents=2',
+    `${mergeBase}..${head}`,
+  ])
+    .split('\n')
+    .filter(Boolean);
+  const diff = gitRaw(root, ['diff', '--binary', `${mergeBase}..${head}`]);
+  const changedStatements = changedStatementsFromDiff(
+    git(root, ['diff', '--unified=20', `${mergeBase}..${head}`]),
+  );
+  const patchId = stablePatchId(root, diff);
+  const changeDigest = exactChangeDigest(diff);
+  const files = [
+    ...new Set(entries.flatMap(entry => diffEntryFiles(entry) ?? [])),
+  ].sort();
+  const mainPatches = new Map();
+  if (mainRef) {
+    const candidates = git(root, [
+      'log',
+      '--format=%H',
+      '--no-merges',
+      mainRef,
+      '--',
+      ...files,
+    ])
+      .split('\n')
+      .filter(Boolean);
+    for (const commit of candidates) {
+      const candidateEntries = git(root, [
+        'diff-tree',
+        '--root',
+        '--no-commit-id',
+        '--name-status',
+        '-r',
+        commit,
+      ])
+        .split('\n')
+        .filter(Boolean);
+      const candidateEntryFiles = candidateEntries.map(diffEntryFiles);
+      if (candidateEntryFiles.some(candidateFiles => candidateFiles === null))
+        continue;
+      const candidateFiles = [...new Set(candidateEntryFiles.flat())].sort();
+      if (canonicalJson(candidateFiles) !== canonicalJson(files)) continue;
+
+      const candidateDiff = gitRaw(root, [
+        'show',
+        '--format=',
+        '--binary',
+        commit,
+        '--',
+        ...candidateFiles,
+      ]);
+      const candidatePatchId = stablePatchId(root, candidateDiff);
+      if (!candidatePatchId || candidatePatchId !== patchId) continue;
+      const candidateChangeDigest = exactChangeDigest(candidateDiff);
+      const matches = mainPatches.get(candidatePatchId) ?? [];
+      matches.push({
+        commit,
+        changeDigest: candidateChangeDigest,
+        presentAtMain:
+          candidateChangeDigest === changeDigest &&
+          patchIsPresentAtRef(root, mainRef, candidateDiff),
+      });
+      mainPatches.set(candidatePatchId, matches);
+    }
+  }
+  return {
+    ...validateReleaseTestRepair({
+      entries,
+      changedStatements,
+      commitCount: commits.length,
+      mergeCommitCount: mergeCommits.length,
+      patchId,
+      changeDigest,
+      mainPatches,
+      baseChangesets,
+    }),
+    patchId,
+  };
+}
+
+const RELEASE_POLICY_CARRY_PATTERNS = [
+  /^scripts\/release\/active-release(?:\.test)?\.mjs$/,
+  /^scripts\/release\/release-paths\.mjs$/,
+  /^\.github\/actions\/test-scope\/action\.yml$/,
+  /^\.github\/scripts\/(?:test-scope-action|touched-components)\.test\.mjs$/,
+  /^\.github\/workflows\/ci\.yml$/,
+  /^docs\/release\.md$/,
+  /^docs\/specs\/AST-(?:017|030)\/spec\.md$/,
+];
+
+function isAncestor(root, ancestor, descendant) {
+  try {
+    execFileSync('git', ['merge-base', '--is-ancestor', ancestor, descendant], {
+      cwd: root,
+      stdio: 'ignore',
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function patchBuildsHead(root, base, head, patch) {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-policy-carry-'));
+  const index = path.join(temp, 'index');
+  const env = {...process.env, GIT_INDEX_FILE: index};
+  try {
+    execFileSync('git', ['read-tree', base], {cwd: root, env, stdio: 'ignore'});
+    execFileSync(
+      'git',
+      ['apply', '--cached', '--unidiff-zero', '--whitespace=nowarn'],
+      {
+        cwd: root,
+        env,
+        input: patch.endsWith('\n') ? patch : `${patch}\n`,
+        stdio: ['pipe', 'ignore', 'ignore'],
+      },
+    );
+    const tree = execFileSync('git', ['write-tree'], {
+      cwd: root,
+      env,
+      encoding: 'utf8',
+    }).trim();
+    return tree === git(root, ['rev-parse', `${head}^{tree}`]);
+  } catch {
+    return false;
+  } finally {
+    fs.rmSync(temp, {recursive: true, force: true});
+  }
+}
+
+function validateReleasePolicyCarryAtRef(
+  root,
+  {base, head, source, mainRef, manifestPath, releaseBranch},
+) {
+  const errors = [];
+  const baseCommit = git(root, ['rev-parse', base]);
+  const commits = git(root, ['rev-list', `${baseCommit}..${head}`])
+    .split('\n')
+    .filter(Boolean);
+  const mergeCommits = git(root, [
+    'rev-list',
+    '--min-parents=2',
+    `${baseCommit}..${head}`,
+  ])
+    .split('\n')
+    .filter(Boolean);
+  if (commits.length !== 1 || mergeCommits.length !== 0)
+    errors.push(
+      'release policy carry must contain exactly one non-merge commit',
+    );
+  if (git(root, ['rev-parse', `${head}^`]) !== baseCommit)
+    errors.push(
+      'release policy carry commit must directly follow the release head',
+    );
+  if (!isAncestor(root, source, mainRef))
+    errors.push('release policy carry source is not merged on current main');
+  if (
+    !/^scripts\/release\/policy-carry\/v\d+\.\d+\.\d+\.json$/.test(manifestPath)
+  )
+    errors.push('release policy carry manifest path is invalid');
+
+  const manifest = jsonAtRef(root, source, manifestPath);
+  if (
+    manifest?.schemaVersion !== 1 ||
+    manifest.releaseBranch !== releaseBranch ||
+    manifest.base !== baseCommit ||
+    !/^scripts\/release\/policy-carry\/v\d+\.\d+\.\d+\.diff$/.test(
+      manifest?.patch ?? '',
+    ) ||
+    !/^[0-9a-f]{64}$/.test(manifest?.patchSha256 ?? '') ||
+    !manifest?.targets ||
+    Array.isArray(manifest.targets) ||
+    typeof manifest.targets !== 'object'
+  ) {
+    errors.push(
+      'release policy carry manifest does not match this branch and base',
+    );
+  }
+
+  const targets =
+    manifest?.targets &&
+    !Array.isArray(manifest.targets) &&
+    typeof manifest.targets === 'object'
+      ? Object.entries(manifest.targets).sort(([a], [b]) => a.localeCompare(b))
+      : [];
+  for (const [file, digest] of targets) {
+    if (
+      !RELEASE_POLICY_CARRY_PATTERNS.some(pattern => pattern.test(file)) ||
+      !/^[0-9a-f]{64}$/.test(digest)
+    ) {
+      errors.push(
+        `release policy carry manifest has an invalid target: ${file}`,
+      );
+    }
+  }
+
+  const candidateEntries = git(root, [
+    'diff',
+    '--name-status',
+    baseCommit,
+    head,
+  ])
+    .split('\n')
+    .filter(Boolean);
+  const candidateFiles = [
+    ...new Set(
+      candidateEntries.flatMap(entry => {
+        const files = diffEntryFiles(entry);
+        if (files === null) {
+          errors.push(`invalid release policy carry diff entry: ${entry}`);
+          return [];
+        }
+        return files;
+      }),
+    ),
+  ].sort();
+  const targetFiles = targets.map(([file]) => file);
+  for (const file of candidateFiles) {
+    if (!RELEASE_POLICY_CARRY_PATTERNS.some(pattern => pattern.test(file)))
+      errors.push(
+        `release policy carry contains an unauthorized path: ${file}`,
+      );
+  }
+  if (canonicalJson(candidateFiles) !== canonicalJson(targetFiles))
+    errors.push(
+      'release policy carry file set does not match its reviewed bundle',
+    );
+
+  const candidateDigests = fileDigestsAtRef(root, head, candidateFiles);
+  for (const [file, digest] of targets) {
+    if (candidateDigests.get(file) !== digest)
+      errors.push(
+        `release policy carry file does not match its reviewed bundle: ${file}`,
+      );
+  }
+
+  const patchContent = manifest?.patch
+    ? filesAtRef(root, source, [manifest.patch]).get(manifest.patch)
+    : null;
+  const patch = patchContent?.toString('utf8') ?? '';
+  if (!patch || sha256(patchContent) !== manifest?.patchSha256)
+    errors.push(
+      'release policy carry patch does not match its manifest digest',
+    );
+  else if (!patchBuildsHead(root, baseCommit, head, patch))
+    errors.push('release policy carry patch does not build the candidate head');
+
+  return {
+    errors,
+    files: candidateEntries.length,
+    bundleDigest: manifest ? sha256(canonicalJson(manifest)) : null,
+  };
+}
+
+const CODEMOD_PROMOTION_SPEC_PATH = 'docs/specs/AST-057-row-actions/spec.md';
+const CODEMOD_PROMOTION_POINTERS = [
+  'packages/cli/assets/codemods/transforms/next/migrate-item-swipe-actions-to-swipe.mjs',
+  'packages/cli/assets/codemods/transforms/next/__tests__/migrate-item-swipe-actions-to-swipe.test.mjs',
+];
+
+function validateCodemodPromotionApplicabilityMove({
+  before,
+  after,
+  entries,
+  status,
+  version,
+}) {
+  const errors = [];
+  if (status !== 'M')
+    errors.push(
+      `${CODEMOD_PROMOTION_SPEC_PATH} may only be modified by a generated codemod promotion`,
+    );
+
+  let expected = before;
+  for (const from of CODEMOD_PROMOTION_POINTERS) {
+    const to = from.replace('/transforms/next/', `/transforms/v${version}/`);
+    if (before.split(from).length !== 2)
+      errors.push(
+        `${CODEMOD_PROMOTION_SPEC_PATH} must contain the exact pre-promotion pointer once: ${from}`,
+      );
+    const hasRename = entries.some(entry => {
+      if (!entry.startsWith('R')) return false;
+      const files = diffEntryFiles(entry);
+      return files?.[0] === from && files[1] === to;
+    });
+    if (!hasRename)
+      errors.push(`codemod promotion does not rename ${from} to ${to}`);
+    expected = expected.replace(from, to);
+  }
+  if (after !== expected)
+    errors.push(
+      `${CODEMOD_PROMOTION_SPEC_PATH} may change only the exact applicability pointers moved by the codemod promotion`,
+    );
+  return errors;
+}
+
+function validateCodemodPromotionApplicabilityAtRef(
+  root,
+  {base, head, entries, version, workingTree = false},
+) {
+  const matchingEntries = entries.filter(entry =>
+    (diffEntryFiles(entry) ?? []).some(isCodemodPromotionApplicabilityPath),
+  );
+  if (matchingEntries.length === 0)
+    return {errors: [], validatedPaths: new Set()};
+  if (matchingEntries.length !== 1)
+    return {
+      errors: [
+        `${CODEMOD_PROMOTION_SPEC_PATH} must have exactly one modified diff entry`,
+      ],
+      validatedPaths: new Set(),
+    };
+
+  const before = filesAtRef(root, base, [CODEMOD_PROMOTION_SPEC_PATH]).get(
+    CODEMOD_PROMOTION_SPEC_PATH,
+  );
+  const after = workingTree
+    ? fs.existsSync(path.join(root, CODEMOD_PROMOTION_SPEC_PATH))
+      ? fs.readFileSync(path.join(root, CODEMOD_PROMOTION_SPEC_PATH))
+      : null
+    : filesAtRef(root, head, [CODEMOD_PROMOTION_SPEC_PATH]).get(
+        CODEMOD_PROMOTION_SPEC_PATH,
+      );
+  if (before === null || after === null)
+    return {
+      errors: [
+        `${CODEMOD_PROMOTION_SPEC_PATH} must exist before and after the codemod promotion`,
+      ],
+      validatedPaths: new Set(),
+    };
+
+  const [status] = matchingEntries[0].split('\t');
+  const errors = validateCodemodPromotionApplicabilityMove({
+    before: before.toString('utf8'),
+    after: after.toString('utf8'),
+    entries,
+    status,
+    version,
+  });
+  return {
+    errors,
+    validatedPaths: errors.length
+      ? new Set()
+      : new Set([CODEMOD_PROMOTION_SPEC_PATH]),
+  };
+}
+
+function validateReleaseDiff(
+  entries,
+  {plan, baseChangesets, validatedCodemodPromotionPaths = new Set()} = {},
+) {
   const errors = [];
   const planned = plan
     ? new Map(plan.changesets.map(entry => [entry.path, entry.sha256]))
     : null;
   const deletedChangesets = new Set();
   for (const entry of entries) {
-    const [status, ...files] = entry.split('\t');
-    const isMove = status?.startsWith('R') || status?.startsWith('C');
-    const expectedPaths = isMove ? 2 : 1;
-    if (
-      !status ||
-      files.length !== expectedPaths ||
-      files.some(file => !file)
-    ) {
+    const [status] = entry.split('\t');
+    const files = diffEntryFiles(entry);
+    if (files === null) {
       errors.push(`invalid diff entry: ${entry}`);
       continue;
     }
     for (const file of files) {
-      if (!file.startsWith('.changeset/') && !isReleaseOutputPath(file))
-        errors.push(`release bump contains a non-generated path: ${file}`);
+      if (!file.startsWith('.changeset/') && !isReleaseOutputPath(file)) {
+        if (isCodemodPromotionApplicabilityPath(file)) {
+          if (!validatedCodemodPromotionPaths.has(file))
+            errors.push(
+              `release bump contains an unvalidated codemod-promotion applicability move: ${file}`,
+            );
+        } else {
+          errors.push(`release bump contains a non-generated path: ${file}`);
+        }
+      }
       if (file.startsWith('.changeset/')) {
         if (status !== 'D')
           errors.push(
@@ -602,6 +1481,97 @@ function nextPlannedVersion(releaseVersion, ownerVersion = null) {
   if (patch === null || minor === null) return null;
   if (ownerVersion === null) return patch;
   return ownerVersion === patch || ownerVersion === minor ? ownerVersion : null;
+}
+
+/** FR51 — no tagged release can admit its successor before npm publication. */
+function successorPlanReadiness({version, stablePublished}) {
+  if (stablePublished) return [];
+  return [`successor plan waits until v${version} has a publication effect`];
+}
+
+function validateSuccessorPlanAtRef(root, releaseRef, releaseVersion) {
+  const marker = markerAtRef(root, releaseRef);
+  const plan = planAtRef(root, releaseRef);
+  validateRefMarker(marker, marker.branch);
+  if (marker.version !== releaseVersion)
+    throw new Error(
+      `successor plan for v${releaseVersion} cannot use ${marker.branch}`,
+    );
+  if (
+    plan?.schemaVersion !== 2 ||
+    plan.version !== marker.version ||
+    plan.branch !== marker.branch ||
+    plan.cutSha !== marker.cutSha ||
+    computePlanDigest(plan) !== marker.planDigest ||
+    canonicalJson(plan.ownerRecut ?? null) !==
+      canonicalJson(marker.ownerRecut ?? null)
+  )
+    throw new Error('successor plan authority does not match the release ref');
+  return plan.ownerRecut ?? null;
+}
+
+async function stablePublicationExists(
+  root,
+  version,
+  {registry, fetchImpl = fetch} = {},
+) {
+  const {DEFAULT_REGISTRY, fetchDistTags, fetchVersionDocument} =
+    await import('../npm/registry.mjs');
+  const manifests = packageManifestsByName(file => {
+    const absolute = path.join(root, file);
+    return fs.existsSync(absolute) ? readJson(absolute) : null;
+  }, root);
+  const names = [...manifests.values()]
+    .filter(isStableReleasePackage)
+    .map(manifest => manifest.name)
+    .sort();
+  if (names.length === 0)
+    throw new Error('successor plan cannot find a stable package to verify');
+
+  const failures = [];
+  for (const name of names) {
+    const npmRegistry = registry ?? DEFAULT_REGISTRY;
+    try {
+      const response = await fetchVersionDocument({
+        name,
+        version,
+        registry: npmRegistry,
+        fetchImpl,
+      });
+      if (response.status === 200) {
+        const document = await response.json();
+        if (document.version === version) return true;
+        failures.push(
+          `${name}@${version} reported ${document.version ?? 'no version'}`,
+        );
+      } else if (response.status !== 404) {
+        failures.push(`${name}@${version} returned HTTP ${response.status}`);
+      }
+    } catch (error) {
+      failures.push(`${name}@${version} failed: ${error.message}`);
+    }
+
+    try {
+      const response = await fetchDistTags({
+        name,
+        registry: npmRegistry,
+        fetchImpl,
+      });
+      if (response.status !== 200) {
+        failures.push(`${name} dist-tags returned HTTP ${response.status}`);
+        continue;
+      }
+      const tags = await response.json();
+      if (tags.latest === version) return true;
+    } catch (error) {
+      failures.push(`${name} dist-tags failed: ${error.message}`);
+    }
+  }
+  if (failures.length)
+    throw new Error(
+      `successor plan cannot verify npm stable publication:\n${failures.join('\n')}`,
+    );
+  return false;
 }
 
 /**
@@ -677,6 +1647,7 @@ function validateReleaseMergeBack({
   releaseOutputs,
   headOutputs,
   releaseRenames = new Set(),
+  validatedCodemodPromotionPaths = new Set(),
   releaseVersion,
   fixedNames = new Set(),
   cutManifests = new Map(),
@@ -723,6 +1694,11 @@ function validateReleaseMergeBack({
           errors.push(
             `release merge-back changed a manifest not changed on the published branch: ${file}`,
           );
+      } else if (isCodemodPromotionApplicabilityPath(file)) {
+        if (status !== 'M' || !validatedCodemodPromotionPaths.has(file))
+          errors.push(
+            `release merge-back contains an unvalidated codemod-promotion applicability move: ${file}`,
+          );
       } else if (isReleaseOutputPath(file)) {
         if (!releaseOutputPaths.has(file) && !releaseRenamePaths.has(file))
           errors.push(
@@ -735,14 +1711,16 @@ function validateReleaseMergeBack({
   }
 
   for (const [file, digest] of planned) {
-    if (baseChangesets.get(file) !== digest)
-      errors.push(
-        `release merge-back cannot verify frozen Changeset on current main: ${file}`,
-      );
-    if (headChangesets.has(file))
-      errors.push(
-        `release merge-back did not delete frozen Changeset: ${file}`,
-      );
+    const baseDigest = baseChangesets.get(file);
+    const headDigest = headChangesets.get(file);
+    if (baseDigest === digest) {
+      if (headDigest !== undefined)
+        errors.push(
+          `release merge-back did not delete frozen Changeset: ${file}`,
+        );
+    } else if (headDigest !== baseDigest) {
+      errors.push(`release merge-back changed post-cut Changeset: ${file}`);
+    }
   }
   for (const [file, digest] of baseChangesets) {
     if (planned.has(file)) continue;
@@ -909,17 +1887,90 @@ function required(values, key) {
   return values[key];
 }
 
-function versionTagExists(root, version) {
+function validateOwnerRecutReceipt(root, reference, version) {
+  const match = /^(.+) SHA-256 ([0-9a-f]{64})$/.exec(reference ?? '');
+  if (!match)
+    throw new Error('existing tag requires a hashed owner-recut receipt');
+  let body;
   try {
-    execFileSync(
-      'git',
-      ['rev-parse', '--verify', '--quiet', `refs/tags/v${version}`],
-      {cwd: root, stdio: 'ignore'},
-    );
-    return true;
+    body = fs.readFileSync(match[1]);
   } catch {
-    return false;
+    throw new Error('owner-recut receipt is unavailable');
   }
+  const digest = crypto.createHash('sha256').update(body).digest('hex');
+  if (digest !== match[2])
+    throw new Error('owner-recut receipt SHA-256 does not match');
+  let receipt;
+  try {
+    receipt = JSON.parse(body);
+  } catch {
+    throw new Error('owner-recut receipt is not valid JSON');
+  }
+  const tag = receipt.priorTag;
+  const absence = receipt.publicationAbsence;
+  const tagSha = git(root, ['rev-parse', `refs/tags/v${version}^{commit}`]);
+  if (
+    receipt.schemaVersion !== 1 ||
+    receipt.kind !== 'tagged-unpublished-owner-recut-authority' ||
+    receipt.version !== version ||
+    tag?.name !== `v${version}` ||
+    tag?.objectType !== 'commit' ||
+    tag?.objectSha !== tagSha ||
+    !String(absence?.npmVersion ?? '').startsWith(`${version} absent`) ||
+    absence?.githubRelease !== 'absent' ||
+    absence?.deploy !== 'absent' ||
+    absence?.mainSync !== 'absent' ||
+    !receipt.ownerAuthority?.source ||
+    !receipt.ownerAuthority?.time ||
+    !receipt.ownerAuthority?.verbatim
+  )
+    throw new Error(
+      'owner-recut receipt does not match the release version and tag',
+    );
+  return {
+    version,
+    tagName: tag.name,
+    tagSha,
+    receiptSha256: digest,
+  };
+}
+
+function versionTagCommit(root, version) {
+  try {
+    return git(root, ['rev-parse', `refs/tags/v${version}^{commit}`]);
+  } catch {
+    return null;
+  }
+}
+
+function validateOwnerRecutTag(root, ownerRecut) {
+  if (ownerRecut === null) return;
+  const liveTagSha = versionTagCommit(root, ownerRecut.version);
+  if (liveTagSha !== ownerRecut.tagSha)
+    throw new Error(
+      'archived owner-recut tag no longer matches its bound commit',
+    );
+}
+
+function versionTagExists(root, version) {
+  return versionTagCommit(root, version) !== null;
+}
+
+function ownerRecutForCreate(root, values, version) {
+  if (versionTagExists(root, version)) {
+    if (!values['owner-recut-receipt'])
+      throw new Error(
+        `version v${version} already has an immutable tag; use a new release branch and version`,
+      );
+    return validateOwnerRecutReceipt(
+      root,
+      values['owner-recut-receipt'],
+      version,
+    );
+  }
+  if (values['owner-recut-receipt'])
+    throw new Error('owner-recut receipt requires the archived tag');
+  return null;
 }
 
 /**
@@ -930,7 +1981,12 @@ function versionTagExists(root, version) {
  * @returns {{version: string|null, errors: string[]}}
  */
 function declaredVersionAtRef(root, ref) {
-  const config = jsonAtRef(root, ref, '.changeset/config.json');
+  const configFile = '.changeset/config.json';
+  const files = expandWorkspaceDirs(root).map(dir =>
+    path.relative(root, path.join(dir, 'package.json')),
+  );
+  const contents = filesAtRef(root, ref, [configFile, ...files]);
+  const config = parseJson(contents.get(configFile));
   if (!config)
     return {
       version: null,
@@ -938,9 +1994,8 @@ function declaredVersionAtRef(root, ref) {
     };
   const fixed = new Set((config.fixed ?? []).flat());
   const versions = new Map();
-  for (const dir of expandWorkspaceDirs(root)) {
-    const file = path.relative(root, path.join(dir, 'package.json'));
-    const manifest = jsonAtRef(root, ref, file);
+  for (const file of files) {
+    const manifest = parseJson(contents.get(file));
     if (!manifest || !fixed.has(manifest.name)) continue;
     if (!isStableReleasePackage(manifest)) continue;
     if (!versions.has(manifest.version)) versions.set(manifest.version, []);
@@ -991,6 +2046,7 @@ function writeAuthority(root, values, refresh) {
   const planPath = path.join(dir, PLAN_FILE);
   const markerExists = fs.existsSync(markerPath);
   const planExists = fs.existsSync(planPath);
+  let ownerRecut = null;
 
   if (refresh) {
     if (!markerExists || !planExists)
@@ -1001,6 +2057,8 @@ function writeAuthority(root, values, refresh) {
     const existingPlan = readJson(planPath);
     const identityErrors = validateIdentity(existingMarker, existingPlan);
     if (identityErrors.length) throw new Error(identityErrors.join('\n'));
+    ownerRecut = existingPlan.ownerRecut ?? null;
+    validateOwnerRecutTag(root, ownerRecut);
     for (const [key, value] of [
       ['version', version],
       ['branch', branch],
@@ -1014,14 +2072,11 @@ function writeAuthority(root, values, refresh) {
       throw new Error(
         'release authority already exists; a release branch cannot be reused',
       );
-    if (versionTagExists(root, version))
-      throw new Error(
-        `version v${version} already has an immutable tag; use a new release branch and version`,
-      );
+    ownerRecut = ownerRecutForCreate(root, values, version);
   }
 
   fs.mkdirSync(dir, {recursive: true});
-  const plan = buildPlan({root, version, branch, cutSha});
+  const plan = buildPlan({root, version, branch, cutSha, ownerRecut});
   const marker = buildMarker(plan);
   fs.writeFileSync(planPath, `${JSON.stringify(plan, null, 2)}\n`);
   fs.writeFileSync(markerPath, `${JSON.stringify(marker, null, 2)}\n`);
@@ -1036,9 +2091,31 @@ async function main() {
   if (command === 'create' || command === 'refresh') {
     // FR48/FR49: admission runs where the plan is made. Loaded here so the
     // trusted CI copy of this file needs no other module.
+    const version = required(values, 'version');
+    let ownerRecut;
+    if (command === 'create') {
+      ownerRecut = ownerRecutForCreate(root, values, version);
+    } else {
+      const marker = readJson(path.join(root, RELEASE_DIR, MARKER_FILE));
+      const plan = readJson(path.join(root, RELEASE_DIR, PLAN_FILE));
+      const identityErrors = validateIdentity(marker, plan);
+      if (identityErrors.length) throw new Error(identityErrors.join('\n'));
+      ownerRecut = plan.ownerRecut ?? null;
+      validateOwnerRecutTag(root, ownerRecut);
+    }
+    if (ownerRecut !== null) {
+      const stablePublished = await stablePublicationExists(root, version, {
+        registry: values.registry,
+      });
+      if (stablePublished)
+        throw new Error(
+          `owner recut refuses v${version} because npm already has a publication effect`,
+        );
+    }
     const {admitRelease} = await import('./release-inputs.mjs');
     const admission = admitRelease(root, {
-      version: required(values, 'version'),
+      version,
+      archivedTag: ownerRecut?.tagName ?? null,
     });
     if (admission.problems.length)
       throw new Error(
@@ -1059,6 +2136,35 @@ async function main() {
     console.log(JSON.stringify(marker));
     return;
   }
+  if (command === 'validate-policy-carry') {
+    const base = required(values, 'base');
+    const head = required(values, 'head');
+    const source = required(values, 'source');
+    const mainRef = required(values, 'main-ref');
+    const manifestPath = required(values, 'manifest');
+    const releaseBranch = required(values, 'release-branch');
+    const result = validateReleasePolicyCarryAtRef(root, {
+      base,
+      head,
+      source,
+      mainRef,
+      manifestPath,
+      releaseBranch,
+    });
+    if (result.errors.length) throw new Error(result.errors.join('\n'));
+    console.log(
+      JSON.stringify({
+        kind: 'policy-carry',
+        base,
+        head,
+        source,
+        manifest: manifestPath,
+        files: result.files,
+        bundleDigest: result.bundleDigest,
+      }),
+    );
+    return;
+  }
   if (command === 'validate-diff') {
     const base = required(values, 'base');
     const head = required(values, 'head');
@@ -1067,26 +2173,73 @@ async function main() {
       git(root, ['show', `${base}:${RELEASE_DIR}/${PLAN_FILE}`]),
     );
     const raw = git(root, ['diff', '--name-status', `${base}...${head}`]);
-    const errors = [
-      ...validateIdentity(marker, plan),
-      ...validateReleaseDiff(raw ? raw.split('\n') : [], {
-        plan,
-        baseChangesets: changesetMapAtRef(root, base),
-      }),
-    ];
+    const entries = raw ? raw.split('\n') : [];
+    const baseChangesets = changesetMapAtRef(root, base);
+    const kind = classifyReleaseDiff(entries);
+    let sourceCommit = null;
+    let patchId = null;
+    let diffErrors;
+    if (kind === 'test-repair') {
+      const repair = validateReleaseTestRepairAtRef(root, {
+        base,
+        head,
+        mainRef: required(values, 'main-ref'),
+        entries,
+        baseChangesets,
+      });
+      sourceCommit = repair.sourceCommit;
+      patchId = repair.patchId;
+      diffErrors = repair.errors;
+    } else if (kind === 'version-bump') {
+      const promotion = validateCodemodPromotionApplicabilityAtRef(root, {
+        base,
+        head,
+        entries,
+        version: marker.version,
+      });
+      diffErrors = [
+        ...validateReleaseDiff(entries, {
+          plan,
+          baseChangesets,
+          validatedCodemodPromotionPaths: promotion.validatedPaths,
+        }),
+        ...promotion.errors,
+      ];
+    } else {
+      diffErrors = [
+        'release candidate contains paths outside the generated version bump or test-repair classes',
+      ];
+    }
+    const errors = [...validateIdentity(marker, plan), ...diffErrors];
     if (errors.length) throw new Error(errors.join('\n'));
     console.log(
       JSON.stringify({
         base,
         head,
+        kind,
         planDigest: marker.planDigest,
-        files: raw ? raw.split('\n').length : 0,
+        files: entries.length,
+        ...(sourceCommit ? {sourceCommit, patchId} : {}),
       }),
     );
     return;
   }
   if (command === 'next-plan-version') {
     const releaseVersion = required(values, 'released-version');
+    const releaseRef = required(values, 'release-ref');
+    validateSuccessorPlanAtRef(root, releaseRef, releaseVersion);
+    const stablePublished = await stablePublicationExists(
+      root,
+      releaseVersion,
+      {
+        registry: values.registry,
+      },
+    );
+    const readinessErrors = successorPlanReadiness({
+      version: releaseVersion,
+      stablePublished,
+    });
+    if (readinessErrors.length) throw new Error(readinessErrors.join('\n'));
     const ownerVersion = values['owner-version'] ?? null;
     const version = nextPlannedVersion(releaseVersion, ownerVersion);
     if (version === null)
@@ -1123,109 +2276,17 @@ async function main() {
   if (command === 'validate-merge-back') {
     const base = required(values, 'base');
     const releaseRef = required(values, 'release-ref');
-    const marker = markerAtRef(root, releaseRef);
-    const plan = JSON.parse(
-      git(root, ['show', `${releaseRef}:${RELEASE_DIR}/${PLAN_FILE}`]),
-    );
-    const errors = validateIdentity(marker, plan);
-    if (releaseRef !== `v${marker.version}`)
-      errors.push('release merge-back must use the immutable version tag');
-    const releaseHead = git(root, ['rev-parse', releaseRef]);
-    const branchHead = git(root, ['rev-parse', `origin/${marker.branch}`]);
-    if (releaseHead !== branchHead)
-      errors.push('version tag does not match the active release branch head');
     const activeBranches = required(values, 'active-branches')
       .split(',')
-      .filter(Boolean)
-      .sort();
-    if (activeBranches.length !== 1 || activeBranches[0] !== marker.branch)
-      errors.push(
-        'release merge-back requires exactly the marked active branch',
-      );
-    const raw = git(root, [
-      'diff',
-      '--name-status',
-      '--find-renames',
+      .filter(Boolean);
+    const {errors, receipt} = validateMergeBackAtRef(root, {
       base,
-      'HEAD',
-    ]);
-    const releaseDiff = git(root, [
-      'diff',
-      '--name-status',
-      '--find-renames',
-      plan.cutSha,
       releaseRef,
-    ]);
-    const releaseRenames = new Set(
-      releaseDiff
-        .split('\n')
-        .filter(Boolean)
-        .map(entry => entry.split('\t'))
-        .filter(
-          ([status, ...files]) => status?.startsWith('R') && files.length === 2,
-        )
-        .map(([, ...files]) => files.join('\t')),
-    );
-    const releaseOutputs = releaseOutputMapAtRef(root, plan, releaseRef);
-    const releaseManifestFiles = releaseOutputPathsAtRef(
-      root,
-      plan,
-      releaseRef,
-    ).filter(isPackageManifestPath);
-    const cutManifests = manifestMapAtRef(
-      root,
-      plan.cutSha,
-      releaseManifestFiles,
-    );
-    const releaseManifests = manifestMapAtRef(
-      root,
-      releaseRef,
-      releaseManifestFiles,
-    );
-    // FR50 validates every current-main manifest so the release branch delta
-    // cannot overwrite post-cut main fields or decide the next version.
-    const mainManifestFiles = git(root, [
-      'ls-tree',
-      '-r',
-      '--name-only',
-      base,
-      '--',
-      'packages',
-    ])
-      .split('\n')
-      .filter(isPackageManifestPath);
-    const baseManifests = manifestMapAtRef(root, base, mainManifestFiles);
-    const baseConfig = jsonAtRef(root, base, '.changeset/config.json');
-    errors.push(
-      ...validateReleaseMergeBack({
-        entries: raw ? raw.split('\n') : [],
-        plan,
-        baseChangesets: changesetMapAtRef(root, base),
-        headChangesets: new Map(
-          changesetEntries(root).map(entry => [entry.path, entry.sha256]),
-        ),
-        releaseOutputs,
-        headOutputs: currentOutputMap(root, releaseOutputs.keys()),
-        releaseRenames,
-        releaseVersion: marker.version,
-        fixedNames: new Set((baseConfig?.fixed ?? []).flat()),
-        cutManifests,
-        releaseManifests,
-        baseManifests,
-        headManifests: currentManifestMap(root, mainManifestFiles),
-      }),
-    );
+      activeBranches,
+      workingTree: true,
+    });
     if (errors.length) throw new Error(errors.join('\n'));
-    console.log(
-      JSON.stringify({
-        branch: marker.branch,
-        head: releaseHead,
-        version: marker.version,
-        planDigest: marker.planDigest,
-        base,
-        releaseRef,
-      }),
-    );
+    console.log(JSON.stringify(receipt));
     return;
   }
   if (command !== 'validate')
@@ -1285,18 +2346,28 @@ export {
   buildPlan,
   canaryEligibility,
   canonicalJson,
+  changedStatementsFromDiff,
   compareVersions,
   computePlanDigest,
   declaredVersionAtRef,
+  filesAtRef,
   nextPlannedVersion,
+  successorPlanReadiness,
+  isReleaseTestRepairPath,
   isStableReleasePackage,
   latestStableVersion,
   listActiveBranches,
+  mergeBackEntries,
+  validateCodemodPromotionApplicabilityAtRef,
+  validateCodemodPromotionApplicabilityMove,
   validateIdentity,
+  validateOwnerRecutTag,
   validateRefMarker,
   validateReleaseDiff,
+  validateReleaseTestRepair,
   validateReleaseState,
   validateReleaseMergeBack,
+  validateHistoricalReleaseMergeBack,
   versionTagExists,
   writeAuthority,
 };

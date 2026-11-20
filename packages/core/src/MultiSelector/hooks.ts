@@ -4,7 +4,7 @@
 
 /**
  * @file hooks.ts
- * @input Uses React hooks, MultiSelectorOptionData type
+ * @input Uses React hooks, the shared useTypeahead hook, MultiSelectorOptionData type
  * @output Exports useMultiCombobox hook
  * @position Public hook, exported from the MultiSelector entry point; used by
  *   MultiSelector.tsx
@@ -14,11 +14,12 @@
  * - /packages/core/src/MultiSelector/useMultiCombobox.doc.mjs
  */
 
-import {useCallback, useRef, useState} from 'react';
+import {useCallback, useState} from 'react';
 import {isRtlElement} from '../hooks/isRtlElement';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import type {MultiSelectorOptionData} from './types';
-import {findTypeaheadMatch} from '../utils/typeaheadMatch';
+import {useTypeahead} from '../hooks/useTypeahead';
+import {enabledEdgeIndex} from '../utils/enabledEdgeIndex';
 
 interface UseMultiComboboxOptions {
   selectableItems: MultiSelectorOptionData[];
@@ -104,10 +105,19 @@ export function useMultiCombobox({
     setHighlightedIndexState(index);
     setHighlightedCell('option');
   }, []);
-  const [typeahead, setTypeahead] = useState('');
-  const typeaheadTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
+
+  // A match on the closed control opens the list on that option.
+  const typeahead = useTypeahead({
+    getItemLabels: () => selectableItems.map(item => item.label),
+    isDisabled: index => selectableItems[index]?.disabled === true,
+    getCurrentIndex: () => (isOpen ? highlightedIndex : -1),
+    onMatch: index => {
+      if (isOpen || onOpen() !== false) {
+        setHighlightedIndex(index);
+      }
+    },
+  });
+  const resetTypeahead = typeahead.reset;
 
   const getItemId = useCallback(
     (index: number) => `${listboxId}-item-${index}`,
@@ -130,10 +140,18 @@ export function useMultiCombobox({
       .filter(i => i >= 0);
   }, [selectableItems]);
 
+  /** Opening never lands on a disabled option; -1 when none is enabled. */
+  const findOpeningIndex = useCallback(
+    (fromEnd: boolean) => enabledEdgeIndex(selectableItems, fromEnd),
+    [selectableItems],
+  );
+
   const closeAndReset = useCallback(() => {
+    // Clear the typed prefix on close. Otherwise the next key extends it.
+    resetTypeahead();
     setHighlightedIndex(-1);
     onClose();
-  }, [onClose, setHighlightedIndex]);
+  }, [onClose, resetTypeahead, setHighlightedIndex]);
 
   const onTriggerClick = useCallback(() => {
     if (isDisabled) {
@@ -144,7 +162,7 @@ export function useMultiCombobox({
     } else {
       const didOpen = onOpen() !== false;
       if (didOpen && !hasSearch) {
-        setHighlightedIndex(0);
+        setHighlightedIndex(findOpeningIndex(false));
       }
     }
   }, [
@@ -154,6 +172,7 @@ export function useMultiCombobox({
     closeAndReset,
     hasSearch,
     setHighlightedIndex,
+    findOpeningIndex,
   ]);
 
   // The scroll effect lives here, the highlight owner, so the hover/keyboard
@@ -174,13 +193,11 @@ export function useMultiCombobox({
       // The action cell is the caller's control, usable whether or not the
       // option itself is disabled (spec:AST-058 FR4).
       if (cell === 'action') {
-        highlightOnHover(index);
-        setHighlightedCell('action');
+        highlightOnHover(index, () => setHighlightedCell('action'));
         return;
       }
       if (!item.disabled) {
-        highlightOnHover(index);
-        setHighlightedCell('option');
+        highlightOnHover(index, () => setHighlightedCell('option'));
       }
     },
     [highlightOnHover],
@@ -189,6 +206,14 @@ export function useMultiCombobox({
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (isDisabled) {
+        return;
+      }
+
+      // With hasSearch the query input owns typing, so type-to-select is off.
+      // Space stays the toggle: after a letter jumps to an option, Space picks
+      // it, so Space never extends the typed prefix here.
+      if (!hasSearch && e.key !== ' ' && typeahead.onKeyDown(e)) {
+        e.preventDefault();
         return;
       }
 
@@ -226,7 +251,7 @@ export function useMultiCombobox({
           e.preventDefault();
           if (!isOpen) {
             if (onOpen() !== false) {
-              setHighlightedIndex(0);
+              setHighlightedIndex(findOpeningIndex(false));
             }
           } else {
             const currentEnabledPos = enabledIndices.indexOf(highlightedIndex);
@@ -242,7 +267,7 @@ export function useMultiCombobox({
           e.preventDefault();
           if (!isOpen) {
             if (onOpen() !== false) {
-              setHighlightedIndex(selectableItems.length - 1);
+              setHighlightedIndex(findOpeningIndex(true));
             }
           } else {
             const currentEnabledPos = enabledIndices.indexOf(highlightedIndex);
@@ -272,7 +297,7 @@ export function useMultiCombobox({
           } else if (!isOpen) {
             const didOpen = onOpen() !== false;
             if (didOpen && !hasSearch) {
-              setHighlightedIndex(0);
+              setHighlightedIndex(findOpeningIndex(false));
             }
           }
           break;
@@ -332,32 +357,6 @@ export function useMultiCombobox({
             onClear();
           }
           break;
-
-        default:
-          // Typeahead only when search is not present
-          if (!hasSearch && e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
-            const newTypeahead = typeahead + e.key;
-            // INV17: the shared type-to-select fold, as Selector uses.
-            const matchIndex = findTypeaheadMatch(
-              selectableItems.flatMap((item, i) => (item.disabled ? [] : [i])),
-              i => selectableItems[i].label,
-              newTypeahead,
-            );
-            const didOpen = isOpen || matchIndex < 0 || onOpen() !== false;
-            if (didOpen) {
-              setTypeahead(newTypeahead);
-              if (typeaheadTimeoutRef.current) {
-                clearTimeout(typeaheadTimeoutRef.current);
-              }
-              typeaheadTimeoutRef.current = setTimeout(() => {
-                setTypeahead('');
-              }, 500);
-              if (matchIndex >= 0) {
-                setHighlightedIndex(matchIndex);
-              }
-            }
-          }
-          break;
       }
     },
     [
@@ -374,8 +373,9 @@ export function useMultiCombobox({
       setHighlightedIndex,
       onToggle,
       getEnabledIndices,
-      typeahead,
+      findOpeningIndex,
       hasSearch,
+      typeahead,
       onClear,
       hasValue,
     ],

@@ -13,6 +13,7 @@ import {scope as internalBarrelScope} from './internal/eslint-plugin-astryx/no-i
 import {scope as nullishGuardScope} from './internal/eslint-plugin-astryx/no-nullish-jsx-guard.js';
 import {scope as truthyGuardScope} from './internal/eslint-plugin-astryx/no-truthy-jsx-guard.js';
 import {scope as privateAttributeScope} from './internal/eslint-plugin-astryx/no-raw-private-attribute.js';
+import {scope as pressRecipesScope} from './internal/eslint-plugin-astryx/press-through-recipes.js';
 import {scope as commentProvenanceScope} from './internal/eslint-plugin-astryx/no-comment-provenance.js';
 
 /* global process */
@@ -49,14 +50,14 @@ const internalBarrelBaseline = JSON.parse(
   ),
 );
 
-// Truthiness guards on ReactNode values that existed when
-// `@astryx/no-truthy-jsx-guard` arrived, by repo-relative file, once per
-// guard. The list only shrinks.
-const truthyGuardBaseline = JSON.parse(
+// Press imports, pressed state, press attributes and `:active` arms outside
+// the press recipes before `@astryx/press-through-recipes` arrived, by
+// repo-relative file, once per site. The list only shrinks.
+const pressRecipesBaseline = JSON.parse(
   readFileSync(
     path.join(
       import.meta.dirname,
-      'internal/eslint-plugin-astryx/no-truthy-jsx-guard.baseline.json',
+      'internal/eslint-plugin-astryx/press-through-recipes.baseline.json',
     ),
     'utf8',
   ),
@@ -191,6 +192,25 @@ const apiImportRules = (/** @type {string[]} */ allowed = []) => [
   },
 ];
 
+// `localeCompare` and `Intl.Collator` without a fixed locale read the host's
+// locale, so the same names sort differently on different machines and the
+// CLI answers differently. CLI code sorts machine text with compareText, or
+// names a fixed locale.
+const HOST_LOCALE_ORDER = [
+  {
+    selector:
+      "CallExpression[callee.property.name='localeCompare']:not([arguments.1.type='Literal'])",
+    message:
+      'Sort machine text with compareText (foundation/text/compare-text.mjs), or pass a fixed locale: localeCompare without one follows the host locale, so the order changes between machines.',
+  },
+  {
+    selector:
+      ":matches(NewExpression, CallExpression)[callee.property.name='Collator']:not([arguments.0.type='Literal'])",
+    message:
+      'Give Intl.Collator a fixed locale, or sort machine text with compareText (foundation/text/compare-text.mjs): without one it follows the host locale.',
+  },
+];
+
 export default defineConfig(
   js.configs.recommended,
   tseslintRecommended,
@@ -205,6 +225,10 @@ export default defineConfig(
       // Canonical consumer fixtures are validated and built in copied,
       // standalone sandboxes rather than linted as workspace source.
       'internal/vibe-tests/fixtures/**',
+      // Vibe eval starter apps and reference solutions build inside copied
+      // consumer apps outside the workspace, with their own dependencies.
+      'internal/vibe-tests/eval/arms/**',
+      'internal/vibe-tests/eval/tasks/*/reference/**',
       // Changesets tooling (custom changelog module + config) is CommonJS
       // build/release glue, not shipped source — keep it out of the TS/ESM
       // lint pass (consistent with scripts/** above).
@@ -399,41 +423,7 @@ export default defineConfig(
       ],
       // announce() live-region messages are user-facing text; the rule checks
       // them as call arguments (callees defaults to ['announce']).
-      '@astryx/no-hardcoded-i18n-string': [
-        isStrictMode ? 'error' : 'warn',
-        {
-          // Exact reported chunks exempted per file. Remove an entry when its
-          // site moves into the catalog; the list should only shrink.
-          allowedStringsByFile: {
-            // Developer diagnostics, not interface copy.
-            'BottomSheet/BottomSheetPanel.tsx': ['snapPoints ignored '],
-            'Markdown/plugins/protocol.ts': [
-              'plugin "',
-              '" failed in ',
-              '; rendered readable fallback.',
-            ],
-            // Pre-existing hardcoded text awaiting catalog keys.
-            'Chat/useChatPasteAsToken.ts': [' lines, ', ' chars'],
-            'Chat/useTriggerMenu.tsx': ['No results'],
-            'CodeBlock/CodeBlock.tsx': [' diff'],
-            'MultiSelector/MultiSelector.tsx': [' selected'],
-            'PowerSearch/PowerSearch.tsx': [
-              'date range',
-              '1 filter',
-              ' filters',
-              ' items',
-            ],
-            'PowerSearch/PowerSearchValueEditor.tsx': [' ago', ' from now'],
-            'Slider/Slider.tsx': ['Minimum value', 'Maximum value', 'Required'],
-            'Table/plugins/columnResize/useTableColumnResize.tsx': [
-              'Resize column ',
-            ],
-            'TimeInput/TimeInput.tsx': ['e.g., 2:30 PM', 'e.g., 14:30'],
-            'Timer/Timer.tsx': ['m ', 'h '],
-            'Tokenizer/Tokenizer.tsx': ['Create "', ' more'],
-          },
-        },
-      ],
+      '@astryx/no-hardcoded-i18n-string': isStrictMode ? 'error' : 'warn',
     },
   },
   // What a disabled control says to the pointer is a defect wherever it
@@ -468,6 +458,8 @@ export default defineConfig(
     rules: {
       '@astryx/no-border-shorthand':
         astryxConfig.rules['@astryx/no-border-shorthand'],
+      '@astryx/no-shorthand-longhand-merge':
+        astryxConfig.rules['@astryx/no-shorthand-longhand-merge'],
     },
   },
   // `light-dark()` is the theme layer's mechanism, and reaches lab for the
@@ -835,6 +827,11 @@ export default defineConfig(
       ],
     },
   },
+  {
+    files: ['packages/cli/**/*.mjs'],
+    ignores: ['**/*.test.mjs'],
+    rules: {'no-restricted-syntax': ['error', ...HOST_LOCALE_ORDER]},
+  },
   // A command's --help and its manifest entry are generated from its colocated
   // CommandDoc via defineCommand. Registering straight onto Commander bypasses
   // the doc, so the docs silently stop describing the real CLI.
@@ -849,6 +846,7 @@ export default defineConfig(
           message:
             'Register commands with defineCommand(parent, doc, {fn, action}) so --help and the manifest come from the colocated CommandDoc. See CONTRIBUTING > Working on the astryx CLI.',
         },
+        ...HOST_LOCALE_ORDER,
       ],
     },
   },
@@ -868,6 +866,7 @@ export default defineConfig(
           message:
             'Register commands with defineCommand(parent, doc, {fn, action}) so --help and the manifest come from the colocated CommandDoc. See CONTRIBUTING > Working on the astryx CLI.',
         },
+        ...HOST_LOCALE_ORDER,
         {
           selector: "CallExpression[callee.property.name='padEnd']",
           message:
@@ -909,6 +908,7 @@ export default defineConfig(
           message:
             'Register commands with defineCommand(parent, doc, {fn, action}) so --help and the manifest come from the colocated CommandDoc. See CONTRIBUTING > Working on the astryx CLI.',
         },
+        ...HOST_LOCALE_ORDER,
       ],
     },
   },
@@ -922,6 +922,29 @@ export default defineConfig(
       // Tests build fixtures directly against zod and Commander.
       'no-restricted-imports': 'off',
       'no-restricted-syntax': 'off',
+    },
+  },
+  // Browser specs use the shared base test, whose contexts answer remote
+  // images locally and block other remote requests. A remote host that is
+  // slow then cannot stall a spec.
+  {
+    files: ['**/*.browser.spec.ts', '**/*.chromium.spec.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            '@playwright/test',
+            'playwright/test',
+            'playwright',
+            'playwright-core',
+          ].map(name => ({
+            name,
+            message:
+              "Import from '@astryxdesign/a11y-spec/playwright' instead: its `test` keeps every browser context off remote hosts.",
+          })),
+        },
+      ],
     },
   },
   // Inside a package's own shipped source, import the module that defines a
@@ -963,8 +986,7 @@ export default defineConfig(
   // renders a stray "0" (`&&`) or drops the slot (`? :`), so a slot's
   // presence is decided by `isRenderable` here too. The rule reads types, so
   // its scope is core, which the type-aware block above parses with the
-  // project service. The guards that predate the rule are listed in the
-  // baseline, once per guard; one more is reported (an error in strict mode).
+  // project service. Every guard is reported (an error in strict mode).
   {
     files: truthyGuardScope.files,
     ignores: truthyGuardScope.ignores,
@@ -972,10 +994,7 @@ export default defineConfig(
       '@astryx': astryxEslintPlugin,
     },
     rules: {
-      '@astryx/no-truthy-jsx-guard': [
-        reactSeverity,
-        {baseline: truthyGuardBaseline, root: import.meta.dirname},
-      ],
+      '@astryx/no-truthy-jsx-guard': reactSeverity,
     },
   },
   // A private `data-astryx-*` attribute is written once, in its owner module
@@ -997,6 +1016,38 @@ export default defineConfig(
       '@astryx/no-raw-private-attribute': [
         reactSeverity,
         {baseline: privateAttributeBaseline, root: import.meta.dirname},
+      ],
+    },
+  },
+  // React attaches its wheel, touchstart and touchmove listeners as passive,
+  // so preventDefault() in those handlers does nothing. Shipped package
+  // source, the same files as the block above.
+  {
+    files: privateAttributeScope.files,
+    ignores: privateAttributeScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-prevent-default-in-passive-react-handler': 'error',
+    },
+  },
+  // One engine writes every pressed state in Core, and each pressable surface
+  // uses one of three recipes: a momentary control, a row-wide target, or a
+  // cell or menu row. A component adds no press tracker, pressed state, press
+  // attribute or `:active` arm of its own. The sites that predate this block
+  // are listed in the baseline, once per site; one more is reported (an error
+  // in strict mode). Tests are out of scope.
+  {
+    files: pressRecipesScope.files,
+    ignores: pressRecipesScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/press-through-recipes': [
+        reactSeverity,
+        {baseline: pressRecipesBaseline, root: import.meta.dirname},
       ],
     },
   },

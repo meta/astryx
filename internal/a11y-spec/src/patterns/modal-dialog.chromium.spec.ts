@@ -9,7 +9,7 @@
  * @position Real-browser self-test of the contract, not a component binding.
  */
 
-import {expect, test, type CDPSession, type Page} from '@playwright/test';
+import {expect, test, type CDPSession, type Page} from '../playwright';
 import {
   MissingBindingCapability,
   checkAccessibilitySpec,

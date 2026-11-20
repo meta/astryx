@@ -3,7 +3,8 @@
 'use client';
 /**
  * @file CodeBlock.tsx
- * @input Uses React, StyleX, theme tokens, CSS Custom Highlight API, SyntaxTheme provider
+ * @input Uses React, StyleX, theme tokens, CSS Custom Highlight API, SyntaxTheme
+ *   provider, and the theme's `code-block-copy` icon slot
  * @output Exports CodeBlock component and CodeBlockProps
  * @position Core implementation; read-only syntax-highlighted code display
  */
@@ -31,11 +32,14 @@ import {
   borderVars,
   durationVars,
   easeVars,
+  focusVars,
 } from '../theme/tokens.stylex';
 import {isRenderable, mergeProps, rtlStyles} from '../utils';
-import {useClipboard} from '../hooks/useClipboard';
+import {useClipboardCopy} from '../hooks/useClipboard';
 import {useScrollableArea} from '../hooks/useScrollableArea';
+import {scrollEdgeFadeStyles} from '../hooks/scrollEdgeFade';
 import {Icon} from '../Icon';
+import {ComponentIcon} from '../Icon/ComponentIcon';
 import {IconButton} from '../IconButton';
 import type {DiffLineKind} from './tokenizer';
 import {
@@ -63,6 +67,11 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/CodeBlock/CodeBlock.generated';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 
@@ -125,6 +134,10 @@ const chevronReveal = stylex.keyframes({
 
 const styles = stylex.create({
   root: {
+    // The page's direction, read where the block sits. The viewport below is
+    // left-to-right so code scrolls and wraps as written; the gutter, the
+    // divider and the diff marker read this to mirror with the page.
+    '--_codeblock-direction': {default: 'ltr', ':dir(rtl)': 'rtl'},
     position: 'relative',
     isolation: 'isolate',
     display: 'flex',
@@ -139,6 +152,14 @@ const styles = stylex.create({
   // shrink and scroll; 0 lets the root's bound reach it.
   viewport: {
     minHeight: 0,
+  },
+  // The root clips (overflow: hidden, for its corners), so the viewport's
+  // keyboard ring sits inside its own box instead of around it.
+  viewportFocusRingInset: {
+    outlineOffset: {
+      default: null,
+      ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
+    },
   },
   // With no header, Copy sits in its own inline-end column beside the code
   // viewport rather than over it, so no line, scrolled or wrapped, runs under
@@ -185,6 +206,13 @@ const styles = stylex.create({
   headerTitle: {
     display: 'flex',
     alignItems: 'center',
+    // The root is a <pre>, so the title inherits `white-space: pre` and
+    // stays on one line. A long title then runs under the header's controls.
+    // It wraps instead and keeps its own spacing.
+    minWidth: 0,
+    whiteSpace: 'pre-wrap',
+    overflowWrap: 'anywhere',
+    '--_astryx-text-overflow-wrap': 'anywhere',
     fontSize: typeScaleVars['--text-supporting-size'],
     fontFamily: typographyVars['--font-family-code'],
     fontWeight: fontWeightVars['--font-weight-medium'],
@@ -260,6 +288,9 @@ const styles = stylex.create({
     // highlightLines) spans the full scroll width instead of stopping at the
     // viewport edge when the reader scrolls a long line.
     minWidth: 'max-content',
+    // Lines lay out their gutter in the page's direction; each line's code
+    // carries dir="auto" (see `lineContent`).
+    direction: 'var(--_codeblock-direction)',
     paddingBlock: spacingVars['--spacing-3'],
     paddingInline: spacingVars['--spacing-4'],
     margin: 0,
@@ -318,10 +349,16 @@ const styles = stylex.create({
       fontFamily: typographyVars['--font-family-code'],
     },
   },
-  // In span mode the tokens are wrapped in this element so they form a single
-  // grid item in column 2 (otherwise each token span would flow into its own
-  // grid cell). minWidth:0 lets it shrink so long lines wrap within the track.
+  // Each line's code sits in this element, so it forms a single grid item in
+  // column 2 (otherwise each token span would flow into its own grid cell).
+  // It carries dir="auto": a line takes its direction from its first strong
+  // character, and a line with none (`});`) falls back to the left-to-right
+  // viewport. The gutter mirrors with the page. minWidth:0 lets it shrink so
+  // long lines wrap within the track.
   lineContent: {
+    // A block, so each line aligns to the start edge of its own direction,
+    // whatever the direction of the row around it.
+    display: 'block',
     minWidth: 0,
   },
   lineChunk: {
@@ -403,9 +440,11 @@ const styles = stylex.create({
   },
   sizeSm: {
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
   },
   sizeMd: {
     fontSize: typeScaleVars['--text-code-size'],
+    lineHeight: typeScaleVars['--text-code-leading'],
   },
   copyButton: {
     // The copy control is a ghost IconButton (Button owns its own padding,
@@ -456,6 +495,7 @@ const LINE_CHUNK_THRESHOLD = 100;
 const CodeChunk = React.memo(function CodeChunk({
   lines,
   startIndex,
+  startLineNumber,
   highlightSet,
   diffKinds,
   renderLineContent,
@@ -463,6 +503,7 @@ const CodeChunk = React.memo(function CodeChunk({
 }: {
   lines: string[];
   startIndex: number;
+  startLineNumber: number;
   highlightSet: Set<number> | null;
   diffKinds: ReadonlyArray<DiffLineKind> | null;
   renderLineContent: (line: string, lineIndex: number) => React.ReactNode;
@@ -472,11 +513,12 @@ const CodeChunk = React.memo(function CodeChunk({
     <>
       {lines.map((line, j) => {
         const i = startIndex + j;
+        const lineNumber = startLineNumber + i;
         const diffKind = diffKinds?.[i];
         return (
           <div
             key={i}
-            data-line={i + 1}
+            data-line={lineNumber}
             data-diff={diffKind === 'context' ? undefined : diffKind}
             {...stylex.props(
               styles.line,
@@ -488,7 +530,8 @@ const CodeChunk = React.memo(function CodeChunk({
               diffKind === 'header' && styles.lineDiffHeader,
               // Last on purpose: a highlight replaces a diff tint rather than
               // stacking on it, so tokens keep their single-paint contrast.
-              (highlightSet?.has(i + 1) ?? false) && styles.lineHighlighted,
+              (highlightSet?.has(lineNumber) ?? false) &&
+                styles.lineHighlighted,
             )}>
             {renderLineContent(line, i)}
           </div>
@@ -504,6 +547,7 @@ function renderLines(
   diffKinds: ReadonlyArray<DiffLineKind> | null,
   renderLineContent: (line: string, lineIndex: number) => React.ReactNode,
   lineNumbers: boolean,
+  startLineNumber: number,
   chunkSize: number = LINE_CHUNK_SIZE,
 ): React.ReactNode {
   chunkSize = Math.max(1, Math.floor(chunkSize));
@@ -513,6 +557,7 @@ function renderLines(
       <CodeChunk
         lines={lines}
         startIndex={0}
+        startLineNumber={startLineNumber}
         highlightSet={highlightSet}
         diffKinds={diffKinds}
         renderLineContent={renderLineContent}
@@ -536,6 +581,7 @@ function renderLines(
         <CodeChunk
           lines={chunkLines}
           startIndex={start}
+          startLineNumber={startLineNumber}
           highlightSet={highlightSet}
           diffKinds={diffKinds}
           renderLineContent={renderLineContent}
@@ -566,6 +612,15 @@ export interface CodeBlockProps extends BaseProps<HTMLPreElement> {
   title?: string;
   hasLanguageLabel?: boolean;
   hasLineNumbers?: boolean;
+  /**
+   * First line's number in the source file. The gutter shows file
+   * coordinates (`startLineNumber + index`) instead of starting at 1, so a
+   * code excerpt reads with its real line numbers. `highlightLines` uses the
+   * same file coordinates. Values below 1 clamp to 1.
+   * @default 1
+   */
+  startLineNumber?: number;
+  /** 1-indexed line numbers to highlight, in the same file coordinates as the gutter (see `startLineNumber`). Out-of-range entries render no highlight. */
   highlightLines?: number[];
   /**
    * Render the code as a unified diff over `language`: lines starting with
@@ -578,6 +633,12 @@ export interface CodeBlockProps extends BaseProps<HTMLPreElement> {
   isDiff?: boolean;
   hasCopyButton?: boolean;
   onCopy?: () => void;
+  /**
+   * Called once with the rejection when the clipboard write fails. The copy
+   * control then shows a cross and is named and announced as the localized
+   * "Failed to copy value to clipboard."; the error itself is not shown.
+   */
+  onCopyError?: (error: unknown) => void;
   /**
    * Your own controls, shown just before Copy: in the header when the block
    * has one, otherwise beside the code in the top inline-end corner, never
@@ -792,6 +853,7 @@ function SpanCodeContent({
   sizeStyle,
   hasLineNumbers,
   maxDigits,
+  startLineNumber,
 }: {
   lines: string[];
   tokenLines: TokenLine[];
@@ -802,7 +864,10 @@ function SpanCodeContent({
   sizeStyle: stylex.StyleXStyles;
   hasLineNumbers: boolean;
   maxDigits: number;
+  startLineNumber: number;
 }) {
+  // Syncs the document's ::highlight() stylesheet. The rules go in one time,
+  // before layout reads.
   useInsertionEffect(() => {
     ensureHighlightStyles();
   }, []);
@@ -827,7 +892,7 @@ function SpanCodeContent({
               )}>
               {diff.glyphs[lineIndex] || ' '}
             </span>
-            <span {...stylex.props(styles.lineContent)}>
+            <span dir="auto" {...stylex.props(styles.lineContent)}>
               {kind === 'header'
                 ? content || '\u200b'
                 : buildSpanLine(content, tokens)}
@@ -835,10 +900,10 @@ function SpanCodeContent({
           </>
         );
       }
-      // Wrap tokens in a single element so they occupy one grid cell when line
-      // numbers are on (see `lineNumbered`); an inline span is a no-op when off.
+      // One content element holds the tokens, so they occupy one grid cell when
+      // line numbers are on (see `lineContent`).
       return (
-        <span {...stylex.props(styles.lineContent)}>
+        <span dir="auto" {...stylex.props(styles.lineContent)}>
           {buildSpanLine(line, tokens)}
         </span>
       );
@@ -861,6 +926,7 @@ function SpanCodeContent({
         diffKinds,
         renderLineContent,
         hasLineNumbers,
+        startLineNumber,
       )}
     </code>
   );
@@ -879,6 +945,7 @@ function RangeCodeContent({
   sizeStyle,
   hasLineNumbers,
   maxDigits,
+  startLineNumber,
 }: {
   lines: string[];
   tokenLines: TokenLine[];
@@ -888,6 +955,7 @@ function RangeCodeContent({
   sizeStyle: stylex.StyleXStyles;
   hasLineNumbers: boolean;
   maxDigits: number;
+  startLineNumber: number;
 }) {
   const codeRef = useRef<HTMLElement>(null);
 
@@ -902,6 +970,8 @@ function RangeCodeContent({
     }
   }, []);
 
+  // Syncs the CSS.highlights registry with the token ranges. It applies them in
+  // chunks.
   useEffect(() => {
     if (!hasHighlightAPI()) {
       return;
@@ -915,11 +985,16 @@ function RangeCodeContent({
     return applyHighlightRangesChunked(codeEl, tokenLines);
   }, [tokenLines]);
 
-  // Range mode keeps the line's text as a bare text node (its firstChild) so
-  // applyHighlightRangesChunked can map token offsets onto it \u2014 no wrapper. The
-  // number ::before is a pseudo-element, so it never becomes a child node here.
+  // Range mode keeps each line's text as the only child of one content span,
+  // so applyHighlightRangesChunked can map token offsets onto that text node.
+  // The span carries dir="auto", and it is the single grid item beside the
+  // number, which is a ::before pseudo-element and never a child node here.
   const renderLineContent = useCallback(
-    (line: string): React.ReactNode => line || '\u200b',
+    (line: string): React.ReactNode => (
+      <span dir="auto" {...stylex.props(styles.lineContent)}>
+        {line || '\u200b'}
+      </span>
+    ),
     [],
   );
 
@@ -939,6 +1014,7 @@ function RangeCodeContent({
         diffKinds,
         renderLineContent,
         hasLineNumbers,
+        startLineNumber,
       )}
     </code>
   );
@@ -963,10 +1039,12 @@ export function CodeBlock({
   title,
   hasLanguageLabel = true,
   hasLineNumbers = false,
+  startLineNumber = 1,
   highlightLines,
   isDiff = false,
   hasCopyButton = true,
   onCopy,
+  onCopyError,
   endContent,
   isWrapped = false,
   maxHeight,
@@ -984,12 +1062,28 @@ export function CodeBlock({
   ref,
   ...props
 }: CodeBlockProps) {
+  if (process.env.NODE_ENV !== 'production' && typeof code !== 'string') {
+    throw devPropError(
+      'CodeBlock',
+      'code',
+      'must be a string, for example <CodeBlock code="const a = 1;" language="ts" />. CodeBlock does not read children.',
+    );
+  }
   const t = useComponentTranslator();
   // Owns the clipboard write, the transient copied flag, its reset timer, and
   // the polite copy announcement (a swapped aria-label alone is not reliably
   // announced) — shared with Timestamp via the same hook.
-  const {copy, isCopied: copied} = useClipboard({
+  // A failed write shows a cross for as long as a copy shows the check, and
+  // is named and announced as the localized failure (Owner decision, Nov 6
+  // 2026). The error itself goes only to `onCopyError`.
+  const {
+    copy,
+    isCopied: copied,
+    isFailed: copyFailed,
+  } = useClipboardCopy({
     announce: t('@astryx.codeBlock.copied'),
+    announceFailure: t('@astryx.codeBlock.copyFailed'),
+    onError: onCopyError,
   });
 
   const useSpans =
@@ -1019,6 +1113,12 @@ export function CodeBlock({
     customTokenizer,
   );
   const diffKinds = diff?.kinds ?? null;
+  // File coordinates for the gutter and highlights. Values below 1 clamp to
+  // 1 so the gutter never shows a 0 or negative line number.
+  const effectiveStartLineNumber =
+    Number.isFinite(startLineNumber) && startLineNumber > 1
+      ? Math.floor(startLineNumber)
+      : 1;
   const highlightSet = useMemo(
     () => (highlightLines ? new Set(highlightLines) : null),
     [highlightLines],
@@ -1032,8 +1132,10 @@ export function CodeBlock({
   }, [code, copy, onCopy]);
 
   const sizeStyle = size === 'sm' ? styles.sizeSm : styles.sizeMd;
-  // Digits in the largest line number — sizes the gutter column width.
-  const maxLineDigits = String(lines.length).length;
+  // Digits in the largest visible line number — sizes the gutter column width.
+  const maxLineDigits = String(
+    effectiveStartLineNumber + lines.length - 1,
+  ).length;
   // With the diff layer on, the label and viewport name say so: `diff` over
   // plaintext, `tsx diff` over a language — so a diff keeps its header,
   // collapse control, and a name that still matches a `diff` fence.
@@ -1046,7 +1148,7 @@ export function CodeBlock({
     : isDiff
       ? languageName === 'plaintext'
         ? 'diff'
-        : `${languageName} diff`
+        : t('@astryx.codeBlock.diffLabel', {language: languageName})
       : languageName !== 'plaintext'
         ? languageName
         : null;
@@ -1078,8 +1180,18 @@ export function CodeBlock({
   // both axes, keeps focus where it is when overflow goes away, and owns the
   // overflow declarations. role="group" (not "region") so several code
   // blocks on a page don't create duplicate same-named landmarks.
-  const {getViewportProps, getContentProps} = useScrollableArea({
+  const {
+    getViewportProps,
+    getContentProps,
+    state: scrollState,
+  } = useScrollableArea({
     axis: 'both',
+    // Nothing inside the code viewport sticks to an outer scroller, so the
+    // viewport stays a scroll container while its code fits. A long line, or
+    // code past `maxHeight`, then scrolls from the first paint: before script
+    // measures it, and in a page that never runs script, such as a rendered
+    // file. The Tab stop still follows measured overflow.
+    stickyContainment: 'always',
     keyboardAccess: {
       owner: 'viewport',
       role: 'group',
@@ -1102,14 +1214,33 @@ export function CodeBlock({
     <IconButton
       variant="ghost"
       size="sm"
-      icon={<Icon icon={copied ? 'check' : 'copy'} size="sm" color="inherit" />}
+      icon={
+        <ComponentIcon
+          slot="code-block-copy"
+          state={{copied: copied && !copyFailed}}
+          fallback={{
+            icon: copyFailed ? 'close' : copied ? 'check' : 'copy',
+            size: 'sm',
+          }}
+          color="inherit"
+        />
+      }
       // A visible "Copy" hover/focus hint via Button's built-in tooltip. It
       // stays "Copy" after copying — the copy → check icon flip is the
-      // confirmation, not a tooltip change. The aria-label still swaps to the
-      // localized "Copied" for assistive tech, backed by the announcement.
-      tooltip={t('@astryx.codeBlock.copyCode')}
+      // confirmation — and says the failure while a failed copy shows. The
+      // aria-label swaps to the localized "Copied" or failure text, backed by
+      // the announcement.
+      tooltip={
+        copyFailed
+          ? t('@astryx.codeBlock.copyFailed')
+          : t('@astryx.codeBlock.copyCode')
+      }
       label={
-        copied ? t('@astryx.codeBlock.copied') : t('@astryx.codeBlock.copyCode')
+        copyFailed
+          ? t('@astryx.codeBlock.copyFailed')
+          : copied
+            ? t('@astryx.codeBlock.copied')
+            : t('@astryx.codeBlock.copyCode')
       }
       onClick={e => {
         // Stop propagation so copying does not toggle the collapsible header.
@@ -1198,8 +1329,16 @@ export function CodeBlock({
   const codeBody = (
     <div
       {...getViewportProps<HTMLDivElement>({
-        ...stylex.props(styles.viewport),
+        // A tab stop while the code overflows: the shared ring, which a theme
+        // restyles through the focus-outline tokens.
+        ...focusOutlineProps.focusVisible(
+          styles.viewport,
+          styles.viewportFocusRingInset,
+        ),
+        xstyle: scrollEdgeFadeStyles(scrollState.inline),
         style: scrollStyle,
+        // Code scrolls and wraps left to right in every page direction.
+        dir: 'ltr',
       })}>
       <div
         {...getContentProps<HTMLDivElement>(
@@ -1219,6 +1358,7 @@ export function CodeBlock({
             sizeStyle={sizeStyle}
             hasLineNumbers={hasLineNumbers}
             maxDigits={maxLineDigits}
+            startLineNumber={effectiveStartLineNumber}
           />
         ) : (
           <RangeCodeContent
@@ -1230,6 +1370,7 @@ export function CodeBlock({
             sizeStyle={sizeStyle}
             hasLineNumbers={hasLineNumbers}
             maxDigits={maxLineDigits}
+            startLineNumber={effectiveStartLineNumber}
           />
         )}
       </div>

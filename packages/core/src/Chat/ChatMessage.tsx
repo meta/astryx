@@ -118,7 +118,7 @@ const styles = stylex.create({
   // Judged from this article (parent-relative), never from siblings, so the
   // global stylesheet keeps no sibling-relative :has().
   avatarOffset: {
-    [chatMessageVars.avatarOffset]: {
+    [chatMessageVars['--_chat-avatar-offset']]: {
       default: '0px',
       ':has([data-chat-name])': spacingVars['--spacing-5'],
     },
@@ -128,7 +128,7 @@ const styles = stylex.create({
     flexShrink: 0,
     // The avatar lines up with a bubble's name row when the message holds
     // one; the article sets the offset (see chatMessageVars).
-    marginBlockStart: chatMessageVars.avatarOffset,
+    marginBlockStart: chatMessageVars['--_chat-avatar-offset'],
   },
   contentColumn: {
     display: 'flex',

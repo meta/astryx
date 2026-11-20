@@ -12,7 +12,8 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
+import {resetAuditEvidence} from '@astryxdesign/a11y-spec/evidence';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -20,7 +21,9 @@ import {
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
 
-const OUTPUT = path.resolve('dropdown-menu-divider-audit-evidence');
+const EVIDENCE = path.resolve('dropdown-menu-divider-audit-evidence');
+// This copy's evidence folder, set in beforeAll (one per --repeat-each copy).
+let OUTPUT = EVIDENCE;
 const STORY_ID = 'core-dropdownmenudivider--menu-separator';
 const WIDE = {width: 1024, height: 768};
 const NARROW = {width: 320, height: 720};
@@ -111,8 +114,7 @@ async function settle(page: Page) {
 }
 
 test.beforeAll(async () => {
-  fs.rmSync(OUTPUT, {recursive: true, force: true});
-  fs.mkdirSync(OUTPUT, {recursive: true});
+  OUTPUT = resetAuditEvidence(EVIDENCE, test.info());
   checkoutSha = execFileSync('git', ['rev-parse', 'HEAD'], {
     encoding: 'utf8',
   }).trim();

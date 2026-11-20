@@ -57,6 +57,48 @@ describe('Stepper', () => {
     expect(screen.getByTestId('step-2')).not.toHaveAttribute('aria-current');
   });
 
+  it.each([
+    ['horizontal', 'separated'],
+    ['vertical', 'separated'],
+    ['horizontal', 'on-track'],
+    ['vertical', 'on-track'],
+  ] as const)(
+    'keeps aria-current on the in-progress step over a caller’s (%s, %s)',
+    (orientation, indicatorPosition) => {
+      render(
+        <Stepper
+          activeStep={1}
+          orientation={orientation}
+          indicatorPosition={indicatorPosition}>
+          <Step
+            step={0}
+            label="Step 1"
+            data-testid="step-0"
+            aria-current="page"
+          />
+          <Step
+            step={1}
+            label="Step 2"
+            data-testid="step-1"
+            aria-current="false"
+          />
+          <Step
+            step={2}
+            label="Step 3"
+            data-testid="step-2"
+            aria-current="true"
+          />
+        </Stepper>,
+      );
+      expect(screen.getByTestId('step-0')).not.toHaveAttribute('aria-current');
+      expect(screen.getByTestId('step-1')).toHaveAttribute(
+        'aria-current',
+        'step',
+      );
+      expect(screen.getByTestId('step-2')).not.toHaveAttribute('aria-current');
+    },
+  );
+
   it('renders descriptions when provided', () => {
     render(
       <Stepper activeStep={0}>
@@ -120,6 +162,21 @@ describe('Stepper', () => {
     );
     const list = screen.getByRole('list');
     expect(list).toHaveAttribute('data-orientation', 'vertical');
+  });
+
+  it('keeps a vertical step body within its step, whatever the width of its content', () => {
+    render(
+      <Stepper activeStep={0} orientation="vertical">
+        <Step step={0} label="Step 1">
+          <div data-testid="content">Content</div>
+        </Step>
+      </Stepper>,
+    );
+    // The body is a flex item of the step row: without the reset, its
+    // min-content floor lets wide content push it past the step.
+    const body = screen.getByTestId('content').closest('li > div');
+    expect(body).not.toBeNull();
+    expect(getComputedStyle(body as Element).minWidth).toBe('0');
   });
 
   it('calls onStepClick when a completed step is clicked', async () => {
@@ -1201,6 +1258,31 @@ describe('Stepper', () => {
       expect(list.style.width).toBe('');
     });
 
+    it('marks the compact summary as the selected step', () => {
+      atWidth(320, fourSteps({}));
+      const summary = document.querySelector<HTMLElement>(SUMMARY);
+      expect(summary).not.toBeNull();
+      const summaryStep = summary!.querySelector('.astryx-step');
+      expect(summaryStep).toHaveAttribute('data-selected', 'selected');
+      expect(summaryStep).toHaveAttribute('data-progress', 'in-progress');
+      expect(summary!.querySelector('.astryx-step-label')).toHaveAttribute(
+        'data-selected',
+        'selected',
+      );
+      // Only the current step is marked in the collapsed list too.
+      const listSteps = [
+        ...screen
+          .getByRole('list')
+          .querySelectorAll<HTMLElement>('.astryx-step'),
+      ];
+      expect(listSteps.map(el => el.dataset.selected ?? null)).toEqual([
+        null,
+        'selected',
+        null,
+        null,
+      ]);
+    });
+
     it('puts horizontal className on the frame without moving list DOM props or ref', () => {
       const ref = createRef<HTMLOListElement>();
       atWidth(
@@ -1519,6 +1601,46 @@ describe('Stepper', () => {
       },
     );
 
+    it('measures the list only while it is mounted and horizontal', () => {
+      const observed = new Set<Element>();
+      class ResizeObserverStub {
+        observe(element: Element) {
+          observed.add(element);
+        }
+        unobserve(element: Element) {
+          observed.delete(element);
+        }
+        disconnect() {
+          observed.clear();
+        }
+      }
+      vi.stubGlobal('ResizeObserver', ResizeObserverStub);
+      const stepper = (orientation: 'horizontal' | 'vertical') => (
+        <Stepper activeStep={0} orientation={orientation}>
+          <Step step={0} label="Account" />
+          <Step step={1} label="Review" />
+        </Stepper>
+      );
+      try {
+        const view = render(stepper('horizontal'));
+        const horizontalList = screen.getByRole('list');
+        expect(observed.has(horizontalList)).toBe(true);
+
+        view.rerender(stepper('vertical'));
+        expect(observed.has(horizontalList)).toBe(false);
+        expect(observed.has(screen.getByRole('list'))).toBe(false);
+
+        view.rerender(stepper('horizontal'));
+        const list = screen.getByRole('list');
+        expect(observed.has(list)).toBe(true);
+
+        view.unmount();
+        expect(observed.has(list)).toBe(false);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
     it('stops the controls at both ends of the sequence', () => {
       const onStepClick = vi.fn();
       // Disabled the Astryx way: aria-disabled, so the control keeps its place
@@ -1566,6 +1688,44 @@ describe('Stepper', () => {
       ).not.toBeInTheDocument();
       expect(screen.getByRole('button', {name: 'Previous step'})).toBeEnabled();
       expect(screen.getByRole('button', {name: 'Next step'})).toBeEnabled();
+    });
+
+    it.each(['separated', 'on-track'] as const)(
+      'states a disabled step as unavailable in the compact %s layout',
+      indicatorPosition => {
+        // A compact step has no button to carry aria-disabled, so its list
+        // item says it in words, as the expanded button does.
+        atWidth(
+          320,
+          <Stepper
+            activeStep={0}
+            onStepClick={vi.fn()}
+            indicatorPosition={indicatorPosition}>
+            <Step step={0} label="Shipping" />
+            <Step step={1} label="Delivery" isDisabled />
+            <Step step={2} label="Payment" />
+          </Stepper>,
+        );
+        const [shipping, delivery, payment] = screen.getAllByRole('listitem');
+        expect(within(delivery).getByText('unavailable')).toBeInTheDocument();
+        expect(within(shipping).queryByText('unavailable')).toBeNull();
+        expect(within(payment).queryByText('unavailable')).toBeNull();
+      },
+    );
+
+    it('keeps a disabled step on its aria-disabled button when the layout is not compact', () => {
+      atWidth(
+        900,
+        <Stepper activeStep={0} onStepClick={vi.fn()}>
+          <Step step={0} label="Shipping" />
+          <Step step={1} label="Delivery" isDisabled />
+          <Step step={2} label="Payment" />
+        </Stepper>,
+      );
+      expect(
+        screen.getByRole('button', {name: /^Go to step 2: Delivery/}),
+      ).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.queryByText('unavailable')).toBeNull();
     });
 
     it('drops the controls but keeps the name on request', () => {
@@ -2027,10 +2187,10 @@ describe('step-label and step-description theme targets', () => {
     expect(descriptions[2].dataset.status).toBe('error');
   });
 
-  it('reflects disabled on the label target and emits its theme selector', () => {
-    // The label owns disabled paint (`styles.labelDisabled`); the description
-    // does not. The selector follows that ownership instead of being copied to
-    // every text target for vocabulary symmetry.
+  it('reflects disabled on the indicator and label targets, not the step or description, and emits theme selectors', () => {
+    // The indicator and label own disabled paint (`styles.numberDisabled` /
+    // `styles.labelDisabled`), so each carries the selector. The step and the
+    // description paint nothing of their own when disabled.
     const {container} = render(
       <Stepper activeStep={0}>
         <Step
@@ -2041,24 +2201,30 @@ describe('step-label and step-description theme targets', () => {
         />
       </Stepper>,
     );
+    const step = container.querySelector('.astryx-step');
+    const indicator = container.querySelector('.astryx-step-indicator');
     const label = container.querySelector('.astryx-step-label');
     const description = container.querySelector('.astryx-step-description');
+    expect(step).not.toHaveAttribute('data-disabled');
+    expect(indicator).toHaveAttribute('data-disabled', 'disabled');
     expect(label).toHaveAttribute('data-disabled', 'disabled');
-    expect(label).toHaveAttribute('data-disabled', 'disabled');
-    expect(description).not.toHaveAttribute('data-disabled');
     expect(description).not.toHaveAttribute('data-disabled');
 
     // A DOM attribute alone would not prove the public defineTheme path accepts
     // and emits the state. Hold both halves of the contract.
     const theme = defineTheme({
-      name: 'step-label-disabled-state-test',
+      name: 'step-disabled-state-test',
       components: {
+        'step-indicator': {
+          'disabled:disabled': {filter: 'grayscale(1)'},
+        },
         'step-label': {
           'disabled:disabled': {opacity: '0.4'},
         },
       },
     });
     const {component: css} = generateThemeCSS(theme);
+    expect(css).toContain('.astryx-step-indicator[data-disabled="disabled"]');
     expect(css).toContain('.astryx-step-label[data-disabled="disabled"]');
     expect(css).toContain('opacity: 0.4');
   });
@@ -2077,6 +2243,73 @@ describe('step-label and step-description theme targets', () => {
     expect(container.querySelectorAll('.astryx-step-description')).toHaveLength(
       2,
     );
+  });
+});
+
+describe('current step selected state', () => {
+  // The current step carries the shared `selected` state that tabs, side
+  // and top navigation, segmented controls and lists use, so one theme rule for
+  // selected items reaches it. `aria-current` stays the accessible cue.
+  const parts = (root: ParentNode, target: string) => [
+    ...root.querySelectorAll<HTMLElement>(`.astryx-${target}`),
+  ];
+
+  it.each(['separated', 'on-track'] as const)(
+    'marks only the current step, its indicator and its label (%s)',
+    indicatorPosition => {
+      const {container} = render(
+        <Stepper activeStep={1} indicatorPosition={indicatorPosition}>
+          <Step step={0} label="Account" description="a" />
+          <Step step={1} label="Payment" description="b" />
+          <Step step={2} label="Review" description="c" />
+        </Stepper>,
+      );
+      for (const target of ['step', 'step-indicator', 'step-label']) {
+        expect(parts(container, target).map(el => el.dataset.selected)).toEqual(
+          [undefined, 'selected', undefined],
+        );
+      }
+      for (const el of parts(container, 'step-description')) {
+        expect(el).not.toHaveAttribute('data-selected');
+      }
+      const current = parts(container, 'step')[1];
+      expect(current).toHaveAttribute('aria-current', 'step');
+    },
+  );
+
+  it('moves with the active step, to the first and the last step', () => {
+    const steps = (
+      <>
+        <Step step={0} label="Account" />
+        <Step step={1} label="Payment" />
+        <Step step={2} label="Review" />
+      </>
+    );
+    const {container, rerender} = render(
+      <Stepper activeStep={0}>{steps}</Stepper>,
+    );
+    const selected = () =>
+      parts(container, 'step').map(el => el.dataset.selected ?? null);
+    expect(selected()).toEqual(['selected', null, null]);
+    rerender(<Stepper activeStep={2}>{steps}</Stepper>);
+    expect(selected()).toEqual([null, null, 'selected']);
+    rerender(<Stepper activeStep={3}>{steps}</Stepper>);
+    expect(selected()).toEqual([null, null, null]);
+  });
+
+  it('emits theme selectors for the state', () => {
+    const theme = defineTheme({
+      name: 'step-selected-state-test',
+      components: {
+        step: {'selected:selected': {backgroundColor: 'rgb(1, 2, 3)'}},
+        'step-indicator': {'selected:selected': {borderRadius: '999px'}},
+        'step-label': {'selected:selected': {fontWeight: '700'}},
+      },
+    });
+    const {component: css} = generateThemeCSS(theme);
+    expect(css).toContain('.astryx-step[data-selected="selected"]');
+    expect(css).toContain('.astryx-step-indicator[data-selected="selected"]');
+    expect(css).toContain('.astryx-step-label[data-selected="selected"]');
   });
 });
 

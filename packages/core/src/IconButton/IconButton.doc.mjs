@@ -20,7 +20,8 @@ export const docs = {
     {
       name: 'icon',
       type: 'ReactNode',
-      description: 'Icon element rendered inside the button. An Astryx Icon with no explicit size defaults to sm for sm/md buttons and md for lg buttons.',
+      description:
+        'Icon element rendered inside the button. An Astryx Icon with no explicit size defaults to sm for sm/md buttons and md for lg buttons.',
       required: true,
       slotElements: [{__element: 'Icon', props: {icon: 'check'}}],
     },
@@ -46,19 +47,22 @@ export const docs = {
     {
       name: 'isLoading',
       type: 'boolean',
-      description: 'Shows a loading spinner and blocks re-activation while staying focusable (aria-busy + aria-disabled, not native disabled).',
+      description:
+        'Shows a loading spinner and blocks re-activation while staying focusable (aria-busy + aria-disabled, not native disabled).',
       default: 'false',
     },
     {
       name: 'isDisabled',
       type: 'boolean',
-      description: 'Disables the button.',
+      description:
+        'Disables the button. Uses aria-disabled instead of native disabled so the button stays focusable.',
       default: 'false',
     },
     {
       name: 'tooltip',
       type: 'string',
-      description: 'Tooltip text shown on hover.',
+      description:
+        "Tooltip text shown on hover and keyboard focus. It also describes the button, unless it repeats the button's accessible name.",
     },
     {
       name: 'onClick',
@@ -70,10 +74,69 @@ export const docs = {
       type: '(e: MouseEvent) => void | Promise<void>',
       description: 'Async click handler with automatic loading state.',
     },
+    {
+      name: 'isInterruptible',
+      type: 'boolean',
+      description:
+        'Keep the button clickable while a clickAction is pending: the spinner and aria-busy still show, but the button is not disabled and the action is not deduped, so a re-click lands and interrupts the in-flight action with a fresh one. Use it for interruptible actions, not fire-once actions (submit, save, pay).',
+      default: 'false',
+    },
+    {
+      name: 'width',
+      type: 'SizeValue',
+      description:
+        'Width of the button. Numbers are treated as pixels, strings are used as-is. Without it the button keeps its icon-only aspect, square by default; with it the button takes that width.',
+    },
+    {
+      name: 'type',
+      type: "'button' | 'submit' | 'reset'",
+      description: 'HTML button type attribute.',
+      default: "'button'",
+    },
+    {
+      name: 'name',
+      type: 'string',
+      description: 'HTML name attribute for form submission.',
+    },
+    {
+      name: 'value',
+      type: 'string | number | readonly string[]',
+      description: 'HTML value attribute for form submission.',
+    },
+    {
+      name: 'form',
+      type: 'string',
+      description: 'Associates the button with a form element by ID.',
+    },
+    {
+      name: 'href',
+      type: 'string',
+      description:
+        'When provided, renders the button as a link element (<a> or custom link component). A disabled IconButton still renders a <button>.',
+    },
+    {
+      name: 'as',
+      type: 'ComponentType',
+      description:
+        'Custom link component to use when href is provided (e.g. Next.js Link).',
+    },
+    {
+      name: 'target',
+      type: 'string',
+      description:
+        'HTML target attribute when rendered as a link (e.g. "_blank").',
+    },
+    {
+      name: 'rel',
+      type: 'string',
+      description:
+        'HTML rel attribute when rendered as a link (e.g. "noopener noreferrer").',
+    },
   ],
 
   usage: {
-    description: 'A button that shows only an icon with no visible text. Use IconButton in toolbars, table rows, and compact UI where space is tight and the icon is universally understood.',
+    description:
+      'A button that shows only an icon with no visible text. Use IconButton in toolbars, table rows, and compact UI where space is tight and the icon is universally understood.',
     accessibility: [
       {
         name: 'Essential icon or spinner arc',
@@ -113,26 +176,68 @@ export const docs = {
       },
     ],
     bestPractices: [
-      { guidance: true, description: 'Make the aria-label specific: a trash icon labeled "Delete conversation" is clearer than just "Delete" for screen readers.' },
-      { guidance: true, description: 'Add a tooltip: even a gear icon can mean Settings, Preferences, or Configure.' },
-      { guidance: true, description: 'Use ghost in toolbars and dense areas to reduce visual clutter.' },
-      { guidance: false, description: 'Use IconButton if the action isn\'t obvious from the icon alone; use Button with text.' },
-      { guidance: false, description: 'Skip the tooltip; label only reaches screen readers, sighted users need the hover hint.' },
+      {
+        guidance: true,
+        description:
+          'Make the aria-label specific: a trash icon labeled "Delete conversation" is clearer than just "Delete" for screen readers.',
+      },
+      {
+        guidance: true,
+        description:
+          'Add a tooltip: even a gear icon can mean Settings, Preferences, or Configure.',
+      },
+      {
+        guidance: true,
+        description:
+          'Use ghost in toolbars and dense areas to reduce visual clutter.',
+      },
+      {
+        guidance: false,
+        description:
+          "Use IconButton if the action isn't obvious from the icon alone; use Button with text.",
+      },
+      {
+        guidance: false,
+        description:
+          'Skip the tooltip; label only reaches screen readers, sighted users need the hover hint.',
+      },
     ],
   },
 };
 
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
 export const docsDense = {
-  description: 'Button showing only an icon, no visible text. Use in toolbars, table rows, compact UI where space is tight + icon universally understood.',
+  description:
+    'Button showing only an icon, no visible text. Use in toolbars, table rows, compact UI where space is tight + icon universally understood.',
   usage: {
-    description: 'Button showing only an icon, no visible text. Use in toolbars, table rows, compact UI where space is tight + icon universally understood.',
+    description:
+      'Button showing only an icon, no visible text. Use in toolbars, table rows, compact UI where space is tight + icon universally understood.',
     bestPractices: [
-      { guidance: true, description: 'Make aria-label specific: trash icon labeled "Delete conversation" > just "Delete" for screen readers.' },
-      { guidance: true, description: 'Add tooltip: even gear icon can mean Settings/Preferences/Configure.' },
-      { guidance: true, description: 'Use ghost in toolbars + dense areas to reduce visual clutter.' },
-      { guidance: false, description: "Use IconButton if action isn't obvious from icon alone; use Button w/ text instead." },
-      { guidance: false, description: 'Skip tooltip: label only reaches screen readers; sighted users need hover hint.' },
+      {
+        guidance: true,
+        description:
+          'Make aria-label specific: trash icon labeled "Delete conversation" > just "Delete" for screen readers.',
+      },
+      {
+        guidance: true,
+        description:
+          'Add tooltip: even gear icon can mean Settings/Preferences/Configure.',
+      },
+      {
+        guidance: true,
+        description:
+          'Use ghost in toolbars + dense areas to reduce visual clutter.',
+      },
+      {
+        guidance: false,
+        description:
+          "Use IconButton if action isn't obvious from icon alone; use Button w/ text instead.",
+      },
+      {
+        guidance: false,
+        description:
+          'Skip tooltip: label only reaches screen readers; sighted users need hover hint.',
+      },
     ],
   },
   propDescriptions: {
@@ -140,11 +245,26 @@ export const docsDense = {
     icon: 'icon element rendered inside button; unsized Astryx Icon defaults to sm for sm/md buttons and md for lg',
     variant: 'visual style variant',
     size: 'size variant',
-    elevation: 'resting shadow depth: none|low|med|high; raise for a floating action button (FAB)',
-    isLoading: 'shows loading spinner, blocks re-activation but stays focusable (aria-disabled, not native disabled)',
-    isDisabled: 'disables button',
-    tooltip: 'tooltip text shown on hover',
+    elevation:
+      'resting shadow depth: none|low|med|high; raise for a floating action button (FAB)',
+    isLoading:
+      'shows loading spinner, blocks re-activation but stays focusable (aria-disabled, not native disabled)',
+    isDisabled: 'disables button; uses aria-disabled instead of native disabled',
+    tooltip:
+      'tooltip on hover + keyboard focus; also describes the button unless it repeats the accessible name',
     onClick: 'standard click handler',
     clickAction: 'async click handler w/ automatic loading state',
+    isInterruptible:
+      'keeps button clickable while clickAction pending; a re-click interrupts it. Not for fire-once actions (submit/save/pay)',
+    width:
+      'button width; numbers=pixels, strings=as-is; without it keeps the icon-only aspect (square by default)',
+    type: 'HTML button type; defaults to "button"',
+    name: 'HTML name for form submission',
+    value: 'HTML value for form submission',
+    form: 'associates button with form element by ID',
+    href: 'renders as a link; a disabled IconButton stays a <button>',
+    as: 'custom link component used with href',
+    target: 'HTML target when rendered as a link',
+    rel: 'HTML rel when rendered as a link',
   },
 };

@@ -68,6 +68,41 @@ describe('a11y contract shards', () => {
     }
   });
 
+  it('gives each timing proof a whole leg and preserves complete coverage', () => {
+    const timing = testsOf('packages/timing.spec.ts', 3);
+    const suite = [...tests, ...timing];
+    const source = file => (file === timing[0].file ? '// @a11y-isolated' : '');
+    const legs = partitionTests(suite, 6, recorded, source);
+    expect(legs).toHaveLength(6);
+    expect(selectedOnce(suite, legs)).toBe(true);
+    expect(legs[5]).toHaveLength(1);
+    expect(legs[5][0].tests).toEqual(timing);
+    expect(legs[5][0].parts).toBe(1);
+    expect(
+      legs
+        .slice(0, 5)
+        .flat()
+        .some(unit => unit.file === timing[0].file),
+    ).toBe(false);
+  });
+
+  it('never shares a timing leg when there are too few shards', () => {
+    const timing = testsOf('packages/timing.spec.ts', 1);
+    const source = () => '// @a11y-isolated';
+    expect(partitionTests(timing, 1, recorded, source)[0][0].tests).toEqual(
+      timing,
+    );
+    expect(() =>
+      partitionTests([...timing, ...tests], 1, recorded, file =>
+        file === timing[0].file ? source() : '',
+      ),
+    ).toThrow(/Not enough contract shards/);
+    const other = testsOf('packages/other-timing.spec.ts', 1);
+    const legs = partitionTests([...timing, ...other], 2, recorded, source);
+    expect(legs.map(leg => leg.length)).toEqual([1, 1]);
+    expect(selectedOnce([...timing, ...other], legs)).toBe(true);
+  });
+
   it('cuts a file longer than a leg’s share into consecutive parts in different legs', () => {
     const legs = partitionTests(tests, 6, recorded);
     const parts = legs.flatMap((leg, index) =>

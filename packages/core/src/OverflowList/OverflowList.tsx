@@ -22,7 +22,6 @@ import {
   type ReactNode,
   type ReactElement,
   Children,
-  useCallback,
   useRef,
   useState,
 } from 'react';
@@ -31,7 +30,7 @@ import {isRenderable} from '../utils/isRenderable';
 import type {SpacingStep} from '../utils/types';
 import * as stylex from '@stylexjs/stylex';
 import {mergeProps} from '../utils';
-import {useOverflow} from '../hooks/useOverflow';
+import {useOverflowInternal} from '../hooks/useOverflow';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {spacingVars} from '../theme/tokens.stylex';
 import {themeProps} from '../utils/themeProps';
@@ -71,9 +70,29 @@ const styles = stylex.create({
   },
 });
 
+// A single-row list's own inline sizes. Its minimum is its fully folded
+// width, so its indicator stays whole; the minimum is never wider than the
+// unfolded items. In a flex row, where its width would follow its folded
+// content, its width is its unfolded items at most the row's width: the row
+// shrinks it toward its minimum, it folds to the width it gets, and it grows
+// back when room returns, folding before any sibling shrinks. Elsewhere its
+// width stays automatic (the full line in a block parent). A caller's width,
+// max-width, or flex basis replaces these.
+const inlineSizes = stylex.create({
+  floor: (minWidth: number) => ({minWidth: `${minWidth}px`}),
+  preferred: (width: number) => ({
+    width: `${width}px`,
+    maxWidth: '100%',
+    // The list gives up its width before its siblings give up any: its
+    // shrink factor dwarfs theirs, so a sibling shrinks by less than a
+    // layout unit until the list reaches its minimum.
+    flexShrink: 1_000_000,
+  }),
+});
+
 const multiRowHeight = stylex.create({
-  height: (maxRows: number, rowHeight: number, gapPx: number) => ({
-    maxHeight: `calc(${rowHeight}px * ${maxRows} + ${gapPx}px * ${maxRows - 1})`,
+  height: (maxRows: number, rowHeight: number, gap: string) => ({
+    maxHeight: `calc(${rowHeight}px * ${maxRows} + ${gap} * ${maxRows - 1})`,
   }),
 });
 
@@ -91,21 +110,19 @@ const gapStyles = stylex.create({
   10: {gap: spacingVars['--spacing-10']},
 });
 
-/**
- * Maps spacing token steps to pixel values for overflow calculations.
- */
-const spacingToPx: Record<SpacingStep, number> = {
-  0: 0,
-  0.5: 2,
-  1: 4,
-  1.5: 6,
-  2: 8,
-  3: 12,
-  4: 16,
-  5: 20,
-  6: 24,
-  8: 32,
-  10: 40,
+/** The spacing token for each gap step, as a CSS value. */
+const gapTokens: Record<SpacingStep, string> = {
+  0: spacingVars['--spacing-0'],
+  0.5: spacingVars['--spacing-0-5'],
+  1: spacingVars['--spacing-1'],
+  1.5: spacingVars['--spacing-1-5'],
+  2: spacingVars['--spacing-2'],
+  3: spacingVars['--spacing-3'],
+  4: spacingVars['--spacing-4'],
+  5: spacingVars['--spacing-5'],
+  6: spacingVars['--spacing-6'],
+  8: spacingVars['--spacing-8'],
+  10: spacingVars['--spacing-10'],
 };
 
 export interface OverflowItem {
@@ -279,20 +296,53 @@ export function OverflowList({
   const childArray = Children.toArray(children) as ReactElement[];
   const itemCount = childArray.length;
 
-  const gapPx = spacingToPx[gap];
-
   const observeParent = behavior === 'observeParent';
   const isMultiRow = maxRows != null && maxRows > 1;
 
-  const {containerRef, measureRef, visibleCount, hasOverflow, rowHeight} =
-    useOverflow(itemCount, {
-      gap: gapPx,
+  // Re-run measurement when keyed children change without resizing the row.
+  // The measured key delays reporting until that measurement has committed.
+  // Lists without the callback skip all identity work.
+  const measurementKey = onOverflowChange
+    ? JSON.stringify({
+        children: childArray.map((child, index) => [index, child.key]),
+        gap,
+        minVisibleItems,
+        maxVisibleItems,
+        maxRows,
+        collapseFrom,
+        behavior,
+      })
+    : '';
+  const [measuredKey, setMeasuredKey] = useState(measurementKey);
+  // Only the multi-row path renders from `rowHeight` (it caps the
+  // container's height), so only that path tracks it.
+  const {
+    containerRef,
+    measureRef,
+    visibleCount,
+    hasOverflow,
+    rowHeight,
+    inlineBounds,
+    remeasure,
+  } = useOverflowInternal(
+    itemCount,
+    {
       minVisibleItems,
       maxVisibleItems,
       maxRows,
       collapseFrom,
       behavior,
-    });
+    },
+    {
+      tracksRows: isMultiRow,
+      tracksInlineBounds: !isMultiRow,
+      // The gap is a spacing token, so its pixels follow the theme.
+      gapToken: gapTokens[gap],
+      // The measured key moves with the measurement's result, so the report
+      // never sees a key that is ahead of the visible set.
+      onMeasure: () => setMeasuredKey(measurementKey),
+    },
+  );
 
   const allItems: OverflowItem[] = childArray.map((child, index) => ({
     child,
@@ -314,30 +364,13 @@ export function OverflowList({
   // so the indicator renders at its maximum possible width.
   const measureIndicator = overflowRenderer?.(allItems);
 
-  // Re-run measurement when keyed children change without resizing the row.
-  // The measured key delays reporting until that measurement has committed.
-  // Lists without the callback skip all identity work.
-  const measurementKey = onOverflowChange
-    ? JSON.stringify({
-        children: childArray.map((child, index) => [index, child.key]),
-        gap,
-        minVisibleItems,
-        maxVisibleItems,
-        maxRows,
-        collapseFrom,
-        behavior,
-      })
-    : '';
-  const [measuredKey, setMeasuredKey] = useState(measurementKey);
-  const reportMeasureRef = useCallback(
-    (element: HTMLElement | null) => {
-      measureRef(element);
-      if (element) {
-        setMeasuredKey(measurementKey);
-      }
-    },
-    [measureRef, measurementKey],
-  );
+  // Keyed children that change without resizing the row report no resize,
+  // so a new key measures again.
+  useIsomorphicLayoutEffect(() => {
+    if (measuredKey !== measurementKey) {
+      remeasure();
+    }
+  }, [measuredKey, measurementKey, remeasure]);
 
   // Report after measurement, before paint, so a standing menu updates in the
   // same frame as the visible row. Keys distinguish membership and order while
@@ -347,9 +380,10 @@ export function OverflowList({
     ? JSON.stringify(overflowItems.map(({child, index}) => [index, child.key]))
     : '[]';
   const reportedKeyRef = useRef('[]');
-  const overflowItemsRef = useRef(overflowItems);
-  overflowItemsRef.current = overflowItems;
 
+  // Reports the measured overflow to `onOverflowChange`. A ResizeObserver
+  // drives the measurement, so no event handler can report it. The items are a
+  // new array on each render; the key comparison keeps the report to changes.
   useIsomorphicLayoutEffect(() => {
     if (
       !onOverflowChange ||
@@ -359,14 +393,20 @@ export function OverflowList({
       return;
     }
     reportedKeyRef.current = overflowKey;
-    onOverflowChange(overflowItemsRef.current);
-  }, [measuredKey, measurementKey, overflowKey, onOverflowChange]);
+    onOverflowChange(overflowItems);
+  }, [
+    measuredKey,
+    measurementKey,
+    overflowKey,
+    onOverflowChange,
+    overflowItems,
+  ]);
 
   return (
     <>
       {/* Hidden measurement container */}
       <div
-        ref={reportMeasureRef}
+        ref={measureRef}
         aria-hidden="true"
         inert
         {...stylex.props(styles.measureContainer, gapStyles[gap])}>
@@ -389,7 +429,19 @@ export function OverflowList({
             isMultiRow &&
               rowHeight > 0 &&
               maxRows != null &&
-              multiRowHeight.height(maxRows, rowHeight, gapPx),
+              multiRowHeight.height(maxRows, rowHeight, gapTokens[gap]),
+            !isMultiRow &&
+              inlineBounds.rendered > 0 &&
+              inlineSizes.floor(
+                Math.min(inlineBounds.collapsed, inlineBounds.rendered) +
+                  inlineBounds.chrome,
+              ),
+            !isMultiRow &&
+              inlineBounds.inFlexRow &&
+              inlineBounds.rendered > 0 &&
+              inlineSizes.preferred(
+                inlineBounds.rendered + inlineBounds.chrome,
+              ),
             observeParent && hasOverflow && styles.fillParent,
             xstyle,
           ),

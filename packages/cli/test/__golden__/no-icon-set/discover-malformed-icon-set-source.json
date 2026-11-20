@@ -9,7 +9,10 @@
         "name": "@astryxdesign/richtext",
         "package": "@astryxdesign/richtext",
         "components": [
-          "RichTextEditor"
+          "RichTextEditor",
+          "RichTextEditorAutoLinkPlugin",
+          "RichTextEditorToolbar",
+          "RichTextView"
         ],
         "version": "<version>",
         "description": "Astryx rich text — a Lexical-based rich text editor and viewer, styled with Astryx design tokens.",

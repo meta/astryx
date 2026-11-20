@@ -13,9 +13,9 @@
  *   words (component:Tokenizer AR7).
  */
 
-import {createContext} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
-export const TokenizerClearAllMessageContext = createContext<string | null>(
-  null,
-);
+export const TokenizerClearAllMessageContext = createSharedContext<
+  string | null
+>('TokenizerClearAllMessageContext', 1, null);
 TokenizerClearAllMessageContext.displayName = 'TokenizerClearAllMessageContext';

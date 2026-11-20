@@ -405,16 +405,38 @@ export function templateIconsCliProblem(pkg) {
 export const CONFIG_ICON_SET_CLI = '0.7.4';
 
 /**
+ * The first stable CLI release that reads `experimental.iconSet` written as
+ * a list (a main set and backups). Earlier releases refuse the list form.
+ */
+export const CONFIG_ICON_SET_LIST_CLI = '0.7.12';
+
+/**
+ * The first stable CLI release that reads `experimental.iconVariant`, the
+ * look the project's icon sets draw. Earlier releases refuse an astryx.config
+ * that sets it ("Unrecognized key").
+ *
+ * Tied to the next patch slot.
+ */
+export const CONFIG_ICON_VARIANT_CLI = '0.7.16';
+
+/**
  * Why an app project whose astryx.config sets `experimental.iconSet` would be
  * refused by a CLI it may run, or null when the `@astryxdesign/cli` range it
  * declares (in dependencies, devDependencies, optionalDependencies, or
- * peerDependencies) admits only CLIs that read the key. A project that
- * declares no range, or one that is not a version range (`workspace:`,
- * `file:`, `link:`), gets null: nothing says which CLI it runs.
+ * peerDependencies) admits only CLIs that read the key. A list value needs a
+ * later release than a string, and `experimental.iconVariant` a later
+ * release than either. A project that declares no range, or one that is not
+ * a version range (`workspace:`, `file:`, `link:`), gets null: nothing says
+ * which CLI it runs.
  * @param {any} pkg the project's package.json
+ * @param {{list?: boolean, variant?: boolean}} [options] `list`: the value is
+ *   a list; `variant`: the config also sets `experimental.iconVariant`
  * @returns {string | null}
  */
-export function projectIconSetCliWarning(pkg) {
+export function projectIconSetCliWarning(
+  pkg,
+  {list = false, variant = false} = {},
+) {
   const field = [
     'dependencies',
     'devDependencies',
@@ -424,9 +446,20 @@ export function projectIconSetCliWarning(pkg) {
   if (!field) return null;
   const range = pkg[field][CLI_PACKAGE];
   if (range.includes(':')) return null;
+  const needed = variant
+    ? CONFIG_ICON_VARIANT_CLI
+    : list
+      ? CONFIG_ICON_SET_LIST_CLI
+      : CONFIG_ICON_SET_CLI;
   const lowest = lowestAdmitted(range);
-  if (lowest != null && semverCompare(lowest, CONFIG_ICON_SET_CLI) >= 0) {
+  if (lowest != null && semverCompare(lowest, needed) >= 0) {
     return null;
   }
-  return `The project's ${CLI_PACKAGE} range "${range}" (${field}) admits a release before ${CONFIG_ICON_SET_CLI}, which refuses an astryx.config that sets \`experimental.iconSet\` ("Unrecognized key"), so commands that load the project configuration, such as \`doctor\` and \`discover\`, fail there. Require "${CLI_PACKAGE}": ">=${CONFIG_ICON_SET_CLI}".`;
+  if (variant) {
+    return `The project's ${CLI_PACKAGE} range "${range}" (${field}) admits a release before ${needed}, which refuses an astryx.config that sets \`experimental.iconVariant\` ("Unrecognized key"), so commands that load the project configuration, such as \`doctor\` and \`discover\`, fail there. Require "${CLI_PACKAGE}": ">=${needed}".`;
+  }
+  if (list) {
+    return `The project's ${CLI_PACKAGE} range "${range}" (${field}) admits a release before ${needed}, which refuses \`experimental.iconSet\` written as a list, so commands that load the project configuration, such as \`doctor\` and \`discover\`, fail there. Require "${CLI_PACKAGE}": ">=${needed}".`;
+  }
+  return `The project's ${CLI_PACKAGE} range "${range}" (${field}) admits a release before ${needed}, which refuses an astryx.config that sets \`experimental.iconSet\` ("Unrecognized key"), so commands that load the project configuration, such as \`doctor\` and \`discover\`, fail there. Require "${CLI_PACKAGE}": ">=${needed}".`;
 }

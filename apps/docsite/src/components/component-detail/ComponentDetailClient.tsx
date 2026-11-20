@@ -32,7 +32,9 @@ import {Theming} from './Theming';
 import {Accessibility} from './Accessibility';
 import {HookSignature} from './HookSignature';
 import {ExampleBlock} from './ExampleBlock';
+import {SetupExampleBlock} from './SetupExampleBlock';
 import {MarkdownText} from '../MarkdownText';
+import {DeprecatedBadge, DeprecationNotice} from '../Deprecation';
 import {
   InteractivePreviewStage,
   useInteractiveState,
@@ -45,7 +47,10 @@ import {PropsTable} from './PropsTable';
 import type {ComponentEntry} from '../../generated/componentRegistry';
 import type {BlockEntry} from '../../generated/blockRegistry';
 import {showcaseRegistry} from '../../generated/showcaseRegistry';
-import {exampleRegistry} from '../../generated/exampleRegistry';
+import {
+  exampleRegistry,
+  setupExampleRegistry,
+} from '../../generated/exampleRegistry';
 import {
   shadcnRegistryIsPreview,
   shadcnRegistryOrigin,
@@ -176,7 +181,9 @@ function OverviewContent({
         <PropsTable props={comp.props} heading="Props" />
       )}
 
-      {(exampleRegistry[comp.name] || []).length > 0 && (
+      {(exampleRegistry[comp.name] || []).length +
+        (setupExampleRegistry[comp.name] || []).length >
+        0 && (
         <>
           <VStack gap={4}>
             <Heading level={2} type="display-3">
@@ -189,6 +196,9 @@ function OverviewContent({
           <VStack gap={10}>
             {(exampleRegistry[comp.name] || []).map((entry, i) => (
               <ExampleBlock key={i} entry={entry} componentName={comp.name} />
+            ))}
+            {(setupExampleRegistry[comp.name] || []).map((entry, i) => (
+              <SetupExampleBlock key={`setup-${i}`} entry={entry} />
             ))}
           </VStack>
         </>
@@ -428,9 +438,17 @@ export function ComponentDetailClient({
                 />
               </>
             )}
+            {comp.deprecated && (
+              <>
+                {' '}
+                <DeprecatedBadge />
+              </>
+            )}
             {!comp.isReady && pkg ? ` · npm install ${pkg}@canary` : ''}
           </Text>
         </VStack>
+
+        {comp.deprecated && <DeprecationNotice deprecation={comp.deprecated} />}
 
         {hasTabs ? (
           <Suspense

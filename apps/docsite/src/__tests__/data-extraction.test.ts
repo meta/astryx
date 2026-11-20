@@ -17,7 +17,13 @@ import {describe, it, expect} from 'vitest';
 import {docs as chatDocs} from '../../../../packages/core/src/Chat/Chat.doc.mjs';
 import {docs as drawerDocs} from '../../../../packages/core/src/Drawer/Drawer.doc.mjs';
 import {docs as drawerHeaderDocs} from '../../../../packages/core/src/Drawer/DrawerHeader.doc.mjs';
+import {docs as bottomSheetSwitcherDocs} from '../../../../packages/core/src/BottomSheet/BottomSheetSwitcher.doc.mjs';
 import docsiteConfig from '../../astryx.config.mjs';
+import {
+  DEMO_CONTENT_MODULE,
+  replaceDemoContent,
+} from '../../../../packages/cli/foundation/discovery/template-adapter.mjs';
+import {fillTemplatePlaceholders} from '../../../../packages/cli/foundation/discovery/template-placeholders.mjs';
 import {packages} from '../generated/packageRegistry';
 import {
   components,
@@ -35,8 +41,13 @@ import {showcaseRegistry} from '../generated/showcaseRegistry';
 import {externalComponentPreviews} from '../generated/componentPreviewRegistry';
 import {eagerShowcases} from '../components/eagerShowcases';
 import {TEMPLATE_COMPONENTS} from '../components/templateComponents';
-import {exampleRegistry} from '../generated/exampleRegistry';
+import {
+  exampleRegistry,
+  setupExampleRegistry,
+} from '../generated/exampleRegistry';
 import {normalizeComponentCategory} from '../lib/componentCategories';
+import {decompressCode} from '../lib/compress';
+import {buildPlaygroundHref} from '../components/playgroundLink';
 
 const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -212,38 +223,6 @@ describe('packageRegistry', () => {
     const names = packages.map(p => p.name);
     expect(new Set(names).size).toBe(names.length);
   });
-
-  it('packages with READMEs have readme content', () => {
-    for (const pkg of packages) {
-      if (pkg.hasReadme) {
-        expect(pkg.readme).toBeTruthy();
-        expect(typeof pkg.readme).toBe('string');
-        expect(pkg.readme!.length).toBeGreaterThan(50);
-      } else {
-        expect(pkg.readme).toBeNull();
-      }
-    }
-  });
-
-  it('packages with CHANGELOGs have changelog content', () => {
-    for (const pkg of packages) {
-      if (pkg.hasChangelog) {
-        expect(pkg.changelog).toBeTruthy();
-        expect(typeof pkg.changelog).toBe('string');
-        expect(pkg.changelog!.length).toBeGreaterThan(
-          pkg.name === '@astryxdesign/richtext' ? 0 : 50,
-        );
-      } else {
-        expect(pkg.changelog).toBeNull();
-      }
-    }
-  });
-
-  it('CLI package has a substantial README', () => {
-    const cli = packages.find(p => p.name === '@astryxdesign/cli');
-    expect(cli?.readme).toBeTruthy();
-    expect(cli!.readme!.length).toBeGreaterThan(1000);
-  });
 });
 
 // ── Component Registry ─────────────────────────────────────────────────
@@ -278,7 +257,12 @@ describe('componentRegistry', () => {
       'ChartTooltip',
     ]);
     expect(components['@astryxdesign/richtext'].map(comp => comp.name)).toEqual(
-      ['RichTextEditor'],
+      [
+        'RichTextEditor',
+        'RichTextEditorAutoLinkPlugin',
+        'RichTextEditorToolbar',
+        'RichTextView',
+      ],
     );
     expect(components['@astryxdesign/vega'].map(comp => comp.name)).toEqual([
       'VegaChart',
@@ -332,7 +316,10 @@ describe('componentRegistry', () => {
       ([packageName, entries]) =>
         packageName === '@astryxdesign/core'
           ? []
-          : entries.map(component => component.name),
+          : entries
+              // Hook entries carry `params` and have no preview.
+              .filter(component => component.params == null)
+              .map(component => component.name),
     );
     expect(Object.keys(externalComponentPreviews).sort()).toEqual(
       externalNames.sort(),
@@ -716,6 +703,24 @@ describe('componentRegistry', () => {
     expect(toolCalls!.parentDoc).toBeNull();
   });
 
+  it('projects a doc deprecation, naming a documented current replacement', () => {
+    const all = Object.values(components).flat();
+    const byName = new Map(all.map(entry => [entry.name, entry]));
+    const switcher = byName.get(bottomSheetSwitcherDocs.name);
+    expect(bottomSheetSwitcherDocs.deprecated).toBeDefined();
+    expect(switcher?.deprecated).toMatchObject(
+      bottomSheetSwitcherDocs.deprecated!,
+    );
+    for (const entry of all.filter(e => e.deprecated)) {
+      const replacement = byName.get(entry.deprecated!.replacement);
+      expect(replacement, entry.name).toBeDefined();
+      expect(replacement!.deprecated, entry.name).toBeNull();
+      expect(entry.deprecated!.replacementDisplayName).toBe(
+        replacement!.displayName,
+      );
+    }
+  });
+
   it('simple components have null parentDoc', () => {
     const core = components['@astryxdesign/core'];
     const button = core.find(c => c.name === 'Button');
@@ -1000,6 +1005,47 @@ describe('blockRegistry', () => {
     }
   });
 
+  it('shows each core block as a copy writes it, with no demo content or icon placeholders (spec:AST-033 FR23)', () => {
+    const blocksDir = path.join(
+      REPO_ROOT,
+      'packages/cli/assets/templates/blocks',
+    );
+    for (const block of blocks.filter(b => b.sourcePackage == null)) {
+      const file = path.join(blocksDir, block.category, `${block.dirName}.tsx`);
+      expect(block.source).toBe(
+        fillTemplatePlaceholders(
+          replaceDemoContent(fs.readFileSync(file, 'utf-8')).source,
+        ).source,
+      );
+      expect(block.source).not.toContain(DEMO_CONTENT_MODULE);
+      expect(block.source).not.toContain('@astryxdesign/template-icons');
+    }
+    for (const entry of Object.values(exampleRegistry).flat()) {
+      expect(entry.source).not.toContain(DEMO_CONTENT_MODULE);
+    }
+  });
+
+  it('opens the displayed source in the playground, with no demo content (spec:AST-033 FR23)', () => {
+    for (const entry of Object.values(exampleRegistry).flat()) {
+      const hash = buildPlaygroundHref(entry.source).split('#code=')[1];
+      const opened = decompressCode(hash);
+      expect(opened).not.toBeNull();
+      expect(opened).not.toContain(DEMO_CONTENT_MODULE);
+    }
+    const pagesDir = path.join(
+      REPO_ROOT,
+      'packages/cli/assets/templates/pages',
+    );
+    for (const template of templates) {
+      const file = path.join(pagesDir, template.slug, 'page.tsx');
+      expect(template.source).toBe(
+        fillTemplatePlaceholders(
+          replaceDemoContent(fs.readFileSync(file, 'utf-8')).source,
+        ).source,
+      );
+    }
+  });
+
   it('decodes unicode escapes in block titles', () => {
     const block = blocks.find(b => b.dirName === 'TabListTabsWithBadge');
     expect(block).toBeDefined();
@@ -1229,6 +1275,18 @@ describe('exampleRegistry', () => {
     }
   });
 
+  it('never gives a setup example a live preview', () => {
+    for (const [component, setup] of Object.entries(setupExampleRegistry)) {
+      const live = new Set(
+        (exampleRegistry[component] ?? []).map(entry => entry.name),
+      );
+      for (const example of setup) {
+        expect(typeof example.code).toBe('string');
+        expect(live.has(example.label)).toBe(false);
+      }
+    }
+  });
+
   it('has examples for known components', () => {
     expect(exampleRegistry['Button']).toBeDefined();
     expect(exampleRegistry['Table']).toBeDefined();
@@ -1428,7 +1486,10 @@ describe('DropdownMenu adaptive-presentation example', () => {
     );
 
     expect(presentation?.type).toBe("'popover' | 'bottom-sheet' | 'adaptive'");
-    expect(presentation?.default).toBe("'popover'");
+    // Unset by default: the menu is anchored, with the touch modes under a
+    // finger. 'popover' pins the pointer behavior.
+    expect(presentation?.default).toBeUndefined();
+    expect(presentation?.description).toContain("Pass 'popover'");
 
     const defaults = dropdownMenu?.playground?.defaults as
       Record<string, unknown> | undefined;

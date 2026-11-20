@@ -92,6 +92,42 @@ const isLinkToFolder = at =>
   fs.lstatSync(at).isSymbolicLink() &&
   fs.realpathSync(at) === fs.realpathSync(FOLDER());
 
+describe("the computer text defers to a project's own Astryx text", () => {
+  it('renders through the shared skill-file writer: the frontmatter, then the hash line over the rest', () => {
+    const text = renderComputerAgentText({
+      command: 'astryx',
+      install: 'npm install -g @astryxdesign/cli',
+    });
+    const lines = text.split('\n');
+    expect(lines.slice(0, 5)).toEqual([
+      '---',
+      'name: astryx',
+      lines[2],
+      '---',
+      '',
+    ]);
+    expect(lines[2]).toMatch(/^description: ".+"$/u);
+    expect(lines[5]).toBe('<!-- ASTRYX:START -->');
+    const hashLine = /^<!-- astryx-managed sha256:([0-9a-f]{64}) -->$/u.exec(
+      lines[6],
+    );
+    expect(hashLine).not.toBeNull();
+    const rest = [...lines.slice(0, 6), ...lines.slice(7)].join('\n');
+    expect(createHash('sha256').update(rest).digest('hex')).toBe(hashLine?.[1]);
+    expect(text.endsWith('<!-- ASTRYX:END -->\n')).toBe(true);
+  });
+
+  it('says so right after its opening sentence, and names no command', () => {
+    const text = renderComputerAgentText({command: 'astryx'});
+    const line =
+      "Inside a project that has its own Astryx text (an `astryx-project` skill, or an Astryx block in AGENTS.md or CLAUDE.md), follow that text: it knows the project's version and setup.";
+    expect(text).toContain(
+      `Astryx, a design system and UI library, is available on this computer.\n${line}\n`,
+    );
+    expect(line).not.toMatch(/`astryx /u);
+  });
+});
+
 describe('renderComputerAgentText', () => {
   it('a skill named astryx with a one-sentence when-to-use description, in strict YAML', () => {
     {
@@ -113,7 +149,12 @@ describe('renderComputerAgentText', () => {
       expect(text).toContain(
         'Use it when you build or change UI, pick components, or style or theme an app.',
       );
-      expect(text).toContain("Start with `astryx search '<what you need>'`.");
+      expect(text).toContain(
+        'To make a page, run `astryx build "<what the page is for>"` first, as the WORKFLOW below says.',
+      );
+      expect(text).toContain(
+        "Start with `astryx search '<what you need>'` for anything else.",
+      );
     }
   });
 
@@ -143,7 +184,7 @@ describe('renderComputerAgentText', () => {
   it('gives the build workflow: a project with Astryx installed and init run, the shared template steps, then check and deliver the build', () => {
     const text = renderComputerAgentText({command: 'astryx'});
     expect(text).toContain(
-      'To build UI, work in a project folder (create one if there is none). Add `@astryxdesign/core` and `@astryxdesign/cli` to a new project or one without `@astryxdesign/core`; to a project that already has `@astryxdesign/core`, add `@astryxdesign/cli` at the same version. Run `astryx init` there and follow the agent docs it writes.',
+      "To build UI, work in a project folder (create one if there is none). In a new project, add `@astryxdesign/core` and `@astryxdesign/cli`; in an existing app that doesn't use Astryx, keep its current UI stack unless the user asks for Astryx, and then add both. To a project that already has `@astryxdesign/core`, add `@astryxdesign/cli` at the same version, pinned exactly when Core is (no `^` or `~`). In a project that has or adds Astryx, run `astryx init` and follow the agent docs it writes; the WORKFLOW below is for that project.",
     );
     for (const line of [WORKFLOW_TITLE, ...WORKFLOW_STEPS]) {
       expect(text).toContain(line);
@@ -341,7 +382,7 @@ describe('links and the copy', () => {
       writeComputerAgentText({home, command: 'astryx'});
       // A link as 0.7.x wrote it: relative to ~/.claude/skills, which the
       // system reads from ~/dotfiles/.claude/skills, so it dangles.
-      fs.rmSync(CLAUDE());
+      fs.unlinkSync(CLAUDE());
       fs.symlinkSync(
         path.relative(path.dirname(CLAUDE()), FOLDER()),
         CLAUDE(),

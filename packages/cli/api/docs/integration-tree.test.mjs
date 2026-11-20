@@ -14,6 +14,7 @@ import {loadDocsCatalog} from './_adapter.mjs';
 import {search} from '../search/search.mjs';
 import {checkDocsTree} from '../doctor/doctor.mjs';
 import {integrationDocConflicts} from '../integration/authoring-checks.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const SLOW = 60_000;
 
@@ -133,7 +134,7 @@ function scaffold(files) {
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-integration-tree-test-'),
+    path.join(REPO_ROOT, '.astryx-integration-tree-test-'),
   );
 });
 
@@ -253,6 +254,41 @@ describe('integration docs in the docs tree', () => {
     expect(bad.status).toBe('warn');
     expect(bad.message).toContain('acme/broken');
     expect(bad.message).toContain('"generic:nope" names no doc');
+  }, SLOW);
+
+  it("warns on a link in a template's description that names no doc, and passes one to its own guide", async () => {
+    scaffold(kit());
+    const pkgDir = path.join(tmpDir, 'node_modules', '@acme', 'kit');
+    fs.writeFileSync(
+      path.join(pkgDir, 'astryx.integration.mjs'),
+      "export default {docs: './docs', templates: './templates', providerId: '@acme/tree-provider'};\n",
+    );
+    /** @param {string} description */
+    const template = description => {
+      fs.mkdirSync(path.join(pkgDir, 'templates'), {recursive: true});
+      fs.writeFileSync(
+        path.join(pkgDir, 'templates', 'acme-hero.doc.mjs'),
+        `export default ${JSON.stringify({type: 'block', name: 'Acme hero', description})};\n`,
+      );
+      fs.writeFileSync(
+        path.join(pkgDir, 'templates', 'acme-hero.tsx'),
+        'export default function AcmeHero() { return null; }\n',
+      );
+    };
+    template('Set it up as {@link generic:setup} says.');
+    const ok = await checkDocsTree({
+      docsCatalog: await loadDocsCatalog(tmpDir),
+    });
+    expect(ok).toMatchObject({id: 'docs-tree', status: 'pass'});
+    template('Set it up as {@link generic:setup} says, then {@link generic:nope}.');
+    const bad = await checkDocsTree({
+      docsCatalog: await loadDocsCatalog(tmpDir),
+    });
+    expect(bad.status).toBe('warn');
+    expect(bad.message).toContain(
+      'template acme-hero (description): "generic:nope" names no doc',
+    );
+    expect(bad.message).not.toContain('"generic:setup"');
   }, SLOW);
 
   it("keeps the CLI's routes: an integration namespace or topic that claims one is withdrawn, and both doctors say so", async () => {
@@ -425,6 +461,39 @@ describe('integration docs in the docs tree', () => {
     const check = await checkDocsTree({docsCatalog: await loadDocsCatalog(tmpDir)});
     expect(check.message).toContain('takes the route "use-a-theme", which the topic "super-tokens" also answers to');
     expect(check.message).not.toContain('names no doc');
+  }, SLOW);
+
+  it("opens the CLI's links to a topic an integration replaces under the same name", async () => {
+    scaffold({
+      ...kit(),
+      'theme.doc.mjs': {
+        type: 'generic',
+        name: 'theme',
+        title: 'Acme theme',
+        description: 'Theming the Acme kit.',
+        replaces: 'theme',
+        sections: [{title: 'One', content: [{type: 'prose', text: 'One.'}]}],
+      },
+      'getting-started.doc.mjs': {
+        type: 'generic',
+        name: 'getting-started',
+        title: 'Acme getting started',
+        description: 'Starting with the Acme kit.',
+        replaces: 'getting-started',
+        sections: [{title: 'One', content: [{type: 'prose', text: 'One.'}]}],
+      },
+    });
+    const check = await checkDocsTree({
+      docsCatalog: await loadDocsCatalog(tmpDir),
+    });
+    expect(check.message).not.toContain('"generic:theme" names no doc');
+    expect(check.message).not.toContain(
+      '"generic:getting-started" names no doc',
+    );
+    expect(check).toMatchObject({id: 'docs-tree', status: 'pass'});
+    expect((await docs('theme', undefined, {cwd: tmpDir})).data.title).toBe(
+      'Acme theme',
+    );
   }, SLOW);
 
   it("keeps the CLI's routes from a replacement that answers to one, in one package or across a chain", async () => {

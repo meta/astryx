@@ -21,7 +21,7 @@
 
 import {use, useId, useMemo, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {sizeVars} from '../theme/tokens.stylex';
+import {inputRowSizeStyles} from '../Field/inputStyles.stylex';
 import {Field, type InputStatus} from '../Field';
 import {SizeProvider, useSize} from '../SizeContext/SizeContext';
 import {mergeProps} from '../utils';
@@ -44,17 +44,10 @@ const styles = stylex.create({
   },
 });
 
-const sizeStyles = stylex.create({
-  sm: {
-    height: sizeVars['--size-element-sm'],
-  },
-  md: {
-    height: sizeVars['--size-element-md'],
-  },
-  lg: {
-    height: sizeVars['--size-element-lg'],
-  },
-});
+// The group owns its row height, and its members fill it (`height: 100%`),
+// so the row takes the one-line field height: the size, grown to a bordered
+// text line when the text is larger.
+const sizeStyles = inputRowSizeStyles;
 
 export interface InputGroupProps extends Omit<
   BaseProps<HTMLDivElement>,
@@ -109,7 +102,8 @@ export interface InputGroupProps extends Omit<
   size?: InputGroupSize;
 
   /**
-   * Status indicator applied to the group border.
+   * Validation status. Its message shows below the group. The group border
+   * does not change; a theme can style the row from `data-status`.
    */
   status?: InputStatus;
 
@@ -125,8 +119,8 @@ export interface InputGroupProps extends Omit<
 }
 
 /**
- * Groups an input with prefix/suffix addons in a visually connected
- * container with shared border and focus ring.
+ * Groups an input with prefix and suffix addons in one connected row. A
+ * focused member stays above its neighbours, so its focus ring shows in full.
  *
  * @example
  * ```

@@ -178,19 +178,19 @@ export const CHECKBOX_BINDING_STATES = [
   {
     id: 'input-required',
     binding: 'CheckboxInput',
-    summary: 'a checkbox declared required',
-    facts: facts({required: true, invalid: true}),
+    summary: 'a checkbox declared required, not yet in error',
+    facts: facts({required: true}),
     visibleLabel: 'Accept terms',
     storyId: 'a11y-checkbox-pattern--input-required',
   },
   {
-    id: 'input-inherited-required-valid',
+    id: 'input-under-required-default',
     binding: 'CheckboxInput',
     summary:
-      'an unchecked checkbox inheriting required semantics without native validation',
-    facts: facts({required: true}),
+      'an unchecked checkbox under a required form default, which gives it no required state',
+    facts: facts(),
     visibleLabel: 'Marketing consent',
-    storyId: 'a11y-checkbox-pattern--input-inherited-required-valid',
+    storyId: 'a11y-checkbox-pattern--input-under-required-default',
   },
   {
     id: 'input-invalid',

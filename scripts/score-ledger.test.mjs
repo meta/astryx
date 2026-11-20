@@ -19,7 +19,8 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import http from 'node:http';
 
-import {describe, it, expect} from 'vitest';
+import {afterAll, beforeAll, describe, it, expect} from 'vitest';
+import {createRepository} from './lib/git-fixture.mjs';
 
 import {
   AUDIT_PROMPT,
@@ -47,6 +48,22 @@ import {
   weakestSection,
   wikiCommitUrl,
 } from './score-ledger.mjs';
+
+/**
+ * The folder every temporary file of these tests lives in, the CLI's included
+ * (its TMPDIR), removed once they finish, so a run leaves nothing behind in the
+ * system temp directory. It is made in beforeAll, not when the module loads:
+ * Vitest skips both hooks when a run filters out every test here.
+ */
+let TEMP_ROOT = '';
+beforeAll(() => {
+  TEMP_ROOT = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'astryx-score-ledger-test-'),
+  );
+});
+afterAll(() => {
+  fs.rmSync(TEMP_ROOT, {recursive: true, force: true});
+});
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '..');
 
@@ -243,7 +260,10 @@ describe('loadLedger never throws', () => {
   });
 
   it('rejects JSON that is not a ledger', async () => {
-    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-')), 'l.json');
+    const file = path.join(
+      fs.mkdtempSync(path.join(TEMP_ROOT, 'ledger-')),
+      'l.json',
+    );
     fs.writeFileSync(file, JSON.stringify({nope: true}));
     const {ledger, error} = await loadLedger(file);
     expect(ledger).toBeNull();
@@ -251,7 +271,10 @@ describe('loadLedger never throws', () => {
   });
 
   it('reads a real ledger', async () => {
-    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-')), 'l.json');
+    const file = path.join(
+      fs.mkdtempSync(path.join(TEMP_ROOT, 'ledger-')),
+      'l.json',
+    );
     fs.writeFileSync(file, JSON.stringify({ledgerVersion: 1, components: [entry()]}));
     const {ledger, error} = await loadLedger(file);
     expect(error).toBeNull();
@@ -893,7 +916,7 @@ function cli(argv, {cwd = REPO_ROOT, input, env} = {}) {
       cwd,
       input,
       encoding: 'utf8',
-      env: {...process.env, ...env},
+      env: {...process.env, TMPDIR: TEMP_ROOT, ...env},
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     return {code: 0, out};
@@ -928,30 +951,17 @@ const scorecard = (over = {}) => ({
  * is shallow and pushes over file://, exactly as `ensureWikiClone` produces.
  */
 function makeWiki(seedLedger) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'score-ledger-wiki-'));
+  const root = fs.mkdtempSync(path.join(TEMP_ROOT, 'score-ledger-wiki-'));
   const bare = path.join(root, 'wiki.git');
-  const seed = path.join(root, 'seed');
   const clone = path.join(root, 'clone');
 
-  git(root, 'init', '--bare', '--initial-branch=master', bare);
-  git(root, 'clone', bare, seed);
-  identify(seed);
-  fs.writeFileSync(
-    path.join(seed, 'component-scores.json'),
-    `${JSON.stringify(seedLedger, null, 2)}\n`,
-  );
-  git(seed, 'add', '-A');
-  git(seed, 'commit', '-m', 'seed');
-  git(seed, 'push', 'origin', 'master');
-
-  git(root, 'clone', '--depth', '1', `file://${bare}`, clone);
-  identify(clone);
+  const ledger = `${JSON.stringify(seedLedger, null, 2)}\n`;
+  const seed = {ref: 'refs/heads/master', message: 'seed', files: {'component-scores.json': ledger}};
+  createRepository(bare, [seed], {bare: true, branch: 'master'});
+  // The clone's own config names who commits there.
+  const identity = ['-c', 'user.name=Ledger Test', '-c', 'user.email=ledger-test@example.com'];
+  git(root, 'clone', ...identity, '--depth', '1', `file://${bare}`, clone);
   return {root, bare, clone, ledger: path.join(clone, 'component-scores.json')};
-}
-
-function identify(dir) {
-  git(dir, 'config', 'user.name', 'Ledger Test');
-  git(dir, 'config', 'user.email', 'ledger-test@example.com');
 }
 
 const readLedger = file => JSON.parse(fs.readFileSync(file, 'utf8'));

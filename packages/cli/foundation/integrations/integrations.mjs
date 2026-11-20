@@ -28,13 +28,19 @@ import {normalizeProviderId} from '../identity/provider-identity.mjs';
 import {
   parseAgentDocsField,
   parseCliCommandField,
+  parseInstallGuidanceField,
   parseIntegrationBase,
   unknownIntegrationKeys,
+  ignoredIntegrationFields,
 } from '../../authoring/integration/schema.mjs';
 import {importUserModule, findPresentFiles} from '../fs/module-loader.mjs';
+import {findManifestPaths, MANIFEST_BASENAMES} from './manifest-paths.mjs';
+
+export {findManifestPaths, MANIFEST_BASENAMES};
 import {parseGapReportHandler} from '../../authoring/gap-report/parse.mjs';
 import {parseDiscoverSource} from '../../authoring/discover/parse.mjs';
 import {resolveProviders} from './provider-resolution.mjs';
+import {unknownCapabilityKeys} from '../bases/steps.mjs';
 
 /**
  * A fully-resolved, loaded integration. Identity (`name`, `version`) comes from
@@ -53,13 +59,24 @@ import {resolveProviders} from './provider-resolution.mjs';
  * @property {string} [codemods]
  * @property {string} [docs]
  * @property {string} [themes]
+ * @property {{export: string, from: string, themeProp?: string, modeProp?: string}} [themeProvider]
+ *   the manifest's provider component that wires every theme under `themes`
  * @property {string} [iconSets] the manifest's `experimental.iconSets` root
  * @property {string} [issuesUrl]
+ * @property {{light: string, dark?: string}} [logo] the manifest's logo
+ *   paths as written, relative to the package root
+ * @property {import('../../authoring/integration/type').BaseDeclaration} [base]
+ *   present when the package is a base
  * @property {{append?: readonly string[]}} [agentDocs]
  * @property {string} [cliCommand] the command this package's users run the
  *   CLI with; read by the picker in foundation/env (see cli-command.mjs)
  * @property {string} [__cliCommandError] why a declared `cliCommand` was
  *   ignored; the rest of the manifest still contributes
+ * @property {string} [installGuidance] how an app that uses this package
+ *   adds a dependency; read by `installGuidanceFor` in
+ *   foundation/env/cli-command.mjs
+ * @property {string} [__installGuidanceError] why a declared
+ *   `installGuidance` was ignored; the rest of the manifest still contributes
  * @property {string} [__agentDocsError] contribution-specific validation
  *   failure; other manifest contributions remain available
  * @property {string} __spec
@@ -72,14 +89,18 @@ import {resolveProviders} from './provider-resolution.mjs';
  * @property {string} __manifestFile
  * @property {string} [__loadError] set when the manifest failed to load/validate;
  *   such an integration contributes nothing and is surfaced via Project.issues()
- * @property {{providerId: import('../../authoring/identity/type').ProviderId, claimedBy: string, message: string}} [__providerConflict]
+ * @property {{providerId: import('../../authoring/identity/type').ProviderId, claimedBy: string, message: string, bothDeclare?: true}} [__providerConflict]
  *   set on a package whose provider ID an earlier-loaded package already
  *   claims; it contributes nothing and is reported as a `duplicate_provider`
- *   warning
+ *   warning. `bothDeclare` marks a conflict where both manifests write the
+ *   provider ID themselves
  * @property {string[]} [__declaredKeys] the keys the manifest object itself
  *   declares, before any is filled in (providerId from the package name)
  * @property {string[]} [__unknownKeys] manifest keys this CLI does not know —
  *   surfaced as a warning; the rest of the manifest still contributes
+ * @property {Array<{field: string, why: string}>} [__ignoredFields] manifest
+ *   fields this CLI drops because it cannot use them (an optional hint, such
+ *   as a themeProvider prop that names no prop) — surfaced as a warning
  * @property {boolean} [__autolinked] loaded because the project declares the
  *   package as a dependency and it ships a manifest, with no astryx.config
  *   entry naming it — see foundation/integrations/autolink.mjs
@@ -101,13 +122,6 @@ import {resolveProviders} from './provider-resolution.mjs';
  *   validated catalog source from the `discover` NAMED export.
  * @property {string} [__discoverError] isolated discover-source validation error.
  */
-
-/** Conventional manifest basenames, in load-precedence order. */
-export const MANIFEST_BASENAMES = [
-  'astryx.integration.ts',
-  'astryx.integration.mjs',
-  'astryx.integration.js',
-];
 
 /**
  * Normalize a package-owned provider ID without rejecting legacy unnamed local
@@ -154,17 +168,6 @@ export function markProviderConflicts(integrations) {
 }
 
 /**
- * Return the conventional root manifest paths present in `dir`, in
- * load-precedence order. Unlike {@link resolveManifestPath} this never throws —
- * callers (for example Doctor integration validation) decide how to treat zero / multiple.
- * @param {string} dir
- * @returns {string[]} absolute manifest paths
- */
-export function findManifestPaths(dir) {
-  return findPresentFiles(dir, MANIFEST_BASENAMES);
-}
-
-/**
  * Parse the optional named gap-report handler without making it part of the
  * default manifest schema. A malformed handler is isolated from every other
  * integration contribution and represented as a failed delivery at fan-out.
@@ -198,7 +201,9 @@ function parseGapReportHandlerExport(value, label) {
 function parseDiscoverSourceExport(value, label) {
   if (value === undefined) return {};
   try {
-    return {source: parseDiscoverSource(value, `${label} named export "discover"`)};
+    return {
+      source: parseDiscoverSource(value, `${label} named export "discover"`),
+    };
   } catch (error) {
     return {error: error instanceof Error ? error.message : String(error)};
   }
@@ -220,7 +225,7 @@ function parseDiscoverSourceExport(value, label) {
  * @param {string} file absolute manifest path
  * @param {string} [label] used in error messages
  * @param {{fresh?: boolean}} [options]
- * @returns {Promise<{manifest: import('../../authoring/integration/type').AstryxIntegration, unknownKeys: string[], declaredKeys: string[], debug?: import('../../authoring/debug/type').DebugEventHandler, gapReport?: import('../../authoring/gap-report/type').GapReportHandler, gapReportError?: string, discover?: import('../../authoring/discover/type').DiscoverSource, discoverError?: string, agentDocsError?: string, cliCommandError?: string}>}
+ * @returns {Promise<{manifest: import('../../authoring/integration/type').AstryxIntegration, unknownKeys: string[], ignoredFields: Array<{field: string, why: string}>, declaredKeys: string[], debug?: import('../../authoring/debug/type').DebugEventHandler, gapReport?: import('../../authoring/gap-report/type').GapReportHandler, gapReportError?: string, discover?: import('../../authoring/discover/type').DiscoverSource, discoverError?: string, agentDocsError?: string, cliCommandError?: string, installGuidanceError?: string}>}
  */
 export async function loadManifest(
   file,
@@ -229,7 +234,8 @@ export async function loadManifest(
 ) {
   const mod = await importUserModule(file, {fresh});
   const raw = mod?.default;
-  if (raw === undefined) throw new Error(noDefaultExportMessage(file, label, mod));
+  if (raw === undefined)
+    throw new Error(noDefaultExportMessage(file, label, mod));
   const baseManifest = parseIntegrationBase(raw, label);
   const gapReport = parseGapReportHandlerExport(mod?.gapReport, label);
   const discover = parseDiscoverSourceExport(mod?.discover, label);
@@ -275,13 +281,37 @@ export async function loadManifest(
     }
   }
 
+  /** @type {string | undefined} */
+  let installGuidance;
+  /** @type {string | undefined} */
+  let installGuidanceError;
+  const rawInstallGuidance =
+    raw != null && typeof raw === 'object' && !Array.isArray(raw)
+      ? /** @type {{installGuidance?: unknown}} */ (raw).installGuidance
+      : undefined;
+  if (rawInstallGuidance !== undefined) {
+    try {
+      installGuidance = parseInstallGuidanceField(
+        rawInstallGuidance,
+        `${label} field "installGuidance"`,
+      );
+    } catch (err) {
+      installGuidanceError = err instanceof Error ? err.message : String(err);
+    }
+  }
+
   return {
     manifest: {
       ...baseManifest,
       ...(agentDocs == null ? {} : {agentDocs}),
       ...(cliCommand == null ? {} : {cliCommand}),
+      ...(installGuidance == null ? {} : {installGuidance}),
     },
-    unknownKeys: unknownIntegrationKeys(raw),
+    unknownKeys: [
+      ...unknownIntegrationKeys(raw),
+      ...unknownCapabilityKeys(raw),
+    ],
+    ignoredFields: ignoredIntegrationFields(raw),
     declaredKeys:
       raw != null && typeof raw === 'object' ? Object.keys(raw) : [],
     debug:
@@ -296,6 +326,7 @@ export async function loadManifest(
     discoverError: discover.error,
     agentDocsError,
     cliCommandError,
+    installGuidanceError,
   };
 }
 
@@ -449,6 +480,8 @@ export async function loadLocalIntegration(packageDir, {fresh = false} = {}) {
   let manifest;
   /** @type {string[]} */
   let unknownKeys;
+  /** @type {Array<{field: string, why: string}>} */
+  let ignoredFields;
   /** @type {string[]} */
   let declaredKeys;
   /** @type {import('../../authoring/debug/type').DebugEventHandler | undefined} */
@@ -465,10 +498,13 @@ export async function loadLocalIntegration(packageDir, {fresh = false} = {}) {
   let agentDocsError;
   /** @type {string | undefined} */
   let cliCommandError;
+  /** @type {string | undefined} */
+  let installGuidanceError;
   try {
     ({
       manifest,
       unknownKeys,
+      ignoredFields,
       declaredKeys,
       debug: debugHandler,
       gapReport: gapReportHandler,
@@ -477,6 +513,7 @@ export async function loadLocalIntegration(packageDir, {fresh = false} = {}) {
       discoverError,
       agentDocsError,
       cliCommandError,
+      installGuidanceError,
     } = await loadManifest(manifestFile, `Integration ${spec}`, {fresh}));
   } catch (err) {
     return {
@@ -512,13 +549,19 @@ export async function loadLocalIntegration(packageDir, {fresh = false} = {}) {
     codemods: resolveRoot(manifest.codemods),
     docs: resolveRoot(manifest.docs),
     themes: resolveRoot(manifest.themes),
+    themeProvider: manifest.themeProvider,
     iconSets: resolveRoot(manifest.experimental?.iconSets),
     issuesUrl: manifest.issuesUrl,
+    logo: manifest.logo,
     agentDocs: manifest.agentDocs,
     cliCommand: manifest.cliCommand,
+    installGuidance: manifest.installGuidance,
+    base: manifest.base,
     __cliCommandError: cliCommandError,
+    __installGuidanceError: installGuidanceError,
     __agentDocsError: agentDocsError,
     __unknownKeys: unknownKeys,
+    __ignoredFields: ignoredFields,
     __declaredKeys: declaredKeys,
     __debug: debugHandler,
     __gapReport: gapReportHandler,
@@ -570,6 +613,8 @@ export async function loadIntegrations(
     let manifest;
     /** @type {string[]} */
     let unknownKeys;
+    /** @type {Array<{field: string, why: string}>} */
+    let ignoredFields;
     /** @type {string[]} */
     let declaredKeys;
     /** @type {import('../../authoring/debug/type').DebugEventHandler | undefined} */
@@ -586,10 +631,13 @@ export async function loadIntegrations(
     let agentDocsError;
     /** @type {string | undefined} */
     let cliCommandError;
+    /** @type {string | undefined} */
+    let installGuidanceError;
     try {
       ({
         manifest,
         unknownKeys,
+        ignoredFields,
         declaredKeys,
         debug: debugHandler,
         gapReport: gapReportHandler,
@@ -598,6 +646,7 @@ export async function loadIntegrations(
         discoverError,
         agentDocsError,
         cliCommandError,
+        installGuidanceError,
       } = await loadManifest(manifestFile, `Integration ${spec}`, {fresh}));
     } catch (err) {
       // A manifest that throws on import or fails schema validation must NOT take
@@ -640,13 +689,19 @@ export async function loadIntegrations(
       codemods: resolveRoot(manifest.codemods),
       docs: resolveRoot(manifest.docs),
       themes: resolveRoot(manifest.themes),
+      themeProvider: manifest.themeProvider,
       iconSets: resolveRoot(manifest.experimental?.iconSets),
       issuesUrl: manifest.issuesUrl,
+      logo: manifest.logo,
       agentDocs: manifest.agentDocs,
       cliCommand: manifest.cliCommand,
+      installGuidance: manifest.installGuidance,
+      base: manifest.base,
       __cliCommandError: cliCommandError,
+      __installGuidanceError: installGuidanceError,
       __agentDocsError: agentDocsError,
       __unknownKeys: unknownKeys,
+      __ignoredFields: ignoredFields,
       __declaredKeys: declaredKeys,
       __debug: debugHandler,
       __gapReport: gapReportHandler,

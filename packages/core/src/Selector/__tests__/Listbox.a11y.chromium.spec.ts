@@ -8,7 +8,7 @@
  * @position Browser binding; keyboard policy, pixels, and real AT remain separate owners.
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test} from '@astryxdesign/a11y-spec/playwright';
 import {
   LISTBOX_PATTERN,
   checkAccessibilitySpec,

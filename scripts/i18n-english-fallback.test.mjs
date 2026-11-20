@@ -222,8 +222,10 @@ describe('findWiringProblems', () => {
 });
 
 describe('import cost', () => {
-  // Same per-component import measurement as the pull-request size report.
-  const {bundleImport} = require('../.github/scripts/lib/component-size.js');
+  // What each component's import loads eagerly, from one build over all six.
+  const {
+    bundleImportsByEntry,
+  } = require('../.github/scripts/lib/component-size.js');
   const enCatalogFile = path.join(
     CORE_DIST,
     'i18n',
@@ -245,18 +247,25 @@ describe('import cost', () => {
   it('bundles only the English a component names, not the whole catalog', () => {
     const keys = loadCatalogKeys();
     expect(keys.length).toBeGreaterThan(100);
-    for (const name of [
-      'Button',
-      'TreeList',
-      'SideNav',
-      'Selector',
-      'Table',
-      'DateInput',
-    ]) {
-      const text = bundleImport(path.join(CORE_DIST, name, `${name}.js`));
-      expect(text, name).not.toBeNull();
-      const bundled = catalogKeysIn(text, keys);
-      expect(bundled.length, name).toBeGreaterThan(0);
+    const entries = new Map(
+      ['Button', 'TreeList', 'SideNav', 'Selector', 'Table', 'DateInput'].map(
+        name => [name, path.join(CORE_DIST, name, `${name}.js`)],
+      ),
+    );
+    // Each text holds at least what the component's own import keeps, so the
+    // upper bound is sound. The lower bound counts only the component's own
+    // keys, which no other component's code can supply.
+    const texts = bundleImportsByEntry([...entries.values()]);
+    expect(texts).not.toBeNull();
+    for (const [name, entry] of entries) {
+      const text = texts?.get(entry);
+      expect(text, name).toBeDefined();
+      const bundled = catalogKeysIn(text ?? '', keys);
+      const own = `@astryx.${name[0].toLowerCase()}${name.slice(1)}.`;
+      expect(
+        bundled.filter(key => key.startsWith(own)).length,
+        name,
+      ).toBeGreaterThan(0);
       expect(bundled.length, name).toBeLessThan(keys.length / 4);
     }
   });

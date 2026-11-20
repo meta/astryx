@@ -169,7 +169,14 @@ export class RichTextExtensionNode extends DecoratorNode<unknown> {
     return {span: importExtensionElement, div: importExtensionElement};
   }
 
-  constructor(facts: RichTextExtensionNodeFacts, format = 0, key?: NodeKey) {
+  // The Yjs binding and `$create` call the constructor with no arguments.
+  // The binding reads each class's default properties from that node.
+  // With no facts, the node gets the values that damaged stored facts get.
+  constructor(
+    facts: RichTextExtensionNodeFacts = factsFrom({}),
+    format = 0,
+    key?: NodeKey,
+  ) {
     super(key);
     this.__facts = facts;
     this.__format = facts.display === 'inline' ? format : 0;

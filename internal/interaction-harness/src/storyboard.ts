@@ -22,7 +22,12 @@
  */
 
 import type {Locator, Page, TestInfo} from '@playwright/test';
-import {holdAnimations, seekAnimations, type HeldAnimation} from './curves';
+import {
+  holdAnimations,
+  seekAnimations,
+  type HeldAnimation,
+  type HoldJudges,
+} from './curves';
 import {timeline} from './math';
 import {writeEvidence} from './output';
 import type {TouchScript} from './scripts';
@@ -55,21 +60,8 @@ export interface StoryboardOptions {
   readonly cellScale?: number;
 }
 
-/**
- * Chromium photographs the page by copying its compositor surface. Right after
- * the page's surface changes (a navigation, a resize) the copy can come back
- * empty, and Chromium answers "Unable to capture screenshot" once its own five
- * retries, issued without waiting for a new frame, have all found no surface.
- * A capture that fails that way is taken again after the page has presented
- * two more frames, at most this many attempts in all.
- */
-const CAPTURE_ATTEMPTS = 3;
-const EMPTY_SURFACE_COPY = /Unable to capture screenshot/;
-
 export class Storyboard {
   readonly frames: StoryboardFrame[] = [];
-  /** Captures Chromium returned empty and that were taken again two frames later. */
-  readonly recaptures: {label: string; error: string}[] = [];
   private clipBox: ClipBox | undefined;
 
   constructor(
@@ -78,9 +70,8 @@ export class Storyboard {
   ) {}
 
   /**
-   * Photographs the clip now and records `data` with it. An empty surface
-   * copy (see CAPTURE_ATTEMPTS) is taken again once the page has presented two
-   * more frames; any other failure, or a third empty copy, throws.
+   * Photographs the clip now and records `data` with it. A capture that
+   * fails throws the engine's error.
    */
   async capture(
     label: string,
@@ -88,25 +79,13 @@ export class Storyboard {
     data: Readonly<Record<string, unknown>> = {},
   ): Promise<void> {
     const clip = await this.resolveClip();
-    for (let attempt = 1; ; attempt += 1) {
-      try {
-        const png = await this.page.screenshot({
-          clip,
-          scale: 'css',
-          animations: 'allow',
-          caret: 'hide',
-        });
-        this.frames.push({label, t, data, png});
-        return;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (attempt >= CAPTURE_ATTEMPTS || !EMPTY_SURFACE_COPY.test(message)) {
-          throw error;
-        }
-        this.recaptures.push({label, error: message.split('\n')[0]});
-        await frames(this.page, 2);
-      }
-    }
+    const png = await this.page.screenshot({
+      clip,
+      scale: 'css',
+      animations: 'allow',
+      caret: 'hide',
+    });
+    this.frames.push({label, t, data, png});
   }
 
   private async resolveClip(): Promise<ClipBox | undefined> {
@@ -152,7 +131,6 @@ export class Storyboard {
       browser: this.page.context().browser()?.browserType().name() ?? null,
       viewport: this.page.viewportSize(),
       clip: this.clipBox ?? null,
-      ...(this.recaptures.length > 0 ? {recaptures: this.recaptures} : {}),
       ...extra,
       frames: this.frames.map(({label, t, data}) => ({label, t, data})),
     };
@@ -258,7 +236,7 @@ async function composeSheet(
   }
 }
 
-export interface AnimationStoryboardOptions extends StoryboardOptions {
+interface AnimationStoryboardBase extends StoryboardOptions {
   /**
    * Frame times, ms from the film's start: the earliest start among the held
    * animations that end (an animation that repeats forever, such as a
@@ -269,15 +247,22 @@ export interface AnimationStoryboardOptions extends StoryboardOptions {
   readonly times?: readonly number[];
   /** Restrict to animations inside this element (when `held` is not passed). */
   readonly scope?: Locator;
-  /**
-   * What an armed hold already took (`armHold`'s `held()`): filmed instead of
-   * holding now, for an animation an action starts that a hold sent after
-   * the action could miss on a loaded runner.
-   */
-  readonly held?: readonly HeldAnimation[];
   /** Measurements per frame (runs after the seek). */
   readonly measure?: () => Promise<Readonly<Record<string, unknown>>>;
 }
+
+/**
+ * Either `held`, what an armed hold already took (`armHold`'s `held()`, which
+ * checked its judged motion): filmed instead of holding now, for an animation
+ * an action starts that a hold sent after the action could miss on a loaded
+ * runner. Or `judges`, the motion the film shows: the film holds now, and
+ * rejects as `holdAnimations` does when it took no animation of it.
+ */
+export type AnimationStoryboardOptions = AnimationStoryboardBase &
+  (
+    | {readonly held: readonly HeldAnimation[]; readonly judges?: undefined}
+    | {readonly held?: undefined; readonly judges: HoldJudges}
+  );
 
 /**
  * Holds every running animation, then seeks them together to each time and
@@ -291,7 +276,7 @@ export async function animationStoryboard(
 ): Promise<{storyboard: Storyboard; held: HeldAnimation[]}> {
   const held = options.held
     ? [...options.held]
-    : await holdAnimations(page, options.scope);
+    : await holdAnimations(page, options.scope, {judges: options.judges});
   if (held.length === 0) {
     throw new Error(`storyboard ${options.name}: no running animation to hold`);
   }

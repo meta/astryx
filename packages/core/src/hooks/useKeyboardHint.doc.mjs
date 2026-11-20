@@ -22,8 +22,8 @@ export const docs = {
     {
       name: 'options.dismissAfterMs',
       type: 'number',
-      description: 'Milliseconds before the hint auto-dismisses after appearing.',
-      default: '3000',
+      description: 'Milliseconds before the hint dismisses itself after appearing. Leave it unset: by default the hint stays until an arrow press, Escape, or blur. A time limit can remove the hint before someone has read it (WCAG 1.4.13).',
+      default: 'undefined (no time limit)',
       required: false,
     },
     {
@@ -58,7 +58,7 @@ export const docs = {
   ],
   usage: {
     description:
-      'Shows an ephemeral "← → to navigate" hint anchored to the focused item the first time a roving-tabindex composite (Toolbar, TabList, SegmentedControl, etc.) receives keyboard focus. It teaches sighted keyboard users that arrow keys move within the group. The hint renders arrow keys with Kbd in the top layer (popover="manual") and is CSS-anchor-positioned to the focused element, so overflow containers never clip it. It auto-dismisses on the first arrow press, on timeout, or on blur, and does not re-show for that instance. Toolbar, TabList, and SegmentedControl wire this in automatically; reach for the hook directly only when building a custom roving-tabindex widget.',
+      'Shows an ephemeral "← → to navigate" hint anchored to the focused item the first time a roving-tabindex composite (Toolbar, TabList, SegmentedControl, etc.) receives keyboard focus. It teaches sighted keyboard users that arrow keys move within the group. The hint renders arrow keys with Kbd in the top layer (popover="manual") and is CSS-anchor-positioned to the focused element, so overflow containers never clip it. It stays until the first arrow press, Escape, or blur, and does not re-show for that instance. Escape closes only the hint, through the shared layer dismissal stack, and keeps focus where it is. Toolbar, TabList, and SegmentedControl wire this in automatically; reach for the hook directly only when building a custom roving-tabindex widget.',
     bestPractices: [
       { guidance: true, description: 'Compose the returned onFocus/onKeyDown with your existing focus handlers rather than replacing them: call onKeyDown first (it only dismisses, never prevents), then your navigation handler.' },
       { guidance: true, description: 'Render hintElement as the last child of the composite container; it is position:fixed in the top layer and aria-hidden, so it never affects layout or the accessibility tree.' },
@@ -75,11 +75,11 @@ export const docs = {
 /** @type {import('@astryxdesign/cli/authoring').HookTranslationDoc} */
 export const docsDense = {
   description:
-    'Ephemeral "← → to navigate" hint anchored to the focused item on first keyboard focus of a roving-tabindex composite (Toolbar/TabList/SegmentedControl). Teaches sighted keyboard users that arrows move within the group. Kbd-rendered arrows in a top-layer popover="manual", CSS-anchor-positioned (never clipped by overflow), aria-hidden. Auto-dismisses on first arrow press, timeout, or blur; never re-shows for that instance.',
+    'Ephemeral "← → to navigate" hint anchored to the focused item on first keyboard focus of a roving-tabindex composite (Toolbar/TabList/SegmentedControl). Teaches sighted keyboard users that arrows move within the group. Kbd-rendered arrows in a top-layer popover="manual", CSS-anchor-positioned (never clipped by overflow), aria-hidden. Stays until first arrow press, Escape, or blur; never re-shows for that instance.',
   paramDescriptions: {
     options: 'config for the keyboard hint.',
     'options.orientation': "arrow axis: 'horizontal' (← →), 'vertical' (↑ ↓), 'both' (all four). Controls shown icons.",
-    'options.dismissAfterMs': 'ms before auto-dismiss after appearing.',
+    'options.dismissAfterMs': 'ms before self-dismiss. Leave unset (default: no time limit, WCAG 1.4.13).',
     'options.isEnabled': 'whether the hint is enabled; false suppresses it (e.g. disabled/read-only widget).',
   },
   returnDescriptions: {
@@ -90,7 +90,7 @@ export const docsDense = {
   },
   usage: {
     description:
-      'Ephemeral "← → to navigate" hint on first keyboard focus of a roving-tabindex composite. Top-layer anchored popover, aria-hidden. Auto-dismisses on first arrow press, timeout, or blur; no re-show. Toolbar/TabList/SegmentedControl wire it in automatically.',
+      'Ephemeral "← → to navigate" hint on first keyboard focus of a roving-tabindex composite. Top-layer anchored popover, aria-hidden. Stays until first arrow press, Escape, or blur; no re-show. Toolbar/TabList/SegmentedControl wire it in automatically.',
     bestPractices: [
       { guidance: true, description: 'Compose returned onFocus/onKeyDown with existing handlers (call onKeyDown first; it only dismisses).' },
       { guidance: true, description: 'Render hintElement as last child; top-layer + aria-hidden, no layout/a11y impact.' },

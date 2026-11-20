@@ -51,8 +51,12 @@
 # appearance-only Core runtime changes.
 #
 # Uses pull_request_target so it can label / request reviewers / disable
-# auto-merge on fork PRs. It reads the PR file list, diff text, and changed Core
-# base/head source bytes as inert API data. The approval helper comes from the
+# auto-merge on fork PRs. An engineering owner's owner command
+# (`/approve-spec`, `/revoke-spec`, an issue_comment in the base context) also
+# runs it, so the command re-evaluates the code half on a fork PR whose review
+# event GitHub held for approval. It reads the PR file list, diff text, changed Core
+# base/head source bytes, and the base/head bytes of each changed file that holds a
+# CSS-named line (the classifier's style-context test) as inert API data. The approval helper comes from the
 # trusted workflow SHA; the visual classifier comes from the PR base ref. It reads
 # eng/design owner lists from repository VARIABLES (vars.ENGOWNERS /
 # vars.DESIGNOWNERS) — no checkout and no execution of PR-controlled code.
@@ -69,8 +73,10 @@ on:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   pull_request_review:
     types: [submitted, dismissed]
-  # Owner commands for the spec-owner job. The job-level filter skips every
-  # other comment before a runner starts.
+  # Owner commands for the spec-owner job, which also run the flag job so the
+  # command re-evaluates both halves of the gate (a fork's review event can be
+  # held for approval). The job-level filters skip every other comment before a
+  # runner starts.
   issue_comment:
     types: [created]
   # Manual re-trigger. The App only auto-runs on the PR events above, so if it
@@ -106,12 +112,18 @@ jobs:
     if: >-
       github.event_name == 'pull_request_target'
       || github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'issue_comment'
+          && github.event.issue.pull_request != null
+          && (startsWith(github.event.comment.body, '/approve-spec')
+              || startsWith(github.event.comment.body, '/revoke-spec')))
     name: Flag review signals
     runs-on: ubuntu-slim
     # Per PR (run-scoped for backfill-all). Only this job cancels: a cancelled
-    # spec-owner reconcile could leave its head without a terminal status.
+    # spec-owner reconcile could leave its head without a terminal status. An
+    # owner-command run is run-scoped too, so a comment never cancels a pull
+    # request event's run (which may be the only writer of a new head's gate).
     concurrency:
-      group: review-signal-${{ github.event.pull_request.number || github.event.inputs.pr || github.run_id }}
+      group: review-signal-${{ github.event_name == 'issue_comment' && format('command-{0}', github.run_id) || github.event.pull_request.number || github.event.inputs.pr || github.run_id }}
       cancel-in-progress: true
     permissions:
       pull-requests: write
@@ -157,6 +169,21 @@ jobs:
             const DESIGN = process.env.DESIGN_LABEL;
             const COMMUNITY = process.env.COMMUNITY_LABEL;
 
+            // Owner handles from a repository variable. An empty or unset
+            // list throws: it is a configuration error, never "no owners"
+            // (see flagOne).
+            function parseHandles(text) {
+              return ((text || '').match(/@?[A-Za-z0-9-]+/g) || [])
+                .map((h) => h.replace(/^@/, '').toLowerCase());
+            }
+            function ownersFromVar(name) {
+              const handles = parseHandles(process.env[name]);
+              if (!handles.length) {
+                throw new Error(`Owner variable ${name} is empty or unset — refusing to bucket authors from an empty list.`);
+              }
+              return handles;
+            }
+
             // Resolve which PR(s) to flag. On a PR event we get the payload PR.
             // On manual dispatch we take the `pr` input (one PR), or re-flag
             // every open PR when it's blank (backfill / mass recovery).
@@ -193,6 +220,21 @@ jobs:
                     `${open.length} open PR(s); ${open.length - ready.length} draft(s) skipped.`,
                 );
               }
+            } else if (context.eventName === 'issue_comment') {
+              // An engineering owner's owner command re-evaluates the code
+              // half from the PR's reviews: GitHub can hold a fork's
+              // pull_request_review run for approval, so the approval alone
+              // may never reach the gate. Anyone else's command changes
+              // nothing here.
+              const commenter = (context.payload.comment?.user?.login || '').toLowerCase();
+              if (!ownersFromVar('ENG_OWNERS').includes(commenter)) {
+                core.info(`@${commenter} is not an engineering owner; the code half is unchanged.`);
+                return;
+              }
+              const { data } = await github.rest.pulls.get({
+                owner, repo, pull_number: context.payload.issue.number,
+              });
+              prs = [data];
             } else {
               prs = [context.payload.pull_request];
             }
@@ -254,17 +296,6 @@ jobs:
             // per-PR try/catch then skips this PR, LEAVES ITS GATE UNTOUCHED
             // (never a false success), and fails the run visibly. An unreadable
             // owner list is never "no owners".
-            function parseHandles(text) {
-              return ((text || '').match(/@?[A-Za-z0-9-]+/g) || [])
-                .map((h) => h.replace(/^@/, '').toLowerCase());
-            }
-            function ownersFromVar(name) {
-              const handles = parseHandles(process.env[name]);
-              if (!handles.length) {
-                throw new Error(`Owner variable ${name} is empty or unset — refusing to bucket authors from an empty list.`);
-              }
-              return handles;
-            }
             const engOwners = ownersFromVar('ENG_OWNERS');
             const designOwners = ownersFromVar('DESIGN_OWNERS');
             const authorIsEng = engOwners.includes(author);
@@ -323,7 +354,8 @@ jobs:
 
             // Bot PRs: no gate, no community label. Set the check to success so
             // a required "review-required" doesn't block them, drop any stray
-            // gate/community labels, and stop.
+            // gate/community labels, and stop. A pull request the review app
+            // opens instead waits for a trainer pass (spec:AST-030 FR15).
             if (authorIsBot) {
               core.info(`@${author} is a bot — exempt from review gates.`);
               const current = pr.labels.map((l) => l.name);
@@ -338,15 +370,60 @@ jobs:
                   }
                 }
               }
+              if (reviewDecision.needsTrainerPass({author, reviewApp: process.env.REVIEW_APP})) {
+                let passed = false;
+                try {
+                  const reviews = await github.paginate(github.rest.pulls.listReviews, {
+                    owner, repo, pull_number: pr.number, per_page: 100,
+                  });
+                  passed = reviewDecision.trainerPassed({reviews, headSha: pr.head.sha, engOwners});
+                } catch (e) {
+                  core.warning(`Could not read exact-head reviews; the trainer pass stays pending: ${e.message}`);
+                }
+                core.info(`@${author} is the review app — trainer pass ${passed ? 'given' : 'pending'}.`);
+                await publishReviewGate(
+                  !passed,
+                  passed
+                    ? reviewDecision.OWNER_CLEARED_TEXT
+                    : reviewDecision.TRAINER_WAITING_TEXT,
+                );
+                return;
+              }
               await publishReviewGate(false, 'Automated (bot) PR — exempt from code review.');
               return;
             }
 
 
-            // --- Changed files. ---
-            const allFiles = await github.paginate(github.rest.pulls.listFiles, {
-              owner, repo, pull_number: pr.number, per_page: 100,
-            });
+            // --- Changed files, at the event's head. ---
+            // The status and its diff always describe the event's head: the
+            // compare of the event's base and head SHAs names that head's
+            // files, while the pull request's own lists can already show a
+            // newer push. A compare names at most COMPARE_FILES files, so a
+            // larger pull request reads its file list and then confirms that
+            // the pull request still points at the event's head.
+            const COMPARE_FILES = 300;
+            const basehead = `${pr.base.sha}...${pr.head.sha}`;
+            let allFiles;
+            if (pr.changed_files <= COMPARE_FILES) {
+              const { data: compared } =
+                await github.rest.repos.compareCommitsWithBasehead({
+                  owner, repo, basehead,
+                });
+              allFiles = compared.files ?? [];
+            } else {
+              allFiles = await github.paginate(github.rest.pulls.listFiles, {
+                owner, repo, pull_number: pr.number, per_page: 100,
+              });
+              const { data: current } = await github.rest.pulls.get({
+                owner, repo, pull_number: pr.number,
+              });
+              if (current.head.sha !== pr.head.sha) {
+                core.info(
+                  `PR #${pr.number} moved from ${pr.head.sha} to ${current.head.sha} while its files were read; the run for the newer head decides.`,
+                );
+                return;
+              }
+            }
             if (allFiles.length !== pr.changed_files) {
               throw new Error(
                 `GitHub returned ${allFiles.length} of ${pr.changed_files} changed files; refusing to classify an incomplete PR.`,
@@ -447,8 +524,13 @@ jobs:
             // It and the diff both come from the API: trusted BASE-ref source,
             // inert PR diff text. Any fetch or parse failure keeps the exception
             // false, so Core runtime changes continue to require engineering.
+            // A diff of more files than a compare names is never classified,
+            // so the exception stays false.
             let visualClassification = null;
-            if (coreChange || designReasons.length === 0) {
+            if (
+              (coreChange || designReasons.length === 0) &&
+              pr.changed_files <= COMPARE_FILES
+            ) {
               try {
                 const { data: libFile } = await github.rest.repos.getContent({
                   owner, repo, ref: pr.base.sha,
@@ -461,8 +543,8 @@ jobs:
                   () => { throw new Error('classify-visual.js must stay dependency-free'); },
                 );
                 const { data: diff } = await github.request(
-                  'GET /repos/{owner}/{repo}/pulls/{pull_number}',
-                  { owner, repo, pull_number: pr.number,
+                  'GET /repos/{owner}/{repo}/compare/{basehead}',
+                  { owner, repo, basehead,
                     headers: { accept: 'application/vnd.github.diff' } },
                 );
                 const sources = {};
@@ -506,9 +588,35 @@ jobs:
                   ]);
                   sources[file.filename] = {base: baseSource, head: headSource};
                 }
+                // A CSS-named key scores only in a style context of its file
+                // at its own revision (the classifier's styleContextLines),
+                // so read each file that holds one, at each side it changed.
+                // A file that cannot be read keeps scoring as a style edit.
+                const styleSources = {};
+                // A classifier from a base older than the style-context test
+                // has no styleContextPaths; it then counts as it did.
+                const needed =
+                  typeof mod.exports.styleContextPaths === 'function'
+                    ? mod.exports.styleContextPaths(String(diff), {ignorePath: isSafeSpace})
+                    : {};
+                for (const [filePath, sides] of Object.entries(needed)) {
+                  styleSources[filePath] = {};
+                  for (const [side, repoName, ref] of [
+                    ['base', pr.base.repo.full_name, pr.base.sha],
+                    ['head', pr.head.repo.full_name, pr.head.sha],
+                  ]) {
+                    if (!sides[side]) continue;
+                    try {
+                      styleSources[filePath][side] = await readSource(repoName, ref, filePath);
+                    } catch (e) {
+                      core.info(`No ${side} bytes for ${filePath}: ${e.message}`);
+                    }
+                  }
+                }
                 visualClassification = mod.exports.classifyVisualDiff(String(diff), {
                   ignorePath: isSafeSpace,
                   sources,
+                  styleSources,
                 });
                 core.info(`visual content score: ${visualClassification.score} (${visualClassification.bucket}); appearanceOnly=${visualClassification.appearanceOnly}`);
                 if (

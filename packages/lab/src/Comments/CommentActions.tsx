@@ -4,15 +4,16 @@
 
 /**
  * @file CommentActions.tsx
- * @input Uses React, React DOM flushSync, StyleX, IconButton, Button, Tooltip,
- *   ToggleButton, OverflowList, DropdownMenu, Popover, Text
+ * @input Uses React, React DOM flushSync, StyleX, Core's internal
+ *   useClipboardCopy, IconButton,
+ *   Button, Tooltip, ToggleButton, OverflowList, DropdownMenu, Popover, Text
  * @output Exports CommentActions (a comment's header actions), ReactionSummary
  *   (its reaction toggles), and the action-lookup helpers rows use for focus
  *   hand-offs
  * @position Internal parts of a comment row in the Comments family
  */
 
-import {useCallback, useEffect, useRef, useState, type ReactNode} from 'react';
+import {useCallback, useRef, useState, type ReactNode} from 'react';
 import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '@astryxdesign/core/Button';
@@ -21,6 +22,7 @@ import {
   type DropdownMenuOption,
 } from '@astryxdesign/core/DropdownMenu';
 import {Icon} from '@astryxdesign/core/Icon';
+import {useClipboardCopy} from '@astryxdesign/core/internal/clipboard-copy';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {OverflowList, type OverflowItem} from '@astryxdesign/core/OverflowList';
@@ -35,7 +37,6 @@ import {CommentIcon} from './icons';
 import {commentAnchorId, type AnyComment} from './utils';
 import type {CommentReaction, CommentReactionOption} from './types';
 
-const LINK_COPIED_RESET_MS = 2_000;
 const MORE_MENU_MIN_WIDTH = `calc(${spacingVars['--spacing-8']} * 5)`;
 
 const styles = stylex.create({
@@ -256,50 +257,36 @@ export function CommentActions({
   resolveAction?: ResolveAction;
 }) {
   const t = useTranslator();
-  const [isLinkCopied, setIsLinkCopied] = useState(false);
+  const linkCopyFailedLabel = t('@astryx.comments.linkCopyFailed');
+  const {
+    copy: copyToClipboard,
+    isCopied: isLinkCopied,
+    isFailed: isLinkCopyFailed,
+  } = useClipboardCopy({announceFailure: linkCopyFailedLabel});
   const [isLinkTooltipOpen, setIsLinkTooltipOpen] = useState(false);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(NO_COLLAPSED_ACTIONS);
   const clusterRef = useRef<HTMLElement | null>(null);
   const href = `#${commentAnchorId(comment.id)}`;
-  const linkLabel = isLinkCopied
-    ? t('@astryx.comments.linkCopied')
-    : t('@astryx.comments.copyLink');
+  const linkLabel = isLinkCopyFailed
+    ? linkCopyFailedLabel
+    : isLinkCopied
+      ? t('@astryx.comments.linkCopied')
+      : t('@astryx.comments.copyLink');
   const resolveLabel = t('@astryx.comments.resolve');
   const reopenLabel = t('@astryx.comments.reopen');
   const replyLabel = t('@astryx.comments.reply');
   const addReactionLabel = t('@astryx.comments.addReaction');
-  // A check mark says the copy worked until the label resets.
-  const linkIcon = isLinkCopied ? (
+  const linkIcon = isLinkCopyFailed ? (
+    <Icon icon="close" color="secondary" />
+  ) : isLinkCopied ? (
     <Icon icon="check" color="secondary" />
   ) : (
     <CommentIcon name="copyLink" />
   );
 
-  const copyCommentLink = async () => {
-    if (navigator.clipboard == null) {
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(
-        new URL(href, window.location.href).href,
-      );
-      setIsLinkCopied(true);
-    } catch {
-      setIsLinkCopied(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!isLinkCopied) {
-      return;
-    }
-    const timer = window.setTimeout(
-      () => setIsLinkCopied(false),
-      LINK_COPIED_RESET_MS,
-    );
-    return () => window.clearTimeout(timer);
-  }, [isLinkCopied]);
+  const copyCommentLink = async () =>
+    copyToClipboard(new URL(href, window.location.href).href);
 
   const changePicker = (isOpen: boolean) => {
     setIsPickerOpen(isOpen);
@@ -472,16 +459,19 @@ export function CommentActions({
           <CommentActionSlot key="link" data-comment-action="link">
             <Tooltip
               content={linkLabel}
-              // A press hides a hover tooltip; this one stays open while the
-              // link reads as copied, so the press visibly worked.
-              isOpen={isLinkCopied || isLinkTooltipOpen}
+              // A press hides a hover tooltip. This one stays open while the
+              // link reads as copied or failed, so the press visibly did
+              // something.
+              isOpen={isLinkCopied || isLinkCopyFailed || isLinkTooltipOpen}
               onOpenChange={setIsLinkTooltipOpen}>
               <IconButton
                 label={linkLabel}
                 variant="ghost"
                 size="sm"
                 data-comment-action="link"
-                data-link-copied={isLinkCopied ? 'true' : undefined}
+                data-link-copied={
+                  isLinkCopied && !isLinkCopyFailed ? 'true' : undefined
+                }
                 icon={linkIcon}
                 onClick={() => void copyCommentLink()}
               />
