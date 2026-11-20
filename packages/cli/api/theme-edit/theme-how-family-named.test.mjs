@@ -382,6 +382,22 @@ describe('a lone color that names a role or variant', () => {
   }, 240_000);
 });
 
+describe('a lone color the accent dial does not take', () => {
+  it('fills the part as before: a modified, two-word or light hue', async () => {
+    for (const [ask, ink] of [
+      ['bigger buttons, bright red', '#dc2626'],
+      ['bigger buttons, teal blue', '#0d9488'],
+      ['bigger buttons, light blue', '#dbeafe'],
+    ]) {
+      const lines = writes(await how('q0', ask)).join('\n');
+      expect(lines, ask).toMatch(
+        new RegExp(`background-color '${ink}' --on button`),
+      );
+      expect(lines, ask).not.toMatch(/^set q0 (?:accent|neutral) /m);
+    }
+  }, 240_000);
+});
+
 describe('a color inside a look', () => {
   it("is the look's tint, never a lone color piece", async () => {
     const glass = writes(

@@ -8686,6 +8686,33 @@ export function draftAnswer(ctx, env, question) {
       Boolean(n?.colors.length && ROLE_OR_VARIANT.test(n.text))
     );
   };
+  // (Whether the accent dial takes a piece's color: one named color said
+  // alone, with a hue, neither light nor muted. "bright red", "teal blue"
+  // and "light blue" are not, so they keep the part's own reading.)
+  const accentTakes = (/** @type {Clause} */ c) => {
+    const found = colorsFound(c.text);
+    if (found.length !== 1 || found[0][2]) return false;
+    const words = c.text
+      .toLowerCase()
+      .replace(/[.!,]/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean);
+    if (
+      !words.every(
+        w =>
+          colorsIn(w).length > 0 ||
+          new RegExp(`^(?:${SHADE_WORDS})$`).test(w) ||
+          /^(?:an?|the)$/.test(w),
+      )
+    )
+      return false;
+    const rgb = parseColor(found[0][1]);
+    if (!rgb) return false;
+    const hi = Math.max(...rgb.slice(0, 3));
+    const lo = Math.min(...rgb.slice(0, 3));
+    if (hi - lo < 12 && (lo > 235 || hi < 20)) return false;
+    return !(hi - lo < 64 && hi > 120);
+  };
   /**
    * The clause-scope reader: whether a clause that names no part takes the
    * part (and state) of the clause before it, or is the whole theme's.
@@ -8735,6 +8762,7 @@ export function draftAnswer(ctx, env, question) {
     if (
       accentParts(before.parts) &&
       !namesARole(c) &&
+      accentTakes(c) &&
       j.sep === 'comma' &&
       j.list == null &&
       c.colors.length &&
@@ -9340,7 +9368,11 @@ export function draftAnswer(ctx, env, question) {
     // (Only after a part that draws with the accent is a lone color the
     // accent; after any other part it reads as it always has.)
     const ownPiece =
-      pieceOfList && !own && accentParts(prevParts) && !namesARole(c);
+      pieceOfList &&
+      !own &&
+      accentParts(prevParts) &&
+      !namesARole(c) &&
+      accentTakes(c);
     if (
       !ownLook &&
       !ownPiece &&
