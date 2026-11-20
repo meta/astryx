@@ -54,6 +54,7 @@ import {
   mergeProps,
   observeResize,
   themeProps,
+  warnOnce,
 } from '@astryxdesign/core/utils';
 import {
   DEFAULT_PLAYBACK_RATES,
@@ -725,12 +726,23 @@ function MarkerButton({
   const loadPopover = (openOnLoad: boolean) => {
     void markerPopover.load().then(
       module => {
+        // A marker removed while its popover loaded opens nothing.
+        if (buttonRef.current == null) {
+          return;
+        }
         setLoadedPopover(() => module.default);
         if (openOnLoad) {
           setOpen(true);
         }
       },
-      () => {},
+      (error: unknown) => {
+        warnOnce(
+          'media-marker-popover-load',
+          'MediaTimeSlider',
+          "A marker's popover did not load. The marker still jumps to its time; the next press tries again.",
+          error,
+        );
+      },
     );
   };
   const button = (

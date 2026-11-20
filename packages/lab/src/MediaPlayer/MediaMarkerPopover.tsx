@@ -17,7 +17,7 @@ import type {ReactNode, RefObject} from 'react';
 import {Popover} from '@astryxdesign/core/Popover';
 
 export interface MediaMarkerPopoverProps {
-  anchorRef: RefObject<HTMLElement>;
+  anchorRef: RefObject<HTMLElement | null>;
   label: string;
   content: ReactNode;
   width: number;
@@ -38,7 +38,9 @@ export default function MediaMarkerPopover({
 }: MediaMarkerPopoverProps) {
   return (
     <Popover
-      anchorRef={anchorRef}
+      // Popover's prop type predates nullable refs; it reads the ref after
+      // mount and skips a null one.
+      anchorRef={anchorRef as RefObject<HTMLElement>}
       label={label}
       content={content}
       placement="above"

@@ -78,11 +78,20 @@ describe('marker popover loaded on demand', () => {
     // The button carries its popover contract before the popover loads.
     expect(marker).toHaveAttribute('aria-haspopup', 'dialog');
     expect(marker).toHaveAttribute('aria-expanded', 'false');
+    expect(marker).not.toHaveAttribute('aria-controls');
 
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     await user.click(marker);
     expect(clip.getCurrentTime()).toBe(20);
     await waitFor(() => expect(popoverLoad.attempts).toBeGreaterThan(0));
     await act(async () => {});
+    // Development builds warn once, however many loads failed.
+    expect(
+      warn.mock.calls.filter(([message]) =>
+        String(message).includes("A marker's popover did not load"),
+      ),
+    ).toHaveLength(1);
+    warn.mockRestore();
     // The failed load left the player and its marker in place.
     expect(container.querySelector('video')).not.toBeNull();
     expect(screen.getByRole('button', {name: 'Lin: hold on this'})).toBe(
@@ -103,5 +112,14 @@ describe('marker popover loaded on demand', () => {
     await waitFor(() =>
       expect(marker).toHaveAttribute('aria-expanded', 'true'),
     );
+
+    // Closed again, the loaded marker carries the same ARIA as before the
+    // load: no reference to the closed popover.
+    await user.click(marker);
+    await waitFor(() =>
+      expect(marker).toHaveAttribute('aria-expanded', 'false'),
+    );
+    expect(marker).toHaveAttribute('aria-haspopup', 'dialog');
+    expect(marker).not.toHaveAttribute('aria-controls');
   });
 });
