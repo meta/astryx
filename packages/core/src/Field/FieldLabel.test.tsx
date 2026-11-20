@@ -44,7 +44,7 @@ describe('FieldLabel', () => {
     expect(declaredValue(label, 'color')).toBe('var(--color-text-primary)');
     expect(
       declaredValue(
-        screen.getByText('We never share it').parentElement,
+        screen.getByText('We never share it').parentElement!,
         'color',
       ),
     ).toBe('var(--color-text-secondary)');
