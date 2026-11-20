@@ -549,4 +549,25 @@ describe('per-side border asks', () => {
     },
     T,
   );
+
+  it(
+    'keeps the inputs light-only, and a light run on secondary buttons',
+    async () => {
+      if (unbuilt) return;
+      // (Most inputs draw a line around: the dark mode keeps theirs.)
+      expect(
+        (await first('inputs with a 2px #eeeeee #eeeeee #dddddd border')).join(
+          '\n',
+        ),
+      ).toMatch(
+        /^border-color '#eeeeee #eeeeee #dddddd' --on inputs --mode light$/m,
+      );
+      expect(
+        await first('secondary buttons with a #eee #eee #ddd border'),
+      ).toEqual([
+        "border-color '#eee #eee #ddd' --on button --when variant:secondary --mode light",
+      ]);
+    },
+    T,
+  );
 });

@@ -29763,7 +29763,9 @@ export function draftAnswer(ctx, env, question) {
                   // (A look whose only line is a group seam, a secondary
                   // button's, draws none around itself: its dark border
                   // is its text color.)
-                  !(FAMILIES[lineOn] ?? [one(lineOn)]).every(m =>
+                  // (A group, the inputs: when any member draws one, the
+                  // dark mode keeps the group's own line.)
+                  !(FAMILIES[lineOn] ?? [one(lineOn)]).some(m =>
                     drawsLineAround(ctx, m, st.state, w || undefined),
                   ),
               )

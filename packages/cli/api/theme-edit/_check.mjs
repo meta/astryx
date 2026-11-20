@@ -3685,6 +3685,10 @@ export function borderFor(ctx, slug, data, s) {
    */
   const draws = t =>
     drawsLineAround(ctx, t, s.state, s.when) ||
+    // (A color for one mode on a look that draws a group seam brings no
+    // border: one written for every mode would hide the other mode's seam.)
+    (!!s.mode &&
+      drawsLine(ctx.C, [t], 'border', null, s.when ?? defaultLook(ctx, t))) ||
     bordersBeyondCore(
       ctx,
       data,

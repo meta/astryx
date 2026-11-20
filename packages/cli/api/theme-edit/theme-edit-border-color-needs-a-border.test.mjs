@@ -233,6 +233,31 @@ describe('a none that turns off only part of the border', () => {
   );
 });
 
+describe('a one-mode color on a look that draws a group seam', () => {
+  it(
+    "brings no border, so the other mode keeps Core's seam",
+    async () => {
+      const light = await themeEditSet('u', 'border-color', '#eeeeee', {
+        cwd,
+        on: 'button',
+        when: 'variant:secondary',
+        mode: 'light',
+      });
+      expect(light.data.notes.join('\n')).not.toContain('added a');
+      await themeEditUndo('u', {cwd});
+      // (For every mode, the border is brought.)
+      const both = await themeEditSet('u', 'border-color', '#999999', {
+        cwd,
+        on: 'button',
+        when: 'variant:secondary',
+      });
+      expect(both.data.notes.join('\n')).toContain('added a');
+      await themeEditUndo('u', {cwd});
+    },
+    T,
+  );
+});
+
 describe("how's check", () => {
   it(
     'writes a color the theme saves already after the border it brings',
