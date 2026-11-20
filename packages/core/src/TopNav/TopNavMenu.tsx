@@ -56,6 +56,11 @@ import {
   typeScaleVars,
 } from '../theme/tokens.stylex';
 import {isRenderable} from '../utils/isRenderable';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 // =============================================================================
 // Styles
@@ -371,6 +376,13 @@ export function TopNavMenu({
   onMouseLeave: onMouseLeaveProp,
   ...rest
 }: TopNavMenuProps) {
+  if (process.env.NODE_ENV !== 'production' && !Array.isArray(items)) {
+    throw devPropError(
+      'TopNavMenu',
+      'items',
+      "must be an array of menu items, for example items={[{title: 'Docs', href: '/docs'}]}. TopNavMenu does not read children.",
+    );
+  }
   const pressable = usePressFeedback();
   const renderMode = useTopNavRenderMode();
   const closeDrawerAfter = useCloseMobileDrawerOnActivate(

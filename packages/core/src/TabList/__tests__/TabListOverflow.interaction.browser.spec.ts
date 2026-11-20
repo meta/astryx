@@ -7,7 +7,8 @@
  *   (`* { min-width: 0 }`)
  * @output Proof that every stop in an overflowing strip, each hugging tab
  *   and a TabMenu trigger, keeps at least its content's width while the
- *   strip scrolls
+ *   strip scrolls, and that the forward arrow key moves focus onto an
+ *   overflowed tab and scrolls it into view, left to right and right to left
  * @position Layout evidence for Tab's and TabMenu's hug sizing in
  *   /packages/core/src/TabList
  */
@@ -97,3 +98,82 @@ test('in a narrow strip with a TabMenu, the menu trigger keeps its width too', a
     expect(stop.width, stop.label).toBeGreaterThanOrEqual(stop.content - 1);
   }
 });
+
+for (const direction of ['ltr', 'rtl'] as const) {
+  test(`the forward arrow from the last visible tab focuses and reveals the next one (${direction})`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({width: 390, height: 700});
+    const params = new URLSearchParams({
+      id: 'core-tablist--overflow',
+      viewMode: 'story',
+      globals: `direction:${direction}`,
+    });
+    await page.goto(`${storybook.origin}/iframe.html?${params}`);
+    await page.locator('.astryx-tab-strip').first().waitFor();
+    const forward = direction === 'rtl' ? 'ArrowLeft' : 'ArrowRight';
+    const stripDirection = await page.evaluate(() => {
+      const strip = document.querySelector('.astryx-tab-strip');
+      return strip == null ? '' : getComputedStyle(strip).direction;
+    });
+    expect(stripDirection).toBe(direction);
+
+    /** Each tab's label and whether the strip's scroller shows all of it. */
+    const tabsInView = async () =>
+      page.evaluate(() => {
+        const tabs = [
+          ...document.querySelectorAll<HTMLElement>(
+            '.astryx-tab-strip [role="tab"], .astryx-tab-strip button',
+          ),
+        ];
+        let scroller: HTMLElement | null =
+          document.querySelector<HTMLElement>('.astryx-tab-strip');
+        while (
+          scroller != null &&
+          scroller.scrollWidth <= scroller.clientWidth + 1
+        ) {
+          scroller = scroller.parentElement;
+        }
+        const view = (scroller ?? document.body).getBoundingClientRect();
+        return tabs.map(tab => {
+          const r = tab.getBoundingClientRect();
+          return {
+            label: tab.innerText.trim(),
+            visible: r.left >= view.left - 1 && r.right <= view.right + 1,
+            focused: tab === document.activeElement,
+          };
+        });
+      });
+
+    const before = await tabsInView();
+    const lastVisible = before.map(tab => tab.visible).lastIndexOf(true);
+    expect(lastVisible).toBeLessThan(before.length - 1);
+    // Enter the strip from the keyboard, then arrow to the last visible tab.
+    await page.keyboard.press('Tab');
+    const enteredStrip = await page.evaluate(
+      () =>
+        document.activeElement?.closest('.astryx-tab-strip') != null &&
+        document.activeElement.getAttribute('tabindex') === '0',
+    );
+    expect(enteredStrip).toBe(true);
+    for (let i = 0; i < 20; i += 1) {
+      const now = await tabsInView();
+      if (now.findIndex(tab => tab.focused) >= lastVisible) {
+        break;
+      }
+      await page.keyboard.press(forward);
+    }
+    // The next tab is still hidden just before the last press.
+    expect((await tabsInView())[lastVisible + 1].visible).toBe(false);
+    await page.keyboard.press(forward);
+    await page.waitForTimeout(400);
+    const after = await tabsInView();
+    const focused = after.findIndex(tab => tab.focused);
+    test.info().annotations.push({
+      type: `overflow-arrow-${direction}`,
+      description: JSON.stringify({lastVisible, focused, tab: after[focused]}),
+    });
+    expect(focused).toBe(lastVisible + 1);
+    expect(after[focused].visible).toBe(true);
+  });
+}

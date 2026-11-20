@@ -397,7 +397,11 @@ This record does not own:
   including portable and theme-local declarations in the same scoped block.
 - `Theme.tsx` mounts compiled CSS for themes that were not built ahead of time.
 - `derivedVarRegistry.ts` owns checked mappings from guaranteed public properties
-  to private component variables.
+  to private component variables. A style key's pseudo-class blocks (`:hover`)
+  lower like its resting rule (derived variables, `replaces`, container
+  padding) at the root, in adaptations and on media surfaces, after the
+  boundary check (INV13) reads their declarations as authored; a
+  pseudo-element block (`::before`) is another box and is written as authored.
 - Component `.doc.mjs` `theming.derived[]` mirrors those mappings;
   `theming.vars[]` distinguishes reviewed public semantic variables from private
   implementation variables.
@@ -475,13 +479,6 @@ shipped behavior does not yet conform and must not be treated as enforcement:
   it. Runtime `defineTheme` has no equivalent validation and accepts them. The
   follow-up must reject direct private variables recursively before CSS
   generation across both paths and prove runtime/static parity.
-- **Nested pseudo component declarations bypass derived expansion.** Top-level
-  component declarations at the root, in adaptations, and under
-  `onDark.components` / `onLight.components` use `derivedVarRegistry`, including
-  `replaces` and container expansion. Nested pseudo declarations on those
-  surfaces still serialize properties directly. The follow-up must route nested
-  pseudos through the same component-declaration lowering path, with parity
-  fixtures for a normal mapping, `replaces`, and container padding.
 - **Guaranteed-property coverage is not machine-complete.** The shared catalog is
   normative, but the component-doc schema has no per-target
   `guaranteedProperties` declarations. CI therefore cannot prove that a target

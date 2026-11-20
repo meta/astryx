@@ -416,6 +416,12 @@ export const docs = {
         description:
           'A button that removes all selected tokens at once. Shown when hasClear is true and tokens are present.',
       },
+      {
+        name: 'Status icon',
+        required: false,
+        description:
+          'Error, warning, or success icon at the end of the field. With statusVariant tooltip it is a button that reveals the status message.',
+      },
     ],
   },
 };
@@ -779,6 +785,12 @@ export const docsZh = {
         required: false,
         description:
           'A button that removes all selected tokens at once. Shown when hasClear is true and tokens are present.',
+      },
+      {
+        name: 'Status icon',
+        required: false,
+        description:
+          'Error, warning, or success icon at the end of the field. With statusVariant tooltip it is a button that reveals the status message.',
       },
     ],
   },
