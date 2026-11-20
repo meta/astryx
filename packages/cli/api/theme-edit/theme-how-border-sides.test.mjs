@@ -720,9 +720,14 @@ describe('per-side border asks', () => {
       const lines = await first(ask);
       // (No border brought: the default card draws one.)
       expect(lines.join('\n')).not.toMatch(/border-width|border-style/);
-      expect(await said(ask)).toMatch(
-        /card looks .*draw no border, so the colors show on the others; to give one a border: .* border 'var\(--border-width\) solid #999999' --on card --when variant:/,
+      const text = await said(ask);
+      expect(text).toMatch(
+        /card looks .*draw no border, so the colors show on the others; to give one a border: `[^`]*experimental theme editor set \S+ border 'var\(--border-width\) solid #999999' --on card --when variant:[a-z-]+`/,
       );
+      // (The line is closed by its own quotes: pasted, it runs as written.)
+      const line =
+        /`([^`]*experimental theme editor set [^`]+)`/.exec(text)?.[1] ?? '';
+      expect(line).toMatch(/ --when variant:[a-z-]+$/);
       // (A light run: one border, drawn on every card look, no note.)
       expect(await said('cards with a #eee #eee #ddd border')).not.toMatch(
         /draw no border/,

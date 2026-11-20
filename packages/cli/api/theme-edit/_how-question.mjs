@@ -24144,7 +24144,7 @@ export function draftAnswer(ctx, env, question) {
             ? lineLessLooks(one(on), f.state)
             : [];
         const lookNote = undrawnLooks.length
-          ? ` (${one(on)} looks ${undrawnLooks.slice(0, 4).join(', ')}${undrawnLooks.length > 4 ? ` and ${undrawnLooks.length - 4} more` : ''} draw no border, so the colors show on the others; to give one a border: astryx experimental theme editor set ${env.slug} border 'var(--border-width) solid ${perSide?.[0]}' --on ${one(on)} --when variant:${undrawnLooks[0]})`
+          ? ` (${one(on)} looks ${undrawnLooks.slice(0, 4).join(', ')}${undrawnLooks.length > 4 ? ` and ${undrawnLooks.length - 4} more` : ''} draw no border, so the colors show on the others; to give one a border: \`astryx experimental theme editor set ${env.slug} border 'var(--border-width) solid ${perSide?.[0]}' --on ${one(on)} --when variant:${undrawnLooks[0]}\`)`
           : '';
         if (perSide && c.lengths.length <= 1)
           return {
