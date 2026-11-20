@@ -1535,6 +1535,8 @@ checks there.
 
 Rejected: a physical Android phone as a gate or as a follow-up check.
 
+**Amended:** `cixzhang`, `2026-11-20 06:52:56 PT` (decision 2362476457883221, option A): a run on a real Pixel counts as Android evidence the same as an emulator run, under the same checks: the pinned test kit, raw logs, the evidence verifier, and one spot check on a different device. A physical Android phone is still not required, and no human check is needed for an Android claim.
+
 ### DEC-31 — Device and emulator evidence carries across a main merge that touches none of the pull request's hand-edited source files, direct imports or shared motion and layer modules
 
 **Reference:** `spec:AST-094/DEC-31`

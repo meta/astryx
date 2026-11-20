@@ -287,9 +287,10 @@ app to turn on.
   the emulator proving FR2–FR5 there
   (`spec:AST-013` FR10); DOM and visual-viewport tests prove the rest of
   FR1–FR7. Simulator and emulator evidence in a top-level document gates
-  merge. Android evidence is emulator evidence at the exact head, with
-  animations at normal scale and removed, plus a slow-device profile, and no
-  human device check (`spec:AST-094` DEC-27). A pass on a physical iPhone,
+  merge. Android evidence is emulator or real-Pixel evidence at the exact
+  head, under the same checks, with animations at normal scale and removed,
+  plus a slow-device profile, and no human device check (`spec:AST-094`
+  DEC-27 as amended 2026-11-20). A pass on a physical iPhone,
   including the phone's real refresh timing, is required before the keyboard
   module ships in a release (DEC-3).
 
