@@ -21,7 +21,8 @@ export interface RingedElement {
 /**
  * Every element under `root` whose computed outline paints (a style other
  * than `none` and a width above zero) on a box a person can see. Read after
- * moving focus with the keyboard, so `:focus-visible` applies.
+ * moving focus with the keyboard, so `:focus-visible` applies. An element
+ * inside clipped content (VisuallyHidden) is not seen, so it does not count.
  */
 export async function ringedElements(
   page: Page,
@@ -29,6 +30,21 @@ export async function ringedElements(
 ): Promise<RingedElement[]> {
   return page.evaluate(rootSelector => {
     const scope = document.querySelector(rootSelector) ?? document.body;
+    const isClipped = (style: CSSStyleDeclaration) =>
+      style.clipPath === 'inset(50%)' ||
+      style.clip === 'rect(0px, 0px, 0px, 0px)';
+    const isInsideClip = (element: Element) => {
+      for (
+        let ancestor = element.parentElement;
+        ancestor != null;
+        ancestor = ancestor.parentElement
+      ) {
+        if (isClipped(getComputedStyle(ancestor))) {
+          return true;
+        }
+      }
+      return false;
+    };
     const out: {description: string; isFocused: boolean}[] = [];
     for (const element of [scope, ...scope.querySelectorAll('*')]) {
       const style = getComputedStyle(element);
@@ -44,8 +60,8 @@ export async function ringedElements(
       if (
         box.width <= 1 ||
         box.height <= 1 ||
-        style.clipPath === 'inset(50%)' ||
-        style.clip === 'rect(0px, 0px, 0px, 0px)'
+        isClipped(style) ||
+        isInsideClip(element)
       ) {
         continue;
       }

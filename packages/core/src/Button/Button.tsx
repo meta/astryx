@@ -76,6 +76,7 @@ import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {ownRingUnlessDimmedProps} from '../privateAttributes/ownRing.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {
   controlPressLayerStyles,
@@ -1179,6 +1180,9 @@ export function Button({
         {...ariaLabelProp}
         {...describedByProp}
         {...edgeCompAttr}
+        // Button rings itself, so a row that rings on focus within leaves
+        // it alone. A disabled row still rings, because it can dim this ring.
+        {...ownRingUnlessDimmedProps}
         // A caller's own busy or disabled state is kept, so a component that
         // hands these props to a Button (a caller-rendered trigger) is heard.
         aria-busy={isLoadingState || props['aria-busy'] || undefined}
@@ -1210,6 +1214,9 @@ export function Button({
         {...ariaLabelProp}
         {...describedByProp}
         {...edgeCompAttr}
+        // Button rings itself, so a row that rings on focus within leaves
+        // it alone. A disabled row still rings, because it can dim this ring.
+        {...ownRingUnlessDimmedProps}
         // A caller's own busy or disabled state is kept, so a component that
         // hands these props to a Button (a caller-rendered trigger) is heard.
         aria-busy={isLoadingState || props['aria-busy'] || undefined}

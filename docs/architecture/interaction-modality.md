@@ -157,9 +157,18 @@ work.
   no component writes the attribute or its selector itself. When layout puts
   the control one level down, as in a numbered Item whose own button or link
   sits in the cell beside its marker, the wrapper marks that cell with the
-  module's group props, so the ring still reaches the control. Implementation
-  gap: the clickable and selectable cards, Thumbnail, MultiSelector,
-  SideNavItem, and ChatComposer's body write their own ring conditions.
+  module's group props, so the ring still reaches the control. A Core row that
+  rings for focus anywhere inside it, such as a reorderable List row or an
+  Item row that delegates to a nested control, takes its ring from
+  `privateAttributes/ownRing.stylex.ts` instead. Button and the reorder handle
+  carry that module's mark, and the row paints no ring while one of them has
+  keyboard focus. VisuallyHidden marks its content too, so the row still rings
+  for a control inside it, whose own ring cannot show. A disabled row also
+  rings for a focused Button; the reorder handle keeps the only ring.
+  Implementation gap: the
+  clickable and selectable cards, Thumbnail, MultiSelector, SideNavItem, and
+  ChatComposer's body write their own ring conditions; a Link or a Switch
+  carries no own-ring mark, so such a row rings around it too.
 - **INV4 — Every modality has an operable path.** Keyboard, pointer, and touch or
   pen can reach each supported interaction. Hover is never the only discovery or
   activation path. A tooltip's scrolling overflow is the one exception, as
@@ -317,6 +326,10 @@ review (`architecture:knowledge-contracts` change coupling step 6).
 - `privateAttributes/focusOwner.stylex.ts` — owns the private focus-owner attribute, its
   selector, and the one shared wrapper ring for INV3's primary-control owners;
   it is not exported from the package.
+- `privateAttributes/ownRing.stylex.ts` — owns the private own-ring attribute,
+  which marks a control that rings itself or content hidden from sight, and
+  the row ring for INV3's rows that ring for focus anywhere inside them; it is
+  not exported from the package.
 - `hooks/useFocusReturnVisibility.ts` — applies last-input visibility when focus
   returns from adaptive surfaces.
 - `hooks/useIndicatorFocusRing.tsx` — lets the semantic owner guarantee paint on
@@ -359,7 +372,7 @@ reachability, newer-intent precedence, and the evidence/scope guard were approve
 | Invariant  | Evidence                                                                                                                                                                                                                                                                              | Failure signal                                                                                                                                                                                                                                                                                              |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | INV1, INV2 | Programmatic-focus cases after keyboard and pointer input in representative component tests                                                                                                                                                                                           | Programmatic focus invents a modality, or pointer history paints the keyboard indicator                                                                                                                                                                                                                     |
-| INV3       | Direct-owner, wrapper-owner, replaceable-indicator, and nested-action cases, including a Token inside an Item and a control inside a card; `FocusRingOwner.a11y.chromium.spec.ts` covers the shared module in Selector, and the other wrappers that the gap names are not covered yet | No indicator, two indicators, replacement content that can opt out, or a component that writes the focus-owner attribute or selector itself                                                                                                                                                                 |
+| INV3       | Direct-owner, wrapper-owner, replaceable-indicator, and nested-action cases, including a Token inside an Item, a control inside a card, and a Button a row delegates to; `FocusRingOwner.a11y.chromium.spec.ts` covers Selector, Item, Token and Thumbnail, but no other gap wrappers | No indicator, two indicators, replacement content that can opt out, or a component that writes the focus-owner attribute or selector itself                                                                                                                                                                 |
 | INV4       | Keyboard, mouse, touch, and pen browser paths where applicable; tap cases on an action trigger with a label tooltip and on a hint-only trigger under `touchTrigger="auto"`                                                                                                            | Hover-only behavior, sticky touch hover, unreachable action, a tap on an action trigger that opens its label tooltip, or hint-only information with no touch path                                                                                                                                           |
 | INV5       | Disabled, busy, and read-only DOM and activation assertions                                                                                                                                                                                                                           | Inactive control reacts, eligible control loses focus, or state changes with modality                                                                                                                                                                                                                       |
 | INV6       | Public API review and representative source inspection                                                                                                                                                                                                                                | A component adds caller-controlled modality without a separate API decision                                                                                                                                                                                                                                 |
