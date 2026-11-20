@@ -163,6 +163,88 @@ describe('lowerReferenceTopic', () => {
     expect(node.provenance.extensions).toEqual(['@acme/one', '@acme/two']);
   });
 
+  it('keeps two packages’ sections of one title, the later keyed by its package', () => {
+    /** @param {string} name @param {object} section */
+    const adds = (name, section) => ({
+      ...file(
+        authored(name, [{content: [prose(name)], ...section}], {
+          extends: 'demo',
+        }),
+      ),
+      provider: `@acme/${name}`,
+    });
+    const keys = (/** @type {any[]} */ extensions) =>
+      lowerReferenceTopic(input(file(demo()), extensions)).doc.sections.map(
+        (/** @type {any} */ each) => [each.id, each.content[0].text],
+      );
+    expect(
+      keys([adds('one', {title: 'Install'}), adds('two', {title: 'Install'})]),
+    ).toEqual([
+      ['quick-start', 'Start here.'],
+      ['props', 'Every prop.'],
+      ['install', 'one'],
+      ['acme-two-install', 'two'],
+    ]);
+    // Across packages, an authored id addresses the section whose key it is,
+    // or whose title answers it as a title query, either way round: the later
+    // package takes the place, in either order, and the topic still loads.
+    for (const [first, second] of [
+      [
+        adds('one', {title: 'Install'}),
+        adds('two', {id: 'install', title: 'Setup'}),
+      ],
+      [
+        adds('one', {id: 'install', title: 'Setup'}),
+        adds('two', {title: 'Install'}),
+      ],
+      [
+        adds('one', {title: 'Installation'}),
+        adds('two', {id: 'install', title: 'Installation'}),
+      ],
+    ]) {
+      expect(keys([first, second])).toEqual([
+        ['quick-start', 'Start here.'],
+        ['props', 'Every prop.'],
+        ['install', 'two'],
+      ]);
+      expect(keys([second, first])).toEqual([
+        ['quick-start', 'Start here.'],
+        ['props', 'Every prop.'],
+        ['install', 'one'],
+      ]);
+    }
+    // The section placed first in the topic keeps the plain key.
+    expect(
+      keys([
+        adds('one', {title: 'Install', after: 'props'}),
+        adds('two', {title: 'Install', before: 'quick-start'}),
+      ]),
+    ).toEqual([
+      ['install', 'two'],
+      ['quick-start', 'Start here.'],
+      ['props', 'Every prop.'],
+      ['acme-one-install', 'one'],
+    ]);
+    // Titles that differ only in letter case derive one key.
+    expect(
+      keys([adds('one', {title: 'Install'}), adds('two', {title: 'INSTALL'})]),
+    ).toEqual([
+      ['quick-start', 'Start here.'],
+      ['props', 'Every prop.'],
+      ['install', 'one'],
+      ['acme-two-install', 'two'],
+    ]);
+    // A section a package put in the place of the topic's own keeps that
+    // place's numeric collisions.
+    expect(
+      keys([adds('one', {title: 'Props'}), adds('two', {title: 'PROPS'})]),
+    ).toEqual([
+      ['quick-start', 'Start here.'],
+      ['props', 'one'],
+      ['props-2', 'two'],
+    ]);
+  });
+
   it('reports problems in the order a reader meets them', () => {
     const broken = new Error('extension failed to load');
     const invalidBase = file(

@@ -66,7 +66,7 @@ import type {
   CommentVersion,
   CommentActivityEvent,
 } from './types';
-import {LoadingMessage} from '../LoadingMessage';
+import {LoadingMessage} from '../internal/LoadingMessage';
 import {useStatusAnnouncement} from '../useStatusAnnouncement';
 
 /** The 28px avatar column every comment row, reply, and event aligns to. */

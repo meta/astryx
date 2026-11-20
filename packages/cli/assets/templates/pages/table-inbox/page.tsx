@@ -125,22 +125,22 @@ import type {TableColumn, TablePlugin} from '@astryxdesign/core/Table';
 import {useToast} from '@astryxdesign/core/Toast';
 import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {
-  ArchiveBoxIcon,
+  ArchiveIcon,
   ArrowLeftIcon,
-  ArrowPathIcon,
-  ArrowUturnLeftIcon,
-  FaceSmileIcon,
-  FolderArrowDownIcon,
+  RefreshIcon,
+  UndoIcon,
+  EmojiIcon,
+  MoveToFolderIcon,
   InboxIcon,
   LinkIcon,
-  PaperAirplaneIcon,
-  PaperClipIcon,
-  PencilSquareIcon,
-  PhotoIcon,
-  TrashIcon,
+  SendIcon,
+  AttachIcon,
+  ComposeIcon,
+  ImageIcon,
+  DeleteIcon,
   UsersIcon,
-  XMarkIcon,
-} from '@heroicons/react/24/outline';
+  CloseIcon,
+} from '@astryxdesign/template-icons';
 
 // ============= DATA =============
 
@@ -792,16 +792,16 @@ function isRowItself(event: {
 interface RowAction {
   id: string;
   label: string;
-  icon: typeof ArchiveBoxIcon;
+  icon: typeof ArchiveIcon;
   /** The icon points along the reading order, so it mirrors in RTL. */
   isDirectional?: boolean;
 }
 
 const ROW_ACTIONS: RowAction[] = [
-  {id: 'archive', label: 'Archive', icon: ArchiveBoxIcon},
-  {id: 'move', label: 'Move to folder', icon: FolderArrowDownIcon},
-  {id: 'delete', label: 'Delete', icon: TrashIcon},
-  {id: 'reply', label: 'Reply', icon: ArrowUturnLeftIcon, isDirectional: true},
+  {id: 'archive', label: 'Archive', icon: ArchiveIcon},
+  {id: 'move', label: 'Move to folder', icon: MoveToFolderIcon},
+  {id: 'delete', label: 'Delete', icon: DeleteIcon},
+  {id: 'reply', label: 'Reply', icon: UndoIcon, isDirectional: true},
 ];
 
 /**
@@ -1094,7 +1094,7 @@ function ReceivedCell({
                says an attachment exists, so unlabelled it would take the fact
                away from anyone not looking at it. */
             <Icon
-              icon={PaperClipIcon}
+              icon={AttachIcon}
               size="sm"
               color="gray"
               label="Has attachments"
@@ -1248,7 +1248,7 @@ function AttachmentStrip({attachments}: {attachments: Attachment[]}) {
   return (
     <VStack gap={2}>
       <HStack gap={1} vAlign="center">
-        <Icon icon={PaperClipIcon} size="sm" color="gray" />
+        <Icon icon={AttachIcon} size="sm" color="gray" />
         <Text type="supporting" color="secondary">
           {attachments.length} attachment
           {attachments.length === 1 ? '' : 's'}
@@ -1543,7 +1543,7 @@ function ConversationPane({
                   variant="ghost"
                   label="Close conversation"
                   tooltip="Close"
-                  icon={<Icon icon={XMarkIcon} size="sm" />}
+                  icon={<Icon icon={CloseIcon} size="sm" />}
                   onClick={onClose}
                 />
               </>
@@ -1611,11 +1611,7 @@ function ConversationPane({
                 label="Reply"
                 variant="primary"
                 icon={
-                  <Icon
-                    icon={ArrowUturnLeftIcon}
-                    size="sm"
-                    xstyle={rtlStyles.mirror}
-                  />
+                  <Icon icon={UndoIcon} size="sm" xstyle={rtlStyles.mirror} />
                 }
                 onClick={() => onReply(replyDraft(conversation, false))}
               />
@@ -1729,12 +1725,12 @@ const RECIPIENT_SOURCE: SearchSource = {
 const COMPOSER_TOOLS: {
   id: string;
   label: string;
-  icon: typeof PaperClipIcon;
+  icon: typeof AttachIcon;
 }[] = [
-  {id: 'attach', label: 'Attach files', icon: PaperClipIcon},
+  {id: 'attach', label: 'Attach files', icon: AttachIcon},
   {id: 'link', label: 'Insert link', icon: LinkIcon},
-  {id: 'image', label: 'Insert image', icon: PhotoIcon},
-  {id: 'emoji', label: 'Insert emoji', icon: FaceSmileIcon},
+  {id: 'image', label: 'Insert image', icon: ImageIcon},
+  {id: 'emoji', label: 'Insert emoji', icon: EmojiIcon},
 ];
 
 /**
@@ -1890,7 +1886,7 @@ function ComposeWindow({
                   variant="ghost"
                   label="Close composer"
                   tooltip="Close"
-                  icon={<Icon icon={XMarkIcon} size="sm" />}
+                  icon={<Icon icon={CloseIcon} size="sm" />}
                   onClick={() => onOpenChange(false)}
                 />
               }
@@ -2026,7 +2022,7 @@ function ComposeWindow({
                     variant="primary"
                     icon={
                       <Icon
-                        icon={PaperAirplaneIcon}
+                        icon={SendIcon}
                         size="sm"
                         xstyle={rtlStyles.mirror}
                       />
@@ -2062,7 +2058,7 @@ function ComposeWindow({
                   variant="ghost"
                   label="Discard draft"
                   tooltip="Discard draft"
-                  icon={<Icon icon={TrashIcon} size="sm" />}
+                  icon={<Icon icon={DeleteIcon} size="sm" />}
                   onClick={discard}
                 />
               }
@@ -2524,7 +2520,7 @@ export default function SupportInboxTemplate() {
                 <Button
                   label="Refresh"
                   variant="ghost"
-                  icon={<Icon icon={ArrowPathIcon} size="sm" />}
+                  icon={<Icon icon={RefreshIcon} size="sm" />}
                   onClick={() =>
                     // Demo only: replace this toast with the call that performs the action.
                     showToast({
@@ -2542,7 +2538,7 @@ export default function SupportInboxTemplate() {
                 <Button
                   label="Compose"
                   variant="primary"
-                  icon={<Icon icon={PencilSquareIcon} size="sm" />}
+                  icon={<Icon icon={ComposeIcon} size="sm" />}
                   onClick={() => setIsComposeOpen(true)}
                 />
               </HStack>

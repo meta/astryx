@@ -47,15 +47,15 @@ import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {
   ArrowLeftIcon,
   LinkIcon,
-  DocumentTextIcon,
-  PencilIcon,
-  TrashIcon,
-  PhotoIcon,
+  DocumentIcon,
+  EditIcon,
+  DeleteIcon,
+  ImageIcon,
   ViewColumnsIcon,
-  BellIcon,
+  NotificationIcon,
   ShareIcon,
   EyeIcon,
-} from '@heroicons/react/24/outline';
+} from '@astryxdesign/template-icons';
 
 const styles = stylex.create({
   // A vertical rule has no intrinsic height and the breadcrumb row centers its
@@ -251,21 +251,21 @@ const ATTACHMENTS: Attachment[] = [
 
 const ATTACHMENT_ICONS = {
   link: LinkIcon,
-  image: PhotoIcon,
-  file: DocumentTextIcon,
+  image: ImageIcon,
+  file: DocumentIcon,
 };
 
 // The parts of every row's Delete that do not depend on the row.
 const ATTACHMENT_DELETE: DropdownMenuOption = {
   label: 'Delete',
-  icon: TrashIcon,
+  icon: DeleteIcon,
   variant: 'destructive',
 };
 
 const HEADER_ACTIONS = [
   {label: 'Watch', icon: EyeIcon},
   {label: 'Share', icon: ShareIcon},
-  {label: 'Notify', icon: BellIcon},
+  {label: 'Notify', icon: NotificationIcon},
 ];
 
 const WATCHERS = [
@@ -665,7 +665,7 @@ function AttachmentsSection() {
                   items={[
                     {
                       label: 'Edit',
-                      icon: PencilIcon,
+                      icon: EditIcon,
                       onClick: () =>
                         // Demo only: replace this toast with the call that edits the attachment.
                         showToast({

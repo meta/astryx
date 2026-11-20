@@ -15,7 +15,7 @@ import {
 import {Stack} from '@astryxdesign/core/Layout';
 import {useToast} from '@astryxdesign/core/Toast';
 import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
-import {TrashIcon, ArchiveBoxIcon} from '@heroicons/react/24/outline';
+import {DeleteIcon, ArchiveIcon} from '@astryxdesign/template-icons';
 
 const DATA = [
   {id: '1', name: 'Alex Johnson', status: 'Active', role: 'Admin'},
@@ -55,7 +55,7 @@ export default function ToolbarBulkActions() {
               <Button
                 label="Delete"
                 variant="ghost"
-                icon={<Icon icon={TrashIcon} />}
+                icon={<Icon icon={DeleteIcon} />}
                 isIconOnly
                 onClick={() =>
                   confirm.show({
@@ -75,7 +75,7 @@ export default function ToolbarBulkActions() {
               <Button
                 label="Archive"
                 variant="ghost"
-                icon={<Icon icon={ArchiveBoxIcon} />}
+                icon={<Icon icon={ArchiveIcon} />}
                 isIconOnly
                 onClick={() =>
                   confirm.show({

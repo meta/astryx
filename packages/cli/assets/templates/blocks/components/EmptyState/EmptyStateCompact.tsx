@@ -6,7 +6,7 @@ import {EmptyState} from '@astryxdesign/core/EmptyState';
 import {Button} from '@astryxdesign/core/Button';
 import {HStack} from '@astryxdesign/core/Layout';
 import {Icon} from '@astryxdesign/core/Icon';
-import {InboxIcon} from '@heroicons/react/24/outline';
+import {InboxIcon} from '@astryxdesign/template-icons';
 import {useToast} from '@astryxdesign/core/Toast';
 
 export default function EmptyStateCompact() {

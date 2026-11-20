@@ -19,11 +19,4 @@ export const doc = {
     'Layout',
     'Text',
   ],
-  icons: {
-    AtSymbolIcon: 'mention',
-    Cog6ToothIcon: 'settings',
-    MicrophoneIcon: 'microphone',
-    PaperClipIcon: 'attach',
-    SparklesIcon: 'sparkles',
-  },
 };
