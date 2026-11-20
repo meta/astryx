@@ -65,13 +65,14 @@ import {installGuidanceFor} from '../../foundation/env/cli-command.mjs';
  * @property {string} category - The doc's category, such as Action or Overlay.
  * @property {string} description - What the doc says the component is.
  * @property {unknown} defaults - Playground defaults, or null.
+ * @property {Record<string, unknown> | null} [mobile] - The props of its render at a phone viewport, merged over the defaults (`playground.mobile`: AppShell's mobile layout), or null.
  * @property {{component: string, props: Record<string, unknown>} | null} wrapper - The parent the playground renders it in, or null.
  * @property {boolean} opens - An overlay its playground shows in place: the pages render it open.
  * @property {boolean} overlay - Its playground opens it over the whole page, so a page of components leaves it out.
  * @property {boolean} deprecated - Its doc marks it deprecated: another part replaces it.
  * @property {string | null} subComponentOf - The component it is a part of, or null.
  * @property {string[]} keywords - The doc's search keywords.
- * @property {Record<string, {type: string, required: boolean, default: string | null, slots: Array<{__element: string, props?: Record<string, unknown>, children?: unknown}>}>} props - Each prop's declared type, whether it is required, its documented default (as the doc writes it), and the elements the doc suggests for it.
+ * @property {Record<string, {type: string, required: boolean, default: string | null, slots: Array<{__element: string, props?: Record<string, unknown>, children?: unknown}>, description: string}>} props - Each prop's declared type, whether it is required, its documented default (as the doc writes it), the elements the doc suggests for it, and its description.
  * @property {Array<{className: string, states: string[], values: Record<string, string[]>}>} targets
  */
 
@@ -79,7 +80,7 @@ import {installGuidanceFor} from '../../foundation/env/cli-command.mjs';
 const projects = new Map();
 
 /** Bump when the shape of the cached component docs changes. */
-const DOCS_VERSION = 8;
+const DOCS_VERSION = 10;
 
 /**
  * The theme editor's cache folder for a project: the `.cache/astryx-theme`
@@ -248,6 +249,12 @@ async function readComponents(coreDir) {
         category: typeof doc.category === 'string' ? doc.category : '',
         description: typeof doc.description === 'string' ? doc.description : '',
         defaults: pg?.defaults ?? null,
+        mobile:
+          pg?.mobile &&
+          typeof pg.mobile === 'object' &&
+          !Array.isArray(pg.mobile)
+            ? pg.mobile
+            : null,
         wrapper:
           typeof pg?.wrapper?.component === 'string'
             ? {
@@ -278,6 +285,8 @@ async function readComponents(coreDir) {
               required: p.required === true,
               default: typeof p.default === 'string' ? p.default : null,
               slots: Array.isArray(p.slotElements) ? p.slotElements : [],
+              description:
+                typeof p.description === 'string' ? p.description : '',
             },
           ]),
         ),

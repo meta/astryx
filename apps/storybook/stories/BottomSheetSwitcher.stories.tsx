@@ -604,6 +604,45 @@ function TypingOverAdvancingFlowExample() {
   );
 }
 
+/**
+ * A flow rendered only while it runs. "Close by removing" in the step unmounts
+ * the whole switcher while its sheet is open, as a route change or a parent's
+ * state would; focus returns to "Set up notifications" by
+ * `component:BottomSheet` FR20.
+ */
+function RemovedWhileOpenExample({hasScrim}: {hasScrim: boolean}) {
+  const [activeSheet, setActiveSheet] = useState<string | null>(null);
+  return (
+    <>
+      <Button
+        label="Set up notifications"
+        onClick={() => setActiveSheet('overview')}
+      />
+      {activeSheet != null && (
+        <BottomSheetSwitcher
+          activeSheet={activeSheet}
+          onActiveSheetChange={setActiveSheet}
+          hasScrim={hasScrim}>
+          <BottomSheet
+            sheetId="overview"
+            label="Set up notifications"
+            height="hug">
+            <Section padding={4}>
+              <HStack gap={2} hAlign="end">
+                <Button
+                  label="Close by removing"
+                  variant="secondary"
+                  onClick={() => setActiveSheet(null)}
+                />
+              </HStack>
+            </Section>
+          </BottomSheet>
+        </BottomSheetSwitcher>
+      )}
+    </>
+  );
+}
+
 const openFlow: NonNullable<Story['play']> = async ({canvasElement}) => {
   const trigger = canvasElement.querySelector('button');
   if (trigger instanceof HTMLElement) {
@@ -655,4 +694,14 @@ export const StackedUnderASheet: Story = {
 export const TypingOverAdvancingFlow: Story = {
   name: 'Typing in a sheet over a flow that advances from code',
   render: () => <TypingOverAdvancingFlowExample />,
+};
+
+export const RemovedWhileOpen: Story = {
+  name: 'Removed while open',
+  render: () => <RemovedWhileOpenExample hasScrim />,
+};
+
+export const RemovedWhileOpenNoScrim: Story = {
+  name: 'Removed while open, no scrim',
+  render: () => <RemovedWhileOpenExample hasScrim={false} />,
 };

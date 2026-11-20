@@ -22,7 +22,7 @@ const VERSION = JSON.parse(
 ).version;
 
 const PAGE =
-  "import {STAR} from 'acme-icons';\nexport default function Page() {\n  return <p>{STAR}</p>;\n}\n";
+  "import {STAR} from 'acme-icons';\nexport default function Page() {\n  return <p>{STAR}</p>;\n}\nimport '@astryxdesign/core/astryx.css';\n";
 
 /** @type {string} */
 let work;
@@ -87,7 +87,7 @@ function hostedRender() {
   const script = `
 const {runHostedCli} = await import(${JSON.stringify(path.join(cli, 'host', 'index.mjs'))});
 const {status} = await runHostedCli({
-  argv: ['experimental', 'render', 'page.jsx', '--json'],
+  argv: ['experimental', 'export', 'page.jsx', '--json'],
   cwd: ${JSON.stringify(dir)},
   roots: [${JSON.stringify(set)}],
 });

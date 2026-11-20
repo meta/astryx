@@ -55,7 +55,7 @@ export const docs = {
       name: 'config.comparators',
       type: 'Partial<Record<TSortKey, (a: T, b: T) => number>>',
       description:
-        'Ascending comparators per sort key; the hook flips the result for descending. Keys without one compare numbers numerically, compare other values as strings with a numeric collator in the active InternationalizationProvider locale, and put null, undefined and NaN last in ascending order and first in descending.',
+        'Ascending comparators per sort key (arrays such as tags need one: they have no sort text); the hook flips the result for descending. Keys without one compare numbers numerically, compare other values as strings with a numeric collator in the active InternationalizationProvider locale, and put null, undefined, NaN and an Invalid Date last in ascending order and first in descending. Arrays and plain objects have no sort text: they compare as equal to each other and sort before text in ascending order, so give a key such as tags a comparator. A Date sorts by its time.',
       required: false,
     },
     {
@@ -91,7 +91,7 @@ export const docs = {
       name: 'sortConfig',
       type: 'UseTableSortableConfig<TSortKey>',
       description:
-        'Pass to useTableSortable(sortConfig) and give the resulting plugin to Table.',
+        'Pass to useTableSortable<Row, TSortKey>(sortConfig), with the same type arguments as this hook (TypeScript cannot infer the row type there), and give the resulting plugin to Table.',
     },
     {
       name: 'applySort',
@@ -112,7 +112,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Add a comparator for values whose order is not their string or number value, such as a status rank.',
+          'Add a comparator for values whose order is not their string or number value, such as a status rank, and for arrays such as tags, which otherwise have no sort text.',
       },
       {
         guidance: false,
@@ -139,7 +139,7 @@ export const docsDense = {
     'config.sort': 'controlled sort state; pair with onSortChange.',
     'config.onSortChange': 'called with next sort state; required with sort.',
     'config.comparators':
-      'ascending comparators per key (flipped for descending). Else numbers numeric, others numeric-collator strings in provider locale; null/undefined/NaN last ascending, first descending.',
+      'ascending comparators per key (arrays e.g. tags need one: no sort text; flipped for descending). Else numbers numeric, others numeric-collator strings in provider locale; null/undefined/NaN/Invalid Date last ascending, first descending; arrays/plain objects have no sort text (equal to each other, before text ascending): give them a comparator; Date sorts by time.',
     'config.allowUnsortedState':
       'to useTableSortable: third click returns to unsorted.',
     'config.isMultiSortEnabled':
@@ -162,7 +162,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Add comparators for non-natural orders (e.g. status rank).',
+          'Add comparators for non-natural orders (e.g. status rank) and arrays (e.g. tags), which otherwise have no sort text.',
       },
       {
         guidance: false,

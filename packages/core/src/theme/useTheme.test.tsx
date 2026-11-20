@@ -6,7 +6,7 @@ import React from 'react';
 import {Theme} from './Theme';
 import {defineTheme} from './defineTheme';
 import {resetThemes} from './themeRegistry';
-import {useTheme} from './useTheme';
+import {useTheme, useThemeName} from './useTheme';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {resolveThemeTokens} from './tokens';
 
@@ -324,6 +324,32 @@ describe('useTheme root-attribute observer lifecycle', () => {
       document.documentElement.setAttribute('data-theme', 'dark');
     });
     expect(renders.count).toBe(before);
+  });
+
+  it('creates no observer under a page-root Theme that applies no theme and forces a mode', () => {
+    const ObserverSpy = vi.fn();
+    vi.stubGlobal('MutationObserver', ObserverSpy);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const seen: string[] = [];
+      function Consumer() {
+        const {name, mode} = useTheme();
+        const rootName = useThemeName();
+        seen.push(`${name} ${mode} ${rootName ?? 'none'}`);
+        return null;
+      }
+      render(
+        <Theme theme={'light' as never} mode="dark">
+          <Theme theme={{} as never} mode="dark">
+            <Consumer />
+          </Theme>
+        </Theme>,
+      );
+      expect(ObserverSpy).not.toHaveBeenCalled();
+      expect(seen.at(-1)).toBe('default dark none');
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('shares one observer across multiple no-context consumers and disconnects once all unmount', () => {

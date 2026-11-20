@@ -106,14 +106,98 @@ describe('stone strong status contrast', () => {
     }
   });
 
-  it('uses dark ink for marks on Stone’s pale progress fills', () => {
+  it('uses light ink on light-mode progress fills and dark ink on dark-mode ones', () => {
     const mark = stoneTheme.components!['progress-bar-mark'];
-    for (const variant of ['accent', 'success', 'warning', 'error']) {
+    const {blue, green, neutral, red, yellow} = stoneModePalettes;
+    expect(mark['placement:fill+variant:accent']).toMatchObject({
+      backgroundColor: `light-dark(${neutral.light[100]}, var(--color-on-light))`,
+    });
+    expect(contrast(neutral.light[100], blue.light[40])).toBeGreaterThanOrEqual(
+      3,
+    );
+    expect(stoneTheme.tokens['--color-on-light']).toBe(
+      `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+    );
+    expect(contrast(neutral.dark[15], blue.dark[80])).toBeGreaterThanOrEqual(3);
+    // A status fill is the status color, so its mark is that status's
+    // on-color: stop 100 in light mode and stop 10 in dark mode.
+    const fills = {success: green, warning: yellow, error: red};
+    for (const [variant, palette] of Object.entries(fills)) {
       expect(mark[`placement:fill+variant:${variant}`]).toMatchObject({
-        backgroundColor: 'var(--color-on-light)',
+        backgroundColor: `var(--color-on-${variant})`,
       });
+      expect(
+        contrast(neutral.light[100], palette.light[30]),
+      ).toBeGreaterThanOrEqual(3);
+      expect(
+        contrast(neutral.dark[10], palette.dark[80]),
+      ).toBeGreaterThanOrEqual(3);
     }
   });
+
+  it('keeps every progress fill at 3:1 on the skeleton track', () => {
+    const fill = stoneTheme.components!['progress-bar-fill'];
+    const {blue, green, neutral, red, yellow} = stoneModePalettes;
+    expect(stoneTheme.components!['progress-bar-track'].base).toMatchObject({
+      backgroundColor: 'var(--color-skeleton)',
+    });
+    expect(stoneTheme.tokens['--color-skeleton']).toBe(
+      `light-dark(${neutral.light[85]}, ${neutral.dark[40]})`,
+    );
+    // Accent uses the blue family; each status fill takes the theme's status
+    // role.
+    expect(fill['variant:accent']).toMatchObject({
+      backgroundColor: `light-dark(${blue.light[40]}, ${blue.dark[80]})`,
+    });
+    const tones = [
+      {light: blue.light[40], dark: blue.dark[80]},
+      ...(
+        [
+          ['success', green],
+          ['warning', yellow],
+          ['error', red],
+        ] as const
+      ).map(([variant, palette]) => {
+        expect(fill[`variant:${variant}`]).toMatchObject({
+          backgroundColor: `var(--color-${variant})`,
+        });
+        expect(stoneTheme.tokens[`--color-${variant}`]).toBe(
+          `light-dark(${palette.light[30]}, ${palette.dark[80]})`,
+        );
+        return {light: palette.light[30], dark: palette.dark[80]};
+      }),
+    ];
+    for (const tone of tones) {
+      expect(contrast(tone.light, neutral.light[85])).toBeGreaterThanOrEqual(3);
+      expect(contrast(tone.dark, neutral.dark[40])).toBeGreaterThanOrEqual(3);
+      // Marks on a light-mode fill are light ink.
+      expect(contrast(neutral.light[100], tone.light)).toBeGreaterThanOrEqual(
+        3,
+      );
+    }
+  });
+
+  it.each(['neutral', 'disabled'])(
+    'keeps a %s fill at 3:1 on the skeleton track: secondary text in light, stop 80 in dark',
+    variant => {
+      const {neutral} = stoneModePalettes;
+      expect(
+        stoneTheme.components!['progress-bar-fill'][`variant:${variant}`],
+      ).toMatchObject({
+        backgroundColor: `light-dark(var(--color-text-secondary), ${neutral.dark[80]})`,
+      });
+      // Secondary text in light mode is stop 40.
+      expect(stoneTheme.tokens['--color-text-secondary']).toBe(
+        `light-dark(${neutral.light[40]}, ${neutral.dark[70]})`,
+      );
+      expect(
+        contrast(neutral.light[40], neutral.light[85]),
+      ).toBeGreaterThanOrEqual(3);
+      expect(
+        contrast(neutral.dark[80], neutral.dark[40]),
+      ).toBeGreaterThanOrEqual(3);
+    },
+  );
 });
 
 describe('stone secondary ComplexSelector', () => {

@@ -22,13 +22,7 @@
  * - /docs/specs/AST-059-layer-viewport-inset/spec.md
  */
 
-import {
-  useCallback,
-  useRef,
-  useState,
-  type CSSProperties,
-  type RefObject,
-} from 'react';
+import {useCallback, useRef, useState, type RefObject} from 'react';
 import {flushSync} from 'react-dom';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 // The keyboard module's own files, not its index. The index also re-exports
@@ -42,6 +36,7 @@ import {
   LAYER_ANCHORED_ATTRIBUTE,
   LAYER_KEYBOARD_CLEARANCE_PX,
 } from './layerKeyboardClearance';
+import {LAYER_LIFT_PROPERTY} from './layerSlideRules';
 import {settledBox} from './settledBox';
 import {awaitBrowserClick} from '../utils/browserClickWait';
 import {subscribeInput} from '../utils/inputStream';
@@ -108,12 +103,14 @@ function keepInView(layer: HTMLElement, target: Element) {
 }
 
 /**
- * The insets that move a capped layer's anchor area `lift` px toward the
- * block-start, or null without a lift. They hold the layer's block-start edge
- * where it was when the cap landed (`LayerKeyboardClearance.lift`).
+ * The style that moves a capped layer `lift` px toward the block-start, or
+ * null without a lift. It holds the layer's block-start edge where it was
+ * when the cap landed (`LayerKeyboardClearance.lift`).
  */
-export function keyboardLiftStyle(lift: number | null): CSSProperties | null {
-  return lift == null ? null : {insetBlockStart: -lift, insetBlockEnd: lift};
+export function keyboardLiftStyle(
+  lift: number | null,
+): Record<string, string> | null {
+  return lift == null ? null : {[LAYER_LIFT_PROPERTY]: `${lift}px`};
 }
 
 /** What `useLayerKeyboardClearance` gives the layer runtime. */

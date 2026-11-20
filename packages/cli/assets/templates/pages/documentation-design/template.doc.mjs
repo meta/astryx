@@ -23,9 +23,4 @@ export const doc = {
   ],
   isReady: true,
   category: 'Content - Documentation Design',
-  icons: {
-    ArrowTopRightOnSquareIcon: 'externalLink',
-    ArrowsPointingOutIcon: 'expand',
-    PlusIcon: 'add',
-  },
 };
