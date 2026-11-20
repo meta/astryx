@@ -19,7 +19,7 @@ const meta: Meta = {
     docs: {
       description: {
         component:
-          "A Timestamp and a Timer draw on Text's element. A theme's `timestamp` and `timer` entries win over its `text` entries there, and change only what the caller left unset: a color or size the caller passes draws as it would without them, and a plain Text draws the same with or without them. The part entries sit at the theme's root, in an adaptation, or on a dark media surface.",
+          "A theme with an entry for a part on another component's element, such as a toggle button, writes its rules in two sub-layers. A plain Text, a Timestamp and a Timer draw the same with or without that entry, whatever the theme's `text`, `timestamp` and `timer` entries and the caller's props. The `timestamp` and `timer` entries sit at the theme's root, in an adaptation, or on a dark media surface.",
       },
     },
   },
@@ -89,55 +89,61 @@ interface Case {
   surface: boolean;
 }
 
+/** A part entry on another element: it turns the theme's sub-layers on. */
+const LAYERING: Components = {
+  'toggle-button': {base: {borderColor: '#333333'}},
+};
+
+/** Where the `timestamp` and `timer` entries sit. */
+const PLACES = ['none', 'root', 'adaptation', 'ondark'] as const;
+
+function themeFor(
+  row: string,
+  place: (typeof PLACES)[number],
+  layered: boolean,
+): DefinedTheme {
+  const onDark = place === 'ondark';
+  const text = textEntries(onDark)[row];
+  const extra = layered ? LAYERING : {};
+  const name = `part-precedence-${row}-${place}${layered ? '-layered' : ''}`;
+  if (place === 'root') {
+    return defineTheme({
+      name,
+      components: {...text, ...partEntries(false), ...extra},
+    });
+  }
+  if (place === 'adaptation') {
+    return defineTheme({
+      name,
+      components: {...text, ...extra},
+      adaptations: {
+        rules: [
+          {
+            when: {motion: 'no-preference'},
+            value: {components: partEntries(false)},
+          },
+        ],
+      },
+    });
+  }
+  if (onDark) {
+    return defineTheme({
+      name,
+      components: {...text, ...extra},
+      onDark: {components: partEntries(true)},
+    });
+  }
+  return defineTheme({name, components: {...text, ...extra}});
+}
+
 function casesFor(row: string): Case[] {
-  const light = textEntries(false)[row];
-  const dark = textEntries(true)[row];
-  const name = (id: string) => `part-precedence-${id}`;
-  return [
-    {
-      id: row,
-      theme: defineTheme({name: name(row), components: light}),
-      surface: false,
-    },
-    {
-      id: `${row}-root`,
-      theme: defineTheme({
-        name: name(`${row}-root`),
-        components: {...light, ...partEntries(false)},
-      }),
-      surface: false,
-    },
-    {
-      id: `${row}-adaptation`,
-      theme: defineTheme({
-        name: name(`${row}-adaptation`),
-        components: light,
-        adaptations: {
-          rules: [
-            {
-              when: {motion: 'no-preference'},
-              value: {components: partEntries(false)},
-            },
-          ],
-        },
-      }),
-      surface: false,
-    },
-    {
-      id: `${row}-surface`,
-      theme: defineTheme({name: name(`${row}-surface`), components: dark}),
-      surface: true,
-    },
-    {
-      id: `${row}-ondark`,
-      theme: defineTheme({
-        name: name(`${row}-ondark`),
-        components: dark,
-        onDark: {components: partEntries(true)},
-      }),
-      surface: true,
-    },
-  ];
+  return PLACES.flatMap(place =>
+    [false, true].map(layered => ({
+      id: `${row}-${place}${layered ? '-layered' : ''}`,
+      theme: themeFor(row, place, layered),
+      surface: place === 'ondark',
+    })),
+  );
 }
 
 const CASES = ['none', 'base', 'keyed', 'onekey'].flatMap(casesFor);

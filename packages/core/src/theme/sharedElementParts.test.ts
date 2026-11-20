@@ -248,120 +248,21 @@ describe('shared-element parts', () => {
       expect(rulesOf(parts)).toEqual(rulesOf(whole));
     });
   });
-  it("keeps Text's color and size props over a part's entry on Text's element", () => {
-    // Timestamp and Timer draw on Text's element: an explicit `color` or
-    // `size` (`data-color`, `data-size` on that element) still wins over the
-    // theme's `timestamp` entry in the later sub-layer, as it wins over a
-    // `text` entry. The overrides name the part's own target, so no other
-    // Text is reached.
-    const theme = defineTheme({
-      name: 'shared-element-text-props',
-      tokens: {},
-      components: {
-        text: {base: {color: 'black'}},
-        timestamp: {base: {color: 'red', fontSize: '20px'}},
-      },
-    });
-    const {component} = generateThemeCSS(theme);
-    const parts = component.slice(component.indexOf('@layer parts {'));
-    const part = parts.indexOf('.astryx-timestamp {');
-    const color = parts.indexOf(
-      '.astryx-timestamp[data-color="primary"] { color: var(--color-text-primary); }',
-    );
-    const size = parts.indexOf(
-      '.astryx-timestamp[data-size="sm"] { font-size: var(--font-size-sm); }',
-    );
-    expect(part).toBeGreaterThan(-1);
-    expect(color).toBeGreaterThan(part);
-    expect(size).toBeGreaterThan(part);
-    // With no color prop a Timestamp still reflects its default `secondary`:
-    // no override for it follows the part, so the theme's timestamp color
-    // paints there, and an explicit color beats it.
-    expect(parts).not.toContain('[data-color="secondary"]');
-  });
 
-  it("leaves a theme's own multi-key text entries in charge of every other Text", () => {
-    // A `timestamp` entry puts the part in the later sub-layer; nothing that
-    // selects every Text may follow it there, or it would outrank the theme's
-    // `text` entries for body text keyed on color or size.
+  it("keeps Timestamp's and Timer's entries in the components sub-layer, beside Text's", () => {
+    // Their targets sit on Text's element, but Text's prop overrides decide
+    // there by weight and order in one layer, so these parts are not split out.
     const theme = defineTheme({
-      name: 'shared-element-text-entries',
+      name: 'shared-element-text-hosted',
       tokens: {},
       components: {
-        text: {
-          'type:body+color:primary': {color: 'green'},
-          'type:body+size:lg': {fontSize: '30px'},
-        },
+        text: {'type:supporting+color:accent': {color: 'teal'}},
         timestamp: {base: {color: 'red'}},
-        timer: {base: {color: 'red'}},
+        timer: {base: {color: 'purple'}},
       },
     });
     const {component} = generateThemeCSS(theme);
-    const at = component.indexOf('@layer parts {');
-    expect(at).toBeGreaterThan(-1);
-    const parts = component.slice(at);
-    expect(parts).not.toMatch(/\.astryx-text[[.:\s{]/);
-    expect(component.slice(0, at)).toMatch(
-      /\.astryx-text\.type-body\[data-color="primary"\]|\.astryx-text[^{]*\[data-color="primary"\][^{]*\{[^}]*color: green/,
-    );
-  });
-
-  it("replays a theme's text entries keyed on a prop before Text's prop overrides on the part", () => {
-    // In the components sub-layer a one-key `color:accent` entry comes before
-    // Text's override for the same prop, and the override wins. The part's
-    // replay keeps that order.
-    const theme = defineTheme({
-      name: 'shared-element-one-key',
-      tokens: {},
-      components: {
-        text: {'color:accent': {color: 'purple'}},
-        timestamp: {base: {color: 'red'}},
-      },
-    });
-    const {component} = generateThemeCSS(theme);
-    const parts = component.slice(component.indexOf('@layer parts {'));
-    const entry = parts.indexOf(
-      '.astryx-timestamp[data-color="accent"] {\n    color: purple;',
-    );
-    const override = parts.indexOf(
-      '.astryx-timestamp[data-color="accent"] { color: var(--color-text-accent); }',
-    );
-    expect(entry).toBeGreaterThan(-1);
-    expect(override).toBeGreaterThan(entry);
-  });
-
-  it("replays the root's text entries for a part that only an adaptation styles", () => {
-    const theme = defineTheme({
-      name: 'shared-element-adaptation-part',
-      tokens: {},
-      components: {text: {'type:supporting+color:accent': {color: 'teal'}}},
-      adaptations: {
-        rules: [
-          {
-            when: {motion: 'reduce'},
-            value: {components: {timestamp: {base: {color: 'red'}}}},
-          },
-        ],
-      },
-    });
-    const out = generateAdaptationCSS(theme, undefined, {layered: true});
-    expect(out.parts).toContain(
-      '.astryx-timestamp[data-type="supporting"][data-color="accent"]',
-    );
-  });
-
-  it("writes no Text prop rules in the parts sub-layer without a part on Text's element", () => {
-    const theme = defineTheme({
-      name: 'shared-element-no-text-part',
-      tokens: {},
-      components: {
-        text: {base: {color: 'black'}},
-        'toggle-button': {base: {color: 'red'}},
-      },
-    });
-    const {component} = generateThemeCSS(theme);
-    expect(component.slice(component.indexOf('@layer parts {'))).not.toContain(
-      '[data-color=',
-    );
+    expect(component).not.toContain('@layer parts');
+    expect(component).toContain('.astryx-timestamp');
   });
 });

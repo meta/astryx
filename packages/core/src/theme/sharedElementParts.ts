@@ -11,8 +11,6 @@
  *   is declared as `sitsOn` on the part's doc target, and a test keeps the
  *   two the same.
  */
-import type {TextColor} from './types';
-
 export const SHARED_ELEMENT_PARTS: Readonly<Record<string, string>> = {
   'alert-dialog': 'dialog',
   'app-shell-sidenav': 'layout-panel',
@@ -54,25 +52,10 @@ export const SHARED_ELEMENT_PARTS: Readonly<Record<string, string>> = {
   'selector-option': 'item',
   'selector-popup': 'popover',
   'switch-label': 'field-label',
-  timer: 'text',
-  timestamp: 'text',
   'timestamp-copy-button': 'button',
   'toast-close': 'button',
   'toggle-button': 'button',
   'typeahead-popup': 'popover',
-};
-
-/**
- * The color a part drawn on Text's element gives Text when its caller passes
- * none. Text reflects it as `data-color` like any other, so the theme
- * compiler leaves it out of the Text color overrides it writes after such a
- * part's rules: the part's own color applies with no color prop.
- */
-export const TEXT_PART_DEFAULT_COLOR: Readonly<
-  Record<'timer' | 'timestamp', TextColor>
-> = {
-  timer: 'secondary',
-  timestamp: 'secondary',
 };
 
 /** Whether a theme target is a part on another component's element. */

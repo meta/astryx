@@ -68,11 +68,7 @@ import {
 import {readerTextSizeEntries} from './dynamicType';
 import {splitTopLevelWhitespace} from './tokenReferences';
 import {withoutUnsetComponents} from './mergeComponents';
-import {
-  isSharedElementPart,
-  SHARED_ELEMENT_PARTS,
-  TEXT_PART_DEFAULT_COLOR,
-} from './sharedElementParts';
+import {isSharedElementPart} from './sharedElementParts';
 import {PRESS_BELIEVED_SELECTOR} from '../privateAttributes/press';
 import {ROOT_SCHEME_UNNAMED, rootSchemeIs} from '../privateAttributes/scheme';
 import {mediaDarkPageIs} from '../privateAttributes/mediaDarkPage';
@@ -1264,117 +1260,6 @@ function inGroup(component: string, group: ComponentGroup | undefined) {
   );
 }
 
-/** The parts on Text's element (`timestamp`, `timer`) a components map has entries for. */
-function textPartsIn(
-  ...sources: (Record<string, unknown> | undefined)[]
-): Set<string> {
-  const found = new Set<string>();
-  for (const source of sources) {
-    for (const part of Object.keys(source ?? {})) {
-      if (SHARED_ELEMENT_PARTS[part] === 'text') {
-        found.add(part);
-      }
-    }
-  }
-  return found;
-}
-
-/** Whether a components map has a `text` entry keyed on a `color` or `size` prop. */
-function hasPropKeyedText(
-  source: Record<string, unknown> | undefined,
-): boolean {
-  return Object.keys((source?.text ?? {}) as object).some(key =>
-    key.split('+').some(t => t.startsWith('color:') || t.startsWith('size:')),
-  );
-}
-
-/**
- * What Text's `color` and `size` props draw, written again on each part on
- * Text's element (Timestamp's `timestamp`, Timer's `timer`) in the parts
- * sub-layer, after the part's rules: first the theme's `text` entries keyed
- * on those props (`color:accent`, `type:supporting+size:sm`), their color and
- * font size only, from each source in order, then Text's prop overrides. That
- * is the order the components sub-layer has them in, so a prop the caller
- * sets draws on the part as it would with no part entry, and no other Text
- * is reached. The color a part gives Text with no color prop
- * (`TEXT_PART_DEFAULT_COLOR`) is left out, so the part's own color applies
- * there.
- */
-function generatePartTextPropOverrides(
-  partsToCover: Iterable<string>,
-  textSources: (Record<string, unknown> | undefined)[],
-  out: string[],
-  surface?: MediaSurface,
-): void {
-  const defaults: Readonly<Record<string, string>> = TEXT_PART_DEFAULT_COLOR;
-  for (const part of partsToCover) {
-    for (const source of textSources) {
-      const keyed: Record<string, StyleOverrides> = {};
-      const textRules = (source?.text ?? {}) as Record<string, StyleOverrides>;
-      for (const [key, styles] of Object.entries(textRules)) {
-        const terms = key.split('+');
-        if (terms.includes(`color:${defaults[part]}`)) {
-          continue;
-        }
-        const kept: StyleOverrides = {};
-        if (terms.some(t => t.startsWith('color:')) && styles?.color != null) {
-          kept.color = styles.color;
-        }
-        if (
-          terms.some(t => t.startsWith('size:')) &&
-          styles?.fontSize != null
-        ) {
-          kept.fontSize = styles.fontSize;
-        }
-        if (Object.keys(kept).length > 0) {
-          keyed[key] = kept;
-        }
-      }
-      if (Object.keys(keyed).length > 0) {
-        generateComponentRules({[part]: keyed}, out, {
-          surface,
-          sink: () => {},
-        });
-      }
-    }
-    for (const [colorName, colorValue] of Object.entries(TEXT_COLOR_MAP)) {
-      if (colorName === defaults[part]) {
-        continue;
-      }
-      out.push(
-        `  ${componentSelector(part, parseStyleKey(`color:${colorName}`), surface)} { color: ${colorValue}; }`,
-      );
-    }
-    for (const [sizeName, sizeValue] of Object.entries(TEXT_SIZE_TOKEN_MAP)) {
-      out.push(
-        `  ${componentSelector(part, parseStyleKey(`size:${sizeName}`), surface)} { font-size: ${sizeValue}; }`,
-      );
-    }
-  }
-}
-
-/**
- * The parts on Text's element a theme layer's part rules must cover: the
- * layer's own, and, when the layer has `text` entries keyed on a prop, every
- * one the theme has anywhere, since those parts' rules sit above the layer's
- * `text` entries.
- */
-function textPartsForLayer(
-  theme: DefinedTheme,
-  layer: Record<string, unknown> | undefined,
-): Set<string> {
-  if (!hasPropKeyedText(layer)) {
-    return textPartsIn(layer);
-  }
-  return textPartsIn(
-    theme.components,
-    layer,
-    theme.__onDark?.components,
-    theme.__onLight?.components,
-    ...(theme.__adaptationRules ?? []).map(rule => rule.components),
-  );
-}
-
 /**
  * Generate component override rules using stable `.astryx-*` target classes
  * and reflected `data-*` selectors for prop/state keys. Handles derived var
@@ -1840,18 +1725,6 @@ function generateProseRules(
  */
 const LINK_HOVER_TINTED = new Set(['primary', 'secondary', 'accent']);
 
-/** Text `color` prop values and the color each one paints. */
-const TEXT_COLOR_MAP: Record<string, string> = {
-  primary: 'var(--color-text-primary)',
-  secondary: 'var(--color-text-secondary)',
-  disabled: 'var(--color-text-disabled)',
-  placeholder: 'var(--color-text-secondary)',
-  accent: 'var(--color-text-accent)',
-  // A label that follows its owner's color, such as a Link's, keeps doing
-  // so when a theme styles the target's base color.
-  inherit: 'inherit',
-};
-
 /**
  * Generate prop-level color override rules for text/heading/link components.
  * These ensure color prop classes override theme token changes.
@@ -1861,6 +1734,17 @@ function generateColorOverrides(
   parts: string[],
   surface?: MediaSurface,
 ): void {
+  const TEXT_COLOR_MAP: Record<string, string> = {
+    primary: 'var(--color-text-primary)',
+    secondary: 'var(--color-text-secondary)',
+    disabled: 'var(--color-text-disabled)',
+    placeholder: 'var(--color-text-secondary)',
+    accent: 'var(--color-text-accent)',
+    // A label that follows its owner's color, such as a Link's, keeps doing
+    // so when a theme styles the target's base color.
+    inherit: 'inherit',
+  };
+
   const touchesText = 'text' in components;
   const touchesHeading = 'heading' in components;
   const touchesLink = 'link' in components;
@@ -1996,7 +1880,6 @@ export function generateThemeRulesSplit(
         resolveModes({...theme.localTokens, ...theme.tokens}),
       ),
     });
-    generatePartTextPropOverrides(textPartsIn(components), [components], parts);
   }
   return {component, prose, parts};
 }
@@ -2103,12 +1986,6 @@ function onMediaCSS(
           location,
           group,
         });
-        generatePartTextPropOverrides(
-          textPartsForLayer(theme, onMedia.components),
-          [theme.components, onMedia.components],
-          out,
-          surface,
-        );
       }
       return;
     }
@@ -2300,11 +2177,6 @@ function generateAdaptationPartsCSS(
       group: 'parts',
       darkPageSides: flipped,
     });
-    generatePartTextPropOverrides(
-      textPartsForLayer(theme, components),
-      [theme.components, components],
-      parts,
-    );
     if (parts.length > 0) {
       blocks.push(
         generateAdaptationMediaBlock(rule.query, parts, scopeSelector),
