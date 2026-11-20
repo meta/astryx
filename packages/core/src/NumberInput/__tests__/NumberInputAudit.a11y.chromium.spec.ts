@@ -319,7 +319,7 @@ for (const {story, count} of restStories) {
   for (const mode of ['light', 'dark'] as const) {
     cases.push({
       key: `${story.replace('core-numberinput--', '')}-matcha-${mode}-ltr`,
-      group: 'themed',
+      group: `themed-${story.replace('core-numberinput--', '')}`,
       story,
       theme: 'matcha',
       mode,
