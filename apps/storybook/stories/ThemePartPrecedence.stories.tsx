@@ -2,7 +2,7 @@
 
 import type {Meta, StoryObj} from '@storybook/react';
 import * as React from 'react';
-import {Theme, defineTheme} from '@astryxdesign/core/theme';
+import {MediaTheme, Theme, defineTheme} from '@astryxdesign/core/theme';
 import type {DefinedTheme} from '@astryxdesign/core/theme';
 import {Stack} from '@astryxdesign/core/Stack';
 import {Text} from '@astryxdesign/core/Text';
@@ -19,7 +19,7 @@ const meta: Meta = {
     docs: {
       description: {
         component:
-          "A Timestamp and a Timer draw on Text's element. A theme's `timestamp` and `timer` entries win over its `text` entries there, and change only what the caller left unset: a color or size the caller passes draws as it would without them, and a plain Text draws the same with or without them.",
+          "A Timestamp and a Timer draw on Text's element. A theme's `timestamp` and `timer` entries win over its `text` entries there, and change only what the caller left unset: a color or size the caller passes draws as it would without them, and a plain Text draws the same with or without them. The part entries sit at the theme's root, in an adaptation, or on a dark media surface.",
       },
     },
   },
@@ -31,25 +31,48 @@ export default meta;
 // Themes
 // =============================================================================
 
-/** A theme's `text` entries, one row each. */
-const TEXT_ENTRIES = {
-  none: {},
-  base: {text: {base: {color: '#008000', fontSize: '30px'}}},
-  keyed: {
-    text: {
-      'type:body+color:primary': {color: '#0000ff'},
-      'type:body+size:lg': {fontSize: '31px'},
-      'type:supporting+color:accent': {color: '#008080'},
-      'type:supporting+size:sm': {fontSize: '32px'},
+type Components = NonNullable<Parameters<typeof defineTheme>[0]['components']>;
+
+/**
+ * A theme's `text` entries, one row each, in colors that read on a light page
+ * and on a dark surface.
+ */
+function textEntries(onDark: boolean): Record<string, Components> {
+  const [green, blue, teal, purple] = onDark
+    ? ['#7fd87f', '#a8c4ff', '#7fe0e0', '#d9b8ff']
+    : ['#006400', '#0000c8', '#006060', '#5c2d91'];
+  return {
+    none: {},
+    base: {text: {base: {color: green, fontSize: '30px'}}},
+    keyed: {
+      text: {
+        'type:body+color:primary': {color: blue},
+        'type:body+size:lg': {fontSize: '31px'},
+        'type:supporting+color:accent': {color: teal},
+        'type:supporting+size:sm': {fontSize: '32px'},
+      },
     },
-  },
-} as const;
+    onekey: {
+      text: {
+        'color:accent': {color: purple},
+        'size:lg': {fontSize: '33px'},
+      },
+    },
+  };
+}
 
 /** The parts on Text's element and what their entries draw. */
-const PART_ENTRIES = {
-  timestamp: {base: {color: '#ff0000', fontSize: '20px'}},
-  timer: {base: {color: '#ff00ff', fontSize: '21px'}},
-} as const;
+function partEntries(onDark: boolean): Components {
+  return onDark
+    ? {
+        timestamp: {base: {color: '#ffb0b0', fontSize: '20px'}},
+        timer: {base: {color: '#ffb0ff', fontSize: '21px'}},
+      }
+    : {
+        timestamp: {base: {color: '#b00000', fontSize: '20px'}},
+        timer: {base: {color: '#800080', fontSize: '21px'}},
+      };
+}
 
 /** The caller's props, one column each. */
 const PROPS = {
@@ -60,16 +83,64 @@ const PROPS = {
   lg: {size: 'lg'},
 } as const;
 
-const THEMES = Object.entries(TEXT_ENTRIES).flatMap(([row, components]) => [
-  {id: row, theme: defineTheme({name: `part-precedence-${row}`, components})},
-  {
-    id: `${row}-parts`,
-    theme: defineTheme({
-      name: `part-precedence-${row}-parts`,
-      components: {...components, ...PART_ENTRIES},
-    }),
-  },
-]);
+interface Case {
+  id: string;
+  theme: DefinedTheme;
+  surface: boolean;
+}
+
+function casesFor(row: string): Case[] {
+  const light = textEntries(false)[row];
+  const dark = textEntries(true)[row];
+  const name = (id: string) => `part-precedence-${id}`;
+  return [
+    {
+      id: row,
+      theme: defineTheme({name: name(row), components: light}),
+      surface: false,
+    },
+    {
+      id: `${row}-root`,
+      theme: defineTheme({
+        name: name(`${row}-root`),
+        components: {...light, ...partEntries(false)},
+      }),
+      surface: false,
+    },
+    {
+      id: `${row}-adaptation`,
+      theme: defineTheme({
+        name: name(`${row}-adaptation`),
+        components: light,
+        adaptations: {
+          rules: [
+            {
+              when: {motion: 'no-preference'},
+              value: {components: partEntries(false)},
+            },
+          ],
+        },
+      }),
+      surface: false,
+    },
+    {
+      id: `${row}-surface`,
+      theme: defineTheme({name: name(`${row}-surface`), components: dark}),
+      surface: true,
+    },
+    {
+      id: `${row}-ondark`,
+      theme: defineTheme({
+        name: name(`${row}-ondark`),
+        components: dark,
+        onDark: {components: partEntries(true)},
+      }),
+      surface: true,
+    },
+  ];
+}
+
+const CASES = ['none', 'base', 'keyed', 'onekey'].flatMap(casesFor);
 
 // =============================================================================
 // Cases
@@ -105,11 +176,31 @@ function Subjects() {
   );
 }
 
-function Case({id, theme}: {id: string; theme: DefinedTheme}) {
+/** A dark MediaTheme surface on the inverted background it is made for. */
+function Surface({children}: {children: React.ReactNode}) {
+  return (
+    <div
+      style={{
+        backgroundColor:
+          'var(--color-surface-inverted, light-dark(#0A1317, #FFFFFF))',
+        padding: 16,
+      }}>
+      <MediaTheme mode="dark">{children}</MediaTheme>
+    </div>
+  );
+}
+
+function ThemeCase({id, theme, surface}: Case) {
   return (
     <section data-theme-case={id}>
       <Theme theme={theme} mode="light">
-        <Subjects />
+        {surface ? (
+          <Surface>
+            <Subjects />
+          </Surface>
+        ) : (
+          <Subjects />
+        )}
       </Theme>
     </section>
   );
@@ -118,8 +209,8 @@ function Case({id, theme}: {id: string; theme: DefinedTheme}) {
 function CasesDemo() {
   return (
     <Stack gap={4}>
-      {THEMES.map(({id, theme}) => (
-        <Case key={id} id={id} theme={theme} />
+      {CASES.map(({id, theme, surface}) => (
+        <ThemeCase key={id} id={id} theme={theme} surface={surface} />
       ))}
     </Stack>
   );

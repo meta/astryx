@@ -1264,65 +1264,115 @@ function inGroup(component: string, group: ComponentGroup | undefined) {
   );
 }
 
+/** The parts on Text's element (`timestamp`, `timer`) a components map has entries for. */
+function textPartsIn(
+  ...sources: (Record<string, unknown> | undefined)[]
+): Set<string> {
+  const found = new Set<string>();
+  for (const source of sources) {
+    for (const part of Object.keys(source ?? {})) {
+      if (SHARED_ELEMENT_PARTS[part] === 'text') {
+        found.add(part);
+      }
+    }
+  }
+  return found;
+}
+
+/** Whether a components map has a `text` entry keyed on a `color` or `size` prop. */
+function hasPropKeyedText(
+  source: Record<string, unknown> | undefined,
+): boolean {
+  return Object.keys((source?.text ?? {}) as object).some(key =>
+    key.split('+').some(t => t.startsWith('color:') || t.startsWith('size:')),
+  );
+}
+
 /**
- * For each of the theme's parts on Text's element (Timestamp's `timestamp`,
- * Timer's `timer`), what Text's `color` and `size` props draw, written on the
- * part's own target after its rules in the parts sub-layer: Text's prop
- * overrides, then the theme's own `text` entries keyed on those props
- * (`type:supporting+color:accent`), their color and font size only, in the
- * order the components sub-layer has them. A prop the caller sets then draws
- * on the part as it would with no part entry, and no other Text is reached.
- * The color a part gives Text with no color prop (`TEXT_PART_DEFAULT_COLOR`)
- * is left out, so the part's own color applies there.
+ * What Text's `color` and `size` props draw, written again on each part on
+ * Text's element (Timestamp's `timestamp`, Timer's `timer`) in the parts
+ * sub-layer, after the part's rules: first the theme's `text` entries keyed
+ * on those props (`color:accent`, `type:supporting+size:sm`), their color and
+ * font size only, from each source in order, then Text's prop overrides. That
+ * is the order the components sub-layer has them in, so a prop the caller
+ * sets draws on the part as it would with no part entry, and no other Text
+ * is reached. The color a part gives Text with no color prop
+ * (`TEXT_PART_DEFAULT_COLOR`) is left out, so the part's own color applies
+ * there.
  */
 function generatePartTextPropOverrides(
-  components: Record<string, unknown> | undefined,
-  parts: string[],
+  partsToCover: Iterable<string>,
+  textSources: (Record<string, unknown> | undefined)[],
+  out: string[],
   surface?: MediaSurface,
 ): void {
   const defaults: Readonly<Record<string, string>> = TEXT_PART_DEFAULT_COLOR;
-  const textRules = (components?.text ?? {}) as Record<string, StyleOverrides>;
-  for (const part of Object.keys(components ?? {})) {
-    if (SHARED_ELEMENT_PARTS[part] !== 'text') {
-      continue;
+  for (const part of partsToCover) {
+    for (const source of textSources) {
+      const keyed: Record<string, StyleOverrides> = {};
+      const textRules = (source?.text ?? {}) as Record<string, StyleOverrides>;
+      for (const [key, styles] of Object.entries(textRules)) {
+        const terms = key.split('+');
+        if (terms.includes(`color:${defaults[part]}`)) {
+          continue;
+        }
+        const kept: StyleOverrides = {};
+        if (terms.some(t => t.startsWith('color:')) && styles?.color != null) {
+          kept.color = styles.color;
+        }
+        if (
+          terms.some(t => t.startsWith('size:')) &&
+          styles?.fontSize != null
+        ) {
+          kept.fontSize = styles.fontSize;
+        }
+        if (Object.keys(kept).length > 0) {
+          keyed[key] = kept;
+        }
+      }
+      if (Object.keys(keyed).length > 0) {
+        generateComponentRules({[part]: keyed}, out, {
+          surface,
+          sink: () => {},
+        });
+      }
     }
     for (const [colorName, colorValue] of Object.entries(TEXT_COLOR_MAP)) {
       if (colorName === defaults[part]) {
         continue;
       }
-      parts.push(
+      out.push(
         `  ${componentSelector(part, parseStyleKey(`color:${colorName}`), surface)} { color: ${colorValue}; }`,
       );
     }
     for (const [sizeName, sizeValue] of Object.entries(TEXT_SIZE_TOKEN_MAP)) {
-      parts.push(
+      out.push(
         `  ${componentSelector(part, parseStyleKey(`size:${sizeName}`), surface)} { font-size: ${sizeValue}; }`,
       );
     }
-    const keyed: Record<string, StyleOverrides> = {};
-    for (const [key, styles] of Object.entries(textRules)) {
-      const terms = key.split('+');
-      if (terms.includes(`color:${defaults[part]}`)) {
-        continue;
-      }
-      const kept: StyleOverrides = {};
-      if (terms.some(t => t.startsWith('color:')) && styles?.color != null) {
-        kept.color = styles.color;
-      }
-      if (terms.some(t => t.startsWith('size:')) && styles?.fontSize != null) {
-        kept.fontSize = styles.fontSize;
-      }
-      if (Object.keys(kept).length > 0) {
-        keyed[key] = kept;
-      }
-    }
-    if (Object.keys(keyed).length > 0) {
-      generateComponentRules({[part]: keyed}, parts, {
-        surface,
-        sink: () => {},
-      });
-    }
   }
+}
+
+/**
+ * The parts on Text's element a theme layer's part rules must cover: the
+ * layer's own, and, when the layer has `text` entries keyed on a prop, every
+ * one the theme has anywhere, since those parts' rules sit above the layer's
+ * `text` entries.
+ */
+function textPartsForLayer(
+  theme: DefinedTheme,
+  layer: Record<string, unknown> | undefined,
+): Set<string> {
+  if (!hasPropKeyedText(layer)) {
+    return textPartsIn(layer);
+  }
+  return textPartsIn(
+    theme.components,
+    layer,
+    theme.__onDark?.components,
+    theme.__onLight?.components,
+    ...(theme.__adaptationRules ?? []).map(rule => rule.components),
+  );
 }
 
 /**
@@ -1946,7 +1996,7 @@ export function generateThemeRulesSplit(
         resolveModes({...theme.localTokens, ...theme.tokens}),
       ),
     });
-    generatePartTextPropOverrides(components, parts);
+    generatePartTextPropOverrides(textPartsIn(components), [components], parts);
   }
   return {component, prose, parts};
 }
@@ -2053,7 +2103,12 @@ function onMediaCSS(
           location,
           group,
         });
-        generatePartTextPropOverrides(onMedia.components, out, surface);
+        generatePartTextPropOverrides(
+          textPartsForLayer(theme, onMedia.components),
+          [theme.components, onMedia.components],
+          out,
+          surface,
+        );
       }
       return;
     }
@@ -2245,7 +2300,11 @@ function generateAdaptationPartsCSS(
       group: 'parts',
       darkPageSides: flipped,
     });
-    generatePartTextPropOverrides(components, parts);
+    generatePartTextPropOverrides(
+      textPartsForLayer(theme, components),
+      [theme.components, components],
+      parts,
+    );
     if (parts.length > 0) {
       blocks.push(
         generateAdaptationMediaBlock(rule.query, parts, scopeSelector),

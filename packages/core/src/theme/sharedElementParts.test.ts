@@ -306,6 +306,50 @@ describe('shared-element parts', () => {
     );
   });
 
+  it("replays a theme's text entries keyed on a prop before Text's prop overrides on the part", () => {
+    // In the components sub-layer a one-key `color:accent` entry comes before
+    // Text's override for the same prop, and the override wins. The part's
+    // replay keeps that order.
+    const theme = defineTheme({
+      name: 'shared-element-one-key',
+      tokens: {},
+      components: {
+        text: {'color:accent': {color: 'purple'}},
+        timestamp: {base: {color: 'red'}},
+      },
+    });
+    const {component} = generateThemeCSS(theme);
+    const parts = component.slice(component.indexOf('@layer parts {'));
+    const entry = parts.indexOf(
+      '.astryx-timestamp[data-color="accent"] {\n    color: purple;',
+    );
+    const override = parts.indexOf(
+      '.astryx-timestamp[data-color="accent"] { color: var(--color-text-accent); }',
+    );
+    expect(entry).toBeGreaterThan(-1);
+    expect(override).toBeGreaterThan(entry);
+  });
+
+  it("replays the root's text entries for a part that only an adaptation styles", () => {
+    const theme = defineTheme({
+      name: 'shared-element-adaptation-part',
+      tokens: {},
+      components: {text: {'type:supporting+color:accent': {color: 'teal'}}},
+      adaptations: {
+        rules: [
+          {
+            when: {motion: 'reduce'},
+            value: {components: {timestamp: {base: {color: 'red'}}}},
+          },
+        ],
+      },
+    });
+    const out = generateAdaptationCSS(theme, undefined, {layered: true});
+    expect(out.parts).toContain(
+      '.astryx-timestamp[data-type="supporting"][data-color="accent"]',
+    );
+  });
+
   it("writes no Text prop rules in the parts sub-layer without a part on Text's element", () => {
     const theme = defineTheme({
       name: 'shared-element-no-text-part',
