@@ -432,15 +432,24 @@ export type ComponentIconSlotState<Slot extends ComponentIconSlotName> =
 /**
  * What a component renders for a slot when the theme maps nothing: its own
  * icon name (or `null` for none), and optionally its own variant and size.
+ *
+ * The name may be a namespaced extension key, so a component that ships its
+ * own glyph keeps drawing it through the shared registry until a theme maps
+ * the slot.
  */
 export type ComponentIconFallback =
   | IconName
+  | NamespacedIconName
   | null
-  | Readonly<{icon: IconName | null; variant?: IconVariant; size?: IconSize}>;
+  | Readonly<{
+      icon: IconName | NamespacedIconName | null;
+      variant?: IconVariant;
+      size?: IconSize;
+    }>;
 
 /** A slot resolved to what the component renders through `Icon`. */
 export type ResolvedComponentIcon = Readonly<{
-  icon: IconName | null;
+  icon: IconName | NamespacedIconName | null;
   variant?: string;
   size?: IconSize;
 }>;
@@ -540,12 +549,43 @@ function applyComponentIconRequest(
 }
 
 /**
+ * Warn once per slot and key when a theme still overrides a slot's glyph
+ * through the namespaced key the slot replaces. The override keeps rendering;
+ * the warning names the slot to move it to.
+ */
+function warnLegacySlotKey(
+  slot: string,
+  key: string,
+  theme: DefinedTheme | null,
+): void {
+  if (process.env.NODE_ENV === 'production' || theme == null) {
+    return;
+  }
+  const overridden =
+    getThemeIconEntries(theme)?.[key] !== undefined ||
+    registry.entries[key] !== undefined;
+  if (!overridden) {
+    return;
+  }
+  warnOnce(
+    `component-icons:${slot}:legacy-key:${key}`,
+    'Icon',
+    `The active theme overrides the namespaced icon key "${key}", which the "${slot}" component icon slot now replaces. Set componentIcons["${slot}"] instead; the key stops rendering when the migration completes.`,
+  );
+}
+
+/**
  * Resolve a component's icon slot. The component passes its slot state and
  * its own fallback; the active theme's `componentIcons[slot]` adjusts that
  * fallback. A shared icon name replaces the fallback icon, `null` hides the
  * icon, a request applies field by field, and a slot function receives the
  * state and returns a request whose result is final: `null` hides the icon,
  * `undefined` changes nothing.
+ *
+ * A fallback that is a namespaced extension key keeps resolving through the
+ * shared registry, so a theme's override of that key still draws until the slot
+ * is mapped. Resolution therefore runs the slot first, then the key, then the
+ * component's own default artwork.
  *
  * This is the only caller of a theme's slot functions. Caller-supplied icon
  * content wins before resolution, so a component does not resolve the slot
@@ -565,6 +605,11 @@ export function resolveComponentIcon<Slot extends ComponentIconSlotName>(
   const theme = getTheme(source);
   const value = getThemeComponentIcons(theme)?.[slot];
   if (value === undefined) {
+    // No theme mapping, so the fallback renders. When that fallback is the
+    // slot's own key, a theme overriding the key still reaches the glyph.
+    if (own.icon != null && isNamespacedKey(own.icon)) {
+      warnLegacySlotKey(slot, own.icon, theme);
+    }
     return own;
   }
   if (typeof value === 'function') {

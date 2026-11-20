@@ -70,6 +70,8 @@ export interface ComponentIconSlotMap {
   };
   /** A Table row's expansion toggle (`useTableRowExpansion`), by whether the row is expanded. */
   'table-row-expand': {readonly expanded: boolean};
+  /** A NumberInput stepper button, by the direction it steps. */
+  'number-input-stepper': {readonly direction: 'increment' | 'decrement'};
 }
 
 /** A slot name from the augmentable {@link ComponentIconSlotMap}. */
@@ -119,7 +121,14 @@ export type ComponentIconStaticMap = Partial<
 >;
 
 export {Icon, renderIconSlot} from './Icon';
-export {useIcon} from './useIcon';
+export {useIcon, useComponentIcon} from './useIcon';
+export {ComponentIcon} from './ComponentIcon';
+export {resolveComponentIcon} from './globalIconRegistry';
+export type {
+  ComponentIconFallback,
+  ComponentIconSlotState,
+  ResolvedComponentIcon,
+} from './globalIconRegistry';
 export type {IconProps, IconColor, IconSize, IconType} from './Icon';
 
 // Global registry (RSC-compatible, no 'use client')
