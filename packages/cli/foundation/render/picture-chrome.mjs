@@ -1,15 +1,16 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file One whole-page picture of a page through a Chrome or Chromium,
- * driven over the DevTools protocol on a pipe, run as its own process by the
- * editor's browser runner.
- * @input argv: the browser, the page (.html), the picture (.png), the color
- *   mode
- * @output the whole page, every pixel of its height, at the path given, and
- *   on stdout the fonts it drew its text in (font-probe.mjs) and the text
- *   it draws cut short (cut-short.mjs); on failure, the browser's reason
- *   on stderr and exit code 1
+ * @file Whole-page pictures of a batch of pages through one Chrome or
+ * Chromium, driven over the DevTools protocol on a pipe, run as its own
+ * process by the editor's browser runner.
+ * @input argv: the browser, and the batch (JSON: each job's page .html,
+ *   picture .png and color mode)
+ * @output each whole page, every pixel of its height, at its path, and on
+ *   stdout, each line led by its job's place and a tab: the fonts it drew
+ *   its text in (font-probe.mjs), the text it draws cut short
+ *   (cut-short.mjs), and PICTURE_TAKEN once it is whole; on failure, the
+ *   browser's reason on stderr and exit code 1
  * @position run by `screenshot` in api/theme-edit/_preview.mjs through
  *   `runBrowser`, which gives it a temp folder of its own (the browser's
  *   profile goes there), its time bound and its stop
@@ -22,10 +23,21 @@ import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {CUT_SHORT_PREFIX, cutShortText} from './cut-short.mjs';
 import {NETWORK_URL_PATTERNS, QUIET_BROWSER_ARGS} from './offline.mjs';
-import {PICTURE_WINDOW} from './picture-window.mjs';
+import {
+  PICTURE_PAGES_AT_ONCE,
+  PICTURE_TAKEN,
+  PICTURE_WINDOW,
+  SETTLE_ANIMATIONS,
+  AWAIT_QUIET,
+  eachAtOnce,
+} from './picture-window.mjs';
 import {FONT_PROBE_PREFIX, probeFonts} from './font-probe.mjs';
 
-const [chrome, html, png, mode] = process.argv.slice(2);
+const [chrome, batch] = process.argv.slice(2);
+/** @type {Array<{html: string, png: string, mode: string}>} */
+const jobs = JSON.parse(batch);
+/** A line for one job of the batch. @param {number} i @param {string} line */
+const say = (i, line) => process.stdout.write(`${i}\t${line}\n`);
 
 const browser = spawn(
   chrome,
@@ -140,8 +152,16 @@ function event(method, sessionId) {
   ]);
 }
 
-try {
-  const {targetId} = await send('Target.createTarget', {url: 'about:blank'});
+/**
+ * One page of the batch in a tab of its own: drawn, pictured whole, and
+ * measured.
+ * @param {{html: string, png: string, mode: string}} job
+ * @param {number} i
+ */
+async function picture({html, png, mode}, i) {
+  // Each page in a window of its own: a page in a background tab runs
+  // no animation frames, so a chart drawn over frames never finishes.
+  const {targetId} = await send('Target.createTarget', {url: 'about:blank', newWindow: true});
   const {sessionId} = await send('Target.attachToTarget', {
     targetId,
     flatten: true,
@@ -171,20 +191,20 @@ try {
   const loaded = event('Page.loadEventFired', sessionId);
   await send('Page.navigate', {url: pathToFileURL(html).href}, sessionId);
   await loaded;
+  // The page draws, at the window's size, until it is quiet (a chart's
+  // drawing over frames ends).
+  await send('Runtime.evaluate', {expression: AWAIT_QUIET, awaitPromise: true}, sessionId);
   // An overlay drawn open plays its opening animation (a fade-in) as the
-  // page loads: each animation that ends is run to its end before the
-  // picture, so the picture shows the overlay as it looks open, as
-  // Playwright's animations: 'disabled' does. A looping one (a spinner)
-  // stays as it is.
-  await send(
-    'Runtime.evaluate',
-    {
-      expression: `for (const a of document.getAnimations()) { if (a.effect?.getComputedTiming().iterations !== Infinity) a.finish(); }`,
-    },
-    sessionId,
-  );
+  // page loads: it is run to its end, and a looping one held at a frame a
+  // person sees (SETTLE_ANIMATIONS), before the picture.
+  await send('Runtime.evaluate', {expression: SETTLE_ANIMATIONS}, sessionId);
   const metrics = await send('Page.getLayoutMetrics', {}, sessionId);
   const size = metrics.cssContentSize ?? metrics.contentSize;
+  // A picture beyond the window makes the page see a resize; a part that
+  // redraws on it (a responsive chart) would start over and be pictured
+  // empty. The page's script is held while the picture is taken; the page
+  // stays laid out for the window (its vh, fixed parts and media queries).
+  await send('Emulation.setScriptExecutionDisabled', {value: true}, sessionId);
   const {data} = await send(
     'Page.captureScreenshot',
     {
@@ -201,12 +221,12 @@ try {
     sessionId,
   );
   fs.writeFileSync(png, Buffer.from(data, 'base64'));
+  await send('Emulation.setScriptExecutionDisabled', {value: false}, sessionId);
   // The fonts the picture drew its text in, for the editor's note.
   const fonts = await probeFonts((method, params) =>
     send(method, params, sessionId),
   ).catch(() => null);
-  if (fonts)
-    process.stdout.write(`${FONT_PROBE_PREFIX}${JSON.stringify(fonts)}\n`);
+  if (fonts) say(i, `${FONT_PROBE_PREFIX}${JSON.stringify(fonts)}`);
   // The text the picture draws cut short, measured on the page as the
   // picture shows it. A measurement that does not run says nothing, and
   // the picture stands.
@@ -216,9 +236,14 @@ try {
     sessionId,
   ).catch(() => null);
   if (Array.isArray(measured?.result?.value) && !measured.exceptionDetails)
-    process.stdout.write(
-      `${CUT_SHORT_PREFIX}${JSON.stringify(measured.result.value)}\n`,
-    );
+    say(i, `${CUT_SHORT_PREFIX}${JSON.stringify(measured.result.value)}`);
+  await send('Target.closeTarget', {targetId}).catch(() => {});
+  say(i, PICTURE_TAKEN);
+}
+
+try {
+  // One browser for every page of the batch, a few tabs at a time.
+  await eachAtOnce(jobs, PICTURE_PAGES_AT_ONCE, picture);
   await send('Browser.close').catch(() => {});
 } catch (e) {
   process.stderr.write(`${e instanceof Error ? e.message : String(e)}\n`);

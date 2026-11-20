@@ -8,7 +8,8 @@
  *
  * Read from the packages' manifests, never from the app's source. The
  * receipt says how Themes nest and never says to replace a provider, which
- * may do more than theming. Shared by `theme add` and `theme remove`.
+ * may do more than theming. Shared by `theme add` and `theme remove`, and
+ * by `build`'s playbook, which names the same wiring.
  */
 
 import {listAvailableThemeState} from './_adapter.mjs';
@@ -16,6 +17,63 @@ import {listAvailableThemeState} from './_adapter.mjs';
 /**
  * @typedef {{export: string, from: string, themeProp?: string, modeProp?: string}} AppProvider
  */
+
+/**
+ * The providers installed packages name as the one that wires their themes,
+ * each once with the package that declares it, and the one the app passes
+ * its theme to: the only provider, when it takes a theme object
+ * (`themeProp`). With two, which one wires the app is not ours to say.
+ * @param {string} cwd
+ * @returns {Promise<{found: Array<{provider: AppProvider, owner: string}>, taking: {provider: AppProvider, owner: string} | null}>}
+ */
+export async function appProviders(cwd) {
+  const {themes} = await listAvailableThemeState(cwd);
+  return providersOf(themes);
+}
+
+/**
+ * The provider's opening tag with the generated module's theme passed, and
+ * its mode when the provider takes one and the theme has one color mode.
+ * @param {AppProvider} provider a provider that takes the theme (`themeProp`)
+ * @param {boolean} oneMode the theme has one color mode
+ * @returns {string}
+ */
+export function providerLine(provider, oneMode) {
+  const mode =
+    oneMode && provider.modeProp
+      ? ` ${provider.modeProp}={themeModes[defaultThemeSlug]}`
+      : '';
+  return `<${provider.export} ${provider.themeProp}={themes[defaultThemeSlug]}${mode}>`;
+}
+
+/**
+ * `appProviders` for themes already listed.
+ * @param {Awaited<ReturnType<typeof listAvailableThemeState>>['themes']} themes
+ * @returns {{found: Array<{provider: AppProvider, owner: string}>, taking: {provider: AppProvider, owner: string} | null}}
+ */
+export function providersOf(themes) {
+  /** @type {Map<string, {provider: AppProvider, owner: string}>} */
+  const byProvider = new Map();
+  for (const theme of themes)
+    if (theme.provider)
+      byProvider.set(`${theme.provider.export}\0${theme.provider.from}`, {
+        provider: {
+          export: theme.provider.export,
+          from: theme.provider.from,
+          ...(theme.provider.themeProp
+            ? {themeProp: theme.provider.themeProp}
+            : {}),
+          ...(theme.provider.themeProp && theme.provider.modeProp
+            ? {modeProp: theme.provider.modeProp}
+            : {}),
+        },
+        owner: String(theme.package ?? theme.provider.from),
+      });
+  const found = [...byProvider.values()];
+  const taking =
+    found.length === 1 && found[0].provider.themeProp ? found[0] : null;
+  return {found, taking};
+}
 
 /**
  * A receipt with its `appProvider` (theme.type.mjs ThemeAppResponse) when an
@@ -45,29 +103,7 @@ export async function withAppProvider(result, cwd) {
         ? 'modes'
         : null;
   if (!kind) return result;
-  const {themes} = await listAvailableThemeState(cwd);
-  /** Each provider once, with the package that declares it. @type {Map<string, {provider: AppProvider, owner: string}>} */
-  const byProvider = new Map();
-  for (const theme of themes)
-    if (theme.provider)
-      byProvider.set(`${theme.provider.export}\0${theme.provider.from}`, {
-        provider: {
-          export: theme.provider.export,
-          from: theme.provider.from,
-          ...(theme.provider.themeProp
-            ? {themeProp: theme.provider.themeProp}
-            : {}),
-          ...(theme.provider.themeProp && theme.provider.modeProp
-            ? {modeProp: theme.provider.modeProp}
-            : {}),
-        },
-        owner: String(theme.package ?? theme.provider.from),
-      });
-  const found = [...byProvider.values()];
-  // Only one applicable provider gets the provider form: with two, which
-  // one wires the app is not ours to say.
-  const taking =
-    found.length === 1 && found[0].provider.themeProp ? found[0] : null;
+  const {found, taking} = await appProviders(cwd);
   if (!found.length || (kind !== 'first' && !taking)) return result;
   // The wiring passes a mode when the provider takes one and an added theme
   // has one color mode, as the Theme wiring does.
@@ -78,9 +114,7 @@ export async function withAppProvider(result, cwd) {
         ? Boolean(change.themeModes)
         : result.data.themes.some(t => t.mode);
   const modeProp = oneMode ? taking?.provider.modeProp : undefined;
-  const line = taking
-    ? `<${taking.provider.export} ${taking.provider.themeProp}={themes[defaultThemeSlug]}${modeProp ? ` ${modeProp}={themeModes[defaultThemeSlug]}` : ''}>`
-    : null;
+  const line = taking ? providerLine(taking.provider, oneMode) : null;
   const name = taking?.provider.export;
   let wire;
   if (kind === 'first') {

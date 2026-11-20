@@ -26,6 +26,11 @@
  *   3. the theme rule loses               — an inline write or an unlayered
  *                                           declaration outranks it (#4530)
  *
+ * A var the component reads with a fallback and never declares is an inherited
+ * seam: no element has a value until a container or a theme sets one. When no
+ * story declares such a var, the page's CSS must read it, and the theme rule on
+ * a rendered target element must arrive there.
+ *
  * What it does NOT prove is the pixel: it stops at the value arriving on the
  * element. What the component then paints with it is that component's own test.
  */
@@ -136,6 +141,21 @@ function storiesFor(index, component) {
  * from `@layer astryx-theme` and read the value back.
  */
 function reachInPage([name, classNames, sentinel]) {
+  const themeSets = (element, target) => {
+    const before = getComputedStyle(element).getPropertyValue(name).trim();
+    const style = document.createElement('style');
+    style.textContent = `@layer astryx-theme { .${target} { ${name}: ${sentinel}; } }`;
+    document.head.appendChild(style);
+    const after = getComputedStyle(element).getPropertyValue(name).trim();
+    style.remove();
+    return {
+      status: after === sentinel ? 'reaches' : 'inert',
+      target,
+      before,
+      after,
+    };
+  };
+
   const declaring = [...document.querySelectorAll('*')].find(el => {
     if (!getComputedStyle(el).getPropertyValue(name).trim()) return false;
     const parent = el.parentElement;
@@ -143,7 +163,7 @@ function reachInPage([name, classNames, sentinel]) {
       !parent || !getComputedStyle(parent).getPropertyValue(name).trim()
     );
   });
-  if (!declaring) return {status: 'undeclared'};
+  if (!declaring) return {status: 'undeclared', inherited: inheritedSeam()};
 
   const target = classNames.find(c => declaring.classList.contains(c));
   if (!target) {
@@ -153,19 +173,32 @@ function reachInPage([name, classNames, sentinel]) {
     };
   }
 
-  const before = getComputedStyle(declaring).getPropertyValue(name).trim();
-  const style = document.createElement('style');
-  style.textContent = `@layer astryx-theme { .${target} { ${name}: ${sentinel}; } }`;
-  document.head.appendChild(style);
-  const after = getComputedStyle(declaring).getPropertyValue(name).trim();
-  style.remove();
+  return themeSets(declaring, target);
 
-  return {
-    status: after === sentinel ? 'reaches' : 'inert',
-    target,
-    before,
-    after,
-  };
+  /**
+   * A var the component reads with a fallback and never declares, so an
+   * ancestor's value reaches it (Link's `--link-hover-color`). No element has
+   * a value until a container or a theme sets one, so no element declares it.
+   * It is a seam only when the page's CSS reads it and declares it nowhere; a
+   * var some rule declares stays on the declaring-element path above.
+   */
+  function inheritedSeam() {
+    const rules = [];
+    for (const sheet of document.styleSheets) {
+      try {
+        for (const rule of sheet.cssRules) rules.push(rule.cssText);
+      } catch {
+        // A cross-origin sheet hides its rules; Core's CSS is same-origin.
+      }
+    }
+    if (!rules.some(text => text.includes(`var(${name}`))) return null;
+    if (rules.some(text => text.includes(`${name}:`))) return null;
+    for (const target of classNames) {
+      const element = document.querySelector(`.${target}`);
+      if (element) return themeSets(element, target);
+    }
+    return null;
+  }
 }
 
 async function probe(context, entry, index) {
@@ -174,6 +207,7 @@ async function probe(context, entry, index) {
     return {status: 'nostory'};
   }
   let last = {status: 'undeclared'};
+  let inherited = null;
   for (const id of ids) {
     const page = await context.newPage();
     try {
@@ -188,11 +222,16 @@ async function probe(context, entry, index) {
       ]);
       if (result.status !== 'undeclared') return {...result, story: id};
       last = {...result, story: id};
+      if (!inherited && result.inherited) {
+        inherited = {...result.inherited, story: id};
+      }
     } finally {
       await page.close();
     }
   }
-  return last;
+  // Only once no story declares the var: a declaring element, when one
+  // renders, is where an unlayered declaration can outrank the theme.
+  return inherited || last;
 }
 
 async function run() {

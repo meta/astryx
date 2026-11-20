@@ -11,7 +11,8 @@ import {existsCaseExact} from '../fs/paths.mjs';
 import {levenshteinDistance} from '../text/string-utils.mjs';
 import {compareText} from '../text/compare-text.mjs';
 
-const SKIP_DIRS = new Set(['utils', '__tests__', 'node_modules']);
+/** The folders the hook lookup never enters, at any depth of `src`. */
+export const HOOK_SKIP_DIRS = new Set(['utils', '__tests__', 'node_modules']);
 
 // A hook's doc outside src/hooks/: a `use…` hook, or a `create…` factory
 // documented as one (its doc typed `HookDoc`, such as createReorderable).
@@ -80,7 +81,7 @@ function hookNameFromFile(fileName) {
  * Returns Record<category, hookName[]> similar to discoverComponents.
  * Categories from HookDoc.category: focus, layout, animation, interaction, data, media, streaming
  * Hooks without a category go in 'Other'.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @param {(name: string) => boolean} [keep] the hooks to read; the others are
  *   left out, and their docs are not read
  * @param {Set<string>} [tops] the top folders of `src` outside `hooks` to
@@ -121,12 +122,13 @@ export function discoverHooks(coreDir, keep = () => true, tops) {
 /**
  * Each hook's doc, by hook name: the `*.doc.mjs` files in src/hooks/, then
  * the hook docs in the other folders of src/.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @param {(name: string) => boolean} keep the hooks to list
  * @param {Set<string>} [tops] as for {@link discoverHooks}
  * @returns {Map<string, string>} hook name → doc path
  */
 function hookDocs(coreDir, keep, tops) {
+  if (coreDir == null) return new Map();
   const srcDir = path.join(coreDir, 'src');
   const hooksDir = path.join(srcDir, 'hooks');
   /** @type {Map<string, string>} */
@@ -144,7 +146,7 @@ function hookDocs(coreDir, keep, tops) {
   // documented as a hook (createReorderable).
   if (pathExists(srcDir)) {
     for (const entry of listDirEntries(srcDir)) {
-      if (!entry.isDirectory() || SKIP_DIRS.has(entry.name) || entry.name === 'hooks') continue;
+      if (!entry.isDirectory() || HOOK_SKIP_DIRS.has(entry.name) || entry.name === 'hooks') continue;
       if (tops && !tops.has(entry.name)) continue;
       scanDirForHookDocs(path.join(srcDir, entry.name), docs, keep);
     }
@@ -162,7 +164,7 @@ function scanDirForHookDocs(dirPath, docs, keep) {
   if (!pathExists(dirPath)) return;
   const entries = listDirEntries(dirPath);
   for (const entry of entries) {
-    if (entry.isDirectory() && !SKIP_DIRS.has(entry.name)) {
+    if (entry.isDirectory() && !HOOK_SKIP_DIRS.has(entry.name)) {
       scanDirForHookDocs(path.join(dirPath, entry.name), docs, keep);
     } else if (entry.isFile() && HOOK_DOC_FILE_RE.test(entry.name)) {
       const hookName = hookNameFromFile(entry.name);
@@ -212,11 +214,12 @@ function readHookKeywords(docPath) {
  * Searches hooks/ directory and component directories.
  * Matches both exact name and with 'use' prefix stripped.
  *
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @param {string} name - Hook name (e.g. 'useMediaQuery', 'MediaQuery', 'mediaquery')
  * @returns {string|null} Path to the .doc.mjs file, or null
  */
 export function findHookDoc(coreDir, name) {
+  if (coreDir == null) return null;
   const srcDir = path.join(coreDir, 'src');
   const hooksDir = path.join(srcDir, 'hooks');
 
@@ -251,7 +254,7 @@ export function findHookDoc(coreDir, name) {
   if (pathExists(srcDir)) {
     const topEntries = listDirEntries(srcDir);
     for (const entry of topEntries) {
-      if (!entry.isDirectory() || SKIP_DIRS.has(entry.name) || entry.name === 'hooks') continue;
+      if (!entry.isDirectory() || HOOK_SKIP_DIRS.has(entry.name) || entry.name === 'hooks') continue;
       const found = searchDirForHookDoc(path.join(srcDir, entry.name), uniqueCandidates);
       if (found) return found;
     }
@@ -289,7 +292,7 @@ function searchDirForHookDoc(dirPath, candidates) {
   if (!pathExists(dirPath)) return null;
   const entries = listDirEntries(dirPath);
   for (const entry of entries) {
-    if (entry.isDirectory() && !SKIP_DIRS.has(entry.name)) {
+    if (entry.isDirectory() && !HOOK_SKIP_DIRS.has(entry.name)) {
       const found = searchDirForHookDoc(path.join(dirPath, entry.name), candidates);
       if (found) return found;
     } else if (entry.isFile() && entry.name.endsWith('.doc.mjs')) {
@@ -306,7 +309,7 @@ function searchDirForHookDoc(dirPath, candidates) {
 
 /**
  * Get all discovered hook names as a flat array (for fuzzy matching).
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @param {(name: string) => boolean} [keep] as for {@link discoverHooks}
  * @param {Set<string>} [tops] as for {@link discoverHooks}
  * @returns {string[]}

@@ -28,6 +28,8 @@ import {KIND_FIELDS} from './_adapter.mjs';
  * @property {string} [summary]
  * @property {string[]} [keywords]
  * @property {string} [description]
+ * @property {string} [packageDescription] an item's package's description:
+ *   search reads its words with the item's own
  */
 
 /**
@@ -85,6 +87,23 @@ export function catalogState(pkg, installedNames, declared, officialDeclared) {
 }
 
 /**
+ * A catalog package as discover may show it: an installed package's icon
+ * sets, under its own name or an alias, are read only where icon features are
+ * on (spec:AST-084 FR17), whichever version is shown.
+ * @param {CatalogPackage} entry
+ * @param {{installed: boolean, iconSets?: boolean}} options `installed`: the
+ *   project has the package, under its name or an alias
+ * @returns {CatalogPackage}
+ */
+export function shownEntry(entry, {installed, iconSets}) {
+  if (!installed || iconSets) return entry;
+  return {
+    ...entry,
+    contributions: entry.contributions.filter(c => c.kind !== 'icon-set'),
+  };
+}
+
+/**
  * The version a catalog package shows by default.
  * @param {CatalogPackage} pkg
  * @returns {string | undefined}
@@ -108,6 +127,9 @@ export function catalogEntry(pkg, version) {
     ...(version ? {version} : {}),
     ...(pkg.description ? {description: pkg.description} : {}),
     ...others,
+    // Icon sets are experimental (spec:AST-017 FR27): the entry names the
+    // field that lists them, so a consumer can leave them out.
+    ...(others.iconSets ? {experimentalFields: ['iconSets']} : {}),
   };
 }
 
@@ -190,7 +212,13 @@ export function searchItems(installed, catalog, declared, officialDeclared) {
       const names = /** @type {Record<string, unknown>} */ (pkg)[field];
       if (!Array.isArray(names)) continue;
       for (const name of names) {
-        items.push({package: pkg.name, kind, name, installed: true});
+        items.push({
+          package: pkg.name,
+          kind,
+          name,
+          installed: true,
+          ...(pkg.description ? {packageDescription: pkg.description} : {}),
+        });
       }
     }
   }
@@ -221,6 +249,7 @@ export function searchItems(installed, catalog, declared, officialDeclared) {
         ...(c.title ? {title: c.title} : {}),
         ...(c.summary ? {summary: c.summary} : {}),
         ...(c.keywords ? {keywords: c.keywords} : {}),
+        ...(pkg.description ? {packageDescription: pkg.description} : {}),
       });
     }
   }

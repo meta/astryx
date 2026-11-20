@@ -43,16 +43,31 @@ import english from '../i18n/generated-english/Drawer/DrawerHeader.generated';
 
 registerEnglishFallback(english);
 
+// Each slot keeps its released block offset from the header row. The title
+// is centred on the medium close action. The close action bleeds by
+// spacing-2. A negative margin on a slot makes the row shorter than that
+// slot, so a painted row (a title bar) would not contain its title. The row
+// takes the most negative offset instead. Each slot takes its own offset
+// less the row's, which is never negative.
+const TITLE_OFFSET = '--_drawer-header-title-offset';
+const END_OFFSET = '--_drawer-header-end-offset';
+const ROW_OFFSET = `min(var(${TITLE_OFFSET}), var(${END_OFFSET}), 0px)`;
+
 const styles = stylex.create({
   container: {
     display: 'flex',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: spacingVars['--spacing-3'],
+    // The title's centre on the close button's centre, as DialogHeader's.
+    [TITLE_OFFSET]: `calc(${sizeVars['--size-element-md']} / 2 - ${spacingVars['--spacing-2']} - ${typeScaleVars['--text-heading-2-size']} * ${typeScaleVars['--text-heading-2-leading']} / 2)`,
+    [END_OFFSET]: '0px',
+    marginBlock: ROW_OFFSET,
   },
   // Compensate for the medium icon button's visual padding on the end slot.
+  // Set on the row as well, whose own offset reads it.
   endBlockEdgeCompensation: {
-    marginBlock: `calc(-1 * ${spacingVars['--spacing-2']})`,
+    [END_OFFSET]: `calc(-1 * ${spacingVars['--spacing-2']})`,
   },
   endInlineEdgeCompensation: {
     marginInlineEnd: `calc(-1 * ${spacingVars['--spacing-2']})`,
@@ -63,15 +78,19 @@ const styles = stylex.create({
     gap: spacingVars['--spacing-0'],
     flex: 1,
     minWidth: 0,
-    // Align the title's center with the close button's center, as
-    // DialogHeader does.
-    marginBlock: `calc(${sizeVars['--size-element-md']} / 2 - ${spacingVars['--spacing-2']} - ${typeScaleVars['--text-heading-2-size']} * ${typeScaleVars['--text-heading-2-leading']} / 2)`,
+    marginBlock: `calc(var(${TITLE_OFFSET}) - ${ROW_OFFSET})`,
   },
   actions: {
     display: 'flex',
     alignItems: 'center',
     gap: spacingVars['--spacing-2'],
     flexShrink: 0,
+  },
+  startSlot: {
+    marginBlock: `calc(0px - ${ROW_OFFSET})`,
+  },
+  endSlot: {
+    marginBlock: `calc(var(${END_OFFSET}) - ${ROW_OFFSET})`,
   },
 });
 
@@ -179,13 +198,18 @@ export function DrawerHeader({
       <div
         {...mergeProps(
           themeProps('drawer-header'),
-          stylex.props(styles.container),
+          stylex.props(
+            styles.container,
+            shouldCompensateEndBlock &&
+              (hasEndContent || onOpenChange != null) &&
+              styles.endBlockEdgeCompensation,
+          ),
         )}>
         {hasStartContent && (
           <div
             {...mergeProps(
               themeProps('drawer-header-start-content'),
-              stylex.props(styles.actions),
+              stylex.props(styles.actions, styles.startSlot),
             )}>
             {startContent}
           </div>
@@ -208,6 +232,7 @@ export function DrawerHeader({
               themeProps('drawer-header-end-content'),
               stylex.props(
                 styles.actions,
+                styles.endSlot,
                 shouldCompensateEndBlock && styles.endBlockEdgeCompensation,
                 shouldCompensateEndInline && styles.endInlineEdgeCompensation,
               ),

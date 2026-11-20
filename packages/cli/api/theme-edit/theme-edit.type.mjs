@@ -63,7 +63,7 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditNewResponse
  * @property {'themeEdit.new'} type
- * @property {{theme: string, like: string | null, files: {settings: string, source: string, css: string, module: string}, settings: string[], notes: string[], problems: string[], wiring: string[]} & ThemeEditPreviewFields} data - `settings`: the dial settings it started with; `notes`: font loading, and with `png` the text the sample page's pictures draw cut short; `wiring`: the steps that put the theme into this app (`theme add <theme>` for its app copy in src/themes/<theme>/, else the root file, its imports and the Theme around the app; what builds it).
+ * @property {{theme: string, like: string | null, files: {settings: string, source: string, css: string, module: string}, settings: string[], notes: string[], problems: string[], wiring: string[], missed?: number, missedParts?: number, missedOn?: string[], missedWhere?: string[]} & ThemeEditPreviewFields} data - `settings`: the dial settings it started with; `missed`, `missedParts`, `missedOn`, `missedWhere`: what those settings did not reach, as a change reports it (left out when none); `notes`: font loading, and with `png` the text the sample page's pictures draw cut short; `wiring`: the steps that put the theme into this app (`theme add <theme>` for its app copy in src/themes/<theme>/, else the root file, its imports and the Theme around the app; what builds it).
  */
 
 /**
@@ -98,15 +98,18 @@
  * @property {string[]} parts - The parts it styles (a group's members when it spread).
  * @property {{name: string, members: string[], onlyHint: boolean} | null} group - The group it spread to; `onlyHint` when `--only` would style one member.
  * @property {string[]} changedTokens - Resolved token changes, `name (mode): before -> after`.
+ * @property {string[]} [changedPartTokens] - Changes to the custom properties the built stylesheet sets on parts, `name on <rule> (mode): before -> after` (a readable text color on a selected row). With `changedTokens`, every custom property whose built value moved.
  * @property {string[]} styled - Part styles and typography the change wrote.
  * @property {string[]} kept - Part settings a whole-theme dial left in place (a part setting wins).
  * @property {string[]} lifted - Variant keys the setting was newly repeated on, so a more specific base rule cannot beat it.
- * @property {string[]} notes - What else to know: the shade a color's main token uses and any shade contrast moved, then the generated color files; font loading; what a token feeds; with `png`, the text the sample page's pictures draw cut short, as the browser measured it (one note for each part, with its labels).
+ * @property {string[]} notes - What else to know: the shade a color's main token uses and any shade contrast moved, then the generated color files; font loading; what a token feeds; with `png`, the text the sample page's pictures draw cut short and the words they break inside the word, as the browser measured them (one note for each part, with its labels).
  * @property {Array<{note: string, run: string[]}>} leftOut - What a whole-theme change leaves out, each with the commands that reach it, one per part: the parts drawn as pills that square corners leave round; the surfaces a border width does not reach, and the dividers it moves. The text output prints it right under the status line.
  * @property {string[]} problems - Text this theme made unreadable (below 4.5:1, and not that low in the base theme).
  * @property {ThemeEditProblem[]} newProblems - What this change made unreadable or unseen, each with the command that fixes it: text and borders that read well before it, and the contrast checks the colors it made fail; with `png`, text the sample page's pictures draw cut short, with `flex-shrink 0` on its part when the browser measured that drawing it whole. The text output leads with them, under the status line.
  * @property {number} [missed] - How many misses the theme's own changes left (show --json lists each, with the line that reaches it); the text output counts them near its top.
  * @property {number} [missedParts] - On how many parts those misses are (a part can miss two ways, its border and its shadow).
+ * @property {string[]} [missedOn] - Those parts, in show's order; the text output names them.
+ * @property {string[]} [missedWhere] - Where each of those parts keeps the base theme's look: the part, the variant its miss is in when it is one (`type:error`), then the state, or `at rest`; the text output names them.
  * @property {string[]} warnings - Warnings from the theme build.
  * @property {string | null} preview
  * @property {string[]} pictures
@@ -146,7 +149,7 @@
  * @property {string[]} data.colorNotes - What the color config keeps or replaced of a hand edit, tokens that use another shade than usual so they read, and any that still do not.
  * @property {string[]} data.problems
  * @property {ThemeEditProblem[]} data.openProblems - Every contrast problem the theme has now: its text, its borders, and the checks its colors fail, each with the command that fixes it; with `png`, text the sample page's pictures draw cut short, with `flex-shrink 0` on its part when the browser measured that drawing it whole. The text output ends with them.
- * @property {string[]} data.notes - What else to know; with `png`, the text the sample page's pictures draw cut short, as the browser measured it (one note for each part, with its labels).
+ * @property {string[]} data.notes - What else to know; with `png`, the text the sample page's pictures draw cut short and the words they break inside the word, as the browser measured them (one note for each part, with its labels).
  * @property {string} data.preview
  * @property {string[]} [data.previewStale] - In-app preview files changed by hand, so they were not written again and still show the theme as it was.
  * @property {string} data.sheet - The theme-building page with every component.
@@ -154,7 +157,7 @@
  * @property {string[]} data.skipped - Template pages left out, with the install line each needs.
  * @property {string[]} data.pictures
  * @property {string | null} data.pictureProblem
- * @property {string} [data.look] - With `png`, when the run took them: the pictures to open: with show's full sheet, the picture of each family of components the theme sets a part of (of the buttons when it sets none) first (sheet-<family>.png), then the sample page's and the open states' (each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list drawn open). The text output says it first and last.
+ * @property {string} [data.look] - With `png`, when the run took them: the pictures to open: with show's full sheet, the picture of each family of components the theme sets a part of (of the buttons when it sets none) first (sheet-<family>.png, or, for a family taller than 1600px, the pictures cut from it in order: sheet-<family>-1.png, -2 …), then the sample page's and the open states' (each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list drawn open). The text output says it first and last.
  * @property {{config: string, module: string, receipt: string} | null} data.colorFiles - The generated color files: the input (in the shape `theme palette generate` reads), the module the theme imports, and the receipt; null when the theme sets no color.
  * @property {{wrote: string[]}} [data.appCopy] - Only the first time the theme's app copy is written: the files written in src/themes/<theme>/.
  * @property {string} [data.appCopyStale] - Set when the app copy was not written: a file, folder or link of yours at one of its names; a link on the way to it (src/, src/themes/ or the copy's folder; the editor writes nothing through one); a file where src/, src/themes/ or the copy's folder goes; or a folder that cannot be written, or a write that failed (with the system's reason, such as not writable or the disk is full).
@@ -190,7 +193,7 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditUndoResponse
  * @property {'themeEdit.undo'} type
- * @property {{theme: string, action: 'step', undid: string, refusedBefore?: string, undone: string[], next?: string, settings: number, stepsLeft: number, changedTokens: string[], problems: string[], newProblems: ThemeEditProblem[], notes?: string[]} & ThemeEditPreviewFields} data - `undid` names what the step took back (each setting, base and mode, in one line); `refusedBefore` says a change command refused since the last change changed nothing, so the step took back the change before it; `next` names the change now on top, which the next undo takes back; `notes`, with `png`, the text the sample page's pictures draw cut short.
+ * @property {{theme: string, action: 'step', undid: string, refusedBefore?: string, undone: string[], next?: string, settings: number, stepsLeft: number, changedTokens: string[], changedPartTokens?: string[], problems: string[], newProblems: ThemeEditProblem[], notes?: string[]} & ThemeEditPreviewFields} data - `undid` names what the step took back (each setting, base and mode, in one line); `refusedBefore` says a change command refused since the last change changed nothing, so the step took back the change before it; `next` names the change now on top, which the next undo takes back; `notes`, with `png`, the text the sample page's pictures draw cut short.
  */
 
 /**
@@ -214,7 +217,7 @@
  * @property {string[]} data.added - Pages added by this call.
  * @property {string[]} data.refreshed - Pages that were there already and are written again.
  * @property {Array<{page: string, why: string}>} data.matched - Each template page added for a description or --template, and why it was picked.
- * @property {Array<{page: string, reason: string, installCommand: string | null}>} data.skipped - Template pages not added: why (packages the app lacks, or a StyleX compiler it does not have), with the command that installs what is missing.
+ * @property {Array<{page: string, reason: string, installCommand: string | null, installGuidance?: string}>} data.skipped - Template pages not added: why (packages the app lacks, or a StyleX compiler it does not have), with the command that installs what is missing, and `installGuidance`, the line a loaded integration gives for adding them, when one is given.
  * @property {string[]} data.notes - What else to know.
  * @property {string[]} data.pages - Every page of the preview, in order.
  * @property {string[]} data.files - Every file the preview wrote.

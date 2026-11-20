@@ -12,7 +12,7 @@
  * square.
  */
 
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet, themeEditShow} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
@@ -22,6 +22,14 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+
+// (What these cases check comes from the theme, not the rendered pages: the
+// renders are stood in for.)
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    await importOriginal(),
+  ),
+);
 
 const T = 400_000;
 /** @type {string} */
@@ -185,19 +193,19 @@ describe('pills and corners', () => {
   it(
     'stay off the misses under rounded corners, and are listed under square ones',
     async () => {
-      // (On the mode case's theme: corners are their own setting.)
+      await themeEditNew('p', {cwd, like: 'neutral'});
       const small = /** @type {any} */ (
-        await themeEditSet('m', 'corners', 'small', {cwd})
+        await themeEditSet('p', 'corners', 'small', {cwd})
       ).data;
-      const show = /** @type {any} */ (await themeEditShow('m', looked())).data;
+      const show = /** @type {any} */ (await themeEditShow('p', looked())).data;
       expect(
         (show.missed ?? []).filter((/** @type {any} */ x) =>
           /full pill/.test(x.why),
         ),
       ).toEqual([]);
       expect(small.missed ?? 0).toBeLessThan(16);
-      await themeEditSet('m', 'corners', 'square', {cwd});
-      const sq = /** @type {any} */ (await themeEditShow('m', looked())).data;
+      await themeEditSet('p', 'corners', 'square', {cwd});
+      const sq = /** @type {any} */ (await themeEditShow('p', looked())).data;
       expect(
         (sq.missed ?? []).some((/** @type {any} */ x) =>
           /full pill/.test(x.why),

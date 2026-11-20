@@ -39,7 +39,11 @@ import {
   integrationsFilesNaming,
 } from '../discovery/entry-name-files.mjs';
 import {BUILTIN_DOCS_DIR, rootNamespaceName} from '../discovery/name-roots.mjs';
-import {hasNameLine, keptTreeSummary} from '../fs/kept-tree.mjs';
+import {
+  hasNameLine,
+  keptTreeSummary,
+  keptTreeSummaryAsync,
+} from '../fs/kept-tree.mjs';
 import {findCoreDir} from '../fs/paths.mjs';
 import {mayHaveIntegrations} from '../integrations/may-have-integrations.mjs';
 import {
@@ -205,7 +209,7 @@ function bestMatch(command, names, typed) {
  * @param {number} tier
  * @returns {Found}
  */
-function hintFor(command, name, from, tier) {
+export function hintFor(command, name, from, tier) {
   return {
     hint: {
       name: `astryx ${command} ${name}`,
@@ -492,9 +496,7 @@ export async function findOtherCommand(
   }
   if (!best && coreDir && !isPath && from != null && NEAR_HOOK_FROM.has(from)) {
     try {
-      const {discoverHookKeywords} =
-        await import('../discovery/hook-discovery.mjs');
-      const found = hookByMeaning(typed, discoverHookKeywords(coreDir), {
+      const found = hookByMeaning(typed, await coreHookKeywords(coreDir), {
         keywords: from === 'component',
       });
       if (found) best = hintFor('hook', found.name, from, found.tier);
@@ -503,6 +505,48 @@ export async function findOtherCommand(
     }
   }
   return best;
+}
+
+/** The code that makes the kept hook keywords. */
+const HOOK_KEYWORDS_CODE = [
+  fileURLToPath(import.meta.url),
+  fileURLToPath(new URL('../discovery/hook-discovery.mjs', import.meta.url)),
+];
+
+/**
+ * Each Core hook with the keywords its doc declares, as
+ * hook-discovery.mjs discoverHookKeywords reads them: a summary kept while
+ * every folder of Core's `src` the hook lookup can list, every doc it read
+ * and every path it probed are unchanged, so a warm miss reads no hook doc.
+ * @param {string} coreDir
+ * @returns {Promise<Array<{name: string, keywords: string[]}>>}
+ */
+export async function coreHookKeywords(coreDir) {
+  const {HOOK_SKIP_DIRS, discoverHookKeywords} =
+    await import('../discovery/hook-discovery.mjs');
+  return keptTreeSummaryAsync(
+    {
+      kind: 'core-hook-keywords',
+      roots: [path.join(coreDir, 'src')],
+      code: HOOK_KEYWORDS_CODE,
+      skip: name => HOOK_SKIP_DIRS.has(name),
+      recorded: true,
+      // A stored value that is not such a list is read again.
+      accept: value =>
+        Array.isArray(value) &&
+        value.every(
+          hook =>
+            hook !== null &&
+            typeof hook === 'object' &&
+            typeof hook.name === 'string' &&
+            Array.isArray(hook.keywords) &&
+            hook.keywords.every(
+              (/** @type {unknown} */ keyword) => typeof keyword === 'string',
+            ),
+        ),
+    },
+    async () => discoverHookKeywords(coreDir),
+  );
 }
 
 /**
@@ -552,7 +596,8 @@ export function hookByMeaning(typed, hooks, {keywords = true} = {}) {
  * names and doc text: the CLI's flat topics and root namespaces, the levels
  * that hold the flat topics, and each integration's topics and root
  * namespaces. Only a CLI tree file whose name `isWanted` accepts, and only an
- * integration doc whose text spells the name, is read.
+ * integration doc whose text spells the name, is read. A doc the run's base
+ * leaves out is no hint.
  * @param {Array<string | undefined>} docsDirs the integrations' docs folders
  * @param {import('./name-index.mjs').NameIndex} index
  * @param {string} wanted the folded name
@@ -560,8 +605,19 @@ export function hookByMeaning(typed, hooks, {keywords = true} = {}) {
  * @returns {Promise<string[]>}
  */
 async function rootDocNames(docsDirs, index, wanted, isWanted) {
+  const {coreOnlyDocNames} = await import('../bases/core-docs.mjs');
+  const leftOut = await coreOnlyDocNames();
+  /** @param {string} name */
+  const served = name => isWanted(name) && !leftOut.has(name);
+  // A level exists while a topic sits in it; an integration's topic keeps
+  // its level on any base.
+  const filled = new Set(
+    index.docs.flat().flatMap(({declared}) =>
+      declared?.level ? [declared.level] : [],
+    ),
+  );
   const builtin = [
-    ...index.topics.filter(isWanted),
+    ...index.topics.filter(served),
     ...index.treeStems.filter(isWanted).flatMap(stem => {
       const name = rootNamespaceName(
         fs.readFileSync(
@@ -569,9 +625,11 @@ async function rootDocNames(docsDirs, index, wanted, isWanted) {
           'utf8',
         ),
       );
-      return name && isWanted(name) ? [name] : [];
+      return name && served(name) ? [name] : [];
     }),
-    ...index.levels.filter(isWanted),
+    ...index.levels.filter(
+      level => served(level) || (isWanted(level) && filled.has(level)),
+    ),
   ];
   if (builtin.length > 0) return builtin;
   // A topic or root namespace: a doc without `placement`.

@@ -24,8 +24,12 @@ import {
   isAstryxInitialized,
   AgentDocsHomeError,
   resolveAgentDocsRoot,
+  ICON_FINDER_LINE,
 } from './agent-docs.mjs';
 import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
+import {writeIconSetProject} from '../../test-utils/icon-set-fixture.mjs';
+import {Project} from '../config/project.mjs';
+import {iconFeatureGate} from '../integrations/icon-features.mjs';
 
 let tmpDir;
 
@@ -345,6 +349,22 @@ describe('generateCompressedIndex', () => {
     );
   });
 
+  it('ends with the remove line, after any integration lines', () => {
+    const REMOVE_LINE =
+      'To remove this block, run `astryx init --remove-agents`, which removes it from the agent files at the project root and in the folder you run it in; from any other file it leaves, delete everything from ASTRYX:START to ASTRYX:END.';
+    const endsWith = (/** @type {string} */ block) =>
+      block.endsWith(`\n${REMOVE_LINE}\n<!-- ASTRYX:END -->`);
+    expect(endsWith(generateCompressedIndex('1.0.0', {topics: []}))).toBe(true);
+    expect(
+      endsWith(
+        generateCompressedIndex('1.0.0', {
+          topics: [],
+          agentDocs: [{package: '@acme/first', append: ['first one']}],
+        }),
+      ),
+    ).toBe(true);
+  });
+
   it('caps the configured project at 32 integration lines', () => {
     const agentDocs = Array.from({length: 5}, (_, packageIndex) => ({
       package: `@acme/package-${packageIndex}`,
@@ -356,6 +376,83 @@ describe('generateCompressedIndex', () => {
     expect(() => generateCompressedIndex('1.0.0', {agentDocs})).toThrow(
       /32-line project limit/,
     );
+  });
+});
+
+describe('the icon finder line in the agent block', () => {
+  /** @type {string} */
+  let root;
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-agent-icon-line-'));
+  });
+  afterEach(() => {
+    fs.rmSync(root, {recursive: true, force: true});
+  });
+
+  /**
+   * The block's lines in a pnpm project with these icon-set packages.
+   * @param {Array<Record<string, unknown>>} packages
+   * @param {Record<string, unknown>} [config]
+   */
+  async function blockLines(packages, config) {
+    const project = writeIconSetProject(root, {packages, config});
+    fs.writeFileSync(
+      path.join(project, 'pnpm-lock.yaml'),
+      "lockfileVersion: '9.0'\n",
+    );
+    const block = await renderAgentDocsBlock(project);
+    const lines = block.split('\n');
+    const cli = lines.findIndex(line =>
+      line.startsWith('CLI: run every command as'),
+    );
+    expect(cli).toBeGreaterThan(-1);
+    return {block, lines, cli};
+  }
+
+  it('no icon-set package: the block has no icon line', async () => {
+    const {block, lines, cli} = await blockLines([]);
+    expect(block).not.toContain('experimental icon');
+    expect(lines[cli + 1]).toBe('');
+    const withoutIcons = generateCompressedIndex(null, {
+      invocation: 'pnpm exec astryx',
+      topics: ['getting-started'],
+    });
+    const withIconsOff = generateCompressedIndex(null, {
+      invocation: 'pnpm exec astryx',
+      topics: ['getting-started'],
+      iconFeatures: false,
+    });
+    expect(withIconsOff).toBe(withoutIcons);
+  });
+
+  it('an installed icon-set package: the line follows the runner line', async () => {
+    const {lines, cli} = await blockLines([{}]);
+    // The line writes the bare command; the runner line above it names the
+    // project's runner, as for every command in the block.
+    expect(lines[cli]).toMatch(/^CLI: run every command as `pnpm /);
+    expect(lines[cli + 1]).toBe(ICON_FINDER_LINE);
+    expect(lines.filter(line => line === ICON_FINDER_LINE)).toHaveLength(1);
+  });
+
+  it('the computer-level skill never gets the line', () => {
+    const text = renderComputerAgentText({command: 'astryx'});
+    expect(text).not.toContain(ICON_FINDER_LINE);
+    expect(text).not.toContain('experimental icon');
+  });
+
+  it('experimental.iconSet in the config turns the line on too', async () => {
+    const {lines, cli} = await blockLines([{}], {
+      experimental: {iconSet: 'glyphs'},
+    });
+    expect(lines[cli + 1]).toBe(ICON_FINDER_LINE);
+  });
+
+  it('experimental.iconSet with no package installed: the line follows the gate', async () => {
+    const config = {experimental: {iconSet: 'glyphs'}};
+    const {block} = await blockLines([], config);
+    const project = await Project.load(path.join(root, 'app'), {fresh: true});
+    expect(iconFeatureGate(project).on).toBe(true);
+    expect(block.includes(ICON_FINDER_LINE)).toBe(iconFeatureGate(project).on);
   });
 });
 
@@ -1288,6 +1385,23 @@ describe('installAgentDocs', () => {
 
     expect(written).toEqual(['custom/AGENT.md']);
     expect(fs.existsSync(path.join(tmpDir, 'custom', 'AGENT.md'))).toBe(true);
+  });
+
+  it('names the by-hand way out in a block that --remove-agents leaves', async () => {
+    setupCorePackage(tmpDir);
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      JSON.stringify({name: 'c', version: '1.0.0'}),
+    );
+    installAgentDocs(tmpDir, {paths: ['custom/AGENT.md']});
+    const file = path.join(tmpDir, 'custom', 'AGENT.md');
+    const {remove} = await import('../../api/init/remove/remove.mjs');
+    await remove({cwd: tmpDir});
+    const left = fs.readFileSync(file, 'utf-8');
+    expect(left).toContain('<!-- ASTRYX:START -->');
+    expect(left).toContain(
+      'from any other file it leaves, delete everything from ASTRYX:START to ASTRYX:END.\n<!-- ASTRYX:END -->',
+    );
   });
 
   it('onlyReplace: skips files without XDS markers', () => {

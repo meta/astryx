@@ -33,10 +33,10 @@ import {Center} from '@astryxdesign/core/Center';
 import {Thumbnail} from '@astryxdesign/core/Thumbnail';
 import {Icon} from '@astryxdesign/core/Icon';
 import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
-import {ShieldCheckIcon} from '@heroicons/react/24/outline';
-import {LockClosedIcon} from '@heroicons/react/24/outline';
-import {CheckCircleIcon} from '@heroicons/react/24/outline';
-import {TruckIcon} from '@heroicons/react/24/outline';
+import {ShieldIcon} from '@astryxdesign/template-icons';
+import {LockIcon} from '@astryxdesign/template-icons';
+import {SuccessIcon} from '@astryxdesign/template-icons';
+import {ShippingIcon} from '@astryxdesign/template-icons';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -161,13 +161,26 @@ const fmt = (n: number) => `$${n.toFixed(2)}`;
 // :root by `@astryxdesign/core/astryx.css`). No StyleX compiler required.
 
 const fullWidth: CSSProperties = {width: '100%'};
+// An order line's name and badge start from no width and grow into the row,
+// so the price stays beside them while they fit, even wrapped onto two lines,
+// and moves under them only when the badge itself does not fit. They never
+// need more than the row (maxWidth): a badge wider than it ellipsizes.
+const itemName: CSSProperties = {flexBasis: 0, flexGrow: 1};
+// A price moved under its line keeps to the end, under the other prices.
+const itemPrice: CSSProperties = {marginInlineStart: 'auto'};
 // Form column flex-basis so the two checkout columns share width evenly.
-const formColBasis: CSSProperties = {flexBasis: 0};
+// The min widths let the two columns wrap on a narrow first paint, before
+// script picks the stacked layout; on desktop both columns are wider.
+const formColBasis: CSSProperties = {
+  flexBasis: 0,
+  minWidth: 'min(100%, 320px)',
+};
 // Space the Order Summary content below its collapsible trigger title.
 const summaryContent: CSSProperties = {paddingBlockStart: 'var(--spacing-2)'};
 // Order-summary column: sticky beside the form on desktop.
 const summarySticky: CSSProperties = {
   flexBasis: 0,
+  minWidth: 'min(100%, 300px)',
   position: 'sticky',
   top: 'var(--spacing-4)',
   alignSelf: 'flex-start',
@@ -271,7 +284,7 @@ export default function PaymentFormPage() {
     <Layout
       height="fill"
       content={
-        <LayoutContent padding={0}>
+        <LayoutContent role="main" padding={0}>
           <Center axis="horizontal">
             <Section
               variant="transparent"
@@ -295,6 +308,7 @@ export default function PaymentFormPage() {
 
                 <Stack
                   direction={isMobile ? 'vertical' : 'horizontal'}
+                  wrap={isMobile ? 'nowrap' : 'wrap'}
                   gap={8}
                   vAlign="start">
                   <StackItem
@@ -733,18 +747,20 @@ export default function PaymentFormPage() {
                               controlStyle={fullWidth}
                             />
                           </StackItem>
-                          <Button
-                            label="Apply"
-                            variant="secondary"
-                            size="lg"
-                            onClick={() =>
-                              // Demo only: replace this toast with the call that applies the promo code.
-                              showToast({
-                                body: 'Demo: the promo code would be applied here',
-                                uniqueID: 'apply-promo',
-                              })
-                            }
-                          />
+                          <StackItem>
+                            <Button
+                              label="Apply"
+                              variant="secondary"
+                              size="lg"
+                              onClick={() =>
+                                // Demo only: replace this toast with the call that applies the promo code.
+                                showToast({
+                                  body: 'Demo: the promo code would be applied here',
+                                  uniqueID: 'apply-promo',
+                                })
+                              }
+                            />
+                          </StackItem>
                         </HStack>
                       </VStack>
 
@@ -794,7 +810,7 @@ export default function PaymentFormPage() {
                         <HStack gap={5} hAlign="center" wrap="wrap">
                           <HStack gap={1} vAlign="center">
                             <Icon
-                              icon={ShieldCheckIcon}
+                              icon={ShieldIcon}
                               size="sm"
                               color="secondary"
                             />
@@ -803,18 +819,14 @@ export default function PaymentFormPage() {
                             </Text>
                           </HStack>
                           <HStack gap={1} vAlign="center">
-                            <Icon
-                              icon={LockClosedIcon}
-                              size="sm"
-                              color="secondary"
-                            />
+                            <Icon icon={LockIcon} size="sm" color="secondary" />
                             <Text type="supporting" color="secondary">
                               SSL Encrypted
                             </Text>
                           </HStack>
                           <HStack gap={1} vAlign="center">
                             <Icon
-                              icon={CheckCircleIcon}
+                              icon={SuccessIcon}
                               size="sm"
                               color="secondary"
                             />
@@ -897,8 +909,14 @@ export default function PaymentFormPage() {
                                       <HStack
                                         gap={2}
                                         hAlign="between"
-                                        vAlign="start">
-                                        <HStack gap={2} vAlign="center">
+                                        vAlign="start"
+                                        wrap="wrap">
+                                        <HStack
+                                          gap={2}
+                                          vAlign="center"
+                                          wrap="wrap"
+                                          maxWidth="100%"
+                                          style={itemName}>
                                           <Text type="body" weight="medium">
                                             {item.name}
                                           </Text>
@@ -909,7 +927,10 @@ export default function PaymentFormPage() {
                                             />
                                           )}
                                         </HStack>
-                                        <Text type="body" weight="bold">
+                                        <Text
+                                          type="body"
+                                          weight="bold"
+                                          style={itemPrice}>
                                           {fmt(item.price)}
                                         </Text>
                                       </HStack>
@@ -1021,7 +1042,7 @@ export default function PaymentFormPage() {
                               </HStack>
                               <Banner
                                 status="info"
-                                icon={<Icon icon={TruckIcon} size="sm" />}
+                                icon={<Icon icon={ShippingIcon} size="sm" />}
                                 title="Free shipping on orders over $300"
                               />
                             </VStack>

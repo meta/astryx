@@ -1137,6 +1137,50 @@ export const OverlayBesideKeyboard: Story = {
   },
 };
 
+/**
+ * Overlay Beside Keyboard with nine options, so the open list must rise to
+ * end above a software keyboard. On a phone, focus the field so that its
+ * keyboard rises, then open the Selector. The list ends above the keyboard.
+ * The trigger sits where Overlay Beside Keyboard's does. On an iPhone with the
+ * keyboard up, a tap on a trigger just above Safari's bottom bars closed the
+ * keyboard and opened nothing.
+ */
+export const FlippedOverlayBesideKeyboard: Story = {
+  parameters: {layout: 'fullscreen'},
+  render: () => {
+    const [name, setName] = useState('');
+    const [value, setValue] = useState<string | undefined>('Banana');
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 16,
+          padding: '96px 24px 0',
+        }}>
+        <TextInput label="Name" value={name} onChange={setName} />
+        <div style={{height: 64}} />
+        <Selector
+          label="Fruit"
+          options={[
+            'Apple',
+            'Banana',
+            'Cherry',
+            'Date',
+            'Elderberry',
+            'Fig',
+            'Grape',
+            'Honeydew',
+            'Kiwi',
+          ]}
+          value={value}
+          onChange={v => setValue(v)}
+        />
+      </div>
+    );
+  },
+};
+
 // All variations
 export const AllVariations: Story = {
   render: () => {
@@ -1724,4 +1768,53 @@ export const SearchableRequired: Story = {
       </VStack>
     );
   },
+};
+
+/**
+ * A Notes field, a button that is no Tab stop, as an unselected tab in a
+ * roving group is, and a Selector, inside a container that takes focus.
+ */
+function SelectorInContainer({tabIndex}: {tabIndex: number}) {
+  const [value, setValue] = useState<string | undefined>(undefined);
+  const [notes, setNotes] = useState('');
+  return (
+    <div
+      tabIndex={tabIndex}
+      data-testid="focusable-container"
+      style={{padding: 32}}>
+      <VStack gap={4}>
+        <TextInput label="Notes" value={notes} onChange={setNotes} />
+        <button type="button" tabIndex={-1}>
+          Next tab
+        </button>
+        <Selector
+          label="Fruit"
+          options={['Apple', 'Banana', 'Cherry']}
+          value={value}
+          onChange={v => setValue(v)}
+          placement="below"
+        />
+      </VStack>
+    </div>
+  );
+}
+
+/**
+ * A Selector inside a container that takes focus but is no control, such as
+ * a dialog's content box with `tabIndex={-1}`, below another field. A press
+ * inside the open list, or on the container, moves the browser's focus to
+ * that container.
+ */
+export const InsideFocusableContainer: Story = {
+  tags: ['!autodocs'],
+  render: () => <SelectorInContainer tabIndex={-1} />,
+};
+
+/**
+ * A Selector inside a container that is a Tab stop, such as a card with
+ * `tabIndex={0}`. A press on the container's padding focuses the container.
+ */
+export const InsideTabStopContainer: Story = {
+  tags: ['!autodocs'],
+  render: () => <SelectorInContainer tabIndex={0} />,
 };

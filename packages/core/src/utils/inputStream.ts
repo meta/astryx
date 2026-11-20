@@ -3,11 +3,11 @@
 /**
  * @file inputStream.ts
  * @input A window, and subscribers to its input events (the press feedback
- *   controller, the gesture host)
- * @output subscribeInput, getLastPointerType, getLastMousePoint and
- *   getDownPresses: the type of the latest pointer event the stream
- *   delivered, where the latest mouse one was, and where each finger and pen
- *   press that is down was last
+ *   controller, the gesture host, the keyboard module)
+ * @output subscribeInput. Its readers: getLastPointerType, the latest
+ *   pointer's type; getLastMousePoint, the latest mouse point; getDownPresses,
+ *   each finger and pen press that is down; getTouches, the fingers on the
+ *   screen and how many touches started.
  * @position The one entry for document-wide input listeners in core: one
  *   native listener per event type on the window's capture phase, shared by
  *   every subscriber
@@ -85,6 +85,29 @@ const inputState = realmValue(sharedKey('input-stream', 1), () => ({
 const {streams, lastPointerTypes, lastMousePoints, downPresses} = inputState;
 const NO_PRESSES: ReadonlyMap<number, MousePoint> = new Map();
 
+/** The fingers on a window's screen, and the touches that started there. */
+export interface TouchRecord {
+  /** How many fingers are on the screen. */
+  readonly fingers: number;
+  /**
+   * How many touches started. It never goes down, so a count a caller notes
+   * stays comparable: a different count later says a touch started since.
+   */
+  readonly starts: number;
+}
+
+const NO_TOUCHES: TouchRecord = {fingers: 0, starts: 0};
+
+/**
+ * How many fingers are on each window's screen, and how many touches have
+ * started, from its touch events. Its own key keeps the stream's first state
+ * readable by copies built before it.
+ */
+const touchRecords = realmValue(
+  sharedKey('input-stream/touches', 1),
+  () => new WeakMap<Window, TouchRecord>(),
+);
+
 /** A point in the viewport, in CSS pixels. */
 export interface MousePoint {
   readonly x: number;
@@ -119,6 +142,26 @@ export function getLastMousePoint(view: Window): MousePoint | null {
  */
 export function getDownPresses(view: Window): ReadonlyMap<number, MousePoint> {
   return downPresses.get(view) ?? NO_PRESSES;
+}
+
+/**
+ * The fingers on `view`'s screen and the touches that started there, from the
+ * touch events its stream delivered. A native pan keeps the finger on the
+ * screen, though the pan's `pointercancel` drops its press from
+ * getDownPresses. The stream counts only while subscribers listen to
+ * `touchstart`, `touchend` and `touchcancel`, as the keyboard module does.
+ * Reading it adds no listener. It counts a stylus too, since a stylus drag
+ * moves the page as a finger does. The gesture host's own count skips a
+ * stylus, and it listens only while a recognizer needs input, so it cannot
+ * serve here.
+ *
+ * @example
+ * ```
+ * const isFingerDown = getTouches(window).fingers > 0;
+ * ```
+ */
+export function getTouches(view: Window): TouchRecord {
+  return touchRecords.get(view) ?? NO_TOUCHES;
 }
 
 /**
@@ -177,6 +220,9 @@ export function subscribeInput<K extends keyof InputEventMap>(
       if (type === 'pointerup' || type === 'pointercancel') {
         downPresses.delete(view);
       }
+      if (type === 'touchend' || type === 'touchcancel') {
+        forgetFingers(view);
+      }
     }
   };
 }
@@ -222,6 +268,13 @@ function dispatch(view: Window, channel: Channel, event: Event): void {
   if (pointerType === 'touch' || pointerType === 'pen') {
     recordPress(view, event);
   }
+  if (
+    event.type === 'touchstart' ||
+    event.type === 'touchend' ||
+    event.type === 'touchcancel'
+  ) {
+    recordTouches(view, event);
+  }
   // A subscriber may subscribe or unsubscribe while the event runs; the
   // event goes to those subscribed when it arrived.
   for (const subscriber of [...channel.subscribers]) {
@@ -235,6 +288,29 @@ function dispatch(view: Window, channel: Channel, event: Event): void {
     } catch (error) {
       report(error);
     }
+  }
+}
+
+// The count stays only while both ends are heard: a missed `touchend` would
+// otherwise leave a finger on the screen.
+function recordTouches(view: Window, event: Event): void {
+  const channels = streams.get(view);
+  if (channels?.has('touchend') !== true || !channels.has('touchcancel')) {
+    forgetFingers(view);
+    return;
+  }
+  const {touches} = event as Partial<TouchEvent>;
+  const starts = touchRecords.get(view)?.starts ?? 0;
+  touchRecords.set(view, {
+    fingers: touches?.length ?? 0,
+    starts: event.type === 'touchstart' ? starts + 1 : starts,
+  });
+}
+
+function forgetFingers(view: Window): void {
+  const record = touchRecords.get(view);
+  if (record != null) {
+    touchRecords.set(view, {fingers: 0, starts: record.starts});
   }
 }
 

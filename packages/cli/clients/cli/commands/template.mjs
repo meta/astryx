@@ -8,6 +8,7 @@ import path from 'node:path';
 import {jsonOut} from '../../../foundation/response/json.mjs';
 import {isFilePathArg} from '../../../foundation/fs/path-safety.mjs';
 import {
+  docText,
   emit,
   section,
   text,
@@ -45,6 +46,18 @@ export {
  *   import('../../../api/template/template.type.mjs').TemplateCdnResponse
  * )} TemplateResponse
  */
+
+/**
+ * The line naming the one `component` call that reads every component a
+ * template uses, or null when it uses none.
+ * @param {string} run the CLI invocation
+ * @param {string[]} components
+ * @returns {string | null}
+ */
+function componentsLine(run, components) {
+  if (components.length === 0) return null;
+  return `Read the components it uses in one call: \`${run} component ${components.join(' ')}\``;
+}
 
 /**
  * The line saying how many docs-only demo content elements became a
@@ -246,7 +259,7 @@ export function registerTemplate(program) {
             const toRow = t => ({
               id: t.id,
               name: markNotReady(t.name, t.isReady),
-              description: firstSentence(t.description ?? ''),
+              description: docText(firstSentence(t.description ?? '')),
               package:
                 t.package && t.package !== '@astryxdesign/core'
                   ? t.package
@@ -284,7 +297,7 @@ export function registerTemplate(program) {
             emit(
               record({package: result.package}),
               text(
-                `# ${markNotReady(tName, isReady)}${description ? ' — ' + description : ''}\n` +
+                `# ${markNotReady(tName, isReady)}${description ? ' — ' + docText(description) : ''}\n` +
                   `# Components: ${components.join(', ')}`,
               ),
               code(skeleton),
@@ -304,11 +317,14 @@ export function registerTemplate(program) {
               demoContentReplaced,
               icons,
               isReady,
+              componentsToRead,
             } = result.data;
             console.error(`package: ${result.package}`);
             if (isReady === false)
               console.error(`template: ${markNotReady(tName, isReady)}`);
             emit(code(source));
+            const readLine = componentsLine(run, componentsToRead);
+            if (readLine) console.error(readLine);
             if (demoMediaReplaced > 0) {
               console.error(
                 `Replaced ${demoMediaReplaced} Astryx demo media reference${demoMediaReplaced === 1 ? '' : 's'}: ` +
@@ -334,6 +350,7 @@ export function registerTemplate(program) {
               notes,
               icons,
               givenPath,
+              components,
             } = result.data;
             const file = `${outputDir}/${fileName}`;
             const givenRelative =
@@ -341,12 +358,14 @@ export function registerTemplate(program) {
                 ? path.join(outputDir, fileName)
                 : outputDir;
             const iconText = iconLines(icons);
+            const readLine = componentsLine(run, components);
             emit(
               text(
                 isReady === false
                   ? `Copied template ${markNotReady(tName, isReady)} to ${file}`
                   : `Copied template to ${file}`,
               ),
+              readLine !== null && text(readLine),
               givenPath !== undefined &&
                 text(
                   `${givenPath} is inside the project, so it was written as its relative path, ${givenRelative}.`,
