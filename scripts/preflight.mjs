@@ -477,7 +477,7 @@ const MISSING_BUILDS =
 
 /** A missing module that is a workspace package's build output. */
 const BUILD_OUTPUT =
-  /error TS2307: Cannot find module '(?:@astryxdesign\/[^']+\/built(?:\/[^']*)?|\.\.?\/[^']*\/dist(?:\/[^']*)?)'/;
+  /error TS2307: Cannot find module '(?:@astryxdesign\/[^']+\/built(?:\/[^']*)?|\.\.?\/(?:[^']*\/)?dist(?:\/[^']*)?)'/;
 
 /**
  * Why a failed typecheck is skipped, or null: every TypeScript error names a
