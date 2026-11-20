@@ -22,13 +22,4 @@ export const doc = {
   // in packages/cli/api/build/kit/start.test.mjs, which reads this doc).
   isReady: false,
   category: 'Shell - Messaging',
-  icons: {
-    Cog6ToothIcon: 'settings',
-    HashtagIcon: 'tag',
-    InboxIcon: 'inbox',
-    MagnifyingGlassIcon: 'search',
-    PencilSquareIcon: 'compose',
-    UserGroupIcon: 'users',
-    XMarkIcon: 'close',
-  },
 };

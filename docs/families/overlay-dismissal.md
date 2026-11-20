@@ -181,7 +181,10 @@ this record's current membership snapshot must be updated with it.
   to a member behind it. A non-modal Popover is present for Escape only while
   focus is inside it, or on or inside its anchor or trigger (`spec:AST-116`
   FR15); otherwise
-  the press goes to the member beneath it, or to the page when none is.
+  the press goes to the member beneath it, or to the page when none is. A
+  Tour step without a backdrop follows the non-modal Popover's rule, and a
+  step with a backdrop takes Escape as a modal layer does (`spec:AST-119`
+  FR14).
 - **FR3 — Platform close requests use the same topmost rule.** A member receiving
   a browser or platform close request closes only when it is the topmost
   registered present member. A request aimed at a lower member is declined.
@@ -254,6 +257,10 @@ this record's current membership snapshot must be updated with it.
 FR2 and FR3 gap: Escape and platform close requests reach a non-modal Popover through
 the shared stack and native auto light dismiss wherever focus is
 (`spec:AST-116` FR15 gap).
+FR2 gap: a Lab TourStep without a backdrop ends the tour on Escape wherever
+focus is (`spec:AST-119` FR14 gap).
+FR9 gap: a Popover's focus return to a control is a plain focus, which can
+scroll the control into view.
 
 ## Allowed component variation
 
@@ -278,6 +285,8 @@ the shared stack and native auto light dismiss wherever focus is
 | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | Dialog inside Dialog                                   | Inner dialog handles the first request                                                                                           | Dialog supplies native modality and focus behavior                                                                                  |
 | Popover inside Dialog                                  | A modal Popover, or a non-modal one holding focus, handles the first Escape                                                      | Popover supplies anchoring, portal placement, and focus policy                                                                      |
+| Tour step without a backdrop                           | Takes Escape only while focus is in its callout, or on or inside its anchor (`spec:AST-119` FR14)                                | Escape ends the tour with `'escape'`; the step has no outside dismissal                                                             |
+| Tour step with a backdrop                              | Handles Escape as a modal layer does (`spec:AST-119` FR14)                                                                       | A press outside the callout ends the tour with `'backdrop'`                                                                         |
 | Registered descendant inside CommandPalette            | Descendant handles the first Escape                                                                                              | CommandPalette inherits Dialog's shared stack participation                                                                         |
 | Tooltip or HoverCard inside Dialog, in page            | An open HoverCard handles the first Escape; over an unpinned Tooltip, the Dialog takes it; a pinned Tooltip takes it first       | Hover families decide when they are present and how controlled state responds                                                       |
 | Lightbox or MobileNav above a required Dialog          | Top member handles the request                                                                                                   | Required Dialog uses `block` only when it is topmost                                                                                |

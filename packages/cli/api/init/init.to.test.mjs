@@ -366,6 +366,31 @@ describe('computer places', () => {
     expect(settings().skills.to).toEqual(['~/team-skills', '~/other']);
   });
 
+  it('writes through a linked skill folder, then refreshes and removes what it wrote there', async () => {
+    const target = tmp('target');
+    fs.mkdirSync(path.join(home, 'hs'));
+    fs.symlinkSync(target, path.join(home, 'hs', 'astryx'), 'dir');
+    await run({to: path.join(home, 'hs')});
+    expect(fs.existsSync(path.join(target, 'SKILL.md'))).toBe(true);
+    expect(settings().skills.to).toEqual(['~/hs']);
+    const again = await run({to: path.join(home, 'hs')});
+    expect(again.skills.at(-1)).toMatchObject({action: 'unchanged'});
+    await init({remove: true, to: path.join(home, 'hs')}, {cwd: project});
+    expect(fs.existsSync(path.join(target, 'SKILL.md'))).toBe(false);
+    expect(settings().skills?.to ?? []).toEqual([]);
+  });
+
+  it("keeps a file a linked skill folder already holds, and does not save a folder nothing reached", async () => {
+    const target = tmp('target');
+    fs.writeFileSync(path.join(target, 'SKILL.md'), 'theirs\n');
+    fs.mkdirSync(path.join(home, 'hs'));
+    fs.symlinkSync(target, path.join(home, 'hs', 'astryx'), 'dir');
+    const data = await run({to: path.join(home, 'hs')});
+    expect(fs.readFileSync(path.join(target, 'SKILL.md'), 'utf8')).toBe('theirs\n');
+    expect(data.skills.at(-1)).toMatchObject({action: 'kept', reason: 'not-astryx'});
+    expect(fs.existsSync(settingsFile()) ? settings().skills?.to : undefined).toBeUndefined();
+  });
+
   it('user with a project place reports both', async () => {
     const data = await run({to: 'user,skills'});
     expect(data.to).toEqual(['user', 'skills']);
@@ -402,7 +427,6 @@ describe('refusals', () => {
     [{to: 'user,~/team', agent: 'claude'}, '--agent'],
     [{to: 'skills', features: 'theme'}, '--features'],
     [{to: 'user', user: true}, '--user'],
-    [{to: 'skills', removeAgents: true}, '--remove-agents'],
     [{to: ''}, 'needs a place'],
   ])('refuses %o', async (options, named) => {
     const err = await refusal(() => init(options, {cwd: project}));

@@ -493,6 +493,18 @@ describe('installCommandFor names a package Astryx releases with Core at the pro
     }
   });
 
+  it('adds Core itself at the same release as a package released with Core', () => {
+    expect(
+      installCommandFor(['@astryxdesign/core'], app({})).installCommand,
+    ).toBe(`npm install @astryxdesign/core@${CLI_VERSION}`);
+    expect(
+      installCommandFor(
+        ['@astryxdesign/core'],
+        app({'@astryxdesign/core': '0.7.10'}),
+      ).installCommand,
+    ).toBe('npm install -E @astryxdesign/core@0.7.10');
+  });
+
   it('leaves any other package to the package manager, and saves nothing exactly beside it', () => {
     const pinned = app({'@astryxdesign/core': '0.7.10'});
     expect(installCommandFor(['left-pad'], pinned).installCommand).toBe(

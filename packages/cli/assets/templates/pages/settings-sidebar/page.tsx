@@ -30,20 +30,20 @@ import {useToast} from '@astryxdesign/core/Toast';
 import {rtlStyles} from '@astryxdesign/core/utils';
 import {
   UserIcon,
-  LockClosedIcon,
-  ShieldCheckIcon,
-  BellIcon,
-  DocumentTextIcon,
+  LockIcon,
+  ShieldIcon,
+  NotificationIcon,
+  DocumentIcon,
   CreditCardIcon,
-  GlobeAltIcon,
-  BriefcaseIcon,
-  WrenchScrewdriverIcon,
-  ComputerDesktopIcon,
-  PencilSquareIcon,
+  GlobeIcon,
+  WorkIcon,
+  WrenchIcon,
+  DesktopIcon,
+  ComposeIcon,
   ShareIcon,
   ArrowLeftIcon,
   ChevronRightIcon,
-} from '@heroicons/react/24/outline';
+} from '@astryxdesign/template-icons';
 
 // Anchor the page to the viewport height so the sidebar + content fill the
 // screen. Layout height="fill" is min-height:100% which collapses when the
@@ -69,13 +69,13 @@ const sideNavHeading: CSSProperties = {
 
 const NAV_ITEMS = [
   {label: 'Personal information', icon: UserIcon},
-  {label: 'Login & security', icon: LockClosedIcon},
-  {label: 'Privacy', icon: ShieldCheckIcon},
-  {label: 'Notifications', icon: BellIcon},
-  {label: 'Taxes', icon: DocumentTextIcon},
+  {label: 'Login & security', icon: LockIcon},
+  {label: 'Privacy', icon: ShieldIcon},
+  {label: 'Notifications', icon: NotificationIcon},
+  {label: 'Taxes', icon: DocumentIcon},
   {label: 'Payments', icon: CreditCardIcon},
-  {label: 'Languages & currency', icon: GlobeAltIcon},
-  {label: 'Travel for work', icon: BriefcaseIcon},
+  {label: 'Languages & currency', icon: GlobeIcon},
+  {label: 'Travel for work', icon: WorkIcon},
 ];
 
 // Section title shown beside the mobile back button (matches each section's
@@ -299,7 +299,7 @@ export default function SettingsSecurityTemplate() {
       <List density="spacious">
         <ListItem
           label="Professional hosting tools"
-          startContent={<Icon icon={WrenchScrewdriverIcon} />}
+          startContent={<Icon icon={WrenchIcon} />}
           onClick={() =>
             // Demo only: replace this toast with the call that performs the action.
             showToast({
@@ -417,7 +417,7 @@ export default function SettingsSecurityTemplate() {
                           gap={3}
                           vAlign="start"
                           style={rowPadding}>
-                          <Icon icon={ComputerDesktopIcon} />
+                          <Icon icon={DesktopIcon} />
                           <StackItem size="fill">
                             <VStack gap={0}>
                               <HStack gap={2} vAlign="center">
@@ -487,7 +487,7 @@ export default function SettingsSecurityTemplate() {
                     <Card variant="muted">
                       <HStack gap={4} vAlign="start">
                         <Center width={48} height={48} style={iconBox}>
-                          <Icon icon={LockClosedIcon} />
+                          <Icon icon={LockIcon} />
                         </Center>
                         <VStack gap={1}>
                           <Text type="body" weight="bold">
@@ -687,7 +687,7 @@ export default function SettingsSecurityTemplate() {
                   <VStack gap={4}>
                     <HStack gap={3} vAlign="start">
                       <Center width={48} height={48} style={iconBox}>
-                        <Icon icon={LockClosedIcon} />
+                        <Icon icon={LockIcon} />
                       </Center>
                       <VStack gap={0}>
                         <Text type="body" weight="semibold" display="block">
@@ -705,7 +705,7 @@ export default function SettingsSecurityTemplate() {
                     <Divider />
                     <HStack gap={3} vAlign="start">
                       <Center width={48} height={48} style={iconBox}>
-                        <Icon icon={PencilSquareIcon} />
+                        <Icon icon={ComposeIcon} />
                       </Center>
                       <VStack gap={0}>
                         <Text type="body" weight="semibold" display="block">
@@ -863,7 +863,7 @@ export default function SettingsSecurityTemplate() {
                     <Card variant="muted">
                       <HStack gap={4} vAlign="start">
                         <Center width={48} height={48} style={iconBox}>
-                          <Icon icon={ShieldCheckIcon} />
+                          <Icon icon={ShieldIcon} />
                         </Center>
                         <VStack gap={1}>
                           <Text type="body" weight="bold">

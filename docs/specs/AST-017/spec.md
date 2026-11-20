@@ -296,7 +296,8 @@ one removal merged ahead of the decision to allow it.
   contract includes fields inside discriminated `data` entries as well as the
   outer envelope. Every field is present in the canonical response type, contract
   tests, text projection where the command provides one, and complete
-  consumer-facing schema documentation. Adding an optional field is nonbreaking
+  consumer-facing schema documentation. A field shown in one section of the
+  text projection is not repeated in another. Adding an optional field is nonbreaking
   when old consumers continue unchanged, but it remains a public schema update and
   does not bypass current-authority review or documentation.
 - **FR14 — No supported CLI behavior is hidden.** Any Astryx CLI behavior
@@ -501,11 +502,25 @@ one removal merged ahead of the decision to allow it.
   `share`, `bundle`, `snapshot`, `standalone`) MAY suggest
   `experimental export`, labeled experimental, and never runs it, because
   people and agents who type those words mean that command; the exception
-  ends when the command graduates or is removed. The same exception covers
+  ends when the command graduates or is removed. The command writes only a
+  page that uses Astryx: one whose script holds a module of an Astryx package
+  or that imports an Astryx stylesheet; it refuses any other page with
+  `ERR_RENDER_NOT_ASTRYX` and writes nothing, so the suggestion never turns a
+  page without Astryx into an Astryx file. The same exception covers
   the command that turns such a file back into its page: the answer to an
   unknown top-level word that asks for it (`import`, `back`, `restore`,
   `unrender`, `reverse`) MAY suggest `experimental import`, labeled
   experimental, and never runs it; it ends when the export exception ends.
+  Another named exception covers sharing a page as one HTML file: the CLI's
+  two guides that teach it (`cli/experimental/share-a-page` and
+  `cli/experimental/export-pages`) set `searchable: true`, and no other doc
+  may. In an Astryx project (one that installs or declares `@astryxdesign/core`
+  or `@astryxdesign/cli`), or outside any package (no package.json at or
+  above the folder), `astryx search`, the `search()` API and an index
+  `exportSearchIndex()` makes there MAY return each of them as one entry,
+  whose own text says it is experimental; in a package without Astryx none of
+  them returns the guides, and every other experimental doc stays out of
+  search. This exception ends when that command graduates or is removed.
   A further named exception: `astryx discover` may list experimental icon-set
   packages in a project where icon features are off. Such an entry shows only the catalog's descriptor
   text, the install line, the opt-in command
