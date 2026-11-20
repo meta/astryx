@@ -67,6 +67,8 @@ type InteractionModalityStore = {
   stopFocusIn?: (() => void) | null;
   /** Ends the input-stream subscription for the window's blur. */
   stopWindowBlur?: (() => void) | null;
+  /** The frame request that turns the rings back on, while one waits. */
+  ringsOnFrame?: number | null;
 };
 
 // Core's private ring switch. The shared rings read it as
@@ -82,11 +84,31 @@ function setFocusRings(targetDocument: Document, isOn: boolean): void {
   if (root?.style == null) {
     return;
   }
-  if (isOn) {
-    root.style.removeProperty(FOCUS_RING_PROPERTY);
-  } else {
-    root.style.setProperty(FOCUS_RING_PROPERTY, '0');
+  const store = getStore(targetDocument);
+  const view = targetDocument.defaultView;
+  if (store.ringsOnFrame != null) {
+    view?.cancelAnimationFrame(store.ringsOnFrame);
+    store.ringsOnFrame = null;
   }
+  if (!isOn) {
+    root.style.setProperty(FOCUS_RING_PROPERTY, '0');
+    return;
+  }
+  if (root.style.getPropertyValue(FOCUS_RING_PROPERTY) === '') {
+    return;
+  }
+  // The rings come back at the start of the next frame, so they still show
+  // in the first frame painted after the key. A change to the root's style
+  // in the key's own task makes the browser lay out again when that key
+  // also closes a layer and moves focus.
+  if (view?.requestAnimationFrame == null) {
+    root.style.removeProperty(FOCUS_RING_PROPERTY);
+    return;
+  }
+  store.ringsOnFrame = view.requestAnimationFrame(() => {
+    store.ringsOnFrame = null;
+    root.style.removeProperty(FOCUS_RING_PROPERTY);
+  });
 }
 
 /**

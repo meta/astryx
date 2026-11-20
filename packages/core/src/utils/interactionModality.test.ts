@@ -19,6 +19,11 @@ async function loadTracker() {
   return import('./interactionModality');
 }
 
+/** The rings come back at the start of the next frame. */
+function nextFrame(view: Window): Promise<void> {
+  return new Promise(resolve => view.requestAnimationFrame(() => resolve()));
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -177,6 +182,7 @@ describe('interactionModality', () => {
       expect(ring()).toBe('0');
       leaveWindow(frame);
       focusIn(next);
+      await nextFrame(pageWindow);
       expect(ring()).toBe('');
 
       // A press that brings focus back from the frame keeps the rings off.
@@ -193,6 +199,7 @@ describe('interactionModality', () => {
       // Focus that comes back to another element moved by keyboard.
       leaveWindow(first);
       focusIn(next);
+      await nextFrame(pageWindow);
       expect(ring()).toBe('');
     } finally {
       host.remove();
@@ -254,6 +261,34 @@ describe('interactionModality', () => {
     }
   });
 
+  it('turns the rings back on at the next frame, and a press before that frame keeps them off', async () => {
+    const host = document.createElement('iframe');
+    document.body.append(host);
+    const secondDocument = host.contentDocument as Document;
+    const secondWindow = secondDocument.defaultView as Window;
+    const tracker = await loadTracker();
+    const ring = () =>
+      secondDocument.documentElement.style.getPropertyValue('--_focus-ring');
+    try {
+      const release =
+        tracker.__trackInteractionModalityInForTest(secondDocument);
+      secondDocument.dispatchEvent(new Event('pointerdown'));
+      secondDocument.dispatchEvent(new KeyboardEvent('keydown', {key: 'Tab'}));
+      expect(ring()).toBe('0');
+      await nextFrame(secondWindow);
+      expect(ring()).toBe('');
+
+      secondDocument.dispatchEvent(new Event('pointerdown'));
+      secondDocument.dispatchEvent(new KeyboardEvent('keydown', {key: 'Tab'}));
+      secondDocument.dispatchEvent(new Event('pointerdown'));
+      await nextFrame(secondWindow);
+      expect(ring()).toBe('0');
+      release();
+    } finally {
+      host.remove();
+    }
+  });
+
   it('keeps hearing a second window across a release and hold in one commit', async () => {
     const host = document.createElement('iframe');
     document.body.append(host);
@@ -282,6 +317,7 @@ describe('interactionModality', () => {
       secondWindow.dispatchEvent(new FocusEvent('blur'));
       vi.restoreAllMocks();
       next.dispatchEvent(new FocusEvent('focusin', {bubbles: true}));
+      await nextFrame(secondWindow);
       expect(ring()).toBe('');
       release();
     } finally {
