@@ -7900,7 +7900,7 @@ export async function themeEditShow(theme, options = {}) {
                   {
                     html: path.join(f.dir, `sheet-${section}.html`),
                     png: path.join(f.dir, `sheet-${section}.png`),
-                    ...(section !== OPEN_SECTION
+                    ...(FAMILY_SECTIONS.includes(section)
                       ? {most: FAMILY_PICTURE_HEIGHT}
                       : {}),
                   },
