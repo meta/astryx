@@ -288,13 +288,13 @@ function cliPackageRanges() {
 }
 
 /**
- * `packages` as an install command in the project at `cwd` names them. A
- * package Astryx releases with Core names Core's exact release as its peer, so
- * it takes the project's Core release, as `theme add` and `doctor` name it
- * ({@link coreMatchedAdd}). Any other package takes the CLI workspace's
- * range; a `*` range pins nothing, so the bare name says the same in fewer
- * bytes. `exact`: every package is one released with Core, and the project
- * saves it exactly.
+ * `packages` as an install command in the project at `cwd` names them. Core,
+ * the CLI, and a package Astryx releases with Core, which names Core's exact
+ * release as its peer, take the project's Core release, as `theme add` and
+ * `doctor` name a theme ({@link coreMatchedAdd}). Any other package takes the
+ * CLI workspace's range; a `*` range pins nothing, so the bare name says the
+ * same in fewer bytes. `exact`: every package moves with Core, and the
+ * project saves it exactly.
  * @param {string[]} packages
  * @param {string} cwd
  * @returns {{specs: string[], guided: string[], exact: boolean}}

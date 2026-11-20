@@ -930,7 +930,8 @@ export function useTriggerMenu(
       return null;
     }
 
-    const emptyText = activeTrigger.emptySearchText ?? 'No results';
+    const emptyText =
+      activeTrigger.emptySearchText ?? t('@astryx.chatTriggerMenu.noResults');
 
     let listContent: ReactNode;
     if (state.isLoading) {
