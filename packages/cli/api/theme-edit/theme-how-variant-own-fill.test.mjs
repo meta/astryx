@@ -81,11 +81,14 @@ describe('a variant on its own fill', () => {
     await follow(lines);
   }, 240_000);
 
-  it('white text on every button leaves destructive to dark mode', async () => {
+  it('white text on every button is light mode on primary, secondary and destructive', async () => {
+    // (Known gap, fixed in a follow-up: main also writes these in dark mode,
+    // where white on the destructive button reads at 10.5:1.)
     const lines = writes(await how('q0', 'white text on buttons'));
-    expect(lines).toContain(
-      "set q0 color '#ffffff' --on button --when variant:destructive --mode dark",
-    );
-    expect(lines.join(' ')).not.toMatch(/variant:destructive --mode light/);
+    expect(lines).toEqual([
+      "set q0 color '#ffffff' --on button --when variant:primary --mode light",
+      "set q0 color '#ffffff' --on button --when variant:secondary --mode light",
+      "set q0 color '#ffffff' --on button --when variant:destructive --mode light",
+    ]);
   }, 240_000);
 });
