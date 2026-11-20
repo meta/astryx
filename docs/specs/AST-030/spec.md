@@ -1514,13 +1514,13 @@ admitted with `ci:run` follows the same rule (FR17, FR29).
 Rejected: running the heavy suites when a pull request is marked ready, opened
 or reopened (most of those heads never merge).
 
-Amended (Decider: `cixzhang`, `2026-11-19 19:49 PT`): for the review-pass run
-only, the review app's approval of the exact head clears the review gate's code half for a
-repository collaborator with read access or more, as it does for a
-write-access author. A read-access author's head the app approved otherwise
-waits for an engineering owner before its heavy suites run, though merging
-still needs that owner. A fork head still needs `ci:run` first, so an outside
-author gains no path.
+Amended 2026-11-19: for the review-pass run only, the review app's approval of
+the exact head clears the review gate's code half for a repository
+collaborator with read access or more, as it does for a write-access author. A
+read-access author's head the app approved otherwise waits for an engineering
+owner before its heavy suites run, though merging still needs that owner. A
+fork head still needs `ci:run` first, so an outside author gains no path.
+**Decider:** `cixzhang`, `2026-11-19 19:49:29 PT`
 
 ## Open questions
 
