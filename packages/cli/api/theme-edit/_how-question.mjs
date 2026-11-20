@@ -12505,12 +12505,6 @@ export function draftAnswer(ctx, env, question) {
     // ("cards: green background", "badges: blue border", "cards:
     // transparent bottom border": a color said before a look or a side is
     // that look's value, never the part's variant.)
-    const next0 =
-      c.text
-        .toLowerCase()
-        .replace(/^[^:]+:\s*/, '')
-        .trim()
-        .split(/\s+/)[1] ?? '';
     // (A colour said as the list's first word, "cards: blue 2px border",
     // "badges: red", is a value for every member, as main reads it.)
     const colorValue = colorsIn(lead0).length > 0 || lead0 === 'transparent';
