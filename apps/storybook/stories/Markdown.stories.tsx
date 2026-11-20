@@ -184,6 +184,20 @@ export const Default: Story = {
   },
 };
 
+/**
+ * A list that mixes task items and plain items: each task item draws its
+ * checkbox in the list's marker column, centered on its first line.
+ */
+export const TaskItemsAmongPlainItems: Story = {
+  args: {
+    children: [
+      '- [ ] Write the release notes',
+      '- Review the open questions',
+      '- [x] Tag the release',
+    ].join('\n'),
+  },
+};
+
 export const Compact: Story = {
   args: {
     children: SAMPLE_MD,
@@ -299,6 +313,34 @@ export const ShiftedHeadings: Story = {
   args: {
     children: SAMPLE_MD,
     headingLevelStart: 3,
+  },
+};
+
+const MIXED_DIRECTION_MD = [
+  '## Release notes',
+  '',
+  'This paragraph reads from left to right.',
+  '',
+  'הפסקה הזאת נקראת מימין לשמאל.',
+  '',
+  '> ציטוט שנקרא מימין לשמאל.',
+  '',
+  '- An English item',
+  '- פריט בעברית',
+  '',
+  '| Name | שם |',
+  '| --- | --- |',
+  '| Markdown | מסמך |',
+].join('\n');
+
+/**
+ * Each prose block lays out in the direction of its own text, whatever the
+ * direction around the document. Switch the direction toolbar to compare.
+ */
+export const MixedDirection: Story = {
+  name: 'Mixed-direction blocks',
+  args: {
+    children: MIXED_DIRECTION_MD,
   },
 };
 

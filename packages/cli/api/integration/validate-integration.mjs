@@ -35,7 +35,11 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {assertWithin} from '../../foundation/fs/path-safety.mjs';
 import {normalizeProviderId} from '../../foundation/identity/provider-identity.mjs';
-import {integrationDocTypes} from '../docs/_adapter.mjs';
+import {
+  integrationDocTypes,
+  packageTemplateLinkProblems,
+} from '../docs/_adapter.mjs';
+import {discoverIntegrationDocs} from '../../foundation/discovery/docs-discovery.mjs';
 import {
   iconSetCoverage,
   iconSetIssues,
@@ -78,6 +82,7 @@ import {
   packageListingCheck,
   componentDocNamesCheck,
   INVALID_CLI_COMMAND,
+  INVALID_INSTALL_GUIDANCE,
   isListedIssue,
   issueListed as listed,
   validateLoadedIntegration,
@@ -96,6 +101,7 @@ import {
 } from '../../foundation/integrations/shipped-imports.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
+import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 
 /** The running CLI is outside the package's `@astryxdesign/cli` peer range. */
 const CLI_PEER_VERSION = 'cli_peer_version';
@@ -165,7 +171,6 @@ const ROOT_KINDS = /** @type {const} */ ([
   'themes',
 ]);
 
-const UNREACHABLE_SCAN_LIMIT = 5_000;
 const UNREACHABLE_SKIP_DIRS = new Set([
   'node_modules',
   '.git',
@@ -210,7 +215,9 @@ function unreadThemeFolderIssues(packageDir, loaded) {
  * Find real contribution metadata that sits outside every declared root. The
  * scan is local-authoring-only, skips dependency/build output, never follows
  * symlinks, and parses candidates before reporting them so ordinary JS files do
- * not become noise.
+ * not become noise. It reads every file name in the package: only a
+ * `.doc` or `.template` module is opened, so a package of tens of thousands
+ * of generated files costs one directory listing per folder.
  *
  * @param {string} packageDir
  * @param {import('../../foundation/integrations/integrations.mjs').LoadedIntegration} loaded
@@ -245,8 +252,6 @@ async function findUnreachableContributionIssues(
   /** @type {Issue[]} */
   const issues = [];
   const context = createFixContext(packageDir, usable);
-  let scanned = 0;
-  let truncated = false;
 
   /** @param {string} dir */
   async function walk(dir) {
@@ -278,7 +283,6 @@ async function findUnreachableContributionIssues(
       return;
     }
     for (const entry of entries) {
-      if (truncated) return;
       if (UNREACHABLE_SKIP_DIRS.has(entry.name)) continue;
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
@@ -286,11 +290,6 @@ async function findUnreachableContributionIssues(
         continue;
       }
       if (!entry.isFile()) continue;
-      scanned += 1;
-      if (scanned > UNREACHABLE_SCAN_LIMIT) {
-        truncated = true;
-        return;
-      }
       if (
         !TEMPLATE_CANDIDATE_RE.test(entry.name) &&
         !DOC_CANDIDATE_RE.test(entry.name)
@@ -309,14 +308,6 @@ async function findUnreachableContributionIssues(
   }
 
   await walk(packageDir);
-  if (truncated) {
-    issues.push(
-      warning(
-        'unreachable_scan_truncated',
-        `Stopped unreachable-contribution scanning after ${UNREACHABLE_SCAN_LIMIT} files. Narrow the package or move generated output under dist/build.`,
-      ),
-    );
-  }
   return issues;
 }
 
@@ -390,18 +381,29 @@ async function validateAtPackageDir(
   let manifest;
   /** @type {string[]} */
   let unknownKeys;
+  /** @type {Array<{field: string, why: string}>} */
+  let ignoredFields;
   /** @type {string[]} */
   let declaredKeys;
   /** @type {string | undefined} */
   let agentDocsError;
   /** @type {string | undefined} */
   let cliCommandError;
+  /** @type {string | undefined} */
+  let installGuidanceError;
   try {
-    ({manifest, unknownKeys, declaredKeys, agentDocsError, cliCommandError} =
-      await loadManifest(
-        manifestFile,
-        `Integration manifest (${path.basename(manifestFile)})`,
-      ));
+    ({
+      manifest,
+      unknownKeys,
+      ignoredFields,
+      declaredKeys,
+      agentDocsError,
+      cliCommandError,
+      installGuidanceError,
+    } = await loadManifest(
+      manifestFile,
+      `Integration manifest (${path.basename(manifestFile)})`,
+    ));
   } catch (err) {
     issues.push(error('invalid_manifest', /** @type {any} */ (err).message));
     return result;
@@ -465,9 +467,12 @@ async function validateAtPackageDir(
     logo: manifest.logo,
     agentDocs: manifest.agentDocs,
     cliCommand: manifest.cliCommand,
+    installGuidance: manifest.installGuidance,
     __cliCommandError: cliCommandError,
+    __installGuidanceError: installGuidanceError,
     __agentDocsError: agentDocsError,
     __unknownKeys: unknownKeys,
+    __ignoredFields: ignoredFields,
     __declaredKeys: declaredKeys,
     __spec: identity.name,
     __declaredProviderId: manifest.providerId,
@@ -478,14 +483,22 @@ async function validateAtPackageDir(
 
   // Roots + contribution checks are shared with validateLoadedIntegration so
   // the everyday-command nudge runs the exact same validators.
-  // A malformed `cliCommand` is an info note beside the issues, not an issue:
+  // A malformed `cliCommand` or `installGuidance` is an info note beside the
+  // issues, not an issue:
   // `integration check --strict` fails on any warning, and a new failure code
   // joins only in a minor release (architecture:cli-surface INV35). Doctor's
   // project check still warns about it.
+  // A manifest key this CLI does not know is a note too, never an issue:
+  // a key from a newer CLI is normal version skew.
   const contribution = await validateLoadedIntegrationListed(loaded);
   (result.listed ??= []).push(...contribution.listed);
+  if (contribution.notes.length > 0)
+    (result.notes ??= []).push(...contribution.notes);
   for (const issue of contribution.issues) {
-    if (issue.code === INVALID_CLI_COMMAND) {
+    if (
+      issue.code === INVALID_CLI_COMMAND ||
+      issue.code === INVALID_INSTALL_GUIDANCE
+    ) {
       (result.notes ??= []).push({code: issue.code, message: issue.message});
     } else {
       issues.push(issue);
@@ -760,15 +773,16 @@ function packageJsonFieldIssues(pkg, pkgJsonPath) {
  * at or above `cwd`, resolved the way the project loads it.
  * @param {string} spec package name
  * @param {string} [cwd]
- * @param {{iconSets?: boolean}} [options] `iconSets`: check the package's
- *   experimental icon sets; by default only when the project at `cwd` sets
- *   `experimental.iconSet`
+ * @param {{iconSets?: boolean, shippedImports?: boolean}} [options]
+ *   `iconSets`: check the package's experimental icon sets; by default only
+ *   where icon features are on in the project at `cwd`.
+ *   `shippedImports: false` skips the shipped-import check.
  * @returns {Promise<ValidateResult>}
  */
 export async function validateInstalledIntegration(
   spec,
   cwd = process.cwd(),
-  {iconSets} = {},
+  {iconSets, shippedImports = true} = {},
 ) {
   // The resolver throws (path-safety guard) on a spec with path segments,
   // `..`, or an absolute path. Every other malformed input to this command
@@ -803,7 +817,7 @@ export async function validateInstalledIntegration(
           exists ? 'invalid_package_json' : 'package_not_found',
           exists
             ? `Could not parse ${pkgJsonPath}: ${err instanceof Error ? err.message : String(err)}`
-            : `Could not find installed integration package "${spec}" at ${pkgJsonPath}. Install it first.`,
+            : notInstalledMessage(spec, pkgJsonPath, cwd),
         ),
       ],
     };
@@ -812,8 +826,36 @@ export async function validateInstalledIntegration(
   return validateAtPackageDir(
     packageDir,
     {name: pkg.name ?? spec, version: pkg.version},
-    {cwd, iconSets: iconSets ?? (await projectUsesIconSets(cwd))},
+    {
+      cwd,
+      iconSets: iconSets ?? (await projectUsesIconSets(cwd)),
+      shippedImports,
+    },
   );
+}
+
+/**
+ * Why `spec` is not installed here. This command checks a package the project
+ * in `cwd` installs; when `cwd` is that package's own folder, the check the
+ * author wants is `integration check`.
+ * @param {string} spec
+ * @param {string} pkgJsonPath
+ * @param {string} cwd
+ */
+function notInstalledMessage(spec, pkgJsonPath, cwd) {
+  /** @type {unknown} */
+  let own;
+  try {
+    own = JSON.parse(
+      fs.readFileSync(path.join(cwd, 'package.json'), 'utf-8'),
+    )?.name;
+  } catch {
+    own = undefined;
+  }
+  if (own === spec) {
+    return `"${spec}" is the package in this folder, not one it installs: this command checks a package the project installs. To check the package you are making, run \`${formatCliCommand('integration check', cwd)}\`.`;
+  }
+  return `Could not find installed integration package "${spec}" at ${pkgJsonPath}. Install it first.`;
 }
 
 /**
@@ -905,6 +947,18 @@ async function docTargetNotes(integration) {
  * @returns {Promise<import('./validate-integration.type.mjs').ValidateIntegrationResponse>}
  */
 export async function validateIntegration(pkg, options = {}) {
+  // Its checks read the package and change none of its files: one listing
+  // of each folder, and one answer from npm on what the package packs.
+  return withListingCache(() => validateIntegrationOnce(pkg, options));
+}
+
+/**
+ * {@link validateIntegration}'s checks, run once.
+ * @param {string | undefined} pkg
+ * @param {{cwd?: string}} options
+ * @returns {Promise<import('./validate-integration.type.mjs').ValidateIntegrationResponse>}
+ */
+async function validateIntegrationOnce(pkg, options) {
   const {cwd = process.cwd()} = options;
   const result = pkg
     ? await validateInstalledIntegration(pkg, cwd)
@@ -947,10 +1001,13 @@ export async function validateIntegration(pkg, options = {}) {
   // `integration check --strict --next` fails on it today.
   const notes = result.found
     ? [
-        // A malformed cliCommand fails --strict from the next minor
-        // (spec:AST-081 FR5).
+        // A malformed cliCommand or installGuidance fails --strict from the
+        // next minor (spec:AST-081 FR5).
         ...(result.notes ?? []).map(note =>
-          note.code === INVALID_CLI_COMMAND ? {...note, next: true} : note,
+          note.code === INVALID_CLI_COMMAND ||
+          note.code === INVALID_INSTALL_GUIDANCE
+            ? {...note, next: true}
+            : note,
         ),
         ...(result.listed ?? []).map(issue => ({
           code: issue.code,
@@ -975,6 +1032,21 @@ export async function validateIntegration(pkg, options = {}) {
       ...(await docTargetNotes(integration)).map(note => ({
         ...note,
         next: true,
+      })),
+    );
+  }
+  // Each link in a template's description that names no doc: a `next` note
+  // until the next minor release makes it a warning.
+  if (integration?.templates) {
+    const ownDocs = integration.docs
+      ? await discoverIntegrationDocs(integration)
+      : null;
+    const links = await packageTemplateLinkProblems(integration, ownDocs);
+    notes.push(
+      ...links.map(message => ({
+        code: 'invalid_doc_graph',
+        message,
+        next: /** @type {const} */ (true),
       })),
     );
   }

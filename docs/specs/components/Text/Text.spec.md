@@ -15,6 +15,7 @@ verified_by:
     .github/visual-baseline/manifest.json,
     packages/core/src/Text/Text.test.tsx,
     packages/core/src/Text/useTruncation.test.tsx,
+    packages/core/src/Text/cutTextOnKeyboardFocus.exports.test.ts,
     packages/core/src/Text/__tests__/TextReflow.a11y.chromium.spec.ts,
     scripts/text-overflow-wrap-anywhere.test.mjs,
     packages/core/src/theme/themingTargets.test.ts,
@@ -82,6 +83,11 @@ Consumer migration instructions belong in consumer docs and release notes.
 - Type-based size, weight, and default color; size, color, and weight
   overrides; and the text layout controls on that element.
 - Measuring truncation and deciding when to compose the truncation Tooltip.
+- The internal hook that shows a component's cut text in an undescribed
+  tooltip on keyboard focus (`useCutTextOnKeyboardFocus` in
+  `Text/TruncationTooltip.tsx`), which `component:Button` FR18 and
+  `component:TableHeaderCell` FR2 use. It is not part of the package's public
+  exports.
 - The clamp it provides to its content. A Link inside a clamped Text lays out
   inline so the clamp truncates it, and keeps its visible focus ring as an
   inset ring (`component:Link` FR6); Text provides that clamp through an

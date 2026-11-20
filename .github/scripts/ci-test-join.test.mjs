@@ -27,6 +27,8 @@ const broad = {
   PR_INTERACTION_WEBKIT_RESULT: 'success',
   PR_COMPONENT_A11Y_CONTRACTS_RESULT: 'success',
   PR_A11Y_DEPENDENT_AUDITS_RESULT: 'success',
+  A11Y_DEPENDENT_AUDITS_PLAN_RESULT: 'success',
+  A11Y_DEPENDENT_AUDITS_COUNT: '2',
 };
 
 // An override of `null` removes the variable, as a missing `needs` result would.
@@ -84,6 +86,54 @@ describe('pull-request test join', () => {
       ['PR_A11Y_DEPENDENT_AUDITS_RESULT', null],
     ]) {
       expect(run({[name]: value}), name).toMatchObject({status: 1});
+    }
+  });
+
+  it('requires the dependent-audit legs exactly when the plan owes an audit, and a plan that ran', () => {
+    // A plan that owes nothing starts no leg: skipped legs pass, run legs do not.
+    expect(
+      run({
+        A11Y_DEPENDENT_AUDITS_COUNT: '0',
+        PR_A11Y_DEPENDENT_AUDITS_RESULT: 'skipped',
+      }),
+    ).toMatchObject({status: 0});
+    for (const result of ['success', 'failure', 'cancelled', null]) {
+      expect(
+        run({
+          A11Y_DEPENDENT_AUDITS_COUNT: '0',
+          PR_A11Y_DEPENDENT_AUDITS_RESULT: result,
+        }),
+        `count 0, legs ${result}`,
+      ).toMatchObject({status: 1});
+    }
+    // Planned legs must succeed.
+    expect(run({A11Y_DEPENDENT_AUDITS_COUNT: '1'})).toMatchObject({status: 0});
+    // A plan that did not succeed fails the join, whatever its one leg did,
+    // and the message says to re-run.
+    for (const plan of ['failure', 'cancelled', 'skipped', null]) {
+      for (const [legs, count] of [
+        ['failure', ''],
+        ['success', '2'],
+        ['skipped', '0'],
+        ['failure', '3'],
+      ]) {
+        const outcome = run({
+          A11Y_DEPENDENT_AUDITS_PLAN_RESULT: plan,
+          A11Y_DEPENDENT_AUDITS_COUNT: count,
+          PR_A11Y_DEPENDENT_AUDITS_RESULT: legs,
+        });
+        expect(outcome, `plan ${plan}, legs ${legs}`).toMatchObject({
+          status: 1,
+        });
+        expect(outcome.output).toContain('re-run all jobs');
+      }
+    }
+    // A plan that succeeded without a readable count fails closed.
+    for (const count of ['', 'x', null]) {
+      expect(
+        run({A11Y_DEPENDENT_AUDITS_COUNT: count}),
+        `count ${count}`,
+      ).toMatchObject({status: 1});
     }
   });
 

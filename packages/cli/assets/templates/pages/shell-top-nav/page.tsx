@@ -21,25 +21,26 @@ import {Badge} from '@astryxdesign/core/Badge';
 import {Card} from '@astryxdesign/core/Card';
 import {Grid} from '@astryxdesign/core/Grid';
 import {Stack, VStack} from '@astryxdesign/core/Stack';
+import {useToast} from '@astryxdesign/core/Toast';
 import {
   ShoppingBagIcon,
-  ShoppingCartIcon,
-  MagnifyingGlassIcon,
+  CartIcon,
+  SearchIcon,
   SparklesIcon,
   SwatchIcon,
   TagIcon,
-  HomeModernIcon,
-  FaceSmileIcon,
-  ReceiptPercentIcon,
+  HouseIcon,
+  EmojiIcon,
+  DiscountIcon,
   GiftIcon,
   CloudIcon,
   BoltIcon,
   SunIcon,
   StarIcon,
   FireIcon,
-  GlobeAltIcon,
+  GlobeIcon,
   MoonIcon,
-} from '@heroicons/react/24/outline';
+} from '@astryxdesign/template-icons';
 
 const styles = stylex.create({
   // Cap + center the page body so wide screens show whitespace gutters.
@@ -61,18 +62,18 @@ const SHOP_ITEMS: MegaItem[] = [
   {name: 'New Arrivals', tagline: 'The latest drops', icon: SparklesIcon},
   {name: 'Womenswear', tagline: 'Dresses, knitwear & more', icon: SwatchIcon},
   {name: 'Menswear', tagline: 'Shirts, tailoring & more', icon: TagIcon},
-  {name: 'Home', tagline: 'Bedding, lighting & décor', icon: HomeModernIcon},
+  {name: 'Home', tagline: 'Bedding, lighting & décor', icon: HouseIcon},
   {
     name: 'Beauty',
     tagline: 'Skincare, fragrance & makeup',
-    icon: FaceSmileIcon,
+    icon: EmojiIcon,
   },
   {
     name: 'Accessories',
     tagline: 'Bags, hats & sunglasses',
     icon: ShoppingBagIcon,
   },
-  {name: 'Sale', tagline: 'Up to 50% off', icon: ReceiptPercentIcon},
+  {name: 'Sale', tagline: 'Up to 50% off', icon: DiscountIcon},
   {name: 'Gift Cards', tagline: 'The perfect present', icon: GiftIcon},
 ];
 
@@ -83,7 +84,7 @@ const BRAND_ITEMS: MegaItem[] = [
   {name: 'Verdant', tagline: 'Sustainable basics', icon: SunIcon},
   {name: 'Studio Mara', tagline: 'Modern tailoring', icon: StarIcon},
   {name: 'Atelier Kos', tagline: 'Limited ateliers', icon: FireIcon},
-  {name: 'Rue & Co', tagline: 'City streetwear', icon: GlobeAltIcon},
+  {name: 'Rue & Co', tagline: 'City streetwear', icon: GlobeIcon},
   {name: 'Halden', tagline: 'Minimal staples', icon: MoonIcon},
 ];
 
@@ -133,6 +134,7 @@ function MegaFeatured(props: {
 }
 
 export default function ShellTopNav() {
+  const showToast = useToast();
   return (
     <AppShell
       variant="surface"
@@ -189,14 +191,38 @@ export default function ShellTopNav() {
                 label="Search products"
                 tooltip="Search"
                 variant="ghost"
-                icon={<Icon icon={MagnifyingGlassIcon} size="sm" />}
+                icon={<Icon icon={SearchIcon} size="sm" />}
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: product search would open here',
+                    uniqueID: 'search',
+                  })
+                }
               />
-              <Button label="Sign in" variant="ghost" />
+              <Button
+                label="Sign in"
+                variant="ghost"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: sign-in would open here',
+                    uniqueID: 'sign-in',
+                  })
+                }
+              />
               <Button
                 label="Checkout"
                 variant="primary"
-                icon={<Icon icon={ShoppingCartIcon} size="sm" />}
+                icon={<Icon icon={CartIcon} size="sm" />}
                 endContent={<Badge label={3} />}
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: checkout would open here',
+                    uniqueID: 'checkout',
+                  })
+                }
               />
             </>
           }

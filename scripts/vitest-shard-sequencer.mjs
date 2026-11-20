@@ -3,9 +3,10 @@
 /**
  * @file Which Node test files one `--shard <i>/<n>` leg runs.
  * @input The test specifications Vitest collected; `--shard`; recorded
- *   seconds per Node test file (scripts/vitest-node-durations.json).
+ *   seconds per Node test file (scripts/vitest-node-durations.json, or the
+ *   record `VITEST_DURATIONS_FILE` names, such as the minimum-Node legs').
  * @output The specifications this leg runs. With `record <log>…`, a fresh
- *   durations file from Node leg logs.
+ *   durations file (the same record) from Node leg logs.
  * @position `sequence.sequencer` in vitest.config.ts, so every `--shard` run,
  *   the Main workflow's legs and pull requests' alike, splits the `node` project
  *   this way. Vitest's own split deals files out by a hash of their path, by
@@ -28,12 +29,37 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {BaseSequencer} from 'vitest/node';
-import {slowestFirst, splitByDuration} from './lib/duration-split.mjs';
-import {DURATIONS, nodeFileCost, readDurations} from './vitest-node-legs.mjs';
+import {
+  mergeRecord as mergeSeconds,
+  slowestFirst,
+  splitByDuration,
+  SWIZZLE_PROOF,
+} from './lib/duration-split.mjs';
+import {
+  DURATIONS,
+  nodeFileCost,
+  readDurations as readRecord,
+} from './vitest-node-legs.mjs';
 
-export {DURATIONS, readDurations};
+export {DURATIONS};
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+/**
+ * The record this run reads and writes: `VITEST_DURATIONS_FILE` (relative to
+ * the repository) when set, so a workflow on another Node version packs by
+ * that version's times; else DURATIONS.
+ */
+export function durationsFile() {
+  const other = process.env.VITEST_DURATIONS_FILE;
+  return other ? path.resolve(ROOT, other) : DURATIONS;
+}
+
+/** Recorded seconds per file in the record this run reads, or none. */
+export function readDurations(file = durationsFile()) {
+  return readRecord(file);
+}
+
 const PROJECT = 'node';
 
 /**
@@ -59,22 +85,66 @@ export function partitionByDuration(
  * pull request's `test-node (2/5)` or a Main run's `test-node (2)`.
  */
 const NODE_LEG_JOB = /^test-node \(\d+(?:\/\d+)?\)$/;
+/** A swizzle-proof leg's job name, such as `swizzle-proof (3/8)`. */
+const SWIZZLE_PROOF_JOB = /^swizzle-proof \(\d+(?:\/\d+)?\)$/;
+
+/**
+ * A log's text without colour codes. They arrive as escape bytes, or, in
+ * `gh run view --log` output, spelled out as `^[[…m`.
+ */
+export const plainLog = text => text.replace(/(?:\x1b|\^\[)\[[0-9;]*m/g, '');
+
+/**
+ * Each Node leg's lines in a whole run's log, by the job name each line
+ * starts with (`test-node (2)`, `test-node (2/5)`).
+ * @param {string} text
+ * @returns {Map<string, string>}
+ */
+export function nodeLegLogs(text) {
+  /** @type {Map<string, string[]>} */
+  const legs = new Map();
+  for (const line of text.split('\n')) {
+    const job = line.split('\t')[0];
+    if (!NODE_LEG_JOB.test(job)) continue;
+    // Append in place: copying the leg's lines for each line is quadratic on
+    // a whole run's log.
+    const lines = legs.get(job);
+    if (lines) lines.push(line);
+    else legs.set(job, [line]);
+  }
+  return new Map([...legs].map(([job, lines]) => [job, lines.join('\n')]));
+}
+
+/**
+ * How many test files a Vitest run counted, from its last `Test Files … (N)`
+ * summary, or null when it printed none (a run that stopped early).
+ * @param {string} text
+ */
+export function countedTestFiles(text) {
+  const summary = plainLog(text)
+    .match(/Test Files\s+[^\n]*\(\d+\)/g)
+    ?.pop();
+  return summary ? Number(/\((\d+)\)\s*$/.exec(summary)[1]) : null;
+}
 
 /**
  * Seconds per Node test file from Vitest's default reporter lines. A whole
  * run's log (`gh run view --log`) names each line's job in its first
  * tab-separated column: only the Node legs' lines count, since other jobs (the
  * build job runs its own `--project node` tests, which the Node legs skip)
- * would book time no leg spends. A single leg's own log has no job column.
+ * would book time no leg spends. The swizzle-proof legs' lines count for the
+ * slice files, which run there. A single leg's own log has no job column.
+ * Every file a Node leg's reporter names gets an entry.
  */
 export function recordDurations(text) {
   const seconds = {};
-  // Colour codes arrive as escape bytes, or, in `gh run view --log` output,
-  // spelled out as `^[[…m`.
-  const plain = text.replace(/(?:\x1b|\^\[)\[[0-9;]*m/g, '');
-  for (const line of plain.split('\n')) {
+  for (const line of plainLog(text).split('\n')) {
     const columns = line.split('\t');
-    if (columns.length >= 3 && !NODE_LEG_JOB.test(columns[0])) continue;
+    if (columns.length >= 3 && !NODE_LEG_JOB.test(columns[0])) {
+      if (!SWIZZLE_PROOF_JOB.test(columns[0])) continue;
+      const file = /\s(\S+\.test\.mjs)\s/.exec(line)?.[1] ?? '';
+      if (!SWIZZLE_PROOF.test(file)) continue;
+    }
     const match =
       /[✓❯×]\s+\|?node\|?\s+(\S+\.(?:test|spec)\.[cm]?[jt]sx?)\s+\(\d+ tests?[^)]*\)\s+(\d+(?:\.\d+)?)(ms|s)\s*$/.exec(
         line,
@@ -84,18 +154,24 @@ export function recordDurations(text) {
       seconds[match[1]] = Math.round(value * 10) / 10;
       continue;
     }
-    // A file whose every test skips in the leg costs the leg nothing: it is
-    // recorded at 0, so a time another job gave it never stays booked.
-    const skipped =
-      /↓\s+\|?node\|?\s+(\S+\.(?:test|spec)\.[cm]?[jt]sx?)\s+\((\d+) tests? \| (\d+) skipped\)/.exec(
+    // A file none of whose tests run in the leg (each skipped or todo) costs
+    // the leg nothing: it is recorded at 0, so a time another job gave it
+    // never stays booked.
+    const idle =
+      /↓\s+\|?node\|?\s+(\S+\.(?:test|spec)\.[cm]?[jt]sx?)\s+\((\d+) tests?((?: \| \d+ (?:skipped|todo))+)\)/.exec(
         line,
       );
-    if (skipped && skipped[2] === skipped[3]) seconds[skipped[1]] = 0;
+    if (
+      idle &&
+      [...idle[3].matchAll(/(\d+) (?:skipped|todo)/g)].reduce(
+        (sum, count) => sum + Number(count[1]),
+        0,
+      ) === Number(idle[2])
+    )
+      seconds[idle[1]] = 0;
   }
   return seconds;
 }
-
-const SWIZZLE_PROOF = /(^|\/)swizzle-proof\.\d+\.test\.mjs$/;
 
 /**
  * The swizzle-proof slices among `files` that prove nothing in this run: every
@@ -118,9 +194,8 @@ export async function idleSwizzleSlices(files) {
 }
 
 /**
- * The record after a run. The run's times replace those files' times; files
- * the run did not reach keep their earlier times; a swizzle-proof slice keeps
- * the largest time seen; a file that no longer exists leaves the record.
+ * The record after a run (duration-split.mjs `mergeRecord`), dropping a file
+ * that no longer exists in the repository unless `exists` says otherwise.
  * @param {Record<string, number>} current
  * @param {Record<string, number>} recorded
  * @param {(file: string) => boolean} [exists]
@@ -131,18 +206,7 @@ export function mergeRecord(
   recorded,
   exists = file => fs.existsSync(path.join(ROOT, file)),
 ) {
-  const merged = {...current};
-  for (const [file, seconds] of Object.entries(recorded)) {
-    merged[file] =
-      SWIZZLE_PROOF.test(file) && typeof current[file] === 'number'
-        ? Math.max(current[file], seconds)
-        : seconds;
-  }
-  return Object.fromEntries(
-    Object.entries(merged)
-      .filter(([file]) => exists(file))
-      .sort(([a], [b]) => a.localeCompare(b)),
-  );
+  return mergeSeconds(current, recorded, exists);
 }
 
 export default class DurationShardSequencer extends BaseSequencer {
@@ -214,11 +278,12 @@ if (
     console.error('No Node test file times found in those logs.');
     process.exit(1);
   }
-  const current = fs.existsSync(DURATIONS)
-    ? JSON.parse(fs.readFileSync(DURATIONS, 'utf8'))
+  const record = durationsFile();
+  const current = fs.existsSync(record)
+    ? JSON.parse(fs.readFileSync(record, 'utf8'))
     : {};
   fs.writeFileSync(
-    DURATIONS,
+    record,
     `${JSON.stringify(
       {
         ...current,
@@ -230,6 +295,6 @@ if (
     )}\n`,
   );
   console.error(
-    `Recorded ${Object.keys(seconds).length} Node test files in ${path.relative(ROOT, DURATIONS)}.`,
+    `Recorded ${Object.keys(seconds).length} Node test files in ${path.relative(ROOT, record)}.`,
   );
 }

@@ -77,6 +77,15 @@ describe('verify-only built-by command normalization', () => {
 export const ${slug}Theme = {name: '${slug}'};`,
     });
 
+  it('build --check leaves out the command in the built-by line, and not the theme it names', () => {
+    expect(normalizeThemeBuildForCompare(builtModule('yarn astryx'))).toBe(
+      normalizeThemeBuildForCompare(builtModule('acme tool astryx')),
+    );
+    expect(normalizeThemeBuildForCompare(builtModule('yarn astryx'))).not.toBe(
+      normalizeThemeBuildForCompare(builtModule('yarn astryx', 'other')),
+    );
+  });
+
   // Two published theme packages, "terminal" and "xtra-professional", were
   // built with yarn; verify under pnpm rebuilt each byte for byte except this
   // line and reported theme_module_stale.
@@ -93,7 +102,7 @@ export const ${slug}Theme = {name: '${slug}'};`,
       ).toBe(normalizeThemeVerifyForCompare(builtModule('acme astryx', slug)));
       expect(
         normalizeThemeBuildForCompare(builtModule('yarn astryx', slug)),
-      ).not.toBe(
+      ).toBe(
         normalizeThemeBuildForCompare(builtModule('pnpm exec astryx', slug)),
       );
     },
@@ -141,6 +150,42 @@ describe('verify-only generated CSS header normalization', () => {
       normalizeThemeBuildForCompare(current),
     );
     expect(released).not.toBe(current);
+  });
+
+  it('build --check keeps a missing CLI line, a second one, and one outside the header significant', () => {
+    const current = generatedCssArtifact();
+    const cliLine = ' * CLI: @astryxdesign/cli@0.6.6\n';
+    for (const other of [
+      current.replace(cliLine, ''),
+      current.replace(cliLine, cliLine + ' * CLI: @astryxdesign/cli@0.6.5\n'),
+    ]) {
+      expect(normalizeThemeBuildForCompare(other)).not.toBe(
+        normalizeThemeBuildForCompare(current),
+      );
+    }
+    const inBody = (/** @type {string} */ version) =>
+      generatedCssArtifact({
+        body: `:root { color: red; }\n * CLI: @astryxdesign/cli@${version}`,
+      });
+    expect(normalizeThemeBuildForCompare(inBody('0.7.0'))).not.toBe(
+      normalizeThemeBuildForCompare(inBody('0.6.6')),
+    );
+  });
+
+  it('build --check leaves out only the CLI line, which names the release that built the file', () => {
+    const current = generatedCssArtifact();
+    expect(
+      normalizeThemeBuildForCompare(generatedCssArtifact({cli: '0.7.0'})),
+    ).toBe(normalizeThemeBuildForCompare(current));
+    for (const other of [
+      generatedCssArtifact({core: '0.7.0'}),
+      generatedCssArtifact({source: 'oceanTheme.ts'}),
+      generatedCssArtifact({body: ':root { color: blue; }'}),
+    ]) {
+      expect(normalizeThemeBuildForCompare(other)).not.toBe(
+        normalizeThemeBuildForCompare(current),
+      );
+    }
   });
 
   it.each([
@@ -493,6 +538,50 @@ import '@acme/widgets/themes/ocean.css';
 
 export {oceanTheme} from '../themes/ocean/ocean.js';
 `;
+
+describe('a theme built with --out and a TypeScript registry', () => {
+  it("verifies: a rebuild to the theme's own name writes the same imports", () => {
+    writePackage();
+    const ocean = path.join(tmpDir, 'themes', 'ocean');
+    fs.writeFileSync(
+      path.join(ocean, 'icons.ts'),
+      "export const oceanIcons: Record<string, string> = {close: 'x'};\n",
+    );
+    fs.writeFileSync(
+      path.join(ocean, 'oceanTheme.ts'),
+      "import {defineTheme} from '@astryxdesign/core/theme';\nimport {oceanIcons} from './icons';\n\nexport const oceanTheme = defineTheme({name: 'ocean', icons: oceanIcons});\n",
+    );
+    const built = spawnSync(
+      process.execPath,
+      [
+        path.join(process.cwd(), 'packages/cli/clients/cli/bin/astryx.mjs'),
+        'theme',
+        'build',
+        'themes/ocean/oceanTheme.ts',
+        '--out',
+        'dist/theme.css',
+      ],
+      {cwd: tmpDir, encoding: 'utf-8', timeout: 60_000},
+    );
+    expect(built.status, built.stderr || built.stdout).toBe(0);
+    // The module is named for the theme, whatever --out names the stylesheet.
+    expect(
+      fs.readFileSync(path.join(tmpDir, 'dist/ocean.js'), 'utf-8'),
+    ).toContain("from './ocean.modules/icons.ts.js'");
+    const packageFile = path.join(tmpDir, 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(packageFile, 'utf-8'));
+    pkg.files = ['astryx.integration.mjs', 'themes', 'dist'];
+    pkg.exports = {
+      './themes/ocean': './dist/ocean.js',
+      './themes/ocean.css': './dist/theme.css',
+    };
+    fs.writeFileSync(packageFile, `${JSON.stringify(pkg, null, 2)}\n`);
+
+    const cli = runCliVerify();
+    expect(cli.status, cli.stderr).toBe(0);
+    expect(cli.receipt?.data.issues).toEqual([]);
+  });
+});
 
 describe('a theme module that loads its own styles', () => {
   it('passes an entry that imports the theme stylesheet and fonts and re-exports the built module', async () => {

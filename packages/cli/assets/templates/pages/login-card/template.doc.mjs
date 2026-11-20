@@ -19,5 +19,4 @@ export const doc = {
   ],
   isReady: true,
   category: 'Login - Card',
-  icons: {CubeIcon: 'package'},
 };

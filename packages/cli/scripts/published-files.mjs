@@ -3,8 +3,9 @@
 /**
  * @file The files a package publishes, and a copy of exactly those files: what
  * the generators that store an answer at `prepack` work on, so what they read,
- * folders included, is what an install holds (generate-self-audit.mjs,
- * generate-component-list.mjs).
+ * folders included, is what an install holds (generate-component-list.mjs,
+ * generate-search-catalog.mjs, and published-copy.mjs for
+ * generate-self-audit.mjs and generate-docs-routes.mjs).
  */
 
 import {spawnSync} from 'node:child_process';

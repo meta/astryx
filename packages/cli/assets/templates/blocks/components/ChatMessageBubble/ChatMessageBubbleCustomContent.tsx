@@ -11,8 +11,10 @@ import {
 import {ClickableCard} from '@astryxdesign/core/ClickableCard';
 import {Text} from '@astryxdesign/core/Text';
 import {Timestamp} from '@astryxdesign/core/Timestamp';
+import {useToast} from '@astryxdesign/core/Toast';
 
 export default function ChatMessageBubbleCustomContent() {
+  const showToast = useToast();
   return (
     <ChatMessageList style={{maxWidth: 520}}>
       <ChatMessage sender="user">
@@ -40,7 +42,13 @@ export default function ChatMessageBubbleCustomContent() {
               }
             />
           }>
-          <ClickableCard label="Open Q3 performance report" onClick={() => {}}>
+          <ClickableCard
+            label="Open Q3 performance report"
+            onClick={() =>
+              showToast({
+                body: 'Demo: the Q3 performance report would open here',
+              })
+            }>
             <Text type="body" weight="semibold" display="block">
               Q3 Performance Report
             </Text>

@@ -913,10 +913,14 @@ export function Popover({
         isSheetMounted ? 'dialog' : popover.triggerProps['aria-haspopup'],
       );
       button.setAttribute('aria-expanded', String(isAnySurfaceOpen));
-      button.setAttribute(
-        'aria-controls',
-        isSheetMounted ? sheetId : popover.triggerProps['aria-controls'],
-      );
+      // A closed trigger names no surface. The attach runs again as the
+      // surface opens and closes, so the reference follows the open state.
+      if (isAnySurfaceOpen) {
+        button.setAttribute(
+          'aria-controls',
+          isSheetMounted ? sheetId : popover.triggerProps['aria-controls'],
+        );
+      }
       // The trigger's text is in the DOM the caller rendered, read as the
       // trigger attaches; it names a sheet that has no `label` (DEC-8).
       // eslint-disable-next-line @eslint-react/set-state-in-effect -- reads the caller-rendered trigger's text, which only the DOM holds

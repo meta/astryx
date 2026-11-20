@@ -76,3 +76,17 @@ describe('unmappedTemplateMeanings and templateMeaningsLine', () => {
     ).toBeNull();
   });
 });
+
+describe('unmappedTemplateMeanings with fallbacks', () => {
+  it('leaves out a meaning whose fallback the map names', () => {
+    expect(
+      unmappedTemplateMeanings(
+        [
+          {definition: 'verified', templates: 1},
+          {definition: 'share', templates: 1},
+        ],
+        {success: 'check'},
+      ),
+    ).toEqual([{definition: 'share', templates: 1}]);
+  });
+});

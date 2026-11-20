@@ -4,17 +4,18 @@
  * @file The CLI's heavy parsing and transform dependencies, each loaded on
  *   first use rather than when a module that may use it is imported.
  * @input Nothing; each getter requires its package once and keeps it.
- * @output `babelParser` (and `babelParse`, its `parse`), `babelCore`,
- *   `jscodeshift` and `selectorParser`: the same module objects a static
- *   import gives, since each package resolves to the same file for `require`
- *   as for `import` (test/lazy-dependencies.test.mjs checks it).
+ * @output `babelParser` (and `babelParse`, its `parse`, and
+ *   `babelParserRelease`, its version), `babelCore` (and `babelCorePath`, the
+ *   file it loads), `jscodeshift`, `selectorParser` and `postcss`: the same
+ *   module objects a static import gives (test/lazy-dependencies.test.mjs
+ *   checks it).
  * @position The first-use loader for these packages on the API's import
  *   path (authoring/ may not import foundation, so the ShadCN source variants
  *   keep their own). Everything that imports the CLI's API reaches the
  *   modules that parse or rewrite sources, and most runs never parse one, so
  *   loading Babel and jscodeshift with them cost every importer about 350
  *   modules. Each package is still resolved when this module loads, which
- *   reads no module, so every module that imports this loader needs all four
+ *   reads no module, so every module that imports this loader needs all five
  *   packages installed: a broken install without one fails when such a
  *   module loads, never as a parse that quietly finds nothing. The `Project`
  *   seam and the agent docs reach this loader through component discovery,
@@ -33,6 +34,7 @@ for (const pkg of [
   '@babel/parser',
   '@babel/core',
   'jscodeshift',
+  'postcss',
   'postcss-selector-parser',
 ]) {
   require.resolve(pkg);
@@ -46,9 +48,25 @@ let core;
 let codeshift;
 /** @type {typeof import('postcss-selector-parser') | undefined} */
 let selectors;
+/** @type {typeof import('postcss').default | undefined} */
+let css;
 
 /** @returns {typeof import('@babel/parser')} */
 export const babelParser = () => (parser ??= require('@babel/parser'));
+
+/**
+ * The release of the `@babel/parser` that `babelParser` loads, read without
+ * loading it, or null when it cannot be read.
+ * @returns {string | null}
+ */
+export function babelParserRelease() {
+  try {
+    const {version} = require('@babel/parser/package.json');
+    return typeof version === 'string' ? version : null;
+  } catch {
+    return null;
+  }
+}
 
 /** @type {typeof import('@babel/parser').parse} */
 export const babelParse = (input, options) =>
@@ -56,6 +74,12 @@ export const babelParse = (input, options) =>
 
 /** @returns {typeof import('@babel/core')} */
 export const babelCore = () => (core ??= require('@babel/core'));
+
+/**
+ * The file `babelCore` loads, resolved without loading it.
+ * @returns {string}
+ */
+export const babelCorePath = () => require.resolve('@babel/core');
 
 /**
  * Untyped here: jscodeshift ships no types, and this module is reached by
@@ -69,13 +93,26 @@ export const selectorParser = () =>
   (selectors ??= require('postcss-selector-parser'));
 
 /**
+ * postcss, for the modules that read a stylesheet only now and then:
+ * doctor's theme checks and the codemods' parser, which the API's import
+ * path reaches, and the reader of a built theme's imports and the font
+ * stylesheet reader, which the theme commands load. Its ES module entry hands
+ * on what its CommonJS one exports, so this is the one postcss the modules
+ * that import it get.
+ * @returns {typeof import('postcss').default}
+ */
+export const postcss = () => (css ??= require('postcss'));
+
+/**
  * Every package loaded on first use, here and in the ShadCN source variants,
- * for the test that each resolves to one file either way.
+ * for the test that each gives one module either way and that importing the
+ * API loads none of them.
  */
 export const LAZY_PACKAGES = [
   '@babel/parser',
   '@babel/core',
   'jscodeshift',
+  'postcss',
   'postcss-selector-parser',
   'recast',
   '@babel/plugin-transform-typescript',

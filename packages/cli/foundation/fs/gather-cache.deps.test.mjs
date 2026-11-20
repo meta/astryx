@@ -45,9 +45,9 @@ vi.mock('./paths.mjs', async importOriginal => ({
 let cache;
 const savedCache = process.env.XDG_CACHE_HOME;
 const STORE = path.join(TEMP_ROOT, 'cache', 'astryx', 'catalogs');
-// Under the CLI's root, so its files count as the CLI's own, which a value
-// derived from a kept gather keys on.
-const DATA = path.join(FAKE_CLI_ROOT, 'data');
+// Outside the CLI's root: a kept entry checks these files on every read,
+// while the CLI's own files are its build id's to stand for.
+const DATA = path.join(TEMP_ROOT, 'data');
 
 const identity = {
   encode: (/** @type {any} */ value) => value,
@@ -177,6 +177,105 @@ describe.skipIf(!hasModuleHooks || process.platform === 'win32')(
       });
     });
 
+    it.each([
+      [
+        'checked for',
+        'checked.txt',
+        (/** @type {string} */ file) => fs.existsSync(file),
+      ],
+      [
+        'resolved',
+        'resolved.txt',
+        (/** @type {string} */ file) => Boolean(fs.realpathSync(file)),
+      ],
+    ])(
+      'builds on an entry that only %s a file it read, and is gathered again alone when that file is edited',
+      async (_how, name, ask) => {
+        write(name, 'one');
+        write('base-own.txt', 'base');
+        write('reader-own.txt', 'reader');
+        const checked = path.join(DATA, name);
+        const runChecked = async () => {
+          /** @type {string[]} */
+          const gathered = [];
+          const value = await cache.recordRun(async () => {
+            const base = await cache.persistedGather(
+              ['deps-test', 'checks'],
+              async () => {
+                gathered.push('checks');
+                return `${ask(checked)}+${read('base-own.txt')}`;
+              },
+              identity,
+            );
+            const reader = await cache.persistedGather(
+              ['deps-test', 'reads'],
+              async () => {
+                gathered.push('reads');
+                return `${read(name)}+${read('reader-own.txt')}`;
+              },
+              identity,
+            );
+            return {base, reader};
+          });
+          return {...value, gathered};
+        };
+        expect(await runChecked()).toEqual({
+          base: 'true+base',
+          reader: 'one+reader',
+          gathered: ['checks', 'reads'],
+        });
+        const reader = entries().get('deps-test/reads');
+        expect(reader?.deps).toHaveLength(1);
+        // It keeps the file it read itself: the entry it builds on holds only
+        // that the file is there, or where it resolves.
+        const own = (reader?.stamps ?? []).map(([file]) => path.basename(file));
+        expect(own).toEqual(expect.arrayContaining([name, 'reader-own.txt']));
+        expect(own).not.toContain('base-own.txt');
+
+        // An edit that keeps the file there: only the entry that read it is
+        // gathered again.
+        write(name, 'two, longer');
+        expect(await runChecked()).toEqual({
+          base: 'true+base',
+          reader: 'two, longer+reader',
+          gathered: ['reads'],
+        });
+      },
+    );
+
+    it("is read back after an in-place edit to one of the CLI's own files, and gathered again after an edit to a package in the CLI's own node_modules", async () => {
+      const own = path.join(FAKE_CLI_ROOT, 'data', 'own.txt');
+      const nested = path.join(
+        FAKE_CLI_ROOT,
+        'node_modules',
+        'dep',
+        'index.js',
+      );
+      fs.mkdirSync(path.dirname(own), {recursive: true});
+      fs.mkdirSync(path.dirname(nested), {recursive: true});
+      fs.writeFileSync(own, 'cli-one');
+      fs.writeFileSync(nested, 'dep-one');
+      const once = () =>
+        cache.recordRun(async () =>
+          cache.persistedGather(
+            ['cli-files-test', 'value'],
+            async () =>
+              `${fs.readFileSync(own, 'utf8')}+${fs.readFileSync(nested, 'utf8')}`,
+            identity,
+          ),
+        );
+      expect(await once()).toBe('cli-one+dep-one');
+      expect(await once()).toBe('cli-one+dep-one');
+      // The build id stands for the CLI's own files: an in-place edit to one
+      // is not seen.
+      fs.writeFileSync(own, 'cli-two');
+      expect(await once()).toBe('cli-one+dep-one');
+      // A package placed in the node_modules folder inside the CLI's is not
+      // part of the build: an edit to it is.
+      fs.writeFileSync(nested, 'dep-two');
+      expect(await once()).toBe('cli-two+dep-two');
+    });
+
     it('is gathered again, then read back, when the entry it builds on is gone', async () => {
       write('base.txt', 'gone-test');
       write('own.txt', 'own');
@@ -249,8 +348,9 @@ describe.skipIf(!hasModuleHooks || process.platform === 'win32')(
               identity,
             );
           }
+          // Keyed by what it is worked out from, as search's entry table is.
           const derived = cache.persistedDerived(
-            ['shared-test', 'derived'],
+            ['shared-test', 'derived', last],
             () => {
               ran.push('derived');
               return last.length;
