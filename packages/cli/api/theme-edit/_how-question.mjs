@@ -29804,17 +29804,34 @@ export function draftAnswer(ctx, env, question) {
     // (Each part the undo names: its own, and an earlier change's part said
     // by its whole name in it, "the heading change"; never a part that only
     // shares a word with it.)
-    const named = [
+    /** Where a part's name is said in the undo, or null. @param {string} on */
+    const spanOf = on => {
+      const m = new RegExp(`\\b${on.split('-').join('[\\s-]+')}s?\\b`).exec(
+        said,
+      );
+      return m ? [m.index, m.index + m[0].length] : null;
+    };
+    const candidates = [
       ...new Set([
         ...(part ? [part] : []),
         ...(uc?.parts ?? []).map((/** @type {{on: string}} */ p) => p.on),
-        ...before
-          .flatMap(partsOf)
-          .filter(on =>
-            new RegExp(`\\b${on.split('-').join('[\\s-]+')}s?\\b`).test(said),
-          ),
+        ...before.flatMap(partsOf).filter(on => spanOf(on)),
       ]),
     ];
+    // ("Undo the button group change": the longest name said wins; the
+    // buttons inside that name are not named.)
+    const named = candidates.filter(on => {
+      const at = spanOf(on);
+      return !(
+        at &&
+        candidates.some(other => {
+          const o = other === on ? null : spanOf(other);
+          return (
+            o && o[0] <= at[0] && o[1] >= at[1] && o[1] - o[0] > at[1] - at[0]
+          );
+        })
+      );
+    });
     // (Each look the undo names: "the heading size change" is the size;
     // a part's size is its text size or its room, "bigger buttons".)
     const LOOK_WORDS = /** @type {Array<[RegExp, string[]]>} */ ([

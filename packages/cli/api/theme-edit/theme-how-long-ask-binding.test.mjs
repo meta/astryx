@@ -345,6 +345,20 @@ const ROWS = [
     },
   ],
   [
+    'an undo of a longer part name never takes back the shorter part said earlier',
+    {
+      q: 'Make the buttons blue. Make the button group rounder. Undo the button group change.',
+      has: ["background-color '#2563eb' --on button --when variant:primary"],
+    },
+  ],
+  [
+    'an undo of the code block header keeps the code blocks change',
+    {
+      q: 'Make the code blocks rounder. Make the code block header bold. Undo the code block header change.',
+      has: ['corners more --on code-block'],
+    },
+  ],
+  [
     'an undo names a part by its whole name, never a part that shares a word',
     {
       q: 'Make the code block header darker. Make the code block copy button blue. Undo the code block header change.',
