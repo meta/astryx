@@ -329,9 +329,10 @@ describe('builds that stay the same', () => {
   it('a stale lock is taken by one command only', () => {
     const lock = path.join(cwd, 'node_modules/.cache/astryx-theme/locks/x');
     fs.mkdirSync(lock, {recursive: true});
+    // The owner PID exceeds Linux's limit, so it cannot name a live process.
     fs.writeFileSync(
       path.join(lock, 'owner.json'),
-      JSON.stringify({pid: 3999999, host: os.hostname(), at: 1}),
+      JSON.stringify({pid: 2 ** 22 + 7, host: os.hostname(), at: 1}),
     );
     expect(tryLock(lock)).toBe(true);
     // The second finds a live holder (this process), not the stale one.
