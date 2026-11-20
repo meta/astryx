@@ -427,7 +427,7 @@ export const PAGE_COLOR_NOTE =
  */
 export const pageColorNote = mode =>
   /^(?:dark|light)-only$/.test(String(mode ?? ''))
-    ? `${PAGE_COLOR_NOTE} This theme has one mode (${mode}): its text is drawn for its own page, so the page must take the theme's page color in every OS mode, or text lands on the browser's white.`
+    ? `${PAGE_COLOR_NOTE} This theme has one mode (${mode}): its text is drawn for its own page, so the page must take the theme's page color in every OS mode, or its text lands on the browser's own page color in the other OS mode.`
     : PAGE_COLOR_NOTE;
 
 export const HEADING_WEIGHTS = wordTable(

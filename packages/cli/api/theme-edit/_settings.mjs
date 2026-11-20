@@ -2372,14 +2372,20 @@ function readMeaninglessOnly(data, notes) {
       !s ||
       typeof s.thing !== 'string' ||
       s.only !== true ||
-      typeof s.on !== 'string' ||
-      onlyMeans(s.on) !== 'own'
+      typeof s.on !== 'string'
     )
       continue;
+    // (On a family role, a change reaches each part of the family, so
+    // only means nothing there either; on a group of the editor's own, or
+    // no part, it stays damage the reader names.)
+    const role = GROUP_ROLES.includes(/** @type {any} */ (s.on));
+    if (!role && onlyMeans(s.on) !== 'own') continue;
     delete s.only;
     read.add(s);
     notes.push(
-      `${describe({...s, value: '?'}).replace(' = ?', '')} was saved with only, which changes nothing there (${s.on} is styled on its own already; only ${AUTO_SPREAD.join(' and ')} spread to their group), so it is read as without it; the next change saves it so`,
+      role
+        ? `${describe({...s, value: '?'}).replace(' = ?', '')} was saved with only, which changes nothing there (${s.on} is a family role: a change on it reaches each part of the family), so it is read as without it; the next change saves it so`
+        : `${describe({...s, value: '?'}).replace(' = ?', '')} was saved with only, which changes nothing there (${s.on} is styled on its own already; only ${AUTO_SPREAD.join(' and ')} spread to their group), so it is read as without it; the next change saves it so`,
     );
   }
   if (!read.size) return;

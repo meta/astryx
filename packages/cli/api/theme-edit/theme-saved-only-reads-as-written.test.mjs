@@ -214,4 +214,26 @@ describe('--only, as set writes it and the reader reads it', () => {
     },
     T,
   );
+
+  it(
+    'a saved only on a family role opens, read as without it, with one note',
+    async () => {
+      write([
+        {
+          thing: 'background-color',
+          value: '#123456',
+          source: 'property',
+          on: 'button-like',
+          only: true,
+        },
+      ]);
+      const before = fs.readFileSync(file(), 'utf8');
+      const r = await themeEditShow('n', {cwd});
+      expect(notes(r)).toMatch(
+        /on button-like was saved with only, which changes nothing there \(button-like is a family role/,
+      );
+      expect(fs.readFileSync(file(), 'utf8')).toBe(before);
+    },
+    T,
+  );
 });
