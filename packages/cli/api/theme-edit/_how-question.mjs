@@ -27706,35 +27706,22 @@ export function draftAnswer(ctx, env, question) {
   for (const unmet of result.filter(d => d.unmet)) {
     const [, what, part] =
       /^(.+?)(?: on ([a-z0-9-]+))?$/.exec(String(unmet.unmet ?? '')) ?? [];
-    const uc = /** @type {any} */ (draftClause.get(unmet));
-    const undoAt = clauses.indexOf(uc);
-    // ("Undo the card and heading changes": every part the undo names;
-    // "Undo the corner change": with no part, the corners on any part.)
-    const named = [
-      ...new Set([
-        ...(part ? [part] : []),
-        ...(uc?.parts ?? []).map((/** @type {{on: string}} */ p) => p.on),
-      ]),
-    ];
-    const aspects = [
-      ...new Set([
-        ...(uc?.aspects ?? []),
-        ...(what === 'everything' ? [] : [what]),
-      ]),
-    ];
+    const undoAt = clauses.indexOf(/** @type {any} */ (draftClause.get(unmet)));
     const undone = result.filter(d => {
       const c = /** @type {any} */ (draftClause.get(d));
       if (d === unmet || d.unmet || !d.options.length || !c) return false;
       if (undoAt >= 0 && clauses.indexOf(c) >= undoAt) return false;
-      const onPart =
-        !named.length ||
-        c.parts?.some((/** @type {{on: string}} */ p) =>
-          named.some(n => p.on === n || (FAMILIES[n] ?? []).includes(p.on)),
-        );
+      // (Of the part the undo names; with no part, of the whole theme.)
+      const onPart = part
+        ? c.parts?.some(
+            (/** @type {{on: string}} */ p) =>
+              p.on === part || (FAMILIES[part] ?? []).includes(p.on),
+          )
+        : !c.parts?.length;
       return (
         onPart &&
-        (!aspects.length ||
-          aspects.some(a => c.aspects?.includes(a)) ||
+        (what === 'everything' ||
+          c.aspects?.includes(what) ||
           d.options
             .flat()
             .some(

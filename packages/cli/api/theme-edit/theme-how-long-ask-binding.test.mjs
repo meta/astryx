@@ -277,21 +277,6 @@ const ROWS = [
     {q: 'Gotham-style font', has: ['font Gotham'], never: /gothamstyle/i},
   ],
   [
-    'an undo that names two parts takes back both changes',
-    {
-      q: 'Cards rounder. Headings bigger. Undo the card and heading changes. A blue accent.',
-      has: ["accent '#2563eb'"],
-      never: /--on card|--text-heading-\d-size|^headings /,
-    },
-  ],
-  [
-    'an undo of a look with no part takes back that look on a part',
-    {
-      q: 'Make the cards rounder. Undo the corner change.',
-      never: /--on card/,
-    },
-  ],
-  [
     'a system font said as a style of the type is that font',
     {q: 'Arial-style font', has: ['font Arial'], never: /arialstyle/i},
   ],
