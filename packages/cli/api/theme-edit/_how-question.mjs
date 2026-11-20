@@ -11406,7 +11406,16 @@ export function draftAnswer(ctx, env, question) {
   const side = /\b(side ?nav|sidebar|side ?panel)\b/.test(q);
   for (const c of clauses)
     for (const p of c.parts) {
-      if (side && p.on === 'top-nav-item') p.on = 'side-nav-item';
+      // (Only a bare "nav links" or "nav items" is the side nav's in a sidebar
+      // ask; a top nav, a navbar or a nav bar said as one stays the top nav.)
+      if (
+        side &&
+        p.on === 'top-nav-item' &&
+        !/\b(?:top ?nav|navbar|top bar|header nav|(?<!\bside[\s-]?)nav(?:igation)?[\s-]?bar)/.test(
+          c.text,
+        )
+      )
+        p.on = 'side-nav-item';
       if (p.on === 'tab' && /\bunderline/.test(c.text)) p.on = 'tab-indicator';
     }
   // ("sidebar: #111827 background, white links"): links said of a part that

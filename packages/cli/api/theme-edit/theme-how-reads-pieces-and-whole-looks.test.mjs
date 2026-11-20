@@ -323,6 +323,28 @@ describe('the earlier theme or look, and parts said apart', () => {
   );
 });
 
+describe('a top nav said beside a side nav', () => {
+  it(
+    'stays the top nav; a bare "nav items" in a sidebar ask is the side nav',
+    async () => {
+      for (const q of [
+        'make the top nav links bold and the side nav items red',
+        'navbar links bold and the side nav items red',
+        'nav bar links bold and the side nav items red',
+      ]) {
+        const lines = first(await answer(q)).join('\n');
+        expect(lines, q).toMatch(/font-weight 700 --on top-nav-item/);
+        expect(lines, q).toMatch(/--on side-nav-item/);
+        expect(lines, q).not.toMatch(/font-weight 700 --on side-nav-item/);
+      }
+      expect(
+        first(await answer('sidebar: nav items white')).join('\n'),
+      ).toMatch(/--on side-nav-item/);
+    },
+    T,
+  );
+});
+
 describe('a negation that takes no piece away', () => {
   it(
     'never hides the part: a behavior word, or an owner without that piece',
