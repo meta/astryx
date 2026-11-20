@@ -39,10 +39,10 @@ import {
 } from '../privateAttributes/menuPressLit.stylex';
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
 import {scroll} from '../motion/uikit/scroll';
-import {__setEventTrustForTest} from '../utils/eventTrust';
+import {__setEventTrustForTest} from '../utils/clickGuard';
 
 // jsdom sends no trusted event. The events in this set stand in for the
-// browser's own (utils/eventTrust.ts).
+// browser's own (utils/clickGuard.ts).
 const browserEvents = new WeakSet<Event>();
 beforeEach(() => {
   __setEventTrustForTest(event => browserEvents.has(event));

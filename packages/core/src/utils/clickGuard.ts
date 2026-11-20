@@ -43,9 +43,8 @@
 // whether or not the touch's `touchstart` was cancelable. So the menu press
 // model's arm stays armed after that `touchend` and takes them, as at a
 // claimed touch's lift. Its window then starts again at that `touchend`.
-// From then on it takes only the browser's own events (utils/eventTrust.ts):
-// a page's `dispatchEvent` or `click()` has no tracked gesture behind it, and
-// it acts.
+// From then on it takes only the browser's own events: a page's
+// `dispatchEvent` or `click()` has no tracked gesture behind it, and it acts.
 //
 // Some clicks always pass:
 // - a click with `detail` 0: a keyboard's, a screen reader's, or one that the
@@ -54,10 +53,20 @@
 // - the hidden haptic switch's click (gestures/haptics.ts).
 
 import {isHapticSwitch} from '../privateAttributes/hapticSwitch.stylex';
-import {isUserAgentEvent} from './eventTrust';
 import {subscribeInput} from './inputStream';
 import {realmValue, sharedKey} from './sharedRealm';
 import {markTouchEndCancelled} from './touchEndMark';
+
+const readIsTrusted = (event: Event): boolean => event.isTrusted;
+
+// The guard's one trust read. jsdom never sends a trusted event, so the unit
+// tests name the events that stand in for the browser's own.
+let readTrust = readIsTrusted;
+
+/** Whether the browser sent `event`, not a page's `dispatchEvent` or `click()`. */
+function isUserAgentEvent(event: Event): boolean {
+  return readTrust(event);
+}
 
 /**
  * How long after a release the browser's click is still swallowed, in ms.
@@ -310,6 +319,16 @@ export function withoutClickGuard<T>(dispatch: () => T): T {
   } finally {
     guardState.unguardedDepth--;
   }
+}
+
+/**
+ * Tests only: names the events that stand in for the browser's own; `null`
+ * restores the real read.
+ */
+export function __setEventTrustForTest(
+  read: ((event: Event) => boolean) | null,
+): void {
+  readTrust = read ?? readIsTrusted;
 }
 
 /**

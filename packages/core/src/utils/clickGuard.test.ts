@@ -23,13 +23,13 @@ import {TapGestureRecognizer} from '../gestures/TapGestureRecognizer';
 import {MENU_PRESS_STRAY_CLICK_MS} from '../hooks/useMenuPress';
 import {
   __resetClickGuardForTest,
+  __setEventTrustForTest,
   armClickGuard,
   CLICK_GUARD_WINDOW_MS,
   disarmClickGuard,
   isClickGuardArmed,
   withoutClickGuard,
 } from './clickGuard';
-import {__setEventTrustForTest} from './eventTrust';
 
 afterEach(() => {
   __resetClickGuardForTest();
@@ -59,7 +59,7 @@ function mouse(
 }
 
 // jsdom sends no trusted event. The events in this set stand in for the
-// browser's own (./eventTrust.ts).
+// browser's own (./clickGuard.ts).
 const browserEvents = new WeakSet<Event>();
 beforeEach(() => {
   __setEventTrustForTest(event => browserEvents.has(event));
