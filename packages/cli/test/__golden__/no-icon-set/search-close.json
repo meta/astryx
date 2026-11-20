@@ -18,6 +18,39 @@
       },
       {
         "domain": "component",
+        "name": "Dialog",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Dialog",
+        "command": "astryx component Dialog",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "DialogHeader",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Dialog",
+        "command": "astryx component DialogHeader",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "Drawer",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Drawer",
+        "command": "astryx component Drawer",
+        "mentions": []
+      },
+      {
+        "domain": "component",
         "name": "DrawerHeader",
         "package": "@astryxdesign/core",
         "score": "<text>",
@@ -51,28 +84,6 @@
           "replacement": "<text>",
           "description": "<text>"
         },
-        "mentions": []
-      },
-      {
-        "domain": "component",
-        "name": "DialogHeader",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "import": "@astryxdesign/core/Dialog",
-        "command": "astryx component DialogHeader",
-        "mentions": []
-      },
-      {
-        "domain": "component",
-        "name": "Drawer",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "import": "@astryxdesign/core/Drawer",
-        "command": "astryx component Drawer",
         "mentions": []
       },
       {
@@ -226,21 +237,6 @@
         "command": "astryx docs icons available-names",
         "parent": "astryx docs icons --index",
         "mentions": []
-      },
-      {
-        "domain": "doc",
-        "name": "icons",
-        "package": "@astryxdesign/cli",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "section": "<text>",
-        "title": "<text>",
-        "command": "astryx docs icons theme-overrides",
-        "parent": "astryx docs icons --index",
-        "mentions": [
-          "This lets you swap the icon set (e.g."
-        ]
       }
     ]
   },
