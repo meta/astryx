@@ -74,8 +74,8 @@ const SHIPPED_HEIGHTS: Record<string, Record<string, number>> = {
 const THEMES = Object.keys(SHIPPED_HEIGHTS);
 
 test.describe('a desktop page', () => {
-  // On a phone the small size's label line is 21 px, a pixel taller than its
-  // 20 px segment, so that segment now grows by the pixel its label needed.
+  // The shipped heights are pinned on a desktop page, where the default text
+  // size gives every label line room in its segment.
   test.use({
     viewport: {width: 1280, height: 800},
     isMobile: false,
