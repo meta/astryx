@@ -6,10 +6,12 @@
  * @input The built A11y/BackdropPress story; real Chromium mouse and touch
  *   input
  * @output Browser evidence that a press which crosses the edge of a Dialog,
- *   Drawer or CommandPalette, either way, leaves it open, that a press on the
- *   backdrop alone still dismisses it, and that a backdrop press which closes
- *   a layer open inside a Dialog or Drawer (a menu, a Typeahead list, a
- *   DateInput calendar, a pinned InfoTip, a ContextMenu) leaves the host open
+ *   Drawer, CommandPalette, BottomSheet or BottomSheetSwitcher step, either
+ *   way, leaves it open, that a press on the backdrop alone still dismisses
+ *   it, that a backdrop press which closes a menu open inside a Dialog,
+ *   Drawer, BottomSheet or BottomSheetSwitcher step leaves the host open, and
+ *   that one which closes another layer open inside a Dialog (a Typeahead
+ *   list, a DateInput calendar, a pinned InfoTip, a ContextMenu) does too
  * @position Chromium proof for the shared backdrop-press rule
  *   (Layer/useBackdropPress.ts). jsdom has no backdrop hit testing and no
  *   click retargeting to the common ancestor.
