@@ -36,6 +36,11 @@ import {
 } from '../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
 import {
+  formatBlock,
+  formatReferenceFull,
+  formatSection,
+} from '../../../foundation/doc-compiler/doc-text.mjs';
+import {
   emit,
   section,
   records,
@@ -64,160 +69,7 @@ export const WHOLE_READ_MAX_BYTES = 16 * 1024;
 
 // ─── Formatting ──────────────────────────────────────────────────────────────
 
-/**
- * A table cell with its pipes escaped. Columns are separated by ` | `, and a
- * union type such as `'light' | 'dark'` is spelled with the same character,
- * so an unescaped cell reads as extra columns. `astryx component` escapes its
- * prop tables the same way.
- * @param {string | undefined} cell
- * @returns {string}
- */
-function tableCell(cell) {
-  return (cell || '').replaceAll('|', '\\|');
-}
-
-/**
- * @param {string[]} headers
- * @param {string[][]} rows
- * @returns {string}
- */
-function formatTable(headers, rows) {
-  const head = headers.map(tableCell);
-  const cells = rows.map(r => r.map(tableCell));
-  const widths = head.map((h, i) =>
-    Math.max(h.length, ...cells.map(r => (r[i] || '').length)),
-  );
-  const sep = widths.map(w => '-'.repeat(w)).join(' | ');
-  const top = head.map((h, i) => h.padEnd(widths[i])).join(' | ');
-  const body = cells
-    .map(r => r.map((c, i) => c.padEnd(widths[i])).join(' | '))
-    .join('\n');
-  return `${top}\n${sep}\n${body}`;
-}
-
-/**
- * @param {string[]} headers
- * @param {string[][]} rows
- * @returns {string}
- */
-function formatTableCompact(headers, rows) {
-  // An empty cell, such as a Default with none, adds nothing to the line.
-  return rows
-    .map(r => r.filter(cell => String(cell ?? '').trim() !== '').join(' = '))
-    .join('\n');
-}
-
-/**
- * One content block as text. Exported for its tests.
- * @param {import('@astryxdesign/cli/authoring').ReferenceContentBlock} block
- * @param {'full' | 'compact' | 'brief'} detail
- * @returns {string | null}
- */
-export function formatBlock(block, detail) {
-  // Docs write commands as bare `astryx ...`; show them the way this project
-  // runs the CLI.
-  const stem = getCliInvocation();
-  /** @param {string} value */
-  const shown = value => prefixCliCommands(value, stem);
-  switch (block.type) {
-    case 'prose':
-      return shown(block.text);
-
-    case 'heading':
-      return `${'#'.repeat(block.level || 3)} ${shown(block.text)}`;
-
-    case 'code':
-      if (detail === 'compact' || detail === 'brief') return null;
-      {
-        // The label names the block, so it prints above the fence, not
-        // inside it: `// label` is not a comment in bash, CSS, JSON, or
-        // HTML, and a reader who copies the block would copy it too.
-        const label = block.label
-          ? `${block.label.replace(/:\s*$/, '')}:\n`
-          : '';
-        const body = prefixCliCommands(block.code, stem, block.lang);
-        return `${label}\`\`\`${block.lang}\n${body}\n\`\`\``;
-      }
-
-    case 'table': {
-      // A cell that is a whole command, such as `astryx theme add neutral`
-      // written without backticks, is prefixed too.
-      /** @param {string} cell */
-      const shownCell = cell =>
-        /^astryx(\s|$)/.test(cell ?? '')
-          ? `${stem}${cell.slice('astryx'.length)}`
-          : shown(cell ?? '');
-      const rows = block.rows.map(row => row.map(shownCell));
-      if (detail === 'brief') {
-        return rows
-          .map(r => r.slice(0, 2).map(tableCell).join('='))
-          .join(' | ');
-      }
-      if (detail === 'compact') {
-        return formatTableCompact(block.headers, rows);
-      }
-      return formatTable(block.headers, rows);
-    }
-
-    case 'list': {
-      const prefix =
-        block.style === 'ordered'
-          ? (/** @type {number} */ i) => `${i + 1}. `
-          : block.style === 'dont'
-            ? () => 'x '
-            : block.style === 'do'
-              ? () => '+ '
-              : () => '- ';
-      return block.items
-        .map((item, i) => `${prefix(i)}${shown(item)}`)
-        .join('\n');
-    }
-
-    default:
-      return null;
-  }
-}
-
-/**
- * @param {import('../../../api/docs/docs.type.mjs').DocsReadSection} section
- * @param {'full' | 'compact' | 'brief'} detail
- * @returns {string}
- */
-function formatSection(section, detail) {
-  const blocks = section.content
-    .map(b => formatBlock(b, detail))
-    .filter(Boolean);
-
-  if (detail === 'brief') {
-    const first = blocks[0] || '';
-    return `${section.title}: ${first.split('\n')[0]}`;
-  }
-
-  const heading =
-    detail === 'compact' ? `[${section.title}]` : `## ${section.title}`;
-  return `${heading}\n\n${blocks.join('\n\n')}`;
-}
-
-/**
- * @param {import('../../../api/docs/docs.type.mjs').DocsReadDoc} docs
- * @param {'full' | 'compact' | 'brief'} detail
- * @returns {string}
- */
-function formatReferenceFull(docs, detail) {
-  if (detail === 'brief') {
-    const header = `${docs.title}: ${docs.description}`;
-    const sections = docs.sections.map(s => formatSection(s, detail));
-    return `${header}\n${sections.join('\n')}`;
-  }
-
-  const header =
-    detail === 'compact'
-      ? `# ${docs.title}\n${docs.description}`
-      : `# ${docs.title}\n\n${docs.description}`;
-  const sections = docs.sections.map(s => formatSection(s, detail));
-  const sep = detail === 'compact' ? '\n\n' : '\n\n';
-  return `${header}\n\n${sections.join(sep)}`;
-}
+export {formatBlock};
 
 /**
  * @param {string} title
@@ -540,6 +392,21 @@ function emitIndex(index, owner, run) {
 }
 
 /**
+ * The mark a listed doc row opens with: an experimental doc is marked as help
+ * marks an experimental command, so a reader cannot take it for a stable doc,
+ * unless its own summary already opens by saying so. Every docs list that
+ * marks a row asks here, so the namespace view and the `--depth` list agree.
+ * @param {string | undefined} stability
+ * @param {string} summary
+ * @returns {'[experimental] ' | ''}
+ */
+function experimentalMark(stability, summary) {
+  return stability === 'experimental' && !/^experimental\b/iu.test(summary)
+    ? '[experimental] '
+    : '';
+}
+
+/**
  * One child row of a namespace. Namespace and guide route names are already
  * readable, so repeating their titles adds noise (`start-a-template  Start a
  * template`). Typed docs keep a distinct title when it carries the real symbol
@@ -557,15 +424,10 @@ function childRow(child, owner) {
     // A child another package owns says which one.
     name:
       child.package === owner ? child.name : `${child.name} (${child.package})`,
-    // An experimental child is marked as help marks an experimental command,
-    // unless its own summary already opens by saying so.
     summary: prefixCliCommands(
-      `${
-        child.stability === 'experimental' &&
-        !/^experimental\b/iu.test(child.summary)
-          ? '[experimental] '
-          : ''
-      }${titleAddsIdentity ? `${child.title}: ${child.summary}` : child.summary}`,
+      `${experimentalMark(child.stability, child.summary)}${
+        titleAddsIdentity ? `${child.title}: ${child.summary}` : child.summary
+      }`,
       getCliInvocation(),
     ),
     experimental: child.stability === 'experimental',
@@ -653,11 +515,13 @@ function emitNode(node, detail, run) {
  *   | import('../../../api/docs/docs.type.mjs').DocsIndexResponse
  *   | import('../../../api/docs/docs.type.mjs').DocsDetailResponse
  *   | import('../../../api/docs/docs.type.mjs').DocsDetailSectionResponse
- *   | import('../../../api/docs/docs.type.mjs').DocsNodeResponse} result
+ *   | import('../../../api/docs/docs.type.mjs').DocsNodeResponse
+ *   | import('../../../api/docs/docs.type.mjs').DocsSkillsResponse
+ *   | import('../../../api/docs/docs.type.mjs').DocsSkillResponse} result
  * @returns {import('../../../foundation/debug/command-result.mjs').CommandResult}
  */
 function summarize(result) {
-  return result.type === 'docs.list'
+  return result.type === 'docs.list' || result.type === 'docs.skills'
     ? resultSet({count: result.data.length, resultKind: 'doc'})
     : resultSet({count: 1, resultKind: 'doc', directMatch: true});
 }
@@ -676,14 +540,10 @@ function flattenNamespaces(rows) {
   return rows.flatMap(row => [
     {
       topic: row.topic,
-      // An experimental doc is marked here as it is wherever else it is
-      // listed, so a reader cannot take a row of this list for a stable doc.
-      description:
-        'stability' in row &&
-        row.stability === 'experimental' &&
-        !/^experimental\b/iu.test(row.description)
-          ? `[experimental] ${row.description}`
-          : row.description,
+      description: `${experimentalMark(
+        'stability' in row ? row.stability : undefined,
+        row.description,
+      )}${row.description}`,
       package: row.package,
     },
     ...flattenNamespaces(row.children ?? []),
@@ -880,6 +740,38 @@ export function registerDocs(program) {
             record({package: result.package}),
             code(formatSection(result.data, detail)),
             text(linkLines(result.data.links).join('\n')),
+          );
+          break;
+        }
+
+        case 'docs.skills': {
+          emit(
+            section('Skills'),
+            records(
+              result.data.map(each => ({
+                topic: `skills/${each.name}`,
+                description: each.description,
+                package: each.package,
+              })),
+              {fields: ['topic', 'description', 'package'], layout: 'inline'},
+            ),
+            text(`Read one: ${run} docs skills/<name>`),
+            // A skill a package declares but this run left out: say why.
+            ...(result.meta?.notes?.length
+              ? [
+                  section('Left out'),
+                  records(result.meta.notes, {fields: ['package', 'message'], layout: 'inline'}),
+                ]
+              : []),
+          );
+          break;
+        }
+
+        case 'docs.skill': {
+          emit(
+            record({package: result.package, skill: result.data.name}),
+            code(result.data.text),
+            text(`Up: ${run} docs skills`),
           );
           break;
         }

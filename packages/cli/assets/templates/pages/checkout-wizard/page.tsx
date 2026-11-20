@@ -94,11 +94,11 @@ import {TextInput} from '@astryxdesign/core/TextInput';
 import {Thumbnail} from '@astryxdesign/core/Thumbnail';
 import {
   CreditCardIcon,
-  LockClosedIcon,
-  MapPinIcon,
-  ShoppingCartIcon,
-  TruckIcon,
-} from '@heroicons/react/24/outline';
+  LockIcon,
+  LocationIcon,
+  CartIcon,
+  ShippingIcon,
+} from '@astryxdesign/template-icons';
 
 // ── Data ──────────────────────────────────────────────────────────────────────
 
@@ -109,9 +109,9 @@ import {
 // The one thing that does displace it is an error, which is louder than
 // identity: a blocked step shows the error glyph until it is fixed.
 const STEPS = [
-  {label: 'Cart', icon: ShoppingCartIcon},
-  {label: 'Shipping', icon: MapPinIcon},
-  {label: 'Delivery', icon: TruckIcon},
+  {label: 'Cart', icon: CartIcon},
+  {label: 'Shipping', icon: LocationIcon},
+  {label: 'Delivery', icon: ShippingIcon},
   {label: 'Payment', icon: CreditCardIcon},
 ];
 
@@ -225,12 +225,19 @@ const POSTAL_CODE_RULES: Record<
 // Plain inline styles over Astryx token CSS variables, so the template compiles
 // in a project with no StyleX pipeline.
 
+// A zero basis keeps the form beside the summary on wide hosts whatever the
+// step's content width; the min width lets the summary wrap below the form on
+// a narrow first paint, before script measures the host (the summary's
+// maxWidth keeps it inside the page there).
+const formColumn: CSSProperties = {flexBasis: 0, minWidth: 'min(100%, 480px)'};
+
 // The summary column holds its width while the form column takes the rest, and
 // pins itself as the form scrolls past — the sticky offset is the page inset,
 // so a stuck card sits where an unstuck one would. The narrow summary needs no
 // order override because it is rendered before the form in the DOM.
 const summaryColumn: CSSProperties = {
   width: 360,
+  maxWidth: '100%',
   flexShrink: 0,
   position: 'sticky',
   top: 'var(--spacing-6)',
@@ -558,7 +565,7 @@ export default function CheckoutWizardPage() {
       {subtotal - discount < FREE_SHIPPING_THRESHOLD && (
         <Banner
           status="info"
-          icon={<Icon icon={TruckIcon} size="sm" />}
+          icon={<Icon icon={ShippingIcon} size="sm" />}
           title={`${money(FREE_SHIPPING_THRESHOLD - (subtotal - discount))} away from free standard shipping`}
         />
       )}
@@ -676,15 +683,19 @@ export default function CheckoutWizardPage() {
                 <Heading level={1}>Checkout</Heading>
               </StackItem>
               <HStack gap={1.5} vAlign="center">
-                <Icon icon={LockClosedIcon} size="sm" color="secondary" />
+                <Icon icon={LockIcon} size="sm" color="secondary" />
                 <Text type="supporting" color="secondary">
                   Secure checkout
                 </Text>
               </HStack>
             </HStack>
 
+            {/* Only the side-by-side row wraps. A wrapping column sizes its
+                line to its widest content, which runs into the page's side
+                padding on a phone. */}
             <Stack
               direction={isNarrow ? 'vertical' : 'horizontal'}
+              wrap={isNarrow ? undefined : 'wrap'}
               gap={6}
               vAlign="start">
               {/* When stacked, summary comes first in DOM as well as visual and
@@ -693,7 +704,7 @@ export default function CheckoutWizardPage() {
 
               {/* The form column owns the sequence end to end: progress at the
                   top, the step in the middle, the way out at the bottom. */}
-              <StackItem size="fill">
+              <StackItem size="fill" style={isNarrow ? undefined : formColumn}>
                 <VStack gap={6}>
                   {isComplete ? (
                     <VStack gap={4}>
@@ -831,11 +842,13 @@ export default function CheckoutWizardPage() {
                             }
                           />
                         </StackItem>
-                        <Button
-                          label="Apply"
-                          variant="secondary"
-                          onClick={applyPromo}
-                        />
+                        <StackItem size="static">
+                          <Button
+                            label="Apply"
+                            variant="secondary"
+                            onClick={applyPromo}
+                          />
+                        </StackItem>
                       </HStack>
                     </VStack>
                   )}
@@ -1059,7 +1072,7 @@ export default function CheckoutWizardPage() {
                           value={cardNumber}
                           onChange={setCardNumber}
                           placeholder="4242 4242 4242 4242"
-                          startIcon={LockClosedIcon}
+                          startIcon={LockIcon}
                           status={
                             currentErrors.cardNumber
                               ? {

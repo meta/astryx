@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import {
   assertWithin,
+  homeRelativePath,
   sanitizeName,
   isFilePathArg,
   PathSafetyError,
@@ -96,6 +97,29 @@ describe('assertWithin', () => {
   it('rejects empty / non-string input', () => {
     expect(() => assertWithin('', tmpDir)).toThrow(/non-empty/i);
     expect(() => assertWithin(null, tmpDir)).toThrow();
+  });
+});
+
+describe('homeRelativePath', () => {
+  const home = path.join(path.parse(process.cwd()).root, 'home', 'someone');
+
+  it('reads `~` and `~/` as the home folder, as a shell expands them', () => {
+    expect(homeRelativePath('~', home)).toBe(home);
+    expect(homeRelativePath('~/scratch/page.tsx', home)).toBe(
+      path.join(home, 'scratch', 'page.tsx'),
+    );
+  });
+
+  it('leaves every other path alone', () => {
+    for (const value of [
+      'src/pages/x',
+      './~/x',
+      '~other/x',
+      'a~/x',
+      '/abs/x',
+    ]) {
+      expect(homeRelativePath(value, home), value).toBeNull();
+    }
   });
 });
 

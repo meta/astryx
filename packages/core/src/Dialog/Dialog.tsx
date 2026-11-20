@@ -85,6 +85,7 @@ import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {createDevWarnings} from '../utils/devWarning';
 import {DialogContext} from './DialogContext';
 import {themeProps} from '../utils/themeProps';
+import {LayoutContainerContext} from '../Layout/LayoutContainerContext';
 import type {DialogVariantMap} from './index';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
@@ -222,6 +223,16 @@ const styles = stylex.create({
     // that sets no color of its own (a selected nav row) needs this.
     color: colorVars['--color-text-primary'],
     '--_dialog-radius': radiusVars['--radius-container'],
+    // Theme corner variables inherit. Reset them, so a nested surface that the
+    // theme does not style hands out its own radius.
+    '--_dialog-radius-top-left': 'initial',
+    '--_dialog-radius-top-right': 'initial',
+    '--_dialog-radius-bottom-right': 'initial',
+    '--_dialog-radius-bottom-left': 'initial',
+    '--_dialog-radius-start-start': 'initial',
+    '--_dialog-radius-start-end': 'initial',
+    '--_dialog-radius-end-start': 'initial',
+    '--_dialog-radius-end-end': 'initial',
     borderRadius: 'var(--_dialog-radius)',
     boxShadow: shadowVars['--shadow-high'],
     display: 'none',
@@ -312,15 +323,34 @@ const styles = stylex.create({
     overflow: 'hidden',
     borderRadius: 'inherit',
   },
+  // A full-bleed child takes the dialog's radius, each corner as drawn.
   innerCorners: {
-    '--_container-corner-block-start': 'var(--_dialog-radius)',
-    '--_container-corner-block-end': 'var(--_dialog-radius)',
+    '--_container-host-radius': 'var(--_dialog-radius)',
+    '--_container-host-radius-top-left': 'var(--_dialog-radius-top-left)',
+    '--_container-host-radius-top-right': 'var(--_dialog-radius-top-right)',
+    '--_container-host-radius-bottom-right':
+      'var(--_dialog-radius-bottom-right)',
+    '--_container-host-radius-bottom-left': 'var(--_dialog-radius-bottom-left)',
+    '--_container-host-radius-start-start': 'var(--_dialog-radius-start-start)',
+    '--_container-host-radius-start-end': 'var(--_dialog-radius-start-end)',
+    '--_container-host-radius-end-start': 'var(--_dialog-radius-end-start)',
+    '--_container-host-radius-end-end': 'var(--_dialog-radius-end-end)',
   },
   // Inline wrapper mirrors the dialog's visual styles without <dialog> behavior
   inlineWrapper: {
     padding: 0,
     backgroundColor: colorVars['--color-background-surface'],
     '--_dialog-radius': radiusVars['--radius-container'],
+    // Theme corner variables inherit. Reset them, so a nested surface that the
+    // theme does not style hands out its own radius.
+    '--_dialog-radius-top-left': 'initial',
+    '--_dialog-radius-top-right': 'initial',
+    '--_dialog-radius-bottom-right': 'initial',
+    '--_dialog-radius-bottom-left': 'initial',
+    '--_dialog-radius-start-start': 'initial',
+    '--_dialog-radius-start-end': 'initial',
+    '--_dialog-radius-end-start': 'initial',
+    '--_dialog-radius-end-end': 'initial',
     borderRadius: 'var(--_dialog-radius)',
     boxShadow: shadowVars['--shadow-high'],
     // Forced colors removes box-shadow, which is this surface's only edge.
@@ -693,6 +723,13 @@ export function Dialog({
           ),
         ];
         for (const target of autofocusTargets) {
+          // A request belongs to its nearest dialog. One inside a nested
+          // dialog is that dialog's, open or closed: a closed one can still be
+          // laid out (a display utility class beats its closed state), and
+          // focus would then land in a dialog nobody can see.
+          if (target.closest('dialog') !== dialog) {
+            continue;
+          }
           // Only hiding inside the dialog makes a request ineligible: the
           // modal dialog is not part of an inert region around it.
           const hiddenAncestor = target.closest(
@@ -856,9 +893,14 @@ export function Dialog({
           containerPaddingBlockEndVarStyles[effectivePadding],
         isFullscreen && useThemeDefault && styles.fullscreenSafeArea,
         styles.innerCorners,
+        containerCornerStyles.fromHostRadius,
         containerCornerStyles.publish,
       )}>
-      <DialogContext value={dialogContextValue}>{children}</DialogContext>
+      <DialogContext value={dialogContextValue}>
+        <LayoutContainerContext value="dialog">
+          {children}
+        </LayoutContainerContext>
+      </DialogContext>
     </div>
   );
 

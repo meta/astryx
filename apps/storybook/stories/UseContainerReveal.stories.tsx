@@ -26,7 +26,7 @@ const styles = stylex.create({
     borderWidth: 1,
     borderStyle: 'solid',
     borderColor: 'rgba(0,0,0,0.12)',
-    background: {
+    backgroundColor: {
       default: 'transparent',
       ':hover': 'rgba(0,0,0,0.03)',
     },

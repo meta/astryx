@@ -26,7 +26,7 @@ import {
  * @param {any} docs
  * @returns {string}
  */
-function buildSignature(docs) {
+export function buildSignature(docs) {
   const name = docs.name;
 
   // Build params string — only top-level params (skip options.foo nested params)
@@ -95,6 +95,28 @@ function formatReturnsTable(returns) {
 }
 
 /**
+ * The `## Parameters` section: what the hook takes, one row per parameter. A
+ * hook read prints it, and so does a component read that resolves to a hook.
+ * @param {any} docs
+ * @returns {string[]}
+ */
+export function formatHookParameters(docs) {
+  if (!docs.params?.length) return [];
+  return ['## Parameters\n', formatParamsTable(docs.params) + '\n'];
+}
+
+/**
+ * The `## Returns` section: what the hook returns, one row per field. A hook
+ * read prints it, and so does a component read that resolves to a hook.
+ * @param {any} docs
+ * @returns {string[]}
+ */
+export function formatHookReturns(docs) {
+  if (!docs.returns?.length) return [];
+  return ['## Returns\n', formatReturnsTable(docs.returns) + '\n'];
+}
+
+/**
  * Format full hook docs (default mode).
  * Matches component formatFull structure:
  *   # Name, description, anatomy→params, best practices, props→params+returns, theming→related
@@ -115,17 +137,9 @@ export function formatHookFull(docs) {
 
   sections.push(...formatAccessibility(docs.usage?.accessibility));
 
-  // Parameters (analogous to ## Props)
-  if (docs.params?.length) {
-    sections.push('## Parameters\n');
-    sections.push(formatParamsTable(docs.params) + '\n');
-  }
+  sections.push(...formatHookParameters(docs));
 
-  // Returns (hook-specific, no component equivalent)
-  if (docs.returns?.length) {
-    sections.push('## Returns\n');
-    sections.push(formatReturnsTable(docs.returns) + '\n');
-  }
+  sections.push(...formatHookReturns(docs));
 
   return sections.join('\n');
 }
@@ -162,17 +176,9 @@ export function formatHookCompact(docs, importPath) {
 
   sections.push(...formatAccessibility(docs.usage?.accessibility));
 
-  // Parameters (matches ## Props in component compact)
-  if (docs.params?.length) {
-    sections.push('## Parameters\n');
-    sections.push(formatParamsTable(docs.params) + '\n');
-  }
+  sections.push(...formatHookParameters(docs));
 
-  // Returns
-  if (docs.returns?.length) {
-    sections.push('## Returns\n');
-    sections.push(formatReturnsTable(docs.returns) + '\n');
-  }
+  sections.push(...formatHookReturns(docs));
 
   // Related components (compact footer)
   /** @type {string[]} */
@@ -272,8 +278,6 @@ export async function formatHookBriefAll(coreDir) {
  * @returns {string}
  */
 export function formatHookParams(docs) {
-  if (docs.params?.length) {
-    return `## Parameters\n\n${formatParamsTable(docs.params)}\n`;
-  }
+  if (docs.params?.length) return formatHookParameters(docs).join('\n');
   return `No parameters documentation found for ${docs.name}.\n`;
 }

@@ -11,6 +11,7 @@ import path from 'node:path';
 
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
+import {withoutCheckoutRetries} from './lib/checkout-retries.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const action = yaml.parse(
@@ -32,10 +33,11 @@ const isCaps = step =>
   step.uses?.startsWith('./') &&
   step.uses.endsWith('/.github/actions/heavy-caps');
 const QUEUED =
-  'Queued behind your 15 oldest PRs: runs on a push once it is among them, or at the pre-merge re-run.';
+  'Queued behind your 15 oldest PRs: runs at a review-pass run once it is among them, or at the pre-merge re-run.';
 const BACKSTOP =
-  "Queued behind the shared login's 5 oldest PRs: runs on a push once it is among them, or at the pre-merge re-run.";
-const CAPPED = 'Daily heavy-run cap reached, runs tomorrow or at pre-merge.';
+  "Queued behind the shared login's 5 oldest PRs: runs at a review-pass run once it is among them, or at the pre-merge re-run.";
+const CAPPED =
+  'Daily heavy-run cap reached: runs at a review-pass run after the cap resets, or at the pre-merge re-run.';
 const ENGOWNERS =
   '# Engineering owners\n# @commented-out\n\n@owner-one @Owner-Two # was @trailing-comment\n';
 
@@ -62,6 +64,7 @@ async function check({
   open = [],
   runs = [],
   attempt = '1',
+  triggeringActor = 'author',
   engowners = ENGOWNERS,
   labelers = {},
   permissions = {},
@@ -133,7 +136,9 @@ async function check({
     },
   };
   const saved = process.env.GITHUB_RUN_ATTEMPT;
+  const savedActor = process.env.GITHUB_TRIGGERING_ACTOR;
   process.env.GITHUB_RUN_ATTEMPT = attempt;
+  process.env.GITHUB_TRIGGERING_ACTOR = triggeringActor;
   process.env.RUN_LABELS_MODULE = RUN_LABELS_MODULE;
   try {
     // The script loads modules with `import()`, which a function built here
@@ -150,6 +155,8 @@ async function check({
   } finally {
     if (saved === undefined) delete process.env.GITHUB_RUN_ATTEMPT;
     else process.env.GITHUB_RUN_ATTEMPT = saved;
+    if (savedActor === undefined) delete process.env.GITHUB_TRIGGERING_ACTOR;
+    else process.env.GITHUB_TRIGGERING_ACTOR = savedActor;
   }
   return messages;
 }
@@ -384,6 +391,40 @@ describe('per-author caps on heavy suites (spec:AST-030 FR16)', () => {
     expect(failed.warning[0]).toContain('running the heavy suite');
   });
 
+  it('holds the review-pass run like a first run, and never the pre-merge re-run of the same head (spec:AST-030 FR16, FR20)', async () => {
+    const over = {open: [...older15(), me], attempt: '2'};
+    // ci-review-pass.yml re-runs the deferred run with the workflow token.
+    expect(
+      (await check({...over, triggeringActor: 'github-actions[bot]'})).failed,
+    ).toEqual([QUEUED]);
+    expect(
+      (
+        await check({
+          open: [me],
+          runs: runsOn(100),
+          attempt: '2',
+          triggeringActor: 'github-actions[bot]',
+        })
+      ).failed,
+    ).toEqual([CAPPED]);
+    // merge-guard's pre-merge re-run, started by a person's token, is exempt.
+    expect(
+      (await check({...over, triggeringActor: 'cixzhang'})).failed,
+    ).toEqual([]);
+    // A release-critical pull request's review-pass run is never held.
+    expect(
+      (
+        await check({
+          ...over,
+          triggeringActor: 'github-actions[bot]',
+          context: pullRequestContext({labels: [{name: 'release-critical'}]}),
+          labelers: {'release-critical': 'maintainer'},
+          permissions: {maintainer: 'write'},
+        })
+      ).failed,
+    ).toEqual([]);
+  });
+
   it('never holds a pull request labelled release-critical by someone with write access (spec:AST-030 DEC-30)', async () => {
     const labelled = pullRequestContext({labels: [{name: 'release-critical'}]});
     const over = {open: [...older15(), me], runs: runsOn(100)};
@@ -476,10 +517,11 @@ describe('per-author caps on heavy suites (spec:AST-030 FR16)', () => {
       'test-build',
     ]);
     for (const [id, job] of heavyJobs) {
-      const caps = job.steps.findIndex(isCaps);
-      expect(job.steps[caps - 1].uses, id).toMatch(/^actions\/checkout@/);
+      const steps = withoutCheckoutRetries(job.steps);
+      const caps = steps.findIndex(isCaps);
+      expect(steps[caps - 1].uses, id).toMatch(/^actions\/checkout@/);
       // A sparse checkout brings the release-critical label check's scripts.
-      const sparse = job.steps[caps - 1].with?.['sparse-checkout'];
+      const sparse = steps[caps - 1].with?.['sparse-checkout'];
       if (sparse)
         expect(String(sparse).split('\n'), id).toEqual(
           expect.arrayContaining(['.github/scripts/lib']),
@@ -490,12 +532,12 @@ describe('per-author caps on heavy suites (spec:AST-030 FR16)', () => {
         contents: 'read',
         'pull-requests': 'read',
       });
-      expect(job.steps[caps + 1], id).toMatchObject({
+      expect(steps[caps + 1], id).toMatchObject({
         name: 'Heavy suite runs',
         run: 'true',
       });
-      expect(job.steps[caps + 1].if, id).toBe(job.steps[caps].if);
-      expect(job.steps[caps].if, id).toBe(job.steps[caps - 1].if);
+      expect(steps[caps + 1].if, id).toBe(steps[caps].if);
+      expect(steps[caps].if, id).toBe(steps[caps - 1].if);
     }
   });
 });

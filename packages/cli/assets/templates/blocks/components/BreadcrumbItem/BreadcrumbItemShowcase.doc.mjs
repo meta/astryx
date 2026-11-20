@@ -12,5 +12,4 @@ export const doc = {
   isShowcase: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Breadcrumbs', 'BreadcrumbItem'],
-  icons: {HomeIcon: 'home'},
 };

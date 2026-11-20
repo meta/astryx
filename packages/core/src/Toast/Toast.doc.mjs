@@ -53,6 +53,13 @@ export const docs = {
       default: '5000',
     },
     {
+      name: 'isExiting',
+      type: 'boolean',
+      description:
+        'Whether the toast is leaving: it plays its exit motion and stops responding to swipes. The toast viewport sets it while a toast leaves; set it only when you render Toast yourself.',
+      default: 'false',
+    },
+    {
       name: 'endContent',
       type: 'ReactNode',
       description:
@@ -93,7 +100,10 @@ export const docs = {
     },
   ],
   theming: {
-    targets: [{className: 'astryx-toast', visualProps: ['type']}],
+    targets: [
+      {className: 'astryx-toast', visualProps: ['type']},
+      {className: 'astryx-toast-close'},
+    ],
     vars: [
       {
         name: '--_toast-slide-y',
@@ -131,7 +141,7 @@ export const docs = {
 
   usage: {
     description:
-      'Toast shows a brief, non-blocking notification to confirm an action or present temporary information. Use it for scenarios where the user needs feedback but not a decision, such as saving, deleting, or changing a status.\n\nFor production use, prefer the `useToast()` hook; it handles positioning, stacking, auto-dismiss, and deduplication via `ToastViewport`. Toasts stay within viewport and safe-area gutters, wrap long message content, and enter, exit, or swipe-dismiss toward their configured top or bottom edge. The vertical swipe uses the same spatial model as placement motion: top Toasts leave upward and bottom Toasts leave downward. Swipe waits for dominant edge-directed intent before cancelling native touch movement and reports the existing manual dismissal reason. Pen is supported as direct-contact input; mouse drag is excluded to avoid conflicting with desktop text selection, where the visible close control remains available. Set `isAutoHide: false` explicitly when an action or message must remain available. The `Toast` component renders the visual toast element inline and is useful for previews, documentation, and static showcases where the viewport lifecycle is not needed. Host `data-*` attributes on `Toast` reach the toast element; its role, live-region attributes, and theme attributes stay component-owned.',
+      'Toast shows a brief, non-blocking notification to confirm an action or present temporary information; show one with `const showToast = useToast()`, which needs no provider or mounted ToastViewport: inside LayerProvider (or a ToastViewport) it uses that viewport, and otherwise the first toast mounts a fallback viewport on document.body with a development warning. Use it for scenarios where the user needs feedback but not a decision, such as saving, deleting, or changing a status.\n\nFor production use, prefer the `useToast()` hook; it handles positioning, stacking, auto-dismiss, and deduplication via `ToastViewport`. Only the viewport announces a toast: a `Toast` rendered on its own, as in a preview, is not a live region and announces nothing. Toasts stay within viewport and safe-area gutters, wrap long message content, and enter, exit, or swipe-dismiss toward their configured top or bottom edge. The vertical swipe uses the same spatial model as placement motion: top Toasts leave upward and bottom Toasts leave downward. Swipe waits for dominant edge-directed intent before cancelling native touch movement and reports the existing manual dismissal reason. Pen is supported as direct-contact input; mouse drag is excluded to avoid conflicting with desktop text selection, where the visible close control remains available. Set `isAutoHide: false` explicitly when an action or message must remain available. The `Toast` component renders the visual toast element inline and is useful for previews, documentation, and static showcases where the viewport lifecycle is not needed. Host `data-*` attributes on `Toast` reach the toast element; its role, live-region attributes, and theme attributes stay component-owned.',
     bestPractices: [
       {
         guidance: true,
@@ -215,7 +225,7 @@ export const docsZh = {
   },
   usage: {
     description:
-      'Toast 显示简短的非阻塞通知，用于确认操作或呈现临时信息。适用于用户需要反馈但不需要做决定的场景，如保存、删除或状态变更。\n\n生产环境中推荐使用 `useToast()` hook，它通过 `ToastViewport` 处理定位、堆叠、自动关闭和去重。Toast 会保持在视口和安全区域边距内，较长的消息会换行，并根据配置的顶部或底部边缘进入、退出或滑动关闭。垂直滑动与位置动效使用同一空间模型：顶部 Toast 向上离开，底部 Toast 向下离开。只有在动作明确朝向关闭边缘时才会接管原生触摸移动，滑动关闭继续报告现有的 manual 原因。触控笔属于直接接触输入，因此支持相同手势；鼠标拖动会与桌面文本选择冲突，所以不启用，关闭按钮始终可用。当操作或消息必须持续可用时，请显式设置 `isAutoHide: false`。`Toast` 组件以内联方式渲染 toast 视觉元素，适用于不需要视口生命周期的预览、文档和静态展示。',
+      'Toast 显示简短的非阻塞通知，用于确认操作或呈现临时信息；用 `const showToast = useToast()` 显示，无需 provider 或已挂载的 ToastViewport：在 LayerProvider（或 ToastViewport）内使用该视口，否则第一个 toast 会在 document.body 上挂载后备视口并给出开发警告。适用于用户需要反馈但不需要做决定的场景，如保存、删除或状态变更。\n\n生产环境中推荐使用 `useToast()` hook，它通过 `ToastViewport` 处理定位、堆叠、自动关闭和去重。Toast 会保持在视口和安全区域边距内，较长的消息会换行，并根据配置的顶部或底部边缘进入、退出或滑动关闭。垂直滑动与位置动效使用同一空间模型：顶部 Toast 向上离开，底部 Toast 向下离开。只有在动作明确朝向关闭边缘时才会接管原生触摸移动，滑动关闭继续报告现有的 manual 原因。触控笔属于直接接触输入，因此支持相同手势；鼠标拖动会与桌面文本选择冲突，所以不启用，关闭按钮始终可用。当操作或消息必须持续可用时，请显式设置 `isAutoHide: false`。`Toast` 组件以内联方式渲染 toast 视觉元素，适用于不需要视口生命周期的预览、文档和静态展示。',
     bestPractices: [
       {
         guidance: true,
@@ -276,10 +286,10 @@ export const docsZh = {
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
 export const docsDense = {
   description:
-    'toast notification w/ auto-dismiss, stacking, dedup, smooth animations; MediaTheme inverted surface',
+    'toast notification w/ auto-dismiss, stacking, dedup, smooth animations; show via useToast() (no provider needed; fallback viewport auto-mounts); MediaTheme inverted surface',
   usage: {
     description:
-      'Brief non-blocking notification for action confirmations and temporary info. Use where user needs feedback not decisions: saves, deletes, status changes. useToast() hook for production (safe-area positioning, responsive message wrapping, stacking, auto-dismiss, dedup via ToastViewport). Enters, exits, or swipe-dismisses toward configured edge; touch is claimed only after dominant edge-directed intent; swipe reports manual. Pen uses the direct-contact gesture; mouse drag stays off to preserve text selection and the close control remains available. Set isAutoHide false explicitly for must-remain actions/messages. Toast renders inline for previews/docs/static showcases. Host data-* attrs on Toast reach the toast element; role, live-region, theme attrs stay owned.',
+      'Brief non-blocking notification for action confirmations and temporary info; show w/ `const showToast = useToast()`, no provider/ToastViewport needed (uses LayerProvider/ToastViewport if present, else first toast mounts fallback viewport on document.body, dev warning). Use where user needs feedback not decisions: saves, deletes, status changes. useToast() hook for production (safe-area positioning, responsive message wrapping, stacking, auto-dismiss, dedup via ToastViewport). Enters, exits, or swipe-dismisses toward configured edge; touch is claimed only after dominant edge-directed intent; swipe reports manual. Pen uses the direct-contact gesture; mouse drag stays off to preserve text selection and the close control remains available. Set isAutoHide false explicitly for must-remain actions/messages. Toast renders inline for previews/docs/static showcases. Host data-* attrs on Toast reach the toast element; role, live-region, theme attrs stay owned.',
     bestPractices: [
       {
         guidance: true,
