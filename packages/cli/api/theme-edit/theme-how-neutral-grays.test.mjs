@@ -7,9 +7,9 @@
  * tinted one (a warm gray), it gives the neutral color as a plain gray, and
  * the page, surfaces and secondary text lose their tint in both modes. The
  * hover tint is never the answer, and a negated ask writes nothing. A gray
- * given a hue ("cool neutral grays") keeps its own reading, and the clause
- * keeps its line at the end of a long ask, while change lines still come
- * before lookups.
+ * given a hue ("cool neutral grays") or a typed color keeps its own
+ * reading, and the clause keeps its line at the end of a long ask, while
+ * change lines still come before lookups.
  */
 
 import * as fs from 'node:fs';
@@ -137,6 +137,51 @@ describe('neutral grays', () => {
       }
       const [kept] = await answer("don't make the grays neutral", 'warm');
       expect(kept.text).toMatch(/you asked for it not to change/);
+      // A negation of another look leaves the grays asked for.
+      const [both] = await answer(
+        'no rounded corners with neutral grays',
+        'warm',
+      );
+      expect(both.lines).toContain("neutral '#737373'");
+    },
+    T,
+  );
+
+  it(
+    'a color typed in the clause wins over the plain gray',
+    async test => {
+      needsBases(test);
+      for (const [q, hex] of [
+        ['neutral grays: #64748b', '#64748b'],
+        ['neutral grays like #64748b', '#64748b'],
+        ['neutral grays (#6b7280)', '#6b7280'],
+      ])
+        for (const theme of ['plain', 'warm']) {
+          const [top] = await answer(q, theme);
+          expect(top.lines[0], `${theme}: ${q}`).toBe(`neutral '${hex}'`);
+        }
+    },
+    T,
+  );
+
+  it(
+    'a change comes before the line that says the grays are neutral already, and no internal word shows',
+    async test => {
+      needsBases(test);
+      for (const q of [
+        'neutral grays, red buttons',
+        'neutral grays and rounder cards',
+      ]) {
+        const results = await answer(q, 'plain');
+        expect(results[0].lines.length, q).toBeGreaterThan(0);
+        expect(
+          results.some(r => /already neutral/.test(r.text)),
+          q,
+        ).toBe(true);
+      }
+      const results = await answer('neutral grays, not warm ones', 'warm');
+      expect(results[0].lines).toEqual(["neutral '#737373'"]);
+      expect(results.some(r => /untinted/.test(r.text))).toBe(false);
     },
     T,
   );

@@ -1189,23 +1189,29 @@ function finish(env, drafts) {
   // In each group (changes, then lookups, then offers), a line whose every
   // command an earlier line already gives (a clause of a whole ask that its
   // sequence runs) follows the lines of that group that say something new.
-  // The cut at ten then drops a repeat before a clause's only line, and a
-  // change still comes before a lookup.
+  // In the change group, a line that says a clause is in place already
+  // stands between them: a new change stays first, and the cut at ten
+  // drops a repeat before it drops that line.
   /** @type {Set<string>} */
   const given = new Set();
-  /** @type {Map<number, {fresh: typeof sorted, repeated: typeof sorted}>} */
+  /** @type {Map<number, {fresh: typeof sorted, already: typeof sorted, repeated: typeof sorted}>} */
   const groups = new Map();
   for (const r of sorted) {
     const g = offered(r) * 2 + changes(r);
-    const group = groups.get(g) ?? {fresh: [], repeated: []};
+    const group = groups.get(g) ?? {fresh: [], already: [], repeated: []};
     groups.set(g, group);
     const repeats =
       r.commands.length > 0 && r.commands.every(c => given.has(c));
-    (repeats ? group.repeated : group.fresh).push(r);
+    (repeats
+      ? group.repeated
+      : ALREADY.has(r)
+        ? group.already
+        : group.fresh
+    ).push(r);
     for (const c of r.commands) given.add(c);
   }
   return [...groups.values()]
-    .flatMap(g => [...g.fresh, ...g.repeated])
+    .flatMap(g => [...g.fresh, ...g.already, ...g.repeated])
     .slice(0, 10);
 }
 
