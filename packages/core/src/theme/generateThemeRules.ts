@@ -281,7 +281,7 @@ export interface ThemeRulesSplit {
   /** Prose element defaults (h1-h6, p, small, code, hr) — belongs in reset layer */
   prose: string[];
   /**
-   * With `layered`, the rules of the shared-element parts (`SHARED_ELEMENT_PARTS`),
+   * With `layered`, the rules of the parts whose doc target names `sitsOn`,
    * left out of `component`: they belong in the later `parts` sub-layer of
    * astryx-theme. Absent without `layered`, where `component` holds them.
    */
@@ -1945,10 +1945,9 @@ export function generateOnMediaCSS(
 
 /**
  * The media-surface CSS of `generateOnMediaCSS`, its component entries
- * limited to one group when `group` is given. The `parts` group writes the
- * shared-element parts' component rules alone, flipped surfaces included;
- * the surfaces' tokens and the rules derived from them stay with the other
- * group.
+ * limited to one group when `group` is given. The `parts` group writes only
+ * the parts' component rules, flipped surfaces included. The surfaces'
+ * tokens and the rules derived from them stay with the other group.
  */
 function onMediaCSS(
   theme: DefinedTheme,

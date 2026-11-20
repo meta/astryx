@@ -549,7 +549,8 @@ export interface ComponentThemingTarget {
    *  shared-element parts list names the same parts, and the theme compiler
    *  reads that list: a theme's entry for such a part goes in a later
    *  astryx-theme sub-layer and wins over its entries for that component.
-   *  Omit for a target on an element of its own. */
+   *  Omit for a target on an element of its own, and for `timestamp` and
+   *  `timer`: they sit on Text's element but stay beside Text's entries. */
   sitsOn?: string;
 }
 

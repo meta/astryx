@@ -259,10 +259,43 @@ describe('shared-element parts', () => {
         text: {'type:supporting+color:accent': {color: 'teal'}},
         timestamp: {base: {color: 'red'}},
         timer: {base: {color: 'purple'}},
+        // A listed part turns the sub-layers on.
+        'toggle-button': {base: {borderColor: 'red'}},
       },
     });
     const {component} = generateThemeCSS(theme);
-    expect(component).not.toContain('@layer parts');
-    expect(component).toContain('.astryx-timestamp');
+    const partsAt = component.indexOf('@layer parts {');
+    expect(partsAt).toBeGreaterThan(-1);
+    expect(component.indexOf('.astryx-toggle-button')).toBeGreaterThan(partsAt);
+    for (const cls of ['.astryx-timestamp', '.astryx-timer']) {
+      expect(component.indexOf(cls)).toBeGreaterThan(-1);
+      expect(component.lastIndexOf(cls)).toBeLessThan(partsAt);
+    }
+  });
+
+  it("keeps an !important value in the component's entry ahead of one in the part's", () => {
+    // CSS reverses layer order for important declarations, so the part's
+    // later sub-layer loses there. The compiler keeps both values as written.
+    const theme = defineTheme({
+      name: 'shared-element-important',
+      tokens: {},
+      components: {
+        button: {'variant:ghost': {borderColor: 'blue !important'}},
+        'toggle-button': {base: {borderColor: 'red !important'}},
+      },
+    });
+    const {component} = generateThemeCSS(theme);
+    const partsAt = component.indexOf('@layer parts {');
+    expect(partsAt).toBeGreaterThan(-1);
+    const buttonAt = component.indexOf('.astryx-button[data-variant="ghost"]');
+    expect(buttonAt).toBeGreaterThan(-1);
+    expect(buttonAt).toBeLessThan(partsAt);
+    expect(
+      component.slice(buttonAt, component.indexOf('}', buttonAt)),
+    ).toContain('blue !important');
+    const partAt = component.indexOf('.astryx-toggle-button', partsAt);
+    expect(component.slice(partAt, component.indexOf('}', partAt))).toContain(
+      'red !important',
+    );
   });
 });

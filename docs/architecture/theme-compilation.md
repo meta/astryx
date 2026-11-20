@@ -176,7 +176,8 @@ Platform-specific details stay inside that compiler.
   sub-layers of INV22 this order holds inside each sub-layer, and a part's
   entries beat the entries of the component it sits on at every stage: a
   part's root entry beats that component's adaptation and `onDark`/`onLight`
-  entries on the same element.
+  entries on the same element. An `!important` declaration in the
+  component's entry still beats an `!important` one in the part's (INV22).
 
 - **INV13 — A declaration stays inside its boundary.** The web compiler rejects
   only an authored property name or value that would escape or invalidate its CSS
@@ -345,11 +346,14 @@ var(--text-body-leading)` for its own theme (`component:Theme` FR1), so text
   media-surface) in `parts`, every other rule in `components`. The part's
   entry therefore wins over the theme's entries for the component it sits on
   by layer order, whatever either selector's specificity, and each sub-layer
-  keeps the compiler's root, adaptation, media-surface order. Timestamp's and
-  Timer's targets sit on Text's element but are not in the list: Core's
-  overrides for Text's `color` and `size` props decide there by weight and
-  order beside the theme's `text` entries, so those parts stay in
-  `components`. The color-scheme rules stay outside both sub-layers. A theme with no such entry keeps the
+  keeps the compiler's root, adaptation, media-surface order. An `!important`
+  declaration is the exception: CSS reverses layer order for important
+  declarations, so an `!important` value in the component's entry beats an
+  `!important` value in the part's entry on the same element. The `timestamp`
+  and `timer` targets sit on Text's element but are not in the list and name
+  no `sitsOn`: Core's overrides for Text's `color` and `size` props decide
+  there by weight and order beside the theme's `text` entries, so those two
+  targets stay in `components`. The color-scheme rules stay outside both sub-layers. A theme with no such entry keeps the
   single layer, byte for byte, and so does a CLI build with a core whose
   `generateThemeRulesSplit` returns no `parts`.
   The CLI builds with the project's own Core, which it reaches only through
