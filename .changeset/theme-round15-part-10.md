@@ -4,7 +4,6 @@
 
 [experimental] `astryx experimental theme editor` answers faster: each contrast check reads a pair's drawn state once, a property's aspect group is a lookup, the part data's states are read once while the part data is unchanged, and a Core component's import path is found once for each installed Core.
 
-- `astryx experimental theme editor set … surfaces flat` (and the other surface looks): the colored and status variants of a surface keep their own fill; the look's fill goes on the variants that draw the plain surface, so a blue card stays blue.
 
 - `astryx experimental theme editor how`: when an ask such as "darker … for contrast" makes one mode's text lighter to gain contrast, the answer now says so in one line ("in dark mode, more contrast means lighter").
 
