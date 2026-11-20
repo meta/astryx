@@ -32,8 +32,7 @@ parts are engine-specific and which are engine-neutral, how engines bind native
 code through its seam, and how Astryx's native code sits beside the native code
 of other libraries in the same app.
 
-A contributor who writes a native piece for any group of the platform follows
-these rules, and a reviewer checks a native change
+A contributor who writes a native piece follows these rules, and a reviewer checks a native change
 against them. An app reaches the platform through its JavaScript API
 (`spec:AST-112/FR5`).
 
@@ -326,13 +325,12 @@ follows the same rules, so they live once, here.
       that sets its own session-configuration provider opts in to these
       guarantees explicitly.
   - An app-wide setting that a piece changes, such as the audio session's
-    category, holds while that piece is active, and the piece's group record
-    names it.
+    category, holds while that piece is active.
   - It observes system notifications and passes them on, and its gesture
     recognizers join each platform's arbitration within
     Astryx's views.
   - Native code calls public platform API (DEC-9). Where a
-    group record names an exception, the binary reports a self-check for it
+    record names an exception, the binary reports a self-check for it
     through the platform info module, and the piece takes its public path
     when the check fails.
   - On iOS the core adds no MetricKit subscriber unless the app opts in to it
@@ -487,8 +485,7 @@ follows the same rules, so they live once, here.
 
 The foundation record describes what an app gets in terms that hold for any
 JavaScript engine React Native hosts. The rules for the native code itself
-follow the binding and apply to every platform group, so one record owns them
-and every group record follows it.
+follow the binding and apply to every native piece, so one record owns them.
 
 ### DEC-2 — Results are values at the binding too
 
