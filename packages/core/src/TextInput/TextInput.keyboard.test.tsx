@@ -10,11 +10,15 @@
  * @position Keyboard tests of TextInput.tsx
  */
 
-import {afterEach, beforeAll, expect, it, vi} from 'vitest';
+import {afterEach, beforeAll, expect, it, onTestFinished, vi} from 'vitest';
 import {act, render, screen} from '@testing-library/react';
 import {TextInput} from './TextInput';
 import {animatorFor} from '../motion/animator';
 import {FIELD_OFFSET} from '../keyboard/keyboardTarget';
+import {
+  getKeyboardLayoutGuide,
+  keyboardProfileOf,
+} from '../keyboard/keyboardLayoutGuide';
 import {
   installKeyboardTestDouble,
   type KeyboardTestDouble,
@@ -95,6 +99,70 @@ it("rides an app's fixed bar at the viewport's bottom with the focused input, an
   act(() => field.blur());
   keyboard.hide();
   expect(animatorFor(bar).get('y')).toBe(0);
+});
+
+// An app's fixed bar at the viewport's bottom with a TextInput in it, in
+// Safari on iOS. WebKit on iOS is the one engine with -webkit-touch-callout.
+// No other keyboard rider is on the page.
+function renderBarInSafari() {
+  keyboard = installKeyboardTestDouble();
+  vi.stubGlobal('CSS', {
+    ...globalThis.CSS,
+    supports: (property: string, value?: string) =>
+      property === '-webkit-touch-callout' && value === 'none',
+  });
+  onTestFinished(() => {
+    vi.unstubAllGlobals();
+  });
+  const bottom = window.innerHeight;
+  render(
+    <div data-bar="" style={{position: 'fixed'}}>
+      <TextInput label="Notes" value="" onChange={() => {}} />
+    </div>,
+  );
+  const bar = document.querySelector<HTMLElement>('[data-bar]')!;
+  boxAt(bar, bottom - 72, 72);
+  const field = screen.getByRole('textbox');
+  boxAt(field, bottom - 56, 40);
+  return {keyboard, bar, field};
+}
+
+it("rides an app's fixed bar on the keyboard's spring from Safari's report in Safari on iOS (spec:AST-099 FR8)", () => {
+  const {keyboard, bar, field} = renderBarInSafari();
+  act(() => field.focus());
+  keyboard.show(300);
+  // The bar rides the keyboard from Safari's report, from where it rests,
+  // instead of moving there at once.
+  const {start} = getKeyboardLayoutGuide(window).transition;
+  const drawn = animatorFor(bar);
+  expect(drawn.get('y', start)).toBeCloseTo(0, 6);
+  expect(drawn.get('y', start + 100)).toBeLessThan(-1);
+  expect(drawn.get('y', start + 100)).toBeGreaterThan(-300);
+  expect(drawn.get('y', start + 1000)).toBe(-300);
+  // The field reads Safari on iOS's keyboard schedule itself.
+  expect(keyboardProfileOf(window)).toBe('uikit');
+});
+
+it("rides an app's fixed bar down from the blur in Safari on iOS, before Safari reports the keyboard gone (spec:AST-099 FR8)", async () => {
+  const {keyboard, bar, field} = renderBarInSafari();
+  act(() => field.focus());
+  keyboard.show(300);
+  // Done: the field loses focus to nothing, and the keyboard goes down. The
+  // guide decides about the hide on the next task, dated at the blur.
+  act(() => field.blur());
+  await act(async () => {
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+  keyboard.frame();
+  // Before Safari's report, the bar already heads down to its rest.
+  const drawn = animatorFor(bar);
+  expect(drawn.get('y', performance.now() + 1000)).toBe(0);
+  expect(getKeyboardLayoutGuide(window).transition).toMatchObject({
+    kind: 'hide',
+    predicted: true,
+  });
+  keyboard.hide();
+  expect(drawn.get('y', performance.now() + 1000)).toBe(0);
 });
 
 it("claims an input that its scroll area cannot scroll up to the area's top, and pans the visual viewport to it", () => {

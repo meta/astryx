@@ -156,7 +156,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'In Safari on iOS, in the browser and as a home-screen app, ChatLayout\u2019s composer and a Tall BottomSheet\u2019s focused field ride the keyboard. They rise from Safari\u2019s report of the keyboard, which comes a little after the keyboard starts up. Each waits until the keyboard\u2019s top reaches it, then rises with it. The rise runs a touch ahead of UIKit\u2019s own keyboard motion, which offsets part of that delay. They go down with the keyboard from the blur that takes it down. Safari reports the keyboard gone only once it is down, so the scroll room stays until then. The ride starts once the page has loaded Core\u2019s touch support, shortly after first paint; before that, they move in one step.',
+          text: 'In Safari on iOS, in the browser and as a home-screen app, ChatLayout\u2019s composer, a Tall BottomSheet\u2019s focused field and a TextInput, TextArea or NumberInput in an app\u2019s docked bar ride the keyboard. They rise from Safari\u2019s report of the keyboard, which comes a little after the keyboard starts up. Each waits until the keyboard\u2019s top reaches it, then rises with it. The rise runs a touch ahead of UIKit\u2019s own keyboard motion, which offsets part of that delay. They go down with the keyboard from the blur that takes it down. Safari reports the keyboard gone only once it is down, so the scroll room stays until then. The ride starts once the page has loaded Core\u2019s touch support, shortly after first paint; before that, they move in one step.',
         },
         {
           type: 'code',

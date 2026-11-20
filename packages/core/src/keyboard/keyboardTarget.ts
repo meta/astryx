@@ -1196,6 +1196,9 @@ export function keepFieldAboveKeyboard(
   if (!followsKeyboard(win)) {
     return () => {};
   }
+  // A field in an app's docked bar rides the bar on the keyboard's motion.
+  // In Safari on iOS that motion is the schedule the touch runtime holds.
+  followTouchRuntimeKeyboardSchedule();
   const stopScrollBack = claimKeyboardScrollBack(win);
   const stopClaim = refuseFocusReveal(doc, {
     claim: destination =>
