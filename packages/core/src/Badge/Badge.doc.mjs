@@ -20,7 +20,7 @@ export const docs = {
       type: 'ReactNode',
       required: true,
       description:
-        'Badge text content. A badge is one line and at least as tall as that line of its label, so it grows with its text (a larger text size); a label wider than the space available is cut with an ellipsis rather than escaping its container; a string or number label is also set as the badge\'s title so the full text stays reachable on hover.',
+        'Badge text content. A badge is one line and at least as tall as that line of its label, so it grows with its text (a larger text size); it is as wide as its label, so it does not stretch to fill a grid cell or a stack; a label wider than the space available is cut with an ellipsis rather than escaping its container; a string or number label is also set as the badge\'s title so the full text stays reachable on hover.',
     },
     {
       name: 'icon',

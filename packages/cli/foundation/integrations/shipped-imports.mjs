@@ -46,12 +46,17 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {resolveLocalModule} from '../discovery/module-exports.mjs';
+import {THEME_BUILD_MARKER} from '../config/theme-build-header.mjs';
 import {cssReferences, moduleImports} from '../render/embedded-imports.mjs';
 import {allTargets, isRecord} from './exports-subpaths.mjs';
 import {outsideFiles, packState} from './pack-state.mjs';
 
 const CODE_FILE = /\.(?:[cm]?[jt]sx?)$/u;
 const DECLARATION_FILE = /\.d\.[cm]?ts$/u;
+/** Built JavaScript, which an app's bundler loads as it is. */
+const BUILT_FILE = /\.[cm]?js$/u;
+/** TypeScript source, which only a bundler set to compile it can load. */
+const TYPESCRIPT_FILE = /\.[cm]?tsx?$/u;
 const STYLESHEET_FILE = /\.css$/iu;
 const RELATIVE = /^\.\.?(?:\/|$)/u;
 /** A `url()` value that names no file of the package. */
@@ -72,10 +77,14 @@ const ENTRY_EXTENSIONS = ['.js', '.mjs', '.cjs', '.json'];
  * @property {string} file the importing file, relative to the package root
  * @property {number} [line]
  * @property {string} specifier
- * @property {'not_packed' | 'missing' | 'outside'} problem `not_packed`: the
- *   file exists but the package does not ship it; `missing`: no such file;
- *   `outside`: the path leaves the package
- * @property {string} [target] the file it names, for `not_packed`
+ * @property {'not_packed' | 'missing' | 'outside' | 'typescript'} problem
+ *   `not_packed`: the file exists but the package does not ship it;
+ *   `missing`: no such file; `outside`: the path leaves the package;
+ *   `typescript`: a theme module `theme build` wrote imports TypeScript
+ *   source, which an app's bundler does not compile from `node_modules` by
+ *   default
+ * @property {string} [target] the file it names, for `not_packed` and
+ *   `typescript`
  */
 
 /**
@@ -87,7 +96,7 @@ const ENTRY_EXTENSIONS = ['.js', '.mjs', '.cjs', '.json'];
 
 /**
  * @typedef {object} ShippedImportFinding
- * @property {'relative_import_not_shipped'} code
+ * @property {'relative_import_not_shipped' | 'built_module_imports_typescript'} code
  * @property {string} message where, what, and the fix
  * @property {string} file the importing file, relative to the package root
  * @property {number} [line]
@@ -377,6 +386,22 @@ export function unshippedImports(packageDir, files, entries) {
         reference.stylesheet,
       );
       if ('file' in resolved) {
+        // A theme module `theme build` wrote that imports TypeScript source:
+        // an app's bundler leaves an installed package's TypeScript alone.
+        if (
+          BUILT_FILE.test(file) &&
+          text.slice(0, 400).includes(THEME_BUILD_MARKER) &&
+          TYPESCRIPT_FILE.test(resolved.file) &&
+          !DECLARATION_FILE.test(resolved.file) &&
+          !reference.optional
+        )
+          unshipped.push({
+            file,
+            ...(reference.line != null ? {line: reference.line} : {}),
+            specifier: reference.specifier,
+            problem: 'typescript',
+            target: resolved.file,
+          });
         const state = files.state(resolved.file);
         if (typeof state === 'object') {
           unchecked.push({
@@ -425,6 +450,14 @@ export function unshippedImports(packageDir, files, entries) {
  */
 function unshippedImportFinding(each, declared) {
   const at = `${each.file}${each.line != null ? `:${each.line}` : ''}`;
+  if (each.problem === 'typescript')
+    return {
+      // A built module that imports TypeScript source.
+      code: 'built_module_imports_typescript',
+      message: `${at}: built module imports TypeScript source: "${each.specifier}" names ${each.target}, which an app's bundler does not compile from an installed package by default (a plain Next.js app), so the app fails to build. Fix: import a JavaScript build of it, with its extension; for a theme, \`astryx theme build\` compiles the theme's local modules to JavaScript beside its built module.`,
+      file: each.file,
+      ...(each.line != null ? {line: each.line} : {}),
+    };
   const why =
     each.problem === 'outside'
       ? 'which is outside the package'

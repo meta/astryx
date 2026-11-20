@@ -21,6 +21,7 @@ export const doc = {
       name: 'slug',
       param: 'slug',
       required: true,
+      names: 'theme',
     },
     {
       name: 'path',

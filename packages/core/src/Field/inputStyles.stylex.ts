@@ -23,6 +23,8 @@ import {
   durationVars,
   easeVars,
   borderVars,
+  sizeVars,
+  typeScaleVars,
 } from '../theme/tokens.stylex';
 
 /**
@@ -91,6 +93,42 @@ export const inputWrapperStyles = stylex.create({
 });
 
 /**
+ * The row height of a one-line text field, by size: the larger of the size
+ * and one bordered body text line. At the theme's default text size that is
+ * the size, as before; larger text grows the row to hold its line inside the
+ * borders. The height stays definite, so a theme's block padding cannot grow
+ * the row at the default text size, and group members can still fill a row.
+ * The coarse-pointer line follows the iOS 16px floor the input's own font
+ * size has.
+ */
+export const inputRowSizeStyles = stylex.create({
+  sm: {
+    height: {
+      default: `max(${sizeVars['--size-element-sm']}, calc(${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
+      '@media (pointer: coarse)': {
+        '@supports (-webkit-touch-callout: none)': `max(${sizeVars['--size-element-sm']}, calc(max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
+      },
+    },
+  },
+  md: {
+    height: {
+      default: `max(${sizeVars['--size-element-md']}, calc(${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
+      '@media (pointer: coarse)': {
+        '@supports (-webkit-touch-callout: none)': `max(${sizeVars['--size-element-md']}, calc(max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
+      },
+    },
+  },
+  lg: {
+    height: {
+      default: `max(${sizeVars['--size-element-lg']}, calc(${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
+      '@media (pointer: coarse)': {
+        '@supports (-webkit-touch-callout: none)': `max(${sizeVars['--size-element-lg']}, calc(max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
+      },
+    },
+  },
+});
+
+/**
  * Status border colors for input wrappers.
  * Keyed by InputStatusType. Under forced colors a focused field's border is
  * Highlight, as in the base style, for wrappers that apply no status focus
@@ -127,7 +165,8 @@ export const inputStatusBorderStyles = stylex.create({
 });
 
 /**
- * Status hover shadow styles for input wrappers.
+ * Status hover shadow styles for input wrappers. Each keeps the base focus
+ * ring.
  * Keyed by InputStatusType.
  */
 export const inputStatusHoverShadowStyles = stylex.create({
@@ -138,6 +177,10 @@ export const inputStatusHoverShadowStyles = stylex.create({
         {
           '@media (hover: hover)': shadowVars['--shadow-inset-warning'],
         },
+      // This boxShadow replaces the base one whole, so it keeps the base
+      // focus ring: the status border does not change on focus, and the ring
+      // is the only sign of keyboard focus.
+      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
     },
   },
   error: {
@@ -147,6 +190,10 @@ export const inputStatusHoverShadowStyles = stylex.create({
         {
           '@media (hover: hover)': shadowVars['--shadow-inset-error'],
         },
+      // This boxShadow replaces the base one whole, so it keeps the base
+      // focus ring: the status border does not change on focus, and the ring
+      // is the only sign of keyboard focus.
+      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
     },
   },
   success: {
@@ -156,6 +203,10 @@ export const inputStatusHoverShadowStyles = stylex.create({
         {
           '@media (hover: hover)': shadowVars['--shadow-inset-success'],
         },
+      // This boxShadow replaces the base one whole, so it keeps the base
+      // focus ring: the status border does not change on focus, and the ring
+      // is the only sign of keyboard focus.
+      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
     },
   },
 });

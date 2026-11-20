@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'undo',
+  group: 'history',
   description: 'Undo the last change.',
   words: ['revert', 'back', 'arrow uturn left'],
 };

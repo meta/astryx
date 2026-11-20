@@ -107,6 +107,19 @@ function packageJsonOf(integration) {
 }
 
 /**
+ * The findings that compare a component with Core's components: a
+ * replacement target Core does not have, two replacements of one Core
+ * component, and a component named like a Core one. Without a Core they
+ * cannot be judged.
+ * @type {ReadonlySet<string>}
+ */
+export const CORE_COMPARISON_CODES = new Set([
+  'missing_component_replacement_target',
+  'ambiguous_component_replacement',
+  'shadowed_component_name',
+]);
+
+/**
  * Whether a package's declared CLI range turns its component replacements on.
  * @param {any} pkg package.json
  * @returns {boolean}

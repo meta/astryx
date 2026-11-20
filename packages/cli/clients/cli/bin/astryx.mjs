@@ -40,11 +40,17 @@ import {
 // could hold planted cache files (foundation/env/private-dir.mjs, the check
 // the kept search catalogs use too). Where the system has no user ids
 // (Windows), ownership cannot be checked, so the cache stays off.
-// NODE_DISABLE_COMPILE_CACHE turns it off. It is best effort: a cache Node
-// cannot read or write is skipped, and nothing about it is printed.
+// NODE_DISABLE_COMPILE_CACHE turns it off. A compile cache Node already uses
+// (NODE_COMPILE_CACHE) is left as it is, and no folder of the CLI's is made.
+// It is best effort: a cache Node cannot read or write is skipped, and
+// nothing about it is printed.
 try {
   const uid = currentUid();
-  if (!process.env.NODE_DISABLE_COMPILE_CACHE && uid != null) {
+  if (
+    !process.env.NODE_DISABLE_COMPILE_CACHE &&
+    uid != null &&
+    !nodeModule.getCompileCacheDir?.()
+  ) {
     const cacheDir = join(tmpdir(), `node-compile-cache-${uid}`);
     if (!existsSync(cacheDir)) mkdirSync(cacheDir, {mode: 0o700});
     if (isPrivateDir(cacheDir)) nodeModule.enableCompileCache?.(cacheDir);

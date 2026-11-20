@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'arrowUp',
+  group: 'arrows',
   description: 'Sort ascending or move up.',
   words: ['ascending', 'up', 'increase'],
   builtIn: true,

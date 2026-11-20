@@ -189,6 +189,11 @@ A command is not done without its `CommandDoc` in `<name>.doc.mjs`. Fill in
 outside a project. Help text, the README tables, and the
 manifest are generated from it, so an undocumented flag is an invisible flag.
 
+When part of an option's text names a command or option that some bases do
+not serve, put that part in the option's `pointers` with the command paths it
+names, such as `{commands: ['template --skeleton'], text: ', --skeleton'}`.
+Help then leaves the part out on those bases. Plain text parts can follow it.
+
 Give at least one example that an agent would actually run, including a `--json`
 one.
 
@@ -218,7 +223,7 @@ folder that is not a project, and its docs have to say which.
    and project table of `spec:AST-081` and its test in the
    `packages/cli/test/global-local*.test.mjs` file that holds its number range
    (rows G1 to G15 in `global-local.test.mjs`, then `global-local.rows-16-39`
-   and `global-local.rows-40-58`), named with the row's number (`G12 …`); a
+   and `global-local.rows-40-59`), named with the row's number (`G12 …`); a
    test there fails on a gap in the row numbers.
 4. **Quote, never paraphrase, what the CLI prints.** A terminal line shown on a
    global-mode page must be one the CLI prints; `test/global-mode-docs.test.mjs`

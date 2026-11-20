@@ -6,9 +6,11 @@
  * @input Two Core builds (a git ref, the working tree, or a built dist
  *   directory each) and the reference pages that
  *   docs/architecture/component-import-boundaries.md INV10 names
- * @output Each reference page's first-load JavaScript, minified and gzip, base
- *   against head, with the delta. With `--unused-on`, a pass or fail line per
- *   named page against INV10's 0.3 KB limit. `--json` prints the same as JSON
+ * @output Each reference page's first-load JavaScript, minified and
+ *   gzip, its static module graph (modules reached and kept, module depth)
+ *   and this build's chunks (count, depth), base against head, with the
+ *   deltas. With `--unused-on`, a pass or fail line per named page against
+ *   INV10's 0.3 KB limit. `--json` prints the same as JSON
  * @position Run by people and review agents with `pnpm size:pages`; not a CI
  *   job. Builds each page with the size report's esbuild options
  *   (.github/scripts/lib/component-size.js), as the import-boundaries check
@@ -29,6 +31,7 @@ const {
   eagerText,
   extractAtRef,
   gzipBytes,
+  importLevels,
   sizeBuildOptions,
 } = require('./.github/scripts/lib/component-size.js');
 
@@ -63,6 +66,24 @@ export function parseReferencePages(recordText) {
   return pages;
 }
 
+const pick = ({
+  min,
+  gzip,
+  modules,
+  keptModules,
+  moduleDepth,
+  chunks,
+  depth,
+}) => ({
+  min,
+  gzip,
+  modules,
+  keptModules,
+  moduleDepth,
+  chunks,
+  depth,
+});
+
 /**
  * Each page's sizes and delta, and with `unusedOn`, whether each named page
  * stays within the unused-feature limit.
@@ -71,11 +92,16 @@ export function comparePages(base, head, {unusedOn = []} = {}) {
   const pages = Object.keys(head).map(page => ({
     page,
     components: head[page].components,
-    base: {min: base[page].min, gzip: base[page].gzip},
-    head: {min: head[page].min, gzip: head[page].gzip},
+    base: pick(base[page]),
+    head: pick(head[page]),
     delta: {
       min: head[page].min - base[page].min,
       gzip: head[page].gzip - base[page].gzip,
+      modules: head[page].modules - base[page].modules,
+      keptModules: head[page].keptModules - base[page].keptModules,
+      moduleDepth: head[page].moduleDepth - base[page].moduleDepth,
+      chunks: head[page].chunks - base[page].chunks,
+      depth: head[page].depth - base[page].depth,
     },
   }));
   const verdicts = unusedOn.map(name => {
@@ -97,6 +123,14 @@ function signed(bytes) {
   return `${bytes < 0 ? '−' : '+'}${Math.abs(bytes).toLocaleString('en-US')}`;
 }
 
+function graph({modules, keptModules, moduleDepth}) {
+  return `${modules} / ${keptModules} / ${moduleDepth}`;
+}
+
+function shape({chunks, depth}) {
+  return `${chunks} / ${depth}`;
+}
+
 function size({min, gzip}) {
   return `${min.toLocaleString('en-US')} / ${gzip.toLocaleString('en-US')}`;
 }
@@ -113,6 +147,26 @@ export function formatComparison({pages, verdicts}, {base, head}) {
         `| ${row.page} (${row.components.join(', ')}) | ${size(row.base)} | ${size(row.head)} | ${signed(row.delta.min)} / ${signed(row.delta.gzip)} |`,
     ),
   ];
+  lines.push(
+    '',
+    'Static module graph (modules reached / modules kept after tree shaking / module depth):',
+    '',
+    '| Page | Base | Head | Change |',
+    '| --- | ---: | ---: | ---: |',
+    ...pages.map(
+      row =>
+        `| ${row.page} | ${graph(row.base)} | ${graph(row.head)} | ${signed(row.delta.modules)} / ${signed(row.delta.keptModules)} / ${signed(row.delta.moduleDepth)} |`,
+    ),
+    '',
+    'Chunks in this build, for reference (first-load chunks / chunk depth; another bundler splits differently):',
+    '',
+    '| Page | Base | Head | Change |',
+    '| --- | ---: | ---: | ---: |',
+    ...pages.map(
+      row =>
+        `| ${row.page} | ${shape(row.base)} | ${shape(row.head)} | ${signed(row.delta.chunks)} / ${signed(row.delta.depth)} |`,
+    ),
+  );
   if (verdicts.length > 0) lines.push('');
   for (const verdict of verdicts) {
     lines.push(
@@ -241,6 +295,58 @@ function componentModule(distDir, name) {
 
 const ENTRY_SOURCE = '__astryx-reference-page__.mjs';
 
+/**
+ * The page's static module graph, from the build's own input graph, so it does
+ * not depend on how a bundler splits chunks: `modules`, the modules the page
+ * entry reaches through static imports, and `moduleDepth`, the most edges on
+ * a shortest path from the entry to one of them (breadth-first levels). The
+ * synthetic entry is level 0 and is not counted. Side-effect imports and
+ * re-exports are static imports, so a folder index counts as a module.
+ * Packages the build leaves external are not part of the graph.
+ */
+export function moduleGraphStats(inputs, entryInput) {
+  const levels = importLevels(inputs, entryInput, ['import-statement']);
+  return {
+    modules: levels.size - 1,
+    moduleDepth: Math.max(...levels.values()),
+  };
+}
+
+/**
+ * This build's chunks before hydration: `chunks`, the first-load chunks the
+ * entry reaches through static imports, the entry chunk included, and
+ * `depth`, their breadth-first levels with the entry chunk at 1. A browser
+ * finds each chunk only after it loads the chunk that imports it, so `depth`
+ * counts the round trips a cold load waits for in turn. Another bundler splits
+ * chunks differently, so these numbers describe this build only.
+ */
+export function chunkGraphStats(outputs, entryOutput) {
+  const levels = importLevels(outputs, entryOutput, ['import-statement']);
+  return {chunks: levels.size, depth: Math.max(...levels.values()) + 1};
+}
+
+/**
+ * The modules this build keeps in the page's first-load chunks after tree
+ * shaking: every module with output bytes in a chunk the entry reaches
+ * through static imports, the synthetic entry not counted. `modules` minus
+ * `keptModules` counts the reached modules that tree shaking drops entirely:
+ * folder indexes that only re-export, and modules none of the page's code
+ * uses.
+ */
+export function keptModuleCount(outputs, entryOutput, entryInput) {
+  const kept = new Set();
+  for (const chunk of importLevels(outputs, entryOutput, [
+    'import-statement',
+  ]).keys()) {
+    for (const [input, {bytesInOutput}] of Object.entries(
+      outputs[chunk].inputs ?? {},
+    )) {
+      if (bytesInOutput > 0 && input !== entryInput) kept.add(input);
+    }
+  }
+  return kept.size;
+}
+
 /** One page as a production app bundle: what it loads before first paint. */
 export async function measurePage(distDir, components) {
   const esbuild = require('esbuild');
@@ -282,7 +388,13 @@ export async function measurePage(distDir, components) {
     ]),
   );
   const text = eagerText(outputs, textByPath, entryOutput);
-  return {min: Buffer.byteLength(text), gzip: gzipBytes(text)};
+  return {
+    min: Buffer.byteLength(text),
+    gzip: gzipBytes(text),
+    ...moduleGraphStats(result.metafile.inputs, entryPath),
+    keptModules: keptModuleCount(outputs, entryOutput, entryPath),
+    ...chunkGraphStats(outputs, entryOutput),
+  };
 }
 
 async function measurePages(distDir, pages) {
@@ -293,6 +405,29 @@ async function measurePages(distDir, pages) {
   return sizes;
 }
 
+/** What `--help` prints. */
+export const USAGE = `Usage: pnpm size:pages --base <ref|dist> [options]
+
+Prints the first-load JavaScript of the reference pages that
+docs/architecture/component-import-boundaries.md INV10 names (docs, form,
+menu, table), base against head: minified and gzip bytes, and the change.
+Each side is Core built as its build:esm script builds it, bundled as a
+production app.
+
+Options:
+  --base <ref|dist>     Git ref or built dist directory to compare from (required)
+  --head <ref|dist>     Git ref or built dist directory to compare (default: the working tree)
+  --unused-on <pages>   Comma-separated pages that render the changed component
+                        without its optional feature. Prints PASS or FAIL per page
+                        against INV10's limit of 0.3 KB gzip (${UNUSED_FEATURE_LIMIT_BYTES} B),
+                        and exits 1 on a failure
+  --page <name=A,B>     Adds a page that imports components A and B
+  --json                Prints the comparison as JSON
+  -h, --help            Prints this help
+
+Example:
+  pnpm size:pages --base origin/main --unused-on table,menu`;
+
 export function parseArgs(argv) {
   const args = {
     base: null,
@@ -300,7 +435,11 @@ export function parseArgs(argv) {
     unusedOn: [],
     extraPages: {},
     json: false,
+    help: false,
   };
+  if (argv.includes('--help') || argv.includes('-h')) {
+    return {...args, help: true};
+  }
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     if (flag === '--base') args.base = argv[++index];
@@ -314,15 +453,17 @@ export function parseArgs(argv) {
     else throw new Error(`Unknown argument: ${flag}`);
   }
   if (args.base == null) {
-    throw new Error(
-      'Usage: pnpm size:pages --base <ref|dist> [--head <ref|dist>] [--unused-on <page,…>] [--page name=A,B] [--json]',
-    );
+    throw new Error(USAGE);
   }
   return args;
 }
 
 async function main(argv) {
   const args = parseArgs(argv);
+  if (args.help) {
+    console.log(USAGE);
+    return 0;
+  }
   const pages = {
     ...parseReferencePages(fs.readFileSync(path.join(REPO, RECORD), 'utf8')),
     ...args.extraPages,
