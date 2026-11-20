@@ -96,6 +96,7 @@ import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {cssProperties, keywordsOf, matchValue, splitTop} from './_css.mjs';
 
 import {render as renderStep} from './_how-commands.mjs';
+import {coversProperty} from '../../foundation/runtime/css-tree.mjs';
 /** @typedef {import('./_how-commands.mjs').Step} Step */
 /** @typedef {import('./_how-commands.mjs').MeasureIntent} MeasureIntent */
 
@@ -28898,6 +28899,38 @@ export function draftAnswer(ctx, env, question) {
             )
           ),
       );
+    // A shorthand said after a side of it on the same part, in one list
+    // ("selected tab: transparent bottom, #dddddd border"), goes first, so
+    // the side said stays: a later shorthand would replace it. Across a
+    // sentence or a "then", the later one is the next step, as said.
+    const stepClause = new Map([...last.values()].map(x => [x.step, x.clause]));
+    const oneList = (/** @type {Step} */ a, /** @type {Step} */ b) => {
+      const from = clauses.indexOf(/** @type {any} */ (stepClause.get(a)));
+      const to = clauses.indexOf(/** @type {any} */ (stepClause.get(b)));
+      if (from < 0 || to < 0) return false;
+      return clauses
+        .slice(from + 1, to + 1)
+        .every(
+          c =>
+            joinOf.get(c)?.sep !== 'break' &&
+            !/\bthen\b/i.test(String(c.joint ?? '')),
+        );
+    };
+    for (let i = 1; i < all.length; i++) {
+      const st = all[i];
+      const first = all.findIndex(
+        (x, k) =>
+          k < i &&
+          oneList(x, st) &&
+          x.on === st.on &&
+          x.state === st.state &&
+          x.when === st.when &&
+          (!st.mode || x.mode === st.mode) &&
+          x.thing !== st.thing &&
+          coversProperty(st.thing, x.thing),
+      );
+      if (first >= 0) all.splice(first, 0, ...all.splice(i, 1));
+    }
     // At most MAX_STEPS in one sequence, cut only between clauses: a
     // clause's steps (its write and the keeps it needs, a status's border
     // written back) run together or not at all. The rest follow as the next

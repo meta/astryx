@@ -1,8 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Per-side border asks in `how`: colors written one per side are one
- * border color with every side as written; a border said on several sides
+ * @file Per-side border asks in `how`: colors written one per side, with a
+ * width or style, said as a border color, or on a one-mode theme, are one
+ * border color with every side as written (a light run said alone stays
+ * one light border); a border said on several sides
  * ("top and sides", "left and right") is drawn on each side said, never
  * only the first; a side said transparent is that side's line drawn
  * see-through, never a fill or a fainter border; one side's border said
@@ -339,7 +341,8 @@ describe('per-side border asks', () => {
       );
       const whole = lines.findIndex(l => /^border '/.test(l));
       expect(side).toBeGreaterThan(-1);
-      expect(whole).toBeGreaterThan(-1);
+      // (The shorthand first, so the side said stays.)
+      expect(whole).toBeLessThan(side);
     },
     T,
   );
@@ -586,6 +589,29 @@ describe('per-side border asks', () => {
       expect(
         (await first('cards with a border on top, bottom margin 8px'))[0],
       ).toBe("border-top '1px solid var(--color-border)' --on card");
+    },
+    T,
+  );
+
+  it(
+    'moves a shorthand before its side only within one list',
+    async () => {
+      if (unbuilt) return;
+      // (Across a sentence or a "then", the later one is the next step.)
+      expect(
+        await first(
+          'Give cards a red top border. Then give cards a 1px solid gray border.',
+        ),
+      ).toEqual([
+        "border-top '1px solid #dc2626' --on card",
+        "border '1px solid #9e9e9e' --on card",
+      ]);
+      expect(
+        await first('tabs: a 2px bottom border, then a 1px gray border'),
+      ).toEqual([
+        "border-bottom '2px solid var(--color-border)' --on tab",
+        "border '1px solid #9e9e9e' --on tab",
+      ]);
     },
     T,
   );
