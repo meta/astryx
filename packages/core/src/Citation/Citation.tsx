@@ -144,15 +144,16 @@ const styles = stylex.create({
     verticalAlign: 'super',
     fontSize: typeScaleVars['--text-supporting-size'],
     fontWeight: fontWeightVars['--font-weight-semibold'],
-    lineHeight: 'normal',
+    lineHeight: typeScaleVars['--text-supporting-leading'],
     color: colorVars['--color-text-secondary'],
     backgroundColor: colorVars['--color-accent-muted'],
     borderRadius: radiusVars['--radius-full'],
     minWidth: spacingVars['--spacing-5'],
-    // The font's own line height makes 1lh the height of the digits' text
-    // box. So the superscript badge keeps its spacing size at the default text
-    // size and grows only with its own text, which raises the line less.
-    height: `max(${spacingVars['--spacing-5']}, 1lh)`,
+    // Its spacing size at the default text size, where one line is shorter.
+    // A taller line grows the badge, but only to 1.5em, which holds the text
+    // box of common UI fonts (Noto Sans needs about 1.4em). A superscript
+    // badge as tall as the line raises the line more.
+    height: `max(${spacingVars['--spacing-5']}, min(1lh, 1.5em))`,
     paddingInline: spacingVars['--spacing-1'],
     textDecoration: 'none',
     transitionProperty: 'background-color',
