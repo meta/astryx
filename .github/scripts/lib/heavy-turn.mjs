@@ -13,7 +13,7 @@
  * gate passes, and an engineering owner or the review app approved that exact
  * head. The app's approval counts for a write-access author and for a fork a
  * maintainer admitted with `ci:run`. The heavy turn clears no gate: merging
- * reads `reviewPasses` (DEC-11, unchanged). Then the deferred run is run again
+ * reads `review-required` (DEC-11, unchanged). Then the deferred run is run again
  * in full, and a later attempt runs every suite. merge-guard's pre-merge
  * re-run is such a later attempt too.
  */
@@ -189,7 +189,7 @@ export async function maintainerAdmitted({github, owner, repo, number}) {
 /**
  * Whether a pull request's head may start its heavy suites (the heavy turn
  * only, spec:AST-030 FR20 and DEC-32). It clears no gate: merging still reads
- * `reviewPasses`. The spec half of the review gate passes at the head, and a
+ * `review-required`. The spec half of the review gate passes at the head, and a
  * review of that exact head approves the code: an engineering owner, or the
  * review app's latest verdict when the author has write access or the pull
  * request comes from a fork a maintainer admitted with `ci:run`. The workflow
