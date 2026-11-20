@@ -43,8 +43,12 @@ export function numberedLookValues(family, typed, drawn) {
  * @param {Array<{on: string, whens: string[]}>} families
  * @param {(when: string, on: string) => number | null} sizeOf a look's size
  *   now on the family's part, in px
+ * @returns {Array<{clause: C, text: string}>} the clauses on a family no
+ *   look of which writes anything and no draft holds, with what to say
  */
 export function oneAnswerPerFamily(drafts, clauseOf, clauses, families, sizeOf) {
+  /** @type {Array<{clause: C, text: string}>} */
+  const unanswered = [];
   for (const c of clauses) {
     const fam = families.find(
       f => c.parts.filter(p => p.on === f.on && f.whens.includes(p.when ?? '')).length > 1,
@@ -60,7 +64,35 @@ export function oneAnswerPerFamily(drafts, clauseOf, clauses, families, sizeOf) 
     const mine = kept.map(
       w => /** @type {D} */ (drafts.find(d => clauseOf(d) === c && d.options.length && lookOf(d) === w)),
     );
-    if (mine.length < 2) continue;
+    const level = (/** @type {string} */ w) => w.split(':')[1];
+    const left = fam.whens.filter(w => !kept.includes(w));
+    const noLength = left.every(w => !sizeOf(w, fam.on));
+    const leftNote = left.length
+      ? `${left.map(level).join(', ')} not changed${noLength ? `: ${left.length > 1 ? 'their sizes are' : 'its size is'} no length now (a clamp() or calc() size), so no step can be taken from ${left.length > 1 ? 'them' : 'it'}` : ''}`
+      : '';
+    if (mine.length === 0) {
+      // (No look writes anything because none has a length size now: one
+      // answer names them all, never a "say it as a part and a look". The
+      // caller adds it for the clause. Any other ask no look takes keeps
+      // the usual answer.)
+      if (!noLength) continue;
+      const text = `${fam.whens.map(level).join(', ')} not changed: their sizes are no length now (a clamp() or calc() size), so no step can be taken from them; say a size for them instead ("${level(fam.whens[0]).replace(/-\d+$/, '')} headings 72px")`;
+      const own = drafts.filter(d => clauseOf(d) === c);
+      if (!own.length) unanswered.push({clause: c, text});
+      else {
+        own[0].text = text;
+        drafts.splice(
+          0,
+          drafts.length,
+          ...drafts.filter(d => clauseOf(d) !== c || d === own[0]),
+        );
+      }
+      continue;
+    }
+    if (mine.length === 1) {
+      if (leftNote) mine[0].text += `; ${leftNote}`;
+      continue;
+    }
     const [head, ...rest] = mine;
     const scaled = scaleFamilySizes(mine, kept, w => sizeOf(w, fam.on));
     const seen = new Set();
@@ -71,19 +103,15 @@ export function oneAnswerPerFamily(drafts, clauseOf, clauses, families, sizeOf) 
     ];
     head.sequence = true;
     const [attr] = kept[0].split(':');
-    const level = (/** @type {string} */ w) => w.split(':')[1];
     head.text = head.text.replace(
       `(${kept[0].replace(':', ' ')})`,
       `(${attr} ${kept.map(level).join(', ')})`,
     );
     if (scaled) head.text += `; ${scaled}`;
-    const left = fam.whens.filter(w => !kept.includes(w));
-    if (left.length) {
-      const noLength = left.every(w => !sizeOf(w, fam.on));
-      head.text += `; ${left.map(level).join(', ')} not changed${noLength ? `: ${left.length > 1 ? 'their sizes are' : 'its size is'} no length now (a clamp() or calc() size), so no step can be taken from ${left.length > 1 ? 'them' : 'it'}` : ''}`;
-    }
+    if (leftNote) head.text += `; ${leftNote}`;
     drafts.splice(0, drafts.length, ...drafts.filter(d => !rest.includes(d)));
   }
+  return unanswered;
 }
 
 /** A step's size in px, or null. @param {unknown} v */

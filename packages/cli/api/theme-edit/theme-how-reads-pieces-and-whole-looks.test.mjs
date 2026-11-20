@@ -630,8 +630,39 @@ describe('a plural display step when one look\'s size is a clamp()', () => {
         const text = JSON.stringify(data.results);
         expect(text).toMatch(/\(type display-2, display-3\)/);
         expect(text).toMatch(/display-1 not changed: its size is no length now/);
+        expect(text).toMatch(/display headings: display-2, display-3"/);
       } finally {
         await themeEditUndo('t', {cwd, thing: '--text-display-1-size'});
+      }
+    },
+    T,
+  );
+});
+
+describe('a plural display step when two or all looks are fluid', () => {
+  it(
+    'writes the looks it can, names the ones left out, and names all of them when none can step',
+    async () => {
+      const fluid = (/** @type {number} */ n) =>
+        themeEditSet('t', `--text-display-${n}-size`, `clamp(30px, ${3 + n}vw, ${80 - n * 8}px)`, {cwd});
+      await fluid(1);
+      await fluid(2);
+      try {
+        const data = await answer('display headings bigger');
+        const lines = first(data).join('\n');
+        expect(lines).toMatch(/--when type:display-3\b/);
+        expect(lines).not.toMatch(/--when type:display-[12]\b/);
+        const text = JSON.stringify(data.results);
+        expect(text).toMatch(/display-1, display-2 not changed: their sizes are no length now/);
+        // (The looks line names only the looks written.)
+        expect(text).toMatch(/display headings: display-3"/);
+        await fluid(3);
+        const none = JSON.stringify((await answer('display headings bigger')).results);
+        expect(none).toMatch(/display-1, display-2, display-3 not changed: their sizes are no length now/);
+        expect(none).not.toMatch(/say it as a part and a look/);
+      } finally {
+        for (const n of [1, 2, 3])
+          await themeEditUndo('t', {cwd, thing: `--text-display-${n}-size`});
       }
     },
     T,

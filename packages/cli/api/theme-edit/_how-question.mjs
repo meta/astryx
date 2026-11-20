@@ -8244,7 +8244,7 @@ export function draftAnswer(ctx, env, question) {
   // them, and any more Core's data saw it drawn in. The clause names each,
   // so a clause that takes its part, "make them blue", takes them all; the
   // answer says which, once the family is written.)
-  /** @type {Array<{text: string, on: string, whens: string[]}>} */
+  /** @type {Array<{label: string, text: string, on: string, whens: string[]}>} */
   const pluralSaid = [];
   for (const c of clauses) {
     const p = c.parts.find(x => x.plural && /-\d+$/.test(x.when ?? ''));
@@ -8266,6 +8266,7 @@ export function draftAnswer(ctx, env, question) {
     )?.[0];
     const whens = values.map(v => `${m[1]}:${v}`);
     pluralSaid.push({
+      label: said ?? `${m[2]} ${p.on}s`,
       text: `${said ?? `${m[2]} ${p.on}s`}: ${values.join(', ')}`,
       on: p.on,
       whens,
@@ -29020,7 +29021,7 @@ export function draftAnswer(ctx, env, question) {
   // token it reads.)
   // (Only the family's own part: a Text set at display-1 is no display
   // heading. A set size that is no length, a clamp(), reads the token.)
-  oneAnswerPerFamily(
+  const familyUnanswered = oneAnswerPerFamily(
     drafts,
     d => draftClause.get(d),
     clauses,
@@ -29041,6 +29042,13 @@ export function draftAnswer(ctx, env, question) {
       );
     },
   );
+  // (A family no look of which writes anything is named in one answer.)
+  for (const u of familyUnanswered) {
+    /** @type {Draft} */
+    const d = {text: u.text, options: []};
+    drafts.push(d);
+    draftClause.set(d, u.clause);
+  }
   /** @type {Draft[]} */
   const result = [];
   // Several changes in one question: one answer that runs them all first,
@@ -31867,15 +31875,19 @@ export function draftAnswer(ctx, env, question) {
       }
   for (const n of placeNotes)
     if (!keptInPlace.has(n.c)) result.push({text: n.text, options: []});
-  for (const f of pluralSaid)
-    if (
+  // (The looks line names the looks written, never one left out.)
+  for (const f of pluralSaid) {
+    const written = f.whens.filter(w =>
       result.some(d =>
-        d.options
-          .flat()
-          .some(st => st.on === f.on && f.whens.includes(st.when ?? '')),
-      )
-    )
-      result.push({text: f.text, options: []});
+        d.options.flat().some(st => st.on === f.on && st.when === w),
+      ),
+    );
+    if (written.length)
+      result.push({
+        text: `${f.label}: ${written.map(w => w.split(':')[1]).join(', ')}`,
+        options: [],
+      });
+  }
   // (The other reading of states said together, said last.)
   result.push(...otherReadings);
   // A panel's look written for every one (a card's) reaches the panels an
