@@ -272,6 +272,47 @@ describe('template path safety', () => {
     },
   );
 
+  it.skipIf(process.platform === 'win32')(
+    'keeps `--overwrite` in the command that writes the named path, so it does not refuse again',
+    async () => {
+      const root = fs.realpathSync(tmpDir);
+      const cwd = path.join(root, 'project');
+      const elsewhere = path.join(root, 'elsewhere');
+      const given = path.join(elsewhere, 'pages', 'blank.tsx');
+      fs.mkdirSync(cwd, {recursive: true});
+      fs.mkdirSync(path.dirname(given), {recursive: true});
+      fs.writeFileSync(given, 'old\n');
+      const before = process.env.HOME;
+      process.env.HOME = path.join(root, 'home');
+      try {
+        const err = await templateApi('blank', {
+          targetPath: given,
+          cwd,
+          overwrite: true,
+        }).catch(e => e);
+        expect(err.code).toBe('ERR_PATH_TRAVERSAL');
+        // The place inside the project is another file: no `--overwrite`.
+        expect(err.suggestions[0].name).toBe(
+          'astryx template blank src/pages/blank.tsx',
+        );
+        expect(err.suggestions[1].name).toBe(
+          `cd ${path.dirname(given)} && astryx template blank ./blank.tsx --overwrite`,
+        );
+
+        // The named command, run from that folder, replaces the file.
+        const written = await templateApi('blank', {
+          targetPath: './blank.tsx',
+          cwd: path.dirname(given),
+          overwrite: true,
+        });
+        expect(written.data.fileName).toBe('blank.tsx');
+        expect(fs.readFileSync(given, 'utf8')).not.toBe('old\n');
+      } finally {
+        process.env.HOME = before;
+      }
+    },
+  );
+
   it('names no folder to run from when only the disk root exists', async () => {
     const cwd = path.join(tmpDir, 'project');
     fs.mkdirSync(cwd, {recursive: true});

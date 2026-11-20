@@ -133,6 +133,12 @@ export function templateCopy(
         scratchPath || replaced || pkgOf(match) !== CORE_PACKAGE_NAME
           ? null
           : fromNearestFolder(path.resolve(cwd, fileTarget));
+      // A command that writes the destination the caller named keeps
+      // `--overwrite`, so it does not refuse a second time. The place inside
+      // the project is another file, which it never overwrites unasked.
+      const sameWrite = (/** @type {string} */ destination) =>
+        `${command} ${quoteCommandArgument(destination)}` +
+        (overwrite ? ' --overwrite' : '');
       throw new AstryxError(
         `Invalid template target path "${given}": it is outside the project root (${path.resolve(cwd)}). ` +
           (scratchPath
@@ -148,7 +154,7 @@ export function templateCopy(
           ...(scratchPath
             ? [
                 {
-                  name: `${command} ${quoteCommandArgument(scratchPath)}`,
+                  name: sameWrite(scratchPath),
                   reason: 'take a scratch copy in the system temp folder',
                 },
               ]
@@ -156,10 +162,7 @@ export function templateCopy(
           ...(there
             ? [
                 {
-                  name: commandInFolder(
-                    there.dir,
-                    `${command} ${quoteCommandArgument(there.path)}`,
-                  ),
+                  name: commandInFolder(there.dir, sameWrite(there.path)),
                   reason: `write the ${match.type} where you named it, from its folder`,
                 },
               ]
