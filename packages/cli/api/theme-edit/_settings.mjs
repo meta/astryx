@@ -7390,33 +7390,37 @@ export function compileTheme(ctx, data, base) {
         }
         putTok(k, color, m);
       }
-    // The emphasized border (input and selector frames) is never fainter
-    // than the border: an opaque border stronger than it on the surface
-    // carries it; a fainter one leaves it as it is.
+    // The emphasized border and the control edge (input, selector and box
+    // frames) are never fainter than the border: an opaque border stronger
+    // than one of them on the surface carries it; a fainter one leaves it as
+    // it is.
     const border = pinned('--color-border', m)
       ? written('--color-border', m)
       : null;
-    const emphasized =
-      written('--color-border-emphasized', m) ??
-      baseColor('--color-border-emphasized', m);
     const ground =
       written('--color-background-surface', m) ??
       baseColor('--color-background-surface', m);
-    if (
-      border &&
-      !pinned('--color-border-emphasized', m) &&
-      (!emphasized ||
-        !ground ||
-        ratio(
-          /** @type {[number, number, number]} */ (parseColor(border)),
-          /** @type {[number, number, number]} */ (parseColor(ground)),
-        ) >
+    for (const frame of [
+      '--color-border-emphasized',
+      '--color-border-control',
+    ]) {
+      const current = written(frame, m) ?? baseColor(frame, m);
+      if (
+        border &&
+        !pinned(frame, m) &&
+        (!current ||
+          !ground ||
           ratio(
-            /** @type {[number, number, number]} */ (parseColor(emphasized)),
+            /** @type {[number, number, number]} */ (parseColor(border)),
             /** @type {[number, number, number]} */ (parseColor(ground)),
-          ))
-    )
-      putTok('--color-border-emphasized', border, m);
+          ) >
+            ratio(
+              /** @type {[number, number, number]} */ (parseColor(current)),
+              /** @type {[number, number, number]} */ (parseColor(ground)),
+            ))
+      )
+        putTok(frame, border, m);
+    }
   }
   // A flat panel is tinted with the muted fill. The pieces inside it drawn
   // in that same color (a neutral badge, a track, whatever token the base
@@ -7740,6 +7744,7 @@ export const FOLLOWS = Object.freeze(
       SURFACE_FAMILY.map(k => [k, '--color-background-surface']),
     ),
     '--color-border-emphasized': '--color-border',
+    '--color-border-control': '--color-border',
   }),
 );
 

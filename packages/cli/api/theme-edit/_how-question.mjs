@@ -17854,6 +17854,7 @@ export function draftAnswer(ctx, env, question) {
               ...(wide ? [set('--border-width', wide)] : []),
               set('--color-border', color, modeOf(c)),
               set('--color-border-emphasized', color, modeOf(c)),
+              set('--color-border-control', color, modeOf(c)),
               ...(everywhere
                 ? borderless.map(pt =>
                     set('border', `${wide ?? bwNow0} solid ${color}`, {
@@ -17875,7 +17876,7 @@ export function draftAnswer(ctx, env, question) {
               ...dividers.map(pt => set('--border-width', bwNow0, {on: pt})),
             ];
             return {
-              text: `borders${wide ? ` ${wide} wide` : ''} in ${color}: the shared border width and colors (--color-border-emphasized is what inputs draw)${everywhere && borderless.length ? `, and a border on the surfaces the shared width does not reach (${borderless.join(', ')})` : ''}${selectedOnly.length ? `, on the parts that draw a box only when selected (${selectedOnly.join(', ')})` : ''}${lines.length ? `, and the indicator lines at that width (${lines.map(x => x.part).join(', ')})` : ''}${dividers.length ? `; the dividers keep their ${bwNow0} rules (${dividers.join(', ')})` : ''}`,
+              text: `borders${wide ? ` ${wide} wide` : ''} in ${color}: the shared border width and colors (--color-border-control is what inputs and checkbox and radio boxes draw)${everywhere && borderless.length ? `, and a border on the surfaces the shared width does not reach (${borderless.join(', ')})` : ''}${selectedOnly.length ? `, on the parts that draw a box only when selected (${selectedOnly.join(', ')})` : ''}${lines.length ? `, and the indicator lines at that width (${lines.map(x => x.part).join(', ')})` : ''}${dividers.length ? `; the dividers keep their ${bwNow0} rules (${dividers.join(', ')})` : ''}`,
               options: [steps],
               sequence: true,
             };
@@ -22009,11 +22010,9 @@ export function draftAnswer(ctx, env, question) {
       const colored = (/** @type {string} */ v) => !isGraySeed(seedOf(v));
       // A color dial counts when the step changes the shades made from it
       // (a warm gray has a little hue to take out), as set measures it.
-      const hasColor = seedsInEffect(
-        ctx.project.cwd,
-        env.slug,
-        env.data,
-      ).some(f => vibrancyMoves(f.dial, f.seed, 0, 100));
+      const hasColor = seedsInEffect(ctx.project.cwd, env.slug, env.data).some(
+        f => vibrancyMoves(f.dial, f.seed, 0, 100),
+      );
       const help =
         'vibrancy sets how saturated every generated color is (0 is gray, 100 the most vivid, 50 the default)';
       // Every accent the theme shows moves the way asked in saturation.

@@ -316,7 +316,7 @@ const styles = stylex.create({
 //   side (like Card) so total inset (border + padding) equals the elevated
 //   case and content geometry is unchanged. Border color, hover, and focus
 //   states mirror TextInput (shared `inputWrapperStyles.base` treatment):
-//   emphasized border at rest → accent on focus-within, with the same inset
+//   the control edge at rest → accent on focus-within, with the same inset
 //   shadow rings on hover and focus.
 const elevationStyles = stylex.create({
   low: {

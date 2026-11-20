@@ -1,8 +1,6 @@
 ---
-'@astryxdesign/build': patch
 '@astryxdesign/cli': patch
 '@astryxdesign/core': patch
-'@astryxdesign/richtext': patch
 '@astryxdesign/theme-butter': patch
 '@astryxdesign/theme-chocolate': patch
 '@astryxdesign/theme-gothic': patch
@@ -19,8 +17,10 @@ What changes on screen:
 - Core's default control edge is `#878D95` (light) and `#666A70` (dark), instead of `#CCD3DB` and `#494D53`.
 - Every field built on the shared field shell uses it: TextInput, TextArea, NumberInput, DateInput, DateRangeInput, DateTimeInput, TimeInput, FileInput, Selector, MultiSelector, ComplexSelector, Typeahead, Tokenizer, PanelSearchInput, PowerSearch, and InputGroupText inside an InputGroup. A field's hover ring is mixed from the same edge.
 - Unchecked CheckboxInput, CheckboxList, RadioList, and DropdownMenu checkbox and radio boxes use it. Checked and disabled boxes are unchanged.
+- A flat ChatComposer (`elevation="none"`) uses it too, because its edge is the only cue to where you type. The raised default keeps its shadow and edge.
+- The theme editor (`astryx theme`) sets and reports the control edge: asking for borders in a colour sets it with the other borders, and a stronger `--color-border` carries it.
 - Every first-party theme sets its own value at 3:1 or more against its own surface and page body, and generated themes (`defineTheme({color})`) derive one.
-- Cards, dividers, and every other use of `--color-border-emphasized` keep their lighter edge.
+- Cards, dividers, the raised ChatComposer, and every other use of `--color-border-emphasized` keep their lighter edge.
 
 Custom themes: a theme that doesn't set `--color-border-control` gets Core's default. A custom theme that set only `--color-border-emphasized` for its field edges now gets Core's default control edge; set `--color-border-control` to a value that suits your palette and reaches 3:1 against your surface and page body.
 

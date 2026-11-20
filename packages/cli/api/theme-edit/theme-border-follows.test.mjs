@@ -54,13 +54,15 @@ const changedNames = d =>
 describe('the emphasized border', () => {
   it('stays when the border is fainter than it', () => {
     expect(changedNames(faint)).not.toContain('--color-border-emphasized');
-    expect(faint.notes.join('\n')).not.toMatch(/follows it/);
+    expect(changedNames(faint)).not.toContain('--color-border-control');
+    expect(faint.notes.join('\n')).not.toMatch(/follows? it/);
   });
 
   it('follows a stronger border, and the result says so', () => {
     expect(changedNames(strong)).toContain('--color-border-emphasized');
+    expect(changedNames(strong)).toContain('--color-border-control');
     expect(strong.notes.join('\n')).toMatch(
-      /--color-border-emphasized follows it \(the frames of inputs and selectors/,
+      /--color-border-emphasized, --color-border-control follow it \(the frames of inputs, selectors and checkbox and radio boxes/,
     );
   });
 
