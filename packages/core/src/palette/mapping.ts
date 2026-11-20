@@ -82,14 +82,6 @@ export interface PaletteBase {
 /** What the mapping reads around the palette. */
 export interface PaletteMappingContext {
   base?: PaletteBase;
-  /**
-   * The theme editor's own rules, beyond `themePalette()`'s mapping: the
-   * colors a look grows (category, chart, status roles left unset, code
-   * colors), the slider track and the inverted error fill, icons at 3:1,
-   * tinted inks, coloured cards keeping their own secondary text, and a
-   * base theme's own pairs kept readable.
-   */
-  editor?: boolean;
   /** Whether a token exists, so the mapping sets it. */
   has: (token: string) => boolean;
   reader: PaletteColorReader;
@@ -1387,29 +1379,7 @@ export function mapPalette(
       return pick(names.text, f.id, m, at(TEXT_STOP[side(m)]), grounds, TEXT);
     });
     put(names.text, f.id, text);
-    // Icons and status dots are graphics, which WCAG asks 3:1 of, not
-    // text's 4.5:1: they take the shade nearest the role's own fill that
-    // reads at 3:1 on what they sit on, so a warning dot stays amber where
-    // warning text must deepen to brown.
-    put(
-      names.icon,
-      f.id,
-      context.editor
-        ? each(m => {
-            const grounds = [...surfaces(m, f.id), ...mutedSeen(m)];
-            const from = fill[m] as StopRef;
-            const own = exactFill[m] ? solid(exactFill[m], m, f.id) : null;
-            if (
-              own &&
-              Math.min(...grounds.map(([, bg]) => contrast(own, bg))) >=
-                NON_TEXT
-            ) {
-              return {...from, color: own};
-            }
-            return pick(names.icon, f.id, m, from.stop, grounds, NON_TEXT);
-          })
-        : text,
-    );
+    put(names.icon, f.id, text);
     if (names.onMuted) {
       const onMuted = names.onMuted;
       put(
