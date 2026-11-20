@@ -1417,6 +1417,9 @@ function PointerDateTimeField({
     timeInputRef.current?.focus();
     if (timePointerActiveRef.current) {
       timePointerActiveRef.current = false;
+      // A second click in the same frame replaces the pending show, so the
+      // field never owns more than one frame.
+      cancelTimeShowFrame();
       timeShowFrameRef.current = requestAnimationFrame(() => {
         timeShowFrameRef.current = null;
         timePopover.show({skipAutoFocus: true});
@@ -1425,6 +1428,7 @@ function PointerDateTimeField({
       timePopover.show({skipAutoFocus: true});
     }
   }, [
+    cancelTimeShowFrame,
     hasTimeOptions,
     isEffectivelyDisabled,
     timePopover,

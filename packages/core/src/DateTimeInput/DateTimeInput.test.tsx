@@ -2699,15 +2699,17 @@ describe('DateTimeInput', () => {
           />,
         );
         const timeInput = screen.getByLabelText('Meeting time');
+        // Two clicks inside one frame: the second replaces the first's show.
+        fireEvent.pointerDown(timeInput);
+        fireEvent.click(timeInput);
         fireEvent.pointerDown(timeInput);
         fireEvent.click(timeInput);
         expect(timeInput).toHaveAttribute('aria-expanded', 'false');
-        const pending = frames.size;
-        expect(pending).toBeGreaterThan(0);
+        expect(frames.size).toBeGreaterThan(0);
 
         unmount();
         // Every frame the field asked for is cancelled, so none runs.
-        expect(frames.size).toBeLessThan(pending);
+        expect(frames.size).toBe(0);
         for (const callback of frames.values()) {
           callback(performance.now());
         }
