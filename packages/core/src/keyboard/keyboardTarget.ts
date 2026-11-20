@@ -954,18 +954,16 @@ function rideWithKeyboard(
   riddenAnimators.set(target, animator);
   const guide =
     keyboardProfileOf(win) != null ? getKeyboardLayoutGuide(win) : null;
+  // Chrome pans to a field it finds covered shortly after its report. Its
+  // reveal of a field in the target also scrolls the page behind it. Safari
+  // leaves a claimed field in place, so there the target rides the whole way.
+  const isChrome = guide?.profile === 'chromium';
   // A ride moves the target while it rides or waits for the keyboard to go.
   // Once it ends, by itself or by a takeover, it never moves the target.
   let state: 'riding' | 'waiting' | 'ended' = 'riding';
   let stopReports: (() => void) | null = null;
   let stopGuide: (() => void) | null = null;
-  // The guide runs only in Chrome, whose own reveal of a field in the target
-  // also scrolls the page behind it.
-  const pans = watchPans(
-    win,
-    focused => target.contains(focused),
-    guide != null,
-  );
+  const pans = watchPans(win, focused => target.contains(focused), isChrome);
   let frame = 0;
   let pendingSlide: KeyboardTransition | null = null;
   const end = () => {
@@ -1022,10 +1020,10 @@ function rideWithKeyboard(
       if (transition == null) {
         animator.set({y});
       } else {
-        // On a show, the field is set just above the keyboard's top at once,
-        // so Chrome's own pan finds it clear. Only the rest rides.
+        // In Chrome a show sets the field just above the keyboard's top at
+        // once, so Chrome's own pan finds it clear. Only the rest rides.
         const atReport =
-          transition.kind === 'show'
+          isChrome && transition.kind === 'show'
             ? clearanceAtReport(target, animator, height, win)
             : null;
         if (atReport != null && y < atReport && atReport < animator.get('y')) {
