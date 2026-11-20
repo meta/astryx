@@ -1241,7 +1241,11 @@ function ensureLocked(
   // A run stopped mid-install (Ctrl-C, a closed terminal) frees the lock and
   // its scratch folder on the way out; a killed one is taken over by the
   // owner check in tryLock.
+  let released = false;
   const release = () => {
+    // Once freed, the lock may be another run's: it is never removed again.
+    if (released) return;
+    released = true;
     for (const entry of safeList(root)) {
       if (entry.startsWith(`.tmp-${version}-${process.pid}-`)) {
         fs.rmSync(path.join(root, entry), {recursive: true, force: true});
@@ -1264,6 +1268,8 @@ function ensureLocked(
     for (const signal of signals) process.off(signal, onSignal);
   };
   for (const signal of signals) process.on(signal, onSignal);
+  /** @type {CachedRelease | ReleaseUnavailable | undefined} */
+  let result;
   try {
     const again = cachedRelease(version, cacheDir);
     if (again) return again;
@@ -1280,11 +1286,41 @@ function ensureLocked(
     removeAside(path.join(root, version));
     verified.delete(`${cacheDir}\0${version}`);
     onProgress('install', version);
-    return installLocked(version, {cacheDir, run, nodeVersion});
+    result = installLocked(version, {cacheDir, run, nodeVersion});
+    return result;
   } finally {
-    removeSignalHandlers();
-    release();
+    try {
+      release();
+    } finally {
+      // An install a signal stopped re-raises it at once (ensureRelease), so
+      // its handlers go now. Otherwise npm ran synchronously: a signal sent to
+      // this process meanwhile waits for the event loop's poll phase, and the
+      // handlers stay until it has run (see settleSignals).
+      if (result && 'signal' in result && result.signal)
+        removeSignalHandlers();
+      else afterPoll(removeSignalHandlers);
+    }
   }
+}
+
+/**
+ * Call `fn` after the event loop's next poll phase, wherever this runs: two
+ * check phases away, since code that runs in an I/O callback reaches a check
+ * phase before the next poll.
+ * @param {() => void} fn
+ */
+function afterPoll(fn) {
+  setImmediate(() => setImmediate(fn));
+}
+
+/**
+ * Let a signal sent to this process while a release installed stop the run
+ * before it goes on: npm runs synchronously, so such a signal waits for the
+ * event loop.
+ * @returns {Promise<void>}
+ */
+export function settleSignals() {
+  return new Promise(resolve => afterPoll(resolve));
 }
 
 /**
