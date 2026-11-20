@@ -104,7 +104,7 @@ export const docs = {
       name: 'describedBy',
       type: 'string',
       description:
-        "ID to compose into aria-describedby on the trigger. It names the tooltip's text description, a hidden copy (the hidden attribute) that renderTooltip renders after the trigger; it is not the tooltip element's id.",
+        "ID to compose into aria-describedby on the trigger. It names the tooltip's text description: a hidden copy (the hidden attribute) after the trigger until the tooltip first shows, then the tooltip's content. It is not the tooltip element's id.",
     },
     {
       name: 'renderTooltip',
@@ -185,7 +185,7 @@ export const docsDense = {
     interactionRef: 'hover/focus interaction ref.',
     anchorId: 'CSS anchor name.',
     describedBy:
-      "ID for aria-describedby: the tooltip's hidden text description, not the tooltip element.",
+      "ID for aria-describedby: the tooltip's text description (a hidden copy until the first show, then its content), not the tooltip element.",
     renderTooltip: 'renders anchor-positioned tooltip content.',
     show: 'opens + holds until hide()/Escape/outside press/focus leave; announces once; onShow. Controlled: onShow only. No-op when disabled.',
     hide: 'closes; onHide. Controlled: onHide only.',

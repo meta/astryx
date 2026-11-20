@@ -571,10 +571,6 @@ export interface FixedLayerReturn {
 }
 
 /**
- * Context-mode options a core component may pass through `useLayerInternal`;
- * not part of the public `useLayer` options.
- */
-/**
  * Context-mode render props a core component may pass through
  * `useLayerInternal`; they are not part of `useLayer`'s public API.
  */
@@ -599,6 +595,10 @@ interface InternalContextLayerReturn extends Omit<
   ) => ReactNode;
 }
 
+/**
+ * Context-mode options a core component may pass through `useLayerInternal`;
+ * not part of the public `useLayer` options.
+ */
 interface InternalContextLayerOptions extends ContextLayerOptions {
   /**
    * The layer must never settle over its anchor (spec:AST-059 FR4). When the

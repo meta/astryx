@@ -239,9 +239,10 @@ export interface TooltipReturn {
   /**
    * ID for aria-describedby on the trigger element.
    * Caller should compose with other IDs using mergeIds utility. It names the
-   * tooltip's text description: a hidden copy of the tooltip text
-   * that `renderTooltip` renders after the trigger, in server and client
-   * markup alike. It is not the tooltip element's id.
+   * tooltip's text description: until the tooltip first shows, a hidden copy
+   * of the tooltip text that `renderTooltip` renders after the trigger, in
+   * server and client markup alike; after that, the tooltip's content. It is
+   * not the tooltip element's id.
    */
   describedBy: string;
 
@@ -249,9 +250,9 @@ export interface TooltipReturn {
    * Render function for tooltip content.
    * Returns anchor-positioned popover element.
    *
-   * The content also renders once from mount as the trigger's hidden
-   * description, so a component inside it runs its effects before the
-   * tooltip first shows.
+   * Until the tooltip first shows, the content also renders as the trigger's
+   * hidden description, so a component inside it runs its effects before
+   * then. The tooltip renders it again inside the layer when it first shows.
    *
    * `positioning` is excluded: the tooltip always derives its position from
    * placement/alignment, so accepting the custom opt-out here would be a
