@@ -816,6 +816,33 @@ function median(values) {
 export const LEG_BUDGET_MS = 10 * 60 * 1000;
 
 /**
+ * The longest a leg may be planned at: a leg's job has 15 minutes, and its
+ * setup takes about two. A plan over it fails by name before any leg starts.
+ */
+export const LEG_LIMIT_MS = 12 * 60 * 1000;
+
+/**
+ * The longest a release check's one leg may be planned at: its job has 360
+ * minutes. Every recorded spec file together takes about 137.
+ */
+export const RELEASE_LEG_LIMIT_MS = 345 * 60 * 1000;
+
+/**
+ * The error a plan fails with when its longest leg is over the time its job
+ * leaves for specs (LEG_LIMIT_MS for a pull request's legs,
+ * RELEASE_LEG_LIMIT_MS for a release check's one leg), or '' when it fits.
+ * @param {{count: number, longestMs: number}} legs
+ * @param {boolean} isPullRequest
+ */
+export function planOverLimit(legs, isPullRequest) {
+  const limit = isPullRequest ? LEG_LIMIT_MS : RELEASE_LEG_LIMIT_MS;
+  if (legs.longestMs <= limit) return '';
+  const minutes = (legs.longestMs / 60000).toFixed(1);
+  const job = isPullRequest ? "a leg's 15-minute job" : "the release check's 360-minute job";
+  return `::error title=Accessibility specs over their leg's time::${legs.count} legs still leave ${minutes} min of recorded time in one leg, more than the ${limit / 60000} minutes ${job} leaves for its specs. Split the change, or its longest spec files.`;
+}
+
+/**
  * The legs an opt-in run needs: enough that each leg's recorded time fits
  * LEG_BUDGET_MS, at most `maxLegs`, split slowest first onto the leg with the
  * least time (`splitByDuration`, as the other leg planners). The recorded
@@ -1294,7 +1321,7 @@ function main() {
       ? scopeLost
         ? planLegs(
             budgeted.run.map(({file}) => file),
-            {},
+            readDurations(root, policySha),
             1,
           )
         : planLegs(
@@ -1314,9 +1341,16 @@ function main() {
     console.log(
       `Accessibility legs: ${legs.count} for ${budgeted.run.length} spec files (the longest leg's recorded time ${minutes} min).`,
     );
+    // A lost scope plans the whole selection as one leg, so it too fails by
+    // name when that leg cannot fit, instead of being cut at the cap.
+    const overLimit = planOverLimit(legs, isPullRequest);
+    if (overLimit) {
+      console.log(overLimit);
+      return 1;
+    }
     if (legs.longestMs > LEG_BUDGET_MS) {
       console.log(
-        `::warning title=Accessibility specs over ten minutes::${legs.count} legs still leave ${minutes} min of recorded time in one leg. The selection needs more legs.`,
+        `::warning title=Accessibility specs over ten minutes::${legs.count} legs still leave ${minutes} min of recorded time in one leg.`,
       );
     }
     // The run step reads this leg's share from here, so it runs exactly
@@ -1329,9 +1363,19 @@ function main() {
       );
     }
     if (process.env.GITHUB_OUTPUT) {
+      // The plan job hands every leg its share, so a leg starts only with a
+      // share to run.
+      const shares = legs.shares.map(list => {
+        const share = new Set(list);
+        return {
+          scopeKnown,
+          run: budgeted.run.filter(({file}) => share.has(file)),
+        };
+      });
+      const numbers = Array.from({length: legs.count}, (_, i) => i + 1);
       fs.appendFileSync(
         process.env.GITHUB_OUTPUT,
-        `count=${legs.count}\nruns=${leg <= legs.count}\nleg=${leg}\n`,
+        `count=${legs.count}\nruns=${leg <= legs.count}\nleg=${leg}\nlegs=${JSON.stringify(numbers)}\nshares=${JSON.stringify(shares)}\n`,
       );
     }
     return 0;

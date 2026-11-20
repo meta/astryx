@@ -15,6 +15,32 @@
  */
 
 /**
+ * Make stdout and stderr block on write when they are pipes, before the run
+ * prints anything.
+ *
+ * Node writes to a file or a terminal synchronously, but on POSIX it writes to
+ * a pipe asynchronously. A run that ends in `process.exit` while a pipe write
+ * waits for a slow reader loses that output: the reader gets the first 64 KiB
+ * (the pipe buffer), and a --json caller gets invalid JSON. When the pipe
+ * blocks, each write is complete when it returns, so every exit keeps all its
+ * output, in order. A write that fits in the pipe buffer returns at once, as
+ * before. It runs here, not in the bin, so a run that a host starts gets it
+ * too. The stream's libuv handle sets the blocking mode; Node makes the same
+ * call for a terminal and for a Windows pipe, which already block. A file
+ * stream has no such handle and already writes synchronously.
+ */
+function blockPipedOutput() {
+  if (process.platform === 'win32') return;
+  for (const stream of [process.stdout, process.stderr]) {
+    if (stream.isTTY) continue;
+    const handle = /** @type {{setBlocking?: (on: boolean) => number}} */ (
+      /** @type {any} */ (stream)._handle
+    );
+    handle?.setBlocking?.(true);
+  }
+}
+
+/**
  * Run the CLI once in this process.
  *
  * Every import here is dynamic: modules that load `styleText` must load only
@@ -28,6 +54,56 @@
  *   when, in a hosted run, that release's host entry answered
  */
 export async function runCli({cliRoot, argv, declinedProjectCli}) {
+  blockPipedOutput();
+  // A folder deleted under the shell (another terminal, `git clean`): every
+  // command reads the working folder first, so say so once, plainly, in
+  // text and in --json, instead of a stack trace.
+  try {
+    process.cwd();
+  } catch (e) {
+    if (/** @type {any} */ (e)?.code !== 'ENOENT') throw e;
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const os = await import('node:os');
+    let up = process.env.PWD ? path.dirname(process.env.PWD) : null;
+    while (up && !fs.existsSync(up) && path.dirname(up) !== up)
+      up = path.dirname(up);
+    const cd = up && fs.existsSync(up) ? up : '~';
+    // Help, the version and docs read no folder: run them from an existing
+    // one.
+    const first = argv.find(a => !a.startsWith('-'));
+    if (
+      argv.length === 0 ||
+      argv.some(a => ['--help', '-h', '--version', '-V'].includes(a)) ||
+      first === 'docs' ||
+      first === 'help'
+    ) {
+      process.chdir(cd === '~' ? os.homedir() : cd);
+      return runCli({cliRoot, argv, declinedProjectCli});
+    }
+    const message =
+      'The current folder no longer exists (it was deleted or moved). Nothing was written. cd to an existing folder and run the command again.';
+    const {quoteCommandArgument} =
+      await import('../../foundation/env/package-manager.mjs');
+    const suggestions = [
+      {
+        name: `cd ${cd === '~' ? cd : quoteCommandArgument(cd)}`,
+        reason: 'an existing folder',
+      },
+    ];
+    if (argv.includes('--json')) {
+      const {toErrorEnvelope} =
+        await import('../../foundation/response/json.mjs');
+      fs.writeSync(
+        1,
+        `${JSON.stringify(toErrorEnvelope(message, suggestions, 'ERR_PROJECT_REQUIRED'), null, 2)}\n`,
+      );
+    } else {
+      fs.writeSync(2, `Error: ${message}\n  ${suggestions[0].name}\n`);
+    }
+    process.exitCode = 1;
+    return undefined;
+  }
   const {startRun} = await import('../../foundation/release/handoff.mjs');
   const answered = await startRun({cliRoot, argv, declinedProjectCli});
   if (answered) return answered;
@@ -36,8 +112,19 @@ export async function runCli({cliRoot, argv, declinedProjectCli}) {
     createProgram,
     loadProjectDebugHandler,
     loadProjectForHelp,
+    refuseHelpWithoutBase,
     handleVersionJsonPreflight,
   } = await import('./index.mjs');
+  // The base every project load reads, the one in createProgram included.
+  const {setRequestedBase} = await import('../../foundation/bases/state.mjs');
+  const {scanRootArgs} = await import('./lib/root-args.mjs');
+  const base = scanRootArgs(
+    process.argv.slice(2),
+    [{long: '--base', required: true}],
+    {unknown: 'skip', pastOperand: true},
+  ).values.get('--base');
+  setRequestedBase(typeof base === 'string' ? base : null);
+
   // Only the commands these arguments need load, before anything below runs,
   // as the full program did.
   const program = await createProgram({argv: process.argv.slice(2)});
@@ -45,6 +132,8 @@ export async function runCli({cliRoot, argv, declinedProjectCli}) {
     await import('../../foundation/response/json.mjs');
   const {handleCommanderError} = await import('./lib/json-shim.mjs');
   const {setOutcome} = await import('../../foundation/debug/index.mjs');
+  const {themeModuleRejection, themeModuleException} =
+    await import('../../foundation/fs/theme-module-rejections.mjs');
 
   /**
    * Top-level error boundary (contract guarantee #4): an uncaught throw must
@@ -88,8 +177,30 @@ export async function runCli({cliRoot, argv, declinedProjectCli}) {
     process.exit(1);
   }
 
-  process.on('unhandledRejection', handleFatal);
-  process.on('uncaughtException', handleFatal);
+  // A command that reads a theme several times meets its module's late
+  // failure each time: said once.
+  /** @type {Set<string>} */
+  const toldWarnings = new Set();
+  /** @param {string} warning */
+  const tellOnce = warning => {
+    if (toldWarnings.has(warning)) return;
+    toldWarnings.add(warning);
+    process.stderr.write(`${warning}\n`);
+  };
+  process.on('unhandledRejection', (reason, promise) => {
+    // A theme module read for its export may leave a promise rejecting:
+    // said, never the command's crash.
+    const told = themeModuleRejection(reason, promise);
+    if (told) tellOnce(told);
+    else handleFatal(reason);
+  });
+  process.on('uncaughtException', error => {
+    // A theme module's callback that throws after its load: said, never
+    // the command's crash.
+    const told = themeModuleException(error);
+    if (told === null) handleFatal(error);
+    else if (told) tellOnce(told);
+  });
 
   // Pick up the project's `debug` function before parsing, so parse errors
   // and `--help` — which short-circuit before any hook runs — are reported
@@ -97,7 +208,8 @@ export async function runCli({cliRoot, argv, declinedProjectCli}) {
   await loadProjectDebugHandler();
   // Help prints its commands while Commander parses, so a help run reads the
   // project's declared `cliCommand` here.
-  await loadProjectForHelp();
+  await loadProjectForHelp(process.argv.slice(2), program);
+  await refuseHelpWithoutBase(process.argv.slice(2), program);
 
   // `--version --json` answers and exits without Commander, so it runs here —
   // after the handler exists, or the run would go unrecorded.

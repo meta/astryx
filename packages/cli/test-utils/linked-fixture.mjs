@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import {createRequire} from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
+import {seedThemeCache} from './theme-cache.mjs';
 
 const CLI_ROOT = path.resolve(import.meta.dirname, '..');
 const require = createRequire(path.join(CLI_ROOT, 'package.json'));
@@ -39,10 +40,28 @@ export function makeLinkedFixture(prefix, packages) {
   for (const name of packages) {
     const link = path.join(root, 'node_modules', name);
     fs.mkdirSync(path.dirname(link), {recursive: true});
-    fs.symlinkSync(packageDir(name), link, 'dir');
+    // A Windows directory symlink needs Developer Mode or an elevated shell,
+    // so without one every fixture fails with EPERM. A junction needs
+    // neither. It resolves and is removed like a symlink, and it takes the
+    // absolute target that packageDir gives.
+    fs.symlinkSync(
+      packageDir(name),
+      link,
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
   }
   const dir = path.join(root, 'project');
   fs.mkdirSync(dir);
+  // A fixture that links Core is an app that lists it, as a real app's
+  // package.json does: the theme editor finds the app by that listing.
+  if (packages.some(n => n === '@astryxdesign/core' || n === '@astryxdesign')) {
+    fs.writeFileSync(
+      path.join(dir, 'package.json'),
+      `${JSON.stringify({private: true, type: 'module', dependencies: {'@astryxdesign/core': '*'}}, null, 2)}\n`,
+    );
+    // The editor's cache for that Core, built once for the run.
+    seedThemeCache(root);
+  }
   return dir;
 }
 

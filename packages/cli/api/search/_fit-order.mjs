@@ -8,9 +8,9 @@
  * @output the same response with the same results, maybe in a new order
  * @position api/search; rankWith (_main-searcher.mjs) runs it after
  * orderMatches, with the weights the adapter loads (loadSearchData) through
- * build's own loader. The fit is build's block-picker match
- * (build/blocks/blocks.mjs) with its shipped weights, so an entry the weights
- * never saw is scored from its own docs the same way. Without readable
+ * build's own loader. The fit is the block picker's `matchOf`
+ * (build/blocks/blocks.mjs) over the shipped weights' vocabulary, so an entry
+ * the weights never saw is scored from its own docs the same way. Without readable
  * weights the order stays.
  */
 
@@ -23,7 +23,7 @@ import {
   wordsOf,
 } from '../build/blocks/blocks.mjs';
 import {bandOf} from './_order.mjs';
-import {searchedComponentsOf} from './_result.mjs';
+import {movedRootsOf, searchedComponentsOf} from './_result.mjs';
 
 /** An entry stays in place when its fit is at least this times the median. */
 export const FIT_BAR = 1.7;
@@ -137,25 +137,37 @@ const runOf = r => `${bandOf(r.score ?? 0)}:${r.domain === 'doc'}`;
  * The results with the first kept. Entries #2 to #10 split into runs of one
  * band and kind. Inside a run, the entries that fit the query under FIT_BAR
  * times the run's median fit move, in order, after the others, unless their
- * name spells NAME_WORDS or more of the query's words. A run whose
- * median fit is zero or less keeps its order. Nothing crosses a run, and
- * nothing is added or dropped.
+ * name spells NAME_WORDS or more of the query's words, or they are held. A
+ * run whose median fit is zero or less keeps its order. Nothing crosses a
+ * run, and nothing is added or dropped.
  * @param {any[]} results
  * @param {any[]} candidates
  * @param {string} query
  * @param {Weights | (() => Weights | null | undefined) | null | undefined} weights
  *   the block picker's weights, or a function that reads them; the function
  *   runs only when a run can change. Without weights the order stays
+ * @param {Set<any>} [held] results that never move down: a family root
+ *   the order moved directly before its part, and that part
+ * @param {Map<any, any>} [pairs] each such part, mapped to its root: the part
+ *   counts in its root's run, so the pair stays together
  * @returns {any[]}
  */
-export function orderByFit(results, candidates, query, weights) {
+export function orderByFit(results, candidates, query, weights, held, pairs) {
+  /** @param {any} r */
+  const runAt = r => runOf(pairs?.get(r) ?? r);
+  /** @param {number} k */
+  const pairAt = k =>
+    k < results.length && pairs?.get(results[k]) === results[k - 1];
   if (!weights || results.length < 3) return results;
   const end = Math.min(FIT_PLACES, results.length);
   /** @type {[number, number][]} */
   const runs = [];
   for (let i = 1; i < end;) {
     let j = i;
-    while (j < end && runOf(results[j]) === runOf(results[i])) j++;
+    while (j < end && runAt(results[j]) === runAt(results[i])) j++;
+    // A held root in the last place read keeps its part in its run, so what
+    // moves after the root moves after the part too.
+    if (pairAt(j)) j++;
     runs.push([i, j]);
     i = j;
   }
@@ -168,6 +180,7 @@ export function orderByFit(results, candidates, query, weights) {
   const queryWords = new Set(termsOf(query).filter(t => !t.includes('_')));
   /** @param {any} r */
   const named = r =>
+    (held?.has(r) ?? false) ||
     new Set(
       wordsOf(r.name)
         .map(stemOf)
@@ -231,7 +244,22 @@ export function withFitOrder(response, candidates, query, weights) {
   const r = /** @type {any} */ (response);
   const results = r?.data?.results;
   if (!Array.isArray(results)) return response;
-  const ordered = orderByFit(results, candidates, query, weights);
+  // A family root the order moved directly before its part (movedRootsOf)
+  // stays there: neither that root nor its part moves down, and the part
+  // counts in its root's run, so nothing comes between them. A root that sat
+  // above its part on its own is not held.
+  const moved = movedRootsOf.get(r);
+  /** @type {Set<any>} */
+  const held = new Set();
+  /** @type {Map<any, any>} */
+  const pairs = new Map();
+  results.forEach((part, k) => {
+    if (k > 0 && moved?.get(part) === results[k - 1]) {
+      held.add(part).add(results[k - 1]);
+      pairs.set(part, results[k - 1]);
+    }
+  });
+  const ordered = orderByFit(results, candidates, query, weights, held, pairs);
   if (ordered === results) return response;
   const out = {...r, data: {...r.data, results: ordered}};
   const searched = searchedComponentsOf.get(r);

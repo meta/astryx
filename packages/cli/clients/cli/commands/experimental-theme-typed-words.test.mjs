@@ -28,7 +28,7 @@ describe('experimental theme copies echo typed text as typed', () => {
     expect(r.status).toBe(1);
     const {error} = JSON.parse(r.stdout);
     expect(error).toContain('No theming target matches "astryx theme list".');
-    expect(error).toContain('Run `experimental theme targets`');
+    expect(error).toContain(' experimental theme targets` with no filter');
   });
 
   it('keeps a slug that holds `theme add`, and still rewords the command it names', async () => {
@@ -41,7 +41,9 @@ describe('experimental theme copies echo typed text as typed', () => {
     );
     expect(r.status).toBe(1);
     const {error} = JSON.parse(r.stdout);
-    expect(error).toContain('Theme "`theme add`" is not added.');
-    expect(error).toMatch(/ experimental theme add `theme add`` first\.$/);
+    expect(error).toContain('Theme "`theme add`" is not added');
+    expect(error).toContain(
+      ' experimental theme list` for the themes you can add.',
+    );
   });
 });

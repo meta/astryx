@@ -21,7 +21,7 @@ const content = [
 
 export default function MarkdownShowcase() {
   return (
-    <Center width={400}>
+    <Center width={400} maxWidth="100%">
       <Markdown>{content}</Markdown>
     </Center>
   );

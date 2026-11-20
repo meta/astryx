@@ -7,6 +7,8 @@
  * @position Client-side policy shared by every TemplateThumbnail. It owns one observer, one scroll listener and one resize listener while a thumbnail is mounted.
  */
 
+import {prefersReducedData} from '../lib/prefersReducedData';
+
 // Above this speed, in viewport heights per second, tiles cross the screen
 // too fast to be read.
 const FAST_SCROLL_VIEWPORTS_PER_SECOND = 2;
@@ -14,24 +16,13 @@ const FAST_SCROLL_VIEWPORTS_PER_SECOND = 2;
 // page is at rest.
 const SCROLL_REST_MS = 100;
 
-type NetworkInformation = {saveData?: boolean; effectiveType?: string};
-
 /**
  * The root margin of the near-viewport observer: one viewport above and
  * below, the distance Safari uses for lazy images. No lead when the user
  * asked to save data or the connection is 2G.
  */
 function leadMargin(): string {
-  const connection = (
-    navigator as Navigator & {connection?: NetworkInformation}
-  ).connection;
-  if (
-    connection?.saveData === true ||
-    /2g/.test(connection?.effectiveType ?? '')
-  ) {
-    return '0px';
-  }
-  return '100% 0px';
+  return prefersReducedData() ? '0px' : '100% 0px';
 }
 
 const nearListeners = new Map<Element, (isNear: boolean) => void>();

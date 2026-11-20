@@ -554,6 +554,31 @@ describe('SideNavHeading', () => {
       );
     });
 
+    it("holds a NavHeadingMenu's items in its own named menu, with no menu inside it", async () => {
+      __resetMenuPressForTest();
+      const user = userEvent.setup();
+      render(
+        <SideNavHeading
+          heading="My App"
+          menu={
+            <NavHeadingMenu>
+              <NavHeadingMenuItem label="Docs" href="/docs" />
+              <NavHeadingMenuItem label="Status" href="/status" />
+            </NavHeadingMenu>
+          }
+        />,
+      );
+      await user.click(screen.getByRole('button', {name: /Open menu/}));
+      const menus = screen.getAllByRole('menu', {hidden: true});
+      expect(menus).toHaveLength(1);
+      expect(menus[0]).toHaveAccessibleName('My App');
+      for (const name of ['Docs', 'Status']) {
+        expect(menus[0]).toContainElement(
+          screen.getByRole('menuitem', {name, hidden: true}),
+        );
+      }
+    });
+
     it('moves focus one item per arrow key in a NavHeadingMenu (APG menu)', async () => {
       __resetMenuPressForTest();
       const user = userEvent.setup();
@@ -2646,6 +2671,50 @@ describe('SideNavItem — mobile drawer close-on-activate', () => {
       <SideNavItem label="Home" href="/" data-testid="item" />,
     );
     await user.click(screen.getByTestId('item'));
+    expect(closeMobileNav).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['ctrl', {ctrlKey: true}],
+    ['meta', {metaKey: true}],
+    ['shift', {shiftKey: true}],
+    ['alt', {altKey: true}],
+  ] as const)(
+    'leaves the drawer open on a %s-click of a link item',
+    (_name, modifier) => {
+      const onClick = vi.fn();
+      const {closeMobileNav} = renderInDrawer(
+        <SideNavItem
+          label="Home"
+          href="#home"
+          onClick={onClick}
+          data-testid="item"
+        />,
+      );
+      fireEvent.click(screen.getByTestId('item'), modifier);
+      expect(onClick).toHaveBeenCalledTimes(1);
+      expect(closeMobileNav).not.toHaveBeenCalled();
+    },
+  );
+
+  it('still closes on a modified click that the item onClick cancels', () => {
+    const {closeMobileNav} = renderInDrawer(
+      <SideNavItem
+        label="Home"
+        href="#home"
+        onClick={event => event.preventDefault()}
+        data-testid="item"
+      />,
+    );
+    fireEvent.click(screen.getByTestId('item'), {ctrlKey: true});
+    expect(closeMobileNav).toHaveBeenCalledTimes(1);
+  });
+
+  it('still closes on a modified click of an item with no href', () => {
+    const {closeMobileNav} = renderInDrawer(
+      <SideNavItem label="Action" onClick={vi.fn()} data-testid="item" />,
+    );
+    fireEvent.click(screen.getByTestId('item'), {ctrlKey: true});
     expect(closeMobileNav).toHaveBeenCalledTimes(1);
   });
 

@@ -111,7 +111,8 @@ affects_consumer_docs: [release-process, templates]
       "DEC-28",
       "DEC-30",
       "FR61",
-      "DEC-32"
+      "DEC-32",
+      "DEC-33"
     ]
   }
 }
@@ -296,7 +297,8 @@ one removal merged ahead of the decision to allow it.
   contract includes fields inside discriminated `data` entries as well as the
   outer envelope. Every field is present in the canonical response type, contract
   tests, text projection where the command provides one, and complete
-  consumer-facing schema documentation. Adding an optional field is nonbreaking
+  consumer-facing schema documentation. A field shown in one section of the
+  text projection is not repeated in another. Adding an optional field is nonbreaking
   when old consumers continue unchanged, but it remains a public schema update and
   does not bypass current-authority review or documentation.
 - **FR14 — No supported CLI behavior is hidden.** Any Astryx CLI behavior
@@ -312,7 +314,14 @@ one removal merged ahead of the decision to allow it.
   Automation MUST use the documented programmatic API.
   Public controls MUST define their accepted values, default, precedence and
   interactions, error behavior, and a representative invocation. Commands and
-  options MUST appear in generated help and the machine-readable manifest.
+  options MUST appear in generated help and the machine-readable manifest; help
+  leaves out the ones the run's base does not serve and counts them. An
+  option's text in help also leaves out a part that names a command or option
+  the run's base does not serve: on a base without layout skeletons, the
+  `template --list` text does not name `--skeleton`. The
+  manifest lists every command and every command's option with `available`;
+  the global options, which every base serves, carry none (`spec:AST-114`
+  FR7).
   Automatic behavior and other controls MUST either appear there or be linked from
   those discovery surfaces to consumer documentation. A
   normal invocation mode MUST have a documented command, option, or configuration
@@ -398,7 +407,9 @@ one removal merged ahead of the decision to allow it.
   never exported, as experimental or otherwise, except through Core's
   `./internal/*` subpaths, which are reserved for Astryx's own packages,
   undocumented, outside the compatibility promise, versioned in lockstep with
-  Core, and limited by lint to Core and Lab (`architecture:react-component-runtime` INV13); a swizzled copy of a Lab component also keeps importing a StyleX module Core exports there, since its identity is its path (`spec:AST-110` FR1). In Core, an experimental public
+  Core, and limited by lint (`architecture:react-component-runtime` INV13) to
+  Core and to the private Lab and Charts packages, which pin Core's exact
+  version; a swizzled copy of a Lab component also keeps importing a StyleX module Core exports there, since its identity is its path (`spec:AST-110` FR1). In Core, an experimental public
   API's status is
   visible at the call site where it is used, carried by the name the caller
   writes, not only in docs, declarations, or a file path; a component's
@@ -422,7 +433,9 @@ one removal merged ahead of the decision to allow it.
   codemod is supplied when a mechanical migration would materially reduce caller
   work. This exception never covers a change to stable defaults, stable runtime or
   accessibility behavior, ordinary import paths, non-experimental props, or stable
-  CLI commands and machine schemas; those changes follow FR1–FR8. A released stable
+  CLI commands and machine schemas; those changes follow FR1–FR8. The discover
+  listing of experimental icon-set packages that FR27 names is part of the
+  experimental surface: a change to it uses `[experimental]`. A released stable
   surface cannot be retroactively demoted to experimental.
 - **FR23 — Promotion creates a stable contract deliberately.** Promotion is an
   owner-approved change that removes the experimental marker, exposes the settled
@@ -472,8 +485,56 @@ one removal merged ahead of the decision to allow it.
   names; persistence uses a feature- and schema-versioned experimental namespace;
   build tooling uses experimental exports/configuration; and docs use marked
   experimental routes. An omitted opt-in MUST leave stable defaults, output, routes,
-  data, and behavior unchanged. Promotion requires owner approval and a `[feat]`
+  data, and behavior unchanged. For icon sets, installing a package that declares
+  `experimental.iconSets` is an opt-in, as setting `experimental.iconSet` is
+  (`spec:AST-084/DEC-13`). Promotion requires owner approval and a `[feat]`
   Changeset; withdrawal uses `[experimental]` and MUST prove no stable spillover.
+  Named exceptions follow; stable output names no experimental surface any
+  of them does not name. First, stable theme help and docs, one theme line of the agent
+  docs block, one line of `init`'s next steps (beside, never instead of, its
+  existing steps), and one line in each of the `theme eject` and
+  `theme palette generate` results MAY point at the experimental theme editor
+  (`experimental theme editor`, `experimental theme preview`) as the way to make
+  and change a theme, and `experimental theme preview app <dir>` as the starter
+  app that shows a theme when there is no app yet, phrased for theme work only
+  and labeled experimental each time; these lines name no other experimental
+  surface, and this exception ends when the theme editor graduates or is
+  removed. Another named
+  exception covers the command that writes a page as one HTML file: the
+  answer to an unknown top-level word that asks for it (`export`, `render`,
+  `share`, `bundle`, `snapshot`, `standalone`) MAY suggest
+  `experimental export`, labeled experimental, and never runs it, because
+  people and agents who type those words mean that command; the exception
+  ends when the command graduates or is removed. The command writes only a
+  page that uses Astryx: one whose script holds a module of an Astryx package
+  or that imports an Astryx stylesheet; it refuses any other page with
+  `ERR_RENDER_NOT_ASTRYX` and writes nothing, so the suggestion never turns a
+  page without Astryx into an Astryx file. The same exception covers
+  the command that turns such a file back into its page: the answer to an
+  unknown top-level word that asks for it (`import`, `back`, `restore`,
+  `unrender`, `reverse`) MAY suggest `experimental import`, labeled
+  experimental, and never runs it; it ends when the export exception ends.
+  Another named exception covers sharing a page as one HTML file: the CLI's
+  two guides that teach it (`cli/experimental/share-a-page` and
+  `cli/experimental/export-pages`) set `searchable: true`, and no other doc
+  may. In an Astryx project (one that installs or declares `@astryxdesign/core`
+  or `@astryxdesign/cli`), or outside any package (no package.json at or
+  above the folder), `astryx search`, the `search()` API and an index
+  `exportSearchIndex()` makes there MAY return each of them as one entry,
+  whose own text says it is experimental; in a package without Astryx none of
+  them returns the guides, and every other experimental doc stays out of
+  search. This exception ends when that command graduates or is removed.
+  A further named exception: `astryx discover` may list experimental icon-set
+  packages in a project where icon features are off. Such an entry shows only the catalog's descriptor
+  text, the install line, the opt-in command
+  (`astryx experimental icon use <package>/<set>`), and, when the catalog lists
+  the set's definitions, how many of the CLI's icon definitions it maps
+  (`definitions: N/M`, in text only); it is marked `[experimental]` in text
+  and `experimental: true` in JSON (on a package entry, `experimentalFields`
+  names its icon-set field). The set's icons and definitions themselves, and
+  every other command, `astryx search` and its discover line included, stay
+  behind the icon feature gate. This exception ends when icon
+  sets graduate or are removed.
 - **FR28 — A planned minor needs no prior deprecation; a patch does.** A change
   landing in a declared minor needs no deprecation path: its `[breaking]` Changeset
   describing the change, with the replacement and migration where they help the
@@ -974,7 +1035,7 @@ lands, maintainers apply its requirement in review and release approval.
 | FR15      | Full manifest-derived command matrix, supported-consumer evidence, and scope-specific contract tests                                                                                                                                                                                                                                                            | global invariant, scoped command group, single command, programmatic API                                                                                                                                                                                                                                                                                                                                | A global control is a no-op for any command, has different meanings, or replaces a narrower owning surface                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | FR16–FR18 | Boundary inventory, hostile side-effect probes, response snapshots, and concurrent API tests                                                                                                                                                                                                                                                                    | known and new extension, partial result, text/JSON/API parity, independent concurrent calls                                                                                                                                                                                                                                                                                                             | A route bypasses the guarantee, omitted work looks complete, or one invocation changes another                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | FR19–FR20 | Proposal evidence with a regression fixture for the detection failure, plus composition and provenance tests                                                                                                                                                                                                                                                    | convention covers the case, detection fails, app plus two integrations, refusal, failing contribution, repeated load                                                                                                                                                                                                                                                                                    | A key ships without a reproduced detection failure, a contribution displaces the app or applies twice, a part of the effective value has no inspectable source, or a failure silently weakens protection                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| FR21–FR24 | Published-surface comparison, declaration/doc metadata checks, import-boundary checks, and Changeset classification review                                                                                                                                                                                                                                      | experimental prop object, experimental subpath, patch evolution, promotion, unpublished adjacent field, stable warning behavior, integration theme; a component or module `/experimental` subpath; an `_experimental` export; a behavior module; an `./internal/*` subpath imported from Core, from Lab, and from another package; a swizzled copy's import of an exported `./internal/*.stylex` module | A prose-only marker excludes a stable API, adjacency falsely publishes a new field, an experimental export leaks through a stable path, a patch changes stable behavior, or a promoted API remains unprotected, a file path or subpath alone marks a surface experimental, a behavior, utility, or internal module without a public contract is exported other than through `./internal/*`, an `./internal/*` subpath is documented or imported outside Core and Lab other than a swizzled copy's exported StyleX module (FR21), or an experimental public API in Core does not show its status at the call site in the name the caller writes |
+| FR21–FR24 | Published-surface comparison, declaration/doc metadata checks, import-boundary checks, and Changeset classification review                                                                                                                                                                                                                                      | experimental prop object, experimental subpath, patch evolution, promotion, unpublished adjacent field, stable warning behavior, integration theme; a component or module `/experimental` subpath; an `_experimental` export; a behavior module; an `./internal/*` subpath imported from Core, Lab, Charts, and any other package; a swizzled copy's import of an exported `./internal/*.stylex` module | A prose-only marker excludes a stable API, adjacency falsely publishes a new field, an experimental export leaks through a stable path, a patch changes stable behavior, or a promoted API remains unprotected, a file path or subpath alone marks a surface experimental, a behavior, utility, or internal module without a public contract is exported other than through `./internal/*`, an `./internal/*` subpath is documented or imported outside packages FR21 names other than a swizzled copy's exported StyleX module, or an experimental public API in Core does not show its status at the call site in the name the caller writes |
 | FR25–FR27 | Stable-surface inventory and experimental-boundary matrix                                                                                                                                                                                                                                                                                                       | package/API, CSS/token, CLI/config, persistence, build tooling, docs, whole Lab component                                                                                                                                                                                                                                                                                                               | An unmarked experiment changes stable defaults or a stable surface bypasses compatibility review                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | FR28–FR31 | Declared-tier check: on a minor, the `[breaking]` Changeset describes the change (old usage, replacement, migration); on a patch, a breaking Changeset is refused and the deprecation ships instead; declaration/doc/build/CLI warning projections; old/new fixtures; dry-run/idempotence/migration tests; maintained-source and latest-stable upgrade evidence | whole component, prop/value, theme field/helper/token/target/source, CLI command, CLI option; old-only, new-only, both, static/dynamic/uncertain migration, text/JSON, development/production                                                                                                                                                                                                           | A warning has no usable modernization route, production runtime changes for deprecation, maintained guidance teaches the old surface, a migration guesses, old behavior degrades early, cadence invents a wait, or one cleanup id covers multiple incompatible deltas                                                                                                                                                                                                                                                                                                                                                                          |
 | FR32–FR35 | Latest-stable victim fixture, pre-existing authority named in the Changeset or pull request, owner review, declared-tier check, and emergency attestation                                                                                                                                                                                                       | victim-free `[fix]`, `[fix]` plus incompatible-fix metadata, coexistence, cleanup transition, critical-harm emergency                                                                                                                                                                                                                                                                                   | A released victim uses bare `[fix]`, a new Changeset tag replaces metadata, a correction record disagrees with its public-surface state, or urgency bypasses migration                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
@@ -1561,6 +1622,22 @@ reviewed and tested normally before a new full exact-head release gate.
 Rejected: another unchanged retry, accepting a named flake, copying an unreviewed
 patch, allowing product or release-output changes in the repair, or merging around a
 required check.
+
+### DEC-33 — Charts reads Core's resolved calendar through an internal entry
+
+**Reference:** `spec:AST-017/DEC-33`
+**Decider:** pending engineering-owner approval
+
+Chart value formats receive the calendar that the provider resolves, the same
+calendar Core's date components show (`spec:AST-115` FR4), and Core's resolver
+is an internal entry. Charts is private and pins Core's exact version, so it
+moves in lockstep with Core, and FR21 admits it beside Lab. Native is also
+private and pins Core's exact version, but Core's internal entries are web
+modules and native apps load nothing web (`spec:AST-082/DEC-7`), so FR21 does not
+admit Native.
+
+Rejected: a public resolved-calendar hook, because no current Core contract
+defines one.
 
 ## Open questions
 

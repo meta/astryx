@@ -23,6 +23,7 @@ integration-add-theme            <text>
 integration-check                <text>
 integration-component-conflicts  <text>
 integration-doc-conflicts        <text>
+integration-example-scope        <text>
 integration-pack-check           <text>
 integration-template-conflicts   <text>
 is-error                         <text>

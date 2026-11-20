@@ -138,7 +138,7 @@ function belongsToSomethingElse(element: Element): boolean {
  * too. A press on the container's surface or on `ownAction` is left alone.
  * Not part of the package's public API.
  */
-export function cancelNestedTouchPress(
+export function cancelNestedPress(
   event: PointerEvent<HTMLElement>,
   container: HTMLElement | null,
   ownAction: Element | null,
@@ -377,7 +377,7 @@ export function useClickableContainerProxy({
       if (disabled) {
         return;
       }
-      cancelNestedTouchPress(
+      cancelNestedPress(
         event,
         containerRef.current,
         interactiveRef?.current ?? null,

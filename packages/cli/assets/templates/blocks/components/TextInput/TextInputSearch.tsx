@@ -5,7 +5,7 @@
 import {useState} from 'react';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Stack} from '@astryxdesign/core/Layout';
-import {MagnifyingGlassIcon} from '@heroicons/react/24/outline';
+import {SearchIcon} from '@astryxdesign/template-icons';
 
 export default function TextInputSearch() {
   const [query, setQuery] = useState('');
@@ -19,7 +19,7 @@ export default function TextInputSearch() {
           value={query}
           onChange={setQuery}
           placeholder="Search projects…"
-          startIcon={MagnifyingGlassIcon}
+          startIcon={SearchIcon}
           hasClear
         />
         <TextInput
@@ -27,7 +27,7 @@ export default function TextInputSearch() {
           value={filter}
           onChange={setFilter}
           placeholder="Filter…"
-          startIcon={MagnifyingGlassIcon}
+          startIcon={SearchIcon}
           hasClear
         />
       </Stack>

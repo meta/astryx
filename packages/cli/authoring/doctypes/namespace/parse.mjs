@@ -5,7 +5,7 @@
  * `parseNamespace` or use `parseDoc`.
  */
 
-import {NamespaceDocKindSchema} from '../_schema.mjs';
+import {docSchemas} from '../_schema.mjs';
 import {formatZodError} from '../../_shared/errors.mjs';
 
 /** @typedef {import('../types.js').NamespaceDoc} NamespaceDoc */
@@ -17,7 +17,7 @@ import {formatZodError} from '../../_shared/errors.mjs';
  * @returns {NamespaceDoc}
  */
 export function parseNamespace(input, label = 'namespace doc') {
-  const result = NamespaceDocKindSchema.safeParse(input);
+  const result = docSchemas().NamespaceDocKindSchema.safeParse(input);
   if (!result.success) {
     throw new Error(formatZodError(label, result.error));
   }

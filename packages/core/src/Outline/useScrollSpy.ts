@@ -35,7 +35,9 @@
  */
 
 import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {scrollingAncestor} from '../utils/scrollingAncestor';
+import {reducedMotionFade} from '../motion/reducedMotion';
 import type {OutlineItem} from './types';
 
 /**
@@ -104,15 +106,19 @@ function scrollToTarget(
   scrollTarget: HTMLElement | Window,
   offset: number,
 ): void {
+  // Under reduced motion the scroll does not travel: it lands at once, even
+  // on a page that sets a smooth scroll-behavior.
+  const behavior: ScrollBehavior =
+    reducedMotionFade(target) == null ? 'smooth' : 'instant';
   if (offset === 0) {
-    target.scrollIntoView({behavior: 'smooth', block: 'start'});
+    target.scrollIntoView({behavior, block: 'start'});
     return;
   }
 
   const delta =
     target.getBoundingClientRect().top -
     getRestingTop(target, scrollRoot, offset);
-  scrollTarget.scrollBy({top: delta, behavior: 'smooth'});
+  scrollTarget.scrollBy({top: delta, behavior});
 }
 
 /**
@@ -126,11 +132,11 @@ function scrollToTarget(
  * the first), the first item is active; at the bottom, the last item is active.
  */
 function resolveActiveId(
-  items: OutlineItem[],
+  ids: ReadonlyArray<string>,
   scrollRoot: HTMLElement | null,
   offset: number,
 ): string | undefined {
-  if (items.length === 0) {
+  if (ids.length === 0) {
     return undefined;
   }
 
@@ -141,12 +147,12 @@ function resolveActiveId(
       : window.innerHeight + window.scrollY >=
         document.documentElement.scrollHeight - 2;
   if (atBottom) {
-    return items[items.length - 1].id;
+    return ids[ids.length - 1];
   }
 
-  let activeId = items[0].id;
-  for (const item of items) {
-    const element = document.getElementById(item.id);
+  let activeId = ids[0];
+  for (const id of ids) {
+    const element = document.getElementById(id);
     if (element == null) {
       continue;
     }
@@ -154,7 +160,7 @@ function resolveActiveId(
     // 1px of tolerance absorbs sub-pixel rounding after a scroll lands.
     const top = element.getBoundingClientRect().top;
     if (top <= getRestingTop(element, scrollRoot, offset) + 1) {
-      activeId = item.id;
+      activeId = id;
     } else {
       break;
     }
@@ -175,7 +181,7 @@ interface UseScrollSpyOptions {
   offset?: number;
   /** Scroll container to track, instead of the nearest scrollable ancestor. */
   scrollContainerRef?: React.RefObject<HTMLElement | null>;
-  /** Whether {@link UseScrollSpyResult.scrollTo} performs the smooth scroll. */
+  /** Whether {@link UseScrollSpyResult.scrollTo} performs the scroll. */
   hasScrollOnClick?: boolean;
   /** Called when a navigation begins, before the scroll starts. */
   onNavigateStart?: (id: string) => void;
@@ -218,7 +224,10 @@ export function useScrollSpy({
   const [uncontrolledActiveId, setUncontrolledActiveId] = useState<
     string | undefined
   >(items[0]?.id);
-  const activeIdRef = useRef<string | undefined>(activeId);
+  // The uncontrolled active item, for the scroll listener's comparison. It
+  // starts as the state does, and every handler that sets the uncontrolled
+  // state writes it too.
+  const activeIdRef = useRef<string | undefined>(uncontrolledActiveId);
   // While true, scroll-spy ignores scroll updates because a navigation is
   // driving a programmatic scroll. Released when it settles or the user scrolls.
   const suppressRef = useRef(false);
@@ -232,14 +241,12 @@ export function useScrollSpy({
   // Latest scroll-position resolver, so a navigation can resume tracking when
   // the user scrolls during the programmatic scroll.
   const syncRef = useRef<(() => void) | null>(null);
-  // Keep latest items/callback in refs so the scroll listener effect doesn't
-  // re-subscribe on every render (items is a fresh array each render).
-  const itemsRef = useRef(items);
-  itemsRef.current = items;
-  const onActiveIdChangeRef = useRef(onActiveIdChange);
-  onActiveIdChangeRef.current = onActiveIdChange;
-  const itemIds = items.map(item => item.id).join('\n');
-  activeIdRef.current = isControlled ? activeId : uncontrolledActiveId;
+  // The scroll listener reads the callback through this ref, so it does not
+  // subscribe again on each render.
+  const onActiveIdChangeRef = useCommittedRef(onActiveIdChange);
+  // Items is a new array each render. The scroll listener subscribes with
+  // their ids, and subscribes again only when the ids change.
+  const itemIds = JSON.stringify(items.map(item => item.id));
 
   /**
    * The element whose scroll position drives the outline: the explicit
@@ -262,6 +269,7 @@ export function useScrollSpy({
 
     const scrollRoot = getScrollRoot();
     const scrollTarget: HTMLElement | Window = scrollRoot ?? window;
+    const ids = JSON.parse(itemIds) as string[];
 
     let frame = 0;
     const update = () => {
@@ -269,11 +277,7 @@ export function useScrollSpy({
       if (suppressRef.current) {
         return;
       }
-      const nextActiveId = resolveActiveId(
-        itemsRef.current,
-        scrollRoot,
-        offset,
-      );
+      const nextActiveId = resolveActiveId(ids, scrollRoot, offset);
       if (nextActiveId != null && nextActiveId !== activeIdRef.current) {
         activeIdRef.current = nextActiveId;
         setUncontrolledActiveId(nextActiveId);
@@ -299,7 +303,7 @@ export function useScrollSpy({
         cancelAnimationFrame(frame);
       }
     };
-  }, [isControlled, itemIds, offset, getScrollRoot]);
+  }, [isControlled, itemIds, offset, getScrollRoot, onActiveIdChangeRef]);
 
   // Tear down any in-flight navigation's listeners when the Outline unmounts.
   useEffect(() => {
@@ -310,6 +314,7 @@ export function useScrollSpy({
 
   const setActiveId = (nextActiveId: string) => {
     if (!isControlled) {
+      activeIdRef.current = nextActiveId;
       setUncontrolledActiveId(nextActiveId);
     }
     onActiveIdChange?.(nextActiveId);

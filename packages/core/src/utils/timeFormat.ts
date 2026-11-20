@@ -3,9 +3,10 @@
 /**
  * @file timeFormat.ts
  * @input An ISO time or typed text, plus the provider's BCP 47 locale
- * @output Exports resolveHourFormat, formatLocaleTime, and parseLocaleTime
- * @position Internal shared helper for TimeInput and DateTimeInput; not part
- *   of the public surface
+ * @output Exports resolveHourFormat, formatLocaleTime, parseLocaleTime,
+ *   isLocaleTimeComplete, and formatElapsedDuration
+ * @position Internal shared helper for TimeInput, DateTimeInput, and Timer;
+ *   not part of the public surface
  *
  * The hour cycle, digits, separator and day-period words come from Intl, so a
  * field reads like `Timestamp`. A `-u-hc-` extension on the provider locale
@@ -17,6 +18,7 @@
  * - /packages/core/src/utils/timeFormat.test.ts
  * - /packages/core/src/TimeInput/TimeInput.tsx
  * - /packages/core/src/DateTimeInput/DateTimeInput.tsx
+ * - /packages/core/src/Timer/Timer.tsx
  */
 
 import type {Locale} from '../i18n/types';
@@ -244,15 +246,11 @@ export function formatLocaleTime(
 }
 
 /**
- * Parses typed text into an ISO time, accepting the locale's digits,
- * separator, and day-period words as well as everything `parseTimeInput`
- * accepts. Returns null when no reading fits.
+ * Typed text in the English-tolerant parser's form: ASCII digits, `:`
+ * between the parts, and the locale's day period, if any, written as a
+ * trailing "am" or "pm". Returns null for empty text.
  */
-export function parseLocaleTime(
-  input: string,
-  locale: Locale,
-  includeSeconds: boolean = false,
-): ISOTimeString | null {
+function readLocaleTime(input: string, locale: Locale): string | null {
   if (!input) {
     return null;
   }
@@ -302,5 +300,102 @@ export function parseLocaleTime(
   if (isPM !== null) {
     text = `${text} ${isPM ? 'pm' : 'am'}`;
   }
-  return parseTimeInput(text, includeSeconds);
+  return text;
+}
+
+/**
+ * Parses typed text into an ISO time, accepting the locale's digits,
+ * separator, and day-period words as well as everything `parseTimeInput`
+ * accepts. Returns null when no reading fits.
+ */
+export function parseLocaleTime(
+  input: string,
+  locale: Locale,
+  includeSeconds: boolean = false,
+): ISOTimeString | null {
+  const text = readLocaleTime(input, locale);
+  return text === null ? null : parseTimeInput(text, includeSeconds);
+}
+
+// The day period as `parseTimeInput` reads it.
+const DAY_PERIOD = /\s*[ap]\.?m?\.?\s*$/;
+const CLOCK_PARTS = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/;
+const COMPACT_PARTS = /^(\d{2})(\d{2})(\d{2})?$/;
+
+/**
+ * Whether typed text holds every part of a time: the hour, both minute
+ * digits, both second digits when the field shows seconds, and, in a
+ * 12-hour field, a day period unless the hour reads as 0 or 13 through 23.
+ * Text that holds every part can still name no time ("25:99").
+ */
+export function isLocaleTimeComplete(
+  input: string,
+  locale: Locale,
+  hourFormat: HourFormat,
+  includeSeconds: boolean = false,
+): boolean {
+  const text = readLocaleTime(input, locale);
+  if (text === null) {
+    return false;
+  }
+  const hasDayPeriod = DAY_PERIOD.test(text);
+  const digits = text.replace(DAY_PERIOD, '').trim();
+  const parts = CLOCK_PARTS.exec(digits) ?? COMPACT_PARTS.exec(digits);
+  if (parts === null || (includeSeconds && parts[3] === undefined)) {
+    return false;
+  }
+  if (hourFormat === '24h' || hasDayPeriod) {
+    return true;
+  }
+  const hour = Number(parts[1]);
+  return hour === 0 || (hour >= 13 && hour <= 23);
+}
+
+export type ElapsedDurationUnit = 'hour' | 'minute' | 'second';
+
+const unitFormats = new Map<string, Intl.NumberFormat>();
+const unitLists = new Map<string, Intl.ListFormat>();
+
+function unitFormat(
+  locale: Locale,
+  unit: ElapsedDurationUnit,
+  isPadded: boolean,
+): Intl.NumberFormat {
+  const key = `${locale}|${unit}|${String(isPadded)}`;
+  let format = unitFormats.get(key);
+  if (format == null) {
+    format = new Intl.NumberFormat(locale, {
+      style: 'unit',
+      unit,
+      unitDisplay: 'narrow',
+      minimumIntegerDigits: isPadded ? 2 : 1,
+      // A count is never grouped: 1000 hours reads "1000h".
+      useGrouping: false,
+    });
+    unitFormats.set(key, format);
+  }
+  return format;
+}
+
+/**
+ * Formats a compact elapsed duration as the locale writes it, from its parts,
+ * largest unit first. Each part after the first has two digits.
+ * en: [["minute", 2], ["second", 8]] → "2m 08s"; [["hour", 1], ["minute", 2]]
+ * → "1h 02m"; [["second", 34]] → "34s". Unit names, digits and joining come
+ * from Intl, so no catalog string is involved.
+ */
+export function formatElapsedDuration(
+  locale: Locale,
+  parts: ReadonlyArray<readonly [ElapsedDurationUnit, number]>,
+): string {
+  let list = unitLists.get(locale);
+  if (list == null) {
+    list = new Intl.ListFormat(locale, {type: 'unit', style: 'narrow'});
+    unitLists.set(locale, list);
+  }
+  return list.format(
+    parts.map(([unit, value], index) =>
+      unitFormat(locale, unit, index > 0).format(value),
+    ),
+  );
 }

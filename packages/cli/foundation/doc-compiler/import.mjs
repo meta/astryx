@@ -28,13 +28,19 @@ import * as fs from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
 import {importUrl} from '../fs/import-url.mjs';
+import {jitiCacheOptions} from '../fs/jiti-cache.mjs';
 import {
   importUserModule,
   readFreshInTurn,
   readInTurn,
 } from '../fs/module-loader.mjs';
 import {fileStamp, recordContentRead} from '../fs/read-record.mjs';
-import {readStore, storedKey, STORED_DOCS_FILE} from './stored-docs.mjs';
+import {
+  noteStoredExport,
+  readStore,
+  storedKey,
+  STORED_DOCS_FILE,
+} from './stored-docs.mjs';
 
 const requireFromHere = createRequire(import.meta.url);
 
@@ -131,6 +137,7 @@ function storedModule(file) {
       enumerable: true,
       writable: true,
     });
+    noteStoredExport(exports[name], key, name);
   }
   Object.defineProperty(module, Symbol.toStringTag, {value: 'Module'});
   Object.preventExtensions(module);
@@ -195,16 +202,21 @@ export function importTemplateModule(file) {
     'template',
     first => {
       if (first.endsWith('.ts')) {
-        jsxJiti ??= createJiti(import.meta.url, {jsx: true});
+        jsxJiti ??= createJiti(import.meta.url, {
+          ...jitiCacheOptions(),
+          jsx: true,
+        });
         return jsxJiti.import(first);
       }
       return importInTurn(first, `file://${first}`);
     },
     changed =>
       changed.endsWith('.ts')
-        ? createJiti(import.meta.url, {jsx: true, moduleCache: false}).import(
-            changed,
-          )
+        ? createJiti(import.meta.url, {
+            ...jitiCacheOptions(),
+            jsx: true,
+            moduleCache: false,
+          }).import(changed)
         : importFresh(changed),
   );
 }

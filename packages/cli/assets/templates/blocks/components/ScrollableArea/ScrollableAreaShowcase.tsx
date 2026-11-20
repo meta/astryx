@@ -44,7 +44,7 @@ const SECTIONS = [
 
 export default function ScrollableAreaShowcase() {
   return (
-    <Card width={380} padding={0}>
+    <Card width={380} maxWidth="100%" padding={0}>
       {/* The heading sits inside the viewport, so it scrolls away with the
           content instead of staying pinned above it. */}
       <ScrollableArea

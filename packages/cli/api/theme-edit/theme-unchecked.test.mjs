@@ -60,6 +60,31 @@ describe('saved, not checked', () => {
       code: 'ERR_THEME_NOT_CHECKED',
       cause: expect.stringContaining("reading 'use'"),
     });
+    // Nothing was rendered, so `see` names why, not a current preview.html.
+    expect(r.data.see).toContain(
+      'the change is saved, but the components could not be rendered here',
+    );
+    expect(r.data.see).toContain("reading 'use'");
+    expect(r.data.see).not.toContain('current after this change');
+    expect(r.data.see).not.toContain('run it with --png');
+    // The same set again, over a preview.html from before (rendered from
+    // other settings): not the no-change shortcut, which would call it
+    // current; the render is tried again and its cause named.
+    fs.writeFileSync(
+      path.join(cwd, 'themes/u/preview.html'),
+      '<html>old</html>\n',
+    );
+    const again = await themeEditSet(
+      'u',
+      '--color-background-body',
+      '#fafafa',
+      {
+        cwd,
+      },
+    );
+    expect(again.data.notChecked?.code).toBe('ERR_THEME_NOT_CHECKED');
+    expect(again.data.see).not.toContain('current after this change');
+    expect(again.data.see).toContain('could not be rendered here');
     const settings = JSON.parse(
       fs.readFileSync(path.join(cwd, 'themes/u/u.settings.json'), 'utf8'),
     );

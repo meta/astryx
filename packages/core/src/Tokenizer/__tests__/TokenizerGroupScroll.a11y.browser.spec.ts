@@ -42,11 +42,24 @@ function tabKey(browserName: string, reverse = false): string {
   return `${browserName === 'webkit' && process.platform === 'darwin' ? 'Alt+' : ''}${reverse ? 'Shift+' : ''}Tab`;
 }
 
+/** The part of Storybook's preview this spec reads: the story render's phase. */
+interface StorybookPreviewWindow extends Window {
+  __STORYBOOK_PREVIEW__?: {currentRender?: {phase?: string}};
+}
+
 async function mount(page: Page, story: string) {
   await page.setViewportSize({width: 600, height: 400});
   await page.goto(`${storybook.origin}/iframe.html?id=${story}&viewMode=story`);
   await expect(page.locator('.astryx-token').first()).toBeVisible();
   await page.evaluate(async () => document.fonts.ready);
+  // A story's play function can scroll the strip, to its end and back to
+  // rest. Wait until Storybook has finished the render, play included, so
+  // none of its scrolls land inside a case.
+  await page.waitForFunction(
+    () =>
+      (window as StorybookPreviewWindow).__STORYBOOK_PREVIEW__?.currentRender
+        ?.phase === 'finished',
+  );
 }
 
 // The strip is the row's child that holds the tokens; the end controls are its
@@ -95,21 +108,46 @@ async function fadedSides(strip: Locator): Promise<Sides> {
     }
     const isClear = (stop: string) =>
       /^(transparent|rgba\(0, 0, 0, 0\))/.test(stop);
-    const first = isClear(stops[0]);
-    const last = isClear(stops[stops.length - 1]);
+    // A stop's position follows its colour. An edge fades only when its clear
+    // stop and the stop beside it sit apart; at one position the clear stop
+    // paints nothing.
+    const position = (stop: string) =>
+      stop.replace(/^(transparent|rgba?\([^)]*\))\s*/, '');
+    const fades = (clear: string, next: string) =>
+      isClear(clear) && position(clear) !== position(next);
+    const first = fades(stops[0], stops[1]);
+    const last = fades(stops[stops.length - 1], stops[stops.length - 2]);
     return leftward ? {left: last, right: first} : {left: first, right: last};
   });
 }
 
+/**
+ * Scrolls the strip to `place` and waits until it is there. WebKit can drop a
+ * scroll request that comes right after mount or under load, so the request
+ * repeats until the scroll position arrives. The fades are read only after
+ * that, so a dropped request never reads as a wrong fade.
+ */
 async function scrollStrip(strip: Locator, place: 'start' | 'middle' | 'end') {
-  await strip.evaluate((element, where) => {
-    const max = element.scrollWidth - element.clientWidth;
-    const offset =
-      where === 'start' ? 0 : where === 'end' ? max : Math.round(max / 2);
-    // RTL scroll offsets run negative from the inline start.
-    const sign = getComputedStyle(element).direction === 'rtl' ? -1 : 1;
-    element.scrollLeft = sign * offset;
-  }, place);
+  await expect
+    .poll(async () =>
+      strip.evaluate((element, where) => {
+        const max = element.scrollWidth - element.clientWidth;
+        const offset =
+          where === 'start' ? 0 : where === 'end' ? max : Math.round(max / 2);
+        const isThere = () =>
+          Math.abs(Math.abs(element.scrollLeft) - offset) <= 1;
+        if (isThere()) {
+          return true;
+        }
+        // RTL scroll offsets run negative from the inline start.
+        const sign = getComputedStyle(element).direction === 'rtl' ? -1 : 1;
+        element.scrollTo({left: sign * offset, behavior: 'instant'});
+        // The next poll confirms the position, so a scroll that is accepted
+        // and then undone is not counted.
+        return false;
+      }, place),
+    )
+    .toBe(true);
 }
 
 async function scrollRange(strip: Locator) {

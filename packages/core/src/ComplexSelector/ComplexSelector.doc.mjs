@@ -128,6 +128,34 @@ export const docs = {
           default: "'Select...'",
         },
         {
+          name: 'isLabelHidden',
+          type: 'boolean',
+          description: 'Visually hides the label while keeping it accessible.',
+          default: 'false',
+        },
+        {
+          name: 'description',
+          type: 'string',
+          description: 'Helper text displayed below the label.',
+        },
+        {
+          name: 'labelTooltip',
+          type: 'string',
+          description: 'Tooltip text displayed next to the label.',
+        },
+        {
+          name: 'isOptional',
+          type: 'boolean',
+          description: 'Marks the field as optional.',
+          default: 'false',
+        },
+        {
+          name: 'isRequired',
+          type: 'boolean',
+          description: 'Marks the field as required.',
+          default: 'false',
+        },
+        {
           name: 'isDisabled',
           type: 'boolean',
           description: 'Disables the selector.',
@@ -172,7 +200,7 @@ export const docs = {
         {
           name: 'startIcon',
           type: 'ReactNode | IconType',
-          description: 'Icon displayed at the start of the trigger.',
+          description: 'Icon displayed at the start of the trigger; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
         },
         {
           name: 'width',
@@ -397,7 +425,7 @@ export const docsDense = {
     triggerLabel: 'Closed trigger label/content.',
     variant:
       'input for forms; secondary beside secondary buttons; ghost beside ghost buttons.',
-    startIcon: 'Leading trigger icon.',
+    startIcon: 'Leading trigger icon; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     placement: 'Popup placement.',
     alignment: 'Popup alignment.',
     renderTrigger:
