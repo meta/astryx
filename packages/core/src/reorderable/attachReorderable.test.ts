@@ -696,6 +696,10 @@ describe('createReorderable attach (spec:AST-103 FR4b)', () => {
       'Milk',
     ]);
     expect(announced()).not.toContain("Can't move Milk");
+    // A keyless neighbour is named by its text, not by its place.
+    expect(announced()[0]).toBe(
+      'Milk, position 2 of 3, after Note, before Eggs',
+    );
   });
 
   it('puts a handle with its own tabindex="-1" in the Tab order, and detach restores it', () => {

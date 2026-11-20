@@ -189,14 +189,6 @@ export function attachReorderable(
     items()
       .map(item => item.element)
       .filter(element => element instanceof HTMLElement);
-  // The items that can be wired: a key and both elements.
-  const readItems = (): ReadonlyArray<ReorderableItem> =>
-    items().filter(
-      item =>
-        item.key != null &&
-        item.element instanceof HTMLElement &&
-        item.handle instanceof HTMLElement,
-    );
 
   const rows: ReorderRows = {
     read: () => [...readRows()],
@@ -246,9 +238,17 @@ export function attachReorderable(
     const modeKey = modeHandle == null ? undefined : wired.get(modeHandle)?.key;
     const current = new Map<HTMLElement, ReorderableItem>();
     const present = new Set<HTMLElement>();
-    for (const item of readItems()) {
+    // Every row gets its name, a keyless one too: a neighbour's announcement
+    // names it. Only an item with a key and a handle is wired.
+    for (const item of items()) {
+      if (!(item.element instanceof HTMLElement)) {
+        continue;
+      }
       present.add(item.element);
-      const name = nameOf(item, naming);
+      const hasHandle = item.handle instanceof HTMLElement;
+      const name = hasHandle
+        ? nameOf(item, naming)
+        : (readAccessibleName(item.element) ?? '');
       const entry = named.get(item.element);
       if (entry == null || entry.name !== name) {
         entry?.release();
@@ -257,7 +257,11 @@ export function attachReorderable(
           release: controller.registerName(item.element, name),
         });
       }
-      if (options.isReorderable?.(item.key) !== false) {
+      if (
+        item.key != null &&
+        hasHandle &&
+        options.isReorderable?.(item.key) !== false
+      ) {
         current.set(item.handle, item);
       }
     }
