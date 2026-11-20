@@ -182,8 +182,9 @@ export interface KbdProps extends BaseProps<HTMLSpanElement> {
 /**
  * Displays a keyboard shortcut as styled <kbd> elements.
  *
- * A general-purpose component for rendering keyboard shortcuts
- * anywhere in the system — tooltips, menus, documentation, etc.
+ * A general-purpose component for rendering keyboard shortcuts in menus,
+ * help text and documentation. In a Tooltip, write the shortcut in the
+ * tooltip's text instead.
  *
  * Platform-aware: `mod` renders as ⌘ on macOS and Ctrl elsewhere.
  * SSR-safe — defers platform detection through useSyncExternalStore to avoid
