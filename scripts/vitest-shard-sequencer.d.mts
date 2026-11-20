@@ -9,7 +9,7 @@
 import type {BaseSequencer} from 'vitest/node';
 
 export declare const DURATIONS: string;
-export declare const PER_FILE_SECONDS: number;
+export declare function durationsFile(): string;
 export declare function partitionByDuration(
   files: string[],
   count: number,
@@ -25,6 +25,9 @@ export declare function mergeRecord(
   exists?: (file: string) => boolean,
 ): Record<string, number>;
 export declare function readDurations(file?: string): Record<string, number>;
+export declare function plainLog(text: string): string;
+export declare function nodeLegLogs(text: string): Map<string, string>;
+export declare function countedTestFiles(text: string): number | null;
 export declare function recordDurations(text: string): Record<string, number>;
 declare const DurationShardSequencer: typeof BaseSequencer;
 export default DurationShardSequencer;

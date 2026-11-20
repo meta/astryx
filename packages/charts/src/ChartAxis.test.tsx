@@ -2,17 +2,26 @@
 
 /**
  * @file ChartAxis.test.tsx
- * @input Uses vitest, @testing-library/react, Chart, ChartAxis, bar mark
+ * @input Uses vitest, @testing-library/react, Chart, ChartAxis, currency, bar mark
  * @output Functional tests for axis rendering — group semantics, band/linear
  *         tick labels, physical edge placement, default edge-line rules,
  *         custom formatting, grapheme-safe truncation and density, and label capping
  * @position Colocated test for ChartAxis.tsx (issue #4295 viz coverage)
  */
 
-import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  expectTypeOf,
+  vi,
+  beforeEach,
+  afterEach,
+} from 'vitest';
 import {render, screen, act, within} from '@testing-library/react';
 import {Chart} from './Chart';
-import {ChartAxis} from './ChartAxis';
+import {ChartAxis, type ChartAxisProps} from './ChartAxis';
+import {currency} from './formatters';
 import {bar} from './marks/bar';
 
 const DATA = [
@@ -60,6 +69,11 @@ function renderChart(axes: React.ReactNode, data = DATA) {
   return utils;
 }
 
+function tickLabels(name: string): string[] {
+  const axis = screen.getByRole('group', {name});
+  return Array.from(axis.querySelectorAll('text'), t => t.textContent ?? '');
+}
+
 describe('ChartAxis bottom (band scale)', () => {
   it('renders a labeled group with one tick label per category', () => {
     renderChart(<ChartAxis position="bottom" />);
@@ -79,6 +93,11 @@ describe('ChartAxis bottom (band scale)', () => {
     expect(edge).toHaveAttribute('x2', '528');
   });
 
+  it('keeps the category text when tickFormat returns undefined', () => {
+    renderChart(<ChartAxis position="bottom" tickFormat={() => undefined} />);
+    expect(tickLabels('bottom axis')).toEqual(['Jan', 'Feb', 'Mar']);
+  });
+
   it('caps labels to maxTicks by evenly skipping categories', () => {
     renderChart(<ChartAxis position="bottom" maxTicks={2} />);
     const axis = screen.getByRole('group', {name: 'bottom axis'});
@@ -86,6 +105,29 @@ describe('ChartAxis bottom (band scale)', () => {
     expect(within(axis).getByText('Jan')).toBeInTheDocument();
     expect(within(axis).getByText('Mar')).toBeInTheDocument();
     expect(within(axis).queryByText('Feb')).not.toBeInTheDocument();
+  });
+
+  it('keeps the last label when thinning cannot land on it', () => {
+    const days = Array.from({length: 14}, (_, index) => ({
+      month: `Day ${index + 1}`,
+      sales: index,
+    }));
+    renderChart(<ChartAxis position="bottom" maxTicks={7} />, days);
+    const axis = screen.getByRole('group', {name: 'bottom axis'});
+    const labels = Array.from(axis.querySelectorAll('text')).map(
+      text => text.textContent,
+    );
+    // 14 labels capped at 7 → step 2. Day 13 would be the last kept label;
+    // Day 14 replaces it because it sits closer than one step.
+    expect(labels).toEqual([
+      'Day 1',
+      'Day 3',
+      'Day 5',
+      'Day 7',
+      'Day 9',
+      'Day 11',
+      'Day 14',
+    ]);
   });
 
   it('automatically reduces categorical labels as the plot narrows', () => {
@@ -174,6 +216,31 @@ describe('ChartAxis left (linear scale)', () => {
     const axis = screen.getByRole('group', {name: 'left axis'});
     expect(within(axis).getByText('$0')).toBeInTheDocument();
     expect(within(axis).getByText('$10')).toBeInTheDocument();
+  });
+
+  it('shows the default tick text when tickFormat returns null', () => {
+    const data = [
+      {month: 'Jan', sales: 1_200_000},
+      {month: 'Feb', sales: 1_500_000},
+    ];
+    const {unmount} = renderChart(<ChartAxis position="left" />, data);
+    const defaults = tickLabels('left axis');
+    unmount();
+
+    renderChart(<ChartAxis position="left" tickFormat={() => null} />, data);
+    expect(tickLabels('left axis')).toEqual(defaults);
+    // d3's default groups digits; String(1000000) would not.
+    expect(defaults).toContain('1,000,000');
+  });
+
+  it('accepts a currency() format as tickFormat', () => {
+    expectTypeOf(currency('$')).toExtend<
+      NonNullable<ChartAxisProps['tickFormat']>
+    >();
+    renderChart(
+      <ChartAxis position="left" tickFormat={currency('$', 'en-US')} />,
+    );
+    expect(tickLabels('left axis')).toContain('$10');
   });
 
   it('showTicks draws a perpendicular mark per tick and forces the axis line on', () => {

@@ -8,11 +8,12 @@ import {Button} from '@astryxdesign/core/Button';
 import {Section} from '@astryxdesign/core/Section';
 import {Stack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
+import {useToast} from '@astryxdesign/core/Toast';
 
-const LANDSCAPE_IMAGE_URL =
-  '/template-assets/light-scene-horizontal-1.png';
+const LANDSCAPE_IMAGE_URL = '/template-assets/light-scene-horizontal-1.png';
 
 export default function MediaThemeImageOverlay() {
+  const showToast = useToast();
   return (
     <AspectRatio
       ratio={16 / 9}
@@ -46,8 +47,21 @@ export default function MediaThemeImageOverlay() {
               hard-coded color overrides.
             </Text>
             <Stack direction="horizontal" gap={2} wrap="wrap">
-              <Button label="Watch" size="sm" />
-              <Button label="Details" variant="secondary" size="sm" />
+              <Button
+                label="Watch"
+                size="sm"
+                onClick={() =>
+                  showToast({body: 'Demo: the video would play here'})
+                }
+              />
+              <Button
+                label="Details"
+                variant="secondary"
+                size="sm"
+                onClick={() =>
+                  showToast({body: 'Demo: the details would open here'})
+                }
+              />
             </Stack>
           </Stack>
         </MediaTheme>

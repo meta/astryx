@@ -568,6 +568,9 @@ function holdKeptInside(layer: Element, until: InputHoldEnd): () => void {
   const wasInert = layer.hasAttribute('inert');
   const previousAriaHidden = layer.getAttribute('aria-hidden');
   let isInert = false;
+  // A focus check queued before the release can run after it. A released hold
+  // changes the layer no more.
+  let isReleased = false;
   const stops: (() => void)[] = [];
 
   const hasFocusInside = () => {
@@ -580,7 +583,7 @@ function holdKeptInside(layer: Element, until: InputHoldEnd): () => void {
     }
   };
   const makeInert = () => {
-    if (isInert) {
+    if (isInert || isReleased) {
       return;
     }
     isInert = true;
@@ -648,7 +651,6 @@ function holdKeptInside(layer: Element, until: InputHoldEnd): () => void {
     );
   }
 
-  let isReleased = false;
   const release = () => {
     if (isReleased) {
       return;

@@ -37,6 +37,7 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {useCommittedRef} from '../hooks/useCommittedRef';
 import {scrollingAncestor} from '../utils/scrollingAncestor';
+import {reducedMotionFade} from '../motion/reducedMotion';
 import type {OutlineItem} from './types';
 
 /**
@@ -105,15 +106,19 @@ function scrollToTarget(
   scrollTarget: HTMLElement | Window,
   offset: number,
 ): void {
+  // Under reduced motion the scroll does not travel: it lands at once, even
+  // on a page that sets a smooth scroll-behavior.
+  const behavior: ScrollBehavior =
+    reducedMotionFade(target) == null ? 'smooth' : 'instant';
   if (offset === 0) {
-    target.scrollIntoView({behavior: 'smooth', block: 'start'});
+    target.scrollIntoView({behavior, block: 'start'});
     return;
   }
 
   const delta =
     target.getBoundingClientRect().top -
     getRestingTop(target, scrollRoot, offset);
-  scrollTarget.scrollBy({top: delta, behavior: 'smooth'});
+  scrollTarget.scrollBy({top: delta, behavior});
 }
 
 /**
@@ -176,7 +181,7 @@ interface UseScrollSpyOptions {
   offset?: number;
   /** Scroll container to track, instead of the nearest scrollable ancestor. */
   scrollContainerRef?: React.RefObject<HTMLElement | null>;
-  /** Whether {@link UseScrollSpyResult.scrollTo} performs the smooth scroll. */
+  /** Whether {@link UseScrollSpyResult.scrollTo} performs the scroll. */
   hasScrollOnClick?: boolean;
   /** Called when a navigation begins, before the scroll starts. */
   onNavigateStart?: (id: string) => void;

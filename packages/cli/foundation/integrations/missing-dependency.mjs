@@ -14,9 +14,12 @@
  *   design, so a manifest that needs either has a packaging bug, which
  *   reinstalling does not clear. A package listed both as a dependency and
  *   as an optional one is optional, as npm reads it.
+ *   `brokenInstall(message)`: the same finding with the package that needs
+ *   it and the importing file.
  * @position Read by the project (foundation/config/project.mjs) to tell an
  *   install the user can repair from a dependency's own packaging bug, which
- *   stays out of the project's issues.
+ *   stays out of the project's issues, and by the API's broken-install
+ *   refusal (api/error.mjs).
  */
 
 import * as fs from 'node:fs';
@@ -73,11 +76,12 @@ function parse(message) {
 }
 
 /**
- * The missing package's name when the package that imports it declares it.
+ * The missing package, the package that needs it and the importing file,
+ * when that package declares the missing one: a broken install.
  * @param {string} message
- * @returns {string | null}
+ * @returns {{name: string, requiredBy: string, importer: string} | null}
  */
-export function missingDeclaredDependency(message) {
+export function brokenInstall(message) {
   const found = parse(message);
   if (!found) return null;
   let dir = path.dirname(found.importer);
@@ -87,7 +91,9 @@ export function missingDeclaredDependency(message) {
       try {
         const pkg = JSON.parse(fs.readFileSync(file, 'utf-8'));
         if (typeof pkg?.name === 'string') {
-          return requires(pkg, found.name) ? found.name : null;
+          return requires(pkg, found.name)
+            ? {name: found.name, requiredBy: pkg.name, importer: found.importer}
+            : null;
         }
       } catch {
         return null;
@@ -97,4 +103,13 @@ export function missingDeclaredDependency(message) {
     if (parent === dir) return null;
     dir = parent;
   }
+}
+
+/**
+ * The missing package's name when the package that imports it declares it.
+ * @param {string} message
+ * @returns {string | null}
+ */
+export function missingDeclaredDependency(message) {
+  return brokenInstall(message)?.name ?? null;
 }

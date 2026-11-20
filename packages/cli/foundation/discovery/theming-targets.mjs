@@ -20,6 +20,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {reusedWhileUnchanged} from '../fs/read-record.mjs';
 import {loadComponentDoc} from './component-loader.mjs';
+import {coreComponentDocs} from './core-component-docs.mjs';
 import {compareText} from '../text/compare-text.mjs';
 
 const SKIP_DIRS = new Set(['node_modules', '__tests__']);
@@ -57,11 +58,12 @@ function targetKey(className) {
  * Unreadable docs are skipped rather than fatal — a single malformed doc must
  * not take out theme validation or the listing.
  *
- * The scan walks every folder under `src` and reads every component doc. A
- * process scans each Core once. It reuses that scan while every folder and
- * doc it read is unchanged, as the docs and search catalogs do. A `src`
- * reached through a symlink, as a project's node_modules reaches Core, shares
- * the scan of its real path. Each call gets its own copy of the rows.
+ * The scan reads every component doc under `src` (core-component-docs.mjs,
+ * which theme build's other views of Core's docs share). A process scans each
+ * Core once. It reuses that scan while every folder and doc it read is
+ * unchanged, as the docs and search catalogs do. A `src` reached through a
+ * symlink, as a project's node_modules reaches Core, shares the scan of its
+ * real path. Each call gets its own copy of the rows.
  *
  * @param {string} coreSrc - absolute path to `<core>/src`
  * @returns {Promise<ThemingTarget[]>}
@@ -93,52 +95,43 @@ const targetScans = new Map();
  * @returns {Promise<ThemingTarget[]>}
  */
 async function scanThemingTargets(coreSrc) {
+  return targetsFromDocs(await coreComponentDocs(coreSrc));
+}
+
+/**
+ * Every theming target the docs declare, sorted by key then component, as
+ * {@link collectThemingTargets} describes.
+ * @param {import('./core-component-docs.mjs').CoreComponentDoc[]} docs
+ * @returns {ThemingTarget[]}
+ */
+export function targetsFromDocs(docs) {
   /** @type {Array<ThemingTarget & {parent: string|null}>} */
   const targets = [];
 
-  /** @param {string} dir */
-  async function scan(dir) {
-    for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        if (SKIP_DIRS.has(entry.name)) continue;
-        await scan(full);
-        continue;
-      }
-      if (!entry.name.endsWith('.doc.mjs')) continue;
+  for (const read of docs) {
+    if ('error' in read) continue;
+    const {file, doc} = read;
+    const component =
+      typeof doc?.name === 'string' && doc.name
+        ? doc.name
+        : path.basename(path.dirname(file));
 
-      /** @type {any} */
-      let doc;
-      try {
-        doc = await loadComponentDoc(full);
-      } catch {
-        continue;
-      }
-
-      const component =
-        typeof doc?.name === 'string' && doc.name
-          ? doc.name
-          : path.basename(path.dirname(full));
-
-      for (const target of doc?.theming?.targets || []) {
-        const className = target?.className;
-        if (typeof className !== 'string') continue;
-        const key = targetKey(className);
-        if (!key) continue;
-        targets.push({
-          key,
-          className,
-          component,
-          parent:
-            typeof doc?.subComponentOf === 'string' ? doc.subComponentOf : null,
-          props: stringList(target.visualProps),
-          states: stringList(target.states),
-        });
-      }
+    for (const target of doc?.theming?.targets || []) {
+      const className = target?.className;
+      if (typeof className !== 'string') continue;
+      const key = targetKey(className);
+      if (!key) continue;
+      targets.push({
+        key,
+        className,
+        component,
+        parent:
+          typeof doc?.subComponentOf === 'string' ? doc.subComponentOf : null,
+        props: stringList(target.visualProps),
+        states: stringList(target.states),
+      });
     }
   }
-
-  await scan(coreSrc);
 
   const canonical = canonicalizeParentTargets(targets);
   canonical.sort(

@@ -442,9 +442,8 @@ describe('ComplexSelector', () => {
 
     // Closed, the surface carries no dialog role, so find the layer itself.
     const popover = document.querySelector('[popover]');
-    expect(popover?.getAttribute('style')).toContain(
-      'position-area: self-block-end span-self-inline-start',
-    );
+    expect(popover?.className).toContain('useLayer__styles.sideBelow');
+    expect(popover?.className).toContain('useLayer__styles.alignInlineEnd');
   });
 
   it('exposes imperative open, close, toggle, and isOpen via handleRef', async () => {

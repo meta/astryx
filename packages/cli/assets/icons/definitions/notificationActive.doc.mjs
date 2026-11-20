@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'notificationActive',
+  group: 'notifications',
   description: 'New or unread notifications.',
   words: ['ringing', 'unread', 'new alert', 'bell alert', 'bell ring'],
 };

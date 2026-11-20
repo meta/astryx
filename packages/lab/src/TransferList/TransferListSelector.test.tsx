@@ -704,9 +704,8 @@ describe('TransferListSelector', () => {
     const popover = screen
       .getByRole('dialog', {name: 'Table columns', ...hidden})
       .closest('[popover]');
-    expect(popover?.getAttribute('style')).toContain(
-      'position-area: self-block-end span-self-inline-end',
-    );
+    expect(popover?.className).toContain('useLayer__styles.sideBelow');
+    expect(popover?.className).toContain('useLayer__styles.alignInlineStart');
   });
 });
 

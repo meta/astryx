@@ -198,6 +198,7 @@ import {Button} from '@astryxdesign/core/Button';
 import {Divider} from '@astryxdesign/core/Divider';
 import {EmptyState} from '@astryxdesign/core/EmptyState';
 import {useHoverCard} from '@astryxdesign/core/HoverCard';
+import {useToast} from '@astryxdesign/core/Toast';
 import {Icon} from '@astryxdesign/core/Icon';
 import {MetadataList, MetadataListItem} from '@astryxdesign/core/MetadataList';
 import {usePowerSearchConfig} from '@astryxdesign/core/PowerSearch';
@@ -222,10 +223,7 @@ import type {
   TablePlugin,
   TableSortComparator,
 } from '@astryxdesign/core/Table';
-import {
-  ArrowDownTrayIcon,
-  MagnifyingGlassIcon,
-} from '@heroicons/react/24/outline';
+import {DownloadIcon, SearchIcon} from '@astryxdesign/template-icons';
 
 // ============= DATA =============
 
@@ -531,6 +529,7 @@ function Figure({
  * yet at the moment the hook attaches to it.
  */
 function DescriptionCell({item}: {item: InvoiceRow}) {
+  const showToast = useToast();
   const anchorRef = useRef<HTMLElement>(null);
   const hoverCard = useHoverCard({
     placement: 'below',
@@ -594,7 +593,18 @@ function DescriptionCell({item}: {item: InvoiceRow}) {
               {`${share.toFixed(1)}%`}
             </MetadataListItem>
           </MetadataList>
-          <Button label="Dispute this line" variant="secondary" width="100%" />
+          <Button
+            label="Dispute this line"
+            variant="secondary"
+            width="100%"
+            onClick={() =>
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({
+                body: `Demo: a dispute for ${item.description} would open here`,
+                uniqueID: `dispute-${item.id}`,
+              })
+            }
+          />
         </VStack>,
       )}
     </>
@@ -778,6 +788,7 @@ function TotalRow({
 // ============= PAGE =============
 
 export default function InvoiceLineItemsTemplate() {
+  const showToast = useToast();
   const [query, setQuery] = useState('');
   const [basis, setBasis] = useState<BillingBasis | 'all'>('all');
 
@@ -853,7 +864,7 @@ export default function InvoiceLineItemsTemplate() {
         // holds the table on the same content line as the MetadataList. The
         // padding moves to the VStack, which is a plain flex container and
         // publishes nothing.
-        <LayoutContent padding={0}>
+        <LayoutContent role="main" padding={0}>
           <VStack padding={4} gap={8}>
             {/* Title, actions and document facts are one masthead, and it
                 scrolls. The Layout `header` slot would pin it: with
@@ -871,7 +882,14 @@ export default function InvoiceLineItemsTemplate() {
                 <Button
                   label="Download PDF"
                   variant="secondary"
-                  icon={<Icon icon={ArrowDownTrayIcon} size="sm" />}
+                  icon={<Icon icon={DownloadIcon} size="sm" />}
+                  onClick={() =>
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: 'Demo: the invoice PDF would download here',
+                      uniqueID: 'download-pdf',
+                    })
+                  }
                 />
               </HStack>
               <MetadataList
@@ -910,7 +928,7 @@ export default function InvoiceLineItemsTemplate() {
                   value={query}
                   onChange={setQuery}
                   placeholder="Search…"
-                  startIcon={<Icon icon={MagnifyingGlassIcon} size="sm" />}
+                  startIcon={<Icon icon={SearchIcon} size="sm" />}
                 />
               </VStack>
             </HStack>

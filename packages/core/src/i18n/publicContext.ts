@@ -4,7 +4,8 @@
 
 /**
  * @file publicContext.ts
- * @input InternationalizationContext, fullEnglishFallback
+ * @input InternationalizationContext from translatingContext,
+ *   fullEnglishFallback
  * @output The public InternationalizationContext export
  * @position The package's InternationalizationContext, re-exported by the i18n
  *   barrel. The same context object Core components read.
@@ -19,9 +20,10 @@
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/i18n/InternationalizationContext.ts
  * - /packages/core/src/i18n/index.ts
+ * - /packages/core/src/i18n/translatingContext.ts
  */
 
-import {InternationalizationContext as ProviderContext} from './InternationalizationContext';
+import {InternationalizationContext as ProviderContext} from './translatingContext';
 import {registerFullEnglishFallback} from './fullEnglishFallback';
 
 registerFullEnglishFallback();

@@ -37,6 +37,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template ButtonWithIcon --type block",
+        "isReady": true,
         "mentions": []
       }
     ]

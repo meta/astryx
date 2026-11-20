@@ -26,6 +26,8 @@ import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {TooltipPresentInterestContext} from './tooltipPresentInterest';
 import {createTriggerFocusGate, isFocusOnTrigger} from '../utils/triggerFocus';
+import {getInteractionModality} from '../utils/interactionModality';
+import {NON_TEXT_INPUT_TYPES} from '../keyboard/keyboardHeight';
 import * as stylex from '@stylexjs/stylex';
 import {
   useLayerInternal,
@@ -53,6 +55,22 @@ import {
 } from '../theme/tokens.stylex';
 
 /**
+ * Whether `element` is a text field in any state: a text-like `<input>`, a
+ * `<textarea>` or an editable element, also when it is read-only, disabled
+ * or brings up no keyboard.
+ */
+function isTextField(element: HTMLElement): boolean {
+  if (element.localName === 'input') {
+    return !NON_TEXT_INPUT_TYPES.has(
+      (element.getAttribute('type') ?? 'text').toLowerCase(),
+    );
+  }
+  return element.matches(
+    'textarea, [contenteditable]:not([contenteditable="false"])',
+  );
+}
+
+/**
  * Grace period (ms) before hiding on pointer-leave when no explicit `hideDelay`
  * is set, so the pointer can travel across the small gap from the trigger onto
  * the tooltip surface without the tooltip disappearing (WCAG 1.4.13 hoverable).
@@ -60,10 +78,9 @@ import {
 const HOVER_BRIDGE_DELAY = 100;
 
 const styles = stylex.create({
-  // Base container styles - inverted colors for high contrast
+  // The same inverted surface Toast paints, so the two match in every theme.
   container: {
-    // Inverted color palette: dark background, light text
-    backgroundColor: colorVars['--color-text-primary'],
+    backgroundColor: colorVars['--color-background-inverted'],
     color: colorVars['--color-background-surface'],
     borderRadius: radiusVars['--radius-container'],
     // Typography
@@ -556,6 +573,14 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const opensOnFocus = useCallback(
     (target: HTMLElement, trigger: HTMLElement | null): boolean => {
       if (trigger != null && !isFocusOnTrigger(target, trigger, focusTrigger)) {
+        return false;
+      }
+      // Browsers mark a pointer's focus on a text field focus-visible, so
+      // after a pointer press only a text field opens the tooltip.
+      if (
+        !isTextField(target) &&
+        getInteractionModality(target) === 'pointer'
+      ) {
         return false;
       }
       return !isTouchInteraction() && target.matches(':focus-visible');

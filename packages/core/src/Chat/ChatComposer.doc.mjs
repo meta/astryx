@@ -7,7 +7,7 @@ export const docs = {
   subComponentOf: 'Chat',
   displayName: 'Chat Composer',
   description:
-    'Layout shell for a chat composer. Arranges named slots (drawer, header, input, footer, send) with page-radius container, elevation, a keyboard-only editor focus ring, and concentric inner radius for child elements.',
+    'Layout shell for a chat composer. Arranges named slots (drawer, header, input, footer, send) with chat-radius container, elevation, a keyboard-only editor focus ring, and concentric inner radius for child elements.',
   usage: {
     description:
       'ChatComposer is the message-entry shell for a chat surface. It coordinates a controlled or uncontrolled draft, provides a default token-capable input and send/stop action, and arranges optional drawer, header, footer, and status content. Custom inputs and send controls can join the same value, submission, disabled, stop, and focus contract through useChatComposerContext().',
@@ -197,7 +197,7 @@ export const docs = {
 export const docsZh = {
   name: 'ChatComposer',
   displayName: 'Chat Composer',
-  description: '聊天编写器布局外壳。排列命名插槽（附件、标题栏、输入、页脚、发送），带有页面圆角容器和同心内圆角。',
+  description: '聊天编写器布局外壳。排列命名插槽（附件、标题栏、输入、页脚、发送），带有聊天圆角容器和同心内圆角。',
   propDescriptions: {
     onSubmit: '用户提交消息时调用。',
     onStop: '用户请求停止生成时调用。',
@@ -224,7 +224,7 @@ export const docsZh = {
 export const docsDense = {
   name: 'ChatComposer',
   displayName: 'Chat Composer',
-  description: 'composer layout shell; named slots (drawer/header/input/footer/send) w/ page-radius + concentric inner radius',
+  description: 'composer layout shell; named slots (drawer/header/input/footer/send) w/ chat-radius + concentric inner radius',
   propDescriptions: {
     onSubmit: 'submit msg handler',
     onStop: 'stop generation handler',

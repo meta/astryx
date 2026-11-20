@@ -19,6 +19,7 @@ import {
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
 import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
+import {modeValue} from '../../test-utils/theme-edit-fixture.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
@@ -292,7 +293,7 @@ describe('padding on real base themes', () => {
     const cssOf = slug =>
       fs.readFileSync(path.join(cwd, 'themes', slug, `${slug}.css`), 'utf8');
 
-    it("fills only its mode's half with a color set in a one-mode theme, and keeps a saved --mode half", async ctx => {
+    it("writes a color set in a one-mode theme in its mode's block, and keeps a saved --mode block", async ctx => {
       if (unbuilt) return ctx.skip();
       await themeEditNew('om1', {cwd, like: 'neutral'});
       await themeEditSet('om1', 'background', '#eeeeee', {
@@ -302,14 +303,20 @@ describe('padding on real base themes', () => {
         mode: 'light',
       });
       await themeEditSet('om1', 'mode', 'light-only', {cwd});
-      expect(ruleOf('om1', '.astryx-button[data-variant="secondary"]')).toMatch(
-        /background(-color)?:\s*light-dark\(#eeeeee,/,
-      );
+      const sec = '.astryx-button[data-variant="secondary"]';
+      expect(
+        modeValue(cssOf('om1'), sec, 'background-color', 'light') ??
+          modeValue(cssOf('om1'), sec, 'background', 'light'),
+      ).toBe('#eeeeee');
       await themeEditSet('om1', 'background', '#f4f4f4', {cwd, on: 'card'});
-      // Each card variant reads its own background: each keeps exactly its
-      // own other half (parts43).
-      expect(ruleOf('om1', '.astryx-card[data-variant="default"]')).toMatch(
-        /background-color:\s*light-dark\(#f4f4f4, var\(--color-background-card\)\)/,
+      // Each card variant reads its own background: each takes the color in
+      // its light block, and the dark mode keeps its own (parts43).
+      const card = '.astryx-card[data-variant="default"]';
+      expect(modeValue(cssOf('om1'), card, 'background-color', 'light')).toBe(
+        '#f4f4f4',
+      );
+      expect(modeValue(cssOf('om1'), card, 'background-color', 'dark')).toBe(
+        undefined,
       );
       await themeEditSet('om1', '--color-background-card', '#fafafa', {cwd});
       expect(cssOf('om1')).toMatch(
