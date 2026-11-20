@@ -10,7 +10,13 @@
 
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {checkSetting, indicatorLines, pillDrawnRadios} from './_check.mjs';
+import {
+  BORDER_COLOR_PROP,
+  borderFor,
+  checkSetting,
+  indicatorLines,
+  pillDrawnRadios,
+} from './_check.mjs';
 import {baseResolved} from './_project.mjs';
 import {readThemeListState} from '../theme/_adapter.mjs';
 import {
@@ -1185,6 +1191,15 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
             ? a.get('base||border-width')
             : a.get(`base||${prop}`));
       if (o && o.light === v.light && o.dark === v.dark) continue;
+      // The see-through border a border color brings to a part that draws
+      // none (set writes it with the color) is that color's line: asked
+      // with it, never a change of its own.
+      if (
+        prop === 'border' &&
+        /\btransparent\b/.test(`${v.light} ${v.dark}`) &&
+        steps.some(st => BORDER_COLOR_PROP.test(String(st.thing)))
+      )
+        continue;
       const fam = familyOf(prop);
       if (!fam) continue;
       // A property a typed value writes is asked: the question wrote it.
@@ -1484,7 +1499,7 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
  * @param {import('./_settings.mjs').ThemeData} d
  * @param {Step} st
  */
-function apply(ctx, slug, d, st) {
+export function apply(ctx, slug, d, st) {
   const unset = st.verb === 'undo';
   const s = checkSetting(
     ctx,
@@ -1505,7 +1520,17 @@ function apply(ctx, slug, d, st) {
       [],
       ERROR_CODES.ERR_INVALID_ARGUMENT,
     );
+  // A border color on a part that draws no border brings the border it
+  // needs, as set writes it.
+  const edge = unset ? null : borderFor(ctx, slug, d, s);
   const k = keyOf(s);
+  // (With a border brought, the color goes after it, as set writes them:
+  // a color the theme saves already moves last, never stays before the
+  // border, whose shorthand would reset it.)
+  if (edge) {
+    d.settings = d.settings.filter(x => keyOf(x) !== k);
+    d.settings.push(edge);
+  }
   const i = d.settings.findIndex(x => keyOf(x) === k);
   if (unset) {
     if (i < 0)

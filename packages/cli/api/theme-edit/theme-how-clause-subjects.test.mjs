@@ -245,13 +245,10 @@ const ROWS = [
     },
   ],
   [
-    'a see-through color before a side is the value, never a variant',
+    "a see-through color before a side is that side's line, never a variant",
     {
       q: 'cards: transparent bottom border',
-      has: [
-        "--color-border '#0000000c' --on card --mode light",
-        "--color-border '#ffffff10' --on card --mode dark",
-      ],
+      has: ["border-bottom '1px solid transparent' --on card"],
       never: /--when variant:transparent/,
     },
   ],

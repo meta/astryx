@@ -3046,14 +3046,19 @@ function oneModeOfTheme(data) {
 /**
  * Whether any of the parts draws a line of that kind (a border, one side's
  * border, an outline) with a width, at rest or in the state named: then its
- * color alone can differ by mode.
+ * color alone can differ by mode. A width drawn with a style of none or
+ * hidden in the same rule is no line. A side cleared only on the first or
+ * last child (a list row's divider, a grouped button's join) is still
+ * drawn on the others, so it counts. With a variant (`variant:primary`), a rule for another value of that
+ * prop does not count.
  * @param {any} C the part census
  * @param {string[]} parts
  * @param {string} prop border, border-<side> or outline
  * @param {string | undefined | null} [state]
+ * @param {string | undefined | null} [when] a variant, `prop:value`
  * @returns {boolean}
  */
-export function drawsLine(C, parts, prop, state) {
+export function drawsLine(C, parts, prop, state, when) {
   // (A side's line is drawn by the side's own width or the shared one.)
   const keys =
     prop === 'border'
@@ -3064,15 +3069,29 @@ export function drawsLine(C, parts, prop, state) {
       : prop.startsWith('border-')
         ? [`${prop}-width`, 'border-width']
         : [`${prop}-width`];
+  const [wp, wv] = String(when ?? '').split(':');
+  const zero = (/** @type {unknown} */ v) =>
+    /^\s*0(?:px|rem|em)?\s*$/.test(String(v));
+  const none = (/** @type {unknown} */ v) =>
+    /^\s*(?:none|hidden)\b/i.test(String(v));
   return parts.some(t => {
     const at = C.MAP[t]?.at ?? {};
-    return keys.some(k =>
-      Object.entries(at[k] ?? {}).some(
-        ([sel, w]) =>
-          !/^\s*0(?:px)?\s*$/.test(String(w)) &&
-          (state ? sel.includes(state) : !/:/.test(sel)),
-      ),
-    );
+    return keys.some(k => {
+      const rules = /** @type {Record<string, string>} */ (at[k] ?? {});
+      const styles = /** @type {Record<string, string>} */ (
+        at[k.replace(/-width$/, '-style')] ?? {}
+      );
+      return Object.entries(rules).some(([sel, w]) => {
+        if (zero(w) || none(styles[sel] ?? '')) return false;
+        if (state ? !sel.includes(state) : /:/.test(sel)) return false;
+        const pairs = sel.split(' ')[0].split(',');
+        return !(
+          wp &&
+          pairs.some(pr => pr.startsWith(`${wp}=`)) &&
+          !pairs.includes(`${wp}=${wv}`)
+        );
+      });
+    });
   });
 }
 
@@ -3420,6 +3439,306 @@ function lineRefusal(ctx, slug, s, prop, v) {
           )
         : [`${HOW} ${part}`],
     },
+  );
+}
+
+/**
+ * The elements a browser draws a border on by itself (a native button's,
+ * a text field's): a part rendered as one of these with no border rule of
+ * its own is not known to draw none.
+ */
+const NATIVE_BORDER_TAGS = new Set([
+  'button',
+  'input',
+  'textarea',
+  'select',
+  'fieldset',
+  'hr',
+  'iframe',
+]);
+
+/**
+ * Whether a part draws a border in the variant and state a setting names
+ * from outside Core's own rules (drawsLine reads those): the base theme's
+ * rules for it, or the theme's own settings for it; or a part Core sets no
+ * border on whose element the browser draws one (a native button), or a
+ * part the part data does not know.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {any} data
+ * @param {import('./_settings.mjs').Setting} s
+ * @param {string} part
+ */
+function bordersBeyondCore(ctx, data, s, part) {
+  const rec = ctx.C.MAP[part];
+  if (!rec) return true;
+  const wp = String(s.when ?? '').split(':')[0];
+  const edgeProp =
+    /^border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?(?:-(?:width|style))?$/;
+  const blank = (/** @type {unknown} */ v) =>
+    /^\s*(?:none|hidden|0(?:px|rem|em)?)\s*$/i.test(String(v)) ||
+    /^\s*(?:none|hidden)\b/i.test(String(v));
+  // A part Core sets no border on draws none, unless the browser draws one
+  // on its element (a native button).
+  const recorded = Object.keys(rec.at ?? {}).some(p => edgeProp.test(p));
+  if (!recorded && (rec.tags ?? []).some(t => NATIVE_BORDER_TAGS.has(t)))
+    return true;
+  // The base theme's rules for the part (its own block and the variant's).
+  const blocks = ctx.base?.components?.[part] ?? {};
+  /** @param {unknown} b @returns {boolean} */
+  const drawsIn = b =>
+    !!b &&
+    typeof b === 'object' &&
+    Object.entries(b).some(([k, v]) =>
+      v && typeof v === 'object'
+        ? drawsIn(v)
+        : /^border(?:Top|Right|Bottom|Left|Block|Inline)?(?:Start|End)?(?:Width|Style)?$/.test(
+            k,
+          ) && !blank(v),
+    );
+  for (const [k, b] of Object.entries(blocks))
+    if (k === 'base' || !wp || k === s.when) if (drawsIn(b)) return true;
+  // The theme's own settings for it.
+  return (data?.settings ?? []).some(
+    (/** @type {any} */ x) =>
+      x.source === 'property' &&
+      edgeProp.test(String(x.thing)) &&
+      !blank(x.value) &&
+      (!x.when || !s.when || x.when === s.when) &&
+      (!x.state || x.state === s.state) &&
+      partsOf(ctx, x).includes(part),
+  );
+}
+
+/**
+ * The look a part has by default: its documented default variant, as
+ * `variant:<value>`, when the part records that variant.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} part
+ * @returns {string | undefined}
+ */
+function defaultLook(ctx, part) {
+  const values = ctx.C.variantValues(part)?.variant ?? [];
+  if (!values.length) return undefined;
+  for (const info of Object.values(ctx.project?.components ?? {})) {
+    if (!info?.targets?.some(t => t.className === `astryx-${part}`)) continue;
+    const v = String(info.props?.variant?.default ?? '').replace(/['"]/g, '');
+    if (values.includes(v)) return `variant:${v}`;
+  }
+  return undefined;
+}
+
+/**
+ * Whether every border side a part draws at rest in a look is cleared on
+ * its first child: a seam with the sibling before it (a button group's
+ * join), never a line around the part.
+ * @param {any} C
+ * @param {string} part
+ * @param {string | undefined} when
+ */
+function seamOnly(C, part, when) {
+  const v = String(when ?? '').replace(/^variant:/, '');
+  const blank = (/** @type {unknown} */ x) =>
+    /^\s*(?:0(?:px)?|none)\s*$/.test(String(x));
+  const drawn = Object.entries(C.MAP[part]?.at ?? {})
+    .filter(([prop]) => /^border(?:-[a-z-]+)?-width$/.test(prop))
+    .flatMap(([, rules]) =>
+      Object.entries(/** @type {Record<string, unknown>} */ (rules))
+        .filter(
+          ([sel, val]) =>
+            !/[\s:]/.test(sel) &&
+            !blank(val) &&
+            (!v ||
+              !/(?:^|,)variant=/.test(sel) ||
+              sel.split(',').includes(`variant=${v}`)),
+        )
+        .map(([sel]) => [rules, sel]),
+    );
+  return (
+    drawn.length > 0 &&
+    drawn.every(([rules, sel]) =>
+      blank(/** @type {any} */ (rules)[`${sel} :first-child`]),
+    )
+  );
+}
+
+/**
+ * Whether Core draws a line around a part where it is asked: in the look
+ * said, else the part's default look, at rest or in the state said. A side
+ * cleared on the first child, a seam with the sibling before it, is never a
+ * line around the part: a secondary button standing alone draws none.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} part
+ * @param {string | null | undefined} state
+ * @param {string | undefined} when
+ */
+export function drawsLineAround(ctx, part, state, when) {
+  const look = when ?? defaultLook(ctx, part);
+  const line =
+    drawsLine(ctx.C, [part], 'border', null, look) ||
+    (!!state && drawsLine(ctx.C, [part], 'border', state, look));
+  return line && !seamOnly(ctx.C, part, look);
+}
+
+/** A border color: one color, one per side, or one side's. */
+export const BORDER_COLOR_PROP =
+  /^border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?-color$/;
+
+/** The border a border color brings to a part that draws none. */
+export const BORDER_TO_COLOR = 'var(--border-width) solid transparent';
+
+/**
+ * The theme's own setting that says a part draws no border (`border none`,
+ * `border-width 0`, `border-style none`) where a border color is asked,
+ * or undefined.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {any} data
+ * @param {{on?: string, when?: string, state?: string}} s
+ * @param {string} part
+ */
+function borderSetToNone(ctx, data, s, part) {
+  const turned = borderTurnedOff(ctx, data, s, part);
+  return turned?.whole ? turned.setting : undefined;
+}
+
+/**
+ * The latest none or zero the theme sets on a part's border where a color
+ * is asked, and whether it turns the whole border off: `border none` (or
+ * `0`), a single-value `border-width 0` or `border-style none`, with no
+ * later setting on the part that draws a side again. A per-side, logical
+ * or multi-value none (`border-bottom none`, `border-width '0 0 1px'`)
+ * leaves a side that may draw: it is not whole.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {any} data
+ * @param {{on?: string, when?: string, state?: string}} s
+ * @param {string} part
+ * @returns {{setting: any, whole: boolean} | null}
+ */
+function borderTurnedOff(ctx, data, s, part) {
+  const settings = /** @type {any[]} */ (data?.settings ?? []);
+  const edge =
+    /^border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?(?:-(?:width|style))?$/;
+  const here = (/** @type {any} */ x) =>
+    x.source === 'property' &&
+    edge.test(String(x.thing)) &&
+    // (A none set for one look hides only that look.)
+    (!x.when || x.when === s.when) &&
+    (!x.state || x.state === s.state) &&
+    partsOf(ctx, x).includes(part);
+  const blank = (/** @type {string} */ t) =>
+    /^(?:none|hidden|0(?:px|rem|em)?)$/i.test(t);
+  for (let i = settings.length - 1; i >= 0; i--) {
+    const x = settings[i];
+    if (!here(x)) continue;
+    const tokens = String(x.value).trim().split(/\s+/).filter(Boolean);
+    if (!tokens.some(blank)) continue;
+    const whole =
+      (x.thing === 'border' ||
+        ((x.thing === 'border-width' || x.thing === 'border-style') &&
+          tokens.length === 1)) &&
+      // (A later setting on the part that draws a side again.)
+      !settings
+        .slice(i + 1)
+        .some(
+          (/** @type {any} */ y) =>
+            here(y) && !String(y.value).trim().split(/\s+/).some(blank),
+        );
+    return {setting: x, whole};
+  }
+  return null;
+}
+
+/**
+ * The border a border color (one color, a color per side, or one side's)
+ * brings to the part it is set on, when the part draws no border in the
+ * variant and state asked (Core sets a tab's, a primary button's and a
+ * banner's to none): a transparent one at rest, as wide as the theme's
+ * border width, so the part keeps one size in every state and the color
+ * has a line to show on. Null when the setting is no border color, its
+ * parts draw a border there, or the theme itself sets their border to none
+ * (set refuses that conflict, naming the none). Set and how both write it
+ * before the color.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {any} data
+ * @param {import('./_settings.mjs').Setting} s the checked border color
+ * @returns {import('./_settings.mjs').Setting | null}
+ */
+export function borderFor(ctx, slug, data, s) {
+  if (ctx.unchecked || !s.on || s.source !== 'property') return null;
+  if (!BORDER_COLOR_PROP.test(s.thing)) return null;
+  if (
+    CSS_WIDE.includes(
+      String(s.value ?? '')
+        .trim()
+        .toLowerCase(),
+    )
+  )
+    return null;
+  const parts = partsOf(ctx, s);
+  /**
+   * Whether the part draws a border where the color is asked. With no
+   * --when, that is the look the part has by default, its documented
+   * default variant (a card's default draws one; a button's secondary draws
+   * only the seam with the button before it in a group, cleared on the
+   * first child, which is no line around it).
+   * @param {string} t
+   */
+  const draws = t =>
+    drawsLineAround(ctx, t, s.state, s.when) ||
+    // (A color for one mode on a look that draws a group seam brings no
+    // border: one written for every mode would hide the other mode's seam.)
+    (!!s.mode &&
+      drawsLine(ctx.C, [t], 'border', null, s.when ?? defaultLook(ctx, t))) ||
+    bordersBeyondCore(
+      ctx,
+      data,
+      {...s, when: s.when ?? defaultLook(ctx, t)},
+      t,
+    );
+  if (
+    !parts.length ||
+    parts.some(
+      t =>
+        draws(t) ||
+        // (Any none the theme sets there, a whole one or one side's: the
+        // color is saved as written, and no border is brought.)
+        borderTurnedOff(ctx, data, s, t) != null,
+    )
+  )
+    return null;
+  return checkSetting(
+    ctx,
+    slug,
+    structuredClone(data),
+    'border',
+    BORDER_TO_COLOR,
+    {on: s.on, when: s.when, only: s.only},
+    false,
+  );
+}
+
+/**
+ * Refuses a border color on a part whose whole border the theme itself turns
+ * off (`border none --on tab`): the two say opposite things, so neither is
+ * changed for the other. The refusal names the none and offers its undo.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {any} data
+ * @param {import('./_settings.mjs').Setting} s
+ * @param {string} prop
+ */
+function borderNoneRefusal(ctx, slug, data, s, prop) {
+  if (ctx.unchecked || !s.on || !BORDER_COLOR_PROP.test(prop)) return;
+  const parts = partsOf(ctx, s);
+  // (Whether Core draws the border or not: the theme's own none hides it
+  // either way, an input's included.)
+  if (!parts.length) return;
+  const none = parts.map(t => borderSetToNone(ctx, data, s, t)).find(Boolean);
+  if (!none) return;
+  refuse(
+    E.ERR_THEME_NO_EFFECT,
+    `${slug} sets ${none.thing} ${none.value} on ${none.on}${none.when ? ` when ${none.when}` : ''}${none.state ? ` :${none.state}` : ''}, so ${prop} on ${s.on} has no line to color. Undo that first, then set the color: it brings the border it needs.`,
+    {run: [setLine(slug, none.thing, '', none, true)]},
   );
 }
 
@@ -7796,6 +8115,9 @@ function checkOne(
     // style is set for it.
     if (!unset && /^outline-(color|width|offset)$/.test(prop))
       noOutlineRefusal(ctx, slug, data, s, prop, v);
+    // A border color where the theme itself sets the part's border to none
+    // has no line to color (elsewhere set brings the border it needs).
+    if (!unset) borderNoneRefusal(ctx, slug, data, s, prop);
     // A text property on a part whose text is drawn by elements inside it
     // that set that property themselves from a token (a top nav heading's
     // title span) never reaches that text: the token, on the part, does.

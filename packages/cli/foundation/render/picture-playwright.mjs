@@ -18,6 +18,7 @@
 import {pathToFileURL} from 'node:url';
 import {CUT_SHORT_PREFIX, cutShortText} from './cut-short.mjs';
 import {LOW_CONTRAST_PREFIX, lowContrastText} from './drawn-contrast.mjs';
+import {PART_BOXES_PREFIX, partBoxes} from './part-boxes.mjs';
 import {LOCAL_URL, QUIET_BROWSER_ARGS} from './offline.mjs';
 import {
   FIT_CELLS,
@@ -32,7 +33,7 @@ import {
 import {FONT_PROBE_PREFIX, probeFonts} from './font-probe.mjs';
 
 const [entry, batch, executablePath] = process.argv.slice(2);
-/** @type {Array<{html: string, png: string, mode: string}>} */
+/** @type {Array<{html: string, png: string, mode: string, boxes?: string[]}>} */
 const jobs = JSON.parse(batch);
 /** A line for one job of the batch. @param {number} i @param {string} line */
 const say = (i, line) => process.stdout.write(`${i}\t${line}\n`);
@@ -49,7 +50,7 @@ try {
     await eachAtOnce(
       jobs,
       PICTURE_PAGES_AT_ONCE,
-      async ({html, png, mode}, i) => {
+      async ({html, png, mode, boxes}, i) => {
         const page = await browser.newPage({
           viewport: {...PICTURE_WINDOW},
           colorScheme: mode === 'dark' ? 'dark' : 'light',
@@ -107,6 +108,15 @@ try {
         } catch {
           // Not measured.
         }
+        // The size of each part the job names, for a check that compares
+        // two pictures' boxes.
+        if (boxes?.length)
+          try {
+            const sized = await page.evaluate(partBoxes, boxes);
+            say(i, `${PART_BOXES_PREFIX}${JSON.stringify(sized)}`);
+          } catch {
+            // Not measured.
+          }
         await page.close?.().catch(() => {});
         say(i, PICTURE_TAKEN);
       },

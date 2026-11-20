@@ -6440,16 +6440,25 @@ export function compileTheme(ctx, data, base) {
     // drops the ring.
     if (kebab(prop) === 'box-shadow') v = withCoreShadowLayers(target, v);
     const b = block(s, target);
-    // A gradient background for one mode goes into the rule's block for
-    // that mode as its image layers (with their positions, sizes and
-    // repeats), and a layer that is a color alone as that mode's color: the
-    // other mode keeps every image and color it had, Core's own included.
+    // A gradient background for a variant, a state or a mode is written as
+    // the background longhands its value gives: its image layers, the
+    // positions, sizes and repeats a layer gives, and a layer that is a
+    // color alone as the color. A layer with a word those longhands do not
+    // take (an attachment, a box) keeps the background shorthand as typed. A longhand set
+    // on the whole part (its repeat, its size) stays in every variant and
+    // state the gradient is written for. For one mode it goes into the
+    // rule's block for that mode: the other mode keeps every image and
+    // color it had, Core's own included.
     if (
-      s.mode &&
+      (s.mode || s.when || s.state) &&
       /^background(-image)?$/.test(kebab(prop)) &&
-      /gradient\(/i.test(v)
+      /gradient\(/i.test(v) &&
+      splitTop(
+        kebab(prop) === 'background' ? backgroundColorLayer(v).images : v,
+        ',',
+      ).every(x => !layerParts(x.trim()).other.length)
     ) {
-      const mb = modeBlock(s, target, s.mode);
+      const mb = s.mode ? modeBlock(s, target, s.mode) : b;
       // The background shorthand's last layer may carry the color under
       // the images: that color is this mode's background color, and the
       // rest are the images.
@@ -6461,22 +6470,28 @@ export function compileTheme(ctx, data, base) {
         .map(x => x.trim())
         .filter(Boolean)
         .map(layerParts);
-      for (const k of [
-        'background',
-        'backgroundImage',
-        'backgroundPosition',
-        'backgroundSize',
-        'backgroundRepeat',
-      ])
-        delete mb[k];
+      // The gradient replaces the image there. A position, size or repeat
+      // set in the same scope stays (a layer's own replaces it). A
+      // background shorthand set there also set the color: its color layer
+      // stays as the color under the image, and one with none (`none`, an
+      // image alone) left it transparent, as it still is.
+      const under = mb.background;
+      delete mb.background;
+      delete mb['background-image'];
+      delete mb.backgroundImage;
+      if (typeof under === 'string' && mb.backgroundColor == null)
+        mb.backgroundColor = backgroundColorLayer(under).color ?? 'transparent';
       mb.backgroundImage = parts.map(x => x.image).join(', ');
-      if (parts.some(x => x.position || x.size || x.repeat)) {
+      // (Only the longhands a layer gives: one it leaves out keeps what the
+      // part has, a whole-part repeat included.)
+      if (parts.some(x => x.position))
         mb.backgroundPosition = parts
           .map(x => x.position || '0% 0%')
           .join(', ');
+      if (parts.some(x => x.size))
         mb.backgroundSize = parts.map(x => x.size || 'auto').join(', ');
+      if (parts.some(x => x.repeat))
         mb.backgroundRepeat = parts.map(x => x.repeat || 'repeat').join(', ');
-      }
       if (!parts.length) delete mb.backgroundImage;
       if (color) mb.backgroundColor = color;
       return;
@@ -6495,7 +6510,14 @@ export function compileTheme(ctx, data, base) {
       ? undefined
       : (s.mode ??
         (modeOnly && parseColor(String(v).trim()) ? modeOnly : undefined));
-    if (mode && !s.when && variantsReading(ctx, target, prop, s.state).length) {
+    // (An image value, a gradient or a picture with words the longhands do
+    // not take, is no color: it stays one value in the mode's block.)
+    if (
+      mode &&
+      !s.when &&
+      !/gradient\(|url\(|image-set\(/i.test(String(v)) &&
+      variantsReading(ctx, target, prop, s.state).length
+    ) {
       // A color for one mode on a part whose variants each have their own:
       // each variant's rule (in the state, for a state setting) gets the
       // color in its block for that mode, so no variant takes another's and
@@ -6532,8 +6554,14 @@ export function compileTheme(ctx, data, base) {
           ...(css === 'background-color' ? ['background'] : []),
         ];
         // A variant whose own background is an image (a gradient) keeps
-        // it: one mode's color is not written there, and the result says so.
-        const image = family
+        // it: one mode's background color is not written there, as the
+        // image covers it, and the result says so. (Its image is written as
+        // background-image, or in a background shorthand.) A text or
+        // border color is not under the image, so it is written as usual.
+        const image = [
+          ...family,
+          ...(css === 'background-color' ? ['background-image'] : []),
+        ]
           .map(k => vb[camel(k)])
           .find(y => typeof y === 'string' && /gradient\(|url\(/i.test(y));
         if (image) {
@@ -6586,6 +6614,25 @@ export function compileTheme(ctx, data, base) {
     // context, apply as they would without it.
     // The background shorthand and its color are one property there: the
     // later setting replaces the earlier.
+    // A shorthand written for a variant, a state or a mode resets, there,
+    // each longhand it covers that the theme sets on the whole part: the
+    // result says which, so a whole-part longhand is never lost silently.
+    if (s.when || s.state || mode) {
+      const lost = (data?.settings ?? []).filter(
+        x =>
+          x !== s &&
+          x.source === 'property' &&
+          !x.when &&
+          !x.state &&
+          !x.mode &&
+          coversProperty(kebab(prop), kebab(x.thing)) &&
+          partsOf(ctx, x).includes(target),
+      );
+      for (const x of lost)
+        (ctx.compileNotes ??= []).push(
+          `${target}${s.when ? ` ${s.when}` : ''}${s.state ? ` :${s.state}` : ''}${mode ? ` in ${mode}` : ''}: its ${kebab(prop)} resets the ${kebab(x.thing)} set on the whole ${target}, so that ${kebab(x.thing)} does not apply there; set ${kebab(x.thing)} in the same scope too, or give ${kebab(prop)} as its longhands`,
+        );
+    }
     if (mode) {
       const mb = modeBlock(s, target, mode);
       if (colorFamily(prop) === 'background-color')
@@ -8053,9 +8100,14 @@ export function backgroundColorLayer(value) {
     .filter(Boolean);
   const last = layers.at(-1) ?? '';
   const words = splitTop(last, ' ').map(x => x.trim());
-  const at = words.findIndex(
-    w => !/gradient\(|url\(/i.test(w) && isColorValue(w),
-  );
+  // A lone var() is the color only when it names a color token: a spacing
+  // or size token is a position or a size (`center / var(--spacing-4)`,
+  // `var(--spacing-2) top`), wherever it stands.
+  const at = words.findIndex(w => {
+    if (/gradient\(|url\(/i.test(w) || !isColorValue(w)) return false;
+    const lone = /^var\(\s*(--[\w-]+)\s*\)$/i.exec(w);
+    return !lone || isColorToken(lone[1]);
+  });
   if (at < 0) return {images: value, color: null};
   const rest = words.filter((_, i) => i !== at).join(' ');
   return {
@@ -8065,32 +8117,49 @@ export function backgroundColorLayer(value) {
 }
 
 /**
- * A background layer's image (its gradient) and what follows it, as the
- * background longhands take them: position, size (after a slash) and
- * repeat.
+ * A background layer's image (a gradient, prefixed or not, a `url()` or an
+ * `image-set()`) and the words beside it, as the background longhands take
+ * them: position, size (after a slash) and repeat. The image may come
+ * before or after those words, as CSS allows. `other` holds the words that
+ * are none of those (an attachment, an origin or clip box, a second image),
+ * and every word of a layer of several words with no image this knows: a
+ * layer with any is not written as these longhands.
  * @param {string} layer
- * @returns {{image: string, position: string, size: string, repeat: string}}
+ * @returns {{image: string, position: string, size: string, repeat: string, other: string[]}}
  */
 function layerParts(layer) {
-  const fn = /^((?:repeating-)?(?:linear|radial|conic)-gradient)\(/i.exec(
-    layer,
-  );
-  if (!fn) return {image: layer, position: '', size: '', repeat: ''};
-  let depth = 0;
-  let end = layer.length - 1;
-  for (let i = fn[0].length - 1; i < layer.length; i++) {
-    if (layer[i] === '(') depth++;
-    if (layer[i] === ')' && --depth === 0) {
-      end = i;
-      break;
-    }
-  }
-  const rest = splitTop(layer.slice(end + 1).trim(), ' ');
+  const IMAGE =
+    /^(?:(?:-(?:webkit|moz|o|ms)-)?(?:repeating-)?(?:linear|radial|conic)-gradient|url|(?:-webkit-)?image-set)\(/i;
+  const all = splitTop(layer.trim(), ' ').filter(Boolean);
+  const at = all.findIndex(w => IMAGE.test(w));
+  if (at < 0)
+    return {
+      image: layer,
+      position: '',
+      size: '',
+      repeat: '',
+      other: all.length > 1 ? all : [],
+    };
+  const rest = all.filter((_, i) => i !== at);
   const REPEAT = /^(repeat|no-repeat|repeat-x|repeat-y|space|round)$/i;
   const repeat = rest.filter(w => REPEAT.test(w)).join(' ');
   const words = rest.filter(w => !REPEAT.test(w)).join(' ');
-  const [position = '', size = ''] = words.split('/').map(x => x.trim());
-  return {image: layer.slice(0, end + 1), position, size, repeat};
+  const [position = '', size = '', ...extra] = words
+    .split('/')
+    .map(x => x.trim());
+  const LENGTH =
+    /^(?:0|-?[\d.]+(?:%|[a-z]+)|(?:calc|min|max|clamp|var)\(.*\))$/i;
+  const other = [
+    ...extra,
+    ...splitTop(position, ' ').filter(
+      w =>
+        w && !/^(?:left|right|top|bottom|center)$/i.test(w) && !LENGTH.test(w),
+    ),
+    ...splitTop(size, ' ').filter(
+      w => w && !/^(?:auto|cover|contain)$/i.test(w) && !LENGTH.test(w),
+    ),
+  ];
+  return {image: all[at], position, size, repeat, other};
 }
 
 /** A side word in a longhand's name, in the order a box value lists sides. */
