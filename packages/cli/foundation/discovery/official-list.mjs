@@ -10,7 +10,7 @@
  *   for the list, once per process: a new package needs no edit here.
  */
 
-import {spawnSync} from 'node:child_process';
+import {execFileSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -55,18 +55,22 @@ export function readOfficialList({file = OFFICIAL_LIST_FILE, root} = {}) {
   }
   const key = root ?? '';
   if (!derived.has(key)) {
-    const run = spawnSync(
-      process.execPath,
-      [GENERATOR, '--print', ...(root == null ? [] : ['--root', root])],
-      {encoding: 'utf8', maxBuffer: 64 * 1024 * 1024},
-    );
-    if (run.status !== 0) {
-      const why = (run.stderr || run.error?.message || '').trim();
+    let text;
+    try {
+      text = execFileSync(
+        process.execPath,
+        [GENERATOR, '--print', ...(root == null ? [] : ['--root', root])],
+        {encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: 'pipe'},
+      );
+    } catch (error) {
+      const why = String(
+        /** @type {{stderr?: unknown}} */ (error).stderr ?? error,
+      ).trim();
       throw new Error(
         `the official list could not be derived from the repository${why ? `: ${why}` : ''}`,
       );
     }
-    derived.set(key, JSON.parse(run.stdout));
+    derived.set(key, JSON.parse(text));
   }
   return derived.get(key);
 }
