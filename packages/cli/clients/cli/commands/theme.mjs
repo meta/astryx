@@ -836,6 +836,15 @@ function printThemeApp(result) {
       text(
         `[ok] ${change.slug} is the app's default theme: an app wired to the generated module shows it now.`,
       ),
+      ...(copy.editor
+        ? [
+            text(
+              copy.editor.files.length
+                ? `[ok] Kept the theme editor's saved state from ${copy.editor.from} in ${copy.editor.outputDir}: \`${formatCliCommand(`experimental theme editor show ${change.slug}`, process.cwd())}\` opens it.`
+                : `[note] The shared theme carries the theme editor's saved state (${copy.editor.from}), not copied: ${copy.editor.notCopied}.`,
+            ),
+          ]
+        : []),
       text(`Wrote: ${copy.written.join(', ')}.`),
       text(
         `Changed: ${copy.config.module} (default ${copy.config.default})${copy.config.dependencies.length > 0 ? `; package.json dependencies ${copy.config.dependencies.join(', ')}` : ''}. ${copy.previousDefault ? `\`${formatCliCommand(`theme use ${copy.previousDefault}`, process.cwd())}\` then ` : ''}\`${formatCliCommand(`theme remove ${change.slug}`, process.cwd())}\` undoes this add.`,
