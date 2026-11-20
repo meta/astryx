@@ -291,6 +291,18 @@ describe('--quick with workspace builds missing', () => {
         "a.ts(1,1): error TS2307: Cannot find module 'left-pad' or its corresponding type declarations.",
       ),
     ).toBeNull();
+    // A third-party package's dist path is not a workspace build.
+    expect(
+      missingBuilds(
+        "a.ts(1,1): error TS2307: Cannot find module 'next/dist/shared/lib/image-config' or its corresponding type declarations.",
+      ),
+    ).toBeNull();
+    // A relative path to a workspace package's dist is.
+    expect(
+      missingBuilds(
+        "a.ts(1,1): error TS2307: Cannot find module '../../packages/core/dist/index.js' or its corresponding type declarations.",
+      ),
+    ).toBe('skipped, workspace builds missing; run `pnpm build` first');
   });
 
   it('plans the quick typecheck to keep its output and judge it', () => {

@@ -477,12 +477,13 @@ const MISSING_BUILDS =
 
 /** A missing module that is a workspace package's build output. */
 const BUILD_OUTPUT =
-  /error TS2307: Cannot find module '(?:@astryxdesign\/[^']+\/built(?:\/[^']*)?|[^']*\/dist(?:\/[^']*)?)'/;
+  /error TS2307: Cannot find module '(?:@astryxdesign\/[^']+\/built(?:\/[^']*)?|\.\.?\/[^']*\/dist(?:\/[^']*)?)'/;
 
 /**
  * Why a failed typecheck is skipped, or null: every TypeScript error names a
- * workspace package's build output (`@astryxdesign/<pkg>/built` or a `dist`
- * path) that a run without `pnpm build` lacks.
+ * workspace package's build output (`@astryxdesign/<pkg>/built`, or a relative
+ * path into a `dist` folder) that a run without `pnpm build` lacks. A
+ * third-party package's `dist` subpath is not one.
  * @param {string} text the typecheck's output
  * @returns {string | null}
  */
