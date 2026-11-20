@@ -121,7 +121,15 @@ describe('experimental theme check', () => {
       });
       const d = await check(file);
       expect(Object.keys(d).sort()).toEqual(
-        ['file', 'files', 'fixed', 'modes', 'notes', 'problems'].sort(),
+        [
+          'file',
+          'files',
+          'fixed',
+          'modes',
+          'notes',
+          'problems',
+          'protectedFiles',
+        ].sort(),
       );
       expect(d.modes).toEqual(['light', 'dark']);
       const p = d.problems.find(
@@ -406,6 +414,34 @@ describe('experimental theme check', () => {
       );
       expect(kinds(m)).toContain('one-look');
       expect(m.notes.some(n => /main\.tsx is protected/.test(n))).toBe(true);
+      expect(m.protectedFiles).toEqual([
+        {
+          file: 'src/main.tsx',
+          declaration: expect.stringContaining('.gitignore'),
+        },
+      ]);
+      expect(m.code).toBe('ERR_CODEMOD_PROTECTED');
+      // A pinned app keeps both halves of a [light, dark] value: the half
+      // it does not show stays as the theme wrote it.
+      const pinned = app('dawn', {pinned: 'light', painted: true});
+      fs.renameSync(
+        path.join(
+          cwd,
+          themeFile('dawn', {
+            ...READABLE,
+            '--color-text-secondary': ['#d8d8d8', '#b0b0b0'],
+          }),
+        ),
+        path.join(pinned, 'src', 'dawnTheme.ts'),
+      );
+      const p = (
+        await themeEditCheck('src/dawnTheme.ts', {cwd: pinned, fix: true})
+      ).data;
+      expect(p.modes).toEqual(['light']);
+      const secondary = p.fixed.find(x => x.token === '--color-text-secondary');
+      if (!secondary) throw new Error('the secondary text was not repaired');
+      expect(Array.isArray(secondary.value)).toBe(true);
+      expect(secondary.value[1]).toBe('#b0b0b0');
     },
     T,
   );

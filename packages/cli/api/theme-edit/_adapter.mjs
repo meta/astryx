@@ -105,6 +105,8 @@ import {
   fontsourceSuggestion,
   themeSourceRefusal,
   typedThemeName,
+  autoMediaPart,
+  autoMediaSide,
 } from './_settings.mjs';
 
 // Every build of a theme writes its app copy (src/themes/<theme>/).
@@ -2115,7 +2117,7 @@ async function compileForCheck(root, file) {
 async function lookOf(ctx, root, file, built) {
   const {theme, exportName} = await loadThemeExport(file, {cwd: root});
   const {core} = ctx.project;
-  const app = appThemeUse(root, built);
+  const app = await appThemeUse(root, built);
   /** @type {Array<'light' | 'dark'>} */
   const modes = app?.pinned ? [app.pinned] : ['light', 'dark'];
   const base = await baseResolved(ctx.project, undefined);
@@ -2133,6 +2135,25 @@ async function lookOf(ctx, root, file, built) {
     pairs: ctx.parts.pairs,
     map: ctx.C.MAP,
     contrast: ctx.C.contrast,
+    // The side Core's media surface takes, by the editor's own reading of
+    // Core's rule: measured on an auto surface (a toast), else the one side
+    // the part data saw.
+    mediaSide: (part, fill, tokens, mode) => {
+      const rec = ctx.C.MAP[part];
+      if (!rec?.media) return null;
+      if (!autoMediaPart(ctx, part))
+        return /** @type {'dark' | 'light' | null} */ (
+          rec.mediaSides?.[0] ?? null
+        );
+      return autoMediaSide(fill, tokens, {
+        mode,
+        error: (ctx.C.partReads(part, 'background') ?? []).some(
+          (/** @type {any} */ r) =>
+            r.token === '--color-background-error-inverted' &&
+            fill === tokens[r.token],
+        ),
+      });
+    },
     app: app
       ? {
           themed: app.elements.length > 0,
@@ -2159,6 +2180,23 @@ export async function themeEditCheck(target, options = {}) {
   const ctx = await context(root);
   const abs = checkedThemeSource(root, from, target);
   const file = path.relative(root, abs).split(path.sep).join('/');
+  // A theme file the repair may not write is refused before the build
+  // writes anything beside it.
+  const sourceProtection = options.fix ? protectedBy(root, abs) : null;
+  if (sourceProtection)
+    throw new AstryxError(
+      `${file} is protected (${sourceProtection}), so check --fix writes nothing there. Nothing was changed.`,
+      [
+        {
+          name: runLine(
+            from,
+            `experimental theme check ${quoteCommandArgument(String(target))}`,
+          ),
+          reason: 'the check without the repair',
+        },
+      ],
+      ERROR_CODES.ERR_CODEMOD_PROTECTED,
+    );
   const built = await compileForCheck(root, file);
   const first = await lookOf(ctx, root, file, built);
   const {exportName, app} = first;
@@ -2170,10 +2208,11 @@ export async function themeEditCheck(target, options = {}) {
   const files = [];
   /** @type {string[]} */
   const notes = [];
-  if (ctx.unchecked)
-    notes.push(`text on the components was not measured: ${ctx.unchecked}`);
-  /** @param {string} f */
-  const shown = f => path.relative(root, f).split(path.sep).join('/');
+  /** @type {Array<{file: string, declaration: string}>} */
+  const protectedFiles = [];
+  /** A file as named from the folder the command ran in. @param {string} f */
+  const shown = f =>
+    path.relative(from, path.resolve(root, f)).split(path.sep).join('/');
   if (options.fix) {
     const repair = lookRepair(look, problems);
     const tree = /** @type {import('./_source-values.mjs').ValueTree} */ ({
@@ -2183,13 +2222,6 @@ export async function themeEditCheck(target, options = {}) {
         : {}),
     });
     if (Object.keys(tree).length) {
-      const why = protectedBy(root, abs);
-      if (why)
-        throw new AstryxError(
-          `${file} is protected (${why}), so check writes nothing there. Nothing was changed.`,
-          [],
-          ERROR_CODES.ERR_CODEMOD_PROTECTED,
-        );
       const before = fs.readFileSync(abs, 'utf8');
       /** @type {string} */
       let after;
@@ -2215,11 +2247,12 @@ export async function themeEditCheck(target, options = {}) {
         );
       }
       fixed.push(...repair.lines);
-      files.push(file);
+      files.push(shown(file));
     }
     if (repair.pin && app) {
       const r = pinAppMode(root, app, repair.pin);
       notes.push(...r.declined);
+      protectedFiles.push(...r.protectedFiles);
       if (r.files.length) {
         files.push(...r.files.map(shown));
         fixed.push({
@@ -2231,6 +2264,7 @@ export async function themeEditCheck(target, options = {}) {
     if (repair.paint && app) {
       const r = paintAppPage(root, app);
       notes.push(...r.declined);
+      protectedFiles.push(...r.protectedFiles);
       if (r.files.length) {
         files.push(...r.files.map(shown));
         fixed.push({
@@ -2247,12 +2281,27 @@ export async function themeEditCheck(target, options = {}) {
   return {
     type: 'themeEdit.check',
     data: {
-      file: path.relative(from, abs).split(path.sep).join('/') || file,
+      file: shown(file),
       modes: look.modes,
       problems,
       fixed,
       files: [...new Set(files)],
       notes,
+      // (One file can keep back both app repairs: it is listed once.)
+      protectedFiles: [
+        ...new Map(protectedFiles.map(p => [p.file, p])).values(),
+      ],
+      ...(ctx.unchecked
+        ? {
+            unmeasured: {
+              code: ctx.uncheckedCode ?? ERROR_CODES.ERR_RENDER_FAILED,
+              cause: ctx.unchecked,
+            },
+          }
+        : {}),
+      ...(protectedFiles.length
+        ? {code: /** @type {const} */ ('ERR_CODEMOD_PROTECTED')}
+        : {}),
     },
   };
 }

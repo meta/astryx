@@ -72,6 +72,10 @@ import {
  * @property {Record<string, import('./_parts.mjs').PartRecord>} map the part data
  * @property {(value: any, base: any, modes: string[], helpers: any) => {problems: any[]}} contrast the compiler's contrast measure
  * @property {{themed: boolean, pinned: Mode | null, painted: boolean} | null} app what the app does with the theme; null outside an app
+ * @property {(part: string, fill: string | null, tokens: Record<string, string>, mode: Mode) => 'off' | 'dark' | 'light' | null} mediaSide
+ *   the side Core's media surface in a part draws its text in on a fill, by
+ *   Core's own rule; null for a part with no media surface, `off` where it
+ *   keeps the theme's own text
  */
 
 /** The page and the grounds text and controls sit on. */
@@ -203,18 +207,16 @@ function textProblems(look) {
       if (own != null) return colorIn(own, tokens[mode], mode) ?? own;
       let tok = s.tokens[0];
       // Core's media surface (a toast, a lightbox) sets the text it holds
-      // from --color-on-dark where it is dark, else --color-on-light.
-      if (
-        side === 'fg' &&
-        tok &&
-        TEXT_TOKEN.test(tok) &&
-        p.bg.target &&
-        look.map[p.bg.target]?.media
-      ) {
-        const ground = shown(drawn(p, 'bg', m), null);
-        if (ground)
-          tok =
-            sideOf(ground) === 'dark' ? '--color-on-dark' : '--color-on-light';
+      // from --color-on-dark or --color-on-light, on the side Core picks.
+      if (side === 'fg' && tok && TEXT_TOKEN.test(tok) && p.bg.target) {
+        const media = look.mediaSide(
+          p.bg.target,
+          drawn(p, 'bg', m),
+          tokens[mode],
+          mode,
+        );
+        if (media === 'dark') tok = '--color-on-dark';
+        if (media === 'light') tok = '--color-on-light';
       }
       if (tok) return colorIn(`var(${tok})`, tokens[mode], mode);
       return s.raw;
@@ -472,7 +474,7 @@ export function lookProblems(look) {
       message: `the theme has one ${lookSide} look for both modes, but the app does not pin the mode: in ${lookSide === 'dark' ? 'light' : 'dark'} mode Core's own colors mix in. Pin it with <Theme mode="${lookSide}">`,
     });
   }
-  if (app && own.has(PAGE) && !app.painted)
+  if (app?.themed && own.has(PAGE) && !app.painted)
     out.push({
       kind: 'page',
       mode: 'both',
@@ -611,7 +613,9 @@ export function lookRepair(look, problems) {
     if (
       p.token &&
       p.mode !== 'both' &&
-      ((p.kind === 'text' && own.has(p.token) && DRAWN_AS_TEXT.test(p.token)) ||
+      ((p.kind === 'text' &&
+        (own.has(p.token) || filled.has(p.token)) &&
+        DRAWN_AS_TEXT.test(p.token)) ||
         (p.kind === 'edge' && filled.has(p.token)))
     )
       nudge.set(`${p.token}|${p.mode}`, {
@@ -649,8 +653,10 @@ export function lookRepair(look, problems) {
   for (const [t, mv] of Object.entries(perMode)) {
     const at = (/** @type {Mode} */ m) =>
       mv[m] ?? colorIn(`var(${t})`, res[m], m) ?? undefined;
-    const light = modes.includes('light') ? at('light') : at('dark');
-    const dark = modes.includes('dark') ? at('dark') : at('light');
+    // Both halves are written: a mode the app does not show keeps its own
+    // value.
+    const light = at('light');
+    const dark = at('dark');
     if (!light || !dark) continue;
     /** @type {string | [string, string]} */
     const value = light === dark ? light : [light, dark];

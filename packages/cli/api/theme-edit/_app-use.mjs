@@ -19,7 +19,6 @@ import {CORE_THEME_SOURCES} from '../../foundation/config/theme-state.mjs';
 import {renderedElements} from '../../foundation/discovery/module-exports.mjs';
 import {createFileProtectionResolver} from '../../foundation/fs/file-protection.mjs';
 import {listProjectSourceFiles} from '../../foundation/fs/project-source-files.mjs';
-import {cssImports} from '../../foundation/render/embedded-imports.mjs';
 import {postcss} from '../../foundation/runtime/lazy-dependencies.mjs';
 
 /** Core's stylesheet, the one an app's entry loads. */
@@ -66,10 +65,11 @@ function paintsPage(css) {
 }
 
 /**
- * The end of the import of Core's stylesheet in a script, or -1.
+ * The end of a script's import of a module, or -1.
  * @param {string} source
+ * @param {string} [specifier]
  */
-function coreCssImportEnd(source) {
+function importEnd(source, specifier = CORE_CSS) {
   try {
     const ast = parseModule(source, {
       sourceType: 'module',
@@ -77,7 +77,7 @@ function coreCssImportEnd(source) {
     });
     const node = ast.program.body.find(
       (/** @type {any} */ n) =>
-        n.type === 'ImportDeclaration' && n.source?.value === CORE_CSS,
+        n.type === 'ImportDeclaration' && n.source?.value === specifier,
     );
     return node ? /** @type {number} */ (node.end) : -1;
   } catch {
@@ -85,30 +85,30 @@ function coreCssImportEnd(source) {
   }
 }
 
+/** @param {string} source @param {string} specifier */
+const importsModule = (source, specifier) => importEnd(source, specifier) >= 0;
+
 /**
  * What the app does with a theme, or null with no app source.
  * @param {string} root the project root
  * @param {string[]} themeFiles the theme's source and built module
- * @returns {AppThemeUse | null}
+ * @returns {Promise<AppThemeUse | null>}
  */
-export function appThemeUse(root, themeFiles) {
+export async function appThemeUse(root, themeFiles) {
   const files = listProjectSourceFiles(root, '', {stylesheets: true});
   if (!files.length) return null;
+  // Doctor's own search for the file that loads Core's stylesheet, loaded
+  // only when a check runs.
+  const {coreStylesheetLoad} = await import('../doctor/doctor.mjs');
   const wears = new Set(themeFiles.map(f => path.resolve(f)));
   /** @type {AppThemeUse['elements']} */
   const elements = [];
   let painted = false;
-  /** @type {string | null} */
-  let entry = null;
   for (const file of files) {
-    const text = fs.readFileSync(file, 'utf8');
     if (file.endsWith('.css')) {
-      painted ||= paintsPage(text);
-      if (!entry && cssImports(text).includes(CORE_CSS)) entry = file;
+      painted ||= paintsPage(fs.readFileSync(file, 'utf8'));
       continue;
     }
-    if (!entry && text.includes(CORE_CSS) && coreCssImportEnd(text) >= 0)
-      entry = file;
     for (const el of renderedElements(file, {
       sources: CORE_THEME_SOURCES,
       name: 'Theme',
@@ -123,9 +123,15 @@ export function appThemeUse(root, themeFiles) {
     elements,
     pinned: one === 'light' || one === 'dark' ? one : null,
     painted,
-    entry,
+    entry: coreStylesheetLoad(root).file,
   };
 }
+
+/**
+ * What an app repair did: the files it wrote, what it did not do and why,
+ * and the protected files that kept it from a change.
+ * @typedef {{files: string[], declined: string[], protectedFiles: Array<{file: string, declaration: string}>}} AppRepair
+ */
 
 /**
  * Why a file may not be changed, or null: what protects it.
@@ -141,13 +147,15 @@ export function protectedBy(root, file) {
  * @param {string} root
  * @param {AppThemeUse} use
  * @param {'light' | 'dark'} mode
- * @returns {{files: string[], declined: string[]}}
+ * @returns {AppRepair}
  */
 export function pinAppMode(root, use, mode) {
   /** @type {string[]} */
   const files = [];
   /** @type {string[]} */
   const declined = [];
+  /** @type {AppRepair['protectedFiles']} */
+  const protectedFiles = [];
   /** @type {Map<string, number[]>} */
   const at = new Map();
   for (const el of use.elements) {
@@ -163,6 +171,7 @@ export function pinAppMode(root, use, mode) {
     const shown = path.relative(root, file);
     const why = protectedBy(root, file);
     if (why) {
+      protectedFiles.push({file: shown, declaration: why});
       declined.push(
         `${shown} is protected (${why}); add mode="${mode}" to its <Theme> yourself`,
       );
@@ -174,7 +183,7 @@ export function pinAppMode(root, use, mode) {
     fs.writeFileSync(file, text);
     files.push(file);
   }
-  return {files, declined};
+  return {files, declined, protectedFiles};
 }
 
 /**
@@ -183,7 +192,7 @@ export function pinAppMode(root, use, mode) {
  * beside it, imported after Core's.
  * @param {string} root
  * @param {AppThemeUse} use
- * @returns {{files: string[], declined: string[]}}
+ * @returns {AppRepair}
  */
 export function paintAppPage(root, use) {
   const entry = use.entry;
@@ -193,6 +202,7 @@ export function paintAppPage(root, use) {
       declined: [
         `no file of the app loads ${CORE_CSS}; add the page rule (html, body { background: var(--color-background-body) }) to the app's global stylesheet yourself`,
       ],
+      protectedFiles: [],
     };
   const shown = path.relative(root, entry);
   const why = protectedBy(root, entry);
@@ -200,6 +210,7 @@ export function paintAppPage(root, use) {
     return {
       files: [],
       declined: [`${shown} is protected (${why}); paint the page yourself`],
+      protectedFiles: [{file: shown, declaration: why}],
     };
   const text = fs.readFileSync(entry, 'utf8');
   if (entry.endsWith('.css')) {
@@ -207,8 +218,17 @@ export function paintAppPage(root, use) {
       entry,
       `${text.replace(/\s*$/, '')}\n\n/* The page outside an AppShell, in the theme. */\n${PAGE_RULE}`,
     );
-    return {files: [entry], declined: []};
+    return {files: [entry], declined: [], protectedFiles: []};
   }
+  const end = importEnd(text);
+  if (end < 0)
+    return {
+      files: [],
+      declined: [
+        `${shown} loads ${CORE_CSS} in a way check does not write beside; add the page rule (html, body { background: var(--color-background-body) }) to the app's global stylesheet yourself`,
+      ],
+      protectedFiles: [],
+    };
   const css = path.join(path.dirname(entry), PAGE_CSS);
   const sheet = `/* The page outside an AppShell, in the theme. */\n${PAGE_RULE}`;
   if (fs.existsSync(css) && fs.readFileSync(css, 'utf8') !== sheet)
@@ -217,13 +237,13 @@ export function paintAppPage(root, use) {
       declined: [
         `${path.relative(root, css)} is a file of yours; paint the page yourself`,
       ],
+      protectedFiles: [],
     };
   fs.writeFileSync(css, sheet);
-  const end = coreCssImportEnd(text);
-  if (!text.includes(`'./${PAGE_CSS}'`))
+  if (!importsModule(text, `./${PAGE_CSS}`))
     fs.writeFileSync(
       entry,
       `${text.slice(0, end)}\nimport './${PAGE_CSS}';${text.slice(end)}`,
     );
-  return {files: [css, entry], declined: []};
+  return {files: [css, entry], declined: [], protectedFiles: []};
 }

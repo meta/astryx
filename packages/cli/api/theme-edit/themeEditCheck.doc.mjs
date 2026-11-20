@@ -13,7 +13,7 @@ export const doc = {
   summary:
     'Build a theme source and list what a person would see as broken in light and dark; with fix, repair it.',
   description:
-    "Compiles the theme as `experimental theme compile` does and lists what a person would see as broken in light and dark. It lists, per mode, text that does not read on the components, see-through menus, menus that blend into the page, faint control edges, a surface on the other side of light and dark from the page, a part's text token inside its menus and fields, a one-look theme the app does not pin, and an app page nobody paints. With `fix` it fills the colors the theme leaves unset from the palette generator, moves only the lightness of the theme's own unreadable text (its hue kept), gives the parts inside a bar the theme's own text, gives flat menus Core's overlay shadow, pins the app's mode and paints its page, then checks again. Of the colors the theme sets, it changes only its own text and icon colors. Theme values are normal lines in the theme file; the mode goes on the app's <Theme> elements that wear the theme, and the page rule into the stylesheet that loads Core's (or a new astryx-page.css beside the script that does, imported there). A protected app file is left alone and named in `notes`. Experimental: it may change or be removed in a patch release.",
+    "Compiles the theme as `experimental theme compile` does and lists what a person would see as broken in light and dark. It lists, per mode, text that does not read on the components, see-through menus, menus that blend into the page, faint control edges, a surface on the other side of light and dark from the page, a part's text token inside its menus and fields, a one-look theme the app does not pin, and an app page nobody paints. With `fix` it fills the colors the theme leaves unset from the palette generator, moves only the lightness of the theme's own unreadable text (its hue kept), gives the parts inside a bar the theme's own text, gives flat menus Core's overlay shadow, pins the app's mode and paints its page, then checks again. Of the colors the theme sets, it changes only its own text and icon colors. Theme values are normal lines in the theme file; the mode goes on the app's <Theme> elements that wear the theme, and the page rule into the stylesheet that loads Core's (or a new astryx-page.css beside the script that does, imported there). A protected app file is left alone and listed in `protectedFiles` (with `code` ERR_CODEMOD_PROTECTED), and when Core's components cannot be drawn `unmeasured` says text was not measured; both count as problems left. Experimental: it may change or be removed in a patch release.",
   importPath: '@astryxdesign/cli/api/experimental',
   signature: 'themeEditCheck(theme: string, options?: object): Promise<object>',
   keywords: ['theme', 'experimental theme', 'check', 'contrast', 'fix'],
@@ -29,7 +29,7 @@ export const doc = {
       name: 'options.fix',
       type: 'boolean',
       description:
-        'Write the repair into the theme source (and pin or paint the app), then check again.',
+        'Write the repair into the theme source (and pin or paint the app), then check again. Default false: the check writes nothing but the build.',
     },
     {
       name: 'options.cwd',

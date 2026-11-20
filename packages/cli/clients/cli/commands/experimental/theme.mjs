@@ -2789,8 +2789,10 @@ export function registerExperimentalTheme(group, program) {
           r => checkLines(r.data, name, o.fix ?? false),
           r => {
             const n = r.data.problems.length;
-            // Problems left are a result, and the run fails on them.
-            if (n) process.exitCode = 1;
+            // Problems left, text not measured, or a repair a protected file
+            // kept back are a result, and the run fails on them.
+            if (n || r.data.unmeasured || r.data.protectedFiles.length)
+              process.exitCode = 1;
             return resultSet({count: n, resultKind: 'mixed', empty: n === 0});
           },
         ),
@@ -2845,7 +2847,14 @@ const CHECK_SHOWN = 12;
  */
 function checkLines(d, name, fix) {
   /** @type {Array<string | import('../../formatters/index.mjs').Block>} */
-  const out = [record({file: d.file, modes: d.modes.join(', ')})];
+  const out = [
+    ...(d.unmeasured
+      ? [
+          `[warn] text on the components was not measured (${d.unmeasured.code}): ${d.unmeasured.cause}`,
+        ]
+      : []),
+    record({file: d.file, modes: d.modes.join(', ')}),
+  ];
   if (d.fixed.length)
     out.push(
       section(`fixed (files: ${d.files.join(', ')}):`),
@@ -2859,8 +2868,17 @@ function checkLines(d, name, fix) {
         {layout: 'inline'},
       ),
     );
-  if (!d.problems.length) out.push('[ok] nothing broken');
-  else {
+  if (d.protectedFiles.length)
+    out.push(
+      section(`protected (${d.code ?? 'ERR_CODEMOD_PROTECTED'}):`),
+      records(
+        d.protectedFiles.map(p => ({file: p.file, declaration: p.declaration})),
+        {layout: 'inline'},
+      ),
+    );
+  if (!d.problems.length && !d.unmeasured && !d.protectedFiles.length)
+    out.push('[ok] nothing broken');
+  else if (d.problems.length) {
     const more = d.problems.length - CHECK_SHOWN;
     out.push(
       section(`problems (${d.problems.length}):`),

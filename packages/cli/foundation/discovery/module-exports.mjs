@@ -1847,32 +1847,9 @@ export function rendersElement(file, {sources, name}) {
  * @returns {Array<{file: string, name: string} | null>}
  */
 export function elementPropOrigins(file, {sources, name, prop, unwrap}) {
-  let ast;
-  try {
-    ast = parseModule(file);
-  } catch {
-    return [];
-  }
-  /** @type {Array<{file: string, name: string} | null>} */
-  const origins = [];
-  for (const element of importedElements(ast, sources, name)) {
-    const attribute = (element.attributes ?? []).find(
-      (/** @type {any} */ item) =>
-        item.type === 'JSXAttribute' && item.name?.name === prop,
-    );
-    if (!attribute) continue;
-    const value =
-      attribute.value?.type === 'JSXExpressionContainer'
-        ? withoutTypeWrappers(attribute.value.expression)
-        : null;
-    if (value?.type !== 'Identifier') {
-      origins.push(null);
-      continue;
-    }
-    const binding = bindingOrigin(ast, file, value.name, new Set());
-    origins.push(binding ? aliasedOrigin(binding, new Set(), unwrap) : null);
-  }
-  return origins;
+  return renderedElements(file, {sources, name, prop, unwrap})
+    .filter(element => Object.hasOwn(element.attributes, prop))
+    .map(element => element.origin);
 }
 
 /**

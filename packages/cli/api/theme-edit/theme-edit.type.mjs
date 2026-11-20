@@ -300,7 +300,7 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditCheckOptions
  * @property {string} [cwd] - The folder to start from (default: process.cwd()); the check acts on the Astryx project at or above it, and a theme file is named from here.
- * @property {boolean} [fix] - Write the repair into the theme source (and pin or paint the app), then check again.
+ * @property {boolean} [fix] - Write the repair into the theme source (and pin or paint the app), then check again. Default false.
  */
 
 /**
@@ -328,8 +328,11 @@
  * @property {Array<'light' | 'dark'>} data.modes - The modes checked: both, or the one the app pins.
  * @property {ThemeEditCheckProblem[]} data.problems - What a person would see as broken (after the repair, with fix); empty when nothing is.
  * @property {Array<{token?: string, part?: string, value: string | [string, string], why: string}>} data.fixed - Each value fix wrote: a token, a part's text token, or the app's mode or page; a [light, dark] pair when the modes differ.
- * @property {string[]} data.files - The files fix wrote.
- * @property {string[]} data.notes - What else to know.
+ * @property {string[]} data.files - The files fix wrote, named from the folder the command ran in, as `file` is.
+ * @property {string[]} data.notes - What else to know, such as an app change fix did not make and why.
+ * @property {Array<{file: string, declaration: string}>} data.protectedFiles - App files fix did not change because the project protects them (generated, ignored, a dependency), each with the declaration that protects it.
+ * @property {'ERR_CODEMOD_PROTECTED'} [data.code] - Set while a protected file kept a repair back (exit 1).
+ * @property {{code: string, cause: string}} [data.unmeasured] - Set when Core's components could not be drawn, so text on them was not measured (exit 1).
  */
 
 export {};
