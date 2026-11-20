@@ -20,10 +20,9 @@ export const docs = {
 
   playground: {
     // The values useToast()'s show function sets, so the playground's toast
-    // starts as a shown info toast does.
+    // starts as a shown info toast does. `type` keeps its documented default.
     defaults: {
       body: 'Changes saved',
-      type: 'info',
       isAutoHide: true,
       autoHideDuration: 5000,
     },
@@ -44,7 +43,7 @@ export const docs = {
       type: "'info' | 'error'",
       description:
         "Toast type controlling background color. useToast()'s show function sets 'info' when it is not given.",
-      required: true,
+      default: "'info'",
     },
     {
       name: 'isAutoHide',
