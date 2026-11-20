@@ -11,7 +11,7 @@ import {Section} from '@astryxdesign/core/Section';
 import {Text} from '@astryxdesign/core/Text';
 import {Icon} from '@astryxdesign/core/Icon';
 import {EmptyState} from '@astryxdesign/core/EmptyState';
-import {SquaresPlusIcon, CheckCircleIcon} from '@heroicons/react/24/outline';
+import {AppsIcon, SuccessIcon} from '@astryxdesign/template-icons';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Button} from '@astryxdesign/core/Button';
 import {useToast} from '@astryxdesign/core/Toast';
@@ -110,7 +110,7 @@ export default function LoginTwoColumn() {
               <Section variant="transparent" padding={0} height="100%">
                 <VStack gap={4} height="100%">
                   <HStack gap={2} vAlign="center">
-                    <Icon icon={SquaresPlusIcon} />
+                    <Icon icon={AppsIcon} />
                     <Text type="body" weight="bold">
                       Product Inc.
                     </Text>
@@ -123,7 +123,7 @@ export default function LoginTwoColumn() {
                           headingLevel={1}
                           title="You're signed in"
                           description="Redirecting to your dashboard…"
-                          icon={<Icon icon={CheckCircleIcon} size="lg" />}
+                          icon={<Icon icon={SuccessIcon} size="lg" />}
                         />
                       ) : (
                         <VStack gap={4} hAlign="stretch" width="100%">

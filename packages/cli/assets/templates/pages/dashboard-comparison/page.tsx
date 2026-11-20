@@ -55,11 +55,11 @@ import {
 import {
   ArrowUpIcon,
   ArrowDownIcon,
-  ArrowDownTrayIcon,
+  DownloadIcon,
   UsersIcon,
-  CursorArrowRaysIcon,
-} from '@heroicons/react/24/outline';
-import {StopIcon} from '@heroicons/react/24/solid';
+  ClickIcon,
+} from '@astryxdesign/template-icons';
+import {StopIcon} from '@astryxdesign/template-icons/24/solid';
 
 // ============= TYPES =============
 
@@ -823,7 +823,7 @@ export default function DataDashboardPage() {
               <Button
                 label="Export"
                 variant="secondary"
-                icon={<Icon icon={ArrowDownTrayIcon} size="sm" />}
+                icon={<Icon icon={DownloadIcon} size="sm" />}
                 onClick={() =>
                   // Demo only: replace this toast with the call that performs the action.
                   showToast({
@@ -859,7 +859,7 @@ export default function DataDashboardPage() {
               <SectionHeading
                 title="Devices"
                 hint="Daily active users (thousands)"
-                icon={CursorArrowRaysIcon}
+                icon={ClickIcon}
               />
               <Card padding={6}>
                 <VStack gap={6}>

@@ -440,10 +440,11 @@ works on is `spec:AST-040` FR9's.
     name the components it uses, keyed by the source's text and the parser's
     release, discover's record of the integrations a project loads
     and what each adds, and what it searches in its sources' saved copies
-    (which `search` reads for its discover line), and
-    doctor's
-    file-only docs checks and theme-wiring scan, which doctor keeps only
-    while the folder exists), a
+    (which `search` reads for its discover line), doctor's file-only docs
+    checks and theme-wiring scan, and what doctor's Core-props check finds in
+    the project's source files, keyed by the folders it lists and the files it
+    reads, and by the TypeScript, Core and project-config versions it used;
+    doctor keeps these only while the folder exists), a
     folder only the user can
     reach (made `0700` by the first run that keeps a gather: `search` or
     `build`, or another of those commands where an integration can load,
@@ -545,6 +546,9 @@ works on is `spec:AST-040` FR9's.
     it names no version, no release-specific command or prop, and only entry
     points every release keeps (`search`, `docs`, `component`, and the like),
     so an older copy never misleads.
+    Inside a project that has its own Astryx text (the `astryx-project` skill,
+    or an Astryx block in AGENTS.md or CLAUDE.md), it tells the agent to follow
+    that text, which knows the project's version and setup.
     It also gives the build route the project agent docs give, through their
     shared workflow wording: work in a project folder; a new project adds
     `@astryxdesign/core` and `@astryxdesign/cli`, an existing app that does not
