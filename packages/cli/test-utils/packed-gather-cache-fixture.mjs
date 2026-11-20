@@ -555,14 +555,10 @@ export function usePackedCli() {
     work = fs.mkdtempSync(
       path.join(runFolder() ?? os.tmpdir(), 'packed-gather-cache-'),
     );
-    packed = packPublishedCli(work);
-    // No run starts the global copy's background Core step, as placeCli
-    // leaves it out: once this version is published, the step installs its
-    // Core into a kept temp folder's release cache, and later runs there then
-    // name a Core that a fresh run does not.
-    fs.rmSync(path.join(packed, 'foundation', 'release', 'core-worker.mjs'), {
-      force: true,
-    });
+    // Once this version is published, the background step can install Core in
+    // a kept temp folder. Later runs there would name a Core that a fresh run
+    // does not.
+    packed = packPublishedCli(work, {coreStep: false});
     // What `prepack` writes for a published package.
     fs.writeFileSync(
       path.join(packed, BUILD_ID),

@@ -506,6 +506,16 @@ export function recyclePlacedCopies({
 }
 
 /**
+ * Leave the background Core step out of a test copy.
+ * @param {string} dir the copy's package folder
+ */
+export function removeCoreWorker(dir) {
+  fs.rmSync(path.join(dir, 'foundation', 'release', 'core-worker.mjs'), {
+    force: true,
+  });
+}
+
+/**
  * Link a new copy of the packed CLI at `dir`, labeled `version`.
  * @param {string} dir
  * @param {string} version
@@ -517,11 +527,7 @@ function buildCopy(dir, version, options) {
   // there imports the CLI's code or packages. One link to each serves every
   // copy. Each copy keeps its own code and its other assets.
   linkTree(from, dir, new Set(['assets/templates', 'assets/icons']));
-  if (!options.coreStep) {
-    fs.rmSync(path.join(dir, 'foundation', 'release', 'core-worker.mjs'), {
-      force: true,
-    });
-  }
+  if (!options.coreStep) removeCoreWorker(dir);
   const pkgFile = path.join(dir, 'package.json');
   const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
   fs.unlinkSync(pkgFile);

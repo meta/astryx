@@ -10,16 +10,18 @@
 import {spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {cliTarball} from './global-local-fixtures.mjs';
+import {cliTarball, removeCoreWorker} from './global-local-fixtures.mjs';
 import {CLI_ROOT} from '../foundation/fs/paths.mjs';
 
 /**
  * Unpack the CLI into `work`, with the CLI's own dependencies linked in as an
- * install would place them.
+ * install would place them. `coreStep: false` leaves out the background Core
+ * step so this copy cannot start a download.
  * @param {string} work
+ * @param {{coreStep?: boolean}} [options]
  * @returns {string} the unpacked package folder
  */
-export function packPublishedCli(work) {
+export function packPublishedCli(work, {coreStep = true} = {}) {
   // The run's shared tarball (the node project's global setup packs it once,
   // with every file `prepack` writes, the build id among them).
   fs.copyFileSync(cliTarball(), path.join(work, 'cli.tgz'));
@@ -41,6 +43,7 @@ export function packPublishedCli(work) {
   );
   fs.mkdirSync(path.dirname(packed), {recursive: true});
   fs.renameSync(path.join(work, 'package'), packed);
+  if (!coreStep) removeCoreWorker(packed);
   fs.symlinkSync(ownModules(), path.join(packed, 'node_modules'), 'dir');
   return packed;
 }
