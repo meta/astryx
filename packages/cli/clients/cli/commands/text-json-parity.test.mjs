@@ -1071,6 +1071,26 @@ const CASES = [
     },
   },
   {
+    name: 'experimental theme create',
+    args: [
+      'experimental',
+      'theme',
+      'create',
+      'parity',
+      '--traits',
+      '{"accent": "#c2410c", "corners": 4}',
+    ],
+    prepare: () => themeProject(),
+    // The theme goes, so each run is the same first write (a second run
+    // with the name writes nothing).
+    beforeEachRun: async cwd => {
+      fs.rmSync(path.join(cwd, 'src', 'themes', 'parity'), {
+        recursive: true,
+        force: true,
+      });
+    },
+  },
+  {
     name: 'experimental theme check',
     // With --fix, so the moved color's old value and the records that
     // would keep it show in both outputs; each run starts from the file as

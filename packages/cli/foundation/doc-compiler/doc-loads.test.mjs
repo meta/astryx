@@ -77,8 +77,8 @@ const RUNNERS = {
     sites: ['child_process.spawn'],
   },
   'api/theme-edit/_project.mjs': {
-    runs: "the project's installed Core theme module and a built-in theme it builds on, to check and resolve tokens",
-    sites: ['import(<computed>) ×2', 'require'],
+    runs: "the project's installed Core theme module, its palette entry, and a built-in theme it builds on, to check and resolve tokens and to make colors",
+    sites: ['import(<computed>) ×3', 'require'],
   },
   'api/theme-edit/_settings.mjs': {
     runs: 'the built theme module, to read its resolved tokens after a build',

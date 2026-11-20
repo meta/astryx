@@ -149,6 +149,12 @@ export const doc = {
         "An undo. One step back (`action` `step`): what was `undone`, the `settings` count now, the `stepsLeft`, the `preview` page, any `pictures`, and `sheetStale` when sheet.html still shows the theme as it was. One setting removed (`action` `undo`): the same fields as `themeEdit.set`, with `setting` and `removed` both naming the setting removed, `alsoRemoved` (when the setting was listed more than once by hand: the other entries, removed with it), and `now` saying what applies instead (a whole-theme setting of the same thing, or the base theme's value; `changedTokens` lists the values). Experimental: may change or be removed in a patch release.",
     },
     {
+      value: 'themeEdit.create',
+      stability: 'experimental',
+      description:
+        "A theme written from traits by `experimental theme create <name> --traits`: the `theme` name, the `file` written (the person's to edit), the `look` (`light`, `dark` or `both`), how many `colors` (each with a light and a dark value) and other `values` it holds, the `parts` it styles, the stylesheet `built`, the app `module` that now has it as the default, `firstAdd`, the `check` (the data of `themeEdit.check` after `--fix`), and `notes`. Experimental: may change or be removed in a patch release.",
+    },
+    {
       value: 'themeEdit.previewAdd',
       stability: 'experimental',
       description:
