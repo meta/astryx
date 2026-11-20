@@ -16,6 +16,8 @@ applies_to:
     packages/core/src/BaseProps.ts,
     packages/lab/src/,
     packages/richtext/src/,
+    packages/charts/src/,
+    packages/vega/src/,
     packages/cli/authoring/doctypes/component/,
     internal/eslint-plugin-astryx/,
   ]
@@ -152,14 +154,15 @@ guidance owns the process used to propose and test APIs.
   behavior only where that public API promises cancellation. A component that
   moves a handler to another element keeps the order and cancellation it
   released for that handler and documents it (`family:input-fields` DEC-8).
-- **INV8 — Refs follow React 19.** A public DOM component accepts `ref` as a prop
-  and connects it to the element promised by its contract. A public `handleRef`
-  through which a component or a chart series definition exposes its imperative
-  handle takes `Ref<Handle>`, so it accepts an object ref or a callback ref.
-  React calls a callback ref with the handle when the handle attaches, so the
-  caller learns when the handle is ready. When the handle detaches, a cleanup
-  the callback ref returned runs; a callback ref without a cleanup is called
-  with `null`.
+- **INV8 — Refs follow React 19.** In every package, a public DOM component
+  accepts `ref` as a prop and connects it to the element promised by its
+  contract. A public ref through which a component or a definition exposes an
+  imperative handle takes `Ref<Handle>`, so it accepts an object ref or a
+  callback ref (DEC-7). React calls a callback ref with the handle when the
+  handle attaches, so the caller learns when the handle is ready. When the
+  handle detaches, a cleanup the callback ref returned runs; a callback ref
+  without a cleanup is called with `null`. A chart series definition's
+  `handleRef`, such as streamGL's, is one application.
 - **INV9 — Released APIs change deliberately.** A released prop, type, export,
   default, or observable behavior is not removed, renamed, retyped, deprecated, or
   corrected incompatibly without the lifecycle, evidence, and migration required by
@@ -462,6 +465,17 @@ that names it.
 The owner said: "okay let's get rid of this massive file. We don't need it, we shoudl be generating API deltas agentically for every PR with codebunny". A committed report per package is large, repeats the surface in each package, and goes stale; a delta generated for each pull request flags the change where review happens. CI's surface compare of the merge base and the exact head is the machine source the merge gate reads; it fails closed when a pull request that changes a published package lacks the artifact; for any other pull request it reads none. The review bot's delta at the start of its summary notes is the human view (INV24).
 
 Rejected: keeping a committed generated API report per package.
+
+### DEC-7 — Every package's handle refs accept callback refs
+
+**Reference:** `architecture:public-component-api/DEC-7`
+**Decider:** `cixzhang`, `2026-11-19 17:20 PT`
+
+Callback refs are an API convention of the whole system, not of one package. A
+public ref that exposes an imperative handle, in any package, takes
+`Ref<Handle>` and accepts an object ref or a callback ref (INV8).
+
+Rejected: accepting callback refs only in the packages that ask for them.
 
 ## Verification
 
