@@ -2864,6 +2864,7 @@ function checkLines(d, name, fix) {
       section(`fixed (files: ${d.files.join(', ')}):`),
       records(
         d.fixed.map(f => ({
+          ...(f.group ? {group: f.group} : {}),
           ...(f.token ? {token: f.token} : {}),
           ...(f.part ? {part: f.part} : {}),
           value: Array.isArray(f.value) ? f.value.join(', ') : f.value,

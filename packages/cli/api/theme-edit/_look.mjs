@@ -29,6 +29,7 @@ import {
   splitTop,
 } from './_color.mjs';
 import {acceptCovers} from './_accepted.mjs';
+import {FAMILIES, familyOf} from './_tables.mjs';
 import {
   NON_TEXT,
   STATUS_TOKEN,
@@ -424,17 +425,8 @@ function barTextProblems(look) {
     }
   }
   for (const p of out.values()) {
-    const value = JSON.stringify(
-      String(
-        partValue(
-          look.components,
-          String(p.part),
-          [String(p.token)],
-          /** @type {Mode} */ (p.mode),
-        ),
-      ),
-    );
-    p.message = `${p.part} sets ${p.token}, so ${(p.parts ?? []).slice(0, 3).join(', ')} inside it draw that text on their own fill: ${p.ratio}:1 in ${p.mode}. In ${p.part}'s base style, replace '${p.token}': ${value} with color: ${value}`;
+    const groups = [...new Set((p.parts ?? []).map(q => familyOf(q) ?? q))];
+    p.message = `${p.part} sets ${p.token}, so ${(p.parts ?? []).slice(0, 3).join(', ')} inside it draw that text on their own fill: ${p.ratio}:1 in ${p.mode}. The fix sets the theme's own ${p.token} again on ${groups.join(', ')}`;
   }
   return [...out.values()];
 }
@@ -555,7 +547,8 @@ function colorlessValue(res, t) {
  * The values that repair what can be repaired without a decision.
  * @typedef {object} LookRepair
  * @property {Record<string, string | [string, string]>} tokens token values to write
- * @property {Array<{token?: string, part?: string, value: string | [string, string], why: string, from?: string | [string, string], accept?: AcceptRecord[]}>} lines
+ * @property {Record<string, Record<string, Record<string, string>>>} components part styles to write: the theme's own text again, on each member of a group inside a bar
+ * @property {Array<{token?: string, part?: string, group?: string, parts?: string[], value: string | [string, string], why: string, from?: string | [string, string], accept?: AcceptRecord[]}>} lines
  *   what each written value is for; a color the author set that a line
  *   moves names its old value (`from`) and the records that would keep it
  *   as designed instead (`accept`, with the reason left to write)
@@ -751,10 +744,40 @@ export function lookRepair(look, problems) {
             why: "menus blended into the page: Core's own overlay shadow",
           });
         }
+  // The parts inside a bar take the theme's own text again, a group at a
+  // time: every member of the group a failing part belongs to (its own
+  // part when it belongs to none), so the group stays alike.
+  /** @type {LookRepair['components']} */
+  const components = {};
+  for (const p of problems) {
+    if (p.kind !== 'bar-text' || !p.token) continue;
+    const l = colorIn(`var(${p.token})`, res.light, 'light');
+    const d = colorIn(`var(${p.token})`, res.dark, 'dark');
+    const value = l && d && l !== d ? `light-dark(${l}, ${d})` : (l ?? d);
+    if (!value) continue;
+    /** @type {Map<string, string[]>} */
+    const groups = new Map();
+    for (const q of p.parts ?? []) {
+      const group = familyOf(q);
+      groups.set(group ?? q, group ? FAMILIES[group] : [q]);
+    }
+    for (const [group, members] of groups) {
+      for (const q of members)
+        ((components[q] ??= {}).base ??= {})[p.token] = value;
+      lines.push({
+        group,
+        parts: members,
+        token: p.token,
+        value,
+        why: `inside ${p.part}: the theme's own text on their own fill`,
+      });
+    }
+  }
   const one = problems.find(p => p.kind === 'one-look');
   const darkPage = shown(colorIn(`var(${PAGE})`, res.dark, 'dark'), null);
   return {
     tokens,
+    components,
     lines,
     pin: one && darkPage ? sideOf(darkPage) : null,
     paint: problems.some(p => p.kind === 'page'),

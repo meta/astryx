@@ -2228,9 +2228,12 @@ export async function themeEditCheck(target, options = {}) {
     path.relative(from, path.resolve(root, f)).split(path.sep).join('/');
   if (options.fix) {
     const repair = lookRepair(look, problems);
-    const tree = /** @type {import('./_source-values.mjs').ValueTree} */ (
-      Object.keys(repair.tokens).length ? {tokens: repair.tokens} : {}
-    );
+    const tree = /** @type {import('./_source-values.mjs').ValueTree} */ ({
+      ...(Object.keys(repair.tokens).length ? {tokens: repair.tokens} : {}),
+      ...(Object.keys(repair.components).length
+        ? {components: repair.components}
+        : {}),
+    });
     if (Object.keys(tree).length) {
       const before = fs.readFileSync(abs, 'utf8');
       /** @type {string} */

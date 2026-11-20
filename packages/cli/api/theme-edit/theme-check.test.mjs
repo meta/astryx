@@ -229,17 +229,28 @@ describe('experimental theme check', () => {
         token: '--color-text-primary',
       });
       expect(leak?.parts?.length).toBeGreaterThan(0);
-      // The repair is the bar's own line: fix names it and writes no part line.
+      // The repair keeps the bar's line and sets the theme's own text on
+      // the groups inside it: the menus read again, and the bar's items
+      // still read on the bar.
       expect(leak?.message).toMatch(
-        /In top-nav's base style, replace '--color-text-primary': "#ffffff" with color: "#ffffff"/,
+        /sets the theme's own --color-text-primary again on /,
       );
-      const barFile = path.join(cwd, 'bar', 'barTheme.ts');
       const barFixed = await check('bar/barTheme.ts', {fix: true});
-      expect(barFixed.problems.some(p => p.kind === 'bar-text')).toBe(true);
-      expect(barFixed.fixed.some(x => x.part)).toBe(false);
-      expect(fs.readFileSync(barFile, 'utf8').match(/"base":/g)).toHaveLength(
-        1,
+      expect(barFixed.problems.some(p => p.kind === 'bar-text')).toBe(false);
+      expect(
+        barFixed.problems.some(p =>
+          (p.parts ?? []).some(q => q.startsWith('top-nav')),
+        ),
+      ).toBe(false);
+      const groupLines = barFixed.fixed.filter(x => x.group);
+      expect(groupLines.length).toBeGreaterThan(0);
+      expect(barFixed.fixed.every(x => !x.part)).toBe(true);
+      const text = fs.readFileSync(
+        path.join(cwd, 'bar', 'barTheme.ts'),
+        'utf8',
       );
+      // The bar's own line stays as written.
+      expect(text).toContain('"--color-text-primary": "#ffffff"');
     },
     T,
   );
