@@ -239,7 +239,7 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
     itself, such as a spring, a drag with snap points, or a navigation
     transition. Each transition and gesture runs frame by frame on the UI
     thread, so it keeps the display's rate while the JavaScript thread is
-    busy.
+    busy. Its feel follows `spec:AST-107` and `spec:AST-108`.
   - Work that can take long, such as file, storage, and network work,
     decoding, rendering a page, and cryptography, runs on background threads.
     A method that runs on the main thread hands that work to them and returns
@@ -300,7 +300,7 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
     registration through autolinking and React Native's code generation, the
     module lookup of FR2, the Fabric components, view managers, and Turbo
     Native Modules that forward to the native seam (FR11), and the binding's
-    own delivery of calls, events, and threads (`spec:AST-112/FR22`).
+    own delivery of calls, events, and threads.
   - Engine-neutral: each contract's name, kind, platforms, members, value
     types, results and reasons, and named features; the result vocabulary
     (FR3); the values that cross (FR4); the growth by named features (FR5);
@@ -317,8 +317,12 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
 - **FR9 — Astryx's native code sits beside the native code an app adds.**
   - The platform carries all the native code it needs (`spec:AST-112/FR2`),
     and an app adds react-native-gesture-handler, Reanimated,
-    react-native-screens, react-native-safe-area-context, or another library
-    with native code beside it without conflict.
+    react-native-screens, react-native-safe-area-context, a haptics library,
+    or another library with native code beside it without conflict. A compatibility test runs
+    Astryx components beside each of them on iOS and Android, and a release
+    waits for it to pass. Astryx measures its own safe-area insets from the
+    platform; they agree with any other inset provider the app uses, and the
+    compatibility test checks that they agree.
   - Every class, type, C symbol, and category or extension method that
     Astryx's native code adds to the Objective-C runtime carries the `Astryx`
     prefix. Android code lives in the package's own namespace, and its
@@ -328,16 +332,38 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
     React Native's classes, and other libraries' classes stay as they are, and
     the application's delegate, each window's root, other objects' delegates
     and data sources, and app-wide appearance proxies stay the app's.
+  - The core fixes what it owns inside its own hosts (DEC-6):
+    - The stack host resets React Native's right-to-left mirror on the scroll
+      view it owns, so the large title draws correctly.
+    - On iOS, the library's modal surfaces present only through the
+      presentation host; the library has no React Native `Modal` path on iOS.
+    - The generated app shell and the Expo package's configuration plugin
+      write the explicit call that hands an opened URL to the sign-in claim;
+      an app with its own native projects makes that call itself. No
+      interceptor stands in for it.
+    - The HTTP cache guarantees of clear on sign-out, under which nothing in
+      flight lands after a clear, cover React Native's networking session,
+      through React Native's public session-configuration hook, and Astryx's
+      own sessions. The app's shared URL cache stays the app's own. An app
+      that sets its own session-configuration provider opts in to these
+      guarantees explicitly.
   - An app-wide setting that a piece changes, such as the audio session's
     category, holds while that piece is active, and the piece's group record
     names it.
   - It observes system notifications and passes them on, and its gesture
     recognizers join each platform's arbitration (`spec:AST-112/FR18`) within
     Astryx's views.
-  - Native code calls public platform API (`spec:AST-112/DEC-15`). Where a
+  - Native code calls public platform API (DEC-9). Where a
     group record names an exception, the binary reports a self-check for it
     through the platform info module, and the piece takes its public path
     when the check fails.
+  - On iOS the core adds no MetricKit subscriber unless the app opts in to it
+    through its capability list (`spec:AST-112/FR3`), as it opts in a
+    capability: an app that did not opt in has no Astryx subscriber, and an
+    app that did has exactly one (DEC-10).
+
+  FR9 gap: on iOS, VideoView's full-screen presentation uses React Native's
+  `Modal` instead of the presentation host.
 
 - **FR11 — Native seam.** Astryx's native views and modules are exposed
   through a seam generated from the contracts; React Native's glue and other
@@ -470,8 +496,11 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
 | FR6      | Gesture and transition runs on the Simulator, the emulator, and devices with a busy JavaScript thread; main-thread checker runs                                                                                                                                                                                                          | a drag; a sheet; a navigation transition; a file read from the main thread                                                                                                                                                                                 | A dropped frame while JavaScript is busy, JavaScript per frame, a view change off the main thread, or main-thread file or network work                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | FR7      | The conformance suites on iOS, Android, and the JavaScript double; the frame recorder's behavior cases on the Simulator and unit tests of `recordFrames`                                                                                                                                                                                 | each contract; a binary with and without each feature; a push; a large title's collapse; an off-screen `testID`; a second recording; a step that never settles; a Release binary; VoiceOver on during a recording                                          | An implementation that fails its suite, a double that passes a case the device fails, a native behavior change without cases, a sample at a resting position during an animation, an off-screen `testID` that slows the recorded frames, two recordings at once, a recording past 60 seconds, a recorder in a Release binary, a `recordFrames` that passes without recording, or a recording that changes an element's label, value, or order                                                                                                                  |
 | FR8      | Check of each codegen spec against its engine-neutral description; source check of contract names and types                                                                                                                                                                                                                              | each contract                                                                                                                                                                                                                                              | A spec that differs from its description, a description without its owner, platforms, first version, stability, members, or named features, or a binding-layer name in a contract or an app-facing type                                                                                                                                                                                                                                                                                                                                                        |
-| FR9      | Symbol and runtime checks of the built binaries; the compatibility apps of `spec:AST-112/FR2` on iOS and Android                                                                                                                                                                                                                         | a binary with each listed library beside Astryx; an exception's self-check that fails                                                                                                                                                                      | An unprefixed symbol, a swizzled or exchanged method, a replaced delegate or appearance proxy, a conflict with a listed library, or a failed self-check without the public path                                                                                                                                                                                                                                                                                                                                                                                |
+| FR9      | Symbol and runtime checks of the built binaries; a source check of the platform's native calls; the compatibility test on iOS and Android                                                                                                                                                                                                | a binary with each listed library beside Astryx; an app with and without another inset provider; a call outside public platform API; an exception's self-check that fails                                                                                  | An unprefixed symbol, a swizzled or exchanged method, a replaced delegate or appearance proxy, a call outside public platform API with no exception named in its record, a conflict with a listed library, a release that ships with a failing compatibility test, Astryx insets that disagree with another inset provider the app uses, or a failed self-check without the public path                                                                                                                                                                        |
+| FR9      | A source check of the core's iOS code                                                                                                                                                                                                                                                                                                    | each file in the core                                                                                                                                                                                                                                      | A method exchange, set-implementation, or replace-method call on a UIKit or React Native class                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| FR9      | A launch test on iOS of the shared URL cache; a clear on sign-out with requests in flight over React Native's networking and Astryx's own sessions                                                                                                                                                                                       | the default session-configuration provider; an app's own provider with and without the opt-in                                                                                                                                                              | The app's shared URL cache replaced, a response that lands after a clear, or an app's own provider overridden without its opt-in                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | FR11     | The package's check of generated files; native builds on iOS and Android of every class against its seam; source check of each binding; unit tests of the generated type mapping; conformance suites run through the seam                                                                                                                | each native view and module; a spec change; a prop batch; an event with and without a payload; an optional value without a default; a member whose name a platform class already has; a C caller on iOS; a seam reject; a record with every declared field | A stale seam, a class that does not adopt its seam, a binding that reaches a class other than through its seam, an engine type or any name lookup crossing the seam, a prop set out of spec order or unchanged, a missing `didUpdateProps` call, an event without its typed arguments, an optional view scalar that reads null, a generated name without the `Seam` infix, a colliding member name without `Prop` or `Field`, a seam reject that reaches JavaScript as a rejection, a record field its spec does not declare, or a behavior change on adoption |
+| DEC-10   | A launch test on iOS of the subscribers MetricKit holds, in an app built with and without the opt-in                                                                                                                                                                                                                                     | an app that did not opt in; an app that opted in; a second launch step in the same process                                                                                                                                                                 | An Astryx subscriber in an app that did not opt in, none or more than one in an app that did, or an app subscriber removed or replaced                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 ## Decision log
 
@@ -559,6 +588,26 @@ written once and reached by more than one engine, and a binding by class name
 or selector ties a class's internals to one engine and breaks when the class
 changes. The seam's typed, generated members let each engine bind the same
 class, so the class keeps one implementation across engines.
+
+### DEC-9 — Native code uses public platform API only
+
+**Reference:** `spec:AST-140/DEC-9`
+**Decider:** imdreamrunner, 2026-11-17
+
+An app built with these packages passes store review and keeps working across
+OS updates only when its native code uses public API. A record that needs an
+exception names it and the reason, so each one is visible and reviewed.
+
+### DEC-10 — App diagnostics are the app's choice
+
+**Reference:** `spec:AST-140/DEC-10`
+**Decider:** imdreamrunner, 2026-11-19
+
+A library collects no app-level diagnostics the app did not ask for. The core
+adds a MetricKit subscriber only when the app opts in through its capability
+list (`spec:AST-112/FR3`), so an app's diagnostics stay the app's choice, and
+an app that opts in has the core's subscriber beside any subscriber it adds
+itself.
 
 ## Open questions
 
