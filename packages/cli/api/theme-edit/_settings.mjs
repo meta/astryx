@@ -7164,8 +7164,12 @@ export function compileTheme(ctx, data, base) {
                 /^(?:background-color|background)$/.test(kebab(o.thing)),
             );
             if (ownFill && look.backgroundColor != null) {
-              const {backgroundColor, ...others} = look;
-              Object.assign(block({...s, mode: undefined}, t), others);
+              Object.assign(
+                block({...s, mode: undefined}, t),
+                Object.fromEntries(
+                  Object.entries(look).filter(([k]) => k !== 'backgroundColor'),
+                ),
+              );
               continue;
             }
             if (keep && look.backgroundColor != null) {
