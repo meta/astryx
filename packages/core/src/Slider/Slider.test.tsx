@@ -331,6 +331,19 @@ describe('Slider', () => {
 
   // --- Required state ---
 
+  it('describes required state with the provider catalog', () => {
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        overrides={{fr: {'@astryx.slider.required': 'Obligatoire'}}}>
+        <Slider label="Volume" value={50} isRequired />
+      </InternationalizationProvider>,
+    );
+    const slider = screen.getByRole('slider');
+    expect(slider).toHaveAccessibleDescription(/Obligatoire/);
+    expect(slider).not.toHaveAccessibleDescription(/Required/);
+  });
+
   it('conveys required state through the accessible description', () => {
     render(<Slider label="Volume" value={50} isRequired />);
     const slider = screen.getByRole('slider');

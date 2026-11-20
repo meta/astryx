@@ -34,15 +34,15 @@ import {
 import type {TableColumn} from '@astryxdesign/core/Table';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {
-  ArrowDownTrayIcon,
-  DocumentDuplicateIcon,
-  EllipsisHorizontalIcon,
-  EnvelopeIcon,
-  NoSymbolIcon,
-  PencilIcon,
-  TrashIcon,
-  UserPlusIcon,
-} from '@heroicons/react/24/outline';
+  DownloadIcon,
+  CopyIcon,
+  MoreHorizontalIcon,
+  MailIcon,
+  BlockIcon,
+  EditIcon,
+  DeleteIcon,
+  UserAddIcon,
+} from '@astryxdesign/template-icons';
 
 // Types
 type MemberRole = 'owner' | 'admin' | 'editor' | 'viewer';
@@ -422,7 +422,7 @@ export default function SimpleTableTemplate() {
             label: `Actions for ${member.name}`,
             variant: 'ghost',
             size: 'sm',
-            icon: <Icon icon={EllipsisHorizontalIcon} size="sm" />,
+            icon: <Icon icon={MoreHorizontalIcon} size="sm" />,
             isIconOnly: true,
           }}
           hasChevron={false}
@@ -430,7 +430,7 @@ export default function SimpleTableTemplate() {
           items={[
             {
               label: 'Edit member',
-              icon: PencilIcon,
+              icon: EditIcon,
               onClick: () =>
                 // Demo only: replace this toast with the call that performs the action.
                 showToast({
@@ -440,7 +440,7 @@ export default function SimpleTableTemplate() {
             },
             {
               label: 'Copy email',
-              icon: DocumentDuplicateIcon,
+              icon: CopyIcon,
               onClick: () =>
                 void copy(member.email).then(copied =>
                   showToast({
@@ -453,7 +453,7 @@ export default function SimpleTableTemplate() {
             },
             {
               label: 'Resend invite',
-              icon: EnvelopeIcon,
+              icon: MailIcon,
               isDisabled: member.status !== 'invited',
               onClick: () =>
                 // Demo only: replace this toast with the call that sends the invite.
@@ -467,7 +467,7 @@ export default function SimpleTableTemplate() {
                 member.status === 'suspended'
                   ? 'Reactivate member'
                   : 'Suspend member',
-              icon: NoSymbolIcon,
+              icon: BlockIcon,
               isDisabled: member.status === 'invited',
               onClick: () =>
                 updateMembers(new Set([member.id]), {
@@ -478,7 +478,7 @@ export default function SimpleTableTemplate() {
             {type: 'divider' as const},
             {
               label: 'Remove member',
-              icon: TrashIcon,
+              icon: DeleteIcon,
               variant: 'destructive' as const,
               onClick: () => askRemoval([member.id]),
             },
@@ -503,7 +503,7 @@ export default function SimpleTableTemplate() {
                   label="Invite member"
                   variant="primary"
                   size="lg"
-                  icon={<Icon icon={UserPlusIcon} />}
+                  icon={<Icon icon={UserAddIcon} />}
                   onClick={() =>
                     // Demo only: replace this toast with the invite flow.
                     showToast({
@@ -521,7 +521,7 @@ export default function SimpleTableTemplate() {
                       <Button
                         label="Remove"
                         variant="ghost"
-                        icon={<Icon icon={TrashIcon} />}
+                        icon={<Icon icon={DeleteIcon} />}
                         onClick={() =>
                           askRemoval(Array.from(selectionState.selectedKeys))
                         }
@@ -543,7 +543,7 @@ export default function SimpleTableTemplate() {
                           },
                           {
                             label: 'Export',
-                            icon: ArrowDownTrayIcon,
+                            icon: DownloadIcon,
                             onClick: () =>
                               // Demo only: replace this toast with the export call.
                               showToast({

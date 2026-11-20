@@ -1921,7 +1921,9 @@ export function Slider({ref, ...props}: SliderProps) {
         {textDisplay}
       </div>
       {conveysRequired && (
-        <VisuallyHidden id={requiredID}>Required</VisuallyHidden>
+        <VisuallyHidden id={requiredID}>
+          {t('@astryx.slider.required')}
+        </VisuallyHidden>
       )}
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}

@@ -95,6 +95,7 @@ import {
   typedWordTest,
 } from '../../foundation/text/suggest-order.mjs';
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
+import {isOutsideAnyPackage} from '../../foundation/env/project-scope.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
 
 export {OVERLAY_LANGUAGES, overlayLanguages};
@@ -1663,7 +1664,7 @@ export async function packageDocTargets(integration, discovered) {
     let owner = null;
     /** @type {string | null} */
     let basePath = null;
-    /** @type {ReadonlyArray<{path: string}>} every extension of the target, in configured order */
+    /** @type {ReadonlyArray<{package: string, path: string, providerId?: string}>} every extension of the target, in configured order */
     let extensions = [];
     /** @type {string[]} */
     let guidesBelow = [];
@@ -1713,7 +1714,9 @@ export async function packageDocTargets(integration, discovered) {
         if (doc == null) break;
         const file = (await loadTopicFile(extension.path, null)).doc;
         if (file == null) continue;
-        const merged = mergeTopicReport(doc, file);
+        const merged = mergeTopicReport(doc, file, {
+          contributor: extension.providerId ?? extension.package,
+        });
         if (extension.path === record.path) {
           unplaced = merged.unplaced;
           break;
@@ -2674,6 +2677,7 @@ export async function integrationDocTypes(integration, cwd) {
   const checked = await checkDocTypes(files, {
     packageDir: packageDir ?? cwd,
     resolveFrom: [cwd, packageDir],
+    outsideAnyPackage: isOutsideAnyPackage(cwd),
   });
   // Test fixtures no reader serves don't ship as docs: only counted.
   const report =
@@ -2699,8 +2703,10 @@ export async function integrationDocTypes(integration, cwd) {
 /**
  * The skills the project's integrations declare, each with the route `astryx
  * docs` reads its doc by, and why each skill left out was left out.
- * `complete` is false when an integration's docs folder could not be read:
- * its skills are unknown, so no copy is removed as a leftover.
+ * `complete` is false when an integration's docs could not be read (its
+ * docs folder, a doc that did not load, or, for a package that declares a
+ * skill, a doc the catalog withdrew the package's docs for): its skills are unknown, so no copy is removed as a
+ * leftover.
  * @param {string} cwd
  * @returns {Promise<{skills: Array<import('../../foundation/discovery/integration-skills.mjs').IntegrationSkill & {route: string}>, problems: Array<{package: string, message: string, unread?: true}>, complete: boolean, unread: string[]}>}
  */
@@ -2708,7 +2714,17 @@ export async function projectIntegrationSkills(cwd) {
   const catalog = await loadDocsCatalog(cwd);
   const project = projectOfCatalog.get(catalog);
   if (!project) return {skills: [], problems: [], complete: true, unread: []};
-  const {skills, problems, unread} = await discoverIntegrationSkills(project.loadedIntegrations);
+  const {skills, problems, unread} = await discoverIntegrationSkills(
+    project.loadedIntegrations,
+  );
+  // A package with a doc that did not load has all its docs withdrawn, so
+  // its skills have no doc to read; they count as unread, not as left out.
+  const named = new Set(unread);
+  const withdrawn = new Set(catalog.issues.map(issue => issue.package));
+  for (const pkg of withdrawn) {
+    if (skills.some(each => each.package === pkg) && !unread.includes(pkg))
+      unread.push(pkg);
+  }
   const complete = unread.length === 0;
   if (skills.length === 0) return {skills: [], problems, complete, unread};
   const tree = await projectTree(catalog);
@@ -2723,12 +2739,28 @@ export async function projectIntegrationSkills(cwd) {
     const file =
       node.guideOverlay?.replacement?.path ??
       ref?.topicFile ??
-      (ref?.flatTopic != null ? catalog.resolve(ref.flatTopic)?.path : undefined);
+      (ref?.flatTopic != null
+        ? catalog.resolve(ref.flatTopic)?.path
+        : undefined);
     if (typeof file === 'string') routes.set(path.resolve(file), node.route);
   }
   /** @type {Array<import('../../foundation/discovery/integration-skills.mjs').IntegrationSkill & {route: string}>} */
   const kept = [];
+  // A package already named as unread has its note.
+  const noted = new Set(named);
   for (const each of skills) {
+    if (withdrawn.has(each.package)) {
+      if (!noted.has(each.package)) {
+        noted.add(each.package);
+        problems.push({
+          package: each.package,
+          message:
+            'a doc did not load, so its docs are withdrawn; its skills are left out, and the copies already written stay until it loads.',
+          unread: true,
+        });
+      }
+      continue;
+    }
     const route = routes.get(path.resolve(each.file));
     if (route == null) {
       problems.push({
@@ -2769,4 +2801,3 @@ export async function renderProjectAgentDocsBlock(root, options = {}) {
   }
   return renderAgentDocsBlock(root, {...options, skills});
 }
-

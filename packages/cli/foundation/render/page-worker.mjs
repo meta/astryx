@@ -99,7 +99,7 @@ const stylexPlugin = /** @type {any} */ (requireFromCli('@stylexjs/babel-plugin'
  */
 const PAGE_CLASS_PREFIX = 'p';
 
-/** StyleX rules collected from every local module the page loads. */
+/** StyleX rules collected from every local module the page loads, and from each package file that holds StyleX source. */
 /** @type {unknown[]} */
 const stylexRules = [];
 /** CSS text of local stylesheets the page imports, in load order. */
@@ -1613,6 +1613,106 @@ function servedThemeFiles(source, filename) {
   return Object.keys(files).length > 0 ? files : null;
 }
 
+/**
+ * The StyleX compiler and its options for one file: the page's class-name
+ * prefix, and the theme files a module outside a project imports.
+ * @param {string} source
+ * @param {string} filename
+ * @returns {[unknown, object]}
+ */
+function stylexPluginFor(source, filename) {
+  const themeFiles = servedThemeFiles(source, filename);
+  return [
+    stylexPlugin,
+    {
+      dev: false,
+      runtimeInjection: false,
+      treeshakeCompensation: true,
+      classNamePrefix: PAGE_CLASS_PREFIX,
+      unstable_moduleResolution: {type: 'commonJS', rootDir: root},
+      ...(themeFiles ? {aliases: themeFiles} : {}),
+    },
+  ];
+}
+
+/**
+ * A StyleX call that the compiler replaces at build time. Compiled StyleX
+ * keeps only runtime calls such as `props`, so a package file without one of
+ * these calls ships compiled styles.
+ */
+const STYLEX_BUILD_CALL = /\b(?:create|keyframes|defineVars|defineConsts|createTheme|firstThatWorks|positionTry|defineMarker|defaultMarker|viewTransitionClass)\s*\(/g;
+
+/** @param {string} code how many StyleX build-time calls the code holds */
+const buildCalls = code => code.match(STYLEX_BUILD_CALL)?.length ?? 0;
+
+/** Each package file checked for StyleX source: its compiled code, or null when it stays as it ships. @type {Map<string, string | null>} */
+const packageStylex = new Map();
+/** Each package file that holds StyleX source, for the page's script. @type {Set<string>} */
+const stylexSourceFiles = new Set();
+
+/**
+ * A package file (installed, or a workspace package linked in) that ships
+ * StyleX source, compiled with StyleX only, as an app's build compiles it:
+ * with the page's class-name prefix, its rules joining the page's. Null for
+ * every other file, which stays byte for byte as it ships. Each file is
+ * compiled once, for the server and the browser both.
+ * @param {string} source
+ * @param {string} filename
+ * @returns {string | null}
+ */
+function compilePackageStylex(source, filename) {
+  const known = packageStylex.get(filename);
+  if (known !== undefined) return known;
+  /** @type {string | null} */
+  let code = null;
+  if (source.includes('@stylexjs/stylex') && buildCalls(source) > 0) {
+    const ts = /\.(tsx?|mts|cts)$/.test(filename);
+    const result = transformSync(source, {
+      filename,
+      babelrc: false,
+      configFile: false,
+      sourceType: 'unambiguous',
+      parserOpts: {
+        plugins: /** @type {import('@babel/core').ParserOptions['plugins']} */ (
+          ts ? [...(/\.[cm]?tsx$/.test(filename) ? ['jsx'] : []), 'typescript', 'decorators-legacy'] : ['jsx']
+        ),
+      },
+      generatorOpts: {retainLines: true},
+      compact: false,
+      plugins: [stylexPluginFor(source, filename)],
+    });
+    const rules = /** @type {any} */ (result?.metadata)?.stylex;
+    // A marker (`defineMarker`, `defaultMarker`) compiles to a class name with
+    // no rule, so a file whose compile replaced a build-time call counts too.
+    // Compiled StyleX keeps its count: only comments and other names match.
+    const hasRules = Array.isArray(rules) && rules.length > 0;
+    if (result?.code && (hasRules || buildCalls(result.code) < buildCalls(source))) {
+      if (hasRules) stylexRules.push(...rules);
+      code = result.code;
+      stylexSourceFiles.add(filename);
+    }
+  }
+  packageStylex.set(filename, code);
+  return code;
+}
+
+/**
+ * The package files in a built script that no render checked yet, checked
+ * for StyleX source now: files only the browser loads, such as a package a
+ * click imports or a module of one that only a lazily loaded module imports.
+ * @param {string[]} files
+ * @returns {boolean} whether one of them holds StyleX source
+ */
+function checkScriptFiles(files) {
+  let found = false;
+  for (const file of files) {
+    if (packageStylex.has(file) || isLocal(file) || !/\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(file)) continue;
+    if (!fs.existsSync(file)) continue;
+    if (compilePackageStylex(fs.readFileSync(file, 'utf8'), file) !== null) found = true;
+  }
+  return found;
+}
+
 const plain = createJiti(entry, {fsCache: false, jsx: {runtime: 'automatic'}});
 
 const jiti = createJiti(entry, {
@@ -1630,9 +1730,10 @@ const jiti = createJiti(entry, {
  * One of the page's own files, or a file outside them and outside
  * `node_modules` that a path alias may reach, compiled as the server
  * compiles it: the page's files with its plugins and StyleX, the other with
- * its path aliases. The code stays an ES module with its JSX and types. For
- * the browser (`browser`), the page's files keep their real charts and
- * record nothing. Null for any other file.
+ * its path aliases. A package file that ships StyleX source compiles with
+ * StyleX ({@link compilePackageStylex}). The code stays an ES module with its
+ * JSX and types. For the browser (`browser`), the page's files keep their
+ * real charts and record nothing. Null for any other file.
  * @param {string} source
  * @param {string} filename
  * @param {boolean} [browser]
@@ -1643,7 +1744,6 @@ function compilePageModule(source, filename, browser = false) {
     if (!localFiles.includes(filename)) localFiles.push(filename);
     moduleFiles.add(filename);
     const ts = /\.(tsx?|mts|cts)$/.test(filename);
-    const themeFiles = source.includes('stylex') ? servedThemeFiles(source, filename) : null;
     const result = transformSync(source, {
       filename,
       babelrc: false,
@@ -1655,28 +1755,17 @@ function compilePageModule(source, filename, browser = false) {
       plugins: [
         aliasPlugin(),
         pagePlugin(filename, browser),
-        ...(source.includes('stylex')
-          ? [
-              [
-                stylexPlugin,
-                {
-                  dev: false,
-                  runtimeInjection: false,
-                  treeshakeCompensation: true,
-                  classNamePrefix: PAGE_CLASS_PREFIX,
-                  unstable_moduleResolution: {type: 'commonJS', rootDir: root},
-                  ...(themeFiles ? {aliases: themeFiles} : {}),
-                },
-              ],
-            ]
-          : []),
+        ...(source.includes('stylex') ? [stylexPluginFor(source, filename)] : []),
       ],
     });
     const rules = /** @type {any} */ (result?.metadata)?.stylex;
     if (Array.isArray(rules)) stylexRules.push(...rules);
     return result?.code ?? source;
   }
-  if (PATHS.length > 0 && !filename.includes(NODE_MODULES) && /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)) {
+  if (!/\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)) return null;
+  const packageCode = compilePackageStylex(source, filename);
+  if (packageCode !== null) source = packageCode;
+  if (PATHS.length > 0 && !filename.includes(NODE_MODULES)) {
     const ts = /\.(tsx?|mts|cts)$/.test(filename);
     const result = transformSync(source, {
       filename,
@@ -1697,7 +1786,7 @@ function compilePageModule(source, filename, browser = false) {
     });
     return result?.code ?? source;
   }
-  return null;
+  return packageCode;
 }
 
 /**
@@ -1961,6 +2050,21 @@ function classify(e) {
 function browserSource(file) {
   const filename = path.normalize(file);
   const compiled = compilePageModule(fs.readFileSync(filename, 'utf8'), filename, true);
+  if (compiled === null) return null;
+  const loader = /\.[cm]?tsx$/.test(filename) ? 'tsx' : /\.[cm]?ts$/.test(filename) ? 'ts' : 'jsx';
+  return {contents: compiled, loader};
+}
+
+/**
+ * A package file that holds StyleX source, for esbuild (client-bundle.mjs):
+ * compiled with StyleX, else null, and esbuild loads it as it ships.
+ * @param {string} file
+ * @returns {{contents: string, loader: 'tsx' | 'ts' | 'jsx'} | null}
+ */
+function browserPackageSource(file) {
+  const filename = path.normalize(file);
+  if (!/\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)) return null;
+  const compiled = compilePackageStylex(fs.readFileSync(filename, 'utf8'), filename);
   if (compiled === null) return null;
   const loader = /\.[cm]?tsx$/.test(filename) ? 'tsx' : /\.[cm]?ts$/.test(filename) ? 'ts' : 'jsx';
   return {contents: compiled, loader};
@@ -2355,16 +2459,18 @@ try {
   // The page's script is built first: it compiles every module the page
   // can load, a lazily imported one included, and their styles join the
   // stylesheet below.
-  /** @type {{code: string, modules: number, astryx: boolean} | null} */
+  /** @type {{code: string, modules: number, astryx: boolean, module: boolean, files: string[]} | null} */
   let script = null;
   if (workerData.buildScript) {
     reach("building the page's script");
     try {
       const loaded = await import(pathToFileURL(workerData.esbuild).href);
-      script = await bundleForBrowser({
+      const build = () => bundleForBrowser({
         esbuild: loaded.default ?? loaded,
         entry,
         source: browserSource,
+        stylexFiles: [...stylexSourceFiles],
+        packageSource: browserPackageSource,
         // The files compilePageModule compiles: the page's own, and, when
         // the project has path aliases, every module outside node_modules.
         isPageFile: file => {
@@ -2380,6 +2486,11 @@ try {
         describe: describeFile,
         oneCopy: served ? Object.keys(SINGLE_COPY_ALIASES) : [],
       });
+      script = await build();
+      // A package file only the browser loads can hold StyleX source too: the
+      // script is built once more with it compiled. Compiling only removes
+      // StyleX calls, so the second build holds no file the first did not.
+      if (checkScriptFiles(script.files)) script = await build();
     } catch (e) {
       if (e instanceof BundleError && e.compile !== undefined) {
         classify(e.compile);
@@ -2480,6 +2591,7 @@ try {
     // Whether the script's module graph holds an Astryx module; null when no
     // script was built. The stylesheets it imports are read by the render.
     astryx: script ? script.astryx : null,
+    scriptIsModule: script?.module ?? false,
   });
 } catch (e) {
   if (e !== null) classify(e);

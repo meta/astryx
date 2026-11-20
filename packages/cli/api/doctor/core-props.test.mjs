@@ -212,6 +212,9 @@ describe('doctor core-props', () => {
         'src/Panel.tsx': 'export function Panel(props: {tone: string}) { return null; }\n',
         // A test file is not read.
         'src/App.test.tsx': app('TabList', '<TabList selectedID="a" />'),
+        // Nor is a Cypress test or a fixture file.
+        'src/App.cy.tsx': app('TabList', '<TabList selectedID="a" />'),
+        'src/App.fixture.tsx': app('TabList', '<TabList selectedID="a" />'),
         // A custom element declared with any props, and a catch-all entry, hide no HTML attribute.
         'src/elements.d.ts':
           "import 'react';\ndeclare module 'react' {\n  namespace JSX {\n    interface IntrinsicElements {\n      'model-viewer': any;\n      [element: string]: any;\n    }\n  }\n}\n",

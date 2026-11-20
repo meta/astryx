@@ -26,6 +26,7 @@ import {builtinModules} from 'node:module';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {NOT_AN_IMAGE, showsImage} from './image-attributes.mjs';
 import {formatSrcset, parseSrcset} from './srcset.mjs';
+import * as vm from 'node:vm';
 import postcss from 'postcss';
 import {importUrl} from '../fs/import-url.mjs';
 import {
@@ -36,22 +37,28 @@ import {
   RenderAssetError,
 } from './assets.mjs';
 import {classesIn, cutCss, cutFontFaces, layerOrderOf} from './css-cut.mjs';
+import {aliasClasses} from './class-alias.mjs';
 import {asParsed, formatFor, sha256, sourceBlock} from './source-block.mjs';
-import {LINK_OUT, ROOT_ID, imageSinks} from './client-bundle.mjs';
+import {LINK_OUT, ROOT_ID, compactSource, imageSinks} from './client-bundle.mjs';
 import {remoteImages} from './remote-images.mjs';
 import {ESBUILD_MISSING, findEsbuild} from './esbuild-dependency.mjs';
 import {carriedNameFor, embeddedPathProblem} from './embedded-files.mjs';
-import {scanHtml} from './html-reader.mjs';
+import {scanHtml, VOID} from './html-reader.mjs';
 import {removeOnStop} from '../fs/stop-cleanup.mjs';
 import {aliasOnly, assetRefsOf, fileNamed} from './embedded-imports.mjs';
-import {isServedPackage, resolveServed} from './served-packages.mjs';
-import {CHART_CSS} from './charts.mjs';
+import {babelParser} from '../runtime/lazy-dependencies.mjs';
+import {isServedPackage, packageOf as specPackageOf, resolveServed} from './served-packages.mjs';
+import {CHART_CSS, smallSvgText} from './charts.mjs';
 import {HOST_EXIT} from './host-exit.mjs';
 import {endNote, headerNote} from './file-header.mjs';
 import {textRuns} from './markup-edits.mjs';
 import {childrenReader, dropperOf} from './dropped-text.mjs';
 import {findNodeModulesPackage, isInside} from '../fs/paths.mjs';
 import {packageOf} from '../doc-compiler/source.mjs';
+import {declaredColorModes} from '../discovery/color-modes.mjs';
+import {alphaOf, parseColor, relativeLuminance} from '../color/css-color.mjs';
+import {installedPackageOf} from './package-resolve-hooks.mjs';
+import {moduleExportSource, resolvePackageModule} from '../discovery/module-exports.mjs';
 
 /** How long one page may take to render before it is stopped. */
 export const RENDER_TIMEOUT_MS = 60_000;
@@ -188,19 +195,30 @@ const escapeHtml = s =>
  * @param {string} markup
  */
 function rootThemeAttrs(markup) {
+  const attrs = rootThemeElement(markup);
+  if (!attrs) return '';
+  return ['data-astryx-theme', 'data-theme']
+    .filter(a => attrs.has(a))
+    .map(
+      a =>
+        ` ${a}="${escapeHtml(String(attrs.get(a))).replace(/"/g, '&quot;')}"`,
+    )
+    .join('');
+}
+
+/**
+ * The attributes of the outermost element a theme marks: the root Theme's
+ * own. Null for a page with no theme.
+ * @param {string} markup
+ * @returns {Map<string, string> | null}
+ */
+function rootThemeElement(markup) {
   for (const t of scanHtml(markup)) {
     if (t.kind !== 'start') continue;
     const attrs = new Map(t.attrs.map(([name, value]) => /** @type {[string, string]} */ ([name, value])));
-    if (!attrs.has('data-astryx-theme')) continue;
-    return ['data-astryx-theme', 'data-theme']
-      .filter(a => attrs.has(a))
-      .map(
-        a =>
-          ` ${a}="${escapeHtml(String(attrs.get(a))).replace(/"/g, '&quot;')}"`,
-      )
-      .join('');
+    if (attrs.has('data-astryx-theme')) return attrs;
   }
-  return '';
+  return null;
 }
 
 /** @param {string} s */
@@ -308,6 +326,85 @@ function reachesAstryxSheet(files, served) {
 }
 
 /**
+ * A stylesheet's text as an `@import` brings it in: inside the import's
+ * `supports()`, media and `layer()` conditions.
+ * @param {{layer: string | null, supports: string | null, media: string}} parsed
+ *   the import's parts, as {@link importParams} reads them
+ * @param {string} css
+ * @returns {string}
+ */
+function underImportConditions(parsed, css) {
+  let inner = css;
+  if (parsed.supports)
+    inner = `@supports (${parsed.supports.replace(/^\((.*)\)$/s, '$1')}){${inner}}`;
+  if (parsed.media) inner = `@media ${parsed.media}{${inner}}`;
+  if (parsed.layer !== null)
+    inner = `@layer${parsed.layer ? ` ${parsed.layer}` : ''}{${inner}}`;
+  return inner;
+}
+
+/**
+ * The stylesheets a page brings in, with every stylesheet their `@import`s
+ * reach, followed as {@link expandImports} follows them: each one's file and
+ * text, and for a package's stylesheet the package and the file that names
+ * it.
+ * @param {(ThemeSheet & {css: string})[]} sheets
+ * @param {ServedSet | null} served
+ * @returns {(ThemeSheet & {css: string})[]}
+ */
+function sheetsWithImports(sheets, served) {
+  /** @type {(ThemeSheet & {css: string})[]} */
+  const out = [];
+  /** @type {Set<string>} */
+  const seen = new Set();
+  /**
+   * @param {ThemeSheet & {css: string}} sheet its own text
+   * @param {(css: string) => string} scope wraps a text in every condition
+   *   of the `@import` chain that brought the sheet in
+   */
+  const visit = (sheet, scope) => {
+    if (seen.has(sheet.file)) return;
+    seen.add(sheet.file);
+    out.push({...sheet, css: scope(sheet.css)});
+    if (!/@import/i.test(sheet.css)) return;
+    /** @type {import('postcss').Root} */
+    let root;
+    try {
+      root = postcss.parse(sheet.css, {from: sheet.file});
+    } catch {
+      return;
+    }
+    root.walkAtRules(/^import$/i, rule => {
+      const parsed = importParams(rule.params);
+      const url = parsed?.url;
+      if (!parsed || !url) return;
+      const to = resolveImport(url, sheet.file, served);
+      if (to.kind !== 'sheet') return;
+      /** @type {string} */
+      let css;
+      try {
+        css = fs.readFileSync(to.target, 'utf8');
+      } catch {
+        return;
+      }
+      // Each import's conditions scope the sheet's rules, inside those of
+      // the imports before it, as the file inlines them: a sheet imported
+      // for one scheme, at any depth, counts as such.
+      /** @param {string} text */
+      const inner = text => scope(underImportConditions(parsed, text));
+      visit(
+        to.fromPackage
+          ? {file: to.target, css, pkg: specPackageOf(url.replace(/^~/, '')), from: sheet.file}
+          : {file: to.target, css},
+        inner,
+      );
+    });
+  };
+  for (const sheet of sheets) visit(sheet, text => text);
+  return out;
+}
+
+/**
  * Inline a stylesheet's own `@import`s, so a stylesheet pulled in that way is
  * part of the file: a relative one from the importing sheet's folder
  * (carried when it is the project's own), a package one (`@scope/pkg/x.css`)
@@ -389,11 +486,7 @@ function expandImports(file, css, ctx) {
       return `url(${q}${rebased.startsWith('.') ? rebased : `./${rebased}`}${q})`;
     });
     // The import's conditions still scope what it brings in.
-    if (parsed.supports)
-      inner = `@supports (${parsed.supports.replace(/^\((.*)\)$/s, '$1')}){${inner}}`;
-    if (parsed.media) inner = `@media ${parsed.media}{${inner}}`;
-    if (parsed.layer !== null)
-      inner = `@layer${parsed.layer ? ` ${parsed.layer}` : ''}{${inner}}`;
+    inner = underImportConditions(parsed, inner);
     try {
       rule.replaceWith(postcss.parse(inner, {from}).nodes);
     } catch (e) {
@@ -834,22 +927,169 @@ export function withoutAutofocus(markup) {
 }
 
 /**
+ * The render's own attribute on a first-paint element whose `src`, `srcset`
+ * or `poster` it carries: each attribute with the number of its value
+ * (`src:0 srcset:1`), so the page's script reads the value there
+ * ({@link withCarriedPaths}). Only the file's markup has it, never the page's
+ * source.
+ */
+export const CARRY_ATTR = 'data-astryx-carried';
+
+/** The name the script reads the markup's carried values from. */
+const CARRIED_VALUES = '__astryxCarried';
+
+/** The script's reader of one candidate of a carried `srcset`, by its place. */
+const CARRIED_CANDIDATE = '__astryxCandidate';
+
+/**
+ * The script's first statement: each value the markup carries, read from the
+ * first paint by its number before the script draws the page again.
+ */
+const CARRIED_PRELUDE =
+  `var ${CARRIED_VALUES}=(()=>{const v=[];for(const e of document.querySelectorAll('[${CARRY_ATTR}]'))` +
+  `for(const c of e.getAttribute('${CARRY_ATTR}').split(' ')){const [a,i]=c.split(':');v[+i]??=e.getAttribute(a)}return v})();`;
+
+/**
  * The page's script with each string the markup's rewrite replaced (an
- * image's `src`, `poster` or `srcset`, as the page wrote it) written as the
- * same carried data, so the page the script draws shows what the first paint
- * showed. Only a quoted string that is exactly that value changes, never a
- * longer string that holds it.
+ * image's `src`, `poster` or `srcset`, as the page wrote it) read from the
+ * markup, which carries the same data, so the page the script draws shows
+ * what the first paint showed and the file holds that data once. A read
+ * replaces only a whole string token of the script whose value is exactly
+ * that path, found with a JavaScript parser. Every other place the path
+ * appears keeps the data itself: a longer string that holds it (inner HTML,
+ * a CSS `url()`), a value no first-paint element carries (an image the page
+ * shows only later), an object key, or a template a tag reads. A script the
+ * parser cannot read, or that would not parse with the reads, keeps the data
+ * everywhere.
+ * @param {string} script
+ * @param {Map<string, string>} rewrites
+ * @param {Map<string, number>} carried each value the first paint carries, with
+ *   the number its mark gives it
+ * @param {Set<string>} [srcsets] the carried values a `srcset` marks: only
+ *   their candidates are read by place
+ * @param {Map<string, string>} [painted] what each value became in the first
+ *   paint (default `rewrites`): a whole value is read only where the script's
+ *   value is the same, so a srcset that lists an https candidate, which the
+ *   script keeps as written, is never read whole
+ * @param {boolean} [strict] the script is a module script, so it parses in
+ *   strict mode
+ * @returns {string}
+ */
+export function withCarriedPaths(script, rewrites, carried, srcsets = new Set(), painted = rewrites, strict = false) {
+  const inline = inlineCarried(script, rewrites);
+  const tokens = carriedTokens(script, rewrites, carried, srcsets, painted);
+  if (tokens.length === 0) return inline;
+  // Each token to read becomes a mark no script holds (the script is built
+  // ASCII-only, so it never holds a raw private-use character), so the text
+  // pass below writes the data everywhere else; then each mark becomes its read.
+  let marked = '';
+  let at = 0;
+  for (const token of tokens) {
+    marked += `${script.slice(at, token.start)}\uE000${Array.isArray(token.index) ? token.index.join('.') : token.index}\uE001`;
+    at = token.end;
+  }
+  marked += script.slice(at);
+  const candidates = tokens.some(token => Array.isArray(token.index));
+  const read =
+    CARRIED_PRELUDE +
+    (candidates ? `var ${CARRIED_CANDIDATE}=(i,k)=>(${compactSource(parseSrcset)})(${CARRIED_VALUES}[i]??'')[k]?.url;` : '') +
+    inlineCarried(marked, rewrites).replace(/\uE000(\d+)(?:\.(\d+))?\uE001/g, (_, i, k, offset, all) =>
+      `${/[\w$]/.test(all[offset - 1] ?? '') ? ' ' : ''}${k === undefined ? `${CARRIED_VALUES}[${i}]` : `${CARRIED_CANDIDATE}(${i},${k})`}`,
+    );
+  try {
+    // A module script parses in strict mode, so the reads must too.
+    new vm.Script(strict ? `"use strict";${read}` : read);
+    return read;
+  } catch {
+    return inline;
+  }
+}
+
+/**
+ * The string tokens of the script whose value is exactly a path the first
+ * paint carries, where a read can stand: not an object key, not a template a
+ * tag reads, not text the page shows (`children`). In script order.
+ * @param {string} script
+ * @param {Map<string, string>} rewrites
+ * @param {Map<string, number>} carried
+ * @param {Set<string>} srcsets the carried values a `srcset` marks
+ * @param {Map<string, string>} painted what each value became in the first paint
+ * @returns {{start: number, end: number, index: number | [number, number]}[]}
+ */
+function carriedTokens(script, rewrites, carried, srcsets, painted) {
+  /** @type {Map<string, number | [number, number]>} */
+  const indexOf = new Map();
+  /** @param {string} value */
+  const quoted = value => !/["'`\\\n]/.test(value) && ['"', "'", '`'].some(q => script.includes(`${q}${value}${q}`));
+  for (const [was] of rewrites) {
+    const index = carried.get(was);
+    if (index !== undefined && painted.get(was) === rewrites.get(was) && quoted(was)) indexOf.set(was, index);
+  }
+  // A local path the script names that a carried srcset lists
+  // (`${a} 1x, ${b} 2x` built in code): read that candidate.
+  for (const [, i, written] of carriedSrcsets(carried, srcsets, rewrites)) {
+    written.forEach(({url}, k) => {
+      if (!indexOf.has(url) && rewrites.has(url) && !/^(https?:)?\/\//i.test(url) && quoted(url)) indexOf.set(url, [i, k]);
+    });
+  }
+  if (indexOf.size === 0) return [];
+  /** @type {any} */
+  let ast;
+  try {
+    ast = babelParser().parse(script, {sourceType: 'script', errorRecovery: false});
+  } catch {
+    return [];
+  }
+  /** @type {{start: number, end: number, index: number | [number, number]}[]} */
+  const found = [];
+  /** @param {any} node @param {any} parent */
+  const visit = (node, parent) => {
+    if (node === null || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child, parent);
+      return;
+    }
+    if (typeof node.type !== 'string') return;
+    /** @type {string | undefined} */
+    let value;
+    if (node.type === 'StringLiteral') value = node.value;
+    else if (node.type === 'TemplateLiteral' && node.expressions.length === 0 && parent?.type !== 'TaggedTemplateExpression') value = node.quasis[0]?.value?.cooked;
+    if (value !== undefined && indexOf.has(value)) {
+      const key = KEYED.has(parent?.type) && parent.key === node;
+      const shown = parent?.type === 'ObjectProperty' && parent.value === node && !parent.computed && (parent.key?.name ?? parent.key?.value) === 'children';
+      if (!key && !shown) found.push({start: node.start, end: node.end, index: /** @type {number | [number, number]} */ (indexOf.get(value))});
+    }
+    for (const k of Object.keys(node)) {
+      if (k === 'loc' || k === 'start' || k === 'end' || k === 'extra' || k === 'leadingComments' || k === 'trailingComments') continue;
+      visit(node[k], node);
+    }
+  };
+  try {
+    visit(ast.program, null);
+  } catch {
+    // A script nested too deep to walk keeps its inline data.
+    return [];
+  }
+  return found.sort((a, b) => a.start - b.start);
+}
+
+/** The nodes whose `key` names a member: a string there is a name, not a value. */
+const KEYED = new Set(['ObjectProperty', 'ObjectMethod', 'ClassProperty', 'ClassMethod', 'ClassPrivateProperty', 'ClassAccessorProperty']);
+
+/**
+ * The script with each string that is exactly a path the markup's rewrite
+ * replaced written as the same data, and each CSS url() that names it too.
+ * Text the page shows (`children: "./photo.png"`) stays as written.
  * @param {string} script
  * @param {Map<string, string>} rewrites
  * @returns {string}
  */
-export function withCarriedPaths(script, rewrites) {
+function inlineCarried(script, rewrites) {
   let out = script;
   for (const [was, now] of rewrites) {
     if (/["'`\\\n<]/.test(now) || /["'`\\\n]/.test(was)) continue;
     for (const quote of ['"', "'", '`']) {
       const literal = `${quote}${was}${quote}`;
-      // Text the page shows (`children: "./photo.png"`) stays as written.
       out = out
         .split(literal)
         .map((part, i, parts) =>
@@ -1008,11 +1248,12 @@ function publicFolderOf(at) {
  * link (`href`) loads nothing, so it is left alone.
  * @param {string} text markup or CSS
  * @param {'html' | 'css'} kind
- * @param {{dir: string, pageDir?: string, root: string, warnings: RenderWarning[], counted: Set<string>, localAssets: Set<string>, leaveLargeStyleAssets?: boolean, rewrites?: Map<string, string>, remote?: Map<string, import('./remote-images.mjs').RemoteImage>}} ctx
+ * @param {{dir: string, pageDir?: string, root: string, warnings: RenderWarning[], counted: Set<string>, localAssets: Set<string>, leaveLargeStyleAssets?: boolean, rewrites?: Map<string, string>, carried?: Map<string, number>, srcsets?: Set<string>, remote?: Map<string, import('./remote-images.mjs').RemoteImage>}} ctx
  *   `leaveLargeStyleAssets`: a stylesheet's file too large to inline is left
  *   as it is and named, as a missing one is, rather than refused;
  *   `rewrites`: each attribute value the markup's rewrite replaced, as the
- *   page wrote it, with what it became; `remote`: the remote images fetched
+ *   page wrote it, with what it became; `carried`: gets each one the markup
+ *   numbers for the page's script (none in a markup-only render); `remote`: the remote images fetched
  *   for this render, by the address the page wrote
  */
 function inlineAssets(text, kind, ctx) {
@@ -1080,7 +1321,7 @@ function inlineAssets(text, kind, ctx) {
     ctx.localAssets.add(found);
     return assetDataUri(found);
   };
-  return rewriteRefs(text, kind, resolveRef, ctx.rewrites);
+  return rewriteRefs(text, kind, resolveRef, ctx.rewrites, ctx.carried, ctx.srcsets);
 }
 
 /**
@@ -1088,6 +1329,167 @@ function inlineAssets(text, kind, ctx) {
  * case. A CSS `url()` has none.
  * @typedef {{tag: string, attr: string}} AssetPlace
  */
+
+/**
+ * Where the first paint holds an https image's data, for the image sinks to
+ * read: the marked value that is the address, or else a marked `srcset` that
+ * lists it, with the candidate's place there.
+ * @param {string} url
+ * @param {Map<string, number> | undefined} carried
+ * @param {Map<string, [number, number]>} listed each address a marked
+ *   `srcset` lists, with its mark and place ({@link listedCandidates})
+ * @returns {[string, number] | [string, number, number] | null}
+ */
+function firstPaintRead(url, carried, listed) {
+  if (!carried) return null;
+  const mark = carried.get(url);
+  if (mark !== undefined) return [url, mark];
+  const place = listed.get(url);
+  return place ? [url, ...place] : null;
+}
+
+/**
+ * Each address a marked `srcset` lists, with that srcset's mark and the
+ * candidate's place in it: the first such place, read once per render.
+ * @param {Map<string, number> | undefined} carried
+ * @param {Set<string>} srcsets the carried values a `srcset` marks
+ * @param {Map<string, string>} rewrites
+ * @returns {Map<string, [number, number]>}
+ */
+function listedCandidates(carried, srcsets, rewrites) {
+  /** @type {Map<string, [number, number]>} */
+  const listed = new Map();
+  if (!carried) return listed;
+  for (const [, i, written] of carriedSrcsets(carried, srcsets, rewrites)) {
+    written.forEach(({url}, k) => {
+      if (!listed.has(url)) listed.set(url, [i, k]);
+    });
+  }
+  return listed;
+}
+
+/**
+ * Each marked `srcset` value whose data lists the same number of candidates
+ * as the page wrote, with its mark: only such a value can give one
+ * candidate's data by its place. A `src` or `poster` that holds a comma and
+ * a space is one address, never a list.
+ * @param {Map<string, number>} carried
+ * @param {Set<string>} srcsets the carried values a `srcset` marks
+ * @param {Map<string, string>} rewrites
+ * @returns {Array<[string, number, import('./srcset.mjs').SrcsetCandidate[]]>}
+ */
+function carriedSrcsets(carried, srcsets, rewrites) {
+  /** @type {Array<[string, number, import('./srcset.mjs').SrcsetCandidate[]]>} */
+  const lists = [];
+  for (const [was, i] of carried) {
+    const now = rewrites.get(was);
+    if (!srcsets.has(was) || now === undefined) continue;
+    const written = parseSrcset(was);
+    if (parseSrcset(now).length === written.length) lists.push([was, i, written]);
+  }
+  return lists;
+}
+
+/** Elements whose content a browser running scripts builds no image of. */
+const UNBUILT = new Set(['noscript', 'template', 'select']);
+
+/**
+ * Where `text` holds markup a browser running scripts never makes elements
+ * of, as [start, end] pairs: a comment (a bogus one too), a CDATA section,
+ * the text of a raw-text element (`<textarea>`, `<iframe>`, `<xmp>` and the
+ * others the scanner names, everything after `<plaintext>`), and each
+ * outermost `<noscript>`, `<template>` or `<select>` (whose content Firefox's
+ * parser drops), which runs to its own close tag past any nested in it. The
+ * pieces are the HTML scanner's own.
+ * @param {string} text
+ * @returns {[number, number][]}
+ */
+function unread(text) {
+  /** @type {[number, number][]} */
+  const ranges = [];
+  /** @type {string[]} */
+  const open = [];
+  let start = 0;
+  for (const piece of scanHtml(text)) {
+    if (open.length === 0 && (piece.kind === 'comment' || piece.kind === 'cdata' || piece.kind === 'raw')) {
+      // A `<![CDATA[` the scanner reads as a bogus comment (outside a foreign
+      // root it tracks) can still be CDATA in a browser: range it to `]]>`.
+      const cdata = piece.kind === 'comment' && text.startsWith('<![CDATA[', piece.start);
+      const close = cdata ? text.indexOf(']]>', piece.start + 9) : -1;
+      ranges.push([piece.start, cdata ? (close < 0 ? text.length : close + 3) : piece.end]);
+      continue;
+    }
+    if ((piece.kind !== 'start' && piece.kind !== 'end') || !UNBUILT.has(piece.tag)) continue;
+    if (piece.kind === 'start') {
+      if (piece.selfClosing) continue;
+      if (open.length === 0) start = piece.start;
+      open.push(piece.tag);
+      continue;
+    }
+    const at = open.lastIndexOf(piece.tag);
+    if (at === -1) continue;
+    open.length = at;
+    if (open.length === 0) ranges.push([start, piece.end]);
+  }
+  if (open.length > 0) ranges.push([start, text.length]);
+  const off = offScript(text);
+  if (off >= 0) ranges.push([off, text.length]);
+  return ranges;
+}
+
+/** The tags a serializer writes inside a `<select>`. */
+const SELECT_CONTENT = new Set(['option', 'optgroup', 'hr']);
+
+/**
+ * Where `text` first holds a shape a serializer such as React's never writes,
+ * or -1: an end tag that does not close the element open last, CDATA, a
+ * bogus comment, a comment holding `--!>` (which also ends one), a
+ * self-closing HTML tag that is not void, `<plaintext>`, `<frameset>`, a
+ * start tag inside a `<select>` other than option, optgroup or hr, or a
+ * `<noscript>` that a browser running scripts ends elsewhere: it reads the
+ * content as text up to the first `</noscript`, where the scanner reads
+ * markup. Up to that point the scanner and a browser agree on the
+ * elements; past it they may not, so nothing after it marks a carried
+ * value, and each image there keeps its own copy in the script. A gap in
+ * the scanner then costs bytes, never a missing picture.
+ * @param {string} text
+ * @returns {number}
+ */
+function offScript(text) {
+  /** @type {string[]} */
+  const open = [];
+  /** Each open `<noscript>`: where it starts, and where a browser ends it. @type {{start: number, end: number}[]} */
+  const noscripts = [];
+  const NOSCRIPT_END = /<\/noscript[\t\n\f\r />]/gi;
+  for (const piece of scanHtml(text)) {
+    const outer = noscripts[0];
+    if (outer && piece.start > outer.end) return outer.start;
+    const written = text.slice(piece.start, piece.end);
+    if (piece.kind === 'cdata' || (piece.kind === 'comment' && (!written.startsWith('<!--') || written.includes('--!>')))) return piece.start;
+    if (piece.kind === 'start') {
+      if (piece.tag === 'plaintext' || piece.tag === 'frameset') return piece.start;
+      if (open.includes('select') && !SELECT_CONTENT.has(piece.tag)) return piece.start;
+      if (VOID.has(piece.tag)) continue;
+      if (written.endsWith('/>') && !piece.selfClosing) return piece.start;
+      if (!piece.selfClosing) open.push(piece.tag);
+      if (piece.tag === 'noscript' && !piece.selfClosing) {
+        NOSCRIPT_END.lastIndex = piece.end;
+        const close = NOSCRIPT_END.exec(text);
+        noscripts.push({start: piece.start, end: close ? close.index : text.length});
+      }
+    } else if (piece.kind === 'end') {
+      if (open[open.length - 1] !== piece.tag) return piece.start;
+      open.pop();
+      if (piece.tag === 'noscript') {
+        const own = /** @type {{start: number, end: number}} */ (noscripts.pop());
+        // A browser running scripts ends the outermost one at its first `</noscript`.
+        if (noscripts.length === 0 && piece.start !== own.end) return own.start;
+      }
+    }
+  }
+  return -1;
+}
+
 
 /**
  * Each reference a page's markup or stylesheet loads, read once for every
@@ -1101,9 +1503,30 @@ function inlineAssets(text, kind, ctx) {
  * @param {(ref: string, place?: AssetPlace) => string | null} resolve
  * @param {Map<string, string>} [rewrites] gets each attribute value replaced,
  *   as the page wrote it, with what it became
+ * @param {Map<string, number>} [marked] number each replaced value in the
+ *   markup ({@link CARRY_ATTR}), so the page's script reads it there, and
+ *   add it to this map with its number
+ * @param {Set<string>} [srcsets] gets each marked value a `srcset` holds
  * @returns {string} the text with the replacements made
  */
-export function rewriteRefs(text, kind, resolve, rewrites) {
+export function rewriteRefs(text, kind, resolve, rewrites, marked, srcsets) {
+  /**
+   * What each replaced value became, for the marks the first paint gets.
+   * @type {Map<string, string[]>}
+   */
+  const became = new Map();
+  /**
+   * Record a replaced value.
+   * @param {string} was
+   * @param {string} now
+   */
+  const carry = (was, now) => {
+    if (!rewrites) return;
+    // The last rewrite of a value is the one the script reads, as without
+    // marks; an element that shows an earlier one is not marked.
+    rewrites.set(was, now);
+    became.set(now, [...(became.get(now) ?? []), was]);
+  };
   /**
    * @param {string} value
    * @param {boolean} [record] keep each rewrite, for a style the script sets
@@ -1126,7 +1549,7 @@ export function rewriteRefs(text, kind, resolve, rewrites) {
       // names in any case.
       .replace(/\s(src|poster)="([^"]*)"/gi, (whole, attr, ref) => {
         const uri = resolve(ref, {tag, attr: attr.toLowerCase()});
-        if (uri) rewrites?.set(decodeAttr(ref), uri);
+        if (uri) carry(decodeAttr(ref), uri);
         return uri ? ` ${attr}="${uri}"` : whole;
       })
       .replace(/\s(srcset)="([^"]*)"/gi, (whole, attr, set) => {
@@ -1139,7 +1562,7 @@ export function rewriteRefs(text, kind, resolve, rewrites) {
         });
         if (!carried) return whole;
         const rewritten = formatSrcset(candidates);
-        rewrites?.set(written, rewritten);
+        carry(written, rewritten);
         return ` ${attr}="${rewritten.replace(/"/g, '&quot;')}"`;
       })
       .replace(/\sstyle="([^"]*)"/g, (whole, style) => {
@@ -1150,10 +1573,62 @@ export function rewriteRefs(text, kind, resolve, rewrites) {
       });
   // Each element by itself, so a reference knows the element it is in. A
   // quoted value may hold a `>`, which does not end the tag.
-  return text.replace(/<([a-zA-Z][\w-]*)\b((?:[^>"']|"[^"]*"|'[^']*')*)>/g, (tagText, name, attrs) => {
+  const written = text.replace(/<([a-zA-Z][\w-]*)\b((?:[^>"']|"[^"]*"|'[^']*')*)>/g, (tagText, name, attrs) => {
     const mapped = mapAttributes(attrs, name.toLowerCase());
     return mapped === attrs ? tagText : `<${name}${mapped}>`;
   });
+  return marked && rewrites && became.size > 0 ? withCarryMarks(written, became, rewrites, marked, srcsets ?? new Set()) : written;
+}
+
+/** The elements whose `src`, `srcset` or `poster` is an image the page shows. */
+const IMAGE_TAGS = new Set(['img', 'source', 'input', 'video']);
+
+/**
+ * The markup with each element a browser builds that shows a replaced value
+ * marked ({@link CARRY_ATTR}) with that value's number, once per element,
+ * after its last attribute. Only the first attribute of each name on a real
+ * `img`, `source`, `input` or `video` start tag counts, outside the ranges
+ * {@link unread} names; the pieces are the HTML scanner's own.
+ * @param {string} text
+ * @param {Map<string, string[]>} became what each value became, and the
+ *   values written that became it
+ * @param {Map<string, string>} rewrites
+ * @param {Map<string, number>} marked gets each marked value, with its number
+ * @param {Set<string>} srcsets gets each marked value a `srcset` holds
+ * @returns {string}
+ */
+function withCarryMarks(text, became, rewrites, marked, srcsets) {
+  const ranges = unread(text);
+  /** @type {Array<[number, string]>} */
+  const inserts = [];
+  for (const piece of scanHtml(text)) {
+    if (piece.kind !== 'start' || !IMAGE_TAGS.has(piece.tag) || piece.attrs.length === 0) continue;
+    if (ranges.some(([from, to]) => piece.start > from && piece.start < to)) continue;
+    /** @type {string[]} */
+    const marks = [];
+    const seen = new Set();
+    for (const [name, value] of piece.attrs) {
+      if (seen.has(name)) continue;
+      seen.add(name);
+      if (name !== 'src' && name !== 'srcset' && name !== 'poster') continue;
+      const now = decodeAttr(value);
+      for (const was of became.get(now) ?? []) {
+        if (rewrites.get(was) !== now) continue;
+        // The number stays the value's own, whatever later leaves the rewrites.
+        if (!marked.has(was)) marked.set(was, [...rewrites.keys()].indexOf(was));
+        if (name === 'srcset') srcsets.add(was);
+        marks.push(`${name}:${marked.get(was)}`);
+      }
+    }
+    if (marks.length > 0) inserts.push([/** @type {[string, string, number, number]} */ (piece.attrs.at(-1))[3], ` ${CARRY_ATTR}="${[...new Set(marks)].join(' ')}"`]);
+  }
+  let out = '';
+  let at = 0;
+  for (const [where, mark] of inserts) {
+    out += text.slice(at, where) + mark;
+    at = where;
+  }
+  return out + text.slice(at);
 }
 
 /**
@@ -1294,10 +1769,208 @@ function installedVersion(name, dir, setDirs) {
 const SCHEME_CSS =
   ':root{color-scheme:light dark}:root[data-theme="light"]{color-scheme:light}:root[data-theme="dark"]{color-scheme:dark}';
 
+/** The tokens that set a page's own surface and text colors. */
+const PAGE_COLOR_TOKEN = /^--color-(background-(body|surface)|text-primary)$/;
+
+/** A page color token that sets the page's background, not its text. */
+const BACKGROUND_TOKEN = /^--color-background-/;
+
+/**
+ * A condition that applies a rule in one scheme only: a
+ * `prefers-color-scheme` query (`not` forms included), a `data-theme` or
+ * scheme attribute, or a `.light`/`.dark` class, in a selector or an
+ * at-rule around it.
+ */
+const MODE_CONDITION = /prefers-color-scheme|\[data-(?:theme|astryx-scheme)="(?:light|dark)"\]|\.(?:light|dark)(?![\w-])/;
+
+/**
+ * A selector or condition without its `:not(...)` groups.
+ * @param {string} text
+ */
+const withoutNegations = text => text.replace(/:not\((?:[^()]|\([^()]*\))*\)/g, '');
+
+/**
+ * A stylesheet with every `data-*` attribute selector written one way,
+ * `[data-x="v"]`, however it was quoted (`[data-x='v']`, `[data-x=v]`)
+ * or flagged (`[data-x="V" i]`).
+ * @param {string} text
+ */
+const withQuotedAttributes = text =>
+  text.replace(/\[\s*(data-[\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s\]'"]+))\s*(?:([iIsS])\s*)?\]/g, (_, attr, dq, sq, bare, flag) => {
+    const value = dq ?? sq ?? bare;
+    // A value matches case-sensitively unless the `i` flag says otherwise.
+    return `[${attr}="${flag === 'i' || flag === 'I' ? value.toLowerCase() : value}"]`;
+  });
+
+/**
+ * The one color mode the page's root theme draws in, or null when it draws
+ * in both (or the page has no theme). The theme module's `colorModes`
+ * export says it when the module has one. Else the page and text colors the
+ * stylesheets the page imports set on the theme's root say it: a light page with
+ * dark text draws in light only, a dark page with light text in dark only.
+ * A theme that sets neither (its fonts, its accent), sets a `light-dark()`
+ * color, one the color reader cannot fix (a `var()`) or a translucent
+ * page color, or sets any page or text color under a light or dark condition,
+ * draws in both, as the reader's scheme decides.
+ * @param {string} markup
+ * @param {'light' | 'dark' | 'both' | null} declared the theme module's
+ *   `colorModes`, as {@link declaredColorModes} reads it
+ * @param {string[]} sheets the text of the stylesheets the page imports
+ * @returns {'light' | 'dark' | null}
+ */
+export function oneColorModeOf(markup, declared, sheets) {
+  if (declared === 'light' || declared === 'dark') return declared;
+  if (declared === 'both') return null;
+  const name = rootThemeElement(markup)?.get('data-astryx-theme');
+  if (!name) return null;
+  const root = `[data-astryx-theme="${name}"]`;
+  /** @type {{background: boolean, value: string}[]} */
+  const colors = [];
+  let conditional = false;
+  for (const sheet of sheets) {
+    const text = withQuotedAttributes(sheet);
+    if (!text.includes(root)) continue;
+    /** @type {any} */
+    let tree;
+    try {
+      tree = postcss.parse(text);
+    } catch {
+      return null;
+    }
+    tree.walkDecls(PAGE_COLOR_TOKEN, (/** @type {any} */ decl) => {
+      /** The selectors and at-rule conditions around the declaration. */
+      const contexts = [];
+      for (let at = decl.parent; at && at.type !== 'root'; at = at.parent) {
+        contexts.push(at.type === 'rule' ? at.selector : `@${at.name} ${at.params}`);
+      }
+      // A media surface fixes its own mode; it says nothing of the theme's. A
+      // rule that only keeps out of media surfaces (`:not(… [data-astryx-media]
+      // …)`) still counts.
+      if (contexts.some(context => withoutNegations(context).includes('data-astryx-media'))) return;
+      // A page color set for one scheme only, anywhere in the theme's sheet,
+      // makes the theme follow the viewer.
+      if (contexts.some(context => MODE_CONDITION.test(context))) {
+        conditional = true;
+        return;
+      }
+      const rule = decl.parent;
+      if (rule?.type !== 'rule' || contexts.slice(1).some(context => !context.startsWith('@'))) return;
+      const selector = rule.selector.trim();
+      // Only the theme's own root sets the page's colors: its attribute, or
+      // `:scope` in an @scope that starts there (its `to (...)` limit names
+      // no root).
+      const scope =
+        rule.parent?.type === 'atrule' && rule.parent.name === 'scope'
+          ? rule.parent.params.split(/\)\s*to\s*\(/)[0].replace(/^\s*\(\s*|\s*\)\s*$/g, '')
+          : null;
+      if (selector === root || (selector === ':scope' && scope === root)) {
+        colors.push({background: BACKGROUND_TOKEN.test(decl.prop), value: decl.value});
+      }
+    });
+  }
+  if (conditional || colors.length === 0) return null;
+  /** @type {Set<'light' | 'dark'>} */
+  const modes = new Set();
+  for (const {background, value} of colors) {
+    const rgb = parseColor(value);
+    // A color the reader cannot fix (a var(), light-dark()), or a page color
+    // that shows what is behind it, leaves the reader's scheme to decide.
+    // Text is light or dark by its own color, whatever its alpha.
+    if (!rgb || (background && alphaOf(value) < 1)) return null;
+    const lightColor = relativeLuminance(rgb) > 0.18;
+    // A light page, or dark text, is a light theme's.
+    modes.add(background === lightColor ? 'light' : 'dark');
+  }
+  return modes.size === 1 ? [...modes][0] : null;
+}
+
+/**
+ * A stylesheet the page imports: its file, and for a package's stylesheet
+ * the package name and the file that imports it.
+ * @typedef {{file: string, pkg?: string, from?: string}} ThemeSheet
+ */
+
+/**
+ * The `colorModes` the module of the page's root theme declares, read
+ * without running it. The module sits beside the theme's stylesheet: a
+ * package's entry (or its `./built` entry) when the page imports the
+ * package's stylesheet, or a module with the stylesheet's name beside it.
+ * Only a module that names the root theme counts.
+ * @param {string} markup
+ * @param {ThemeSheet[]} sheets the stylesheets the page imports
+ * @param {(specifier: string, from: string) => string | null} resolve the
+ *   module file a bare specifier names from a file
+ * @returns {'light' | 'dark' | 'both' | null}
+ */
+function rootThemeColorModes(markup, sheets, resolve) {
+  const name = rootThemeElement(markup)?.get('data-astryx-theme');
+  if (!name) return null;
+  /** @type {Set<string>} */
+  const candidates = new Set();
+  for (const {file, pkg, from} of sheets) {
+    const base = file.replace(/\.css$/i, '');
+    for (const ext of ['.js', '.mjs', '.ts', '.tsx']) candidates.add(base + ext);
+    // The package by the name the page imports it as, as `theme add` finds
+    // it (a linked package's real path holds no node_modules); else the
+    // installed package folder that holds the file.
+    let pkgName = pkg ?? null;
+    let at = from ?? file;
+    if (!pkgName) {
+      const pkgDir = installedPackageOf(file);
+      if (!pkgDir) continue;
+      try {
+        pkgName = JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf8'))?.name ?? null;
+      } catch {
+        continue;
+      }
+      at = file;
+    }
+    if (typeof pkgName !== 'string' || pkgName === '@astryxdesign/core') continue;
+    // The built entry first, which `theme add` reads and which carries the
+    // export, then the package's own.
+    for (const specifier of [`${pkgName}/built`, pkgName]) {
+      const target = resolve(specifier, at);
+      if (target) candidates.add(target);
+    }
+  }
+  const named = new RegExp(`name:\\s*["']${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["']`);
+  for (const file of candidates) {
+    if (!isFileAt(file)) continue;
+    // The module must hold the root theme: its name, as a built theme
+    // writes it, in the module or in the file its colorModes come from.
+    const holds = [file, moduleExportSource(file, 'colorModes')].some(f => {
+      if (!f) return false;
+      try {
+        return named.test(fs.readFileSync(f, 'utf8'));
+      } catch {
+        return false;
+      }
+    });
+    if (!holds) continue;
+    // A module that holds the theme but declares no modes (a package's
+    // source entry, beside its built one that does) leaves the next to say.
+    const declared = declaredColorModes(file);
+    if (declared !== null) return declared;
+  }
+  return null;
+}
+
+/**
+ * The page's scheme rules. A page that draws in one mode keeps that scheme
+ * whatever the viewer's, and paints the theme's own page color on the
+ * document, so a viewer of the other scheme never shows its own canvas
+ * behind the theme's text. It adds no specificity: a page's own unlayered
+ * `html` rule still wins, but a rule inside `@layer` does not.
+ * @param {'light' | 'dark' | null} mode
+ */
+function schemeCssFor(mode) {
+  return mode ? `:where(:root){color-scheme:${mode};background-color:var(--color-background-body)}` : SCHEME_CSS;
+}
+
 /**
  * Render a page module to one self-contained HTML file.
  * @param {string} entry absolute path of the page module
- * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string, cwd?: string, openLayers?: boolean, leaveLargeStyleAssets?: boolean, markupOnly?: boolean, esbuildFrom?: string, remoteImages?: Parameters<typeof remoteImages>[0], cutFontFaces?: boolean}} [options]
+ * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string, cwd?: string, openLayers?: boolean, leaveLargeStyleAssets?: boolean, markupOnly?: boolean, esbuildFrom?: string, remoteImages?: Parameters<typeof remoteImages>[0], cutFontFaces?: boolean, keepClassNames?: boolean}} [options]
  *   `served`: the Core of the package set the CLI runs from, for the packages
  *   the page's folder has no copy of; `output`: the file the HTML goes to;
  *   `cwd`: the current folder, whose files are the page's own outside a
@@ -1315,6 +1988,8 @@ const SCHEME_CSS =
  *   any of the page's modules can use, not only the markup's. esbuild, a
  *   dependency of the CLI, builds the script (`esbuildFrom`: the folder it
  *   resolves from); a page whose script cannot be built fails the render.
+ *   `keepClassNames` keeps every class of the first paint as written,
+ *   for a caller that styles the markup with its own copy of the styles.
  *   `markupOnly` renders the markup and its styles without the script, for a
  *   caller that shows the markup itself (the theme editor); it writes no file
  *   and reaches no network. The render fetches each https image the page
@@ -1370,6 +2045,8 @@ export async function renderPage(entry, options = {}) {
   const sheetText = [];
   /** Each stylesheet's own file, so its url()s resolve from its folder. @type {string[]} */
   const sheetFiles = [];
+  /** Whether each stylesheet is Core's or an official package's (`@astryxdesign/*`). @type {boolean[]} */
+  const sheetIsAstryx = [];
   /** @param {string} spec */
   const addSheet = spec => {
     try {
@@ -1378,6 +2055,7 @@ export async function renderPage(entry, options = {}) {
       sheets.push(spec);
       sheetText.push(fs.readFileSync(file, 'utf8'));
       sheetFiles.push(file);
+      sheetIsAstryx.push(true);
       return true;
     } catch {
       return false;
@@ -1388,6 +2066,10 @@ export async function renderPage(entry, options = {}) {
   /** The package stylesheets the page's modules import. @type {string[]} */
   const scriptSheets = [];
   let scriptNamesAstryx = false;
+  /** The text of the stylesheets the page imports itself: its theme's, and its own. @type {string[]} */
+  const themeSheets = [];
+  /** Those package stylesheets: each file, and the package and importer it came by. @type {ThemeSheet[]} */
+  const themeSheetFiles = [];
   // Package stylesheets the page imports itself, such as a theme's.
   for (const {spec, from} of /** @type {{spec: string, from: string}[]} */ (
     message.packageCss ?? []
@@ -1401,6 +2083,9 @@ export async function renderPage(entry, options = {}) {
       sheets.push(spec);
       sheetText.push(fs.readFileSync(file, 'utf8'));
       sheetFiles.push(file);
+      themeSheets.push(/** @type {string} */ (sheetText.at(-1)));
+      themeSheetFiles.push({file, pkg: specPackageOf(spec), from});
+      sheetIsAstryx.push(spec.startsWith('@astryxdesign/'));
     } catch {
       warnings.push({
         code: 'missing-asset',
@@ -1455,6 +2140,10 @@ export async function renderPage(entry, options = {}) {
     localAssets: /** @type {Set<string>} */ (new Set()),
     leaveLargeStyleAssets: options.leaveLargeStyleAssets === true,
     rewrites: /** @type {Map<string, string>} */ (new Map()),
+    // The page's script reads the data the markup carries; a markup-only
+    // render has no script.
+    carried: options.markupOnly ? undefined : /** @type {Map<string, number>} */ (new Map()),
+    srcsets: /** @type {Set<string>} */ (new Set()),
     remote: remote?.results,
   };
   /**
@@ -1511,6 +2200,7 @@ export async function renderPage(entry, options = {}) {
   const used = classesIn(markup);
   /** The page's script; none in a markup-only render. @type {string | null} */
   const script = typeof message.script === 'string' ? message.script : null;
+  const scriptIsModule = script !== null && message.scriptIsModule === true;
   // https images the page's files name as literals that the first paint may
   // not show (the next view, a feed after a click): fetched the same way, so
   // the script draws them from the same carried data.
@@ -1561,6 +2251,8 @@ export async function renderPage(entry, options = {}) {
   const states = markup.includes(' data-astryx-state="');
   const layerOrder = sheetText.map(layerOrderOf).find(Boolean) ?? '';
   let css = layerOrder;
+  /** The classes the kept rules of Core's and the official packages' stylesheets name: only these take an alias. @type {Set<string>} */
+  const packageClasses = new Set();
   try {
     // A stylesheet's url()s are relative to the stylesheet, not the page: a
     // theme's font, or an image beside an imported stylesheet.
@@ -1603,6 +2295,9 @@ export async function renderPage(entry, options = {}) {
       );
     };
     const parts = sheetText.map((text, i) => sheet(sheetFiles[i], text));
+    parts.forEach(({cut}, i) => {
+      if (sheetIsAstryx[i]) for (const m of cut.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)) packageClasses.add(m[1]);
+    });
     for (const {
       file,
       css: text,
@@ -1724,6 +2419,14 @@ export async function renderPage(entry, options = {}) {
       message: script
         ? `${blankCharts === 1 ? 'A chart' : `${blankCharts} charts`} could not be drawn without a browser, so the file paints ${blankCharts === 1 ? 'it' : 'them'} empty and its script draws ${blankCharts === 1 ? 'it' : 'them'} when it runs; a viewer that blocks scripts keeps ${blankCharts === 1 ? 'it' : 'them'} empty. The render draws a chart into the markup only when a module of the page (not an installed package) imports the chart, and its ResponsiveContainer, from recharts by name (\`import {LineChart} from 'recharts'\`).`
         : `${blankCharts === 1 ? 'A chart' : `${blankCharts} charts`} could not be drawn without a browser, so ${blankCharts === 1 ? 'it is' : 'they are'} empty here: the render draws a chart only when a module of the page (not an installed package) imports the chart, and its ResponsiveContainer, from recharts by name (\`import {LineChart} from 'recharts'\`).`,
+    });
+  }
+  // Text inside a drawing that scales to its box shrinks with it on a phone.
+  const smallText = smallSvgText(markup);
+  if (smallText) {
+    warnings.push({
+      code: 'chart-size',
+      message: `${smallText.count === 1 ? 'An SVG drawing scales' : `${smallText.count} SVG drawings scale`} to fit ${smallText.count === 1 ? 'its' : 'their'} box with text inside, so on a 375 px phone that text shows at about ${smallText.px} px. Put the labels in HTML beside the drawing, or draw the chart with recharts in a ResponsiveContainer, which keeps its text size.`,
     });
   }
   if (message.chartsAlone) {
@@ -1931,11 +2634,31 @@ export async function renderPage(entry, options = {}) {
     const mixed = written.map((candidate, i) => (remoteAddress(candidate.url) ? candidate : carried[i]));
     if (mixed.some((candidate, i) => candidate !== written[i])) localRewrites.set(was, formatSrcset(mixed));
   }
+  // An https image the first paint shows and marks: the sink reads its data
+  // from that element, so the script holds no second copy of it.
   /** @type {[string, string][]} */
   const sinks = [];
-  for (const [url, fetched] of remote?.results ?? []) if ('uri' in fetched) sinks.push([url, fetched.uri]);
+  /** @type {Array<[string, number] | [string, number, number]>} */
+  const reads = [];
+  const listed = listedCandidates(ctx.carried, ctx.srcsets, ctx.rewrites);
+  for (const [url, fetched] of remote?.results ?? []) {
+    if (!('uri' in fetched)) continue;
+    const read = firstPaintRead(url, ctx.carried, listed);
+    if (read) reads.push(read);
+    else sinks.push([url, fetched.uri]);
+  }
+  let pageScriptText = script === null ? null : withCarriedPaths(script, localRewrites, ctx.carried ?? new Map(), ctx.srcsets, ctx.rewrites, scriptIsModule);
+  // The values the first paint carries are read once, before the sinks and
+  // the page's script that use them.
+  let prelude = reads.length > 0 ? CARRIED_PRELUDE : '';
+  if (pageScriptText?.startsWith(CARRIED_PRELUDE)) {
+    prelude = CARRIED_PRELUDE;
+    pageScriptText = pageScriptText.slice(CARRIED_PRELUDE.length);
+  }
   const drawn =
-    script === null ? null : (sinks.length > 0 ? imageSinks(sinks) : '') + withCarriedPaths(script, localRewrites);
+    pageScriptText === null
+      ? null
+      : prelude + (sinks.length + reads.length > 0 ? imageSinks(sinks, reads, CARRIED_VALUES) : '') + pageScriptText;
   // Paths are kept relative to the folder that holds every file: the page's
   // folder, or an ancestor when the page imports from above it, but never one
   // from which the page's own path holds a name a reverse refuses (a
@@ -2022,7 +2745,37 @@ export async function renderPage(entry, options = {}) {
       ? decodeAttr(heading)
       : path.basename(entry).replace(/\.[^.]+$/, ''));
   const generator = `<meta name="generator" content="Astryx${options.version ? ` ${escapeHtml(options.version)}` : ''}">`;
-  const style = `<style>${SCHEME_CSS}${script ? `#${ROOT_ID}{display:contents}` : ''}${markup.includes('class="recharts-responsive-container"') ? CHART_CSS : ''}${css}</style>`;
+  const importedSheets = /** @type {{file: string, css: string}[]} */ (message.importedCss ?? []);
+  // The theme editor shows each mode itself, so its markup-only pages keep
+  // both schemes; a written file shows the theme's one mode.
+  // The theme's stylesheet may come through the page's own CSS, by an
+  // `@import` that the file inlines.
+  const modeSheets = options.markupOnly
+    ? []
+    : sheetsWithImports(
+        [
+          ...themeSheetFiles.map((sheet, i) => ({...sheet, css: themeSheets[i]})),
+          ...importedSheets.map(sheet => ({file: sheet.file, css: sheet.css})),
+        ],
+        served,
+      );
+  const mode = options.markupOnly ? null : oneColorModeOf(
+    markup,
+    rootThemeColorModes(markup, modeSheets, (specifier, from) => {
+      try {
+        return resolveServed(specifier, from, served) ?? resolvePackageModule(specifier, from);
+      } catch {
+        return resolvePackageModule(specifier, from);
+      }
+    }),
+    modeSheets.map(sheet => sheet.css),
+  );
+  const drawsCharts = markup.includes('class="recharts-responsive-container"');
+  // A page that repeats an element repeats its StyleX class list: the first
+  // paint names each such list by one alias class (class-alias.mjs). The
+  // script draws its own elements with StyleX's classes.
+  if (script && !options.keepClassNames) ({markup, css} = aliasClasses(markup, css, packageClasses, new Set(tokens)));
+  const style = `<style>${schemeCssFor(mode)}${script ? `#${ROOT_ID}{display:contents}` : ''}${drawsCharts ? CHART_CSS : ''}${css}</style>`;
   // With a script, the markup sits in the one element the script draws into,
   // which takes no box of its own.
   const body = script ? `<div id="${ROOT_ID}">${markup}</div>` : markup;
@@ -2047,7 +2800,12 @@ export async function renderPage(entry, options = {}) {
           const bytes = imageBytes.get(sha);
           return bytes ? `${prefix},${bytes.toString('base64')}` : null;
         });
-  const scriptTag = pageScript ? `<script>${pageScript}</script>\n` : '';
+  // A module script runs once the document is parsed, so a browser that
+  // reaches it before its first paint paints the markup first. A classic
+  // script at the end of the body would run before that paint on a page small
+  // enough to arrive at once. A script that would not run the same in strict
+  // mode (a CommonJS package that does not ask for it) stays classic.
+  const scriptTag = pageScript ? `<script${scriptIsModule ? ' type="module"' : ''}>${pageScript}</script>\n` : '';
   let html;
   let block;
   if (options.output) {
@@ -2135,7 +2893,7 @@ export async function renderPage(entry, options = {}) {
     html =
       `<!doctype html><html lang="en"${rootThemeAttrs(markup)}><head><meta charset="utf-8">${generator}\n${headerNote(facts)}\n` +
       '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-      '<meta name="color-scheme" content="light dark">' +
+      `<meta name="color-scheme" content="${mode ?? 'light dark'}">` +
       `<title>${escapeHtml(title)}</title>${style}</head><body>${body}` +
       `${block}\n${endNote(facts)}\n${scriptTag}</body></html>\n`;
   } else {
@@ -2143,7 +2901,7 @@ export async function renderPage(entry, options = {}) {
     html =
       `<!doctype html><html lang="en"${rootThemeAttrs(markup)}><head><meta charset="utf-8">` +
       '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-      '<meta name="color-scheme" content="light dark">' +
+      `<meta name="color-scheme" content="${mode ?? 'light dark'}">` +
       `${generator}<title>${escapeHtml(title)}</title>${style}</head><body>${body}` +
       `${block}${scriptTag}</body></html>\n`;
   }

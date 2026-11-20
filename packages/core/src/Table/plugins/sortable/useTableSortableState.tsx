@@ -4,7 +4,7 @@
 
 /**
  * @file useTableSortableState.tsx
- * @input React, TableSortState types
+ * @input React, TableSortState types, isInvalidDate from columnUtils
  * @output Exports useTableSortableState hook and config types
  * @position Sort state helper; manages sort state + applies local sort to data.
  *   Pairs with useTableSortable (the headless sort plugin).
@@ -21,6 +21,7 @@ import {useState, useMemo, useCallback, useRef} from 'react';
 import type {TableSortState, UseTableSortableConfig} from './useTableSortable';
 import {useCollator} from '../../../i18n/useCollator';
 import {useCommittedRef} from '../../../hooks/useCommittedRef';
+import {isInvalidDate} from '../../columnUtils';
 
 // =============================================================================
 // Comparator Types
@@ -38,7 +39,7 @@ function isMissingSortValue(value: unknown): boolean {
   return (
     value == null ||
     (typeof value === 'number' && Number.isNaN(value)) ||
-    (value instanceof Date && Number.isNaN(value.getTime()))
+    isInvalidDate(value)
   );
 }
 
@@ -178,9 +179,9 @@ function defaultCompare<T extends Record<string, unknown>>(
   const aVal = a[sortKey];
   const bVal = b[sortKey];
 
-  // Missing values never reach the comparisons below. A NaN result reads as
-  // equal to Array.sort and breaks the order of the other rows. An Invalid
-  // Date throws in toISOString.
+  // Missing values never reach the comparisons below. Array.sort reads a NaN
+  // result as equal, which breaks the order of the other rows. toISOString
+  // throws for an Invalid Date.
   const aMissing = isMissingSortValue(aVal);
   const bMissing = isMissingSortValue(bVal);
   if (aMissing && bMissing) {
