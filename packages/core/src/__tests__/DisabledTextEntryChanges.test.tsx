@@ -106,6 +106,7 @@ const fields: Field[] = [
     render: props => (
       <Typeahead
         label="Assignee"
+        isRequired
         searchSource={peopleSource}
         value={null}
         isDisabled
@@ -180,7 +181,9 @@ describe('a disabled text entry field changes nothing and submits nothing (spec:
           expect(input.disabled).toBe(false);
         });
 
-        // A required disabled field does not block submission (FR3).
+        // A required disabled field must not block submission (FR3). No
+        // field renders a native required attribute today, so this guards a
+        // future one.
         it('adds nothing to form data, and a required one does not block submission', () => {
           const {container} = render(
             <form>
