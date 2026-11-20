@@ -6,6 +6,11 @@ is the operational authority. This page explains the repository and npm mechanic
 Astryx publishes its public `@astryxdesign/*` packages from GitHub Actions through
 npm trusted publishing (OIDC). CI carries no long-lived npm publish token. Every
 stable package is built from an immutable release tag and published with provenance.
+A missed release that created a tag but published nothing recuts the same version
+from current `main`. The release owner supplies a SHA-256-verified owner-recut
+receipt that matches the version and the tag's commit object. The archived tag stays
+in place through the replacement final gate; its deletion is recorded immediately
+before the replacement tag is created. A published version is never reused.
 
 ## Release sequence
 

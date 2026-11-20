@@ -112,7 +112,8 @@ affects_consumer_docs: [release-process, templates]
       "DEC-30",
       "FR61",
       "DEC-32",
-      "DEC-33"
+      "DEC-33",
+      "DEC-34"
     ]
   }
 }
@@ -757,7 +758,13 @@ one removal merged ahead of the decision to allow it.
   neither the patch nor the minor successor of the latest stable release,
   including a version that is already released. The latest stable release is the
   newest `vX.Y.Z` tag. A prerelease or canary identifier is publication metadata
-  and is never a declared version or a base.
+  and is never a declared version or a base. An existing stable-version tag also
+  refuses a new release lifecycle unless every publication effect is absent and a
+  SHA-256-verified `tagged-unpublished-owner-recut-authority` receipt matches the
+  declared version and the tag's local commit object. That owner recut keeps the
+  archived tag until the replacement final gate, then records its deletion before
+  creating the replacement tag. A published version or an unauthenticated reuse is
+  always refused.
 - **FR50 — The published release branch squashes back into current main.** After
   branch-owned tag and stable publication are verified, one merge-back change applies a
   squash projection of the exact published release branch onto then-current main. It
@@ -1638,6 +1645,24 @@ admit Native.
 
 Rejected: a public resolved-calendar hook, because no current Core contract
 defines one.
+
+### DEC-34 — A missed unpublished release recuts the same version from main
+
+**Reference:** `spec:AST-017/DEC-34`
+**Decider:** `cixzhang`, `2026-11-19 20:28:03 PT`
+
+Release versions stay in order. When a release misses its train and no package,
+GitHub Release, deployment, or merge-back was published, the next run recuts the
+same version from current main instead of skipping it. A tag left by the failed
+run is archived evidence, not publication authority. Under the Chief and release
+owner's 2026-11-20 release policy, the new lifecycle starts only from a
+SHA-256-verified owner-recut receipt that matches the version and the tag's commit
+object. It keeps that tag through the replacement final gate, then records deletion
+before it creates the replacement tag. This mechanism never applies to a version
+with any publication effect.
+
+Rejected: skipping the missed version, silently retargeting the old tag, deleting
+it before the replacement is fully gated, or reusing any published version.
 
 ## Open questions
 

@@ -931,7 +931,9 @@ function validateReleaseTestRepair({
   for (const entry of entries) {
     const status = entry.split('\t', 1)[0];
     if (status !== 'M')
-      errors.push(`release test repair may only modify an existing test: ${entry}`);
+      errors.push(
+        `release test repair may only modify an existing test: ${entry}`,
+      );
     const files = diffEntryFiles(entry);
     if (files === null) {
       errors.push(`invalid diff entry: ${entry}`);
@@ -1029,11 +1031,7 @@ function validateReleaseTestRepairAtRef(
   ])
     .split('\n')
     .filter(Boolean);
-  const diff = gitRaw(root, [
-    'diff',
-    '--binary',
-    `${mergeBase}..${head}`,
-  ]);
+  const diff = gitRaw(root, ['diff', '--binary', `${mergeBase}..${head}`]);
   const changedStatements = changedStatementsFromDiff(
     git(root, ['diff', '--unified=20', `${mergeBase}..${head}`]),
   );
@@ -1138,12 +1136,14 @@ function patchBuildsHead(root, base, head, patch) {
     execFileSync('git', ['read-tree', base], {cwd: root, env, stdio: 'ignore'});
     execFileSync(
       'git',
-      ['apply', '--cached', '--unidiff-zero', '--whitespace=nowarn'], {
-      cwd: root,
-      env,
-      input: patch.endsWith('\n') ? patch : `${patch}\n`,
-      stdio: ['pipe', 'ignore', 'ignore'],
-    });
+      ['apply', '--cached', '--unidiff-zero', '--whitespace=nowarn'],
+      {
+        cwd: root,
+        env,
+        input: patch.endsWith('\n') ? patch : `${patch}\n`,
+        stdio: ['pipe', 'ignore', 'ignore'],
+      },
+    );
     const tree = execFileSync('git', ['write-tree'], {
       cwd: root,
       env,
@@ -1178,7 +1178,9 @@ function validateReleasePolicyCarryAtRef(
       'release policy carry must contain exactly one non-merge commit',
     );
   if (git(root, ['rev-parse', `${head}^`]) !== baseCommit)
-    errors.push('release policy carry commit must directly follow the release head');
+    errors.push(
+      'release policy carry commit must directly follow the release head',
+    );
   if (!isAncestor(root, source, mainRef))
     errors.push('release policy carry source is not merged on current main');
   if (
@@ -1279,8 +1281,7 @@ function validateReleasePolicyCarryAtRef(
   };
 }
 
-const CODEMOD_PROMOTION_SPEC_PATH =
-  'docs/specs/AST-057-row-actions/spec.md';
+const CODEMOD_PROMOTION_SPEC_PATH = 'docs/specs/AST-057-row-actions/spec.md';
 const CODEMOD_PROMOTION_POINTERS = [
   'packages/cli/assets/codemods/transforms/next/migrate-item-swipe-actions-to-swipe.mjs',
   'packages/cli/assets/codemods/transforms/next/__tests__/migrate-item-swipe-actions-to-swipe.test.mjs',
@@ -1375,11 +1376,7 @@ function validateCodemodPromotionApplicabilityAtRef(
 
 function validateReleaseDiff(
   entries,
-  {
-    plan,
-    baseChangesets,
-    validatedCodemodPromotionPaths = new Set(),
-  } = {},
+  {plan, baseChangesets, validatedCodemodPromotionPaths = new Set()} = {},
 ) {
   const errors = [];
   const planned = plan
@@ -1587,10 +1584,7 @@ function validateReleaseMergeBack({
             `release merge-back changed a manifest not changed on the published branch: ${file}`,
           );
       } else if (isCodemodPromotionApplicabilityPath(file)) {
-        if (
-          status !== 'M' ||
-          !validatedCodemodPromotionPaths.has(file)
-        )
+        if (status !== 'M' || !validatedCodemodPromotionPaths.has(file))
           errors.push(
             `release merge-back contains an unvalidated codemod-promotion applicability move: ${file}`,
           );
@@ -1782,6 +1776,48 @@ function required(values, key) {
   return values[key];
 }
 
+function validateOwnerRecutReceipt(root, reference, version) {
+  const match = /^(.+) SHA-256 ([0-9a-f]{64})$/.exec(reference ?? '');
+  if (!match)
+    throw new Error('existing tag requires a hashed owner-recut receipt');
+  let body;
+  try {
+    body = fs.readFileSync(match[1]);
+  } catch {
+    throw new Error('owner-recut receipt is unavailable');
+  }
+  const digest = crypto.createHash('sha256').update(body).digest('hex');
+  if (digest !== match[2])
+    throw new Error('owner-recut receipt SHA-256 does not match');
+  let receipt;
+  try {
+    receipt = JSON.parse(body);
+  } catch {
+    throw new Error('owner-recut receipt is not valid JSON');
+  }
+  const tag = receipt.priorTag;
+  const absence = receipt.publicationAbsence;
+  const tagSha = git(root, ['rev-parse', `refs/tags/v${version}^{commit}`]);
+  if (
+    receipt.schemaVersion !== 1 ||
+    receipt.kind !== 'tagged-unpublished-owner-recut-authority' ||
+    receipt.version !== version ||
+    tag?.name !== `v${version}` ||
+    tag?.objectType !== 'commit' ||
+    tag?.objectSha !== tagSha ||
+    !String(absence?.npmVersion ?? '').startsWith(`${version} absent`) ||
+    absence?.githubRelease !== 'absent' ||
+    absence?.deploy !== 'absent' ||
+    absence?.mainSync !== 'absent' ||
+    !receipt.ownerAuthority?.source ||
+    !receipt.ownerAuthority?.time ||
+    !receipt.ownerAuthority?.verbatim
+  )
+    throw new Error(
+      'owner-recut receipt does not match the release version and tag',
+    );
+}
+
 function versionTagExists(root, version) {
   try {
     execFileSync(
@@ -1891,10 +1927,15 @@ function writeAuthority(root, values, refresh) {
       throw new Error(
         'release authority already exists; a release branch cannot be reused',
       );
-    if (versionTagExists(root, version))
-      throw new Error(
-        `version v${version} already has an immutable tag; use a new release branch and version`,
-      );
+    if (versionTagExists(root, version)) {
+      if (!values['owner-recut-receipt'])
+        throw new Error(
+          `version v${version} already has an immutable tag; use a new release branch and version`,
+        );
+      validateOwnerRecutReceipt(root, values['owner-recut-receipt'], version);
+    } else if (values['owner-recut-receipt']) {
+      throw new Error('owner-recut receipt requires the archived tag');
+    }
   }
 
   fs.mkdirSync(dir, {recursive: true});

@@ -128,6 +128,39 @@ function validate(state, overrides = {}) {
   });
 }
 
+function ownerRecutReceipt(
+  root,
+  {version = '0.6.5', tagSha, tagObjectType = 'commit', digestOverride} = {},
+) {
+  const document = {
+    schemaVersion: 1,
+    kind: 'tagged-unpublished-owner-recut-authority',
+    version,
+    priorTag: {
+      name: `v${version}`,
+      objectType: tagObjectType,
+      objectSha: tagSha ?? git(root, 'rev-parse', 'HEAD'),
+    },
+    publicationAbsence: {
+      npmVersion: `${version} absent for every stable package`,
+      githubRelease: 'absent',
+      deploy: 'absent',
+      mainSync: 'absent',
+    },
+    ownerAuthority: {
+      source: 'release owner',
+      time: '2026-11-20T04:41:00Z',
+      verbatim: 'recut the missed version from main',
+    },
+  };
+  const file = path.join(root, 'owner-recut.json');
+  const body = `${JSON.stringify(document, null, 2)}\n`;
+  fs.writeFileSync(file, body);
+  const digest =
+    digestOverride ?? crypto.createHash('sha256').update(body).digest('hex');
+  return `${file} SHA-256 ${digest}`;
+}
+
 afterEach(() => {
   for (const root of roots.splice(0))
     fs.rmSync(root, {recursive: true, force: true});
@@ -255,6 +288,84 @@ describe('one branch per release lifecycle', () => {
     expect(() => writeAuthority(root, identity(cutSha), false)).toThrow(
       'use a new release branch and version',
     );
+  });
+
+  it('allows only an authenticated unpublished owner recut over an existing tag', () => {
+    const {root, cutSha} = cutFixture();
+    git(root, 'tag', 'v0.6.5');
+    const values = identity(cutSha);
+
+    expect(() =>
+      writeAuthority(
+        root,
+        {
+          ...values,
+          'owner-recut-receipt': ownerRecutReceipt(root, {
+            digestOverride: '0'.repeat(64),
+          }),
+        },
+        false,
+      ),
+    ).toThrow('owner-recut receipt SHA-256 does not match');
+    expect(() =>
+      writeAuthority(
+        root,
+        {
+          ...values,
+          'owner-recut-receipt': ownerRecutReceipt(root, {version: '0.6.6'}),
+        },
+        false,
+      ),
+    ).toThrow('owner-recut receipt does not match the release version and tag');
+    expect(() =>
+      writeAuthority(
+        root,
+        {
+          ...values,
+          'owner-recut-receipt': ownerRecutReceipt(root, {
+            tagObjectType: 'tag',
+          }),
+        },
+        false,
+      ),
+    ).toThrow('owner-recut receipt does not match the release version and tag');
+    expect(() =>
+      writeAuthority(
+        root,
+        {
+          ...values,
+          'owner-recut-receipt': ownerRecutReceipt(root, {
+            tagSha: 'f'.repeat(40),
+          }),
+        },
+        false,
+      ),
+    ).toThrow('owner-recut receipt does not match the release version and tag');
+
+    expect(() =>
+      writeAuthority(
+        root,
+        {
+          ...values,
+          'owner-recut-receipt': ownerRecutReceipt(root),
+        },
+        false,
+      ),
+    ).not.toThrow();
+  });
+
+  it('refuses an owner recut receipt when the archived tag is absent', () => {
+    const {root, cutSha} = cutFixture();
+    expect(() =>
+      writeAuthority(
+        root,
+        {
+          ...identity(cutSha),
+          'owner-recut-receipt': ownerRecutReceipt(root),
+        },
+        false,
+      ),
+    ).toThrow('owner-recut receipt requires the archived tag');
   });
 
   it("binds the release version to main's declared version at the cut", () => {
@@ -507,7 +618,9 @@ describe('active release branch authority', () => {
     expect(validateMove({status: 'D'})).toContain(
       `${spec} may only be modified by a generated codemod promotion`,
     );
-    expect(validateMove({after: after.replace('{"paths"', '{"other"')})).toContain(
+    expect(
+      validateMove({after: after.replace('{"paths"', '{"other"')}),
+    ).toContain(
       `${spec} may change only the exact applicability pointers moved by the codemod promotion`,
     );
     expect(classifyReleaseDiff(['M\tdocs/specs/AST-058/spec.md'])).toBe(
@@ -680,8 +793,7 @@ describe('active release branch authority', () => {
 +  1,
  );
  after();`,
-        expected:
-          'await expect.poll(() => count).toBeGreaterThan(\n  1,\n);',
+        expected: 'await expect.poll(() => count).toBeGreaterThan(\n  1,\n);',
       },
       {
         diff: `diff --git a/test.mjs b/test.mjs
@@ -744,7 +856,8 @@ describe('active release branch authority', () => {
         `release test repair changes an assertion, test control, timeout, retry, or snapshot: ${expected}`,
       );
     }
-    const portStatements = changedStatementsFromDiff(`diff --git a/test.mjs b/test.mjs
+    const portStatements =
+      changedStatementsFromDiff(`diff --git a/test.mjs b/test.mjs
 --- a/test.mjs
 +++ b/test.mjs
 @@ -1,7 +1,7 @@
@@ -765,7 +878,8 @@ describe('active release branch authority', () => {
  cleanup();`);
     expect(portStatements).not.toContain('<unbounded changed statement>');
 
-    const multiStatementChange = changedStatementsFromDiff(`diff --git a/test.mjs b/test.mjs
+    const multiStatementChange =
+      changedStatementsFromDiff(`diff --git a/test.mjs b/test.mjs
 --- a/test.mjs
 +++ b/test.mjs
 @@ -1 +1 @@
@@ -773,7 +887,10 @@ describe('active release branch authority', () => {
 +safe(); expect(value).toBe(false);`);
     expect(multiStatementChange).toContain('expect(value).toBe(false);');
     expect(
-      repair({changedLines: undefined, changedStatements: multiStatementChange}),
+      repair({
+        changedLines: undefined,
+        changedStatements: multiStatementChange,
+      }),
     ).toContain(
       'release test repair changes an assertion, test control, timeout, retry, or snapshot: expect(value).toBe(false);',
     );
@@ -833,8 +950,7 @@ describe('active release branch authority', () => {
     roots.push(root);
     const testFile =
       'packages/core/src/BottomSheet/__tests__/BottomSheetRelease.a11y.chromium.spec.ts';
-    const before =
-      'const ready = true;\nawait page.mouse.move(0, 150);\n\n';
+    const before = 'const ready = true;\nawait page.mouse.move(0, 150);\n\n';
     const after = 'const ready = true;\nawait mouseDrag(page);\n\n';
     const {cut} = createRepository(root, [
       {
@@ -914,8 +1030,7 @@ describe('active release branch authority', () => {
         name: 'whitespaceRepair',
         parent: 'releaseBase',
         files: {
-          [testFile]:
-            'const ready = true;\nawait mouse Drag(page);\n\n',
+          [testFile]: 'const ready = true;\nawait mouse Drag(page);\n\n',
         },
       },
       {
