@@ -14,11 +14,14 @@
  * a reader has one. next.config.mjs traces it into the /mcp function.
  *
  * It installs outside the repository and then copies the folder in place: npm
- * refuses to run under the root manifest's `devEngines`. Before that, it calls
+ * refuses to run under the root manifest's `devEngines`. The install pins every
+ * registry dependency to the version the lockfile resolved (npm `overrides`,
+ * lockfile-overrides.mjs), so a release published moments earlier cannot break
+ * or change it. Before that, it calls
  * every tool the folder's server lists, and fails unless each one answers for
  * the documented Core.
  *
- * @input the workspace CLI; the documented Core; the npm registry
+ * @input the workspace CLI; the documented Core; their pnpm lockfiles; the npm registry
  * @output apps/docsite/.mcp-runtime
  * @position docsite build — run by `pnpm build` before `next build`
  */
@@ -29,6 +32,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {askMcpServer, RUNTIME_DIR} from '../src/lib/mcpBridge.mjs';
+import {lockfileOverrides} from './lockfile-overrides.mjs';
 import {resolveContentRoot} from './resolve-content-root.mjs';
 
 const DOCSITE_ROOT = path.resolve(
@@ -132,6 +136,45 @@ async function checkEveryTool(runtime, coreVersion) {
   return answeredBy;
 }
 
+/**
+ * The overrides that pin the CLI's dependencies to this repository's lockfile
+ * and Core's to the lockfile of the checkout it comes from. A name the two pin
+ * to different versions is pinned under each package instead.
+ * @param {string} contentRoot the checkout the documented Core comes from
+ * @returns {Record<string, string | Record<string, string>>}
+ */
+function installOverrides(contentRoot) {
+  const lock = root =>
+    fs.readFileSync(path.join(root, 'pnpm-lock.yaml'), 'utf8');
+  const cli = {path: 'packages/cli', name: '@astryxdesign/cli'};
+  const core = {path: 'packages/core', name: '@astryxdesign/core'};
+  if (path.resolve(contentRoot) === REPO_ROOT)
+    return lockfileOverrides(lock(REPO_ROOT), [cli, core]);
+  const merged = lockfileOverrides(lock(REPO_ROOT), [cli]);
+  for (const [name, pin] of Object.entries(
+    lockfileOverrides(lock(contentRoot), [core]),
+  )) {
+    if (!(name in merged)) {
+      merged[name] = pin;
+    } else if (JSON.stringify(merged[name]) !== JSON.stringify(pin)) {
+      const cliPin = merged[name];
+      delete merged[name];
+      for (const [owner, own] of [
+        [cli.name, cliPin],
+        [core.name, pin],
+      ]) {
+        const version = typeof own === 'string' ? own : own['.'];
+        if (version == null) continue;
+        merged[owner] = {
+          ...(typeof merged[owner] === 'object' ? merged[owner] : {}),
+          [name]: version,
+        };
+      }
+    }
+  }
+  return merged;
+}
+
 /** Build the folder, check it, and move it into place. */
 async function main() {
   const {target, contentRoot} = resolveContentRoot();
@@ -168,7 +211,15 @@ async function main() {
 
     fs.writeFileSync(
       path.join(project, 'package.json'),
-      `${JSON.stringify({name: 'astryx-docs-mcp', private: true}, null, 2)}\n`,
+      `${JSON.stringify(
+        {
+          name: 'astryx-docs-mcp',
+          private: true,
+          overrides: installOverrides(contentRoot),
+        },
+        null,
+        2,
+      )}\n`,
     );
     execFileSync(
       'npm',
