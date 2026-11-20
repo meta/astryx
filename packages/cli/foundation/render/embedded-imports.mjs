@@ -2,7 +2,7 @@
 
 /**
  * @file Which embedded files the page itself reaches, for `astryx
- * experimental render --reverse`. A received file is untrusted, so its list
+ * experimental export --reverse`. A received file is untrusted, so its list
  * of files is not: a file is written only when the embedded page reaches it
  * through its own imports (static, re-exports, `import()` and `require()` of
  * a string), followed module by module through the embedded tree. Relative
@@ -17,7 +17,7 @@ import * as path from 'node:path';
 import {babelParse as parse, postcss} from '../runtime/lazy-dependencies.mjs';
 import {MODULE_EXTENSIONS} from './embedded-files.mjs';
 import {builtinModules} from 'node:module';
-import {matchPath, pathsFor} from './ts-paths.mjs';
+import {matchPath, pathsFor, typeScriptSourcesOf} from './ts-paths.mjs';
 import {isAssetPath} from './assets.mjs';
 import {climbsOut} from '../fs/paths.mjs';
 import {writtenString} from '../text/written-string.mjs';
@@ -115,26 +115,27 @@ export function importSpecifiers(source, file) {
 /**
  * Each string specifier one module imports, with its line and whether it
  * brings in types only (`import type`, `export type`, or named bindings that
- * are each an inline `type`), which a bundler drops. Null when the module
- * does not parse.
+ * are each an inline `type`), which a bundler drops, and whether it is a
+ * static import declaration. Null when the module does not parse.
  * @param {string} source
  * @param {string} file for the parser's TypeScript/JSX choice
- * @returns {Array<{specifier: string, line?: number, typeOnly: boolean}> | null}
+ * @returns {Array<{specifier: string, line?: number, typeOnly: boolean, declaration: boolean}> | null}
  */
 export function moduleImports(source, file) {
   return scanModule(source, file).records;
 }
 
 /**
- * Relative asset paths in a piece of text: a `./`/`../` path to an image or
- * font, bare or inside `url(...)`.
+ * Asset paths in a piece of text: a `./`/`../` path, or a path from the
+ * site's root (`/pics/a.png`, served from `public/`), to an image or font,
+ * bare or inside `url(...)`.
  * @param {string} text
  * @returns {string[]}
  */
 export function assetRefsIn(text) {
   /** @type {string[]} */
   const out = [];
-  for (const m of text.matchAll(/(?:^|url\(\s*['"]?)(\.\.?\/[^'")\s]+)/g)) {
+  for (const m of text.matchAll(/(?:^|url\(\s*['"]?)(\.\.?\/[^'")\s]+|\/(?!\/)[^'")\s]+)/g)) {
     const ref = m[1].split(/[?#]/)[0];
     if (isAssetPath(ref)) out.push(ref);
   }
@@ -142,16 +143,26 @@ export function assetRefsIn(text) {
 }
 
 /**
+ * @typedef {object} AssetRef
+ * @property {string} written the reference as the file writes it
+ * @property {string} file the file name it names: a string or a `url()` is
+ *   URL text, so its percent-escapes are decoded; an import, re-export,
+ *   `import()` or `require()` specifier names its file as written, as a
+ *   bundler resolves it
+ */
+
+/**
  * The images, fonts and media a carried file names by a relative path: in a
- * module's strings, or in a stylesheet. A render carries each one that
- * exists, and {@link reachableFiles} expects each one back.
+ * module's strings and specifiers, or in a stylesheet. A render carries each
+ * one that exists, and {@link reachableFiles} expects each one back, by the
+ * same file name.
  * @param {string} source
  * @param {string} file its path; a `.css` file is read as a stylesheet
- * @returns {string[]}
+ * @returns {AssetRef[]}
  */
 export function assetRefsOf(source, file) {
   return /\.css$/i.test(file)
-    ? assetRefsIn(source)
+    ? assetRefsIn(source).map(ref => ({written: ref, file: fileNamed(ref)}))
     : scanModule(source, file).assets;
 }
 
@@ -175,14 +186,14 @@ function typesOnly(node) {
 /**
  * One module's imports, and the relative asset paths its strings name
  * (`<img src="./logo.png">`, `url(./bg.png)` in a style). `records` holds
- * each import with its line and whether it is types only; null when the
- * module does not parse.
+ * each import with its line, whether it is types only and whether it is a
+ * static import declaration; null when the module does not parse.
  * @param {string} source
  * @param {string} file
- * @returns {{imports: string[], assets: string[], records: Array<{specifier: string, line?: number, typeOnly: boolean}> | null}}
+ * @returns {{imports: string[], assets: AssetRef[], records: Array<{specifier: string, line?: number, typeOnly: boolean, declaration: boolean}> | null}}
  */
 function scanModule(source, file) {
-  /** @type {string[]} */
+  /** @type {AssetRef[]} */
   const assets = [];
   /** @type {any} */
   let ast;
@@ -203,38 +214,68 @@ function scanModule(source, file) {
   } catch {
     return {imports: [], assets: [], records: null};
   }
-  /** @type {Array<{specifier: string, line?: number, typeOnly: boolean}>} */
+  /** @type {Array<{specifier: string, line?: number, typeOnly: boolean, declaration: boolean}>} */
   const records = [];
   /** @param {string} specifier @param {any} node @param {boolean} [typeOnly] */
   const add = (specifier, node, typeOnly = false) =>
-    records.push({specifier, line: node.loc?.start?.line, typeOnly});
+    records.push({
+      specifier,
+      line: node.loc?.start?.line,
+      typeOnly,
+      declaration: node.type === 'ImportDeclaration',
+    });
   const written = writtenString;
+  /**
+   * The specifier node of an import, a re-export, an `import()` or a
+   * `require()`, or null for any other node.
+   * @param {any} node
+   */
+  const specifierNode = node => {
+    if (
+      node.type === 'ImportDeclaration' ||
+      node.type === 'ExportNamedDeclaration' ||
+      node.type === 'ExportAllDeclaration'
+    )
+      return node.source?.type === 'StringLiteral' ? node.source : null;
+    if (node.type === 'ImportExpression') return node.source ?? null;
+    if (
+      node.type === 'CallExpression' &&
+      (node.callee?.type === 'Import' ||
+        (node.callee?.type === 'Identifier' && node.callee.name === 'require'))
+    )
+      return node.arguments?.[0] ?? null;
+    return null;
+  };
+  /**
+   * The specifier nodes seen so far, and the template parts inside them. A
+   * bundler resolves a specifier as written; any other string is URL text.
+   * @type {WeakSet<object>}
+   */
+  const specifiers = new WeakSet();
+  /** @param {any} node @param {string[]} refs */
+  const addAssets = (node, refs) =>
+    assets.push(
+      ...refs.map(ref => ({
+        written: ref,
+        file: specifiers.has(node) ? ref : fileNamed(ref),
+      })),
+    );
   /** @param {any} node */
   const visit = node => {
     if (!node || typeof node.type !== 'string') return;
-    if (node.type === 'StringLiteral') assets.push(...assetRefsIn(node.value));
-    else if (node.type === 'TemplateElement')
-      assets.push(...assetRefsIn(node.value?.cooked ?? ''));
-    if (
-      (node.type === 'ImportDeclaration' ||
-        node.type === 'ExportNamedDeclaration' ||
-        node.type === 'ExportAllDeclaration') &&
-      node.source?.type === 'StringLiteral'
-    ) {
-      add(node.source.value, node, typesOnly(node));
-    } else if (
-      node.type === 'ImportExpression' &&
-      written(node.source) != null
-    ) {
-      add(/** @type {string} */ (written(node.source)), node);
-    } else if (
-      node.type === 'CallExpression' &&
-      written(node.arguments?.[0]) != null &&
-      (node.callee?.type === 'Import' ||
-        (node.callee?.type === 'Identifier' && node.callee.name === 'require'))
-    ) {
-      add(/** @type {string} */ (written(node.arguments[0])), node);
+    const specifier = specifierNode(node);
+    if (specifier) {
+      specifiers.add(specifier);
+      for (const quasi of specifier.quasis ?? []) specifiers.add(quasi);
+      if (specifier === node.source && node.type !== 'ImportExpression') {
+        add(specifier.value, node, typesOnly(node));
+      } else if (written(specifier) != null) {
+        add(/** @type {string} */ (written(specifier)), node);
+      }
     }
+    if (node.type === 'StringLiteral') addAssets(node, assetRefsIn(node.value));
+    else if (node.type === 'TemplateElement')
+      addAssets(node, assetRefsIn(node.value?.cooked ?? ''));
     for (const key of Object.keys(node)) {
       if (key === 'loc' || key === 'start' || key === 'end' || key === 'extra')
         continue;
@@ -269,38 +310,70 @@ export function receivingAliases(file) {
  *   page), so it goes where the page's layout puts it.
  * @property {Set<string>} aliased - Absolute paths a receiving-project alias
  *   import names for it, so it also goes there.
+ * @property {Map<string, Set<string>>} [via] - For each path in `aliased`,
+ *   the alias imports that name it there.
+ * @property {Map<string, Set<string>>} [by] - For each of those alias
+ *   imports, the tree paths of the files that make it.
  * @property {Set<string>} unaliased - Alias imports that name it where no
  *   receiving-project alias does: the render recorded the file each named,
  *   so it goes where the page's layout puts it, and the page needs the alias.
  */
 
 /**
+ * The tree paths a relative import may name, in the order a reverse resolves
+ * it: the path as written, then the TypeScript source a `.js`-family name
+ * stands for (`fmt.js` for fmt.ts), then with each extension an
+ * extensionless import stands for, then as its folder's index file with each.
+ * @param {string} spec a tree path, `/`-separated
+ * @returns {string[]}
+ */
+export function resolutionCandidates(spec) {
+  return [
+    spec,
+    ...typeScriptSourcesOf(spec),
+    ...RESOLVE_EXTENSIONS.map(x => spec + x),
+    ...RESOLVE_EXTENSIONS.map(x => `${spec}/index${x}`),
+  ];
+}
+
+/**
+ * The file name a reference written as URL text names: its percent-escapes
+ * decoded. A reference with any `%` that starts no escape is read whole, as
+ * written (`./a%20b%.png` stays `./a%20b%.png`). The first paint, the export's
+ * scan of carried modules and `--reverse` all read a reference this way.
+ * @param {string} ref
+ */
+export function fileNamed(ref) {
+  try {
+    return decodeURIComponent(ref);
+  } catch {
+    return ref;
+  }
+}
+
+/**
  * The embedded files the page reaches through its imports.
  * @param {{path: string, base64: string}[]} files the embedded files, page
  *   first; every path appears once (callers refuse duplicates first)
- * @param {{aliases?: import('./ts-paths.mjs').PathPattern[], recorded?: unknown}} [options]
+ * @param {{aliases?: import('./ts-paths.mjs').PathPattern[], recorded?: unknown, publicDir?: unknown, reused?: Set<string>}} [options]
  *   the receiving project's path aliases (see receivingAliases), and the
  *   alias imports the render recorded (an untrusted record: only an entry
- *   that names a carried file counts)
+ *   that names a carried file counts; without a record, each such import
+ *   names the one carried file its path ends with), and the absolute paths
+ *   whose project file the page uses as it is: a file an alias leads to
+ *   there is reached, but what it imports is not followed from it
  * @returns {{reached: Map<string, Reach>, missing: string[]}} the reached
  *   tree paths, and the relative imports the file does not carry
  */
-export function reachableFiles(files, {aliases = [], recorded} = {}) {
+export function reachableFiles(files, {aliases = [], recorded, publicDir, reused} = {}) {
   const byPath = new Map(files.map(f => [f.path, f]));
   /** @type {Map<string, Reach>} */
   const reached = new Map();
   /** @type {Set<string>} */
   const missing = new Set();
   /** @param {string} candidate tree path, `/`-separated */
-  const resolveIn = candidate => {
-    if (byPath.has(candidate)) return candidate;
-    for (const ext of RESOLVE_EXTENSIONS)
-      if (byPath.has(candidate + ext)) return candidate + ext;
-    for (const ext of RESOLVE_EXTENSIONS)
-      if (byPath.has(`${candidate}/index${ext}`))
-        return `${candidate}/index${ext}`;
-    return null;
-  };
+  const resolveIn = candidate =>
+    resolutionCandidates(candidate).find(p => byPath.has(p)) ?? null;
   /**
    * The one tree file an alias import names: the file whose path ends with
    * the import's rest (`@/components/Header` -> `.../components/Header.tsx`).
@@ -310,11 +383,7 @@ export function reachableFiles(files, {aliases = [], recorded} = {}) {
     /** @type {{path: string, tail: string}[]} */
     const hits = [];
     for (const p of byPath.keys()) {
-      for (const tail of [
-        rest,
-        ...RESOLVE_EXTENSIONS.map(e => rest + e),
-        ...RESOLVE_EXTENSIONS.map(e => `${rest}/index${e}`),
-      ]) {
+      for (const tail of resolutionCandidates(rest)) {
         if (p === tail || p.endsWith(`/${tail}`)) {
           hits.push({path: p, tail});
           break;
@@ -322,6 +391,15 @@ export function reachableFiles(files, {aliases = [], recorded} = {}) {
       }
     }
     return hits.length === 1 ? hits[0] : null;
+  };
+  /** @param {string} spec an import only an alias resolves */
+  const derivedTarget = spec => {
+    const segments = spec.split('/');
+    for (let drop = 1; drop < segments.length; drop++) {
+      const hit = bySuffix(segments.slice(drop).join('/'));
+      if (hit) return hit.path;
+    }
+    return undefined;
   };
   /** @param {string} p */
   const reach = p => {
@@ -333,11 +411,51 @@ export function reachableFiles(files, {aliases = [], recorded} = {}) {
     }
     return {r, fresh};
   };
+  /**
+   * Where a path from the site's root lies in the tree: under the `public/`
+   * folder the render recorded reading, else the nearest one at or above the
+   * page's folder. Null when there is none, or when the path leaves it.
+   * @param {string} ref
+   */
+  const publicPath = ref => {
+    /** @param {string} dir a tree folder holding `public/` files */
+    const under = dir => {
+      const joined = path.posix.normalize(`${dir}/${ref.slice(1)}`);
+      return joined.startsWith(`${dir}/`) ? joined : null;
+    };
+    const holds = (/** @type {string} */ dir) => [...byPath.keys()].some(p => p.startsWith(`${dir}/`));
+    // The public/ the render read, as it recorded it (an untrusted record:
+    // only a plain tree path that holds carried files counts).
+    if (
+      typeof publicDir === 'string' &&
+      publicDir !== '' &&
+      !publicDir.startsWith('/') &&
+      path.posix.normalize(publicDir) === publicDir &&
+      !climbsOut(publicDir) &&
+      holds(publicDir)
+    )
+      return under(publicDir);
+    // A file without the record: the nearest public/ above the page.
+    const page = files[0]?.path ?? '';
+    for (let d = path.posix.dirname(page); ; d = path.posix.dirname(d)) {
+      const dir = d === '.' ? 'public' : `${d}/public`;
+      if (holds(dir)) return under(dir);
+      if (d === '.' || d === '/' || d === '') return null;
+    }
+  };
+
   /** @type {string[]} */
   const queue = [];
+  const queued = new Set();
+  /** @param {string} p */
+  const follow = p => {
+    if (queued.has(p)) return;
+    queued.add(p);
+    queue.push(p);
+  };
   if (files.length > 0) {
     reach(files[0].path).r.relative = true;
-    queue.push(files[0].path);
+    follow(files[0].path);
   }
   while (queue.length > 0) {
     const current = /** @type {string} */ (queue.shift());
@@ -375,10 +493,15 @@ export function reachableFiles(files, {aliases = [], recorded} = {}) {
             .map(ref => (ref.startsWith('.') ? ref : `./${ref}`)),
           assets: assetRefsOf(source, current),
         };
-    for (const ref of scanned.assets) {
-      const joined = path.posix.normalize(
-        path.posix.join(path.posix.dirname(current), ref),
-      );
+    for (const {file: ref} of scanned.assets) {
+      const joined = ref.startsWith('/')
+        ? publicPath(ref)
+        : path.posix.normalize(
+            path.posix.join(path.posix.dirname(current), ref),
+          );
+      // A path from the site's root names nothing when the tree holds no
+      // `public/` on the page's path: the render had none to read it from.
+      if (joined === null) continue;
       if (climbsOut(joined)) continue;
       if (!byPath.has(joined)) {
         missing.add(joined);
@@ -397,9 +520,8 @@ export function reachableFiles(files, {aliases = [], recorded} = {}) {
           missing.add(joined);
           continue;
         }
-        const {r, fresh} = reach(target);
-        r.relative = true;
-        if (fresh) queue.push(target);
+        reach(target).r.relative = true;
+        follow(target);
         continue;
       }
       const match = matchPath(aliases, bare);
@@ -466,26 +588,40 @@ export function reachableFiles(files, {aliases = [], recorded} = {}) {
           undefined,
         );
         if (chosen) {
-          const {r, fresh} = reach(chosen.hit.path);
+          const {r} = reach(chosen.hit.path);
           r.aliased.add(chosen.abs);
-          if (fresh) queue.push(chosen.hit.path);
+          r.via ??= new Map();
+          const names = r.via.get(chosen.abs) ?? new Set();
+          names.add(bare);
+          r.via.set(chosen.abs, names);
+          r.by ??= new Map();
+          const importers = r.by.get(bare) ?? new Set();
+          importers.add(current);
+          r.by.set(bare, importers);
+          if (!reused?.has(chosen.abs)) follow(chosen.hit.path);
         }
         continue;
       }
       // No alias here names it, but the render recorded the carried file it
-      // named: that file comes back in the page's own layout.
-      const sent =
+      // named, or the file has no record and one carried file fits: that
+      // file comes back in the page's own layout.
+      const listed =
         aliasOnly(bare) &&
         recorded &&
         typeof recorded === 'object' &&
         Object.hasOwn(recorded, bare)
           ? /** @type {Record<string, unknown>} */ (recorded)[bare]
           : undefined;
+      // A file from a CLI that recorded no alias imports: the one carried
+      // file whose path ends with the import's longest tail after its first
+      // segment (`@/components/Header` -> `.../components/Header.tsx`).
+      const sent =
+        typeof listed === 'string' ? listed : aliasOnly(bare) && !recorded ? derivedTarget(bare) : undefined;
       if (typeof sent === 'string' && byPath.has(sent)) {
-        const {r, fresh} = reach(sent);
+        const {r} = reach(sent);
         r.relative = true;
         r.unaliased.add(bare);
-        if (fresh) queue.push(sent);
+        follow(sent);
       }
     }
   }

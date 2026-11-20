@@ -106,8 +106,17 @@ async function both(cwd, query, options = {}) {
 }
 
 describe('rankIconIndex answers as icon() does where the index was made', () => {
-  it('for every query, with and without a project set', async () => {
-    for (const config of [{}, {experimental: {iconSet: 'lines'}}]) {
+  it('for every query, with and without a project set and look', async () => {
+    for (const config of [
+      {},
+      {experimental: {iconSet: 'lines'}},
+      {
+        experimental: {
+          iconSet: ['glyphs', 'lines'],
+          iconVariant: 'solid',
+        },
+      },
+    ]) {
       const cwd = multiSetProject(config);
       const index = JSON.parse(JSON.stringify(await exportIconIndex({cwd})));
       const list = queries();
@@ -116,6 +125,33 @@ describe('rankIconIndex answers as icon() does where the index was made', () => 
         expect(await rankIconIndex(query, index), query).toEqual(
           await icon(query, {cwd}),
         );
+      }
+      fs.rmSync(tmp, {recursive: true, force: true});
+      fs.mkdirSync(tmp);
+    }
+  });
+
+  it('with no set installed, and with only a withdrawn set', async () => {
+    for (const packages of [[], [{data: '{nope'}]]) {
+      const cwd = writeIconSetProject(tmp, {packages});
+      const index = JSON.parse(JSON.stringify(await exportIconIndex({cwd})));
+      for (const query of ['close', 'delete', 'chevron down', 'zebra']) {
+        expect(await rankIconIndex(query, index), query).toEqual(
+          await icon(query, {cwd}),
+        );
+      }
+      const answer = await rankIconIndex('close', index);
+      if (packages.length === 0) {
+        expect(answer.data).toMatchObject({
+          reason: 'No icon set is installed.',
+          definitions: [{name: 'close', builtIn: true}],
+        });
+      } else {
+        expect(answer.data).toEqual({
+          query: 'close',
+          matchCount: 0,
+          matches: [],
+        });
       }
       fs.rmSync(tmp, {recursive: true, force: true});
       fs.mkdirSync(tmp);

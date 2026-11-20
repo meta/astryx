@@ -43,7 +43,7 @@ export const doc = {
       flag: '--when <prop:value>',
       param: 'options.when',
       description:
-        'Only that variant of the part, such as variant:primary or status:error (how <part> lists them); give it once per prop for several at once (--when variant:ghost --when size:sm, or variant:ghost+size:sm); needs --on',
+        'Only that variant of the part, such as variant:primary or status:error, or one stripe of a table row, parity:odd or parity:even (the first body row is odd; how <part> lists them); give it once per prop for several at once (--when variant:ghost --when size:sm, or variant:ghost+size:sm); needs --on',
     },
     {
       flag: '--state <state>',
@@ -67,7 +67,7 @@ export const doc = {
       flag: '--png',
       param: 'options.png',
       description:
-        "Also take PNG pictures of the previews (light and dark): preview.png, the sample page, and sheet-overlays.png, each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list drawn open (from sheet-overlays.html, which it writes too; a file of yours by that name is left alone and the picture not taken) (show adds a picture of each family of components the theme sets a part of, or of the buttons when it sets none, and show --section <family> --png takes any other family; sheet.html, every component, is not pictured), with no dev server running: it needs a Playwright installed in the project or a Chrome or Chromium found on the machine, and adds a few seconds while the browser starts (a browser that takes longer than 60 seconds is stopped, and the result says so); without one, the result says how to get it. Each picture carries the editor stamp and is recorded, by name and content, in themes/<theme>/<theme>.pictures.json; a file of yours named like a picture (preview.png, sheet-overlays.png) is never written over: no picture is taken, and the result names the file. A change removes the pictures --png took of the look before it (the preview, the sheet and each section sheet, in each mode) and the result names them; a section sheet's page stays, marked as out of date",
+        "Also take PNG pictures of the previews (light and dark): preview.png, the sample page, and sheet-overlays.png, each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list drawn open (from sheet-overlays.html, which it writes too; a file of yours by that name is left alone and the picture not taken) (show adds a picture of each family of components the theme sets a part of, or of the buttons when it sets none, and show --section <family> --png takes any other family; sheet.html, every component, is not pictured), with no dev server running: it needs a Playwright installed in the project or a Chrome or Chromium found on the machine, and adds a few seconds while the browser starts (a browser that takes longer than 60 seconds, plus 20 seconds for each picture after the first, is stopped, and the result says so); without one, the result says how to get it. Each picture carries the editor stamp and is recorded, by name and content, in themes/<theme>/<theme>.pictures.json; a file of yours named like a picture (preview.png, sheet-overlays.png) is never written over: no picture is taken, and the result names the file. A change removes the pictures --png took of the look before it (the preview, the sheet and each section sheet, in each mode) and the result names them; a section sheet's page stays, marked as out of date",
     },
   ],
   examples: [
@@ -106,6 +106,11 @@ export const doc = {
     {
       label: 'One variant in one state',
       cli: 'astryx experimental theme editor set brand background-color "#f3e8ff" --on button --when variant:ghost --state hover',
+    },
+    {
+      label:
+        "Zebra rows: the odd rows of every data-driven table striped (in an isStriped table, also set the even rows transparent with --when parity:even --state striped to clear Core's own stripe)",
+      cli: 'astryx experimental theme editor set brand background-color "#f9f9f9" --on table-row --when parity:odd',
     },
     {
       label: 'Every input',

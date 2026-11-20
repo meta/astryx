@@ -10,14 +10,21 @@
  */
 
 import {COMMON_STATES} from './_tables.mjs';
-import {baseComponent, modesOf, partsOf} from './_settings.mjs';
+import {
+  autoMediaSide,
+  baseComponent,
+  kebab,
+  modesOf,
+  partsOf,
+  roleReach,
+} from './_settings.mjs';
 import {borderlessSurfaces, pillParts} from './_check.mjs';
 import {parseColor, ratio, splitTop} from './_color.mjs';
 import {blurScaled} from './_how-question.mjs';
 
 /**
  * @typedef {{thing: string, value: string, on?: string, when?: string, state?: string, mode?: string}} MissedStep
- * @typedef {{kind: number, part: string, state?: string, why: string, steps: MissedStep[], aspect: string}} Missed
+ * @typedef {{kind: number, part: string, state?: string, when?: string, why: string, steps: MissedStep[], aspect: string}} Missed
  */
 
 /**
@@ -168,6 +175,33 @@ export function missedSteps(ctx, data, res, base) {
             .map((/** @type {string} */ when) => ({when, token: r.token})),
     );
     /**
+     * Whether a media part's text, which picks its own side from its fill
+     * (Core's automatic media mode), already reads on a fill in a mode: its
+     * text then needs no step of its own, and the fill is the one line.
+     * @param {string} m @param {unknown} fillValue @param {boolean} [error]
+     */
+    const textFollows = (m, fillValue, error = false) => {
+      if (!C.MAP[p]?.media) return false;
+      const tokens = res[m] ?? {};
+      const side = autoMediaSide(String(fillValue ?? ''), tokens, {
+        mode: m,
+        ...(error ? {error: true} : {}),
+      });
+      const text = parseColor(
+        String(
+          tokens[
+            side === 'off'
+              ? '--color-text-primary'
+              : side === 'dark'
+                ? '--color-on-dark'
+                : '--color-on-light'
+          ] ?? '',
+        ),
+      );
+      const g = parseColor(String(fillValue ?? ''));
+      return Boolean(text && g && ratio(text, g) >= 4.5);
+    };
+    /**
      * @param {string[]} ms
      * @param {boolean} [inverse] the theme's own inverted surface: in a
      *   theme that draws both modes, the surface it draws in the other mode
@@ -197,23 +231,32 @@ export function missedSteps(ctx, data, res, base) {
               on: p,
               mode: m,
             },
-            ...(C.MAP[p]?.media || !textTokens.length
-              ? ['color']
-              : textTokens
-            ).map(thing => ({
-              thing,
-              value: readableOn(m, fill(m)),
-              on: p,
-              mode: m,
-            })),
-            ...(C.MAP[p]?.media || !textTokens.length
-              ? otherFills.map((/** @type {any} */ o) => ({
-                  thing: 'color',
-                  value: readableOn(m, res[m]?.[o.token]),
+            // (A media part whose text picks a side that reads on the new
+            // fill takes no text step: the fill is the one line.)
+            ...(textFollows(m, fill(m))
+              ? []
+              : (C.MAP[p]?.media || !textTokens.length
+                  ? ['color']
+                  : textTokens
+                ).map(thing => ({
+                  thing,
+                  value: readableOn(m, fill(m)),
                   on: p,
                   mode: m,
-                  when: o.when,
-                }))
+                }))),
+            ...(C.MAP[p]?.media || !textTokens.length
+              ? otherFills
+                  .filter(
+                    (/** @type {any} */ o) =>
+                      !textFollows(m, res[m]?.[o.token], true),
+                  )
+                  .map((/** @type {any} */ o) => ({
+                    thing: 'color',
+                    value: readableOn(m, res[m]?.[o.token]),
+                    on: p,
+                    mode: m,
+                    when: o.when,
+                  }))
               : []),
           ])
         : // The surface and the text as the colors they are in that mode (a
@@ -326,15 +369,29 @@ export function missedSteps(ctx, data, res, base) {
         found.push({
           kind: 3,
           part: p,
+          ...(when ? {when} : {}),
           why: `${when ? `${when.replace(':', ' ')}, ` : ''}its fill is still the base's ${st} color (${r.token}), which the theme's ${STATUS[st][0]} color does not reach`,
           aspect: 'background',
-          steps: ms.map(m => ({
-            thing: r.token,
-            value: String(res[m]?.[STATUS[st][1]]),
-            on: p,
-            ...(when ? {when} : {}),
-            mode: m,
-          })),
+          // (A media part's text picks its side from the new fill: where
+          // that side does not read on it, the text that does, in the same
+          // condition, so the line makes no problem of its own.)
+          steps: ms.flatMap(m => {
+            const value = String(res[m]?.[STATUS[st][1]]);
+            return [
+              {thing: r.token, value, on: p, ...(when ? {when} : {}), mode: m},
+              ...(C.MAP[p]?.media && !textFollows(m, value, st === 'error')
+                ? [
+                    {
+                      thing: 'color',
+                      value: readableOn(m, value),
+                      on: p,
+                      ...(when ? {when} : {}),
+                      mode: m,
+                    },
+                  ]
+                : []),
+            ];
+          }),
         });
       }
     }
@@ -352,7 +409,7 @@ export function missedSteps(ctx, data, res, base) {
     // the base points the role token at another one there (stone's and
     // gothic's info banner reads the categorical blue), or a variant named
     // for the role draws a color of the base's palette written out (stone's
-    // accent progress fill in its pale blue). Listed once the theme moved
+    // accent progress fill in its blue). Listed once the theme moved
     // that role, in each mode where it looks different, with a line that
     // gives the part the theme's role color there.
     for (const [key, look] of Object.entries(
@@ -407,6 +464,7 @@ export function missedSteps(ctx, data, res, base) {
         found.push({
           kind: 8,
           part: p,
+          ...(when ? {when} : {}),
           why: `${when ? `${when.replace(':', ' ')}, ` : ''}the base theme points ${names.join(' and ')} there, so the theme's own color does not reach it`,
           aspect: 'background',
           steps: pointed,
@@ -444,6 +502,7 @@ export function missedSteps(ctx, data, res, base) {
         found.push({
           kind: 8,
           part: p,
+          ...(when ? {when} : {}),
           why: `${String(when).replace(':', ' ')}, its ${side === 'text' ? 'text' : 'fill'} is a color of the base theme's palette written out (${v}), which the theme's ${named} color does not reach`,
           aspect: side === 'text' ? 'text' : 'background',
           steps: [{thing, value: `var(${token})`, on: p, when}],
@@ -506,6 +565,7 @@ export function missedSteps(ctx, data, res, base) {
         found.push({
           kind: 8,
           part: p,
+          ...(when ? {when} : {}),
           why: `${when ? `${when.replace(':', ' ')}, ` : ''}its ${thing === 'color' ? 'text' : thing.replace('-color', '')} is the base theme's own accent (${String(v)}), written as a color, which the accent leaves as it is`,
           aspect:
             thing === 'color'
@@ -554,10 +614,25 @@ export function missedSteps(ctx, data, res, base) {
             ),
         )
       : [];
+    // (The looks the status fill is drawn in, when none is at rest.)
+    const statusLooks = statusReads.some((/** @type {any} */ r) =>
+      r.when.includes(''),
+    )
+      ? []
+      : [
+          ...new Set(
+            statusReads.flatMap((/** @type {any} */ r) =>
+              r.when
+                .filter((/** @type {string} */ w) => /^variant=[\w-]+$/.test(w))
+                .map((/** @type {string} */ w) => w.replace('=', ':')),
+            ),
+          ),
+        ];
     if (statuses.length && !covers(p, FILL))
       found.push({
         kind: 3,
         part: p,
+        ...(statusLooks.length ? {when: statusLooks.join(', ')} : {}),
         why: `still the base's ${statuses.join(', ')} color${statuses.length > 1 ? 's' : ''} (${statusReads[0].token}): not generated at the theme's vibrancy`,
         aspect: 'background',
         steps: statuses.map(st => ({
@@ -750,10 +825,14 @@ export function missedSteps(ctx, data, res, base) {
   }
   // A square or outlined look (square corners, or a border width the
   // theme set) beside a soft shadow the base draws (a popover's, a menu's,
-  // a dialog's): the shadow with no blur matches it.
-  const square = modes.every(m =>
-    /^0(px|rem)?$/.test(String(res[m]?.['--radius-element']).trim()),
-  );
+  // a dialog's): the shadow with no blur matches it. Square corners count
+  // when the theme's own change made them so: a base square by design
+  // (y2k) draws its shadows beside them as it means to.
+  const square =
+    corners &&
+    modes.every(m =>
+      /^0(px|rem)?$/.test(String(res[m]?.['--radius-element']).trim()),
+    );
   // The same look beside the base's focus ring, drawn outside the part with
   // a gap: a ring drawn inside the part's edge matches it.
   const offsets = modes.map(m =>
@@ -815,6 +894,26 @@ export function missedSteps(ctx, data, res, base) {
       'var(--border-width) solid var(--color-border)',
     ))
       found.push({...x, kind: 5, aspect: 'border'});
+
+  // What the theme's role colors reach on their own (the compiler writes
+  // them onto the parts where the base theme draws the role itself) is
+  // not missed.
+  const reached = roleReach(ctx, data, base);
+  for (let i = found.length - 1; i >= 0; i--) {
+    const x = found[i];
+    const steps = x.steps.filter(
+      st =>
+        !reached.some(
+          r =>
+            r.part === x.part &&
+            r.when === (st.when ?? undefined) &&
+            kebab(r.prop) === st.thing &&
+            (st.on ?? x.part) === x.part,
+        ),
+    );
+    if (!steps.length) found.splice(i, 1);
+    else if (steps.length < x.steps.length) found[i] = {...x, steps};
+  }
 
   // One of each kind first, in the order the kinds are missed most (an
   // inverted surface, a disabled part, a selected state, a status fill,

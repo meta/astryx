@@ -56,7 +56,7 @@ const SECTIONS = [
 
 export default function ScrollableAreaStickyGroupHeaders() {
   return (
-    <Card width={380} padding={0}>
+    <Card width={380} maxWidth="100%" padding={0}>
       {/* The viewport is the containing block for position: sticky. The panel
           heading is ordinary content and scrolls away; the section labels
           below it pin to the top of the list, not the page. */}

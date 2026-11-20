@@ -86,6 +86,10 @@ export const docs = {
             ],
           ],
         },
+        {
+          type: 'prose',
+          text: 'Outside a project, a run can also use each package that the `package.json` of the folder holding your CLI lists in `dependencies` or `optionalDependencies`, such as an icon library your pages import. A page resolves its imports of them there, and `{@command template}`, `{@command build}` and `{@command theme eject}` do not name them as missing.',
+        },
       ],
     },
     {

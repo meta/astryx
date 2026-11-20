@@ -14,6 +14,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {COMMAND_NAMES, commandsForArgs, createProgram} from './index.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
+import {experimentalSubcommandOf} from './commands/experimental/index.mjs';
 
 /** @type {import('commander').Command} */
 let full;
@@ -55,7 +56,8 @@ describe('commandsForArgs', () => {
     const names = full.commands.map(command => command.name());
     expect([...COMMAND_NAMES].sort()).toEqual([...names].sort());
     for (const name of COMMAND_NAMES) {
-      if (name === 'manifest') {
+      // The manifest (with no stored manifest) and mcp read every command.
+      if (name === 'manifest' || name === 'mcp') {
         expect(loads([name])).toBeNull();
         continue;
       }
@@ -91,6 +93,41 @@ describe('commandsForArgs', () => {
       ['--detail'],
     ]) {
       expect(loads(argv), argv.join(' ')).toBeNull();
+    }
+  });
+});
+
+describe('experimentalSubcommandOf', () => {
+  it('names the subcommand after experimental, past the root options', () => {
+    expect(
+      experimentalSubcommandOf(full, ['experimental', 'export', 'page.tsx']),
+    ).toBe('export');
+    expect(
+      experimentalSubcommandOf(full, [
+        '--json',
+        'experimental',
+        'export',
+        'page.tsx',
+        '--help',
+      ]),
+    ).toBe('export');
+    expect(
+      experimentalSubcommandOf(full, ['experimental', 'theme', 'list']),
+    ).toBe('theme');
+  });
+
+  it('needs every subcommand for the group itself, help, a flag first, a renamed or an unknown word', () => {
+    for (const argv of [
+      undefined,
+      ['experimental'],
+      ['experimental', '--help'],
+      ['experimental', 'help', 'export'],
+      ['experimental', 'render', 'page.tsx'],
+      ['experimental', 'nope'],
+      ['help', 'experimental', 'export'],
+      ['docs', 'export'],
+    ]) {
+      expect(experimentalSubcommandOf(full, argv), String(argv)).toBeNull();
     }
   });
 });
@@ -134,6 +171,11 @@ describe('a run that loads only its command prints what the full program prints'
       ['--detail', 'brief', 'docs', '--help'],
       ['--lang', 'zh', 'component', '--help'],
       ['docs', '--no-such-flag'],
+      ['experimental'],
+      ['experimental', 'nope'],
+      ['experimental', 'render', 'page.tsx'],
+      ['experimental', 'export'],
+      ['--json', 'experimental', 'export', 'missing.tsx'],
     ]) {
       await expectSameAnswer(argv);
     }

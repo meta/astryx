@@ -25,6 +25,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from 'react';
 import {useCommittedRefInto} from '../hooks/useCommittedRef';
 import type {ReactNode} from 'react';
@@ -66,6 +67,8 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Toast/ToastViewport.generated';
+import {Theme} from '../theme/Theme';
+import type {ThemeSource} from '../theme/useTheme';
 
 registerEnglishFallback(english);
 
@@ -265,8 +268,35 @@ interface ToastRowProps {
   onExited: (id: string) => void;
   onDismiss: (id: string, reason: ToastDismissReason) => void;
   announce: AnnounceFn;
-  /** Whether the card carries its own live region (see ToastViewport). */
-  isLiveRegion: boolean;
+}
+
+const noCallerTheme = () => () => {};
+
+/**
+ * Draws a toast shown into the fallback viewport under the caller's current
+ * Theme, so the caller's theme CSS reaches it and the page's `<html>` does
+ * not.
+ */
+function CallerTheme({
+  source,
+  children,
+}: {
+  source: ThemeSource | undefined;
+  children: ReactNode;
+}): ReactNode {
+  const caller = useSyncExternalStore(
+    source?.subscribe ?? noCallerTheme,
+    () => source?.get() ?? null,
+    () => source?.get() ?? null,
+  );
+  if (caller == null) {
+    return children;
+  }
+  return (
+    <Theme theme={caller.theme} mode={caller.mode}>
+      {children}
+    </Theme>
+  );
 }
 
 /**
@@ -290,7 +320,6 @@ function ToastRow({
   onExited,
   onDismiss,
   announce,
-  isLiveRegion,
 }: ToastRowProps) {
   const o = entry.options;
   const type = o.type ?? 'info';
@@ -360,24 +389,25 @@ function ToastRow({
           styles.toastWrapperInner,
           isSettled && !isExiting && styles.toastWrapperInnerSettled,
         )}>
-        <ToastSurface
-          type={type}
-          body={o.body}
-          endContent={o.endContent}
-          isAutoHide={isAutoHide}
-          autoHideDuration={dur}
-          isExiting={isExiting}
-          gestureDirection={isReversed ? -1 : 1}
-          onDismiss={reason => onDismiss(entry.id, reason)}
-          renderContent={o.renderContent}
-          timerKey={entry.id}
-          isLiveRegion={isLiveRegion}
-          announce={announce}
-          isRenderedBodyAnnouncement={
-            o.renderContent == null && getNodeText(o.body) === ''
-          }
-          hasEntryStarted={hasEntryStarted}
-        />
+        <CallerTheme source={entry.callerTheme}>
+          <ToastSurface
+            type={type}
+            body={o.body}
+            endContent={o.endContent}
+            isAutoHide={isAutoHide}
+            autoHideDuration={dur}
+            isExiting={isExiting}
+            gestureDirection={isReversed ? -1 : 1}
+            onDismiss={reason => onDismiss(entry.id, reason)}
+            renderContent={o.renderContent}
+            timerKey={entry.id}
+            announce={announce}
+            isRenderedBodyAnnouncement={
+              o.renderContent == null && getNodeText(o.body) === ''
+            }
+            hasEntryStarted={hasEntryStarted}
+          />
+        </CallerTheme>
       </div>
     </div>
   );
@@ -567,7 +597,17 @@ export function ToastViewport({
       const keepsRow =
         overwritten != null && !exitingIdsRef.current.has(overwritten.id);
       const placed: ToastEntry = keepsRow
-        ? {...entry, rowKey: overwritten.rowKey ?? overwritten.id}
+        ? {
+            ...entry,
+            rowKey: overwritten.rowKey ?? overwritten.id,
+            // Adding or removing a Theme changes the row's tree, which
+            // remounts the card and loses focus. So between a toast with a
+            // Theme and one without, the card keeps its first Theme, or none.
+            callerTheme:
+              entry.callerTheme != null && overwritten.callerTheme != null
+                ? entry.callerTheme
+                : overwritten.callerTheme,
+          }
         : entry;
       if (keepsRow) {
         // If the update removes the focused control, the commit hands focus
@@ -1020,7 +1060,6 @@ export function ToastViewport({
             onExited={handleExited}
             onDismiss={removeToast}
             announce={announce}
-            isLiveRegion={false}
           />
         ))}
       </LayerContentBoundary>

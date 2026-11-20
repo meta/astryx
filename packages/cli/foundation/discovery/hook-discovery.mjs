@@ -11,7 +11,8 @@ import {existsCaseExact} from '../fs/paths.mjs';
 import {levenshteinDistance} from '../text/string-utils.mjs';
 import {compareText} from '../text/compare-text.mjs';
 
-const SKIP_DIRS = new Set(['utils', '__tests__', 'node_modules']);
+/** The folders the hook lookup never enters, at any depth of `src`. */
+export const HOOK_SKIP_DIRS = new Set(['utils', '__tests__', 'node_modules']);
 
 // A hook's doc outside src/hooks/: a `use…` hook, or a `create…` factory
 // documented as one (its doc typed `HookDoc`, such as createReorderable).
@@ -145,7 +146,7 @@ function hookDocs(coreDir, keep, tops) {
   // documented as a hook (createReorderable).
   if (pathExists(srcDir)) {
     for (const entry of listDirEntries(srcDir)) {
-      if (!entry.isDirectory() || SKIP_DIRS.has(entry.name) || entry.name === 'hooks') continue;
+      if (!entry.isDirectory() || HOOK_SKIP_DIRS.has(entry.name) || entry.name === 'hooks') continue;
       if (tops && !tops.has(entry.name)) continue;
       scanDirForHookDocs(path.join(srcDir, entry.name), docs, keep);
     }
@@ -163,7 +164,7 @@ function scanDirForHookDocs(dirPath, docs, keep) {
   if (!pathExists(dirPath)) return;
   const entries = listDirEntries(dirPath);
   for (const entry of entries) {
-    if (entry.isDirectory() && !SKIP_DIRS.has(entry.name)) {
+    if (entry.isDirectory() && !HOOK_SKIP_DIRS.has(entry.name)) {
       scanDirForHookDocs(path.join(dirPath, entry.name), docs, keep);
     } else if (entry.isFile() && HOOK_DOC_FILE_RE.test(entry.name)) {
       const hookName = hookNameFromFile(entry.name);
@@ -253,7 +254,7 @@ export function findHookDoc(coreDir, name) {
   if (pathExists(srcDir)) {
     const topEntries = listDirEntries(srcDir);
     for (const entry of topEntries) {
-      if (!entry.isDirectory() || SKIP_DIRS.has(entry.name) || entry.name === 'hooks') continue;
+      if (!entry.isDirectory() || HOOK_SKIP_DIRS.has(entry.name) || entry.name === 'hooks') continue;
       const found = searchDirForHookDoc(path.join(srcDir, entry.name), uniqueCandidates);
       if (found) return found;
     }
@@ -291,7 +292,7 @@ function searchDirForHookDoc(dirPath, candidates) {
   if (!pathExists(dirPath)) return null;
   const entries = listDirEntries(dirPath);
   for (const entry of entries) {
-    if (entry.isDirectory() && !SKIP_DIRS.has(entry.name)) {
+    if (entry.isDirectory() && !HOOK_SKIP_DIRS.has(entry.name)) {
       const found = searchDirForHookDoc(path.join(dirPath, entry.name), candidates);
       if (found) return found;
     } else if (entry.isFile() && entry.name.endsWith('.doc.mjs')) {

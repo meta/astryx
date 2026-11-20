@@ -27,6 +27,7 @@ import {useChatComposerContext} from './ChatContext';
 import type {BaseProps} from '../BaseProps';
 import {composeEventHandlers, mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
+import {radiusVars} from '../theme/tokens.stylex';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -63,6 +64,10 @@ export interface ChatSendButtonProps extends BaseProps<HTMLButtonElement> {
 
 const styles = stylex.create({
   root: {
+    // Declared on the button itself, so it stays circular inside a composer,
+    // whose concentric radius reaches other buttons by inheritance. A theme
+    // that sets the button or send-button radius still wins.
+    '--_button-radius': radiusVars['--radius-full'],
     borderRadius: 'var(--_button-radius, var(--radius-full))',
     flexShrink: 0,
   },

@@ -113,7 +113,7 @@ export const docs = {
     {
       name: 'labelIcon',
       type: 'ReactNode | IconType',
-      description: 'Icon to display before the label text. See `astryx docs icons` for valid semantic names.',
+      description: 'Icon to display before the label text; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'labelTooltip',

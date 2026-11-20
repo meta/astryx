@@ -124,8 +124,8 @@ interface RangeEntry {
 
 /**
  * Apply highlight ranges for a single line's tokens.
- * The line div is expected to contain a single text node as its
- * first child (or a zero-width space placeholder for empty lines).
+ * The line div holds its text directly, or inside one content element, as a
+ * single text node (a zero-width space placeholder for an empty line).
  */
 function applyLineRanges(
   lineDiv: Element,
@@ -137,9 +137,11 @@ function applyLineRanges(
     return;
   }
 
-  // The text node is the first child of the line div.
-  // In range mode, lines render plain text so this is always a Text node.
-  const textNode = lineDiv.firstChild;
+  // A line holds its text directly, or inside one content element (CodeBlock
+  // wraps each line's code in a dir="auto" span).
+  const first = lineDiv.firstChild;
+  const textNode =
+    first?.nodeType === Node.ELEMENT_NODE ? first.firstChild : first;
   if (!textNode || textNode.nodeType !== Node.TEXT_NODE) {
     return;
   }

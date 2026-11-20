@@ -10,10 +10,10 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {
   HomeIcon,
   FolderIcon,
-  ChartBarIcon,
-  Cog6ToothIcon,
+  ChartIcon,
+  SettingsIcon,
   UsersIcon,
-} from '@heroicons/react/24/outline';
+} from '@astryxdesign/template-icons';
 
 export default function MobileNavBasicMobileNav() {
   const [isOpen, setIsOpen] = useState(false);
@@ -38,14 +38,10 @@ export default function MobileNavBasicMobileNav() {
             href="/dashboard"
           />
           <SideNavItem label="Projects" icon={FolderIcon} href="/projects" />
-          <SideNavItem
-            label="Analytics"
-            icon={ChartBarIcon}
-            href="/analytics"
-          />
+          <SideNavItem label="Analytics" icon={ChartIcon} href="/analytics" />
         </SideNavSection>
         <SideNavSection title="Settings">
-          <SideNavItem label="General" icon={Cog6ToothIcon} href="/settings" />
+          <SideNavItem label="General" icon={SettingsIcon} href="/settings" />
           <SideNavItem label="Team" icon={UsersIcon} href="/team" />
         </SideNavSection>
       </MobileNav>

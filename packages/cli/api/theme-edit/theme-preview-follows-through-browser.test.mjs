@@ -38,20 +38,21 @@ vi.mock('./_preview.mjs', async importOriginal => {
   return {
     ...stubbed,
     /** A picture stand-in: a tiny PNG at the path asked for. */
-    async screenshot(
+    async screenshots(
       /** @type {any} */ project,
-      /** @type {string} */ html,
-      /** @type {string} */ png,
+      /** @type {Array<{html: string, png: string}>} */ jobs,
     ) {
-      fs.writeFileSync(
-        png,
-        Buffer.from(
-          '89504e470d0a1a0a0000000d4948445200000001000000010806000000' +
-            '1f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082',
-          'hex',
-        ),
-      );
-      return {ok: true, file: path.relative(project.cwd, png)};
+      return jobs.map(({png}) => {
+        fs.writeFileSync(
+          png,
+          Buffer.from(
+            '89504e470d0a1a0a0000000d4948445200000001000000010806000000' +
+              '1f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082',
+            'hex',
+          ),
+        );
+        return {ok: true, file: path.relative(project.cwd, png)};
+      });
     },
   };
 });
@@ -90,13 +91,34 @@ describe('the browser run', () => {
   it('a run stopped at the bound is said to have timed out, and its temp folder goes', async () => {
     const {dir, script} = sleepyScript();
     const record = path.join(dir, 'temp');
+    const watcher = fs.watch(dir);
+    const written = new Promise((resolve, reject) => {
+      watcher.on('change', () => {
+        if (fs.existsSync(record) && fs.statSync(record).size > 0)
+          resolve(true);
+      });
+      watcher.once('error', reject);
+    });
+    // The bound must not race the stand-in process writing its record.
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
     try {
-      const r = await runBrowser(script, [record], 1500);
-      expect(r.timedOut).toBe(true);
+      const running = runBrowser(script, [record], 1500);
+      await Promise.race([
+        written,
+        running.then(r => {
+          throw new Error(r.stderr || 'picture script ended before its record');
+        }),
+      ]);
       const temp = fs.readFileSync(record, 'utf8');
       expect(temp).not.toBe(os.tmpdir());
+      expect(fs.existsSync(path.join(temp, 'profile'))).toBe(true);
+      await vi.advanceTimersByTimeAsync(1500);
+      const r = await running;
+      expect(r.timedOut).toBe(true);
       expect(fs.existsSync(temp)).toBe(false);
     } finally {
+      watcher.close();
+      vi.useRealTimers();
       fs.rmSync(dir, {recursive: true, force: true});
     }
   }, 30_000);

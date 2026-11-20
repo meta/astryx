@@ -295,6 +295,105 @@ describe('a production build resolves generated locale modules', () => {
   }, 180_000);
 });
 
+describe("a production build loads Core's stylesheets the way its exports name them", () => {
+  it('builds a page that imports astryx.css and reset.css, with no second copy of Core', async () => {
+    const root = realpathSync(
+      mkdtempSync(path.join(tmpdir(), 'astryx-stylesheet-import-')),
+    );
+    const packageDir = path.join(root, 'node_modules/@astryxdesign');
+    const outDir = path.join(root, 'dist');
+    mkdirSync(packageDir, {recursive: true});
+    symlinkSync(CORE_PACKAGE, path.join(packageDir, 'core'), 'dir');
+    writeFileSync(
+      path.join(root, 'index.html'),
+      '<script type="module" src="/main.ts"></script>',
+    );
+    writeFileSync(
+      path.join(root, 'main.ts'),
+      [
+        "import '@astryxdesign/core/reset.css';",
+        "import '@astryxdesign/core/astryx.css';",
+        "import {Button} from '@astryxdesign/core/Button';",
+        'document.body.dataset.button = typeof Button;',
+        '',
+      ].join('\n'),
+    );
+
+    try {
+      await build({
+        root,
+        logLevel: 'error',
+        build: {outDir, emptyOutDir: true, minify: false},
+        plugins: [...astryxStylex({dev: false, rootDir: root})],
+      });
+      const assets = path.join(outDir, 'assets');
+      const css = readdirSync(assets)
+        .filter(file => file.endsWith('.css'))
+        .map(file => readFileSync(path.join(assets, file), 'utf8'))
+        .join('\n');
+      // reset.css arrives through its export.
+      expect(css).toContain('box-sizing: border-box');
+      // StyleX compiled the Button; no prebuilt copy of Core rides along.
+      expect(css).toMatch(LIBRARY_CLASS);
+      expect(css).not.toContain('Pre-compiled StyleX CSS');
+      expect(css).not.toContain('--x---_avatar-group-overlap');
+    } finally {
+      rmSync(root, {recursive: true, force: true});
+    }
+  }, 180_000);
+
+  it('builds a stylesheet that @imports astryx.css and reset.css, with no second copy of Core', async () => {
+    const root = realpathSync(
+      mkdtempSync(path.join(tmpdir(), 'astryx-stylesheet-at-import-')),
+    );
+    const packageDir = path.join(root, 'node_modules/@astryxdesign');
+    const outDir = path.join(root, 'dist');
+    mkdirSync(packageDir, {recursive: true});
+    symlinkSync(CORE_PACKAGE, path.join(packageDir, 'core'), 'dir');
+    writeFileSync(
+      path.join(root, 'index.html'),
+      '<script type="module" src="/main.ts"></script>',
+    );
+    writeFileSync(
+      path.join(root, 'app.css'),
+      [
+        "@import '@astryxdesign/core/reset.css';",
+        "@import '@astryxdesign/core/astryx.css';",
+        '',
+      ].join('\n'),
+    );
+    writeFileSync(
+      path.join(root, 'main.ts'),
+      [
+        "import './app.css';",
+        "import {Button} from '@astryxdesign/core/Button';",
+        'document.body.dataset.button = typeof Button;',
+        '',
+      ].join('\n'),
+    );
+
+    try {
+      await build({
+        root,
+        logLevel: 'error',
+        build: {outDir, emptyOutDir: true, minify: false},
+        plugins: [...astryxStylex({dev: false, rootDir: root})],
+      });
+      const assets = path.join(outDir, 'assets');
+      const css = readdirSync(assets)
+        .filter(file => file.endsWith('.css'))
+        .map(file => readFileSync(path.join(assets, file), 'utf8'))
+        .join('\n');
+      expect(css).toContain('box-sizing: border-box');
+      expect(css).toMatch(LIBRARY_CLASS);
+      expect(css).not.toContain('Pre-compiled StyleX CSS');
+      expect(css).not.toContain('--x---_avatar-group-overlap');
+    } finally {
+      rmSync(root, {recursive: true, force: true});
+    }
+  }, 180_000);
+});
+
 describe('a production build separates Astryx and product styles by layer', () => {
   describe('when the app imports a stylesheet of its own', () => {
     let built: Built;

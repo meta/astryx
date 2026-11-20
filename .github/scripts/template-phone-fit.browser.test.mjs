@@ -5,8 +5,9 @@
  * app, run with its scripts, and shown in Chromium's phone emulation (touch,
  * so `(pointer: coarse)` matches and the theme's larger touch text and
  * controls apply) and again with a mouse, the page has no horizontal
- * overflow. Pages copied from a template keep its layout, so an overflowing
- * template makes overflowing pages.
+ * overflow, and every chart label shows whole inside its chart. Pages copied
+ * from a template keep its layout, so an overflowing template makes
+ * overflowing pages.
  *
  * The app is what a builder's app is: each template is copied with
  * `astryx template`, compiled with the Vite plugin from @astryxdesign/build,
@@ -170,7 +171,12 @@ describe.runIf(BROWSER_STEP)(
       if (home) removeLinkedFixture(home);
     });
 
-    it('has no horizontal overflow with touch or a mouse', async () => {
+    /**
+     * Opens every ready template with each pointer and runs `check` on it.
+     * `check` returns the page's problems; a page that does not render is one.
+     * @param {(page: any) => Promise<string[]>} check
+     */
+    async function eachTemplate(check) {
       const origin = `http://127.0.0.1:${server.address().port}`;
       /** @type {string[]} */
       const problems = [];
@@ -192,13 +198,8 @@ describe.runIf(BROWSER_STEP)(
             try {
               await page.goto(`${origin}/#${id}`);
               await page.waitForSelector('body[data-ready]', {timeout: 30_000});
-              const width = await page.evaluate(() => {
-                // This runs in the page, where the browser's globals are.
-                const {document} = /** @type {any} */ (globalThis);
-                return document.documentElement.scrollWidth;
-              });
-              if (width > PHONE.width)
-                problems.push(`${id} (${pointer}): ${width} px wide`);
+              for (const problem of await check(page))
+                problems.push(`${id} (${pointer}): ${problem}`);
             } catch (error) {
               problems.push(
                 `${id} (${pointer}): did not render: ${errors[0] ?? /** @type {Error} */ (error).message}`,
@@ -211,6 +212,51 @@ describe.runIf(BROWSER_STEP)(
           await context.close();
         }
       }
+      return problems;
+    }
+
+    it('has no horizontal overflow with touch or a mouse', async () => {
+      const problems = await eachTemplate(async page => {
+        const width = await page.evaluate(() => {
+          // This runs in the page, where the browser's globals are.
+          const {document} = /** @type {any} */ (globalThis);
+          return document.documentElement.scrollWidth;
+        });
+        return width > PHONE.width ? [`${width} px wide`] : [];
+      });
+      expect(problems).toEqual([]);
+    }, 900_000);
+
+    // An outer <svg> clips what it draws outside its box, so a chart label
+    // placed past the chart's edge (a reference-line label above a plot with
+    // no top margin, a tick wider than its axis) shows only a fragment.
+    it('shows every chart label whole, inside its chart', async () => {
+      const problems = await eachTemplate(page =>
+        page.evaluate(() => {
+          // This runs in the page, where the browser's globals are.
+          const {document, getComputedStyle} = /** @type {any} */ (globalThis);
+          /** @type {string[]} */
+          const clipped = [];
+          for (const text of document.querySelectorAll('svg text')) {
+            let svg = text.ownerSVGElement;
+            while (svg.ownerSVGElement) svg = svg.ownerSVGElement;
+            const label = text.textContent.trim();
+            if (!label || getComputedStyle(svg).overflow === 'visible')
+              continue;
+            const box = svg.getBoundingClientRect();
+            const ink = text.getBoundingClientRect();
+            // A pixel of slack absorbs sub-pixel text metrics.
+            if (
+              ink.top < box.top - 1 ||
+              ink.bottom > box.bottom + 1 ||
+              ink.left < box.left - 1 ||
+              ink.right > box.right + 1
+            )
+              clipped.push(`chart label "${label}" is clipped by its chart`);
+          }
+          return clipped;
+        }),
+      );
       expect(problems).toEqual([]);
     }, 900_000);
   },

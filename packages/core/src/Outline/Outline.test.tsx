@@ -88,6 +88,37 @@ describe('Outline', () => {
     ).toBeInTheDocument();
   });
 
+  it("names the nav with a caller's aria-label over label", () => {
+    render(
+      <Outline
+        items={items}
+        label="On this page"
+        aria-label="Guide sections"
+      />,
+    );
+    expect(
+      screen.getByRole('navigation', {name: 'Guide sections'}),
+    ).toBeInTheDocument();
+  });
+
+  it('forwards ref, DOM props, data-testid, and style to the nav', () => {
+    const ref = vi.fn();
+    render(
+      <Outline
+        items={items}
+        ref={ref}
+        id="page-outline"
+        data-testid="outline"
+        style={{maxWidth: 240}}
+      />,
+    );
+    const nav = screen.getByRole('navigation');
+    expect(ref).toHaveBeenCalledWith(nav);
+    expect(nav).toHaveAttribute('id', 'page-outline');
+    expect(screen.getByTestId('outline')).toBe(nav);
+    expect(nav).toHaveStyle({maxWidth: '240px'});
+  });
+
   it('marks the controlled active item with aria-current', () => {
     render(<Outline items={items} activeId="install" />);
     expect(screen.getByRole('link', {name: 'Installation'})).toHaveAttribute(
@@ -771,6 +802,77 @@ describe('Outline navigate callbacks', () => {
     window.location.hash = '';
   });
 
+  it('ends the first navigation at once when a second one starts', async () => {
+    const user = userEvent.setup();
+    const cleanup = mountHeadings();
+    const onNavigateStart = vi.fn();
+    const onNavigateEnd = vi.fn();
+
+    render(
+      <Outline
+        items={items}
+        onNavigateStart={onNavigateStart}
+        onNavigateEnd={onNavigateEnd}
+      />,
+    );
+    await user.click(screen.getByRole('link', {name: 'Installation'}));
+    expect(onNavigateEnd).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('link', {name: 'API'}));
+    // The first navigation ends before the second scroll settles.
+    expect(onNavigateStart.mock.calls).toEqual([['install'], ['api']]);
+    expect(onNavigateEnd.mock.calls).toEqual([['install']]);
+
+    act(() => {
+      window.dispatchEvent(new Event('scrollend'));
+    });
+    expect(onNavigateEnd.mock.calls).toEqual([['install'], ['api']]);
+
+    cleanup();
+  });
+
+  it('does not fire onNavigateEnd after the Outline unmounts mid-scroll', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
+    const cleanup = mountHeadings();
+    const onNavigateEnd = vi.fn();
+
+    const {unmount} = render(
+      <Outline items={items} onNavigateEnd={onNavigateEnd} />,
+    );
+    await user.click(screen.getByRole('link', {name: 'Installation'}));
+    unmount();
+
+    act(() => {
+      window.dispatchEvent(new Event('scrollend'));
+      vi.advanceTimersByTime(5000);
+    });
+    expect(onNavigateEnd).not.toHaveBeenCalled();
+
+    cleanup();
+  });
+
+  it('does nothing for Space on a link whose target is missing', async () => {
+    const user = userEvent.setup();
+    window.location.hash = '';
+    const onNavigateStart = vi.fn();
+    const onNavigateEnd = vi.fn();
+
+    render(
+      <Outline
+        items={items}
+        onNavigateStart={onNavigateStart}
+        onNavigateEnd={onNavigateEnd}
+      />,
+    );
+    screen.getByRole('link', {name: 'Installation'}).focus();
+    await user.keyboard('[Space]');
+
+    expect(onNavigateStart).not.toHaveBeenCalled();
+    expect(onNavigateEnd).not.toHaveBeenCalled();
+    expect(window.location.hash).toBe('');
+  });
+
   it('does not fire callbacks for a modified (Cmd) click', async () => {
     const user = userEvent.setup();
     const cleanup = mountHeadings();
@@ -1079,6 +1181,72 @@ describe('Outline scroll scoping', () => {
     expect(onNavigateEnd).toHaveBeenCalledWith('install');
 
     pane.remove();
+    cleanup();
+  });
+});
+
+describe('Outline under reduced motion', () => {
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+    window.scrollBy = vi.fn();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** The person prefers reduced motion; `pointer` names the primary pointer. */
+  function preferReducedMotion(pointer: 'fine' | 'coarse') {
+    vi.spyOn(window, 'matchMedia').mockImplementation(
+      query =>
+        ({
+          matches:
+            query === '(prefers-reduced-motion: reduce)' ||
+            (pointer === 'coarse' && query === '(pointer: coarse)'),
+          media: query,
+          onchange: null,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        }) as MediaQueryList,
+    );
+  }
+
+  it.each(['fine', 'coarse'] as const)(
+    'lands on the heading at once with a %s pointer',
+    async pointer => {
+      preferReducedMotion(pointer);
+      const user = userEvent.setup();
+      const cleanup = mountHeadings();
+      render(<Outline items={items} />);
+
+      await user.click(screen.getByRole('link', {name: 'Installation'}));
+
+      expect(
+        document.getElementById('install')!.scrollIntoView,
+      ).toHaveBeenCalledWith({behavior: 'instant', block: 'start'});
+      cleanup();
+    },
+  );
+
+  it('lands below a fixed header at once', async () => {
+    preferReducedMotion('fine');
+    const user = userEvent.setup();
+    const cleanup = mountHeadings();
+    vi.spyOn(
+      document.getElementById('install')!,
+      'getBoundingClientRect',
+    ).mockReturnValue({top: 500} as DOMRect);
+    render(<Outline items={items} offset={64} />);
+
+    await user.click(screen.getByRole('link', {name: 'Installation'}));
+
+    expect(window.scrollBy).toHaveBeenCalledWith({
+      top: 436,
+      behavior: 'instant',
+    });
     cleanup();
   });
 });
