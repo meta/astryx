@@ -9,7 +9,7 @@
 import * as fs from 'node:fs';
 import * as http from 'node:http';
 import * as path from 'node:path';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {JSDOM} from 'jsdom';
 import {render} from '../../api/render/render.mjs';
 import {imageRequest, imageTypeOf, remoteImages} from './remote-images.mjs';
@@ -390,8 +390,13 @@ describe('imageRequest', () => {
     await heldArrived;
     stop.abort();
     await expect(asked).rejects.toThrow();
-    await new Promise(resolve => setTimeout(resolve, 100));
-    expect(holdClosed).toBe(true);
+    // The server sees the closed socket in a later turn of the event loop,
+    // which a loaded machine can delay past any fixed wait. The request has
+    // no timeout, so nothing but the stop closes this socket.
+    await vi.waitFor(() => expect(holdClosed).toBe(true), {
+      timeout: 10_000,
+      interval: 10,
+    });
   });
 });
 
