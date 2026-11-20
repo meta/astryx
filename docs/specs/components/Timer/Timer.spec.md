@@ -24,6 +24,7 @@ architecture:
     architecture:public-component-api,
     architecture:component-theming-surface,
     architecture:react-component-runtime,
+    architecture:internationalization,
   ]
 contributing: []
 system_specs:
@@ -126,16 +127,16 @@ the current format API.
 
 ### Representative states
 
-| State            | Required invariant                                             | Allowed variation                       |
-| ---------------- | -------------------------------------------------------------- | --------------------------------------- |
-| Initial elapsed  | `0s` and `PT0S` on one `<time>`                                | Root props and styling                  |
-| Initial clock    | `0:00` and `PT0S` on one `<time>`                              | Root props and styling                  |
-| Seconds/minutes  | `34s`, `2m 08s`, `0:34`, or `2:08` with whole-second semantics | Finite elapsed value                    |
-| Hour-scale       | `1h 02m` at minute cadence or `1:02:33` at second cadence      | Format                                  |
-| Delayed callback | Catch up to clock without accumulated drift                    | Delay length                            |
-| Prop update      | New origin or format applies on the same `<time>`              | Parent render cause                     |
-| Replay/unmount   | Each acquired resource is released                             | Development replay count                |
-| Typography       | Timestamp defaults or explicit Text-family overrides           | Supported type, size, color, and weight |
+| State            | Required invariant                                             | Allowed variation                                                                 |
+| ---------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Initial elapsed  | `0s` and `PT0S` on one `<time>`                                | Root props and styling; the provider locale's unit name                           |
+| Initial clock    | `0:00` and `PT0S` on one `<time>`                              | Root props and styling                                                            |
+| Seconds/minutes  | `34s`, `2m 08s`, `0:34`, or `2:08` with whole-second semantics | Finite elapsed value; for `elapsed`, the provider locale's unit names and joining |
+| Hour-scale       | `1h 02m` at minute cadence or `1:02:33` at second cadence      | Format; for `elapsed`, the provider locale's unit names and joining               |
+| Delayed callback | Catch up to clock without accumulated drift                    | Delay length                                                                      |
+| Prop update      | New origin or format applies on the same `<time>`              | Parent render cause                                                               |
+| Replay/unmount   | Each acquired resource is released                             | Development replay count                                                          |
+| Typography       | Timestamp defaults or explicit Text-family overrides           | Supported type, size, color, and weight                                           |
 
 ### Transformation and precedence order
 
@@ -192,14 +193,14 @@ the current format API.
 
 ## Verification map
 
-| Contract                    | Verification                                                                     | Representative states                                                                                                        | Mutation or failure expectation                                                                                                                                            | Audit section               |
-| --------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| FR1–FR4, FR8–FR10, AR1, AR3 | `Timer.test.tsx` controlled-clock tests                                          | Initial formats, origin variants including future scheduling, delayed callback, format change, second/minute/hour boundaries | State ticks, callback accumulation, wrong ladder/padding, negative values, needless pre-origin wakes, stale semantics, wrong cadence, or clock-derived initial markup fail | `audit:Timer/behavior`      |
-| FR3, PR1                    | React Profiler commit-count test                                                 | Several ticks                                                                                                                | A state-based implementation adds update commits and fails                                                                                                                 | `audit:Timer/performance`   |
-| FR4, PR2                    | Resource spies under rerender, StrictMode, and unmount                           | Setup, dependency change, replay, cleanup                                                                                    | Duplicate or leaked resources fail counts                                                                                                                                  | `audit:Timer/resources`     |
-| FR5                         | Public import, Timestamp-default typography, overrides, BaseProps, and ref tests | Default and explicit typography, ref, event, ARIA, class, style                                                              | Missing export, styling divergence, or dropped input fails                                                                                                                 | `audit:Timer/api`           |
-| FR6, AR2                    | Accessibility attribute tests                                                    | Default and deliberate caller ARIA                                                                                           | Unsolicited live semantics or dropped ARIA fails                                                                                                                           | `audit:Timer/accessibility` |
-| FR7                         | `themingTargets.test.ts` and `scripts/check-knowledge.mjs`                       | One wrapper target                                                                                                           | Missing, extra, or misplaced target fails                                                                                                                                  | `audit:Timer/theming`       |
+| Contract                    | Verification                                                                            | Representative states                                                                                                                                                                         | Mutation or failure expectation                                                                                                                                                                                       | Audit section               |
+| --------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| FR1–FR4, FR8–FR10, AR1, AR3 | `Timer.test.tsx` controlled-clock tests and `timeFormat.test.ts` elapsed-duration cases | Initial formats, origin variants including future scheduling, delayed callback, format change, second/minute/hour boundaries, `elapsed` under a provider locale (`de-DE`), a 1,000-hour count | State ticks, callback accumulation, wrong ladder/padding, negative values, needless pre-origin wakes, stale semantics, wrong cadence, or clock-derived initial markup fail, or locale unit names that are not applied | `audit:Timer/behavior`      |
+| FR3, PR1                    | React Profiler commit-count test                                                        | Several ticks                                                                                                                                                                                 | A state-based implementation adds update commits and fails                                                                                                                                                            | `audit:Timer/performance`   |
+| FR4, PR2                    | Resource spies under rerender, StrictMode, and unmount                                  | Setup, dependency change, replay, cleanup                                                                                                                                                     | Duplicate or leaked resources fail counts                                                                                                                                                                             | `audit:Timer/resources`     |
+| FR5                         | Public import, Timestamp-default typography, overrides, BaseProps, and ref tests        | Default and explicit typography, ref, event, ARIA, class, style                                                                                                                               | Missing export, styling divergence, or dropped input fails                                                                                                                                                            | `audit:Timer/api`           |
+| FR6, AR2                    | Accessibility attribute tests                                                           | Default and deliberate caller ARIA                                                                                                                                                            | Unsolicited live semantics or dropped ARIA fails                                                                                                                                                                      | `audit:Timer/accessibility` |
+| FR7                         | `themingTargets.test.ts` and `scripts/check-knowledge.mjs`                              | One wrapper target                                                                                                                                                                            | Missing, extra, or misplaced target fails                                                                                                                                                                             | `audit:Timer/theming`       |
 
 ## Decision log
 

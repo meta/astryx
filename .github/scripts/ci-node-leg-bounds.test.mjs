@@ -10,6 +10,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
+import {withoutCheckoutRetries} from './lib/checkout-retries.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const job = yaml.parse(
@@ -31,7 +32,9 @@ describe('the Node legs inside their job limit', () => {
     );
     // Both the scoped and the full run pass the watchdog.
     expect(
-      step.run.match(/pnpm test:node [^\n]*"\$\{WATCHDOG\[@\]\}"/g),
+      step.run.match(
+        /(?:pnpm test:node|pnpm exec vitest run --project node) [^\n]*"\$\{WATCHDOG\[@\]\}"/g,
+      ),
     ).toHaveLength(2);
     expect(step.env.VITEST_SHARD_TIMES_FILE).toBe(
       '${{ runner.temp }}/node-file-times.json',
@@ -55,12 +58,13 @@ describe('the Node legs inside their job limit', () => {
   });
 
   it("end door-conformance's slowest hook at least two minutes inside the job limit", () => {
+    // The three door-conformance test files share one hook.
     const source = fs.readFileSync(
-      path.join(root, 'packages/cli/host/door-conformance.test.mjs'),
+      path.join(root, 'packages/cli/test-utils/door-conformance.mjs'),
       'utf8',
     );
     const bound =
-      /beforeAll\(async \(\) => \{[\s\S]*?\n {2}\}, (\d+) \* 60_000\);/.exec(
+      /beforeAll\(async \(\) => \{[\s\S]*?\n {2,}\}, (\d+) \* 60_000\);/.exec(
         source,
       );
     expect(bound, 'the beforeAll bound').not.toBeNull();
@@ -71,7 +75,7 @@ describe('the Node legs inside their job limit', () => {
     // A step only one leg runs takes a share of that leg no split can book.
     // The first leg keeps only the steps that run where no Node share runs (a
     // spec-only change's record readers) or a Lab-only change's one check.
-    const legOneOnly = job.steps
+    const legOneOnly = withoutCheckoutRetries(job.steps)
       .filter(
         each =>
           typeof each.if === 'string' && /\bmatrix\.shard == 1\b/.test(each.if),

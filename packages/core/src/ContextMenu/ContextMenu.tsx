@@ -3,8 +3,9 @@
 
 /**
  * @file ContextMenu.tsx
- * @input Uses React, StyleX, useLayer, shared layer dismissal, BottomSheet,
- *   useListFocus, and the shared menu-presentation resolver
+ * @input Uses React, StyleX, useLayer, shared layer dismissal, the lazily
+ *   loaded menu sheet (DropdownMenu/lazyMenuBottomSheet), useListFocus, and the
+ *   shared menu-presentation resolver
  * @output Exports ContextMenu with cursor-popover and touch-sheet presentations
  * @position Core implementation; consumed by index.ts
  *
@@ -44,11 +45,9 @@ import React, {
   useCallback,
   useEffect,
   useId,
-  lazy,
   useMemo,
   useRef,
   useState,
-  Suspense,
 } from 'react';
 import type {ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
@@ -60,7 +59,12 @@ import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {currentGesture} from '../Layer/gestureCounter';
 import {noteOutsideDismissal} from '../Layer/outsidePress';
-import {MenuBottomSheetActionList} from '../DropdownMenu/MenuBottomSheetActionList';
+import {
+  MenuBottomSheet,
+  MenuBottomSheetActionList,
+  MenuBottomSheetWithoutActionList,
+  preloadMenuBottomSheetActionList,
+} from '../DropdownMenu/lazyMenuBottomSheet';
 import {menuBottomSheetStyles} from '../DropdownMenu/menuBottomSheet.stylex';
 import {renderDropdownItems} from '../DropdownMenu/renderDropdownItems';
 import {
@@ -115,11 +119,6 @@ import english from '../i18n/generated-english/ContextMenu/ContextMenu.generated
 
 registerEnglishFallback(english);
 
-const LazyMenuBottomSheet = lazy(async () =>
-  import('../DropdownMenu/MenuBottomSheet').then(module => ({
-    default: module.MenuBottomSheet,
-  })),
-);
 const styles = stylex.create({
   // Trigger wrapper: suppress the iOS long-press callout/selection so the
   // long-press opens our context menu instead of the native text/callout UI.
@@ -157,6 +156,16 @@ const styles = stylex.create({
     ),
     overflowY: 'auto',
     '--_dropdown-menu-radius': radiusVars['--radius-container'],
+    // Theme corner variables inherit. Reset them, so a nested surface that the
+    // theme does not style hands out its own radius.
+    '--_dropdown-menu-radius-top-left': 'initial',
+    '--_dropdown-menu-radius-top-right': 'initial',
+    '--_dropdown-menu-radius-bottom-right': 'initial',
+    '--_dropdown-menu-radius-bottom-left': 'initial',
+    '--_dropdown-menu-radius-start-start': 'initial',
+    '--_dropdown-menu-radius-start-end': 'initial',
+    '--_dropdown-menu-radius-end-start': 'initial',
+    '--_dropdown-menu-radius-end-end': 'initial',
     '--_dropdown-menu-padding': spacingVars['--spacing-1'],
     padding: spacingVars['--spacing-1'],
     borderRadius: 'var(--_dropdown-menu-radius)',
@@ -203,6 +212,16 @@ const styles = stylex.create({
     gap: spacingVars['--spacing-0-5'],
     width: '100%',
     '--_dropdown-menu-radius': radiusVars['--radius-container'],
+    // Theme corner variables inherit. Reset them, so a nested surface that the
+    // theme does not style hands out its own radius.
+    '--_dropdown-menu-radius-top-left': 'initial',
+    '--_dropdown-menu-radius-top-right': 'initial',
+    '--_dropdown-menu-radius-bottom-right': 'initial',
+    '--_dropdown-menu-radius-bottom-left': 'initial',
+    '--_dropdown-menu-radius-start-start': 'initial',
+    '--_dropdown-menu-radius-start-end': 'initial',
+    '--_dropdown-menu-radius-end-start': 'initial',
+    '--_dropdown-menu-radius-end-end': 'initial',
     '--_dropdown-menu-padding': spacingVars['--spacing-1'],
     padding: spacingVars['--spacing-1'],
     borderRadius: 'var(--_dropdown-menu-radius)',
@@ -392,6 +411,16 @@ export function ContextMenu({
   const items = itemsProp ?? [];
   const menuContent = menuContentProp;
 
+  const usesSheetActionList = usesBottomSheet && itemsProp !== undefined;
+  // Syncs the touch sheet's action list with the presentation: a data-driven
+  // sheet menu loads its rows at rest, so its first open shows them at once. A
+  // pointer menu never loads them.
+  useEffect(() => {
+    if (usesSheetActionList) {
+      void preloadMenuBottomSheetActionList();
+    }
+  }, [usesSheetActionList]);
+
   const menuId = useId();
   // Cursor point in the trigger's local coordinate space (offset from the
   // trigger's top-left, in-flow). Stored here and written to the cursor
@@ -415,15 +444,24 @@ export function ContextMenu({
   const focusOnShowRef = useRef(false);
   const focusFirstRef = useRef<() => void>(() => {});
   const [submenuPath, setSubmenuPath] = useState<ContextMenuItemData[]>([]);
+  // The row reads a node label's text as the level opens. That text names the
+  // sheet.
+  const [submenuTitles, setSubmenuTitles] = useState<(string | undefined)[]>(
+    [],
+  );
   const currentSubmenu = submenuPath.at(-1);
   const currentItems = currentSubmenu?.items ?? items;
   const currentTitle = currentSubmenu?.label ?? label;
-  const sheetLabel = typeof currentTitle === 'string' ? currentTitle : label;
+  const sheetLabel =
+    typeof currentTitle === 'string'
+      ? currentTitle
+      : submenuTitles.at(-1) || label;
 
   const updateOpenState = useCallback(
     (nextIsOpen: boolean) => {
       if (!nextIsOpen) {
         setSubmenuPath([]);
+        setSubmenuTitles([]);
       }
       setIsOpen(nextIsOpen);
       onOpenChange?.(nextIsOpen);
@@ -879,7 +917,10 @@ export function ContextMenu({
                 <Icon icon="chevronLeft" size="sm" xstyle={rtlStyles.mirror} />
               }
               isIconOnly
-              onClick={() => setSubmenuPath(path => path.slice(0, -1))}
+              onClick={() => {
+                setSubmenuPath(path => path.slice(0, -1));
+                setSubmenuTitles(titles => titles.slice(0, -1));
+              }}
             />
             {sheetViewHeading}
           </div>
@@ -889,7 +930,10 @@ export function ContextMenu({
         <MenuBottomSheetActionList
           items={currentItems}
           onSelect={handleBottomSheetSelect}
-          onOpenSubmenu={item => setSubmenuPath(path => [...path, item])}
+          onOpenSubmenu={(item, title) => {
+            setSubmenuPath(path => [...path, item]);
+            setSubmenuTitles(titles => [...titles, title]);
+          }}
         />
       </div>
     ) : (
@@ -899,6 +943,9 @@ export function ContextMenu({
   // An inline trigger (`span`) lets prose own a context menu without
   // breaking its flow.
   const TriggerElement = triggerAs === 'div' ? 'div' : 'span';
+  const SheetForContent = usesSheetActionList
+    ? MenuBottomSheet
+    : MenuBottomSheetWithoutActionList;
 
   return (
     <>
@@ -933,14 +980,12 @@ export function ContextMenu({
       </TriggerElement>
 
       {usesBottomSheet ? (
-        <Suspense fallback={null}>
-          <LazyMenuBottomSheet
-            isOpen={isOpen}
-            onOpenChange={updateOpenState}
-            label={sheetLabel}>
-            {renderedBottomSheetContent}
-          </LazyMenuBottomSheet>
-        </Suspense>
+        <SheetForContent
+          isOpen={isOpen}
+          onOpenChange={updateOpenState}
+          label={sheetLabel}>
+          {renderedBottomSheetContent}
+        </SheetForContent>
       ) : (
         layer.render(<LayerDepthProvider>{renderedMenu}</LayerDepthProvider>, {
           placement: 'below',

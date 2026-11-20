@@ -2,13 +2,15 @@
 
 /**
  * @file useChartColors.test.ts
- * @input Uses vitest, @testing-library/react renderHook, useChartColors
+ * @input Uses vitest, @testing-library/react renderHook, Theme, useChartColors
  * @output Functional tests for the theme-aware chart color palette hook
  * @position Colocated test for useChartColors.ts (issue #4295 viz coverage)
  */
 
+import {createElement, type ReactNode} from 'react';
 import {describe, it, expect} from 'vitest';
 import {renderHook} from '@testing-library/react';
+import {Theme, defineTheme} from '@astryxdesign/core';
 import {useChartColors} from './useChartColors';
 
 describe('useChartColors', () => {
@@ -40,6 +42,20 @@ describe('useChartColors', () => {
   it('returns an empty palette for a non-positive count', () => {
     const {result} = renderHook(() => useChartColors());
     expect(result.current.categorical(0)).toEqual([]);
+  });
+
+  it('resolves colors from the surrounding theme and its mode', () => {
+    const theme = defineTheme({
+      name: 'use-chart-colors-test',
+      tokens: {'--color-data-categorical-blue': 'light-dark(#111111, #222222)'},
+    });
+    const {result} = renderHook(() => useChartColors(), {
+      wrapper: ({children}: {children: ReactNode}) =>
+        createElement(Theme, {theme, mode: 'dark', children}),
+    });
+    expect(result.current.categorical(1)).toEqual(['#222222']);
+    // The palette default for --color-data-neutral is light-dark(#8494A3, #8C939B).
+    expect(result.current.semantic.neutral).toBe('#8C939B');
   });
 
   it('returns a referentially stable API across rerenders', () => {

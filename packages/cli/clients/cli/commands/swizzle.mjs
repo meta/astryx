@@ -18,6 +18,7 @@ import {defineCommand} from '../lib/define-command.mjs';
 import {doc as swizzleCommand} from './swizzle.doc.mjs';
 import {doc as swizzleFn} from '../../../api/swizzle/swizzle.doc.mjs';
 import {NO_RESULT_SET, resultSet} from '../../../foundation/debug/index.mjs';
+import {currentNonCoreBase} from '../../../foundation/bases/state.mjs';
 
 /**
  * @param {import('commander').Command} program
@@ -66,12 +67,18 @@ export function registerSwizzle(program) {
           section('Available components'),
           list(components),
           text(`Usage: ${run} swizzle <component>`),
-          text(
-            [
-              `Example: ${run} swizzle Button`,
-              `         ${run} swizzle XDSButton  (XDS prefix also works)`,
-            ].join('\n'),
-          ),
+          // The examples name Core components, so a run on another base
+          // leaves them out.
+          ...(currentNonCoreBase()
+            ? []
+            : [
+                text(
+                  [
+                    `Example: ${run} swizzle Button`,
+                    `         ${run} swizzle XDSButton  (XDS prefix also works)`,
+                  ].join('\n'),
+                ),
+              ]),
         );
         return answered;
       }

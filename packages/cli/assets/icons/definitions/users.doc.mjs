@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'users',
+  group: 'people',
   description: 'A group of people or a team.',
   words: ['team', 'group', 'people', 'members'],
 };

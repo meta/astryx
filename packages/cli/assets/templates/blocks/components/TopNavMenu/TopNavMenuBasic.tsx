@@ -8,12 +8,12 @@ import {
   TopNavItem,
   TopNavMenu,
 } from '@astryxdesign/core/TopNav';
-import {ChartBarIcon, Cog6ToothIcon} from '@heroicons/react/24/outline';
+import {ChartIcon, SettingsIcon} from '@astryxdesign/template-icons';
 
 export default function TopNavMenuBasic() {
   return (
     <TopNav
-      style={{width: 600}}
+      style={{width: 600, maxWidth: '100%'}}
       label="Main navigation"
       heading={<TopNavHeading heading="Platform" />}
       startContent={
@@ -25,13 +25,13 @@ export default function TopNavMenuBasic() {
               {
                 title: 'Analytics',
                 description: 'View traffic and engagement metrics',
-                icon: <ChartBarIcon />,
+                icon: <ChartIcon />,
                 href: '#analytics',
               },
               {
                 title: 'Settings',
                 description: 'Configure your workspace',
-                icon: <Cog6ToothIcon />,
+                icon: <SettingsIcon />,
                 href: '#settings',
               },
             ]}

@@ -35,7 +35,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: '`theme add` records an installed package theme and regenerates `src/astryx-themes.ts` or `.js` with its built module, production CSS, and optional font CSS. In a project without `src`, the module is at the project root. The first imported theme becomes the default. `theme use <slug>` changes that default, and `theme remove <slug>` removes a non-default theme.',
+          text: '`theme add` records an installed package theme and regenerates `src/astryx-themes.ts` or `.js` with its built module, production CSS, and optional font CSS. In a project without `src`, the module is at the project root. The first imported theme becomes the default. `theme use <slug>` changes that default, and `theme remove <slug>` removes a theme other than the default. Removing the only added theme removes the module file and prints the lines the app root must drop.',
         },
         {
           type: 'prose',
@@ -144,6 +144,10 @@ export const docs = {
         {
           type: 'prose',
           text: 'To create a theme with custom dark mode colors, see {@link generic:author-a-theme}.',
+        },
+        {
+          type: 'prose',
+          text: 'To make dark mode the default, pass `mode="dark"` to the root `Theme`. A server-rendered app also sets `<html data-theme="dark">` in its root layout, so the first paint is dark before the app runs.',
         },
       ],
     },

@@ -961,15 +961,22 @@ Storybook story for anything you added or altered.
   fork either push their branches here or apply `ci:run` themselves.
 - **Heavy browser suites are shared per author.** They run for an author's
   fifteen oldest open pull requests, up to a hundred such runs a day. A pull
-  request past either limit shows a failing check that says why, and runs in
-  full at its pre-merge re-run. Engineering owners listed in `.github/ENGOWNERS`
-  are not limited.
-- **Pull requests from the shared agent login run the heavy suites when ready
-  and before merge.** A push to a ready agent pull request runs lint and, in
-  the CI workflow, only typecheck (path-filtered workflows run as usual);
-  `test`, `build` and `docsite-test` fail with "Heavy CI deferred" (unless the
-  change is spec-only, which runs everything) until the pull request is marked ready or reopened, or its latest run is
-  re-run with **Re-run all jobs**, which runs everything at that head.
+  request past either limit shows a failing check that says why, and runs at a
+  review-pass run once it is within them, or in full at its pre-merge re-run.
+  Engineering owners listed in `.github/ENGOWNERS` are not limited.
+- **The heavy suites run once review passes, and before merge.** A pull
+  request's run into `main`, from any author, in its first attempt (a push, or
+  the pull request opened, reopened or marked ready) runs lint and, in the CI
+  workflow, only typecheck (path-filtered workflows run as usual); `test`,
+  `build` and `docsite-test` fail with "Heavy CI deferred". A spec-only or
+  Lab-only change is never deferred, nor a pull request labelled
+  `release-critical` when someone with write access applied the label last.
+  Once the review app (for an author with write access) or an engineering owner
+  approves that exact head and the spec gate passes, the `CI review pass`
+  workflow runs that head's run again in full. The `review-required` check can
+  show success earlier, at an engineering owner's own push; that does not start
+  the full run. merge-guard's pre-merge re-run also runs everything. **Re-run
+  all jobs** on the latest run runs everything at that head at once.
 
 ## Code Style
 
