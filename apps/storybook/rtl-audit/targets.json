@@ -621,6 +621,15 @@
     }
   },
   {
+    "component": "Pagination",
+    "storyId": "core-pagination--many-pages",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "nav.astryx-pagination [aria-label=\"Go to previous page\"]",
+      "next": "nav.astryx-pagination [aria-label=\"Go to next page\"]"
+    }
+  },
+  {
     "component": "Popover",
     "storyId": "core-popover--default",
     "dims": ["D4"],
