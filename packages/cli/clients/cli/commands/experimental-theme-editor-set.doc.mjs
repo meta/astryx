@@ -43,7 +43,7 @@ export const doc = {
       flag: '--when <prop:value>',
       param: 'options.when',
       description:
-        'Only that variant of the part, such as variant:primary or status:error (how <part> lists them); give it once per prop for several at once (--when variant:ghost --when size:sm, or variant:ghost+size:sm); needs --on',
+        'Only that variant of the part, such as variant:primary or status:error, or one stripe of a table row, parity:odd or parity:even (the first body row is odd; how <part> lists them); give it once per prop for several at once (--when variant:ghost --when size:sm, or variant:ghost+size:sm); needs --on',
     },
     {
       flag: '--state <state>',
@@ -106,6 +106,11 @@ export const doc = {
     {
       label: 'One variant in one state',
       cli: 'astryx experimental theme editor set brand background-color "#f3e8ff" --on button --when variant:ghost --state hover',
+    },
+    {
+      label:
+        "Zebra rows: the odd rows of every data-driven table striped (in an isStriped table, also set the even rows transparent with --when parity:even --state striped to clear Core's own stripe)",
+      cli: 'astryx experimental theme editor set brand background-color "#f9f9f9" --on table-row --when parity:odd',
     },
     {
       label: 'Every input',
