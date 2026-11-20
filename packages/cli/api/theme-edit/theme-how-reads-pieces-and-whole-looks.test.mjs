@@ -432,6 +432,14 @@ describe('a look said, then taken away by a pronoun', () => {
           /border none --on card\b/,
         ],
         [
+          'the shadow on the cards is too strong and the headings should be bold, remove it',
+          /box-shadow none --on card\b[\s\S]*headings bold/,
+        ],
+        [
+          'the card border is too thick and the headings need to be bigger, hide it',
+          /border none --on card\b[\s\S]*\nset t (?:type|--text-heading)/,
+        ],
+        [
           'the underline on the links in the footer is ugly, remove it',
           /text-decoration none --on link\b/,
         ],

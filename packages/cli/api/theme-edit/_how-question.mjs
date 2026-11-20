@@ -5328,7 +5328,14 @@ export function draftAnswer(ctx, env, question) {
         // (A part said before "but", "the cards look fine but the border
         // is ugly", is not this look's.)
         (kept && joinWord === 'and' && partIn(kept));
-      return part ? `${lead}${kept}no ${word} on ${part}` : m;
+      // (An ask joined after the look, "the shadow on the cards is too
+      // strong and the headings should be bold", stays its own clause.)
+      const rest = said.slice(at + look.length);
+      const next = /\b(?:and|but|then)\s+(?=\S)/i.exec(rest);
+      const tail = next ? rest.slice(next.index + next[0].length).trim() : '';
+      return part
+        ? `${lead}${kept}no ${word} on ${part}${tail ? `, ${tail}` : ''}`
+        : m;
     },
   );
   question = String(question)
@@ -5480,7 +5487,17 @@ export function draftAnswer(ctx, env, question) {
     // that works in light and dark", keeps its own reading.)
     .replace(
       /\b(?:(?:please\s+)?(?:make\s+sure|ensure)\s+)?(?:(?:please\s+)?make\s+(?:it|this)\s+)?(?:(?:that|which|it|this|the\s+(?:theme|app|site|ui|design))\s+)?(?:(?:should|must|needs?\s+to|has\s+to|will|to)\s+)?(?:works?|look(?:s)?\s+good|holds?\s+up)\s+in\s+(?:both\s+)?(?:light\s+(?:and|&)\s+dark|dark\s+(?:and|&)\s+light)(?:\s+modes?)?(?=\s*(?:[,;.!?]|$))/gi,
-      ', light and dark modes',
+      // (Said with a "not" before it in its clause, "it doesn't need to
+      // work in light and dark mode", it asks for nothing.)
+      (m, at, all) =>
+        /\b(?:not|no\s+need|never|without)\b|n't\b/i.test(
+          all
+            .slice(0, at)
+            .split(/[,;.!?]/)
+            .pop() ?? '',
+        )
+          ? m
+          : ', light and dark modes',
     )
     // ("a theme that works in dark mode": a theme with both modes, which it
     // has; never an ask scoped to dark.)

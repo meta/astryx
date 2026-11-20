@@ -195,4 +195,14 @@ describe('light and dark said as what the theme must work in', () => {
     expect(headings).not.toContain('set lo mode both');
     expect(headings.join('\n')).not.toMatch(/headings light/);
   }, 300_000);
+  it('asks for nothing when "not" comes before it', async () => {
+    for (const q of [
+      "it doesn't need to work in light and dark mode",
+      "don't make it work in light and dark mode",
+      "make the buttons blue, it doesn't need to work in light and dark mode",
+    ])
+      expect(JSON.stringify(await results('lo', q)), q).not.toMatch(
+        /mode both/,
+      );
+  }, 240_000);
 });
