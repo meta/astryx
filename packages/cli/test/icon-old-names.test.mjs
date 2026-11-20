@@ -4,7 +4,7 @@
  * The experimental icon commands say "meaning": `icon new-meaning`,
  * `--meaning`, `--new-meaning`, `--meanings` and the docs route
  * `cli/experimental/icon-meanings`. The old names have no alias. No file
- * outside the changelogs and the pending release notes still names them, and
+ * outside the changelogs and this rename's own release note names them, and
  * the CLI treats them as it treats any word or option it does not know.
  */
 
@@ -41,8 +41,22 @@ const OLD_NAMES = new RegExp(
   'u',
 );
 
-const ROOTS = ['packages/cli', 'docs', 'CONTRIBUTING.md', 'AGENTS.md'];
-const SKIP_DIRS = new Set(['node_modules', 'dist', '.turbo', 'coverage']);
+/** The release note of this rename names the old names on purpose. */
+const RENAME_NOTE = path.join(REPO, '.changeset/icon-cli-meaning-names.md');
+const SKIP_DIRS = new Set([
+  '.git',
+  'node_modules',
+  'dist',
+  'out',
+  'build',
+  'coverage',
+  'storybook-static',
+  '.next',
+  '.turbo',
+  '.cache',
+  'test-results',
+  'playwright-report',
+]);
 const TEXT = /\.(?:mjs|cjs|js|ts|tsx|md|json)$/u;
 
 /**
@@ -65,18 +79,16 @@ function walk(at, out) {
 }
 
 describe('old icon names', () => {
-  it('appear in no file outside the changelogs and pending release notes', () => {
+  it("appear in no file outside the changelogs and this rename's release note", () => {
     const found = [];
-    for (const root of ROOTS) {
-      for (const file of walk(path.join(REPO, root), [])) {
-        if (file === SELF) continue;
-        const lines = fs.readFileSync(file, 'utf8').split('\n');
-        lines.forEach((line, at) => {
-          if (OLD_NAMES.test(line)) {
-            found.push(`${path.relative(REPO, file)}:${at + 1}`);
-          }
-        });
-      }
+    for (const file of walk(REPO, [])) {
+      if (file === SELF || file === RENAME_NOTE) continue;
+      const lines = fs.readFileSync(file, 'utf8').split('\n');
+      lines.forEach((line, at) => {
+        if (OLD_NAMES.test(line)) {
+          found.push(`${path.relative(REPO, file)}:${at + 1}`);
+        }
+      });
     }
     expect(found).toEqual([]);
   });

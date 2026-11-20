@@ -489,7 +489,7 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
   `add --all` with an export name, `--meaning`, `--new-meaning`,
   `--description`, `--words`, `--default`, or `--id`; `add --meaning`
   with `--new-meaning`; `add --description` or `--words` without
-  `--new-meaning`; `map --pairs` with a definition, an icon, or
+  `--new-meaning`; `map --pairs` with a meaning, an icon, or
   `--remove`, and `map --remove` with an icon; and `new-set --exclude`
   without `--from` or `--default-variant` without `--variants`. Every
   command reads modules statically, and its writes are all or nothing: when
