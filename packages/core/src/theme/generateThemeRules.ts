@@ -52,6 +52,7 @@ import {cssVar, classPrefix, dataAttrNamespace} from '../naming';
 import {
   analyzeDeclarationValue,
   substituteVarReferences,
+  canonicalizeDeclarationName,
   checkDeclarationName,
   checkDeclarationValue,
 } from './declarationBoundary';
@@ -1887,7 +1888,7 @@ function schemeDependence(
     }
     visiting.add(name);
     const isDependent =
-      value.includes('light-dark(') ||
+      LIGHT_DARK_CALL.test(value) ||
       analyzeDeclarationValue(value).references.some(reference =>
         dependsOnScheme(reference, visiting),
       );
@@ -1900,22 +1901,32 @@ function schemeDependence(
   return check;
 }
 
+// A `light-dark()` call in any case. CSS function names are ASCII
+// case-insensitive.
+const LIGHT_DARK_CALL = /(?:^|[^\w-])light-dark\(/i;
+
 const ROOT_ALIAS_PREFIX = '--_theme-root-';
 const ROOT_ALIAS_REFERENCE = /var\((--_theme-root-[^\s,()]+)/gi;
 // The start of a `var()` call up to the referenced name: any case, spaces and
 // comments.
 const VAR_CALL_HEAD = /^var\(\s*(?:\/\*[\s\S]*?\*\/\s*)*/i;
 
+// A custom property name as written, with CSS escapes.
+const WRITTEN_NAME =
+  /^--(?:[A-Za-z0-9_\-\u0080-\uFFFF]|\\[0-9a-fA-F]{1,6}[ \t\n\r\f]?|\\[^\n\r\f0-9a-fA-F])*/;
+
 /**
  * The call `var(<name>, <fallback>)` written as `var(--_theme-root-<name>,
- * <fallback>)`, or `null` when the call does not start with the name.
+ * <fallback>)`, with the name in its canonical spelling, or `null` when the
+ * name the call writes is not `reference`.
  */
 function rootAliasCall(reference: string, call: string): string | null {
   const head = VAR_CALL_HEAD.exec(call)?.[0] ?? '';
-  if (!call.startsWith(reference, head.length)) {
+  const written = WRITTEN_NAME.exec(call.slice(head.length))?.[0] ?? '';
+  if (written === '' || canonicalizeDeclarationName(written) !== reference) {
     return null;
   }
-  return `var(${ROOT_ALIAS_PREFIX}${reference.slice(2)}${call.slice(head.length + reference.length)}`;
+  return `var(${ROOT_ALIAS_PREFIX}${reference.slice(2)}${call.slice(head.length + written.length)}`;
 }
 
 /**
@@ -2120,7 +2131,9 @@ function overlappingRuleBlocks(
     surfaceReplays: ReadonlyMap<'dark' | 'light', [string, string][]>;
     sink: DiagnosticSink;
     /** Each rule's own values per side (the surface's tokens and roles). */
-    ruleOwnBySide: ReadonlyArray<ReadonlyMap<MediaSide, ReadonlyMap<string, string>>>;
+    ruleOwnBySide: ReadonlyArray<
+      ReadonlyMap<MediaSide, ReadonlyMap<string, string>>
+    >;
     /** The dark-page copies of a query's restatements. */
     darkPageRestatements: (
       restatedBySide: ReadonlyMap<MediaSide, [string, string][]>,
@@ -2399,11 +2412,10 @@ export function generateOnMediaCSS(
   }
 
   /**
-   * The dark-page copies of one query's restatements. A restatement is written
-   * for a side's own selector, which also reaches a surface that a dark page
-   * flips to the other side. So, for each side a dark page flips a surface to,
-   * the copy writes that side's restatements and, for a token the other side
-   * restates but this side holds, this side's own value.
+   * The dark-page copies of one query's restatements. A side's restatement
+   * also reaches a surface that a dark page flips to the other side. The copy
+   * writes the flipped side's restatements. For a token only the other side
+   * restates, it writes this side's own value, its base replay, or `inherit`.
    */
   const darkPageRestatements = (
     restatedBySide: ReadonlyMap<MediaSide, [string, string][]>,
@@ -2416,13 +2428,14 @@ export function generateOnMediaCSS(
       const restated = restatedBySide.get(side) ?? [];
       const restatedNames = new Set(restated.map(([name]) => name));
       const own = ownBySide.get(side) ?? new Map<string, string>();
+      const baseReplays = new Map(surfaceReplays.get(side) ?? []);
+      // For each token the other side restates, the value this side shows:
+      // its own value, else its base replay, else the inherited value.
       const kept = (restatedBySide.get(other) ?? []).flatMap(
-        ([name]): [string, string][] => {
-          const value = own.get(name);
-          return value === undefined || restatedNames.has(name)
+        ([name]): [string, string][] =>
+          restatedNames.has(name)
             ? []
-            : [[name, value]];
-        },
+            : [[name, own.get(name) ?? baseReplays.get(name) ?? 'inherit']],
       );
       const entries = [...restated, ...kept];
       if (entries.length === 0) {
@@ -2483,11 +2496,10 @@ export function generateOnMediaCSS(
         ...(surfaceOwnNames.get(surface) ?? []),
         ...restorationEntries.map(([role]) => role),
       ]);
-      // Under this query the theme root declares the rule's values over the
-      // base values. The surface takes every value the root resolves under the
-      // query: a token that becomes scheme-dependent, and a base replay whose
-      // value changes, for example because the rule sets a token it refers
-      // to. A base replay that must no longer be re-declared inherits.
+      // Under this query the root declares the rule's values over the base
+      // values. The surface restates each re-declaration whose value changes:
+      // a token that becomes scheme-dependent, or a base replay that refers to
+      // a token the rule sets. A base replay that no longer applies inherits.
       const ruleDeclared = {...rootValues, ...ruleValues};
       const baseReplayValues = new Map(surfaceReplays.get(surface) ?? []);
       const candidateNames = new Set([

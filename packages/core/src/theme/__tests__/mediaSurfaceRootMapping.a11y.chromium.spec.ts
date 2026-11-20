@@ -38,67 +38,73 @@ interface Contrast {
   icon: number;
 }
 
-for (const pageMode of ['light', 'dark'] as const) {
-  for (const surface of ['dark', 'light'] as const) {
-    test(`a ${surface} media surface on a ${pageMode} page keeps readable secondary text and icons under an app's root mapping`, async ({
-      page,
-    }) => {
-      const story = `core-themes-mediatheme--on-${surface}`;
-      await page.goto(
-        `${storybook.origin}/iframe.html?id=${story}&viewMode=story&globals=colorMode:${pageMode}`,
-      );
-      const media = page.locator(`[data-astryx-media="${surface}"]`).first();
-      await media.waitFor();
-      const grey = PAGE_GREY[pageMode];
-      await page.addStyleTag({
-        content: `[data-astryx-theme] { --color-text-secondary: ${grey} !important; --color-icon-secondary: ${grey} !important; }`,
-      });
-      const contrast = await media.evaluate((element): Contrast => {
-        const channels = (color: string): number[] => {
-          const values = color.match(/[\d.]+/g)?.map(Number) ?? [];
-          // color(srgb r g b) gives 0-1 channels; rgb() gives 0-255.
-          return color.startsWith('color(')
-            ? values.slice(0, 3).map(value => value * 255)
-            : values.slice(0, 3);
-        };
-        const luminance = ([r, g, b]: number[]): number => {
-          const linear = (value: number) => {
-            const c = value / 255;
-            return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-          };
-          return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
-        };
-        const ratio = (a: number[], b: number[]) => {
-          const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-          return (hi + 0.05) / (lo + 0.05);
-        };
-        // The surface's own background, resolved inside it. A story's
-        // backdrop can follow the page instead of the surface.
-        const resolved = (
-          property: 'color' | 'backgroundColor',
-          token: string,
-        ) => {
-          const span = document.createElement('span');
-          span.style[property] = `var(${token})`;
-          span.textContent = 'probe';
-          element.append(span);
-          const value = getComputedStyle(span)[property];
-          span.remove();
-          return value;
-        };
-        const background = resolved(
-          'backgroundColor',
-          '--color-background-surface',
-        );
-        const probe = (token: string) =>
-          ratio(channels(resolved('color', token)), channels(background));
-        return {
-          text: probe('--color-text-secondary'),
-          icon: probe('--color-icon-secondary'),
-        };
-      });
-      expect(contrast.text).toBeGreaterThanOrEqual(4.5);
-      expect(contrast.icon).toBeGreaterThanOrEqual(3);
+// The on-light story always nests a dark Theme, so its light surface sits
+// on a dark page whatever the global color mode.
+const CASES = [
+  {surface: 'dark', pageMode: 'light'},
+  {surface: 'dark', pageMode: 'dark'},
+  {surface: 'light', pageMode: 'dark'},
+] as const;
+
+for (const {surface, pageMode} of CASES) {
+  test(`a ${surface} media surface on a ${pageMode} page keeps readable secondary text and icons under an app's root mapping`, async ({
+    page,
+  }) => {
+    const story = `core-themes-mediatheme--on-${surface}`;
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=${story}&viewMode=story&globals=colorMode:${pageMode}`,
+    );
+    const media = page.locator(`[data-astryx-media="${surface}"]`).first();
+    await media.waitFor();
+    const grey = PAGE_GREY[pageMode];
+    await page.addStyleTag({
+      content: `[data-astryx-theme] { --color-text-secondary: ${grey} !important; --color-icon-secondary: ${grey} !important; }`,
     });
-  }
+    const contrast = await media.evaluate((element): Contrast => {
+      const channels = (color: string): number[] => {
+        const values = color.match(/[\d.]+/g)?.map(Number) ?? [];
+        // color(srgb r g b) gives 0-1 channels; rgb() gives 0-255.
+        return color.startsWith('color(')
+          ? values.slice(0, 3).map(value => value * 255)
+          : values.slice(0, 3);
+      };
+      const luminance = ([r, g, b]: number[]): number => {
+        const linear = (value: number) => {
+          const c = value / 255;
+          return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+        };
+        return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+      };
+      const ratio = (a: number[], b: number[]) => {
+        const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+        return (hi + 0.05) / (lo + 0.05);
+      };
+      // The surface's own background, resolved inside it. A story's
+      // backdrop can follow the page instead of the surface.
+      const resolved = (
+        property: 'color' | 'backgroundColor',
+        token: string,
+      ) => {
+        const span = document.createElement('span');
+        span.style[property] = `var(${token})`;
+        span.textContent = 'probe';
+        element.append(span);
+        const value = getComputedStyle(span)[property];
+        span.remove();
+        return value;
+      };
+      const background = resolved(
+        'backgroundColor',
+        '--color-background-surface',
+      );
+      const probe = (token: string) =>
+        ratio(channels(resolved('color', token)), channels(background));
+      return {
+        text: probe('--color-text-secondary'),
+        icon: probe('--color-icon-secondary'),
+      };
+    });
+    expect(contrast.text).toBeGreaterThanOrEqual(4.5);
+    expect(contrast.icon).toBeGreaterThanOrEqual(3);
+  });
 }

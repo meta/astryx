@@ -985,3 +985,86 @@ describe('generateOnMediaCSS restatements on a surface a dark page flips', () =>
     ).toBe(true);
   });
 });
+
+describe('generateOnMediaCSS restatements only the other side writes on a flipped card', () => {
+  // The dark side holds the emphasized border and restates the muted fill
+  // under the rule; the light side holds the plain border and restates
+  // nothing. On a dark page the flipped card shows the light side, so its
+  // dark-page copy writes the light side's value for the muted fill.
+  const theme = defineTheme({
+    name: 'media-scheme-replay-flip-other',
+    tokens: {
+      '--color-background-inverted': ['#0a1317', '#f4f0e8'],
+      '--color-on-dark': ['#ffffff', '#ffffff'],
+      '--color-on-light': ['#111111', '#111111'],
+      '--color-border-emphasized': ['#777777', '#888888'],
+      '--color-border': ['#999999', '#666666'],
+      '--color-background-muted':
+        'color-mix(in srgb, var(--color-border-emphasized) 50%, var(--color-border))',
+    },
+    onDark: {tokens: {'--color-border-emphasized': '#cccccc'}},
+    onLight: {tokens: {'--color-border': '#333333'}},
+    adaptations: {
+      rules: [
+        {
+          when: {width: {below: 'lg'}},
+          value: {
+            tokens: {
+              '--color-border-emphasized': 'light-dark(#ff0000, #aa0000)',
+            },
+          },
+        },
+      ],
+    },
+  });
+  const css = generateOnMediaCSS(theme);
+  const query = css.slice(css.indexOf('\n@media '));
+  const rules = [...query.matchAll(/([^{};]+)\{([^{}]*)\}/g)];
+
+  it("restores the light side's muted fill on a card a dark page flips to light", () => {
+    const darkRestated = rules.findIndex(
+      match =>
+        match[1].trim() === '[data-astryx-media="dark"]' &&
+        match[2].includes('--color-background-muted:'),
+    );
+    const lightCopy = rules.findIndex(
+      match =>
+        match[1].includes('[data-astryx-media-dark-page="light"]') &&
+        match[2].includes('--color-background-muted:'),
+    );
+    expect(darkRestated).toBeGreaterThanOrEqual(0);
+    expect(lightCopy).toBeGreaterThan(darkRestated);
+  });
+});
+
+describe('generateOnMediaCSS reads light-dark() and var() names in any spelling', () => {
+  it('re-declares a token whose value writes LIGHT-DARK() in capitals', () => {
+    const css = generateOnMediaCSS(
+      defineTheme({
+        name: 'media-scheme-replay-case',
+        tokens: {'--color-text-secondary': 'LIGHT-DARK(#555555, #aaaaaa)'},
+      }),
+    );
+    expect(mediaDeclarations(css, 'dark')['--color-text-secondary']).toBe(
+      'LIGHT-DARK(#555555, #aaaaaa)',
+    );
+  });
+
+  it('refers to the root alias of a token a value names with a CSS escape', () => {
+    // `\65 ` is `e`, so the reference names --color-background-muted, a Core
+    // default the theme leaves unset.
+    const css = generateOnMediaCSS(
+      defineTheme({
+        name: 'media-scheme-replay-escape',
+        tokens: {
+          '--color-text-secondary': ['#555555', '#aaaaaa'],
+          '--color-border':
+            'color-mix(in srgb, var(--color-text-secondary) 50%, var(--color-background-mut\\65 d))',
+        },
+      }),
+    );
+    const border = mediaDeclarations(css, 'dark')['--color-border'];
+    expect(border).toContain('var(--_theme-root-color-background-muted)');
+    expect(css).toContain('--_theme-root-color-background-muted:');
+  });
+});
