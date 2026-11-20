@@ -61,8 +61,8 @@ shared icon names under FR17.
 
 - **FR1 — One package and an Expo adapter.** The package carries the native
   code that any Astryx component or `create` template uses; what goes in the
-  package, in a module package, or outside Astryx follows FR20, and the group
-  records (FR7) list each group's pieces. A separate package exists when it
+  package, in a module package, or outside Astryx follows FR20. A separate
+  package exists when it
   brings a third-party dependency; the Expo adapter is that case, so an app
   outside Expo installs no Expo code. The public set is:
   - `@astryxdesign/react-native`: the React Native platform package that
@@ -103,22 +103,13 @@ shared icon names under FR17.
     the reads of `@astryxdesign/core` that `spec:AST-082/FR16` allows; the
     shared contracts are built in (FR4). `@astryxdesign/core`
     and `@astryxdesign/cli` never depend on it (`spec:AST-082/FR14`).
-  - The Astryx router holds the routing state and
-    drives the platform's navigation hosts (`spec:AST-125`). Astryx also owns
-    the native stack and tab containers, transitions, gestures, insets, and
-    every bar, header, button, and search field, rendered by the system
-    through the platform's hosts or drawn by the library (DEC-9). The router
-    supports Astryx's screen header (`TopNav`), tab bar, and sheets.
-  - An app may use another router, such as Expo Router, instead. Astryx
-    components work inside it, and the app keeps that router's own navigation
-    and chrome.
   - The package's only peer dependencies outside Astryx are React and React
     Native.
   - `@astryxdesign/react-native` brings all the native code Astryx needs and
     takes no third-party native dependency, so an Astryx upgrade reaches every
     app through the package alone (FR4); the Expo wrapper's `expo` peer, which its
     configuration plugin uses, is the one third-party dependency of the set
-    (FR1). It owns its own recognizers (FR18) and
+    (FR1). It owns its own recognizers and
     measures its own safe-area insets.
   - `@astryxdesign/react-native` imports nothing from Expo or from
     `@astryxdesign/react-native-expo`, and declares neither as a dependency.
@@ -237,13 +228,13 @@ shared icon names under FR17.
     implementation behind those components; no entry exports one as a
     separate public view.
   - `./storage` (storage) and `./controls` (below) hold the rest of the core's app API; the navigation hosts are
-    reached through the Astryx router (FR2).
+    reached through the Astryx router.
   - `./theme`, `./styles`, and `./i18n` hold the theme objects, the style
     helpers, and the strings.
   - `./camera`, `./media`, `./photos`, and `./web` are the opt-in capabilities'
     entries. `./controls`, part of the core,
     holds the library's components whose native half is a native control or a
-    gesture view (`spec:AST-126`, `spec:AST-124`); the controls and views
+    gesture view; the controls and views
     themselves stay internal.
   - Apart from the Jest setup file, no entry installs a global when it is
     imported (DEC-10).
@@ -304,23 +295,6 @@ shared icon names under FR17.
     `on<Event>(event)` with one object argument, `is` and `has` booleans, and
     string unions for closed sets. A call takes its subject first and one
     options object, with defaults for every option.
-  - Each group of the platform has its own record, which details these rules
-    and FR3's linking for the group's pieces:
-
-    | Group                      | Record         | Links             |
-    | -------------------------- | -------------- | ----------------- |
-    | Surfaces and glass         | `spec:AST-123` | core              |
-    | Gestures and drag          | `spec:AST-124` | core              |
-    | Navigation hosts           | `spec:AST-125` | core              |
-    | Native controls            | `spec:AST-126` | core              |
-    | Icons and drawing          | `spec:AST-127` | core              |
-    | Menus and presentation     | `spec:AST-128` | core              |
-    | Layout, text, and keyboard | `spec:AST-129` | core              |
-    | System modules             | `spec:AST-130` | core              |
-    | Web                        | `spec:AST-131` | `web`             |
-    | Media and camera           | `spec:AST-132` | `media`, `camera` |
-    | Photos                     | `spec:AST-135` | `photos`          |
-
   - While the package is canary-only, this shape is an internal convention
     that may change in any canary; the public promise is decided when the
     package leaves the canary channel (FR14). It follows the web's current
@@ -399,17 +373,6 @@ shared icon names under FR17.
     fails when it drifts. A prop shared with the web library carries
     per-platform wording where the platforms differ.
 
-- **FR18 — Astryx's gestures join each platform's arbitration.**
-  - The gesture module registers Astryx's recognizers with each platform's
-    arbitration: on iOS, recognizer relationships such as require-to-fail and
-    simultaneous recognition; on Android, touch interception.
-  - It exposes a handle per recognizer, so other recognizers, those of
-    react-native-gesture-handler included, can declare their relationship to
-    it; `spec:AST-124` specifies the gesture handle API.
-  - It runs natively, independent of the JavaScript runtime.
-  - Gesture behavior and feel follow `spec:AST-094`, `spec:AST-107`, and
-    `spec:AST-108`.
-  - Astryx owns its own recognizers, and the app owns its other gestures.
 - **FR19 — Accessibility follows the core contract on every native surface.**
   - Every native host and control exposes its core contract's semantics under
     VoiceOver and TalkBack: names, roles, states, focus order, and
@@ -433,7 +396,7 @@ shared icon names under FR17.
     (FR14).
   - **Outside Astryx**, otherwise: an app uses its host platform's
     implementation or the libraries it chooses, and Astryx components work
-    beside them (FR2).
+    beside them (`spec:AST-140/FR9`).
   - A piece moves into the core package only when a component or template
     starts to use it, and leaves it when none does. The core never holds a
     module because one app needs it, and no Astryx package depends on a
@@ -447,25 +410,6 @@ shared icon names under FR17.
     (FR4). The build
     generates a size table per capability, and a check fails when the table is
     missing a capability.
-- **FR21 — Glass and materials are a look.**
-  - `surface` (`glass`,
-    `material`, or `plain`) says which kind of surface an element is, and the
-    native theme's `material` member (`opaque` or `translucent`,
-    `spec:AST-082` FR10) decides how that surface looks.
-  - On `Button` and `IconButton`, `surface` is a situational appearance
-    choice made per call site: each use
-    picks the surface that fits where the button sits. A drawn button draws
-    that surface, and a system-drawn button shows it as the platform's
-    matching button style. On both, the native theme's `material` member
-    decides how the surface looks (`spec:AST-082` FR10).
-  - The public API expresses glass and materials through component props
-    (`surface` and presentation) and through native theme intent in
-    `defineNativeTheme`, with `platforms.ios` and `platforms.android`
-    entries. No public JavaScript glass
-    or material component exists. The platform layer keeps native glass and
-    material components as internal implementation: on iOS the system's glass,
-    and on Android a drawn or Material surface.
-
 - **FR23 — NavigationStack starts in the lab.** The React Native
   `NavigationStack`, with `Screen`, `useScreenScrollProps()`, and the stack
   navigator, starts in the package's lab folder, `packages/react-native/lab/`,
@@ -513,13 +457,10 @@ shared icon names under FR17.
   support point there.
 - The package's `./unstable/*` names are experimental under `spec:AST-017`
   FR21 and FR22 (FR5).
-- The group records `spec:AST-123` to `spec:AST-132` and `spec:AST-135`
-  detail FR3's linking and
-  FR7's shape for each group of the platform (FR7).
 - `spec:AST-082` DEC-2 gains one sentence, with **Decider:** cixzhang,
   2026-11-18: `surface` on `Button` and `IconButton` is a situational,
   per-call-site appearance choice, and the look of that surface stays the
-  native theme's `material` member (FR21).
+  native theme's `material` member.
 - `spec:AST-082` DEC-7's existing sentence on where the React Native
   candidate's native code lives names its home: the platform layer of
   `@astryxdesign/react-native` (`spec:AST-112` FR1, FR4), and the shared
@@ -552,10 +493,8 @@ shared icon names under FR17.
 | FR11     | The sample app built with `astryx rn shell` projects, with Expo's prebuild through `@astryxdesign/react-native-expo`, and with an app's own projects; a launch test per platform of the calls to the core's app-lifecycle entry; a source check of the core for Expo types and Expo modules API                                                                                                    | the sample with every capability opted in; each build system                                                                                                                                                                                         | A build that needs a manual native edit, one build system that writes declarations or lifecycle calls the others do not, `@astryxdesign/react-native` requiring an Expo library or holding Expo types or Expo modules API, native code or behavior in the Expo package beyond its plugin and declaration JSON, or a lifecycle entry that is not called at launch                                                                                                                                                                                                                                                                                                |
 | FR14     | Canary and release-candidate dry run                                                                                                                                                                                                                                                                                                                                                               | a release of the package set                                                                                                                                                                                                                         | A release without a changelog or the tarball's hash, a capability versioned apart, a package of the set on another version, or a release candidate or canary that carries a version other than the package's own                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | FR15     | Review of each native change's evidence; documentation drift check                                                                                                                                                                                                                                                                                                                                 | a native behavior change; a renamed API                                                                                                                                                                                                              | A native claim backed only by a build or by anything other than the Simulator, the emulator, or a device, or documentation that no longer matches                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| FR18     | Gesture tests on the Simulator, the emulator, and devices, beside a second gesture library                                                                                                                                                                                                                                                                                                         | an Astryx recognizer beside a react-native-gesture-handler recognizer; a busy JavaScript thread                                                                                                                                                      | A relationship that cannot be declared, an Astryx recognizer that does not follow a declared relationship, or a gesture that waits on JavaScript                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | FR19     | VoiceOver and TalkBack checks on devices; runs at the largest text size and with reduced motion                                                                                                                                                                                                                                                                                                    | each native host and control                                                                                                                                                                                                                         | A missing name, role, state, or announcement, a wrong focus order, a target below the platform minimum, text that ignores the text-size setting, or motion that ignores reduced motion                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | FR20     | Dependency check of every Astryx component and `create` template; a generated app, an Expo app, and an app with its own native projects built with the core only; the build's size table                                                                                                                                                                                                           | each component and template; each of the three kinds of app; each capability                                                                                                                                                                         | A component or template that needs a third-party library, a native capability in the package that no Astryx component or template uses, app-shell pieces in an app with its own native projects or missing from a generated app, or a size table that lacks a capability                                                                                                                                                                                                                                                                                                                                                                                        |
-| FR21     | `exports` map check; a capture of each `surface` value on `Button` and `IconButton` on both platforms; a theme with `platforms.ios` and `platforms.android` glass intent on both platforms                                                                                                                                                                                                         | each `surface` value on `Button` and `IconButton`, drawn and system-drawn; a native theme `material` entry                                                                                                                                           | A public JavaScript glass or material component, a drawn button that ignores its `surface`, a system-drawn button whose platform style does not match its `surface`, a surface whose look ignores the theme's `material`, or a look that the props and the native theme cannot express                                                                                                                                                                                                                                                                                                                                                                          |
 | FR23     | Review of where `NavigationStack`, `Screen`, `useScreenScrollProps()`, and the stack navigator are exported; the CI lane of a pull request that changes the lab folder                                                                                                                                                                                                                             | each of the four names; a pull request that changes only `packages/react-native/lab/`; web's `NavigationStack` leaving Lab                                                                                                                           | One of the four names in a stable entry while web's `NavigationStack` is in Lab, one outside `./unstable/*` while in the lab, or a lab pull request on the Lab-only lane                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | DEC-10   | A source check that every `Intl` read has a fallback; Avatar initials rendered under a runtime without `Intl`                                                                                                                                                                                                                                                                                      | each `Intl` read in the package's own code; a name with combining marks and an emoji; a number and a plural formatted without `Intl`                                                                                                                 | An `Intl` read without a fallback, a component that does not render or work without `Intl`, initials without `Intl` that differ from `component:Avatar` FR3's, or a global `Intl` polyfill                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | FR11     | A development-warning test under an unsupported `Platform.OS`                                                                                                                                                                                                                                                                                                                                      | `Platform.OS` set to `macos` and to `windows`                                                                                                                                                                                                        | No warning, more than one warning, a warning that does not name the platform, or an icon or chart that draws empty without a warning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
@@ -651,7 +590,7 @@ work inside it, and the app keeps that router's own navigation, chrome, and
 behavior.
 
 Astryx owns its own recognizers and measures its own insets, and Astryx
-components work beside third-party libraries in the same app (FR2, FR18,
+components work beside third-party libraries in the same app (FR2,
 `spec:AST-140/FR9`).
 
 ### DEC-10 — Importing the package changes no globals

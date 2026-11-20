@@ -32,8 +32,8 @@ parts are engine-specific and which are engine-neutral, how engines bind native
 code through its seam, and how Astryx's native code sits beside the native code
 of other libraries in the same app.
 
-A contributor who writes a native piece for any group of the platform
-(`spec:AST-112/FR7`) follows these rules, and a reviewer checks a native change
+A contributor who writes a native piece for any group of the platform follows
+these rules, and a reviewer checks a native change
 against them. An app reaches the platform through its JavaScript API
 (`spec:AST-112/FR5`).
 
@@ -47,39 +47,17 @@ for these interfaces is set when the package leaves the canary channel
 `spec:AST-112` describes the React Native foundation in terms that hold for any
 JavaScript engine React Native hosts. The platform's native code follows more
 specific rules: the binding to React Native, the shape of every message across
-it, threads, tests, and the native seam. Every platform group record follows
-the same rules, so they live once, here.
+it, threads, tests, and the native seam. Every native piece of the platform
+follows the same rules, so they live once, here.
 
 ## Related records
 
-- Each native piece's methods, props, events, and reasons: its group record
-  (below).
 - The JavaScript API an app calls, its entries, and its capability shape:
   `spec:AST-112/FR5` and `spec:AST-112/FR7`.
 - Which capabilities link by default and which an app opts in, and how
   linking relates to the app's build settings: `spec:AST-112/FR3`.
 - Packages outside the core that carry native code, their roles, the host
   interface, and the version pin: `spec:AST-112/FR4`.
-
-## Platform group records
-
-Each group record specifies its own native pieces and follows this record for
-the rules above. `spec:AST-112/FR3` says which pieces link in every app and
-which an app opts in, and `spec:AST-112/FR7` lists the groups.
-
-| Record         | Group                                             |
-| -------------- | ------------------------------------------------- |
-| `spec:AST-123` | Surfaces and glass                                |
-| `spec:AST-124` | Gestures and drag                                 |
-| `spec:AST-125` | Navigation hosts                                  |
-| `spec:AST-126` | Native controls                                   |
-| `spec:AST-127` | Icons and drawing                                 |
-| `spec:AST-128` | Menus and presentation                            |
-| `spec:AST-129` | Layout, text, and keyboard                        |
-| `spec:AST-130` | System modules, the platform info module included |
-| `spec:AST-131` | Web                                               |
-| `spec:AST-132` | Media and camera                                  |
-| `spec:AST-135` | Photos                                            |
 
 ## Non-goals
 
@@ -173,8 +151,8 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
     the method's own argument after its request object (FR3), such as bytes
     an app hands over for analysis.
   - Bytes that native code produces cross as a `file:` URI to a file in the
-    core's cache, which stays there until the system reclaims the cache
-    (`spec:AST-130/FR14`). A short, fixed-size value, such as a block of
+    core's cache, which stays there until the system reclaims the cache. A
+    short, fixed-size value, such as a block of
     random bytes, crosses as a base64 string.
   - Bytes of any size cross in both directions: native code reads an
     `ArrayBuffer` in place and writes what it produces to the file.
@@ -195,8 +173,8 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
     `<Contract>.<feature>`. Each contract's named features live in one list,
     the contract's own; the binary's report, the typed names below, and the
     documentation all come from it.
-  - The binary reports the features it has through the platform info module
-    (`spec:AST-130`), on both platforms with the same name, with
+  - The binary reports the features it has through the platform info module,
+    on both platforms with the same name, with
     `isSupported` false and a note on a platform that lacks one.
   - The package's public API reads the features a binary implements:
     `contractFeatures(contract)`, exported from the package's main entry `.`,
@@ -351,7 +329,7 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
     category, holds while that piece is active, and the piece's group record
     names it.
   - It observes system notifications and passes them on, and its gesture
-    recognizers join each platform's arbitration (`spec:AST-112/FR18`) within
+    recognizers join each platform's arbitration within
     Astryx's views.
   - Native code calls public platform API (DEC-9). Where a
     group record names an exception, the binary reports a self-check for it
@@ -480,8 +458,6 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
   features, the registration of the core and each capability, how native
   modules and views reach JavaScript, the native-layer conformance tests, and
   the split between engine-specific and engine-neutral code.
-- Every platform group record listed above follows this record and adds its
-  own pieces.
 - The package's contributor documentation for native code states these rules.
 
 ## Verification
