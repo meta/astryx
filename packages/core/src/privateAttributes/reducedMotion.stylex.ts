@@ -3,12 +3,15 @@
  * @file privateAttributes/reducedMotion.stylex.ts
  * @input Whether a theme reduces motion for everyone
  * @output reducedMotionMarkProps and setRootReducedMotionMark, which write the
- *   mark, and themeReducesMotion, which reads it
+ *   mark, themeReducesMotion, which reads it, and ThemeReducesMotionContext,
+ *   the same fact for a hook that holds no element
  * @position Owner module of the private reduced-motion attribute: the only
  *   file that writes its name. Theme marks its root, and the root theme marks
  *   `<html>`; the animator, reducedMotionFade and the layout glide read it as
  *   the person's Reduce Motion setting. No package entry exports it.
  */
+
+import {createSharedContext} from '../utils/sharedContext';
 
 const REDUCED_MOTION = 'data-astryx-reduced-motion';
 
@@ -43,3 +46,17 @@ export function themeReducesMotion(
 ): boolean {
   return element?.closest?.(`[${REDUCED_MOTION}]`) != null;
 }
+
+/**
+ * True under a theme with `reducedMotion: 'always'` and under every theme
+ * nested in one: the mark only adds, so a nested theme does not take it away.
+ * Theme provides it beside the DOM mark; useReducesMotion reads it for a hook
+ * that holds no element. It lives here, beside the mark, so the motion
+ * foundation reads it without loading a theme or a StyleX module.
+ */
+export const ThemeReducesMotionContext = createSharedContext<boolean>(
+  'ThemeReducesMotionContext',
+  1,
+  false,
+);
+ThemeReducesMotionContext.displayName = 'ThemeReducesMotionContext';

@@ -63,7 +63,6 @@ import {
   ThemeSourceContext,
   createThemeSource,
   ThemeModeContext,
-  ThemeReducesMotionContext,
   useRootScheme,
 } from './useTheme';
 import {warnOnce} from '../utils/devWarning';
@@ -71,6 +70,7 @@ import {REDUCED_MOTION_PROPERTY, resolveMotionKnobs} from './themeMotion';
 import {
   reducedMotionMarkProps,
   setRootReducedMotionMark,
+  ThemeReducesMotionContext,
 } from '../privateAttributes/reducedMotion.stylex';
 import {setRootScheme} from '../privateAttributes/scheme';
 import {createSharedContext} from '../utils/sharedContext';

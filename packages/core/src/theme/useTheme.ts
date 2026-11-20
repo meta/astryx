@@ -142,20 +142,6 @@ export const SystemSchemeContext = createSharedContext<'root' | 'preference'>(
 );
 SystemSchemeContext.displayName = 'SystemSchemeContext';
 
-/**
- * True under a theme with `reducedMotion: 'always'` and under every theme
- * nested in one: the mark only adds, so a nested theme does not take it away.
- * Theme provides it; useReducesMotion reads it for a hook that holds no
- * element. Code that holds an element reads the DOM mark instead.
- * @internal Not exported from the theme barrel.
- */
-export const ThemeReducesMotionContext = createSharedContext<boolean>(
-  'ThemeReducesMotionContext',
-  1,
-  false,
-);
-ThemeReducesMotionContext.displayName = 'ThemeReducesMotionContext';
-
 // =============================================================================
 // Return type
 // =============================================================================
