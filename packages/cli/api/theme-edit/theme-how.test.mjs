@@ -210,9 +210,10 @@ const QUESTIONS = [
     {
       parts: ['app-shell-header'],
       aspects: ['text'],
-      // The title and items inside read the text tokens themselves.
-      top: /^set q --color-text-primary '#ffffff' --on app-shell-header/,
-      adds: /app-shell-header\.base\.--color-text-primary=#ffffff/,
+      // The title and items inside read the text tokens themselves; white
+      // reads on the header in dark mode only (it is light in light mode).
+      top: /^set q --color-text-primary '#ffffff' --on app-shell-header --mode dark/,
+      adds: /app-shell-header\.base\.@dark\.--color-text-primary=#ffffff/,
     },
   ],
   [
@@ -314,7 +315,49 @@ const QUESTIONS = [
       adds: /button\.variant:\w+\.@(light|dark)\.:hover\./,
     },
   ],
-  ['table rows striped', {parts: ['table-row'], top: null}],
+  // Table rows carry their stripe (parity) in Core: a stripe ask sets it.
+  [
+    'table rows striped',
+    {
+      parts: ['table-row'],
+      top: /^set q background-color 'var\(--color-background-muted\)' --on table-row --when parity:even$/,
+      adds: /table-row\.parity:even\.backgroundColor=var\(--color-background-muted\)/,
+    },
+  ],
+  [
+    'odd rows light gray #f9f9f9',
+    {
+      parts: ['table-row'],
+      // (The odd stripe, and Core's own even stripe of a striped table
+      // cleared, run in order.)
+      top: /^set q background-color '#f9f9f9' --on table-row --when parity:odd --mode light && set q background-color transparent --on table-row --when parity:even --state striped --mode light$/,
+      adds: /table-row\.parity:odd\.@light\.backgroundColor=#f9f9f9/,
+    },
+  ],
+  // The stripes' plain names come from the doc of the prop that turns them
+  // on (Table's isStriped).
+  [
+    'alternate row shading',
+    {
+      parts: ['table-row'],
+      top: /^set q background-color 'var\(--color-background-muted\)' --on table-row --when parity:even$/,
+    },
+  ],
+  [
+    'shade every other row',
+    {
+      parts: ['table-row'],
+      top: /^set q background-color 'var\(--color-background-muted\)' --on table-row --when parity:even$/,
+    },
+  ],
+  [
+    'no stripes on even rows',
+    {
+      parts: ['table-row'],
+      top: /^set q background-color transparent --on table-row --when parity:even$/,
+      adds: /table-row\.parity:even\.backgroundColor=transparent/,
+    },
+  ],
   [
     'table header gray background',
     {
@@ -778,6 +821,82 @@ const QUESTIONS = [
   ],
   ['modern', {top: null}],
 ];
+
+describe("a stripe is only a table row's", () => {
+  // "even", "odd" and the stripes' plain names ("alternate") mean a stripe
+  // only on a part whose rows carry one.
+  it.each([
+    'make the card background even lighter',
+    'card background an even gray',
+    'alternate button background',
+  ])('%s', async question => {
+    const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+    const commands = (data.results ?? []).flatMap(
+      (/** @type {{commands: string[]}} */ r) => r.commands,
+    );
+    expect(commands.join('\n')).not.toMatch(/--on table-row|--when parity:/);
+  });
+});
+
+describe('stripe answers keep to the stripe', () => {
+  /** @param {string} question */
+  const commandsFor = async question => {
+    const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+    return (data.results ?? [])
+      .flatMap((/** @type {{commands: string[]}} */ r) => r.commands)
+      .join('\n');
+  };
+  // A hover cleared beside a one-mode fill clears in every mode: only a
+  // stripe's other stripe follows the stripe's mode.
+  it.each([
+    'white cards, transparent on hover',
+    'white cards, hover background none',
+  ])('%s', async question => {
+    expect(await commandsFor(question)).toMatch(
+      /--on card --state hover(?! --mode)/,
+    );
+  });
+  it('keeps a stripe removal the ask says in every mode', async () => {
+    const commands = await commandsFor(
+      'odd rows #f9f9f9 and no stripes on even rows',
+    );
+    expect(commands).toMatch(
+      /--when parity:even(?! --state)(?! --mode)(?:\s|$)/,
+    );
+  });
+  // A stripe name beside another ask of the rows is that ask's.
+  it.each([
+    'alternate table row text color red',
+    'table rows alternate text color',
+  ])('writes no stripe for %s', async question => {
+    expect(await commandsFor(question)).not.toMatch(
+      /parity:|--color-background-muted|background/,
+    );
+  });
+  // A stripe removal names the hover it takes away, as a stripe does.
+  it.each(['no stripes on even rows', 'odd rows light gray #f9f9f9'])(
+    'names the hover cost for %s',
+    async question => {
+      const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+      expect(data.results[0].text).toMatch(/hover/);
+    },
+  );
+  it("reads a stripe ask that names no part as a table row's", async () => {
+    expect(await commandsFor('zebra stripes')).toMatch(
+      /--on table-row --when parity:even/,
+    );
+  });
+  it('reads "odd table rows" as the odd stripe', async () => {
+    expect(await commandsFor('odd table rows #fafafa')).toMatch(
+      /'#fafafa' --on table-row --when parity:odd/,
+    );
+  });
+  it('never darkens the even stripe for "odd rows darker"', async () => {
+    expect(await commandsFor('odd rows darker background')).not.toMatch(
+      /parity:even|--color-background-muted/,
+    );
+  });
+});
 
 describe('how answers plain-words questions', () => {
   for (const [question, want] of QUESTIONS)
@@ -2019,7 +2138,8 @@ const QUESTIONS_F = [
   ],
   [
     'page should be off-white',
-    {top: /^set q --color-background-body '#fafafa' --mode light$/},
+    // (Off-white is a warm off-white.)
+    {top: /^set q --color-background-body '#faf8f3' --mode light$/},
   ],
   ['headings are way too big', {top: /^set q type compact$/}],
   [

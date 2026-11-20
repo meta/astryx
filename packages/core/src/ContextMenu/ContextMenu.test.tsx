@@ -293,6 +293,41 @@ describe('ContextMenu', () => {
     expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
   });
 
+  it('names the sheet after a node-label submenu while its level shows', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ContextMenu
+        presentation="bottom-sheet"
+        label="Row actions"
+        items={[
+          {
+            label: (
+              <>
+                <em>Move</em> to project
+              </>
+            ),
+            items: [{label: 'Apollo launch'}],
+          },
+        ]}>
+        <div>Right-click me</div>
+      </ContextMenu>,
+    );
+
+    fireEvent.contextMenu(screen.getByText('Right-click me'));
+    await user.click(
+      await screen.findByRole('button', {name: /Move to project/}),
+    );
+    expect(
+      screen.getByRole('dialog', {name: 'Move to project'}),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', {name: 'Back'}));
+    expect(
+      screen.getByRole('dialog', {name: 'Row actions'}),
+    ).toBeInTheDocument();
+  });
+
   it('drills into nested data items inside the BottomSheet', async () => {
     const user = userEvent.setup();
     const onMove = vi.fn();

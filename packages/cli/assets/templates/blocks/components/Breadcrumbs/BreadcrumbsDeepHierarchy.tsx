@@ -4,7 +4,7 @@
 
 import {Breadcrumbs, BreadcrumbItem} from '@astryxdesign/core/Breadcrumbs';
 import {Icon} from '@astryxdesign/core/Icon';
-import {HomeIcon} from '@heroicons/react/24/outline';
+import {HomeIcon} from '@astryxdesign/template-icons';
 
 export default function BreadcrumbsDeepHierarchy() {
   return (

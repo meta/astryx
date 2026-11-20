@@ -31,7 +31,10 @@ describe('init.remove acts where init writes, the project root, and in the folde
     expect(written.data.docsWritten).toEqual(['../../AGENTS.md', '../../GEMINI.md']);
 
     const r = await remove({cwd: sub});
-    expect(r).toEqual({type: 'init.remove', data: {removed: true}});
+    expect(r).toEqual({
+      type: 'init.remove',
+      data: {removed: true, from: ['agents-md'], skills: [], user: null},
+    });
     // Both files held only what init wrote, so they are deleted.
     expect(fs.existsSync(path.join(project, 'AGENTS.md'))).toBe(false);
     expect(fs.existsSync(path.join(project, 'GEMINI.md'))).toBe(false);
@@ -82,7 +85,10 @@ describe('init.remove acts where init writes, the project root, and in the folde
         logger.setSilent(true);
         warn.mockRestore();
       }
-      expect(r).toEqual({type: 'init.remove', data: {removed: true}});
+      expect(r).toEqual({
+      type: 'init.remove',
+      data: {removed: true, from: ['agents-md'], skills: [], user: null},
+    });
       expect(fs.readFileSync(path.join(web, 'AGENTS.md'), 'utf8').trimEnd()).toBe('# Web');
       expect(fs.readFileSync(path.join(sub, 'AGENTS.md'), 'utf8').trimEnd()).toBe('# Src');
       // The file outside the project keeps its block.

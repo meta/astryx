@@ -505,6 +505,7 @@ function stoppedReceipt({
       files: [],
       refreshed: false,
       action: 'none',
+      skills: [],
     },
     sourcePathFound,
     filesChanged: modifiedFiles.length,
@@ -783,6 +784,7 @@ export async function run(options = {}, {cwd = process.cwd(), origin} = {}) {
             files: [],
             refreshed: false,
             action: 'none',
+            skills: [],
           },
           sourcePathFound,
           filesChanged: coreResult?.totalFilesChanged ?? 0,
@@ -835,6 +837,7 @@ export async function run(options = {}, {cwd = process.cwd(), origin} = {}) {
             files: inspection.staleFiles,
             refreshed: false,
             action: inspection.status === 'missing' ? 'nudge-init' : 'none',
+            skills: [],
           }),
       });
     }
@@ -960,6 +963,7 @@ export async function run(options = {}, {cwd = process.cwd(), origin} = {}) {
       files: [],
       refreshed: false,
       action: 'none',
+      skills: [],
     }),
     // A missing source directory is the one way this command can migrate
     // nothing and still look complete: every codemod is skipped, filesChanged

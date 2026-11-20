@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'folder',
+  group: 'folders',
   description: 'A folder or collection.',
   words: ['directory', 'collection'],
 };

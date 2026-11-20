@@ -2,14 +2,26 @@
 
 Core UI components, theme system, and utilities for the Astryx design system. For project setup, see [Quick Start](#quick-start) below.
 
-> **Building with an AI agent?** Add the CLI, then run `init`:
+> **Setup is install, then `init`.** Add the CLI at Core's version and run `init` once, before you write UI:
 >
 > ```bash
-> npm install -D @astryxdesign/cli   # or: pnpm add -D / yarn add -D / bun add -d
-> npx @astryxdesign/cli init         # the CLI you just installed
+> npm install -D -E @astryxdesign/cli@<core version>   # or: pnpm add -D -E / yarn add -D -E / bun add -d --exact
+> npx @astryxdesign/cli init                           # asks no questions
 > ```
 >
-> `init` writes the Astryx component index into your `AGENTS.md`/`CLAUDE.md` so your agent discovers components, templates, and design tokens instead of guessing. Need a single command without installing? The same scoped command works: `npx @astryxdesign/cli <cmd>`. Always use the scoped name: the unscoped `astryx` resolves to an unrelated npm package until `@astryxdesign/cli` is a dependency. See [XDS CLI](#xds-cli).
+> Use the version of `@astryxdesign/core` you have. Keep `-E` when `package.json` pins Core exactly, as the starters do; leave it out when Core has a `^` or `~` range.
+>
+> `init` prints the getting-started steps (styles, theme) and saves the Astryx guide to your `AGENTS.md`/`CLAUDE.md`: components, templates, and design tokens, so any agent working in the project builds with Astryx instead of guessing. Read it before you write UI. Always use the scoped name: the unscoped `astryx` resolves to an unrelated npm package until `@astryxdesign/cli` is a dependency. See [Astryx CLI](#astryx-cli).
+
+> **Building with an AI agent?** Ask the Astryx CLI before you write code. These commands work with or without the install above:
+>
+> ```bash
+> npx @astryxdesign/cli build "<what you are building>"   # the template, blocks and components to start from
+> npx @astryxdesign/cli component <Name>                  # one component's props, variants and examples
+> npx @astryxdesign/cli doctor --built .                  # checks the setup and the code you wrote
+> ```
+>
+> The `.doc.mjs` files in this package are only part of what the CLI knows: it also has page templates, blocks and checks that no source file shows.
 
 ## Component Docs
 
@@ -31,7 +43,7 @@ panel slots into common page patterns (dashboards, settings, forms, detail pages
 Wrap them in your own app chrome (`AppShell`, `TopNav`, `SideNav`) to add
 global navigation.
 
-Requires `@astryxdesign/cli` (`npm install -D @astryxdesign/cli`):
+Requires `@astryxdesign/cli` at Core's version: `npm install -D -E @astryxdesign/cli@<core version>` (leave out `-E` when Core has a `^` or `~` range).
 
 ```bash
 astryx template --list              # browse all page and block templates
@@ -77,27 +89,30 @@ astryx gap-report                   # report a missing capability
 
 Astryx requires **React 19** or later (`react` and `react-dom` >= 19.0.0 are peer dependencies).
 
-Install Astryx and a theme:
+Install Astryx, a theme, and the CLI, then run `init` once:
 
 ```bash
 npm install @astryxdesign/core @astryxdesign/theme-neutral @stylexjs/stylex
+npm install -D @astryxdesign/cli
+npx @astryxdesign/cli init   # prints the getting-started steps; saves the Astryx guide to AGENTS.md
 ```
 
-Then pick your setup below based on your framework and styling approach.
+Then pick your setup below based on your framework and styling approach. The setup you pick wires the theme, so it replaces the theme step `init` prints.
 
 ### Next.js (simplest)
 
-The fastest way to get started. No build plugins, no PostCSS, no Babel config — Astryx ships pre-built CSS and JS, so you import three stylesheets (order matters) and wrap your app in a theme provider.
+The fastest way to get started. No build plugins, no PostCSS, no Babel config — Astryx ships pre-built CSS and JS, so you import four stylesheets (order matters) and wrap your app in a theme provider.
 
 **`src/app/globals.css`**
 
 ```css
+@import '@astryxdesign/theme-neutral/fonts.css';
 @import '@astryxdesign/core/reset.css';
 @import '@astryxdesign/core/astryx.css';
 @import '@astryxdesign/theme-neutral/theme.css';
 ```
 
-The import order maps to the layer cascade: `reset.css` (`@layer reset`) → `astryx.css` component styles (`@layer astryx-base`) → `theme.css` token overrides (`@layer astryx-theme`).
+The import order maps to the layer cascade: `reset.css` (`@layer reset`) → `astryx.css` component styles (`@layer astryx-base`) → `theme.css` token overrides (`@layer astryx-theme`). `fonts.css` loads the theme's fonts: `@font-face` rules for font files the theme package ships, so the page requests nothing outside your app. Without it the page falls back to the system font stack.
 
 **`src/app/providers.tsx`**
 
@@ -146,6 +161,7 @@ This `globals.css` is the whole file for a new app. For an app that already uses
 ```css
 @layer reset, theme, base, astryx-base, astryx-theme, components, utilities;
 
+@import '@astryxdesign/theme-neutral/fonts.css';
 @import 'tailwindcss/theme.css' layer(theme);
 @import 'tailwindcss/preflight.css' layer(base);
 @import '@astryxdesign/core/reset.css';
@@ -239,6 +255,7 @@ npm install @astryxdesign/core @astryxdesign/theme-neutral @stylexjs/stylex
 **`src/app/globals.css`**
 
 ```css
+@import '@astryxdesign/theme-neutral/fonts.css';
 @import '@astryxdesign/core/reset.css';
 @import '@astryxdesign/core/astryx.css';
 @import '@astryxdesign/theme-neutral/theme.css';

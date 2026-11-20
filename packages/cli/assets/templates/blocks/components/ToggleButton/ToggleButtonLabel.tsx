@@ -11,8 +11,8 @@ import {
   EyeIcon,
   EyeSlashIcon,
   FunnelIcon,
-  MapPinIcon,
-} from '@heroicons/react/24/outline';
+  LocationIcon,
+} from '@astryxdesign/template-icons';
 
 export default function ToggleButtonLabel() {
   const [isVisible, setIsVisible] = useState(true);
@@ -53,7 +53,7 @@ export default function ToggleButtonLabel() {
           <ToggleButton
             value="nearby"
             label="Nearby"
-            icon={<Icon icon={MapPinIcon} />}>
+            icon={<Icon icon={LocationIcon} />}>
             Nearby
           </ToggleButton>
         </ToggleButtonGroup>

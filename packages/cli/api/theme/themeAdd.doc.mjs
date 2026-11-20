@@ -11,7 +11,7 @@ export const doc = {
   displayName: 'themeAdd()',
   summary: 'Add a built theme to the app.',
   description:
-    'Records a package or built local theme and regenerates the app theme module with its built module and stylesheets. options.import is an accepted compatibility no-op, as is options.overwrite set to false. Passing targetPath or options.overwrite set to true fails before writing and names themeEject, which owns source copying.',
+    "Records a package or built local theme and regenerates the app theme module with its built module and stylesheets. Given a shared theme instead of a slug (a path to its folder, a .tgz archive of it, or an https URL to a .tgz), it first copies the one theme folder in it into the local themes root (src/themes/<name>), installs the @astryxdesign packages the theme imports that the app lacks with the app's package manager, install scripts off (any other package it imports is named with its install command, never installed), and records the theme as the default; the receipt carries data.copy, with every file written and the record and dependencies changed. Nothing of the theme runs, so a theme shared without its built module is refused. A folder another theme holds, or a shared copy with files changed since, is refused (the same shared theme over its own unchanged copy is replaced), as are an unreadable archive, a link or an outside path in it, and a source with no theme folder or more than one. options.import is an accepted compatibility no-op, as is options.overwrite set to false. Passing targetPath or options.overwrite set to true fails before writing and names themeEject, which owns source copying.",
   importPath: '@astryxdesign/cli/api',
   signature:
     'themeAdd(slug: string, options?: {targetPath?: string, overwrite?: boolean, import?: boolean, cwd?: string, package?: string}): Promise<ThemeAppResponse>',
@@ -20,7 +20,8 @@ export const doc = {
     {
       name: 'slug',
       type: 'string',
-      description: 'Slug of the available theme.',
+      description:
+        'Slug of the available theme, or a shared theme: a path to its folder, a .tgz archive of it, or an https URL to a .tgz.',
       required: true,
     },
     {
