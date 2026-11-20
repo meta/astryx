@@ -488,7 +488,7 @@ describe('recentFailedInstall', () => {
 });
 
 describe('ensureRelease after a failed install (FR2)', () => {
-  it('does not start npm again for a release whose install just failed', () => {
+  it('does not install again for a release whose install just failed', () => {
     const cacheDir = tempDir('cache');
     const first = fakeNpm({outcome: 'offline'});
     const failed = ensureRelease('0.6.8', {cacheDir, run: first.run});
