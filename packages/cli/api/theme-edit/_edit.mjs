@@ -6591,7 +6591,9 @@ async function changeOnce(
     const at = data.settings.map(x => keyOf(x)).lastIndexOf(keyOf(side));
     if (
       at >= 0 &&
-      JSON.stringify(data.settings[at]) === JSON.stringify(side) &&
+      // (By what is saved: a note the side's check adds is no change.)
+      JSON.stringify(savedSetting(data.settings[at])) ===
+        JSON.stringify(savedSetting(side)) &&
       !data.settings
         .slice(at + 1)
         .some(

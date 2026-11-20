@@ -38,6 +38,7 @@ import {
   takesPercentage,
   sameKindValues,
   unitsJoined,
+  sidesOf,
 } from './_css.mjs';
 import {
   calcVars,
@@ -293,25 +294,32 @@ export const setLine = (slug, thing, value, s, unset = false) =>
  */
 function boxSides(prop, v) {
   if (prop !== 'padding' && prop !== 'margin') return null;
-  const w = splitTop(v.trim(), ' ').filter(Boolean);
-  if (w.length < 2 || w.length > 4) return null;
-  if (new Set(w).size === 1 && oneLength(w[0])) return [['', w[0]]];
-  return w.length === 2
+  const n = splitTop(v.trim(), ' ').filter(Boolean).length;
+  // (The shorthand rules split the value, as every other reader of a box
+  // shorthand's sides does.)
+  const sides = n >= 2 ? sidesOf(prop, v) : null;
+  if (!sides) return null;
+  const [top, right, bottom, left] = ['top', 'right', 'bottom', 'left'].map(
+    side => sides[`${prop}-${side}`],
+  );
+  if (top === right && right === bottom && bottom === left && oneLength(top))
+    return [['', top]];
+  return n === 2
     ? [
-        ['block', w[0]],
-        ['inline', w[1]],
+        ['block', top],
+        ['inline', right],
       ]
-    : w.length === 3
+    : n === 3
       ? [
-          ['top', w[0]],
-          ['inline', w[1]],
-          ['bottom', w[2]],
+          ['top', top],
+          ['inline', right],
+          ['bottom', bottom],
         ]
       : [
-          ['top', w[0]],
-          ['right', w[1]],
-          ['bottom', w[2]],
-          ['left', w[3]],
+          ['top', top],
+          ['right', right],
+          ['bottom', bottom],
+          ['left', left],
         ];
 }
 

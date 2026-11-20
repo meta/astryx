@@ -396,4 +396,38 @@ describe('a padding of several lengths where only one works', () => {
     },
     T,
   );
+
+  it(
+    'adds no undo step for a repeat whose later side carries a note',
+    async () => {
+      await set('4px var(--spacng-3, 8px)');
+      await themeEditSet('t', 'padding', '6px', {
+        cwd,
+        on: 'segmented-control',
+      });
+      const notes = (await set('4px var(--spacng-3, 8px)')).join('\n');
+      expect(notes).not.toMatch(/undo t takes back/);
+      expect(saved()).toEqual([
+        'padding-block 4px',
+        'padding-inline var(--spacng-3, 8px)',
+        'padding 6px',
+      ]);
+      await themeEditUndo('t', {cwd});
+      await themeEditUndo('t', {cwd});
+      expect(saved()).toEqual([]);
+    },
+    T,
+  );
+
+  it(
+    'does not split a padding marked important into sides',
+    async () => {
+      await set('5px 0 !important').catch(() => null);
+      expect(
+        saved().some(x => /^padding-(top|bottom|block|inline)/.test(x)),
+      ).toBe(false);
+      while (saved().length) await themeEditUndo('t', {cwd});
+    },
+    T,
+  );
 });
