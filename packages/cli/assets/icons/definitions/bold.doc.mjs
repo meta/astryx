@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'bold',
+  group: 'textFormat',
   description: 'Bold text.',
   words: ['strong', 'text format'],
 };

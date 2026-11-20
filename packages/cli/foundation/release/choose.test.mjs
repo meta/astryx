@@ -412,6 +412,45 @@ describe('isComputerLevel', () => {
     expect(isComputerLevel(['docs', 'init', '--user'])).toBe(false);
   });
 
+  it('is init --to naming the computer alone', () => {
+    expect(isComputerLevel(['init', '--to', 'user'])).toBe(true);
+    expect(isComputerLevel(['--json', 'init', '--to=user'])).toBe(true);
+    expect(isComputerLevel(['init', '--to', 'user', '--to', 'user'])).toBe(true);
+    expect(isComputerLevel(['init', '--to', 'user,skills'])).toBe(false);
+    expect(isComputerLevel(['init', '--to', 'skills'])).toBe(false);
+  });
+
+  it('is init --to naming only folders outside the project it runs in', () => {
+    const project = tempDir();
+    fs.writeFileSync(
+      path.join(project, 'package.json'),
+      JSON.stringify({name: 'app', dependencies: {'@astryxdesign/core': '*'}}),
+    );
+    const outside = tempDir();
+    const run = (/** @type {string} */ to) => isComputerLevel(['init', '--to', to], project);
+    expect(run('~/team-skills')).toBe(true);
+    expect(run(path.join(outside, 'skills'))).toBe(true);
+    expect(run(`user,${outside}`)).toBe(true);
+    expect(run('./team')).toBe(false);
+    // A project folder linked outside the project is still the project's
+    // place, as init reads it (which refuses it).
+    fs.symlinkSync(outside, path.join(project, 'linked-out'), 'dir');
+    expect(run('./linked-out')).toBe(false);
+    expect(run('.')).toBe(false);
+    expect(run(path.join(project, 'nested'))).toBe(false);
+    expect(run('user,skills')).toBe(false);
+    expect(run(`${outside},agents-md`)).toBe(false);
+    // A feature beyond the agent docs writes into the project.
+    const withArgs = (/** @type {string[]} */ extra) =>
+      isComputerLevel(['init', '--to', '~/team-skills', ...extra], project);
+    expect(withArgs(['--all'])).toBe(false);
+    expect(withArgs(['--features', 'agents,theme'])).toBe(false);
+    expect(withArgs(['--features=template'])).toBe(false);
+    expect(withArgs(['--features', 'agents'])).toBe(true);
+    // Outside any project every folder is the computer's.
+    expect(isComputerLevel(['init', '--to', './team'], tempDir())).toBe(true);
+  });
+
   it('is docs global and its pages, whatever the options', () => {
     expect(isComputerLevel(['docs', 'global'])).toBe(true);
     expect(isComputerLevel(['--json', 'docs', 'global/problems'])).toBe(true);

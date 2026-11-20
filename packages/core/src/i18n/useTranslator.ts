@@ -4,7 +4,7 @@
 
 /**
  * @file useTranslator.ts
- * @input InternationalizationContext (via use())
+ * @input InternationalizationContext from translatingContext (via use())
  * @output Exports useTranslator hook returning a stable translator function
  * @position Client-side hook for translating outside of render (event handlers,
  *   effects, non-component code) while still resolving against the current
@@ -21,10 +21,11 @@
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/i18n/index.ts
  * - /packages/core/src/i18n/useComponentTranslator.ts
+ * - /packages/core/src/i18n/translatingContext.ts
  */
 
 import {use} from 'react';
-import {InternationalizationContext} from './InternationalizationContext';
+import {InternationalizationContext} from './translatingContext';
 import {registerFullEnglishFallback} from './fullEnglishFallback';
 
 registerFullEnglishFallback();

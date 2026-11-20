@@ -57,6 +57,11 @@ import {
   type AnimatedLayout,
   type LayoutChange,
 } from '../motion/animatedLayout';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 /**
  * The clip a tree with no handle takes while it moves. Rows that glide up into
@@ -291,6 +296,13 @@ export function TreeList({
   animatedLayout: animatedLayoutProp,
   ...restProps
 }: TreeListProps) {
+  if (process.env.NODE_ENV !== 'production' && !Array.isArray(items)) {
+    throw devPropError(
+      'TreeList',
+      'items',
+      "must be an array of items, for example items={[{id: 'docs', label: 'Docs'}]}. TreeList does not read children.",
+    );
+  }
   const headerId = useId();
   // A header that renders nothing names nothing, so the tree keeps its own label.
   const hasHeader = isRenderable(header);

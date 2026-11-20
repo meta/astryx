@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'file',
+  group: 'files',
   description: 'A file of any type.',
   words: ['file', 'attachment', 'document'],
 };

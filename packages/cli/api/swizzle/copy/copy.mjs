@@ -19,11 +19,11 @@ import * as path from 'node:path';
 import {
   checkGhCli,
   planCopy,
-  relativeSpecifierBetween,
   renderFile,
   resolveComponentReplacement,
   resolveCore,
 } from '../_adapter.mjs';
+import {relativeSpecifierBetween} from '../../../foundation/fs/relative-specifier.mjs';
 import {assertWithin, sanitizeName, PathSafetyError} from '../../../foundation/fs/path-safety.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
 import {findPackageRoot} from '../../../foundation/fs/paths.mjs';

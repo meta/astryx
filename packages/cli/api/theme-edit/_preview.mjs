@@ -66,7 +66,9 @@ import {
   wordTable,
 } from './_tables.mjs';
 import {extractImportedPackages} from '../../foundation/discovery/template-needs.mjs';
+import {fillTemplatePlaceholders} from '../../foundation/discovery/template-placeholders.mjs';
 import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
+import {fontFaces} from '../../foundation/fonts/font-stylesheet.mjs';
 import {themeFileImports} from '../../foundation/discovery/theme-discovery.mjs';
 import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
@@ -78,6 +80,17 @@ const TEMPLATES_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../../assets/templates/pages',
 );
+
+/**
+ * A template page's source as a copy of it reads: icon placeholders filled.
+ * @param {string} template
+ * @returns {string}
+ */
+function templatePageSource(template) {
+  return fillTemplatePlaceholders(
+    fs.readFileSync(path.join(TEMPLATES_DIR, template, 'page.tsx'), 'utf8'),
+  ).source;
+}
 
 /** The groups of the theme-building page, in order. */
 export {SHOWCASE_GROUPS};
@@ -414,7 +427,7 @@ function withPages(project, group, items) {
   for (const t of PAGE_TEMPLATES) {
     const file = path.join(TEMPLATES_DIR, t, 'page.tsx');
     if (!fs.existsSync(file)) continue;
-    const src = fs.readFileSync(file, 'utf8');
+    const src = templatePageSource(t);
     const pkgs = [...extractImportedPackages(src)].filter(
       pkg => !findNodeModulesPackage(project.cwd, pkg),
     );
@@ -518,9 +531,11 @@ function inParentOf(project, name) {
 }
 
 /**
- * Template page modules the theme-building page imports, copied beside it.
+ * Template page modules the theme-building page imports, written beside it
+ * as a copy of the template writes them: each icon placeholder import is the
+ * library import that draws it.
  * @param {Record<string, import('./_catalog.mjs').Binding>} imports
- * @returns {Array<{name: string, from: string}>}
+ * @returns {Array<{name: string, text: string}>}
  */
 function templateFiles(imports) {
   return Object.values(imports).flatMap(b => {
@@ -529,7 +544,7 @@ function templateFiles(imports) {
       ? [
           {
             name: `templates/${m[1]}.tsx`,
-            from: path.join(TEMPLATES_DIR, m[1], 'page.tsx'),
+            text: templatePageSource(m[1]),
           },
         ]
       : [];
@@ -586,11 +601,19 @@ export function baseFontsSheet(ctx, data) {
   } catch {
     return null;
   }
-  // The families the sheet loads; with the theme's build at hand, the sheet
-  // is imported only while the build still names one of them.
-  const families = [...text.matchAll(/family=([^:&'")]+)/g)].map(m =>
-    decodeURIComponent(m[1].replace(/\+/g, ' ')),
-  );
+  // The families the sheet loads, from a font service request or from its
+  // own `@font-face` rules (a base that ships its font files); with the
+  // theme's build at hand, the sheet is imported only while the build still
+  // names one of them.
+  const faces = fontFaces(text);
+  const families = [
+    ...new Set([
+      ...[...text.matchAll(/family=([^:&'")]+)/g)].map(m =>
+        decodeURIComponent(m[1].replace(/\+/g, ' ')),
+      ),
+      ...faces.map(f => f.family),
+    ]),
+  ];
   /** @type {string | null} */
   let built = null;
   try {
@@ -625,6 +648,20 @@ export function baseFontsSheet(ctx, data) {
       weights.set(
         family,
         [...new Set(list)].sort((a, b) => a - b),
+      );
+  }
+  // The weights the sheet's own faces load: one weight each; a range
+  // (`100 900`) is a variable face, every weight in it, so none is listed.
+  for (const family of new Set(faces.map(f => f.family))) {
+    const own = faces.filter(f => f.family === family).map(f => f.weights);
+    if (own.some(w => !w || w[0] !== w[1])) continue;
+    const list = own.flatMap(w => (w ? [w[0]] : []));
+    if (list.length)
+      weights.set(
+        family,
+        [...new Set([...(weights.get(family) ?? []), ...list])].sort(
+          (a, b) => a - b,
+        ),
       );
   }
   return {spec: sheet, families, remote, weights};
@@ -714,19 +751,9 @@ export function fontIndexWeights(ctx, pkg) {
   } catch {
     return null;
   }
-  /** @type {Array<[number, number]>} */
-  const spans = [];
-  for (const m of text.matchAll(/@font-face\s*\{([^}]*)\}/gi)) {
-    const value = /font-weight\s*:\s*([^;}]+)/i.exec(m[1])?.[1] ?? '400';
-    const nums = value
-      .trim()
-      .replace(/\bnormal\b/gi, '400')
-      .replace(/\bbold\b/gi, '700')
-      .split(/\s+/)
-      .map(Number);
-    if (!nums.length || nums.some(n => !Number.isFinite(n))) continue;
-    spans.push([nums[0], nums[1] ?? nums[0]]);
-  }
+  const spans = fontFaces(text).flatMap(face =>
+    face.weights ? [face.weights] : [],
+  );
   return spans.length ? spans : null;
 }
 

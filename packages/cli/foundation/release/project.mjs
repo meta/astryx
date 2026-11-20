@@ -50,8 +50,10 @@ export {CLI_PACKAGE_NAME, CORE_PACKAGE_NAME};
  *   declares the Core or the CLI
  * @property {string | null} declaredCoreRange the Core range it declares
  * @property {string | null} declaredCliRange the CLI range it declares
- * @property {string | null} lockedCoreVersion the Core version its lockfile records
- * @property {string | null} lockedCliVersion the CLI version its lockfile records
+ * @property {string | null} lockedCoreVersion the Core version its lockfile
+ *   records, read only when the folder reads no installed Core
+ * @property {string | null} lockedCliVersion the CLI version its lockfile
+ *   records, read only when the folder installs no CLI
  */
 
 /**
@@ -248,37 +250,72 @@ const LOCKFILES = [
  * @returns {string | null}
  */
 export function lockedVersion(lockfile, memberDir, name, range) {
+  return lockedVersions(lockfile, memberDir, [{name, range}]).get(name) ?? null;
+}
+
+/**
+ * The versions a lockfile records for the `wanted` packages of the package at
+ * `memberDir`. It reads the lockfile once for all of them, and parses an npm
+ * lockfile once.
+ * @param {string} lockfile
+ * @param {string} memberDir the folder whose package.json declares them
+ * @param {Array<{name: string, range: string | null}>} wanted
+ * @returns {Map<string, string | null>}
+ */
+export function lockedVersions(lockfile, memberDir, wanted) {
+  /** @type {Map<string, string | null>} */
+  const versions = new Map();
   let text;
   try {
     text = fs.readFileSync(lockfile, 'utf-8');
   } catch {
     // An unreadable lockfile records nothing.
-    return null;
+    return versions;
   }
   const base = path.basename(lockfile);
   const rel = path
     .relative(path.dirname(lockfile), memberDir)
     .split(path.sep)
     .join('/');
-  if (base === 'package-lock.json' || base === 'npm-shrinkwrap.json') {
-    const lock = safeJson(text);
-    const packages = lock?.packages;
-    if (packages && typeof packages === 'object') {
-      for (const key of [
-        rel ? `${rel}/node_modules/${name}` : null,
-        `node_modules/${name}`,
-      ]) {
-        const version = key ? packages[key]?.version : undefined;
-        if (typeof version === 'string') return version;
-      }
+  const lock =
+    base === 'package-lock.json' || base === 'npm-shrinkwrap.json'
+      ? safeJson(text)
+      : null;
+  for (const {name, range} of wanted) {
+    if (base === 'package-lock.json' || base === 'npm-shrinkwrap.json') {
+      versions.set(name, npmLockedVersion(lock, rel, name));
+    } else if (base === 'pnpm-lock.yaml') {
+      versions.set(name, pnpmLockedVersion(text, rel, name));
+    } else if (base === 'yarn.lock') {
+      versions.set(name, yarnLockedVersion(text, name, range));
+    } else if (base === 'bun.lock') {
+      versions.set(name, bunLockedVersion(text, name));
     }
-    const legacy = lock?.dependencies?.[name]?.version;
-    return typeof legacy === 'string' ? legacy : null;
   }
-  if (base === 'pnpm-lock.yaml') return pnpmLockedVersion(text, rel, name);
-  if (base === 'yarn.lock') return yarnLockedVersion(text, name, range);
-  if (base === 'bun.lock') return bunLockedVersion(text, name);
-  return null;
+  return versions;
+}
+
+/**
+ * An npm lockfile's version for `name` in the member at `rel`, then at the
+ * root, then in a legacy lockfile's `dependencies`.
+ * @param {any} lock
+ * @param {string} rel
+ * @param {string} name
+ * @returns {string | null}
+ */
+function npmLockedVersion(lock, rel, name) {
+  const packages = lock?.packages;
+  if (packages && typeof packages === 'object') {
+    for (const key of [
+      rel ? `${rel}/node_modules/${name}` : null,
+      `node_modules/${name}`,
+    ]) {
+      const version = key ? packages[key]?.version : undefined;
+      if (typeof version === 'string') return version;
+    }
+  }
+  const legacy = lock?.dependencies?.[name]?.version;
+  return typeof legacy === 'string' ? legacy : null;
 }
 
 /**
@@ -445,29 +482,24 @@ export function readReleaseFacts(startDir) {
   const core = findReadCore(startDir);
   const cli =
     findProjectCli(startDir) ?? (fromRoot ? findProjectCli(fromRoot) : null);
-  let lockedCoreVersion = null;
-  let lockedCliVersion = null;
-  if (declaring && (!core || !cli)) {
-    const lockfile = findLockfile(declaring.dir);
-    if (lockfile) {
-      lockedCoreVersion = declaring.core
-        ? lockedVersion(
-            lockfile,
-            declaring.dir,
-            CORE_PACKAGE_NAME,
-            declaring.core,
-          )
-        : null;
-      lockedCliVersion = declaring.cli
-        ? lockedVersion(
-            lockfile,
-            declaring.dir,
-            CLI_PACKAGE_NAME,
-            declaring.cli,
-          )
-        : null;
-    }
+  // Read the lockfile only for a package that is not installed. One run reads
+  // these facts several times, so read it once for both packages.
+  /** @type {Array<{name: string, range: string | null}>} */
+  const wanted = [];
+  if (declaring && !core && declaring.core) {
+    wanted.push({name: CORE_PACKAGE_NAME, range: declaring.core});
   }
+  if (declaring && !cli && declaring.cli) {
+    wanted.push({name: CLI_PACKAGE_NAME, range: declaring.cli});
+  }
+  const lockfile =
+    declaring && wanted.length > 0 ? findLockfile(declaring.dir) : null;
+  const locked =
+    declaring && lockfile
+      ? lockedVersions(lockfile, declaring.dir, wanted)
+      : new Map();
+  const lockedCoreVersion = locked.get(CORE_PACKAGE_NAME) ?? null;
+  const lockedCliVersion = locked.get(CLI_PACKAGE_NAME) ?? null;
   return {
     inProject: Boolean(core || cli || declaring),
     core,

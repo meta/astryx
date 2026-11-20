@@ -46,10 +46,10 @@ import {
   type CastFrame,
   type Point,
   type TouchDriver,
-  type TrackedFrame,
 } from '@astryxdesign/interaction-harness';
 import {cubicBezier} from '../../motion/bezier';
 import {parseCssEasing, parseMotionRoleValue} from '../../motion/roles';
+import {judgeAgainstControl} from './busyMotionJudge';
 
 const storybook = withStorybook(test);
 
@@ -319,6 +319,12 @@ const channel = (
  */
 async function closeMidPresentation(page: Page) {
   const {trigger} = await openPage(page);
+  // A long entrance, so a close that a loaded engine runs late still lands
+  // inside it. A long exit, so the fade spans several frames even where a
+  // loaded renderer paints only a few a second. Where the fade starts, and
+  // that it only falls, do not depend on either length.
+  await setToken(page, '--duration-medium-max', '2000ms');
+  await setToken(page, '--duration-exit', '1200ms');
   await trigger.evaluate(opener => (opener as HTMLElement).click());
   return page.evaluate(async () => {
     const element = document.querySelector('dialog') as HTMLElement;
@@ -536,47 +542,6 @@ async function trackLuma(
   } finally {
     await scratch.close();
   }
-}
-
-/**
- * Judges the alert against the compositor control in one busy window. Both
- * are read from the same screencast frames. The alert changes on every frame
- * the control moved, and stalls no longer than the control does. On a
- * two-core runner the block's spin starves the compositor and the screencast
- * alike, so a frame rate is no reference there.
- */
-function judgeAgainstControl(
-  alert: ReadonlyArray<{t: number; luma: number}>,
-  control: ReadonlyArray<TrackedFrame>,
-  window: {from: number; to: number},
-) {
-  let controlMoved = 0;
-  let missed = 0;
-  let alertStall = 0;
-  let controlStall = 0;
-  let longestAlertStall = 0;
-  let longestControlStall = 0;
-  for (let i = 1; i < alert.length; i += 1) {
-    if (alert[i].t < window.from || alert[i].t > window.to) {
-      continue;
-    }
-    const before = control[i - 1].box;
-    const now = control[i].box;
-    const controlMoves =
-      before != null && now != null && Math.abs(now.x - before.x) > 0.5;
-    const alertMoves = Math.abs(alert[i].luma - alert[i - 1].luma) > 0.05;
-    controlStall = controlMoves ? 0 : controlStall + 1;
-    alertStall = alertMoves ? 0 : alertStall + 1;
-    longestControlStall = Math.max(longestControlStall, controlStall);
-    longestAlertStall = Math.max(longestAlertStall, alertStall);
-    if (controlMoves) {
-      controlMoved += 1;
-      if (!alertMoves) {
-        missed += 1;
-      }
-    }
-  }
-  return {controlMoved, missed, longestAlertStall, longestControlStall};
 }
 
 /** Records when the dialog loses `open`: the end of the alert's fade. */
@@ -1130,10 +1095,14 @@ test.describe('under a finger', () => {
     );
     const {driver, trigger, dialog} = await openPage(page);
     // Both motions run 2 s on straight curves here, so the 1 s block always
-    // lands inside them. An opaque dim makes every frame of them change the
-    // alert's pixels by over one level, which a lossless cast shows.
+    // lands inside them. The alert is black over a white page, with no dim,
+    // so the middle of the alert follows its opacity alone: it changes by
+    // about two levels on every frame, which a lossless cast shows, and it
+    // never turns. Over a dim that fades on the same curve, the alert's
+    // pixels stop changing where its fade and the dim's cancel, and a frame
+    // there reads as missed.
     await page.addStyleTag({
-      content: `* { --duration-medium-max: ${BUSY_MS}ms !important; --duration-exit: ${BUSY_MS}ms !important; --ease-entrance: linear !important; --ease-exit: linear !important; --color-overlay: rgb(0 0 0) !important; }`,
+      content: `* { --duration-medium-max: ${BUSY_MS}ms !important; --duration-exit: ${BUSY_MS}ms !important; --ease-entrance: linear !important; --ease-exit: linear !important; --color-overlay: transparent !important; --color-background-body: rgb(255 255 255) !important; } dialog { --color-background-surface: rgb(0 0 0) !important; }`,
     });
     // The control shows what the compositor presented in each block.
     const control = await startBusyControl(page);

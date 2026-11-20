@@ -10,6 +10,7 @@ import {Section} from '@astryxdesign/core/Section';
 import {Stack} from '@astryxdesign/core/Layout';
 import {Selector} from '@astryxdesign/core/Selector';
 import {Heading, Text} from '@astryxdesign/core/Text';
+import {useToast} from '@astryxdesign/core/Toast';
 
 const warmTheme = defineTheme({
   name: 'warm-docs',
@@ -44,6 +45,7 @@ const themes = {
 type ThemeName = keyof typeof themes;
 
 export default function ThemeSwitcher() {
+  const showToast = useToast();
   const [themeName, setThemeName] = useState<ThemeName>('Warm');
 
   return (
@@ -63,7 +65,12 @@ export default function ThemeSwitcher() {
                 Switching the theme object updates all tokens and component
                 styles below the provider.
               </Text>
-              <Button label="Save changes" />
+              <Button
+                label="Save changes"
+                onClick={() =>
+                  showToast({body: 'Demo: your changes would be saved here'})
+                }
+              />
             </Stack>
           </Card>
         </Theme>

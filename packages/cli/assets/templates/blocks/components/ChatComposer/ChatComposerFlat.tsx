@@ -8,13 +8,15 @@ import {DropdownMenu} from '@astryxdesign/core/DropdownMenu';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Stack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
+import {useToast} from '@astryxdesign/core/Toast';
 import {
-  Cog6ToothIcon,
+  SettingsIcon,
   MicrophoneIcon,
   SparklesIcon,
-} from '@heroicons/react/24/outline';
+} from '@astryxdesign/template-icons';
 
 export default function ChatComposerFlat() {
+  const showToast = useToast();
   return (
     <Stack direction="vertical" gap={2} width={450} maxWidth="100%">
       <Text type="supporting" color="secondary">
@@ -48,7 +50,7 @@ export default function ChatComposerFlat() {
                 label: 'Settings',
                 variant: 'ghost',
                 size: 'md',
-                icon: <Icon icon={Cog6ToothIcon} size="sm" />,
+                icon: <Icon icon={SettingsIcon} size="sm" />,
                 children: 'Settings',
               }}
               menuWidth={200}
@@ -67,6 +69,9 @@ export default function ChatComposerFlat() {
             size="md"
             icon={<Icon icon={MicrophoneIcon} />}
             isIconOnly
+            onClick={() =>
+              showToast({body: 'Demo: voice input would start here'})
+            }
           />
         }
       />

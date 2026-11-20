@@ -109,6 +109,16 @@ describe('NavigationStack', () => {
     expect(screen.getByRole('button', {name: 'General'})).toBeInTheDocument();
   });
 
+  // A card is a stacking context at rest, as it is during a transition (a
+  // transform makes one), so screen content with any z-index stays under the
+  // bar, whose z-index is 1.
+  it("gives every card isolation: 'isolate' at rest", () => {
+    render(<Harness initial={['General']} />);
+    for (const title of ['Settings', 'General']) {
+      expect(getComputedStyle(screenCard(title)!).isolation).toBe('isolate');
+    }
+  });
+
   it('pushes a screen: its title shows, Back reads the previous title, the root is covered', async () => {
     render(<Harness />);
     fireEvent.click(screen.getByRole('button', {name: 'General'}));

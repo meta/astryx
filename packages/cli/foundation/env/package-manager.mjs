@@ -413,6 +413,17 @@ function isYarnClassic({dir}) {
 }
 
 /**
+ * Is the Yarn of the project holding `targetDir` the classic line (1.x)?
+ * The same reading as the dlx choice: the declared version, then the
+ * lockfile header, then a committed config, then the runner.
+ * @param {string} targetDir
+ * @returns {boolean}
+ */
+export function isYarnClassicAt(targetDir) {
+  return isYarnClassic(explainPackageManager(targetDir));
+}
+
+/**
  * The major version in a directory's `packageManager: "yarn@<version>"`.
  * @param {string} dir
  * @returns {number | null}
@@ -573,10 +584,17 @@ export function guessCliInvocation(targetDir) {
   // Who answered this run decides the stem, so every command one run prints
   // reaches the same release, whichever folder a line names.
   const choice = runChoice(process.cwd());
-  if (choice.copy === 'project' && !isCliOneOff() && cliBinResolves(targetDir)) {
+  if (
+    choice.copy === 'project' &&
+    !isCliOneOff() &&
+    cliBinResolves(targetDir)
+  ) {
     return `${getRunPrefix(targetDir)} ${CLI_BIN}`;
   }
-  if (!choice.inProject && (isGlobalCopy(CLI_ROOT) || isInReleaseCache(CLI_ROOT))) {
+  if (
+    !choice.inProject &&
+    (isGlobalCopy(CLI_ROOT) || isInReleaseCache(CLI_ROOT))
+  ) {
     return CLI_BIN;
   }
   return `${getDlxPrefix(targetDir)} ${CLI_PACKAGE}@${cliVersion()}`;
@@ -671,20 +689,35 @@ export function prefixCliCommands(text, stem, lang = null) {
     .join('\n');
 }
 
-/** @type {AsyncLocalStorage<{pm: import('../doc-compiler/doc-syntax.mjs').DocPackageManager}>} */
+/** @type {AsyncLocalStorage<{pm: import('../doc-compiler/doc-syntax.mjs').DocPackageManager, dir: string | null}>} */
 const docPackageManagerScope = new AsyncLocalStorage();
 
 /**
  * Run `fn` with doc `{@pm}` steps rendered for `pm`, whatever the working
  * directory's project uses: a host that shows docs to readers of every
- * package manager, such as the docsite, picks one.
+ * package manager, such as the docsite, picks one. `dir` is the project the
+ * docs render for, whose Core release a step's Astryx packages take
+ * ({@link docProjectDir}); a host for every reader passes none. A scope
+ * inside another keeps the outer one's project.
  * @template T
  * @param {import('../doc-compiler/doc-syntax.mjs').DocPackageManager} pm
  * @param {() => T} fn
+ * @param {string | null} [dir]
  * @returns {T}
  */
-export function runWithDocPackageManager(pm, fn) {
-  return docPackageManagerScope.run({pm}, fn);
+export function runWithDocPackageManager(pm, fn, dir = null) {
+  const outer = docPackageManagerScope.getStore();
+  return docPackageManagerScope.run({pm, dir: outer ? outer.dir : dir}, fn);
+}
+
+/**
+ * The project folder doc steps render for: the one a scope names
+ * ({@link runWithDocPackageManager}); none in a scope for every reader, and
+ * none outside any scope, where a read is about no one project.
+ * @returns {string | null}
+ */
+export function docProjectDir() {
+  return docPackageManagerScope.getStore()?.dir ?? null;
 }
 
 /**

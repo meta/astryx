@@ -54,6 +54,7 @@ import {resolveStyleColor} from '../Text/Text';
 import type {LayerPlacement} from '../Layer';
 import {mergeProps} from '../utils/mergeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useDevWarning} from '../hooks/useDevWarning';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import type {HeadingTypeMap} from './index';
@@ -199,6 +200,20 @@ const levelToTag = {
   6: 'h6',
 } as const;
 
+/** The level a heading renders at when its `level` is missing or not 1–6. */
+const FALLBACK_LEVEL = 2;
+
+/** `level` as a number from 1 to 6, or the fallback level. */
+function resolveLevel(level: unknown): HeadingLevel {
+  const value =
+    typeof level === 'number' || typeof level === 'string'
+      ? Number(level)
+      : Number.NaN;
+  return Number.isInteger(value) && value >= 1 && value <= 6
+    ? (value as HeadingLevel)
+    : FALLBACK_LEVEL;
+}
+
 /**
  * Heading - Semantic heading component
  *
@@ -216,7 +231,7 @@ const levelToTag = {
  * ```
  */
 export function Heading({
-  level,
+  level: requestedLevel,
   type,
   weight,
   accessibilityLevel,
@@ -236,6 +251,14 @@ export function Heading({
   ref,
   ...props
 }: HeadingProps) {
+  // JavaScript callers and generated pages can omit `level`. The heading still
+  // renders, with a section heading's element and scale, instead of crashing.
+  const level = resolveLevel(requestedLevel);
+  useDevWarning(
+    'Heading',
+    `level must be 1, 2, 3, 4, 5 or 6, but it is ${typeof requestedLevel === 'string' ? JSON.stringify(requestedLevel) : String(requestedLevel)}. The heading renders as level ${level}. Pass the outline level, for example <Heading level={2}>.`,
+    level !== requestedLevel,
+  );
   const Component = levelToTag[level];
 
   // If accessibilityLevel differs from visual level, use aria-level

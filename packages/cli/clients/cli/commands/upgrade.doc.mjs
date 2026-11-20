@@ -18,7 +18,8 @@ export const doc = {
   description:
     'Migrates project source from a previous Astryx version to the installed one by ' +
     'running the registered codemods, and refreshes the fully rendered managed ' +
-    'agent-docs block when Core or configured integration guidance changes. ' +
+    'agent-docs block when Core or configured integration guidance changes, and the Astryx skill in every place astryx.config `skills.to` saves ' +
+    '(`init --to`; an edited skill file is kept). ' +
     'Dry-run by default. --apply writes codemod and receipt changes, runs hooks, then refreshes agent docs. ' +
     'Anything a post-codemod hook prints goes to stderr, so stdout carries only the result. ' +
     'Run from a folder inside a project, it upgrades that project and names files in the result relative to the folder you ran it in. ' +
