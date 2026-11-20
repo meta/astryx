@@ -810,8 +810,11 @@ function markTask(time: number, clock: () => number): TaskMark {
 /** The first read of the time an animation frame runs, by its timestamp. */
 let frameRead: {readonly frame: number; readonly time: number} | null = null;
 
+/** What names a clock: a caller's own, or the document an engine reads. */
+type ClockSource = (() => number) | Document | undefined;
+
 /** The first motion call on a clock since the last microtask checkpoint. */
-let openCall: {readonly time: number; readonly clock: () => number} | null =
+let openCall: {readonly time: number; readonly source: ClockSource} | null =
   null;
 
 /**
@@ -821,18 +824,19 @@ let openCall: {readonly time: number; readonly clock: () => number} | null =
  * several animators in one callback, such as a pager's children, line up, as
  * calls from rest share one start. A call more than LATE_START_MS after the
  * first opens a new clock: the curves that a block passed restart at their
- * frame instead.
+ * frame instead. `source` names the clock: a caller's own, or the document
+ * whose motion clock every engine there reads.
  */
-function callTime(clock: () => number): number {
+function callTime(clock: () => number, source: ClockSource): number {
   const time = clock();
   if (
     openCall != null &&
-    openCall.clock === clock &&
+    openCall.source === source &&
     time - openCall.time <= LATE_START_MS
   ) {
     return openCall.time;
   }
-  const call = {time, clock};
+  const call = {time, source};
   openCall = call;
   queueMicrotask(() => {
     if (openCall === call) {
@@ -1299,6 +1303,11 @@ export function createMotionEngine(
   // unmount too.
   let clockDocument = element?.ownerDocument;
   const now = options.now ?? (() => motionNow(clockDocument));
+  // What names its clock, so engines on one document share call times.
+  const clockSource = (): ClockSource =>
+    options.now ??
+    clockDocument ??
+    (typeof document === 'undefined' ? undefined : document);
   const frameSource =
     options.requestFrame ??
     (typeof requestAnimationFrame === 'function'
@@ -4575,7 +4584,7 @@ export function createMotionEngine(
       if (animateOptions.start !== 'presented') {
         flushDeferred();
       }
-      const time = animateOptions.at ?? callTime(now);
+      const time = animateOptions.at ?? callTime(now, clockSource());
       const targets = expand(to);
       const velocities = expand(transition.velocity ?? {});
       const {owner, finished} = newOwner();
@@ -4708,7 +4717,7 @@ export function createMotionEngine(
       if (playOptions.start !== 'presented') {
         flushDeferred();
       }
-      const time = playOptions.at ?? callTime(now);
+      const time = playOptions.at ?? callTime(now, clockSource());
       const {owner, finished} = newOwner();
       const byProperty: Partial<Record<MotionProperty, MotionCurve>> = {};
       // `scale` first, so an explicit `scaleX` or `scaleY` beside it wins.
@@ -4851,7 +4860,7 @@ export function createMotionEngine(
     decay(curves, decayOptions = {}) {
       syncPending();
       flushDeferred();
-      const time = decayOptions.at ?? callTime(now);
+      const time = decayOptions.at ?? callTime(now, clockSource());
       // Under Reduce Motion only momentum keeps moving (DR2, DEC-2): a curve
       // that is a transition plays as `animate` does, a cross-fade or at once.
       const reduce = prefersReducedMotion();

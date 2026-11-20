@@ -2827,6 +2827,40 @@ describe('presentation values, retargeting, velocity (spec:AST-094 FR6)', () => 
       }
     });
 
+    it('retargets made in one callback on several animators on the default clock share one clock', async () => {
+      // Engines on their default clock, the motion clock of their document.
+      // jsdom gives it no timeline, so it reads performance.now().
+      const pages = new Set([performance, document.defaultView?.performance]);
+      const spies = [...pages]
+        .filter((page): page is Performance => page != null)
+        .map(page => vi.spyOn(page, 'now').mockImplementation(() => clock));
+      try {
+        const first = setup({now: undefined});
+        const second = setup({now: undefined});
+        for (const {animator} of [first, second]) {
+          animator.animate(
+            {x: 300},
+            {spring: springs.emphasis, velocity: {x: 800}},
+          );
+        }
+        await advance(120);
+        const call = clock;
+        first.animator.animate({x: -100}, {spring: springs.emphasis});
+        // The callback goes on to the next element's animator.
+        clock += 3;
+        second.animator.animate({x: -100}, {spring: springs.emphasis});
+        clock += 13;
+        await commitFrame(clock);
+        expect(live('translate').map(animation => animation.startTime)).toEqual(
+          [call, call],
+        );
+      } finally {
+        for (const spy of spies) {
+          spy.mockRestore();
+        }
+      }
+    });
+
     it('a call in the next callback, after a microtask checkpoint, starts its own clock', async () => {
       const now = () => clock;
       const first = setup({now});
