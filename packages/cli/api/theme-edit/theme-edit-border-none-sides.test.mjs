@@ -331,6 +331,33 @@ describe('undoing a border none', () => {
   );
 
   it(
+    'brings a dark border after a light one on a seam look',
+    async () => {
+      await themeEditNew('s7', {cwd, like: 'neutral'});
+      const opts = {cwd, on: 'button', when: 'variant:secondary'};
+      await themeEditSet('s7', 'border-color', '#999999', {
+        ...opts,
+        mode: 'light',
+      });
+      const r = await themeEditSet('s7', 'border-color', '#555555', {
+        ...opts,
+        mode: 'dark',
+      });
+      expect(r.data.notes.join('\n')).toContain('added a');
+      const saved = JSON.parse(
+        fs.readFileSync(path.join(cwd, 'themes/s7/s7.settings.json'), 'utf8'),
+      );
+      expect(
+        saved.settings
+          .filter((/** @type {any} */ x) => x.thing === 'border')
+          .map((/** @type {any} */ x) => x.mode)
+          .sort(),
+      ).toEqual(['dark', 'light']);
+    },
+    T,
+  );
+
+  it(
     'takes back the border set added, and does not write it again',
     async () => {
       await themeEditNew('s3', {cwd, like: 'neutral'});

@@ -1127,7 +1127,12 @@ export function familyListMeant(value) {
 }
 
 /** A side word in a longhand's name, in the order a box value lists sides. */
-const BOX_SIDES = ['top', 'right', 'bottom', 'left'];
+export const BOX_SIDES = /** @type {const} */ ([
+  'top',
+  'right',
+  'bottom',
+  'left',
+]);
 
 /**
  * A two-sided (start/end) or four-sided (top/right/bottom/left) longhand's

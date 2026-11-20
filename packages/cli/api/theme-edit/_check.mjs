@@ -39,6 +39,7 @@ import {
   sameKindValues,
   unitsJoined,
   sidesOf,
+  BOX_SIDES,
 } from './_css.mjs';
 import {
   calcVars,
@@ -3523,6 +3524,8 @@ function bordersBeyondCore(ctx, data, s, part) {
       !blank(x.value) &&
       (!x.when || !s.when || x.when === s.when) &&
       (!x.state || x.state === s.state) &&
+      // (A border written for one mode draws only in that mode.)
+      (!x.mode || x.mode === /** @type {any} */ (s).mode) &&
       partsOf(ctx, x).includes(part),
   );
 }
@@ -3621,8 +3624,6 @@ function borderSetToNone(ctx, data, s, part) {
     : undefined;
 }
 
-const BOX_SIDES = /** @type {const} */ (['top', 'right', 'bottom', 'left']);
-
 /**
  * The sides a border property names: one side, a logical pair, or all four.
  * @param {string} thing
@@ -3675,22 +3676,27 @@ function borderSidesOff(ctx, data, s, part) {
       continue;
     const sides = borderSides(String(x.thing));
     const tokens = String(x.value).trim().split(/\s+/).filter(Boolean);
-    /** @param {number} i @returns {string | undefined} */
-    const tokenAt = i => {
-      if (!m[1] || tokens.length < 2) return tokens[0];
-      if (sides.length === 2) return tokens[Math.min(i, tokens.length - 1)];
-      const at = [
-        [0, 0, 0, 0],
-        [0, 1, 0, 1],
-        [0, 1, 2, 1],
-        [0, 1, 2, 3],
-      ][Math.min(tokens.length, 4) - 1];
-      return tokens[at[i]];
+    // (A width or style of several values: each side's value as CSS reads
+    // the list; a logical pair, `border-block-width '0 1px'`, is its start
+    // and its end.)
+    const perSide =
+      m[1] && tokens.length > 1 && sides.length === 4
+        ? sidesOf(String(x.thing), String(x.value))
+        : null;
+    /** @param {string} side @param {number} i @returns {string | undefined} */
+    const tokenAt = (side, i) => {
+      if (perSide) {
+        const prop = Object.keys(perSide).find(p => borderSides(p)[0] === side);
+        return prop ? perSide[prop] : undefined;
+      }
+      return m[1] && sides.length === 2
+        ? tokens[Math.min(i, tokens.length - 1)]
+        : tokens[0];
     };
     sides.forEach((side, i) => {
       if (m[1]) {
         const off = m[1] === 'width' ? widthOff : styleOff;
-        if (blank(tokenAt(i))) off.set(side, x);
+        if (blank(tokenAt(side, i))) off.set(side, x);
         else off.delete(side);
       } else {
         // (A shorthand writes the side's width and style together; with no
