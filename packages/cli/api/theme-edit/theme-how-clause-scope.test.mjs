@@ -432,8 +432,10 @@ const LATER_ASKS = [
     "the part's text in its with-list",
     {
       q: 'badges with a subtle colored background and dark text',
-      // (Each badge variant, in the modes the text reads in there.)
-      has: ["color '#111827' --on badge --when variant:warning"],
+      // (Main writes the dark text on every badge in every mode; in dark
+      // mode it reads at 1.3-1.6:1 on the colored fills, and the status
+      // badges already draw #111111 there, so it is light mode's.)
+      has: ["color '#111827' --on badge --mode light"],
       never: /^--color-text-primary/,
     },
   ],
