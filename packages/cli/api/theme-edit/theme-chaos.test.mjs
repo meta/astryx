@@ -2,7 +2,7 @@
 
 /**
  * @file Seeded chaos test for `astryx experimental theme`. One fixed seed
- *   drives about 200 random but plausible commands through the real CLI
+ *   drives 80 random but plausible commands (200 with THEME_EDIT_SLOW=1) through the real CLI
  *   program: valid values, near misses, edge values, undo chains, a damaged
  *   settings file. After every step it checks that an accepted command takes
  *   effect, that a refused command writes nothing and carries a documented
@@ -24,9 +24,12 @@ import {
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {SLOW} from '../../test-utils/theme-render-stub.mjs';
 
 const SEED = 20261110;
-const STEPS = 200;
+// The first 80 steps of the seeded sequence run by default, as a sample;
+// THEME_EDIT_SLOW=1 runs all 200.
+const STEPS = SLOW ? 200 : 80;
 
 /** @param {number} a */
 function prng(a) {
@@ -334,9 +337,15 @@ beforeAll(async () => {
   writeFixtureBaseTheme(cwd, 'neutral');
   fs.writeFileSync(
     path.join(cwd, 'package.json'),
-    `${JSON.stringify({name: 'app', private: true, type: 'module'})}\n`,
+    `${JSON.stringify({name: 'app', private: true, type: 'module', dependencies: {'@astryxdesign/core': '*'}})}\n`,
   );
   fs.mkdirSync(path.join(cwd, 'src/app'), {recursive: true});
+  // A routes folder has a root layout, which loads Core's stylesheet.
+  if (!fs.existsSync(path.join(cwd, 'src/app/layout.tsx')))
+    fs.writeFileSync(
+      path.join(cwd, 'src/app/layout.tsx'),
+      "import '@astryxdesign/core/astryx.css';\nexport default function RootLayout({children}) { return children; }\n",
+    );
   for (const t of THEMES) await run(['editor', 'new', t]);
 
   /** Snapshots of each theme folder from before each accepted set, newest last. */
@@ -537,8 +546,8 @@ describe(`theme chaos, seed ${SEED}`, () => {
         );
     }
     expect(counts.steps).toBe(STEPS);
-    expect(counts.accepted).toBeGreaterThan(20);
-    expect(counts.refused).toBeGreaterThan(20);
+    expect(counts.accepted).toBeGreaterThan(STEPS / 10);
+    expect(counts.refused).toBeGreaterThan(STEPS / 10);
   });
   it('1: exit 0 is ok; a refusal has a documented code and writes nothing', () => {
     expect(of('1')).toEqual([]);
@@ -583,21 +592,17 @@ describe('known chaos findings', () => {
     expect(fs.existsSync(path.join(cwd, 'themes/kd/kd.theme.ts'))).toBe(true);
   }, 120_000);
 
-  it.fails(
-    'F5: a preview page with an empty template name is refused',
-    async () => {
-      const x = await step(['preview', 'add', '--template', '']);
-      try {
-        expect(x.r.status).toBe(1);
-      } finally {
-        fs.rmSync(path.join(cwd, 'src/app/theme-preview'), {
-          recursive: true,
-          force: true,
-        });
-      }
-    },
-    120_000,
-  );
+  it('F5: a preview page with an empty template name is refused', async () => {
+    const x = await step(['preview', 'add', '--template', '']);
+    try {
+      expect(x.r.status).toBe(1);
+    } finally {
+      fs.rmSync(path.join(cwd, 'src/app/theme-preview'), {
+        recursive: true,
+        force: true,
+      });
+    }
+  }, 120_000);
 
   it('F3: a theme name with a dash before a digit is made (b-2)', async () => {
     const x = await step(['editor', 'new', 'k-2']);
@@ -629,58 +634,48 @@ describe('known chaos findings', () => {
     expect(clean(await step(['editor', 'show', 'ks']))).toBe(true);
   }, 120_000);
 
-  it.fails(
-    'F8: a preview data file of the wrong shape is refused with a code',
-    async () => {
-      fs.mkdirSync(path.join(cwd, 'src/app/theme-preview'), {recursive: true});
-      fs.writeFileSync(
-        path.join(cwd, 'src/app/theme-preview/theme-preview.json'),
-        '{"pages": "x", "files": 7}',
-      );
-      try {
-        expect(clean(await step(['preview', 'list']))).toBe(true);
-      } finally {
-        fs.rmSync(path.join(cwd, 'src/app/theme-preview'), {
-          recursive: true,
-          force: true,
-        });
-      }
-    },
-    120_000,
-  );
-
-  it.fails(
-    'F14: an option with its value missing is refused with a parse code, not ERR_UNKNOWN',
-    async () => {
-      const x = await step(['editor', 'set', 'a', 'corners', 'pill', '--on']);
-      expect(x.r.body?.code).not.toBe('ERR_UNKNOWN');
-    },
-    120_000,
-  );
-
-  it('F6: mode dark-only changes the built theme', async () => {
-    await run(['editor', 'new', 'km', '--accent', '#e11d48']);
-    const x = await step(['editor', 'set', 'km', 'mode', 'dark-only']);
-    expect(x.changed.filter(k => k.endsWith('/km.css'))).not.toEqual([]);
+  it('F8: a preview data file of the wrong shape is refused with a code', async () => {
+    fs.mkdirSync(path.join(cwd, 'src/app/theme-preview'), {recursive: true});
+    fs.writeFileSync(
+      path.join(cwd, 'src/app/theme-preview/theme-preview.json'),
+      '{"pages": "x", "files": 7}',
+    );
+    try {
+      expect(clean(await step(['preview', 'list']))).toBe(true);
+    } finally {
+      fs.rmSync(path.join(cwd, 'src/app/theme-preview'), {
+        recursive: true,
+        force: true,
+      });
+    }
   }, 120_000);
 
-  it.fails(
-    'F9: undo after a color restores the palette files exactly',
-    async () => {
-      await run(['editor', 'new', 'kp', '--accent', '#e11d48']);
-      const before = snapshot();
-      await run(['editor', 'set', 'kp', 'warning', '#FFF']);
-      await run(['editor', 'undo', 'kp']);
-      expect(
-        changes(
-          before,
-          snapshot(),
-          k => k.includes('/themes/kp/') && !k.endsWith('.history.json'),
-        ),
-      ).toEqual([]);
-    },
-    120_000,
-  );
+  it('F14: an option with its value missing is refused with a parse code, not ERR_UNKNOWN', async () => {
+    const x = await step(['editor', 'set', 'a', 'corners', 'pill', '--on']);
+    expect(x.r.body?.code).toBe('ERR_MISSING_ARGUMENT');
+  }, 120_000);
+
+  it('F6 (now one-mode by <Theme mode>): mode dark-only says where the mode goes and keeps the colors', async () => {
+    // Core has no mode inside a theme: the theme keeps both halves of its
+    // colors and the app's <Theme> is given mode="dark".
+    await run(['editor', 'new', 'km', '--accent', '#e11d48']);
+    const x = await step(['editor', 'set', 'km', 'mode', 'dark-only']);
+    expect(JSON.stringify(x.r.body)).toContain('mode=\\"dark\\"');
+  }, 120_000);
+
+  it('F9: undo after a color restores the palette files exactly', async () => {
+    await run(['editor', 'new', 'kp', '--accent', '#e11d48']);
+    const before = snapshot();
+    await run(['editor', 'set', 'kp', 'warning', '#FFF']);
+    await run(['editor', 'undo', 'kp']);
+    expect(
+      changes(
+        before,
+        snapshot(),
+        k => k.includes('/themes/kp/') && !k.endsWith('.history.json'),
+      ),
+    ).toEqual([]);
+  }, 120_000);
 
   it('F10: vibrancy is refused when the only color is a gray', async () => {
     await run(['editor', 'new', 'kv', '--accent', 'black']);

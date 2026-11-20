@@ -18,7 +18,6 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
   assertWithin,
   PathSafetyError,
-  sanitizeName,
 } from '../../foundation/fs/path-safety.mjs';
 import {
   discoverBundledThemes,
@@ -46,47 +45,14 @@ import {
   projectPath,
 } from './add-helpers.mjs';
 
-const DEFAULT_THEMES_ROOT = './themes';
+import {
+  renameDefinedTheme,
+  renameThemeFile,
+  rewriteThemeSource,
+  themeIdentity,
+} from '../theme/_fork.mjs';
 
-/** @param {string} slug */
-function themeIdentity(slug) {
-  try {
-    sanitizeName(slug, {label: 'theme name'});
-  } catch (error) {
-    if (error instanceof PathSafetyError) {
-      throw new AstryxError(
-        error.message,
-        undefined,
-        ERROR_CODES.ERR_INVALID_ARGUMENT,
-      );
-    }
-    throw error;
-  }
-  if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u.test(slug)) {
-    throw new AstryxError(
-      `Invalid theme name "${slug}": use lowercase kebab-case starting with a letter.`,
-      undefined,
-      ERROR_CODES.ERR_INVALID_ARGUMENT,
-    );
-  }
-  const identifier = slug.replace(/-([a-z0-9])/gu, (_, character) =>
-    character.toUpperCase(),
-  );
-  const displayName = slug
-    .split('-')
-    .map(part =>
-      part === 'y2k' ? 'Y2K' : part[0].toUpperCase() + part.slice(1),
-    )
-    .join(' ');
-  return {
-    slug,
-    identifier,
-    displayName,
-    exportName: `${identifier}Theme`,
-    entry: `${identifier}Theme.ts`,
-    descriptor: `${identifier}Theme.doc.mjs`,
-  };
-}
+const DEFAULT_THEMES_ROOT = './themes';
 
 /** @param {{slug: string, exportName: string}} identity */
 function themeSource(identity) {
@@ -129,7 +95,10 @@ function resolveBaseTheme(slug, packageDir, owner, themesRoot) {
   // Also check the package's own themes root.
   if (themesRoot && fs.existsSync(themesRoot)) {
     try {
-      candidates = [...candidates, ...discoverThemeDirectory(themesRoot, owner)];
+      candidates = [
+        ...candidates,
+        ...discoverThemeDirectory(themesRoot, owner),
+      ];
     } catch {
       // A broken local root is not the caller's problem here.
     }
@@ -147,74 +116,6 @@ function resolveBaseTheme(slug, packageDir, owner, themesRoot) {
     );
   }
   return match;
-}
-
-/**
- * Rename a file from the base theme's namespace to the new theme's namespace.
- * Files whose name starts with the base identifier get the new identifier;
- * others keep their name as-is.
- * @param {string} file  POSIX relative path inside the theme directory
- * @param {string} baseIdentifier
- * @param {string} newIdentifier
- * @returns {string}
- */
-function renameThemeFile(file, baseIdentifier, newIdentifier) {
-  const basename = path.posix.basename(file);
-  const dir = path.posix.dirname(file);
-  if (!basename.startsWith(baseIdentifier)) return file;
-  const renamed = newIdentifier + basename.slice(baseIdentifier.length);
-  return dir === '.' ? renamed : `${dir}/${renamed}`;
-}
-
-/**
- * Rewrite a source file's contents from the base theme's names to the new
- * theme's names. This replaces:
- *   1. Identifier prefixes (camelCase variables, import paths): baseIdentifier
- *      followed by an uppercase letter.
- *   2. The theme slug in string literals: 'baseSlug' → 'newSlug' and
- *      'astryx-baseSlug' → 'astryx-newSlug'.
- *   3. CSS custom properties scoped to the theme: --astryx-theme-baseSlug-.
- * @param {string} source
- * @param {string} baseSlug
- * @param {string} baseIdentifier
- * @param {string} newSlug
- * @param {string} newIdentifier
- * @returns {string}
- */
-function rewriteThemeSource(
-  source,
-  baseSlug,
-  baseIdentifier,
-  newSlug,
-  newIdentifier,
-) {
-  let result = source;
-  // 1. Identifier prefixes: neutralPalettes → oceanPalettes, neutralTheme → oceanTheme
-  const identRe = new RegExp(`${escapeRegExp(baseIdentifier)}(?=[A-Z])`, 'gu');
-  result = result.replace(identRe, newIdentifier);
-  // 2. String-literal theme names
-  result = result.replace(
-    new RegExp(`'astryx-${escapeRegExp(baseSlug)}'`, 'gu'),
-    `'astryx-${newSlug}'`,
-  );
-  result = result.replace(
-    new RegExp(`'${escapeRegExp(baseSlug)}'`, 'gu'),
-    `'${newSlug}'`,
-  );
-  // 3. CSS custom properties scoped to the base theme
-  result = result.replace(
-    new RegExp(
-      `--astryx-theme-${escapeRegExp(baseSlug)}-`,
-      'gu',
-    ),
-    `--astryx-theme-${newSlug}-`,
-  );
-  return result;
-}
-
-/** @param {string} s */
-function escapeRegExp(s) {
-  return s.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 }
 
 /** What every app that uses Astryx already has: Core, and React through Core's peers. */
@@ -332,6 +233,10 @@ function forkThemePlans(base, identity, themeDir) {
         identity.slug,
         identity.identifier,
       );
+      // The entry's defineTheme name, wherever it sits (a double-quoted name,
+      // one after `extends`), is the fork's, as the build names its files.
+      if (file === base.files[0])
+        contents = renameDefinedTheme(contents, identity.slug) ?? contents;
     } else {
       contents = bytes;
     }

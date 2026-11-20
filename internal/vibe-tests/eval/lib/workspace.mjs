@@ -4,7 +4,7 @@
  * @file Arm bases, their controls, and per-run workspaces outside the repo.
  * @input an arm descriptor and a run directory
  * @output an installed, control-checked base and fresh copies of it
- * @position Called by run.mjs before it grades anything
+ * @position Called by run.mjs before any agent starts
  */
 
 import {spawn} from 'node:child_process';
@@ -51,11 +51,7 @@ export function run(command, {cwd, timeoutMs = 300_000, env} = {}) {
     };
     const timer = setTimeout(() => {
       timedOut = true;
-      try {
-        process.kill(-child.pid, 'SIGKILL');
-      } catch {
-        child.kill('SIGKILL');
-      }
+      killGroup(child);
       finish(null);
     }, timeoutMs);
     child.on('close', code => finish(code));
@@ -66,7 +62,16 @@ export function run(command, {cwd, timeoutMs = 300_000, env} = {}) {
   });
 }
 
-function isInside(candidate, root) {
+/** Kills a detached child and every process it started. */
+export function killGroup(child) {
+  try {
+    process.kill(-child.pid, 'SIGKILL');
+  } catch {
+    child.kill('SIGKILL');
+  }
+}
+
+export function isInside(candidate, root) {
   const relative = path.relative(root, candidate);
   return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
 }

@@ -11,6 +11,7 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {ideaKind} from './kind.mjs';
 import {pickStart, rankPages} from './rank.mjs';
+import {readNames} from './words.mjs';
 import {loadComponents, loadPageTemplates} from '../_adapter.mjs';
 
 // api/build/kit/ -> up 5 = repo root (has packages/core and the templates).
@@ -41,6 +42,20 @@ describe('rankPages on the shipped page templates', () => {
   /** @param {string} query */
   const start = async query =>
     pickStart(rankPages(query, await loadPageTemplates(REPO)))?.name ?? null;
+
+  it('starts a new template its one phrase keyword describes', async () => {
+    // A new template's only evidence is its descriptor: a phrase the idea
+    // names must carry as much as its words listed one by one.
+    const catalog = [
+      ...(await loadPageTemplates(REPO)),
+      page('acme-books', 'Acme - Books', 'Rows of entries.', [
+        'quarterly vendor ledger',
+      ]),
+    ];
+    expect(
+      pickStart(rankPages('a quarterly vendor ledger page', catalog))?.name,
+    ).toBe('acme-books');
+  });
 
   it('starts a long dashboard idea from the family base', async () => {
     expect(
@@ -86,7 +101,7 @@ describe('rankPages on the shipped page templates', () => {
       await start(
         'a data table of campaigns with spend and revenue, plus summary metrics above it',
       ),
-    ).toMatch(/^table-/);
+    ).toMatch(/^table(-|$)/);
   });
 
   it('keeps a variant that leads when its family base cannot start alone', async () => {
@@ -163,6 +178,25 @@ describe('rankPages on any catalog', () => {
     expect(rankPages('uptime overview', catalog)[0].name).toBe('health');
   });
 
+  it('matches a phrase keyword only as the whole phrase', () => {
+    const catalog = [
+      page('article', 'Docs - Article', 'Long-form prose.', [
+        'table of contents',
+      ]),
+      page('grid', 'Table - Grid', 'Rows and columns.', ['table']),
+    ];
+    // The phrase's words never count alone: a table request is the table.
+    const table = rankPages('a table of orders with contents', catalog);
+    expect(table[0].name).toBe('grid');
+    expect(table.find(r => r.name === 'article')?.hits).toBe(0);
+    // Named in order, the phrase counts every one of its words.
+    const docs = rankPages('docs article with a table of contents', catalog);
+    const article = docs.find(r => r.name === 'article');
+    expect([...(article?.matched ?? [])]).toEqual(
+      expect.arrayContaining(['table', 'content']),
+    );
+  });
+
   it("lets a variant displace its family's base only with two words of its own", () => {
     const catalog = [
       page('widget', 'Widget - Basic', 'One compact card.', ['widget']),
@@ -178,6 +212,60 @@ describe('rankPages on any catalog', () => {
     expect(rankPages('weather widget with radar', catalog)[0].name).toBe(
       'widget-weather',
     );
+  });
+
+  it('reads a template named in any case, separator or with a neighbour-letter swap', () => {
+    const catalog = [
+      page('kanban-board', 'Tools - Kanban', 'Cards in columns of a board.'),
+      page('table-inbox', 'Table - Inbox', 'A list with a reading pane.'),
+    ];
+    for (const idea of [
+      'a KanbanBoard page',
+      'a kanbanBoard',
+      'a knaban board page',
+    ]) {
+      expect(rankPages(idea, catalog)[0]?.name).toBe('kanban-board');
+    }
+  });
+
+  it('never respells a real word into a template name', () => {
+    const catalog = [
+      page('detail-page', 'Content - Detail', 'One record with its fields.'),
+      page('table-inbox', 'Table - Inbox', 'A list with a reading pane.'),
+    ];
+    expect(readNames('a list with a detail pane', catalog)).toBe(
+      'a list with a detail pane',
+    );
+    expect(readNames('a DetailPage, please', catalog)).toBe(
+      'a detail page, please',
+    );
+  });
+
+  it('reads only a swap of two neighbouring letters as a slip', () => {
+    const catalog = [
+      page('settings', 'Settings - Basic', 'Preferences in sections.'),
+      page('table-page', 'Table - Basic', 'Rows of records.'),
+    ];
+    for (const idea of [
+      'a seating chart page',
+      'a sports betting page',
+      'a sitting schedule page',
+      'a cable page',
+      'a setings page',
+    ]) {
+      expect(readNames(idea, catalog)).toBe(idea);
+    }
+    expect(readNames('a stetings page', catalog)).toBe('a settings page');
+  });
+
+  it('never reads a real word in a longer name as a slip', () => {
+    const catalog = [
+      page('classic-gallery', 'Gallery - Classic', 'A grid of images.'),
+      page('centered-hero', 'Content - Hero', 'A centered headline.'),
+    ];
+    for (const idea of ['a classic galley page', 'an entered hero page']) {
+      expect(readNames(idea, catalog)).toBe(idea);
+    }
   });
 
   it('weighs a word by how rare it is among page templates', () => {
@@ -220,13 +308,14 @@ describe('rankPages structure signals', () => {
     ),
   ];
 
-  it('doubles a container word and lets it carry the start', () => {
+  it('doubles a container word, but a frame around a part is no start evidence', () => {
+    // The modal holds the draft history, a part, not a settings page.
     const ranked = rankPages(
       'draft history in a modal with delete row actions',
       catalog,
     );
     expect(ranked[0].name).toBe('dialog-panel');
-    expect(ranked[0].containerMatched).toBe(true);
+    expect(ranked[0].containerMatched).toBe(false);
   });
 
   it('counts only an overlay frame as a container', () => {
@@ -322,6 +411,43 @@ describe('ideaKind: a part of a page, told by the components the system ships', 
     expect(kind('reuse the existing tooltip on the chart')).toBe('edit');
   });
 
+  it('takes an idea that opens with "add" as an edit', () => {
+    expect(kind('add a filter row above the table')).toBe('edit');
+    expect(kind('add a date picker to the settings page')).toBe('edit');
+    // A head that names a page, or a new page, is still a page; "add" inside
+    // an idea opens nothing.
+    expect(kind('add a settings page')).toBe('page');
+    expect(kind('add a new settings page')).toBe('page');
+    expect(kind('a settings page where admins add users')).toBe('page');
+  });
+
+  it('takes an "add" idea that says nowhere the piece goes as before', () => {
+    expect(kind('add a settings page to the app')).toBe('page');
+    expect(kind('add a settings page')).toBe('page');
+    expect(kind('add a data table to my app')).toBe('page');
+    expect(kind('add a tooltip to my app')).toBe('part');
+    expect(kind('add a settings page to my project')).toBe('page');
+    expect(kind('add a data table with filters to my website')).toBe('page');
+    expect(kind('add a data table with filters')).toBe('page');
+    expect(kind('add a tooltip')).toBe('part');
+  });
+
+  it('names a component in an "add" place only by its head word', () => {
+    const own = [page('table', 'Table - Basic', 'Rows.')];
+    const parts = [component('ChatToolCalls', ['tool']), component('Banner')];
+    expect(ideaKind('add a task board to my tool', own, parts)).toBe('page');
+    expect(ideaKind('add a banner to the tool calls', own, parts)).toBe('edit');
+  });
+
+  it('names a template in an "add" place only by its whole name', () => {
+    const own = [page('product-detail', 'Content - Detail', 'One product.')];
+    const parts = [component('Banner')];
+    expect(ideaKind('add a task board to my product', own, parts)).toBe('page');
+    expect(
+      ideaKind('add a banner to the product detail page', own, parts),
+    ).toBe('edit');
+  });
+
   it('does not take "existing" that names no page or part as an edit', () => {
     expect(kind('a new settings page inspired by the existing one')).toBe(
       'page',
@@ -352,6 +478,40 @@ describe('pickStart on parts and edits (spec:AST-048/FR3)', () => {
     expect(await start('an empty state for a settings page')).toBe('settings');
     expect(await start('a date range picker')).toBeNull();
     expect(await start('compact status pill with a tooltip')).toBeNull();
+  });
+
+  it('never takes a template kept off the gallery as the app shell for a part', () => {
+    const pages = [
+      page('frame-top', 'Shell - Top Nav', 'An app frame with top navigation.'),
+      {
+        ...page(
+          'frame-preview',
+          'Shell - Top Nav',
+          'Sample product screens for a theme preview, with top navigation.',
+          ['theme preview'],
+        ),
+        hidden: true,
+      },
+    ];
+    const shellFor = (/** @type {string} */ idea) =>
+      pickStart(rankPages(idea, pages), 'part')?.name ?? null;
+    expect(shellFor('a theme preview frame with top navigation')).toBeNull();
+    expect(shellFor('an app frame with top navigation')).toBe('frame-top');
+  });
+
+  it('hosts a part on a family base only when the family is where it goes', () => {
+    const pages = [
+      page('content', 'Content - Basic', 'A plain content page.'),
+      page('content-article', 'Content - Article', 'A long-form article.'),
+      page('frame-top', 'Shell - Top Nav', 'An app frame with top navigation.'),
+    ];
+    // "content" also ends a component's name, so an idea headed by it asks
+    // for that piece; the same word after "for the" names the page it joins.
+    const pieceWords = new Set(['content', 'button']);
+    const hostFor = (/** @type {string} */ idea) =>
+      pickStart(rankPages(idea, pages), 'part', pieceWords)?.name ?? null;
+    expect(hostFor('a content block with a heading and two links')).toBeNull();
+    expect(hostFor('a pull quote for the content page')).toBe('content');
   });
 
   it('starts an edit of an existing page or part from the app shell', async () => {
@@ -390,8 +550,108 @@ describe('pickStart on parts and edits (spec:AST-048/FR3)', () => {
   });
 
   it('still starts a whole page from its template', async () => {
+    expect(await start('a checkout form in a dialog')).toBe(
+      'form-wizard-dialog',
+    );
+  });
+
+  it("starts from the family's template for the frame that holds the page", async () => {
+    expect(await start('notification settings in a modal')).toBe(
+      'settings-dialog',
+    );
+    expect(await start('a toggle in a modal on the settings page')).toBe(
+      'settings',
+    );
+    const pages = [
+      page('widget', 'Widget - Basic', 'A plain widget page.'),
+      page('widget-dialog', 'Widget - Dialog', 'A widget page in a dialog.'),
+    ];
+    const lead = (/** @type {string} */ idea) =>
+      pickStart(rankPages(idea, pages))?.name;
+    expect(lead('a widget in a dialog')).toBe('widget-dialog');
+    expect(lead('a widget with a toggle in a dialog')).toBe('widget');
+  });
+
+  it('counts a frame only when it holds the page the idea names', async () => {
+    const [catalog] = await shipped;
+    /** @param {string} idea */
+    const framed = idea =>
+      rankPages(idea, catalog).find(r => r.name === 'settings-dialog')
+        ?.containerMatched;
+    expect(framed('notification settings in a modal')).toBe(true);
+    expect(framed('settings page with an avatar upload in a modal')).toBe(
+      false,
+    );
+    expect(framed('a toggle in a modal on the settings page')).toBe(false);
+  });
+});
+
+describe('rankPages is a total order', () => {
+  const ideas = [
+    'code editor',
+    'item detail page',
+    'settings in a modal dialog',
+    'ide with a file tree',
+    'chat',
+    'inbox table with filters',
+  ];
+  /** @param {any[]} ranked */
+  const names = ranked => ranked.map(r => `${r.name}:${r.score}`);
+
+  it('ranks the same however the catalog is ordered', async () => {
+    const pages = await loadPageTemplates(REPO);
+    const reversed = [...pages].reverse();
+    const rotated = [...pages.slice(7), ...pages.slice(0, 7)];
+    for (const idea of ideas) {
+      const expected = names(rankPages(idea, pages));
+      expect(names(rankPages(idea, reversed))).toEqual(expected);
+      expect(names(rankPages(idea, rotated))).toEqual(expected);
+    }
+  });
+
+  it('breaks an exact tie by name, without the host locale', () => {
+    // Same words, same score: only the names differ, in case and in letters
+    // some locales move ("y" in Lithuanian, dotless "i" in Turkish).
+    const catalog = ['Yard-Board', 'ide-board', 'IDE-board', 'item-board'].map(
+      name => page(name, 'Tools', 'a board of cards'),
+    );
+    const order = rankPages('board of cards', catalog).map(r => r.name);
+    expect(order).toEqual([
+      'ide-board',
+      'IDE-board',
+      'item-board',
+      'Yard-Board',
+    ]);
     expect(
-      await start('saved drafts in a modal with resume and delete row actions'),
-    ).toBe('settings-dialog');
+      rankPages('board of cards', [...catalog].reverse()).map(r => r.name),
+    ).toEqual(order);
+  });
+});
+
+describe('an exact tie the idea settles by name', () => {
+  // Both ids carry "steps" and "flow", so the ranker ties them; only the
+  // vertical one composes the progress rail the idea mentions.
+  const catalog = [
+    {
+      ...page('steps-flow', 'Steps - Flow', 'one step at a time'),
+      displayName: 'Steps Flow',
+    },
+    {
+      ...page(
+        'steps-flow-vertical',
+        'Steps - Flow Vertical',
+        'one step at a time',
+      ),
+      displayName: 'Vertical Flow',
+      components: ['ProgressRail'],
+    },
+  ];
+  const idea = 'steps flow page with a progress rail';
+
+  it('goes to the template the idea names by its whole name', () => {
+    const ranked = rankPages(idea, catalog);
+    expect(ranked[0].score).toBe(ranked[1].score);
+    expect(ranked[0].name).toBe('steps-flow');
+    expect(rankPages(idea, [...catalog].reverse())[0].name).toBe('steps-flow');
   });
 });

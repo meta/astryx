@@ -193,25 +193,44 @@ const DOUBLE_TAP = [
 
 /**
  * Holds the page's main thread for `holdMs`, from 50 ms after the first lift,
- * as a page's own long task does. Records when each touch reached the page.
+ * as a page's own long task does. Records each touch's stamp and when it
+ * reached the page, each frame, and when the task ran, on the page's clock.
  */
 async function holdAfterFirstLift(page: Page, holdMs: number): Promise<void> {
   await page.evaluate(ms => {
-    const seen: {type: string; at: number}[] = [];
-    (window as unknown as {__tapsSeen: typeof seen}).__tapsSeen = seen;
+    const record = {
+      seen: [] as {type: string; at: number; stamp: number}[],
+      frames: [] as number[],
+      hold: {start: Number.NaN, end: Number.NaN},
+    };
+    (window as unknown as {__tapRecord: typeof record}).__tapRecord = record;
+    const frame = () => {
+      record.frames.push(performance.now());
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
     for (const type of ['touchstart', 'touchend']) {
-      addEventListener(type, () => seen.push({type, at: performance.now()}), {
-        capture: true,
-      });
+      addEventListener(
+        type,
+        event =>
+          record.seen.push({
+            type,
+            at: performance.now(),
+            stamp: event.timeStamp,
+          }),
+        {capture: true},
+      );
     }
     addEventListener(
       'touchend',
       () => {
         setTimeout(() => {
-          const end = performance.now() + ms;
+          record.hold.start = performance.now();
+          const end = record.hold.start + ms;
           while (performance.now() < end) {
             // The page's own task holds the main thread.
           }
+          record.hold.end = performance.now();
         }, 50);
       },
       {capture: true, once: true},
@@ -219,12 +238,58 @@ async function holdAfterFirstLift(page: Page, holdMs: number): Promise<void> {
   }, holdMs);
 }
 
+/** The page's record of a held double tap, from `holdAfterFirstLift`. */
+interface HeldTapRecord {
+  /** The first lift's stamp. */
+  readonly liftStamp: number;
+  /** The next touch-down's stamp. */
+  readonly downStamp: number;
+  /** When the next touch-down reached the page's listeners. */
+  readonly downReceivedAt: number;
+  /** When the page drew each frame. */
+  readonly frames: readonly number[];
+  /** When the page's own task began and ended. */
+  readonly holdStart: number;
+  readonly holdEnd: number;
+}
+
+async function heldTapRecord(page: Page): Promise<HeldTapRecord> {
+  return page.evaluate(() => {
+    const {seen, frames, hold} = (
+      window as unknown as {
+        __tapRecord: {
+          seen: {type: string; at: number; stamp: number}[];
+          frames: number[];
+          hold: {start: number; end: number};
+        };
+      }
+    ).__tapRecord;
+    const lift = seen.findIndex(entry => entry.type === 'touchend');
+    const down = seen.findIndex(
+      (entry, index) => index > lift && entry.type === 'touchstart',
+    );
+    if (lift < 0 || down < 0) {
+      throw new Error(`no second touch-down: ${JSON.stringify(seen)}`);
+    }
+    return {
+      liftStamp: seen[lift].stamp,
+      downStamp: seen[down].stamp,
+      downReceivedAt: seen[down].at,
+      frames: frames.slice(),
+      holdStart: hold.start,
+      holdEnd: hold.end,
+    };
+  });
+}
+
 /** How long after the first lift the next touch-down reached the page, ms. */
 async function secondTouchGapMs(page: Page): Promise<number> {
   return page.evaluate(() => {
-    const seen = (
-      window as unknown as {__tapsSeen: {type: string; at: number}[]}
-    ).__tapsSeen;
+    const {seen} = (
+      window as unknown as {
+        __tapRecord: {seen: {type: string; at: number}[]};
+      }
+    ).__tapRecord;
     const lift = seen.findIndex(entry => entry.type === 'touchend');
     const down = seen.findIndex(
       (entry, index) => index > lift && entry.type === 'touchstart',
@@ -688,7 +753,6 @@ test.describe('touch input', () => {
 
   test("a page task that holds the main thread across the tap interval's close never names the runner", async ({
     page,
-    browserName,
   }) => {
     // The driver comes first, so its mark does too.
     const driver = await touchDriver(page);
@@ -704,20 +768,38 @@ test.describe('touch input', () => {
       );
     // The page read separate taps, but its own task held the touch-down.
     expect(await secondTouchGapMs(page)).toBeGreaterThan(350);
-    // Chromium draws a frame after the task, before the touch-down it held.
-    // So the play names the held main thread. WebKit draws no frame between
-    // them, so the component decides (touch.taps.test.ts covers that case).
+    const record = await heldTapRecord(page);
+    const closesAt = record.liftStamp + 350;
+    expect(record.holdStart).toBeLessThan(closesAt);
+    expect(record.holdEnd).toBeGreaterThan(closesAt);
+    // Whether the engine draws a frame between the task's end and the
+    // touch-down it held is its own scheduling. The verdict follows the
+    // page's frames, by the play's rule: a frame after the close and before
+    // the touch-down arrived. A page that stamps touches on arrival gives
+    // the stamp; otherwise its listeners give the receipt.
+    const arrivedAt = driver.scriptedTimestamps
+      ? record.downReceivedAt
+      : record.downStamp;
+    const drewBetween = record.frames.some(
+      time => time > closesAt && time < arrivedAt,
+    );
+    test.info().annotations.push({
+      type: 'frame between the close and the touch-down',
+      description: drewBetween ? 'yes' : 'no',
+    });
+    // A play that fails names the held main thread, with a frame gap at
+    // least as long as the task, and never the runner.
+    const fault =
+      outcome instanceof Error && outcome.name === 'TouchTapIntervalError'
+        ? (outcome as Error & {fault: TapIntervalFault}).fault
+        : null;
     const named =
-      outcome instanceof Error &&
-      outcome.name === 'TouchTapIntervalError' &&
-      (outcome as Error & {fault: TapIntervalFault}).fault.closeFrameGapMs >
-        FRAME_STARVATION_MS &&
-      !outcome.message.includes('runner')
+      fault != null &&
+      fault.closeFrameGapMs >= record.holdEnd - record.holdStart &&
+      !(outcome as Error).message.includes('runner')
         ? 'a held main thread'
         : outcome;
-    expect(named).toBe(
-      browserName === 'webkit' ? 'resolved' : 'a held main thread',
-    );
+    expect(named).toBe(drewBetween ? 'a held main thread' : 'resolved');
   });
 
   test('a page task that ends before the tap interval closes leaves the double tap on time', async ({

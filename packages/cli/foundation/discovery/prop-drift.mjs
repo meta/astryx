@@ -31,7 +31,11 @@
  *   each);
  * - `type_mismatch`: for a prop declared in the package, the documented type
  *   differs from the code's where both sides read exactly (type-match.mjs
- *   states the rules); every other type is listed as not compared;
+ *   states the rules); every other type is listed as not compared. A doc may
+ *   leave out a string literal that the package marks deprecated in every
+ *   place the type takes it from: a union member under a `@deprecated`
+ *   comment, a `@deprecated` key of a `keyof` map, or a parameter of a
+ *   `@deprecated` overload;
  * - `default_mismatch`: the doc's `default` and the literal default the
  *   component writes in its props parameter's destructuring (`size = 'md'`)
  *   differ, quotes and whitespace aside; where both write a default and
@@ -61,6 +65,7 @@ import {
   unresolvedGlobals,
   unresolvedReference,
 } from './unresolved-references.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 /**
  * @typedef {'not_in_code' | 'not_in_doc' | 'required_mismatch' | 'type_mismatch' | 'default_mismatch'} PropDriftKind
@@ -258,6 +263,8 @@ function ownFileTest(root) {
  *   the name in each member that lacks the prop; null when two signatures
  *   in one member take it
  * @property {any} location where names in the prop's type resolve
+ * @property {() => Set<string>} deprecated string literals the package's own
+ *   declarations give the prop only from deprecated sources
  */
 
 /**
@@ -569,6 +576,7 @@ function readCodeProps(
           : each.flatMap(indexes => indexes.map(info => info.type));
       }),
       location: ownDeclarations[0] ?? sourceFile,
+      deprecated: memo(() => deprecatedLiterals(ts, checker, ownDeclarations)),
       // Printed where the prop is declared, where a documented type's names
       // resolve: a type another file imports under another name prints as
       // that file names it.
@@ -762,7 +770,7 @@ function inDeclaredOrder(ts, checker, type, symbol) {
   /** @type {(t: any) => string} */
   const text = t => checker.typeToString(t);
   return [...type.types].sort(
-    (a, b) => place(a) - place(b) || text(a).localeCompare(text(b)),
+    (a, b) => place(a) - place(b) || compareText(text(a), text(b)),
   );
 }
 
@@ -861,7 +869,8 @@ function judgeProp(ts, checker, docType, code, reading) {
   // signature, which a doc may describe too.
   const indexed = code.indexed();
   if (indexed == null) return 'not_compared';
-  return judgeMembers(docType, [...code.types(), ...indexed], {
+  const types = [...code.types(), ...indexed];
+  const ctx = {
     ts,
     checker,
     location: code.location,
@@ -876,7 +885,132 @@ function judgeProp(ts, checker, docType, code, reading) {
           ...code.declared.map(text => [text]),
           ...code.renderings(),
         ],
-  });
+  };
+  const verdict = judgeMembers(docType, types, ctx);
+  const deprecated = verdict === 'mismatch' ? code.deprecated() : new Set();
+  if (deprecated.size === 0) return verdict;
+  // A doc need not offer a value the package deprecates: judge it again
+  // against the type without those literals. Its written text still holds
+  // them, so only the parts are compared.
+  const current = types
+    .flatMap(type => (type.isUnion() ? type.types : [type]))
+    .filter(part => !(part.isStringLiteral() && deprecated.has(part.value)));
+  return judgeType(docType, current, {...ctx, written: []}) === 'match'
+    ? 'match'
+    : verdict;
+}
+
+/**
+ * The string literals a prop's own declarations give it only from deprecated
+ * sources: a union member under a `@deprecated` comment, a `@deprecated` key
+ * of a `keyof` map, or any literal in a `@deprecated` overload's parameter.
+ * A literal that any other source also gives stays current. Aliases without
+ * type parameters are read through their declarations; every other form
+ * gives its string values as current.
+ * @param {any} ts
+ * @param {any} checker
+ * @param {any[]} declarations the prop's declarations in the package
+ * @returns {Set<string>}
+ */
+function deprecatedLiterals(ts, checker, declarations) {
+  /** @type {Set<string>} */
+  const deprecated = new Set();
+  /** @type {Set<string>} */
+  const current = new Set();
+  // A node is read once as current and once as deprecated: a deprecated
+  // overload and a current one can name the same alias.
+  const seen = {current: new Set(), deprecated: new Set()};
+  // A union member's comments sit between the member before it and itself:
+  // on their own line before a leading `|`, or on the line after the `|`.
+  // TypeScript's leading ranges start after the first line break (a comment
+  // on the line before belongs to that line's member); its trailing ranges
+  // hold the comments on the line itself.
+  /** @type {(member: any, previous: any, union: any) => boolean} */
+  const commentDeprecates = (member, previous, union) => {
+    const text = member.getSourceFile().text;
+    const start = member.getFullStart();
+    return [
+      ...(ts.getLeadingCommentRanges(
+        text,
+        previous ? previous.end : union.getFullStart(),
+      ) ?? []),
+      ...(ts.getLeadingCommentRanges(text, start) ?? []),
+      ...(ts.getTrailingCommentRanges(text, start) ?? []),
+    ].some((/** @type {any} */ range) =>
+      text.slice(range.pos, range.end).includes('@deprecated'),
+    );
+  };
+  /** @type {(node: any, inDeprecated: boolean) => void} */
+  const visit = (node, inDeprecated) => {
+    const read = inDeprecated ? seen.deprecated : seen.current;
+    if (!node || read.has(node)) return;
+    read.add(node);
+    if (ts.isParenthesizedTypeNode(node)) return visit(node.type, inDeprecated);
+    if (ts.isUnionTypeNode(node)) {
+      node.types.forEach((/** @type {any} */ member, /** @type {number} */ i) =>
+        visit(
+          member,
+          inDeprecated || commentDeprecates(member, node.types[i - 1], node),
+        ),
+      );
+      return;
+    }
+    if (ts.isLiteralTypeNode(node) && ts.isStringLiteral(node.literal)) {
+      (inDeprecated ? deprecated : current).add(node.literal.text);
+      return;
+    }
+    if (
+      ts.isTypeOperatorNode(node) &&
+      node.operator === ts.SyntaxKind.KeyOfKeyword
+    ) {
+      for (const key of checker.getPropertiesOfType(
+        checker.getTypeFromTypeNode(node.type),
+      )) {
+        const keyDeprecated = (key.declarations ?? []).some(
+          (/** @type {any} */ d) => ts.getJSDocDeprecatedTag(d) != null,
+        );
+        (inDeprecated || keyDeprecated ? deprecated : current).add(key.name);
+      }
+      return;
+    }
+    if (ts.isTypeReferenceNode(node) && !node.typeArguments) {
+      let target = checker.getSymbolAtLocation(node.typeName);
+      if (target && target.flags & ts.SymbolFlags.Alias) {
+        target = checker.getAliasedSymbol(target);
+      }
+      const aliases = (target?.declarations ?? []).filter(
+        (/** @type {any} */ d) =>
+          ts.isTypeAliasDeclaration(d) && !d.typeParameters,
+      );
+      if (aliases.length > 0) {
+        for (const alias of aliases) visit(alias.type, inDeprecated);
+        return;
+      }
+    }
+    // Any other form (`Exclude<All, 'xs'>`, `Base['size']`, a generic alias)
+    // carries no deprecation the walk can read: its string values come from
+    // its source as it is.
+    const type = checker.getTypeFromTypeNode(node);
+    for (const part of type.isUnion() ? type.types : [type]) {
+      if (part.isStringLiteral()) {
+        (inDeprecated ? deprecated : current).add(part.value);
+      }
+    }
+  };
+  for (const declaration of declarations) {
+    if (!declaration.type) continue;
+    // A literal written in a deprecated overload's parameter is deprecated.
+    let inDeprecated = false;
+    for (let at = declaration.parent; at; at = at.parent) {
+      if (ts.isFunctionLike(at) && ts.getJSDocDeprecatedTag(at) != null) {
+        inDeprecated = true;
+        break;
+      }
+    }
+    visit(declaration.type, inDeprecated);
+  }
+  for (const literal of current) deprecated.delete(literal);
+  return deprecated;
 }
 
 /**
@@ -935,6 +1069,24 @@ function documentedProps(raw) {
       required: raw.required,
     };
   });
+}
+
+/**
+ * Whether a props type takes a prop of this name, as JSX checks a prop: a
+ * member of its union has the property, or one of its index signatures takes
+ * the name.
+ * @param {any} ts
+ * @param {any} checker
+ * @param {any} type
+ * @param {string} name
+ * @returns {boolean}
+ */
+export function propsTypeTakes(ts, checker, type, name) {
+  const members = holders(ts, checker, type);
+  return (
+    members.some(member => checker.getPropertyOfType(member, name) !== undefined) ||
+    indexesFor(ts, checker, members, name).length > 0
+  );
 }
 
 /**
@@ -1792,7 +1944,7 @@ export function comparePropTables(tables, options) {
         reason: `the package's TypeScript config has an error, so props were not read (${project.error})`,
       });
     }
-    unchecked.sort((a, b) => a.component.localeCompare(b.component));
+    unchecked.sort((a, b) => compareText(a.component, b.component));
     return {
       status: 'checked',
       typescript: version,
@@ -2213,15 +2365,14 @@ export function comparePropTables(tables, options) {
   // sort one component's findings among another's that shares its prefix.
   findings.sort(
     (a, b) =>
-      a.component.localeCompare(b.component) ||
-      a.prop.localeCompare(b.prop) ||
-      a.kind.localeCompare(b.kind),
+      compareText(a.component, b.component) ||
+      compareText(a.prop, b.prop) ||
+      compareText(a.kind, b.kind),
   );
-  unchecked.sort((a, b) => a.component.localeCompare(b.component));
+  unchecked.sort((a, b) => compareText(a.component, b.component));
   typesNotCompared.sort(
     (a, b) =>
-      a.component.localeCompare(b.component) ||
-      a.reason.localeCompare(b.reason),
+      compareText(a.component, b.component) || compareText(a.reason, b.reason),
   );
   return {
     status: 'checked',
@@ -2428,7 +2579,7 @@ export async function comparePropDocs(components, options) {
   return {
     ...report,
     unchecked: [...unchecked, ...report.unchecked].sort((a, b) =>
-      a.component.localeCompare(b.component),
+      compareText(a.component, b.component),
     ),
   };
 }

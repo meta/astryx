@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'cut',
+  group: 'clipboard',
   description: 'Cut a selection so you can paste it somewhere else.',
   words: ['scissors', 'cut out', 'clip'],
 };

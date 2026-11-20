@@ -89,6 +89,59 @@ describe('orderByFit', () => {
     expect(new Set(out)).toEqual(new Set(results));
   });
 
+  it('never moves a held entry down', () => {
+    const results = [
+      result('Beacon', 160),
+      result('Pebble', 120),
+      result('Quill', 120),
+      result('Marrow', 120),
+      result('Thistle', 120),
+      result('LanternCrate', 120),
+    ];
+    const out = orderByFit(
+      results,
+      CATALOG,
+      QUERY,
+      weights,
+      new Set([results[1]]),
+    );
+    expect(names(out)).toEqual([
+      'Beacon',
+      'Pebble',
+      'Thistle',
+      'LanternCrate',
+      'Quill',
+      'Marrow',
+    ]);
+  });
+
+  it('keeps a held root and its part together at the last place read', () => {
+    const results = [
+      'Beacon',
+      'Thistle',
+      'LanternCrate',
+      'Thistle',
+      'LanternCrate',
+      'Thistle',
+      'LanternCrate',
+      'Pebble',
+      'Quill',
+      'Marrow',
+      'UploadZoneHint',
+    ].map((name, i) => result(name, i === 0 ? 160 : 120));
+    const [root, part] = results.slice(9);
+    const out = orderByFit(
+      results,
+      CATALOG,
+      QUERY,
+      weights,
+      new Set([root, part]),
+      new Map([[part, root]]),
+    );
+    expect(out.indexOf(part)).toBe(out.indexOf(root) + 1);
+    expect(new Set(out)).toEqual(new Set(results));
+  });
+
   it('scores an entry with no catalog item from the result itself', () => {
     const results = [
       result('Beacon', 160),

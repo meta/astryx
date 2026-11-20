@@ -154,10 +154,12 @@ work.
   takes the one shared focus-owner style and owner attribute from
   `privateAttributes/focusOwner.stylex.ts`, so the wrapper rings only while that control
   has keyboard focus, and a nested owner or a sibling control rings itself;
-  no component writes the attribute or its selector itself. Implementation
-  gap: Item, Token, the clickable and selectable cards, Thumbnail,
-  MultiSelector, SideNavItem, and ChatComposer's body write their own ring
-  conditions.
+  no component writes the attribute or its selector itself. When layout puts
+  the control one level down, as in a numbered Item whose own button or link
+  sits in the cell beside its marker, the wrapper marks that cell with the
+  module's group props, so the ring still reaches the control. Implementation
+  gap: Thumbnail, MultiSelector, SideNavItem, and ChatComposer's body write
+  their own ring conditions.
 - **INV4 — Every modality has an operable path.** Keyboard, pointer, and touch or
   pen can reach each supported interaction. Hover is never the only discovery or
   activation path. A tooltip's scrolling overflow is the one exception, as
@@ -337,6 +339,11 @@ review (`architecture:knowledge-contracts` change coupling step 6).
 - The action-group tracker (INV13) — the one press tracker for action groups
   outside menus and Selector's and MultiSelector's options, with its one-axis
   tracking (INV14); not exported.
+- `useTapStop` in `Layer/useTouchTrigger.ts` — swallows the click or mousedown
+  that follows a touch press on a control that must not act on taps; not
+  exported. Tokenizer runs it on every press and passes it a token's remove
+  button's mousedown only after a finger's press with the keyboard down. A pen's
+  press keeps its default, as a mouse's does.
 
 ## Deciding specs
 

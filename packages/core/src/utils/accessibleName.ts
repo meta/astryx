@@ -8,9 +8,10 @@
  *   input button's value, its visible text (`aria-hidden` left out, an inner
  *   image's alt, `aria-label` or svg title counted), then `title`
  * @position Internal utility, not exported from the package: DropdownMenu
- *   names a menu after a custom trigger, SideNav finds a re-rendered header
- *   or footer control again by name (`component:SideNav` AR3), and
- *   reorderable attach names each item without its handle
+ *   names a menu after a custom trigger and a level after a node label,
+ *   SideNav finds a re-rendered header or footer control again by name
+ *   (`component:SideNav` AR3), and reorderable attach names each item without
+ *   its handle
  */
 
 /** Where `node` sits under `root`: each ancestor's child index, root first. */
@@ -32,7 +33,10 @@ function pathTo(root: Element, node: Element): number[] | null {
  * Text an assistive technology reads from `element`, `aria-hidden` left out,
  * and `exclude`'s subtree left out when it is inside `element`.
  */
-function visibleText(element: Element, exclude?: Element | null): string {
+export function visibleText(
+  element: Element,
+  exclude?: Element | null,
+): string {
   const copy = element.cloneNode(true) as Element;
   const path = exclude == null ? null : pathTo(element, exclude);
   if (path != null && path.length > 0) {

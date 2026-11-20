@@ -629,7 +629,7 @@ describe('generated files a formatter rewrote', () => {
         'trash',
       ]);
       expect(mapped.code, JSON.stringify(mapped.body)).toBe(0);
-      expect(generatedOf('brand')).toContain('close: createElement(TrashIcon');
+      expect(generatedOf('brand')).toContain('close: /* @__PURE__ */ createElement(TrashIcon');
       const added = await json([
         'experimental',
         'icon',
@@ -2007,4 +2007,58 @@ describe('the default variant on every path', () => {
       }
     }
   }
+});
+
+describe('a refresh after the library drops a glyph it drew in several looks', () => {
+  it('removes every look of that glyph from the generated module and its declarations', async () => {
+    writeVectorLibrary(GLYPHS);
+    await json([...NEW_SET, '--variants', 'outline,filled']);
+    const ADD_FILLED = [
+      'experimental',
+      'icon',
+      'add',
+      '--variant',
+      'filled',
+      '--from',
+      '@acme/vector-icons',
+      '--all',
+    ];
+    await json(ADD_FILLED);
+    const declarationsOf = (/** @type {string} */ set) =>
+      fs.readFileSync(
+        path.join(pkg, 'icon-sets', set, `${set}.generated.d.ts`),
+        'utf-8',
+      );
+    expect(generatedOf('brand')).toContain('StarFilled24WGHT400Icon');
+
+    writeVectorLibrary(GLYPHS.filter(glyph => glyph !== 'Star'));
+    const refreshed = await json([...NEW_SET, '--variants', 'outline,filled']);
+    expect(refreshed.code, JSON.stringify(refreshed.body)).toBe(0);
+    expect(refreshed.body.data.notes).toEqual(
+      expect.arrayContaining([
+        '1 icons the library no longer exports were removed from the set: star.',
+      ]),
+    );
+    const library = fs.readFileSync(
+      path.join(pkg, 'node_modules', '@acme', 'vector-icons', 'index.js'),
+      'utf-8',
+    );
+    for (const text of [generatedOf('brand'), declarationsOf('brand')]) {
+      expect(text).not.toMatch(/Star/u);
+      // Every name the module re-exports is one the library still exports.
+      for (const [, name] of text.matchAll(/\{(\w+) as \w+\}/gu)) {
+        expect(library).toContain(`as ${name}}`);
+      }
+      expect(text).toContain('XFilled24WGHT400Icon as XFilledIcon');
+    }
+    expect(
+      dataOf('brand').icons.map((/** @type {{id: string}} */ icon) => icon.id),
+    ).not.toContain('star');
+
+    // A second refresh, and the add after it, change nothing.
+    const before = [generatedOf('brand'), declarationsOf('brand')];
+    await json([...NEW_SET, '--variants', 'outline,filled']);
+    await json(ADD_FILLED);
+    expect([generatedOf('brand'), declarationsOf('brand')]).toEqual(before);
+  });
 });

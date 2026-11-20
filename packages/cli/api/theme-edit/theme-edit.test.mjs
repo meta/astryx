@@ -10,7 +10,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as zlib from 'node:zlib';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
   themeEditHow,
   themeEditNew,
@@ -29,26 +29,18 @@ import {
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
 
+import {withRealRenders} from '../../test-utils/theme-render-stub.mjs';
+import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
+// The page renders cost seconds and these tests read settings, builds and
+// files: a stand-in renders unless a test asks for the real thing.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
+
 /** @type {string} */
 let cwd;
-
-/**
- * The error a call throws: its code, message and suggested commands.
- * @param {() => Promise<unknown>} fn
- */
-async function refusal(fn) {
-  try {
-    await fn();
-  } catch (e) {
-    const err = /** @type {any} */ (e);
-    return {
-      code: err.code,
-      message: String(err.message),
-      run: (err.suggestions ?? []).map((/** @type {any} */ s) => s.name),
-    };
-  }
-  throw new Error('expected a refusal');
-}
 
 /** @param {string} slug */
 const settingsOf = slug =>
@@ -70,7 +62,9 @@ beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-edit-', FIXTURE_PACKAGES);
   // CI builds only Core, so the base theme is a fixture, not a built package.
   writeFixtureBaseTheme(cwd, 'neutral');
-  await themeEditNew('t', {cwd, like: 'neutral'});
+  // The first theme renders for real: its preview and render folder are
+  // checked below.
+  await withRealRenders(() => themeEditNew('t', {cwd, like: 'neutral'}));
 }, 120_000);
 
 afterAll(() => {
@@ -125,6 +119,34 @@ describe('new', () => {
 });
 
 describe('refusals', () => {
+  it('refuses a background on a selected table row, which Core paints inline, and points to the token it reads', async () => {
+    const before = settingsOf('t');
+    const r = await refusal(() =>
+      themeEditSet('t', 'background', '#dbeafe', {
+        cwd,
+        on: 'table-row',
+        state: 'selected',
+      }),
+    );
+    expect(r.code).toBe('ERR_THEME_NO_EFFECT');
+    expect(r.message).toContain(
+      "By default Core paints table-row's background-color when selected as an inline style from --color-accent-muted",
+    );
+    expect(r.message).toContain(
+      'only where the component is set not to paint it (such as a table with its row highlight off) does a selected background-color apply',
+    );
+    expect(r.run).toContain(
+      "astryx experimental theme editor set t --color-accent-muted '#dbeafe' --on table-row --state selected",
+    );
+    expect(settingsOf('t')).toBe(before);
+    await themeEditSet('t', '--color-accent-muted', '#dbeafe', {
+      cwd,
+      on: 'table-row',
+      state: 'selected',
+    });
+    await themeEditUndo('t', {cwd});
+  });
+
   it('refuses a token the part never reads and names the property that works; nothing is written', async () => {
     const before = settingsOf('t');
     const r = await refusal(() =>
@@ -134,7 +156,7 @@ describe('refusals', () => {
     expect(r.message).toContain('card never reads --color-on-info-muted');
     expect(r.message).toContain('Nothing was changed.');
     expect(r.run).toContain(
-      'astryx experimental theme editor set t color "#ffffff" --on card',
+      "astryx experimental theme editor set t color '#ffffff' --on card",
     );
     expect(settingsOf('t')).toBe(before);
   });
@@ -164,7 +186,8 @@ describe('refusals', () => {
       themeEditSet('t', 'background', '#fff', {
         cwd,
         on: 'button',
-        state: 'pressed',
+        // (A button's pressed is a state now: Core paints aria-pressed.)
+        state: 'checked',
       }),
     );
     expect(r.code).toBe('ERR_THEME_UNKNOWN_STATE');
@@ -195,7 +218,7 @@ describe('refusals', () => {
     );
     expect(r.code).toBe('ERR_THEME_UNKNOWN_THING');
     expect(r.run[0]).toContain(
-      'background "linear-gradient(#fff, #000)" --on card',
+      "background 'linear-gradient(#fff, #000)' --on card",
     );
   });
 
@@ -212,9 +235,8 @@ describe('refusals', () => {
       themeEditSet('t', 'box-shadow', 'none', {cwd}),
     );
     expect(r.code).toBe('ERR_MISSING_ARGUMENT');
-    expect(r.run[0]).toBe(
-      'astryx experimental theme editor set t box-shadow none --on <part>',
-    );
+    // No part was named and box-shadow has no theme-wide dial: how.
+    expect(r.run[0]).toBe('astryx experimental theme editor how box-shadow');
   });
 });
 
@@ -238,11 +260,14 @@ describe('colors', () => {
     const r = await themeEditSet(
       't',
       '--color-text-primary',
-      'var(--brand-ink)',
+      // A variable the app sets (with a fallback, as one that is not a
+      // design token needs) has no fixed color.
+      'var(--brand-ink, currentcolor)',
       {cwd},
     );
-    expect(r.data.problems.join(' ')).toContain('not checked');
-    expect(r.data.problems.join(' ')).toContain('var(--brand-ink)');
+    // What cannot be measured is a note, not a problem.
+    expect(r.data.notes.join(' ')).toContain('not checked');
+    expect(r.data.notes.join(' ')).toContain('currentcolor');
     await themeEditUndo('t', {cwd, thing: '--color-text-primary'});
   });
 
@@ -388,16 +413,16 @@ describe('typed modes', () => {
     });
   });
 
-  it('refuses --mode on a one-mode theme', async () => {
+  it("reads a one-mode theme's own --mode as no --mode, and says so", async () => {
     await themeEditNew('night', {cwd});
     await themeEditSet('night', 'mode', 'dark-only', {cwd});
-    const r = await refusal(() =>
-      themeEditSet('night', '--color-accent', '#ff0000', {cwd, mode: 'dark'}),
+    const r = await themeEditSet('night', '--color-accent', '#ff0000', {
+      cwd,
+      mode: 'dark',
+    });
+    expect(r.data.notes.join(' ')).toMatch(
+      /night is dark-only: --mode dark is its own mode, the same as no --mode/,
     );
-    expect(r.code).toBe('ERR_THEME_NO_MODE');
-    expect(r.run).toEqual([
-      'astryx experimental theme editor set night --color-accent "#ff0000"',
-    ]);
   });
 });
 
@@ -515,7 +540,7 @@ describe('settings round trip', () => {
       set.data.changedTokens.some(c => c.startsWith('--color-accent (light)')),
     ).toBe(true);
     expect(set.data.notes.join(' ')).toMatch(
-      /--color-accent uses accent shade \d+ \(#[0-9a-f]{6}\) in light/,
+      /--color-accent uses your exact color \(#7c3aed, accent shade \d+\) in light/,
     );
     expect(JSON.parse(settingsOf('t')).settings).toEqual([
       {thing: 'accent', value: '#7c3aed', source: 'dial'},
@@ -534,7 +559,9 @@ describe('settings round trip', () => {
 
   it('show lists the settings and writes both pages', async () => {
     await themeEditSet('t', 'surfaces', 'outlined', {cwd});
-    const r = await themeEditShow('t', {cwd, section: 'actions'});
+    const r = await withRealRenders(() =>
+      themeEditShow('t', {cwd, section: 'actions'}),
+    );
     expect(r.data.settings.map(s => s.thing)).toContain('surfaces');
     expect(fs.readFileSync(path.join(cwd, r.data.sheet), 'utf8')).toContain(
       'astryx-button',
@@ -550,18 +577,21 @@ describe('how on real parts, questions and settings', () => {
     expect(r.data.kind).toBe('question');
     expect(r.data.understood.parts).toContain('banner');
     const commands = r.data.results.flatMap(x => x.commands);
-    expect(commands).toContain(
-      'astryx experimental theme editor set <theme> color "#ffffff" --on banner   # direct: always works',
-    );
     expect(
-      r.data.results.some(x => x.text.includes('--when status:<value>')),
+      commands.some(c =>
+        c.endsWith("editor set t color '#ffffff' --on banner"),
+      ),
     ).toBe(true);
+    expect(
+      r.data.results.some(x => x.text.includes('--when status:info')),
+    ).toBe(true);
+    expect(r.data.results[0].text).toContain('--color-on-info-muted');
   });
 
-  it('a question about soft shadows is answered with box-shadow and the shadow tokens', async () => {
+  it('a question about soft shadows is answered with box-shadow on the part', async () => {
     const r = await themeEditHow('card soft shadow', {cwd});
-    expect(r.data.results[0].commands[0]).toContain(
-      'box-shadow "var(--shadow-low)" --on containers',
+    expect(r.data.results[0].commands[0]).toMatch(
+      /editor set t box-shadow 'var\(--shadow-low\)' --on card$/,
     );
   });
 
@@ -630,10 +660,19 @@ describe('how on a picture', () => {
     fs.writeFileSync(path.join(cwd, 'p.png'), png());
     const r = await themeEditHow('p.png', {cwd, at: ['0,0;2,0', '3,1']});
     expect(r.data.points).toEqual([
-      {at: '0,0', color: '#ff0000'},
-      {at: '2,0', color: '#0000ff'},
-      {at: '3,1', color: '#000000'},
+      {at: '0,0', color: '#ff0000', alpha: 1},
+      {at: '2,0', color: '#0000ff', alpha: 1},
+      {at: '3,1', color: '#000000', alpha: 1},
     ]);
+  });
+
+  it('refuses a point outside the picture, naming its size', async () => {
+    fs.writeFileSync(path.join(cwd, 'p.png'), png());
+    const r = await refusal(() =>
+      themeEditHow('p.png', {cwd, at: ['-1,0', '9,9']}),
+    );
+    expect(r.code).toBe('ERR_INVALID_ARGUMENT');
+    expect(r.message).toContain('-1,0; 9,9 are outside the picture');
   });
 
   it('reads points in every accepted form', () => {
@@ -679,8 +718,9 @@ describe('the command', () => {
     expect(r.status).toBe(1);
     const out = JSON.parse(r.stdout);
     expect(out.code).toBe('ERR_THEME_NO_EFFECT');
-    expect(out.suggestions[0].name).toBe(
-      'astryx experimental theme editor set t color "#ffffff" --on card',
+    // The same prefix the text output uses.
+    expect(out.suggestions[0].name).toMatch(
+      /^(astryx|(?:npx|pnpm dlx|yarn dlx|bunx) \S+) experimental theme editor set t color '#ffffff' --on card$/,
     );
   });
 
@@ -803,8 +843,7 @@ describe('the command', () => {
         cwd,
       },
     );
-    expect(fresh.stdout).toContain(
-      'Will replace: astryx theme template, astryx theme eject',
-    );
+    // Each stable command is claimed once, by its own copy.
+    expect(fresh.stdout).not.toContain('Will replace');
   });
 });

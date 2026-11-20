@@ -31,6 +31,14 @@ export const docs = {
         'Maximum number of lines before truncation. 1 detects single-line overflow (scrollWidth against offsetWidth); values above 1 detect a -webkit-line-clamp cut by measuring the real content height with a Range, bypassing the clamped scrollHeight. 0 disables detection: isTruncated stays false and fullText stays empty.',
       required: true,
     },
+    {
+      name: 'options.isExpanded',
+      type: 'boolean',
+      description:
+        'Pass true while the text is shown in full; the hook keeps reporting whether it is cut off when clamped.',
+      default: 'false',
+      required: false,
+    },
   ],
   returns: [
     {
@@ -91,6 +99,8 @@ export const docsDense = {
     options: 'config object.',
     'options.maxLines':
       'lines allowed before truncation; 1 = single-line overflow check, >1 = clamp detection via Range measurement, 0 = off.',
+    'options.isExpanded':
+      'true while the text is shown in full; keeps reporting whether it is cut off when clamped.',
   },
   returnDescriptions: {
     ref: 'ref callback for the measured text element; swapping elements re-observes and cleans up.',

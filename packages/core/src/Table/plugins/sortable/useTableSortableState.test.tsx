@@ -8,9 +8,16 @@
  */
 
 import {describe, it, expect, vi} from 'vitest';
-import {render, renderHook, screen, within} from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {useState} from 'react';
+import {Suspense, startTransition, use, useState} from 'react';
 import {Table} from '../../Table';
 import type {TableColumn} from '../../types';
 import {useTableSortable} from './useTableSortable';
@@ -309,6 +316,41 @@ describe('useTableSortableState', () => {
     });
   });
 
+  describe('render cost', () => {
+    it('does not re-sort when its parent re-renders with an inline comparators object', () => {
+      let comparisons = 0;
+      function Parent() {
+        const [count, setCount] = useState(0);
+        return (
+          <>
+            <button type="button" onClick={() => setCount(count + 1)}>
+              Bump {count}
+            </button>
+            <SortableStateTable
+              defaultSort={[{sortKey: 'salary', direction: 'ascending'}]}
+              comparators={{
+                salary: (a, b) => {
+                  comparisons++;
+                  return a.salary - b.salary;
+                },
+              }}
+            />
+          </>
+        );
+      }
+      render(<Parent />);
+      expect(comparisons).toBeGreaterThan(0);
+      comparisons = 0;
+
+      act(() => {
+        fireEvent.click(screen.getByRole('button', {name: 'Bump 0'}));
+      });
+
+      expect(screen.getByRole('button', {name: 'Bump 1'})).toBeInTheDocument();
+      expect(comparisons).toBe(0);
+    });
+  });
+
   describe('controlled mode', () => {
     function ControlledWrapper() {
       const [sort, setSort] = useState<TableSortState>([
@@ -395,6 +437,23 @@ describe('useTableSortableState', () => {
         {sortKey: 'name', direction: 'ascending'},
       ]);
     });
+    it('calls the onSortChange from the latest render, not the one from the last sort change', async () => {
+      const first = vi.fn();
+      const second = vi.fn();
+      const sort: TableSortState = [];
+      const {rerender} = render(
+        <SortableStateTable sort={sort} onSortChange={first} />,
+      );
+      // A new handler arrives while the sort state stays the same.
+      rerender(<SortableStateTable sort={sort} onSortChange={second} />);
+
+      await userEvent.click(screen.getByRole('button', {name: 'Name'}));
+
+      expect(first).not.toHaveBeenCalled();
+      expect(second).toHaveBeenCalledWith([
+        {sortKey: 'name', direction: 'ascending'},
+      ]);
+    });
   });
 
   describe('multi-sort', () => {
@@ -476,6 +535,46 @@ describe('useTableSortableState', () => {
         }),
       );
       expect(result.current.sortedData.map(e => e.age)).toEqual([NaN, 5, 1]);
+    });
+  });
+
+  describe('Invalid Date handling', () => {
+    interface LogEntry extends Record<string, unknown> {
+      id: string;
+      at: Date;
+    }
+    const entries: LogEntry[] = [
+      {id: 'late', at: new Date('2024-03-01T00:00:00Z')},
+      {id: 'bad', at: new Date('not a date')},
+      {id: 'early', at: new Date('2024-01-01T00:00:00Z')},
+    ];
+
+    it('sorts an Invalid Date to the end in ascending order, like null', () => {
+      const {result} = renderHook(() =>
+        useTableSortableState<LogEntry>({
+          data: entries,
+          defaultSort: [{sortKey: 'at', direction: 'ascending'}],
+        }),
+      );
+      expect(result.current.sortedData.map(e => e.id)).toEqual([
+        'early',
+        'late',
+        'bad',
+      ]);
+    });
+
+    it('sorts an Invalid Date to the start in descending order, like null', () => {
+      const {result} = renderHook(() =>
+        useTableSortableState<LogEntry>({
+          data: entries,
+          defaultSort: [{sortKey: 'at', direction: 'descending'}],
+        }),
+      );
+      expect(result.current.sortedData.map(e => e.id)).toEqual([
+        'bad',
+        'late',
+        'early',
+      ]);
     });
   });
 
@@ -576,5 +675,69 @@ describe('useTableSortableState', () => {
       const sorted = capturedApplySort!(subset);
       expect(sorted.map(e => e.name)).toEqual(['Aaron', 'Zara']);
     });
+  });
+  it('calls the sort callback of the last committed render, not one from a render React set aside', () => {
+    const committed = vi.fn();
+    const setAside = vi.fn();
+    const never = new Promise<never>(() => {});
+    function Waits({isWaiting}: {isWaiting: boolean}) {
+      if (isWaiting) {
+        use(never);
+      }
+      return null;
+    }
+    function Harness({
+      onSortChange,
+      isWaiting,
+    }: {
+      onSortChange: (sort: TableSortState<string>) => void;
+      isWaiting: boolean;
+    }) {
+      const {sortConfig} = useTableSortableState<Employee>({
+        data: employees,
+        sort: [],
+        onSortChange,
+      });
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() =>
+              sortConfig.onSortChange([
+                {sortKey: 'name', direction: 'ascending'},
+              ])
+            }>
+            Sort
+          </button>
+          <Waits isWaiting={isWaiting} />
+        </>
+      );
+    }
+    type HarnessProps = {
+      onSortChange: (sort: TableSortState<string>) => void;
+      isWaiting: boolean;
+    };
+    let update: (next: HarnessProps) => void = () => {};
+    function App() {
+      const [props, setProps] = useState<HarnessProps>({
+        onSortChange: committed,
+        isWaiting: false,
+      });
+      update = setProps;
+      return (
+        <Suspense fallback={null}>
+          <Harness {...props} />
+        </Suspense>
+      );
+    }
+    render(<App />);
+    // The transition's render runs the hook with the new callback, then
+    // waits, so React keeps the committed screen.
+    act(() => {
+      startTransition(() => update({onSortChange: setAside, isWaiting: true}));
+    });
+    fireEvent.click(screen.getByRole('button', {name: 'Sort'}));
+    expect(setAside).not.toHaveBeenCalled();
+    expect(committed).toHaveBeenCalledTimes(1);
   });
 });

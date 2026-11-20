@@ -68,5 +68,7 @@
   "Lightbox": {
     "stories": ["core-lightbox--open-viewer"],
     "readySelector": "dialog[open]"
-  }
+  },
+  "ListItem": {"components": ["List", "ListItem"]},
+  "MetadataListItem": {"components": ["MetadataList", "MetadataListItem"]}
 }

@@ -14,6 +14,11 @@ import {ProgressBar} from '@astryxdesign/core/ProgressBar';
 import {List, ListItem} from '@astryxdesign/core/List';
 import {Text} from '@astryxdesign/core/Text';
 import {Badge} from '@astryxdesign/core/Badge';
+import {Dialog} from '@astryxdesign/core/Dialog';
+import {
+  SegmentedControl,
+  SegmentedControlItem,
+} from '@astryxdesign/core/SegmentedControl';
 import {useState} from 'react';
 
 // Inline icons for story demos (not in the default icon registry)
@@ -503,4 +508,79 @@ export const DisabledStreamingNarrow: Story = {
       '1',
     );
   },
+};
+
+export const NarrowFooterActions: Story = {
+  name: 'Readiness / footer actions on narrow viewport',
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      description: {
+        story:
+          'At a mobile viewport, labeled footer actions wider than the footer wrap onto another line inside the composer, and the send action stays inside it. A browser spec checks the geometry at 320px.',
+      },
+    },
+  },
+  globals: {viewport: {value: 'mobile1', isRotated: false}},
+  render: () => (
+    <ChatComposer
+      data-testid="narrow-footer-composer"
+      onSubmit={() => {}}
+      placeholder="Ask anything"
+      footerActions={
+        <>
+          <Button label="Research mode" variant="ghost" size="md" />
+          <Button label="Attach files" variant="ghost" size="md" />
+          <Button label="Settings" variant="ghost" size="md" />
+        </>
+      }
+    />
+  ),
+};
+
+/**
+ * Browser fixture: "Open dialog" opens a Dialog holding a SegmentedControl,
+ * and "Close dialog" unmounts it while it is still open (its key changes).
+ * The empty composer behind it must still take a click and typing.
+ */
+function KeyedDialogFixture() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [selection, setSelection] = useState('a');
+  return (
+    <>
+      <Button label="Open dialog" onClick={() => setIsOpen(true)} />
+      <ChatComposer
+        value={draft}
+        onChange={setDraft}
+        onSubmit={() => {}}
+        input={
+          <ChatComposerInput
+            label="Chat input"
+            value={draft}
+            onChange={setDraft}
+          />
+        }
+      />
+      <Dialog
+        key={String(isOpen)}
+        isOpen={isOpen}
+        onOpenChange={setIsOpen}
+        aria-label="Example dialog">
+        <SegmentedControl
+          label="Options"
+          value={selection}
+          onChange={setSelection}>
+          <SegmentedControlItem value="a" label="A" />
+          <SegmentedControlItem value="b" label="B" />
+        </SegmentedControl>
+        <Button label="Close dialog" onClick={() => setIsOpen(false)} />
+      </Dialog>
+    </>
+  );
+}
+
+export const BehindAKeyedDialog: Story = {
+  tags: ['!autodocs'],
+  render: () => <KeyedDialogFixture />,
 };
