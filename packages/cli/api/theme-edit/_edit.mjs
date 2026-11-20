@@ -18,7 +18,7 @@ import {
   vendorProperties,
 } from './_css.mjs';
 import * as path from 'node:path';
-import {AstryxError} from '../error.mjs';
+import {AstryxError, brokenInstallError} from '../error.mjs';
 import {
   followLine,
   readSetLine,
@@ -39,7 +39,6 @@ import {
   stateSpelling,
 } from './_normal.mjs';
 import {
-  AUTO_SPREAD,
   COMMON_STATES,
   CORNERS,
   CSS_PSEUDO_CLASSES,
@@ -57,6 +56,7 @@ import {
   TYPE_STYLES,
   familyOf,
   wordTable,
+  onlyMeans,
 } from './_tables.mjs';
 import {
   commitTheme,
@@ -205,6 +205,7 @@ import {
   writeWhole,
   isGraySeed,
   seedOf,
+  seedsInEffect,
   isEditorTemp,
 } from './_palette.mjs';
 import {
@@ -2360,8 +2361,7 @@ function leftOutParts(ctx, slug, data, sub, s) {
       ctx.project.core.tokenDefaults?.['--radius-full'] ?? '9999px',
     );
     /** @param {string} m */
-    const only = m =>
-      !FAMILIES[m] && AUTO_SPREAD.includes(familyOf(m) ?? '') ? ' --only' : '';
+    const only = m => (onlyMeans(m) === 'member' ? ' --only' : '');
     if (pills.length)
       out.push({
         note: `the parts drawn as pills stay round (${pills.join(', ')}): they read --radius-full, which corners leaves as it is; ${radios.length ? `these square them and keep the radio marks round (${radios.join(', ')})` : 'this squares them'}:`,
@@ -4430,7 +4430,15 @@ function carryTyped(e, sub, slug, thing, typed, data, cwd = process.cwd()) {
       },
     });
   });
-  const covered = coversTyped(reads, typedText, String(thing));
+  const covered = coversTyped(
+    reads,
+    typedText,
+    String(thing),
+    e.suggestions.map(x => {
+      const m = head.exec(x.name);
+      return m ? (m[3] ?? m[4]) : undefined;
+    }),
+  );
   /** @type {Set<string>} */
   const dropped = new Set();
   const lines = e.suggestions.filter((x, i) => {
@@ -6577,7 +6585,13 @@ async function changeOnce(
                 x.on &&
                 !x.when &&
                 !x.state &&
-                partsOf(ctx, x).some(t => writes.has(`${t}\0${x.thing}`)),
+                partsOf(ctx, x).some(t => writes.has(`${t}\0${x.thing}`)) &&
+                // (The dial's rule on a variant is more specific than the
+                // exact property on the part's plain rule: there the dial
+                // wins, so the exact property does not win everywhere.)
+                !partsOf(ctx, x).some(t =>
+                  writes.has(`${t}\0${x.thing}\0variant`),
+                ),
             ) ?? null
           );
         })()
@@ -6742,6 +6756,24 @@ async function changeOnce(
             ? [s.thing, null]
             : null))
         : null;
+  // A color family whose fill the own source sets as a fixed color grows
+  // every shade from that color, not from the setting.
+  const sourceSeed =
+    sub === 'set' &&
+    PALETTE_DIALS.includes(s.thing) &&
+    !s.on &&
+    !s.mode &&
+    !s.when &&
+    !s.state
+      ? (seedsInEffect(cwd, slug, data).find(
+          f => f.dial === s.thing && f.source,
+        ) ?? null)
+      : null;
+  // Whether this change was compared with a readable last build.
+  const lastBuildCompared = !r.notes.some(
+    n =>
+      n.includes('could not be read') || n.includes('there was no last build'),
+  );
   /** @type {string[]} */
   const notes = [
     ...fieldNotes,
@@ -6849,15 +6881,12 @@ async function changeOnce(
     !ownOverToken &&
     !ownPartHits.length &&
     // With the last build unreadable or missing, nothing was compared.
-    !r.notes.some(
-      n =>
-        n.includes('could not be read') ||
-        n.includes('there was no last build'),
-    ) &&
+    lastBuildCompared &&
     !r.unchanged &&
     !r.changed.length &&
     !styled.length &&
-    !ctx.unchecked
+    !ctx.unchecked &&
+    !sourceSeed
       ? [
           `this changes nothing you see: the theme already shows ${describe(s)} (it is saved, and stays when the base theme changes)`,
           // A mode's own setting under one the theme sets for every mode:
@@ -6885,13 +6914,14 @@ async function changeOnce(
           })(),
         ]
       : []),
-    // A card's content takes one radius from Core, whatever its corners.
+    // On a Core that gives a part's content one radius (its derived entry
+    // has no `corners`), that content takes the first corner for all four.
     ...(sub === 'set' &&
     s.source === 'property' &&
     s.thing === 'border-radius' &&
     s.on &&
     (ctx.derived?.[s.on] ?? []).some(
-      d => d.property === 'borderRadius' && d.vars?.length,
+      d => d.property === 'borderRadius' && d.vars?.length && !d.corners,
     ) &&
     /\s|\//.test(String(s.value).trim())
       ? [
@@ -7028,10 +7058,10 @@ async function changeOnce(
     );
   // A group kept alike (inputs share one height) loses that when one member
   // changes its height alone.
-  const family = s.on && s.only ? familyOf(s.on) : null;
+  const family =
+    s.on && s.only && onlyMeans(s.on) === 'member' ? familyOf(s.on) : null;
   if (
     family &&
-    AUTO_SPREAD.includes(family) &&
     (s.thing === 'spacing' ||
       /^--size-element-/.test(s.thing) ||
       /^(min-|max-)?(height|block-size)$|^padding(-block(-start|-end)?|-top|-bottom)?$/.test(
@@ -7048,9 +7078,26 @@ async function changeOnce(
       (dialTokens.has(k) ||
         // A role font writes --font-family-<role>.
         (s.thing === 'font' && s.on && k === `--font-family-${s.on}`)) &&
-      !exactWins.some(x => x.thing === k),
+      !exactWins.some(x => x.thing === k) &&
+      k !== sourceSeed?.source,
   );
   const ownSet = new Set(ownSourceTokens(cwd, slug));
+  if (sourceSeed?.source) {
+    // Only a change compared with the last build can say nothing moved.
+    const unchangedOnScreen =
+      !ctx.unchecked &&
+      !r.unchanged &&
+      lastBuildCompared &&
+      !r.changed.length &&
+      !styled.length;
+    const shades =
+      s.thing === 'accent'
+        ? 'links, icons, the tints'
+        : 'text, icons, the tints';
+    notes.push(
+      `${slug}.theme.ts sets ${sourceSeed.source} itself, and every ${s.thing} shade (${shades}) grows from its color, ${sourceSeed.seed}${sameColor(sourceSeed.seed, String(s.value)) ? '' : `, not from ${s.value}`}${unchangedOnScreen ? ', so this setting changes nothing you see' : ''}; ${ownTakeOut(slug, s.thing, [sourceSeed.source], data)}`,
+    );
+  }
   if (ownWins.length)
     notes.push(
       `${slug}.theme.ts sets ${ownWins.slice(0, 4).join(', ')}${ownWins.length > 4 ? ` and ${ownWins.length - 4} more` : ''} itself, and your own source wins over the settings, so ${ownWins.length > 1 ? 'those do' : 'that does'} not change; ${ownTakeOut(slug, s.thing, ownWins, data)}`,
@@ -7232,7 +7279,9 @@ async function changeOnce(
     );
   }
   if (s.thing === 'accent' && sub === 'set') {
-    notes.push(...infoClashNotes(data, base, slug, String(s.value)));
+    notes.push(
+      ...infoClashNotes(data, base, slug, sourceSeed?.seed ?? String(s.value)),
+    );
   }
   if (s.thing === 'vibrancy') {
     notes.push(
@@ -7333,7 +7382,7 @@ async function changeOnce(
         ? {
             name: group,
             members: parts,
-            onlyHint: !FAMILIES[s.on ?? ''] && AUTO_SPREAD.includes(group),
+            onlyHint: onlyMeans(s.on) === 'member',
           }
         : null,
       changedTokens: r.changed,
@@ -7630,6 +7679,8 @@ export async function themeEditShow(theme, options = {}) {
     } catch (e) {
       putBack(kept, tokensDir);
       if (e instanceof AstryxError && e.code !== E.ERR_THEME_LOAD) throw e;
+      const broken = brokenInstallError(e, cwd, 'Nothing was changed.');
+      if (broken) throw broken;
       // An own theme source that no longer builds is named, as `set` names
       // it; the old build is never shown as current.
       const why = (e instanceof Error ? e.message : String(e))
@@ -7914,7 +7965,14 @@ export async function themeEditShow(theme, options = {}) {
                       x.on &&
                       !x.when &&
                       !x.state &&
-                      partsOf(ctx, x).some(t => writes.has(`${t}\0${x.thing}`)),
+                      partsOf(ctx, x).some(t =>
+                        writes.has(`${t}\0${x.thing}`),
+                      ) &&
+                      // (Not where the dial writes a variant's own rule,
+                      // which is more specific: the dial wins there.)
+                      !partsOf(ctx, x).some(t =>
+                        writes.has(`${t}\0${x.thing}\0variant`),
+                      ),
                   )
                 : undefined;
               if (exact)
@@ -8069,8 +8127,16 @@ function dialWrites(ctx, data, dial, base) {
   for (const [target, keys] of Object.entries(withDial))
     for (const [key, block] of Object.entries(keys ?? {}))
       for (const [prop, value] of Object.entries(block ?? {}))
-        if (typeof value === 'string' && plain[target]?.[key]?.[prop] !== value)
+        if (
+          typeof value === 'string' &&
+          plain[target]?.[key]?.[prop] !== value
+        ) {
           out.add(`${target}\0${kebab(prop)}`);
+          // (Written on a variant's own rule too: a rule more specific than
+          // the part's plain one.)
+          if (key.startsWith('variant:'))
+            out.add(`${target}\0${kebab(prop)}\0variant`);
+        }
   return out;
 }
 

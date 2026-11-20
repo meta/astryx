@@ -94,11 +94,11 @@ import {TextInput} from '@astryxdesign/core/TextInput';
 import {Thumbnail} from '@astryxdesign/core/Thumbnail';
 import {
   CreditCardIcon,
-  LockClosedIcon,
-  MapPinIcon,
-  ShoppingCartIcon,
-  TruckIcon,
-} from '@heroicons/react/24/outline';
+  LockIcon,
+  LocationIcon,
+  CartIcon,
+  ShippingIcon,
+} from '@astryxdesign/template-icons';
 
 // ── Data ──────────────────────────────────────────────────────────────────────
 
@@ -109,9 +109,9 @@ import {
 // The one thing that does displace it is an error, which is louder than
 // identity: a blocked step shows the error glyph until it is fixed.
 const STEPS = [
-  {label: 'Cart', icon: ShoppingCartIcon},
-  {label: 'Shipping', icon: MapPinIcon},
-  {label: 'Delivery', icon: TruckIcon},
+  {label: 'Cart', icon: CartIcon},
+  {label: 'Shipping', icon: LocationIcon},
+  {label: 'Delivery', icon: ShippingIcon},
   {label: 'Payment', icon: CreditCardIcon},
 ];
 
@@ -565,7 +565,7 @@ export default function CheckoutWizardPage() {
       {subtotal - discount < FREE_SHIPPING_THRESHOLD && (
         <Banner
           status="info"
-          icon={<Icon icon={TruckIcon} size="sm" />}
+          icon={<Icon icon={ShippingIcon} size="sm" />}
           title={`${money(FREE_SHIPPING_THRESHOLD - (subtotal - discount))} away from free standard shipping`}
         />
       )}
@@ -683,7 +683,7 @@ export default function CheckoutWizardPage() {
                 <Heading level={1}>Checkout</Heading>
               </StackItem>
               <HStack gap={1.5} vAlign="center">
-                <Icon icon={LockClosedIcon} size="sm" color="secondary" />
+                <Icon icon={LockIcon} size="sm" color="secondary" />
                 <Text type="supporting" color="secondary">
                   Secure checkout
                 </Text>
@@ -1072,7 +1072,7 @@ export default function CheckoutWizardPage() {
                           value={cardNumber}
                           onChange={setCardNumber}
                           placeholder="4242 4242 4242 4242"
-                          startIcon={LockClosedIcon}
+                          startIcon={LockIcon}
                           status={
                             currentErrors.cardNumber
                               ? {

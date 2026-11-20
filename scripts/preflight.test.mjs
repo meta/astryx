@@ -21,6 +21,7 @@ import {
   chromiumSpecs,
   classify,
   formatTable,
+  missingBuilds,
   planChecks,
   runChecks,
   stopReason,
@@ -269,6 +270,90 @@ describe('runChecks', () => {
     expect(chromiumSpecs('{"full": false, "specs": ["a.spec.ts"]}')).toEqual([
       'a.spec.ts',
     ]);
+  });
+});
+
+describe('--quick with workspace builds missing', () => {
+  const missing = [
+    "assets/templates/pages/a/page.tsx(9,28): error TS2307: Cannot find module '@astryxdesign/theme-neutral/built' or its corresponding type declarations.",
+    "src/x.ts(1,1): error TS2307: Cannot find module '../../core/dist/index.js' or its corresponding type declarations.",
+  ].join('\n');
+  const real = `${missing}\nsrc/y.ts(3,5): error TS2322: Type 'string' is not assignable to type 'number'.`;
+
+  it('names missing builds only when every error is a missing build output', () => {
+    expect(missingBuilds(missing)).toBe(
+      'skipped, workspace builds missing; run `pnpm build` first',
+    );
+    expect(missingBuilds(real)).toBeNull();
+    expect(missingBuilds('no errors here')).toBeNull();
+    expect(
+      missingBuilds(
+        "a.ts(1,1): error TS2307: Cannot find module 'left-pad' or its corresponding type declarations.",
+      ),
+    ).toBeNull();
+    // A third-party package's dist path is not a workspace build.
+    expect(
+      missingBuilds(
+        "a.ts(1,1): error TS2307: Cannot find module 'next/dist/shared/lib/image-config' or its corresponding type declarations.",
+      ),
+    ).toBeNull();
+    // A relative path into a workspace package's dist is, at any depth.
+    for (const specifier of [
+      '../../packages/core/dist/index.js',
+      '../dist/index.js',
+      './dist/index.js',
+    ])
+      expect(
+        missingBuilds(
+          `a.ts(1,1): error TS2307: Cannot find module '${specifier}' or its corresponding type declarations.`,
+        ),
+        specifier,
+      ).toBe('skipped, workspace builds missing; run `pnpm build` first');
+  });
+
+  it('plans the quick typecheck to keep its output and judge it', () => {
+    const typecheck = byId(
+      plan(['packages/core/src/Button/Button.tsx'], {quick: true}),
+      'typecheck',
+    ).commands[0];
+    expect(typecheck.tee).toBe(true);
+    expect(typecheck.stdout).toMatch(/typecheck\.log$/);
+    expect(typecheck.skipWhen).toBe(missingBuilds);
+  });
+
+  it('reports a SKIP, not a failure, and the verdict does not count it', () => {
+    const dir = tmp();
+    const log = path.join(dir, 'typecheck.log');
+    const check = text => [
+      {
+        id: 'typecheck',
+        commands: [
+          {
+            kind: 'build',
+            argv: ['tsc'],
+            stdout: log,
+            tee: true,
+            skipWhen: missingBuilds,
+          },
+        ],
+      },
+    ];
+    const exec = text => () => (fs.writeFileSync(log, text), 2);
+    const [skipped] = runChecks(check(), {exec: exec(missing), now: () => 0});
+    expect(skipped).toMatchObject({
+      result: 'SKIP',
+      note: 'skipped, workspace builds missing; run `pnpm build` first',
+      failed: null,
+    });
+    const verdict = formatTable([skipped], {quick: true});
+    expect(verdict).not.toContain('not ready');
+    // A skipped typecheck checked nothing: the verdict says so, never a pass.
+    expect(verdict).toContain(
+      'not checked: typecheck (workspace builds missing); run `pnpm build`, then run again before you flip',
+    );
+    expect(verdict).not.toContain('quick checks pass');
+    const [failed] = runChecks(check(), {exec: exec(real), now: () => 0});
+    expect(failed).toMatchObject({result: 'FAIL', failed: 'tsc'});
   });
 });
 

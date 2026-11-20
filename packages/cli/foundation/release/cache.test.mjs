@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect, afterEach} from 'vitest';
-import {spawn} from 'node:child_process';
+import {spawn, spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import fsMutable from 'node:fs';
 import {syncBuiltinESMExports} from 'node:module';
@@ -1344,4 +1344,63 @@ describe('no install outlives its run', () => {
       await waitFor(() => !alive(/** @type {number} */ (leftover.pid)), 5_000),
     ).toBe(true);
   }, 30_000);
+});
+
+describe('a stop signal during the install', () => {
+  const CACHE = new URL('./cache.mjs', import.meta.url).href;
+  /**
+   * Run `ensureRelease` in a child Node with a stand-in npm, at the top level
+   * or inside an I/O callback, and print what the run does after it.
+   * @param {'term-during-install' | 'npm-stopped'} what
+   * @param {'top' | 'io-callback'} where
+   */
+  const child = (what, where) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-stop-'));
+    const script = path.join(dir, 'run.mjs');
+    fs.writeFileSync(
+      script,
+      `import * as fs from 'node:fs';
+import {ensureRelease, settleSignals} from ${JSON.stringify(CACHE)};
+const run = args => {
+  if (args[0] !== 'install')
+    return {status: 0, stdout: 'https://registry.example/\\n', stderr: ''};
+  if (${JSON.stringify(what)} === 'npm-stopped')
+    return {status: null, signal: 'SIGINT', stdout: '', stderr: ''};
+  // A signal sent to this process while npm runs synchronously.
+  process.kill(process.pid, 'SIGTERM');
+  return {status: 1, stdout: '', stderr: 'npm error code ECONNREFUSED'};
+};
+const go = async () => {
+  const release = ensureRelease('0.6.8', {cacheDir: ${JSON.stringify(dir)}, run});
+  console.log('returned', 'reason' in release);
+  await settleSignals();
+  console.log('answered');
+};
+if (${JSON.stringify(where)} === 'io-callback') fs.readFile(${JSON.stringify(script)}, () => go());
+else go();
+`,
+    );
+    try {
+      return spawnSync(process.execPath, [script], {
+        encoding: 'utf-8',
+        timeout: 60_000,
+      });
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  };
+
+  for (const where of /** @type {const} */ (['top', 'io-callback'])) {
+    it(`stops the run before it answers (${where})`, () => {
+      const result = child('term-during-install', where);
+      expect(result.signal).toBe('SIGTERM');
+      expect(result.stdout).not.toContain('answered');
+    });
+  }
+
+  it('ends the run at once when the signal stopped npm', () => {
+    const result = child('npm-stopped', 'io-callback');
+    expect(result.signal).toBe('SIGINT');
+    expect(result.stdout).toBe('');
+  });
 });

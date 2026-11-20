@@ -206,6 +206,13 @@ const styles = stylex.create({
   headerTitle: {
     display: 'flex',
     alignItems: 'center',
+    // The root is a <pre>, so the title inherits `white-space: pre` and
+    // stays on one line. A long title then runs under the header's controls.
+    // It wraps instead and keeps its own spacing.
+    minWidth: 0,
+    whiteSpace: 'pre-wrap',
+    overflowWrap: 'anywhere',
+    '--_astryx-text-overflow-wrap': 'anywhere',
     fontSize: typeScaleVars['--text-supporting-size'],
     fontFamily: typographyVars['--font-family-code'],
     fontWeight: fontWeightVars['--font-weight-medium'],
@@ -1141,7 +1148,7 @@ export function CodeBlock({
     : isDiff
       ? languageName === 'plaintext'
         ? 'diff'
-        : `${languageName} diff`
+        : t('@astryx.codeBlock.diffLabel', {language: languageName})
       : languageName !== 'plaintext'
         ? languageName
         : null;

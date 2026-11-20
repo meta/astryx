@@ -12,7 +12,8 @@
  *   without the icon-set feature, so a result, field, section, count, or
  *   `stability` that an experimental surface adds to search, the docs, a
  *   template copy, doctor, or an integration's verify report fails here, as
- *   does any sentence that names an experimental surface. They hold no prose
+ *   does any sentence that names an experimental surface, apart from the
+ *   shareable-page guides spec:AST-017 FR27 lets search return. They hold no prose
  *   (titles, summaries, descriptions, snippets), so main's ordinary doc and
  *   command wording edits rewrite none of them. Help, the
  *   manifest, and the `astryx docs cli` listing gain only the experimental
@@ -42,7 +43,8 @@
  * output runs `vitest run packages/cli/test/experimental-isolation.test.mjs
  * --update` in the branch itself, then reviews
  * the diff of `__golden__/no-icon-set/`: a diff that names an icon set, an
- * icon definition, or `experimental` is the leak this test exists to catch.
+ * icon definition, or `experimental` (other than the two shareable-page
+ * guides) is the leak this test exists to catch.
  */
 
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
@@ -56,6 +58,17 @@ import {CLI_ROOT} from '../foundation/fs/paths.mjs';
 import {runCli} from '../test-utils/run-cli.mjs';
 import {startCliSequence} from '../test-utils/run-cli-sequence.mjs';
 import {writeIconSetProject} from '../test-utils/icon-set-fixture.mjs';
+import {fillTemplatePlaceholders} from '../foundation/discovery/template-placeholders.mjs';
+
+/**
+ * The only docs that may set `searchable: true` (spec:AST-017 FR27, the
+ * shareable-page exception): search returns them while they are
+ * experimental.
+ */
+const SHAREABLE_PAGE_GUIDES = new Set([
+  'cli/experimental/share-a-page',
+  'cli/experimental/export-pages',
+]);
 
 const REPO_ROOT = path.resolve(CLI_ROOT, '..', '..');
 // Goldens come from the CLI without the feature: point these at a checkout of
@@ -268,14 +281,25 @@ const COMPUTER_CHECKS = new Set([
 ]);
 
 /**
- * A doctor JSON report with the computer's checks reduced to their ids, and
- * the summary counting only the project's: those checks answer from this
- * machine's cache and search path, which no golden can hold.
+ * The checks that report only on a computer in a given state: a folder an
+ * earlier CLI left in this user's cache. Whether one appears says nothing
+ * about the project, so the golden leaves it out.
+ */
+const COMPUTER_STATE_CHECKS = new Set(['old-transpile-cache']);
+
+/**
+ * A doctor JSON report with the computer's checks reduced to their ids, the
+ * checks only some computers report left out, and the summary counting only
+ * the project's: those checks answer from this machine's cache and search
+ * path, which no golden can hold.
  * @param {string} stdout
  */
 function withoutComputerChecks(stdout) {
   const report = JSON.parse(stdout);
   const summary = {pass: 0, warn: 0, fail: 0, info: 0};
+  report.data.checks = report.data.checks.filter(
+    (/** @type {any} */ check) => !COMPUTER_STATE_CHECKS.has(check.id),
+  );
   report.data.checks = report.data.checks.map((/** @type {any} */ check) => {
     if (COMPUTER_CHECKS.has(check.id)) return {id: check.id};
     summary[/** @type {keyof typeof summary} */ (check.status)] += 1;
@@ -493,6 +517,8 @@ async function searchGolden(query, cwd, run = cliRun) {
   );
   body.data.matchCount -= added.length;
   for (const result of body.data.results) {
+    // The shareable-page guides are FR27's named search exception.
+    if (SHAREABLE_PAGE_GUIDES.has(result.name)) continue;
     expect(result).not.toHaveProperty('stability');
     expect(['icon', 'icon-set', 'icon-definition']).not.toContain(
       result.domain,
@@ -573,6 +599,37 @@ beforeAll(() => {
 
 afterAll(() => {
   fs.rmSync(project, {recursive: true, force: true});
+});
+
+describe('searchable experimental docs (spec:AST-017 FR27)', () => {
+  it('only the shareable-page guides set searchable: true', async () => {
+    const files = spawnSync('git', ['ls-files', '*.doc.mjs'], {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+    })
+      .stdout.split('\n')
+      .filter(Boolean);
+    expect(files.length).toBeGreaterThan(100);
+    /** @type {string[]} */
+    const marked = [];
+    for (const rel of files) {
+      if (
+        !/\bsearchable\b/u.test(
+          fs.readFileSync(path.join(REPO_ROOT, rel), 'utf8'),
+        )
+      )
+        continue;
+      const mod = await import(pathToFileURL(path.join(REPO_ROOT, rel)).href);
+      for (const value of Object.values(mod))
+        if (value && typeof value === 'object' && value.searchable === true)
+          marked.push(
+            value.placement?.parent === 'namespace:experimental'
+              ? `cli/experimental/${value.name}`
+              : rel,
+          );
+    }
+    expect(new Set(marked)).toEqual(SHAREABLE_PAGE_GUIDES);
+  });
 });
 
 describe('with no icon set, stable output is unchanged', () => {
@@ -846,20 +903,23 @@ describe('with no icon set, stable output is unchanged', () => {
     ]);
   });
 
-  it('a template that declares icons prints and copies as it always has', async () => {
+  it('a template with icons prints and copies as it always has', async () => {
     // The template's own source, from the checkout whose CLI answers: printed
-    // and copied unchanged, icons included.
-    const page = fs.readFileSync(
-      path.join(
-        process.env.GOLDEN_CLI_ROOT ?? CLI_ROOT,
-        'assets',
-        'templates',
-        'pages',
-        'settings-dialog',
-        'page.tsx',
+    // and copied unchanged but for its icon placeholders, which become the
+    // library imports that draw them (AST-084 FR22).
+    const page = fillTemplatePlaceholders(
+      fs.readFileSync(
+        path.join(
+          process.env.GOLDEN_CLI_ROOT ?? CLI_ROOT,
+          'assets',
+          'templates',
+          'pages',
+          'settings-dialog',
+          'page.tsx',
+        ),
+        'utf-8',
       ),
-      'utf-8',
-    );
+    ).source;
     const shown = astryx(['template', 'settings-dialog', '--json']);
     expect(shown.status).toBe(0);
     const shownBody = JSON.parse(shown.stdout);
@@ -1333,17 +1393,19 @@ describe.skipIf(REGENERATING)(
 
     it('a template prints and copies as it always has without experimental.iconSet', () => {
       const cwd = installed('template');
-      const page = fs.readFileSync(
-        path.join(
-          CLI_ROOT,
-          'assets',
-          'templates',
-          'pages',
-          'settings-dialog',
-          'page.tsx',
+      const page = fillTemplatePlaceholders(
+        fs.readFileSync(
+          path.join(
+            CLI_ROOT,
+            'assets',
+            'templates',
+            'pages',
+            'settings-dialog',
+            'page.tsx',
+          ),
+          'utf-8',
         ),
-        'utf-8',
-      );
+      ).source;
       const shown = JSON.parse(
         astryx(['template', 'settings-dialog', '--json'], cwd).stdout,
       );

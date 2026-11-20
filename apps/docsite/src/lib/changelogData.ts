@@ -2,7 +2,7 @@
 
 /**
  * @file changelogData.ts
- * @input Generated package and component registries
+ * @input The generated component registry and the package text
  * @output The changelog text of every published package, and the component
  *   names that release notes link
  * @position Server-side input of the changelog routes and the sitemap. The
@@ -10,12 +10,13 @@
  */
 
 import {components} from '../generated/componentRegistry';
-import {packages} from '../generated/packageRegistry';
 import type {ChangelogEntry} from './changelogPages';
+import {packageText} from './packageText';
 
-export const changelogEntries: ChangelogEntry[] = packages
-  .filter((p): p is typeof p & {changelog: string} => p.changelog != null)
-  .map(p => ({pkg: p.name, content: p.changelog}));
+export const changelogEntries: ChangelogEntry[] = packageText.flatMap(
+  ({name, changelog}) =>
+    changelog != null ? [{pkg: name, content: changelog}] : [],
+);
 
 export const changelogComponentNames: string[] = Object.values(components)
   .flat()

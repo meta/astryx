@@ -8,7 +8,7 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {Heading} from '@astryxdesign/core/Text';
 import {Card} from '@astryxdesign/core/Card';
 import {Section} from '@astryxdesign/core/Section';
-import {FunnelIcon, PlusIcon} from '@heroicons/react/24/outline';
+import {FunnelIcon, AddIcon} from '@astryxdesign/template-icons';
 import {useToast} from '@astryxdesign/core/Toast';
 
 export default function ToolbarCardHeader() {
@@ -37,7 +37,7 @@ export default function ToolbarCardHeader() {
                 showToast({body: 'Demo: an add-user form would open here'})
               }
               label="Add user"
-              icon={<Icon icon={PlusIcon} />}
+              icon={<Icon icon={AddIcon} />}
               isIconOnly
             />
           </>

@@ -240,7 +240,7 @@ export const ERROR_CODES = Object.freeze({
   ERR_VERSION_DETECT: 'ERR_VERSION_DETECT',
   /** A `--from`/`--to` value was not a valid semver string. */
   ERR_INVALID_VERSION: 'ERR_INVALID_VERSION',
-  /** A required external dependency (e.g. jscodeshift) is missing. */
+  /** A required external dependency (e.g. jscodeshift) is missing, or an installed package needs a package it declares that is not installed (a broken install). */
   ERR_DEP_MISSING: 'ERR_DEP_MISSING',
 
   // ── GitHub CLI ───────────────────────────────────────────────────
@@ -341,9 +341,12 @@ export const ERROR_CODES = Object.freeze({
    */
   ERR_RENDER_FAILED: 'ERR_RENDER_FAILED',
   /**
-   * `export --reverse` was given an HTML file that a render did not write and
-   * that holds no Astryx markup and no embedded source, so there is nothing
-   * to rebuild. Nothing was written.
+   * Not an Astryx page. `export` was given a page whose script holds no
+   * module of an Astryx package and that imports no Astryx stylesheet: the
+   * command writes a page built with Astryx components, and the app's own
+   * build shares any other. `export --reverse` was given an HTML file that a
+   * render did not write and that holds no Astryx markup and no embedded
+   * source, so there is nothing to rebuild. Nothing was written.
    */
   ERR_RENDER_NOT_ASTRYX: 'ERR_RENDER_NOT_ASTRYX',
   /**
