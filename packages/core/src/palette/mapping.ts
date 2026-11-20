@@ -83,6 +83,14 @@ export interface PaletteBase {
 /** What the mapping reads around the palette. */
 export interface PaletteMappingContext {
   base?: PaletteBase;
+  /**
+   * The theme editor's own rules, beyond `themePalette()`'s mapping: the
+   * colors a look grows (category, chart, status roles left unset, code
+   * colors), the slider track and the inverted error fill, tinted inks,
+   * coloured cards keeping their own secondary text, and a base theme's own
+   * pairs kept readable.
+   */
+  editor?: boolean;
   /** Whether a token exists, so the mapping sets it. */
   has: (token: string) => boolean;
   reader: PaletteColorReader;
