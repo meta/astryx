@@ -18431,7 +18431,7 @@ export function draftAnswer(ctx, env, question) {
             };
           // "thick black borders on everything": the shared width (thick is
           // one pixel past it), the shared border colors (inputs draw the
-          // emphasized one), and on "everything" a border on the surfaces
+          // control edge), and on "everything" a border on the surfaces
           // that draw none (dialogs, popovers, menus).
           const bwNow0 = String(current('--border-width') ?? '1px');
           const onePast = (() => {
