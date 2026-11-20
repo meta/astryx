@@ -21,6 +21,11 @@ import {
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
 import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
+import {realRenders} from '../../test-utils/theme-render-stub.mjs';
+
+// (These cases read the drawn pages, their pictures or what a drawing
+// reports: drawn for real.)
+realRenders(true);
 
 const T = 300_000;
 /**
@@ -47,6 +52,11 @@ const cutProblems = list => list.filter(p => /cut short/.test(p.problem));
 /** @param {any} r */
 const cutNotes = r =>
   /** @type {string[]} */ (r.data.notes ?? []).filter(n => /cut short/.test(n));
+/** Notes of words broken across lines inside the word. @param {any} r */
+const brokenNotes = r =>
+  /** @type {string[]} */ (r.data.notes ?? []).filter(n =>
+    /across lines inside the word/.test(n),
+  );
 
 describe('text the pictures draw cut short', () => {
   it(
@@ -59,6 +69,7 @@ describe('text the pictures draw cut short', () => {
       );
       expect(r.data.pictures).toContain('themes/big/preview.png');
       expect(cutNotes(r)).toEqual([]);
+      expect(brokenNotes(r)).toEqual([]);
     },
     T,
   );
@@ -73,6 +84,7 @@ describe('text the pictures draw cut short', () => {
       );
       expect(r.data.pictures).toContain('themes/bt/preview.png');
       expect(cutNotes(r)).toEqual([]);
+      expect(brokenNotes(r)).toEqual([]);
     },
     T,
   );

@@ -3,7 +3,7 @@
 /**
  * @file What each themeable part reads, derived from the installed Core
  * itself: render a catalog of every component on the server with the
- * project's own React (the machinery of `astryx experimental render`), then
+ * project's own React (the machinery of `astryx experimental export`), then
  * join each element's classes to the rules in Core's shipped stylesheet.
  * The result names, for every part, the CSS properties it sets and the
  * public tokens that feed each one (under which variant or state), the parts
@@ -16,6 +16,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
@@ -23,7 +24,7 @@ import {fileURLToPath} from 'node:url';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {importPathOf, installLine, literals} from './_project.mjs';
-import {removeEmptyFolder} from './_palette.mjs';
+import {removeEmptyFolder} from '../../foundation/fs/empty-folder.mjs';
 import {VOID} from '../../foundation/render/html-reader.mjs';
 import {
   RENDER_TIMEOUT_MS,
@@ -37,14 +38,19 @@ import {
   pageSource,
 } from './_catalog.mjs';
 import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
+import {
+  fileStamp,
+  recordContentRead,
+} from '../../foundation/fs/read-record.mjs';
 
 /**
- * What the cached part data is built by: a fingerprint of this file and
- * every file it imports by a relative path, read once. Any change to the
- * code that draws and reads the census builds it again, with no number to
- * bump by hand (the installed Core is the cache folder's own key).
+ * A fingerprint of a module and every file it imports by a relative path,
+ * read once: what a cache built by that code is keyed by, so any change to
+ * the code builds it again, with no number to bump by hand (the installed
+ * Core is the cache folder's own key).
+ * @param {string} url the module's own `import.meta.url`
  */
-const CENSUS_KEY = (() => {
+export function codeFingerprint(url) {
   const hash = createHash('sha256');
   /** @type {Set<string>} */
   const seen = new Set();
@@ -65,9 +71,12 @@ const CENSUS_KEY = (() => {
     ))
       walk(path.resolve(path.dirname(file), m[1]));
   };
-  walk(fileURLToPath(import.meta.url));
+  walk(fileURLToPath(url));
   return hash.digest('hex').slice(0, 16);
-})();
+}
+
+/** What the cached part data is built by ({@link codeFingerprint}). */
+const CENSUS_KEY = codeFingerprint(import.meta.url);
 
 /**
  * Flags that change what a component does or whether it shows, not how it
@@ -88,6 +97,7 @@ const LIFECYCLE_FLAGS = new Set([
  * @property {Record<string, string[]>} inside - tokens read by unnamed elements inside the part -> properties
  * @property {Record<string, string[]>} attrs - data attributes seen on the part
  * @property {string[]} contains - parts rendered inside it
+ * @property {string[]} [repeats] - parts it holds more than one of side by side, as the nearest part around them (a shortcut's keys, a button group's buttons)
  * @property {Record<string, string[]>} [holdsVariants] - for a part rendered inside it, the variants it is drawn in there (a toast's close button: ghost)
  * @property {string[]} [tags] - the elements it is rendered as (`tr` for a table row)
  * @property {string} [underInput] - drawn under an invisible native input
@@ -199,12 +209,16 @@ export function demoProps(project, name) {
   )
     return null;
   const props = given ?? {};
-  // A search source its defaults leave out (a command palette's) is the
-  // page's sample one: without it the part lists nothing.
+  // A required prop its defaults leave out (a status dot's variant, a
+  // command palette's search source) takes its sample, as for a doc with no
+  // defaults: without it the part draws nothing (no color, no list).
   if (given)
-    for (const [p, d] of Object.entries(info.props ?? {}))
-      if (!(p in props) && /^SearchSource\b/.test(d.type))
-        props[p] = SAMPLE_SOURCE;
+    for (const [p, d] of Object.entries(info.props ?? {})) {
+      if (p in props || /^on[A-Z]/.test(p) || p === 'children') continue;
+      if (!d.required && !/^SearchSource\b/.test(d.type)) continue;
+      const v = d.slots?.[0] ?? sampleOf(name, d.type);
+      if (v !== undefined) props[p] = v;
+    }
   if (!given)
     for (const [p, d] of Object.entries(info.props ?? {})) {
       if (!d.required || /^on[A-Z]/.test(p)) continue;
@@ -447,6 +461,20 @@ export function catalogItems(project) {
         label: v.label,
         tree: {__element: name, props: v.props},
       });
+  // (A component whose layout changes at phone width renders that layout
+  // too, from its doc's mobile props over its demo: AppShell's menu button
+  // in the top bar and its open drawer.)
+  for (const [name, info] of Object.entries(project.components)) {
+    const mobile = /** @type {any} */ (info).mobile;
+    if (!mobile) continue;
+    const demo = demoProps(project, name);
+    if (!demo) continue;
+    items.push({
+      name,
+      label: 'mobile',
+      tree: {__element: name, props: {...demo, ...mobile}},
+    });
+  }
   /** @type {Record<string, string>} */
   const imports = {};
   for (const n of elementNames([items.map(i => i.tree), SAMPLE_PAGE])) {
@@ -490,10 +518,55 @@ const RUN = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
 export const renderDir = project =>
   path.join(project.cwd, 'themes', `.astryx-render-${RUN}`);
 
+/** The file in a render folder that names the process that made it. */
+const RENDER_OWNER = '.astryx-render-owner.json';
+/** The renders of this process running now, which share its render folder. */
+let rendersInFlight = 0;
+
+/**
+ * The process space this process runs in: its host and, on Linux, its pid
+ * namespace, so a process id read from a render folder's owner file is
+ * known to be this machine's own (a container that shares the project
+ * folder has another).
+ */
+const processSpace = () => {
+  let namespace = '';
+  try {
+    namespace = fs.readlinkSync('/proc/self/ns/pid');
+  } catch {
+    // No pid namespaces here.
+  }
+  return `${os.hostname()}\0${namespace}`;
+};
+
+/**
+ * Whether the process that made a render folder is known to be gone: its
+ * owner file names this process space, and no process has its id.
+ * @param {string} dir
+ * @param {number} pid
+ */
+function renderOwnerGone(dir, pid) {
+  /** @type {any} */
+  let owner;
+  try {
+    owner = JSON.parse(fs.readFileSync(path.join(dir, RENDER_OWNER), 'utf8'));
+  } catch {
+    return false;
+  }
+  if (owner?.space !== processSpace() || owner?.pid !== pid) return false;
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch (error) {
+    return /** @type {any} */ (error)?.code === 'ESRCH';
+  }
+}
+
 /**
  * Remove render folders a stopped command left (killed, out of memory):
- * only `.astryx-render-<pid>-<random>` folders more than ten minutes old.
- * Links are never followed.
+ * `.astryx-render-<pid>-<random>` folders whose maker is known to be gone
+ * (its owner file names this process space, and no process has its id),
+ * else only those more than ten minutes old. Links are never followed.
  * @param {string} themes
  */
 function sweepRenders(themes) {
@@ -507,17 +580,23 @@ function sweepRenders(themes) {
     const m = /^\.astryx-render-(\d+)-[a-z0-9]+$/.exec(n);
     if (!m || Number(m[1]) === process.pid) continue;
     const p = path.join(themes, n);
-    // A process id from another process space may look gone or alive here,
-    // so age decides: a render takes at most three minutes, and a folder
-    // older than ten is a leftover.
-    /** @type {number} */
-    let age;
+    // A folder whose maker is known gone is a leftover at once. A process id
+    // from another process space may look gone or alive here, so there age
+    // decides: a render takes at most three minutes, and a folder older than
+    // ten is a leftover.
+    /** @type {import('node:fs').Stats} */
+    let stat;
     try {
-      age = Date.now() - fs.lstatSync(p).mtimeMs;
+      stat = fs.lstatSync(p);
     } catch {
       continue;
     }
-    if (age < 10 * 60_000) continue;
+    if (!stat.isDirectory()) continue;
+    if (
+      !renderOwnerGone(p, Number(m[1])) &&
+      Date.now() - stat.mtimeMs < 10 * 60_000
+    )
+      continue;
     try {
       if (fs.lstatSync(p).isDirectory())
         fs.rmSync(p, {recursive: true, force: true});
@@ -564,22 +643,36 @@ export async function renderGenerated(
   // still goes.
   const untrack = removeOnStop(dir);
   const entry = path.join(dir, file);
-  // Demo images point at the docs site's own folder (`/template-assets/…`),
-  // which a page opened from disk cannot reach: the inline placeholder
-  // takes their place, as when a template is scaffolded.
-  const {stripTemplateAssetRefs} =
-    await import('../../foundation/discovery/template-adapter.mjs');
-  fs.writeFileSync(entry, stripTemplateAssetRefs(source));
-  for (const x of extra) {
-    fs.mkdirSync(path.dirname(path.join(dir, x.name)), {recursive: true});
-    fs.copyFileSync(x.from, path.join(dir, x.name));
-  }
+  rendersInFlight++;
   try {
+    // Who made it, so a later render can tell it is left over once this
+    // process is gone (killed outright, which no handler sees).
+    fs.writeFileSync(
+      path.join(dir, RENDER_OWNER),
+      `${JSON.stringify({pid: process.pid, space: processSpace()})}\n`,
+    );
+    // Demo images point at the docs site's own folder
+    // (`/template-assets/…`), which a page opened from disk cannot reach:
+    // the inline placeholder takes their place, as when a template is
+    // scaffolded.
+    const {stripTemplateAssetRefs} =
+      await import('../../foundation/discovery/template-adapter.mjs');
+    fs.writeFileSync(entry, stripTemplateAssetRefs(source));
+    for (const x of extra) {
+      fs.mkdirSync(path.dirname(path.join(dir, x.name)), {recursive: true});
+      fs.copyFileSync(x.from, path.join(dir, x.name));
+    }
     // The editor's pages render every component, and a busy machine slows
     // them down: they get three times the page limit.
     const page = await renderPage(entry, {
       title: file.replace(/\.[^.]+$/, ''),
       timeoutMs: EDITOR_RENDER_MS,
+      // The editor shows the markup itself and writes no file, so it needs
+      // no script.
+      markupOnly: true,
+      // A theme's image too large for a page is named by the editor (show's
+      // notes); the page goes on without it.
+      leaveLargeStyleAssets: true,
       ...(opts.openLayers ? {openLayers: true} : {}),
     });
     // The page is the same whichever command rendered it: the folder's
@@ -631,6 +724,10 @@ export async function renderGenerated(
     // it, so a render running beside this one keeps its own.
     for (const f of [entry, ...extra.map(x => path.join(dir, x.name))])
       fs.rmSync(f, {force: true});
+    // The owner file goes with this process's last render: then the folder
+    // holds nothing of a render still running.
+    if (--rendersInFlight === 0)
+      fs.rmSync(path.join(dir, RENDER_OWNER), {force: true});
     // Another render may still use it: a folder with a file in it stays.
     removeEmptyFolder(madeThemes ? themes : dir, {deep: true});
     untrack();
@@ -641,8 +738,8 @@ export async function renderGenerated(
 const isRecord = v => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /**
- * Part data read from a cache file, by file, with the file's identity, size
- * and time when it was read. Shared by every command in the process, so it
+ * Part data read from a cache file, by file, with the file's stamp
+ * (`fileStamp`) when it was read. Shared by every command in the process, so it
  * is frozen.
  * @type {Map<string, {stamp: string, data: PartData}>}
  */
@@ -672,8 +769,8 @@ export async function partData(project) {
   try {
     // The file is read again only when it changed: every command reads it,
     // and parsing it costs more than the rest of a small command.
-    const st = fs.statSync(file);
-    const stamp = `${st.ino}:${st.size}:${st.mtimeMs}`;
+    recordContentRead(file);
+    const stamp = fileStamp(file);
     const kept = readParts.get(file);
     const cached =
       kept?.stamp === stamp
@@ -688,7 +785,9 @@ export async function partData(project) {
       Object.values(cached.map).every(isRecord) &&
       Array.isArray(cached.pairs)
     ) {
-      readParts.set(file, {stamp, data: cached});
+      // A file that appeared after its stamp is not kept: the entry would
+      // outlive its removal.
+      if (stamp !== '-') readParts.set(file, {stamp, data: cached});
       return cached;
     }
   } catch {
@@ -1200,9 +1299,9 @@ function resolvePrivate(v, env, tokens, depth = 0) {
  * @returns {{map: Record<string, PartRecord>, pairs: TextPair[]}}
  */
 export function walkMarkup(html, decls, tokens, targets = new Map()) {
-  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, holdsVariants?: Record<string, Set<string>>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>, underInput?: string}>} */
+  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, repeats: Set<string>, holdsVariants?: Record<string, Set<string>>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>, underInput?: string}>} */
   const map = {};
-  /** @type {Array<{env: Record<string, string>, target: string | null, all?: string[], fg: PaintSide | null, bg: PaintSide | null, cond: string, kids?: string[], input?: boolean, owns?: boolean}>} */
+  /** @type {Array<{env: Record<string, string>, target: string | null, all?: string[], fg: PaintSide | null, bg: PaintSide | null, cond: string, kids?: string[], input?: boolean, owns?: boolean, seenParts?: Record<string, number>}>} */
   const stack = [{env: {}, target: null, fg: null, bg: null, cond: ''}];
   /** @type {Map<string, TextPair>} */
   const pairs = new Map();
@@ -1337,6 +1436,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         inside: {},
         attrs: {},
         contains: new Set(),
+        repeats: new Set(),
         tags: new Set(),
         innerCorners: new Set(),
         media: false,
@@ -1447,6 +1547,22 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         } else if (attr('placeholder') && !attr('value'))
           addPair(target, fg, bg, attr('placeholder'));
       }
+    }
+    // (A part held more than once by the nearest part around it, side by
+    // side: a shortcut's keys, a button group's buttons.)
+    if (ownsTarget) {
+      const nearest = [...stack]
+        .reverse()
+        .find(anc => (anc.all ?? (anc.target ? [anc.target] : [])).length);
+      if (nearest)
+        for (const t of named.map(c => c.slice(7))) {
+          const seen = (nearest.seenParts ??= {});
+          seen[t] = (seen[t] ?? 0) + 1;
+          if (seen[t] === 2)
+            for (const at of nearest.all ??
+              (nearest.target ? [nearest.target] : []))
+              if (at !== t) map[at].repeats.add(t);
+        }
     }
     // (Each part an element carries holds what is inside it: a checkbox
     // list's root is a field too.)
@@ -1559,6 +1675,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         Object.entries(v.attrs).map(([k, s]) => [k, [...s]]),
       ),
       contains: [...v.contains],
+      ...(v.repeats?.size ? {repeats: [...v.repeats]} : {}),
       ...(v.holdsVariants
         ? {
             holdsVariants: Object.fromEntries(

@@ -316,8 +316,9 @@ const COLUMN_GAP = 12; // the column's gap={3}
 
 // The dropzone column next to the thumbnail. flexBasis:0 lets it shrink below
 // its intrinsic width instead of pushing the row wider than the form measure.
-// StackItem already resets min-width, so that half of the job is done for us.
-const coverColumn: CSSProperties = {flexBasis: 0};
+// The floor is the column's own min-content width, its widest button, so the
+// column wraps under the cover before any button has to give up its label.
+const coverColumn: CSSProperties = {flexBasis: 0, minWidth: 'min-content'};
 // Fills what the buttons beneath it leave, so the column ends level with the
 // cover. A definite height rather than `height: 100%` or a flex-grow, because
 // Field sizes its control to content: there is no resolved height above the
@@ -720,7 +721,7 @@ export default function FormWizardVerticalPage() {
       header={
         <LayoutHeader hasDivider>
           <VStack gap={4}>
-            <HStack gap={3} vAlign="center">
+            <HStack wrap="wrap" gap={3} vAlign="center">
               <StackItem size="fill">
                 {/* The flow, not the book. The book's own title is a field on
                     step 2 and is echoed back on the review step, so repeating
@@ -774,7 +775,7 @@ export default function FormWizardVerticalPage() {
         )
       }
       content={
-        <LayoutContent>
+        <LayoutContent role="main">
           <Center axis="horizontal">
             <VStack
               gap={6}

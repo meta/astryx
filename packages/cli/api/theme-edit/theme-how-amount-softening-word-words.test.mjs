@@ -92,6 +92,12 @@ describe('amounts with a softening word', () => {
   );
 });
 
+/** A plain fill on cards: each neutral card variant. @param {string} fill */
+const CARDS = fill =>
+  ['default', 'transparent', 'muted'].map(
+    v => `${fill} --on card --when variant:${v}`,
+  );
+
 describe('a later clause about the theme text', () => {
   it(
     'is the theme text, never the part before',
@@ -99,7 +105,7 @@ describe('a later clause about the theme text', () => {
       needsBases(test);
       expect(
         (await answer('make cards red and the text bigger')).first,
-      ).toEqual(["background-color '#dc2626' --on card", 'text-size more']);
+      ).toEqual([...CARDS("background-color '#dc2626'"), 'text-size more']);
     },
     T,
   );

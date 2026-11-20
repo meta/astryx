@@ -42,7 +42,8 @@ owns response fields and compatibility.
 
 - Which ordering method or weights win. They are measured, and they change
   under FR6.
-- How search matches or scores an entry.
+- How search matches or scores an entry, beyond the reading of other
+  entries' names that FR1 states.
 - Build's start template, alternatives, and page call (`spec:AST-048`).
 - Equivalent internal implementations remain valid when they satisfy this
   contract.
@@ -52,15 +53,39 @@ owns response fields and compatibility.
 - **FR1 — search answers with the lexical matches.** Every result is an entry
   the lexical ranker matched, with that ranker's score and reason, and
   `matchCount` equals its match count. Search never returns more results than
-  the lexical ranker does for the same query and limit.
+  the lexical ranker does for the same query and limit. In search's reading of
+  the catalog, another entry's name is that entry's evidence: a component a
+  block uses never answers a query word for the block alone, and a title inside
+  the query reaches its tier only when no query word it leaves unanswered names
+  a component or hook and no doc. In that reading, a doc that opens a level (a
+  docs-tree namespace) does not answer a query word through its text (its prose,
+  or a code term or table cell its keywords gather) when a doc beneath its route
+  answers that word at least as strongly: the word is that doc's evidence. Its
+  name, title, description and declared keywords stay its own. `searchCore`,
+  which build reads, keeps the gathered reading.
+  Icons are not among the results: an icon ask's trailing `icons` section
+  (`spec:AST-084` FR6) changes neither `results` nor `matchCount`.
 - **FR2 — bands do not cross.** Search orders matches only inside a run of one
   score band and one kind (doc or not); a band is a range of lexical scores,
   so inside one a lower score can lead a higher one. A match never moves past a
   match of another band or kind; between runs, the lexical order holds,
-  including its domain priority.
+  including its domain priority. Inside a run, a family's root leads a part of
+  its own family when the part answers no query word the root does not, and no
+  query word, in any plural or stem form, is a word of the part's name that
+  does not start a word of the root's name. Among matches of the first
+  result's domain that tie with it on score and on the query words they
+  matched, the match whose own name holds more query words leads. A first
+  result that matched the whole query (a name, keyword, or title hit), or
+  whose title the query holds, keeps its place, and a part of the first result
+  never takes it.
 - **FR3 — a whole name keeps today's answer.** A query that is an entry's
   whole name or title, read with dashes and spaces alike, gets the lexical
-  ranker's answer unchanged.
+  ranker's answer unchanged. In search's reading, a match whose name of two
+  or more words a longer query writes as one word (`TableSortableTable`,
+  `table-sortable-table`) leads the lexical answer, and the order inside runs
+  keeps it first. It does not lead when a longer named run of the query
+  contains that word, or when a block's display name or a doc's title or
+  heading that the query holds contains it.
 - **FR4 — build orders the block catalog for its block slots.**
   `spec:AST-048` owns which blocks build lists and delegates their order here.
   Build's `blocks` hold as many blocks as build itself lists, each once, each

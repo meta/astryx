@@ -103,7 +103,7 @@
         "token-utilities",
         "usetheme-hook"
       ],
-      "skeleton": "886d96a28f744f16807376b1b70638d515e9a851e9507809a9d819b938ea3cd3",
+      "skeleton": "e41a8634edba6f179b0a455f1c76e213f04a4bed3a0662a3c6bff261d3c142d7",
       "mentions": []
     },
     "browser-support": {
@@ -154,7 +154,7 @@
         "example-apps",
         "explore-the-cli"
       ],
-      "skeleton": "3241e02aec55b756c2dd55f6311b8e60f3b1f70b6cf76b3bc4661e7fb9410a4b",
+      "skeleton": "05e446f3356c50ba4225100bb95eb18d57eb4643d25f5879d0d40fc7acff1bef",
       "mentions": []
     },
     "icons": {
@@ -249,7 +249,7 @@
         "what-each-file-does",
         "further-reading"
       ],
-      "skeleton": "ef4e4158ed2cdf854f1136340b28822987012bda257287dff750fea105ec5d8d",
+      "skeleton": "af5541b78883db8a65d292340cecdaffa0c6b1052b77921ba0025a2ab51f75eb",
       "mentions": []
     },
     "theme": {
@@ -280,7 +280,7 @@
         "nesting-themes",
         "runtime-vs-built-themes"
       ],
-      "skeleton": "eeb293ed4c43f4ff72bb3d44ae5a36e3fdae16d01717f8db75370add6dc928d4",
+      "skeleton": "c2941d6fc4d91afea2972ff0934246160d80dfecfcbfbafa36a86e406cb0cb96",
       "mentions": []
     },
     "use-integrations": {
@@ -305,7 +305,7 @@
         "mcp-server",
         "global-mode"
       ],
-      "skeleton": "032b8da5c5f97f350157c8f4b270f1c954ba32da04cbb5e846f42ed7fc9e31bb",
+      "skeleton": "712ebe16f9b4feced0722c6ee99d718798ced1e237d94dfeddc2ab0334250394",
       "mentions": []
     }
   }

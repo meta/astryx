@@ -22,6 +22,9 @@ const coreSrc = join(here, '..');
 /** The touch modules no component may import statically. */
 const TOUCH_MODULES = ['motion/animator.ts', 'gestures/GestureHost.ts'];
 
+/** The keyboard module a text field loads with the touch runtime. */
+const KEYBOARD_MODULES = ['keyboard/useMobileKeyboard.ts'];
+
 /** The source with its comments removed, so prose cannot pass or fail it. */
 function code(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
@@ -51,8 +54,8 @@ function staticImports(file: string): string[] {
   });
 }
 
-/** Each touch module the entry reaches, with the chain that brings it. */
-function touchChains(entry: string): string[] {
+/** Each of `modules` the entry reaches, with the chain that brings it. */
+function touchChains(entry: string, modules = TOUCH_MODULES): string[] {
   const start = join(coreSrc, entry);
   const parent = new Map<string, string | null>([[start, null]]);
   const queue = [start];
@@ -60,7 +63,7 @@ function touchChains(entry: string): string[] {
   while (queue.length > 0) {
     const file = queue.shift()!;
     const name = relative(coreSrc, file);
-    if (TOUCH_MODULES.includes(name)) {
+    if (modules.includes(name)) {
       const chain: string[] = [];
       for (let at: string | null = file; at != null; at = parent.get(at)!) {
         chain.unshift(relative(coreSrc, at));
@@ -105,6 +108,15 @@ describe('architecture:react-component-runtime INV13 shared touch loader', () =>
     expect(touchChains(entry)).toEqual([]);
   });
 
+  it.each(['TextInput/index.ts', 'TextArea/index.ts', 'NumberInput/index.ts'])(
+    '%s reaches neither a touch module nor the keyboard module statically',
+    entry => {
+      expect(
+        touchChains(entry, [...TOUCH_MODULES, ...KEYBOARD_MODULES]),
+      ).toEqual([]);
+    },
+  );
+
   it('loads the runtime module only from the loader, through import()', () => {
     const importers = sourceFiles(coreSrc)
       .filter(file =>
@@ -127,6 +139,7 @@ describe('architecture:react-component-runtime INV13 shared touch loader', () =>
       'SegmentedControl/SegmentedControl.tsx',
     ],
     ['Switch/switchTouchPart', 'Switch/Switch.tsx'],
+    ['keyboard/keyboardFieldPart', 'keyboard/useDeferredMobileKeyboard.tsx'],
   ])(
     'loads the touch part %s only from its component, through the loader',
     (part, component) => {

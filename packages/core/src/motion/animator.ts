@@ -189,6 +189,12 @@
  */
 
 import {SETTLE_THRESHOLD} from './settleThreshold';
+import {
+  defaultIsCoarsePointer,
+  defaultPrefersReducedMotion,
+} from './motionQueries';
+
+export {defaultIsCoarsePointer, defaultPrefersReducedMotion};
 import {cubicBezier} from './bezier';
 import {LATE_START_MS} from './frameBlock';
 import {solveSpring, toSpring, type SpringDescription} from './spring';
@@ -1197,32 +1203,6 @@ function expand(values: MotionValues): Partial<Record<MotionProperty, number>> {
 /** The time the motion clock reads (`performance.now()`'s time base). */
 export function motionNow(): number {
   return typeof performance === 'undefined' ? Date.now() : performance.now();
-}
-
-/**
- * Whether the user asked for reduced motion (`prefers-reduced-motion:
- * reduce`), read at the moment of the call: the preference the animator uses
- * by default for its Reduce Motion substitution. A component never reads it
- * to pick a curve of its own: its motion settings do not override the
- * policy (design:reduced-motion DR4); `animator.reducedMotion()` or
- * `reducedMotionFade()` gives the policy's answer. False without a window
- * (server rendering).
- */
-export function defaultPrefersReducedMotion(): boolean {
-  return (
-    typeof window !== 'undefined' &&
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  );
-}
-
-/** Whether the primary pointer is coarse: `(pointer: coarse)`. */
-export function defaultIsCoarsePointer(): boolean {
-  return (
-    typeof window !== 'undefined' &&
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(pointer: coarse)').matches
-  );
 }
 
 /**

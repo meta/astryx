@@ -23,6 +23,7 @@ import * as path from 'node:path';
 import {logger} from '../../logger.mjs';
 import {themeBuild} from './build.mjs';
 import {ensureCoreBuilt} from '../../../clients/cli/commands/ensure-core-built.mjs';
+import {hasModuleHooks} from '../../../test-utils/module-hooks.mjs';
 
 vi.setConfig({testTimeout: 120_000});
 
@@ -170,17 +171,20 @@ describe('F44-06: a misspelled field the source reader cannot place', () => {
 });
 
 describe('F44-10: a package stylesheet the theme source imports', () => {
-  it('is named by the specifier the source wrote, not the linked store file', async () => {
-    writeBasePackage();
-    write('p/p.ts', `import '@fixture/base-theme/fonts.css';\n${THEME}`);
-    const r = await captured(() => themeBuild('p/p.ts', {}, {cwd: dir}));
-    expect(r.err).toBeUndefined();
-    const said = r.result.data.warnings.join('\n');
-    expect(said).toContain(
-      "p/p.ts imports '@fixture/base-theme/fonts.css', which the built outputs do not carry",
-    );
-    expect(said).not.toContain('.store');
-  });
+  it.skipIf(!hasModuleHooks)(
+    'is named by the specifier the source wrote, not the linked store file',
+    async () => {
+      writeBasePackage();
+      write('p/p.ts', `import '@fixture/base-theme/fonts.css';\n${THEME}`);
+      const r = await captured(() => themeBuild('p/p.ts', {}, {cwd: dir}));
+      expect(r.err).toBeUndefined();
+      const said = r.result.data.warnings.join('\n');
+      expect(said).toContain(
+        "p/p.ts imports '@fixture/base-theme/fonts.css', which the built outputs do not carry",
+      );
+      expect(said).not.toContain('.store');
+    },
+  );
 });
 
 describe('F44-11: a plain theme whose getter throws', () => {

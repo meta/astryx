@@ -26,10 +26,12 @@ import {
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
 import {
+  armHold,
   busyWindowProof,
   CONTROL_RGB,
   countBetween,
   inPresentationOrder,
+  releaseAnimations,
   startBusyControl,
   traceRendering,
   trackMarker,
@@ -424,31 +426,44 @@ test('a value change lays out and paints nothing per frame', async ({page}) => {
       document.querySelector('.astryx-circular-progress-fill') as HTMLElement
     ).style.setProperty('--duration-medium', '3000ms'),
   );
-  // Tracing starts before the change, so however long it takes to start, it
-  // takes none of the change's time. The judged second starts two frames
-  // after the change's animations are ready, 200 ms in.
+  // Hold the fill before the story renders. Test-process delays must not
+  // consume the change before its judged second starts.
+  const fill = page.locator('.astryx-circular-progress-fill');
+  const hold = await armHold(page, fill, {
+    count: 4,
+    judges: {
+      target: fill.locator(':scope > span').last(),
+      property: 'transform',
+    },
+  });
+  await setArgs(page, {value: 80});
+  expect(await hold.held()).toHaveLength(4);
   let from = 0;
   let to = 0;
   let moving = false;
   const trace = await traceRendering(page, async () => {
-    await setArgs(page, {value: 80});
-    await page.waitForTimeout(200);
-    from = await page.evaluate(async () => {
-      await Promise.all(document.getAnimations().map(async a => a.ready));
+    [from, to, moving] = await fill.evaluate(async element => {
+      const animations = element.getAnimations({subtree: true});
+      for (const animation of animations) {
+        animation.currentTime = 200;
+        animation.play();
+      }
+      await Promise.all(animations.map(animation => animation.ready));
       await new Promise(resolve =>
         requestAnimationFrame(() => requestAnimationFrame(resolve)),
       );
-      return performance.timeOrigin + performance.now();
+      const start = performance.timeOrigin + performance.now();
+      // Keep both marks and the running-state read in the page's task queue.
+      // A delayed response to the test cannot move the read past the end.
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return [
+        start,
+        performance.timeOrigin + performance.now(),
+        animations.some(animation => animation.playState === 'running'),
+      ] as const;
     });
-    await page.waitForTimeout(1000);
-    [to, moving] = await page.evaluate(
-      () =>
-        [
-          performance.timeOrigin + performance.now(),
-          document.getAnimations().some(a => a.playState === 'running'),
-        ] as const,
-    );
   });
+  await releaseAnimations(page, {finish: true});
   const counts = countBetween(trace, from, to);
   // A full second of the change: nothing lays out or paints. A
   // stroke-dashoffset transition repainted every frame (36 paints in 410 ms).

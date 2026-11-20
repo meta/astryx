@@ -9,6 +9,8 @@
  * listed once that status color is set. Each line, followed, ends it.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {themeEditNew, themeEditSet, themeEditShow} from './theme-edit.mjs';
 import {splitCommand} from './_vet.mjs';
@@ -99,7 +101,7 @@ describe('a text color for a state', () => {
 
 describe("the base theme's own accent, written as a color", () => {
   it(
-    'is listed once the accent moves, and its lines end it',
+    'is reached by the accent once it moves, so it is not listed',
     async () => {
       if (unbuilt) return;
       await themeEditNew('b', {
@@ -111,12 +113,10 @@ describe("the base theme's own accent, written as a color", () => {
         (d.missed ?? []).filter((/** @type {any} */ x) =>
           /base theme's own accent/.test(x.why),
         );
-      const before = own(await shown('b'));
-      expect(before.map((/** @type {any} */ x) => x.part)).toEqual(
-        expect.arrayContaining(['top-nav-item', 'button']),
-      );
-      for (const x of before) await follow(x.line);
       expect(own(await shown('b'))).toEqual([]);
+      expect(
+        fs.readFileSync(path.join(cwd, 'themes', 'b', 'b.css'), 'utf8'),
+      ).toMatch(/var\(--color-text-accent\)/);
     },
     T,
   );

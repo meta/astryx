@@ -4,7 +4,7 @@
  * @file Builds the theme editor's part data and component docs for the
  *   CLI's own Core, once per test run, into the run's folder.
  * @input The folder, as the first argument.
- * @output `<folder>/<core key>/parts.json` and `docs.json`.
+ * @output `<folder>/<core key>/parts.json`, `docs.json` and `items.json`.
  * @position Run by the node project's globalSetup in plain Node, as the CLI
  *   runs: the module runner globalSetup itself runs in does not give the
  *   theme build what it needs (import.meta.resolve). theme-cache.mjs copies
@@ -28,8 +28,9 @@ async function warmThemeCache(dir) {
   const fixture = makeLinkedFixture('astryx-theme-cache-', FIXTURE_PACKAGES);
   try {
     writeFixtureBaseTheme(fixture, 'neutral');
-    // A new theme reads the part data and the component docs, so the
-    // editor builds both into the fixture's cache.
+    // A new theme reads the part data and the component docs, and draws the
+    // sample page from its component items, so the editor builds all three
+    // into the fixture's cache.
     await themeEditNew('warm', {cwd: fixture, like: 'neutral'});
     const cache = cacheRoot(path.dirname(fixture));
     for (const key of fs.readdirSync(cache))

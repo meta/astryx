@@ -254,6 +254,7 @@ import {
 } from '../Field/useEntryErrorReport';
 import {useValueReplacesEntry} from '../Field/useValueReplacesEntry';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {useDeferredMobileKeyboard} from '../keyboard/useDeferredMobileKeyboard';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -753,6 +754,9 @@ export function NumberInput({
   const statusMessageID = useId();
   const unitsID = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  // The keyboard module is this field's touch part, which the touch loader
+  // loads after first paint.
+  const mobileKeyboard = useDeferredMobileKeyboard(inputRef);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const inputGroup = useInputGroup();
   const inputGroupState = use(InputGroupInternalContext);
@@ -1513,11 +1517,14 @@ export function NumberInput({
               inputRef.current?.focus();
               stepValue(1);
             }}
-            {...stylex.props(
-              styles.numberStepperButton,
-              interactionOverlayStyles.backgroundImage,
-              (isDisabled || isReadOnly || !canIncrement) &&
-                styles.numberStepperButtonDisabled,
+            {...mergeProps(
+              themeProps('number-input-stepper', {direction: 'increment'}),
+              stylex.props(
+                styles.numberStepperButton,
+                interactionOverlayStyles.backgroundImage,
+                (isDisabled || isReadOnly || !canIncrement) &&
+                  styles.numberStepperButtonDisabled,
+              ),
             )}>
             <Icon
               icon="numberInput:stepperDown"
@@ -1561,12 +1568,15 @@ export function NumberInput({
               inputRef.current?.focus();
               stepValue(-1);
             }}
-            {...stylex.props(
-              styles.numberStepperButton,
-              interactionOverlayStyles.backgroundImage,
-              styles.decrementButton,
-              (isDisabled || isReadOnly || !canDecrement) &&
-                styles.numberStepperButtonDisabled,
+            {...mergeProps(
+              themeProps('number-input-stepper', {direction: 'decrement'}),
+              stylex.props(
+                styles.numberStepperButton,
+                interactionOverlayStyles.backgroundImage,
+                styles.decrementButton,
+                (isDisabled || isReadOnly || !canDecrement) &&
+                  styles.numberStepperButtonDisabled,
+              ),
             )}>
             <Icon icon="numberInput:stepperDown" size="xsm" color="inherit" />
           </button>
@@ -1613,6 +1623,7 @@ export function NumberInput({
       {inputWrapper}
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}
+      {mobileKeyboard}
     </Field>
   );
 }

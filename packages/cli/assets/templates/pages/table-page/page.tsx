@@ -867,7 +867,7 @@ export default function InvoiceLineItemsTemplate() {
         // holds the table on the same content line as the MetadataList. The
         // padding moves to the VStack, which is a plain flex container and
         // publishes nothing.
-        <LayoutContent padding={0}>
+        <LayoutContent role="main" padding={0}>
           <VStack padding={4} gap={8}>
             {/* Title, actions and document facts are one masthead, and it
                 scrolls. The Layout `header` slot would pin it: with

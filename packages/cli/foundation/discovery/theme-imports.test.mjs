@@ -51,6 +51,35 @@ afterEach(() => {
 });
 
 describe('resolveThemeImports', () => {
+  it("names the install of a theme package Astryx releases with Core at the project's Core release", () => {
+    const dir = project();
+    fs.writeFileSync(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        name: 'app',
+        dependencies: {'@astryxdesign/core': '0.7.16'},
+      }),
+    );
+    fs.writeFileSync(path.join(dir, 'package-lock.json'), '{}\n');
+    const core = path.join(dir, 'node_modules', '@astryxdesign', 'core');
+    fs.mkdirSync(core, {recursive: true});
+    fs.writeFileSync(
+      path.join(core, 'package.json'),
+      JSON.stringify({name: '@astryxdesign/core', version: '0.7.16'}),
+    );
+
+    // Its exact Core peer refuses any other release, so a plain install of
+    // the newest one would fail.
+    expect(() =>
+      resolveThemeImports(
+        discovered({slug: 'stone', package: '@astryxdesign/theme-stone'}),
+        {cwd: dir},
+      ),
+    ).toThrow(
+      /install it, then add the theme: `npm install -E @astryxdesign\/theme-stone@0\.7\.16`, then `.* theme add stone`\.$/u,
+    );
+  });
+
   it("in a fresh clone that lists the theme package, says to install the project's dependencies, but not from a folder with its own package.json", () => {
     const dir = project();
     fs.writeFileSync(

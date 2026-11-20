@@ -66,8 +66,15 @@ const styles = stylex.create({
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
     lineHeight: typeScaleVars['--text-label-leading'],
-    fontWeight: fontWeightVars['--font-weight-medium'],
-    color: colorVars['--color-text-secondary'],
+    // Arial, Helvetica, Liberation Sans, and Segoe UI have no 500 face, and
+    // CSS resolves a missing 500 to the regular face. Semibold resolves up to
+    // a heavier face, so the label stays heavier than its description with
+    // every font.
+    fontWeight: fontWeightVars['--font-weight-semibold'],
+    // The label names the control, so it takes the primary text colour. The
+    // description and the optionality marker stay secondary and read as
+    // supporting text beside it.
+    color: colorVars['--color-text-primary'],
     cursor: {
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
