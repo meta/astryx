@@ -107,6 +107,47 @@ function integrationWithDocSource(name, component, docSource, lib = {}) {
 const BASE_DOC = `export default {type: 'component', name: 'AcmeNav', displayName: 'Acme Nav', replaces: 'SideNav', usage: {description: 'Acme nav.'}, props: []};\n`;
 
 describe('resolveComponentReplacements', () => {
+  it('computes no finding that needs Core when there is no Core, such as outside a project before Core is installed', async () => {
+    const acme = integration(
+      '@acme/nav',
+      [
+        {name: 'AcmeSideNav', replaces: 'SideNav'},
+        {name: 'AcmeMissing', replaces: 'NoSuchCoreNav'},
+        {name: 'AcmeOdd', replaces: 5, legacy: true},
+      ],
+      {peers: FLOOR},
+    );
+    const result = await resolveComponentReplacements(null, [acme]);
+
+    expect(codes(result)).toEqual([
+      'error:invalid_component_replacement:AcmeOdd',
+    ]);
+    expect(result.active).toEqual([]);
+  });
+
+  it('marks each finding that compares a component with Core components, and no other', async () => {
+    const acme = integration(
+      '@acme/nav',
+      [
+        {name: 'AcmeMissing', replaces: 'NoSuchCoreNav'},
+        {name: 'SideNav', replaces: 'Button'},
+        {name: 'AcmeOdd', replaces: 5, legacy: true},
+      ],
+      {peers: FLOOR},
+    );
+    const result = await resolveComponentReplacements(CORE_DIR, [acme]);
+    const marks = Object.fromEntries(
+      result.findings.map(finding => [
+        finding.component,
+        finding.needsCore === true,
+      ]),
+    );
+
+    // A missing target and a component named after a different Core
+    // component are judged against Core's names; a malformed value is not.
+    expect(marks).toEqual({AcmeMissing: true, SideNav: true, AcmeOdd: false});
+  });
+
   it('applies a replacement from a package that declares the CLI floor', async () => {
     const acme = integration(
       '@acme/nav',

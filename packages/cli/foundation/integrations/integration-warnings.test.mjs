@@ -13,6 +13,7 @@
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import {warnOnIntegrationIssues} from './integration-warnings.mjs';
 import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
@@ -188,5 +189,103 @@ describe('warnOnIntegrationIssues', () => {
     expect(errLines[0]).toBe(`Warning: ${conflictMessage}`);
     // Must NOT print the generic validate pointer for a provider conflict.
     expect(errLines[0]).not.toContain('integration issue(s)');
+  });
+
+  it('names an issue that compares with Core components itself outside a project, where doctor reads no Core', async () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-warn-out-'));
+    const issues = [
+      {
+        package: '@acme/nav',
+        code: 'missing_component_replacement_target',
+        severity: 'error',
+        message:
+          'Component "AcmeNav" replaces "NoSuchNav", which is not a Core component.',
+        needsCore: true,
+      },
+      {
+        package: '@acme/nav',
+        code: 'invalid_component_replacement',
+        severity: 'error',
+        message:
+          'Component "SideNav" replaces "Button", but its own name is the Core component "SideNav".',
+        needsCore: true,
+      },
+      {
+        package: '@acme/pair',
+        code: 'ambiguous_component_replacement',
+        severity: 'error',
+        message:
+          '@acme/pair declares 2 components as replacements for Core component "Button".',
+        needsCore: true,
+      },
+      {
+        package: '@acme/odd',
+        code: 'invalid_component_replacement',
+        severity: 'error',
+        message: 'Component "Odd" sets `replaces` to 5.',
+      },
+    ];
+    try {
+      await warnOnIntegrationIssues(
+        {cwd: outside, issues: async () => issues},
+        {json: false},
+      );
+    } finally {
+      fs.rmSync(outside, {recursive: true, force: true});
+    }
+
+    // The package is named unless the message already names it; one that
+    // needs no Core, as a malformed `replaces`, still points to doctor.
+    expect(errLines.slice(0, 3)).toEqual([
+      `Warning: @acme/nav: ${issues[0].message}`,
+      `Warning: @acme/nav: ${issues[1].message}`,
+      `Warning: ${issues[2].message}`,
+    ]);
+    expect(errLines[3]).toMatch(
+      /^Warning: @acme\/odd has 1 integration issue\(s\)\. Run: .+ doctor$/,
+    );
+    expect(errLines).toHaveLength(4);
+  });
+
+  it('points to doctor for that issue in a project with Core installed, where doctor reads that Core', async () => {
+    const app = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-warn-app-'));
+    const issue = {
+      package: '@acme/nav',
+      code: 'missing_component_replacement_target',
+      severity: 'error',
+      message: 'Component "AcmeNav" replaces "NoSuchNav".',
+      needsCore: true,
+    };
+    try {
+      fs.writeFileSync(
+        path.join(app, 'package.json'),
+        JSON.stringify({dependencies: {'@astryxdesign/core': '1.0.0'}}),
+      );
+      const core = path.join(app, 'node_modules', '@astryxdesign', 'core');
+      fs.mkdirSync(core, {recursive: true});
+      fs.writeFileSync(
+        path.join(core, 'package.json'),
+        JSON.stringify({name: '@astryxdesign/core', version: '1.0.0'}),
+      );
+      await warnOnIntegrationIssues(
+        {cwd: app, issues: async () => [issue]},
+        {json: false},
+      );
+      // The same project before its dependencies are installed: doctor reads
+      // no Core there, so the line names the issue itself.
+      fs.rmSync(path.join(app, 'node_modules'), {recursive: true, force: true});
+      await warnOnIntegrationIssues(
+        {cwd: app, issues: async () => [issue]},
+        {json: false},
+      );
+    } finally {
+      fs.rmSync(app, {recursive: true, force: true});
+    }
+
+    expect(errLines).toHaveLength(2);
+    expect(errLines[0]).toMatch(
+      /^Warning: @acme\/nav has 1 integration issue\(s\)\. Run: .+ doctor$/,
+    );
+    expect(errLines[1]).toBe(`Warning: @acme/nav: ${issue.message}`);
   });
 });

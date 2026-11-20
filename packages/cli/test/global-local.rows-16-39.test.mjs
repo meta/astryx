@@ -871,6 +871,57 @@ describe.skipIf(!POSIX)(
       expect(used.stdout + used.stderr).toContain(
         'Validating integration: @acme/broken@1.0.0',
       );
+      // A global copy with no Core yet (Core is an optional peer, and this
+      // computer cannot fetch it) has nothing to compare a replacement with:
+      // a valid one is no issue, printed or counted.
+      const bareComputer = computer();
+      const bare = globalCli('npm', '9.0.0', {
+        root: bareComputer.home,
+        withoutCore: true,
+      });
+      const bareNav = acmeWidgets(path.resolve(bare.dir, '..', '..', '..'), {
+        topic: 'bare-nav-guide',
+        name: '@acme/bare-nav',
+        peers: {'@astryxdesign/cli': `>=${COMPONENT_REPLACES_CLI}`},
+        manifest:
+          "export default {docs: './docs', components: './components'};\n",
+      });
+      fs.mkdirSync(path.join(bareNav, 'components'), {recursive: true});
+      fs.writeFileSync(
+        path.join(bareNav, 'components', 'AcmeSideNav.doc.mjs'),
+        `export default ${JSON.stringify({
+          type: 'component',
+          name: 'AcmeSideNav',
+          displayName: 'AcmeSideNav',
+          import: '@acme/bare-nav/components/AcmeSideNav',
+          replaces: 'SideNav',
+          keywords: ['acme'],
+          usage: {description: 'AcmeSideNav for Acme apps.'},
+          props: [],
+        })};\n`,
+      );
+      fs.writeFileSync(
+        path.join(bareNav, 'components', 'AcmeSideNav.tsx'),
+        'export function AcmeSideNav() {\n  return null;\n}\n',
+      );
+      const bareEmpty = tempDir('bare-empty');
+      const bareNudge = run(bare.bin, ['discover'], {
+        cwd: bareEmpty,
+        pc: bareComputer,
+      }).stderr;
+      expect(bareNudge).not.toContain('which is not a Core component');
+      expect(bareNudge).not.toContain('@acme/bare-nav has');
+      // It is loaded there: doctor lists it as used.
+      expect(
+        JSON.parse(
+          run(bare.bin, ['doctor', '--json'], {
+            cwd: bareEmpty,
+            pc: bareComputer,
+          }).stdout,
+        ).data.checks.find(
+          (/** @type {any} */ c) => c.id === 'computer-integrations',
+        ).message,
+      ).toContain('@acme/bare-nav@1.0.0');
     });
 
     it("G36 inside a project: an integration installed for the computer adds nothing, and discover and doctor list it as available with the project's install command", () => {
