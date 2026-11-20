@@ -12262,7 +12262,7 @@ export function draftAnswer(ctx, env, question) {
   // names no part, look, setting or color. That clause, and the clauses of
   // its list after it that name no part of their own, write nothing and
   // name the word: never the whole theme in its place.
-  const subjectKnown = (/** @type {string} */ w) =>
+  const subjectKnown = (/** @type {string} */ w, /** @type {string} */ text) =>
     lex.vocab.includes(w) ||
     lex.vocab.includes(singular(w)) ||
     corrected(w, lex.vocab) !== w ||
@@ -12271,7 +12271,7 @@ export function draftAnswer(ctx, env, question) {
     aspectsOf(w).length > 0 ||
     stateWord(w) != null ||
     colorsIn(w).length > 0 ||
-    lex.parts.some(([re]) => re.test(` ${w} `)) ||
+    partWord(w, text) ||
     /^(?:themes?|everything|everywhere|sites?|apps?|ui|pages?|modes?|colou?rs?|palettes?|brands?|looks?|vibes?|styles?|defaults?|things?|details?|elements?|components?|controls?|surfaces?|items?|words?|letters?|numbers?)$/.test(
       w,
     );
@@ -12395,7 +12395,7 @@ export function draftAnswer(ctx, env, question) {
       return null;
     const unknown = words.filter(
       w =>
-        !subjectKnown(w) &&
+        !subjectKnown(w, t) &&
         !describes(w) &&
         !VERB.test(w) &&
         !ROLE_WORDS.test(w) &&
