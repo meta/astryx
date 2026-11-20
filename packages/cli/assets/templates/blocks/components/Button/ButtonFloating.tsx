@@ -8,7 +8,7 @@ import {Stack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 import {useToast} from '@astryxdesign/core/Toast';
 import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
-import {PlusIcon} from '@heroicons/react/24/outline';
+import {AddIcon} from '@astryxdesign/template-icons';
 
 const VARIANTS = [
   {variant: 'primary' as const, label: 'Primary'},
@@ -31,7 +31,7 @@ export default function ButtonFloating() {
             key={variant}
             label={label}
             variant={variant}
-            icon={<Icon icon={PlusIcon} />}
+            icon={<Icon icon={AddIcon} />}
             elevation="med"
             onClick={() =>
               variant === 'destructive'

@@ -51,6 +51,7 @@ import {
   readThemeState,
 } from '../../foundation/config/theme-state.mjs';
 import {STARTER_THEME} from '../../foundation/discovery/theme-discovery.mjs';
+import {fillTemplatePlaceholders} from '../../foundation/discovery/template-placeholders.mjs';
 import {AstryxError} from '../error.mjs';
 
 /**
@@ -378,7 +379,9 @@ function isBlockPickerWeights(w) {
  */
 export function templateSetupNotes(template, cwd) {
   try {
-    const source = fs.readFileSync(template.filePath, 'utf-8');
+    const {source} = fillTemplatePlaceholders(
+      fs.readFileSync(template.filePath, 'utf-8'),
+    );
     return analyzeTemplateNeeds(source, cwd).notes;
   } catch {
     // Best-effort: a read failure does not break the recommendation.

@@ -69,11 +69,11 @@ import {
 import {
   ArrowUpIcon,
   ArrowDownIcon,
-  BellAlertIcon,
-  CheckCircleIcon,
-  ServerStackIcon,
-} from '@heroicons/react/24/outline';
-import {StopIcon} from '@heroicons/react/24/solid';
+  NotificationActiveIcon,
+  SuccessIcon,
+  ServerIcon,
+} from '@astryxdesign/template-icons';
+import {StopIcon} from '@astryxdesign/template-icons/24/solid';
 
 // ============= TYPES =============
 
@@ -958,7 +958,7 @@ function AlertsFeed({hasStickyHeader = false}: {hasStickyHeader?: boolean}) {
 
   return (
     <RailSection
-      icon={BellAlertIcon}
+      icon={NotificationActiveIcon}
       iconColor={firing > 0 ? 'error' : 'secondary'}
       title="Active alerts"
       subtitle={`${ALERTS.length} in the last 24h · newest first`}
@@ -973,7 +973,7 @@ function AlertsFeed({hasStickyHeader = false}: {hasStickyHeader?: boolean}) {
         <EmptyState
           title="All clear"
           description="No active alerts across the selected environment."
-          icon={<Icon icon={CheckCircleIcon} size="lg" color="success" />}
+          icon={<Icon icon={SuccessIcon} size="lg" color="success" />}
           isCompact
         />
       ) : (
@@ -1035,7 +1035,7 @@ function NoServices() {
     <EmptyState
       title="No services in this view"
       description="Nothing reports in the selected environment and region. Try widening the region filter."
-      icon={<Icon icon={ServerStackIcon} size="lg" />}
+      icon={<Icon icon={ServerIcon} size="lg" />}
       isCompact
     />
   );
@@ -1067,7 +1067,7 @@ function ServiceBreakdown({
 
   return (
     <RailSection
-      icon={ServerStackIcon}
+      icon={ServerIcon}
       iconColor="secondary"
       title="Service breakdown"
       subtitle={contextLabel}

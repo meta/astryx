@@ -72,6 +72,13 @@ export const doc = {
       type: 'string',
       description: 'Folder relative paths resolve from (default: the current directory).',
     },
+    {
+      name: 'options.keepClassNames',
+      type: 'boolean',
+      description:
+        "Keep every class of the first paint as written, for a caller that takes the file's markup and styles it with its own copy of the StyleX styles. By default, once the repeated lists of the StyleX classes Astryx's packages write (the `x…` classes) add up to 16 KB, each such list becomes one short alias class, whose rules only the file's own stylesheet holds; the page's own StyleX classes keep their names. Rendering only; refused with `reverse`.",
+      default: 'false',
+    },
   ],
   returns: [
     {
@@ -89,7 +96,7 @@ export const doc = {
     {code: 'ERR_MISSING_ARGUMENT', when: 'no file is given'},
     {
       code: 'ERR_INVALID_ARGUMENT',
-      when: 'the file or `out` has the wrong kind of extension, `out` is the input itself, `title` is given with `reverse`, or `overwrite` without it; with `reverse`, the page would land under a configuration name (`vite.config.ts`) or where a test, story or benchmark runner would run it (judged from the repository root)',
+      when: 'the file or `out` has the wrong kind of extension, `out` is the input itself, `title` or `keepClassNames` is given with `reverse`, or `overwrite` without it; with `reverse`, the page would land under a configuration name (`vite.config.ts`) or where a test, story or benchmark runner would run it (judged from the repository root)',
     },
     {code: 'ERR_FILE_NOT_FOUND', when: 'the file, or a local file the page imports, does not exist'},
     {code: 'ERR_READ_FAILED', when: 'the file is there but cannot be read: no read permission, a folder or a pipe given as the file, or another file-system error; the message names the reason'},
@@ -97,7 +104,7 @@ export const doc = {
     {code: 'ERR_WRITE_FAILED', when: 'a file cannot be written, such as when `out` names a folder; with `reverse`, every file is written or none is'},
     {code: 'ERR_RENDER_COMPILE', when: 'the page does not compile, or a stylesheet it imports is not valid CSS (the message names the file)'},
     {code: 'ERR_RENDER_NO_DEFAULT_EXPORT', when: 'the page has no default export'},
-    {code: 'ERR_RENDER_MISSING_DEPENDENCY', when: "the page imports a package that is not installed (the suggestion is one install line for every such package, in the project's package manager: a package that Astryx releases with Core at the project's Core release, and any other package at the CLI's version range (such as `recharts@\"^3.10.1\"`), and none when the project's lockfiles disagree, which the message then says; for a page in another package than the folder the render runs from, the message names that package and the line to run there; in a folder that no package.json holds, the message says to install them in the project that uses the page, with no install line), or the esbuild the CLI depends on is missing from its install"},
+    {code: 'ERR_RENDER_MISSING_DEPENDENCY', when: "the page imports a package that is not installed (the suggestion is one install line for every such package, in the project's package manager: Core, the CLI and a package that Astryx releases with Core at the project's Core release, and any other package at the CLI's version range (such as `recharts@\"^3.10.1\"`), and none when the project's lockfiles disagree, which the message then says; for a page in another package than the folder the render runs from, the message names that package and the line to run there; in a folder that no package.json holds, the message says to install them in the project that uses the page, with no install line), or the esbuild the CLI depends on is missing from its install"},
     {code: 'ERR_RENDER_SCRIPT', when: "the page's script cannot be built for the browser: a module it loads needs Node (`fs`, `path`), or cannot be found or compiled for the browser; the message names the module"},
     {code: 'ERR_VERSIONS_UNAVAILABLE', when: 'outside a project, the page imports an Astryx package, React or StyleX, and the Core of the release that answers cannot be downloaded'},
     {code: 'ERR_RENDER_BROWSER_API', when: 'the page reads a browser-only API, such as window or document, while rendering'},
