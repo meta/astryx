@@ -274,6 +274,14 @@ const ROWS = [
     {q: '0 2px 6px #0000004d', has: ["--shadow-med '0 2px 6px #0000004d'"]},
   ],
   [
+    "an offer's fills are measured on its first line only, as main",
+    {
+      q: 'badges: red',
+      has: ["background-color '#dc2626' --on badge --when variant:neutral"],
+      says: /^(?![\s\S]*variant warning in light mode)/,
+    },
+  ],
+  [
     'a size and corners together',
     {q: 'checkboxes 16px with 3px corners', never: /contradict/},
   ],

@@ -27511,6 +27511,8 @@ export function draftAnswer(ctx, env, question) {
           keptLines.push({
             text: `to change the ${colored.join(', ')} ${name} variants too: one line for each`,
             options: colored.map(v => [{...st, when: `variant:${v}`}]),
+            // (More than the ask: offered, never the answer itself.)
+            offer: true,
           });
       }
     }
@@ -28433,6 +28435,9 @@ export function draftAnswer(ctx, env, question) {
       d.options.some(o => o.some(x => !fillSteps.includes(x)))
     )
       continue;
+    // (An offer, "to change the … variants too", is measured as main
+    // measures it: its first line only.)
+    if (d.offer) fillSteps.splice(1);
     const st = fillSteps[0];
     const fill = parseColor(String(st.value ?? ''));
     if (
