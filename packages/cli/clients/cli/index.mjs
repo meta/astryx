@@ -720,10 +720,11 @@ export async function createProgram({argv} = {}) {
       // none of the registered subcommands matched.
       const extras = (cmd && cmd.args) || [];
       if (extras.length > 0) {
-        const {findEntry, iconFeaturesOn, unknownCommandAnswer} = await import('./lib/unknown-command.mjs');
+        const {findEntry, iconFeaturesOn, projectScript, unknownCommandAnswer} = await import('./lib/unknown-command.mjs');
         const answer = await unknownCommandAnswer(program, process.argv.slice(2), {
           findEntry,
           iconFeatures: iconFeaturesOn,
+          projectScript,
         });
         const unknown = String(extras[0]);
         cliError(answer?.message ?? `unknown command '${unknown}'`, {

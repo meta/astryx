@@ -172,6 +172,26 @@ describe('the command the words point at', () => {
     expect(a?.suggestions.map(s => s.name)).toEqual(['astryx help']);
   });
 
+  it("names the project's own script first when the word is one of its scripts", async () => {
+    /** @param {string} word */
+    const projectScript = async word =>
+      word === 'test' ? 'pnpm run test' : null;
+    const a = await unknownCommandAnswer(program(), ['test'], {
+      findEntry: entries,
+      projectScript,
+    });
+    expect(a?.suggestions).toEqual([
+      {name: 'pnpm run test', reason: "the project's own test script"},
+      {name: 'astryx help', reason: 'every command, with what it does'},
+    ]);
+    // A word that is no script answers as before.
+    const far = await unknownCommandAnswer(program(), ['frobnicate'], {
+      findEntry: entries,
+      projectScript,
+    });
+    expect(far?.suggestions.map(s => s.name)).toEqual(['astryx help']);
+  });
+
   it('falls back to the names a typo of the word could be, else the help', async () => {
     expect(await names(['componet'])).toEqual(['component']);
     const far = await unknownCommandAnswer(program(), ['frobnicate'], {
@@ -584,6 +604,40 @@ describe('the CLI', () => {
     expect(JSON.parse(stdout).suggestions).toEqual([
       {name: 'astryx help', reason: 'every command, with what it does'},
     ]);
+  });
+
+  it("names a script of the project's package.json with the project's package manager, and keeps it before an option the program does not take", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-script-word-'));
+    try {
+      fs.writeFileSync(
+        path.join(tmp, 'package.json'),
+        JSON.stringify({
+          name: 'app',
+          private: true,
+          scripts: {test: 'vitest', dev: 'vite'},
+          dependencies: {'@astryxdesign/core': '*'},
+        }),
+      );
+      fs.writeFileSync(
+        path.join(tmp, 'pnpm-lock.yaml'),
+        "lockfileVersion: '9.0'\n",
+      );
+      const test = await runCli(['--json', 'test'], tmp);
+      expect(test.status).toBe(1);
+      expect(JSON.parse(test.stdout).suggestions).toEqual([
+        {name: 'pnpm run test', reason: "the project's own test script"},
+        {name: 'astryx help', reason: 'every command, with what it does'},
+      ]);
+      const dev = await runCli(['dev', '--port', '3000'], tmp);
+      expect(dev.status).toBe(1);
+      expect(dev.stderr).toMatch(/^Run: pnpm run dev$/m);
+      const lint = JSON.parse((await runCli(['--json', 'lint'], tmp)).stdout);
+      expect(
+        lint.suggestions.map((/** @type {{name: string}} */ s) => s.name),
+      ).toEqual(['astryx help']);
+    } finally {
+      fs.rmSync(tmp, {recursive: true, force: true});
+    }
   });
 
   it('reports an unknown command before an option the program does not take', async () => {

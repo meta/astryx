@@ -19,8 +19,17 @@
  *   in index.mjs and by stray-option.mjs
  */
 
+import * as path from 'node:path';
 import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
-import {quoteCommandArgument} from '../../../foundation/env/package-manager.mjs';
+import {
+  commandInFolder,
+  detectPackageManager,
+  quoteCommandArgument,
+} from '../../../foundation/env/package-manager.mjs';
+import {
+  findDeclaringPackage,
+  readJson,
+} from '../../../foundation/release/project.mjs';
 import {optionsInReach, runParses} from './stray-option.mjs';
 import {
   ADD_WORDS as ADD_TABLE,
@@ -55,6 +64,12 @@ import {
 /**
  * Whether icon features are on where the run is.
  * @typedef {() => Promise<boolean>} IconFeatures
+ */
+
+/**
+ * The run of the project's own package.json script that a word names, or
+ * null when it names none.
+ * @typedef {(word: string) => Promise<string | null>} ProjectScript
  */
 
 /**
@@ -839,18 +854,24 @@ async function pointed(
  * bare `astryx …` runs or command names, as cliError prints them.
  * @param {CommandLike} program
  * @param {string[]} words the words of the run after the program name
- * @param {{findEntry?: FindEntry, iconFeatures?: IconFeatures}} [context]
+ * @param {{findEntry?: FindEntry, iconFeatures?: IconFeatures, projectScript?: ProjectScript}} [context]
  *   `findEntry` finds which lookup command reads a name; without it, no name
  *   points at a command. `iconFeatures` says whether icon features are on;
- *   without it, they are off
- * @returns {Promise<{word: string, message: string, suggestions: Array<{name: string, reason: string}>, fallback?: true} | null>}
- *   null when no word names a command; `fallback` when nothing fits and the
- *   one suggestion is the help
+ *   without it, they are off. `projectScript` finds the project's own script
+ *   the word names; without it, no word names one
+ * @returns {Promise<{word: string, message: string, suggestions: Array<{name: string, reason: string}>, near?: true, fallback?: true} | null>}
+ *   null when no word names a command; `near` when the suggestions are the
+ *   names of commands the word is a typo of; `fallback` when nothing fits and
+ *   the one suggestion is the help
  */
 export async function unknownCommandAnswer(
   program,
   words,
-  {findEntry = async () => null, iconFeatures = async () => false} = {},
+  {
+    findEntry = async () => null,
+    iconFeatures = async () => false,
+    projectScript = async () => null,
+  } = {},
 ) {
   const first = firstWord(words, program);
   if (!first) return null;
@@ -866,6 +887,23 @@ export async function unknownCommandAnswer(
       ].join(' '),
       reason: r.reason,
     }));
+  const help = {
+    name: 'astryx help',
+    reason: 'every command, with what it does',
+  };
+  // A word that names one of the project's own package.json scripts (`test`,
+  // `dev`) is most likely that script, typed through the CLI: its run comes
+  // first.
+  const script = await projectScript(word).catch(() => null);
+  if (script)
+    return {
+      word,
+      message,
+      suggestions: [
+        {name: script, reason: `the project's own ${word} script`},
+        ...(runs.length > 0 ? runs : [help]),
+      ],
+    };
   if (runs.length > 0) return {word, message, suggestions: runs};
   const near = nearNames(
     word,
@@ -876,18 +914,37 @@ export async function unknownCommandAnswer(
       word,
       message,
       suggestions: near.map(name => ({name, reason: 'did you mean this?'})),
+      near: true,
     };
   // When nothing fits, the help lists every command with what it does. A
   // bare list of names would put the first one (`init`, which writes files)
   // where a reader looks for the answer.
-  return {
-    word,
-    message,
-    suggestions: [
-      {name: 'astryx help', reason: 'every command, with what it does'},
-    ],
-    fallback: true,
-  };
+  return {word, message, suggestions: [help], fallback: true};
+}
+
+/**
+ * The run of the project's own package.json script named `word`, with the
+ * package manager the project uses (`pnpm run test`), from the folder of
+ * that package.json when the run starts elsewhere. Null outside a project,
+ * or when no script has that name.
+ * @type {ProjectScript}
+ */
+export async function projectScript(word) {
+  const project = findDeclaringPackage(process.cwd());
+  if (!project) return null;
+  const scripts = readJson(path.join(project.dir, 'package.json'))?.scripts;
+  if (
+    !scripts ||
+    typeof scripts !== 'object' ||
+    !Object.hasOwn(scripts, word) ||
+    typeof scripts[word] !== 'string'
+  )
+    return null;
+  const pm = detectPackageManager(project.dir);
+  const run = `${pm === 'npx' ? 'npm' : pm} run ${quoteCommandArgument(word)}`;
+  return path.resolve(project.dir) === path.resolve(process.cwd())
+    ? run
+    : commandInFolder(project.dir, run);
 }
 
 /**
