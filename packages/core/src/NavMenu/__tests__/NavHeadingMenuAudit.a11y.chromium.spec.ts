@@ -275,7 +275,15 @@ for (const mode of ['light', 'dark'] as const) {
         await page.locator('.astryx-nav-heading-menu').waitFor();
         await settle(page);
         const rest = await readMenu(page, 'body');
-        checkRows(check, rest, 'md');
+        // Inside the heading, the element is presentational: the heading's
+        // own "Workspace" menu holds the rows, and no menu sits inside it.
+        checkRows(check, rest, 'md', 'none');
+        check(rest.nestedInMenu, 'rows are not in the heading menu');
+        check(
+          rest.hostMenuName?.includes('Workspace') === true,
+          `host menu name ${rest.hostMenuName}`,
+        );
+        check(rest.innerMenus === 0, `${rest.innerMenus} menus inside`);
         for (const row of rest.rows) {
           check(row.tag === 'a' && row.href === '#', `${row.name}: ${row.tag}`);
           if (row.iconLeft != null && row.labelLeft != null) {
