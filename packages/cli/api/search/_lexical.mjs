@@ -636,7 +636,8 @@ export function rankLexical(query, options, catalog) {
       );
     // Whether a root's own hits on the words its part answers have keyword
     // strength (STRONG_TOKEN_SCORE: the whole name, the name's head word, or a
-    // keyword), not a word inside its name, a near spelling, or a mention in
+    // keyword, also within the scorer's typo distance, since a misspelled
+    // name still names the root), not a word inside its name or a mention in
     // its text. A root with weaker hits leads its part only inside the part's
     // run (rootsFirst): `router` keeps a part whose keyword is `router` above
     // a root whose description only mentions it.
