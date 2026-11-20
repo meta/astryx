@@ -114,6 +114,10 @@ import {
   parseLocaleTime,
   resolveHourFormat,
 } from '../utils/timeFormat';
+import {
+  localeTextDirection,
+  localeTextStyles,
+} from '../utils/localeTextDirection';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
@@ -754,6 +758,7 @@ function PointerDateTimeField({
   };
   const t = useComponentTranslator();
   const locale = useLocale();
+  const textDirection = localeTextDirection(locale);
   const usesNativePicker = nativeMode !== 'off';
   // `forced` (`presentation="native"`, FR2): no Astryx fallback. `adaptive`
   // (`adaptive-native` coarse) and `legacy` (deprecated `always`):
@@ -1904,8 +1909,10 @@ function PointerDateTimeField({
                 aria-controls={popover.isOpen ? popover.id : undefined}
                 aria-autocomplete="none"
                 autoComplete="off"
+                dir={textDirection}
                 {...stylex.props(
                   styles.input,
+                  localeTextStyles.pageAlign,
                   isEffectivelyDisabled && styles.inputDisabled,
                   isDateInvalid && styles.inputInvalid,
                 )}
@@ -2055,8 +2062,10 @@ function PointerDateTimeField({
                     : undefined
                 }
                 aria-busy={isBusy || undefined}
+                dir={textDirection}
                 {...stylex.props(
                   styles.input,
+                  localeTextStyles.pageAlign,
                   isEffectivelyDisabled && styles.inputDisabled,
                   typedTime.isRejected && styles.inputInvalid,
                 )}
@@ -2137,7 +2146,11 @@ function PointerDateTimeField({
                         isSelected && styles.timeOptionSelected,
                       ),
                     )}>
-                    {option.label}
+                    <span
+                      dir={textDirection}
+                      {...stylex.props(localeTextStyles.isolate)}>
+                      {option.label}
+                    </span>
                   </div>
                 );
               })}
