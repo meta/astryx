@@ -26,6 +26,7 @@ import {
   useTransition,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputRowSizeStyles} from '../Field/inputStyles.stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {
   plainDateFromISO,
@@ -43,7 +44,6 @@ import {
 import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import {
   colorVars,
-  sizeVars,
   radiusVars,
   spacingVars,
   typographyVars,
@@ -97,6 +97,11 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/DateRangeInput/DateRangeInput.generated';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 
@@ -257,15 +262,12 @@ const styles = stylex.create({
 
 const sizeStyles = stylex.create({
   sm: {
-    height: sizeVars['--size-element-sm'],
     minWidth: 180,
   },
   md: {
-    height: sizeVars['--size-element-md'],
     minWidth: 180,
   },
   lg: {
-    height: sizeVars['--size-element-lg'],
     minWidth: 180,
   },
 });
@@ -598,6 +600,17 @@ export function DateRangeInput({
   ref,
   ...restProps
 }: DateRangeInputProps) {
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    value != null &&
+    (typeof value.start !== 'string' || typeof value.end !== 'string')
+  ) {
+    throw devPropError(
+      'DateRangeInput',
+      'value',
+      "must be null or {start, end} with ISO date strings, for example value={{start: '2026-01-01', end: '2026-01-31'}}. Pass strings, not Date objects.",
+    );
+  }
   const {rest, container} = useFieldInputStyling('DateRangeInput', restProps, {
     containerXstyle,
     containerClassName,
@@ -792,6 +805,7 @@ export function DateRangeInput({
             inputWrapperStyles.base,
             inputWrapperStyles.textField,
             sizeStyles[size],
+            inputRowSizeStyles[size],
             isEffectivelyDisabled && inputWrapperStyles.disabled,
             isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,
             status && inputStatusBorderStyles[status.type],

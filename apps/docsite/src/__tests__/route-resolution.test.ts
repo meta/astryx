@@ -90,8 +90,8 @@ describe('route resolution', () => {
 
   it('lists the guides the sidebar listed before the splits, plus new topics only', () => {
     // The Guide section as it was before the CLI integration guide and the
-    // other topics were split into short guides. `styling-overview` and
-    // `cli-host-entry` are topics added since; `global` is the Global mode
+    // other topics were split into short guides. `styling-overview`,
+    // `cli-host-entry` and `cli-skill-places` are topics added since; `global` is the Global mode
     // page; `authoring` holds what CLI Integrations and Writing docs did;
     // `use-integrations` is the guide for apps that install one;
     // `cli-experimental-export-pages` is the experimental export guide and
@@ -113,6 +113,7 @@ describe('route resolution', () => {
         'cli-experimental-export-pages',
         'cli-experimental-share-a-page',
         'cli-host-entry',
+        'cli-skill-places',
         'global',
         'internationalization',
         'is-my-code-good',

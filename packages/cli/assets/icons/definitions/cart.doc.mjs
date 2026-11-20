@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'cart',
+  group: 'shopping',
   description: 'A shopping cart.',
   words: ['shop', 'buy', 'checkout', 'shopping cart'],
 };

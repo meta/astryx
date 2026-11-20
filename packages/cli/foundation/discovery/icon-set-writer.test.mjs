@@ -11,6 +11,7 @@ import {
   generatedModuleText,
   iconIdOf,
   packageRootMoves,
+  readGeneratedStatements,
 } from './icon-set-writer.mjs';
 
 describe('iconIdOf', () => {
@@ -69,6 +70,110 @@ describe('generatedModuleText over a large library', () => {
     expect(first.js).toContain(
       "export {Glyph19999Outline24Icon as Glyph19999Icon} from '@acme/big-library';",
     );
+  });
+});
+
+describe('generatedModuleText marks its top-level calls pure', () => {
+  const icons = [
+    {
+      name: 'TrashIcon',
+      from: '@acme/glyph-data',
+      source: 'glyphTrash',
+      adapt: true,
+    },
+    {name: 'XIcon', from: '@acme/glyph-data', source: 'glyphX', adapt: true},
+    {name: 'StarIcon', from: '@acme/star', source: 'StarIcon', adapt: false},
+  ];
+  const data = /** @type {any} */ ({
+    schemaVersion: 1,
+    module: '@acme/glyph-icons',
+    adapter: {module: './src/adapt.js', export: 'adapt'},
+    themeMap: 'themeIcons',
+    icons: [
+      {id: 'trash', export: 'TrashIcon'},
+      {id: 'x', export: 'XIcon'},
+      {id: 'star', export: 'StarIcon'},
+    ],
+    map: {close: 'x', delete: 'trash'},
+  });
+  const write = (/** @type {string | null} */ before) =>
+    generatedModuleText('/pkg', 'glyph.generated.js', before, data, icons);
+  const written = write(null);
+
+  it('writes each adapter call and theme-map element with the mark, so a bundler drops the unused ones', () => {
+    expect(written.js).toContain(
+      'export const XIcon = /* @__PURE__ */ adaptIcon(XIconSource);',
+    );
+    expect(written.js).toContain('close: /* @__PURE__ */ createElement(XIcon,');
+    expect(written.js).toContain("export {StarIcon} from '@acme/star';");
+    const calls = written.js
+      .split('\n')
+      .filter(line => /^export const \w+ = |^ {2}\w+: /u.test(line))
+      .filter(line => /\w\(/u.test(line));
+    expect(calls.length).toBeGreaterThan(0);
+    for (const line of calls)
+      expect(line).toMatch(/\/\* @__PURE__ \*\/ \w+\(/u);
+  });
+
+  it.each([
+    [
+      'an older CLI wrote it, without marks',
+      (/** @type {string} */ js) => js.replaceAll('/* @__PURE__ */ ', ''),
+    ],
+    [
+      'a tool wrote the other spelling',
+      (/** @type {string} */ js) =>
+        js.replaceAll('/* @__PURE__ */ ', '/*#__PURE__*/'),
+    ],
+    [
+      'a formatter moved the call to its own line',
+      (/** @type {string} */ js) =>
+        js
+          .replaceAll(
+            '= /* @__PURE__ */ adaptIcon(',
+            '=\n  /* @__PURE__ */ adaptIcon(\n    ',
+          )
+          .replaceAll('Source);', 'Source,\n  );'),
+    ],
+  ])(
+    'reads a module %s the same, and rewrites it with the marks',
+    (_, restyle) => {
+      const before = restyle(written.js);
+      expect(before).not.toBe(written.js);
+      expect(readGeneratedStatements(before, 'glyph.generated.js')).toEqual(
+        readGeneratedStatements(written.js, 'glyph.generated.js'),
+      );
+      const again = write(before);
+      expect(again.js).toBe(written.js);
+      expect(again.dts).toBe(written.dts);
+    },
+  );
+
+  it.each([
+    ['as the CLI spells it', '/* @__PURE__ */ '],
+    ['in the other spelling', '/*#__PURE__*/'],
+  ])('keeps the mark of a statement written by hand %s', (_, mark) => {
+    const before = `${written.js}export const BrandIcon = ${mark}makeBrand('brand');\n`;
+    const again = write(before);
+    expect(again.js).toContain(
+      "export const BrandIcon = /* @__PURE__ */ makeBrand('brand');",
+    );
+    expect(write(again.js).js).toBe(again.js);
+  });
+
+  it('leaves a statement written by hand without a mark unmarked', () => {
+    const before = `${written.js}export const BrandIcon = makeBrand('brand');\n`;
+    expect(write(before).js).toContain(
+      "export const BrandIcon = makeBrand('brand');",
+    );
+  });
+
+  it('types the marked module as it types the unmarked one', () => {
+    expect(written.dts).toContain(
+      'export declare const XIcon: ComponentType<SVGProps<SVGSVGElement>>;',
+    );
+    expect(written.dts).toContain('readonly close: ReactElement');
+    expect(written.dts).not.toContain('__PURE__');
   });
 });
 

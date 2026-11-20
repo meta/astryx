@@ -28,6 +28,7 @@ import {
   gatherCandidatesReused,
   loadSearchData,
   searchIconSection,
+  withoutShareGuides,
 } from './_adapter.mjs';
 import {rankLexical} from './_lexical.mjs';
 import {searchView} from './_named-keywords.mjs';
@@ -222,7 +223,8 @@ async function searchCoreRead(query, options) {
         withoutNotReady(
           options.ownKeywords
             ? await searchCatalog(options)
-            : await gatherCandidatesReused(options),
+            : // build ranks without the shareable-page guides
+              withoutShareGuides(await gatherCandidatesReused(options)),
           options.readyTemplatesOnly === true,
         ),
       ),

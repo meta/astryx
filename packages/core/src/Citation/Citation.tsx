@@ -82,7 +82,10 @@ const styles = stylex.create({
     display: 'inline-flex',
     alignItems: 'center',
     gap: spacingVars['--spacing-1'],
-    verticalAlign: 'baseline',
+    // A flex chip takes its baseline from its first item. An icon has no text
+    // baseline, so its bottom edge sat on the line and the chip rode above
+    // it. Centred, it sits on the line with or without an icon.
+    verticalAlign: 'middle',
     height: spacingVars['--spacing-5'],
     fontSize: typeScaleVars['--text-supporting-size'],
     fontWeight: typeScaleVars['--text-supporting-weight'],

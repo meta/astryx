@@ -8,14 +8,15 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {Heading} from '@astryxdesign/core/Text';
 import {Card} from '@astryxdesign/core/Card';
 import {Section} from '@astryxdesign/core/Section';
-import {ArrowLeftIcon} from '@heroicons/react/24/outline';
+import {ArrowLeftIcon} from '@astryxdesign/template-icons';
 import {useToast} from '@astryxdesign/core/Toast';
 import {rtlStyles} from '@astryxdesign/core/utils';
 
 export default function ToolbarThreeSlot() {
   const showToast = useToast();
   return (
-    <Card style={{width: 600, height: '100%', marginTop: 260}}>
+    <Card
+      style={{width: 600, maxWidth: '100%', height: '100%', marginTop: 260}}>
       <Toolbar
         label="Document toolbar"
         dividers={['bottom']}
@@ -25,6 +26,9 @@ export default function ToolbarThreeSlot() {
             variant="ghost"
             icon={<Icon icon={ArrowLeftIcon} xstyle={rtlStyles.mirror} />}
             isIconOnly
+            onClick={() =>
+              showToast({body: 'Demo: the previous page would open here'})
+            }
           />
         }
         centerContent={<Heading level={4}>Title</Heading>}

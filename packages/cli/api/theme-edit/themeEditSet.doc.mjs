@@ -156,6 +156,10 @@ export const doc = {
       when: 'the theme does not build (the change is undone)',
     },
     {
+      code: 'ERR_DEP_MISSING',
+      when: "a package the build loads is broken in node_modules (it needs a package it declares, and that package is missing); the suggestion is the app's install command, or, when the run uses a CLI copy of its own (global, one-off or cached) and the app's install does not hold the package that needs it, the message names that copy (a release-cache copy: the folder to remove); nothing was changed",
+    },
+    {
       code: 'ERR_RENDER_FAILED',
       when: "the components or the preview do not render with the project's React",
     },

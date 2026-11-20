@@ -61,7 +61,6 @@ function spellsOut(term, name, description) {
   const words = term.split(/\s+/).filter(Boolean);
   const parts = wordsOf(name);
   if (words.length < 2 || words.length !== parts.length) return false;
-  const described = wordsOf(description);
   let expanded = false;
   for (let i = 0; i < words.length; i++) {
     const w = words[i];
@@ -70,7 +69,7 @@ function spellsOut(term, name, description) {
     // Only a single-letter word is an abbreviation to spell out: "With" in a
     // name is not spelled out by "without".
     if (p.length !== 1 || !w.startsWith(p)) return false;
-    if (!described.some(d => sameWord(d, w))) return false;
+    if (!wordsOf(description).some(d => sameWord(d, w))) return false;
     expanded = true;
   }
   return expanded;

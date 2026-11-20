@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'chevronUp',
+  group: 'chevrons',
   description: 'Collapse a section or move up.',
   words: ['collapse', 'up'],
 };

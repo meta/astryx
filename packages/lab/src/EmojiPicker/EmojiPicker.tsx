@@ -59,7 +59,7 @@ import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {ScrollableArea} from '@astryxdesign/core/ScrollableArea';
 import {Text} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
-import {LoadingMessage} from '../LoadingMessage';
+import {LoadingMessage} from '../internal/LoadingMessage';
 import {useStatusAnnouncement} from '../useStatusAnnouncement';
 
 export interface EmojiOption {
