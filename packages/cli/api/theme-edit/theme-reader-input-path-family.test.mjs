@@ -177,7 +177,7 @@ describe('one reader for each kind of input', () => {
       for (const [thing, saved, line] of [
         ['headings', 'blod', / set b headings bold$/],
         ['spacing', 'romy', / set b spacing roomy$/],
-        ['text-size', '16px', / set b text-size 16$/],
+        ['text-size', '1rem', / set b text-size 16$/],
       ]) {
         const data = JSON.parse(before);
         data.settings = [

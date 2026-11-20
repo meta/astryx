@@ -1,18 +1,19 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file A role color the base theme takes away from a part on its own is
- * listed under missed once the theme moves that role: the base pointing
- * the role tokens at others there (stone's info banner on its categorical
- * blue), or a variant named for the role drawn in a color of its palette
- * written out (stone's accent progress fill). Each line, followed, ends the
- * entry; an untouched base lists none.
+ * @file A role color the base theme takes away from a part on its own (the
+ * base pointing the role tokens at others there, as stone's info banner on
+ * its categorical blue, or a variant named for the role drawn in a color of
+ * its palette written out, as stone's accent progress fill) is reached by
+ * the theme's role color once the theme moves that role: the part takes
+ * it, and the missed list does not list it. An untouched base lists none.
  */
+
+import fs from 'node:fs';
+import path from 'node:path';
 
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {themeEditNew, themeEditShow} from './theme-edit.mjs';
-import {splitCommand} from './_vet.mjs';
-import {runCli} from '../../test-utils/run-cli.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -40,19 +41,19 @@ afterAll(() => {
   if (cwd) removeLinkedFixture(cwd);
 });
 
-/** @param {string} line */
-async function follow(line) {
-  for (const one of line.split(' && ')) {
-    const args = splitCommand(one.slice(one.indexOf('experimental ')));
-    const r = await runCli(/** @type {string[]} */ (args), {cwd});
-    expect(r.status, `${one}\n${r.stderr}`).toBe(0);
-  }
-}
 /** @param {string} slug */
 const roleMisses = async slug =>
   /** @type {Array<{part: string, why: string, line: string}>} */ (
     /** @type {any} */ (await themeEditShow(slug, looked())).data.missed ?? []
   ).filter(x => /base theme points|palette written out/.test(x.why));
+
+/** A rule's body by its selector. @param {string} slug @param {string} selector */
+const rule = (slug, selector) =>
+  new RegExp(
+    `\\n {2}${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\{([^}]*)\\}`,
+  ).exec(
+    fs.readFileSync(path.join(cwd, 'themes', slug, `${slug}.css`), 'utf8'),
+  )?.[1] ?? '';
 
 describe('a role color the base takes away from a part', () => {
   it(
@@ -70,7 +71,7 @@ describe('a role color the base takes away from a part', () => {
   );
 
   it(
-    "lists stone's info banner and accent progress fill, and their lines end them",
+    "stone's info banner and accent progress fill take the theme's colors, so neither is listed",
     async () => {
       if (unbuilt) return;
       await themeEditNew('s', {
@@ -78,25 +79,19 @@ describe('a role color the base takes away from a part', () => {
         like: 'stone',
         settings: {info: '#6b21a8', accent: '#c2410c'},
       });
-      const before = await roleMisses('s');
-      const banner = before.find(x => x.part === 'banner');
-      expect(banner?.why).toMatch(
-        /--color-info-muted at --color-background-blue/,
-      );
-      expect(banner?.why).toMatch(/--color-on-info-muted at --color-text-blue/);
-      expect(banner?.line).toMatch(/--on banner --when status:info/);
-      const fill = before.find(x => x.part === 'progress-bar-fill');
-      expect(fill?.line).toMatch(
-        /background-color 'var\(--color-accent\)' --on progress-bar-fill --when variant:accent/,
-      );
-      for (const x of before) await follow(x.line);
       expect(await roleMisses('s')).toEqual([]);
+      const banner = rule('s', '.astryx-banner[data-status="info"]');
+      expect(banner).toMatch(/--color-info-muted: (light-dark\()?#/);
+      expect(banner).toMatch(/--color-on-info-muted: (light-dark\()?#/);
+      expect(
+        rule('s', '.astryx-progress-bar-fill[data-variant="accent"]'),
+      ).toMatch(/background-color: var\(--color-accent\);/);
     },
     T,
   );
 
   it(
-    "lists gothic's info banner",
+    "gothic's info banner takes the theme's info",
     async () => {
       if (unbuilt) return;
       await themeEditNew('g', {
@@ -104,9 +99,9 @@ describe('a role color the base takes away from a part', () => {
         like: 'gothic',
         settings: {info: '#ff00e6'},
       });
-      const banner = (await roleMisses('g')).find(x => x.part === 'banner');
-      expect(banner?.line).toMatch(
-        /--color-info-muted '#[0-9a-fA-F]{6,8}' --on banner --when status:info/,
+      expect(await roleMisses('g')).toEqual([]);
+      expect(rule('g', '.astryx-banner[data-status="info"]')).toMatch(
+        /--color-info-muted: (light-dark\()?#/,
       );
     },
     T,

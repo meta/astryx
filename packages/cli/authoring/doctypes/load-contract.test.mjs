@@ -14,13 +14,13 @@ import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {describe, expect, it} from 'vitest';
 import {parseDoc} from './parse.mjs';
-import {AuthoredDocKindSchema} from './_schema.mjs';
+import {docSchemas} from './_schema.mjs';
 import {doc as graphFieldsDoc} from './base/graph-fields.doc.mjs';
 import {doc as iconDefinitionDoc} from './icon-definition/icon-definition.doc.mjs';
 import {problemsInTopic} from '../../foundation/discovery/docs-discovery.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const KINDS = AuthoredDocKindSchema.options;
+const KINDS = docSchemas().AuthoredDocKindSchema.options;
 
 /** The lock that pins each kind's load check to its published type. */
 const LOCKS = {

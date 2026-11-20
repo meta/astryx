@@ -11,9 +11,4 @@ export const doc = {
   isReady: true,
   aspectRatio: 4 / 3,
   componentsUsed: ['Chat', 'Icon'],
-  icons: {
-    CheckCircleIcon: 'success',
-    UserMinusIcon: 'userRemove',
-    UserPlusIcon: 'userAdd',
-  },
 };

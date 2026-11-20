@@ -207,7 +207,8 @@ const config: StorybookConfig = {
         ...astryxStylex({
           stylexOptions: {
             dev: false,
-            styleResolution: 'application-order',
+            // No styleResolution: Storybook resolves style merges the way the
+            // published CSS does, so a story shows what npm users get.
             aliases: stylexAliases,
             unstable_moduleResolution: stylexResolution.stylexModuleResolution,
             lightningcssOptions: {

@@ -9,6 +9,7 @@
 import {describe, expect, it} from 'vitest';
 import {pictureFontNotes} from './_preview.mjs';
 import {FONT_PROBE_PREFIX} from '../../foundation/render/font-probe.mjs';
+import {DIALS} from './_tables.mjs';
 
 /** @param {object} probe */
 const printed = probe => `${FONT_PROBE_PREFIX}${JSON.stringify(probe)}\n`;
@@ -40,5 +41,16 @@ describe('the fonts a picture drew its text in', () => {
     ).toEqual([]);
     expect(pictureFontNotes('')).toEqual([]);
     expect(pictureFontNotes(`${FONT_PROBE_PREFIX}not json\n`)).toEqual([]);
+  });
+});
+
+describe('the font dial help', () => {
+  it('names rounded as an open font to install, and what a picture names', () => {
+    const help = DIALS.font.help;
+    expect(help).toContain(
+      'rounded (Nunito, an open font: it loads once its package is installed',
+    );
+    expect(help).toContain('draws a serif, monospace or cursive stack');
+    expect(help).not.toContain('Also: rounded, comic');
   });
 });

@@ -55,6 +55,14 @@ beforeAll(async () => {
     await themeEditNew(`f${like}`, {cwd, like});
     await themeEditSet(`f${like}`, 'surfaces', 'flat', {cwd});
   }
+  // White cards in light mode, then flat: the light cards show white.
+  await themeEditNew('white', {cwd, like: 'neutral'});
+  await themeEditSet('white', 'background-color', '#ffffff', {
+    cwd,
+    on: 'card',
+    mode: 'light',
+  });
+  await themeEditSet('white', 'surfaces', 'flat', {cwd});
 }, 600_000);
 
 afterAll(() => {
@@ -85,6 +93,15 @@ describe('surfaces flat', () => {
     );
     for (const hue of ['blue', 'green', 'red', 'yellow'])
       expect(valueIn(rule, `--color-background-${hue}`), hue).toBe('');
+  });
+
+  it('a panel with a fill of its own in a mode keeps its pieces there', () => {
+    const rule = cardRule('white');
+    // Light shows the white card: the gray badge keeps its own pill.
+    expect(valueIn(rule, '--color-background-gray')).toBe('');
+    expect(light(valueIn(rule, '--color-background-muted'))).not.toBe(
+      'var(--color-background-card)',
+    );
   });
 
   it('neutral: the emphasized border stands out from the tint at least as from the card', () => {

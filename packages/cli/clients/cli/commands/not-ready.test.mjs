@@ -90,6 +90,8 @@ const NO_TEMPLATE_RESULTS = new Set([
   'docs.index',
   'docs.detail.section',
   'docs.node',
+  'docs.skill',
+  'docs.skills',
   'doctor',
   'integration.component-conflicts',
   'integration.doc-conflicts',

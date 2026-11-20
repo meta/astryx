@@ -32,6 +32,7 @@ import React, {
   useTransition,
   type ReactNode,
 } from 'react';
+import {useCommittedRefInto} from '../hooks/useCommittedRef';
 import * as stylex from '@stylexjs/stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useTooltip} from '../Tooltip';
@@ -77,13 +78,16 @@ import {useCombobox, useSelectedItemOverlayMargin} from './hooks';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useTypeahead} from '../hooks/useTypeahead';
-import {useResolvedOptionality} from '../hooks/useResolvedRequired';
+import {
+  resolveSearchTriggerRequired,
+  useResolvedOptionality,
+} from '../hooks/useResolvedRequired';
 import {SelectorOption} from './SelectorOption';
 import {SelectorRowLayoutContext} from './SelectorRowLayoutContext';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
 import {withholdCallerHandlers} from '../utils/disabledInteraction';
-import {warnOnce} from '../utils/devWarning';
+import {devPropError, warnOnce} from '../utils/devWarning';
 import {useSize} from '../SizeContext/SizeContext';
 import {
   useFieldInputStyling,
@@ -116,6 +120,10 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Selector/Selector.generated';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 
@@ -444,9 +452,14 @@ const styles = stylex.create({
     transitionProperty: 'none',
   },
 
-  // Popover container (for anchor positioning)
+  // Clamp the trigger width with the viewport cap. A CSS minimum otherwise
+  // wins over the layer's maximum.
   popover: {
-    minWidth: 'anchor-size(width)',
+    minWidth: stylex.firstThatWorks(
+      `min(anchor-size(width), ${layerViewportInset.maxInlineSize})`,
+      `min(anchor-size(width), ${layerViewportInset.maxInlineSizeFallback})`,
+      'anchor-size(width)',
+    ),
   },
 
   // Empty state
@@ -456,6 +469,7 @@ const styles = stylex.create({
     color: colorVars['--color-text-secondary'],
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
   },
 
   // Section heading. Plain secondary text, no rules — the same treatment
@@ -490,6 +504,7 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-element'],
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     color: colorVars['--color-text-primary'],
     backgroundColor: 'transparent',
     borderWidth: 0,
@@ -1227,6 +1242,13 @@ export function Selector<T extends SelectorOptionType>(
     id,
     ...restProps
   } = props as SelectorPropsClearable<T>;
+  if (process.env.NODE_ENV !== 'production' && !Array.isArray(options)) {
+    throw devPropError(
+      'Selector',
+      'options',
+      "must be an array of options, for example options={[{value: 'nyc', label: 'New York'}]}. Selector does not read <option> children.",
+    );
+  }
   const inputGroup = useInputGroup();
   const inputGroupState = use(InputGroupInternalContext);
   const isDisabled = isDisabledProp || inputGroupState.isDisabled;
@@ -1426,6 +1448,8 @@ export function Selector<T extends SelectorOptionType>(
   // Explicit placement opts out of the selector-specific overlay behavior and
   // uses the standard layer positioning API instead.
   const shouldOverlaySelectedItem = placement == null && !hasSearch;
+  // Written below, once the overlay margin hook has run.
+  const remeasureOverlayRef = useRef<(() => void) | null>(null);
   const surface = useSelectorPresentation({
     presentation,
     onHide: handleLayerHide,
@@ -1448,6 +1472,11 @@ export function Selector<T extends SelectorOptionType>(
       // The overlay margin moves the list after the show, so the overlay
       // writes the entrance's side once it has moved.
       writesEntranceSide: shouldOverlaySelectedItem,
+      // A scroll stop can flip the list, and the overlay margin depends on
+      // the side.
+      onPlacedAfresh: shouldOverlaySelectedItem
+        ? () => remeasureOverlayRef.current?.()
+        : undefined,
     },
   });
   const {popover} = surface;
@@ -1530,14 +1559,18 @@ export function Selector<T extends SelectorOptionType>(
     surface.isOpen && !isLoading && filteredItems.length === 0;
   useAnnounceRenderedText(emptyStateRef, isPanelEmpty, searchQuery);
 
-  const {marginBlockStart: rawMarginBlockStart, isPositioned: rawIsPositioned} =
-    useSelectedItemOverlayMargin({
-      isOpen: popover.isOpen && shouldOverlaySelectedItem,
-      selectedItemIndex,
-      listboxId,
-      listboxRef,
-      anchorRef,
-    });
+  const {
+    marginBlockStart: rawMarginBlockStart,
+    isPositioned: rawIsPositioned,
+    remeasure: remeasureOverlay,
+  } = useSelectedItemOverlayMargin({
+    isOpen: popover.isOpen && shouldOverlaySelectedItem,
+    selectedItemIndex,
+    listboxId,
+    listboxRef,
+    anchorRef,
+  });
+  useCommittedRefInto(remeasureOverlayRef, remeasureOverlay);
 
   const isPositioned = shouldOverlaySelectedItem ? rawIsPositioned : true;
   const popoverPlacement = placement ?? 'below';
@@ -2144,17 +2177,15 @@ export function Selector<T extends SelectorOptionType>(
     callerAriaLabel != null && ariaLabelledByProp == null
       ? triggerId
       : (triggerLabelledBy ?? (inputGroup ? undefined : fieldLabelId));
-  // With search, the editable trigger is a role-less button, where
-  // aria-required is not allowed. The closed trigger states the required
-  // state in its name, through the Field label's visible marker, or else in
-  // its description; the search combobox carries aria-required while open.
-  const isSearchTrigger = hasSearch && !isEffectivelyReadOnly;
-  const isLabelRequiredInName =
-    isLabelRequiredMarkerShown &&
-    !inputGroup &&
-    (callerAriaLabel == null || ariaLabelledByProp != null);
-  const hasRequiredDescription =
-    isSearchTrigger && isEffectivelyRequired && !isLabelRequiredInName;
+  const {ariaRequired, hasRequiredDescription} = resolveSearchTriggerRequired({
+    hasSearch,
+    isReadOnly: isEffectivelyReadOnly,
+    isRequired: isEffectivelyRequired,
+    showsRequiredMarker: isLabelRequiredMarkerShown,
+    isInInputGroup: inputGroup != null,
+    ariaLabel: callerAriaLabel,
+    ariaLabelledBy: ariaLabelledByProp,
+  });
   const isValueInTriggerName =
     hasSearch &&
     !isEffectivelyReadOnly &&
@@ -2272,8 +2303,7 @@ export function Selector<T extends SelectorOptionType>(
     'aria-labelledby': isValueInTriggerName
       ? joinAriaIDs(triggerNameLabelId, valueTextId)
       : triggerLabelledBy,
-    'aria-required':
-      isEffectivelyRequired && !isSearchTrigger ? 'true' : undefined,
+    'aria-required': ariaRequired,
     'aria-invalid': status?.type === 'error' ? 'true' : undefined,
     'aria-busy': isBusy || undefined,
     // The built-in keyboard model runs first; a caller handler sees the keys

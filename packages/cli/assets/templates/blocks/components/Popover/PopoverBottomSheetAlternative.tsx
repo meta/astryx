@@ -4,7 +4,7 @@
 
 import {useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {CalendarIcon, TagIcon, UserIcon} from '@heroicons/react/24/outline';
+import {CalendarIcon, TagIcon, UserIcon} from '@astryxdesign/template-icons';
 import {BottomSheet} from '@astryxdesign/core/BottomSheet';
 import {Button} from '@astryxdesign/core/Button';
 import {Icon} from '@astryxdesign/core/Icon';

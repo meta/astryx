@@ -27,7 +27,9 @@
 import {recordCommandResult} from '../../../foundation/debug/index.mjs';
 import {routeSegment} from '../../../foundation/discovery/docs-section-key.mjs';
 import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
+import {isOutsideAnyPackage} from '../../../foundation/env/project-scope.mjs';
 import {renderTokens} from '../../../foundation/doc-compiler/links.mjs';
+import {pointerClause} from '../../../foundation/discovery/command-pointers.mjs';
 import {text} from '../formatters/index.mjs';
 
 /**
@@ -97,6 +99,157 @@ export function commandDocsOf(cmd) {
   return /** @type {any} */ (cmd)?.[COMMAND_DOCS];
 }
 
+/** A group's answer for one of its subcommands called bare. */
+const BARE_SUBCOMMAND = Symbol.for('astryx.command.bareSubcommand');
+
+/**
+ * What a group answers when one of its subcommands is called bare and fails:
+ * `result` when the group answered in its place, else one `suggestion` to add
+ * to the subcommand's error.
+ * @typedef {(subcommand: import('commander').Command) => Promise<
+ *   | {result: import('../../../foundation/debug/command-result.mjs').CommandResult}
+ *   | {suggestion: {name: string, reason: string}}
+ * >} BareSubcommandAnswer
+ */
+
+/**
+ * Whether `cmd` was called bare: no arguments, and no options except the
+ * program's own global options. A parent group's options count too, since
+ * Commander gives the group an option it declares that is written after the
+ * subcommand's name.
+ * @param {import('commander').Command} cmd
+ * @returns {boolean}
+ */
+function calledBare(cmd) {
+  if (cmd.args.length > 0) return false;
+  for (let node = cmd; node.parent; node = node.parent) {
+    const given = node.options.some(option => {
+      const source = node.getOptionValueSource(option.attributeName());
+      return source === 'cli' || source === 'env';
+    });
+    if (given) return false;
+  }
+  return true;
+}
+
+/**
+ * Whether `group` answers for its subcommands called bare.
+ * @param {import('commander').Command | null | undefined} group
+ * @returns {boolean}
+ */
+export function answersBareSubcommands(group) {
+  return typeof (/** @type {any} */ (group)?.[BARE_SUBCOMMAND]) === 'function';
+}
+
+/**
+ * The parent group's answer for `cmd` when `cmd` was called bare; null when
+ * it was not, when its group gives no answer, or when `cmd` refuses to run
+ * outside a project (`outsideProject: 'refuse'`) and the run is outside any
+ * project or package: that refusal is its answer.
+ * Called only where the subcommand fails, so the answer can only replace an
+ * error.
+ * @param {import('commander').Command} cmd
+ * @returns {Promise<Awaited<ReturnType<BareSubcommandAnswer>> | null>}
+ */
+export async function answerBareSubcommand(cmd) {
+  if (!answersBareSubcommands(cmd.parent) || !calledBare(cmd)) return null;
+  if (
+    commandDocsOf(cmd)?.doc.outsideProject === 'refuse' &&
+    isOutsideAnyPackage(process.cwd())
+  )
+    return null;
+  /** @type {BareSubcommandAnswer} */
+  const answer = /** @type {any} */ (cmd.parent)[BARE_SUBCOMMAND];
+  return answer(cmd);
+}
+
+/**
+ * Text in a description that names other commands, by their command paths.
+ * @typedef {{commands: string[], text: string}} HelpPointer
+ */
+
+/** The parts a description was set from, and the text they made. */
+const DESCRIPTION_PARTS = Symbol('astryx.descriptionParts');
+
+/**
+ * Set a command's description from parts: plain text, and pointers whose
+ * text names other commands. The description holds every part, as the
+ * manifest publishes it; help reads the parts through
+ * {@link servedDescription}.
+ * @param {import('commander').Command} cmd
+ * @param {Array<string | HelpPointer>} parts
+ */
+export function describeCommand(cmd, parts) {
+  const text = parts
+    .map(part => (typeof part === 'string' ? part : part.text))
+    .join('');
+  cmd.description(text);
+  Object.defineProperty(cmd, DESCRIPTION_PARTS, {
+    value: {parts, text},
+    configurable: true,
+  });
+}
+
+/**
+ * A command's description with each pointer left out unless `served` holds
+ * for every command it names. A description set later, outside
+ * {@link describeCommand}, has no parts and is returned whole.
+ * @param {import('commander').Command} cmd
+ * @param {(command: string) => boolean} served
+ * @returns {string}
+ */
+export function servedDescription(cmd, served) {
+  return servedParts(cmd, cmd.description(), served);
+}
+
+/**
+ * Set an option's description from parts, as {@link describeCommand} does
+ * for a command; help reads them through {@link servedOptionDescription}.
+ * @param {import('commander').Option} option
+ * @param {Array<string | HelpPointer>} parts
+ * @returns {import('commander').Option} the option
+ */
+export function describeOption(option, parts) {
+  const text = parts
+    .map(part => (typeof part === 'string' ? part : part.text))
+    .join('');
+  option.description = text;
+  Object.defineProperty(option, DESCRIPTION_PARTS, {
+    value: {parts, text},
+    configurable: true,
+  });
+  return option;
+}
+
+/**
+ * An option's description with each pointer left out unless `served` holds
+ * for every command it names.
+ * @param {import('commander').Option} option
+ * @param {(command: string) => boolean} served
+ * @returns {string}
+ */
+export function servedOptionDescription(option, served) {
+  return servedParts(option, option.description ?? '', served);
+}
+
+/**
+ * The text of `holder`'s recorded parts that `served` keeps. A description
+ * set outside the parts is returned whole.
+ * @param {object} holder a command or an option
+ * @param {string} description its current description
+ * @param {(command: string) => boolean} served
+ * @returns {string}
+ */
+function servedParts(holder, description, served) {
+  /** @type {{parts: Array<string | HelpPointer>, text: string} | undefined} */
+  const recorded = /** @type {any} */ (holder)[DESCRIPTION_PARTS];
+  if (recorded == null || recorded.text !== description) return description;
+  return recorded.parts
+    .filter(part => typeof part === 'string' || part.commands.every(served))
+    .map(part => (typeof part === 'string' ? part : part.text))
+    .join('');
+}
+
 /**
  * Build a Commander command from a CommandDoc and attach it to `parent`.
  *
@@ -107,11 +260,18 @@ export function commandDocsOf(cmd) {
  *   action?: (...args: any[]) => import('../../../foundation/debug/command-result.mjs').CommandResult
  *     | Promise<import('../../../foundation/debug/command-result.mjs').CommandResult>,
  *   hidden?: boolean,
+ *   bareSubcommand?: BareSubcommandAnswer,
  * }} [impl] `hidden` keeps the command out of help and the manifest (a
  *   package-script hook, not a command for people or agents).
+ *   `bareSubcommand` is a group's answer for a subcommand called bare that
+ *   fails (see {@link answerBareSubcommand}).
  * @returns {import('commander').Command} the created command.
  */
-export function defineCommand(parent, doc, {fn, action, hidden} = {}) {
+export function defineCommand(
+  parent,
+  doc,
+  {fn, action, hidden, bareSubcommand} = {},
+) {
   // The command token is the last path segment ("theme build" -> "build"),
   // since subcommands are added to their group command, not the program.
   const token = doc.name.split(' ').pop() ?? doc.name;
@@ -130,16 +290,27 @@ export function defineCommand(parent, doc, {fn, action, hidden} = {}) {
     value: {doc, fn},
     configurable: true,
   });
+  if (bareSubcommand) {
+    Object.defineProperty(cmd, BARE_SUBCOMMAND, {
+      value: bareSubcommand,
+      configurable: true,
+    });
+  }
   // Help shows doc tokens as commands, the way `astryx docs` does.
-  if (doc.summary) cmd.description(renderTokens(doc.summary));
+  /** @type {Array<string | HelpPointer>} */
+  const parts = [
+    ...(doc.summary ? [renderTokens(doc.summary)] : []),
+    ...(doc.pointers ?? []).map(pointer => ({
+      commands: pointer.commands,
+      text: pointerClause(renderTokens(pointer.text)),
+    })),
+  ];
   // An experimental command says so wherever its name is listed in help.
   if (doc.stability === 'experimental') {
-    cmd.description(`[experimental] ${cmd.description() || ''}`.trimEnd());
+    parts.unshift(parts.length > 0 ? '[experimental] ' : '[experimental]');
   }
-  if (doc.deprecated) {
-    const base = cmd.description() || '';
-    cmd.description(`${base} [DEPRECATED: ${doc.deprecated}]`);
-  }
+  if (doc.deprecated) parts.push(` [DEPRECATED: ${doc.deprecated}]`);
+  if (parts.length > 0) describeCommand(cmd, parts);
   if (doc.replaces?.length) {
     cmd.addHelpText(
       'before',
@@ -167,6 +338,16 @@ export function defineCommand(parent, doc, {fn, action, hidden} = {}) {
   for (const o of doc.options ?? []) {
     const desc = o.description ?? (o.param ? paramDesc(o.param) : '');
     const option = cmd.createOption(o.flag, renderTokens(desc));
+    if (o.pointers?.length) {
+      describeOption(option, [
+        renderTokens(desc),
+        ...o.pointers.map(part =>
+          typeof part === 'string'
+            ? renderTokens(part)
+            : {commands: part.commands, text: renderTokens(part.text)},
+        ),
+      ]);
+    }
     if (o.default != null) option.default(o.default);
     cmd.addOption(option);
   }
@@ -194,6 +375,27 @@ export function defineCommand(parent, doc, {fn, action, hidden} = {}) {
   return cmd;
 }
 
+/** @type {((cmd: import('commander').Command, cli: string) => boolean) | null} */
+let exampleShown_ = null;
+
+/**
+ * Set the test that decides which examples help shows: the run's base hides
+ * an example that names a command or option it does not serve.
+ * @param {(cmd: import('commander').Command, cli: string) => boolean} test
+ */
+export function setHelpExampleFilter(test) {
+  exampleShown_ = test;
+}
+
+/**
+ * @param {import('commander').Command} cmd
+ * @param {string} cli
+ * @returns {boolean}
+ */
+function exampleShown(cmd, cli) {
+  return exampleShown_ == null || exampleShown_(cmd, cli);
+}
+
 /**
  * End `cmd`'s help with what its CommandDoc says: the exit codes, then the
  * examples, then `More:`, the `astryx docs` route that reads the whole command.
@@ -211,21 +413,25 @@ export function addDocHelp(cmd, doc) {
   )
     cmd.addHelpText('before', () => {
       const lead = (doc.examples ?? [])
+        .filter(({cli}) => exampleShown(cmd, cli))
         .slice(0, FIRST)
         .flatMap(({label, cli}) => [
           ...(label ? [`  # ${label}`] : []),
           `  ${formatCliCommand(cli)}`,
         ]);
+      if (lead.length === 0) return '';
       return `${text(['Start here:', ...lead].join('\n')).toString()}\n`;
     });
   addExitCodesHelp(cmd, doc.exitCodes);
   // Rendered when help is shown, so the run prefix (pnpm exec astryx, yarn
   // astryx, ...) is looked up then, not on every start.
   cmd.addHelpText('after', () => {
-    const examples = (doc.examples ?? []).flatMap(({label, cli}) => [
-      ...(label ? [`  # ${label}`] : []),
-      `  ${formatCliCommand(cli)}`,
-    ]);
+    const examples = (doc.examples ?? [])
+      .filter(({cli}) => exampleShown(cmd, cli))
+      .flatMap(({label, cli}) => [
+        ...(label ? [`  # ${label}`] : []),
+        `  ${formatCliCommand(cli)}`,
+      ]);
     const more = `More: ${formatCliCommand(`docs cli/commands/${routeSegment(doc.name)}`)}`;
     const blocks =
       examples.length > 0
