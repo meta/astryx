@@ -488,9 +488,9 @@ export function ToastSurface({
     pickInvertedSide,
   );
   const mediaMode = measuredMediaMode ?? fallbackMediaMode;
-  // Before the measurement, a system-mode page whose two sides differ (its
-  // reader's scheme unknown) keeps the ambient text until the card is
-  // measured. With no theme, Core's defaults give the two sides.
+  // On a system-mode page the server does not know the reader's scheme.
+  // If the card's two sides differ, keep the ambient text until the client
+  // knows it. With no theme, Core's defaults give the two sides.
   const textSides = useMemo(
     () =>
       sides ??
