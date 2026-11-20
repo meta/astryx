@@ -394,6 +394,16 @@ const ROWS = [
     },
   ],
   [
+    'a tinted glass is a tint, in the whole answer too',
+    {
+      // (A soft blue said as a tint is a pale wash of it, as main reads
+      // it; the tint reading is in the follow-up #13044.)
+      q: 'translucent glassy window frames, soft blue-tinted glass, white content',
+      has: ["background-color '#eff6ff' --on containers --mode light"],
+      never: /'#2563eb'/,
+    },
+  ],
+  [
     'a theme color fill keeps its text readable, in the whole answer too',
     {
       q: 'tabs 14px text, selected tab accent, other tabs gray',
