@@ -1,0 +1,231 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * A checkbox's box and a radio's circle set their own width and height and
+ * read no spacing or control size: "smaller checkboxes", "bigger radios" and
+ * "13px checkboxes" size that square, and spacing on them is refused with
+ * the size line to use. Against
+ * a real bundled base theme.
+ */
+
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
+import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
+import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
+import {
+  makeLinkedFixture,
+  removeLinkedFixture,
+} from '../../test-utils/linked-fixture.mjs';
+import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
+import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
+
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    await importOriginal(),
+  ),
+);
+
+/** @type {string} */
+let cwd;
+
+/** Why a bundled theme could not be built here, when it could not. */
+let unbuilt = '';
+
+beforeAll(async () => {
+  cwd = makeLinkedFixture('astryx-theme-checks-size-', FIXTURE_PACKAGES);
+  unbuilt = await installRealBaseThemes(cwd, ['neutral']);
+}, 300_000);
+
+afterAll(() => {
+  if (cwd) removeLinkedFixture(cwd);
+});
+
+/** @param {import('vitest').TestContext} ctx */
+const needBases = ctx => {
+  if (!unbuilt) return false;
+  console.warn(`skipped: ${unbuilt}`);
+  ctx.skip();
+  return true;
+};
+
+/** The first answer's set lines. @param {string} q @param {string} theme */
+const lines = async (q, theme) => {
+  const {data} = await themeEditHow(q, {cwd, theme});
+  return ((data.results ?? [])[0]?.commands ?? [])
+    .filter((/** @type {string} */ c) => / editor set /.test(c))
+    .map((/** @type {string} */ c) => c.replace(/^.*? editor /, ''));
+};
+
+describe('the size of checkboxes and radios', () => {
+  it('steps each size from its own value, never spacing', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('c', {cwd, like: 'neutral'});
+    // (The part data draws the md box only: sm is named, never given md's
+    // size.)
+    expect(await lines('smaller checkboxes', 'c')).toEqual([
+      'set c width 20px --on checkbox-indicator --when size:md --only',
+      'set c height 20px --on checkbox-indicator --when size:md --only',
+    ]);
+    const {data} = await themeEditHow('smaller checkboxes', {cwd, theme: 'c'});
+    expect(data.results[0].text).toMatch(/sm: no size the editor knows/);
+    // (A condition other than a size is not stepped.)
+    expect(await lines('smaller indeterminate checkboxes', 'c')).toEqual([]);
+    // (It points at the ask in the same direction, without the condition.)
+    const {data: up} = await themeEditHow('bigger indeterminate checkboxes', {
+      cwd,
+      theme: 'c',
+    });
+    expect(up.results[0].text).toMatch(/\("bigger checkbox-indicator"\)/);
+    // (The line it offers sets that size only.)
+    expect(data.results[0].text).toMatch(
+      /width 16px and height 16px --on checkbox-indicator --when size:sm --only\)/,
+    );
+    expect(await lines('bigger radio buttons', 'c')).toEqual([
+      'set c width 28px --on radio-indicator --when size:md --only',
+      'set c height 28px --on radio-indicator --when size:md --only',
+    ]);
+    expect(await lines('smaller checks', 'c')).toEqual([
+      'set c width 20px --on checks --when size:md',
+      'set c height 20px --on checks --when size:md',
+    ]);
+  });
+
+  it('steps from the theme\u2019s latest size, the part or its group', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('n', {cwd, like: 'neutral'});
+    expect(await lines('13px checkboxes', 'n')).toEqual([
+      'set n width 13px --on checkbox-indicator --only',
+      'set n height 13px --on checkbox-indicator --only',
+    ]);
+    await themeEditSet('n', 'width', '20px', {
+      cwd,
+      on: 'checkbox-indicator',
+      only: true,
+    });
+    await themeEditSet('n', 'height', '20px', {
+      cwd,
+      on: 'checkbox-indicator',
+      only: true,
+    });
+    await themeEditSet('n', 'width', '13px', {cwd, on: 'checks'});
+    await themeEditSet('n', 'height', '13px', {cwd, on: 'checks'});
+    // (The group's 13px, set later, covers the part's 20px; every size.)
+    expect(await lines('bigger checkboxes', 'n')).toEqual([
+      'set n width 17px --on checkbox-indicator --when size:sm --only',
+      'set n height 17px --on checkbox-indicator --when size:sm --only',
+      'set n width 17px --on checkbox-indicator --when size:md --only',
+      'set n height 17px --on checkbox-indicator --when size:md --only',
+    ]);
+    // The refusal names the theme's size, not Core's.
+    const r = await refusal(() =>
+      themeEditSet('n', 'spacing', 'less', {cwd, on: 'checks'}),
+    );
+    expect(r.code).toBe('ERR_THEME_NO_EFFECT');
+    expect(r.message).toMatch(/\(13px by 13px\)/);
+    expect(r.message).not.toMatch(/share/);
+    expect(r.run.some(x => /how "smaller checks"$/.test(x))).toBe(true);
+    // (More room points at the bigger box.)
+    const up = await refusal(() =>
+      themeEditSet('n', 'spacing', 'more', {cwd, on: 'checks'}),
+    );
+    expect(up.run.some(x => /how "bigger checks"$/.test(x))).toBe(true);
+    // (A factor written with a comma, 1,25, reads as 1.25: bigger.)
+    const comma = await refusal(() =>
+      themeEditSet('n', 'spacing', '1,25', {cwd, on: 'checks'}),
+    );
+    expect(comma.run.some(x => /how "bigger checks"$/.test(x))).toBe(true);
+  });
+
+  it('starts from a size\u2019s own setting first, and steps each member from its own size', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('o', {cwd, like: 'neutral'});
+    await themeEditSet('o', 'width', '30px', {
+      cwd,
+      on: 'checkbox-indicator',
+      when: 'size:md',
+      only: true,
+    });
+    await themeEditSet('o', 'height', '30px', {
+      cwd,
+      on: 'checkbox-indicator',
+      when: 'size:md',
+      only: true,
+    });
+    await themeEditSet('o', 'width', '13px', {cwd, on: 'checks'});
+    await themeEditSet('o', 'height', '13px', {cwd, on: 'checks'});
+    // (The medium box's own 30px outranks the later plain 13px: its rule is
+    // the more specific.)
+    expect(await lines('bigger checkboxes', 'o')).toEqual([
+      'set o width 17px --on checkbox-indicator --when size:sm --only',
+      'set o height 17px --on checkbox-indicator --when size:sm --only',
+      'set o width 34px --on checkbox-indicator --when size:md --only',
+      'set o height 34px --on checkbox-indicator --when size:md --only',
+    ]);
+    // (Members that differ step each from its own size, and the refusal
+    // names each one's size.)
+    const checks = await lines('smaller checks', 'o');
+    expect(checks).toContain(
+      'set o width 26px --on checkbox-indicator --when size:md --only',
+    );
+    expect(checks).toContain(
+      'set o width 9px --on radio-indicator --when size:md --only',
+    );
+    // (At sm, where both are 13px, one group line steps both.)
+    expect(checks).toContain('set o width 9px --on checks --when size:sm');
+    expect(checks.some(l => / --on checks --when size:md/.test(l))).toBe(false);
+    const r = await refusal(() =>
+      themeEditSet('o', 'spacing', 'less', {
+        cwd,
+        on: 'checks',
+        when: 'size:md',
+      }),
+    );
+    expect(r.message).toMatch(
+      /checkbox-indicator 30px by 30px, radio-indicator 13px by 13px/,
+    );
+  });
+
+  it('counts a size set on another member without --only, which reaches the whole group', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('g', {cwd, like: 'neutral'});
+    await themeEditSet('g', 'width', '1rem', {
+      cwd,
+      on: 'radio-indicator',
+      only: true,
+    });
+    await themeEditSet('g', 'height', '1rem', {
+      cwd,
+      on: 'radio-indicator',
+      only: true,
+    });
+    // (Set without --only on the checkbox, 16px reaches the radios too.)
+    await themeEditSet('g', 'width', '16px', {cwd, on: 'checkbox-indicator'});
+    await themeEditSet('g', 'height', '16px', {cwd, on: 'checkbox-indicator'});
+    expect(await lines('smaller radios', 'g')).toContain(
+      'set g width 12px --on radio-indicator --when size:md --only',
+    );
+  });
+
+  it('leaves the switch, whose track Core lays out with its thumb', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('w', {cwd, like: 'neutral'});
+    expect(await lines('bigger switches', 'w')).not.toContainEqual(
+      expect.stringMatching(/ (width|height) \d+px --on switch/),
+    );
+  });
+
+  it('says what it cannot read, and writes nothing, when no size can be stepped', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('r', {cwd, like: 'neutral'});
+    await themeEditSet('r', 'width', '1rem', {cwd, on: 'checks'});
+    await themeEditSet('r', 'height', '1rem', {cwd, on: 'checks'});
+    // (A box in rem is not stepped in px, and spacing never stands in.)
+    const {data} = await themeEditHow('smaller checkboxes', {cwd, theme: 'r'});
+    const first = data.results[0];
+    expect(first.text).toMatch(
+      /sized by its own width and height, and the editor cannot read them to step: its width 1rem and height 1rem are not in px, so it keeps its own/,
+    );
+    expect(first.text).toMatch(/give its size in px/);
+    expect(await lines('smaller checkboxes', 'r')).toEqual([]);
+    expect(JSON.stringify(data.results)).not.toMatch(/padding|spacing|gap/);
+  });
+});
