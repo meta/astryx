@@ -208,6 +208,11 @@ export function MetadataList({
   style,
   'data-testid': testId,
   ref,
+  // The accessible name belongs on the dl that owns the list's meaning; a
+  // name on the plain div wrapper is not reliably announced.
+  'aria-label': ariaLabel,
+  'aria-labelledby': ariaLabelledBy,
+  'aria-describedby': ariaDescribedBy,
   ...restProps
 }: MetadataListProps) {
   const isMultiColumn =
@@ -313,6 +318,9 @@ export function MetadataList({
         {titleContent}
         <dl
           id={contentId}
+          aria-label={ariaLabel}
+          aria-labelledby={ariaLabelledBy}
+          aria-describedby={ariaDescribedBy}
           {...stylex.props(
             styles.dl,
             getGridStyle(),
