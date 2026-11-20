@@ -334,7 +334,7 @@ const elevationStyles = stylex.create({
     borderWidth: borderVars['--border-width'],
     borderStyle: 'solid',
     borderColor: {
-      default: colorVars['--color-border-emphasized'],
+      default: colorVars['--color-border-control'],
       ':focus-within': colorVars['--color-accent'],
     },
     // Draw the border *inside* the padding — subtract its width from the body
@@ -345,7 +345,7 @@ const elevationStyles = stylex.create({
       default: 'none',
       ':hover:not(:focus-within):where(:not(:disabled,[aria-disabled="true"]))':
         {
-          '@media (hover: hover)': `inset 0px 0px 0px 2px color-mix(in srgb, ${colorVars['--color-border-emphasized']} 30%, transparent)`,
+          '@media (hover: hover)': `inset 0px 0px 0px 2px color-mix(in srgb, ${colorVars['--color-border-control']} 30%, transparent)`,
         },
       ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
     },

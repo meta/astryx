@@ -242,11 +242,12 @@ export function expandColorScale(config: ColorScaleConfig): ColorScaleTokens {
   // boundaries stay perceivable for users who opt into high contrast.
   const borderSubtleAlpha = isHigh ? 0.2 : 0.1;
 
-  // Emphasized borders outline form controls (CheckboxInput, Selector), so
-  // they are non-text UI boundaries under WCAG 1.4.11 and must reach 3:1
-  // against the surface they sit on. High contrast starts at a more
-  // aggressive tone (50 vs 70/30), guaranteeing a stronger result; standard
-  // contrast starts at 70/30 and walks toward mid-scale only as far as needed.
+  // The emphasized border and the control edge are non-text UI boundaries
+  // under WCAG 1.4.11. The control edge outlines fields and checkbox and
+  // radio boxes. Both must reach 3:1 against the surface they sit on. High
+  // contrast starts at a more aggressive tone (50 vs 70/30), guaranteeing a
+  // stronger result; standard contrast starts at 70/30 and walks toward
+  // mid-scale only as far as needed.
   const borderEmphasizedStartLight = isHigh ? 50 : 70;
   const borderEmphasizedStartDark = isHigh ? 50 : 30;
   const borderEmphasized = ld(

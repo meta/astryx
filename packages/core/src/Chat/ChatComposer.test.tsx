@@ -16,6 +16,10 @@ import {useChatComposerContext} from './ChatContext';
 import {createStaticSource} from '../Typeahead/createStaticSource';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import type * as AnnounceModule from '../hooks/useAnnounce';
+import * as stylex from '@stylexjs/stylex';
+import {colorVars} from '../theme/tokens.stylex';
+import {resolveThemeToken} from '../theme/tokens';
+import {contrastRatio} from '../theme/contrast';
 
 const announce = vi.fn();
 vi.mock('../hooks/useAnnounce', async importOriginal => ({
@@ -55,6 +59,43 @@ describe('ChatComposer elevation', () => {
 
   it("defaults to 'low' (preserves the raised look)", () => {
     expect(renderBodyClass(undefined)).toBe(renderBodyClass('low'));
+  });
+});
+
+// A flat composer has no shadow, so its border is the only cue to where the
+// editable area is: it draws the control edge (architecture:theme-tokens
+// INV13), which holds 3:1 against what the composer sits on.
+describe('ChatComposer flat edge', () => {
+  it("draws the control edge at rest when elevation is 'none'", () => {
+    const edge = stylex
+      .props(
+        stylex.create({
+          edge: {borderColor: colorVars['--color-border-control']},
+        }).edge,
+      )
+      .className!.split(' ')
+      .filter(name => !name.includes('__'));
+    const flat = renderBodyClass('none').split(' ');
+    for (const name of edge) {
+      expect(flat).toContain(name);
+    }
+  });
+
+  it('meets 3:1 against the page body, surface and card in light and dark', () => {
+    for (const mode of ['light', 'dark'] as const) {
+      const edge = resolveThemeToken(null, '--color-border-control', {mode});
+      for (const against of [
+        '--color-background-body',
+        '--color-background-surface',
+        '--color-background-card',
+      ] as const) {
+        const fill = resolveThemeToken(null, against, {mode});
+        expect(
+          contrastRatio(edge, fill),
+          `${mode}: ${edge} on ${against} ${fill}`,
+        ).toBeGreaterThanOrEqual(3);
+      }
+    }
   });
 });
 

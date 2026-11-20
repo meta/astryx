@@ -120,7 +120,7 @@ describe('shadows', () => {
       'make the hover shadow on inputs darker',
     ]) {
       const r = await top(q, 'h');
-      expect(r.commands[0], q).toMatch(/--color-border-emphasized/);
+      expect(r.commands[0], q).toMatch(/--color-border-control/);
       expect(r.commands[0], q).not.toMatch(/#de4745/);
     }
   }, 240_000);

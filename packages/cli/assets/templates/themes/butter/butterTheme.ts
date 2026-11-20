@@ -807,7 +807,8 @@ export const butterTheme = defineTheme({
       },
     },
 
-    // Inputs — softer border than default, more vertical breathing room.
+    // Inputs: the control edge (--color-border-control) and more vertical
+    // breathing room.
     // Status modifiers also remap the semantic tokens locally so the
     // status icon + border read as the same vivid hue as the banner
     // (icons inherit from --color-{success,warning,error}).

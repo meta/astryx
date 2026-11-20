@@ -231,7 +231,8 @@ export const myTheme = defineTheme({
   // The families, so you know what exists:
   //   --color-*        accent, on-accent · background-{body,surface,card,popover,
   //                    muted,inverted} · text-* · icon-* · border,
-  //                    border-emphasized · overlay{,-hover,-pressed} ·
+  //                    border-emphasized, border-control ·
+  //                    overlay{,-hover,-pressed} ·
   //                    success/warning/error (+ -muted, on-*) · skeleton, track,
   //                    shadow, tint-hover · categorical {blue,cyan,gray,green,
   //                    orange,pink,purple,red,teal,yellow} ×
