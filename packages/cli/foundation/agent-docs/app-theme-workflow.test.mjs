@@ -7,19 +7,20 @@ describe('generated agent docs app-theme workflow', () => {
   it('points agents at the theme doc and guards :root overrides', () => {
     const result = generateCompressedIndex('1.0.0');
 
-    // A theme is made and changed with the theme editor and wired with add.
-    expect(result).toContain('astryx experimental theme editor new <name>');
-    expect(result).toContain(':root overrides');
-    expect(result).toContain('astryx theme add <name>');
-    // Each change is looked at in the editor's pictures before it is done.
+    // A theme starts from traits: create writes the whole file and makes it
+    // the app's theme.
     expect(result).toContain(
-      'astryx experimental theme editor show <name> --png',
+      "astryx experimental theme create <name> --traits '<json>'",
     );
-    expect(result).toContain('not done until you have looked');
-    // A denser or roomier app is a theme change, as colors are.
-    expect(result).toContain('editor set <name> spacing tight');
-    // A change to one kind of part is a theme change, found with how.
-    expect(result).toContain('names the `set … --on <part>` line');
+    expect(result).toContain(':root overrides');
+    expect(result).toContain("makes it the app's theme");
+    // The file is then the agent's: every edit is checked before it is done.
+    expect(result).toContain('edit any line by hand');
+    expect(result).toContain('astryx experimental theme check <name> --fix');
+    expect(result).toContain('not done until check passes');
+    // A denser or roomier app and one kind of part are theme changes too.
+    expect(result).toContain('so do a denser or roomier app');
+    expect(result).toContain('`astryx theme targets` lists the parts');
     // With no app yet, the starter app shows the theme.
     expect(result).toContain('astryx experimental theme preview app <dir>');
     expect(result).not.toContain('theme add <slug> --import');
@@ -28,7 +29,7 @@ describe('generated agent docs app-theme workflow', () => {
     expect(result).toContain('theme eject <slug>');
     expect(result).toContain('only forks source');
     expect(
-      result.split('\n').filter(l => /experimental theme editor/.test(l)),
+      result.split('\n').filter(l => /experimental theme create/.test(l)),
     ).toHaveLength(1);
   });
 });

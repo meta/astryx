@@ -549,9 +549,9 @@ describe('a project whose only base is not Core', () => {
       expect(theme.stdout).toMatch(/^ {2}list /m);
       expect(theme.stdout).not.toMatch(/^ {2}build /m);
       expect(theme.stdout).not.toContain('theme targets');
-      expect(theme.stdout).not.toContain('experimental theme editor');
+      expect(theme.stdout).not.toContain('experimental theme create --traits');
       const root = astryx(['--help'], dir);
-      expect(root.stdout).not.toContain('experimental theme editor');
+      expect(root.stdout).not.toContain('experimental theme create --traits');
       expect(theme.stdout.trimEnd().split('\n').at(-1)).toBe(
         '6 commands hidden: the active base @acme/native-ui does not provide the steps they need.',
       );
@@ -573,7 +573,7 @@ describe('a project whose only base is not Core', () => {
       const experimentalJson = astryx(['experimental', '--help', '--json'], dir).json();
       expect(JSON.stringify(experimentalJson.data.subcommands)).not.toContain('editor set');
       const themeJson = astryx(['theme', '--help', '--json'], dir).json();
-      expect(themeJson.data.description).not.toContain('experimental theme editor');
+      expect(themeJson.data.description).not.toContain('experimental theme create');
       const groupJson = astryx(['--json', 'experimental', 'theme'], dir);
       expect(groupJson.json().data.commands.map(c => c.name)).not.toContain('compile');
       const bare = astryx(['--json', '--base', '@acme/nope'], dir);
@@ -1072,14 +1072,14 @@ describe('help reads the base --base names, and a bare group help', () => {
         'dir',
       );
       const theme = astryx(['--base', '@acme/native-ui', 'theme', '--help'], dir);
-      expect(theme.stdout).not.toContain('experimental theme editor');
+      expect(theme.stdout).not.toContain('experimental theme create --traits');
       const template = astryx(
         ['--base', '@acme/native-ui', 'template', '--help'],
         dir,
       );
       expect(template.stdout).toContain('acme astryx template');
       const onCore = astryx(['theme', '--help'], dir);
-      expect(onCore.stdout).toContain('experimental theme editor');
+      expect(onCore.stdout).toContain('experimental theme create --traits');
     },
     SLOW,
   );
@@ -1089,7 +1089,7 @@ describe('help reads the base --base names, and a bare group help', () => {
     () => {
       const dir = project({'@acme/native-ui': CONTENT_BASE});
       const bare = astryx(['theme'], dir);
-      expect(bare.stdout).not.toContain('experimental theme editor');
+      expect(bare.stdout).not.toContain('experimental theme create --traits');
       expect(bare.stdout).not.toMatch(/^ {2}build /m);
     },
     SLOW,

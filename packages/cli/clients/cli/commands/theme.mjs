@@ -1053,7 +1053,7 @@ function printThemeEject(result, words = THEME_WORDS, like = 'neutral') {
     // Astryx theme package, so a theme from another package starts from
     // neutral.
     text(
-      `To make or change a theme: the experimental theme editor, ${getCliInvocation()} experimental theme editor new <name> --like ${like}.`,
+      `Edit the fork by hand and run ${getCliInvocation()} experimental theme check ${path.join(data.outputDir, data.entry)} --fix after every edit; one checked change at a time: the experimental theme editor, ${getCliInvocation()} experimental theme editor new <name> --like ${like}.`,
     ),
   );
 }

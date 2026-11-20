@@ -163,10 +163,12 @@ describe('generateCompressedIndex', () => {
 
   it('includes theme nudge rule', () => {
     const result = generateCompressedIndex('1.0.0');
-    // Themes go through the theme editor (preferred over hand-written files),
-    // never :root overrides; extending a theme and eject-to-fork stay named.
-    expect(result).toMatch(/astryx experimental theme editor new <name>/);
-    expect(result).toMatch(/prefer the experimental theme editor/);
+    // Themes start from traits, the file is then edited and checked, never
+    // :root overrides; extending a theme and eject-to-fork stay named.
+    expect(result).toContain(
+      "astryx experimental theme create <name> --traits '<json>'",
+    );
+    expect(result).toContain('astryx experimental theme check <name> --fix');
     expect(result).toMatch(/never :root overrides/);
     expect(result).toContain('astryx docs theme');
     expect(result).toContain('theme eject <slug>');
