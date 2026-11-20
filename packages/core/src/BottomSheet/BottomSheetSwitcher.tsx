@@ -588,6 +588,8 @@ export function BottomSheetSwitcher({
   // browser moves focus out of it only when it next renders.
   const hadFocusAtCloseRef = useRef(false);
   const previousActiveSheetRef = useRef(activeSheet);
+  // Syncs with document focus: records whether the flow held it in the commit
+  // that closes the flow.
   useLayoutEffect(() => {
     const wasOpen = previousActiveSheetRef.current != null;
     previousActiveSheetRef.current = activeSheet;
