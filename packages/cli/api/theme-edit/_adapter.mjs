@@ -20,6 +20,7 @@
  *   themeEditHow('white text in the banner')            themeEdit.how (a question)
  *   themeEditHow('target.png', {at: ['4,8']})           themeEdit.how (a picture)
  *   themeEditHow('accent', {list: 'tokens'})            themeEdit.how (a list)
+ *   themeEditCreate('acme', '{"accent": "#c2410c"}')    themeEdit.create
  *
  * Every change is checked first against what the installed Core's parts
  * really read; a change that cannot take effect is refused and nothing is
@@ -143,6 +144,7 @@ export {
   checkedShowLines as editorCheckedShowLines,
 } from './_edit.mjs';
 export {splitCommand} from './_vet.mjs';
+import {colorsIn, createFromTraits} from './_create.mjs';
 import {themeEditHow as howAt} from './_how.mjs';
 
 /**
@@ -2466,4 +2468,22 @@ export async function themeEditCheck(target, options = {}) {
         : {}),
     },
   };
+}
+
+/**
+ * `experimental theme create <name> --traits`: write, build and add the
+ * theme the traits describe, then run `theme check --fix` on it.
+ * @param {string} name
+ * @param {unknown} traits
+ * @param {import('./theme-edit.type.mjs').ThemeEditCreateOptions} [options]
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditCreateResponse>}
+ */
+export async function themeEditCreate(name, traits, options = {}) {
+  const written = await createFromTraits(name, traits, options);
+  const checked = await themeEditCheck(written.data.theme, {
+    cwd: options.cwd,
+    fix: true,
+  });
+  const colors = colorsIn(options.cwd ?? process.cwd(), written.data.file);
+  return {...written, data: {...written.data, colors, check: checked.data}};
 }

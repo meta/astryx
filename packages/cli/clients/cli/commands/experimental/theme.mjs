@@ -49,6 +49,7 @@ import {
   themeEditSet,
   themeEditShow,
   themeEditUndo,
+  themeEditCreate,
 } from '../../../../api/theme-edit/theme-edit.mjs';
 import {
   builtInThemes,
@@ -116,6 +117,8 @@ import {doc as previewRemoveFn} from '../../../../api/theme-edit/themeEditPrevie
 import {doc as howFn} from '../../../../api/theme-edit/themeEditHow.doc.mjs';
 import {doc as checkDoc} from '../experimental-theme-check.doc.mjs';
 import {doc as checkFn} from '../../../../api/theme-edit/themeEditCheck.doc.mjs';
+import {doc as createDoc} from '../experimental-theme-create.doc.mjs';
+import {doc as createFn} from '../../../../api/theme-edit/themeEditCreate.doc.mjs';
 import {quoteCommandArgument} from '../../../../foundation/env/package-manager.mjs';
 import {
   commandAvailable,
@@ -2962,6 +2965,55 @@ export function registerExperimentalTheme(group, program) {
     checkDoc,
   );
 
+  explained(
+    defineCommand(theme, createDoc, {
+      fn: createFn,
+      action: (/** @type {string} */ name, /** @type {any} */ o) =>
+        o.traits === undefined
+          ? cliError(
+              `experimental theme create needs the look: --traits '<json>'.`,
+              {
+                code: ERROR_CODES.ERR_MISSING_ARGUMENT,
+                suggestions: [
+                  {
+                    name: cmd(
+                      `${PREFIX} create ${name} --traits '{"page": "#f7f5f0", "accent": "#c2410c", "corners": 4}'`,
+                    ),
+                    reason: 'a theme from a few traits',
+                  },
+                  {
+                    name: cmd(`${PREFIX} create --help`),
+                    reason: 'every trait field and what it takes',
+                  },
+                ],
+              },
+            )
+          : run(
+              program,
+              () =>
+                themeEditCreate(name, String(o.traits), {cwd: process.cwd()}),
+              r => createdLines(r.data),
+              r => {
+                const c = r.data.check;
+                // As check fails on them, so does create: problems left,
+                // text not measured, or a repair kept back.
+                if (
+                  c.problems.length ||
+                  c.unmeasured ||
+                  c.protectedFiles.length
+                )
+                  process.exitCode = 1;
+                return resultSet({
+                  count: 1,
+                  resultKind: 'mixed',
+                  directMatch: true,
+                });
+              },
+            ),
+    }).allowExcessArguments(false),
+    createDoc,
+  );
+
   registerThemeSubcommands(
     theme,
     program,
@@ -2993,6 +3045,32 @@ export function registerExperimentalTheme(group, program) {
       colorModes: editorColorModes,
     },
   );
+}
+
+/**
+ * The text of a theme made from traits: what it wrote and where the app
+ * takes it, then the check of it, as `experimental theme check` prints one.
+ * @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditCreateResponse['data']} d
+ * @returns {Array<string | import('../../formatters/index.mjs').Block>}
+ */
+function createdLines(d) {
+  return [
+    record({
+      theme: d.theme,
+      file: d.file,
+      look: d.look,
+      colors: String(d.colors),
+      values: String(d.values),
+      built: d.built ?? 'none',
+      module: d.module,
+      firstAdd: String(d.firstAdd),
+    }),
+    ...(d.parts.length ? [section('parts:'), list(d.parts)] : []),
+    ...d.notes,
+    section(`check ${d.theme} --fix:`),
+    ...checkLines(d.check, d.theme, true),
+    `The file is yours to edit; after each edit, run \`${cmd(`${PREFIX} check ${d.theme}`)}\`.`,
+  ];
 }
 
 /** How many problems the text lists before it counts the rest. */

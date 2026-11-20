@@ -13,6 +13,7 @@
  *   themeEditPreviewAdd('a sales dashboard')            themeEdit.previewAdd
  *   themeEditPreviewApp('theme-app')                    themeEdit.previewApp
  *   themeEditHow('banner')                              themeEdit.how
+ *   themeEditCreate('acme', '{"accent": "#c2410c"}')    themeEdit.create
  *   themeEditCheck('brand', {fix: true})                themeEdit.check
  *
  * Every change is checked first against what the installed Core's parts
@@ -36,3 +37,4 @@ export {themeEditPreviewList} from './preview-list/preview-list.mjs';
 export {themeEditPreviewRemove} from './preview-remove/preview-remove.mjs';
 export {themeEditHow} from './how/how.mjs';
 export {themeEditCheck} from './check/check.mjs';
+export {themeEditCreate} from './create/create.mjs';

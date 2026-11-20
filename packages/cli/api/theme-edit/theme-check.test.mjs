@@ -293,7 +293,10 @@ describe('experimental theme check', () => {
       const barFixed = await check('bar/barTheme.ts', {fix: true});
       expect(barFixed.problems.some(p => p.kind === 'bar-text')).toBe(false);
       expect(barFixed.fixed.filter(x => x.group === 'inputs')).toHaveLength(1);
-      expect(barFixed.fixed.every(x => !x.part)).toBe(true);
+      // (Its only part lines are the secondary text the palette lifts.)
+      expect(barFixed.fixed.every(x => !x.part || /lifted/.test(x.why))).toBe(
+        true,
+      );
       const text = fs.readFileSync(
         path.join(cwd, 'bar', 'barTheme.ts'),
         'utf8',
@@ -1904,6 +1907,30 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
       expect(await code(themeEditCheck('x.ts', {cwd: bare}))).toBe(
         'ERR_PROJECT_REQUIRED',
       );
+    },
+    T,
+  );
+
+  it(
+    'keeps a per-mode secondary text the theme sets on a lifted block',
+    async () => {
+      const file = themeFile(
+        'perlift',
+        {...READABLE, '--color-accent': ['#0f7b6c', '#5fd3bf']},
+        {item: {selected: {'@light': {'--color-text-secondary': '#3a3a3a'}}}},
+      );
+      const fixed = await check(file, {fix: true});
+      expect(fs.readFileSync(path.join(cwd, file), 'utf8')).toContain(
+        '#3a3a3a',
+      );
+      // The lifted line names the part and token, and gives the one mode
+      // it wrote as a single value.
+      const line = fixed.fixed.find(
+        x => x.part === 'item' && /selected/.test(x.why),
+      );
+      expect(line).toMatchObject({token: '--color-text-secondary'});
+      expect(typeof line?.value).toBe('string');
+      expect(line?.why).toMatch(/dark only/);
     },
     T,
   );

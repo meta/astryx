@@ -73,8 +73,8 @@ const RUNNERS = {
     sites: ['require(<computed>)'],
   },
   'api/theme-edit/_project.mjs': {
-    runs: "the project's installed Core theme module and a built-in theme it builds on, to check and resolve tokens",
-    sites: ['import(<computed>) ×2', 'require'],
+    runs: "the project's installed Core theme module, its palette entry, and a built-in theme it builds on, to check and resolve tokens and to make colors",
+    sites: ['import(<computed>) ×3', 'require'],
   },
   'api/theme-edit/_settings.mjs': {
     runs: 'the built theme module, to read its resolved tokens after a build',
@@ -163,6 +163,7 @@ const RUNNERS = {
     runs: SELF_DOCS,
     sites: [
       'import ../../../../api/theme-edit/themeEditCheck.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditCreate.doc.mjs',
       'import ../../../../api/theme-edit/themeEditHow.doc.mjs',
       'import ../../../../api/theme-edit/themeEditNew.doc.mjs',
       'import ../../../../api/theme-edit/themeEditPreviewAdd.doc.mjs',
@@ -174,6 +175,7 @@ const RUNNERS = {
       'import ../../../../api/theme-edit/themeEditUndo.doc.mjs',
       'import ../experimental-theme-add.doc.mjs',
       'import ../experimental-theme-check.doc.mjs',
+      'import ../experimental-theme-create.doc.mjs',
       'import ../experimental-theme-compile.doc.mjs',
       'import ../experimental-theme-editor-how.doc.mjs',
       'import ../experimental-theme-editor-new.doc.mjs',

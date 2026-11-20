@@ -39,6 +39,7 @@ import {
 } from '../theme/build/font-warning.mjs';
 import {fontKey} from '../../foundation/fonts/font-stylesheet.mjs';
 import {
+  LIFT_PARTS,
   NON_TEXT,
   STATUS_TOKEN,
   TEXT,
@@ -101,10 +102,10 @@ const SURFACE = '--color-background-surface';
 const GROUNDS = [PAGE, SURFACE, CARD, POPOVER];
 const EDGE = '--color-border-emphasized';
 /** The category colors (Badge, Token and Card tints) and the chart colors. */
-const CATEGORY_OR_CHART =
+export const CATEGORY_OR_CHART =
   /^--color-(data-[a-z0-9-]+|(background|text|icon|border)-(red|orange|yellow|green|teal|cyan|blue|purple|pink|gray))$/;
 /** The pointer tints a bar can set for the parts it holds. */
-const BAR_TINTS = [
+export const BAR_TINTS = [
   '--color-overlay-hover',
   '--color-overlay-pressed',
   '--color-neutral',
@@ -363,6 +364,46 @@ const MENU_OPENERS = ['button', 'top-nav-item', 'selector', 'multi-selector'];
 const ACCEPT = new WeakMap();
 
 /**
+ * The grounds each text problem was measured on, as drawn (a see-through
+ * fill laid over the painted part around it): what a repair moves the
+ * text against.
+ * @type {WeakMap<LookProblem, Rgb[]>}
+ */
+const MEASURED_ON = new WeakMap();
+
+/**
+ * The fill the theme gives the innermost part around a text pair that
+ * passes `where`, or null: of the parts the census saw the text inside.
+ * @param {Look['map']} map
+ * @param {TextPair} p
+ * @param {Record<string, Record<string, any>>} styles
+ * @param {Mode} m
+ * @param {(part: string) => boolean} where
+ * @returns {string | null}
+ */
+function filledAround(map, p, styles, m, where) {
+  const keys = ['backgroundColor', 'background'];
+  const parts = (p.within ?? []).filter(
+    part => where(part) && partValue(styles, part, keys, m) != null,
+  );
+  return partValue(styles, innermost(map, parts), keys, m);
+}
+
+/**
+ * The part of `parts` that holds none of the others, or null.
+ * @param {Look['map']} map
+ * @param {string[]} parts
+ * @returns {string | null}
+ */
+function innermost(map, parts) {
+  return (
+    parts.find(part =>
+      parts.every(o => o === part || !inside(map, part).has(o)),
+    ) ?? null
+  );
+}
+
+/**
  * Text problems: every real pair below 4.5:1 now, measured with the
  * theme's tokens and its own part styles, and lower than in Core's own
  * look. (A pair Core's own look draws as low is one the part data does not
@@ -373,6 +414,16 @@ const ACCEPT = new WeakMap();
  */
 function textProblems(look) {
   const {res, base, components} = look;
+  /**
+   * The parts around a pair's text, nearest first (`within` runs from the
+   * outermost part in).
+   * @param {TextPair} p
+   * @returns {string[]}
+   */
+  const aroundParts = p =>
+    [...(p.within ?? [])]
+      .reverse()
+      .filter(q => q !== p.fg.target && q !== p.bg.target);
   /**
    * A side of a pair as drawn: the part's own style, else its token.
    * @param {Record<Mode, Record<string, string>>} tokens
@@ -385,6 +436,20 @@ function textProblems(look) {
       const mode = /** @type {Mode} */ (m);
       const s = p[side];
       const block = pairBlock(look.map, p);
+      // A part between the text and the ground the census saw that the
+      // theme gives a fill (a top bar the theme paints) is the ground now.
+      if (side === 'bg') {
+        const fill = filledAround(
+          look.map,
+          p,
+          styles,
+          mode,
+          part =>
+            part !== p.fg.target &&
+            (!s.target || inside(look.map, s.target).has(part)),
+        );
+        if (fill) return colorIn(fill, tokens[mode], mode) ?? fill;
+      }
       // The ground is the part's own fill, else the fill the text's own
       // part paints under it (a header cell's on a card).
       const own =
@@ -396,6 +461,17 @@ function textProblems(look) {
               : null));
       if (own != null) return colorIn(own, tokens[mode], mode) ?? own;
       let tok = s.tokens[0];
+      // Secondary text a part lifts on the fill it sits on (the palette's
+      // lifted blocks) is drawn with the part's own value there.
+      if (side === 'fg' && tok === SECONDARY_TEXT) {
+        const lifted = LIFT_PARTS.filter(
+          ([part, , ground]) => part === s.target && ground === p.bg.tokens[0],
+        )
+          .map(([part, block]) => partValue(styles, part, [tok], mode, block))
+          .find(v => v != null);
+        if (lifted != null)
+          return colorIn(lifted, tokens[mode], mode) ?? lifted;
+      }
       // Core's media surface (a toast, a lightbox) draws the text it holds
       // in its own on-colors: read as the editor reads it.
       if (side === 'fg' && tok)
@@ -403,16 +479,51 @@ function textProblems(look) {
           look.textTokens(p, drawn(p, 'bg', m), tokens[mode], mode)[0] ?? tok;
       if (side === 'fg' && tok) {
         // A text token a part sets for itself wins over the theme's: the
-        // text's own part first, then the part it sits on.
+        // text's own part first, then the part it sits on, then the parts
+        // around it, nearest first (a top bar's own text).
         const set =
           partValue(styles, p.fg.target, [tok], mode, block) ??
-          partValue(styles, p.bg.target, [tok], mode, block);
+          partValue(styles, p.bg.target, [tok], mode, block) ??
+          aroundParts(p)
+            .map(q => partValue(styles, q, [tok], mode))
+            .find(v => v != null);
+        if (set != null) return colorIn(set, tokens[mode], mode) ?? set;
+      }
+      if (side === 'bg' && tok) {
+        // A fill token a part around the ground sets for what it holds (a
+        // top bar's own neutral track) wins over the theme's.
+        const set = aroundParts(p)
+          .map(q => partValue(styles, q, [tok], mode))
+          .find(v => v != null);
         if (set != null) return colorIn(set, tokens[mode], mode) ?? set;
       }
       if (tok) return colorIn(`var(${tok})`, tokens[mode], mode);
       return s.raw;
     };
-    return drawn;
+    /** @type {(p: TextPair, side: 'fg' | 'bg', m: string) => string | null} */
+    const drawnOver = (p, side, m) => {
+      const v = drawn(p, side, m);
+      if (side !== 'bg' || v == null || alphaOf(v) >= 1) return v;
+      // A see-through fill shows the fill of the part around it that the
+      // theme paints (a top bar), not the page.
+      const mode = /** @type {Mode} */ (m);
+      const target = p.bg.target;
+      const around = filledAround(
+        look.map,
+        p,
+        styles,
+        mode,
+        part =>
+          part !== target && (!target || inside(look.map, part).has(target)),
+      );
+      const page = shown(colorIn(`var(${PAGE})`, tokens[mode], mode), null);
+      const under = around
+        ? shown(colorIn(around, tokens[mode], mode), page)
+        : null;
+      const c = under ? shown(v, under) : null;
+      return c ? hex(c) : v;
+    };
+    return drawnOver;
   };
   const {problems} = look.contrast(
     drawnBy(res, components),
@@ -467,7 +578,11 @@ function textProblems(look) {
       ownFg == null && tok
         ? ([p.fg.target, p.bg.target].find(
             q => q && partValue(components, q, [tok], mode, block) != null,
-          ) ?? null)
+          ) ??
+          aroundParts(p).find(
+            q => partValue(components, q, [tok], mode) != null,
+          ) ??
+          null)
         : null;
     const part =
       ownBg != null ? bgPart : ownFg != null ? p.fg.target : tokenPart;
@@ -494,6 +609,7 @@ function textProblems(look) {
       if (!had.parts?.includes(where)) had.parts?.push(where);
       if (x.ratio < /** @type {number} */ (had.ratio)) had.ratio = x.ratio;
       if (record) ACCEPT.get(had)?.push(record);
+      if (x.ground) MEASURED_ON.get(had)?.push(x.ground);
       continue;
     }
     const problem = /** @type {LookProblem} */ ({
@@ -509,6 +625,7 @@ function textProblems(look) {
     });
     out.set(key, problem);
     ACCEPT.set(problem, record ? [record] : []);
+    MEASURED_ON.set(problem, x.ground ? [x.ground] : []);
   }
   for (const p of out.values()) {
     const what = p.part
@@ -525,7 +642,7 @@ function textProblems(look) {
  * @param {Look['map']} map
  * @returns {Array<{part: string, shadows: string[]}>}
  */
-function menuParts(map) {
+export function menuParts(map) {
   const known = MENUS.get(map);
   if (known) return known;
   /** @type {Array<{part: string, shadows: string[]}>} */
@@ -1677,7 +1794,7 @@ function chartProblems(look) {
   const looks = (/** @type {string} */ t) => t.startsWith('--color-data-');
   if (![PAGE, SURFACE, '--color-accent'].some(t => look.own.has(t))) return [];
   if ([...look.own].some(t => looks(t) && !coreCopy(look, t))) return [];
-  const derived = Object.keys(filledColors(look)).filter(looks).sort();
+  const derived = Object.keys(filledColors(look).colors).filter(looks).sort();
   // The palette cannot derive a set that reads and stays apart here: the
   // charts still keep Core's colors, and only the author can choose them.
   if (!derived.length)
@@ -1882,7 +1999,7 @@ function colorlessValue(res, t, raw = undefined) {
  * The values that repair what can be repaired without a decision.
  * @typedef {object} LookRepair
  * @property {Record<string, string | [string, string]>} tokens token values to write
- * @property {Record<string, Record<string, Record<string, true>>>} components part styles to write: each member of a group inside a bar spreads the shared const that holds the theme's own text
+ * @property {Record<string, Record<string, Record<string, true | Record<string, string>>>>} components part styles to write: each member of a group inside a bar spreads the shared const that holds the theme's own text (`'...<name>': true`), and the secondary text the palette lifts on some parts (in `@light` and `@dark` blocks)
  * @property {Record<string, Record<string, string>>} shared the consts those styles spread, by name: the theme's own text tokens
  * @property {Array<{token?: string, part?: string, group?: string, parts?: string[], value: string | [string, string], why: string, from?: string | [string, string], accept?: AcceptRecord[]}>} lines
  *   what each written value is for; a color the author set that a line
@@ -1897,9 +2014,12 @@ function colorlessValue(res, t, raw = undefined) {
  * palette generator grows a family from each color the theme sets (its
  * surface or page, its accent, its status colors) and maps them to every
  * color token as the official themes do. Each mode takes the side of the
- * palette its page is on.
+ * palette its page is on. When the theme leaves the secondary text unset,
+ * the parts whose secondary text the palette lifts (on the accent tint,
+ * the neutral track, the colored cards) get the lifted text too, as
+ * `themePalette()` gives them.
  * @param {Look} look
- * @returns {Record<string, Partial<Record<Mode, string>>>}
+ * @returns {{colors: Record<string, Partial<Record<Mode, string>>>, lift: Record<string, Record<string, Record<string, Record<string, string>>>>}}
  */
 function filledColors(look) {
   let fills = FILLED.get(look);
@@ -1927,23 +2047,28 @@ function filledColors(look) {
 }
 
 /**
+ * The colors the palette fills, and the secondary text it lifts on parts.
+ * @typedef {{colors: Record<string, Partial<Record<Mode, string>>>, lift: Record<string, Record<string, Record<string, Record<string, string>>>>}} PaletteFills
+ */
+
+/**
  * The palette fills by Core's token defaults (one object per Core), then by
  * the theme's inputs.
- * @type {WeakMap<object, Map<string, Record<string, Partial<Record<Mode, string>>>>>}
+ * @type {WeakMap<object, Map<string, PaletteFills>>}
  */
 const FILLED_BY_INPUTS = new WeakMap();
 
 /**
  * The palette fills by look: the check and the repair both read them for
  * one look, and they are the same each time.
- * @type {WeakMap<Look, Record<string, Partial<Record<Mode, string>>>>}
+ * @type {WeakMap<Look, PaletteFills>}
  */
 const FILLED = new WeakMap();
 
 /**
  * The palette fills for a look, as {@link filledColors} returns them.
  * @param {Look} look
- * @returns {Record<string, Partial<Record<Mode, string>>>}
+ * @returns {PaletteFills}
  */
 function paletteFills(look) {
   const {res, own, modes, base, defaults} = look;
@@ -1974,7 +2099,7 @@ function paletteFills(look) {
     const seed = seedOf(`--color-${word}`);
     if (seed) dials.push({id: dial, seed});
   }
-  if (!dials.length) return {};
+  if (!dials.length) return {colors: {}, lift: {}};
   /** @type {import('../theme/palette/generate/mapping.mjs').PaletteMappingContext} */
   const context = {
     base,
@@ -1988,7 +2113,7 @@ function paletteFills(look) {
     setExactly: t => own.has(t),
   };
   const plan = planPaletteRequest(dials, {recipe: PALETTE_RECIPE_V2}, context);
-  if (!plan) return {};
+  if (!plan) return {colors: {}, lift: {}};
   const candidate = generateTonalPalette(/** @type {any} */ (plan.config));
   const mapping = mapPalette(candidate, dials, plan.fills, context);
   /** A chart color the theme copied from Core's. @param {string} t */
@@ -2049,8 +2174,25 @@ function paletteFills(look) {
       if (color) (out[t] ??= {})[m] = color;
     }
   }
-  return out;
+  /** @type {Record<string, Record<string, Record<string, Record<string, string>>>>} */
+  const lift = {};
+  if (!own.has(SECONDARY_TEXT) && mapping.lift)
+    for (const [part, block, ground] of LIFT_PARTS) {
+      const refs = mapping.lift[ground];
+      if (!refs) continue;
+      /** @type {Record<string, Record<string, string>>} */
+      const sides = {};
+      for (const m of modes) {
+        const color = refs[side[m]]?.color;
+        if (color) sides[`@${m}`] = {[SECONDARY_TEXT]: color};
+      }
+      if (Object.keys(sides).length) (lift[part] ??= {})[block] = sides;
+    }
+  return {colors: out, lift};
 }
+
+/** The token the palette lifts on some parts. */
+const SECONDARY_TEXT = '--color-text-secondary';
 
 /**
  * The repair for a theme's problems: unset colors filled, the theme's own
@@ -2068,12 +2210,12 @@ export function lookRepair(look, problems) {
   const perMode = {};
   /** @type {Record<string, string>} */
   const why = {};
-  const fills = filledColors(look);
-  const filledHad = new Set(Object.keys(fills));
+  const fill = filledColors(look);
+  const filledHad = new Set(Object.keys(fill.colors));
   // A chart color the theme copied from Core's is derived again only when
   // the check says the charts keep Core's colors.
   const charts = problems.some(p => p.kind === 'charts');
-  for (const [t, v] of Object.entries(fills)) {
+  for (const [t, v] of Object.entries(fill.colors)) {
     if (own.has(t) && !charts) continue;
     perMode[t] = v;
     why[t] = own.has(t)
@@ -2171,9 +2313,15 @@ export function lookRepair(look, problems) {
     const page = shown(colorIn(`var(${PAGE})`, res[mode], mode), null);
     const fg = shown(colorIn(`var(${token})`, res[mode], mode), page);
     if (!fg || !page) continue;
+    // The grounds as the check measured them (a see-through fill over the
+    // part around it), else the fill the problem names.
     const all = now
       .filter(p => p.token === token && p.mode === mode && p.on)
-      .map(p => shown(colorIn(`var(${p.on})`, res[mode], mode), page))
+      .flatMap(p =>
+        MEASURED_ON.get(p)?.length
+          ? /** @type {Rgb[]} */ (MEASURED_ON.get(p))
+          : [shown(colorIn(`var(${p.on})`, res[mode], mode), page)],
+      )
       .filter(/** @returns {g is Rgb} */ g => g != null);
     // Text on a fill (--color-on-*) sides with its first fill; other text
     // with the page.
@@ -2308,6 +2456,61 @@ export function lookRepair(look, problems) {
   const components = {};
   /** @type {LookRepair['shared']} */
   const shared = {};
+  // The lifted secondary text the filled palette gives, unless the theme
+  // sets that block's secondary text itself. A part drawn straight on a bar
+  // that sets its own secondary text (a segmented control in a dark header)
+  // keeps the bar's: a part's own token would win over it. Parts in a menu
+  // the bar opens paint their own fill, so they take the lift.
+  const menus = new Set(
+    menuParts(look.map).flatMap(({part}) => [
+      part,
+      ...(look.map[part]?.contains ?? []),
+    ]),
+  );
+  const onBar = new Set(
+    Object.entries(look.components ?? {})
+      .filter(([, b]) => {
+        const base = /** @type {any} */ (b)?.base;
+        return (
+          base &&
+          typeof base === 'object' &&
+          (SECONDARY_TEXT in base ||
+            SECONDARY_TEXT in (base['@light'] ?? {}) ||
+            SECONDARY_TEXT in (base['@dark'] ?? {}))
+        );
+      })
+      .flatMap(([bar]) => [...inside(look.map, bar)])
+      .filter(q => !menus.has(q)),
+  );
+  for (const [part, blocks] of Object.entries(fill.lift))
+    for (const [block, sides] of Object.entries(blocks)) {
+      if (onBar.has(part)) continue;
+      // Each mode the theme sets that block's secondary text in keeps it.
+      const free = Object.fromEntries(
+        Object.entries(sides).filter(
+          ([side]) =>
+            partValue(
+              look.components,
+              part,
+              [SECONDARY_TEXT],
+              /** @type {Mode} */ (side.slice(1)),
+              block,
+            ) == null,
+        ),
+      );
+      if (!Object.keys(free).length) continue;
+      (components[part] ??= {})[block] = /** @type {any} */ (free);
+      const l = free['@light']?.[SECONDARY_TEXT];
+      const d = free['@dark']?.[SECONDARY_TEXT];
+      lines.push({
+        part,
+        token: SECONDARY_TEXT,
+        value: /** @type {string | [string, string]} */ (
+          l && d ? [l, d] : (l ?? d)
+        ),
+        why: `secondary text lifted on its fill (${block}${l && d ? '' : `, ${l ? 'light' : 'dark'} only`}), as the palette lifts it`,
+      });
+    }
   for (const p of now) {
     // (A fill the bar sets for its own parts goes back to the theme's on
     // the parts inside it that draw their text on it, the same way.)

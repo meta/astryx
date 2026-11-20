@@ -372,7 +372,7 @@
  * @property {ThemeEditCheckProblem[]} data.problems - What a person would see as broken (after the repair, with fix); empty when nothing is.
  * @property {string} [data.next] - While problems remain, the one next step: run the check again with fix, or after it, the edit fix cannot make and the file it goes in.
  * @property {number} data.accepted - Measured pairs the theme's `accepted` records keep as designed (a sibling `<theme>.accepted.json`): left as they are, not problems.
- * @property {Array<{token?: string, part?: string, group?: string, parts?: string[], value: string | [string, string], why: string, from?: string | [string, string], accept?: Array<{part: string, ground: string, when?: string, mode: 'light' | 'dark', ratio: number, color?: string, groundColor?: string, reason: string}>}>} data.fixed - Each value fix wrote: a token; a text token set again on a group of parts inside a bar (`group`, its member `parts`); or the app's mode or page; a [light, dark] pair when the modes differ. A color the author set that fix moved names its old value (`from`) and the records that would keep it as designed instead (`accept`, its `reason` left to write).
+ * @property {Array<{token?: string, part?: string, group?: string, parts?: string[], value: string | [string, string], why: string, from?: string | [string, string], accept?: Array<{part: string, ground: string, when?: string, mode: 'light' | 'dark', ratio: number, color?: string, groundColor?: string, reason: string}>}>} data.fixed - Each value fix wrote: a token; a part's lifted secondary text (`part` and `token`, a single value with its mode in `why` when one mode only); a text token set again on a group of parts inside a bar (`group`, its member `parts`); or the app's mode or page; a [light, dark] pair when the modes differ. A color the author set that fix moved names its old value (`from`) and the records that would keep it as designed instead (`accept`, its `reason` left to write).
  * @property {string[]} data.files - The files fix wrote, named from the folder the command ran in, as `file` is.
  * @property {string[]} data.notes - What else to know, such as an app change fix did not make and why.
  * @property {Array<{file: string, declaration: string}>} data.protectedFiles - App files fix did not change because the project protects them (generated, ignored, a dependency), each with the declaration that protects it.
@@ -381,3 +381,28 @@
  */
 
 export {};
+
+/**
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditCreateOptions
+ * @property {string} [cwd] - The folder to start from (default: process.cwd()); the command acts on the Astryx app at or above it.
+ */
+
+/**
+ * `astryx --json experimental theme create <name> --traits '<json>'`.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditCreateResponse
+ * @property {'themeEdit.create'} type
+ * @property {object} data
+ * @property {string} data.theme - The theme's name.
+ * @property {string} data.file - The theme file written, from the app root: the person's to edit.
+ * @property {'light' | 'dark' | 'both'} data.look - One look (the app shows the theme in that mode) or a light and a dark look.
+ * @property {number} data.colors - Color tokens the file sets once `theme check --fix` filled it, each with a light and a dark value.
+ * @property {number} data.values - Other tokens written: corners, spacing, sizes, type, shadows, borders.
+ * @property {string[]} data.parts - The parts the file styles.
+ * @property {string | null} data.built - The stylesheet the build wrote.
+ * @property {string} data.module - The app's generated theme module, which now has the theme as its default.
+ * @property {boolean} data.firstAdd - True when this was the app's first theme: the app wires the module in once.
+ * @property {ThemeEditCheckResponse['data']} data.check - What `experimental theme check <name> --fix` found (`problems`) and repaired (`fixed`) in the file.
+ * @property {string[]} data.notes - What else to know.
+ */

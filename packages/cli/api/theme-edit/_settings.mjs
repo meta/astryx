@@ -5449,6 +5449,92 @@ export function baseTextPx(base) {
 export const textPx = v => TEXT_SIZE.find(([n]) => n === v)?.[1] ?? Number(v);
 
 /**
+ * A surface's variant axis that tells its plain fills (the card, surface,
+ * page, popover or muted color, or none) from its colored ones (a blue card,
+ * a status tint), with the values that draw the plain one; null when every
+ * variant draws the plain surface. A plain surface change leaves the colored
+ * and status variants their own fill.
+ * @param {Record<string, any>} map the part census
+ * @param {string} t
+ * @returns {{axis: string, plain: string[]} | null}
+ */
+export function surfaceVariantsOf(map, t) {
+  const PLAIN =
+    /^(?:transparent|inherit|none|var\(--color-background-(?:card|surface|body|popover|muted)\))$/;
+  const fills = Object.entries(map[t]?.at?.['background-color'] ?? {})
+    .filter(([c]) => !/[\s:[]/.test(c) && c !== 'always')
+    .map(([c, v]) => ({
+      props: Object.fromEntries(c.split(',').map(kv => kv.split('='))),
+      plain: PLAIN.test(String(v).trim()),
+    }));
+  if (!fills.some(f => !f.plain)) return null;
+  const axes = [...new Set(fills.flatMap(f => Object.keys(f.props)))];
+  for (const axis of axes) {
+    const plain = new Set(fills.filter(f => f.plain).map(f => f.props[axis]));
+    const colored = new Set(
+      fills.filter(f => !f.plain).map(f => f.props[axis]),
+    );
+    if (
+      [...colored].every(v => v != null && !plain.has(v)) &&
+      [...plain].every(v => v != null)
+    )
+      return {axis, plain: [...plain]};
+  }
+  return null;
+}
+
+/**
+ * The part styles a rung of the `surfaces` dial gives: each part the dial
+ * reaches with the rung (a panel floating over the page with the floating
+ * rung, where one differs, so it keeps an edge under flat). A frame that
+ * paints nothing (the banner's) gives its line and shadow to the part inside
+ * it that paints the rounded fill, so they follow its corners. A surface
+ * with colored variants names, in `keep`, the variants a plain fill goes on.
+ * @param {Record<string, any>} map the part census
+ * @param {(part: string) => boolean} has whether this Core has the part
+ * @param {string} value the rung
+ * @param {{floating?: Record<string, string>}} [opts] a floating style other
+ *   than the dial's own
+ * @returns {Array<{part: string, kind: 'surface' | 'floating' | 'edge' | 'rest', style: Record<string, string>, keep?: {axis: string, plain: string[]} | null}>}
+ */
+export function surfacePartStyles(map, has, value, opts = {}) {
+  const floating = opts.floating ?? FLOATING_SURFACES[value];
+  /** @type {ReturnType<typeof surfacePartStyles>} */
+  const out = [];
+  for (const t of SURFACE_PARTS.filter(has)) {
+    const floats = FLOATING_PANELS.includes(t) && Boolean(floating);
+    const look = floats ? floating : SURFACES[value];
+    const paintsNone =
+      !map[t]?.at?.['background-color'] && !map[t]?.at?.['border-radius'];
+    const fill = paintsNone
+      ? (map[t]?.contains ?? []).find(
+          (/** @type {string} */ k) =>
+            map[k]?.at?.['background-color'] && map[k]?.at?.['border-radius'],
+        )
+      : undefined;
+    if (!fill) {
+      out.push({
+        part: t,
+        kind: floats ? 'floating' : 'surface',
+        style: look,
+        keep: surfaceVariantsOf(map, t),
+      });
+      continue;
+    }
+    const edge = Object.fromEntries(
+      Object.entries(look).filter(([k]) => /^(border|boxShadow)/.test(k)),
+    );
+    const rest = Object.fromEntries(
+      Object.entries(look).filter(([k]) => !/^(border|boxShadow)/.test(k)),
+    );
+    out.push({part: fill, kind: 'edge', style: edge});
+    if (Object.keys(rest).length)
+      out.push({part: t, kind: 'rest', style: rest});
+  }
+  return out;
+}
+
+/**
  * The family and fallbacks a font value means: a preset, an open font, a
  * whole stack with commas, or one family name.
  * @param {string} value
@@ -8531,124 +8617,63 @@ export function compileTheme(ctx, data, base) {
                 : f.fallbacks,
           };
       } else if (s.thing === 'surfaces') {
-        /**
-         * A surface's variant axis that tells its plain fills (the card,
-         * surface, page, popover or muted color, or none) from its colored
-         * ones (a blue card, a status tint), with the values that draw the
-         * plain one; null when every variant draws the plain surface.
-         * @param {string} t
-         */
-        const surfaceVariantsOf = t => {
-          const PLAIN =
-            /^(?:transparent|inherit|none|var\(--color-background-(?:card|surface|body|popover|muted)\))$/;
-          const fills = Object.entries(
-            ctx.C.MAP[t]?.at?.['background-color'] ?? {},
-          )
-            .filter(([c]) => !/[\s:[]/.test(c) && c !== 'always')
-            .map(([c, v]) => ({
-              props: Object.fromEntries(c.split(',').map(kv => kv.split('='))),
-              plain: PLAIN.test(String(v).trim()),
-            }));
-          if (!fills.some(f => !f.plain)) return null;
-          const axes = [...new Set(fills.flatMap(f => Object.keys(f.props)))];
-          for (const axis of axes) {
-            const plain = new Set(
-              fills.filter(f => f.plain).map(f => f.props[axis]),
-            );
-            const colored = new Set(
-              fills.filter(f => !f.plain).map(f => f.props[axis]),
-            );
-            if (
-              [...colored].every(v => v != null && !plain.has(v)) &&
-              [...plain].every(v => v != null)
-            )
-              return {axis, plain: [...plain]};
-          }
-          return null;
-        };
-        for (const t of SURFACE_PARTS.filter(x => ctx.project.target.has(x))) {
-          // (A panel floating over the page keeps an edge under flat.)
-          const look =
-            FLOATING_PANELS.includes(t) && FLOATING_SURFACES[s.value]
-              ? FLOATING_SURFACES[s.value]
-              : SURFACES[s.value];
-          // A frame that paints nothing (the banner's): its line and shadow
-          // go on the part inside it that paints the rounded fill, so they
-          // follow its corners; a square ring around them otherwise.
-          const paintsNone =
-            !ctx.C.MAP[t]?.at?.['background-color'] &&
-            !ctx.C.MAP[t]?.at?.['border-radius'];
-          const fill = paintsNone
-            ? (ctx.C.MAP[t]?.contains ?? []).find(
-                k =>
-                  ctx.C.MAP[k]?.at?.['background-color'] &&
-                  ctx.C.MAP[k]?.at?.['border-radius'],
-              )
-            : undefined;
-          if (!fill) {
-            // A plain surface change leaves the colored and status
-            // variants their own fill (a blue card stays blue under flat):
-            // the fill goes on the variants that draw the plain surface.
-            const keep = surfaceVariantsOf(t);
-            // (A fill the theme sets on the part, itself or through a group
-            // it is in, before or after the surfaces look, is the part's
-            // own: the look's fill never covers it, from a variant block or
-            // the part's own, in the modes that fill is set for; in a mode
-            // it leaves, the look's fill stays.)
-            const ownFills = data.settings.filter(
-              (/** @type {any} */ o) =>
-                !o.state &&
-                !o.when &&
-                /^(?:background-color|background)$/.test(kebab(o.thing)) &&
-                (o.on === t || partsOf(ctx, o).includes(t)),
-            );
-            if (ownFills.length && look.backgroundColor != null) {
-              Object.assign(
-                block({...s, mode: undefined}, t),
-                Object.fromEntries(
-                  Object.entries(look).filter(([k]) => k !== 'backgroundColor'),
-                ),
-              );
-              const covered = new Set(
-                ownFills.flatMap((/** @type {any} */ o) =>
-                  o.mode ? [o.mode] : ['light', 'dark'],
-                ),
-              );
-              for (const mode of /** @type {const} */ ([
-                'light',
-                'dark',
-              ]).filter(m => !covered.has(m)))
-                for (const when of keep
-                  ? keep.plain.map(v => `${keep.axis}:${v}`)
-                  : [undefined])
-                  block({...s, mode, when}, t).backgroundColor =
-                    look.backgroundColor;
-              continue;
-            }
-            if (keep && look.backgroundColor != null) {
-              const {backgroundColor, ...others} = look;
-              Object.assign(block({...s, mode: undefined}, t), others);
-              for (const v of keep.plain)
-                block(
-                  {...s, mode: undefined, when: `${keep.axis}:${v}`},
-                  t,
-                ).backgroundColor = backgroundColor;
-              continue;
-            }
+        for (const {part: t, kind, style: look, keep} of surfacePartStyles(
+          ctx.C.MAP,
+          x => ctx.project.target.has(x),
+          s.value,
+        )) {
+          if (kind === 'edge' || kind === 'rest') {
             Object.assign(block({...s, mode: undefined}, t), look);
             continue;
           }
-          const edge = Object.fromEntries(
-            Object.entries(look).filter(([k]) => /^(border|boxShadow)/.test(k)),
+          // A plain surface change leaves the colored and status
+          // variants their own fill (a blue card stays blue under flat):
+          // the fill goes on the variants that draw the plain surface.
+          // (A fill the theme sets on the part, itself or through a group
+          // it is in, before or after the surfaces look, is the part's
+          // own: the look's fill never covers it, from a variant block or
+          // the part's own, in the modes that fill is set for; in a mode
+          // it leaves, the look's fill stays.)
+          const ownFills = data.settings.filter(
+            (/** @type {any} */ o) =>
+              !o.state &&
+              !o.when &&
+              /^(?:background-color|background)$/.test(kebab(o.thing)) &&
+              (o.on === t || partsOf(ctx, o).includes(t)),
           );
-          const rest = Object.fromEntries(
-            Object.entries(look).filter(
-              ([k]) => !/^(border|boxShadow)/.test(k),
-            ),
-          );
-          Object.assign(block({...s, mode: undefined}, fill), edge);
-          if (Object.keys(rest).length)
-            Object.assign(block({...s, mode: undefined}, t), rest);
+          if (ownFills.length && look.backgroundColor != null) {
+            Object.assign(
+              block({...s, mode: undefined}, t),
+              Object.fromEntries(
+                Object.entries(look).filter(([k]) => k !== 'backgroundColor'),
+              ),
+            );
+            const covered = new Set(
+              ownFills.flatMap((/** @type {any} */ o) =>
+                o.mode ? [o.mode] : ['light', 'dark'],
+              ),
+            );
+            for (const mode of /** @type {const} */ (['light', 'dark']).filter(
+              m => !covered.has(m),
+            ))
+              for (const when of keep
+                ? keep.plain.map(v => `${keep.axis}:${v}`)
+                : [undefined])
+                block({...s, mode, when}, t).backgroundColor =
+                  look.backgroundColor;
+            continue;
+          }
+          if (keep && look.backgroundColor != null) {
+            const {backgroundColor, ...others} = look;
+            Object.assign(block({...s, mode: undefined}, t), others);
+            for (const v of keep.plain)
+              block(
+                {...s, mode: undefined, when: `${keep.axis}:${v}`},
+                t,
+              ).backgroundColor = backgroundColor;
+            continue;
+          }
+          Object.assign(block({...s, mode: undefined}, t), look);
         }
       } else if (s.thing === 'buttons') {
         const primary = block(
