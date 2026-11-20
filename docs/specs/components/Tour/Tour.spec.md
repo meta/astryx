@@ -20,7 +20,7 @@ families: [family:overlay-dismissal]
 design_specs: []
 architecture: []
 contributing: []
-system_specs: []
+system_specs: [spec:AST-119]
 ---
 
 # Tour component contract
@@ -111,6 +111,8 @@ The component implements design requirements without copying their rationale.
 **Decision:** A step is a non-modal layer with no light dismiss. Without a backdrop, a press on the page or on the target leaves the tour running, on every pointer. With a backdrop, the dimmed overlay catches every press, the target's included, and ends the tour with `'backdrop'`.
 
 **Rejected:** ending a tour without a backdrop on any press, which ends it when a person uses the control the step introduces.
+
+**Amended:** `spec:AST-119` FR14 and DEC-6 make a step with a backdrop a modal layer. This decision's "a step is a non-modal layer" covers a step without a backdrop.
 
 ## Open questions
 

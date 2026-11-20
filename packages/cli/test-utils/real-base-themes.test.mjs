@@ -166,4 +166,56 @@ describe('installRealBaseThemes', () => {
       fs.realpathSync(whole),
     );
   });
+
+  it('builds a theme again when its build is older than its source', async () => {
+    const themes = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-themes-'));
+    temps.push(themes);
+    // A copy of the neutral package whose build predates its source.
+    const own = path.join(themes, 'neutral');
+    fs.cpSync(path.join(THEMES, 'neutral', 'src'), path.join(own, 'src'), {
+      recursive: true,
+    });
+    fs.copyFileSync(
+      path.join(THEMES, 'neutral', 'package.json'),
+      path.join(own, 'package.json'),
+    );
+    // (A folder of its own, whose entries link to the package's: the build
+    // writes its scratch output there.)
+    const deps = fs.realpathSync(path.join(THEMES, 'neutral', 'node_modules'));
+    fs.mkdirSync(path.join(own, 'node_modules'));
+    for (const entry of fs.readdirSync(deps)) {
+      if (entry.startsWith('.')) continue;
+      fs.symlinkSync(
+        fs.realpathSync(path.join(deps, entry)),
+        path.join(own, 'node_modules', entry),
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
+    }
+    fs.mkdirSync(path.join(own, 'dist'));
+    fs.writeFileSync(path.join(own, 'dist', 'neutral.js'), '// stale\n');
+    const long = new Date(Date.now() - 86_400_000);
+    fs.utimesSync(path.join(own, 'dist', 'neutral.js'), long, long);
+
+    const stale = fixture(FIXTURE_PACKAGES);
+    expect(await installRealBaseThemes(stale, ['neutral'], {themes})).toBe('');
+    // The fixture gets a build made from the source, never the stale one.
+    expect(fs.realpathSync(installed(stale, 'neutral'))).not.toBe(
+      fs.realpathSync(own),
+    );
+    expect(
+      fs.readFileSync(
+        path.join(installed(stale, 'neutral'), 'dist', 'neutral.js'),
+        'utf8',
+      ),
+    ).not.toBe('// stale\n');
+
+    // A build newer than every source file is linked as it is.
+    const now = new Date(Date.now() + 60_000);
+    fs.utimesSync(path.join(own, 'dist', 'neutral.js'), now, now);
+    const fresh = fixture(FIXTURE_PACKAGES);
+    expect(await installRealBaseThemes(fresh, ['neutral'], {themes})).toBe('');
+    expect(fs.realpathSync(installed(fresh, 'neutral'))).toBe(
+      fs.realpathSync(own),
+    );
+  }, 600_000);
 });

@@ -52,8 +52,10 @@ const SURFACE_TEXT = {
 };
 
 /**
- * The selector Core's TableRow gives a striped table's painted rows (its
- * even rows, not counting expansion panels); the striped-row rule repeats it.
+ * The selector Core's TableRow gives a striped table's painted rows: its
+ * even rows, not counting expansion panels. The striped-row rule repeats it
+ * under the row's `striped` state, so a plain table's rows keep the text
+ * around them.
  */
 const STRIPED_ROW = ':nth-child(even of :not([data-expansion-panel]))';
 
@@ -84,7 +86,7 @@ const OWN_FILL_RULES: ReadonlyArray<readonly [string, string, string?]> = [
   ['avatar-group-overflow', 'base'],
   ['segmented-control-item', 'selected'],
   ['step-indicator', 'progress:not-started'],
-  ['table-row', 'base', STRIPED_ROW],
+  ['table-row', 'striped', STRIPED_ROW],
   ['banner-content', 'base'],
   ['input-group-text', 'base'],
   ['text-input', 'base'],
@@ -268,6 +270,9 @@ const INPUT_STATUS_VARS = {
     '--color-icon-error': red.light[60],
   },
 } as const;
+
+/** The color modes butter draws: light and dark. */
+export const colorModes = ['light', 'dark'] as const;
 
 export const butterTheme = defineTheme({
   name: 'butter',
@@ -488,6 +493,8 @@ export const butterTheme = defineTheme({
     '--radius-element': '0.5rem', // 8px
     '--radius-container': '0.75rem', // 12px
     '--radius-page': '1.5rem',
+    // Chat surfaces stay rounder than cards.
+    '--radius-chat': '28px',
     '--radius-full': '9999px',
 
     // =========================================================================
@@ -504,6 +511,11 @@ export const butterTheme = defineTheme({
   },
 
   components: withOwnFillText({
+    // The send button keeps the 16px corner it took from the 28px composer:
+    // a rounded square on Butter's 40px controls.
+    'chat-send-button': {
+      base: {':where(.astryx-chat-composer *)': {borderRadius: '16px'}},
+    },
     // In dark mode, secondary text falls under 4.5:1 on the selected fill (the
     // accent tint) and under its hover. Selected rows, a dropzone's hint and
     // a numbered citation, all on that fill, use the nearest stop that clears
@@ -572,7 +584,8 @@ export const butterTheme = defineTheme({
     button: {
       // Radius intentionally not pinned, so buttons keep core's
       // `var(--_button-radius, --radius-element)`: standalone buttons stay 8px,
-      // while the chat composer (which sets --_button-radius) rounds them fully.
+      // while the chat composer (which sets --_button-radius) gives them its
+      // 16px concentric corner.
       // Inline padding only. Button sets its own block padding and height.
       base: {
         paddingInline: 'var(--spacing-4)',
@@ -728,8 +741,8 @@ export const butterTheme = defineTheme({
       },
     },
 
-    // Progress bar — pale track in light, warm brown in dark. Vivid
-    // semantic fills match the banner colors (Success / Warning / Error).
+    // Progress bar — pale track in light, warm brown in dark. Status fills take
+    // the theme's status roles, which reach 3:1 on that track.
     'progress-bar-track': {
       base: {
         backgroundColor: lightDark(neutral.light[85], neutral.dark[40]),
@@ -737,13 +750,41 @@ export const butterTheme = defineTheme({
     },
     'progress-bar-fill': {
       'variant:success': {
-        backgroundColor: green.light[70],
+        backgroundColor: 'var(--color-success)',
       },
       'variant:warning': {
-        backgroundColor: yellow.light[80],
+        backgroundColor: 'var(--color-warning)',
       },
       'variant:error': {
-        backgroundColor: red.light[60],
+        backgroundColor: 'var(--color-error)',
+      },
+      // The secondary text color (stop 70) reads under 3:1 on the dark track,
+      // so a neutral or disabled fill takes stop 80 there.
+      'variant:neutral': {
+        backgroundColor: lightDark(
+          'var(--color-text-secondary)',
+          neutral.dark[80],
+        ),
+      },
+      'variant:disabled': {
+        backgroundColor: lightDark(
+          'var(--color-text-secondary)',
+          neutral.dark[80],
+        ),
+      },
+    },
+
+    // A status fill is the status color, so its mark takes that status's
+    // on-color.
+    'progress-bar-mark': {
+      'placement:fill+variant:success': {
+        backgroundColor: 'var(--color-on-success)',
+      },
+      'placement:fill+variant:warning': {
+        backgroundColor: 'var(--color-on-warning)',
+      },
+      'placement:fill+variant:error': {
+        backgroundColor: 'var(--color-on-error)',
       },
     },
 

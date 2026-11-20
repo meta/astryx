@@ -11,6 +11,8 @@ import {renderToString} from 'react-dom/server';
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {Timer} from './Timer';
+import {InternationalizationProvider} from '../i18n';
+import {formatElapsedDuration} from '../utils/timeFormat';
 
 describe('Timer', () => {
   beforeEach(() => {
@@ -90,6 +92,31 @@ describe('Timer', () => {
     rerender(<Timer startTime={now - 3_753_000} data-testid="timer" />);
     expect(timer).toHaveTextContent('1h 02m');
     expect(timer).toHaveAttribute('datetime', 'PT3720S');
+  });
+
+  it('writes elapsed durations in the provider locale', () => {
+    const now = Date.now();
+    const renderTimer = (startTime: number) => (
+      <InternationalizationProvider locale="de-DE">
+        <Timer startTime={startTime} data-testid="timer" />
+      </InternationalizationProvider>
+    );
+    const {rerender} = render(renderTimer(now - 34_000));
+    const timer = screen.getByTestId('timer');
+    // The locale's own unit text; timeFormat.test.ts pins the exact strings.
+    expect(timer).toHaveTextContent(
+      formatElapsedDuration('de-DE', [['second', 34]]),
+    );
+    expect(timer).not.toHaveTextContent('34s');
+
+    rerender(renderTimer(now - 128_000));
+    expect(timer).toHaveTextContent(
+      formatElapsedDuration('de-DE', [
+        ['minute', 2],
+        ['second', 8],
+      ]),
+    );
+    expect(timer).toHaveAttribute('datetime', 'PT128S');
   });
 
   it('formats clock durations across minutes and hours', () => {

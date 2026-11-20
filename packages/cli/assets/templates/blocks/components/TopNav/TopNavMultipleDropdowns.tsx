@@ -10,11 +10,7 @@ import {
 } from '@astryxdesign/core/TopNav';
 import {NavIcon} from '@astryxdesign/core/NavIcon';
 import {Icon} from '@astryxdesign/core/Icon';
-import {
-  CubeIcon,
-  ChartBarIcon,
-  ShieldCheckIcon,
-} from '@heroicons/react/24/outline';
+import {PackageIcon, ChartIcon, ShieldIcon} from '@astryxdesign/template-icons';
 
 export default function TopNavMultipleDropdowns() {
   return (
@@ -23,7 +19,7 @@ export default function TopNavMultipleDropdowns() {
       heading={
         <TopNavHeading
           heading="My App"
-          logo={<NavIcon icon={<Icon icon={CubeIcon} size="sm" />} />}
+          logo={<NavIcon icon={<Icon icon={PackageIcon} size="sm" />} />}
           headingHref="#"
         />
       }
@@ -35,13 +31,13 @@ export default function TopNavMultipleDropdowns() {
               {
                 title: 'Analytics',
                 description: 'Track behavior',
-                icon: <ChartBarIcon />,
+                icon: <ChartIcon />,
                 href: '#',
               },
               {
                 title: 'Security',
                 description: 'Enterprise protection',
-                icon: <ShieldCheckIcon />,
+                icon: <ShieldIcon />,
                 href: '#',
               },
             ]}

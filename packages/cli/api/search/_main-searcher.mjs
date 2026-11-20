@@ -72,7 +72,7 @@ function namesLoosely(candidate, loose) {
 
 /**
  * Each family member's `domain:name`, mapped to the family its doc lists it
- * in (see rootsFirst in _order.mjs).
+ * in (see tieByOwnName in _order.mjs).
  * @param {import('./_lexical.mjs').Candidate[]} all
  * @returns {Map<string, string>}
  */

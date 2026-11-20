@@ -70,6 +70,7 @@ import {
   systemFontFamilies,
   isSystemFamily,
   fontStack,
+  onlyMeans,
 } from './_tables.mjs';
 import {
   COLOR_NAMES,
@@ -93,7 +94,7 @@ import {
   VIBRANCY_DEFAULT,
   vibrancyMoves,
   paletteToken,
-  seedOf,
+  seedsInEffect,
 } from './_palette.mjs';
 import {
   camel,
@@ -264,6 +265,46 @@ export function modeDialValue(v) {
  */
 export const setLine = (slug, thing, value, s, unset = false) =>
   `${P} ${unset ? 'undo' : 'set'} ${slug} ${quoteCommandArgument(thing)}${value ? ` ${quoteCommandArgument(value)}` : ''}${s.on ? ` --on ${s.on}` : ''}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}${s.only ? ' --only' : ''}`;
+
+/**
+ * The longhand lines that give a box shorthand of two to four lengths side
+ * by side (`padding '5px 0'`: padding-block 5px, padding-inline 0), each
+ * with the length typed for it, as CSS gives the sides out; null for any
+ * other property or value.
+ * @param {string} slug
+ * @param {string} prop
+ * @param {string} v
+ * @param {{on?: string, when?: string, state?: string, mode?: string, only?: boolean}} s
+ * @returns {string[] | null}
+ */
+function boxSideLines(slug, prop, v, s) {
+  if (prop !== 'padding' && prop !== 'margin') return null;
+  const w = splitTop(v.trim(), ' ').filter(Boolean);
+  if (w.length < 2 || w.length > 4) return null;
+  if (!w.every(x => oneLength(x) || /^[+-]?0*\.?0+$/.test(x))) return null;
+  // (One length said again for each side is that one length.)
+  if (new Set(w).size === 1) return null;
+  /** @type {Array<[string, string]>} */
+  const sides =
+    w.length === 2
+      ? [
+          ['block', w[0]],
+          ['inline', w[1]],
+        ]
+      : w.length === 3
+        ? [
+            ['top', w[0]],
+            ['inline', w[1]],
+            ['bottom', w[2]],
+          ]
+        : [
+            ['top', w[0]],
+            ['right', w[1]],
+            ['bottom', w[2]],
+            ['left', w[3]],
+          ];
+  return sides.map(([side, x]) => setLine(slug, `${prop}-${side}`, x, s));
+}
 
 /** @param {string} v */
 const cornerPxOf = v =>
@@ -4759,30 +4800,21 @@ function checkOne(
     s.mode != null &&
     oneModeOfTheme(data) != null &&
     oneModeOfTheme(data) !== s.mode;
-  if (
-    s.mode &&
-    data.mode !== 'both' &&
-    !unset &&
-    !sameModeEntry &&
-    !otherModeOfOneMode
-  ) {
-    // What takes no --mode in any theme (a size, a font, a keyword) is
-    // refused for that, with the command that drops --mode: a theme with
-    // both modes would refuse it too, so its mode is no way out.
-    try {
-      checkSetting(ctx, slug, {...data, mode: 'both'}, thing, v, flags);
-    } catch (e) {
-      if (/** @type {any} */ (e)?.code === E.ERR_THEME_NO_MODE) throw e;
-    }
-    refuse(
-      E.ERR_THEME_NO_MODE,
-      `This theme is ${data.mode}, so its own mode needs no --mode.`,
-      {
-        run: [
-          `${P} set ${slug} ${thing} ${quoteCommandArgument(v)}${onFlag}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}`,
-        ],
-      },
-    );
+  // The theme's own mode named on a one-mode theme (`--mode dark` on a
+  // dark-only theme) is the same as no --mode: read so, as undo reads it,
+  // and said. What takes no --mode in any theme (a size, a font,
+  // a keyword) is still refused for that, with the line without --mode.
+  if (s.mode && data.mode !== 'both' && !sameModeEntry && !otherModeOfOneMode) {
+    if (!unset)
+      try {
+        checkSetting(ctx, slug, {...data, mode: 'both'}, thing, v, flags);
+      } catch (e) {
+        if (/** @type {any} */ (e)?.code === E.ERR_THEME_NO_MODE) throw e;
+      }
+    const own = s.mode;
+    s.mode = undefined;
+    if (!unset)
+      s.note = `${slug} is ${data.mode}: --mode ${own} is its own mode, the same as no --mode`;
   }
   if ((s.when || s.state) && !s.on)
     refuse(E.ERR_MISSING_ARGUMENT, '--when and --state need --on <part>.', {
@@ -4790,15 +4822,17 @@ function checkOne(
     });
   // --only is checked on a part this Core has; a part in other letters or
   // misspelt gets the part's own refusal first, with --only kept.
+  // (What --only means is the one rule the settings reader reads a saved
+  // one by: onlyMeans.)
   if (s.only && (!s.on || TARGET.has(s.on) || FAMILIES[s.on])) {
-    const fam = s.on ? familyOf(s.on) : null;
-    if (!fam || FAMILIES[/** @type {string} */ (s.on)])
+    const means = onlyMeans(s.on);
+    if (means === 'group')
       refuse(
         E.ERR_INVALID_ARGUMENT,
         '--only is for one member of a group, such as text-input (how --list groups).',
         {run: [`${HOW} --list groups`]},
       );
-    if (!AUTO_SPREAD.includes(/** @type {string} */ (fam)))
+    if (means === 'own')
       refuse(
         E.ERR_INVALID_ARGUMENT,
         `${s.on} is styled on its own already: only ${AUTO_SPREAD.join(' and ')} spread to their group, so drop --only.`,
@@ -5734,8 +5768,14 @@ function checkOne(
       return s;
     }
     if (unset) return s;
-    /** @param {Array<[string, number]>} L @param {string | number} def */
-    const ladder = (L, def) => {
+    /**
+     * @param {Array<[string, number]>} L
+     * @param {string | number} def
+     * @param {(rung: [string, number]) => string | null} [past] the exact
+     *   line one step past a last rung, when one setting does it (a size the
+     *   dial takes, or the token the part reads for it); none: no line
+     */
+    const ladder = (L, def, past) => {
       // The value in effect for the target: its own setting, else the
       // whole-theme one, else the starting point.
       // Same target: the part, and the same variant and state.
@@ -5805,21 +5845,16 @@ function checkOne(
       // At the last rung that way, a step goes nowhere: refused as every
       // dial refuses it at its end, with the other way.
       if (at >= 0) {
-        // Past the last rung, an exact size still does it: the line for one
-        // step beyond this rung, as the dial writes sizes.
-        const beyond =
-          typeof L[at][1] === 'number'
-            ? Math.round(
-                /** @type {number} */ (L[at][1]) * (v === 'more' ? 1.15 : 0.87),
-              )
-            : null;
+        // Past the last rung, an exact size still does it, when one setting
+        // does: the dial's own line for it.
+        const beyond = past ? past(L[at]) : null;
         refuse(
           E.ERR_THEME_NO_EFFECT,
           `${thing} is already at its ${v === 'more' ? 'largest' : 'smallest'} step, ${L[at][0]}${s.on ? ` on ${s.on}` : ''}, so "${v}" has nowhere to go.${beyond ? ` An exact size goes past the rungs.` : ''}`,
           {
             run: [
               setLine(slug, thing, v === 'more' ? 'less' : 'more', s),
-              ...(beyond ? [setLine(slug, thing, String(beyond), s)] : []),
+              ...(beyond ? [beyond] : []),
             ],
           },
         );
@@ -6195,7 +6230,30 @@ function checkOne(
               : a,
           )[0]
         : null;
-      if (step) s.value = ladder(SPACING, 'medium');
+      // Past its last rung, spacing on a part goes on in the control height
+      // the part reads (a bigger button is a taller one): that token, one
+      // step past the rung's scale, on the part. The whole theme has no one
+      // setting for it.
+      const pastSpacing = (/** @type {[string, number]} */ [, k]) => {
+        if (!s.on) return null;
+        // (A group: its first member that reads a control height.)
+        const parts = FAMILIES[s.on] ?? [s.on];
+        const token = parts
+          .flatMap(p => C.partReads(p, 'size') ?? [])
+          .map((/** @type {{token: string}} */ r) => r.token)
+          .find((/** @type {string} */ t) => /^--size-element-/.test(t));
+        // (From the height the base theme gives it, as the rung scales it:
+        // a base with taller controls steps from its own height, never
+        // Core's.)
+        const px = token
+          ? (lengthPx(String(ctx.base?.light?.[token] ?? '')) ??
+            lengthPx(String(TOKENS[token] ?? '')))
+          : null;
+        if (!token || px == null) return null;
+        const n = Math.round(px * k * (v === 'more' ? 1.15 : 0.87));
+        return setLine(slug, token, `${n}px`, s);
+      };
+      if (step) s.value = ladder(SPACING, 'medium', pastSpacing);
       else if (!SPACING.some(([n]) => n === v) && nearFactor)
         refuse(
           E.ERR_THEME_BAD_VALUE,
@@ -6262,7 +6320,18 @@ function checkOne(
       // With no text-size setting yet, a step starts from the size the base
       // theme's body text shows (past the last rung, it asks for a size).
       if (step)
-        s.value = ladder(TEXT_SIZE, ctx.base ? baseTextPx(ctx.base) : 'medium');
+        s.value = ladder(
+          TEXT_SIZE,
+          ctx.base ? baseTextPx(ctx.base) : 'medium',
+          // A size the dial takes: one step past the rung's.
+          ([, px]) =>
+            setLine(
+              slug,
+              thing,
+              String(Math.round(px * (v === 'more' ? 1.15 : 0.87))),
+              s,
+            ),
+        );
       else if (
         /^\d+\.\d+$/.test(v.trim()) &&
         Number(v) >= 10 &&
@@ -6449,9 +6518,12 @@ function checkOne(
       // With no color to saturate, no vibrancy value is suggested. A color
       // counts when vibrancy changes the shades made from it at all (a warm
       // gray has a little hue to take out or add; a pure gray has none).
-      const canApply = colors.some(x =>
-        vibrancyMoves(x.thing, seedOf(x.value), 0, 100),
+      const inEffect = seedsInEffect(ctx.project.cwd, slug, data);
+      const canApply = inEffect.some(f =>
+        vibrancyMoves(f.dial, f.seed, 0, 100),
       );
+      // The fills the theme's own source sets win over their settings.
+      const fromSource = inEffect.filter(f => f.source);
       if (!step && canApply && (!/^\d{1,3}$/.test(v) || Number(v) > 100)) {
         // The value meant: a step in other letters (MORE), or the number
         // read as CSS reads it (70%, 7e1), kept in range.
@@ -6489,7 +6561,7 @@ function checkOne(
         refuse(
           E.ERR_THEME_NO_EFFECT,
           colors.length
-            ? `vibrancy sets how saturated the generated colors are, and every color this theme sets (${colors.map(x => `${x.thing} ${x.value}`).join(', ')}) comes out the same at every vibrancy: a gray with no hue to change, so it would change nothing. Set a color first.`
+            ? `vibrancy sets how saturated the generated colors are, and every color this theme shows (${(inEffect.length ? inEffect.map(f => (f.source ? `${f.dial} ${f.seed}, the ${f.source} ${slug}.theme.ts sets` : `${f.dial} ${f.value}`)) : colors.map(x => `${x.thing} ${x.value}`)).join('; ')}) comes out the same at every vibrancy: a gray with no hue to change, so it would change nothing. ${fromSource.length ? `${slug}.theme.ts wins over the setting for ${fromSource.map(f => f.dial).join(' and ')}: set ${fromSource.length > 1 ? 'those fills' : 'that fill'} there to a color, or take ${fromSource.length > 1 ? 'them' : 'it'} out.` : 'Set a color first.'}`
             : (() => {
                 // Colors set as tokens or on parts are values of their own:
                 // vibrancy saturates only what the color dials make.
@@ -7256,10 +7328,18 @@ function checkOne(
     // max() or clamp() giving one.
     if (s.on && ctx.derived && !WRAPPED_PARTS[s.on]) {
       const inCalc = calcVars(ctx.project);
+      // A radius entry with `corners` hands each corner its own variable, so
+      // one length per corner works there; a `/` radius still does not.
+      const eachCornerOneLength =
+        !v.includes('/') &&
+        splitTop(v.trim(), ' ').every(
+          x => oneLength(x) || /^[+-]?0+(?:\.0+)?$/.test(x.trim()),
+        );
       const hit = partsOf(ctx, s).find(t =>
         (ctx.derived?.[t] ?? []).some(
           d =>
             d.property === camel(prop) &&
+            !(d.corners && eachCornerOneLength) &&
             (d.vars ?? []).some(x => inCalc.has(x.toLowerCase())),
         ),
       );
@@ -7274,7 +7354,11 @@ function checkOne(
         refuse(
           E.ERR_THEME_BAD_VALUE,
           `${hit} reads ${prop} inside calc() (its corners and inner rows follow it), where only one length works: a length, a variable, or calc(), min(), max() or clamp() giving one; not "${v.trim()}".`,
-          {run: [setLine(slug, prop, fix, s)]},
+          {
+            run: boxSideLines(slug, prop, v, s) ?? [
+              setLine(slug, prop, fix, s),
+            ],
+          },
         );
       }
     }

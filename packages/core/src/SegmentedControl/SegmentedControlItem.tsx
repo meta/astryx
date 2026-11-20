@@ -170,6 +170,7 @@ const sizeStyles = stylex.create({
     borderRadius: CONCENTRIC_RADIUS,
     paddingInline: spacingVars['--spacing-2'],
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
   },
   md: {
     height: `max(calc(${sizeVars['--size-element-md']} - 4px), 1lh)`,

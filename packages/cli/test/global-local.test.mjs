@@ -224,7 +224,7 @@ describe.skipIf(!POSIX)(
         );
         const r = await runAsync(
           g.bin,
-          ['experimental', 'render', 'page.jsx', '--json'],
+          ['experimental', 'export', 'page.jsx', '--json'],
           {
             cwd: dir,
             pc,

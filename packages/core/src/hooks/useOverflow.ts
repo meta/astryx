@@ -22,6 +22,11 @@ import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 import {useCommittedRef} from './useCommittedRef';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {computeOverflow, countRows} from './computeOverflow';
+import {
+  layoutSize,
+  screenScale,
+  type ScreenScaleTolerance,
+} from '../utils/hitArea';
 import {useDevWarning} from './useDevWarning';
 
 export interface UseOverflowOptions {
@@ -86,6 +91,117 @@ export interface UseOverflowReturn {
   rows: number;
   /** Measured max item height in pixels; used to size the multi-row container */
   rowHeight: number;
+}
+
+/**
+ * A single-row list's inline bounds, from the measure copy. `collapsed` is
+ * the list folded as far as it can fold (the minimum items and the
+ * indicator), rounded up to a whole pixel. `rendered` is every item
+ * unfolded, exact. `chrome` is the list's own inline padding and border. All
+ * are 0 until the list measures.
+ */
+export interface OverflowInlineBounds {
+  collapsed: number;
+  rendered: number;
+  /** The list's own inline padding and border. */
+  chrome: number;
+  /**
+   * Whether the list's parent lays it out in a flex row, where its width
+   * would otherwise follow its shown (folded) content.
+   */
+  inFlexRow: boolean;
+}
+
+const NO_INLINE_BOUNDS: OverflowInlineBounds = {
+  collapsed: 0,
+  rendered: 0,
+  chrome: 0,
+  inFlexRow: false,
+};
+
+/** Whether `parent` lays its children out in a flex row. */
+function isFlexRow(parent: Element | null): boolean {
+  if (parent == null) {
+    return false;
+  }
+  const style = getComputedStyle(parent);
+  return (
+    (style.display === 'flex' || style.display === 'inline-flex') &&
+    style.flexDirection.startsWith('row')
+  );
+}
+
+/**
+ * An element's sub-pixel border-box width in layout pixels; its rounded width
+ * without layout. Under a scale, the width comes from the computed style: a
+ * scaled rect is rounded on screen, and divided by the scale it can be a
+ * layout unit short, which shrinks an item below its text. The computed
+ * width keeps six significant digits, so half of its last digit is added
+ * back: the sum of the widths is then never short of the items.
+ */
+function exactWidth(element: HTMLElement, scale: number): number {
+  if (scale !== 1) {
+    const layout = layoutSize(element)?.width ?? 0;
+    if (layout > 0) {
+      return layout + 0.5 * 10 ** (Math.floor(Math.log10(layout)) - 5);
+    }
+  }
+  const width = element.getBoundingClientRect().width;
+  return width > 0 ? width / scale : element.offsetWidth;
+}
+
+/**
+ * The list counts any scale beyond the computed width's rounding (six
+ * significant digits), however close to 1: the last frames of a layer
+ * scaling in still shorten its measured items.
+ */
+const INLINE_SCALE_TOLERANCE: ScreenScaleTolerance = {pixels: 0, ratio: 6e-6};
+
+/** The bounds of a single-row set, from sub-pixel widths. */
+function inlineBoundsOf(
+  widths: ReadonlyArray<number>,
+  indicatorWidth: number,
+  gap: number,
+  minVisibleItems: number,
+  collapseFrom: 'start' | 'end',
+  maxVisibleItems: number | undefined,
+  chrome: number,
+  inFlexRow: boolean,
+): OverflowInlineBounds {
+  const span = (set: ReadonlyArray<number>) =>
+    set.reduce((sum, width) => sum + width, 0) +
+    gap * Math.max(0, set.length - 1);
+  const kept = Math.min(minVisibleItems, widths.length);
+  const keptWidths =
+    collapseFrom === 'end'
+      ? widths.slice(0, kept)
+      : widths.slice(widths.length - kept);
+  const folds = kept < widths.length;
+  const collapsed = folds
+    ? span(keptWidths) + (keptWidths.length > 0 ? gap : 0) + indicatorWidth
+    : span(widths);
+  // The most the list shows: the items the cap allows (the floor wins over a
+  // smaller cap), and the indicator when the cap leaves items out.
+  const allowed = Math.max(
+    kept,
+    Math.min(maxVisibleItems ?? widths.length, widths.length),
+  );
+  const allowedWidths =
+    collapseFrom === 'end'
+      ? widths.slice(0, allowed)
+      : widths.slice(widths.length - allowed);
+  const capped = allowed < widths.length && indicatorWidth > 0;
+  const rendered =
+    span(allowedWidths) +
+    (capped ? (allowedWidths.length > 0 ? gap : 0) + indicatorWidth : 0);
+  // Round the folded width up so the trigger never clips. Keep the unfolded
+  // width exact: the list's width at it must not widen a list with room.
+  return {
+    collapsed: Math.ceil(collapsed),
+    rendered,
+    chrome,
+    inFlexRow,
+  };
 }
 
 /**
@@ -349,11 +465,11 @@ export function useOverflow(
   itemCount: number,
   options: UseOverflowOptions = {},
 ): UseOverflowReturn {
-  const {remeasure: _remeasure, ...result} = useOverflowInternal(
-    itemCount,
-    options,
-    {tracksRows: true},
-  );
+  const {
+    remeasure: _remeasure,
+    inlineBounds: _inlineBounds,
+    ...result
+  } = useOverflowInternal(itemCount, options, {tracksRows: true});
   return result;
 }
 
@@ -365,13 +481,28 @@ export function useOverflow(
  * them. `onMeasure` runs after each measurement, in the same render as its
  * result, so a host can mark what that measurement covered. `remeasure`
  * measures again with the lists of the current commit, for a change that
- * resizes nothing.
+ * resizes nothing. With `gapToken`, the CSS value of the host's gap, the hook
+ * ignores `gap` and reads the gap the browser renders on the measurement copy;
+ * a new token measures again.
  */
 export function useOverflowInternal(
   itemCount: number,
   options: UseOverflowOptions,
-  {tracksRows, onMeasure}: {tracksRows: boolean; onMeasure?: () => void},
-): UseOverflowReturn & {remeasure: () => void} {
+  {
+    tracksRows,
+    tracksInlineBounds = false,
+    onMeasure,
+    gapToken,
+  }: {
+    tracksRows: boolean;
+    tracksInlineBounds?: boolean;
+    onMeasure?: () => void;
+    gapToken?: string;
+  },
+): UseOverflowReturn & {
+  inlineBounds: OverflowInlineBounds;
+  remeasure: () => void;
+} {
   const {
     gap = 0,
     minVisibleItems = 0,
@@ -395,6 +526,9 @@ export function useOverflowInternal(
   const [measuredSizes] = useState<MeasuredSizes>(() => new WeakMap());
   const [rows, setRows] = useState(1);
   const [rowHeight, setRowHeight] = useState(0);
+  const [inlineBounds, setInlineBounds] =
+    useState<OverflowInlineBounds>(NO_INLINE_BOUNDS);
+  const appliedBoundsRef = useRef<OverflowInlineBounds>(NO_INLINE_BOUNDS);
   // The values last written to state. A measurement that matches them writes
   // nothing, so a resize that changes nothing renders nothing.
   const appliedRef = useRef({visibleCount: itemCount, rows: 1, rowHeight: 0});
@@ -403,6 +537,7 @@ export function useOverflowInternal(
   const observedElRef = useRef<HTMLElement | null>(null);
   const observedMeasureElRef = useRef<HTMLElement | null>(null);
   const unobserveContainerRef = useRef<(() => void) | null>(null);
+  const unobserveParentRef = useRef<(() => void) | null>(null);
   const unobserveMeasureRef = useRef<(() => void) | null>(null);
 
   const apply = useCallback(
@@ -450,8 +585,17 @@ export function useOverflowInternal(
       } else {
         availableWidth = container.offsetWidth;
         recordBorderBox(measuredSizes, container);
+        if (tracksInlineBounds && container.parentElement != null) {
+          recordBorderBox(measuredSizes, container.parentElement);
+        }
       }
       recordBorderBox(measuredSizes, measure);
+      // A spacing token follows the theme's scale and the root font size, so
+      // its pixel value is known only after layout.
+      const gapPx =
+        gapToken != null
+          ? Number.parseFloat(getComputedStyle(measure).columnGap) || 0
+          : gap;
 
       const allChildren = Array.from(measure.children) as HTMLElement[];
 
@@ -470,7 +614,62 @@ export function useOverflowInternal(
         return;
       }
 
-      const widths = children.map(child => child.offsetWidth);
+      let widths = children.map(child => child.offsetWidth);
+      let fitIndicatorWidth = indicatorWidth;
+      let chrome = 0;
+      if (tracksInlineBounds) {
+        const style = getComputedStyle(container);
+        const px = (value: string) => parseFloat(value) || 0;
+        chrome =
+          px(style.paddingLeft) +
+          px(style.paddingRight) +
+          px(style.borderLeftWidth) +
+          px(style.borderRightWidth);
+      }
+      // The visible list shares the measure copy's scale and, unlike the
+      // zero-height copy, has a box to read it from.
+      const scale = tracksInlineBounds
+        ? screenScale(
+            container,
+            container.getBoundingClientRect(),
+            INLINE_SCALE_TOLERANCE,
+          ).x
+        : 1;
+      const exact = (element: HTMLElement) => exactWidth(element, scale);
+      if (tracksInlineBounds && !observeParent) {
+        // The list publishes its unfolded width as its own width. It fits
+        // sub-pixel items in its sub-pixel content box, so a box at that
+        // width holds every item.
+        widths = children.map(exact);
+        fitIndicatorWidth = hasIndicator
+          ? exact(allChildren[allChildren.length - 1])
+          : 0;
+        // Layout snaps a published width to a fraction of a pixel; the
+        // allowance keeps a box at that width holding every item.
+        availableWidth = exact(container) - chrome + 0.05;
+      }
+      if (tracksInlineBounds) {
+        const bounds = inlineBoundsOf(
+          children.map(exact),
+          hasIndicator ? exact(allChildren[allChildren.length - 1]) : 0,
+          gapPx,
+          minVisibleItems,
+          collapseFrom,
+          maxVisibleItems,
+          chrome,
+          !observeParent && isFlexRow(container.parentElement),
+        );
+        const applied = appliedBoundsRef.current;
+        if (
+          applied.collapsed !== bounds.collapsed ||
+          applied.rendered !== bounds.rendered ||
+          applied.chrome !== bounds.chrome ||
+          applied.inFlexRow !== bounds.inFlexRow
+        ) {
+          appliedBoundsRef.current = bounds;
+          setInlineBounds(bounds);
+        }
+      }
       const measuredRowHeight = children.reduce(
         (max, child) => Math.max(max, child.offsetHeight || 0),
         0,
@@ -478,9 +677,9 @@ export function useOverflowInternal(
 
       const {visibleCount: nextVisible, rows: nextRows} = computeOverflow({
         widths,
-        gap,
+        gap: gapPx,
         availableWidth,
-        indicatorWidth,
+        indicatorWidth: fitIndicatorWidth,
         minVisibleItems,
         maxVisibleItems,
         maxRows,
@@ -533,7 +732,7 @@ export function useOverflowInternal(
           canChangeListHeight(
             renderedSet(appliedRef.current.visibleCount),
             renderedSet(nextVisible),
-            gap,
+            gapPx,
             availableWidth,
             maxRows ?? 1,
           )
@@ -547,6 +746,7 @@ export function useOverflowInternal(
     [
       itemCount,
       gap,
+      gapToken,
       minVisibleItems,
       maxVisibleItems,
       maxRows,
@@ -554,6 +754,7 @@ export function useOverflowInternal(
       observeParent,
       apply,
       measuredSizes,
+      tracksInlineBounds,
     ],
   );
 
@@ -578,6 +779,8 @@ export function useOverflowInternal(
       unobserveContainerRef.current?.();
       unobserveContainerRef.current = null;
       observedElRef.current = null;
+      unobserveParentRef.current?.();
+      unobserveParentRef.current = null;
 
       if (el) {
         const target =
@@ -588,9 +791,19 @@ export function useOverflowInternal(
           measuredSizes,
         );
         observedElRef.current = target;
+        // A parent that resizes can change how it lays the list out (a flex
+        // row at one width, a block at another), and the list's published
+        // width depends on that, so the list measures again.
+        if (!observeParent && tracksInlineBounds && el.parentElement != null) {
+          unobserveParentRef.current = observeForOverflow(
+            el.parentElement,
+            measureLatest,
+            measuredSizes,
+          );
+        }
       }
     },
-    [measureLatest, measuredSizes, observeParent],
+    [measureLatest, measuredSizes, observeParent, tracksInlineBounds],
   );
 
   const measureRef = useCallback(
@@ -637,6 +850,7 @@ export function useOverflowInternal(
     // the return uses the fixed values.
     rows: tracksRows ? rows : 1,
     rowHeight: tracksRows ? rowHeight : 0,
+    inlineBounds: tracksInlineBounds ? inlineBounds : NO_INLINE_BOUNDS,
     remeasure,
   };
 }

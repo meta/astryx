@@ -10,6 +10,7 @@ import {Stack} from '@astryxdesign/core/Layout';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {Button} from '@astryxdesign/core/Button';
 import {Badge} from '@astryxdesign/core/Badge';
+import {useToast} from '@astryxdesign/core/Toast';
 
 const warmTheme = defineTheme({
   name: 'warm-docs',
@@ -38,6 +39,7 @@ const forestTheme = defineTheme({
 });
 
 function ThemeCard({label}: {label: string}) {
+  const showToast = useToast();
   return (
     <Card padding={4} width="100%">
       <Stack direction="vertical" gap={3}>
@@ -50,9 +52,30 @@ function ThemeCard({label}: {label: string}) {
           and component treatment.
         </Text>
         <Stack direction="horizontal" gap={2} wrap="wrap">
-          <Button label="Primary" variant="primary" size="sm" />
-          <Button label="Secondary" variant="secondary" size="sm" />
-          <Button label="Ghost" variant="ghost" size="sm" />
+          <Button
+            label="Primary"
+            variant="primary"
+            size="sm"
+            onClick={() =>
+              showToast({body: 'Demo: the primary action would run here'})
+            }
+          />
+          <Button
+            label="Secondary"
+            variant="secondary"
+            size="sm"
+            onClick={() =>
+              showToast({body: 'Demo: the secondary action would run here'})
+            }
+          />
+          <Button
+            label="Ghost"
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              showToast({body: 'Demo: the ghost action would run here'})
+            }
+          />
         </Stack>
       </Stack>
     </Card>

@@ -502,6 +502,7 @@ export function MobileNav({
   className,
   style,
   onClick: onClickProp,
+  id: idProp,
   ref,
   ...rest
 }: MobileNavProps) {
@@ -576,7 +577,7 @@ export function MobileNav({
         active !== null &&
         active !== document.body &&
         !dialogRef.current?.contains(active);
-      const dialogIds = [dialogId, dialogRef.current?.id, rest.id];
+      const dialogIds = [dialogId, dialogRef.current?.id, idProp];
       const trigger =
         hasOpenerFocus && active
           ? active
@@ -731,7 +732,7 @@ export function MobileNav({
   return (
     <dialog
       ref={useMergedRefs(ref, dialogRef)}
-      id={dialogId}
+      id={idProp ?? dialogId}
       {...mergeProps(
         themeProps('mobile-nav', {side: resolvedSide}),
         stylex.props(
@@ -764,13 +765,16 @@ export function MobileNav({
             <div
               ref={drawerRef}
               tabIndex={-1}
-              {...stylex.props(
-                styles.drawer,
-                dynamicStyles.width(width),
-                isStart && styles.drawerStart,
-                isStart && isOpen && styles.drawerStartOpen,
-                !isStart && styles.drawerEnd,
-                !isStart && isOpen && styles.drawerEndOpen,
+              {...mergeProps(
+                themeProps('mobile-nav-drawer', {side: resolvedSide}),
+                stylex.props(
+                  styles.drawer,
+                  dynamicStyles.width(width),
+                  isStart && styles.drawerStart,
+                  isStart && isOpen && styles.drawerStartOpen,
+                  !isStart && styles.drawerEnd,
+                  !isStart && isOpen && styles.drawerEndOpen,
+                ),
               )}>
               {/* Header — content + close button */}
               <div

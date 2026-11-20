@@ -91,13 +91,34 @@ describe('the browser run', () => {
   it('a run stopped at the bound is said to have timed out, and its temp folder goes', async () => {
     const {dir, script} = sleepyScript();
     const record = path.join(dir, 'temp');
+    const watcher = fs.watch(dir);
+    const written = new Promise((resolve, reject) => {
+      watcher.on('change', () => {
+        if (fs.existsSync(record) && fs.statSync(record).size > 0)
+          resolve(true);
+      });
+      watcher.once('error', reject);
+    });
+    // The bound must not race the stand-in process writing its record.
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
     try {
-      const r = await runBrowser(script, [record], 1500);
-      expect(r.timedOut).toBe(true);
+      const running = runBrowser(script, [record], 1500);
+      await Promise.race([
+        written,
+        running.then(r => {
+          throw new Error(r.stderr || 'picture script ended before its record');
+        }),
+      ]);
       const temp = fs.readFileSync(record, 'utf8');
       expect(temp).not.toBe(os.tmpdir());
+      expect(fs.existsSync(path.join(temp, 'profile'))).toBe(true);
+      await vi.advanceTimersByTimeAsync(1500);
+      const r = await running;
+      expect(r.timedOut).toBe(true);
       expect(fs.existsSync(temp)).toBe(false);
     } finally {
+      watcher.close();
+      vi.useRealTimers();
       fs.rmSync(dir, {recursive: true, force: true});
     }
   }, 30_000);

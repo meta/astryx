@@ -63,7 +63,7 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditNewResponse
  * @property {'themeEdit.new'} type
- * @property {{theme: string, like: string | null, files: {settings: string, source: string, css: string, module: string}, settings: string[], notes: string[], problems: string[], wiring: string[], missed?: number, missedParts?: number, missedOn?: string[]} & ThemeEditPreviewFields} data - `settings`: the dial settings it started with; `missed`, `missedParts`, `missedOn`: what those settings did not reach, as a change reports it (left out when none); `notes`: font loading, and with `png` the text the sample page's pictures draw cut short; `wiring`: the steps that put the theme into this app (`theme add <theme>` for its app copy in src/themes/<theme>/, else the root file, its imports and the Theme around the app; what builds it).
+ * @property {{theme: string, like: string | null, files: {settings: string, source: string, css: string, module: string}, settings: string[], notes: string[], problems: string[], wiring: string[], missed?: number, missedParts?: number, missedOn?: string[], missedWhere?: string[]} & ThemeEditPreviewFields} data - `settings`: the dial settings it started with; `missed`, `missedParts`, `missedOn`, `missedWhere`: what those settings did not reach, as a change reports it (left out when none); `notes`: font loading, and with `png` the text the sample page's pictures draw cut short; `wiring`: the steps that put the theme into this app (`theme add <theme>` for its app copy in src/themes/<theme>/, else the root file, its imports and the Theme around the app; what builds it).
  */
 
 /**
@@ -109,6 +109,7 @@
  * @property {number} [missed] - How many misses the theme's own changes left (show --json lists each, with the line that reaches it); the text output counts them near its top.
  * @property {number} [missedParts] - On how many parts those misses are (a part can miss two ways, its border and its shadow).
  * @property {string[]} [missedOn] - Those parts, in show's order; the text output names them.
+ * @property {string[]} [missedWhere] - Where each of those parts keeps the base theme's look: the part, the variant its miss is in when it is one (`type:error`), then the state, or `at rest`; the text output names them.
  * @property {string[]} warnings - Warnings from the theme build.
  * @property {string | null} preview
  * @property {string[]} pictures
@@ -216,7 +217,7 @@
  * @property {string[]} data.added - Pages added by this call.
  * @property {string[]} data.refreshed - Pages that were there already and are written again.
  * @property {Array<{page: string, why: string}>} data.matched - Each template page added for a description or --template, and why it was picked.
- * @property {Array<{page: string, reason: string, installCommand: string | null}>} data.skipped - Template pages not added: why (packages the app lacks, or a StyleX compiler it does not have), with the command that installs what is missing.
+ * @property {Array<{page: string, reason: string, installCommand: string | null, installGuidance?: string}>} data.skipped - Template pages not added: why (packages the app lacks, or a StyleX compiler it does not have), with the command that installs what is missing, and `installGuidance`, the line a loaded integration gives for adding them, when one is given.
  * @property {string[]} data.notes - What else to know.
  * @property {string[]} data.pages - Every page of the preview, in order.
  * @property {string[]} data.files - Every file the preview wrote.

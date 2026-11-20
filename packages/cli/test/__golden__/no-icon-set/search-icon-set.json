@@ -60,6 +60,17 @@
         "mentions": []
       },
       {
+        "domain": "component",
+        "name": "Icon",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Icon",
+        "command": "astryx component Icon",
+        "mentions": []
+      },
+      {
         "domain": "template",
         "name": "ToolbarTableFilter",
         "package": "@astryxdesign/core",
@@ -70,17 +81,6 @@
         "kind": "block",
         "command": "astryx template ToolbarTableFilter --type block",
         "isReady": true,
-        "mentions": []
-      },
-      {
-        "domain": "component",
-        "name": "Icon",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "import": "@astryxdesign/core/Icon",
-        "command": "astryx component Icon",
         "mentions": []
       },
       {
