@@ -65,7 +65,7 @@ owns response fields and compatibility.
   which build reads, keeps the gathered reading.
   Icons are not among the results: an icon ask's trailing `icons` section
   (`spec:AST-084` FR6) changes neither `results` nor `matchCount`.
-- **FR2 — bands do not cross.** Search orders matches only inside a run of one
+- **FR2 — bands do not cross, except a marked family root directly before its part.** Search orders matches only inside a run of one
   score band and one kind (doc or not); a band is a range of lexical scores,
   so inside one a lower score can lead a higher one. A match never moves past a
   match of another band or kind, except a family root as this requirement
@@ -75,8 +75,9 @@ owns response fields and compatibility.
   root does not, no query word, in any plural or stem form, is a word of the
   part's name that does not start a word of the root's name, and the query
   does not write the part's name of two or more words as one word, as is or
-  misspelled. Such a root, when the order places it below that part, moves
-  directly before the part, whatever its band; nothing else crosses a run. Among matches of the first
+  misspelled (a typed word that is the root's own name, or its plural, is no
+  misspelling). A root leads its part from another run only when its own hits
+  on the words the part answers have keyword strength (the whole name, the name's head word, or a keyword, also one edit away), not a word inside its name or a mention in its text. Such a root, when the order places it below that part, moves directly before the part, whatever its band, or only inside the part's run when its hits are weaker; nothing else crosses a run. Among matches of the first
   result's domain that tie with it on score and on the query words they
   matched, the match whose own name holds more query words leads. A first
   result that matched the whole query (a name, keyword, or title hit), or

@@ -207,6 +207,19 @@ describe.skipIf(!POSIX)(
         message:
           '@acme/widgets@1.0.0 is not used here: this folder loads its own copy of @acme/widgets.',
       });
+      // validate checks the copy the folder uses, its own, not the one
+      // installed for the computer; so does a folder inside that source.
+      fs.mkdirSync(path.join(source, 'docs'), {recursive: true});
+      for (const cwd of [source, path.join(source, 'docs')]) {
+        const validated = run(
+          g.bin,
+          ['doctor', 'integration', 'validate', '@acme/widgets'],
+          {cwd, pc},
+        );
+        expect(validated.stdout + validated.stderr).toContain(
+          'Validating integration: @acme/widgets@2.0.0',
+        );
+      }
     });
 
     it('G42 inside a project, an integration installed for the computer is offered only when its peer range admits the project release and it loads', () => {

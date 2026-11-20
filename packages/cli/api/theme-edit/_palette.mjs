@@ -34,6 +34,7 @@ import {
   PALETTE_GENERATOR_VERSION,
   PALETTE_RECIPE,
   PALETTE_RECIPE_V2,
+  PALETTE_RECIPES,
   PALETTE_WHITE,
   generateTonalPalette,
   modesForStrategy,
@@ -86,6 +87,11 @@ import {splitTop} from './_css.mjs';
 import {P} from './_tables.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 import {sha256} from '../../foundation/render/source-block.mjs';
+import {cliVersion} from '../../foundation/release/run-context.mjs';
+import {
+  newerRecipe,
+  newerRecipeRefusal,
+} from '../theme/palette/generate/newer-recipe.mjs';
 
 export {readRegularFile};
 
@@ -742,6 +748,9 @@ function paletteContext(cwd, slug, data, base, tokenDefaults = {}) {
 function planPalette(cwd, slug, data, base) {
   const file = paletteFiles(slug).config;
   const existing = readConfig(path.join(cwd, file));
+  // (Before anything reads it, so the refusal names this project's way to
+  // a newer CLI.)
+  refuseUnknownRecipe(existing, file, cwd);
   const fams = dialFamilies(data, ownSourceTokenValues(cwd, slug));
   if (!existing && !fams.length) return null;
   /** @type {string[]} */
@@ -1532,11 +1541,38 @@ export function syncPaletteRefs(cwd, slug, source, pal) {
 }
 
 /**
+ * A palette made with a recipe this CLI does not know, with the file left as
+ * it is. A newer CLI's recipe is no fault to fix by hand: it gets the
+ * refusal `theme palette generate` gives, with the update step that fits
+ * where the CLI runs. Any other recipe is named as no recipe Astryx makes,
+ * and the file is the fix: its `recipe` set to one this CLI knows.
+ * @param {any} config
+ * @param {string} file the config's path, for the refusal
+ * @param {string} [cwd] the project, for the step that updates the CLI
+ */
+function refuseUnknownRecipe(config, file, cwd) {
+  const recipe = config?.recipe;
+  if (recipe == null || PALETTE_RECIPES.includes(recipe)) return;
+  if (newerRecipe(recipe))
+    throw newerRecipeRefusal({recipe, file, cwd: cwd ?? process.cwd()});
+  // Every command that reads the theme builds this plan and meets this
+  // refusal again, so the way out is the file itself, and no command is
+  // offered.
+  throw new AstryxError(
+    `${file}: this theme's colors name the palette recipe ${String(recipe)}, which no Astryx CLI makes. Fix that part of the file by hand: set "recipe" to one of the recipes this CLI (${cliVersion()}) knows, ${PALETTE_RECIPES.join(', ')}. Nothing was changed.`,
+    [],
+    ERROR_CODES.ERR_PALETTE_GENERATION,
+  );
+}
+
+/**
  * @param {any} config
  * @param {string} [file] the config's path, for the refusal
+ * @param {string} [cwd] the project, for the command that updates the CLI
  * @returns {Candidate}
  */
-function generate(config, file = 'palette.config.json') {
+function generate(config, file = 'palette.config.json', cwd = undefined) {
+  refuseUnknownRecipe(config, file, cwd);
   try {
     return generateTonalPalette(config);
   } catch (e) {
@@ -1566,7 +1602,7 @@ export function familyRamp(cwd, slug, data, base, family) {
       planPalette(cwd, slug, data, base)
     );
     const ramp = /** @type {any} */ (
-      generate(plan.config, paletteFiles(slug).config).palette
+      generate(plan.config, paletteFiles(slug).config, cwd).palette
     )[family];
     if (ramp?.light && ramp?.dark) return ramp;
   }
@@ -1609,7 +1645,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
   if (!fams.length) return null;
   const plan = /** @type {PalettePlan} */ (planPalette(cwd, slug, data, base));
   const {config} = plan;
-  const candidate = generate(config, paletteFiles(slug).config);
+  const candidate = generate(config, paletteFiles(slug).config, cwd);
   const mapping = mapPalette(
     candidate,
     fams,

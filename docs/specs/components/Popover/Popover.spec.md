@@ -284,8 +284,9 @@ table owns their semantic effect.
 
 ## Accessibility contract
 
-- **AR1 — Trigger relationship.** The trigger exposes expanded state, the popup
-  relationship, and a role-appropriate popup type while mounted.
+- **AR1 — Trigger relationship.** The trigger exposes expanded state and a
+  role-appropriate popup type while mounted, and the popup relationship while
+  the popup is open (AR6).
 - **AR2 — Dialog naming.** Dialog mode requires a caller-provided accessible
   label and places dialog/modal semantics on the painted surface. Missing naming
   warns in development but does not synthesize a label.
@@ -308,6 +309,12 @@ table owns their semantic effect.
   fixture, not a recorded result. PR #5373 records no named NVDA + Chrome or
   VoiceOver + Safari announcement result, so this contract makes no AT
   announcement claim.
+- **AR6 — Popup reference only while open.** A trigger Popover attaches to
+  (its child, or the button `anchorRef` names) names the surface in
+  `aria-controls` only while the surface is open, and closing removes it, so a
+  closed trigger references no surface (`architecture:component-import-boundaries`
+  INV3). A render-function trigger receives `aria-controls` in its props and
+  places it itself.
 
 ## Design relationships
 
@@ -396,6 +403,7 @@ consumers that need distinct theme reachability provide and document an owned
 | FR5                          | `Popover.test.tsx` scheduling and observer-lifecycle suites                                                                                                                                      | Closed, opened, repeated signals, cleanup                                                                                                                                                                                               | Constructing observers while closed or measuring more than once per pending frame fails lifecycle assertions.                                                        | `audit:Popover/resources`     |
 | FR6, FR7 and theming anatomy | `Popover.test.tsx`, `Popover.doc.mjs`, `usePopover.doc.mjs`, `astryx theme targets Popover --json`, and `scripts/check-knowledge.mjs`                                                            | One real surface with canonical `popover` plus composed-component refinements                                                                                                                                                           | A fake anatomy part, missing canonical output, or an active target without a real owner fails review or validation.                                                  | `audit:Popover/theming`       |
 | AR5                          | `Popover.stories.tsx` manual-AT fixture and PR #5373 test record                                                                                                                                 | Read-only dialog manual-AT fixture; no recorded NVDA/VoiceOver announcement result                                                                                                                                                      | A fixture without recorded AT/browser observations cannot be cited as announcement proof.                                                                            | `audit:Popover/at-evidence`   |
+| AR6                          | `Popover.test.tsx` AR6 tests and `PopoverPresentation.test.tsx` sheet AR6 test                                                                                                                   | Child trigger, `anchorRef` trigger and bottom-sheet trigger; closed, open, closed again; a re-attach while closed                                                                                                                       | A closed trigger with `aria-controls`, or an open trigger whose `aria-controls` does not name the mounted surface, fails assertions.                                 | `audit:Popover/accessibility` |
 | Presentation (DEC-6, DEC-8)  | `PopoverPresentation.test.tsx`                                                                                                                                                                   | Default on a phone, adaptive on a phone and a desktop, forced sheet, close, controlled, dismissal mapping                                                                                                                               | A sheet on a default phone popover, an anchored popover where the sheet is asked for, or a trigger state that ignores the sheet fails.                               | `audit:Popover/api`           |
 
 ## Decision log
