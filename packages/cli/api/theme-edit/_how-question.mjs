@@ -27550,9 +27550,8 @@ export function draftAnswer(ctx, env, question) {
             : 'a theme that is always dark: mode dark-only',
         options: [[set('mode', 'dark-only')]],
       };
-    // (A going-back word said alone: "use the default theme" names a
-    // theme; "make it look like before" asks undo. Beside other asks, or
-    // "by default", it is theirs.)
+    // (A going-back word said alone: "make it look like before" asks undo.
+    // Beside other asks, or "by default", it is theirs.)
     const back =
       clauses.length === 1 && !/\bby default\b/.test(t) && !c.colors.length;
     // (Only words that name the earlier look go back, "like before", "clear
@@ -27560,35 +27559,6 @@ export function draftAnswer(ctx, env, question) {
     // "more original", never does.)
     const earlier =
       /\b(?:(?:like|as) (?:it was )?before|back to (?:how|the way|what)|(?:go|put it|change it) back(?! to\b)|reset|revert|restore|start over|what it was|the way (?:it|they) (?:was|were)|clear (?:everything|all|it all)|the (?:previous|earlier|old) (?:look|version))\b/;
-    // (The theme itself only when the ask goes back to it, "use the default
-    // theme", "back to the old theme"; "make the old theme warmer" asks for
-    // a change.)
-    if (
-      back &&
-      /\bthe (?:default|base|original|standard|plain|previous|old) theme\b/.test(
-        t,
-      ) &&
-      (earlier.test(t) ||
-        /\b(?:use|switch to|go back to|back to|return to)\s+the\b/.test(t))
-    ) {
-      // (`theme use` runs only on a theme the app has added, so the line
-      // adds the base first; a theme with no base has none to go back to.)
-      const base =
-        env.data.like && env.data.like !== 'none'
-          ? String(env.data.like)
-          : null;
-      return base
-        ? {
-            text: `the app picks its theme: astryx theme add ${base} adds ${base} to the app (nothing changes when it is there already), then astryx theme use ${base} makes it the default; to keep ${env.slug} and take back its settings instead: how "back to the base theme"`,
-            options: [],
-            lookup: `astryx theme add ${base}`,
-          }
-        : {
-            text: `${env.slug} has no base theme, so there is none to go back to; astryx theme list shows the themes the app has, and astryx theme use <name> makes one the default`,
-            options: [],
-            lookup: 'astryx theme list',
-          };
-    }
     if (
       (/\b(undo|revert|go back|take back)\b/.test(t) && !c.colors.length) ||
       (back && earlier.test(t))

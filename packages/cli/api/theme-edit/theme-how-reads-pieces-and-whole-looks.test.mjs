@@ -151,18 +151,11 @@ describe('one variant made to look like another', () => {
         // ("before" is the earlier look, never a product's name.)
         expect(text, q).not.toMatch(/never guesses a brand|"before"/);
       }
-      // (Said of no part, it is the theme's earlier look: undo; a theme
-      // named is the app's choice of theme.)
+      // (Said of no part, it is the theme's earlier look: undo.)
       for (const q of ['make it look like before', 'clear everything'])
         expect(JSON.stringify((await answer(q)).results), q).toMatch(
           /undo t steps back one change|has no change to undo/,
         );
-      const use = JSON.stringify(
-        (await answer('use the default theme')).results,
-      );
-      expect(use).toMatch(/astryx theme use /);
-      expect(use).toMatch(/back to the base theme/);
-      expect(use).not.toMatch(/steps back one change/);
       // (A going-back word said as a look describes: no undo, no theme
       // switch.)
       for (const q of [
@@ -296,12 +289,6 @@ describe('the earlier theme or look, and parts said apart', () => {
       expect(
         JSON.stringify((await answer('a restored vintage look')).results),
       ).not.toMatch(/undo|no change to undo/);
-      expect(
-        JSON.stringify((await answer('make the old theme warmer')).results),
-      ).not.toMatch(/theme use/);
-      expect(
-        JSON.stringify((await answer('go back to the old theme')).results),
-      ).toMatch(/theme use/);
     },
     T,
   );
