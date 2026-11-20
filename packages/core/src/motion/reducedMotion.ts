@@ -44,7 +44,10 @@
  * - /packages/core/src/motion/animator.ts (its Reduced Motion path)
  */
 
-import {defaultIsCoarsePointer, defaultPrefersReducedMotion} from './animator';
+import {
+  defaultIsCoarsePointer,
+  defaultPrefersReducedMotion,
+} from './motionQueries';
 import {resolveMotion} from './resolveMotion';
 import {themeReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import {

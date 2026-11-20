@@ -118,7 +118,7 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {setInputValue} from '../utils/setInputValue';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
-import {useMobileKeyboard} from '../keyboard/useMobileKeyboard';
+import {useDeferredMobileKeyboard} from '../keyboard/useDeferredMobileKeyboard';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -377,7 +377,9 @@ export function TextInput({
   const descriptionID = useId();
   const statusMessageID = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
-  useMobileKeyboard(inputRef);
+  // The keyboard module is this field's touch part, which the touch loader
+  // loads after first paint.
+  const mobileKeyboard = useDeferredMobileKeyboard(inputRef);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const [, startTransition] = useTransition();
@@ -634,6 +636,7 @@ export function TextInput({
       )}
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}
+      {mobileKeyboard}
     </Field>
   );
 }

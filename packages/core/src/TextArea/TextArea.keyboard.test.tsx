@@ -10,7 +10,7 @@
  * @position Keyboard tests of TextArea.tsx
  */
 
-import {afterEach, expect, it, vi} from 'vitest';
+import {afterEach, beforeAll, expect, it, vi} from 'vitest';
 import {act, render, screen} from '@testing-library/react';
 import {TextArea} from './TextArea';
 import {animatorFor} from '../motion/animator';
@@ -19,6 +19,13 @@ import {
   installKeyboardTestDouble,
   type KeyboardTestDouble,
 } from '../keyboard/__tests__/keyboardTestDouble';
+import {__loadTouchRuntimeForTest} from '../utils/touchRuntime';
+
+// The field loads its keyboard module with the shared touch runtime, after
+// first paint. These cases start with it loaded.
+beforeAll(async () => {
+  await __loadTouchRuntimeForTest();
+});
 
 let keyboard: KeyboardTestDouble | null = null;
 

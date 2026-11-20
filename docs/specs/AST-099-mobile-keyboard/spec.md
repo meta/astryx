@@ -442,8 +442,9 @@ Firefox for Android (Gap 21). Each other gap below is open.
   slow-device profile). Firefox's own reveal does the same with no Core reveal.
 - **Gap 22 — A field focused before the touch runtime loads.** Until the shared
   loader has run (after first paint, at idle within its cap; `spec:AST-080`
-  DEC-5), a focused field keeps the browser's own reveal and does not ride the
-  keyboard.
+  DEC-5), a focused field keeps the browser's own reveal: TextInput, TextArea
+  and NumberInput load their keyboard module with the touch runtime, and a
+  field in a sheet does not ride the keyboard.
 
 ### Follow-up
 
