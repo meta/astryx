@@ -235,6 +235,29 @@ describe("a bar's height", () => {
   );
 
   it(
+    'in two bars given the same height but padded differently, says so instead of saying the heights differ',
+    async () => {
+      await themeEditSet('b', 'height', '64px', {cwd, on: 'layout-header'});
+      const r = /** @type {any} */ (
+        await themeEditSet('b', 'height', '64px', {
+          cwd,
+          on: 'app-shell-header',
+        })
+      ).data;
+      const text = said(r);
+      // (Either the bars agree and the row takes it in both, or they pad
+      // it differently and that is what is said: never "heights differ".)
+      expect(text).not.toMatch(/heights differ/);
+      expect(text).toMatch(
+        /top-nav takes this in every bar|the bars pad it differently/,
+      );
+      await themeEditUndo('b', {cwd});
+      await themeEditUndo('b', {cwd});
+    },
+    T,
+  );
+
+  it(
     'in two bars that hold the same row, writes the reach only where their heights agree, and says so',
     async () => {
       // (The top nav sits in the app's header and in a layout header.)
@@ -250,7 +273,7 @@ describe("a bar's height", () => {
           on: 'app-shell-header',
         })
       ).data;
-      expect(said(both)).toMatch(/as they differ, it takes neither/);
+      expect(said(both)).toMatch(/as their heights differ, it takes neither/);
       expect(built('top-nav')).not.toMatch(/calc\((48|72)px/);
       await themeEditUndo('b', {cwd});
       await themeEditUndo('b', {cwd});

@@ -8106,7 +8106,7 @@ function barReach(ctx, theme) {
   const comps = /** @type {Record<string, Record<string, any>>} */ (
     theme.components
   );
-  /** @type {Map<string, Array<{holder: string, said: string, set: Record<string, string>, written: string[]}>>} */
+  /** @type {Map<string, Array<{holder: string, said: string, height: string | null, set: Record<string, string>, written: string[]}>>} */
   const byRow = new Map();
   for (const [holder, keys] of Object.entries(comps)) {
     const b = keys?.base;
@@ -8175,7 +8175,16 @@ function barReach(ctx, theme) {
       }
     }
     if (written.length)
-      byRow.set(row, [...(byRow.get(row) ?? []), {holder, said, set, written}]);
+      byRow.set(row, [
+        ...(byRow.get(row) ?? []),
+        {
+          holder,
+          said,
+          height: height == null ? null : String(height),
+          set,
+          written,
+        },
+      ]);
   }
   // The row's rule is one for the whole theme, so it takes a bar's reach in
   // every bar that holds it: written only when the bars given a height or
@@ -8187,8 +8196,14 @@ function barReach(ctx, theme) {
     });
     const named = reaches.map(r => `${r.said} on ${r.holder}`).join(', ');
     if (new Set(reaches.map(r => JSON.stringify(r.set))).size > 1) {
+      // (The same height in bars that pad it differently, such as a safe
+      // area at the top of the app's header, still leaves the row a
+      // different height in each.)
+      const sameHeight = new Set(reaches.map(r => r.height)).size === 1;
       (ctx.compileNotes ??= []).push(
-        `${named} reach ${row}, the row inside each, which takes one height in every bar that holds it (${holders.join(', ')}): as they differ, it takes neither; give those bars the same height, or set one on ${row}`,
+        sameHeight
+          ? `${named} reach ${row}, the row inside each, which takes one height in every bar that holds it (${holders.join(', ')}): the bars pad it differently (${reaches.map(r => `${r.holder} leaves ${r.set.height ?? r.set.minHeight ?? 'its own height'}`).join('; ')}), so it takes neither; set a height on ${row} itself`
+          : `${named} reach ${row}, the row inside each, which takes one height in every bar that holds it (${holders.join(', ')}): as their heights differ, it takes neither; give those bars the same height, or set one on ${row}`,
       );
       continue;
     }
