@@ -411,6 +411,14 @@ describe('a look said, then taken away by a pronoun', () => {
           /border none --on card\b/,
         ],
         [
+          'the cards look fine but the button border is ugly, hide it',
+          /border none --on button\b/,
+        ],
+        [
+          "the dialog's card border is ugly, hide it",
+          /border none --on card\b/,
+        ],
+        [
           'the underline on the links in the footer is ugly, remove it',
           /text-decoration none --on link\b/,
         ],

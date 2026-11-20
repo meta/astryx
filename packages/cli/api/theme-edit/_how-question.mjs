@@ -5285,22 +5285,35 @@ export function draftAnswer(ctx, env, question) {
       // (An ask joined before it by "and", "make the buttons blue and the
       // card border is ugly", stays as said: only the words after the last
       // "and" are this look's.)
-      const cut = said.slice(0, at).search(/\band\s+(?!.*\band\s)/i);
-      const kept = cut >= 0 ? said.slice(0, cut + 4) : '';
-      const before = said.slice(cut >= 0 ? cut + 4 : 0, at).trim();
+      const join = /\b(?:and|but|then)\s+/gi;
+      let cut = -1;
+      let cutLen = 0;
+      let joinWord = '';
+      for (const j of said.slice(0, at).matchAll(join)) {
+        cut = /** @type {number} */ (j.index);
+        cutLen = j[0].length;
+        joinWord = j[0].trim().toLowerCase();
+      }
+      const kept = cut >= 0 ? said.slice(0, cut + cutLen) : '';
+      const before = said.slice(cut >= 0 ? cut + cutLen : 0, at).trim();
       // (The part said first: "the border on the cards in the dialog" is
       // the cards'.)
-      const partIn = (/** @type {string} */ w) =>
+      /** @param {string} w @param {boolean} [nearEnd] */
+      const partIn = (w, nearEnd = false) =>
         partLexicon(ctx)
           .parts.map(([re]) => re.exec(` ${w.toLowerCase()} `))
           .filter(x => x != null)
-          .sort(
-            (x, y) =>
-              /** @type {RegExpExecArray} */ (x).index -
-                /** @type {RegExpExecArray} */ (y).index ||
-              /** @type {RegExpExecArray} */ (y)[0].length -
-                /** @type {RegExpExecArray} */ (x)[0].length,
-          )[0]?.[0]
+          .sort((a, b) => {
+            const x = /** @type {RegExpExecArray} */ (a);
+            const y = /** @type {RegExpExecArray} */ (b);
+            // (Before the look, the part nearest it, "the dialog's card
+            // border"; after on/of, the part said first, "the border on
+            // the cards in the dialog".)
+            return nearEnd
+              ? y.index + y[0].length - (x.index + x[0].length) ||
+                  y[0].length - x[0].length
+              : x.index - y.index || y[0].length - x[0].length;
+          })[0]?.[0]
           ?.trim();
       // (The part is the one named before the look, "the copy button
       // border"; else the one after on, of, in or around, "I hate the
@@ -5310,9 +5323,11 @@ export function draftAnswer(ctx, env, question) {
         said.slice(at + look.length),
       )?.[1];
       const part =
-        (before && partIn(before)) ||
+        (before && partIn(before, true)) ||
         (onPart && partIn(onPart)) ||
-        (kept && partIn(kept));
+        // (A part said before "but", "the cards look fine but the border
+        // is ugly", is not this look's.)
+        (kept && joinWord === 'and' && partIn(kept));
       return part ? `${lead}${kept}no ${word} on ${part}` : m;
     },
   );
