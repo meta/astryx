@@ -30301,7 +30301,7 @@ export function draftAnswer(ctx, env, question) {
     // (Where the page color shows: only a part that draws the token at
     // rest paints it, as the part data reads. A page built from none of
     // them, a stack or layout set straight inside the theme, keeps the
-    // browser's white: said, with the two ways to paint it.)
+    // browser's own page color: said, with the two ways to paint it.)
     const pageReaders = Object.keys(C.MAP)
       .filter(p =>
         (C.partReads(p, 'background') ?? []).some(
