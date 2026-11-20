@@ -23456,8 +23456,41 @@ export function draftAnswer(ctx, env, question) {
    * ("radio station"); in a part slot, a part it cannot name.
    * @param {string} w
    */
-  function knownWord(w) {
+  /**
+   * Whether how knows a word as something other than a part's name. A piece
+   * of a part's hyphenated name ("thumb" in slider-thumb, "trigger",
+   * "overflow") is known only right before a part word, as a modifier
+   * ("the close button"); alone, it names no part ("white text on thumbs").
+   * So is a CSS property's name ("overflow"): known after a part ("cards
+   * transform"), never as the part a change is put on ("on overflows").
+   * @param {string} w @param {string} [text] the clause it is read in
+   */
+  function knownWord(w, text) {
     const word = singular(w);
+    const piece = [...TARGET.keys()].some(k => k.split('-').includes(word));
+    const modifier =
+      text == null ||
+      (() => {
+        const after = new RegExp(`\\b${w}\\s+([a-z]+)`).exec(text)?.[1];
+        return after != null && lex.parts.some(([re]) => re.test(` ${after} `));
+      })();
+    // (A CSS property's name alone as the part a change is put on, "on
+    // overflows", names no part; after a part, "cards transform", it is
+    // the part's property.)
+    if (
+      text != null &&
+      new RegExp(`\\b(?:on|from)\\s+(?:the\\s+|all\\s+)?${w}\\s*$`).test(
+        text.trim(),
+      ) &&
+      (cssProperties().has(w) || cssProperties().has(word)) &&
+      !aspectsOf(w).length &&
+      !aspectsOf(word).length &&
+      !lex.vocab.includes(w) &&
+      !lex.vocab.includes(word) &&
+      !lex.parts.some(([re]) => re.test(` ${w} `)) &&
+      !/^(?:top|bottom|left|right|content|cursor)$/.test(word)
+    )
+      return false;
     return Boolean(
       lex.vocab.includes(w) ||
       lex.vocab.includes(word) ||
@@ -23488,7 +23521,7 @@ export function draftAnswer(ctx, env, question) {
       /^(?:padding|spacing|shadows?|borders?|corners?|radius|background|fill|text|font|colou?r|outline|gap|size|height|width|titles?|headings?|headers?|footers?|bar|area|section|region|panel|box|element|component|container|part|piece|block|wrapper|surface|min|max|half|twice|double|triple|quarter|third|up|down|out|off|back|away)$/.test(
         w,
       ) ||
-      [...TARGET.keys()].some(k => k.split('-').includes(word)) ||
+      (piece && modifier) ||
       Object.values(C.MAP).some(m =>
         Object.values(m.attrs ?? {}).some(
           vals => Array.isArray(vals) && vals.includes(w),
@@ -23666,7 +23699,7 @@ export function draftAnswer(ctx, env, question) {
       const without = aspectsOf(text.replace(new RegExp(`\\b${w}\\b`), ' '));
       const withIt = aspectsOf(text);
       if (
-        knownWord(w) ||
+        knownWord(w, text) ||
         withIt.some(x => !without.includes(x)) ||
         (between &&
           (/^(?:own|outer|inner|whole|main|full|bottom|top|left|right|side|each|every|default|plain|base)$/.test(
