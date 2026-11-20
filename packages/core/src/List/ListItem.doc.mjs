@@ -21,7 +21,7 @@ export const docs = {
       name: 'description',
       type: 'ReactNode',
       description:
-        'Secondary content below the label. A plain string gets single-line truncation automatically; a ReactNode lets child components control their own wrapping and line-clamp behavior.',
+        'Secondary content below the label: a plain string shows on one line and the row cuts long text with an ellipsis, so for full text pass a node, for example description={<Text type="supporting">…</Text>}. A node controls its own wrapping and line clamp.',
     },
     {
       name: 'startContent',
@@ -68,7 +68,7 @@ export const docs = {
       name: 'interactiveRef',
       type: 'RefObject<HTMLElement | null>',
       description:
-        "Ref to a nested control (e.g. a checkbox in startContent) that owns the item's keyboard access and action. The row becomes an enlarged click/tap target that delegates surface clicks to it (useClickableContainer) and renders no invisible button/anchor, so the row adds no second tab stop (WCAG 4.1.2). Mutually exclusive with onClick/href; those are ignored when set.",
+        "Ref to a nested control (e.g. a checkbox in startContent) that owns the item's keyboard access and action. The row becomes an enlarged click/tap target that delegates surface clicks to it (useClickableContainer) and renders no invisible button/anchor, so the row adds no second tab stop (WCAG 4.1.2). Mutually exclusive with onClick/href; those are ignored when set. While the row is selected it writes aria-current on the control unless the control has its own; do not set the row\'s value on the control yourself.",
     },
     {
       name: 'href',
@@ -106,7 +106,7 @@ export const docs = {
       name: 'isSelected',
       type: 'boolean',
       description:
-        'Selected state; marks the item as the current one with aria-current="true" (a list item cannot carry aria-selected).',
+        'Selected state; marks the item as the current one with aria-current="true" (a list item cannot carry aria-selected). On a row with onClick or href, the marker sits on the row\'s button or link, which takes focus; on a row with interactiveRef, on the control it delegates to.',
       default: 'false',
     },
     {
@@ -153,7 +153,7 @@ export const docsZh = {
       name: 'description',
       type: 'ReactNode',
       description:
-        '标签下方的次要内容。纯字符串会自动应用单行截断；ReactNode 允许子组件自行控制换行和多行截断行为。',
+        '标签下方的次要内容：纯字符串只显示一行，过长时以省略号截断；要显示完整文本，请传入节点，例如 description={<Text type="supporting">…</Text>}。节点自行控制换行和多行截断。',
     },
     {
       name: 'startContent',
@@ -174,7 +174,7 @@ export const docsZh = {
       name: 'interactiveRef',
       type: 'RefObject<HTMLElement | null>',
       description:
-        '指向嵌套控件（如 startContent 中的复选框）的 ref，该控件承载项目的键盘访问和操作。行成为更大的点击/触摸目标，将表面点击委托给该控件（useClickableContainer），且不渲染不可见按钮/锚点，因此行不会增加第二个 Tab 停留点（WCAG 4.1.2）。与 onClick/href 互斥——设置后二者将被忽略。',
+        '指向嵌套控件（如 startContent 中的复选框）的 ref，该控件承载项目的键盘访问和操作。行成为更大的点击/触摸目标，将表面点击委托给该控件（useClickableContainer），且不渲染不可见按钮/锚点，因此行不会增加第二个 Tab 停留点（WCAG 4.1.2）。与 onClick/href 互斥——设置后二者将被忽略。行被选中时，若控件没有自己的 aria-current，行会在控件上写入它；不要在控件上自行设置相同的值。',
     },
     {
       name: 'href',
@@ -210,7 +210,7 @@ export const docsZh = {
       name: 'isSelected',
       type: 'boolean',
       description:
-        '选中状态；在项目上设置 aria-current="true"，将其标为当前项（列表项不能使用 aria-selected）。',
+        '选中状态；设置 aria-current="true"，将其标为当前项（列表项不能使用 aria-selected）。带 onClick 或 href 的行把它放在获得焦点的按钮或链接上；带 interactiveRef 的行放在其委托的控件上。',
       default: 'false',
     },
     {
@@ -251,19 +251,21 @@ export const docsDense = {
       "Start/end content alignment, passed to Item: 'center' (default), 'start', or 'first-line' (centered on the label's first line).",
     label:
       'Primary content. String auto-truncates; ReactNode renders as given.',
-    description: 'Secondary text below label.',
+    description:
+      'Secondary text below label: a string shows on one line (ellipsis); for full text pass a node, e.g. <Text type="supporting">.',
     startContent: 'Content before label area (e.g. icon, avatar).',
     endContent: 'Content after label area (e.g. badge, chevron).',
     onClick: 'Click handler; enables invisible button pattern.',
     interactiveRef:
-      "Ref to a nested control that owns the item's keyboard access/action; row delegates surface clicks to it (useClickableContainer), no invisible button/anchor, no second tab stop (WCAG 4.1.2). Mutually exclusive with onClick/href.",
+      "Ref to a nested control that owns the item's keyboard access/action; row delegates surface clicks to it (useClickableContainer), no invisible button/anchor, no second tab stop (WCAG 4.1.2). Mutually exclusive with onClick/href. When selected, the row writes aria-current on the control.",
     href: 'Link URL; enables invisible anchor pattern. Follows the shared navigation rule (see Link href).',
     target:
       'Link target attribute, only when href provided. target="_blank" auto-adds noopener noreferrer.',
     rel: 'Link relationship tokens. noopener noreferrer are merged for target="_blank".',
     isDisabled:
       'Disabled state; interactive rows stay keyboard-reachable and cannot activate.',
-    isSelected: 'Selected state; sets aria-current="true".',
+    isSelected:
+      'Selected state; sets aria-current="true" (on the button or link of an onClick or href row, or the delegated control).',
     itemKey: "The row's identity for List animatedLayout and the key a reorderable List's onReorder reports; a row without one changes at once and has no reorder handle.",
   },
 };

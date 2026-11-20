@@ -7,7 +7,7 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {importSpecifiers, moduleImports, reachableFiles} from './embedded-imports.mjs';
+import {importSpecifiers, moduleImports, reachableFiles, resolutionCandidates} from './embedded-imports.mjs';
 
 const specifiers = (/** @type {string} */ source, /** @type {string} */ file) =>
   (moduleImports(source, file) ?? []).map(each => each.specifier);
@@ -88,5 +88,62 @@ describe('reachableFiles: the public/ folder the render read', () => {
     for (const publicDir of ['../public', '/public', 'public/../src/public', 'nowhere', 7]) {
       expect(reachableFiles(tree, {publicDir}).missing).toEqual(['src/public/pics/a.png']);
     }
+  });
+});
+
+describe('resolutionCandidates', () => {
+  it('tries the path as written, then the TypeScript source a .js-family name stands for', () => {
+    expect(resolutionCandidates('parts/Kpi.js').slice(0, 3)).toEqual([
+      'parts/Kpi.js',
+      'parts/Kpi.ts',
+      'parts/Kpi.tsx',
+    ]);
+    expect(resolutionCandidates('parts/Kpi.jsx').slice(0, 3)).toEqual([
+      'parts/Kpi.jsx',
+      'parts/Kpi.tsx',
+      'parts/Kpi.ts',
+    ]);
+    expect(resolutionCandidates('a.mjs').slice(0, 2)).toEqual([
+      'a.mjs',
+      'a.mts',
+    ]);
+    expect(resolutionCandidates('a.cjs').slice(0, 2)).toEqual([
+      'a.cjs',
+      'a.cts',
+    ]);
+  });
+
+  it('adds no TypeScript step for an extensionless or other import', () => {
+    expect(resolutionCandidates('parts/Kpi')[1]).toBe('parts/Kpi.tsx');
+    expect(resolutionCandidates('data.json')[1]).toBe('data.json.tsx');
+  });
+});
+
+describe('reachableFiles: a reference written as URL text', () => {
+  /** @param {string} p @param {string} text */
+  const file = (p, text = '') => ({path: p, base64: Buffer.from(text).toString('base64')});
+
+  it('expects back the file its percent-escapes name, from the site root and by a relative path', () => {
+    const page = 'export default () => <><img src="/pics/a%20b.png" alt="" /><img src="./c%20d.png" alt="" /></>;\n';
+    const tree = [file('src/page.tsx', page), file('public/pics/a b.png'), file('src/c d.png')];
+    const {reached, missing} = reachableFiles(tree);
+    expect(missing).toEqual([]);
+    expect(reached.has('public/pics/a b.png')).toBe(true);
+    expect(reached.has('src/c d.png')).toBe(true);
+  });
+
+  it('follows import() and require() of an image as written, with no decode', () => {
+    const page = "export default () => <button onClick={() => { import('./a%20b.png'); require('./c.png'); }} />;\n";
+    expect(reachableFiles([file('src/page.tsx', page), file('src/a%20b.png'), file('src/c.png')]).missing).toEqual([]);
+  });
+
+  it('follows an import of an image as written, with no decode', () => {
+    const page = "import shot from './Screen%20Shot.png';\nexport default () => <img src={shot} alt=\"\" />;\n";
+    expect(reachableFiles([file('src/page.tsx', page), file('src/Screen%20Shot.png')]).missing).toEqual([]);
+  });
+
+  it('reads a % that starts no escape as itself', () => {
+    const page = 'export default () => <img src="./50%.png" alt="" />;\n';
+    expect(reachableFiles([file('src/page.tsx', page), file('src/50%.png')]).missing).toEqual([]);
   });
 });

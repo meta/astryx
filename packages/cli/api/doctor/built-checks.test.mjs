@@ -9,6 +9,7 @@ import {checkBuilt, scanBuilt} from './built-checks.mjs';
 import {builtIntegrationPackages} from './_adapter.mjs';
 import {runChecks} from './doctor.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
+import {renderThemeModule} from '../../foundation/config/theme-state.mjs';
 
 /** @type {string} */
 let dir;
@@ -342,6 +343,99 @@ describe('what a --built path counts', () => {
     expect(scan.findings.map(f => f.message)).toContain(
       'imports the stylesheet `./page.css`: use component props and tokens',
     );
+  });
+
+  it('reads the stylesheets a registered theme loads as theme wiring, and still flags a stray one', () => {
+    write({
+      'package.json': JSON.stringify({name: 'app'}),
+      'src/astryx-themes.ts': renderThemeModule(
+        [
+          {
+            slug: 'brand',
+            owner: './src/themes',
+            exportName: 'brandTheme',
+            module: './themes/brand/brand.js',
+            stylesheet: './themes/brand/brand.css',
+            fontStylesheet: './themes/brand/brand.fonts.css',
+          },
+        ],
+        'brand',
+        true,
+      ),
+      'src/themes/brand/brand.css': ':root {}\n',
+      'src/themes/brand/brand.fonts.css': '\n',
+      'src/main.tsx':
+        "import './themes/brand/brand.css';\nimport './extra.css';\nexport const x = 1;\n",
+    });
+    const styling = scanBuilt(dir, [])
+      .findings.filter(f => f.category === 'Styling')
+      .map(f => `${f.file}:${f.message}`);
+    expect(styling).toEqual([
+      'src/main.tsx:imports the stylesheet `./extra.css`: use component props and tokens',
+    ]);
+  });
+
+  it('flags a stylesheet a person adds to the theme module', () => {
+    const module = renderThemeModule(
+      [
+        {
+          slug: 'brand',
+          owner: './src/themes',
+          exportName: 'brandTheme',
+          module: './themes/brand/brand.js',
+          stylesheet: './themes/brand/brand.css',
+        },
+      ],
+      'brand',
+      true,
+    );
+    write({
+      'package.json': JSON.stringify({name: 'app'}),
+      'src/astryx-themes.ts': module.replace(
+        'import "./themes/brand/brand.css";',
+        'import "./themes/brand/brand.css";\nimport "./extra.css";',
+      ),
+      'src/themes/brand/brand.css': ':root {}\n',
+    });
+    expect(
+      scanBuilt(dir, [])
+        .findings.filter(f => f.category === 'Styling')
+        .map(f => f.message),
+    ).toContain(
+      'imports the stylesheet `./extra.css`: use component props and tokens',
+    );
+  });
+
+  it("reads the setup stylesheet that only loads Astryx's CSS as wiring, and still flags one with rules of its own", () => {
+    write({
+      'src/index.css': [
+        '/* Astryx setup */',
+        '@layer reset, astryx-base, astryx-theme;',
+        "@import '@astryxdesign/core/reset.css';",
+        '@import url("@astryxdesign/core/astryx.css");',
+        "@import '@astryxdesign/theme-neutral/theme.css';",
+        "@import '@astryxdesign/theme-neutral/fonts.css';",
+        '',
+      ].join('\n'),
+      'src/main.tsx':
+        "import './index.css';\nimport './app.css';\nimport './other.css';\nimport './layered.css';\nimport 'kit/index.css';\nexport const x = 1;\n",
+      'src/kit/index.css': "@import '@astryxdesign/core/reset.css';\n",
+      'src/app.css':
+        "@import '@astryxdesign/core/astryx.css';\nbody { margin: 0; }\n",
+      'src/other.css':
+        "@import '@astryxdesign/core/reset.css';\n@import 'some-kit/base.css';\n",
+      'src/layered.css':
+        "@import '@astryxdesign/core/reset.css';\n@layer app { .x { color: red; } }\n",
+    });
+    const styling = scanBuilt(dir, [])
+      .findings.filter(f => f.category === 'Styling')
+      .map(f => `${f.file}:${f.line} ${f.message}`);
+    expect(styling).toEqual([
+      'src/main.tsx:2 imports the stylesheet `./app.css`: use component props and tokens',
+      'src/main.tsx:3 imports the stylesheet `./other.css`: use component props and tokens',
+      'src/main.tsx:4 imports the stylesheet `./layered.css`: use component props and tokens',
+      'src/main.tsx:5 imports the stylesheet `kit/index.css`: use component props and tokens',
+    ]);
   });
 
   it('names the integrations by the declared dependencies that ship a manifest, running nothing', () => {

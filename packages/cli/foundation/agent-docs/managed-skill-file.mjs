@@ -12,8 +12,8 @@
  * The computer-level skill (`computer-agent-text.mjs`) and the skill places
  * `astryx init --to` writes (`skill-places.mjs`) share these rules.
  *
- * @input  a path and the text this release renders for it
- * @output the file's state, and the write and remove actions
+ * @input  a path and the text this release renders for it, or a skill's name, description and text
+ * @output the file's state, the write and remove actions, and the SKILL.md rendering
  * @position foundation/agent-docs — read by the computer-level skill and the
  *   skill places
  */
@@ -46,6 +46,37 @@ export function withHash(text) {
   const lineEnd = text.indexOf('\n', at);
   const cut = lineEnd === -1 ? text.length : lineEnd + 1;
   return `${text.slice(0, cut)}<!-- astryx-managed sha256:${hashOf(text)} -->\n${text.slice(cut)}`;
+}
+
+/**
+ * A SKILL.md file Astryx manages: skill frontmatter, then the text between
+ * the Astryx markers, with the hash line after the start marker.
+ * @param {{name: string, description: string, block: string}} skill
+ *   `block`: the text from the start marker to the end marker
+ * @returns {string}
+ */
+export function renderSkillFile({name, description, block}) {
+  if (
+    !block.startsWith(MARKER_START) ||
+    !block.trimEnd().endsWith(MARKER_END)
+  ) {
+    throw new Error(
+      'A managed skill file needs the managed block, inside the Astryx markers.',
+    );
+  }
+  return withHash(
+    [
+      '---',
+      `name: ${name}`,
+      // Quoted: a description can hold `: ` and `;`, which strict YAML parsers
+      // can misread, and an agent tool that fails to parse drops the skill.
+      `description: ${JSON.stringify(description)}`,
+      '---',
+      '',
+      block,
+      '',
+    ].join('\n'),
+  );
 }
 
 /**

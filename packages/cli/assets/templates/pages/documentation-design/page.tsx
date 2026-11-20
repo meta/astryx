@@ -24,11 +24,12 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {Section} from '@astryxdesign/core/Section';
 import {Center} from '@astryxdesign/core/Center';
 import {Outline, type OutlineItem} from '@astryxdesign/core/Outline';
+import {useToast} from '@astryxdesign/core/Toast';
 import {
-  ArrowTopRightOnSquareIcon,
-  ArrowsPointingOutIcon,
-  PlusIcon,
-} from '@heroicons/react/24/outline';
+  ExternalLinkIcon,
+  ExpandIcon,
+  AddIcon,
+} from '@astryxdesign/template-icons';
 
 const tabListFlush: CSSProperties = {marginInlineStart: '-12px'};
 const outlinePanel: CSSProperties = {
@@ -499,6 +500,7 @@ function getComponentDocs(key: string) {
 // ---------------------------------------------------------------------------
 
 function ComponentDetailView({activeNav}: {activeNav: string}) {
+  const showToast = useToast();
   const [exampleTabs, setExampleTabs] = useState<Record<string, string>>({});
   // Mobile first: the server render and a shared static copy, which run no
   // script, get one column with the section links on top. That reads well at
@@ -507,7 +509,12 @@ function ComponentDetailView({activeNav}: {activeNav: string}) {
 
   const EXAMPLE_PREVIEWS: Record<string, React.ReactNode[]> = {
     button: [
-      <HStack key="semantics" gap={3} vAlign="center">
+      <HStack
+        key="semantics"
+        gap={3}
+        vAlign="center"
+        hAlign="center"
+        wrap="wrap">
         <Button label="Flat" variant="ghost" />
         <Button label="Default" variant="secondary" />
         <Button label="Primary" variant="primary" />
@@ -522,7 +529,7 @@ function ComponentDetailView({activeNav}: {activeNav: string}) {
       <Button
         label="Button"
         variant="secondary"
-        icon={<Icon icon={PlusIcon} />}
+        icon={<Icon icon={AddIcon} />}
         endContent={<Badge label="New" variant="info" />}
       />
     ),
@@ -652,29 +659,46 @@ function ComponentDetailView({activeNav}: {activeNav: string}) {
                 return (
                   <Card key={i} padding={0}>
                     <Section padding={3} variant="transparent">
-                      <HStack gap={3} vAlign="center">
+                      {/* On a narrow screen the actions move under the title
+                          instead of running past the card. */}
+                      <HStack gap={3} vAlign="center" wrap="wrap">
                         <StackItem size="fill">
                           <Text type="body" weight="medium">
                             {example.title}
                           </Text>
                         </StackItem>
-                        <HStack gap={1} vAlign="center">
+                        <HStack gap={1} vAlign="center" wrap="wrap">
                           <Button
                             label="Open in Craft"
                             variant="ghost"
                             size="sm"
-                            icon={<Icon icon={ArrowTopRightOnSquareIcon} />}
+                            icon={<Icon icon={ExternalLinkIcon} />}
+                            onClick={() =>
+                              showToast({
+                                body: 'Demo: this example would open in Craft here',
+                              })
+                            }
                           />
                           <Button
                             label="Send to CLI"
                             variant="ghost"
                             size="sm"
+                            onClick={() =>
+                              showToast({
+                                body: 'Demo: this example would be sent to the CLI here',
+                              })
+                            }
                           />
                           <IconButton
                             label="Fullscreen"
                             variant="ghost"
                             size="sm"
-                            icon={<Icon icon={ArrowsPointingOutIcon} />}
+                            icon={<Icon icon={ExpandIcon} />}
+                            onClick={() =>
+                              showToast({
+                                body: 'Demo: this example would open full screen here',
+                              })
+                            }
                           />
                         </HStack>
                       </HStack>

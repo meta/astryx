@@ -37,12 +37,13 @@ afterEach(() => {
   fs.rmSync(project, {recursive: true, force: true});
 });
 
-it('passes agent-docs on the saved skill files', async () => {
+it('passes agent-docs on the saved skill files, and points at skill-places', async () => {
   await init({to: 'skills'}, {cwd: project});
   const report = await runChecks({cwd: project});
   const check = report.checks.find(each => each.id === 'agent-docs');
   expect(check).toMatchObject({status: 'pass'});
   expect(check?.message).toContain('.agents/skills/astryx-project/SKILL.md');
+  expect(check?.message).toContain('skill-places');
 });
 
 it('passes when the project keeps its own AGENTS.md text beside the skill', async () => {
@@ -52,14 +53,15 @@ it('passes when the project keeps its own AGENTS.md text beside the skill', asyn
   expect(report.checks.find(each => each.id === 'agent-docs')).toMatchObject({status: 'pass'});
 });
 
-it('warns, with init as the fix, when the saved skill files are gone', async () => {
+it('leaves the verdict to skill-places when the saved skill files are gone', async () => {
   await init({to: 'skills'}, {cwd: project});
   fs.rmSync(path.join(project, '.agents'), {recursive: true});
   fs.rmSync(path.join(project, '.claude'), {recursive: true});
   const report = await runChecks({cwd: project});
-  const check = report.checks.find(each => each.id === 'agent-docs');
-  expect(check).toMatchObject({status: 'warn'});
-  expect(check?.fix).toContain('init');
+  expect(report.checks.find(each => each.id === 'agent-docs')).toMatchObject({status: 'info'});
+  const places = report.checks.find(each => each.id === 'skill-places');
+  expect(places).toMatchObject({status: 'warn'});
+  expect(places?.fix).toContain('init');
 });
 
 it('a skill file without the Astryx markers does not count', async () => {

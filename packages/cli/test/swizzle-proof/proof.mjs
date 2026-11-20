@@ -570,7 +570,7 @@ export async function prove(
           `export function element() {`,
           `  const make = samples[${JSON.stringify(t.key)}];`,
           `  if (!make && C == null) throw new Error('the copy exports no ${t.name}');`,
-          `  return make ? make({C, mod: Copy, React, Core, Pkg}) : React.createElement(C, revive(defaults));`,
+          `  return make ? make({C, mod: Copy, React, Core, Pkg, defaults: revive(defaults)}) : React.createElement(C, revive(defaults));`,
           `}`,
           `export function render() {`,
           `  return renderToString(element());`,

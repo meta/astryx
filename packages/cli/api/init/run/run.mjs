@@ -16,6 +16,7 @@
  * programmatic caller stays quiet.
  */
 
+import {renderProjectAgentDocsBlock} from '../../docs/_adapter.mjs';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import {CLI_ROOT} from '../../../foundation/fs/paths.mjs';
@@ -30,6 +31,10 @@ import {
   STARTER_THEME,
   addComputerSkillFolders,
   assertPlaceWithin,
+  integrationSkillProblems,
+  integrationSkillTexts,
+  leftoverIntegrationSkills,
+  removeIntegrationSkillFiles,
   computerSkillText,
   inspectAgentDocs,
   projectInstallStep,
@@ -38,6 +43,7 @@ import {
   removeSkillPlace,
   resolveAgentPaths,
   saveProjectPlaces,
+  skillReceiptRow,
   writeSkillPlace,
 } from '../_adapter.mjs';
 import {savedName} from '../../../foundation/agent-docs/skill-places.mjs';
@@ -49,7 +55,6 @@ import {
   assertAgentDocsTarget,
   removeProjectAgentDocs,
   installAgentDocs,
-  renderAgentDocsBlock,
   agentDocsTargetDir,
   readAgentDocTexts,
   agentDocChange,
@@ -63,9 +68,12 @@ import {logger} from '../../logger.mjs';
 
 /**
  * The places one run writes. `previous`: with `--to`, the project places the
- * config saved before it, which the run moves off; null without `--to`.
- * `homeRefusal`: why the project root takes no project place (checkPlaces).
- * @typedef {{places: import('../../../foundation/agent-docs/skill-places.mjs').SkillPlace[], projectRoot: string | null, previous: import('../../../foundation/agent-docs/skill-places.mjs').SkillPlace[] | null, homeRefusal?: string}} InitPlaces
+ * config saved before it, which the run moves off; null without `--to`, and
+ * with `--once`. `once`: a copy that is saved nowhere, so no later run
+ * refreshes it. `homeRefusal`: why the project root takes no project place
+ * (checkPlaces).
+ * @typedef {{places: import('../../../foundation/agent-docs/skill-places.mjs').SkillPlace[], projectRoot: string | null, previous: import('../../../foundation/agent-docs/skill-places.mjs').SkillPlace[] | null, once?: boolean, named?: boolean, homeRefusal?: string}} InitPlaces
+ *   `named`: the places came from `--to`, not from what the project saves
  */
 
 export const VALID_FEATURES = ['agents', 'theme', 'template'];
@@ -183,7 +191,7 @@ async function applyAgents(cwd, options, invocation, data) {
     const targetDir = paths ? cwd : root;
     // With explicit paths, installAgentDocs checks each file's own folder.
     if (!paths) assertAgentDocsTarget(targetDir);
-    const renderedBlock = await renderAgentDocsBlock(root);
+    const renderedBlock = await renderProjectAgentDocsBlock(root);
     const before = readAgentDocTexts(targetDir, paths ?? AGENT_DOC_PATHS);
     // Read-only, before the write: whether the project's agent docs were
     // already current, so default mode can tell a set-up app from a new one.
@@ -264,26 +272,6 @@ async function applyAgents(cwd, options, invocation, data) {
   }
 }
 
-/** @type {Record<string, string>} */
-const SKILL_KEPT = {
-  edited:
-    'kept, edited since Astryx wrote it; delete it to get the current text',
-  'not-astryx': 'kept, not created by Astryx',
-  'pair-kept': "kept: the other copy of this place is not Astryx's, so neither copy is written",
-};
-
-/**
- * One receipt line for one skill file.
- * @param {import('../init.type.mjs').InitSkillFile} row
- * @returns {string}
- */
-function skillLine({path: shown, action, reason}) {
-  if (action === 'kept')
-    return `[skip] Astryx skill: ${shown} ${SKILL_KEPT[reason ?? 'not-astryx']}`;
-  if (action === 'unchanged')
-    return `[ok] Astryx skill: ${shown} already current, nothing changed`;
-  return `[ok] Astryx skill: ${shown} ${action}`;
-}
 
 /**
  * The places this run writes: the ones `--to` named, else the project's
@@ -303,7 +291,7 @@ async function placesFor(cwd, given) {
           kind: /** @type {const} */ ('agents-md'),
         },
       ];
-  return {places, projectRoot, previous: null};
+  return {places, projectRoot, previous: null, named: false};
 }
 
 /**
@@ -320,6 +308,7 @@ async function placesFor(cwd, given) {
 async function applyPlaces(cwd, options, invocation, data, given) {
   const {places, projectRoot, previous} = given;
   data.to = places.map(savedName);
+  data.once = Boolean(given.once);
   const shown = (/** @type {string} */ file) =>
     projectRoot && !path.relative(projectRoot, file).startsWith('..')
       ? path.relative(projectRoot, file).split(path.sep).join('/')
@@ -327,19 +316,13 @@ async function applyPlaces(cwd, options, invocation, data, given) {
   /** @param {import('../../../foundation/agent-docs/skill-places.mjs').SkillPlace} place */
   const record = (
     place,
-    /** @type {ReturnType<typeof writeSkillPlace>} */ rows,
+    /** @type {Array<{file: string, action: import('../../../foundation/agent-docs/managed-skill-file.mjs').ManagedFileAction, reason?: 'edited' | 'not-astryx' | 'pair-kept' | 'computer-skill', skill?: string}>} */ rows,
   ) => {
     for (const row of rows) {
-      if (row.action === 'absent') continue;
-      /** @type {import('../init.type.mjs').InitSkillFile} */
-      const entry = {
-        path: shown(row.file),
-        place: savedName(place),
-        action: row.action,
-      };
-      if (row.reason) entry.reason = row.reason;
-      data.skills.push(entry);
-      logger.log(skillLine(entry));
+      const receipt = skillReceiptRow(place, row, shown, 'delete it to get the current text', cwd);
+      if (!receipt) continue;
+      data.skills.push(receipt.entry);
+      logger.log(receipt.line);
     }
   };
   const projectPlaces = places.filter(place => place.scope === 'project');
@@ -355,13 +338,17 @@ async function applyPlaces(cwd, options, invocation, data, given) {
   if (given.homeRefusal) {
     logger.warn(`Note: ${given.homeRefusal}`);
     data.docsError = {kind: 'install-failed', message: given.homeRefusal};
-    return applyComputerPlaces(places, data, record);
+    return applyComputerPlaces(places, given, data, record);
   }
   // What can stop the run comes before any place changes: the skill renders,
   // and the config can take the record, which is saved once a new place
   // holds the guidance.
   const text =
     skillPlaces.length > 0 && projectRoot ? await projectSkillText(projectRoot) : null;
+  // Each skill an integration declares goes into every skill place beside
+  // the project skill.
+  const declared =
+    text != null && projectRoot ? await integrationSkillTexts(projectRoot) : null;
   if (previous && projectRoot && projectPlaces.length > 0) {
     saveProjectPlaces(projectRoot, projectPlaces, {check: true});
   }
@@ -369,6 +356,13 @@ async function applyPlaces(cwd, options, invocation, data, given) {
   // project never goes without the guidance.
   if (projectPlaces.some(place => place.kind === 'agents-md')) {
     await applyAgents(cwd, options, invocation, data);
+    // Without a skill place, a left-out skill still loses its line in the
+    // block; say so once.
+    if (declared == null && projectRoot) {
+      for (const problem of await integrationSkillProblems(projectRoot)) {
+        logger.warn(`Note: ${problem.package}: ${problem.message}`);
+      }
+    }
   }
   // Whether the guidance landed in a skill place: a place whose files are
   // all a person's own is kept as it is, so it holds no Astryx text.
@@ -381,6 +375,20 @@ async function applyPlaces(cwd, options, invocation, data, given) {
       if (rows.some(row => row.action !== 'kept')) landed = true;
       actions.push(...rows.map(row => row.action));
       record(place, rows);
+      if (declared) {
+        for (const each of declared.skills) {
+          record(place, writeSkillPlace(place, projectRoot, each.text, each.name));
+        }
+        if (declared.complete) {
+          record(
+            place,
+            removeIntegrationSkillFiles(leftoverIntegrationSkills(place, projectRoot, declared.keep)),
+          );
+        }
+      }
+    }
+    for (const problem of declared?.problems ?? []) {
+      logger.warn(`Note: ${problem.package}: ${problem.message}`);
     }
     // Without the block, the project skill files say whether the project
     // was set up before this run, as the agent docs do for the block.
@@ -428,7 +436,7 @@ async function applyPlaces(cwd, options, invocation, data, given) {
     }
   }
 
-  await applyComputerPlaces(places, data, record);
+  await applyComputerPlaces(places, given, data, record);
 
 }
 
@@ -488,11 +496,12 @@ function checkBlockOptions(options, given) {
   if (blockOptions.length === 0 || given.places.some(place => place.kind === 'agents-md')) {
     return;
   }
-  const saved = given.previous == null;
   throw new AstryxError(
-    saved
-      ? `${blockOptions.join(' and ')} choose the agent files of the AGENTS.md block, and this project saves its Astryx guidance in ${given.places.map(savedName).join(', ')} (astryx.config skills.to): add \`--to agents-md\` to write the block, or leave them out.`
-      : `${blockOptions.join(' and ')} choose the agent files of the AGENTS.md block: add agents-md to \`--to\`, or leave them out.`,
+    given.once
+      ? `${blockOptions.join(' and ')} choose the agent files of the AGENTS.md block, which \`--once\` never writes: leave them out.`
+      : given.named === false
+        ? `${blockOptions.join(' and ')} choose the agent files of the AGENTS.md block, and this project saves its Astryx guidance in ${given.places.map(savedName).join(', ')} (astryx.config skills.to): add \`--to agents-md\` to write the block, or leave them out.`
+        : `${blockOptions.join(' and ')} choose the agent files of the AGENTS.md block: add agents-md to \`--to\`, or leave them out.`,
     undefined,
     ERROR_CODES.ERR_INVALID_ARGUMENT,
   );
@@ -500,20 +509,28 @@ function checkBlockOptions(options, given) {
 
 /**
  * Write the computer places `--to` named: folders outside any project,
- * saved in the settings file, and the computer-level skill.
+ * saved in the settings file unless `--once`, and the computer-level skill.
  * @param {import('../../../foundation/agent-docs/skill-places.mjs').SkillPlace[]} places
+ * @param {InitPlaces} given
  * @param {import('../init.type.mjs').InitRunData} data
  * @param {(place: import('../../../foundation/agent-docs/skill-places.mjs').SkillPlace, rows: ReturnType<typeof writeSkillPlace>) => void} record
  */
-async function applyComputerPlaces(places, data, record) {
+async function applyComputerPlaces(places, given, data, record) {
   const computerFolders = places.filter(
     place => place.scope === 'computer' && place.kind === 'folder',
   );
   if (computerFolders.length > 0) {
     const text = computerSkillText(computerAgentCommand());
-    for (const place of computerFolders)
-      record(place, writeSkillPlace(place, null, text));
-    addComputerSkillFolders(computerFolders.map(savedName));
+    /** @type {typeof computerFolders} */
+    const landed = [];
+    for (const place of computerFolders) {
+      const rows = writeSkillPlace(place, null, text);
+      record(place, rows);
+      // A folder is saved only once it holds the guidance: nothing would
+      // ever fill a folder where every file was kept.
+      if (rows.some(row => row.action !== 'kept')) landed.push(place);
+    }
+    if (!given.once && landed.length > 0) addComputerSkillFolders(landed.map(savedName));
   }
   if (places.some(place => place.kind === 'user')) {
     data.user = (await user()).data;
@@ -703,6 +720,7 @@ export async function run(options = {}, {cwd = process.cwd(), places} = {}) {
       templatePath: null,
       nextSteps: false,
       to: [],
+      once: false,
       skills: [],
       user: null,
     };
@@ -739,6 +757,7 @@ export async function run(options = {}, {cwd = process.cwd(), places} = {}) {
     templatePath: null,
     nextSteps: !outside,
     to: [],
+    once: false,
     skills: [],
     user: null,
   };
