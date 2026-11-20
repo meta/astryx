@@ -28861,6 +28861,14 @@ export function draftAnswer(ctx, env, question) {
    * @type {Step[]}
    */
   const superseded = [];
+  /** Steps replaced by a later clause said after "then". @type {Step[]} */
+  const thenReplaced = [];
+  /**
+   * Two text colors said in one list a state leads: the earlier and the
+   * later, which is written.
+   * @type {Array<{earlier: Step, later: Step}>}
+   */
+  const saidTwice = [];
   /** Steps folded into a later one's box-shadow layers. @type {Step[]} */
   const layered = [];
   /**
@@ -28951,8 +28959,8 @@ export function draftAnswer(ctx, env, question) {
         const isRing = (/** @type {Step} */ x) =>
           /^(?:inset\s+)?0 0 0 \S+ /.test(String(x.value));
         // (Two text colors in a list a state leads, "disabled buttons: gray
-        // text, white text and a 2px border": the later one stands, as main
-        // writes it.)
+        // text, white text and a 2px border": the later one is written, and
+        // the answer says both were said.)
         const inStateList =
           stateCarried.has(clause) ||
           stateCarried.has(prior.clause) ||
@@ -28967,13 +28975,18 @@ export function draftAnswer(ctx, env, question) {
           last.set(`${key}\u0000${k}`, {step: st, clause});
           continue;
         }
-        if (
-          /\bthen\b/i.test(clause.joint ?? '') ||
+        if (/\bthen\b/i.test(clause.joint ?? '')) {
+          superseded.push(prior.step);
+          thenReplaced.push(prior.step);
+          foldedClauses.add(prior.clause);
+        } else if (
           // (Two fills in such a list are offered as a choice, as main
           // offers them.)
-          (!/^background/.test(String(st.thing)) && inStateList)
+          !/^background/.test(String(st.thing)) &&
+          inStateList
         ) {
           superseded.push(prior.step);
+          saidTwice.push({earlier: prior.step, later: st});
           foldedClauses.add(prior.clause);
         } else if (
           st.thing === 'box-shadow' &&
@@ -29159,10 +29172,14 @@ export function draftAnswer(ctx, env, question) {
           ),
       )
     : drafts;
-  if (superseded.length)
+  if (thenReplaced.length)
     for (const d of kept)
       if (d.options.length && !/replaces the earlier/.test(d.text))
-        d.text += ` (said after "then", this replaces the earlier ${superseded.map(st => `${st.thing} ${st.value}`).join(', ')})`;
+        d.text += ` (said after "then", this replaces the earlier ${thenReplaced.map(st => `${st.thing} ${st.value}`).join(', ')})`;
+  if (saidTwice.length)
+    for (const d of kept)
+      if (d.options.length && !/were said for the text/.test(d.text))
+        d.text += ` (${saidTwice.map(({earlier, later}) => `two colors were said for the text, ${earlier.value} and ${later.value}; the later one, ${later.value}, is written`).join('; ')})`;
   result.push(...kept.slice(0, clashes.length ? 0 : undefined));
   // An undo of a setting the theme does not have ("…; also undo the
   // corners" with no corners set) is named as having nothing to take back;

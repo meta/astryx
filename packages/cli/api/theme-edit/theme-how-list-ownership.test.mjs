@@ -165,6 +165,27 @@ describe("a part's colon list owns its items", () => {
     for (const line of lines) expect(line, row.q).not.toMatch(row.never);
   });
 
+  it('names two text colors said in a state list, never as a "then" step', async () => {
+    if (unbuilt) return;
+    const {data} = await themeEditHow(
+      'hovered tabs: white text and gray text',
+      {
+        cwd,
+        theme: 'n',
+      },
+    );
+    const r = data.results?.[0];
+    expect(
+      r.commands.some(c =>
+        c.endsWith("color '#9e9e9e' --on tab --state hover"),
+      ),
+    ).toBe(true);
+    expect(r.text).toContain(
+      'two colors were said for the text, #ffffff and #9e9e9e; the later one, #9e9e9e, is written',
+    );
+    expect(r.text).not.toMatch(/"then"/);
+  });
+
   it('reads "the active page in pagination" as its current page cell', async () => {
     if (unbuilt) return;
     expect(await first('the active page in pagination blue')).toContain(
