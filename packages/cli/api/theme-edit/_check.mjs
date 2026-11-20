@@ -3676,27 +3676,19 @@ function borderSidesOff(ctx, data, s, part) {
       continue;
     const sides = borderSides(String(x.thing));
     const tokens = String(x.value).trim().split(/\s+/).filter(Boolean);
-    // (A width or style of several values: each side's value as CSS reads
-    // the list; a logical pair, `border-block-width '0 1px'`, is its start
-    // and its end.)
-    const perSide =
-      m[1] && tokens.length > 1 && sides.length === 4
-        ? sidesOf(String(x.thing), String(x.value))
-        : null;
-    /** @param {string} side @param {number} i @returns {string | undefined} */
-    const tokenAt = (side, i) => {
-      if (perSide) {
-        const prop = Object.keys(perSide).find(p => borderSides(p)[0] === side);
-        return prop ? perSide[prop] : undefined;
-      }
-      return m[1] && sides.length === 2
-        ? tokens[Math.min(i, tokens.length - 1)]
-        : tokens[0];
+    // (A width or style names each side's value as CSS reads the list,
+    // `calc()` kept whole; a logical pair is its start and its end.)
+    const perSide = m[1] ? sidesOf(String(x.thing), String(x.value)) : null;
+    /** @param {string} side @returns {string | undefined} */
+    const tokenAt = side => {
+      if (!perSide) return tokens[0];
+      const prop = Object.keys(perSide).find(p => borderSides(p)[0] === side);
+      return prop ? perSide[prop] : undefined;
     };
-    sides.forEach((side, i) => {
+    sides.forEach(side => {
       if (m[1]) {
         const off = m[1] === 'width' ? widthOff : styleOff;
-        if (blank(tokenAt(side, i))) off.set(side, x);
+        if (blank(tokenAt(side))) off.set(side, x);
         else off.delete(side);
       } else {
         // (A shorthand writes the side's width and style together; with no

@@ -93,6 +93,20 @@ describe('a border none on some sides', () => {
   );
 
   it(
+    'reads a logical pair with a calc() as its start and end',
+    async () => {
+      await check(
+        [['border-block-width', 'calc(1px + 1px) 0']],
+        [
+          ['border-bottom-color', false],
+          ['border-top-color', true],
+        ],
+      );
+    },
+    T,
+  );
+
+  it(
     "reads one side's none",
     async () => {
       await check(
