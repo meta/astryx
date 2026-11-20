@@ -282,6 +282,34 @@ type Story = StoryObj<typeof VideoPlayer>;
 
 export const Video: Story = {};
 
+/**
+ * A player 360px wide or narrower, such as a 240px attachment tile, gets a
+ * compact bar: a smaller inset, gap, and padding, and small buttons, so the
+ * bar covers less of the picture. Volume leaves the bar at 480px and the time
+ * at 360px. Tooltips that open from the bar keep their normal size.
+ */
+export const SmallPlayer: Story = {
+  decorators: [
+    Story => (
+      <div style={{width: 240}}>
+        <Story />
+      </div>
+    ),
+  ],
+  render: args => {
+    const captionsUrl = useCaptionsUrl();
+    if (captionsUrl == null) {
+      return <div />;
+    }
+    return (
+      <VideoPlayer
+        {...args}
+        captions={[{src: captionsUrl, label: 'English', language: 'en'}]}
+      />
+    );
+  },
+};
+
 export const VideoWithCaptions: Story = {
   render: args => {
     const captionsUrl = useCaptionsUrl();
