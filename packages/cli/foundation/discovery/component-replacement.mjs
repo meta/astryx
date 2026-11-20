@@ -51,6 +51,8 @@ import {persistedGather} from '../fs/gather-cache.mjs';
  *   declares the CLI floor. Project issues and the everyday-command nudge
  *   carry only these; a package without the floor is reported to its author
  *   through `doctor integration components` and the pack check alone.
+ * @property {boolean} [needsCore] the finding compares the component with
+ *   Core's components, so it cannot be judged without a Core
  */
 
 /**
@@ -105,19 +107,6 @@ function packageJsonOf(integration) {
     return {};
   }
 }
-
-/**
- * The findings that compare a component with Core's components: a
- * replacement target Core does not have, two replacements of one Core
- * component, and a component named like a Core one. Without a Core they
- * cannot be judged.
- * @type {ReadonlySet<string>}
- */
-export const CORE_COMPARISON_CODES = new Set([
-  'missing_component_replacement_target',
-  'ambiguous_component_replacement',
-  'shadowed_component_name',
-]);
 
 /**
  * Whether a package's declared CLI range turns its component replacements on.
@@ -385,8 +374,10 @@ async function replacementsNow(coreDir, loadedIntegrations) {
    * @param {Declaration} declaration
    * @param {ComponentReplacementFinding['code']} code
    * @param {string} message
+   * @param {boolean} [needsCore] it compares the component with Core's
+   *   components, as every finding here does but a malformed `replaces`
    */
-  const report = (declaration, code, message) => {
+  const report = (declaration, code, message, needsCore = true) => {
     findings.push({
       package: declaration.package,
       component: declaration.name,
@@ -394,6 +385,7 @@ async function replacementsNow(coreDir, loadedIntegrations) {
       severity: declaration.optedIn ? 'error' : 'warning',
       message,
       optedIn: declaration.optedIn,
+      ...(needsCore ? {needsCore: true} : {}),
     });
   };
 
@@ -425,9 +417,13 @@ async function replacementsNow(coreDir, loadedIntegrations) {
         declaration,
         'invalid_component_replacement',
         `Component "${name}" sets \`replaces\` to ${JSON.stringify(replaces) ?? String(replaces)}. Set it to the exact name of one Core component, such as "SideNav".`,
+        false,
       );
       continue;
     }
+    // With no Core there is nothing to compare the target with: only the
+    // opt-in and value findings above are computed.
+    if (!coreDir) continue;
     if (!coreSet.has(replaces)) {
       const differentCase = coreByKey.get(keyOf(replaces));
       report(
@@ -543,6 +539,7 @@ async function replacementsNow(coreDir, loadedIntegrations) {
         severity: 'warning',
         message: `Core component "${target}" is replaced by ${packages}. ${reason}`,
         optedIn: true,
+        needsCore: true,
       });
     }
     const active = {
@@ -570,6 +567,7 @@ async function replacementsNow(coreDir, loadedIntegrations) {
         severity: 'warning',
         message: `Component "${native.name}" from ${native.package} is shadowed by "${winner.name}" from ${winner.package}, which replaces Core "${target}". Select it with --package ${native.package}.`,
         optedIn: true,
+        needsCore: true,
       });
     }
   }
