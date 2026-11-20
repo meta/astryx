@@ -9554,6 +9554,33 @@ export function draftAnswer(ctx, env, question) {
       clauses.splice(i, 1);
     }
   }
+  // ("red #c8102e and blue #003da5 accents": colors said together before
+  // the role they share are each that role, never the part said before.
+  // A theme has one accent: the first color said is it. The second has no
+  // setting of its own, so it is never a choice that holds the rest of the
+  // ask back.)
+  for (let i = 0; i + 1 < clauses.length; i++) {
+    const [a, b] = [clauses[i], clauses[i + 1]];
+    if (
+      joinOf.get(b)?.sep === 'and' &&
+      /\b(?:accents?|accent colou?rs?)\s*$/.test(b.text) &&
+      !a.parts.length &&
+      a.colors.length &&
+      a.text
+        .trim()
+        .split(/\s+/)
+        .every(w => colorsIn(w.toLowerCase()).length > 0)
+    ) {
+      a.parts = [];
+      a.aspects = [...b.aspects];
+      a.text = `${a.text.trim()} accent`;
+      if (b.colors.length) {
+        b.text = '';
+        b.colors = [];
+        b.aspects = [];
+      }
+    }
+  }
   // ("a #e8def8 pill", "a blue rounded box": a color said with a shape is
   // the shape's fill, beside its corners.)
   for (const c of clauses)

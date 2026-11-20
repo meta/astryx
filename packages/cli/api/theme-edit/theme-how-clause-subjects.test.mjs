@@ -189,14 +189,18 @@ const ROWS = [
     },
   ],
   [
-    'a color after a part is its text; the next color before accents is the accent',
+    'colors before their role',
     {
       q: 'bold headings, red #c8102e and blue #003da5 accents',
-      has: [
-        'headings bold',
-        "color '#c8102e' --on heading",
-        "accent '#003da5'",
-      ],
+      never: /--on heading$/,
+    },
+  ],
+  [
+    'two colors before one accent: the first is it, and the rest is kept',
+    {
+      q: 'bold headings, red #c8102e and blue #003da5 accents',
+      has: ['headings bold', "accent '#c8102e'"],
+      never: /^accent '#003da5'/,
     },
   ],
   [
@@ -207,7 +211,7 @@ const ROWS = [
         'headings bold',
         'corners more --on card',
         'spacing less --on table-row',
-        "accent '#003da5'",
+        "accent '#c8102e'",
       ],
     },
   ],
