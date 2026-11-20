@@ -673,7 +673,13 @@ describe('theme add with a shared theme', () => {
       'made with a palette recipe this CLI does not know',
       null,
       JSON.stringify({recipe: 'astryx-oklch-v99'}),
-      /palette recipe astryx-oklch-v99, which this CLI \(\S+\) doesn't know; update the CLI/,
+      /palette recipe astryx-oklch-v99, which a newer CLI than this one \(\S+\) makes; update the CLI/,
+    ],
+    [
+      'made with a palette recipe no Astryx CLI makes',
+      null,
+      JSON.stringify({recipe: 'custom'}),
+      /palette recipe custom, which no Astryx CLI makes$/,
     ],
   ])(
     'adds the theme but not editor state %s, and says why',

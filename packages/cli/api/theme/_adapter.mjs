@@ -15,8 +15,9 @@ import {
   installCommandFor,
 } from '../../foundation/discovery/template-needs.mjs';
 import {copyTree, stageSharedTheme} from './_shared-source.mjs';
-import {appCopyMark} from '../theme-edit/_marks.mjs';
+import {appCopyDescriptor} from '../theme-edit/_marks.mjs';
 import {PALETTE_RECIPES} from './palette/generate/generator.mjs';
+import {newerRecipe} from './palette/generate/newer-recipe.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
 export {isSharedThemeSource} from './_shared-source.mjs';
 import * as crypto from 'node:crypto';
@@ -1904,7 +1905,9 @@ async function sharedEditorProblem(dir, slug) {
     }
     const recipe = palette?.recipe;
     if (recipe != null && !PALETTE_RECIPES.includes(recipe))
-      return `it was made with the palette recipe ${String(recipe)}, which this CLI (${cliVersion()}) doesn't know; update the CLI, then add the theme again to keep its editor state`;
+      return newerRecipe(recipe)
+        ? `it was made with the palette recipe ${String(recipe)}, which a newer CLI than this one (${cliVersion()}) makes; update the CLI, then add the theme again to keep its editor state`
+        : `it was made with the palette recipe ${String(recipe)}, which no Astryx CLI makes`;
   }
   return null;
 }
@@ -2055,23 +2058,6 @@ export async function addSharedThemeToApp(source, options) {
     // on any failure.
     /** @type {string[]} */
     let added = [];
-    /** @type {string | null} */
-    let aside = null;
-    if (previous) {
-      const listed = new Set([...Object.keys(previous.files), SHARED_RECEIPT]);
-      added = filesUnder(target).filter(file => !listed.has(file));
-      const shipped = new Set(forkFileNames(theme, name));
-      const clash = added.filter(file => shipped.has(file));
-      if (clash.length > 0) {
-        throw new AstryxError(
-          `The ${name} theme in this app (${relFrom(cwd, target)}) holds ${clash.join(', ')}, which you added to the copy and the shared theme also ships; adding it again would replace it, so nothing was written.`,
-          undefined,
-          ERROR_CODES.ERR_FILE_EXISTS,
-        );
-      }
-      aside = path.join(root, `.astryx-shared-${name}-${process.pid}`);
-      fs.renameSync(target, aside);
-    }
     // The theme editor's saved state the bundle carries goes to the editor's
     // folder for the theme (themes/<name>/), where `theme editor` opens it:
     // only into a folder that is not there, or over this add's own earlier
@@ -2091,19 +2077,25 @@ export async function addSharedThemeToApp(source, options) {
         : await sharedEditorProblem(staged.editor.dir, name);
     if (staged.editor && editorRefusal) editorNote = editorRefusal;
     else if (staged.editor) {
-      // (A folder of only system files, `.DS_Store`, holds no editor state.)
-      if (folderIsEmpty(editorDir)) editorPlan = 'new';
-      else if (
-        previousEditor &&
-        changedSharedFiles(editorDir, {files: previousEditor}).length === 0 &&
-        filesUnder(editorDir).every(
-          file =>
-            file in previousEditor || FOLDER_JUNK.has(path.basename(file)),
+      // (Read before anything is moved, so a folder it cannot read leaves
+      // the app as it was and adds the theme without the editor state.)
+      try {
+        // (A folder of only system files, `.DS_Store`, holds no editor state.)
+        if (folderIsEmpty(editorDir)) editorPlan = 'new';
+        else if (
+          previousEditor &&
+          changedSharedFiles(editorDir, {files: previousEditor}).length === 0 &&
+          filesUnder(editorDir).every(
+            file =>
+              file in previousEditor || FOLDER_JUNK.has(path.basename(file)),
+          )
         )
-      )
-        editorPlan = 'replace';
-      else
-        editorNote = `${relFrom(cwd, editorDir)} already holds editor state that theme add did not write, or that changed since; it is left as it is`;
+          editorPlan = 'replace';
+        else
+          editorNote = `${relFrom(cwd, editorDir)} already holds editor state that theme add did not write, or that changed since; it is left as it is`;
+      } catch {
+        editorNote = `${relFrom(cwd, editorDir)} could not be read; it is left as it is`;
+      }
     }
     const editorMadeRoot = previous?.editor
       ? previous.editor.madeRoot === true
@@ -2114,6 +2106,23 @@ export async function addSharedThemeToApp(source, options) {
     // (A folder of only system files that is there before the add stays;
     // a failed add takes out only what it copied into it.)
     const editorDirWasThere = fs.existsSync(editorDir);
+    /** @type {string | null} */
+    let aside = null;
+    if (previous) {
+      const listed = new Set([...Object.keys(previous.files), SHARED_RECEIPT]);
+      added = filesUnder(target).filter(file => !listed.has(file));
+      const shipped = new Set(forkFileNames(theme, name));
+      const clash = added.filter(file => shipped.has(file));
+      if (clash.length > 0) {
+        throw new AstryxError(
+          `The ${name} theme in this app (${relFrom(cwd, target)}) holds ${clash.join(', ')}, which you added to the copy and the shared theme also ships; adding it again would replace it, so nothing was written.`,
+          undefined,
+          ERROR_CODES.ERR_FILE_EXISTS,
+        );
+      }
+      aside = path.join(root, `.astryx-shared-${name}-${process.pid}`);
+      fs.renameSync(target, aside);
+    }
     /** @type {string[]} */
     let editorFiles = [];
     /** @type {string[]} */
@@ -2143,10 +2152,7 @@ export async function addSharedThemeToApp(source, options) {
       if (editorFiles.length) {
         const doc = files.find(file => file.endsWith('Theme.doc.mjs'));
         if (doc)
-          fs.writeFileSync(
-            path.join(target, doc),
-            `// ${appCopyMark(name)} after every build of themes/${name}/; do not edit it here. Change the theme with the editor.\n\n${localThemeDescriptor(theme)}`,
-          );
+          fs.writeFileSync(path.join(target, doc), appCopyDescriptor(name));
       }
       const install = installSharedThemeNeeds(
         forkNeeds(outputDir, files, cwd),

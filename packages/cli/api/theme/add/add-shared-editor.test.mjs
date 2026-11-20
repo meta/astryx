@@ -11,6 +11,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {afterAll, beforeAll, expect, it, vi} from 'vitest';
 import {themeAdd} from './add.mjs';
+import {runCli} from '../../../test-utils/run-cli.mjs';
 import {themeEditNew, themeEditSet} from '../../theme-edit/theme-edit.mjs';
 import {
   makeLinkedFixture,
@@ -66,6 +67,19 @@ it('an editor set after the add updates the app copy the add wrote', async () =>
 
   const added = await themeAdd(bundle, {cwd: receiver});
   expect(added.data.copy?.editor?.files).toContain('sunset.settings.json');
+  // (The app copy's descriptor is the editor's own, so the copy is current
+  // right after the add: the editor's check finds nothing to rewrite.)
+  expect(
+    fs.readFileSync(
+      path.join(receiver, 'src/themes/sunset/sunsetTheme.doc.mjs'),
+      'utf8',
+    ),
+  ).toBe(
+    fs.readFileSync(
+      path.join(maker, 'src/themes/sunset/sunsetTheme.doc.mjs'),
+      'utf8',
+    ),
+  );
 
   const before = fs.readFileSync(
     path.join(receiver, 'src/themes/sunset/sunset.css'),
@@ -79,4 +93,21 @@ it('an editor set after the add updates the app copy the add wrote', async () =>
       'utf8',
     ),
   ).not.toBe(before);
+}, 300_000);
+
+it('the stable add names no experimental command when it keeps editor state', async () => {
+  // (spec:AST-017 FR27: stable output names no experimental surface.)
+  const fresh = makeLinkedFixture(
+    'astryx-theme-add-editor-fresh-',
+    FIXTURE_PACKAGES,
+  );
+  writeFixtureBaseTheme(fresh, 'neutral');
+  const {status, stdout, stderr} = await runCli(
+    ['theme', 'add', bundle],
+    fresh,
+  );
+  removeLinkedFixture(fresh);
+  expect(status, stdout + stderr).toBe(0);
+  expect(stdout).toMatch(/Kept the shared theme's working files/);
+  expect(stdout).not.toMatch(/experimental/);
 }, 300_000);

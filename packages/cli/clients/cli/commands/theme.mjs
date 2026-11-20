@@ -840,7 +840,7 @@ function printThemeApp(result) {
         ? [
             text(
               copy.editor.files.length
-                ? `[ok] Kept the theme editor's saved state from ${copy.editor.from} in ${copy.editor.outputDir}: \`${formatCliCommand(`experimental theme editor show ${change.slug}`, process.cwd())}\` opens it.`
+                ? `[ok] Kept the shared theme's working files from ${copy.editor.from} in ${copy.editor.outputDir}.`
                 : `[note] The shared theme carries the theme editor's saved state (${copy.editor.from}), not copied: ${copy.editor.notCopied}.`,
             ),
           ]
