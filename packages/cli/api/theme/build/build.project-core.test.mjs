@@ -23,6 +23,7 @@ import {
   validateThemePrivateInputs,
 } from './build.mjs';
 import {fetchCarriedThemeCoreDir} from '../_adapter.mjs';
+import {CLI_VERSION} from '../../../test-utils/release-fixtures.mjs';
 
 vi.mock('../_adapter.mjs', async importOriginal => {
   const actual = /** @type {Record<string, any>} */ (await importOriginal());
@@ -236,7 +237,10 @@ describe('the error when there is no Core to generate with', () => {
     expect(message).toContain(
       'This project does not have @astryxdesign/core installed',
     );
-    expect(message).toContain('`npm install @astryxdesign/core`');
+    // With no Core, Core is named at the release of the CLI that answers.
+    expect(message).toContain(
+      `\`npm install @astryxdesign/core@${CLI_VERSION}\``,
+    );
     expect(message).not.toContain('pnpm -F');
     expect(message).toContain(
       "Import error: Cannot find package '@astryxdesign/core'",

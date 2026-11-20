@@ -93,6 +93,11 @@ export interface BottomSheetSwitcherContextValue {
    */
   onBeforeSheetPresent: (sheetId: string) => void;
   /**
+   * Called by a sheet host just before it shows its dialog without the scrim,
+   * so the switcher can remember the page element that opened the flow.
+   */
+  onBeforeSheetShow: () => void;
+  /**
    * Whether a modal sheet dialog that is already open sits beneath another
    * open sheet dialog in the top layer, so it must re-present to become the
    * topmost layer again.

@@ -16,6 +16,14 @@
         "title": "<text>",
         "children": [
           {
+            "route": "cli/skill-places",
+            "name": "skill-places",
+            "package": "@astryxdesign/cli",
+            "kind": "generic",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
             "route": "cli/component-lookups",
             "name": "component-lookups",
             "package": "@astryxdesign/cli",

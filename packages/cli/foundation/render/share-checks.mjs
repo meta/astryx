@@ -2,9 +2,10 @@
 
 /**
  * @file The checks a render runs on the file it just wrote, so the person
- * or agent who shares it need not run them by hand: what the file asks the
- * network for, and whether its embedded source gives back every carried file
- * exactly. A check reports; it never stops the write.
+ * or agent who shares it need not run them by hand: what the file loads from
+ * outside itself (a remote address, or a file beside it), and whether its
+ * embedded source gives back every carried file exactly. A check reports;
+ * it never stops the write.
  * @input the bytes of the written file, the page module, the carried files
  * @output {outside, roundTrip}
  * @position read by renderToFile in api/render/_adapter.mjs after it writes

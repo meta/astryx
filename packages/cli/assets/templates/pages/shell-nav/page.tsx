@@ -26,10 +26,10 @@ import {useHotkeys} from '@astryxdesign/core/hooks';
 import {useToast} from '@astryxdesign/core/Toast';
 import {
   PlayIcon,
-  MagnifyingGlassIcon,
+  SearchIcon,
   FolderIcon,
-  DocumentTextIcon,
-} from '@heroicons/react/24/outline';
+  DocumentIcon,
+} from '@astryxdesign/template-icons';
 
 const noop = () => {};
 
@@ -48,7 +48,7 @@ const folder = (
 const file = (id: string, isSelected = false): TreeListItemData => ({
   id,
   label: <Text maxLines={1}>{id}</Text>,
-  startContent: <Icon icon={DocumentTextIcon} size="xsm" />,
+  startContent: <Icon icon={DocumentIcon} size="xsm" />,
   isSelected,
 });
 
@@ -244,7 +244,7 @@ export default function ShellNav() {
                     isLabelHidden
                     size="sm"
                     width="100%"
-                    startIcon={MagnifyingGlassIcon}
+                    startIcon={SearchIcon}
                     placeholder="Search files and commands…"
                     value=""
                     onChange={() => {}}

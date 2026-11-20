@@ -18,7 +18,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import {describe, expect, it} from 'vitest';
+import {describe, expect, it, vi} from 'vitest';
 import yaml from 'yaml';
 
 import {
@@ -42,6 +42,8 @@ const ci = read('ci.yml');
 const lint = read('lint.yml');
 const prComment = read('pr-comment.yml');
 
+const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
+
 // The jobs that skip on a deferred push.
 const HEAVY = [
   'test-ui',
@@ -64,6 +66,7 @@ function pushEvent({
   login = 'cixzhang',
   base = 'main',
   head = 'fix/thing',
+  labels = [],
 } = {}) {
   return {
     event_name: 'pull_request',
@@ -77,7 +80,7 @@ function pushEvent({
         draft: false,
         user: {login},
         head: {repo: {full_name: 'meta/astryx'}},
-        labels: [],
+        labels: labels.map(name => ({name})),
       },
     },
   };
@@ -156,20 +159,30 @@ function starts(id, github, {specOnly, others = 'success'} = {}) {
 const deferralStep = id =>
   ci.jobs[id].steps.find(step => step.name === 'Heavy CI deferred');
 
-describe('which pushes defer the heavy suites (spec:AST-030 FR20)', () => {
-  it('is a push to a ready agent-lane pull request into main, in its first attempt', () => {
+describe('which runs defer the heavy suites (spec:AST-030 FR20, DEC-32)', () => {
+  it('is any first attempt of a pull request into main', () => {
     expect(ci.jobs['heavy-ci'].if).toContain(HEAVY_CANDIDATE);
     expect(evaluate(HEAVY_CANDIDATE, {github: pushEvent()})).toBe(true);
   });
 
   it.each([
+    ['a push', {}],
     ['marked ready', {action: 'ready_for_review'}],
     ['opened', {action: 'opened'}],
     ['reopened', {action: 'reopened'}],
-    ['re-run (the pre-merge run)', {attempt: '2'}],
     ['from another author', {login: 'someone'}],
+    ['from an engineering owner', {login: 'engineer'}],
+  ])('defers on %s, for every author', (_, event) => {
+    const github = pushEvent(event);
+    expect(evaluate(HEAVY_CANDIDATE, {github})).toBe(true);
+    expect(heavyCi(github).outputs.deferred).toBe('true');
+    for (const id of HEAVY) expect(starts(id, github), id).toBe(false);
+  });
+
+  it.each([
+    ['re-run in full (review passed, or the pre-merge run)', {attempt: '2'}],
     ['a release merge-back', {head: 'chore/merge-v1.2.3-to-main'}],
-  ])('runs everything when the pull request is %s', (_, event) => {
+  ])('runs everything when the run is %s', (_, event) => {
     const github = pushEvent(event);
     expect(evaluate(HEAVY_CANDIDATE, {github})).toBe(false);
     expect(heavyCi(github).result).toBe('skipped');
@@ -191,10 +204,139 @@ describe('which pushes defer the heavy suites (spec:AST-030 FR20)', () => {
     expect(heavyCi(github).result).toBe('skipped');
   });
 
-  it('names the shared agent logins in one list, the heavy-suite caps included', () => {
-    expect(HEAVY_CANDIDATE).toContain(
-      `fromJSON('${JSON.stringify(SHARED_AGENT_LOGINS)}')`,
+  it('runs every suite in the same run when the review gate already passes at the head, never a deferred attempt and then a second run (DEC-32)', async () => {
+    vi.useFakeTimers();
+    const job = ci.jobs['heavy-ci'];
+    expect(job.permissions.statuses).toBe('read');
+    const gate = job.steps.find(item => item.id === 'gate');
+    expect(gate.env.HEAD_SHA).toBe('${{ github.event.pull_request.head.sha }}');
+    expect(job.steps.find(item => item.id === 'decide').env.REVIEW_PASSES).toBe(
+      '${{ steps.gate.outputs.passes }}',
     );
+    process.env.HEAVY_MODULE = '/heavy-turn.mjs';
+    process.env.HEAD_SHA = 'h1';
+    process.env.ENG_OWNERS = '@owner1';
+    process.env.REVIEW_APP = 'astracat-bot[bot]';
+    /**
+     * Runs the step with the gate's states, one per look, and whether a
+     * review of the head cleared it; returns its answer and looks.
+     */
+    const passes = async (states, reviewed = true) => {
+      const outputs = {};
+      let looks = 0;
+      const done = new AsyncFunction(
+        'github',
+        'context',
+        'core',
+        'importModule',
+        gate.with.script.replaceAll('await import(', 'await importModule('),
+      )(
+        {},
+        {
+          repo: {owner: 'o', repo: 'r'},
+          payload: {pull_request: {number: 7, head: {sha: 'h1'}}},
+        },
+        {warning: () => {}, setOutput: (key, value) => (outputs[key] = value)},
+        async specifier =>
+          specifier === 'node:url'
+            ? import('node:url')
+            : {
+                reviewStatus: async ({sha}) => {
+                  expect(sha).toBe('h1');
+                  const state = states[Math.min(looks, states.length - 1)];
+                  looks += 1;
+                  return state == null ? null : {state};
+                },
+                ownerHandles: text => [String(text)],
+                reviewPasses: async ({pull, engOwners, reviewApp}) => {
+                  expect(pull).toEqual({number: 7, head: {sha: 'h1'}});
+                  expect(engOwners).toEqual(['@owner1']);
+                  expect(reviewApp).toBe('astracat-bot[bot]');
+                  return reviewed;
+                },
+              },
+      );
+      await vi.advanceTimersByTimeAsync(4 * 60_000);
+      await done;
+      return [outputs.passes, looks];
+    };
+    // Review signal writes the gate a moment after the push; a review of the
+    // head cleared it (a re-run, or a head reviewed before its run).
+    expect(await passes([null, 'pending', 'success'])).toEqual(['true', 3]);
+    // The gate passed at the author's own push, with no review: defer.
+    expect(await passes(['success'], false)).toEqual(['false', 1]);
+    // A failing gate defers at once; a gate still pending after three
+    // minutes defers.
+    expect(await passes(['failure'])).toEqual(['false', 1]);
+    expect(await passes(['pending'])).toEqual(['false', 12]);
+    vi.useRealTimers();
+  });
+
+  it('reads a release-critical label only when someone with write access applied it last (DEC-30)', async () => {
+    const job = ci.jobs['heavy-ci'];
+    const read = job.steps.find(item => item.id === 'release');
+    const labelled = pushEvent({
+      login: 'someone',
+      labels: ['release-critical'],
+    });
+    // The job still runs for a labelled pull request; its decision reads the label.
+    expect(evaluate(HEAVY_CANDIDATE, {github: labelled})).toBe(true);
+    expect(evaluate(read.if, {github: labelled})).toBe(true);
+    expect(evaluate(read.if, {github: pushEvent()})).toBe(false);
+    expect(
+      job.steps.find(item => item.uses?.startsWith('actions/checkout')).with[
+        'sparse-checkout'
+      ],
+    ).toContain('.github/scripts/lib');
+    // The step asks run-labels.cjs, as admission and the caps do.
+    process.env.RUN_LABELS_MODULE = '/run-labels.cjs';
+    const counts = async decide => {
+      const outputs = {};
+      await new AsyncFunction(
+        'github',
+        'context',
+        'core',
+        'importModule',
+        read.with.script.replaceAll('await import(', 'await importModule('),
+      )(
+        {},
+        {},
+        {
+          warning: () => {},
+          notice: () => {},
+          setOutput: (key, value) => (outputs[key] = value),
+        },
+        async specifier =>
+          specifier === 'node:url'
+            ? import('node:url')
+            : {
+                decideRunLabel: async ({suite, label}) => {
+                  expect([suite, label]).toEqual([
+                    'release-critical',
+                    'release-critical',
+                  ]);
+                  return decide();
+                },
+              },
+      );
+      return outputs.counts;
+    };
+    expect(await counts(() => true)).toBe('true');
+    // Applied last by someone without write access, or unreadable: it does
+    // not count, so the push defers.
+    expect(await counts(() => false)).toBe('false');
+    expect(
+      await counts(() => {
+        throw new Error('lookup failed');
+      }),
+    ).toBe('false');
+    expect(
+      job.steps.find(item => item.id === 'decide').env.RELEASE_CRITICAL,
+    ).toBe('${{ steps.release.outputs.counts }}');
+  });
+
+  it('names no author in the deferral, and keeps the shared agent logins in one list with the heavy-suite caps', () => {
+    expect(HEAVY_CANDIDATE).not.toContain('user.login');
     const caps = fs.readFileSync(
       path.resolve(import.meta.dirname, '../actions/heavy-caps/action.yml'),
       'utf8',
@@ -224,6 +366,33 @@ describe('a deferred push', () => {
       expect(String(ci.jobs[id].if), id).toContain(`&& (${HEAVY_RUNS} && (`);
       expect(ungated(ci.jobs[id].if), id).not.toContain('heavy-ci');
     }
+  });
+
+  it('defers a fork push admitted with ci:run; its review-pass run at that head runs every suite after the label is removed, and a later push runs nothing (FR20, FR29)', () => {
+    const fromFork = ({labels, attempt}) => {
+      const event = pushEvent({login: 'someone', labels, attempt});
+      event.event.pull_request.head.repo.full_name = 'someone/astryx';
+      return event;
+    };
+    const admitted = fromFork({labels: ['ci:run'], attempt: '1'});
+    expect(heavyCi(admitted).outputs.deferred).toBe('true');
+    expect(starts('typecheck', admitted)).toBe(true);
+    for (const id of HEAVY) expect(starts(id, admitted), id).toBe(false);
+    // A later attempt keeps the event it re-runs, `ci:run` included, though
+    // the contributor job has since removed the label from the pull request.
+    const reviewPass = fromFork({labels: ['ci:run'], attempt: '2'});
+    expect(heavyCi(reviewPass).result).toBe('skipped');
+    for (const id of HEAVY) expect(starts(id, reviewPass), id).toBe(true);
+    // A later push carries no label: nothing runs until it is vetted again.
+    const later = fromFork({labels: [], attempt: '1'});
+    expect(starts('typecheck', later)).toBe(false);
+    for (const id of HEAVY) expect(starts(id, later), id).toBe(false);
+  });
+
+  it('runs every suite at the pre-merge re-run, a later attempt', () => {
+    const preMerge = pushEvent({attempt: '2'});
+    expect(heavyCi(preMerge).result).toBe('skipped');
+    for (const id of HEAVY) expect(starts(id, preMerge), id).toBe(true);
   });
 
   it('still runs the fast checks: typecheck and lint', () => {
@@ -283,13 +452,16 @@ describe('a deferred push', () => {
   // A Lab-only change runs only fast work, so it defers nothing either
   // (spec:AST-030 FR26).
   it.each([
-    ['true', 'false', 'false', ''],
-    ['false', 'true', 'false', ''],
-    ['false', 'false', 'true', HEAVY_DEFERRED_MESSAGE],
-    ['', '', 'true', HEAVY_DEFERRED_MESSAGE],
+    ['true', 'false', '', '', 'false', ''],
+    ['false', 'true', '', '', 'false', ''],
+    ['false', 'false', 'true', '', 'false', ''],
+    ['false', 'false', 'false', 'true', 'false', ''],
+    ['false', 'false', 'false', 'false', 'true', HEAVY_DEFERRED_MESSAGE],
+    ['false', 'false', '', '', 'true', HEAVY_DEFERRED_MESSAGE],
+    ['', '', '', '', 'true', HEAVY_DEFERRED_MESSAGE],
   ])(
-    'defers unless the change is spec-only or Lab-only (spec_only=%s, lab_only=%s → deferred=%s)',
-    (specOnly, labOnly, deferred, summary) => {
+    'defers unless the change is spec-only or Lab-only, release-critical counts, or the review gate already passes (spec_only=%s, lab_only=%s, release_critical=%s, review_passes=%s → deferred=%s)',
+    (specOnly, labOnly, releaseCritical, reviewPasses, deferred, summary) => {
       const step = ci.jobs['heavy-ci'].steps.find(item => item.id === 'decide');
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'heavy-ci-'));
       try {
@@ -305,6 +477,8 @@ describe('a deferred push', () => {
               ...process.env,
               SPEC_ONLY: specOnly,
               LAB_ONLY: labOnly,
+              RELEASE_CRITICAL: releaseCritical,
+              REVIEW_PASSES: reviewPasses,
               GITHUB_OUTPUT: output,
               GITHUB_STEP_SUMMARY: stepSummary,
               GITHUB_RUN_ID: '7',
@@ -415,7 +589,10 @@ describe("heavy-ci's skip on every other run", () => {
             ? {a11y: 'true', rtl: 'true', visual: 'true'}
             : id === 'room'
               ? {full: String(full)}
-              : {},
+              : // A push that is not spec-only or Lab-only defers.
+                id === 'heavy-ci' && runs
+                ? {deferred: 'true'}
+                : {},
       };
     }
     return results;
@@ -454,16 +631,24 @@ describe("heavy-ci's skip on every other run", () => {
       expect(results[id].result, id).toBe('skipped');
   });
 
-  it('runs the suites an opt-in label asks for on a pull request', () => {
-    const github = pushEvent({login: 'someone', action: 'labeled'});
-    github.event.pull_request.labels = [
-      {name: 'ci:run-a11y'},
-      {name: 'ci:run-rtl'},
-    ];
-    const results = plan(github);
-    expect(results['heavy-ci'].result).toBe('skipped');
+  it('runs the suites an opt-in label asks for once review passes, not on the first attempt', () => {
+    const labelled = attempt => {
+      const github = pushEvent({login: 'someone', attempt});
+      github.event.pull_request.labels = [
+        {name: 'ci:run-a11y'},
+        {name: 'ci:run-rtl'},
+      ];
+      return plan(github);
+    };
+    const first = labelled('1');
+    expect(first['heavy-ci'].result).toBe('success');
+    for (const id of ['pr-a11y-specs', 'pr-rtl-shard'])
+      expect(first[id].result, id).toBe('skipped');
+    // The review-pass re-run (a later attempt) runs them.
+    const again = labelled('2');
+    expect(again['heavy-ci'].result).toBe('skipped');
     for (const id of ['pr-a11y-guards', 'pr-a11y-specs', 'pr-rtl-shard'])
-      expect(results[id].result, id).toBe('success');
+      expect(again[id].result, id).toBe('success');
   });
 });
 

@@ -13,23 +13,4 @@ export const doc = {
   // The standalone entry demonstrates an application shell; the named preview
   // composes into its host without nesting AppShell. Keep it out of the gallery.
   isHiddenFromOverview: true,
-  icons: {
-    Banknote: 'money',
-    CreditCard: 'creditCard',
-    Download: 'download',
-    Folder: 'folder',
-    LayoutGrid: 'apps',
-    List: 'list',
-    Lock: 'lock',
-    MapPin: 'location',
-    Mic: 'microphone',
-    Plus: 'add',
-    Search: 'search',
-    ShoppingBag: 'shoppingBag',
-    Smartphone: 'mobile',
-    Tag: 'tag',
-    User: 'user',
-    Wallet: 'wallet',
-    X: 'close',
-  },
 };

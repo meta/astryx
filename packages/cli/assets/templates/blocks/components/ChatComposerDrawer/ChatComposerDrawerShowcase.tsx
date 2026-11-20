@@ -7,7 +7,7 @@ import {Token} from '@astryxdesign/core/Token';
 import {Button} from '@astryxdesign/core/Button';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Stack} from '@astryxdesign/core/Layout';
-import {PaperClipIcon} from '@heroicons/react/24/outline';
+import {AttachIcon} from '@astryxdesign/template-icons';
 import type {CSSProperties} from 'react';
 
 const drawerBorder: CSSProperties = {
@@ -37,7 +37,7 @@ export default function ChatComposerDrawerShowcase() {
             label="Attach"
             variant="ghost"
             size="sm"
-            icon={<Icon icon={PaperClipIcon} size="sm" />}
+            icon={<Icon icon={AttachIcon} size="sm" />}
             isIconOnly
             onClick={() => {}}
           />
