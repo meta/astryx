@@ -351,6 +351,113 @@ describe('a piece that holds a control', () => {
   );
 });
 
+describe('a look said, then taken away by a pronoun', () => {
+  it(
+    'takes away only that look, never the part, and keeps the asks before it',
+    async () => {
+      for (const [q, want] of [
+        [
+          'code block copy button border is ugly, hide it',
+          /border none --on code-block-copy-button/,
+        ],
+        [
+          'the border on the code block copy button is ugly, hide it',
+          /border none --on code-block-copy-button/,
+        ],
+        [
+          'the code block copy button has a shadow, remove it',
+          /box-shadow none --on code-block-copy-button/,
+        ],
+        [
+          'the shadow on the cards is too strong, remove it',
+          /box-shadow none --on card\b/,
+        ],
+        [
+          'code block header background is too dark, hide it',
+          /background-color transparent --on code-block-header/,
+        ],
+      ]) {
+        const lines = first(await answer(String(q))).join('\n');
+        expect(lines, String(q)).toMatch(/** @type {RegExp} */ (want));
+        expect(lines, String(q)).not.toMatch(/display none/);
+      }
+      // (The part said after on/of when the words before name none; an
+      // ask joined by "and" before it stays as said.)
+      for (const q of [
+        "I don't like the shadow on the cards, remove it",
+        'the cards have a heavy shadow, remove it',
+      ]) {
+        const lines = first(await answer(q)).join('\n');
+        expect(lines, q).toMatch(/box-shadow none --on card\b/);
+        expect(lines, q).not.toMatch(/--shadow-/);
+      }
+      // ("it" is the nearest look; a part after on/of needs no verb after it.)
+      for (const [q, want] of [
+        [
+          'the button shadow is too strong and the card border is ugly, hide it',
+          /border none --on card\b/,
+        ],
+        [
+          'the shadow on the cards is too strong and the border is ugly, remove it',
+          /border none --on card\b/,
+        ],
+        [
+          'I hate the underline on links, remove it',
+          /text-decoration none --on link\b/,
+        ],
+        ['I hate the border on cards, remove it', /border none --on card\b/],
+      ]) {
+        const lines = first(await answer(String(q))).join('\n');
+        expect(lines, String(q)).toMatch(/** @type {RegExp} */ (want));
+        expect(lines, String(q)).not.toMatch(/display none|1px solid/);
+      }
+      const joined = first(
+        await answer(
+          'make the buttons blue and the card border is ugly, hide it',
+        ),
+      ).join('\n');
+      expect(joined).toMatch(/'#2563eb' --on button/);
+      expect(joined).toMatch(/border none --on card\b/);
+      expect(joined).not.toMatch(/border none --on button/);
+      const both = first(
+        await answer('make the buttons blue, the card border is ugly, hide it'),
+      ).join('\n');
+      expect(both).toMatch(/'#2563eb' --on button/);
+      expect(both).toMatch(/border none --on card\b/);
+      expect(both).not.toMatch(/display none/);
+    },
+    T,
+  );
+});
+
+describe('a nav said as a bar', () => {
+  it(
+    'is the top nav beside a side nav; a side nav bar is the side nav',
+    async () => {
+      for (const q of [
+        'nav bar links bold and the side nav items red',
+        'navigation bar links bold and the sidebar items red',
+        'top nav links bold and the side nav items red',
+      ]) {
+        const lines = first(await answer(q)).join('\n');
+        expect(lines, q).toMatch(/font-weight 700 --on top-nav-item/);
+        expect(lines, q).not.toMatch(/font-weight 700 --on side-nav-item/);
+      }
+      for (const q of [
+        'side nav bar links bold',
+        'side nav bar items red',
+        'side navigation bar items bigger',
+        'sidebar: nav items white',
+      ]) {
+        const lines = first(await answer(q)).join('\n');
+        expect(lines, q).toMatch(/--on side-nav-item/);
+        expect(lines, q).not.toMatch(/--on top-nav-item/);
+      }
+    },
+    T,
+  );
+});
+
 describe('a negation that takes no piece away', () => {
   it(
     'never hides the part: a behavior word, or an owner without that piece',
@@ -520,38 +627,52 @@ describe("a part's own piece taken away", () => {
       const all = data =>
         JSON.stringify(
           (data.results ?? []).find((/** @type {any} */ r) =>
-            r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
+            r.commands.some((/** @type {string} */ c) =>
+              / editor set /.test(c),
+            ),
           )?.commands ?? [],
         );
       // (A size is the largest look's; the others keep the steps between
       // them, so the type scale keeps its shape.)
       const sizedData = await answer('display headings 60px');
       const sized = all(sizedData);
-      expect(sized).toMatch(/font-size 60px --on heading --when type:display-1/);
+      expect(sized).toMatch(
+        /font-size 60px --on heading --when type:display-1/,
+      );
       for (const n of [2, 3]) {
-        const px = Number(new RegExp(`font-size (\\d+)px --on heading --when type:display-${n}\\b`).exec(sized)?.[1]);
+        const px = Number(
+          new RegExp(
+            `font-size (\\d+)px --on heading --when type:display-${n}\\b`,
+          ).exec(sized)?.[1],
+        );
         expect(px).toBeGreaterThan(0);
         expect(px).toBeLessThan(60);
       }
-      expect(JSON.stringify(sizedData.results)).toMatch(/scaled to keep the steps/);
+      expect(JSON.stringify(sizedData.results)).toMatch(
+        /scaled to keep the steps/,
+      );
       // (Any length unit scales, written in the unit said.)
       const em = all(await answer('display headings 3em'));
       expect(em).toMatch(/font-size 3em --on heading --when type:display-1/);
       for (const n of [2, 3]) {
-        const v = Number(new RegExp(`font-size ([\\d.]+)em --on heading --when type:display-${n}\\b`).exec(em)?.[1]);
+        const v = Number(
+          new RegExp(
+            `font-size ([\\d.]+)em --on heading --when type:display-${n}\\b`,
+          ).exec(em)?.[1],
+        );
         expect(v).toBeGreaterThan(0);
         expect(v).toBeLessThan(3);
       }
       // (A look's other options, a whole-theme dial, stay out of the family's
       // one answer.)
-      expect(first(await answer('display headings tighter letter spacing'))).not.toContain(
-        'set t headings tight',
-      );
+      expect(
+        first(await answer('display headings tighter letter spacing')),
+      ).not.toContain('set t headings tight');
       const georgia = first(await answer('display headings in Georgia'));
       expect(georgia.length).toBe(new Set(georgia).size);
-      expect(JSON.stringify((await answer('display headings color')).results)).not.toMatch(
-        /heading and heading/,
-      );
+      expect(
+        JSON.stringify((await answer('display headings color')).results),
+      ).not.toMatch(/heading and heading/);
     },
     T,
   );
@@ -561,17 +682,32 @@ describe('a plural display size after one look is set', () => {
   it(
     'scales from the size the theme sets on each look, so the steps stay',
     async () => {
-      await themeEditSet('t', 'font-size', '60px', {cwd, on: 'heading', when: 'type:display-1'});
+      await themeEditSet('t', 'font-size', '60px', {
+        cwd,
+        on: 'heading',
+        when: 'type:display-1',
+      });
       try {
         const lines = first(await answer('display headings 72px')).join('\n');
-        expect(lines).toMatch(/font-size 72px --on heading --when type:display-1/);
+        expect(lines).toMatch(
+          /font-size 72px --on heading --when type:display-1/,
+        );
         for (const n of [2, 3]) {
-          const px = Number(new RegExp(`font-size (\\d+)px --on heading --when type:display-${n}\\b`).exec(lines)?.[1]);
+          const px = Number(
+            new RegExp(
+              `font-size (\\d+)px --on heading --when type:display-${n}\\b`,
+            ).exec(lines)?.[1],
+          );
           expect(px).toBeGreaterThan(0);
           expect(px).toBeLessThan(72);
         }
       } finally {
-        await themeEditUndo('t', {cwd, thing: 'font-size', on: 'heading', when: 'type:display-1'});
+        await themeEditUndo('t', {
+          cwd,
+          thing: 'font-size',
+          on: 'heading',
+          when: 'type:display-1',
+        });
       }
     },
     T,
@@ -583,11 +719,22 @@ describe("a plural display size beside another part's look", () => {
     "reads only the family's own part: a Text set at display-1 leaves the display headings' steps as they are",
     async () => {
       const before = first(await answer('display headings 72px')).join('\n');
-      await themeEditSet('t', 'font-size', '200px', {cwd, on: 'text', when: 'type:display-1'});
+      await themeEditSet('t', 'font-size', '200px', {
+        cwd,
+        on: 'text',
+        when: 'type:display-1',
+      });
       try {
-        expect(first(await answer('display headings 72px')).join('\n')).toBe(before);
+        expect(first(await answer('display headings 72px')).join('\n')).toBe(
+          before,
+        );
       } finally {
-        await themeEditUndo('t', {cwd, thing: 'font-size', on: 'text', when: 'type:display-1'});
+        await themeEditUndo('t', {
+          cwd,
+          thing: 'font-size',
+          on: 'text',
+          when: 'type:display-1',
+        });
       }
     },
     T,
@@ -607,20 +754,32 @@ describe('a plural display size after one look is set to a clamp()', () => {
       try {
         const data = await answer('display headings 72px');
         expect(first(data).join('\n')).toBe(before);
-        expect(JSON.stringify(data.results)).toMatch(/scaled to keep the steps/);
+        expect(JSON.stringify(data.results)).toMatch(
+          /scaled to keep the steps/,
+        );
       } finally {
-        await themeEditUndo('t', {cwd, thing: 'font-size', on: 'heading', when: 'type:display-2'});
+        await themeEditUndo('t', {
+          cwd,
+          thing: 'font-size',
+          on: 'heading',
+          when: 'type:display-2',
+        });
       }
     },
     T,
   );
 });
 
-describe('a plural display step when one look\'s size is a clamp()', () => {
+describe("a plural display step when one look's size is a clamp()", () => {
   it(
     'names only the looks it writes, and says the one it leaves out',
     async () => {
-      await themeEditSet('t', '--text-display-1-size', 'clamp(40px, 6vw, 72px)', {cwd});
+      await themeEditSet(
+        't',
+        '--text-display-1-size',
+        'clamp(40px, 6vw, 72px)',
+        {cwd},
+      );
       try {
         const data = await answer('display headings bigger');
         const lines = first(data).join('\n');
@@ -629,7 +788,9 @@ describe('a plural display step when one look\'s size is a clamp()', () => {
         expect(lines).toMatch(/--when type:display-3\b/);
         const text = JSON.stringify(data.results);
         expect(text).toMatch(/\(type display-2, display-3\)/);
-        expect(text).toMatch(/display-1 not changed: its size is no length now/);
+        expect(text).toMatch(
+          /display-1 not changed: its size is no length now/,
+        );
         expect(text).toMatch(/display headings: display-2, display-3"/);
       } finally {
         await themeEditUndo('t', {cwd, thing: '--text-display-1-size'});
@@ -644,7 +805,12 @@ describe('a plural display step when two or all looks are fluid', () => {
     'writes the looks it can, names the ones left out, and names all of them when none can step',
     async () => {
       const fluid = (/** @type {number} */ n) =>
-        themeEditSet('t', `--text-display-${n}-size`, `clamp(30px, ${3 + n}vw, ${80 - n * 8}px)`, {cwd});
+        themeEditSet(
+          't',
+          `--text-display-${n}-size`,
+          `clamp(30px, ${3 + n}vw, ${80 - n * 8}px)`,
+          {cwd},
+        );
       await fluid(1);
       await fluid(2);
       try {
@@ -653,23 +819,38 @@ describe('a plural display step when two or all looks are fluid', () => {
         expect(lines).toMatch(/--when type:display-3\b/);
         expect(lines).not.toMatch(/--when type:display-[12]\b/);
         const text = JSON.stringify(data.results);
-        expect(text).toMatch(/display-1, display-2 not changed: their sizes are no length now/);
+        expect(text).toMatch(
+          /display-1, display-2 not changed: their sizes are no length now/,
+        );
         // (The looks line names only the looks written.)
         expect(text).toMatch(/display headings: display-3"/);
         await fluid(3);
-        const none = JSON.stringify((await answer('display headings bigger')).results);
-        expect(none).toMatch(/display-1, display-2, display-3 not changed: their sizes are no length now/);
+        const none = JSON.stringify(
+          (await answer('display headings bigger')).results,
+        );
+        expect(none).toMatch(
+          /display-1, display-2, display-3 not changed: their sizes are no length now/,
+        );
         expect(none).not.toMatch(/say it as a part and a look/);
         // (A size said with a mode is no step ask: it keeps the answer for
         // that mode, never "say a size".)
-        const darkOnly = JSON.stringify((await answer('display headings 72px in dark mode')).results);
+        const darkOnly = JSON.stringify(
+          (await answer('display headings 72px in dark mode')).results,
+        );
         expect(darkOnly).toMatch(/cannot be dark mode only/);
         expect(darkOnly).not.toMatch(/say a size for them instead/);
         // (Only a size ask alone takes that answer: a font or an alignment
         // keeps its own, and a color said with the size is still named.)
-        for (const ask of ['display headings in Georgia', 'display headings centered'])
-          expect(JSON.stringify((await answer(ask)).results), ask).not.toMatch(/not changed: their sizes are no length/);
-        const both = JSON.stringify((await answer('display headings bigger and blue')).results);
+        for (const ask of [
+          'display headings in Georgia',
+          'display headings centered',
+        ])
+          expect(JSON.stringify((await answer(ask)).results), ask).not.toMatch(
+            /not changed: their sizes are no length/,
+          );
+        const both = JSON.stringify(
+          (await answer('display headings bigger and blue')).results,
+        );
         expect(both).toMatch(/display-1, display-2, display-3 not changed/);
         expect(both).toMatch(/not used: \\"blue\\"/);
       } finally {
@@ -714,7 +895,7 @@ describe('a display heading', () => {
         [1, 2, 3].map(n => `${thing} --on heading --when type:display-${n}`);
       const blue = await answer('bold display headings, make them blue');
       expect(first(blue)).toEqual([
-        ...each("set t font-weight 700"),
+        ...each('set t font-weight 700'),
         ...each("set t color '#2563eb'"),
       ]);
       expect(JSON.stringify(blue.results)).toMatch(
@@ -723,18 +904,22 @@ describe('a display heading', () => {
       // (One clause is one answer that covers every look.)
       const heavy = await answer('heavy display headings');
       expect(
-        heavy.results.filter((/** @type {any} */ r) => r.commands.some((/** @type {string} */ c) => / editor set /.test(c))),
+        heavy.results.filter((/** @type {any} */ r) =>
+          r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
+        ),
       ).toHaveLength(1);
       // (Nothing written, nothing named.)
-      expect(JSON.stringify((await answer('display headings')).results)).not.toMatch(
-        /display headings: display-1/,
-      );
+      expect(
+        JSON.stringify((await answer('display headings')).results),
+      ).not.toMatch(/display headings: display-1/);
       const listed = first(
         await answer('display headings: heavier, tighter letter spacing'),
       );
       for (const n of [1, 2, 3])
         expect(listed.join('\n')).toMatch(
-          new RegExp(`letter-spacing \\S+ --on heading --when type:display-${n}\\b`),
+          new RegExp(
+            `letter-spacing \\S+ --on heading --when type:display-${n}\\b`,
+          ),
         );
     },
     T,

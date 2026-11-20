@@ -5264,6 +5264,48 @@ export function draftAnswer(ctx, env, question) {
         (m, lead, run) => (cued(run) ? `${lead}font ${run}` : m),
       );
   }
+  // (A look said, then taken away by a pronoun: "the copy button border is
+  // ugly, hide it", "the shadow on the cards is too strong, remove it". The
+  // pronoun is that look, never the part: only the look goes, and the
+  // asks before it stay as said.)
+  question = String(question).replace(
+    /(^|[,;.]\s*)([^,;.]*?\b(?:borders?|shadows?|outlines?|underlines?|backgrounds?|gradients?)\b[^,;.]*)[,;.]\s*(?:(?:so|and|then|please|just)\s+)*(?:hide|remove|drop|lose|get\s+rid\s+of)\s+(?:it|them)\b\s*[.!]?$/i,
+    (m, lead, said) => {
+      // ("it" is the nearest look said before it: "the button shadow is too
+      // strong and the card border is ugly, hide it" is the card border.)
+      const looks = [
+        ...said.matchAll(
+          /\b(borders?|shadows?|outlines?|underlines?|backgrounds?|gradients?)\b/gi,
+        ),
+      ];
+      const last = looks[looks.length - 1];
+      const look = last[1];
+      const at = /** @type {number} */ (last.index);
+      const word = look.toLowerCase().replace(/s$/, '');
+      // (An ask joined before it by "and", "make the buttons blue and the
+      // card border is ugly", stays as said: only the words after the last
+      // "and" are this look's.)
+      const cut = said.slice(0, at).search(/\band\s+(?!.*\band\s)/i);
+      const kept = cut >= 0 ? said.slice(0, cut + 4) : '';
+      const before = said.slice(cut >= 0 ? cut + 4 : 0, at).trim();
+      const partIn = (/** @type {string} */ w) =>
+        partLexicon(ctx)
+          .parts.map(([re]) => re.exec(` ${w.toLowerCase()} `)?.[0]?.trim())
+          .find(Boolean);
+      // (The part is the one named before the look, "the copy button
+      // border"; else the one after on, of, in or around, "I hate the
+      // border on cards"; else the one said earlier in the clause, "the
+      // shadow on the cards is too strong and the border is ugly".)
+      const onPart = /^\s*(?:on|of|in|around)\s+(.+)$/i.exec(
+        said.slice(at + look.length),
+      )?.[1];
+      const part =
+        (before && partIn(before)) ||
+        (onPart && partIn(onPart)) ||
+        (kept && partIn(kept));
+      return part ? `${lead}${kept}no ${word} on ${part}` : m;
+    },
+  );
   question = String(question)
     .replace(/\b([a-z]+)[- ]?(mode|theme)\b/gi, (m, w, k) => {
       const mode = modeNear(w);
@@ -11652,7 +11694,7 @@ export function draftAnswer(ctx, env, question) {
   }
   // "nav items" in a question about the sidebar are the side nav's; an
   // underline on tabs is the tab indicator.
-  const side = /\b(side ?nav|sidebar|side ?panel)\b/.test(q);
+  const side = /\b(side ?nav(?:igation)?|sidebar|side ?panel)\b/.test(q);
   for (const c of clauses)
     for (const p of c.parts) {
       // (Only a bare "nav links" or "nav items" is the side nav's in a sidebar
