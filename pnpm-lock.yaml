@@ -200,6 +200,9 @@ importers:
       '@astryxdesign/richtext':
         specifier: '*'
         version: link:../../packages/richtext
+      '@astryxdesign/template-icons':
+        specifier: '*'
+        version: link:../../packages/template-icons
       '@astryxdesign/theme-butter':
         specifier: '*'
         version: link:../../packages/themes/butter
@@ -875,6 +878,9 @@ importers:
       '@astryxdesign/lab':
         specifier: '*'
         version: link:../lab
+      '@astryxdesign/template-icons':
+        specifier: '*'
+        version: link:../template-icons
       '@astryxdesign/theme-neutral':
         specifier: '*'
         version: link:../themes/neutral
@@ -1106,6 +1112,18 @@ importers:
       lexical:
         specifier: ^0.52.0
         version: 0.52.0(typescript@6.0.3)
+
+  packages/template-icons:
+    dependencies:
+      '@heroicons/react':
+        specifier: ^2.2.0
+        version: 2.2.0(react@19.3.1)
+      lucide-react:
+        specifier: ^1.66.0
+        version: 1.67.0(@types/react@19.3.0)(react@19.3.1)
+      react:
+        specifier: '>=18'
+        version: 19.3.1
 
   packages/themes/butter:
     dependencies:

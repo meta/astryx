@@ -10,8 +10,8 @@ import {
   StarIcon,
   TagIcon,
   UserIcon,
-  ShieldCheckIcon,
-} from '@heroicons/react/24/outline';
+  ShieldIcon,
+} from '@astryxdesign/template-icons';
 
 export default function TokenIcon() {
   return (
@@ -38,7 +38,7 @@ export default function TokenIcon() {
         <Token
           label="Verified"
           color="green"
-          icon={<Icon icon={ShieldCheckIcon} size="sm" color="inherit" />}
+          icon={<Icon icon={ShieldIcon} size="sm" color="inherit" />}
         />
       </Stack>
     </Stack>

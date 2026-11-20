@@ -17,7 +17,7 @@
  * - /packages/cli/assets/templates/blocks/components/Toast/ (showcase blocks)
  */
 
-import {useCallback, useEffect, useRef} from 'react';
+import {use, useCallback, useEffect, useMemo, useRef} from 'react';
 import type {FocusEvent, ReactNode, RefObject} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '../Button';
@@ -37,10 +37,14 @@ import {INTERACTIVE_SELECTORS} from '../hooks/useClickableContainer';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import type {AnnounceFn} from '../hooks/useAnnounce';
 import {useTheme} from '../theme';
+import {ThemeContext, useThemeDefinition} from '../theme/useTheme';
+import {useIsHydrating} from '../hooks/useIsHydrating';
+import {resolveThemeTokens} from '../theme/tokens';
+import {invertedSideIn} from '../theme/invertedSurfaceSide';
+import {MediaDarkPage} from '../theme/MediaDarkPage';
 import {MediaTheme} from '../theme/MediaTheme';
 import {useSurfaceMediaMode} from '../hooks/useAutoMediaMode';
 import {pickInvertedSide} from '../hooks/mediaSide';
-import {parseColor} from '../utils/color';
 import type {
   ToastType,
   ToastDismissReason,
@@ -134,6 +138,11 @@ const styles = stylex.create({
     opacity: 0,
     transform: `translateY(var(--_toast-swipe-exit-y, var(--_toast-swipe-y, var(--_toast-slide-y, ${TOAST_EDGE_DRIFT})))) scale(var(--_toast-swipe-scale, 1))`,
   },
+  // The close button draws in the card's text color, the color the card's
+  // body text inherits.
+  close: {
+    color: 'inherit',
+  },
   endContent: {
     flexShrink: 0,
     display: 'flex',
@@ -175,11 +184,6 @@ interface ToastSurfaceProps extends ToastProps {
    * toast's auto-hide timer starts over.
    */
   timerKey?: string;
-  /**
-   * False when the viewport announces the toast: the card then carries no
-   * live region of its own, so an update in place is announced once.
-   */
-  isLiveRegion?: boolean;
   /**
    * True once the toast's row has started to open. The card then has no
    * starting style, so a move between modal outlets starts no transition.
@@ -225,7 +229,6 @@ export function ToastSurface({
   renderContent,
   gestureDirection,
   timerKey,
-  isLiveRegion = true,
   announce,
   isRenderedBodyAnnouncement = false,
   hasEntryStarted = false,
@@ -404,9 +407,11 @@ export function ToastSurface({
   // The viewport announces a plain-text body when it dispatches the toast.
   // This reads a component body or a custom layout after commit. A body is
   // read whole, links included. A custom layout leaves out its controls.
+  // Only the viewport passes `announce`. The card never holds a live role, so
+  // a Toast rendered on its own announces nothing; its caller owns that.
   useAnnounceRenderedText(
     renderContent != null ? rootRef : bodyRef,
-    !isLiveRegion && (renderContent != null || isRenderedBodyAnnouncement),
+    announce != null && (renderContent != null || isRenderedBodyAnnouncement),
     timerKey ?? '',
     {
       politeness: isError ? 'assertive' : 'polite',
@@ -423,31 +428,46 @@ export function ToastSurface({
   }, [onDismiss]);
 
   // Before the measurement, take the side from the theme's resolved surface by
-  // the measurement's rule. If the surface is translucent, or parseColor cannot
-  // read it or an on-color, use the mode.
+  // the measurement's rule. If the surface is translucent, or an on-color
+  // cannot be read, use the mode.
   const {mode, tokens} = useTheme();
-  const surface = parseColor(
-    tokens[
-      isError
-        ? '--color-background-error-inverted'
-        : '--color-background-inverted'
-    ] ?? '',
+  const surfaceToken = isError
+    ? '--color-background-error-inverted'
+    : '--color-background-inverted';
+  const fromTokens = invertedSideIn(tokens, surfaceToken);
+  // A system-mode page's scheme is the reader's, which the server does not
+  // know. The card takes its light-page side, and the side it takes on a
+  // dark page rides beside it; the theme writes that side's rules for a dark
+  // page, so the first paint is right in both.
+  const theme = useThemeDefinition();
+  // While a system-mode page renders on the server (or hydrates the server's
+  // markup), its scheme is the reader's and unknown; later renders know it.
+  const isHydrating = useIsHydrating();
+  const themeMode = use(ThemeContext)?.mode ?? 'system';
+  const isSchemeUnknown = themeMode === 'system' && isHydrating;
+  const sides = useMemo(
+    () =>
+      theme == null
+        ? null
+        : {
+            light: invertedSideIn(
+              resolveThemeTokens(theme, {mode: 'light'}),
+              surfaceToken,
+            ),
+            dark: invertedSideIn(
+              resolveThemeTokens(theme, {mode: 'dark'}),
+              surfaceToken,
+            ),
+          },
+    [theme, surfaceToken],
   );
-  const fromTokens =
-    surface !== null && surface.a >= 1
-      ? pickInvertedSide(
-          surface,
-          null,
-          parseColor(tokens['--color-on-dark'] ?? ''),
-          parseColor(tokens['--color-on-light'] ?? ''),
-        )
-      : null;
+  const pageSide = isSchemeUnknown ? sides?.light : fromTokens;
   const fallbackMediaMode =
-    fromTokens === 'dark' || fromTokens === 'light'
-      ? fromTokens
-      : isError || mode === 'light'
-        ? 'dark'
-        : 'light';
+    pageSide ?? (isError || mode === 'light' ? 'dark' : 'light');
+  const darkPageSide =
+    isSchemeUnknown && sides?.dark != null && sides.dark !== fallbackMediaMode
+      ? sides.dark
+      : null;
   // Once painted, the card's text takes the side that reads best on it.
   const measuredMediaMode = useSurfaceMediaMode(
     rootRef,
@@ -459,9 +479,6 @@ export function ToastSurface({
     <div
       {...pickDataAttributes(rest)}
       ref={rootRef}
-      role={isLiveRegion ? (isError ? 'alert' : 'status') : undefined}
-      aria-live={isLiveRegion ? (isError ? 'assertive' : 'polite') : undefined}
-      aria-atomic={isLiveRegion ? 'true' : undefined}
       onMouseEnter={pauseForPointer}
       onMouseLeave={resumeForPointer}
       onFocusCapture={pauseForFocus}
@@ -476,36 +493,40 @@ export function ToastSurface({
           isExiting && styles.exiting,
         ),
       )}>
-      <MediaTheme mode={measuredMediaMode ?? fallbackMediaMode}>
-        {renderContent ? (
-          renderContent({
-            body,
-            endContent,
-            type,
-            isAutoHide,
-            autoHideDuration,
-            dismiss: handleDismiss,
-          })
-        ) : (
-          <div {...stylex.props(styles.inner)}>
-            <div ref={bodyRef} {...stylex.props(styles.content)}>
-              {body}
-            </div>
+      <MediaDarkPage side={measuredMediaMode == null ? darkPageSide : null}>
+        <MediaTheme mode={measuredMediaMode ?? fallbackMediaMode}>
+          {renderContent ? (
+            renderContent({
+              body,
+              endContent,
+              type,
+              isAutoHide,
+              autoHideDuration,
+              dismiss: handleDismiss,
+            })
+          ) : (
+            <div {...stylex.props(styles.inner)}>
+              <div ref={bodyRef} {...stylex.props(styles.content)}>
+                {body}
+              </div>
 
-            <div {...stylex.props(styles.endContent)}>
-              {endContent}
-              <Button
-                variant="ghost"
-                size="sm"
-                icon={<Icon icon="close" size="sm" color="inherit" />}
-                label={t('@astryx.toast.dismiss')}
-                onClick={handleDismiss}
-                isIconOnly
-              />
+              <div {...stylex.props(styles.endContent)}>
+                {endContent}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<Icon icon="close" size="sm" color="inherit" />}
+                  className={themeProps('toast-close').className}
+                  xstyle={styles.close}
+                  label={t('@astryx.toast.dismiss')}
+                  onClick={handleDismiss}
+                  isIconOnly
+                />
+              </div>
             </div>
-          </div>
-        )}
-      </MediaTheme>
+          )}
+        </MediaTheme>
+      </MediaDarkPage>
     </div>
   );
 }

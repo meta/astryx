@@ -3,9 +3,9 @@
 /**
  * @file ContextMenu.sheetLoading.test.tsx
  * @output Tests that a ContextMenu loads its touch sheet's action list only for
- *   the bottom-sheet presentation: a popover menu opens without it, and a
- *   sheet menu still opens, shows its rows, drills into a sub-menu and comes
- *   back
+ *   a data-driven bottom-sheet menu: a popover menu and a compound sheet menu
+ *   open without it, and a data-driven sheet menu still opens, shows its rows,
+ *   drills into a sub-menu and comes back
  * @position Validates which modules ContextMenu loads per presentation. Each
  *   test starts from a fresh module registry and counts the loads of the
  *   sheet's modules.
@@ -71,6 +71,29 @@ describe('ContextMenu sheet loading', () => {
     expect(
       screen.getByRole('menuitem', {name: 'Edit', hidden: true}),
     ).toBeTruthy();
+    expect(loads.actionList).toBe(0);
+  });
+
+  it('opens a compound sheet menu without loading the sheet action list', async () => {
+    const {ContextMenu} = await import('./ContextMenu');
+    render(
+      <ContextMenu
+        presentation="bottom-sheet"
+        label="Row actions"
+        menuContent={<button type="button">Custom action</button>}>
+        <div>Right-click me</div>
+      </ContextMenu>,
+    );
+
+    fireEvent.contextMenu(screen.getByText('Right-click me'));
+    expect(
+      await screen.findByRole(
+        'button',
+        {name: 'Custom action'},
+        {timeout: 15000},
+      ),
+    ).toBeInTheDocument();
+    await settle();
     expect(loads.actionList).toBe(0);
   });
 

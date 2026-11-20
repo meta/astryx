@@ -380,16 +380,16 @@ const markerStyles = stylex.create({
 });
 
 /** The width and height of CheckboxInput's small control. */
-const TASK_CHECKBOX_SIZE = 20;
-
 const taskMarkerStyles = stylex.create({
   // A task item's checkbox stands where the marker would, centered on the
-  // item's first line, as a task list's checkboxes are.
+  // item's first line, as a task list's checkboxes are: the box is one line
+  // tall and centers the checkbox at whatever size it draws (a theme's box).
   container: {
     alignSelf: 'flex-start',
     display: 'flex',
+    alignItems: 'center',
     flexShrink: 0,
-    marginTop: `calc((1em * ${typeScaleVars['--text-body-leading']} - ${TASK_CHECKBOX_SIZE}px) / 2)`,
+    height: `calc(1em * ${typeScaleVars['--text-body-leading']})`,
   },
 });
 

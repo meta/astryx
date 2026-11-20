@@ -10,7 +10,8 @@
  * statically read value (themes, icon sets, icon definitions), keyed by the
  * hash of its text and the type it is read as, so the published package reads
  * it without parsing; and the CLI's own shipped docs' exports as the readers
- * parse them, so it reads the parse without running it. The file is not committed;
+ * parse them, by the zod release that made each parse, so it reads the parse
+ * without running it. The file is not committed;
  * a checkout without it imports every doc, with the same result. `--clean` (at
  * `postpack`) removes it.
  */
@@ -22,10 +23,11 @@ import {isDeepStrictEqual} from 'node:util';
 import {parse} from '@babel/parser';
 import {CLI_ROOT} from '../foundation/fs/paths.mjs';
 import {
+  docParserZodVersion,
   storedKey,
+  storedParseKey,
   STORED_DOCS_FILE,
 } from '../foundation/doc-compiler/stored-docs.mjs';
-import {storedParseKey} from '../foundation/doc-compiler/stored-docs.mjs';
 import {parseReadableDoc} from '../foundation/doc-compiler/parse-readable.mjs';
 import {
   descriptorStoreKey,
@@ -171,6 +173,9 @@ function runsCode(node, declared) {
 export async function storedDocsText() {
   /** @type {Record<string, Record<string, unknown>>} */
   const byKey = {};
+  // A parse is stored by the zod release that made it, and only when that
+  // release can be read: an install that loads another release parses.
+  const zod = docParserZodVersion();
   const files = [
     ...docFilesIn(CLI_ROOT),
     ...(fs.existsSync(CORE_SRC) ? docFilesIn(CORE_SRC) : []),
@@ -211,7 +216,8 @@ export async function storedDocsText() {
     const parsedHere = file.startsWith(
       path.join(CLI_ROOT, 'assets', 'docs') + path.sep,
     );
-    for (const name of parsedHere ? ['docs', 'default'] : []) {
+    for (const name of ['docs', 'default']) {
+      if (!parsedHere || zod == null) break;
       if (!data[name] || typeof data[name] !== 'object') continue;
       let parsed;
       try {
@@ -221,7 +227,7 @@ export async function storedDocsText() {
         continue;
       }
       if (isDeepStrictEqual(JSON.parse(JSON.stringify(parsed)), parsed)) {
-        byKey[storedParseKey(storedKey(text), name)] = parsed;
+        byKey[storedParseKey(storedKey(text), name, zod)] = parsed;
       }
     }
   }
