@@ -5,9 +5,11 @@ import {hydrateRoot, type Root} from 'react-dom/client';
 import {renderToString} from 'react-dom/server';
 import {act, render, cleanup} from '@testing-library/react';
 import React from 'react';
+import {declaredValue} from '../__tests__/stylexDeclarations';
 import {Theme} from './Theme';
+import {useTheme} from './useTheme';
 import {defineTheme} from './defineTheme';
-import type * as DefineThemeModule from './defineTheme';
+import type * as GenerateThemeRulesModule from './generateThemeRules';
 import {dynamicTypeScaleRule} from './dynamicType';
 import {__resetDevWarnings} from '../utils/devWarning';
 
@@ -15,8 +17,8 @@ const {generateThemeCSSSpy} = vi.hoisted(() => ({
   generateThemeCSSSpy: vi.fn(),
 }));
 
-vi.mock('./defineTheme', async importOriginal => {
-  const actual = await importOriginal<typeof DefineThemeModule>();
+vi.mock('./generateThemeRules', async importOriginal => {
+  const actual = await importOriginal<typeof GenerateThemeRulesModule>();
   generateThemeCSSSpy.mockImplementation(actual.generateThemeCSS);
   return {...actual, generateThemeCSS: generateThemeCSSSpy};
 });
@@ -40,6 +42,7 @@ describe('Theme', () => {
     // Clean up documentElement state before each test
     document.documentElement.removeAttribute('data-theme');
     document.documentElement.removeAttribute('data-astryx-theme');
+    document.documentElement.removeAttribute('data-astryx-scheme');
     generateThemeCSSSpy.mockClear();
   });
 
@@ -100,6 +103,32 @@ describe('Theme', () => {
     expect(wrapper).toBeTruthy();
   });
 
+  it("gives text inside that only inherits its size the theme's body size", () => {
+    const {container} = render(
+      <Theme theme={testTheme}>
+        <span>child</span>
+      </Theme>,
+    );
+    const wrapper = container.querySelector<HTMLElement>(
+      '[data-astryx-theme="test"]',
+    );
+    expect(declaredValue(wrapper!, 'font-size')).toMatch(/--text-body-size/);
+  });
+
+  it("gives text inside that only inherits its line height the theme's body leading", () => {
+    const {container} = render(
+      <Theme theme={testTheme}>
+        <span>child</span>
+      </Theme>,
+    );
+    const wrapper = container.querySelector<HTMLElement>(
+      '[data-astryx-theme="test"]',
+    );
+    expect(declaredValue(wrapper!, 'line-height')).toMatch(
+      /--text-body-leading/,
+    );
+  });
+
   // =========================================================================
   // Root detection — data-theme on <html>
   // =========================================================================
@@ -130,6 +159,142 @@ describe('Theme', () => {
       </Theme>,
     );
     expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+  });
+
+  it('names the scheme the root provider draws in on <html> when its mode or the page decides it, and removes it on unmount', async () => {
+    for (const mode of ['dark', 'light'] as const) {
+      const {unmount} = render(
+        <Theme theme={testTheme} mode={mode}>
+          <span>child</span>
+        </Theme>,
+      );
+      expect(document.documentElement.getAttribute('data-astryx-scheme')).toBe(
+        mode,
+      );
+      unmount();
+      expect(document.documentElement.hasAttribute('data-astryx-scheme')).toBe(
+        false,
+      );
+    }
+    // A system root on a page whose scheme the engine does not report leaves
+    // the reader's preference to decide.
+    const unreported = render(
+      <Theme theme={testTheme} mode="system">
+        <span>child</span>
+      </Theme>,
+    );
+    expect(document.documentElement.hasAttribute('data-astryx-scheme')).toBe(
+      false,
+    );
+    unreported.unmount();
+    // A system root on a page that names no scheme draws light, and on a
+    // page that names both the reader's preference decides.
+    const real = window.getComputedStyle.bind(window);
+    let rootScheme = 'normal';
+    vi.spyOn(window, 'getComputedStyle').mockImplementation(
+      (element, pseudo) => {
+        const style = real(element, pseudo);
+        if (element === document.documentElement) {
+          Object.defineProperty(style, 'colorScheme', {
+            configurable: true,
+            get: () => rootScheme,
+          });
+        }
+        return style;
+      },
+    );
+    try {
+      // A nested Theme that forces dark never writes the root's scheme, not
+      // even for a moment before the root writes its own.
+      const written: (string | null)[] = [];
+      const watcher = new MutationObserver(records => {
+        for (const record of records) {
+          if (record.attributeName === 'data-astryx-scheme') {
+            written.push(
+              document.documentElement.getAttribute('data-astryx-scheme'),
+            );
+          }
+        }
+      });
+      watcher.observe(document.documentElement, {attributes: true});
+      const page = render(
+        <Theme theme={testTheme} mode="system">
+          <Theme theme={testTheme} mode="dark">
+            <span>child</span>
+          </Theme>
+        </Theme>,
+      );
+      await Promise.resolve();
+      watcher.disconnect();
+      expect(document.documentElement.getAttribute('data-astryx-scheme')).toBe(
+        'light',
+      );
+      expect(written).not.toContain('dark');
+      page.unmount();
+      rootScheme = 'light dark';
+      render(
+        <Theme theme={testTheme} mode="system">
+          <span>child</span>
+        </Theme>,
+      );
+      expect(document.documentElement.hasAttribute('data-astryx-scheme')).toBe(
+        false,
+      );
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('names the page scheme again when the reader changes their preference, on a root that follows it through a media query', () => {
+    const real = window.getComputedStyle.bind(window);
+    let prefersDark = false;
+    const query = Object.assign(new EventTarget(), {
+      media: '(prefers-color-scheme: dark)',
+      get matches() {
+        return prefersDark;
+      },
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+    });
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => query),
+    );
+    // The host's root follows the reader: `@media (prefers-color-scheme:
+    // dark) {:root {color-scheme: dark}}`.
+    vi.spyOn(window, 'getComputedStyle').mockImplementation(
+      (element, pseudo) => {
+        const style = real(element, pseudo);
+        if (element === document.documentElement) {
+          Object.defineProperty(style, 'colorScheme', {
+            configurable: true,
+            get: () => (prefersDark ? 'dark' : 'light'),
+          });
+        }
+        return style;
+      },
+    );
+    try {
+      render(
+        <Theme theme={testTheme} mode="system">
+          <span>child</span>
+        </Theme>,
+      );
+      expect(document.documentElement.getAttribute('data-astryx-scheme')).toBe(
+        'light',
+      );
+      act(() => {
+        prefersDark = true;
+        query.dispatchEvent(new Event('change'));
+      });
+      expect(document.documentElement.getAttribute('data-astryx-scheme')).toBe(
+        'dark',
+      );
+    } finally {
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+    }
   });
 
   it('removes data-theme from <html> when root provider unmounts', () => {
@@ -657,6 +822,203 @@ describe('the runtime injection hint', () => {
       expect(message).not.toContain('@astryxdesign/theme-');
       expect(message).not.toMatch(/import \{[^}]*\}/);
       expect(message).not.toContain(`${name}Theme`);
+    }
+  });
+});
+
+describe('a theme value that is not a defined theme', () => {
+  const NOT_THEMES: ReadonlyArray<[string, unknown]> = [
+    ['the mode string "light"', 'light'],
+    ['the string "default"', 'default'],
+    ['the mode string "system"', 'system'],
+    ['an empty object', {}],
+    ['null', null],
+    ['undefined', undefined],
+  ];
+
+  /** Shows the theme name and mode a descendant reads. */
+  function Probe() {
+    const {name, mode} = useTheme();
+    return <span data-testid="probe">{`${name} ${mode}`}</span>;
+  }
+
+  beforeEach(() => {
+    __resetDevWarnings();
+    document.documentElement.removeAttribute('data-theme');
+    document.documentElement.removeAttribute('data-astryx-theme');
+    generateThemeCSSSpy.mockClear();
+  });
+
+  afterEach(() => {
+    cleanup();
+    document.documentElement.removeAttribute('data-theme');
+    document.documentElement.removeAttribute('data-astryx-theme');
+  });
+
+  for (const [label, value] of NOT_THEMES) {
+    it(`renders ${label} in the browser with Core's default tokens, compiles nothing and warns once`, () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const {getByTestId, container} = render(
+          <Theme theme={value as never} mode="dark">
+            <Probe />
+          </Theme>,
+        );
+        expect(getByTestId('probe').textContent).toBe('default dark');
+        const wrapper = container.firstElementChild as HTMLElement;
+        expect(wrapper.hasAttribute('data-astryx-theme')).toBe(false);
+        expect(wrapper.getAttribute('data-theme')).toBe('dark');
+        expect(document.documentElement.getAttribute('data-theme')).toBe(
+          'dark',
+        );
+        expect(document.documentElement.hasAttribute('data-astryx-theme')).toBe(
+          false,
+        );
+        expect(generateThemeCSSSpy).not.toHaveBeenCalled();
+        const messages = warn.mock.calls
+          .map(args => String(args[0]))
+          .filter(m => m.includes('takes a theme from defineTheme()'));
+        expect(messages).toHaveLength(1);
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it(`renders ${label} the same on the server and in the browser`, () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const host = document.createElement('div');
+      document.body.append(host);
+      try {
+        const ui = (
+          <Theme theme={value as never} mode="light">
+            <p>content</p>
+          </Theme>
+        );
+        host.innerHTML = renderToString(ui);
+        const serverMarkup = host.innerHTML;
+        let root: Root | undefined;
+        act(() => {
+          root = hydrateRoot(host, ui);
+        });
+        expect(host.innerHTML).toBe(serverMarkup);
+        expect(host.textContent).toBe('content');
+        expect(error).not.toHaveBeenCalled();
+        act(() => root?.unmount());
+      } finally {
+        host.remove();
+        warn.mockRestore();
+        error.mockRestore();
+      }
+    });
+  }
+
+  it('names the mode prop when the value is a mode', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      render(<Theme theme={'dark' as never}>x</Theme>);
+      expect(String(warn.mock.calls[0]?.[0])).toBe(
+        'Theme: `theme` takes a theme from defineTheme(), but got the string "dark". To set the color mode, use mode="dark". Until then, this Theme applies no theme of its own.',
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('keeps the theme around it when nested, and its own mode', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const {getByTestId} = render(
+        <Theme theme={testTheme} mode="light">
+          <Theme theme={'light' as never} mode="dark">
+            <Probe />
+          </Theme>
+        </Theme>,
+      );
+      const probe = getByTestId('probe');
+      expect(probe.textContent).toBe('test dark');
+      expect(probe.parentElement?.getAttribute('data-astryx-theme')).toBe(
+        'test',
+      );
+      expect(document.documentElement.getAttribute('data-astryx-theme')).toBe(
+        'test',
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('keeps its mode for the Themes and readers below it when no theme surrounds it', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const {getByTestId} = render(
+        <Theme theme={'light' as never} mode="dark">
+          <div data-testid="forced">
+            <Probe />
+          </div>
+          <Theme theme={testTheme} mode="system">
+            <div data-testid="system">
+              <Probe />
+            </div>
+          </Theme>
+          <Theme theme={{} as never} mode="light">
+            <div data-testid="nested">
+              <Probe />
+            </div>
+          </Theme>
+        </Theme>,
+      );
+      expect(getByTestId('forced').textContent).toBe('default dark');
+      // A system Theme under one that forces dark follows the reader's
+      // preference (light here), not the forced root.
+      expect(getByTestId('system').textContent).toBe('test light');
+      expect(getByTestId('nested').textContent).toBe('default light');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('warns for null and for a plain object separately', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      render(<Theme theme={null as never}>x</Theme>);
+      render(<Theme theme={{} as never}>y</Theme>);
+      const messages = warn.mock.calls
+        .map(args => String(args[0]))
+        .filter(m => m.includes('takes a theme from defineTheme()'));
+      expect(messages).toHaveLength(2);
+      expect(messages[0]).toContain('got null');
+      expect(messages[1]).toContain(
+        'an object that defineTheme() did not make',
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('applies a defined theme once the value becomes one, without remounting the subtree', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const {container, rerender} = render(
+        <Theme theme={{} as never}>
+          <input data-testid="kept" />
+        </Theme>,
+      );
+      const input = container.querySelector('input');
+      rerender(
+        <Theme theme={testTheme}>
+          <input data-testid="kept" />
+        </Theme>,
+      );
+      expect(container.querySelector('input')).toBe(input);
+      expect(
+        (container.firstElementChild as HTMLElement).getAttribute(
+          'data-astryx-theme',
+        ),
+      ).toBe('test');
+      expect(generateThemeCSSSpy).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
     }
   });
 });

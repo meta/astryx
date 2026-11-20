@@ -260,3 +260,209 @@ describe('useClipboardCopy (internal)', () => {
     expect(Object.keys(result.current).sort()).toEqual(['copy', 'isCopied']);
   });
 });
+
+describe('useClipboard where the async Clipboard API is not allowed', () => {
+  let execCommand: ReturnType<typeof vi.fn>;
+  /** The text the last copy event carried, as the browser would copy it. */
+  let copiedText: string | undefined;
+
+  /**
+   * The browser's copy command: fires a `copy` event at the focused element
+   * and copies what the event's clipboard data holds.
+   */
+  function copyCommand(command: string): boolean {
+    if (command !== 'copy') {
+      return false;
+    }
+    const data = new Map<string, string>();
+    const event = new Event('copy', {bubbles: true, cancelable: true});
+    Object.defineProperty(event, 'clipboardData', {
+      value: {setData: (type: string, value: string) => data.set(type, value)},
+    });
+    (document.activeElement ?? document.body).dispatchEvent(event);
+    copiedText = event.defaultPrevented ? data.get('text/plain') : undefined;
+    return true;
+  }
+
+  beforeEach(() => {
+    copiedText = undefined;
+    Object.assign(navigator, {
+      clipboard: {writeText: vi.fn().mockResolvedValue(undefined)},
+    });
+    // A sandboxed frame's permissions policy refuses `clipboard-write`.
+    Object.defineProperty(document, 'featurePolicy', {
+      configurable: true,
+      value: {
+        allowsFeature: (feature: string) => feature !== 'clipboard-write',
+      },
+    });
+    execCommand = vi.fn(copyCommand);
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: execCommand,
+    });
+  });
+
+  afterEach(() => {
+    delete (document as {featurePolicy?: unknown}).featurePolicy;
+    delete (document as {execCommand?: unknown}).execCommand;
+    __resetLiveRegionsForTest();
+    vi.restoreAllMocks();
+  });
+
+  it('copies the exact text with the copy command, never trying the refused API, and reports the copy', async () => {
+    const {result} = renderHook(() => useClipboard({announce: 'Copied'}));
+    let outcome: boolean | undefined;
+    await act(async () => {
+      outcome = await result.current.copy('from a sandbox');
+    });
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
+    expect(execCommand).toHaveBeenCalledWith('copy');
+    expect(copiedText).toBe('from a sandbox');
+    expect(outcome).toBe(true);
+    expect(result.current.isCopied).toBe(true);
+    await waitFor(() =>
+      expect(politeRegion()?.textContent ?? '').toContain('Copied'),
+    );
+  });
+
+  it('moves no focus and adds no element, so a control in a surface that closes on focus loss keeps it', async () => {
+    const button = document.createElement('button');
+    document.body.append(button);
+    button.focus();
+    let focusedDuringCopy: Element | null = null;
+    execCommand.mockImplementation((command: string) => {
+      focusedDuringCopy = document.activeElement;
+      return copyCommand(command);
+    });
+    const blur = vi.fn();
+    button.addEventListener('blur', blur);
+    const {result} = renderHook(() => useClipboard());
+    const elements = document.body.querySelectorAll('*').length;
+    await act(async () => {
+      await result.current.copy('x');
+    });
+    expect(focusedDuringCopy).toBe(button);
+    expect(document.activeElement).toBe(button);
+    expect(blur).not.toHaveBeenCalled();
+    expect(copiedText).toBe('x');
+    expect(document.body.querySelectorAll('*').length).toBe(elements);
+    button.remove();
+  });
+
+  it("keeps the page's own copy handlers from changing the text", async () => {
+    const pageHandler = vi.fn((event: Event) => {
+      (event as ClipboardEvent).clipboardData?.setData('text/plain', 'changed');
+    });
+    document.addEventListener('copy', pageHandler);
+    const {result} = renderHook(() => useClipboard());
+    await act(async () => {
+      await result.current.copy('exact');
+    });
+    expect(copiedText).toBe('exact');
+    expect(pageHandler).not.toHaveBeenCalled();
+    document.removeEventListener('copy', pageHandler);
+  });
+
+  it('reports a failed write when the browser does not copy', async () => {
+    execCommand.mockReturnValue(false);
+    const onError = vi.fn();
+    const {result} = renderHook(() =>
+      useClipboardCopy({announceFailure: 'Failed', onError}),
+    );
+    let outcome: boolean | undefined;
+    await act(async () => {
+      outcome = await result.current.copy('x');
+    });
+    expect(outcome).toBe(false);
+    expect(result.current.isFailed).toBe(true);
+    expect(result.current.isCopied).toBe(false);
+    expect(onError).toHaveBeenCalledTimes(1);
+  });
+
+  it('never runs the copy command outside a click or a key press', async () => {
+    Object.defineProperty(navigator, 'userActivation', {
+      configurable: true,
+      value: {isActive: false},
+    });
+    const {result} = renderHook(() => useClipboard());
+    let outcome: boolean | undefined;
+    await act(async () => {
+      outcome = await result.current.copy('x');
+    });
+    expect(outcome).toBe(false);
+    expect(execCommand).not.toHaveBeenCalled();
+    delete (navigator as {userActivation?: unknown}).userActivation;
+  });
+
+  it('reports a failed write when the copy command fires no copy event', async () => {
+    execCommand.mockImplementation(() => true);
+    const {result} = renderHook(() => useClipboard());
+    let outcome: boolean | undefined;
+    await act(async () => {
+      outcome = await result.current.copy('x');
+    });
+    expect(outcome).toBe(false);
+  });
+});
+
+describe('useClipboard where the browser refuses the async write', () => {
+  afterEach(() => {
+    delete (document as {execCommand?: unknown}).execCommand;
+    vi.restoreAllMocks();
+  });
+
+  it('tries the async API first and copies with the copy command after a permission refusal', async () => {
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: vi
+          .fn()
+          .mockRejectedValue(new DOMException('Refused', 'NotAllowedError')),
+      },
+    });
+    let copied: string | undefined;
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: vi.fn((command: string) => {
+        const data = new Map<string, string>();
+        const event = new Event('copy', {bubbles: true, cancelable: true});
+        Object.defineProperty(event, 'clipboardData', {
+          value: {
+            setData: (type: string, value: string) => data.set(type, value),
+          },
+        });
+        document.body.dispatchEvent(event);
+        copied = data.get('text/plain');
+        return command === 'copy';
+      }),
+    });
+    const {result} = renderHook(() => useClipboard());
+    let outcome: boolean | undefined;
+    await act(async () => {
+      outcome = await result.current.copy('after a refusal');
+    });
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      'after a refusal',
+    );
+    expect(copied).toBe('after a refusal');
+    expect(outcome).toBe(true);
+  });
+
+  it('does not use the copy command when the write fails for another reason', async () => {
+    Object.assign(navigator, {
+      clipboard: {writeText: vi.fn().mockRejectedValue(new Error('broken'))},
+    });
+    const execCommand = vi.fn().mockReturnValue(true);
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: execCommand,
+    });
+    const {result} = renderHook(() => useClipboard());
+    let outcome: boolean | undefined;
+    await act(async () => {
+      outcome = await result.current.copy('x');
+    });
+    expect(outcome).toBe(false);
+    expect(execCommand).not.toHaveBeenCalled();
+  });
+});

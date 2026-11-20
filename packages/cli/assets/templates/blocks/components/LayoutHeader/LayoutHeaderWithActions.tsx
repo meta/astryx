@@ -17,7 +17,7 @@ import {useToast} from '@astryxdesign/core/Toast';
 export default function LayoutHeaderWithActions() {
   const showToast = useToast();
   return (
-    <Center width={400}>
+    <Center width={400} maxWidth="100%">
       <Layout
         style={{width: '100%'}}
         height="fill"

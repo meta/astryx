@@ -25,5 +25,4 @@ export const doc = {
   ],
   isReady: true,
   category: 'Content - Card Grid',
-  icons: {MagnifyingGlassIcon: 'search'},
 };

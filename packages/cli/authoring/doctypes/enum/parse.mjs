@@ -5,7 +5,7 @@
  * `../_schema.mjs`; consumers call `parseEnum` or use `parseDoc`.
  */
 
-import {EnumDocKindSchema} from '../_schema.mjs';
+import {docSchemas} from '../_schema.mjs';
 import {formatZodError} from '../../_shared/errors.mjs';
 
 /** @typedef {import('../types.js').EnumDoc} EnumDoc */
@@ -18,7 +18,7 @@ import {formatZodError} from '../../_shared/errors.mjs';
  * @returns {EnumDoc}
  */
 export function parseEnum(input, label = 'enum doc') {
-  const result = EnumDocKindSchema.safeParse(input);
+  const result = docSchemas().EnumDocKindSchema.safeParse(input);
   if (!result.success) {
     throw new Error(formatZodError(label, result.error));
   }

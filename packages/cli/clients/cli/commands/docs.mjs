@@ -3,8 +3,10 @@
 /**
  * @file docs command — Print Astryx reference docs
  *
- * In text, every read is one level: a topic lists its sections, so a reader can
- * open one section by its key, and `--full` prints the whole topic. `--depth`
+ * In text, a topic prints whole, unless its whole text is over
+ * WHOLE_READ_MAX_BYTES: then it lists its sections, so a reader opens one by
+ * its key. `--index` lists the sections of any topic, and `--full` prints any
+ * topic whole. `--depth`
  * reads a docs-tree namespace as many levels down as asked, each doc below it
  * at --detail (brief by default: one line each). `--json` keeps the docs()
  * contract: a topic returns its whole doc, and `--index` its sections.
@@ -17,8 +19,9 @@
  * Usage:
  *   astryx docs                          List available topics
  *   astryx docs --list                   The same list, asked for by flag
- *   astryx docs <topic>                  List the topic's sections (a topic
- *                                        with one section prints whole)
+ *   astryx docs <topic>                  Print the topic (its sections when
+ *                                        its whole text is over 16 KB)
+ *   astryx docs <topic> --index          List the topic's sections
  *   astryx docs <topic> <section>        Print one section
  *   astryx docs <topic> --full           Print the whole topic
  *   astryx docs <route>                  Open a node of the docs tree, such as
@@ -32,6 +35,11 @@ import {
   prefixCliCommands,
 } from '../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
+import {
+  formatBlock,
+  formatReferenceFull,
+  formatSection,
+} from '../../../foundation/doc-compiler/doc-text.mjs';
 import {
   emit,
   section,
@@ -49,162 +57,19 @@ import {docs as docsApi} from '../../../api/docs/docs.mjs';
 import {doc as docsCommand} from './docs.doc.mjs';
 import {doc as docsFn} from '../../../api/docs/docs.doc.mjs';
 
+/**
+ * The longest whole topic a bare text read prints, in bytes of the topic's own
+ * text at the read's detail: its title, description and sections, without the
+ * package line and the moves that frame the read. Up to this size, reading the
+ * whole topic costs no more than a reader who wants the answer reads through
+ * the section list and the sections it opens; a longer topic lists its
+ * sections.
+ */
+export const WHOLE_READ_MAX_BYTES = 16 * 1024;
+
 // ─── Formatting ──────────────────────────────────────────────────────────────
 
-/**
- * A table cell with its pipes escaped. Columns are separated by ` | `, and a
- * union type such as `'light' | 'dark'` is spelled with the same character,
- * so an unescaped cell reads as extra columns. `astryx component` escapes its
- * prop tables the same way.
- * @param {string | undefined} cell
- * @returns {string}
- */
-function tableCell(cell) {
-  return (cell || '').replaceAll('|', '\\|');
-}
-
-/**
- * @param {string[]} headers
- * @param {string[][]} rows
- * @returns {string}
- */
-function formatTable(headers, rows) {
-  const head = headers.map(tableCell);
-  const cells = rows.map(r => r.map(tableCell));
-  const widths = head.map((h, i) =>
-    Math.max(h.length, ...cells.map(r => (r[i] || '').length)),
-  );
-  const sep = widths.map(w => '-'.repeat(w)).join(' | ');
-  const top = head.map((h, i) => h.padEnd(widths[i])).join(' | ');
-  const body = cells
-    .map(r => r.map((c, i) => c.padEnd(widths[i])).join(' | '))
-    .join('\n');
-  return `${top}\n${sep}\n${body}`;
-}
-
-/**
- * @param {string[]} headers
- * @param {string[][]} rows
- * @returns {string}
- */
-function formatTableCompact(headers, rows) {
-  // An empty cell, such as a Default with none, adds nothing to the line.
-  return rows
-    .map(r => r.filter(cell => String(cell ?? '').trim() !== '').join(' = '))
-    .join('\n');
-}
-
-/**
- * One content block as text. Exported for its tests.
- * @param {import('@astryxdesign/cli/authoring').ReferenceContentBlock} block
- * @param {'full' | 'compact' | 'brief'} detail
- * @returns {string | null}
- */
-export function formatBlock(block, detail) {
-  // Docs write commands as bare `astryx ...`; show them the way this project
-  // runs the CLI.
-  const stem = getCliInvocation();
-  /** @param {string} value */
-  const shown = value => prefixCliCommands(value, stem);
-  switch (block.type) {
-    case 'prose':
-      return shown(block.text);
-
-    case 'heading':
-      return `${'#'.repeat(block.level || 3)} ${shown(block.text)}`;
-
-    case 'code':
-      if (detail === 'compact' || detail === 'brief') return null;
-      {
-        // The label names the block, so it prints above the fence, not
-        // inside it: `// label` is not a comment in bash, CSS, JSON, or
-        // HTML, and a reader who copies the block would copy it too.
-        const label = block.label
-          ? `${block.label.replace(/:\s*$/, '')}:\n`
-          : '';
-        const body = prefixCliCommands(block.code, stem, block.lang);
-        return `${label}\`\`\`${block.lang}\n${body}\n\`\`\``;
-      }
-
-    case 'table': {
-      // A cell that is a whole command, such as `astryx theme add neutral`
-      // written without backticks, is prefixed too.
-      /** @param {string} cell */
-      const shownCell = cell =>
-        /^astryx(\s|$)/.test(cell ?? '')
-          ? `${stem}${cell.slice('astryx'.length)}`
-          : shown(cell ?? '');
-      const rows = block.rows.map(row => row.map(shownCell));
-      if (detail === 'brief') {
-        return rows
-          .map(r => r.slice(0, 2).map(tableCell).join('='))
-          .join(' | ');
-      }
-      if (detail === 'compact') {
-        return formatTableCompact(block.headers, rows);
-      }
-      return formatTable(block.headers, rows);
-    }
-
-    case 'list': {
-      const prefix =
-        block.style === 'ordered'
-          ? (/** @type {number} */ i) => `${i + 1}. `
-          : block.style === 'dont'
-            ? () => 'x '
-            : block.style === 'do'
-              ? () => '+ '
-              : () => '- ';
-      return block.items
-        .map((item, i) => `${prefix(i)}${shown(item)}`)
-        .join('\n');
-    }
-
-    default:
-      return null;
-  }
-}
-
-/**
- * @param {import('../../../api/docs/docs.type.mjs').DocsReadSection} section
- * @param {'full' | 'compact' | 'brief'} detail
- * @returns {string}
- */
-function formatSection(section, detail) {
-  const blocks = section.content
-    .map(b => formatBlock(b, detail))
-    .filter(Boolean);
-
-  if (detail === 'brief') {
-    const first = blocks[0] || '';
-    return `${section.title}: ${first.split('\n')[0]}`;
-  }
-
-  const heading =
-    detail === 'compact' ? `[${section.title}]` : `## ${section.title}`;
-  return `${heading}\n\n${blocks.join('\n\n')}`;
-}
-
-/**
- * @param {import('../../../api/docs/docs.type.mjs').DocsReadDoc} docs
- * @param {'full' | 'compact' | 'brief'} detail
- * @returns {string}
- */
-function formatReferenceFull(docs, detail) {
-  if (detail === 'brief') {
-    const header = `${docs.title}: ${docs.description}`;
-    const sections = docs.sections.map(s => formatSection(s, detail));
-    return `${header}\n${sections.join('\n')}`;
-  }
-
-  const header =
-    detail === 'compact'
-      ? `# ${docs.title}\n${docs.description}`
-      : `# ${docs.title}\n\n${docs.description}`;
-  const sections = docs.sections.map(s => formatSection(s, detail));
-  const sep = detail === 'compact' ? '\n\n' : '\n\n';
-  return `${header}\n\n${sections.join(sep)}`;
-}
+export {formatBlock};
 
 /**
  * @param {string} title
@@ -527,6 +392,21 @@ function emitIndex(index, owner, run) {
 }
 
 /**
+ * The mark a listed doc row opens with: an experimental doc is marked as help
+ * marks an experimental command, so a reader cannot take it for a stable doc,
+ * unless its own summary already opens by saying so. Every docs list that
+ * marks a row asks here, so the namespace view and the `--depth` list agree.
+ * @param {string | undefined} stability
+ * @param {string} summary
+ * @returns {'[experimental] ' | ''}
+ */
+function experimentalMark(stability, summary) {
+  return stability === 'experimental' && !/^experimental\b/iu.test(summary)
+    ? '[experimental] '
+    : '';
+}
+
+/**
  * One child row of a namespace. Namespace and guide route names are already
  * readable, so repeating their titles adds noise (`start-a-template  Start a
  * template`). Typed docs keep a distinct title when it carries the real symbol
@@ -544,15 +424,10 @@ function childRow(child, owner) {
     // A child another package owns says which one.
     name:
       child.package === owner ? child.name : `${child.name} (${child.package})`,
-    // An experimental child is marked as help marks an experimental command,
-    // unless its own summary already opens by saying so.
     summary: prefixCliCommands(
-      `${
-        child.stability === 'experimental' &&
-        !/^experimental\b/iu.test(child.summary)
-          ? '[experimental] '
-          : ''
-      }${titleAddsIdentity ? `${child.title}: ${child.summary}` : child.summary}`,
+      `${experimentalMark(child.stability, child.summary)}${
+        titleAddsIdentity ? `${child.title}: ${child.summary}` : child.summary
+      }`,
       getCliInvocation(),
     ),
     experimental: child.stability === 'experimental',
@@ -640,11 +515,13 @@ function emitNode(node, detail, run) {
  *   | import('../../../api/docs/docs.type.mjs').DocsIndexResponse
  *   | import('../../../api/docs/docs.type.mjs').DocsDetailResponse
  *   | import('../../../api/docs/docs.type.mjs').DocsDetailSectionResponse
- *   | import('../../../api/docs/docs.type.mjs').DocsNodeResponse} result
+ *   | import('../../../api/docs/docs.type.mjs').DocsNodeResponse
+ *   | import('../../../api/docs/docs.type.mjs').DocsSkillsResponse
+ *   | import('../../../api/docs/docs.type.mjs').DocsSkillResponse} result
  * @returns {import('../../../foundation/debug/command-result.mjs').CommandResult}
  */
 function summarize(result) {
-  return result.type === 'docs.list'
+  return result.type === 'docs.list' || result.type === 'docs.skills'
     ? resultSet({count: result.data.length, resultKind: 'doc'})
     : resultSet({count: 1, resultKind: 'doc', directMatch: true});
 }
@@ -663,14 +540,10 @@ function flattenNamespaces(rows) {
   return rows.flatMap(row => [
     {
       topic: row.topic,
-      // An experimental doc is marked here as it is wherever else it is
-      // listed, so a reader cannot take a row of this list for a stable doc.
-      description:
-        'stability' in row &&
-        row.stability === 'experimental' &&
-        !/^experimental\b/iu.test(row.description)
-          ? `[experimental] ${row.description}`
-          : row.description,
+      description: `${experimentalMark(
+        'stability' in row ? row.stability : undefined,
+        row.description,
+      )}${row.description}`,
       package: row.package,
     },
     ...flattenNamespaces(row.children ?? []),
@@ -717,16 +590,17 @@ export function registerDocs(program) {
       // its default, each is one line.
       const childDetail =
         program.getOptionValueSource('detail') === 'default' ? 'brief' : detail;
-      // Text reads one level: a topic lists its sections (one with a single
-      // section prints whole). JSON keeps docs(): the whole topic unless
-      // --index. The dense variant is written to be read whole.
-      const listSections =
-        Boolean(options.index) ||
-        (!json &&
-          !options.full &&
-          !dense &&
-          lang !== 'dense' &&
-          sectionName == null);
+      // A text read prints a topic whole, as JSON and docs() do: agents act
+      // on the first read, and most never open a section from an index. Only
+      // a topic whose whole text is over WHOLE_READ_MAX_BYTES lists its
+      // sections instead. --index always lists them, --full always prints
+      // the whole topic, and the dense variant is written to be read whole.
+      const mayList =
+        !json &&
+        !options.full &&
+        !dense &&
+        lang !== 'dense' &&
+        sectionName == null;
       let result;
       try {
         result = await docsApi(topic, sectionName, {
@@ -734,15 +608,18 @@ export function registerDocs(program) {
           zh,
           dense,
           list: options.list,
-          index: listSections,
+          index: Boolean(options.index),
           ...(depth != null ? {depth, detail: childDetail} : {}),
         });
         if (
+          mayList &&
           !options.index &&
-          result.type === 'docs.index' &&
-          result.data.sections.length <= 1
+          result.type === 'docs.detail' &&
+          result.data.sections.length > 1 &&
+          Buffer.byteLength(formatReferenceFull(result.data, detail), 'utf8') >
+            WHOLE_READ_MAX_BYTES
         ) {
-          result = await docsApi(topic, sectionName, {lang, zh, dense});
+          result = await docsApi(topic, sectionName, {lang, zh, index: true});
         }
       } catch (e) {
         // docs API throws structured errors with {name, reason} suggestions —
@@ -788,9 +665,9 @@ export function registerDocs(program) {
             }),
             text(
               [
-                `Usage: ${run} docs <topic>                  list a topic's sections`,
+                `Usage: ${run} docs <topic>                  read a topic`,
+                `       ${run} docs <topic> --index          list a topic's sections`,
                 `       ${run} docs <topic> <section>        read one section`,
-                `       ${run} docs <topic> --full           read the whole topic`,
                 `       ${run} docs cli/api                  go down the docs tree one level at a time`,
                 `       ${run} docs cli --depth all          every doc below cli, one line each`,
                 `With --json, a topic returns its whole doc; add --index for its section list.`,
@@ -839,7 +716,19 @@ export function registerDocs(program) {
                 detail,
               ),
             ),
-            text(linkLines(result.data.links).join('\n')),
+            text(
+              [
+                // A whole read ends with its moves too: down to one section
+                // and to the section list, then up and across.
+                ...(result.data.sections.length > 1
+                  ? [
+                      `Read one section: ${run} docs ${result.data.name} <section>`,
+                      `List its sections: ${run} docs ${result.data.name} --index`,
+                    ]
+                  : []),
+                ...linkLines(result.data.links),
+              ].join('\n'),
+            ),
           );
           break;
         }
@@ -851,6 +740,38 @@ export function registerDocs(program) {
             record({package: result.package}),
             code(formatSection(result.data, detail)),
             text(linkLines(result.data.links).join('\n')),
+          );
+          break;
+        }
+
+        case 'docs.skills': {
+          emit(
+            section('Skills'),
+            records(
+              result.data.map(each => ({
+                topic: `skills/${each.name}`,
+                description: each.description,
+                package: each.package,
+              })),
+              {fields: ['topic', 'description', 'package'], layout: 'inline'},
+            ),
+            text(`Read one: ${run} docs skills/<name>`),
+            // A skill a package declares but this run left out: say why.
+            ...(result.meta?.notes?.length
+              ? [
+                  section('Left out'),
+                  records(result.meta.notes, {fields: ['package', 'message'], layout: 'inline'}),
+                ]
+              : []),
+          );
+          break;
+        }
+
+        case 'docs.skill': {
+          emit(
+            record({package: result.package, skill: result.data.name}),
+            code(result.data.text),
+            text(`Up: ${run} docs skills`),
           );
           break;
         }

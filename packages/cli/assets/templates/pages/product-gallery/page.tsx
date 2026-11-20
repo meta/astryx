@@ -10,7 +10,7 @@ import {AspectRatio} from '@astryxdesign/core/AspectRatio';
 import {Card} from '@astryxdesign/core/Card';
 import {Icon} from '@astryxdesign/core/Icon';
 import {rtlStyles} from '@astryxdesign/core/utils';
-import {ArrowRightIcon} from '@heroicons/react/24/outline';
+import {ArrowRightIcon} from '@astryxdesign/template-icons';
 import type {CSSProperties} from 'react';
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
@@ -117,7 +117,7 @@ export default function ProductGalleryTemplate() {
       height="fill"
       contentWidth={1200}
       content={
-        <LayoutContent padding={6}>
+        <LayoutContent role="main" padding={6}>
           <VStack gap={6}>
             {/* Header — Grid handles responsive stacking */}
             <Grid columns={{minWidth: 280, max: 2}} gap={4} align="start">
@@ -148,7 +148,7 @@ export default function ProductGalleryTemplate() {
             </Grid>
 
             {/* Product Grid — reflows 3 → 2 → 1 columns as width narrows */}
-            <Grid columns={{minWidth: 300}} gap={6}>
+            <Grid columns={{minWidth: 300, max: 3}} gap={6}>
               {PRODUCTS.map(product => (
                 <ProductCard key={product.id} product={product} />
               ))}

@@ -10,6 +10,7 @@ Options:
   --dense                           <text>
   --lang <locale>                   <text>
   --detail <level>                  <text>
+  --base <package>                  <text>
   --json                            <text>
   -h, --help                        <text>
 
@@ -25,10 +26,11 @@ Commands:
   theme                             <text>
   integration                       <text>
   hook [options] [name]             <text>
-  discover [options] [query]        <text>
+  discover [options] [query...]     <text>
   search [options] <query...>       <text>
   build [options] [query]           <text>
   doctor [options]                  <text>
+  mcp [options]                     <text>
   manifest                          <text>
   help                              <text>
 

@@ -282,9 +282,12 @@ function HeroContent({contentRef}: {contentRef: Ref<HTMLElement>}) {
 }
 
 export function HomePage({
+  coreComponentCount,
   templatesPreview,
   themesStore,
 }: {
+  /** Public Core components, rounded down to the nearest 10. */
+  coreComponentCount: number;
   templatesPreview: ReactNode;
   themesStore: ReactNode;
 }) {
@@ -382,12 +385,13 @@ export function HomePage({
       </HeroReelProvider>
       <VStack ref={showcaseRef} xstyle={styles.showcaseOverlay}>
         <FeaturesShowcase
+          coreComponentCount={coreComponentCount}
           templatesPreview={templatesPreview}
           themesStore={themesStore}
         />
         <AboutShowcase />
         <BlogShowcase />
-        <DiscoverShowcase />
+        <DiscoverShowcase coreComponentCount={coreComponentCount} />
       </VStack>
     </div>
   );

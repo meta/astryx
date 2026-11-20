@@ -24,9 +24,17 @@ import {
   walk,
 } from './template-source-tree.mjs';
 import {readStore, storedKey} from '../doc-compiler/stored-docs.mjs';
-import {CLI_ROOT, findWorkspaceRoot} from '../fs/paths.mjs';
+import {CLI_ROOT, findPackageRoot, findWorkspaceRoot} from '../fs/paths.mjs';
 import {writtenString} from '../text/written-string.mjs';
 import {detectStylingSystem} from '../agent-docs/agent-docs.mjs';
+import {hostedPagePackages} from '../runtime/package-root.mjs';
+import {runChoice} from '../release/run-context.mjs';
+import {installGuidanceFor} from '../env/cli-command.mjs';
+import {
+  coreMatchedAdd,
+  exactAddFlag,
+  releaseSpec,
+} from '../release/notices.mjs';
 import {
   decidePackageManagerIn,
   formatCliCommand,
@@ -96,6 +104,31 @@ function moduleSpecifiers(source) {
 }
 
 /**
+ * The files a source names with `/// <reference path="…" />` before its
+ * first statement, the only place TypeScript reads one. They bring in types
+ * for the type check, not code a build runs, so they are not imports.
+ * @param {string} source
+ * @returns {string[]}
+ */
+export function referencedPaths(source) {
+  let file;
+  try {
+    file = parseTemplateSource(source, {errorRecovery: true});
+  } catch {
+    return [];
+  }
+  const first = file.program.body[0]?.start ?? Infinity;
+  /** @type {string[]} */
+  const out = [];
+  for (const c of file.comments ?? []) {
+    if (c.type !== 'CommentLine' || c.start >= first) continue;
+    const ref = /^\/\s*<reference\s+path\s*=\s*(["'])(.+?)\1/.exec(c.value);
+    if (ref) out.push(ref[2]);
+  }
+  return out;
+}
+
+/**
  * moduleSpecifiers, read from the source's syntax tree.
  * @param {string} source
  * @returns {string[]}
@@ -134,6 +167,12 @@ export function parsedSpecifiers(source) {
       add(node.arguments?.[0]);
     } else if (node.type === 'ImportExpression') {
       add(node.source);
+    } else if (
+      node.type === 'TSImportEqualsDeclaration' &&
+      node.moduleReference?.type === 'TSExternalModuleReference'
+    ) {
+      // `import s = require('../shared')`
+      add(node.moduleReference.expression);
     } else if (node.type === 'TSImportType') {
       // `type O = import('chart-lib').Options`
       add(
@@ -208,7 +247,7 @@ const ADD_VERB = {
  * per-directory rule; with none, npm. Ambiguous when that directory's
  * lockfiles disagree and nothing it commits picks one.
  * @param {string} target
- * @returns {{verb: string} | {verb: null, dir: string, lockfiles: string[]}}
+ * @returns {{verb: string, pm: string} | {verb: null, dir: string, lockfiles: string[]}}
  */
 function resolveInstallVerb(target) {
   const root = findWorkspaceRoot(target);
@@ -223,13 +262,14 @@ function resolveInstallVerb(target) {
           lockfiles: decision.lockfiles.map(lock => lock.file),
         };
       }
-      return {verb: ADD_VERB[decision.pm] ?? ADD_VERB.npm};
+      const pm = Object.hasOwn(ADD_VERB, decision.pm) ? decision.pm : 'npm';
+      return {verb: ADD_VERB[pm], pm};
     }
     const parent = path.dirname(dir);
     if (dir === root || parent === dir) break;
     dir = parent;
   }
-  return {verb: ADD_VERB.npm};
+  return {verb: ADD_VERB.npm, pm: 'npm'};
 }
 
 /**
@@ -248,31 +288,117 @@ function cliPackageRanges() {
 }
 
 /**
- * The command that installs `packages` in the project at `cwd`, in its package
- * manager and with the CLI workspace's version ranges. Null, with the reason,
- * when several lockfiles leave the package manager undetermined; null with no
- * reason when there is nothing to install.
+ * `packages` as an install command in the project at `cwd` names them. Core,
+ * the CLI, and a package Astryx releases with Core, which names Core's exact
+ * release as its peer, take the project's Core release, as `theme add` and
+ * `doctor` name a theme ({@link coreMatchedAdd}). Any other package takes the
+ * CLI workspace's range; a `*` range pins nothing, so the bare name says the
+ * same in fewer bytes. `exact`: every package moves with Core, and the
+ * project saves it exactly.
  * @param {string[]} packages
  * @param {string} cwd
- * @returns {{installCommand: string | null, noCommandReason: string | null}}
+ * @returns {{specs: string[], guided: string[], exact: boolean}}
  */
-export function installCommandFor(packages, cwd) {
-  if (packages.length === 0) {
-    return {installCommand: null, noCommandReason: null};
-  }
-  const resolved = resolveInstallVerb(cwd);
+function installSpecs(packages, cwd) {
   const ranges = cliPackageRanges();
-  const specs = packages.map(p => (ranges[p] ? `${p}@"${ranges[p]}"` : p));
+  const matched = packages.map(p => coreMatchedAdd(cwd, p));
+  return {
+    specs: packages.map((p, i) => {
+      const release = matched[i]?.release;
+      if (release) return releaseSpec(p, release);
+      return ranges[p] && ranges[p] !== '*' ? `${p}@"${ranges[p]}"` : p;
+    }),
+    // Guidance names the bare packages, so the integration's own rule picks
+    // versions; a package released with Core is named at its release, a
+    // range quoted as in the command.
+    guided: packages.map((p, i) =>
+      matched[i] ? releaseSpec(p, matched[i].release) : p,
+    ),
+    exact: matched.length > 0 && matched.every(m => m?.exact === true),
+  };
+}
+
+/**
+ * How the project at `cwd` installs `packages`: its package manager
+ * ({@link resolveInstallVerb}) and the versions {@link installSpecs} names.
+ * @param {string[]} packages
+ * @param {string} cwd
+ */
+function installPlan(packages, cwd) {
+  return {resolved: resolveInstallVerb(cwd), ...installSpecs(packages, cwd)};
+}
+
+/**
+ * The command that installs `packages` in the project at `cwd`, in its package
+ * manager and at the versions {@link installSpecs} names. Null, with the
+ * reason, when several lockfiles leave the package manager undetermined; null
+ * with no reason when there is nothing to install. `installGuidance` is the
+ * line the project's integrations give for adding packages, with the packages
+ * filled in, or null; where it is set, printers show it instead of the
+ * command.
+ * @param {string[]} packages
+ * @param {string} cwd
+ * @param {string} [shownFrom] the folder the reason names other folders from;
+ *   `cwd` unless the command runs from another folder
+ * @returns {{installCommand: string | null, noCommandReason: string | null, installGuidance: string | null}}
+ */
+export function installCommandFor(packages, cwd, shownFrom = cwd) {
+  if (packages.length === 0) {
+    return {installCommand: null, noCommandReason: null, installGuidance: null};
+  }
+  return planCommand(installPlan(packages, cwd), cwd, shownFrom);
+}
+
+/**
+ * {@link installCommandFor} for a plan already made.
+ * @param {ReturnType<typeof installPlan>} plan
+ * @param {string} cwd
+ * @param {string} shownFrom
+ * @returns {{installCommand: string | null, noCommandReason: string | null, installGuidance: string | null}}
+ */
+function planCommand({resolved, specs, guided, exact}, cwd, shownFrom) {
+  if (specs.length === 0) {
+    return {installCommand: null, noCommandReason: null, installGuidance: null};
+  }
+  const installGuidance = installGuidanceFor(guided, cwd) ?? null;
   if (resolved.verb !== null) {
+    const verb = exact
+      ? `${resolved.verb} ${exactAddFlag(resolved.pm)}`
+      : resolved.verb;
     return {
-      installCommand: `${resolved.verb} ${specs.join(' ')}`,
+      installCommand: `${verb} ${specs.join(' ')}`,
       noCommandReason: null,
+      installGuidance,
     };
   }
-  const where = path.relative(cwd, resolved.dir) || '.';
+  const where = path.relative(shownFrom, resolved.dir) || '.';
   return {
     installCommand: null,
     noCommandReason: `Install missing dependencies: ${specs.join(' ')}. No install command: ${where} has ${resolved.lockfiles.join(' and ')}, and nothing there says which package manager to use.`,
+    installGuidance,
+  };
+}
+
+/**
+ * The install step to print for `packages` in the project at `cwd`: the
+ * install guidance its integrations give, else its package manager's command,
+ * or `npm install` with a note naming the folder whose lockfiles disagree when
+ * the package manager cannot be decided.
+ * @param {string[]} packages
+ * @param {string} cwd
+ * @returns {{line: string, note: string | null}}
+ */
+export function installStepFor(packages, cwd) {
+  const plan = installPlan(packages, cwd);
+  const {installCommand, installGuidance} = planCommand(plan, cwd, cwd);
+  if (installGuidance) return {line: installGuidance, note: null};
+  if (installCommand) return {line: installCommand, note: null};
+  const {resolved, specs, exact} = plan;
+  const where =
+    resolved.verb === null ? path.relative(cwd, resolved.dir) || '.' : '.';
+  return {
+    line: `npm install ${exact ? `${exactAddFlag('npm')} ` : ''}${specs.join(' ')}`,
+    note: `the lockfiles in ${where === '.' ? 'this folder' : where} disagree; use the package manager this project uses`,
   };
 }
 
@@ -289,6 +415,7 @@ export function installCommandFor(packages, cwd) {
  *   notes: string[],
  *   missingPackages: string[],
  *   installCommand: string | null,
+ *   installGuidance: string | null,
  * }}
  */
 export function analyzeTemplateNeeds(source, cwd) {
@@ -314,9 +441,20 @@ export function analyzeTemplateNeeds(source, cwd) {
     // No package.json or unreadable — treat everything as missing.
   }
 
-  const missing = external.filter(p => !(p in projectDeps));
+  // Outside a project, a page takes what the host's package set provides,
+  // as render serves it, so a package that set provides needs no install.
+  const provided = runChoice(cwd).inProject ? [] : hostedPagePackages();
+  const missing = external.filter(
+    p => !(p in projectDeps) && !provided.includes(p),
+  );
 
-  const {installCommand, noCommandReason} = installCommandFor(missing, cwd);
+  // In a folder that no package.json holds, an install would make the folder
+  // a project, so the missing packages are named for the project that uses
+  // the page instead.
+  const unpackaged = findPackageRoot(cwd) == null;
+  const {installCommand, noCommandReason, installGuidance} = unpackaged
+    ? {installCommand: null, noCommandReason: null, installGuidance: null}
+    : installCommandFor(missing, cwd);
 
   // ── StyleX compiler ────────────────────────────────────────────────────
   const usesStylex = imported.has(STYLEX_RUNTIME);
@@ -328,9 +466,13 @@ export function analyzeTemplateNeeds(source, cwd) {
   const notes = [];
   if (missing.length > 0) {
     notes.push(
-      installCommand
-        ? `Install missing dependencies: ${installCommand}`
-        : (noCommandReason ?? ''),
+      unpackaged
+        ? `Missing dependencies: ${missing.join(', ')}. Install them in the project that uses this page.`
+        : installGuidance
+          ? `Install missing dependencies: ${installGuidance}`
+          : installCommand
+            ? `Install missing dependencies: ${installCommand}`
+            : (noCommandReason ?? ''),
     );
   }
   if (stylexCompilerNeeded) {
@@ -339,5 +481,5 @@ export function analyzeTemplateNeeds(source, cwd) {
     );
   }
 
-  return {notes, missingPackages: missing, installCommand};
+  return {notes, missingPackages: missing, installCommand, installGuidance};
 }

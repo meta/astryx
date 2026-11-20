@@ -75,7 +75,7 @@ describe('template path safety', () => {
     );
     expect(err.suggestions).toEqual([
       {
-        name: 'astryx template blank src/pages/blank',
+        name: 'astryx template blank src/pages/blank.tsx',
         reason: 'write the page inside the project',
       },
       {
@@ -88,6 +88,53 @@ describe('template path safety', () => {
     expect(fs.readdirSync(cwd)).toEqual([]);
   });
 
+  it('reads `~/` as the home folder: outside the project it is refused, and no folder named `~` is made', async () => {
+    const cwd = path.join(tmpDir, 'project');
+    fs.mkdirSync(cwd, {recursive: true});
+    const given = `~/astryx-no-such-folder-${path.basename(tmpDir)}/page.tsx`;
+
+    const err = await templateApi('blank', {targetPath: given, cwd}).catch(
+      e => e,
+    );
+    expect(err.code).toBe('ERR_PATH_TRAVERSAL');
+    expect(err.message).toContain(
+      `Invalid template target path "${given}": it is outside the project root`,
+    );
+    expect(err.suggestions[0]).toEqual({
+      name: 'astryx template blank src/pages/blank.tsx',
+      reason: 'write the page inside the project',
+    });
+    expect(fs.readdirSync(cwd)).toEqual([]);
+    expect(
+      fs.existsSync(path.join(os.homedir(), path.dirname(given.slice(2)))),
+    ).toBe(false);
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'writes a `~/` path that names a place in the project there, as its absolute path is',
+    async () => {
+      const home = fs.realpathSync(tmpDir);
+      const cwd = path.join(home, 'project');
+      fs.mkdirSync(cwd, {recursive: true});
+      const before = process.env.HOME;
+      process.env.HOME = home;
+      try {
+        const res = await templateApi('blank', {
+          targetPath: '~/project/src/pages/home.tsx',
+          cwd,
+        });
+        expect(res.data.outputDir).toBe(path.join('src', 'pages'));
+        expect(res.data.fileName).toBe('home.tsx');
+      } finally {
+        process.env.HOME = before;
+      }
+      expect(fs.existsSync(path.join(cwd, 'src', 'pages', 'home.tsx'))).toBe(
+        true,
+      );
+      expect(fs.existsSync(path.join(cwd, '~'))).toBe(false);
+    },
+  );
+
   it('keeps the flags as typed in the suggested commands', async () => {
     const cwd = path.join(tmpDir, 'project');
     fs.mkdirSync(cwd, {recursive: true});
@@ -99,7 +146,7 @@ describe('template path safety', () => {
       cwd,
     }).catch(e => e);
     expect(err.suggestions.map(s => s.name)).toEqual([
-      'astryx template blank --type page --package @astryxdesign/core src/pages/blank',
+      'astryx template blank --type page --package @astryxdesign/core src/pages/blank.tsx',
       'astryx template blank --type page --package @astryxdesign/core',
     ]);
   });
@@ -130,6 +177,40 @@ describe('template path safety', () => {
         'src/pages beside an app/ folder stops a Next build',
       ).toBe(false);
     }
+  });
+
+  it('names the page or block file in a project that is not a Next app, and the named command writes exactly that file', async () => {
+    const cwd = path.join(tmpDir, 'project');
+    fs.mkdirSync(cwd, {recursive: true});
+    fs.writeFileSync(
+      path.join(cwd, 'package.json'),
+      JSON.stringify({dependencies: {vite: '^8.0.0'}}),
+    );
+
+    const err = await templateApi('blank', {
+      targetPath: nowhere('scratch'),
+      cwd,
+    }).catch(e => e);
+    const named = err.suggestions[0].name.split(' ').at(-1);
+    expect(named).toBe('src/pages/blank.tsx');
+
+    await templateApi('blank', {targetPath: named, cwd});
+    expect(fs.existsSync(path.join(cwd, named))).toBe(true);
+    expect(fs.readdirSync(path.join(cwd, 'src', 'pages'))).toEqual([
+      'blank.tsx',
+    ]);
+
+    const blockErr = await templateApi('ButtonShowcase', {
+      targetPath: nowhere('scratch-block'),
+      cwd,
+    }).catch(e => e);
+    const namedBlock = blockErr.suggestions[0].name.split(' ').at(-1);
+    expect(namedBlock).toBe('src/components/ButtonShowcase.tsx');
+
+    await templateApi('ButtonShowcase', {targetPath: namedBlock, cwd});
+    expect(fs.readdirSync(path.join(cwd, 'src', 'components'))).toEqual([
+      'ButtonShowcase.tsx',
+    ]);
   });
 
   it('names the page file in a Next app with only the Pages Router, and the named command writes it', async () => {
@@ -545,7 +626,7 @@ describe('template path text output', () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('is outside the project root');
     expect(result.stderr).toMatch(
-      /template blank src\/pages\/blank\s+\(write the page inside the project\)/,
+      /template blank src\/pages\/blank\.tsx\s+\(write the page inside the project\)/,
     );
     expect(result.stderr).toMatch(
       /template blank\s+\(print the source and write nothing\)/,

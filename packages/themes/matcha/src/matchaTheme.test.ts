@@ -35,10 +35,20 @@ describe('matcha palette mapping', () => {
         ramp[mode === 'light' ? 20 : 75],
       );
       expect(tokens['--color-text-secondary']).toBe(
-        ramp[mode === 'light' ? 30 : 60],
+        ramp[mode === 'light' ? 30 : 70],
       );
     },
   );
+
+  // Light category text steps deeper where stop 35 reads under 4.5:1 on its
+  // own category fill.
+  const LIGHT_TEXT_STOP: Partial<Record<string, 25 | 30 | 40>> = {
+    green: 30,
+    orange: 25,
+    pink: 30,
+    red: 30,
+    yellow: 40,
+  };
 
   it.each(['light', 'dark'] as const)(
     'maps categorical roles to reviewed %s stops',
@@ -58,7 +68,7 @@ describe('matcha palette mapping', () => {
           ramp[mode === 'light' ? 50 : 70],
         );
         expect(tokens[`--color-text-${family}`]).toBe(
-          ramp[mode === 'light' ? 35 : 75],
+          ramp[mode === 'light' ? (LIGHT_TEXT_STOP[family] ?? 35) : 75],
         );
       }
     },

@@ -3,7 +3,7 @@
 'use client';
 
 import {useState, type CSSProperties} from 'react';
-import {ShieldCheckIcon} from '@heroicons/react/24/outline';
+import {ShieldIcon} from '@astryxdesign/template-icons';
 import {VStack, HStack} from '@astryxdesign/core/Layout';
 import {Center} from '@astryxdesign/core/Center';
 import {Text} from '@astryxdesign/core/Text';
@@ -97,14 +97,14 @@ export default function LoginSSO() {
   };
 
   return (
-    <Center axis="both" padding={6} style={pageStyle}>
+    <Center role="main" axis="both" padding={6} style={pageStyle}>
       <Card padding={8} width="100%" maxWidth={400}>
         <VStack gap={4} hAlign="stretch">
           {/* ── Step 1: Email entry ── */}
           {step === 'email' && (
             <>
               <VStack gap={1} hAlign="center">
-                <Text type="display-1" as="h2">
+                <Text type="display-1" as="h1">
                   Welcome back
                 </Text>
                 <Text type="body" color="secondary" size="sm">
@@ -176,7 +176,7 @@ export default function LoginSSO() {
             <>
               <VStack gap={2} hAlign="center">
                 <Avatar name={provider.name} size={48} />
-                <Text type="display-3" as="h2">
+                <Text type="display-3" as="h1">
                   Sign in with {provider.name}
                 </Text>
                 <Text type="body" color="secondary" size="sm">
@@ -187,7 +187,7 @@ export default function LoginSSO() {
               <Card padding={0}>
                 <Section variant="muted" padding={4}>
                   <HStack gap={2} vAlign="center">
-                    <Icon icon={ShieldCheckIcon} color="secondary" />
+                    <Icon icon={ShieldIcon} color="secondary" />
                     <VStack gap={0}>
                       <Text type="label">{provider.name}</Text>
                       <Text type="supporting" color="secondary">
@@ -220,7 +220,7 @@ export default function LoginSSO() {
           {step === 'password-fallback' && (
             <>
               <VStack gap={1} hAlign="center">
-                <Text type="display-1" as="h2">
+                <Text type="display-1" as="h1">
                   Welcome back
                 </Text>
                 <Text type="body" color="secondary" size="sm">

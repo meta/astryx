@@ -8,7 +8,7 @@ import {TabList, Tab} from '@astryxdesign/core/TabList';
 export default function TabListTabsFillLayout() {
   const [value, setValue] = useState('home');
   return (
-    <div style={{width: 500}}>
+    <div style={{width: 500, maxWidth: '100%'}}>
       <TabList value={value} onChange={setValue} layout="fill" hasDivider>
         <Tab value="home" label="Home" />
         <Tab value="projects" label="Projects" />
