@@ -322,8 +322,11 @@ draws each meaning a bundled template imports.
   the one the query ranks first names it, then a built-in one, then the
   first by name. With no set installed, the answer says so (`reason`),
   names the Astryx definitions that match (`definitions`), built-in ones
-  first, each with its `group` and `relatives` as a match has them, and
-  says how to get a set (`next`).
+  first; when a refined meaning matches, the built-in it falls back to
+  (FR23) is listed too: if the query also matches that built-in, it takes
+  the better of its own place and the refined meaning's place, otherwise it
+  comes after the built-ins that match, each with its `group` and
+  `relatives` as a match has them, and says how to get a set (`next`).
   `astryx search` with no `--type` answers an icon ask the same way: where
   icon features are on and one word of the query as typed is `icon`, `icons`, a
   set's name, or an icon export name (`SearchIcon`), and is not a component

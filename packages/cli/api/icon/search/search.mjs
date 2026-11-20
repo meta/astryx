@@ -19,6 +19,7 @@ import {
   iconSetKey,
   importLine,
   loadIconSets,
+  meaningWithFallbacks,
   missingIconLook,
   noIconSetNext,
 } from '../_adapter.mjs';
@@ -289,7 +290,8 @@ function inLook(match, sets, looks) {
 /**
  * The answer when no icon set is installed: no icon matches, so it names
  * the Astryx icon definitions that do, built-in ones first (Core draws those
- * by name with no set), and how to get a set.
+ * by name with no set) with the built-in one each matching refined meaning
+ * falls back to, and how to get a set.
  * @param {string} query
  * @param {number} limit
  * @param {boolean} discoverListsPacks
@@ -297,11 +299,34 @@ function inLook(match, sets, looks) {
  */
 function noIconSet(query, limit, discoverListsPacks) {
   const docs = astryxIconDefinitions().definitions.map(each => each.doc);
+  const byName = new Map(docs.map(doc => [doc.name, doc]));
   const found = definitionMatches(query).map(match => match.doc);
+  const matched = new Set(
+    found.filter(doc => doc.builtIn).map(doc => doc.name),
+  );
+  // With no set, Core draws only the built-in definitions, so a refined
+  // meaning that matches lists the built-in it falls back to (FR23). A
+  // built-in the query matches too takes the better of its own place and
+  // the refined meaning's; one that only a fallback brings comes after the
+  // built-ins that match.
+  /** @param {(typeof docs)[number]} doc */
+  const drawnAs = doc =>
+    meaningWithFallbacks(doc.name)
+      .map(name => byName.get(name))
+      .find(each => each?.builtIn);
+  const builtIns = found.flatMap(doc => {
+    const drawn = drawnAs(doc);
+    return drawn && matched.has(drawn.name) ? [drawn] : [];
+  });
+  const brought = found.flatMap(doc => {
+    const drawn = doc.builtIn ? undefined : drawnAs(doc);
+    return drawn && !matched.has(drawn.name) ? [drawn] : [];
+  });
   const ordered = [
-    ...found.filter(doc => doc.builtIn),
+    ...builtIns,
+    ...brought,
     ...found.filter(doc => !doc.builtIn),
-  ];
+  ].filter((doc, i, list) => list.findIndex(o => o.name === doc.name) === i);
   return {
     type: 'icon.search',
     data: {

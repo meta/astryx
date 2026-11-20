@@ -170,6 +170,27 @@ describe('astryx experimental icon with no icon set installed', () => {
     expect(text.stdout).not.toContain('Core draws these names');
   });
 
+  it('lists the built-in a matching refined meaning falls back to (FR23)', async () => {
+    /** @param {string} ask */
+    const names = async ask =>
+      JSON.parse(
+        (await runCli(['experimental', 'icon', ask, '--json'], bare)).stdout,
+      ).data.definitions.map((/** @type {{name: string}} */ each) => each.name);
+    // `help` falls back to `info`, which Core draws with no set.
+    expect((await names('question')).slice(0, 2)).toEqual(['info', 'help']);
+    // A built-in the query matches too takes the refined meaning's place.
+    expect((await names('help question close')).slice(0, 3)).toEqual([
+      'info',
+      'close',
+      'help',
+    ]);
+    // One that only a fallback brings comes after the built-ins that match.
+    const review = await names('review check');
+    expect(review[0]).toBe('check');
+    expect(review.indexOf('info')).toBeGreaterThan(review.indexOf('success'));
+    expect(review.indexOf('info')).toBeLessThan(review.indexOf('review'));
+  });
+
   it('lists built-in names before other definitions, at most --limit', async () => {
     const json = JSON.parse(
       (
