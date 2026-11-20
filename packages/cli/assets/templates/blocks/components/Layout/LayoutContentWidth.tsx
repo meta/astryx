@@ -12,8 +12,10 @@ import {
 } from '@astryxdesign/core/Layout';
 import {Button} from '@astryxdesign/core/Button';
 import {Heading, Text} from '@astryxdesign/core/Text';
+import {useToast} from '@astryxdesign/core/Toast';
 
 export default function LayoutContentWidth() {
+  const showToast = useToast();
   return (
     <Layout
       height="fill"
@@ -40,10 +42,20 @@ export default function LayoutContentWidth() {
       footer={
         <LayoutFooter hasDivider>
           <HStack gap={2} hAlign="end">
-            <Button label="Cancel" variant="secondary">
+            <Button
+              label="Cancel"
+              variant="secondary"
+              onClick={() =>
+                showToast({body: 'Demo: your edits would be discarded here'})
+              }>
               Cancel
             </Button>
-            <Button label="Submit" variant="primary">
+            <Button
+              label="Submit"
+              variant="primary"
+              onClick={() =>
+                showToast({body: 'Demo: the form would be sent here'})
+              }>
               Submit
             </Button>
           </HStack>

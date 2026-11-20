@@ -25,6 +25,21 @@ export const BUDGET_FLOOR = 1500;
 // A step that uses the admission action is named this; a waiting run is found
 // by it.
 export const STEP = 'Wait for room under the CI ceiling';
+// ci.yml's admission job runs a step of this name when the run starts its
+// widening matrices at full width, and skips it at tight width.
+export const WIDE_STEP = 'Run the legs at full width';
+
+/**
+ * The leg width a run's admission picked, read from its jobs: 'full',
+ * 'tight', or null while admission has not decided.
+ */
+export function legWidth(jobs) {
+  const step = jobs
+    .flatMap(job => job.steps ?? [])
+    .find(item => item.name === WIDE_STEP);
+  if (step?.status !== 'completed') return null;
+  return step.conclusion === 'success' ? 'full' : 'tight';
+}
 // A pull-request run yields to a waiting `main` run for the first fifteen
 // minutes of that wait. After that the `main` run still counts its whole
 // peak, so a pull-request run starts only when it fits beside it
@@ -37,19 +52,79 @@ export const MAIN_YIELD_MS = 15 * 60_000;
 export const AT_LIMIT_SPACING_MS = 10 * 60_000;
 // A wait this close to the longest wait counts as one that ran out.
 export const AT_LIMIT_SLACK_MS = 30_000;
+// ci.yml's `room` job runs a step of this name, which says how many jobs its
+// widening matrices add at full width: each `leg-widths` job's `full - tight`
+// (its Node leg count follows the recorded Node times).
+export const WIDEN_STEP = /^Hold (\d+) more jobs at full width$/;
+
+/**
+ * The jobs a run's widening matrices add at full width, read from its jobs,
+ * or 0 when it names none (a run that plans no widening matrix).
+ */
+export function widenOf(jobs) {
+  for (const step of jobs.flatMap(job => job.steps ?? [])) {
+    const match = WIDEN_STEP.exec(step.name ?? '');
+    if (match) return Number(match[1]);
+  }
+  return 0;
+}
+
+// Each leg of a matrix that limits its legs with `max-parallel` runs a step
+// of this name, which gives that limit (`strategy.max-parallel`). GitHub lists
+// the legs it holds back as queued, but they hold no runner, so a run counts
+// at most that many live legs of the matrix.
+export const AT_ONCE_STEP = /^Run at most (\d+) legs at once$/;
+
+/** The matrix a job is a leg of, from its `<job> (<index>/<total>)` name. */
+const matrixOf = name => /^(.+) \(\d+\/\d+\)$/.exec(name ?? '')?.[1];
+
+/**
+ * The jobs a run holds: its live jobs, with each matrix that names its
+ * `max-parallel` (AT_ONCE_STEP) counted at no more legs than that.
+ */
+export function liveJobs(jobs) {
+  const live = jobs.filter(job => LIVE.includes(job.status));
+  const atOnce = new Map();
+  for (const job of live) {
+    const matrix = matrixOf(job.name);
+    if (matrix == null) continue;
+    for (const step of job.steps ?? []) {
+      const match = AT_ONCE_STEP.exec(step.name ?? '');
+      if (match) atOnce.set(matrix, Number(match[1]));
+    }
+  }
+  const legs = new Map();
+  let holds = 0;
+  for (const job of live) {
+    const matrix = matrixOf(job.name);
+    if (matrix != null && atOnce.has(matrix)) {
+      legs.set(matrix, (legs.get(matrix) ?? 0) + 1);
+    } else {
+      holds += 1;
+    }
+  }
+  for (const [matrix, count] of legs) {
+    holds += Math.min(count, atOnce.get(matrix));
+  }
+  return holds;
+}
+
 // The most jobs a run holds at once, by workflow: ci.yml's release-check and
 // Main's runs (a push's fast checks or a unit run) from their `peak`
-// (ci-admission.test.mjs), a pull-request ci.yml run from its measured most,
-// every other workflow's run one or two slim jobs.
+// (ci-admission.test.mjs), a pull-request ci.yml run from its measured most
+// at the leg width its admission picked: `peak` at tight width, plus the jobs
+// its matrices add (`widenOf`) at full width or while undecided. Every other
+// workflow's run holds one or two slim jobs.
 // One line per workflow: ci-admission.test.mjs reads each estimate from it.
 // prettier-ignore
 const ESTIMATE = {
-  '.github/workflows/ci.yml': run => (run.event === 'workflow_dispatch' ? 39 : 18),
-  '.github/workflows/deploy.yml': run => (run.event === 'push' ? 4 : 14),
+  '.github/workflows/ci.yml': (run, jobs) => (run.event === 'workflow_dispatch' ? 47 : legWidth(jobs) === 'tight' ? 19 : 19 + widenOf(jobs)),
+  '.github/workflows/deploy.yml': run => (run.event === 'push' ? 4 : 20),
   '.github/workflows/review-signal.yml': () => 2,
   '.github/workflows/audits-at-head.yml': () => 10,
 };
-export const estimate = run => (ESTIMATE[run.path] ?? (() => 1))(run);
+export const estimate = (run, jobs = []) =>
+  (ESTIMATE[run.path] ?? (() => 1))(run, jobs);
 // Jobs always counted for small, unadmitted workflows: they peaked at twenty
 // at once in a day's runs and rose by fourteen within two minutes in
 // ninety-nine looks of a hundred (spec:AST-030 DEC-16).
@@ -153,8 +228,9 @@ export async function countLook({
       if (waits.some(step => step.status === 'in_progress')) {
         if (isPullRun(run)) pullWaiters.push({id: run.id, began: span.began});
         // Still waiting for room. A `main` run holds its whole peak, ahead of
-        // this one. A pull-request run holds what it runs: the job that waits
-        // and its Storybook build, which starts beside it. `main` runs queue
+        // this one. A pull-request run holds what it runs: the job that waits,
+        // its Storybook build, which starts beside it, and its superseded-runs
+        // sweep, which starts with the run. `main` runs queue
         // by when they began waiting, both read on GitHub's clock, a tie going
         // to the lower run id: a `main` run that began after this one holds
         // only what it runs, so of two waiting `main` runs exactly one counts
@@ -164,9 +240,7 @@ export async function countLook({
           !main ||
           !(span.began > mine || (span.began === mine && run.id > selfId));
         const holds =
-          isMain(run) && ahead
-            ? estimate(run)
-            : Math.max(1, jobs.filter(job => LIVE.includes(job.status)).length);
+          isMain(run) && ahead ? estimate(run) : Math.max(1, liveJobs(jobs));
         if (isMain(run) && !main && !(Date.now() - span.began >= MAIN_YIELD_MS))
           mainWaiting = true;
         large += holds;
@@ -191,13 +265,13 @@ export async function countLook({
           startedAtLimit.push({id: run.id, ago: Date.now() - span.ended});
         }
       }
-      const live = jobs.filter(job => LIVE.includes(job.status)).length;
+      const live = liveJobs(jobs);
       const ended = waits
         .map(step => Date.parse(step.completed_at ?? ''))
         .filter(Number.isFinite);
       const admittedAt = ended.length > 0 ? Math.max(...ended) : NaN;
       const fresh = Date.now() - admittedAt < JUST_ADMITTED_MS;
-      const holds = fresh ? Math.max(live, estimate(run)) : live;
+      const holds = fresh ? Math.max(live, estimate(run, jobs)) : live;
       large += holds;
       counted.push(
         `${short(run)} ${run.id} ${run.event}: ${holds}${fresh && holds > live ? ` (admitted just now, ${live} live)` : ' live'}`,

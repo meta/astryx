@@ -82,8 +82,9 @@ export const authors = {
   },
 } as const satisfies Record<string, AuthorProfile>;
 
-// Bylines show avatars at 40 px or less. Without a size, GitHub sends the
-// full uploaded image, which can be more than 500 KB.
+// The size for a reader of `avatar` that asks for none. The byline asks for
+// the size it shows. Without a size, GitHub sends the full uploaded image,
+// which can be more than 500 KB.
 function githubAvatar(username: string): string {
   return `https://github.com/${username}.png?size=128`;
 }

@@ -16,10 +16,4 @@ export const doc = {
     'Text',
     'Icon',
   ],
-  icons: {
-    EyeIcon: 'eye',
-    EyeSlashIcon: 'eyeSlash',
-    FunnelIcon: 'funnel',
-    MapPinIcon: 'location',
-  },
 };

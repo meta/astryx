@@ -3,7 +3,9 @@
 /**
  * A published CLI keeps the catalog `search` and `build` gather between runs
  * (foundation/fs/gather-cache.mjs) and uses it only while nothing it read has
- * changed: a kept catalog keeps search, build and doctor records, and gathers fresh on a Node without module hooks.
+ * changed. This file: a kept catalog keeps search, build and doctor records, and
+ * gathers fresh on a Node without module hooks; packed-gather-cache.discovery
+ * covers the component list, template discovery, themes and docs.
  * Each case's answer from a kept catalog must equal a fresh gather's.
  */
 
@@ -25,17 +27,53 @@ import {
   CACHE_NAME,
   keptTmp,
   freshTmp,
-  doctorEntries,
   issuesEntries,
   derivedEntries,
   entries,
-  templatesEntries,
-  themeEntries,
   QUERIES,
   hasModuleHooks,
+  readKept,
+  templatesEntry,
+  templatesEntries,
+  expectWarmHit,
+  maskCacheCount,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
 
 usePackedCli();
+
+/** @param {string} text */
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * What each kept entry in a temp folder's cache folder holds, by kind, once
+ * each: template discovery, a doc parse, a kept summary by its kind, or
+ * anything else by its key.
+ * @param {string} tmp
+ * @returns {string[]}
+ */
+function keptKinds(tmp) {
+  const dir = path.join(tmp, CACHE_NAME);
+  if (!fs.existsSync(dir)) return [];
+  const kinds = new Set();
+  for (const name of fs.readdirSync(dir)) {
+    if (!name.startsWith('gather-')) continue;
+    const file = path.join(dir, name);
+    const key = JSON.parse(readKept(file).key);
+    const summary = key.indexOf('kept-tree');
+    kinds.add(
+      templatesEntry(file)
+        ? 'template discovery'
+        : key.includes('doc-parse')
+          ? 'doc parse'
+          : summary >= 0
+            ? `summary ${key[summary + 1]}`
+            : `other ${JSON.stringify(key.slice(5))}`,
+    );
+  }
+  return [...kinds].sort();
+}
 
 describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
   it("is listed by doctor, with the runs under Plug'n'Play that keep none", () => {
@@ -51,8 +89,71 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     expect(plain).toContain(path.join(tmp, CACHE_NAME));
     expect(plain).not.toContain("Plug'n'Play");
     // Every kind of entry the folder holds is named, the docs not-found
-    // hint's name summaries (kept-tree.mjs) included.
-    expect(plain).toContain("the docs not-found hint's name summaries");
+    // hint's name summaries (kept-tree.mjs), the CLI's own docs tree (the
+    // docs adapter) and theme build's facts from Core's docs included.
+    expect(plain).toContain(
+      "the lookup commands' not-found hint's name summaries",
+    );
+    expect(plain).toContain("the CLI's own docs tree");
+    expect(plain).toContain(
+      "what template reads from a template's source to name the components it uses",
+    );
+    expect(plain).toContain(
+      "Core's and integrations' components with the doc parts the component matcher scores, Core hooks' declared keywords",
+    );
+    expect(plain).toContain(
+      "what theme build checks a theme against in Core's component docs",
+    );
+    expect(plain).toContain(
+      "the JavaScript theme build compiles from a theme's local TypeScript or JSX modules",
+    );
+    expect(plain).toContain(
+      "what theme build finds when it checks a theme's pseudo-class keys, token names and settings the browser won't show as written",
+    );
+    expect(plain).toContain(
+      "npm's list of the files an integration package packs",
+    );
+    expect(plain).toContain(
+      "what doctor's Core-props check finds in the project's source files, keyed by the folders it lists and the files it reads, and by the TypeScript, Core and project-config versions it used",
+    );
+    expect(plain).toContain(
+      "what doctor's Core-button check finds in the project's source files, keyed by the folders it lists and the files it reads, and by the installed packages and Node.js version it used",
+    );
+    expect(plain).toContain(
+      'On Linux, when a debug handler is set, runs also keep the locale and time zone here.',
+    );
+    // The row names the other checks that can make the folder.
+    expect(plain).toContain(
+      "A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's `integration check` of itself, for npm's list.",
+    );
+    // The CLI's build id stands for its own files' contents.
+    expect(plain).toContain(
+      "the installed CLI's own files judged by its build id and folder (an upgrade, a reinstall or a copy in another folder changes them; in-place edits aren't supported)",
+    );
+    // The bound on the folder, and on the transpile cache beside it.
+    expect(plain).toContain('at most 64 MB');
+    expect(plain).toContain(
+      `the transpile cache in ${path.join(tmp, 'astryx', 'transpiled')} keeps its copies in 256 subfolders, each holding at most 1/256 of that, and drops the copies made longest ago first.`,
+    );
+    // Text prints only the brief: the folder, its entries and size, the
+    // command that prints the whole message, and the command that clears the
+    // kept folders. The transpile folder is named once it exists.
+    const catalogs = path.join(tmp, CACHE_NAME);
+    const transpiled = path.join(tmp, 'astryx', 'transpiled');
+    const brief = new RegExp(
+      `^\\d+ (entry|entries) \\(\\d+\\.\\d MB\\) in ${escapeRegExp(catalogs)}\\. \`[^\`]* doctor --json\` lists every kept item and the size limits\\. To clear the caches, run: rm -rf ${escapeRegExp(catalogs)}( ${escapeRegExp(transpiled)})?\\.$`,
+    );
+    expect(row().brief).toMatch(brief);
+    fs.mkdirSync(transpiled, {recursive: true});
+    expect(row().brief).toContain(`rm -rf ${catalogs} ${transpiled}.`);
+    const shown = run(['doctor'], {tmp, json: false}).stdout;
+    expect(shown).toContain(
+      'Each check: status, id, label, message (or brief), fix',
+    );
+    expect(shown.replace(/\s+/g, ' ')).toContain(
+      `To clear the caches, run: rm -rf ${catalogs} ${transpiled}.`,
+    );
+    expect(shown).not.toContain('keep what they gather');
     const pnp = path.join(work, 'as-pnp.cjs');
     fs.writeFileSync(pnp, "process.versions.pnp = '3';\n");
     const underPnp = row({NODE_OPTIONS: `--require ${pnp}`}).message;
@@ -139,7 +240,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
       for (const name of files) {
         const text = fs.readFileSync(path.join(dir, name), 'utf8');
         expect(text, name).not.toContain(secret);
-        for (const [, state] of JSON.parse(text).env ?? []) {
+        for (const [, state] of readKept(path.join(dir, name)).env ?? []) {
           states += 1;
           expect(state === null || /^[0-9a-f]{32}$/.test(state), name).toBe(
             true,
@@ -239,7 +340,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     120_000,
   );
 
-  it('records nothing for component, template, theme, discover or docs in a project with no integration', () => {
+  it('records nothing for theme, discover or docs in a project with no integration, and keeps template discovery for component and template', () => {
     const tmp = keptTmp('no-integration');
     // A project with Core and nothing else: no config, no manifest, no
     // dependency that ships one.
@@ -274,17 +375,11 @@ Module._resolveFilename = function (request, parent, isMain, options) {
 `,
       );
       const env = {NODE_OPTIONS: `--require ${strict}`};
-      for (const ask of [
-        ['template', '--list'],
-        ['component', 'Button'],
-        ['theme', 'list'],
-        ['discover'],
-        ['docs'],
-      ]) {
-        // Stdout and status: a once-a-day notice may go to stderr.
-        const answer = (
-          /** @type {{status: number | null, stdout: string}} */ r,
-        ) => [r.status, r.stdout];
+      // Stdout and status: a once-a-day notice may go to stderr.
+      const answer = (
+        /** @type {{status: number | null, stdout: string}} */ r,
+      ) => [r.status, r.stdout];
+      for (const ask of [['theme', 'list'], ['discover'], ['docs']]) {
         const fresh = answer(
           run(ask, {tmp: freshTmp(), cwd: bare, json: false}),
         );
@@ -297,6 +392,53 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       }
       expect(entries(tmp).size).toBe(0);
       expect(issuesEntries(tmp).size).toBe(0);
+      expect(templatesEntries(tmp).size).toBe(0);
+      // Template discovery reads each of the CLI's template docs, so the
+      // lookups keep it in the existing folder, and never make the folder.
+      const asks = [
+        ['template', '--list'],
+        ['component', 'Button'],
+        ['component', 'Buttn'],
+      ];
+      const fresh = asks.map(ask => {
+        const first = freshTmp();
+        const answered = answer(run(ask, {tmp: first, cwd: bare, json: false}));
+        if (ask[1] !== 'Buttn') {
+          expect(fs.existsSync(path.join(first, CACHE_NAME))).toBe(false);
+        }
+        expect(answer(run(ask, {tmp, cwd: bare, json: false}))).toEqual(
+          answered,
+        );
+        return answered;
+      });
+      const warm = expectWarmHit(tmp, asks, {cwd: bare, json: false});
+      expect(warm.map(answer)).toEqual(fresh);
+      if (hasModuleHooks) {
+        expect(templatesEntries(tmp).size).toBe(1);
+        // Besides template discovery: the stored docs' parses the recorded
+        // runs keep, and the summaries any lookup keeps once the folder
+        // exists.
+        expect(keptKinds(tmp)).toEqual([
+          'doc parse',
+          'summary core-component-views',
+          'summary core-hook-keywords',
+          'summary hint-names',
+          'summary stored-component-list-check',
+          'template discovery',
+        ]);
+      } else {
+        // File-stamped summaries do not need module hooks. The gathers and
+        // stored doc parses still need a recorded run and keep nothing here.
+        expect(entries(tmp).size).toBe(0);
+        expect(templatesEntries(tmp).size).toBe(0);
+        expect(derivedEntries(tmp)).toEqual([]);
+        expect(keptKinds(tmp)).toEqual([
+          'summary core-component-views',
+          'summary core-hook-keywords',
+          'summary hint-names',
+          'summary stored-component-list-check',
+        ]);
+      }
     } finally {
       fs.rmSync(bare, {recursive: true, force: true});
     }
@@ -358,288 +500,6 @@ Module._resolveFilename = function (request, parent, isMain, options) {
     120_000,
   );
 
-  it.skipIf(!hasModuleHooks)(
-    "keeps doctor's docs checks, and a broken link shows on the very next run",
-    () => {
-      const tmp = keptTmp('doctor-docs');
-      const other = makeProject();
-      try {
-        fs.writeFileSync(
-          path.join(other.widgets, 'astryx.integration.mjs'),
-          `export default { docs: './docs' };\n`,
-        );
-        fs.mkdirSync(path.join(other.widgets, 'docs'));
-        // The link lives in a module the doc imports, so an edit to that module
-        // alone must show too.
-        const target = path.join(other.widgets, 'docs', 'target.mjs');
-        const link = (/** @type {string} */ to) =>
-          fs.writeFileSync(target, `export const target = '${to}';\n`);
-        link('quick-start');
-        fs.writeFileSync(
-          path.join(other.widgets, 'docs', 'deploying.doc.mjs'),
-          `import {target} from './target.mjs';\nexport const docs = {type: 'generic', name: 'deploying', title: 'Deploying', description: 'How to deploy.', sections: [{title: 'Overview', content: [{type: 'prose', text: 'Ship it, then see {@link generic:' + target + '}.'}]}]};\n`,
-        );
-        const tree = (/** @type {{stdout: string}} */ r) =>
-          JSON.parse(r.stdout).data.checks.find(
-            (/** @type {{id: string}} */ c) => c.id === 'docs-tree',
-          );
-        const doctor = (/** @type {string} */ at) =>
-          tree(run(['doctor'], {tmp: at, cwd: other.dir}));
-        const fresh = doctor(freshTmp());
-        expect(doctor(tmp)).toEqual(fresh);
-        const kept = doctorEntries(tmp);
-        expect([...kept.keys()].sort()).toEqual([
-          'cli-docs',
-          'docs-progressive-disclosure',
-          'docs-tree',
-        ]);
-        // Read back, not checked again: the same three files.
-        expect(doctor(tmp)).toEqual(fresh);
-        expect(doctorEntries(tmp)).toEqual(kept);
-        // Broken by an edit to the imported module alone: the very next doctor
-        // reports it, as a fresh one does, and checks the docs tree again.
-        link('no-such-topic');
-        const broken = doctor(tmp);
-        expect(JSON.stringify(broken)).toContain('no-such-topic');
-        expect(broken).toEqual(doctor(freshTmp()));
-        const after = doctorEntries(tmp);
-        expect(after.get('docs-tree')).not.toBe(kept.get('docs-tree'));
-        // Fixed: the next doctor no longer reports it.
-        link('quick-start');
-        expect(doctor(tmp)).toEqual(fresh);
-      } finally {
-        fs.rmSync(other.dir, {recursive: true, force: true});
-      }
-    },
-    180_000,
-  );
-
-  it.skipIf(!hasModuleHooks)(
-    'keeps the component list, and a new or edited component shows on the very next run',
-    () => {
-      const tmp = keptTmp('component-list');
-      const other = makeProject();
-      try {
-        fs.writeFileSync(
-          path.join(other.widgets, 'astryx.integration.mjs'),
-          `export default { components: './components' };\n`,
-        );
-        const component = (
-          /** @type {string} */ name,
-          /** @type {string} */ description,
-        ) => {
-          const dir = path.join(other.widgets, 'components', name);
-          fs.mkdirSync(dir, {recursive: true});
-          fs.writeFileSync(
-            path.join(dir, `${name}.doc.mjs`),
-            `export const docs = {type: 'component', name: '${name}', description: '${description}', props: []};\n`,
-          );
-          fs.writeFileSync(
-            path.join(dir, `${name}.tsx`),
-            `export function ${name}() { return null; }\n`,
-          );
-        };
-        component('Gadget', 'Shows a gadget.');
-        // Core as a copy of what component discovery reads, so a test can edit
-        // a Core doc in place.
-        const core = path.join(
-          other.dir,
-          'node_modules',
-          '@astryxdesign',
-          'core',
-        );
-        const coreSource = fs.realpathSync(core);
-        fs.unlinkSync(core);
-        fs.mkdirSync(core);
-        for (const entry of [
-          'package.json',
-          'groups.doc.mjs',
-          'docs.mjs',
-          'src',
-        ]) {
-          fs.cpSync(path.join(coreSource, entry), path.join(core, entry), {
-            recursive: true,
-            filter: from => !from.includes(`${path.sep}__tests__`),
-          });
-        }
-        const lists = () =>
-          new Map(
-            fs
-              .readdirSync(path.join(tmp, CACHE_NAME))
-              .map(name => path.join(tmp, CACHE_NAME, name))
-              .filter(
-                file =>
-                  JSON.parse(fs.readFileSync(file, 'utf8')).value?.type ===
-                  'component.list',
-              )
-              .map(file => [file, fs.statSync(file).ino]),
-          );
-        for (const ask of [
-          ['component', '--list'],
-          ['component', '--list', '--detail', 'compact'],
-        ]) {
-          for (const json of [true, false]) {
-            const fresh = run(ask, {tmp: freshTmp(), cwd: other.dir, json});
-            expect(fresh.status, fresh.stderr).toBe(0);
-            // Kept, then read back: byte for byte what a fresh run prints.
-            expect(run(ask, {tmp, cwd: other.dir, json})).toEqual(fresh);
-            expect(run(ask, {tmp, cwd: other.dir, json})).toEqual(fresh);
-          }
-        }
-        const kept = lists();
-        // One per list detail: text and JSON print the same kept list.
-        expect(kept.size).toBe(2);
-        expect(run(['component', '--list'], {tmp, cwd: other.dir})).toEqual(
-          run(['component', '--list'], {tmp: freshTmp(), cwd: other.dir}),
-        );
-        expect(lists()).toEqual(kept);
-        // A new component folder, then an edited doc: each shows on the very
-        // next run, as a fresh run shows it.
-        component('Widget', 'Shows a widget.');
-        const added = run(['component', '--list'], {tmp, cwd: other.dir});
-        expect(added.stdout).toContain('Widget');
-        expect(added).toEqual(
-          run(['component', '--list'], {tmp: freshTmp(), cwd: other.dir}),
-        );
-        // A Core doc edited in place: its new description shows.
-        const buttonDoc = path.join(core, 'src', 'Button', 'Button.doc.mjs');
-        const text = fs.readFileSync(buttonDoc, 'utf8');
-        const description = /description:\s*'([^']{20,})'/.exec(text)?.[1];
-        expect(description).toBeDefined();
-        const compact = ['component', '--list', '--detail', 'compact'];
-        expect(run(compact, {tmp, cwd: other.dir}).stdout).toContain(
-          /** @type {string} */ (description).slice(0, 30),
-        );
-        fs.writeFileSync(
-          buttonDoc,
-          text.replace(
-            /** @type {string} */ (description),
-            'A button, edited in place.',
-          ),
-        );
-        const edited = run(compact, {tmp, cwd: other.dir});
-        expect(edited.stdout).toContain('A button, edited in place.');
-        expect(edited).toEqual(run(compact, {tmp: freshTmp(), cwd: other.dir}));
-        // A component read is unchanged warm and cold.
-        const read = ['component', 'Button'];
-        expect(run(read, {tmp, cwd: other.dir})).toEqual(
-          run(read, {tmp: freshTmp(), cwd: other.dir}),
-        );
-      } finally {
-        fs.rmSync(other.dir, {recursive: true, force: true});
-      }
-    },
-    240_000,
-  );
-
-  it.skipIf(!hasModuleHooks)(
-    "keeps doctor's theme-wiring scan, and an edit to the app's import or the theme module shows on the very next run",
-    () => {
-      const tmp = keptTmp('theme-wiring');
-      const other = makeProject();
-      try {
-        const version = JSON.parse(
-          fs.readFileSync(path.join(packed, 'package.json'), 'utf8'),
-        ).version;
-        const theme = path.join(
-          other.dir,
-          'node_modules',
-          '@astryxdesign',
-          'theme-neutral',
-        );
-        fs.mkdirSync(path.join(theme, 'dist'), {recursive: true});
-        fs.writeFileSync(
-          path.join(theme, 'package.json'),
-          JSON.stringify({
-            name: '@astryxdesign/theme-neutral',
-            version,
-            type: 'module',
-            exports: {
-              '.': './dist/index.js',
-              './built': './dist/neutral.js',
-              './theme.css': './dist/theme.css',
-            },
-          }),
-        );
-        const themeModule = path.join(theme, 'dist', 'neutral.js');
-        fs.writeFileSync(
-          themeModule,
-          `export const neutralTheme = {name: 'neutral', tokens: {}};\n`,
-        );
-        fs.writeFileSync(
-          path.join(theme, 'dist', 'index.js'),
-          `export {neutralTheme} from './neutral.js';\n`,
-        );
-        fs.writeFileSync(
-          path.join(theme, 'dist', 'theme.css'),
-          `[data-astryx-theme="neutral"] { --color-text: black; }\n`,
-        );
-        const themes = (/** @type {string} */ at) => {
-          const result = run(['doctor'], {tmp: at, cwd: other.dir});
-          return JSON.parse(result.stdout).data.checks.find(
-            (/** @type {{id: string}} */ c) => c.id === 'themes',
-          );
-        };
-        const wiringEntries = () =>
-          fs
-            .readdirSync(path.join(tmp, CACHE_NAME))
-            .filter(name =>
-              Array.isArray(
-                JSON.parse(
-                  fs.readFileSync(path.join(tmp, CACHE_NAME, name), 'utf8'),
-                ).value?.wired,
-              ),
-            );
-        // Nothing wired yet: kept, then read back, as a fresh run answers.
-        const unwired = themes(freshTmp());
-        expect(themes(tmp)).toEqual(unwired);
-        expect(wiringEntries()).toHaveLength(1);
-        expect(themes(tmp)).toEqual(unwired);
-        // The app passes the package's theme to Core's Theme: the very next
-        // run sees it.
-        fs.mkdirSync(path.join(other.dir, 'app'), {recursive: true});
-        fs.writeFileSync(
-          path.join(other.dir, 'app', 'providers.tsx'),
-          [
-            "import {Theme} from '@astryxdesign/core/theme';",
-            "import {neutralTheme} from '@astryxdesign/theme-neutral/built';",
-            'export const Providers = ({children}: any) => (',
-            '  <Theme theme={neutralTheme}>{children}</Theme>',
-            ');',
-            '',
-          ].join('\n'),
-        );
-        const wired = themes(tmp);
-        expect(wired).not.toEqual(unwired);
-        expect(wired).toEqual(themes(freshTmp()));
-        expect(themes(tmp)).toEqual(wired);
-        // An edit to the theme module alone scans again, as a fresh run does.
-        const keptEntry = path.join(tmp, CACHE_NAME, wiringEntries()[0]);
-        const before = fs.statSync(keptEntry).ino;
-        fs.writeFileSync(
-          themeModule,
-          `export const neutralTheme = {name: 'neutral', tokens: {color: {}}};\n`,
-        );
-        expect(themes(tmp)).toEqual(themes(freshTmp()));
-        const rescanned = fs.statSync(keptEntry).ino;
-        expect(rescanned).not.toBe(before);
-        // The package no longer exports the built theme the app imports: the
-        // very next run scans again and reports it, as a fresh run does.
-        const pkgFile = path.join(theme, 'package.json');
-        const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
-        delete pkg.exports['./built'];
-        fs.writeFileSync(pkgFile, JSON.stringify(pkg));
-        const dropped = themes(tmp);
-        expect(dropped).not.toEqual(wired);
-        expect(dropped).toEqual(themes(freshTmp()));
-        expect(fs.statSync(keptEntry).ino).not.toBe(rescanned);
-      } finally {
-        fs.rmSync(other.dir, {recursive: true, force: true});
-      }
-    },
-    240_000,
-  );
-
   it('leaves a missing cache folder missing when doctor runs', () => {
     const tmp = freshTmp();
     run(['doctor'], {tmp});
@@ -694,8 +554,9 @@ Module._resolveFilename = function (request, parent, isMain, options) {
     () => {
       const tmp = keptTmp('doctor-core');
       // A project with no installed Core, and an opted-in integration whose
-      // component replaces a Core one: everyday commands read the Core the CLI
-      // carries, doctor only the project's (none), so their lists differ.
+      // component replaces a name Core does not have: everyday commands read
+      // the Core the CLI carries and find it, doctor reads only the project's
+      // (none) and cannot judge it, so their lists differ.
       const dir = fs.mkdtempSync(path.join(work, 'projects', 'no-core-'));
       // The Core the CLI carries: the repository's, beside the installed CLI,
       // for this case only.
@@ -739,7 +600,7 @@ Module._resolveFilename = function (request, parent, isMain, options) {
             name: 'AcmeSideNav',
             displayName: 'AcmeSideNav',
             import: '@acme/nav/components/AcmeSideNav',
-            replaces: 'SideNav',
+            replaces: 'NoSuchCoreNav',
             keywords: ['acme'],
             usage: {description: 'AcmeSideNav for Acme apps.'},
             props: [],
@@ -754,15 +615,18 @@ Module._resolveFilename = function (request, parent, isMain, options) {
             (/** @type {{id: string}} */ c) => c.id === 'integration-issues',
           );
         const fresh = check(run(['doctor'], {tmp: freshTmp(), cwd: dir}));
-        // Doctor, reading no Core, finds the replaced component missing; the
-        // everyday command, reading the carried Core, finds nothing.
-        expect(JSON.stringify(fresh)).toContain('SideNav');
+        // Doctor, reading no Core, cannot judge the replacement and names
+        // nothing; the everyday command, reading the carried Core, finds the
+        // missing target and prints it itself, since doctor cannot.
+        expect(JSON.stringify(fresh)).not.toContain('NoSuchCoreNav');
         const everyday = run(['template', '--list'], {
           tmp,
           cwd: dir,
           json: false,
         });
-        expect(everyday.stderr).not.toContain('@acme/nav');
+        expect(everyday.stderr).toContain(
+          'Warning: @acme/nav: Component "AcmeSideNav" replaces "NoSuchCoreNav", which is not a Core component.',
+        );
         run(['template', '--list'], {tmp, cwd: dir, json: false});
         // The everyday command kept its lists (the integration's and the
         // project's); doctor still answers as a fresh doctor does.
@@ -796,10 +660,7 @@ Module._resolveFilename = function (request, parent, isMain, options) {
             stderr: r.stderr,
             // The cache row counts what the folder holds, which a write
             // earlier in the run adds to: the rest must match exactly.
-            stdout: r.stdout
-              .split(tmp)
-              .join('<tmp>')
-              .replace(/\(\d+ entr(?:y|ies), [\d.]+ MB\)/g, '(<count>)'),
+            stdout: maskCacheCount(r.stdout.split(tmp).join('<tmp>')),
           };
         } finally {
           fs.chmodSync(path.dirname(catalogs), 0o700);
@@ -819,97 +680,6 @@ Module._resolveFilename = function (request, parent, isMain, options) {
     },
     120_000,
   );
-
-  it('keeps template discovery, and discovers again after a template edit', async () => {
-    const tmp = keptTmp('templates');
-    const other = makeProject();
-    try {
-      const templates = path.join(other.widgets, 'templates');
-      fs.mkdirSync(templates, {recursive: true});
-      const doc = path.join(templates, 'tally.doc.mjs');
-      const write = (/** @type {string} */ description) =>
-        fs.writeFileSync(
-          doc,
-          `export default {type: 'page', name: 'tally', description: '${description}', category: 'Widget - Tally'};\n`,
-        );
-      write('Running totals, tallied by team.');
-      fs.writeFileSync(
-        path.join(templates, 'tally.tsx'),
-        `export default function Page() { return null; }\n`,
-      );
-      const ask = ['template', '--list'];
-      const fresh = run(ask, {tmp: freshTmp(), cwd: other.dir, json: false});
-      expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
-      const kept = templatesEntries(tmp);
-      // Node 22.13 has no synchronous module hooks, so the supported fallback
-      // gathers fresh and keeps no template records.
-      expect(kept.size).toBe(hasModuleHooks ? 1 : 0);
-      // With hooks this reads back the same file; without them it gathers
-      // fresh. Either path must return the same answer.
-      expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
-      expect(templatesEntries(tmp)).toEqual(kept);
-      write('Grand totals, tallied by week.');
-      const [again, edited] = await Promise.all([
-        runAsync(ask, {tmp, cwd: other.dir, json: false}),
-        runAsync(ask, {tmp: freshTmp(), cwd: other.dir, json: false}),
-      ]);
-      expect(edited.stdout).toContain('Grand totals');
-      expect(again).toEqual(edited);
-    } finally {
-      fs.rmSync(other.dir, {recursive: true, force: true});
-    }
-  }, 120_000);
-
-  it('keeps template records apart for two copies of one build, outside a project', () => {
-    const tmp = keptTmp('two-copies');
-    // A second copy of the same build, in an install of its own, and an
-    // integration beside the first copy only.
-    const second = path.join(
-      work,
-      'install-2',
-      'node_modules',
-      '@astryxdesign',
-      'cli',
-    );
-    fs.cpSync(packed, second, {recursive: true, verbatimSymlinks: true});
-    const beside = path.join(work, 'install', 'node_modules', '@acme', 'tally');
-    const outside = fs.mkdtempSync(path.join(work, 'outside-'));
-    try {
-      fs.mkdirSync(path.join(beside, 'templates'), {recursive: true});
-      fs.writeFileSync(
-        path.join(beside, 'package.json'),
-        JSON.stringify({name: '@acme/tally', version: '1.0.0'}),
-      );
-      fs.writeFileSync(
-        path.join(beside, 'astryx.integration.mjs'),
-        `export default { templates: './templates' };\n`,
-      );
-      fs.writeFileSync(
-        path.join(beside, 'templates', 'zqledger.doc.mjs'),
-        `export default {type: 'page', name: 'zqledger', description: 'Running totals, tallied by team.', category: 'Widget - Tally'};\n`,
-      );
-      fs.writeFileSync(
-        path.join(beside, 'templates', 'zqledger.tsx'),
-        `export default function Page() { return null; }\n`,
-      );
-      const ask = ['template', '--list'];
-      const first = run(ask, {tmp: freshTmp(), cwd: outside});
-      const other = run(ask, {tmp: freshTmp(), cwd: outside, cli: second});
-      // Only the first copy sees the integration beside it.
-      expect(first.stdout).toContain('zqledger');
-      expect(other.stdout).not.toContain('zqledger');
-      run(ask, {tmp, cwd: outside, json: false});
-      run(ask, {tmp, cwd: outside, json: false});
-      // Only runtimes with synchronous hooks keep template records.
-      expect(templatesEntries(tmp).size).toBe(hasModuleHooks ? 1 : 0);
-      expect(run(ask, {tmp, cwd: outside, cli: second})).toEqual(other);
-      expect(run(ask, {tmp, cwd: outside})).toEqual(first);
-    } finally {
-      fs.rmSync(beside, {recursive: true, force: true});
-      fs.rmSync(path.join(work, 'install-2'), {recursive: true, force: true});
-      fs.rmSync(outside, {recursive: true, force: true});
-    }
-  }, 120_000);
 
   it('reports an installed dependency whose manifest fails to load as its issue', () => {
     const tmp = keptTmp('unloadable');
@@ -995,166 +765,6 @@ Module._resolveFilename = function (request, parent, isMain, options) {
     } finally {
       fs.rmSync(other.dir, {recursive: true, force: true});
     }
-  }, 120_000);
-
-  it("keeps an integration's themes, and finds an edit to a theme or a module it imports", () => {
-    const tmp = keptTmp('themes');
-    const other = makeProject();
-    try {
-      fs.writeFileSync(
-        path.join(other.widgets, 'astryx.integration.mjs'),
-        `export default { themes: './themes' };\n`,
-      );
-      // A package that ships the theme's built files as its exports.
-      const version = JSON.parse(
-        fs.readFileSync(
-          path.join(REPO_ROOT, 'packages', 'cli', 'package.json'),
-          'utf8',
-        ),
-      ).version;
-      fs.writeFileSync(
-        path.join(other.widgets, 'package.json'),
-        JSON.stringify({
-          name: '@acme/widgets',
-          version: '1.0.0',
-          type: 'module',
-          peerDependencies: {'@astryxdesign/core': `^${version}`},
-          exports: {
-            './themes/tally': './dist/tally.js',
-            './themes/tally.css': './dist/tally.css',
-          },
-        }),
-      );
-      fs.mkdirSync(path.join(other.widgets, 'dist'));
-      fs.writeFileSync(
-        path.join(other.widgets, 'dist', 'tally.js'),
-        "export const tallyTheme = {name: 'tally', tokens: {}};\n",
-      );
-      fs.writeFileSync(
-        path.join(other.widgets, 'dist', 'tally.css'),
-        '[data-astryx-theme="tally"] { --color-text: black; }\n',
-      );
-      const theme = path.join(other.widgets, 'themes', 'tally');
-      fs.mkdirSync(theme, {recursive: true});
-      const describe = (/** @type {string} */ text) =>
-        fs.writeFileSync(
-          path.join(theme, 'tallyTheme.doc.mjs'),
-          `/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {type: 'theme', name: 'tally', displayName: 'Tally', description: '${text}', maintained: true};\n`,
-        );
-      describe('Tally theme for ledgers.');
-      fs.writeFileSync(
-        path.join(theme, 'tallyTheme.ts'),
-        "import {tokens} from './tokens';\nexport const tallyTheme = {name: 'tally', tokens};\n",
-      );
-      const tokens = (/** @type {string} */ source) =>
-        fs.writeFileSync(path.join(theme, 'tokens.ts'), source);
-      tokens('export const tokens = {};\n');
-      const ask = ['theme', 'list'];
-      const fresh = () => run(ask, {tmp: freshTmp(), cwd: other.dir});
-      const kept = () => run(ask, {tmp, cwd: other.dir});
-      const first = fresh();
-      expect(first.stdout).toContain('Tally theme for ledgers.');
-      expect(kept()).toEqual(first);
-      // Runtimes with synchronous hooks keep one entry; older supported Node
-      // versions gather fresh on each run and keep none.
-      const keptThemes = themeEntries(tmp);
-      expect(keptThemes.size).toBe(hasModuleHooks ? 1 : 0);
-      expect(kept()).toEqual(first);
-      expect(themeEntries(tmp)).toEqual(keptThemes);
-      // An in-place edit to the theme's doc shows on the next run, which
-      // discovers the themes again.
-      describe('Tally theme, edited.');
-      const edited = kept();
-      expect(edited.stdout).toContain('Tally theme, edited.');
-      expect(edited).toEqual(fresh());
-      if (hasModuleHooks) {
-        expect(themeEntries(tmp)).not.toEqual(keptThemes);
-      } else {
-        expect(themeEntries(tmp).size).toBe(0);
-      }
-      // So does an edit to a module the theme imports that breaks it.
-      tokens("export {tokens} from './missing';\n");
-      const broken = kept();
-      expect(broken).toEqual(fresh());
-      expect(broken).not.toEqual(edited);
-    } finally {
-      fs.rmSync(other.dir, {recursive: true, force: true});
-    }
-  }, 180_000);
-
-  it('lets docs read the kept checks, and shows a topic edit on the very next call', () => {
-    const tmp = keptTmp('docs');
-    const other = makeProject();
-    try {
-      fs.writeFileSync(
-        path.join(other.widgets, 'astryx.integration.mjs'),
-        `export default { docs: './docs' };\n`,
-      );
-      fs.mkdirSync(path.join(other.widgets, 'docs'));
-      const topic = (/** @type {string} */ text) =>
-        fs.writeFileSync(
-          path.join(other.widgets, 'docs', 'deploying.doc.mjs'),
-          `export const docs = {type: 'generic', name: 'deploying', title: 'Deploying', description: 'How to deploy.', sections: [{title: 'Overview', content: [{type: 'prose', text: '${text}'}]}]};\n`,
-        );
-      topic('Ship it on Tuesdays.');
-      const ask = ['docs', 'deploying'];
-      const first = run(ask, {tmp: freshTmp(), cwd: other.dir});
-      expect(first.stdout).toContain('Ship it on Tuesdays.');
-      expect(run(ask, {tmp, cwd: other.dir})).toEqual(first);
-      // docs keeps the integration's check results only when module reads can be recorded.
-      const kept = issuesEntries(tmp);
-      if (hasModuleHooks) {
-        expect(kept.size).toBeGreaterThan(0);
-      } else {
-        expect(kept.size).toBe(0);
-      }
-      expect(run(ask, {tmp, cwd: other.dir})).toEqual(first);
-      expect(issuesEntries(tmp)).toEqual(kept);
-      // An in-place edit to the topic shows on the very next call.
-      topic('Ship it on Thursdays.');
-      const edited = run(ask, {tmp, cwd: other.dir});
-      expect(edited.stdout).toContain('Ship it on Thursdays.');
-      expect(edited).toEqual(run(ask, {tmp: freshTmp(), cwd: other.dir}));
-    } finally {
-      fs.rmSync(other.dir, {recursive: true, force: true});
-    }
-  }, 180_000);
-
-  it('is skipped silently when its folder cannot be used', () => {
-    fs.mkdirSync(path.join(work, 'tmp'), {recursive: true});
-    const notAFolder = path.join(work, 'tmp', 'file-tmp');
-    fs.writeFileSync(notAFolder, '');
-    // Open to others: refused, as one someone else could have planted.
-    const shared = path.join(work, 'tmp', 'shared');
-    fs.mkdirSync(path.join(shared, CACHE_NAME), {recursive: true});
-    fs.chmodSync(path.join(shared, CACHE_NAME), 0o777);
-    const expected = run(QUERIES[0], {tmp: freshTmp()});
-    expect(run(QUERIES[0], {tmp: shared})).toEqual(expected);
-    expect(entries(shared).size).toBe(0);
-
-    expect(derivedEntries(shared)).toEqual([]);
-    const broken = spawnSync(
-      process.execPath,
-      [
-        path.join(packed, 'clients', 'cli', 'bin', 'astryx.mjs'),
-        ...QUERIES[0],
-        '--json',
-      ],
-      {
-        cwd: project,
-        encoding: 'utf8',
-        env: {
-          ...process.env,
-          TMPDIR: notAFolder,
-          XDG_CACHE_HOME: notAFolder,
-          XDG_CONFIG_HOME: userConfig(),
-          NO_UPDATE_NOTIFIER: '1',
-          NODE_DISABLE_COMPILE_CACHE: '1',
-        },
-      },
-    );
-    expect(broken.status).toBe(0);
-    expect(broken.stdout).toBe(expected.stdout);
   }, 120_000);
 });
 

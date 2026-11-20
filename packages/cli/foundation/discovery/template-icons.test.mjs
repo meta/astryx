@@ -807,6 +807,35 @@ describe("a set that wraps the template's library", () => {
     );
   });
 
+  it('names the library a set wraps when the template imports one of its subpaths', () => {
+    const subpath = SOURCE.replace("'@acme/library'", "'@acme/library/solid'");
+    /** @type {any} */
+    const main = {
+      status: 'selected',
+      set: WRAPPER,
+      configured: 'wrapper',
+      order: [WRAPPER, SET],
+      reason: 'list',
+    };
+    const asMain = map(subpath, DECLARED, main, [WRAPPER, SET]);
+    expect(asMain.source).toBe(subpath);
+    expect(asMain.icons?.kept[0].reason).toBe(
+      'it already comes from @acme/library/solid, part of @acme/library, which @acme/wrapper/wrapper wraps',
+    );
+    /** @type {any} */
+    const backup = {
+      status: 'selected',
+      set: SET,
+      configured: 'glyphs',
+      order: [SET, WRAPPER],
+      reason: 'list',
+    };
+    const asBackup = map(subpath, DECLARED, backup, [SET, WRAPPER]);
+    expect(asBackup.icons?.kept.map(each => each.reason)).toContain(
+      'no set in your list maps its icon definition, and it already comes from @acme/library/solid, part of @acme/library, which @acme/wrapper/wrapper wraps',
+    );
+  });
+
   it('still draws a placeholder for an icon from a library no listed set wraps', () => {
     const {source} = map(
       SOURCE.replace("'@acme/library'", "'@acme/other'"),
@@ -912,5 +941,149 @@ describe('the local placeholder', () => {
         `export const A = ${JSON.stringify(placeholderDeclaration('MissingIcon'))};\nexport const B = 'MissingIcon /* missing icon: cut */';\n`,
       ),
     ).toEqual([]);
+  });
+});
+
+describe('mapTemplateIcons with placeholder imports (FR22)', () => {
+  const PLACEHOLDERS = [
+    "import {CloseIcon, DeleteIcon} from '@astryxdesign/template-icons';",
+    "import {StarIcon as StarSolid} from '@astryxdesign/template-icons/24/solid';",
+    "import {Icon} from '@astryxdesign/core/Icon';",
+    'export default function Page() {',
+    '  return <><Icon icon={CloseIcon} /><DeleteIcon /><Icon icon={StarSolid} /></>;',
+    '}',
+    '',
+  ].join('\n');
+
+  it('writes aliased Heroicons with no project set, and no report', () => {
+    const {source, icons} = map(
+      PLACEHOLDERS,
+      {},
+      {status: 'none', reason: 'No icon set is installed.'},
+      [],
+    );
+    expect(icons).toBeUndefined();
+    expect(source).toContain(
+      "import {\n  XMarkIcon as CloseIcon,\n  TrashIcon as DeleteIcon,\n} from '@heroicons/react/24/outline';",
+    );
+    expect(source).toContain(
+      "import {StarIcon as StarSolid} from '@heroicons/react/24/solid';",
+    );
+    expect(source).not.toContain('@astryxdesign/template-icons');
+    // Names below the imports never change.
+    expect(source.slice(source.indexOf('export default'))).toBe(
+      PLACEHOLDERS.slice(PLACEHOLDERS.indexOf('export default')),
+    );
+  });
+
+  it('maps each placeholder by its meaning with a project set, like the same icon declared', () => {
+    const fromPlaceholders = map(PLACEHOLDERS);
+    const declaredSource = PLACEHOLDERS.replace(
+      "import {CloseIcon, DeleteIcon} from '@astryxdesign/template-icons';",
+      "import {\n  XMarkIcon as CloseIcon,\n  TrashIcon as DeleteIcon,\n} from '@heroicons/react/24/outline';",
+    ).replace(
+      "import {StarIcon as StarSolid} from '@astryxdesign/template-icons/24/solid';",
+      "import {StarIcon as StarSolid} from '@heroicons/react/24/solid';",
+    );
+    const fromDeclared = map(declaredSource, {
+      XMarkIcon: 'close',
+      TrashIcon: 'delete',
+      StarIcon: 'star',
+    });
+    expect(fromPlaceholders.source).toBe(fromDeclared.source);
+    expect(fromPlaceholders.icons).toEqual(fromDeclared.icons);
+    expect(fromPlaceholders.source).not.toContain(
+      '@astryxdesign/template-icons',
+    );
+  });
+});
+
+describe('mapTemplateIcons with a meaning that falls back (FR23)', () => {
+  it("draws the fallback's icon when no set maps the meaning", () => {
+    const source = [
+      "import {CheckBadgeIcon} from '@heroicons/react/24/outline';",
+      'export const a = <CheckBadgeIcon />;',
+      '',
+    ].join('\n');
+    const withSuccess = /** @type {any} */ ({
+      ...SET,
+      data: {...SET.data, map: {...SET.data.map, success: 'home'}},
+    });
+    const result = mapTemplateIcons(
+      source,
+      {sets: [withSuccess], choice: {...SELECTED, set: withSuccess}},
+      {CheckBadgeIcon: 'verified'},
+    );
+    const today = mapTemplateIcons(
+      source,
+      {sets: [withSuccess], choice: {...SELECTED, set: withSuccess}},
+      {CheckBadgeIcon: 'success'},
+    );
+    expect(result.source).toBe(today.source);
+    expect(result.icons?.placeholder).toEqual([]);
+  });
+
+  it('tries the meaning, then its fallback, in each set before the next set', () => {
+    const source = [
+      "import {CheckBadgeIcon} from '@heroicons/react/24/outline';",
+      'export const a = <CheckBadgeIcon />;',
+      '',
+    ].join('\n');
+    const main = /** @type {any} */ ({
+      ...SET,
+      data: {...SET.data, map: {...SET.data.map, success: 'home'}},
+    });
+    const backup = /** @type {any} */ ({
+      name: 'brand',
+      package: '@acme/brand',
+      license: 'Apache-2.0',
+      data: {
+        schemaVersion: 1,
+        module: '@acme/brand',
+        map: {verified: 'seal'},
+        icons: [{id: 'seal', export: 'SealIcon', words: ['verified']}],
+      },
+    });
+    const result = mapTemplateIcons(
+      source,
+      {
+        sets: [main, backup],
+        choice: {
+          status: 'selected',
+          set: main,
+          configured: 'glyphs',
+          order: [main, backup],
+          reason: 'list',
+        },
+      },
+      {CheckBadgeIcon: 'verified'},
+    );
+    expect(result.source).toContain("from '@acme/glyphs'");
+    expect(result.source).not.toContain('@acme/brand');
+  });
+
+  it('keeps the meaning of each placeholder that one library icon draws', () => {
+    const source = [
+      "import {ReviewIcon, VerifiedIcon} from '@astryxdesign/template-icons';",
+      'export const a = <><ReviewIcon /><VerifiedIcon /></>;',
+      '',
+    ].join('\n');
+    const withBoth = /** @type {any} */ ({
+      ...SET,
+      data: {
+        ...SET.data,
+        map: {...SET.data.map, info: 'search', success: 'home'},
+      },
+    });
+    const result = mapTemplateIcons(
+      source,
+      {sets: [withBoth], choice: {...SELECTED, set: withBoth}},
+      {},
+    );
+    const targets = (result.icons?.mapped ?? []).map(
+      (/** @type {any} */ each) => JSON.stringify(each.target),
+    );
+    expect(targets).toHaveLength(2);
+    expect(new Set(targets).size).toBe(2);
   });
 });

@@ -75,18 +75,21 @@ const densityStyles = stylex.create({
     paddingBlock: spacingVars['--spacing-1'],
     paddingInline: spacingVars['--spacing-2'],
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
     boxSizing: 'border-box',
   },
   balanced: {
     paddingBlock: spacingVars['--spacing-2'],
     paddingInline: spacingVars['--spacing-3'],
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
     boxSizing: 'border-box',
   },
   spacious: {
     paddingBlock: spacingVars['--spacing-3'],
     paddingInline: spacingVars['--spacing-4'],
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
     boxSizing: 'border-box',
   },
 });
@@ -99,14 +102,17 @@ const densityStyles = stylex.create({
 const densityTextStyles = stylex.create({
   compact: {
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
     boxSizing: 'border-box',
   },
   balanced: {
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
     boxSizing: 'border-box',
   },
   spacious: {
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
     boxSizing: 'border-box',
   },
 });

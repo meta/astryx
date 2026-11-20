@@ -1,7 +1,0 @@
----
-'@astryxdesign/core': patch
----
-
-[fix] DateInput, DateTimeInput: in a standalone field, rejected dates now meet WCAG 2.2 1.4.1 (Use of Color) and 3.3.1 (Error Identification); inside an InputGroup they set `aria-invalid` and are announced. Before, text that is not a date was marked invalid and announced on every keystroke, with no visible message, and Enter or blur reverted it. A native date control flagged each partial year while the year was typed, showed no message, and dropped the rejection when it restored the committed date at blur. Now text that is not a date shows nothing while you type; Enter or blur keeps it in the field and shows "Invalid date" as the field's error status, with `aria-invalid` and one announcement. Its message replaces a caller `status`, as the field's other rejections already do; with `onEntryErrorChange`, a caller `error` status with a message still wins. A native date control's rejection waits for Enter or blur, shows the out-of-range message a typed date shows, under the same `status` rules, and stays shown after the control restores the committed date at blur. A shown rejection stays through an edit that leaves the date wrong or unfinished, and clears once the date is valid or empty. What a form posts does not change: while kept text is not a date, a hidden input posts the committed date under the field's `name`, and the next Enter submits the form.
-
-@nynexman4464

@@ -61,7 +61,6 @@ function spellsOut(term, name, description) {
   const words = term.split(/\s+/).filter(Boolean);
   const parts = wordsOf(name);
   if (words.length < 2 || words.length !== parts.length) return false;
-  const described = wordsOf(description);
   let expanded = false;
   for (let i = 0; i < words.length; i++) {
     const w = words[i];
@@ -70,7 +69,7 @@ function spellsOut(term, name, description) {
     // Only a single-letter word is an abbreviation to spell out: "With" in a
     // name is not spelled out by "without".
     if (p.length !== 1 || !w.startsWith(p)) return false;
-    if (!described.some(d => sameWord(d, w))) return false;
+    if (!wordsOf(description).some(d => sameWord(d, w))) return false;
     expanded = true;
   }
   return expanded;
@@ -137,28 +136,57 @@ function mentionPattern(term, t) {
  * and guidance must not change after its first score, as no catalog changes
  * them: an edited candidate, including one in a stored index passed to
  * `rankSearchIndex()` again, would still be scored on its first text.
- * @type {WeakMap<object, {names: {name: string, lower: string, leaf: string}[], keywords: {kw: string, text: string, lower: string}[], description?: string, prose: (string | undefined)[], guidance: (string | undefined)[]}>}
+ * @type {WeakMap<object, {names: {name: string, lower: string, leaf: string}[], keywords: {kw: string, text: string, lower: string, used: boolean}[], ownFirst?: {kw: string, text: string, lower: string, used: boolean}[], description?: string, prose: (string | undefined)[], guidance: (string | undefined)[]}>}
  */
 const prepared = new WeakMap();
+
+/**
+ * Whether a doc's keyword is a word its text mentions rather than one it is
+ * named or declared by: a code term or a table cell its keywords gather
+ * (`issuesUrl`), not the author's declared keywords, its title or headings,
+ * or its name, including its route's last part written with spaces (a
+ * placed guide answers to `tokens border`). Another domain's keywords are
+ * all its own.
+ * @param {any} candidate
+ * @param {string} lower the keyword, lowercased
+ */
+function mentionKeyword(candidate, lower) {
+  if (candidate.domain !== 'doc') return false;
+  const leaves = [candidate.name, candidate._topic]
+    .map(n => String(n ?? ''))
+    .map(n => n.slice(n.lastIndexOf('/') + 1));
+  const own = [
+    ...(candidate._declared ?? []),
+    ...(candidate.titles ?? []),
+    candidate.name,
+    ...leaves,
+    ...leaves.map(leaf => leaf.replaceAll('-', ' ')),
+  ];
+  return !own.some(x => x != null && String(x).toLowerCase() === lower);
+}
 
 /** @param {any} candidate */
 function prepare(candidate) {
   let p = prepared.get(candidate);
   if (p === undefined) {
-    const {name, aliases = [], keywords = []} = candidate;
+    const {name, aliases = [], keywords = [], domain, _uses} = candidate;
     p = {
       names: [name, ...aliases.filter(Boolean)].map(n => {
         const l = n.toLowerCase();
         return {name: n, lower: l, leaf: l.slice(l.lastIndexOf('/') + 1)};
       }),
-      keywords: keywords.map((/** @type {string} */ kw) => {
-        const text = String(kw);
-        return {kw, text, lower: text.toLowerCase()};
-      }),
+      keywords: [],
       description: undefined,
       prose: [],
       guidance: [],
     };
+    // A keyword that is a component the template uses (`_uses`).
+    const uses = domain === 'template' && Array.isArray(_uses) ? _uses : [];
+    for (const kw of keywords) {
+      const text = String(kw);
+      const used = uses.length > 0 && uses.includes(kw);
+      p.keywords.push({kw, text, lower: text.toLowerCase(), used});
+    }
     prepared.set(candidate, p);
   }
   return p;
@@ -211,14 +239,28 @@ function weakKeywordScore(t, kw) {
  * @param {string[]} [candidate.guidance] - Usage guidance (features, best practices) — scored a tier below description.
  * @param {string} [candidate._family] - The family whose doc lists the entry as a member.
  * @param {number} [candidate._familyIndex] - The entry's place among that family's members.
- * @param {{fuzzy?: boolean, joins?: boolean, part?: boolean, synonym?: boolean}} [opts] - `fuzzy`: allow edit-distance (typo) matches. Default true; multi-word queries pass false. `joins`: read a spaced query joined into a name or keyword (default true); off when the query names an entry outright. `part`: the term is one word of a longer query, so a name's head word after single letters (Stack in VStack) does not count as a keyword hit for it. `synonym`: the term stands in for a word of the query, so it names no family.
- * @returns {{score: number, reason: string, alias?: 'partial' | 'keyword'} | null}
- *   `alias` marks a hit that read the query's words joined.
+ * @param {any[]} [candidate._summarizes] - The docs beneath a doc that
+ *   opens a level, in search's view only (_named-keywords.mjs).
+ * @param {{fuzzy?: boolean, joins?: boolean, part?: boolean, synonym?: boolean, mentions?: boolean, ownEvidence?: boolean}} [opts] - `ownEvidence`: search's reading, where a template's used components (`_uses`) are marked as such (`used`). `mentions`: also say whether the hit is only a mention (see `inText`); only the reading of a one-identifier query asks, so other searches pay nothing for it. `fuzzy`: allow edit-distance (typo) matches. Default true; multi-word queries pass false. `joins`: read a spaced query joined into a name or keyword (default true); off when the query names an entry outright. `part`: the term is one word of a longer query, so a name's head word after single letters (Stack in VStack) does not count as a keyword hit for it. `synonym`: the term stands in for a word of the query, so it names no family.
+ * @returns {{score: number, reason: string, alias?: 'partial' | 'keyword', inText?: true, used?: true, own?: number} | null}
+ *   `used` marks a hit on a component the template uses, and `own` is then
+ *   its best hit on its own text. `alias` marks a hit that read the query's
+ *   words joined; `inText`, asked
+ *   for with `mentions`, a hit that is the term mentioned in the
+ *   description, docs or guidance, or a doc keyword its text gathers (see
+ *   mentionKeyword), not a name or a keyword of its own.
  */
 export function scoreCandidate(
   term,
   candidate,
-  {fuzzy = true, joins = true, part = false, synonym = false} = {},
+  {
+    fuzzy = true,
+    joins = true,
+    part = false,
+    synonym = false,
+    mentions = false,
+    ownEvidence = false,
+  } = {},
 ) {
   const {
     domain,
@@ -235,17 +277,52 @@ export function scoreCandidate(
   let reason = '';
   /** @type {'partial' | 'keyword' | false} */
   let alias = false;
+  /** Whether the best hit is a mention in text, not a name or keyword. */
+  let inText = false;
+  /** Whether the best hit is a component the template uses. */
+  let byUse = false;
+  /** The best hit that is not a component the template uses. */
+  let bestOwn = 0;
+  // A doc that opens a level (search's view, _named-keywords.mjs) sums up the
+  // docs beneath it: a term its text mentions that one of them answers at
+  // least as strongly is that doc's evidence, not this page's.
+  const summarized = candidate._summarizes;
+  /** @param {number} score */
+  const answeredBelow = score =>
+    summarized != null &&
+    summarized.some(
+      doc =>
+        (scoreCandidate(term, doc, {fuzzy, joins, part, synonym})?.score ??
+          0) >= score,
+    );
   /**
    * @param {number} score
    * @param {string} why
    * @param {'partial' | 'keyword' | false} [byAlias] - the hit reads the
    *   query's words joined, into part of a name or into a keyword
+   * @param {boolean} [mention] - the hit is the term mentioned in text
+   * @param {boolean} [use] - the hit is a component the template uses
+   * @param {boolean} [text] - the hit is the page's text (its prose, or a
+   *   keyword that text gathers) rather than its name, title, description or
+   *   declared keywords; a page that sums up the docs beneath it does not
+   *   take it when one of them answers the term as strongly
    */
-  const consider = (score, why, byAlias = false) => {
+  const consider = (
+    score,
+    why,
+    byAlias = false,
+    mention = false,
+    use = false,
+    text = false,
+  ) => {
+    if (text && score > best && answeredBelow(score)) return;
+    if (!use && score > bestOwn) bestOwn = score;
     if (score > best) {
       best = score;
       reason = why;
       alias = byAlias;
+      inText = mention;
+      byUse = use;
     }
   };
 
@@ -339,30 +416,84 @@ export function scoreCandidate(
   }
 
   // ── Keyword signals ─────────────────────────────────────────────
+  // In search's reading (`ownEvidence`), a template's used components match
+  // as its keywords do, after its own keywords, and the hit says it came from
+  // one.
   const termJoined = joined(term);
-  for (const {kw, text: kwText, lower: kwLower} of p.keywords) {
+  /** Whether a keyword is one the page's text gathers (see `consider`). */
+  const byText = (/** @type {string} */ lower) =>
+    summarized != null && mentionKeyword(candidate, lower);
+  const keywordList = ownEvidence
+    ? (p.ownFirst ??= [
+        ...p.keywords.filter(k => !k.used),
+        ...p.keywords.filter(k => k.used),
+      ])
+    : p.keywords;
+  for (const {
+    kw,
+    text: kwText,
+    lower: kwLower,
+    used: usedKeyword,
+  } of keywordList) {
+    const used = ownEvidence && usedKeyword;
     // A one-word keyword typed as separate words is the keyword: `number
     // field` is `numberfield`. Only a
     // lowercase keyword, one an author declares for a reader to type: a
     // capitalized one names another entry (a block's `componentsUsed`). A
     // doc's keywords include code terms, matched as written.
     if (kwLower === term) {
-      consider(90, `keyword "${kw}"`);
+      consider(
+        90,
+        `keyword "${kw}"`,
+        false,
+        mentions && mentionKeyword(candidate, kwLower),
+        used,
+        byText(kwLower),
+      );
       continue;
     }
     if (joins && domain !== 'doc' && /\s/.test(term) && kwText === termJoined) {
-      consider(90, `keyword "${kw}"`, 'keyword');
+      consider(
+        90,
+        `keyword "${kw}"`,
+        'keyword',
+        mentions && mentionKeyword(candidate, kwLower),
+        used,
+        byText(kwLower),
+      );
       continue;
     }
     if (sameTermWord(t, kwLower)) {
-      consider(88, `keyword "${kw}"`);
+      consider(
+        88,
+        `keyword "${kw}"`,
+        false,
+        mentions && mentionKeyword(candidate, kwLower),
+        used,
+        byText(kwLower),
+      );
       continue;
     }
-    if (startsATermWordOf(t, kw)) consider(70, `keyword "${kw}"`);
+    if (startsATermWordOf(t, kw))
+      consider(
+        70,
+        `keyword "${kw}"`,
+        false,
+        mentions && mentionKeyword(candidate, kwLower),
+        used,
+        byText(kwLower),
+      );
     if (fuzzy) {
       const dist = typoDistance(term, kwLower);
       if (dist != null && dist <= 2) {
-        consider(dist === 1 ? 70 : 30, `keyword "${kw}" (distance ${dist})`);
+        consider(
+          dist === 1 ? 70 : 30,
+          `keyword "${kw}" (distance ${dist})`,
+          false,
+          mentions && mentionKeyword(candidate, kwLower),
+          used,
+          byText(kwLower),
+        );
       }
     }
   }
@@ -388,12 +519,12 @@ export function scoreCandidate(
   if (term.length >= 3) {
     const re = mentionPattern(term, t);
     if (description && re.test((p.description ??= description.toLowerCase()))) {
-      consider(50, `description mentions "${term}"`);
+      consider(50, `description mentions "${term}"`, false, true);
     } else {
       let matchedProse = false;
       for (let i = 0; i < prose.length; i++) {
         if (prose[i] && re.test(loweredAt(p.prose, prose, i))) {
-          consider(50, `docs mention "${term}"`);
+          consider(50, `docs mention "${term}"`, false, true, false, true);
           matchedProse = true;
           break;
         }
@@ -404,7 +535,14 @@ export function scoreCandidate(
       if (!matchedProse) {
         for (let i = 0; i < guidance.length; i++) {
           if (guidance[i] && re.test(loweredAt(p.guidance, guidance, i))) {
-            consider(45, `guidance mentions "${term}"`);
+            consider(
+              45,
+              `guidance mentions "${term}"`,
+              false,
+              true,
+              false,
+              true,
+            );
             break;
           }
         }
@@ -412,5 +550,13 @@ export function scoreCandidate(
     }
   }
 
-  return best > 0 ? {score: best, reason, ...(alias ? {alias} : {})} : null;
+  if (best <= 0) return null;
+  /** @type {{score: number, reason: string, alias?: 'partial' | 'keyword', inText?: true, used?: true, own?: number}} */
+  const hit = {score: best, reason, ...(alias ? {alias} : {})};
+  if (mentions && inText) hit.inText = true;
+  if (byUse) {
+    hit.used = true;
+    hit.own = bestOwn;
+  }
+  return hit;
 }
