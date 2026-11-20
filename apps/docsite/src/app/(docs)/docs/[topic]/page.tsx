@@ -23,6 +23,7 @@ import {TokensDocView} from '../../../../components/docs/TokensDocView';
 import {PackageStubPage} from '../../../../components/docs/PackageStubPage';
 import {type InstallStep} from '../../../../components/docs/PackageActions';
 import {linkifyDocSections} from '../../../../components/docs/docsLinkify';
+import {packageText} from '../../../../lib/packageText';
 import {pageMetadata} from '../../../../lib/pageMetadata';
 
 // Every documented component and hook name, for the prose auto-linker. Same
@@ -160,7 +161,7 @@ export default async function DocPage({
       name={pkg.name}
       description={pkg.description}
       version={pkg.version}
-      readme={pkg.readme}
+      readme={packageText.find(text => text.name === pkg.name)?.readme ?? null}
       installSteps={getInstallSteps(pkg)}
       cta={
         firstComponent
