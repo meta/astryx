@@ -23,6 +23,7 @@ import {
   type ReactNode,
   type Ref,
 } from 'react';
+import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import type {BaseProps} from '@astryxdesign/core';
@@ -730,7 +731,12 @@ function MarkerButton({
         if (buttonRef.current == null) {
           return;
         }
-        setLoadedPopover(() => module.default);
+        // The popover mounts closed and attaches to the button first, so a
+        // held press then opens it the way a later press does, growing out
+        // of the marker.
+        flushSync(() => {
+          setLoadedPopover(() => module.default);
+        });
         if (openOnLoad) {
           setOpen(true);
         }
