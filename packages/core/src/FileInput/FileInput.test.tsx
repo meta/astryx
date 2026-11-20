@@ -158,6 +158,42 @@ describe('FileInput', () => {
     },
   );
 
+  it.each(['sm', 'md', 'lg'] as const)(
+    'reflects size %s on the compact control theme target',
+    size => {
+      render(
+        <FileInput
+          label="Upload"
+          size={size}
+          value={null}
+          onChange={() => {}}
+        />,
+      );
+      const control = document.querySelector('.astryx-file-input');
+      expect(control).toHaveAttribute('data-size', size);
+    },
+  );
+
+  it('defaults to md size', () => {
+    render(<FileInput label="Upload" value={null} onChange={() => {}} />);
+    const control = document.querySelector('.astryx-file-input');
+    expect(control).toHaveAttribute('data-size', 'md');
+  });
+
+  it('keeps the size theme target in dropzone mode', () => {
+    render(
+      <FileInput
+        label="Upload"
+        mode="dropzone"
+        size="lg"
+        value={null}
+        onChange={() => {}}
+      />,
+    );
+    const control = document.querySelector('.astryx-file-input');
+    expect(control).toHaveAttribute('data-size', 'lg');
+  });
+
   it('displays selected file name', () => {
     const file = createFile('report.pdf', 1024, 'application/pdf');
     render(<FileInput label="Document" value={file} onChange={() => {}} />);

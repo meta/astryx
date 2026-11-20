@@ -114,6 +114,13 @@ export const docs = {
       default: "'input'",
     },
     {
+      name: 'size',
+      type: "'sm' | 'md' | 'lg'",
+      description:
+        "The size of the input: 'sm' is a compact 28px control, 'md' the default 32px, 'lg' a large 36px control. Sets the compact control height so same-size inputs align in a form row; dropzone mode keeps its own padding.",
+      default: "'md'",
+    },
+    {
       name: 'status',
       type: "{type: 'error' | 'warning' | 'success', message?: string}",
       description:
@@ -173,7 +180,7 @@ export const docs = {
   ],
   theming: {
     targets: [
-      {className: 'astryx-file-input', visualProps: ['mode', 'status']},
+      {className: 'astryx-file-input', visualProps: ['mode', 'size', 'status']},
       {className: 'astryx-file-input-icon', visualProps: ['mode']},
     ],
   },
@@ -288,6 +295,13 @@ export const docsZh = {
       default: "'input'",
     },
     {
+      name: 'size',
+      type: "'sm' | 'md' | 'lg'",
+      description:
+        "输入框尺寸：'sm' 为紧凑的 28px 控件，'md' 为默认的 32px，'lg' 为较大的 36px 控件。设置紧凑控件的高度，使同尺寸输入框在表单行中对齐；dropzone 模式保持自身的内边距。",
+      default: "'md'",
+    },
+    {
       name: 'status',
       type: "{type: 'error' | 'warning' | 'success', message?: string}",
       description: '验证状态。',
@@ -334,7 +348,7 @@ export const docsZh = {
   ],
   theming: {
     targets: [
-      {className: 'astryx-file-input', visualProps: ['mode', 'status']},
+      {className: 'astryx-file-input', visualProps: ['mode', 'size', 'status']},
       {className: 'astryx-file-input-icon', visualProps: ['mode']},
     ],
   },

@@ -62,6 +62,12 @@ const meta: Meta<typeof FileInput> = {
       options: ['input', 'dropzone'],
       description: 'Visual mode: compact input or drag-and-drop dropzone',
     },
+    size: {
+      control: 'select',
+      options: ['sm', 'md', 'lg'],
+      description:
+        'Size of the input: compact 28px, default 32px, or large 36px control height',
+    },
     status: {
       control: 'object',
       description:
