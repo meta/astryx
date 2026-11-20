@@ -285,16 +285,19 @@ describe('Toast responsive layout', () => {
   });
   it('lets an inset edge of 0 replace the provider value on that edge, in LTR and RTL', () => {
     const edges = [
-      ['top', 'top'],
-      ['bottom', 'bottom'],
-      ['start', 'insetInlineStart'],
-      ['end', 'insetInlineEnd'],
+      ['top', 'top', 'topEnd'],
+      ['bottom', 'bottom', 'bottomEnd'],
+      ['start', 'insetInlineStart', 'bottomEnd'],
+      ['end', 'insetInlineEnd', 'bottomEnd'],
     ] as const;
     for (const direction of ['ltr', 'rtl'] as const) {
-      for (const [edge, property] of edges) {
+      for (const [edge, property, position] of edges) {
         render(
           <div dir={direction}>
-            <ToastViewport isTopLayer={false} inset={{[edge]: 0}}>
+            <ToastViewport
+              isTopLayer={false}
+              position={position}
+              inset={{[edge]: 0}}>
               <ShowToastButton options={INFO_A} />
             </ToastViewport>
           </div>,
@@ -309,6 +312,28 @@ describe('Toast responsive layout', () => {
         );
         cleanup();
       }
+    }
+  });
+
+  it('writes nothing for a zero on the block edge opposite the position', () => {
+    for (const [position, edge] of [
+      ['bottomEnd', 'top'],
+      ['topStart', 'bottom'],
+    ] as const) {
+      render(
+        <ToastViewport
+          isTopLayer={false}
+          position={position}
+          inset={{top: 0, bottom: 0}}>
+          <ShowToastButton options={INFO_A} />
+        </ToastViewport>,
+      );
+      act(() => {
+        fireEvent.click(screen.getByText('Trigger'));
+      });
+      const viewport = screen.getByRole('region', {name: 'Notifications'});
+      expect(viewport.style[edge], `${position} ${edge}`).toBe('');
+      cleanup();
     }
   });
 });
