@@ -19306,6 +19306,8 @@ export function draftAnswer(ctx, env, question) {
         ...(size ? ['font-size'] : []),
         ...(c.aspects.includes('weight') || !size ? ['font-weight'] : []),
       ];
+      /** Tokens left alone because a part's buttons read them too. @type {string[]} */
+      const sharedWithControls = [];
       /** @param {{on: string, when: string}} x @param {string} prop */
       const linesFor = (x, prop) => {
         // (Its text parts' tokens: the ones inside it that set the
@@ -19330,8 +19332,8 @@ export function draftAnswer(ctx, env, question) {
           ),
         ].filter(t => t in TOKENS);
         // (A token its buttons read too, a banner title's
-        // --text-label-size, would resize its buttons as well: such a part
-        // gets no line, as on main.)
+        // --text-label-size, would resize its buttons as well: left out,
+        // and said.)
         const controlTokens = new Set(
           (rec?.contains ?? [])
             .filter(
@@ -19355,9 +19357,11 @@ export function draftAnswer(ctx, env, question) {
             ? /^--(?:text-[a-z0-9-]+-size|font-size-[a-z0-9-]+)$/.test(t)
             : /^--(?:text-[a-z0-9-]+-weight|font-weight-[a-z]+)$/.test(t),
         );
-        if (read.some(t => controlTokens.has(t))) return [];
-        const held = read;
+        const held = read.filter(t => !controlTokens.has(t));
+        for (const t of read.filter(t => controlTokens.has(t)))
+          sharedWithControls.push(`${x.on}'s ${t}, which its buttons read too`);
         const isSize = prop === 'font-size';
+        if (read.length && !held.length) return [];
         if (!held.length)
           return [
             isSize
@@ -19379,7 +19383,7 @@ export function draftAnswer(ctx, env, question) {
         .map(x => ({x, lines: props.flatMap(prop => linesFor(x, prop))}))
         .filter(o => o.lines.length);
       push({
-        text: `no part draws only a status's text, so the whole theme's text is left as it is${offered.length ? `; the parts that show ${word} text, each in its ${word} look: ${offered.map(o => o.x.on).join(', ')} (one line each${typed ? `, each set to ${typed}` : ''})` : ''}`,
+        text: `no part draws only a status's text, so the whole theme's text is left as it is${offered.length ? `; the parts that show ${word} text, each in its ${word} look: ${offered.map(o => o.x.on).join(', ')} (one line each${typed ? `, each set to ${typed}` : ''})` : ''}${sharedWithControls.length ? `; left as it is: ${sharedWithControls.join('; ')}` : ''}`,
         // (A part whose text is drawn by elements inside it, a banner's
         // title and description, takes the token its text reads.)
         options: offered.map(o => o.lines),
