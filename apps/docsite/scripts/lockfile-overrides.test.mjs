@@ -14,7 +14,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {describe, expect, it} from 'vitest';
 import YAML from 'yaml';
-import {lockfileOverrides} from './lockfile-overrides.mjs';
+import {lockfileOverrides, scopedOverrides} from './lockfile-overrides.mjs';
 
 const REPO = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -58,6 +58,25 @@ describe('lockfileOverrides', () => {
       '@babel/traverse': '7.29.7',
       'old-tool': {'.': '1.0.0', semver: '5.7.2'},
       '@astryxdesign/cli': {semver: '6.3.1'},
+    });
+  });
+
+  it("nests the pins under one package, so a sibling's own ranges keep the registry's versions", () => {
+    expect(
+      scopedOverrides(
+        {
+          '@babel/parser': '7.29.8',
+          'old-tool': {'.': '1.0.0', semver: '5.7.2'},
+          '@astryxdesign/cli': {semver: '6.3.1'},
+        },
+        '@astryxdesign/cli',
+      ),
+    ).toEqual({
+      '@astryxdesign/cli': {
+        '@babel/parser': '7.29.8',
+        'old-tool': {'.': '1.0.0', semver: '5.7.2'},
+        semver: '6.3.1',
+      },
     });
   });
 

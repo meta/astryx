@@ -120,3 +120,16 @@ export function lockfileOverrides(lockText, importers) {
   }
   return overrides;
 }
+
+/**
+ * The same pins, applied only inside one package's dependency tree: the
+ * overrides nest under that package's name. A sibling package with its own
+ * dependency ranges keeps the versions npm resolves for it.
+ * @param {Record<string, string | Record<string, string>>} overrides
+ * @param {string} owner the package whose tree the pins apply to
+ * @returns {Record<string, Record<string, string | Record<string, string>>>}
+ */
+export function scopedOverrides(overrides, owner) {
+  const {[owner]: ownPins, ...rest} = overrides;
+  return {[owner]: {...rest, ...(typeof ownPins === 'object' ? ownPins : {})}};
+}
