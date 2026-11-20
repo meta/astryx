@@ -233,6 +233,30 @@ describe("a bar's height", () => {
     },
     T,
   );
+
+  it(
+    'in two bars that hold the same row, writes the reach only where their heights agree, and says so',
+    async () => {
+      // (The top nav sits in the app's header and in a layout header.)
+      const lone = /** @type {any} */ (
+        await themeEditSet('b', 'height', '72px', {cwd, on: 'layout-header'})
+      ).data;
+      expect(said(lone)).toMatch(
+        /top-nav takes this in every bar that holds it \([^)]*app-shell-header[^)]*\)/,
+      );
+      const both = /** @type {any} */ (
+        await themeEditSet('b', 'height', '48px', {
+          cwd,
+          on: 'app-shell-header',
+        })
+      ).data;
+      expect(said(both)).toMatch(/as they differ, it takes neither/);
+      expect(built('top-nav')).not.toMatch(/calc\((48|72)px/);
+      await themeEditUndo('b', {cwd});
+      await themeEditUndo('b', {cwd});
+    },
+    T,
+  );
 });
 
 describe("the part map's bar facts", () => {

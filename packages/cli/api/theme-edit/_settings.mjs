@@ -8106,6 +8106,8 @@ function barReach(ctx, theme) {
   const comps = /** @type {Record<string, Record<string, any>>} */ (
     theme.components
   );
+  /** @type {Map<string, Array<{holder: string, said: string, set: Record<string, string>, written: string[]}>>} */
+  const byRow = new Map();
   for (const [holder, keys] of Object.entries(comps)) {
     const b = keys?.base;
     if (!b || typeof b !== 'object') continue;
@@ -8133,11 +8135,13 @@ function barReach(ctx, theme) {
     }
     if (!rows.length) continue;
     const row = rows[0];
-    const rb = ((comps[row] ??= {}).base ??= {});
+    const rb = comps[row]?.base ?? {};
+    /** @type {Record<string, string>} */
+    const set = {};
     /** @type {string[]} */
     const written = [];
     if (!BLOCK_PADDING_KEYS.some(k => rb[k] != null)) {
-      rb.paddingBlock = '0';
+      set.paddingBlock = '0';
       written.push('padding-block 0');
     }
     if (
@@ -8159,21 +8163,40 @@ function barReach(ctx, theme) {
       // center in it, and anything taller shows past both edges alike); a
       // bar with a least height gives its row that least height.
       const key = (b.height ?? b.blockSize) === height ? 'height' : 'minHeight';
-      rb[key] = sides.length
+      set[key] = sides.length
         ? `calc(${height} - ${sides.join(' - ')})`
         : String(height);
-      written.push(`${key === 'height' ? 'height' : 'min-height'} ${rb[key]}`);
+      written.push(`${key === 'height' ? 'height' : 'min-height'} ${set[key]}`);
       // A row that wraps centers its lines too, so a part taller than the
       // bar (a heading with roomy padding) leaves the others in the middle.
       if (rb.alignContent == null) {
-        rb.alignContent = 'center';
+        set.alignContent = 'center';
         written.push('align-content center');
       }
     }
     if (written.length)
+      byRow.set(row, [...(byRow.get(row) ?? []), {holder, said, set, written}]);
+  }
+  // The row's rule is one for the whole theme, so it takes a bar's reach in
+  // every bar that holds it: written only when the bars given a height or
+  // padding agree on it, and named in each case.
+  for (const [row, reaches] of byRow) {
+    const holders = Object.keys(map).filter(h => {
+      const r = barRows(map, h);
+      return r.length === 1 && r[0] === row;
+    });
+    const named = reaches.map(r => `${r.said} on ${r.holder}`).join(', ');
+    if (new Set(reaches.map(r => JSON.stringify(r.set))).size > 1) {
       (ctx.compileNotes ??= []).push(
-        `${said} on ${holder} reaches ${row}, the row inside it (${written.join(', ')}), so the items it holds sit in the middle of the bar; a value you set on ${row} itself stays yours`,
+        `${named} reach ${row}, the row inside each, which takes one height in every bar that holds it (${holders.join(', ')}): as they differ, it takes neither; give those bars the same height, or set one on ${row}`,
       );
+      continue;
+    }
+    const [{set, written}] = reaches;
+    Object.assign(((comps[row] ??= {}).base ??= {}), set);
+    (ctx.compileNotes ??= []).push(
+      `${named} ${reaches.length > 1 ? 'reach' : 'reaches'} ${row}, the row inside it (${written.join(', ')}), so the items it holds sit in the middle of the bar${holders.length > 1 ? `; ${row} takes this in every bar that holds it (${holders.join(', ')})` : ''}; a value you set on ${row} itself stays yours`,
+    );
   }
 }
 
