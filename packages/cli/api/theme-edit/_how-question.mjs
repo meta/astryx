@@ -27731,6 +27731,47 @@ export function draftAnswer(ctx, env, question) {
       );
     });
     if (!undone.length) continue;
+    // An undo that names more than one change ("Undo the card change and
+    // the heading change"), or a look that more than one earlier change
+    // could be ("the heading size change" after a size and a bold), is not
+    // read for sure: nothing is taken back, and the answer says so.
+    const uc = /** @type {any} */ (draftClause.get(unmet));
+    const next = clauses[undoAt + 1];
+    const alsoNamed =
+      next &&
+      !next.aspects?.length &&
+      !next.colors?.length &&
+      /^\W*(?:and\s+)?the\s+(?:[\w-]+\s+){0,3}changes?\b/i.test(
+        String(next.text ?? ''),
+      );
+    const lookOf = (/** @type {any} */ d) =>
+      /** @type {string[]} */ (
+        /** @type {any} */ (draftClause.get(d))?.aspects ?? []
+      );
+    // (A look word the undo says that no aspect was read for, "the
+    // heading size change", still narrows it.)
+    const looksSaid = [
+      ...(uc?.aspects ?? []),
+      ...(what === 'everything' ? [] : [what]),
+      ...(/\b(?:sizes?|weights?|bold|colou?rs?|spacing|padding|corners?|radius|shadows?|borders?|fonts?|leading|line[- ]height)\b/i.test(
+        String(uc?.text ?? ''),
+      )
+        ? ['said']
+        : []),
+    ];
+    const looks = new Set(undone.flatMap(lookOf));
+    const several = (uc?.parts?.length ?? 0) > 1 || alsoNamed;
+    const unsure =
+      several ||
+      (looksSaid.length > 0 &&
+        looks.size > 1 &&
+        undone.some(d => !looksSaid.some(a => lookOf(d).includes(a))));
+    if (unsure) {
+      unmet.text = `the undo ${several ? 'names more than one change' : 'could mean more than one earlier change'}, so nothing is taken back; undo them one at a time`;
+      if (uc) answeredByUndo.add(uc);
+      if (alsoNamed) answeredByUndo.add(next);
+      continue;
+    }
     // (A whole answer that holds every line, "all of it, in order", loses
     // each line taken back once; a later clause that says the change again
     // keeps it.)
@@ -31008,7 +31049,15 @@ export function draftAnswer(ctx, env, question) {
         ...(words.toLowerCase().match(/#[0-9a-f]{3,8}\b/g) ?? []),
         ...lengthsIn(words.toLowerCase()),
       ];
-      if (typed.length && typed.some(v => !usedValue(v))) named.push(words);
+      // (A value an undo in the same ask took back is answered.)
+      const takenBack = [...answeredByUndo]
+        .map(c => String(/** @type {any} */ (c).text ?? '').toLowerCase())
+        .join(' ');
+      if (
+        typed.length &&
+        typed.some(v => !usedValue(v) && !takenBack.includes(v))
+      )
+        named.push(words);
     }
     const taken = new Set([
       ...result.map(d => draftClause.get(d)).filter(x => x != null),

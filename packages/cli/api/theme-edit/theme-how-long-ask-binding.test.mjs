@@ -273,6 +273,30 @@ const ROWS = [
     },
   ],
   [
+    'an undo that names two changes takes nothing back and says so',
+    {
+      q: 'Make the cards rounder. Make the headings bold. Undo the card change and the heading change.',
+      has: ['corners more --on card', 'headings bold'],
+      says: /names more than one change[\s\S]*one at a time/,
+    },
+  ],
+  [
+    'an undo whose look more than one earlier change could be takes nothing back',
+    {
+      q: 'Make the headings bigger. Make the headings bold. Undo the heading size change.',
+      has: ['headings bold'],
+      says: /more than one earlier change[\s\S]*one at a time/,
+    },
+  ],
+  [
+    'a value an undo took back is never named not used',
+    {
+      q: 'Make the headings 20px. Undo the heading change. A blue accent.',
+      has: ["accent '#2563eb'"],
+      says: /^(?![\s\S]*not used)/,
+    },
+  ],
+  [
     'any family said as a style of the type is that family',
     {q: 'Gotham-style font', has: ['font Gotham'], never: /gothamstyle/i},
   ],
