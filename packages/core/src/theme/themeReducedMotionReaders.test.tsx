@@ -16,7 +16,7 @@ import type {ReactElement, ReactNode} from 'react';
 import {renderHook} from '@testing-library/react';
 import {renderToString} from 'react-dom/server';
 import {describe, expect, it, vi} from 'vitest';
-import {useReducesMotion} from '../motion/reducedMotion';
+import {useReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import {useStreamingText} from '../hooks/useStreamingText';
 import {defineTheme} from './defineTheme';
 import {Theme} from './Theme';

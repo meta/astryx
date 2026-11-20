@@ -35,7 +35,7 @@
  */
 
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {useReducesMotion} from '../motion/reducedMotion';
+import {useReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import {setScrollAnchoringOff} from '../privateAttributes/scrollAnchoring.stylex';
 import {subscribeInput} from '../utils/inputStream';
 import {
