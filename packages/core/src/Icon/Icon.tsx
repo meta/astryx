@@ -519,9 +519,9 @@ export function renderIconSlot(
 /**
  * Whether Icon draws an icon slot value: a semantic icon name or an icon
  * component (a function or a forwardRef object). Any other value is the
- * caller's own node, rendered as given. Core-internal: `renderIconSlot`
- * and a component that puts its own theming target on the Icon it draws
- * share it, so they read a slot value the same way. The package entry does
+ * caller's own node, rendered as given. Core-internal. `renderIconSlot`
+ * shares it with components that put their own target on the Icon. Both
+ * then read a slot value the same way. The package entry does
  * not export it.
  */
 export function drawsAsIcon(

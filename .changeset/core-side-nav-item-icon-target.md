@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[feat] A SideNavItem's built-in icon (an icon name or icon component given as `icon` or `selectedIcon`) carries its own theme target, `side-nav-item-icon`, with the row's `selected` and `disabled` states, in the expanded and the collapsed rail. A theme can color the side nav icons apart from their labels and from every other icon: its entry for `side-nav-item-icon` wins over its `icon` entries, keyed ones included. A custom React node given as `icon` is left as it is. The default look does not change.
+[feat] A SideNavItem's built-in icon (an icon name or icon component given as `icon` or `selectedIcon`) carries its own theme target, `side-nav-item-icon`, with the row's `selected` and `disabled` states, in the expanded and the collapsed rail. A theme can color the side nav icons apart from their labels and from every other icon: its entry for `side-nav-item-icon` wins over its `icon` entries, keyed ones included, unless the `icon` entry marks the value `!important` (then the `icon` entry wins). A custom React node given as `icon` is left as it is. The default look does not change.
 
 @josephfarina
