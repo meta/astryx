@@ -68,6 +68,7 @@ export function readOfficialList({file = OFFICIAL_LIST_FILE, root} = {}) {
       ).trim();
       throw new Error(
         `the official list could not be derived from the repository${why ? `: ${why}` : ''}`,
+        {cause: error},
       );
     }
     derived.set(key, JSON.parse(text));
