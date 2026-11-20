@@ -177,6 +177,27 @@ describe('neutral grays', () => {
   );
 
   it(
+    'another part named after the grays leaves the plain gray',
+    async test => {
+      needsBases(test);
+      for (const q of [
+        'neutral grays with a blue accent',
+        'neutral grays with blue buttons',
+        'neutral grays with #0969da links',
+        'neutral grays without any tint',
+        'rounder cards and neutral grays too',
+      ]) {
+        const results = await answer(q, 'warm');
+        expect(
+          results.flatMap(r => r.lines),
+          q,
+        ).toContain("neutral '#737373'");
+      }
+    },
+    T,
+  );
+
+  it(
     'a color typed in the clause wins over the plain gray',
     async test => {
       needsBases(test);

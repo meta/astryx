@@ -1976,11 +1976,11 @@ const AWAY_BEFORE =
 
 /**
  * Words after the grays, in their clause, that give them a hue or say
- * something about them instead of asking for them ("neutral grays with a
- * blue tint", "neutral grays are too cold").
+ * something about them instead of asking for them ("neutral grays tinted
+ * blue", "neutral grays are too cold").
  */
 const HUE_OR_STATEMENT_AFTER =
-  /\b(?:tint(?:ed|s)?|hue|warm(?:er)?|cool(?:er)?|cold|blue|bluish|green|greenish|brown|brownish|beige|are|is|look|looks|feel|feels|seem|seems|too)\b/i;
+  /\b(?:tint(?:ed|s)?|hue|warm(?:er)?|cool(?:er)?|cold|blue|bluish|green|greenish|brown|brownish|beige|are|is|look|looks|feel|feels|seem|seems)\b/i;
 
 /** A color typed later in the same clause ("neutral grays: #64748b"). */
 const TYPED_COLOR = /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|oklch|oklab|lab|lch)\(/i;
@@ -2001,14 +2001,23 @@ export function untintedGraysWords(question) {
   /** @param {string} m @param {number} at @param {string} text */
   const kept = (m, at, text) => {
     const before = text.slice(0, at).split(CLAUSE_BREAK).pop() ?? '';
-    // ("grays with no tint", "neutral grays with a blue tint"): "with"
-    // joins what follows to the grays, and "no tint" is the same ask.
-    const after =
-      text
-        .slice(at + m.length)
-        .replace(/^\s*with\s+no\s+(?:colou?r\s+)?tint(?:s|ing)?\b/i, '')
-        .replace(/^\s*with\b/i, '')
-        .split(CLAUSE_BREAK)[0] ?? '';
+    // ("grays with no tint", "grays without any tint"): the same ask.
+    const rest = text
+      .slice(at + m.length)
+      .replace(
+        /^\s*(?:with\s+no|without(?:\s+any)?)\s+(?:colou?r\s+)?tint(?:s|ing)?\b/i,
+        '',
+      );
+    // ("neutral grays with a blue tint"): a hue after "with" is the grays'
+    // own only when a tint word follows it; "with blue buttons" is another
+    // part's color.
+    if (
+      /^\s*with\s+(?:an?\s+)?(?:[\w#-]+\s+){0,2}(?:tint|cast|hue|undertone)\b/i.test(
+        rest,
+      )
+    )
+      return true;
+    const after = rest.split(CLAUSE_BREAK)[0] ?? '';
     return (
       AWAY_BEFORE.test(before) ||
       HUE_OR_STATEMENT_AFTER.test(after) ||
