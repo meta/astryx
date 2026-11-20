@@ -45,7 +45,7 @@ import {
 } from '../theme/tokens.stylex';
 import {Field} from '../Field/Field';
 import {useTooltip} from '../Tooltip';
-import {tooltipIdOf} from '../Tooltip/useTooltip';
+import {tooltipIdOf} from '../Tooltip/tooltipPresentInterest';
 import {VisuallyHidden} from '../VisuallyHidden';
 import type {InputStatus} from '../Field/types';
 import {mergeProps, rtlStyles} from '../utils';

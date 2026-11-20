@@ -32,7 +32,8 @@ import type {BaseProps} from '../BaseProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {Icon, type IconSize} from '../Icon/Icon';
 import {stopInReactTree} from '../Layer/layerClickBoundary';
-import {tooltipIdOf, useTooltip} from '../Tooltip/useTooltip';
+import {useTooltip} from '../Tooltip/useTooltip';
+import {tooltipIdOf} from '../Tooltip/tooltipPresentInterest';
 import {
   registerEnglishFallback,
   useComponentTranslator,

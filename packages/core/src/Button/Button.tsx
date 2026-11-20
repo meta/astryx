@@ -30,8 +30,11 @@ import {
 import type {BaseProps} from '../BaseProps';
 import type {Elevation, SizeValue} from '../utils/types';
 import * as stylex from '@stylexjs/stylex';
-import {isTooltipDescription, useTooltip} from '../Tooltip/useTooltip';
-import {TooltipDescribesContext} from '../Tooltip/tooltipPresentInterest';
+import {useTooltip} from '../Tooltip/useTooltip';
+import {
+  isTooltipDescription,
+  TooltipDescribesContext,
+} from '../Tooltip/tooltipPresentInterest';
 import {useCutTextOnKeyboardFocus} from '../Text/TruncationTooltip';
 import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {

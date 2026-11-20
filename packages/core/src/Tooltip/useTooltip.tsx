@@ -30,6 +30,7 @@ import {useCommittedRef} from '../hooks/useCommittedRef';
 import {getNodeText} from '../utils/getNodeText';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
+  DESCRIPTION_SUFFIX,
   TooltipDescribesContext,
   TooltipDescriptionIdContext,
   TooltipPresentInterestContext,
@@ -310,29 +311,6 @@ export interface TooltipReturn {
  * {tooltip.renderTooltip('Helpful tooltip text')}
  * ```
  */
-
-const DESCRIPTION_SUFFIX = '-description';
-
-/**
- * The tooltip element's id for a `describedBy` id: the element the layer
- * mounts at its first show. For Core components only; it is not exported
- * from the package entry.
- */
-export function tooltipIdOf(describedBy: string): string {
-  return describedBy.endsWith(DESCRIPTION_SUFFIX)
-    ? describedBy.slice(0, -DESCRIPTION_SUFFIX.length)
-    : describedBy;
-}
-
-/**
- * Whether `element` is a tooltip's description, the hidden copy a trigger's
- * `aria-describedby` names. For Core components only.
- */
-export function isTooltipDescription(element: Element): boolean {
-  return (
-    element.hasAttribute('hidden') && element.id.endsWith(DESCRIPTION_SUFFIX)
-  );
-}
 
 /**
  * The trigger's description until the layer first mounts: a hidden copy of

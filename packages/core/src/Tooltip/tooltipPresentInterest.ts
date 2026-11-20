@@ -8,7 +8,8 @@
  * @output Exports `TooltipPresentInterestContext` and its value types: the
  *   interaction on a tooltip's anchor that mounted the tooltip; and
  *   `TooltipDescribesContext`: whether the tooltip describes its anchor; and
- *   `TooltipDescriptionIdContext`: the id that description takes
+ *   `TooltipDescriptionIdContext`: the id that description takes; and
+ *   `tooltipIdOf` and `isTooltipDescription`, which read those ids
  * @position Internal to Core, not exported from the Tooltip entry. A
  *   truncated Text or Heading mounts its tooltip on the first hover, tap or
  *   focus, and provides that interaction here, so the tooltip answers it when
@@ -70,3 +71,30 @@ export const TooltipDescriptionIdContext = createSharedContext<string | null>(
   null,
 );
 TooltipDescriptionIdContext.displayName = 'TooltipDescriptionIdContext';
+
+/** The suffix a tooltip's description id adds to its layer's id. */
+export const DESCRIPTION_SUFFIX = '-description';
+
+/**
+ * The tooltip element's id for a `describedBy` id: the element the layer
+ * mounts at its first show. For Core components only; it is not exported
+ * from the package entry. It lives here, beside the other internal trigger
+ * contracts, so a component that reads it does not import the tooltip
+ * runtime.
+ */
+export function tooltipIdOf(describedBy: string): string {
+  return describedBy.endsWith(DESCRIPTION_SUFFIX)
+    ? describedBy.slice(0, -DESCRIPTION_SUFFIX.length)
+    : describedBy;
+}
+
+/**
+ * Whether `element` is a tooltip's description copy, the hidden element a
+ * trigger's `aria-describedby` names before the tooltip first shows. For
+ * Core components only.
+ */
+export function isTooltipDescription(element: Element): boolean {
+  return (
+    element.hasAttribute('hidden') && element.id.endsWith(DESCRIPTION_SUFFIX)
+  );
+}
