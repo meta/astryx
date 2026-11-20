@@ -129,6 +129,20 @@ describe('status colors for color-blind readers', () => {
     }
   }, 60_000);
 
+  it('asks a change said beside a color-blind word as said', async () => {
+    const r = /** @type {any} */ (
+      await themeEditHow('warnings darker for color-blind users', {
+        cwd,
+        theme: 'cb',
+      })
+    );
+    const results = /** @type {any[]} */ (r.data.results ?? []);
+    expect(
+      results.flatMap(x => x.commands).some(c => / set cb warning '#/.test(c)),
+    ).toBe(true);
+    expect(results.some(x => /^color-blind readers/.test(x.text))).toBe(true);
+  }, 240_000);
+
   it('keeps any change said beside a color-blind word', async () => {
     const texts = async (/** @type {string} */ ask) =>
       /** @type {any[]} */ (

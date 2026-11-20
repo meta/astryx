@@ -190,9 +190,11 @@ function withPrefix(value, cwd) {
  * @param {string} subject
  * @param {import('./theme-edit.type.mjs').ThemeEditHowOptions} options
  * @param {string} cwd
+ * @param {boolean} [blindSaid] the color-blind pieces were answered
+ *   already: the rest is asked as said, never split for them again
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditHowResponse['data']>}
  */
-async function answer(subject, options, cwd) {
+async function answer(subject, options, cwd, blindSaid = false) {
   const {list, at = [], count} = options;
   // "½rem": a fraction is a number before anything reads the question.
   const t = (subject ?? '')
@@ -582,14 +584,16 @@ async function answer(subject, options, cwd) {
   }
   // (Color-blind readers asked about in a list of asks: the other pieces
   // are answered as said, and the color-blind answer follows them.)
-  const blind = colorBlindPieces(
-    t
-      .trim()
-      .toLowerCase()
-      .replace(/[?.!]+$/, ''),
-  );
+  const blind = blindSaid
+    ? {blind: false, rest: ''}
+    : colorBlindPieces(
+        t
+          .trim()
+          .toLowerCase()
+          .replace(/[?.!]+$/, ''),
+      );
   if (!tool && blind.blind && blind.rest) {
-    const rest = await answer(blind.rest, options, cwd);
+    const rest = await answer(blind.rest, options, cwd, true);
     return {
       ...rest,
       subject: t,
@@ -1545,10 +1549,10 @@ function colorBlindPieces(q) {
     .filter(Boolean);
   const blind = pieces.filter(x => COLOR_BLIND.test(x));
   if (!blind.length) return {blind: false, rest: ''};
-  // (A color-blind piece keeps a change said in it, "warnings darker for
-  // color-blind users", without the color-blind words; a piece that is
-  // only about color-blind readers is read as the status colors it is
-  // about, so the list keeps its shape.)
+  // (A color-blind piece that says a change, "warnings darker for
+  // color-blind users", is asked as said; a piece that is only about
+  // color-blind readers is read as the status colors it is about, so the
+  // list keeps its shape.)
   const own = (/** @type {string} */ x) => {
     const left = x
       .replace(
@@ -1576,7 +1580,7 @@ function colorBlindPieces(q) {
         '',
       )
       .replace(/[^\w#]+/g, '');
-    return said ? left : 'status colors';
+    return said ? x : 'status colors';
   };
   const kept = blind.map(own);
   if (blind.length === pieces.length && kept.every(x => x === 'status colors'))
@@ -1585,9 +1589,7 @@ function colorBlindPieces(q) {
     .reduce((t, x, k) => t.replace(x, ` ${kept[k]} `), q)
     .replace(/\s+/g, ' ')
     .trim();
-  // (The rest is asked again: one that still names color-blind readers
-  // would be asked forever, so it gets the color-blind answer alone.)
-  return {blind: true, rest: COLOR_BLIND.test(rest) ? '' : rest};
+  return {blind: true, rest};
 }
 
 /**

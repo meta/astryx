@@ -28762,26 +28762,16 @@ export function draftAnswer(ctx, env, question) {
         .filter(st => !st.on && Object.hasOwn(DIALS, String(st.thing)))
         .map(st => String(st.thing)),
     );
+    // A feel the ask judges, negates or tones down anywhere ("too playful",
+    // "the current theme looks busy", "it's busy; tone it down", "not
+    // loud") moves no dial: a move could go toward the feel the ask
+    // dislikes. Such a feel word is named as not used.
+    const judged =
+      /\b(?:too|less|not|no|never|overly|without|avoid\w*|don'?t|doesn'?t|isn'?t|aren'?t|shouldn'?t|nothing|stop|prevent\w*|reduce\w*|rid\s+of|clear\s+of|away\s+from|instead\s+of|rather\s+than|bad|awful|ugly|annoying|wrong|(?:looks|looked|looking|feels|felt|feeling|seems|seemed)\s+\w|(?:tone|tones|toned|toning|calm|calms|calmed|dial|dials|dialed|turn|turns|turned|tamp|tamps|tamped)\s+(?:it\s+|things\s+|that\s+|this\s+)?(?:down|back))/.test(
+        asked0,
+      );
     for (const w of new Set(qWords)) {
-      // ("too playful", "less minimal", "not playful", "I don't want it
-      // busy", "without being loud", "keep it from looking busy", "tone
-      // down the busy look", "steer clear of loud": the feel is what the
-      // ask moves away from, never a move toward it. So is a feel the
-      // whole ask judges bad or tones down after it: "busy dashboards are
-      // bad", "it's loud, tone it down".)
-      const said = q.toLowerCase();
-      if (
-        new RegExp(
-          String.raw`\b(?:too|less|not|no|never|overly|so|un|without|avoid(?:ing)?|don'?t\s+(?:want|like|need)|doesn'?t\s+(?:need|have)|isn'?t|aren'?t|shouldn'?t|nothing|from|stop|prevent|reduce|rid\s+of|clear\s+of|instead\s+of|rather\s+than|(?:tone|dial|turn|calm|tamp|scale|cut|play|water)(?:s|d|ed|ing)?\s+(?:it\s+|things\s+)?(?:down|back))[\s-]+(?:[\w']+\s+){0,3}${w}\b`,
-        ).test(said) ||
-        new RegExp(
-          String.raw`\b${w}\b(?:[\s,]+[\w']+){0,3}?[\s,]+(?:(?:is|are|was|were|looks?|feels?|seems?)\s+)?(?:bad|awful|ugly|annoying|wrong|too\s+much)\b`,
-        ).test(asked0) ||
-        new RegExp(
-          String.raw`\b${w}\b[^.;!?]{0,40}?\b(?:tone|dial|turn|calm|tamp|scale|cut|play|water)(?:s|d|ed|ing)?\s+(?:it|that|this|things)?\s*(?:down|back)\s*(?:[.,;!?]|$)`,
-        ).test(asked0)
-      )
-        continue;
+      if (judged) continue;
       const moves = (FEELS.get(w) ?? []).filter(
         m =>
           !ownDials.has(m.dial) &&

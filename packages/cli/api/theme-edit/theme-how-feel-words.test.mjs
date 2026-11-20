@@ -99,10 +99,11 @@ describe('a feel word said for the whole theme', () => {
     expect(a.text).not.toMatch(/not used: "playful theme"/);
   }, 240_000);
 
-  it('"feels too playful" moves away from the feel, never toward it', async ctx => {
+  it('a feel the ask judges, negates or tones down moves no dial, and is named', async ctx => {
     if (unbuilt) return ctx.skip();
     expect((await answer('it feels too playful now')).sets).toEqual([]);
-    // (A feel said to stay clear of is never a move toward it.)
+    // (A feel the ask judges, negates or tones down is never a move toward
+    // it.)
     for (const ask of [
       "I don't want it busy",
       'avoid anything busy',
@@ -112,6 +113,10 @@ describe('a feel word said for the whole theme', () => {
       'steer clear of loud',
       'busy dashboards are bad, keep ours calm',
       "it's loud, tone it down",
+      'the layout feels busy, make it calmer',
+      'the current theme looks busy',
+      "it's busy; tone it down",
+      'the old theme felt busy and loud',
     ]) {
       const sets = (await answer(ask)).sets;
       expect(sets.join(' '), ask).not.toMatch(/spacing compact|type display/);
@@ -119,11 +124,12 @@ describe('a feel word said for the whole theme', () => {
     expect((await answer('bold headings without being loud')).sets).toContain(
       'headings bold',
     );
+    expect((await answer('the current theme looks busy')).text).toMatch(
+      /not taken: [^\n]*"busy"/,
+    );
+    // (A plain feel ask still moves its dials.)
+    expect((await answer('make it playful')).sets).toContain('corners round');
     // (A feel word said of a color, a status or the accent, describes it.)
-    // (A calm verb with its own object tones that down, not the feel.)
-    expect(
-      (await answer('playful theme, tone down the shadows')).sets,
-    ).toContain('corners round');
     for (const ask of ['bright red errors', 'a bright accent'])
       expect((await answer(ask)).sets.join(' '), ask).not.toMatch(/vibrancy/);
   }, 240_000);
