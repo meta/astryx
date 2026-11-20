@@ -12,6 +12,16 @@ import {
   spacingVars,
   radiusVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
+import {SAMPLE_IMAGES} from './assets/samples/samples';
+
+const GALLERY_IMAGES = [
+  SAMPLE_IMAGES.forest400x300,
+  SAMPLE_IMAGES.lake400x300,
+  SAMPLE_IMAGES.beach400x300,
+  SAMPLE_IMAGES.city400x300,
+  SAMPLE_IMAGES.desert400x300,
+  SAMPLE_IMAGES.snow400x300,
+];
 
 const styles = stylex.create({
   container: {
@@ -102,8 +112,8 @@ export default meta;
 type Story = StoryObj<typeof AspectRatio>;
 
 // Placeholder image URLs
-const PLACEHOLDER_IMAGE = 'https://picsum.photos/800/600';
-const PLACEHOLDER_SQUARE = 'https://picsum.photos/400/400';
+const PLACEHOLDER_IMAGE = SAMPLE_IMAGES.lake800x600;
+const PLACEHOLDER_SQUARE = SAMPLE_IMAGES.snow400x400;
 
 export const Default: Story = {
   args: {
@@ -270,7 +280,7 @@ export const FitModes: Story = {
         <AspectRatio ratio={16 / 9} fit="center">
           <img
             {...stylex.props(styles.image)}
-            src="https://picsum.photos/200/120"
+            src={SAMPLE_IMAGES.beach200x120}
             alt="Natural size, centered"
           />
         </AspectRatio>
@@ -398,7 +408,7 @@ export const ImageGallery: Story = {
           <AspectRatio key={i} ratio={4 / 3} fit="cover">
             <img
               {...stylex.props(styles.image)}
-              src={`https://picsum.photos/seed/${i + 1}/400/300`}
+              src={GALLERY_IMAGES[i]}
               alt={`Gallery image ${i + 1}`}
             />
           </AspectRatio>

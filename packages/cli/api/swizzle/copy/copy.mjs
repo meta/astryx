@@ -19,11 +19,11 @@ import * as path from 'node:path';
 import {
   checkGhCli,
   planCopy,
-  relativeSpecifierBetween,
   renderFile,
   resolveComponentReplacement,
   resolveCore,
 } from '../_adapter.mjs';
+import {relativeSpecifierBetween} from '../../../foundation/fs/relative-specifier.mjs';
 import {assertWithin, sanitizeName, PathSafetyError} from '../../../foundation/fs/path-safety.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
 import {findPackageRoot} from '../../../foundation/fs/paths.mjs';
@@ -150,7 +150,7 @@ async function loadConfigSafely(cwd) {
  * Build the set of OWNER packages that provide a component named `name` across
  * core + every loaded integration. Core holds every name it documents, but has
  * source to copy (`sourceDir`) only for a name with its own folder.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @param {Array<{name: string, components?: string, issuesUrl?: string}>} loadedIntegrations
  * @param {string} name
  * @param {string|undefined} coreIssuesUrl
@@ -158,9 +158,10 @@ async function loadConfigSafely(cwd) {
  */
 function resolveOwners(coreDir, loadedIntegrations, name, coreIssuesUrl) {
   const owners = [];
-  const coreComponentDir = path.join(coreDir, 'src', name);
-  const coreFolder = fs.existsSync(coreComponentDir);
-  if (coreFolder || findComponentReadme(coreDir, name)) {
+  const coreComponentDir =
+    coreDir == null ? null : path.join(coreDir, 'src', name);
+  const coreFolder = coreComponentDir != null && fs.existsSync(coreComponentDir);
+  if (coreFolder || (coreDir != null && findComponentReadme(coreDir, name))) {
     owners.push({
       package: CORE_PACKAGE,
       sourceDir: coreFolder ? coreComponentDir : null,

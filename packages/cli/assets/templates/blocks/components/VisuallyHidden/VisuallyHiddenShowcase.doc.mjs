@@ -18,10 +18,4 @@ export const doc = {
     'Text',
     'Icon',
   ],
-  icons: {
-    ArrowDownTrayIcon: 'download',
-    ShareIcon: 'share',
-    SpeakerWaveIcon: 'audio',
-    TrashIcon: 'delete',
-  },
 };

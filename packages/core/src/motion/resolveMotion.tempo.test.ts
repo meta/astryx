@@ -17,7 +17,11 @@
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {createMotionEngine, SETTLE_THRESHOLD} from './animator';
-import {resolveMotion, resolveSettleMs} from './resolveMotion';
+import {
+  resolveMotion,
+  resolveMoveTiming,
+  resolveSettleMs,
+} from './resolveMotion';
 import {
   settlingDuration,
   solveSpring,
@@ -226,6 +230,78 @@ describe('a CSS part timed from its spring', () => {
       resolveSettleMs(target, springs.sheetDismissSwipe),
     );
     animator.dispose();
+  });
+
+  it("follows one move's progress on the spring, as linear() easing over its settle", () => {
+    tempo = '1.5';
+    const target = element();
+    const animator = createMotionEngine(target, {now: () => 0});
+    const close = animator.animate(
+      {y: 400},
+      {spring: springs.sheetDismissSwipe, velocity: {y: 3000}},
+      {at: 0},
+    );
+    const move = {
+      from: 0,
+      to: 400,
+      velocity: 3000,
+      epsilon: SETTLE_THRESHOLD.y,
+    };
+    const {durationMs, easing} = resolveMoveTiming(
+      target,
+      springs.sheetDismissSwipe,
+      move,
+    );
+    expect(durationMs).toBe(
+      resolveSettleMs(target, springs.sheetDismissSwipe, move),
+    );
+    const stops = /^linear\((.*)\)$/.exec(easing)![1].split(',').map(Number);
+    expect(stops[0]).toBe(0);
+    expect(stops.at(-1)).toBeCloseTo(1, 2);
+    // Each stop is the share of the move the animator's curve has played.
+    const curve = close.curve('y')!;
+    for (const i of [1, Math.floor(stops.length / 4), stops.length - 2]) {
+      const t = (i / (stops.length - 1)) * curve.duration;
+      expect(stops[i]).toBeCloseTo(curve.at(t) / 400, 3);
+    }
+    animator.dispose();
+  });
+
+  it('reaches the end of its easing where the move gets to doneAt, and stays there', () => {
+    const target = element();
+    const move = {
+      from: 0,
+      to: 700,
+      velocity: 3000,
+      epsilon: SETTLE_THRESHOLD.y,
+    };
+    const doneAt = 400;
+    const {durationMs, easing} = resolveMoveTiming(
+      target,
+      springs.sheetDismissSwipe,
+      move,
+      doneAt,
+    );
+    expect(durationMs).toBe(
+      resolveSettleMs(target, springs.sheetDismissSwipe, move),
+    );
+    const stops = /^linear\((.*)\)$/.exec(easing)![1].split(',').map(Number);
+    const curve = solveSpring(
+      toSpring(resolveMotion(target, springs.sheetDismissSwipe)),
+      move,
+    );
+    const atStop = (i: number) =>
+      curve.value(((i / (stops.length - 1)) * durationMs) / 1000);
+    const reached = stops.findIndex(stop => stop === 1);
+    expect(reached).toBeGreaterThan(0);
+    // Before the move gets to doneAt, each stop is its share of the way there.
+    for (let i = 1; i < reached; i++) {
+      expect(stops[i]).toBeCloseTo(atStop(i) / doneAt, 3);
+      expect(atStop(i)).toBeLessThan(doneAt);
+    }
+    // From there on, the easing holds at its end.
+    expect(atStop(reached)).toBeGreaterThanOrEqual(doneAt - 1);
+    expect(stops.slice(reached).every(stop => stop === 1)).toBe(true);
   });
 });
 

@@ -7,7 +7,7 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {VStack, HStack} from '@astryxdesign/core/Layout';
 import {Link} from '@astryxdesign/core/Link';
 import {Text} from '@astryxdesign/core/Text';
-import {LinkIcon} from '@heroicons/react/24/outline';
+import {LinkIcon} from '@astryxdesign/template-icons';
 
 export default function HoverCardInteractiveContent() {
   return (

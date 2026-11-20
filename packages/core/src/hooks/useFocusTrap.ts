@@ -19,7 +19,11 @@
 
 import {useCallback, useEffect, useRef} from 'react';
 import {isFocusLost} from '../utils/focusReturn';
-import {isHTMLElement} from '../utils/nodeType';
+import {
+  isDialogShown,
+  isDisplayedWhileClosed,
+  isHTMLElement,
+} from '../utils/nodeType';
 import {sharedState} from '../utils/sharedRealm';
 
 import {FOCUSABLE_SELECTOR} from './focusableSelector';
@@ -69,19 +73,6 @@ export function useFocusTrapEscapeCompatibilitySignal(isActive: boolean): void {
 }
 
 /**
- * Whether an element is shown as a popover. jsdom and browsers without the
- * Popover API do not recognize `:popover-open`, and nothing is popover-open
- * there.
- */
-function isPopoverOpen(el: Element): boolean {
-  try {
-    return el.matches(':popover-open');
-  } catch {
-    return false;
-  }
-}
-
-/**
  * Whether an element is currently perceivable/focusable — excludes ones hidden
  * via `display:none`/`visibility:hidden` or inside an `inert`/`hidden` subtree,
  * which the browser skips for Tab, and ones inside an `aria-hidden="true"`
@@ -95,15 +86,14 @@ function isVisiblyFocusable(el: HTMLElement): boolean {
   if (el.hidden || el.closest('[hidden]')) {
     return false;
   }
-  // A closed <dialog> renders nothing, so nothing inside it can take focus.
-  // A dialog shown with showPopover() (a non-modal sheet or drawer) never
-  // sets `open`, so it counts as shown while it is popover-open.
+  // A closed <dialog> that the page does not display renders nothing, so
+  // nothing inside it can take focus.
   for (
     let dialog = el.closest('dialog');
     dialog != null;
     dialog = dialog.parentElement?.closest('dialog') ?? null
   ) {
-    if (!dialog.open && !isPopoverOpen(dialog)) {
+    if (!isDialogShown(dialog) && !isDisplayedWhileClosed(dialog)) {
       return false;
     }
   }

@@ -12,5 +12,4 @@ export const doc = {
   isShowcase: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Selector', 'SelectorOption'],
-  icons: {UserIcon: 'user'},
 };

@@ -8,20 +8,28 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
 } from '@astryxdesign/core/DropdownMenu';
+import {useToast} from '@astryxdesign/core/Toast';
 
 export default function DropdownMenuGroupShowcase() {
+  const showToast = useToast();
   return (
     <DropdownMenu button={{label: 'Version'}}>
       <DropdownMenuGroup title="Version history">
         <DropdownMenuItem
           icon="arrowDown"
           label="Restore this version"
-          onClick={() => {}}
+          onClick={() =>
+            showToast({body: 'Demo: this version would be restored here'})
+          }
         />
         <DropdownMenuItem
           icon="copy"
           label="Compare with current"
-          onClick={() => {}}
+          onClick={() =>
+            showToast({
+              body: 'Demo: a comparison with the current version would open here',
+            })
+          }
         />
       </DropdownMenuGroup>
       <DropdownMenuDivider />
@@ -29,9 +37,20 @@ export default function DropdownMenuGroupShowcase() {
         <DropdownMenuItem
           icon="externalLink"
           label="As a link"
-          onClick={() => {}}
+          onClick={() =>
+            showToast({
+              body: 'Demo: a link would be added to your message here',
+            })
+          }
         />
-        <DropdownMenuItem label="As a snippet" onClick={() => {}} />
+        <DropdownMenuItem
+          label="As a snippet"
+          onClick={() =>
+            showToast({
+              body: 'Demo: a snippet would be added to your message here',
+            })
+          }
+        />
       </DropdownMenuGroup>
     </DropdownMenu>
   );

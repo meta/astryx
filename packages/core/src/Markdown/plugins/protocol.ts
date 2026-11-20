@@ -1646,15 +1646,15 @@ export function reportMarkdownPluginFailure(
   error: unknown,
 ): void {
   const key = `markdown-plugin:${pluginName}:${phase}`;
-  const message = `plugin "${pluginName}" failed in ${phase}; rendered readable fallback.`;
+  const diagnostic = `plugin "${pluginName}" failed in ${phase}; rendered readable fallback.`;
   if (process.env.NODE_ENV === 'production') {
     if (!reportedProductionPluginFailures.has(key)) {
       reportedProductionPluginFailures.add(key);
-      devError('Markdown', message);
+      devError('Markdown', diagnostic);
     }
     return;
   }
-  warnOnce(key, 'Markdown', message, error);
+  warnOnce(key, 'Markdown', diagnostic, error);
 }
 
 export function applyMarkdownTransforms<Node extends MarkdownExtensionNode>(

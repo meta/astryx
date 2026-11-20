@@ -33,7 +33,7 @@ export const doc = {
       flag: '--template <id>',
       param: 'options.template',
       description:
-        'Add this page template (astryx template --list --type page) instead of ranking one from a description',
+        'Add this page template (astryx template --list --type page) instead of ranking one from a description. A default page (overview, components, colors) adds just that page back when it is missing',
     },
     {
       flag: '--top <n>',
@@ -63,6 +63,7 @@ export const doc = {
     },
   ],
   outsideProject: 'refuse',
+  requires: ['themes.appModule'],
   notes: [
     {
       type: 'prose',

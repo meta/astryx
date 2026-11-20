@@ -174,23 +174,43 @@ describe('component icon slot resolution', () => {
     expect(warnings()).toHaveLength(1);
   });
 
-  it('does not warn in production', async () => {
+  it('keeps valid fields when malformed fields cannot be serialized', () => {
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    const fallback = {...FALLBACK, variant: 'outline'} as const;
+
+    expect(
+      resolveCopy(() => ({icon: 1n, variant: circular, size: 'lg'}), {
+        fallback,
+        iconVariants: ['outline'],
+      }),
+    ).toEqual({...fallback, size: 'lg'});
+    expect(warnings()).toHaveLength(2);
+  });
+
+  it('ignores a non-request result that cannot be serialized', () => {
+    expect(resolveCopy(() => 1n)).toEqual(FALLBACK);
+    expect(warnings()).toHaveLength(1);
+  });
+
+  it('does not format malformed fields or warn in production', async () => {
     vi.resetModules();
     vi.stubEnv('NODE_ENV', 'production');
     try {
       const registry = await import('./globalIconRegistry');
       const themes = await import('../theme/defineTheme');
+      const toJSON = vi.fn(() => 1n);
       const theme = themes.defineTheme({
         name: 'slots-production',
         componentIcons: {
           // @ts-expect-error -- not a shared icon name.
-          [COPY]: 'clipboard',
+          [COPY]: {icon: {toJSON}, size: 'lg'},
         },
       });
       expect(
-        registry.resolveComponentIcon(COPY, {copied: false}, 'copy', theme)
-          .icon,
-      ).toBe('copy');
+        registry.resolveComponentIcon(COPY, {copied: false}, FALLBACK, theme),
+      ).toEqual({icon: 'copy', size: 'lg'});
+      expect(toJSON).not.toHaveBeenCalled();
       expect(warnings()).toEqual([]);
     } finally {
       vi.unstubAllEnvs();

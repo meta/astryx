@@ -28,6 +28,7 @@ import * as path from 'node:path';
 import {loadModuleWithParser} from '../../foundation/fs/module-loader.mjs';
 import {parseCodemod} from '../../authoring/codemod/parse.mjs';
 import {semverCompare} from '../../foundation/env/semver.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 
 /** File extensions recognized as codemod modules. */
 const CODEMOD_EXTENSIONS = ['.ts', '.mjs', '.js'];
@@ -100,7 +101,7 @@ function collectCodemodFiles(versionDir) {
   }
 
   walk(versionDir);
-  return out.sort((a, b) => a.id.localeCompare(b.id));
+  return out.sort((a, b) => compareText(a.id, b.id));
 }
 
 /**
