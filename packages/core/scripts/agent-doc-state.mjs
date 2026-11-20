@@ -54,7 +54,7 @@ export const WORKFLOW_TITLE =
 export const WORKFLOW_STEPS = Object.freeze([
   '1. `astryx build "<idea>"` — names the template to scaffold from and the parts it lacks.',
   '2. `astryx template <name> <path>` — scaffold it; keep its frame, gap and padding; replace the content.',
-  '3. `astryx template <Block>` for parts it lacks; `astryx component <Name>` to read props before using one.',
+  '3. `astryx component <Name>` to read props before using one; `astryx template <Block>` prints a block example to read for a part it lacks. Astryx names differ from other libraries: buttons, badges, tokens and tabs take their text in `label` (Text, Heading and Link take children), booleans start with `is` or `has` (`isOpen`, `isDisabled`), and every input takes `value` and `onChange`.',
 ]);
 
 /**
@@ -132,9 +132,63 @@ export function holdsAstryxBlock(content) {
 }
 
 /**
+ * The project skills folders `init --to skills` writes, relative to the
+ * project root: the shared folder most agents read, and Claude Code's own.
+ */
+export const PROJECT_SKILL_FOLDERS = Object.freeze([
+  path.join('.agents', 'skills'),
+  path.join('.claude', 'skills'),
+]);
+
+/**
+ * The project skill's name, which is also its folder's name. It differs from
+ * the computer-level skill's (`astryx`): an agent that reads both a user and
+ * a project skill of one name shows only one of them, and Claude Code shows
+ * the user one, which would hide the project's.
+ */
+export const PROJECT_SKILL_NAME = 'astryx-project';
+
+/**
+ * The names a project's astryx.config can have, in the order the CLI looks
+ * for them.
+ */
+export const CONFIG_BASENAMES = ['astryx.config.ts', 'astryx.config.mjs', 'astryx.config.js'];
+
+/**
+ * The project skill files a folder place saved in the project's
+ * astryx.config can hold: `<root>/<path>/astryx-project/SKILL.md` for each
+ * `'./<path>'` string the config file names (`'.'` is the root). The config
+ * is read as text and
+ * never run, so this works where only Node's builtins load. A string that
+ * is not a saved place counts only when Astryx wrote a project skill there.
+ * @param {string} root
+ * @returns {string[]}
+ */
+function savedFolderSkillFiles(root) {
+  for (const name of CONFIG_BASENAMES) {
+    let source;
+    try {
+      source = fs.readFileSync(path.join(root, name), 'utf-8');
+    } catch {
+      continue;
+    }
+    const files = [];
+    // `'.'` and `'./'` name the project root itself.
+    for (const match of source.matchAll(/(['"`])\.(?:\/([^'"`\n]*?))?\1/gu)) {
+      const rel = match[2] ?? '';
+      if (rel.split(/[\\/]/u).includes('..')) continue;
+      files.push(path.join(root, rel, PROJECT_SKILL_NAME, 'SKILL.md'));
+    }
+    return files;
+  }
+  return [];
+}
+
+/**
  * Single source of truth for "is Astryx set up in this project?" — true when any
- * agent-doc file already holds an Astryx block, i.e. `init` / `agent-docs` has
- * run. Reused by the init & upgrade commands, the per-command setup nudge
+ * agent-doc file already holds an Astryx block, or a project skills folder or
+ * a folder place saved in astryx.config holds the Astryx project skill
+ * (`init --to`), i.e. `init` has run. Reused by the init & upgrade commands, the per-command setup nudge
  * (enforcement layer 3), and the cli postinstall nudge (layer 2). Core's
  * postinstall (separate package, layer 1) mirrors the same marker contract.
  *
@@ -150,6 +204,19 @@ export function isAstryxInitialized(targetDir = process.cwd()) {
       }
     } catch {
       // Unreadable file — ignore and keep checking the others.
+    }
+  }
+  const skillFiles = [
+    ...PROJECT_SKILL_FOLDERS.map(folder =>
+      path.join(targetDir, folder, PROJECT_SKILL_NAME, 'SKILL.md'),
+    ),
+    ...savedFolderSkillFiles(targetDir),
+  ];
+  for (const file of skillFiles) {
+    try {
+      if (fs.readFileSync(file, 'utf-8').includes(MARKER_START)) return true;
+    } catch {
+      // No project skill there.
     }
   }
   return false;
@@ -220,7 +287,7 @@ export function setupNudge(
   const run = before
     ? `\`${before}\`, then \`${invocation} init\``
     : `\`${invocation} init\``;
-  return `\nNext step: run ${run} to finish setup and install the Astryx agent prompt.\n\n`;
+  return `\nAstryx is not set up in this project yet. Next step: run ${run} now, before you write Astryx code. It asks no questions, prints the getting-started steps, and saves the Astryx guide to AGENTS.md.\n\n`;
 }
 
 /** The nudge with the fallback invocation. */

@@ -32,6 +32,7 @@ import {
   visualResult,
   wideReport,
 } from './touched-components.mjs';
+import {withoutCheckoutRetries} from './lib/checkout-retries.mjs';
 
 const ci = yaml.parse(
   fs.readFileSync(new URL('../workflows/ci.yml', import.meta.url), 'utf8'),
@@ -291,6 +292,23 @@ describe('wide changes', () => {
     });
     expect(summaryMarkdown(report)).toContain('Wide change (6 components)');
     expect(summaryMarkdown(report)).toContain('`ci:run-visual`');
+  });
+
+  it('pairs each label with the one suite it runs, so no label reads as running the visual suite', () => {
+    const scope = owners(9);
+    const text = summaryMarkdown(
+      wideReport({
+        headSha: 'abc',
+        scope,
+        decision: decideWideChange(scope, []),
+      }),
+    );
+    expect(text).toContain(
+      'Each label runs only its own full suite: `ci:run-visual` for Visual, `ci:run-a11y` for Accessibility, `ci:run-rtl` for RTL.',
+    );
+    expect(text).not.toMatch(
+      /`ci:run-a11y` or `ci:run-rtl` to run the full suite/,
+    );
   });
 });
 
@@ -842,7 +860,7 @@ describe('pr-component-a11y-contracts routing', () => {
     }
     // Only the selection and head checkouts: no later checkout moves the tree.
     expect(
-      contracts.steps
+      withoutCheckoutRetries(contracts.steps)
         .filter(candidate => candidate.uses?.startsWith('actions/checkout@'))
         .map(({name}) => name),
     ).toEqual([

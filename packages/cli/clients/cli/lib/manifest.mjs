@@ -42,6 +42,15 @@ import {fileURLToPath} from 'node:url';
 import {API_VERSION} from '../../../foundation/response/json.mjs';
 import {commandDocsOf} from './define-command.mjs';
 import {doc as manifestDoc} from '../commands/manifest.doc.mjs';
+import {compareText} from '../../../foundation/text/compare-text.mjs';
+import {commandAvailable, helpBase} from './base-gate.mjs';
+import {
+  isAvailable,
+  longFlag,
+} from '../../../foundation/bases/requirements.mjs';
+import {coreBase} from '../../../foundation/bases/core.mjs';
+import {answeredBy} from '../../../foundation/release/run-context.mjs';
+import {commandPath} from './command-path.mjs';
 
 /**
  * What a run may do beyond the command it was asked for (spec AST-081;
@@ -57,7 +66,9 @@ export const GLOBAL_MODE = Object.freeze({
  * Envelopes the CLI layer builds itself, so the wrapped FunctionDoc cannot
  * declare them: `manifest` wraps no API function, `theme build` batches several
  * `themeBuild()` receipts, and `theme add` with no slug (or `--list`) answers
- * with `themeListAvailable()`'s `theme.list` instead of calling `themeAdd()`.
+ * with `themeListAvailable()`'s `theme.list` instead of calling `themeAdd()`,
+ * and an `experimental icon` subcommand typed alone may answer the search's
+ * `icon.search` instead of calling its own function.
  * manifest.test.mjs fails once the wrapped FunctionDoc declares one of these, so
  * the list only shrinks.
  * @type {Record<string, string[]>}
@@ -70,6 +81,12 @@ const CLI_LAYER_RESPONSE_TYPES = {
   'experimental theme': ['help'],
   'experimental theme editor': ['help'],
   'experimental theme preview': ['help'],
+  // An icon subcommand typed alone answers the icon search for its name.
+  'experimental icon add': ['icon.search'],
+  'experimental icon map': ['icon.search'],
+  'experimental icon use': ['icon.search'],
+  'experimental icon new-set': ['icon.search'],
+  'experimental icon new-definition': ['icon.search'],
 };
 
 /**
@@ -122,24 +139,6 @@ function describeArgument(arg) {
 }
 
 /**
- * Compute the fully-qualified command name relative to the root program,
- * e.g. `theme build`. The root program itself maps to ''.
- * @param {import('commander').Command} cmd
- * @param {import('commander').Command} root
- * @returns {string}
- */
-function fullName(cmd, root) {
-  const parts = [];
-  /** @type {import('commander').Command | null} */
-  let c = cmd;
-  while (c && c !== root) {
-    parts.unshift(c.name());
-    c = c.parent;
-  }
-  return parts.join(' ');
-}
-
-/**
  * The docs a command was built from. `manifest` is registered by hand in
  * index.mjs, so its CommandDoc is read here.
  * @param {import('commander').Command} cmd
@@ -157,10 +156,11 @@ function docsOf(cmd, name) {
  * @param {import('commander').Command} cmd
  * @param {import('commander').Command} root
  * @param {Set<string>} jsonSupported  fully-qualified names that support --json
+ * @param {import('../../../foundation/bases/resolve.mjs').ActiveBase | null} [base]  the run's base
  * @returns {import('./manifest').ManifestCommand | null}  null for hidden/internal commands
  */
-function describeCommand(cmd, root, jsonSupported) {
-  const name = fullName(cmd, root);
+function describeCommand(cmd, root, jsonSupported, base = null) {
+  const name = commandPath(cmd);
   // Skip the auto-generated help command and any hidden/internal commands
   // (e.g. the postinstall shim) — agents never invoke these directly.
   // `_hidden` is a Commander internal not present on its public types.
@@ -170,7 +170,7 @@ function describeCommand(cmd, root, jsonSupported) {
 
   const subcommands = /** @type {object[]} */ (
     (cmd.commands || [])
-      .map(sub => describeCommand(sub, root, jsonSupported))
+      .map(sub => describeCommand(sub, root, jsonSupported, base))
       .filter(Boolean)
   );
 
@@ -190,6 +190,22 @@ function describeCommand(cmd, root, jsonSupported) {
     options: (cmd.options || []).map(describeOption),
     json: jsonSupported.has(name),
   };
+
+  // The steps the command, its options, and its argument values cannot run
+  // without, and whether the run's base serves the command.
+  if (docs?.doc.requires?.length) entry.requires = [...docs.doc.requires];
+  for (const option of entry.options) {
+    const declared = (docs?.doc.options ?? []).find(
+      o => longFlag(o.flag) === longFlag(option.flag),
+    );
+    if (declared?.requires?.length) option.requires = [...declared.requires];
+    option.available = isAvailable(base ?? coreBase(), option.requires);
+  }
+  for (const argument of entry.arguments) {
+    const declared = (docs?.doc.args ?? []).find(a => a.name === argument.name);
+    if (declared?.requires) argument.requires = {...declared.requires};
+  }
+  entry.available = commandAvailable(cmd, base);
 
   const aliases = cmd.aliases ? cmd.aliases() : [];
   if (aliases && aliases.length > 0) entry.aliases = [...aliases];
@@ -222,7 +238,7 @@ function describeCommand(cmd, root, jsonSupported) {
   // `.command()` calls silently changes the output.
   if (subcommands.length > 0) {
     entry.subcommands = subcommands.sort((a, b) =>
-      /** @type {any} */ (a).name.localeCompare(/** @type {any} */ (b).name),
+      compareText(/** @type {any} */ (a).name, /** @type {any} */ (b).name),
     );
   }
 
@@ -291,6 +307,51 @@ export function storedManifest() {
 }
 
 /**
+ * A stored manifest as a run on `base` reads it: each command's and option's
+ * `available` and the manifest's `base` follow that base, Core included.
+ * @param {import('./manifest').CLIManifest} manifest
+ * @param {import('../../../foundation/bases/resolve.mjs').ActiveBase | null} base
+ * @returns {import('./manifest').CLIManifest}
+ */
+export function rebaseManifest(manifest, base) {
+  const shown = base ?? coreBase();
+  /** @param {import('./manifest').ManifestCommand[]} cmds @returns {import('./manifest').ManifestCommand[]} */
+  const rebase = cmds =>
+    cmds.map(cmd => {
+      const subcommands = cmd.subcommands ? rebase(cmd.subcommands) : undefined;
+      const available = isAvailable(
+        shown,
+        cmd.requires,
+        subcommands?.map(sub => Boolean(sub.available)),
+      );
+      const options = (cmd.options ?? []).map(option => ({
+        ...option,
+        available: isAvailable(shown, option.requires),
+      }));
+      return {...cmd, options, ...(subcommands ? {subcommands} : {}), available};
+    });
+  return {
+    ...manifest,
+    commands: rebase(manifest.commands),
+    base: manifestBase(shown),
+  };
+}
+
+/**
+ * The manifest's `base`: the run's base and the steps it serves. On Core the
+ * version is the Core the run pairs with, as `meta.answeredBy` names it.
+ * @param {import('../../../foundation/bases/resolve.mjs').ActiveBase} base
+ * @returns {import('./manifest').CLIManifest['base']}
+ */
+function manifestBase(base) {
+  return {
+    name: base.name,
+    version: base.core ? answeredBy().core : base.version,
+    steps: [...base.steps],
+  };
+}
+
+/**
  * Build the full capability manifest from a configured Commander program.
  *
  * @param {import('commander').Command} program  the root program
@@ -302,12 +363,14 @@ export function storedManifest() {
 export function buildManifest(program, opts = {}) {
   const jsonSupported = opts.jsonSupported || new Set();
   const version = opts.version || /** @type {any} */ (program)._version || '';
+  const base = helpBase();
+  const shown = base ?? coreBase();
 
   const commands = /** @type {any[]} */ (
     (program.commands || [])
-      .map(cmd => describeCommand(cmd, program, jsonSupported))
+      .map(cmd => describeCommand(cmd, program, jsonSupported, base))
       .filter(Boolean)
-  ).sort((a, b) => a.name.localeCompare(b.name));
+  ).sort((a, b) => compareText(a.name, b.name));
 
   return {
     name: 'astryx',
@@ -318,6 +381,8 @@ export function buildManifest(program, opts = {}) {
     commands,
     jsonSupported: [...jsonSupported].sort(),
     globalMode: GLOBAL_MODE,
+    // The run's base and the steps it serves.
+    base: manifestBase(shown),
     // Flat index of every response `type` discriminator the CLI can emit,
     // keyed by command — lets an agent know what to expect back per call.
     responseTypes: Object.fromEntries(

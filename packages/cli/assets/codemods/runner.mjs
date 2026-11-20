@@ -575,10 +575,7 @@ export async function runCodemods(
   }
 
   // Dynamically import jscodeshift
-  const jscodeshift =
-    /** @type {import('../../authoring/codemod/type').JscodeshiftFactory} */ (
-      (await import('jscodeshift')).default
-    );
+  const jscodeshift = (await import('jscodeshift')).default;
 
   let totalTransformsApplied = 0;
   let totalValidationBlocked = 0;

@@ -477,6 +477,7 @@ export const StatusVariantComparison: Story = {
   render: () => {
     const [a, setA] = useState<SearchableItem[]>([]);
     const [b, setB] = useState<SearchableItem[]>([]);
+    const [c, setC] = useState<SearchableItem[]>([]);
     return (
       <div style={{display: 'flex', flexDirection: 'column', gap: 24}}>
         <Tokenizer
@@ -493,6 +494,14 @@ export const StatusVariantComparison: Story = {
           onChange={items => setB(items)}
           status={{type: 'error', message: 'Select at least one member'}}
           statusVariant="detached"
+        />
+        <Tokenizer
+          label="Tooltip"
+          searchSource={userSource}
+          value={c}
+          onChange={items => setC(items)}
+          status={{type: 'error', message: 'Select at least one member'}}
+          statusVariant="tooltip"
         />
       </div>
     );

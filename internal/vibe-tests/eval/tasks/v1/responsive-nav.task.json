@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "responsive-nav",
+  "source": "rc-1",
+  "title": "Navigation that collapses into a menu on narrow screens",
+  "prompt": "Build a top navigation bar with the site name \"Orbit\" and the links \"Home\", \"Projects\", \"Team\" and \"Settings\". At widths of 768 pixels and wider, the links show in the bar and there is no menu button. Below 768 pixels they are hidden behind a button named \"Open menu\" that opens a panel with the same links. The panel closes when you press Escape or choose a link, and Escape moves focus back to the button. The current page is Home: mark its link with aria-current=\"page\"."
+}

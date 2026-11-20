@@ -39,6 +39,11 @@ export const docs = {
       {
         guidance: false,
         description:
+          "Pass `curve: 'monotone'` to line() or area() for measured data. Keep the default straight segments, so each value reads as a point joined to the next one; a smoothed curve reads as decoration.",
+      },
+      {
+        guidance: false,
+        description:
           'Reuse one mark definition object across multiple Chart instances. Mark definitions currently carry per-chart layout metadata and are single-use.',
       },
     ],

@@ -92,6 +92,16 @@ export function oncePerListing(key, compute) {
 }
 
 /**
+ * What `oncePerListing(key, …)` already computed in this operation, without
+ * computing it: undefined when nothing has.
+ * @param {string} key
+ * @returns {unknown}
+ */
+export function onceComputed(key) {
+  return scope.getStore()?.memos.get(key);
+}
+
+/**
  * Whether an operation's listing cache is active.
  * @returns {boolean}
  */

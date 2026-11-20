@@ -17,46 +17,40 @@
  */
 
 import * as fs from 'node:fs';
-import {createRequire} from 'node:module';
 import * as path from 'node:path';
+import {createHash} from 'node:crypto';
 import {lowerDoc} from '../doc-compiler/compile.mjs';
 import {packageSource} from '../doc-compiler/source.mjs';
-import {CLI_ROOT} from '../fs/paths.mjs';
+import {CLI_ROOT, realDir} from '../fs/paths.mjs';
+import {persistedGather} from '../fs/gather-cache.mjs';
+import {fileStamp, recordContentRead} from '../fs/read-record.mjs';
+import {EXACT_CODEC} from '../fs/exact-codec.mjs';
 import {listDirEntries} from '../fs/listing-cache.mjs';
 import {formatCliCommand} from '../env/package-manager.mjs';
 import {LOCAL_THEME_ROOT} from '../config/theme-state.mjs';
 import {assertWithin, PathSafetyError} from '../fs/path-safety.mjs';
 import {THEME_MODULE_EXTENSIONS} from './theme-module-extensions.mjs';
+import {babelParser, jscodeshift} from '../runtime/lazy-dependencies.mjs';
+import {
+  readStore,
+  storedKey,
+  STORED_DOCS_FILE,
+} from '../doc-compiler/stored-docs.mjs';
+import {compareText} from '../text/compare-text.mjs';
+import {currentNonCoreBase} from '../bases/state.mjs';
 
 export const BUNDLED_THEME_PACKAGE = '@astryxdesign/cli';
+
+/**
+ * The theme a project starts with when it has none: the package `init`
+ * installs and the build playbook tells such a project to add.
+ */
+export const STARTER_THEME = Object.freeze({
+  slug: 'neutral',
+  package: '@astryxdesign/theme-neutral',
+});
 export const THEMES_DIR = path.join(CLI_ROOT, 'assets', 'templates', 'themes');
 export const THEME_DOC_SUFFIX = '.doc.mjs';
-
-const require = createRequire(import.meta.url);
-
-/** @type {typeof import('@babel/parser') | undefined} */
-let babelParser;
-/** @type {any} */
-let jscodeshiftApi;
-
-/**
- * The descriptor parser, loaded when the first descriptor is read.
- * @returns {typeof import('@babel/parser')}
- */
-function descriptorParser() {
-  babelParser ??= require('@babel/parser');
-  return /** @type {typeof import('@babel/parser')} */ (babelParser);
-}
-
-/**
- * The theme source parser, loaded when the first integration theme source is
- * checked. Bundled themes never need it.
- * @returns {any}
- */
-function sourceParser() {
-  jscodeshiftApi ??= require('jscodeshift');
-  return jscodeshiftApi;
-}
 
 /**
  * @typedef {object} DiscoveredTheme
@@ -76,6 +70,8 @@ function sourceParser() {
  * @property {string} sourceDir absolute directory holding this theme's files
  * @property {boolean} bundled
  * @property {string} docPath absolute descriptor path
+ * @property {{export: string, from: string, themeProp?: string, modeProp?: string}} [provider] the component the
+ *   owning integration's manifest names as the one that wires its themes
  */
 
 /**
@@ -169,12 +165,39 @@ class ThemeRuntimeExportError extends Error {}
  * Every string specifier a module imports, re-exports, or imports dynamically.
  * @param {string} file
  * @param {any} jscodeshift
+ * @param {{withRequire?: boolean}} [options] `withRequire`: also
+ *   `require('./x')` and TypeScript `import x = require('./x')`
  * @returns {string[]}
  */
-function moduleSpecifiers(file, jscodeshift) {
+function moduleSpecifiers(file, jscodeshift, {withRequire = false} = {}) {
   const parser = /\.(?:ts|tsx|mts|cts)$/u.test(file) ? 'tsx' : 'babel';
-  const j = jscodeshift.withParser(parser);
-  const root = j(fs.readFileSync(file, 'utf-8'));
+  const text = fs.readFileSync(file, 'utf-8');
+  // A module's specifiers follow from its text: one parse per text read
+  // (a command reads the same built theme module several times).
+  const key = `${parser}\0${withRequire}\0${createHash('sha256').update(text).digest('hex')}`;
+  const known = SPECIFIERS.get(key);
+  if (known) return [...known];
+  const found = parsedSpecifiers(text, jscodeshift.withParser(parser), {
+    withRequire,
+  });
+  if (SPECIFIERS.size >= 256) SPECIFIERS.clear();
+  SPECIFIERS.set(key, found);
+  return [...found];
+}
+
+/** The specifiers each module text read names, by parser, mode and text. @type {Map<string, string[]>} */
+const SPECIFIERS = new Map();
+
+/**
+ * The module specifiers a module's text names (imports, re-exports,
+ * import() calls, and with `withRequire` require() calls).
+ * @param {string} text
+ * @param {any} j jscodeshift with its parser
+ * @param {{withRequire: boolean}} options
+ * @returns {string[]}
+ */
+function parsedSpecifiers(text, j, {withRequire}) {
+  const root = j(text);
   /** @type {string[]} */
   const specifiers = [];
   root.find(j.ImportDeclaration).forEach((/** @type {any} */ importPath) => {
@@ -207,6 +230,23 @@ function moduleSpecifiers(file, jscodeshift) {
       specifiers.push(importPath.node.source.value);
     }
   });
+  if (withRequire) {
+    // CommonJS `require('./x')` and TypeScript `import x = require('./x')`.
+    root.find(j.CallExpression).forEach((/** @type {any} */ callPath) => {
+      const {callee, arguments: args} = callPath.node;
+      if (
+        callee?.type === 'Identifier' &&
+        callee.name === 'require' &&
+        typeof args?.[0]?.value === 'string'
+      )
+        specifiers.push(args[0].value);
+    });
+    root.find(j.TSImportEqualsDeclaration).forEach((/** @type {any} */ p) => {
+      const ref = p.node.moduleReference;
+      const value = ref?.expression?.value ?? ref?.argument?.value;
+      if (typeof value === 'string') specifiers.push(value);
+    });
+  }
 
   return specifiers;
 }
@@ -214,10 +254,12 @@ function moduleSpecifiers(file, jscodeshift) {
 /**
  * Every module a theme source file imports or re-exports, as written.
  * @param {string} file
+ * @param {{withRequire?: boolean}} [options] `withRequire`: also
+ *   `require('./x')` and TypeScript `import x = require('./x')`.
  * @returns {string[]}
  */
-export function themeFileImports(file) {
-  return moduleSpecifiers(file, sourceParser());
+export function themeFileImports(file, options = {}) {
+  return moduleSpecifiers(file, jscodeshift(), options);
 }
 
 /**
@@ -638,8 +680,8 @@ function readThemeDoc(docPath, owner) {
 
 /**
  * Descriptor reads in this process, by path and label, reused while the file
- * keeps its size and mtime.
- * @type {Map<string, {size: number, mtimeMs: number, read: {value: Record<string, any>} | {error: unknown}}>}
+ * keeps its stamp (`fileStamp`).
+ * @type {Map<string, {stamp: string, read: {value: Record<string, any>} | {error: unknown}}>}
  */
 const descriptorReads = new Map();
 
@@ -673,43 +715,86 @@ export function readStaticDescriptorValue(
   typeName,
   {data = false} = {},
 ) {
-  const {size, mtimeMs} = fs.statSync(docPath);
+  // A kept read still counts as a read of the file, so a kept catalog sees an
+  // edit to it.
+  recordContentRead(docPath);
+  const stamp = fileStamp(docPath);
+  // An absent path throws the error a stat gives.
+  if (stamp === '-') fs.statSync(docPath);
   const key = `${docPath}\0${label}\0${typeName}\0${data}`;
   let cached = descriptorReads.get(key);
-  if (!cached || cached.size !== size || cached.mtimeMs !== mtimeMs) {
+  if (cached?.stamp !== stamp) {
     /** @type {{value: Record<string, any>} | {error: unknown}} */
     let read;
     try {
+      const source = fs.readFileSync(docPath, 'utf-8');
+      // A descriptor Astryx ships was read at publish, by the hash of its
+      // text (scripts/generate-stored-docs.mjs): the same text reads the
+      // same value without parsing. Any other text, or a store that cannot
+      // be read, is parsed.
+      let stored;
+      try {
+        stored = readStore(STORED_DOCS_FILE).get(
+          descriptorStoreKey(source, typeName, data),
+        );
+      } catch {
+        stored = undefined;
+      }
       read = {
-        value: readDescriptorSource(
-          fs.readFileSync(docPath, 'utf-8'),
-          label,
-          typeName,
-          data,
-        ),
+        value:
+          stored != null && typeof stored === 'object'
+            ? stored
+            : readDescriptorSource(source, label, typeName, data),
       };
     } catch (error) {
       read = {error};
     }
-    cached = {size, mtimeMs, read};
-    descriptorReads.set(key, cached);
+    cached = {stamp, read};
+    // A file that appeared after its stamp is not kept: the entry would
+    // outlive its removal.
+    if (stamp !== '-') descriptorReads.set(key, cached);
   }
   if ('error' in cached.read) throw cached.read.error;
   return data ? structuredClone(cached.read.value) : {...cached.read.value};
 }
 
 /**
+ * The typed descriptors read statically, each with whether plain data is
+ * accepted: what scripts/generate-stored-docs.mjs reads at publish.
+ * @type {ReadonlyArray<[string, boolean]>}
+ */
+export const STATIC_DESCRIPTOR_TYPES = [
+  ['ThemeDoc', false],
+  ['IconSetDoc', false],
+  ['IconDefinitionDoc', true],
+];
+
+/**
+ * Where a descriptor's statically read value is stored at publish: by the
+ * hash of its text, the type it is read as, and whether plain data counts.
+ * @param {string} source
+ * @param {string} typeName
+ * @param {boolean} data
+ * @returns {string}
+ */
+export function descriptorStoreKey(source, typeName, data) {
+  return `descriptor:${typeName}:${data ? 'data' : 'object'}:${storedKey(source)}`;
+}
+
+/**
+ * The static value a descriptor's source default-exports (see
+ * {@link readStaticDescriptorValue}); throws when it is not one.
  * @param {string} source
  * @param {string} label
  * @param {string} typeName
  * @param {boolean} [data]
  * @returns {Record<string, any>}
  */
-function readDescriptorSource(source, label, typeName, data = false) {
+export function readDescriptorSource(source, label, typeName, data = false) {
   /** @type {any} */
   let ast;
   try {
-    ast = descriptorParser().parse(source, {
+    ast = babelParser().parse(source, {
       sourceType: 'module',
       tokens: true,
       createParenthesizedExpressions: true,
@@ -1290,7 +1375,7 @@ export function discoverUnmigratedThemeCopies(
     .filter(entry => entry.isDirectory() && !isIgnoredThemeEntry(entry.name))
     .map(entry => unmigratedThemeCopy(path.join(root, entry.name)))
     .filter(copy => copy !== null)
-    .sort((a, b) => a.slug.localeCompare(b.slug));
+    .sort((a, b) => compareText(a.slug, b.slug));
 }
 
 /** @param {string[]} files */
@@ -1396,7 +1481,7 @@ export function discoverThemeDirectory(
   }
   const directories = rootEntries
     .filter(entry => entry.isDirectory())
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => compareText(a.name, b.name));
 
   for (const directory of directories) {
     const slug = directory.name;
@@ -1514,11 +1599,11 @@ export function discoverThemeDirectory(
           )
           .filter(file => file !== docPath),
       );
-      const jscodeshift = sourceParser();
+      const codeshift = jscodeshift();
       try {
         validateThemeModuleGraph(
           entryPath,
-          jscodeshift,
+          codeshift,
           sourceDir,
           allowedFiles,
           owner,
@@ -1529,7 +1614,7 @@ export function discoverThemeDirectory(
           !moduleExportsName(
             entryPath,
             exportName,
-            jscodeshift,
+            codeshift,
             sourceDir,
             allowedFiles,
           )
@@ -1660,7 +1745,7 @@ export function unreadThemeFolders(themeRoot, {packageDir, packageName} = {}) {
   for (const file of modules) {
     let specifiers;
     try {
-      specifiers = moduleSpecifiers(file, sourceParser());
+      specifiers = moduleSpecifiers(file, jscodeshift());
     } catch {
       continue;
     }
@@ -1685,6 +1770,8 @@ let bundledThemeCache = null;
 
 /** @returns {DiscoveredTheme[]} */
 export function discoverBundledThemes() {
+  // Core's content shows only in a run whose base is Core.
+  if (currentNonCoreBase()) return [];
   bundledThemeCache ??= discoverThemeDirectory(
     THEMES_DIR,
     BUNDLED_THEME_PACKAGE,
@@ -1745,18 +1832,40 @@ export function discoverLocalThemes(
   }));
 }
 
+/** An integration's discovered themes, kept exactly, with the shape they need. */
+const THEMES_CODEC = {
+  ...EXACT_CODEC,
+  valid: (/** @type {any} */ themes) =>
+    Array.isArray(themes) &&
+    themes.every(
+      theme =>
+        theme != null &&
+        typeof theme.slug === 'string' &&
+        typeof theme.exportName === 'string',
+    ),
+};
+
 /**
  * @param {import('../integrations/integrations.mjs').LoadedIntegration} integration
  * @returns {Promise<DiscoveredTheme[]>}
  */
 export async function discoverIntegrationThemes(integration) {
   if (!integration.themes) return [];
-  return discoverThemeDirectory(integration.themes, integration.name).map(
-    theme => ({
-      ...theme,
-      packageDir: integration.__packageDir,
-      packageExports: integration.__packageExports,
-      source: /** @type {const} */ ('package'),
-    }),
+  const themesDir = integration.themes;
+  // Kept between runs while every file and module it read is unchanged; the
+  // live fields below are added after, as on a fresh read.
+  const found = /** @type {DiscoveredTheme[]} */ (
+    await persistedGather(
+      ['integration-themes', realDir(themesDir), integration.name ?? null],
+      async () => discoverThemeDirectory(themesDir, integration.name),
+      THEMES_CODEC,
+    )
   );
+  return found.map(theme => ({
+    ...theme,
+    packageDir: integration.__packageDir,
+    packageExports: integration.__packageExports,
+    source: /** @type {const} */ ('package'),
+    ...(integration.themeProvider ? {provider: integration.themeProvider} : {}),
+  }));
 }

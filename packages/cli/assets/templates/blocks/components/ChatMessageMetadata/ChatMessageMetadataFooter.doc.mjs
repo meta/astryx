@@ -18,10 +18,4 @@ export const doc = {
     'Text',
     'Layout',
   ],
-  icons: {
-    ArrowPathIcon: 'refresh',
-    ClipboardDocumentIcon: 'clipboard',
-    HandThumbDownIcon: 'thumbsDown',
-    HandThumbUpIcon: 'thumbsUp',
-  },
 };

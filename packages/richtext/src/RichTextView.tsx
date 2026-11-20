@@ -35,14 +35,15 @@ import {RichTextPlugin} from '@lexical/react/LexicalRichTextPlugin';
 import {ContentEditable} from '@lexical/react/LexicalContentEditable';
 import {LexicalErrorBoundary} from '@lexical/react/LexicalErrorBoundary';
 import {TablePlugin} from '@lexical/react/LexicalTablePlugin';
-import {TableScrollRegionPlugin} from './TableScrollRegionPlugin';
-import {TableColumnFloorPlugin} from './TableColumnFloorPlugin';
-import {CodeBlockHeaderPlugin} from './CodeBlockHeaderPlugin';
-import {CodeSyntaxPlugin} from './CodeSyntaxPlugin';
-import {MarkdownExtensionsPlugin} from './MarkdownExtensionsPlugin';
+import {TableScrollRegionPlugin} from './internal/TableScrollRegionPlugin';
+import {TableColumnFloorPlugin} from './internal/TableColumnFloorPlugin';
+import {CodeBlockHeaderPlugin} from './internal/CodeBlockHeaderPlugin';
+import {CodeSyntaxPlugin} from './internal/CodeSyntaxPlugin';
+import {BlockDirectionPlugin} from './internal/BlockDirectionPlugin';
+import {MarkdownExtensionsPlugin} from './internal/MarkdownExtensionsPlugin';
 import type {RichTextMarkdownExtension} from './markdownExtensions';
 import type {CodeLanguage} from '@astryxdesign/core/CodeBlock';
-import {TaskCheckboxPlugin} from './TaskCheckboxPlugin';
+import {TaskCheckboxPlugin} from './internal/TaskCheckboxPlugin';
 import type {
   AnyLexicalExtension,
   Klass,
@@ -56,6 +57,10 @@ import {DEFAULT_NODES} from './editorNodes';
 
 const styles = stylex.create({
   root: {
+    // The document's own direction, read where the surface sits. A block
+    // whose text decides nothing reads this rather than inheriting, so a
+    // list or table that reads the other way cannot change it.
+    '--_richtext-document-direction': {default: 'ltr', ':dir(rtl)': 'rtl'},
     width: '100%',
     // Holds the code block headers and task checkboxes drawn over the
     // content.
@@ -335,6 +340,7 @@ export function RichTextView({
             in tab order. */}
         <CodeBlockHeaderPlugin codeLanguages={codeLanguages} />
         <CodeSyntaxPlugin codeLanguages={codeLanguages} />
+        <BlockDirectionPlugin />
         {markdownExtensions != null && markdownExtensions.length > 0 ? (
           <MarkdownExtensionsPlugin
             extensions={markdownExtensions}

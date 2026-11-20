@@ -29,6 +29,7 @@ export async function componentDetailBlocks(componentName, cwd, ownerPackage) {
     description: b.description,
     isShowcase: b.isShowcase ?? false,
     category: b.category,
+    isReady: b.isReady !== false,
   });
 
   // Examples: blocks in the component's own directory, or

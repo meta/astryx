@@ -15,7 +15,7 @@ import * as path from 'node:path';
 import {isBuiltin} from 'node:module';
 import {packageOf} from '../../foundation/render/served-packages.mjs';
 import {resolveInstalledPackageDir} from '../../foundation/integrations/installed-package.mjs';
-import {parse} from '@babel/parser';
+import {babelParse as parse} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {
   inspectPackageExport,
   sourceExportTarget,
@@ -889,15 +889,3 @@ export function renderFile(planned, specifierOf) {
   return out;
 }
 
-/**
- * The relative specifier from one written file to another.
- * @param {string} fromDest
- * @param {string} toDest
- */
-export function relativeSpecifierBetween(fromDest, toDest) {
-  let rel = toPosix(path.relative(path.dirname(fromDest), toDest));
-  rel = DECLARATION_FILE.test(toDest)
-    ? rel.replace(/\.d\.[cm]?ts$/, '')
-    : rel.replace(/\.(?:[cm]?[jt]sx?)$/, '');
-  return rel.startsWith('.') ? rel : `./${rel}`;
-}
