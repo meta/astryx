@@ -193,6 +193,10 @@ const ROWS = [
     },
   ],
   [
+    'a word before the accent names its color',
+    {q: 'system blue accent #007AFF', has: ["accent '#007aff'"]},
+  ],
+  [
     'a size and corners together',
     {q: 'checkboxes 16px with 3px corners', never: /contradict/},
   ],

@@ -12344,6 +12344,10 @@ export function draftAnswer(ctx, env, question) {
     // (A font's name before "font": "Inter font", "SF Pro font".)
     if (/^(?:fonts?|typefaces?|famil(?:y|ies)|serif|sans|mono)$/.test(stop))
       return null;
+    // (A word before the theme's accent or neutral names its color, never
+    // a part: "system blue accent", "brand red accent". The color word is
+    // read already, so the role word ends the lead.)
+    if (/^(?:accents?|neutrals?)$/.test(stop)) return null;
     // (Function words, counts and steps, the theme's own name, words in
     // an aspect phrase, "line height", and the function words of the
     // other languages the readers take, name no subject.)
