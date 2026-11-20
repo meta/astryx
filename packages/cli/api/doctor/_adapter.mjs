@@ -17,6 +17,7 @@ import {
   listedPackageInstall,
   projectAddCommand,
   globalBehind,
+  globalUpdateBesideCli,
   globalUpgradeCommand,
   lastNoticeSkip,
   projectLag,
@@ -86,8 +87,6 @@ import {
 } from '../../foundation/discovery/button-actions.mjs';
 import {iconImportFindings} from '../../foundation/discovery/icon-imports.mjs';
 import {packageImportTarget} from '../../foundation/discovery/package-exports.mjs';
-import {scanCoreProps} from '../../foundation/discovery/core-props.mjs';
-import {readCorePropTypes} from '../../foundation/discovery/core-prop-types.mjs';
 import {projectAugmentations} from '../../foundation/discovery/core-augmentation-points.mjs';
 import {
   resolveProjectTypeScript,
@@ -95,7 +94,6 @@ import {
   unusableTypeScriptReason,
 } from '../../foundation/discovery/project-typescript.mjs';
 import {nameWords, orderByAffinity} from '../../foundation/text/suggest-order.mjs';
-import {COMPONENT_BATCH_SELECTOR_LIMIT, component as componentAnswer} from '../component/component.mjs';
 import {compilerOptionsFor, existingFile, pathsFor, projectMapsImport, resolvePath} from '../../foundation/render/ts-paths.mjs';
 import {
   resolveIconModule,
@@ -113,6 +111,9 @@ import {
 } from '../../foundation/discovery/module-exports.mjs';
 import {cssImports} from '../../foundation/render/embedded-imports.mjs';
 import {postcss} from '../../foundation/runtime/lazy-dependencies.mjs';
+import {hostedRun} from '../../foundation/runtime/package-root.mjs';
+import {pointsToDoctor} from '../../foundation/integrations/integration-warnings.mjs';
+import {CORE_COMPARISON_CODES} from '../../foundation/discovery/component-replacement.mjs';
 import {isValidSemver, satisfiesRange} from '../../foundation/env/semver.mjs';
 import * as path from 'node:path';
 import {
@@ -199,9 +200,9 @@ const CHECK_CODEC = {
  * A doctor check that reads only files, kept between runs through the kept
  * gather (foundation/fs/gather-cache.mjs): a later `doctor` with every file,
  * folder, module and environment variable it read unchanged reads the check
- * back. Only the docs checks and the theme-wiring scan go through here; a
- * check that depends on the time, the network or anything else the stamps do
- * not see never does.
+ * back. Only the docs checks, the theme-wiring scan, the Core-props scan and
+ * the Core-button scan go through here; a check that depends on the time, the
+ * network or anything else the stamps do not see never does.
  * @template T
  * @param {{name: string, cwd: string, coreDir: string | null}} where - The
  *   check, the project folder, and the Core folder the project loads.
@@ -247,6 +248,55 @@ export const THEME_WIRING_CODEC = {
     ) &&
     value.unconfirmed.every(
       (/** @type {any} */ u) => u != null && typeof u.file === 'string',
+    ),
+};
+
+/**
+ * The Core-props scan's result ({@link findUnknownCoreProps}), kept exactly,
+ * with its shape.
+ */
+export const CORE_PROPS_CODEC = {
+  encode: (/** @type {any} */ value) => value,
+  decode: (/** @type {any} */ value) => value,
+  valid: (/** @type {any} */ value) =>
+    value != null &&
+    Array.isArray(value.found) &&
+    Number.isInteger(value.uses) &&
+    (value.skipped === null || typeof value.skipped === 'string') &&
+    value.found.every(
+      (/** @type {any} */ prop) =>
+        prop != null &&
+        typeof prop.file === 'string' &&
+        Number.isInteger(prop.line) &&
+        Number.isInteger(prop.column) &&
+        typeof prop.component === 'string' &&
+        typeof prop.prop === 'string' &&
+        (prop.suggestion === null || typeof prop.suggestion === 'string'),
+    ),
+};
+
+/**
+ * The Core-button scan's result ({@link findButtonsWithoutAction}), kept
+ * exactly, with its shape.
+ */
+export const BUTTON_ACTIONS_CODEC = {
+  encode: (/** @type {any} */ value) => value,
+  decode: (/** @type {any} */ value) => value,
+  valid: (/** @type {any} */ value) =>
+    value != null &&
+    Array.isArray(value.found) &&
+    Number.isInteger(value.files) &&
+    typeof value.incomplete === 'boolean' &&
+    (value.domListener === undefined || typeof value.domListener === 'string') &&
+    value.found.every(
+      (/** @type {any} */ button) =>
+        button != null &&
+        typeof button.file === 'string' &&
+        Number.isInteger(button.line) &&
+        Number.isInteger(button.column) &&
+        (button.component === 'Button' || button.component === 'IconButton') &&
+        (button.label === null || typeof button.label === 'string') &&
+        (button.note === null || typeof button.note === 'string'),
     ),
 };
 
@@ -903,6 +953,8 @@ export async function findUnknownCoreProps(projectDir) {
   const jsxDeclarations = [];
   /** @type {string[]} */
   const corePages = [];
+  /** @type {typeof import('../../foundation/discovery/core-props.mjs').scanCoreProps | null} */
+  let scanCoreProps = null;
   for (const file of files) {
     let text;
     try {
@@ -914,6 +966,8 @@ export async function findUnknownCoreProps(projectDir) {
     if (notPageCode(relative(file)) || !text.includes('@astryxdesign/core')) continue;
     corePages.push(file);
     if (OTHER_JSX_RUNTIME.test(text)) continue;
+    // The scanner loads only when a page imports Core.
+    scanCoreProps ??= (await import('../../foundation/discovery/core-props.mjs')).scanCoreProps;
     for (const use of scanCoreProps(text) ?? []) uses.push({...use, file: relative(file), path: file});
   }
   // Each page that imports Core is read with the config TypeScript reads for
@@ -981,6 +1035,7 @@ export async function findUnknownCoreProps(projectDir) {
   /** @type {UnknownCoreProp[]} */
   const found = [];
   for (const group of groups.values()) {
+    const {COMPONENT_BATCH_SELECTOR_LIMIT, component: componentAnswer} = await import('../component/component.mjs');
     // Batched reads of the props the docs of the group's Core list, as
     // `astryx component <Name> --props` prints them; a component they do not
     // describe is not judged.
@@ -1000,6 +1055,7 @@ export async function findUnknownCoreProps(projectDir) {
       return props != null && !props.includes(use.prop);
     });
     if (candidates.length === 0) continue;
+    const {readCorePropTypes} = await import('../../foundation/discovery/core-prop-types.mjs');
     // What augments Core for a page: the project's files and installed
     // packages, and those of the page's own package, as a workspace member
     // installs its own.
@@ -1469,38 +1525,74 @@ export function readPackageJson(file) {
 
 /**
  * The integrations installed for the computer, and, outside a project, which
- * of them the folder loads (spec AST-081 FR12): those it uses, and the names
- * of the integrations the folder loads itself, whose copies win.
+ * of them the folder loads (spec AST-081 FR12): those it uses, the issues in
+ * their contributions, and the names of the integrations the folder loads
+ * itself, whose copies win. Also how such a package is updated: the command
+ * beside a CLI installed for the computer, or by the tool whose package set
+ * runs this CLI.
  * @param {string} cwd
- * @returns {Promise<{computerIntegrations: import('../../foundation/integrations/computer-integrations.mjs').ComputerIntegrationCandidate[], loadedComputerIntegrations: string[], folderIntegrations: string[]}>}
+ * @returns {Promise<{computerIntegrations: import('../../foundation/integrations/computer-integrations.mjs').ComputerIntegrationCandidate[], loadedComputerIntegrations: string[], computerIntegrationIssues: Array<{package: string, severity: string, message: string}>, folderIntegrations: string[], integrationUpdate: ((name: string) => string | null) | null, integrationsUpdateWithTool: boolean}>}
  */
 export async function computerIntegrationsOutside(cwd) {
   const computerIntegrations = computerIntegrationCandidates(cwd);
-  if (computerIntegrations.length === 0) {
-    return {
-      computerIntegrations,
-      loadedComputerIntegrations: [],
-      folderIntegrations: [],
-    };
-  }
+  const globalCopy = isGlobalCopy(CLI_ROOT);
+  const update = {
+    integrationUpdate: globalCopy
+      ? (/** @type {string} */ name) => globalUpdateBesideCli(CLI_ROOT, name)
+      : null,
+    integrationsUpdateWithTool: hostedRun() != null,
+  };
+  const none = {
+    computerIntegrations,
+    loadedComputerIntegrations: [],
+    computerIntegrationIssues: [],
+    folderIntegrations: [],
+    ...update,
+  };
+  if (computerIntegrations.length === 0) return none;
+  /** @type {import('../../foundation/config/project.mjs').Project} */
+  let project;
   try {
-    const project = await Project.load(cwd, {core: 'project'});
-    /** @type {Array<{name: string, __computer?: boolean, __loadError?: string}>} */
-    const loaded = project.loadedIntegrations;
-    return {
-      computerIntegrations,
-      loadedComputerIntegrations: loaded
-        .filter(i => i.__computer && !i.__loadError)
-        .map(i => i.name),
-      folderIntegrations: loaded.filter(i => !i.__computer).map(i => i.name),
-    };
+    project = await Project.load(cwd, {core: 'project'});
   } catch {
-    return {
-      computerIntegrations,
-      loadedComputerIntegrations: [],
-      folderIntegrations: [],
-    };
+    return none;
   }
+  /** @type {Array<{name: string, __computer?: boolean, __loadError?: string}>} */
+  const loaded = project.loadedIntegrations;
+  const used = loaded
+    .filter(i => i.__computer && !i.__loadError)
+    .map(i => i.name);
+  // The everyday commands count these issues when they point at doctor, so
+  // doctor names them. Doctor reads no Core outside a project, so it leaves
+  // out the comparisons with Core components; the everyday commands judge
+  // those against the Core they carry. Core's templates come with the CLI.
+  const names = new Set(used);
+  const noCore = project.coreDir() == null;
+  /** @type {Array<{package: string, severity: string, message: string}>} */
+  let issues = [];
+  try {
+    issues = (await project.issues())
+      .filter(
+        issue =>
+          names.has(issue.package) &&
+          pointsToDoctor(issue) &&
+          !(noCore && CORE_COMPARISON_CODES.has(issue.code)),
+      )
+      .map(issue => ({
+        package: issue.package,
+        severity: issue.severity,
+        message: issue.message,
+      }));
+  } catch {
+    // The integrations loaded; only their issues could not be read.
+  }
+  return {
+    computerIntegrations,
+    loadedComputerIntegrations: used,
+    computerIntegrationIssues: issues,
+    folderIntegrations: loaded.filter(i => !i.__computer).map(i => i.name),
+    ...update,
+  };
 }
 
 /**
