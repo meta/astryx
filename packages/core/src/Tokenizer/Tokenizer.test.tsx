@@ -957,6 +957,26 @@ describe('Tokenizer', () => {
       expect(screen.getAllByText('Alice').length).toBeGreaterThanOrEqual(1);
     });
 
+    it('unfocusedInline: writes the overflow count with the provider catalog', () => {
+      render(
+        <InternationalizationProvider
+          locale="fr"
+          overrides={{
+            fr: {'@astryx.tokenizer.overflowCount': '+{count, number} autres'},
+          }}>
+          <Tokenizer
+            label="Members"
+            searchSource={userSource}
+            value={[users[0], users[1], users[2]]}
+            onChange={() => {}}
+            tokenOverflowBehavior="unfocusedInline"
+          />
+        </InternationalizationProvider>,
+      );
+      expect(screen.getAllByText(/^\+\d+ autres$/).length).toBeGreaterThan(0);
+      expect(screen.queryByText(/^\+\d+ more$/)).not.toBeInTheDocument();
+    });
+
     it('unfocusedInline: removes truncation on focus', () => {
       render(
         <Tokenizer

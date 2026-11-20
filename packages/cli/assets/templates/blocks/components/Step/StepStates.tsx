@@ -2,6 +2,7 @@
 
 'use client';
 
+import {HStack} from '@astryxdesign/core/Layout';
 import {Stepper, Step} from '@astryxdesign/core/Stepper';
 import {Text} from '@astryxdesign/core/Text';
 
@@ -10,7 +11,7 @@ export default function StepStates() {
   // Stepper's `activeStep`. Each state below is therefore one Step in its own
   // Stepper, with activeStep placed on one side of it or the other.
   return (
-    <div style={{display: 'flex', flexWrap: 'wrap', gap: 32}}>
+    <HStack wrap="wrap" gap={8}>
       <div style={{width: 220}}>
         <Text type="label">Completed</Text>
         <Stepper activeStep={1} orientation="vertical">
@@ -41,6 +42,6 @@ export default function StepStates() {
           <Step step={0} label="Verify email" status="warning" />
         </Stepper>
       </div>
-    </div>
+    </HStack>
   );
 }

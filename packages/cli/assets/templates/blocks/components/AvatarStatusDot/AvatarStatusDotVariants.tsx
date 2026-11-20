@@ -7,7 +7,7 @@ import {HStack} from '@astryxdesign/core/Layout';
 
 export default function AvatarStatusDotVariants() {
   return (
-    <HStack gap={4} vAlign="center">
+    <HStack gap={4} vAlign="center" wrap="wrap">
       <Avatar
         name="Ana Silva"
         size="xl"

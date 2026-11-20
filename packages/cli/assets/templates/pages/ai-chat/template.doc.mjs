@@ -24,13 +24,4 @@ export const doc = {
   ],
   isReady: true,
   category: 'AI Chat - Conversation',
-  icons: {
-    AtSymbolIcon: 'mention',
-    ChevronRightIcon: 'chevronRight',
-    ClipboardDocumentIcon: 'clipboard',
-    DocumentTextIcon: 'document',
-    PaperClipIcon: 'attach',
-    ShareIcon: 'share',
-    XMarkIcon: 'close',
-  },
 };

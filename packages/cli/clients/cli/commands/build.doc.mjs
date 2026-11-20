@@ -19,7 +19,7 @@ export const doc = {
     'The build-a-page entry point. With no query it returns the how-to-build-a-page ' +
     'playbook; with a query it names the page template to start from (always one: the ' +
     'closest page template, or the app shell when none matches), the next two templates, and the ' +
-    'drop-in blocks and idea-specific components and hooks around it.',
+    'block examples to read for reference and the idea-specific components and hooks around it.',
   fn: 'build',
   args: [{name: 'query', param: 'query', required: false}],
   options: [

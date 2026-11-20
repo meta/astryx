@@ -13,6 +13,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
   assertWithin,
+  homeRelativePath,
   isFilePathArg,
   PathSafetyError,
   tempFolderOf,
@@ -21,6 +22,7 @@ import {
 import {AstryxError, writeFailed} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {
+  answeredComponentsInSource,
   pkgOf,
   replaceTemplateDemos,
 } from '../../../foundation/discovery/template-adapter.mjs';
@@ -36,8 +38,10 @@ import {
  * Scaffold an already-resolved template to `targetPath` (relative to `cwd`) and
  * return the `template.copy` receipt.
  * @param {import('../../../foundation/discovery/template-adapter.mjs').DiscoveredTemplate} match
- * @param {{targetPath: string, cwd: string, overwrite?: boolean, iconSets?: Parameters<typeof mapTemplateIcons>[1], command?: string}} ctx
+ * @param {{targetPath: string, cwd: string, overwrite?: boolean, iconSets?: Parameters<typeof mapTemplateIcons>[1], components?: {ownersOf: (name: string) => readonly string[], qualified: boolean, documents?: (pkg: string, name: string) => boolean}, command?: string}} ctx
  *   `iconSets`: the project's icon sets; without them the icons are unchanged.
+ *   `components`: how `astryx component` reads the project's components
+ *   (loadComponentLookup); without it the receipt names no component.
  *   `command`: the command that selects this template, without a path; the
  *   refusal of a path outside the project suggests it
  * @returns {import('../template.type.mjs').TemplateCopyResponse}
@@ -49,6 +53,7 @@ export function templateCopy(
     cwd,
     overwrite = false,
     iconSets = NO_ICON_SETS,
+    components = {ownersOf: () => [], qualified: false},
     command = `astryx template ${match.dirName} --type ${match.type}`,
   },
 ) {
@@ -60,13 +65,18 @@ export function templateCopy(
     );
   }
 
-  // If targetPath looks like a file (e.g. `./foo.tsx`), write directly to
+  // `~/…` names the home folder, as a shell reads it, never a folder named
+  // `~` here; the message still quotes the path as given.
+  const given = targetPath;
+  const target = homeRelativePath(given) ?? given;
+
+  // If target looks like a file (e.g. `./foo.tsx`), write directly to
   // it. Previously this path was treated as a directory and the file was
   // written as `./foo.tsx/page.tsx`, which is wrong and surprising.
-  const fileTarget = isFilePathArg(targetPath)
-    ? targetPath
+  const fileTarget = isFilePathArg(target)
+    ? target
     : path.join(
-        targetPath,
+        target,
         match.type === 'block' ? path.basename(match.filePath) : 'page.tsx',
       );
 
@@ -85,12 +95,12 @@ export function templateCopy(
   } catch (err) {
     if (!(err instanceof PathSafetyError)) throw err;
     const outsideProject =
-      path.isAbsolute(targetPath) &&
+      path.isAbsolute(target) &&
       err.code === ERROR_CODES.ERR_PATH_TRAVERSAL &&
       !err.viaSymlink;
-    const temp = outsideProject ? tempFolderOf(targetPath) : null;
+    const temp = outsideProject ? tempFolderOf(target) : null;
     if (temp) {
-      outputFilePath = inTempFolder(fileTarget, targetPath, temp);
+      outputFilePath = inTempFolder(fileTarget, given, temp);
       scratch = true;
     } else if (outsideProject) {
       // Outside the project and the temp folder there is nothing to write,
@@ -99,7 +109,7 @@ export function templateCopy(
       const folder = templateDestination(cwd, match.type, match.dirName);
       const [scratchFolder] = tempFolders();
       throw new AstryxError(
-        `Invalid template target path "${targetPath}": it is outside the project root (${path.resolve(cwd)}). ` +
+        `Invalid template target path "${given}": it is outside the project root (${path.resolve(cwd)}). ` +
           (scratchFolder
             ? `The template is written only inside the project, or as a scratch copy in the system temp folder (${scratchFolder}). Give a path inside one, or print the source.`
             : 'The template is written only inside the project. Give a path inside it, or print the source.'),
@@ -164,10 +174,8 @@ export function templateCopy(
 
   // Analyze what the template needs that the project lacks: external packages
   // and the StyleX compiler. Derived from the source's own imports.
-  const {notes, missingPackages, installCommand} = analyzeTemplateNeeds(
-    outputSource,
-    cwd,
-  );
+  const {notes, missingPackages, installCommand, installGuidance} =
+    analyzeTemplateNeeds(outputSource, cwd);
   const missing = missingPackages;
 
   const relOutput = scratch ? outputDir : path.relative(cwd, outputDir) || '.';
@@ -184,6 +192,8 @@ export function templateCopy(
       notes,
       missingPackages: missing,
       installCommand,
+      components: answeredComponentsInSource(outputSource, components),
+      ...(installGuidance ? {installGuidance} : {}),
       ...(path.isAbsolute(targetPath) && !scratch
         ? {givenPath: targetPath}
         : {}),

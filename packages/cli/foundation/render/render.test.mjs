@@ -2,16 +2,19 @@
 
 /**
  * @file Tests for the render helpers: the CSS cut, the embedded source, the
- * HTML reader, the time limit, and drawing the overlays a page opens.
+ * HTML reader, the time limit, drawing the overlays a page opens, and the
+ * names a render does not carry.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {performance} from 'node:perf_hooks';
 import {describe, expect, it} from 'vitest';
-import {classesIn, cutCss, layerOrderOf, requiredClasses} from './css-cut.mjs';
+import {classesIn, cutCss, cutFontFaces, layerOrderOf, requiredClasses} from './css-cut.mjs';
 import {RENDER_FORMAT, readSourceBlock, renderedHeadOf, renderedMarkupOf, sourceBlock} from './source-block.mjs';
-import {isAstryxMarkup, parseHtml} from './html-reader.mjs';
-import {renderPage, withCarriedPaths} from './render-page.mjs';
+import {isAstryxMarkup, parseHtml, scanHtml} from './html-reader.mjs';
+import {CARRY_ATTR, oneColorModeOf, renderPage, withCarriedPaths, withUncarriedImages} from './render-page.mjs';
+import {carriedNameFor, embeddedPathProblem} from './embedded-files.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
 
 describe('requiredClasses with grouped selectors', () => {
@@ -69,6 +72,150 @@ describe('cutCss', () => {
   });
 });
 
+describe('cutFontFaces', () => {
+  const face = (family, range) =>
+    `@font-face { font-family: ${family}; src: url(x.woff2); unicode-range: ${range}; }`;
+  const css = [
+    face("'Inter'", 'U+0000-00FF'),
+    face("'Inter'", 'U+0400-045F'),
+    face("'Inter'", 'U+1F00-1FFF'),
+    face('Mono', 'U+0000-00FF'),
+    '@font-face { font-family: Plain; src: url(p.woff2); }',
+    '.t { font-family: Inter, sans-serif; } .p { font-family: Plain; }',
+  ].join('\n');
+
+  it('keeps the faces whose range covers the text and whose family is named', () => {
+    const out = cutFontFaces(css, '<p class="t">Hello</p>');
+    expect(out).toContain('U+0000-00FF');
+    expect(out).toContain('font-family: Plain');
+    expect(out).not.toContain('U+0400-045F');
+    expect(out).not.toContain('U+1F00-1FFF');
+    expect(out).not.toContain('font-family: Mono');
+  });
+
+  it('keeps a range for a character the script holds', () => {
+    const out = cutFontFaces(css, '<p class="t">Hello</p><script>t("Привет")</script>');
+    expect(out).toContain('U+0400-045F');
+    expect(out).not.toContain('U+1F00-1FFF');
+  });
+
+  it('counts a character the script holds as an escape, as the bundled script writes it', () => {
+    const route = cutFontFaces(css, '<p class="t">Home</p><script>v="\\u1f00\\u03b1"</script>');
+    expect(route).toContain('U+1F00-1FFF');
+    expect(route).not.toContain('U+0400-045F');
+    expect(cutFontFaces(css, '<p class="t">x</p><script>t("\\u{41f}")</script>')).toContain('U+0400-045F');
+    expect(cutFontFaces(css, '<p class="t">&#x41F;</p>')).toContain('U+0400-045F');
+    expect(cutFontFaces(face('Emoji', 'U+1F600-1F64F'), 'Emoji "\\ud83d\\ude00"')).toContain('@font-face');
+  });
+
+  it('keeps a family the markup or the script names, and reads wildcard ranges', () => {
+    const out = cutFontFaces(
+      `${face('Mono', 'U+00??')}\n${face('Mono', 'U+04??')}`,
+      'el.style.fontFamily = "Mono"; "ok"',
+    );
+    expect(out).toContain('U+00??');
+    expect(out).not.toContain('U+04??');
+  });
+
+  it('counts a family named through a token chain or a font shorthand', () => {
+    const chain = cutFontFaces(
+      `${face("'Inter'", 'U+0000-00FF')}\n:root { --font-brand: 'Inter', sans-serif; --font-body: var(--font-brand); }\n.t { font-family: var(--font-body); }`,
+      '<p class="t">Hello</p>',
+    );
+    expect(chain).toContain('@font-face');
+    const shorthand = cutFontFaces(
+      `${face('Mono', 'U+0000-00FF')}\n.t { font: 600 14px/1.4 Mono, monospace; }`,
+      '<p class="t">Hello</p>',
+    );
+    expect(shorthand).toContain('@font-face');
+  });
+
+  it('counts text the stylesheet draws: content strings, CSS escapes and other list markers', () => {
+    expect(cutFontFaces(css, '<p class="t">x</p>', `${css}\n.t::before { content: "\\41f"; }`)).toContain('U+0400-045F');
+    expect(cutFontFaces(css, '<p class="t">x</p>', `${css}\n.t::before { content: "Ἀ"; }`)).toContain('U+1F00-1FFF');
+    const greekList = cutFontFaces(css, '<ol class="t"><li>x</li></ol>', `${css}\n.t { list-style: lower-greek inside; }`);
+    expect(greekList).toContain('U+1F00-1FFF');
+    expect(greekList).toContain('U+0400-045F');
+    const counter = cutFontFaces(css, '<p class="t">x</p>', `${css}\n.t::before { content: counter(step, hiragana); }`);
+    expect(counter).toContain('U+0400-045F');
+    const plainList = cutFontFaces(css, '<ol class="t"><li>x</li></ol>', `${css}\n.t { list-style: decimal; } .u::before { content: counter(step) ". "; }`);
+    expect(plainList).not.toContain('U+0400-045F');
+  });
+
+  it('reads a family name as CSS reads it, and as the script escapes it', () => {
+    const escapedFace = '@font-face { font-family: Gill\\ Sans; src: url(g.woff2); unicode-range: U+0000-00FF; }';
+    expect(cutFontFaces(escapedFace, 'x', `${escapedFace}\n.t { font-family: 'Gill Sans'; }`)).toContain('@font-face');
+    const accented = "@font-face { font-family: 'Üní Sans'; src: url(u.woff2); unicode-range: U+0000-00FF; }";
+    expect(cutFontFaces(accented, '<script>el.style.fontFamily="\\xDCn\\xED Sans"</script>')).toContain('@font-face');
+    expect(cutFontFaces(accented, '<script>el.style.fontFamily="Other"</script>')).not.toContain('@font-face');
+  });
+
+  it('keeps every face of a named family under a text-transform that changes the characters', () => {
+    const wide = cutFontFaces(css, '<p class="t">abc</p>', `${css}\n.t { text-transform: full-width; }`);
+    expect(wide).toContain('U+0400-045F');
+    expect(cutFontFaces(css, '<p class="t">abc</p>', `${css}\n.t { text-transform: uppercase; }`)).not.toContain('U+0400-045F');
+  });
+
+  it('counts a list style or a text-transform the markup or the script sets', () => {
+    const inline = cutFontFaces(css, '<ol class="t" style="list-style-type:upper-armenian"><li>x</li></ol>');
+    expect(inline).toContain('U+1F00-1FFF');
+    const script = cutFontFaces(css, '<p class="t">x</p><script>e.style.textTransform="full-width"</script>');
+    expect(script).toContain('U+0400-045F');
+    const react = cutFontFaces(css, '<p class="t">x</p><script>jsx("ol",{style:{listStyleType:"lower-greek"}})</script>');
+    expect(react).toContain('U+1F00-1FFF');
+    expect(cutFontFaces(css, '<ol class="t" style="list-style-type:decimal"><li>x</li></ol>')).not.toContain('U+0400-045F');
+  });
+
+  it('reads a style by its value, never an object key, and finds setProperty values', () => {
+    const minified = cutFontFaces(css, '<ul class="t"><li>x</li></ul><script>s={listStyle:a="none",margin:0}</script>');
+    expect(minified).not.toContain('U+0400-045F');
+    expect(minified).not.toContain('U+1F00-1FFF');
+    const set = cutFontFaces(css, '<p class="t">x</p><script>el.style.setProperty("list-style-type", "georgian")</script>');
+    expect(set).toContain('U+0400-045F');
+    expect(cutFontFaces(css, '<ol class="t" style="list-style: inside georgian"><li>x</li></ol>')).toContain('U+0400-045F');
+  });
+
+  it('reads a style a custom property holds for a var()', () => {
+    expect(cutFontFaces(`${css}:root{--marker:georgian}ol.t{list-style-type:var(--marker)}`, '<ol class="t"><li>x</li></ol>')).toContain('U+0400-045F');
+    expect(cutFontFaces(`${css}@property --tt{syntax:'*';inherits:true;initial-value:full-width}.t{text-transform:var(--tt)}`, '<p class="t">x</p>')).toContain('U+0400-045F');
+    expect(cutFontFaces(`${css}:root{--weight:bold}`, '<p class="t">x</p>')).not.toContain('U+0400-045F');
+  });
+
+  it('reads a style through a chain of custom properties and in a var() fallback', () => {
+    expect(cutFontFaces(`${css}:root{--base:georgian;--marker:var(--base)}ol.t{list-style-type:var(--marker)}`, '<ol class="t"><li>x</li></ol>')).toContain('U+0400-045F');
+    expect(cutFontFaces(`${css}ol.t{list-style-type:var(--marker, georgian)}`, '<ol class="t"><li>x</li></ol>')).toContain('U+0400-045F');
+    expect(cutFontFaces(`${css}ol.t{list-style-type:var(--marker, decimal)}`, '<ol class="t"><li>x</li></ol>')).not.toContain('U+0400-045F');
+  });
+
+  it('reads no style from prose or a font-stack token, and every word of a quoted shorthand', () => {
+    expect(cutFontFaces(css, '<p class="t">x</p><script>s="Full-width alert bar for info, success, warning, and error messages."</script>')).not.toContain('U+0400-045F');
+    expect(cutFontFaces(css, '<p class="t">Cuisine: Thai food</p><script>v="Persian"</script>')).not.toContain('U+0400-045F');
+    expect(cutFontFaces(`${css}:root{--font-georgian:'Noto Sans Georgian', sans-serif}`, '<p class="t">x</p>')).not.toContain('U+0400-045F');
+    expect(cutFontFaces(css, '<ol class="t"><li>x</li></ol><script>jsx("ol",{style:{listStyle:"inside georgian"}})</script>')).toContain('U+0400-045F');
+    expect(cutFontFaces(css, '<ol class="t"><li>x</li></ol><script>el.style.setProperty("list-style","inside georgian")</script>')).toContain('U+0400-045F');
+  });
+
+  it('counts the other case of each character, for text-transform', () => {
+    expect(cutFontFaces(face('Inter', 'U+0370-03FF'), '<p style="font-family:Inter">µ</p>')).toContain('@font-face');
+    expect(cutFontFaces(face('Inter', 'U+0130-0130'), '<p style="font-family:Inter">i</p>')).toContain('@font-face');
+  });
+
+  it('names the families of the whole stylesheet when it cuts one part of it', () => {
+    const part = face('Mono', 'U+0000-00FF');
+    expect(cutFontFaces(part, 'x', `${part}\n.c { font-family: Mono; }`)).toContain('@font-face');
+    expect(cutFontFaces(part, 'x', `${part}\n.c { font-family: Other; }`)).not.toContain('@font-face');
+  });
+
+  it('does not take a longer name for the family', () => {
+    const out = cutFontFaces(face('Inter', 'U+0000-00FF'), '.x { pointer-events: none; } interactive');
+    expect(out).not.toContain('@font-face');
+  });
+
+  it('keeps a face whose range it cannot read', () => {
+    expect(cutFontFaces(face('Inter', 'bogus'), 'Inter x')).toContain('bogus');
+  });
+});
+
 describe('the embedded source', () => {
   it('round-trips any bytes, even text that would end a script', () => {
     const bytes = Buffer.from('const s = "</script><!--";\r\n// ünïcode ✓\u2028', 'utf8');
@@ -113,6 +260,16 @@ describe('the embedded source', () => {
       found: true,
       damaged: 'its embedded source is cut short: the file ends inside it',
     });
+  });
+});
+
+describe('the record of files a render could not carry', () => {
+  it('round-trips through the embedded source, and is left out when empty', () => {
+    const files = [{path: 'page.tsx', bytes: Buffer.from('export default () => null;\n')}];
+    const read = readSourceBlock(`<body>${sourceBlock('page.tsx', files, {notCarried: ['../shared/rows.ts', 'site.scss']})}</body>`);
+    expect(read).toMatchObject({found: true, source: {notCarried: ['../shared/rows.ts', 'site.scss']}});
+    const none = readSourceBlock(`<body>${sourceBlock('page.tsx', files, {notCarried: []})}</body>`);
+    expect(/** @type {any} */ (none).source).not.toHaveProperty('notCarried');
   });
 });
 
@@ -168,6 +325,13 @@ describe('the HTML reader', () => {
     const [svg, p] = div.children;
     expect(svg.children[0]).toEqual({tag: 'title', attrs: {}, children: []});
     expect(p.children[0].text).toBe('after');
+  });
+
+  it('reads a CDATA section in svg as its text, closed or not', () => {
+    const closed = /** @type {any} */ (parseHtml('<svg><text><![CDATA[Hello]]></text></svg>').children[0]);
+    expect(closed.children[0]).toEqual({tag: 'text', attrs: {}, children: [{text: 'Hello'}]});
+    const open = /** @type {any} */ (parseHtml('<svg><text><![CDATA[Hi').children[0]);
+    expect(open.children[0].children).toEqual([{text: 'Hi'}]);
   });
 
   it('tells Astryx markup from other HTML', () => {
@@ -234,12 +398,275 @@ export default function Page() {
 });
 
 describe('withCarriedPaths', () => {
-  it('rewrites an image path the script names, and leaves text the page shows as written', () => {
+  it('reads an image path the script names from the markup, and leaves text the page shows as written', () => {
     const rewrites = new Map([['./photo.png', 'data:image/png;base64,AAAA']]);
-    expect(
-      withCarriedPaths(`a({src:"./photo.png",children:"./photo.png"});b('./photo.png');c({children: \`./photo.png\`})`, rewrites),
-    ).toBe(
-      `a({src:"data:image/png;base64,AAAA",children:"./photo.png"});b('data:image/png;base64,AAAA');c({children: \`./photo.png\`})`,
+    const script = withCarriedPaths(`a({src:"./photo.png",children:"./photo.png"});b('./photo.png');c({children: \`./photo.png\`})`, rewrites, new Map([['./photo.png', 0]]));
+    expect(script).not.toContain('data:image/png');
+    expect(script.endsWith(`a({src:__astryxCarried[0],children:"./photo.png"});b(__astryxCarried[0]);c({children: \`./photo.png\`})`)).toBe(true);
+    expect(script).toContain(`'[${CARRY_ATTR}]'`);
+  });
+
+  it('writes the data itself where a read cannot go: an object key, a tagged template, a value the first paint does not carry, or a script that would not parse', () => {
+    const rewrites = new Map([['./photo.png', 'data:image/png;base64,AAAA']]);
+    const carried = new Map([['./photo.png', 0]]);
+    expect(withCarriedPaths('f("./photo.png")', rewrites, new Map())).toBe('f("data:image/png;base64,AAAA")');
+    expect(withCarriedPaths(`m={"./photo.png":1};f("./photo.png")`, rewrites, carried)).toMatch(
+      /m=\{"data:image\/png;base64,AAAA":1\};f\(__astryxCarried\[0\]\)$/,
     );
+    expect(withCarriedPaths('f=()=>tag`./photo.png`', rewrites, carried)).toMatch(/f=\(\)=>tag`data:image\/png;base64,AAAA`$/);
+    expect(withCarriedPaths('f=()=>{return"./photo.png"}', rewrites, carried)).toMatch(/f=\(\)=>\{return __astryxCarried\[0\]\}$/);
+    expect(withCarriedPaths('f("./photo.png"', rewrites, carried)).toBe('f("data:image/png;base64,AAAA"');
+  });
+});
+
+describe('withCarriedPaths numbering', () => {
+  it('reads each value by the number its first-paint mark gives it, even after an earlier value left the rewrites', () => {
+    // ./a.png was 0 when the markup was marked, then left (kept as written).
+    const rewrites = new Map([['./b.png', 'data:image/png;base64,BBBB']]);
+    const script = withCarriedPaths('f("./a.png");g("./b.png")', rewrites, new Map([['./b.png', 1]]));
+    expect(script.endsWith('f("./a.png");g(__astryxCarried[1])')).toBe(true);
+  });
+});
+
+describe('withUncarriedImages', () => {
+  it('writes in the data: URI of an image the embedded source does not carry', () => {
+    const kept = 'a'.repeat(64);
+    const left = 'b'.repeat(64);
+    const script = `x=c("${kept}","data:image/png;base64");y=c('${left}','data:image/png;base64')`;
+    expect(
+      withUncarriedImages(script, new Set([kept]), (sha, prefix) => (sha === left ? `${prefix},QUJD` : null)),
+    ).toBe(`x=c("${kept}","data:image/png;base64");y="data:image/png;base64,QUJD"`);
+  });
+
+  it('reads a script with a long run of name characters in one pass', () => {
+    const left = 'b'.repeat(64);
+    // A large string in the page (a minified data blob) is one long run of
+    // name characters; a reader that starts a match at each of them takes
+    // minutes on this.
+    const script = `s="${'a1'.repeat(200_000)}";y=c("${left}","data:image/png;base64")`;
+    const started = performance.now();
+    const out = withUncarriedImages(script, new Set(), () => 'data:image/png;base64,QUJD');
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(out.endsWith('y="data:image/png;base64,QUJD"')).toBe(true);
+  });
+});
+
+describe('a name that reads as configuration', () => {
+  it('is left out, and the name its warning offers is carried', () => {
+    for (const name of [
+      'chart.config.json',
+      'test.config.json',
+      'package.json',
+      'tsconfig.app.json',
+      'yarn-lock.json',
+      'vite.config.ts',
+      'test.config.ts',
+    ]) {
+      expect(embeddedPathProblem(`data/${name}`)?.toolConfig, name).toBe(true);
+      expect(embeddedPathProblem(`data/${carriedNameFor(`data/${name}`).name}`), name).toBeNull();
+    }
+  });
+
+  it('offers a rename for a *.config.json, and a file of its own for a tool\'s file', () => {
+    expect(carriedNameFor('chart.config.json')).toEqual({action: 'rename', name: 'chart-data.json'});
+    expect(carriedNameFor('data/a.b.config.json')).toEqual({action: 'rename', name: 'a-b-data.json'});
+    for (const name of ['package.json', 'tsconfig.json', 'package-lock.json', 'vite.config.ts']) {
+      expect(carriedNameFor(name).action, name).toBe('move');
+    }
+    expect(carriedNameFor('package.json').name).toBe('page-data.json');
+    expect(carriedNameFor('vite.config.ts').name).toBe('page-data.ts');
+  });
+
+  it('never offers a name a runner picks up: test.config.ts gets page-data.ts, not test-data.ts', () => {
+    expect(embeddedPathProblem('test-data.ts')).not.toBeNull();
+    expect(carriedNameFor('test.config.ts')).toEqual({action: 'move', name: 'page-data.ts'});
+  });
+
+  it('is not the reason a runner file or a dotfile is left out', () => {
+    expect(embeddedPathProblem('a.config.test.ts')?.toolConfig).toBeUndefined();
+    expect(embeddedPathProblem('.tool/x.config.json')?.toolConfig).toBeUndefined();
+  });
+});
+
+describe('oneColorModeOf: the modes a page\'s root theme draws in', () => {
+  const root = '<div data-astryx-theme="retro" class="x">Hi</div>';
+  const scoped = (/** @type {string} */ body) => `@scope ([data-astryx-theme="retro"]) to ([data-astryx-theme]) { :scope { ${body} } }`;
+  // A built light-only theme: plain page colors, and the light-dark() status
+  // roles theme build derives for any theme that sets a surface color.
+  const light = scoped('--color-background-body:#c0c0c0;--color-background-surface:#c0c0c0;--color-text-primary:#000;--color-on-info-muted:light-dark(#003F92,#093E87)');
+  const media = '[data-astryx-theme="retro"] [data-astryx-media="dark"]{color-scheme:dark;--color-text-primary:var(--color-on-dark)}';
+
+  it('takes the declared colorModes: one mode as it is, both modes as both', () => {
+    expect(oneColorModeOf(root, 'light', [scoped('--color-background-body:light-dark(#fff,#111)')])).toBe('light');
+    expect(oneColorModeOf(root, 'dark', [light])).toBe('dark');
+    expect(oneColorModeOf(root, 'both', [light])).toBeNull();
+  });
+
+  it('reads a theme with no colorModes as light only when it sets its page colors with no dark value', () => {
+    expect(oneColorModeOf(root, null, [light, media])).toBe('light');
+    expect(oneColorModeOf(root, null, [light, '.page{margin:0}'])).toBe('light');
+  });
+
+  it('reads a dark page with light text as dark only, and mixed or unreadable colors as both', () => {
+    expect(oneColorModeOf(root, null, [scoped('--color-background-body:#101314;--color-text-primary:#e8f1f6'), media])).toBe('dark');
+    expect(oneColorModeOf(root, null, [scoped('--color-background-body:rgb(16, 19, 20)')])).toBe('dark');
+    expect(oneColorModeOf(root, null, [scoped('--color-background-body:#c0c0c0;--color-text-primary:#eeeeee')])).toBeNull();
+    expect(oneColorModeOf(root, null, [scoped('--color-background-body:var(--brand-page)')])).toBeNull();
+    // Any color the shared reader fixes counts: named, hsl(), oklch().
+    expect(oneColorModeOf(root, null, [scoped('--color-background-body:white;--color-text-primary:black')])).toBe('light');
+    expect(oneColorModeOf(root, null, [scoped('--color-background-body:hsl(0 0% 75%);--color-text-primary:oklch(0.2 0 0)')])).toBe('light');
+    expect(oneColorModeOf(root, null, [scoped('--color-background-body:oklch(0.18 0.01 250)')])).toBe('dark');
+    // Any page color set for one scheme only keeps both modes.
+    const gothic = scoped('--color-background-body:#101314;--color-text-primary:#e8f1f6');
+    const retroLightRoot = scoped('--color-background-body:#c0c0c0;--color-text-primary:#000');
+    expect(oneColorModeOf(root, null, [gothic, '[data-astryx-theme="retro"][data-theme="light"]{--color-background-body:#fff}'])).toBeNull();
+    expect(oneColorModeOf(root, null, [gothic, '@media (prefers-color-scheme: light){[data-astryx-theme="retro"]{--color-text-primary:#111}}'])).toBeNull();
+    expect(oneColorModeOf(root, null, [gothic, '[data-astryx-theme="retro"][data-theme="dark"]{--color-background-surface:#202326}'])).toBeNull();
+    // A negated query, a query nested in the root rule, and a selector list.
+    expect(oneColorModeOf(root, null, [gothic, '@media not all and (prefers-color-scheme: dark){[data-astryx-theme="retro"]{--color-background-body:#fff}}'])).toBeNull();
+    expect(oneColorModeOf(root, null, ['[data-astryx-theme="retro"]{--color-background-body:#c0c0c0;@media (prefers-color-scheme: dark){--color-background-body:#111}}'])).toBeNull();
+    expect(oneColorModeOf(root, null, [retroLightRoot, '@media (prefers-color-scheme: dark){[data-astryx-theme="retro"], [data-astryx-theme="retro"] .card{--color-background-body:#111}}'])).toBeNull();
+    // "Dark unless forced light": the media query decides, not the :not().
+    const darkUnlessLight = '@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) [data-astryx-theme="retro"]{--color-background-body:#111}}';
+    expect(oneColorModeOf(root, null, [scoped('--color-background-body:#c0c0c0;--color-text-primary:#000'), darkUnlessLight])).toBeNull();
+    const lightUnlessDark = '@media (prefers-color-scheme: light){:root:not([data-theme="dark"]) [data-astryx-theme="retro"]{--color-background-body:#fff}}';
+    expect(oneColorModeOf(root, null, [gothic, lightUnlessDark])).toBeNull();
+    // Attribute selectors read the same however they are quoted.
+    const retroLight1 = scoped('--color-background-body:#c0c0c0;--color-text-primary:#000');
+    expect(oneColorModeOf(root, null, [retroLight1, "[data-astryx-theme='retro'][data-theme='dark']{--color-background-body:#111}"])).toBeNull();
+    expect(oneColorModeOf(root, null, [retroLight1, '[data-astryx-theme=retro][data-theme=dark]{--color-background-body:#111}'])).toBeNull();
+    expect(oneColorModeOf(root, null, ["[data-astryx-theme='retro']{--color-background-body:#c0c0c0;--color-text-primary:#000}"])).toBe('light');
+    // A component's dark block from theme build keeps out of media surfaces; it still counts.
+    expect(oneColorModeOf(root, null, [retroLight1, '@scope ([data-astryx-theme="retro"]) to ([data-astryx-theme]) { :scope[data-astryx-scheme="dark"] .astryx-card:where(:not(:scope [data-astryx-media] *)) { --color-text-primary:#eee } }'])).toBeNull();
+    // A media surface's own colors say nothing of the theme's.
+    expect(oneColorModeOf(root, null, [retroLight1, '[data-astryx-theme="retro"] [data-astryx-media="dark"]{--color-text-primary:#eee}'])).toBe('light');
+    // A theme name keeps its case.
+    expect(oneColorModeOf('<div data-astryx-theme="Retro">Hi</div>', null, ['@scope ([data-astryx-theme="Retro"]) to ([data-astryx-theme]) { :scope { --color-background-body:#c0c0c0;--color-text-primary:#000 } }'])).toBe('light');
+    // A flagged attribute or a `.dark` class is a mode condition too.
+    expect(oneColorModeOf(root, null, [retroLight1, '[data-astryx-theme="retro"][data-theme="DARK" i]{--color-background-body:#111}'])).toBeNull();
+    expect(oneColorModeOf(root, null, [retroLight1, '.dark [data-astryx-theme="retro"]{--color-background-body:#111}'])).toBeNull();
+    // An @scope's `to (...)` limit does not name the root.
+    expect(oneColorModeOf(root, null, ['@scope ([data-astryx-theme="night"]) to ([data-astryx-theme="retro"]) { :scope { --color-background-body:#101314 } }'])).toBeNull();
+    // A part's or another theme's page color for one mode in a sheet that
+    // names the theme keeps both modes too: the export never guesses one mode
+    // past such a rule. A sheet that never names the theme says nothing.
+    expect(oneColorModeOf(root, null, [retroLightRoot, '[data-astryx-theme="night"][data-theme="dark"]{--color-background-body:#111}'])).toBe('light');
+    expect(oneColorModeOf(root, null, [`${retroLightRoot}[data-astryx-theme="night"][data-theme="dark"]{--color-background-body:#111}`])).toBeNull();
+    expect(oneColorModeOf(root, null, [retroLightRoot, '@media (prefers-color-scheme: dark){[data-astryx-theme="retro"] .astryx-card{--color-text-primary:#eee}}'])).toBeNull();
+    // A nested rule is not the root.
+    expect(oneColorModeOf(root, null, ['[data-astryx-theme="retro"]{--color-background-body:#c0c0c0;& .x{--color-text-primary:#fff}}'])).toBe('light');
+    // A translucent page color shows what is behind it.
+    expect(oneColorModeOf(root, null, [scoped('--color-background-surface:rgba(0,0,0,.04)')])).toBeNull();
+    // Text is light or dark by its own color, whatever its alpha.
+    expect(oneColorModeOf(root, null, [scoped('--color-background-body:#fff;--color-text-primary:rgba(0, 0, 0, 0.87)')])).toBe('light');
+    // `:scope` counts only in an @scope that starts at the theme itself.
+    expect(oneColorModeOf(root, null, [scoped('--font-family-body:Georgia,serif'), '@scope ([data-astryx-theme="retro"] .promo) { :scope { --color-text-primary:#fff } }'])).toBeNull();
+    // Page colors set for one scheme only are not the theme's own.
+    expect(
+      oneColorModeOf(root, null, [
+        `@media (prefers-color-scheme: light) { ${scoped('--color-background-body:#c0c0c0;--color-text-primary:#000')} }`,
+      ]),
+    ).toBeNull();
+    // Another theme's root in the same sheet says nothing of this one's.
+    expect(
+      oneColorModeOf(root, null, [
+        `${scoped('--font-family-body:Georgia,serif')}@scope ([data-astryx-theme="night"]) to ([data-astryx-theme]) { :scope { --color-background-body:#101314 } }`,
+      ]),
+    ).toBeNull();
+    // A part's own text color says nothing of the page's.
+    expect(oneColorModeOf(root, null, [scoped('--color-background-body:#c0c0c0'), '@scope ([data-astryx-theme="retro"]) to ([data-astryx-theme]) { .astryx-tag { --color-text-primary: #fff } }'])).toBe('light');
+  });
+
+  it('keeps both modes for a theme that sets no page color, a dark page value, or no stylesheet of its own', () => {
+    expect(oneColorModeOf(root, null, [scoped('--font-family-body:Georgia,serif'), media])).toBeNull();
+    expect(oneColorModeOf(root, null, [scoped('--color-accent:#c2185b')])).toBeNull();
+    expect(oneColorModeOf(root, null, [scoped('--color-background-body:light-dark(#fff,#111)')])).toBeNull();
+    for (const dark of [
+      '@media (prefers-color-scheme: dark){[data-astryx-theme="retro"]{--color-background-body:#111}}',
+      '[data-astryx-theme="retro"][data-theme="dark"]{--color-text-primary:#eee}',
+      'html[data-astryx-scheme="dark"] [data-astryx-theme="retro"]{--color-background-surface:#222}',
+    ])
+      expect(oneColorModeOf(root, null, [light, dark])).toBeNull();
+    expect(oneColorModeOf('<main>Hi</main>', null, [light])).toBeNull();
+    expect(oneColorModeOf(root, null, ['.page{--color-background-body:#fff}'])).toBeNull();
+  });
+});
+
+describe('scanHtml', () => {
+  /** @param {string} html */
+  const pieces = html => [...scanHtml(html)].map(t => `${t.kind}:${html.slice(t.start, t.end)}`);
+
+  it('reads the content of iframe, xmp, noembed and noframes as raw text, and everything after plaintext', () => {
+    for (const tag of ['iframe', 'xmp', 'noembed', 'noframes']) {
+      expect(pieces(`<${tag}><img src="a.png"></${tag}><b>`)).toEqual([`start:<${tag}>`, 'raw:<img src="a.png">', `end:</${tag}>`, 'start:<b>']);
+    }
+    expect(pieces('<plaintext><img src="a.png"></plaintext><b>')).toEqual(['start:<plaintext>', 'raw:<img src="a.png"></plaintext><b>']);
+  });
+
+  it('reads a bogus comment to the next >', () => {
+    expect(pieces('<?php x ?><b>')).toEqual(['comment:<?php x ?>', 'start:<b>']);
+    expect(pieces('<!x <img src="a.png"><b>')).toEqual(['comment:<!x <img src="a.png">', 'start:<b>']);
+    expect(pieces('</ <img src="a.png"><b>')).toEqual(['comment:</ <img src="a.png">', 'start:<b>']);
+    expect(pieces('a < b')).toEqual(['text:a < b']);
+  });
+
+  it('ends raw text only at its own end tag, and a script only where the script data states end it', () => {
+    expect(pieces('<textarea>a</textareas><img src="a.png"></textarea><b>')).toEqual(['start:<textarea>', 'raw:a</textareas><img src="a.png">', 'end:</textarea>', 'start:<b>']);
+    expect(pieces('<title>a</TITLE >b')).toEqual(['start:<title>', 'raw:a', 'end:</TITLE >', 'text:b']);
+    expect(pieces('<script>x<!--<script>y</script>z</script><b>')).toEqual(['start:<script>', 'raw:x<!--<script>y</script>z', 'end:</script>', 'start:<b>']);
+    expect(pieces('<script>a<!-- b --></script><b>')).toEqual(['start:<script>', 'raw:a<!-- b -->', 'end:</script>', 'start:<b>']);
+    expect(pieces('<script>a<!--<scripts></script><b>')).toEqual(['start:<script>', 'raw:a<!--<scripts>', 'end:</script>', 'start:<b>']);
+  });
+
+  it('reads a CDATA section inside svg or math to ]]>, and outside them as a bogus comment', () => {
+    expect(pieces('<svg><![CDATA[ a > <img src="a.png"> ]]></svg><b>')).toEqual(['start:<svg>', 'cdata:<![CDATA[ a > <img src="a.png"> ]]>', 'end:</svg>', 'start:<b>']);
+    expect(pieces('<![CDATA[ a > b ]]>')).toEqual(['comment:<![CDATA[ a >', 'text: b ]]>']);
+  });
+
+  it('reads a tag name up to white space, / or >, and closes only an open foreign root of its own name', () => {
+    expect(pieces(`<x.y title='<img src="a.png">'>b`)).toEqual([`start:<x.y title='<img src="a.png">'>`, 'text:b']);
+    expect(pieces('<math></svg><![CDATA[ a > <img src="a.png"> ]]></math>')).toEqual(['start:<math>', 'end:</svg>', 'cdata:<![CDATA[ a > <img src="a.png"> ]]>', 'end:</math>']);
+  });
+
+  it('honours a self-closing tag only in svg or math', () => {
+    expect(pieces('<textarea/><img src="a.png"></textarea><b>')).toEqual(['start:<textarea/>', 'raw:<img src="a.png">', 'end:</textarea>', 'start:<b>']);
+    const closed = [...scanHtml('<div/><svg><path/></svg>')].filter(t => t.kind === 'start').map(t => /** @type {any} */ (t).selfClosing);
+    expect(closed).toEqual([false, false, true]);
+  });
+
+  it('reads HTML again in an svg or MathML integration point and after a breakout tag', () => {
+    expect(pieces('<svg><foreignObject><textarea/><img src="a.png"></textarea></foreignObject></svg>')).toContain('raw:<img src="a.png">');
+    expect(pieces('<math><mi><iframe/><img src="a.png"></iframe></mi></math>')).toContain('raw:<img src="a.png">');
+    expect(pieces('<svg><p><title/><img src="a.png"></title></svg>')).toContain('raw:<img src="a.png">');
+    // In svg itself, /> closes the tag and svg's <title> holds markup.
+    expect(pieces('<svg><path/><title>t</title></svg>')).toEqual(['start:<svg>', 'start:<path/>', 'start:<title>', 'text:t', 'end:</title>', 'end:</svg>']);
+  });
+
+  it('closes svg and MathML elements as the tree builder does (HTML 13.2.6)', () => {
+    const raw = (/** @type {string} */ html) => pieces(html).includes('raw:<img src="a.png">');
+    const IMG = '<textarea/><img src="a.png"></textarea>';
+    // Foreign "any other end tag": walk up to the node of that name.
+    expect(raw(`<svg><desc></svg></desc>${IMG}`)).toBe(true);
+    expect(raw(`<math><mi><svg></math>${IMG}`)).toBe(true);
+    // ...and at the first HTML element, the HTML mode reads it: a special
+    // element there stops it, so the integration point stays open.
+    expect(raw(`<svg><foreignObject><div></foreignObject>${IMG}</div></foreignObject></svg>`)).toBe(true);
+    expect(raw(`<svg><foreignObject><div></svg>${IMG}</div></foreignObject></svg>`)).toBe(true);
+    // An annotation-xml with an HTML encoding is an HTML integration point;
+    // one without is not, so /> closes and no raw text opens there.
+    expect(raw(`<math><annotation-xml encoding="text/html">${IMG}</annotation-xml></math>`)).toBe(true);
+    expect(raw(`<math><annotation-xml>${IMG}</annotation-xml></math>`)).toBe(false);
+    // In a MathML text integration point, mglyph and malignmark stay MathML.
+    expect(pieces('<math><mi><mglyph/>x</mi></math>')).toContain('start:<mglyph/>');
+    // The dispatcher gives <svg> in annotation-xml to HTML: an svg root.
+    expect(pieces('<math><annotation-xml><svg><path/></svg></annotation-xml></math>')).toContain('start:<path/>');
+    // CDATA while the current node is foreign, an integration point too.
+    expect(pieces('<svg><desc><![CDATA[ a > b ]]></desc></svg>')).toContain('cdata:<![CDATA[ a > b ]]>');
+  });
+
+  it('says where each attribute is', () => {
+    const html = `<span data-tip='<img src="a.png">' id=b>`;
+    const [tag] = /** @type {any[]} */ ([...scanHtml(html)]);
+    expect(tag.attrs.map((/** @type {[string, string, number, number]} */ [, , from, to]) => html.slice(from, to))).toEqual([`data-tip='<img src="a.png">'`, 'id=b']);
   });
 });
