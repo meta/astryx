@@ -84,10 +84,11 @@ before the replacement tag is created. A published version is never reused.
 6. In a separate owner PR, declare the next plan across the fixed-group versions,
    exact internal pins, and lockfile. The released version's patch successor is the
    default. A minor successor is used only when the owner explicitly names it.
-   `next-plan-version` requires the immutable release ref. For an owner recut it
-   reads the stable packages' live npm dist-tags and refuses the successor until at
-   least one `latest` tag records the released version. Tag deletion or replacement
-   alone cannot admit the plan.
+   `next-plan-version` requires the immutable release ref. For every tagged
+   release, it reads the stable packages' live npm version documents and dist-tags
+   and refuses the successor until at least one package records the released
+   version. Tag deletion or replacement alone cannot admit the plan, and an
+   unreadable registry fails closed.
 
 After a cut, main's declaration remains its future plan and may change independently
 of the frozen release branch. Required pull-request lint does not compare it with the

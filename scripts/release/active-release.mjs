@@ -1483,15 +1483,10 @@ function nextPlannedVersion(releaseVersion, ownerVersion = null) {
   return ownerVersion === patch || ownerVersion === minor ? ownerVersion : null;
 }
 
-/**
- * FR51 — an owner-recut version stays reusable until npm records its first
- * stable publication effect. Tag replacement alone does not admit the plan.
- */
-function successorPlanReadiness({ownerRecut, stablePublished}) {
-  if (ownerRecut === null || stablePublished) return [];
-  return [
-    `successor plan waits until v${ownerRecut.version} has a publication effect`,
-  ];
+/** FR51 — no tagged release can admit its successor before npm publication. */
+function successorPlanReadiness({version, stablePublished}) {
+  if (stablePublished) return [];
+  return [`successor plan waits until v${version} has a publication effect`];
 }
 
 function validateSuccessorPlanAtRef(root, releaseRef, releaseVersion) {
@@ -1520,7 +1515,8 @@ async function stablePublicationExists(
   version,
   {registry, fetchImpl = fetch} = {},
 ) {
-  const {DEFAULT_REGISTRY, fetchDistTags} = await import('../npm/registry.mjs');
+  const {DEFAULT_REGISTRY, fetchDistTags, fetchVersionDocument} =
+    await import('../npm/registry.mjs');
   const manifests = packageManifestsByName(file => {
     const absolute = path.join(root, file);
     return fs.existsSync(absolute) ? readJson(absolute) : null;
@@ -1534,10 +1530,31 @@ async function stablePublicationExists(
 
   const failures = [];
   for (const name of names) {
+    const npmRegistry = registry ?? DEFAULT_REGISTRY;
+    try {
+      const response = await fetchVersionDocument({
+        name,
+        version,
+        registry: npmRegistry,
+        fetchImpl,
+      });
+      if (response.status === 200) {
+        const document = await response.json();
+        if (document.version === version) return true;
+        failures.push(
+          `${name}@${version} reported ${document.version ?? 'no version'}`,
+        );
+      } else if (response.status !== 404) {
+        failures.push(`${name}@${version} returned HTTP ${response.status}`);
+      }
+    } catch (error) {
+      failures.push(`${name}@${version} failed: ${error.message}`);
+    }
+
     try {
       const response = await fetchDistTags({
         name,
-        registry: registry ?? DEFAULT_REGISTRY,
+        registry: npmRegistry,
         fetchImpl,
       });
       if (response.status !== 200) {
@@ -1926,6 +1943,15 @@ function versionTagCommit(root, version) {
   }
 }
 
+function validateOwnerRecutTag(root, ownerRecut) {
+  if (ownerRecut === null) return;
+  const liveTagSha = versionTagCommit(root, ownerRecut.version);
+  if (liveTagSha !== ownerRecut.tagSha)
+    throw new Error(
+      'archived owner-recut tag no longer matches its bound commit',
+    );
+}
+
 function versionTagExists(root, version) {
   return versionTagCommit(root, version) !== null;
 }
@@ -2032,6 +2058,7 @@ function writeAuthority(root, values, refresh) {
     const identityErrors = validateIdentity(existingMarker, existingPlan);
     if (identityErrors.length) throw new Error(identityErrors.join('\n'));
     ownerRecut = existingPlan.ownerRecut ?? null;
+    validateOwnerRecutTag(root, ownerRecut);
     for (const [key, value] of [
       ['version', version],
       ['branch', branch],
@@ -2074,6 +2101,7 @@ async function main() {
       const identityErrors = validateIdentity(marker, plan);
       if (identityErrors.length) throw new Error(identityErrors.join('\n'));
       ownerRecut = plan.ownerRecut ?? null;
+      validateOwnerRecutTag(root, ownerRecut);
     }
     const {admitRelease} = await import('./release-inputs.mjs');
     const admission = admitRelease(root, {
@@ -2190,19 +2218,16 @@ async function main() {
   if (command === 'next-plan-version') {
     const releaseVersion = required(values, 'released-version');
     const releaseRef = required(values, 'release-ref');
-    const ownerRecut = validateSuccessorPlanAtRef(
+    validateSuccessorPlanAtRef(root, releaseRef, releaseVersion);
+    const stablePublished = await stablePublicationExists(
       root,
-      releaseRef,
       releaseVersion,
+      {
+        registry: values.registry,
+      },
     );
-    const stablePublished =
-      ownerRecut === null
-        ? true
-        : await stablePublicationExists(root, releaseVersion, {
-            registry: values.registry,
-          });
     const readinessErrors = successorPlanReadiness({
-      ownerRecut,
+      version: releaseVersion,
       stablePublished,
     });
     if (readinessErrors.length) throw new Error(readinessErrors.join('\n'));
@@ -2327,6 +2352,7 @@ export {
   validateCodemodPromotionApplicabilityAtRef,
   validateCodemodPromotionApplicabilityMove,
   validateIdentity,
+  validateOwnerRecutTag,
   validateRefMarker,
   validateReleaseDiff,
   validateReleaseTestRepair,

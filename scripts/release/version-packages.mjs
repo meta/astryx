@@ -27,7 +27,11 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
-import {isStableReleasePackage, validateIdentity} from './active-release.mjs';
+import {
+  isStableReleasePackage,
+  validateIdentity,
+  validateOwnerRecutTag,
+} from './active-release.mjs';
 import {admitRelease} from './release-inputs.mjs';
 
 const ROOT = path.resolve(
@@ -172,6 +176,7 @@ async function main(argv) {
     );
   }
 
+  validateOwnerRecutTag(root, plan.ownerRecut ?? null);
   const admission = admitRelease(root, {
     version: marker.version,
     archivedTag: plan.ownerRecut?.tagName ?? null,

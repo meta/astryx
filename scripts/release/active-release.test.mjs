@@ -402,6 +402,48 @@ describe('one branch per release lifecycle', () => {
     expect(marker.ownerRecut).toEqual(plan.ownerRecut);
   });
 
+  it('refuses refresh after the archived tag moves', () => {
+    const {root, cutSha} = cutFixture();
+    git(root, 'tag', 'v0.6.4');
+    git(root, 'tag', 'v0.6.5');
+    writeAuthority(
+      root,
+      {
+        ...identity(cutSha),
+        'owner-recut-receipt': ownerRecutReceipt(root),
+      },
+      false,
+    );
+    const {movedTagTarget} = importCommits(root, [
+      {
+        ref: 'refs/heads/main',
+        parent: 'refs/heads/main',
+        name: 'movedTagTarget',
+        message: 'move archived tag',
+      },
+    ]);
+    git(root, 'tag', '-f', 'v0.6.5', movedTagTarget);
+
+    expect(() =>
+      execFileSync(
+        process.execPath,
+        [
+          ACTIVE_RELEASE,
+          'refresh',
+          '--root',
+          root,
+          '--version',
+          '0.6.5',
+          '--branch',
+          BRANCH,
+          '--cut-sha',
+          cutSha,
+        ],
+        {encoding: 'utf8'},
+      ),
+    ).toThrow(/archived owner-recut tag no longer matches its bound commit/);
+  });
+
   it('refuses the successor command until npm stable publication', async () => {
     const {root, cutSha} = cutFixture();
     git(root, 'tag', 'v0.6.5');
@@ -424,9 +466,14 @@ describe('one branch per release lifecycle', () => {
       },
     ]);
     let latest = '0.6.4';
-    const server = http.createServer((_request, response) => {
-      response.writeHead(200, {'content-type': 'application/json'});
-      response.end(JSON.stringify({latest}));
+    const server = http.createServer((request, response) => {
+      if (request.url?.endsWith('/dist-tags')) {
+        response.writeHead(200, {'content-type': 'application/json'});
+        response.end(JSON.stringify({latest}));
+        return;
+      }
+      response.writeHead(404, {'content-type': 'application/json'});
+      response.end('{}');
     });
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     const address = server.address();
@@ -452,6 +499,73 @@ describe('one branch per release lifecycle', () => {
         /successor plan waits until v0\.6\.5 has a publication effect/,
       );
       latest = '0.6.5';
+      const {stdout} = await execFileAsync(process.execPath, args);
+      expect(stdout.trim()).toBe('0.6.6');
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+  });
+
+  it('holds an ordinary tagged release through npm absence or unreadability', async () => {
+    const {root, cutSha} = cutFixture();
+    git(root, 'tag', 'v0.6.4');
+    writeAuthority(root, identity(cutSha), false);
+    const {releaseHead} = importCommits(root, [
+      {
+        ref: `refs/heads/${BRANCH}`,
+        parent: 'refs/heads/main',
+        name: 'releaseHead',
+        message: 'ordinary release authority',
+        snapshot: true,
+        files: workingTreeFiles(root),
+      },
+    ]);
+    git(root, 'tag', 'v0.6.5', releaseHead);
+
+    let registryState = 'absent';
+    const server = http.createServer((request, response) => {
+      if (registryState === 'unreadable') {
+        response.writeHead(503, {'content-type': 'application/json'});
+        response.end('{}');
+        return;
+      }
+      if (request.url?.endsWith('/dist-tags')) {
+        response.writeHead(200, {'content-type': 'application/json'});
+        response.end(JSON.stringify({latest: '0.6.4'}));
+        return;
+      }
+      if (registryState === 'published') {
+        response.writeHead(200, {'content-type': 'application/json'});
+        response.end(JSON.stringify({version: '0.6.5'}));
+        return;
+      }
+      response.writeHead(404, {'content-type': 'application/json'});
+      response.end('{}');
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    const args = [
+      ACTIVE_RELEASE,
+      'next-plan-version',
+      '--root',
+      root,
+      '--released-version',
+      '0.6.5',
+      '--release-ref',
+      `refs/heads/${BRANCH}`,
+      '--registry',
+      `http://127.0.0.1:${address.port}`,
+    ];
+
+    try {
+      await expect(execFileAsync(process.execPath, args)).rejects.toThrow(
+        /successor plan waits until v0\.6\.5 has a publication effect/,
+      );
+      registryState = 'unreadable';
+      await expect(execFileAsync(process.execPath, args)).rejects.toThrow(
+        /successor plan cannot verify npm stable publication/,
+      );
+      registryState = 'published';
       const {stdout} = await execFileAsync(process.execPath, args);
       expect(stdout.trim()).toBe('0.6.6');
     } finally {
@@ -1929,21 +2043,12 @@ describe('published release merge-back (FR50)', () => {
     expect(nextPlannedVersion('0.7.0-canary.1')).toBeNull();
   });
 
-  it('holds the successor plan until an owner recut has a publication effect', () => {
-    const ownerRecut = {
-      version: '0.7.17',
-      tagName: 'v0.7.17',
-      tagSha: CUT,
-      receiptSha256: 'a'.repeat(64),
-    };
+  it('holds every successor plan until its release has a publication effect', () => {
     expect(
-      successorPlanReadiness({ownerRecut, stablePublished: false}),
+      successorPlanReadiness({version: '0.7.17', stablePublished: false}),
     ).toEqual(['successor plan waits until v0.7.17 has a publication effect']);
-    expect(successorPlanReadiness({ownerRecut, stablePublished: true})).toEqual(
-      [],
-    );
     expect(
-      successorPlanReadiness({ownerRecut: null, stablePublished: false}),
+      successorPlanReadiness({version: '0.7.17', stablePublished: true}),
     ).toEqual([]);
   });
 });
