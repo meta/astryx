@@ -27,7 +27,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Give an overlay action a label that names what it does, such as "Quick view". With showOn hover or focus, Tab reaches the action while the overlay is hidden, and focus reveals the overlay.',
+          'Give an overlay action a label that names what it does, such as "Quick view". With showOn hover or focus on a device with a mouse or trackpad, Tab reaches the action while the overlay is hidden, and focus reveals the overlay.',
       },
       {
         guidance: false,
@@ -207,7 +207,7 @@ export const docsDense = {
     bestPractices: [
       {guidance: true, description: 'Use for short contextual actions/labels tied to the underlying surface.'},
       {guidance: true, description: 'Keep content compact and legible over the scrim.'},
-      {guidance: true, description: 'Label overlay actions by what they do; Tab reaches them while hidden, focus reveals.'},
+      {guidance: true, description: 'Label overlay actions by what they do; with a mouse or trackpad, Tab reaches them while hidden, focus reveals.'},
       {guidance: false, description: 'Do not use for floating anchored surfaces; use Popover, Tooltip, or Dialog.'},
       {guidance: false, description: 'Do not put info needed to choose the item (title, price) only in a hover/focus overlay; touch shows hover after a tap, never focus.'},
     ],

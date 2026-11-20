@@ -7,6 +7,7 @@ import {Overlay, useOverlay} from '@astryxdesign/core/Overlay';
 import {AspectRatio} from '@astryxdesign/core/AspectRatio';
 import {Card} from '@astryxdesign/core/Card';
 import {Button} from '@astryxdesign/core/Button';
+import {Link} from '@astryxdesign/core/Link';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {VStack, Layout, LayoutContent} from '@astryxdesign/core/Layout';
 import {Spinner} from '@astryxdesign/core/Spinner';
@@ -363,7 +364,7 @@ const REVEAL_MODES = [
 /**
  * Each reveal mode over media that has no focusable element of its own, with
  * an action in the overlay. Tab reaches each action, and focus reveals its
- * overlay.
+ * overlay. The last focus overlay holds a Link with no href.
  */
 export const RevealModes: Story = {
   render: () => (
@@ -387,6 +388,19 @@ export const RevealModes: Story = {
             </AspectRatio>
           </Overlay>
         ))}
+        {/* The Link has no href, so it sets its own pointer-events. */}
+        <Overlay
+          showOn="focus"
+          align="center"
+          content={<Link onClick={() => {}}>Focus link action</Link>}>
+          <AspectRatio ratio={16 / 9}>
+            <img
+              src={SAMPLE_IMAGE}
+              alt="Focus link media"
+              {...stylex.props(styles.image)}
+            />
+          </AspectRatio>
+        </Overlay>
       </Grid>
     </div>
   ),

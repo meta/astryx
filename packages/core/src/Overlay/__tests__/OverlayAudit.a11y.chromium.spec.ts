@@ -331,7 +331,7 @@ for (const mode of ['light', 'dark'] as const) {
     reducedMotion: 'reduce',
     run: async (page, check, frame) => {
       const rest = await overlays(page);
-      check(rest.length === 4, `${rest.length} overlays`);
+      check(rest.length === 5, `${rest.length} overlays`);
       for (const o of rest.slice(0, 3)) {
         check(o.opacity === '0', `${o.name} rest opacity ${o.opacity}`);
         check(
@@ -343,6 +343,14 @@ for (const mode of ['light', 'dark'] as const) {
         shown(rest[3]),
         `always ${rest[3]?.opacity} ${rest[3]?.visibility}`,
       );
+      check(
+        rest[4]?.opacity === '0',
+        `focus link rest opacity ${rest[4]?.opacity}`,
+      );
+      check(
+        rest[4]?.action?.hitIsAction === false,
+        'the hidden focus link takes a click',
+      );
       const violations = await axe(page);
       check(violations.length === 0, `axe: ${violations.join(' | ')}`);
       await frame('rest', {overlays: rest, violations});
@@ -353,6 +361,7 @@ for (const mode of ['light', 'dark'] as const) {
         'Focus action',
         'Hover strip action',
         'Always action',
+        'Focus link action',
       ];
       for (const label of expected) {
         await page.keyboard.press('Tab');

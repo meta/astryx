@@ -94,7 +94,7 @@ export const docs = {
   ],
   usage: {
     description:
-      "Adds overlay behavior to a container you already render, such as a Card or a custom media frame, without the wrapper Overlay adds. Spread containerRef and containerProps on the container, then render element (or renderOverlay(children)) once inside it. The scrim is absolutely positioned, so it covers the nearest positioned ancestor: the container itself, or a positioned section inside it such as an image area. Visibility is CSS-driven from the container's :hover and :focus-within, so with showOn 'hover' a keyboard user reveals the content by moving focus into the container. Content that a hover or focus reveal hides stays in the tab order, so Tab reaches an action in it and focus reveals the scrim. A revealed scrim takes pointer input over the area it covers, so keep any other control in the container outside the scrim, or use a top or bottom strip and keep the control in the part the strip leaves uncovered.",
+      "Adds overlay behavior to a container you already render, such as a Card or a custom media frame, without the wrapper Overlay adds. Spread containerRef and containerProps on the container, then render element (or renderOverlay(children)) once inside it. The scrim is absolutely positioned, so it covers the nearest positioned ancestor: the container itself, or a positioned section inside it such as an image area. Visibility is CSS-driven from the container's :hover and :focus-within, so with showOn 'hover' a keyboard user reveals the content by moving focus into the container. On a device with a mouse or trackpad, content that a hover or focus reveal hides stays in the tab order, so Tab reaches an action in it and focus reveals the scrim. On a touch-primary device a hover overlay stays inert until a tap. A revealed scrim takes pointer input over the area it covers, so keep any other control in the container outside the scrim, or use a top or bottom strip and keep the control in the part the strip leaves uncovered.",
     bestPractices: [
       {
         guidance: true,
@@ -104,7 +104,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Give an overlay action a label that names what it does. Tab reaches it while the overlay is hidden, and focus reveals the overlay.',
+          'Give an overlay action a label that names what it does. With a mouse or trackpad, Tab reaches it while the overlay is hidden, and focus reveals the overlay.',
       },
       {
         guidance: true,
@@ -127,7 +127,7 @@ export const docs = {
 /** @type {import('@astryxdesign/cli/authoring').HookTranslationDoc} */
 export const docsDense = {
   description:
-    "Overlay behavior on a container you already render (Card, media frame) w/o Overlay's wrapper. Spread containerRef + containerProps on it, render element / renderOverlay(children) once inside. CSS-driven via container :hover/:focus-within; hover mode also reveals on keyboard focus. Hidden content stays tabbable; focus reveals it. Keep other controls outside the area a revealed scrim covers (the scrim takes pointer input).",
+    "Overlay behavior on a container you already render (Card, media frame) w/o Overlay's wrapper. Spread containerRef + containerProps on it, render element / renderOverlay(children) once inside. CSS-driven via container :hover/:focus-within; hover mode also reveals on keyboard focus. With a mouse or trackpad, hidden content stays tabbable; focus reveals it. Keep other controls outside the area a revealed scrim covers (the scrim takes pointer input).",
   paramDescriptions: {
     options: 'overlay config; all fields optional.',
     'options.content':
@@ -150,7 +150,7 @@ export const docsDense = {
   },
   usage: {
     description:
-      'Overlay behavior on an existing container: spread containerRef + containerProps, render element once inside. Scrim covers nearest positioned ancestor. CSS :hover/:focus-within; hover mode reveals on keyboard focus too; hidden content stays tabbable.',
+      'Overlay behavior on an existing container: spread containerRef + containerProps, render element once inside. Scrim covers nearest positioned ancestor. CSS :hover/:focus-within; hover mode reveals on keyboard focus too; with a mouse or trackpad, hidden content stays tabbable.',
     bestPractices: [
       {
         guidance: true,
@@ -160,7 +160,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Label overlay actions by what they do; Tab reaches them while hidden, focus reveals.',
+          'Label overlay actions by what they do; with a mouse or trackpad, Tab reaches them while hidden, focus reveals.',
       },
       {
         guidance: true,

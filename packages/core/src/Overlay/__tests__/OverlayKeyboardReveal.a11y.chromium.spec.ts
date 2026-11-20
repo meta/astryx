@@ -73,22 +73,25 @@ test('Tab reaches the action of every reveal mode in source order', async ({
   page,
 }) => {
   await open(page, 'reveal-modes');
-  // A focus overlay at rest takes no click: hover never reveals it.
-  const focusAction = page.getByRole('button', {name: 'Focus action'});
-  const box = await focusAction.boundingBox();
-  expect(box).not.toBeNull();
-  if (box != null) {
-    const hit = await page.evaluate(
-      ({x, y}) => document.elementFromPoint(x, y)?.tagName ?? null,
-      {x: box.x + box.width / 2, y: box.y + box.height / 2},
-    );
-    expect(hit).toBe('IMG');
+  // A focus overlay at rest takes no click: hover never reveals it. The Link
+  // with no href sets its own pointer-events.
+  for (const name of ['Focus action', 'Focus link action']) {
+    const box = await page.getByRole('button', {name}).boundingBox();
+    expect(box).not.toBeNull();
+    if (box != null) {
+      const hit = await page.evaluate(
+        ({x, y}) => document.elementFromPoint(x, y)?.tagName ?? null,
+        {x: box.x + box.width / 2, y: box.y + box.height / 2},
+      );
+      expect(hit).toBe('IMG');
+    }
   }
   for (const label of [
     'Hover action',
     'Focus action',
     'Hover strip action',
     'Always action',
+    'Focus link action',
   ]) {
     await page.keyboard.press('Tab');
     expect(await focused(page)).toEqual({label, scrimOpacity: '1'});

@@ -147,8 +147,14 @@ const styles = stylex.create({
     },
   },
 
-  // CSS-driven: focus-within only
+  // CSS-driven: focus-within only. Hover never reveals this overlay, so at
+  // rest a clip path also keeps its content out of hit-testing, even content
+  // that sets its own pointer-events. A clip path keeps it in the tab order.
   focusReveal: {
+    clipPath: {
+      default: 'inset(50%)',
+      [stylex.when.ancestor(':focus-within', overlayScope)]: 'none',
+    },
     opacity: {
       default: 0,
       [stylex.when.ancestor(':focus-within', overlayScope)]: 1,

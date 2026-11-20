@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] Overlay: with `showOn="hover"`, `"hover-or-focus"` or `"focus"`, keyboard users can now Tab to an action inside the overlay, and focus reveals it. Before, the hidden overlay took its content out of the tab order, so over media with nothing focusable of its own the action could not be reached by keyboard. With a mouse, trackpad or keyboard, screen readers now also read the overlay's content while it is hidden, as they do for other hover reveals.
+[fix] Overlay: on a device with a mouse or trackpad, keyboard users can now Tab to an action inside an overlay with `showOn="hover"`, `"hover-or-focus"` or `"focus"`, and focus reveals it. Before, the hidden overlay took its content out of the tab order, so over media with nothing focusable of its own the action could not be reached by keyboard. Screen readers on those devices now also read the overlay's content while it is hidden, as they do for other hover reveals. A hidden focus overlay still takes no clicks.
 
 @cixzhang
