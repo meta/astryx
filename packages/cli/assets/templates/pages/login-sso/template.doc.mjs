@@ -19,5 +19,4 @@ export const doc = {
   ],
   isReady: true,
   category: 'Login - SSO',
-  icons: {ShieldCheckIcon: 'shield'},
 };

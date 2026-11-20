@@ -28,6 +28,7 @@ import {
   writeJson,
 } from '../test-utils/release-fixtures.mjs';
 import {installPlaceOf} from '../foundation/release/choose.mjs';
+import {COMPONENT_REPLACES_CLI} from '../foundation/integrations/cli-requirement.mjs';
 import {relativeWithin, samePath} from '../foundation/fs/path-compare.mjs';
 import {userCacheDir} from '../foundation/env/user-dirs.mjs';
 import {astryxCommandsOnSearchPath} from '../foundation/env/search-path.mjs';
@@ -626,6 +627,96 @@ describe.skipIf(!POSIX)(
         status: 'pass',
         message: 'Used outside a project: @acme/widgets@1.0.0.',
       });
+      // One that validly replaces a Core component: doctor reads no Core
+      // outside a project, so it leaves that comparison to the commands that
+      // carry one, and reports no issue for it.
+      const nav = acmeWidgets(path.resolve(g.dir, '..', '..', '..'), {
+        topic: 'nav-guide',
+        name: '@acme/nav',
+        peers: {'@astryxdesign/cli': `>=${COMPONENT_REPLACES_CLI}`},
+        manifest:
+          "export default {docs: './docs', components: './components'};\n",
+      });
+      fs.mkdirSync(path.join(nav, 'components'), {recursive: true});
+      fs.writeFileSync(
+        path.join(nav, 'components', 'AcmeSideNav.doc.mjs'),
+        `export default ${JSON.stringify({
+          type: 'component',
+          name: 'AcmeSideNav',
+          displayName: 'AcmeSideNav',
+          import: '@acme/nav/components/AcmeSideNav',
+          replaces: 'SideNav',
+          keywords: ['acme'],
+          usage: {description: 'AcmeSideNav for Acme apps.'},
+          props: [],
+        })};\n`,
+      );
+      fs.writeFileSync(
+        path.join(nav, 'components', 'AcmeSideNav.tsx'),
+        'export function AcmeSideNav() {\n  return null;\n}\n',
+      );
+      const withNav = JSON.parse(
+        run(g.bin, ['doctor', '--json'], {cwd: empty, pc}).stdout,
+      ).data.checks.find(
+        (/** @type {any} */ c) => c.id === 'computer-integrations',
+      );
+      expect(withNav.message).toContain('@acme/nav@1.0.0');
+      expect(withNav.status).toBe('pass');
+      // One whose contributions have an issue: the everyday commands point
+      // at doctor for it, and doctor names it.
+      const broken = acmeWidgets(path.resolve(g.dir, '..', '..', '..'), {
+        topic: 'broken-guide',
+        name: '@acme/broken',
+        manifest:
+          "export default {docs: './docs', components: './components'};\n",
+      });
+      fs.mkdirSync(path.join(broken, 'components'), {recursive: true});
+      fs.writeFileSync(
+        path.join(broken, 'components', 'Thing.tsx'),
+        'export function Thing() {\n  return null;\n}\n',
+      );
+      expect(run(g.bin, ['discover'], {cwd: empty, pc}).stderr).toContain(
+        'Warning: @acme/broken has 1 integration issue(s). Run: astryx doctor',
+      );
+      const after = JSON.parse(
+        run(g.bin, ['doctor', '--json'], {cwd: empty, pc}).stdout,
+      ).data.checks.find(
+        (/** @type {any} */ c) => c.id === 'computer-integrations',
+      );
+      expect(after.status).toBe('warn');
+      expect(after.message).toContain(
+        '@acme/broken@1.0.0 has 1 integration issue: Component source "Thing.tsx" has no same-stem metadata file Thing.doc.mjs',
+      );
+      expect(after.message).not.toContain('@acme/nav@1.0.0 has');
+      expect(after.fix).toContain(
+        'Otherwise, a newer release of @acme/broken needs to fix it.',
+      );
+      expect(after.fix).toContain('@acme/broken@latest');
+      // One whose template replaces a template that Core does not have.
+      // Core's templates come with the CLI, so doctor names this issue too.
+      const tpl = acmeWidgets(path.resolve(g.dir, '..', '..', '..'), {
+        topic: 'tpl-guide',
+        name: '@acme/tpl',
+        manifest:
+          "export default {docs: './docs', templates: './templates'};\n",
+      });
+      fs.mkdirSync(path.join(tpl, 'templates'), {recursive: true});
+      fs.writeFileSync(
+        path.join(tpl, 'templates', 'acme-shell.doc.mjs'),
+        "export default {type: 'page', name: 'Acme shell', description: 'Acme app shell.', replaces: 'no-such-template'};\n",
+      );
+      fs.writeFileSync(
+        path.join(tpl, 'templates', 'acme-shell.tsx'),
+        'export default function AcmeShell() {\n  return null;\n}\n',
+      );
+      const withTpl = JSON.parse(
+        run(g.bin, ['doctor', '--json'], {cwd: empty, pc}).stdout,
+      ).data.checks.find(
+        (/** @type {any} */ c) => c.id === 'computer-integrations',
+      );
+      expect(withTpl.status).toBe('warn');
+      expect(withTpl.message).toContain('@acme/tpl@1.0.0 has');
+      expect(withTpl.message).toContain('which is not a Core template id.');
     });
 
     it("G36 inside a project: an integration installed for the computer adds nothing, and discover and doctor list it as available with the project's install command", () => {
