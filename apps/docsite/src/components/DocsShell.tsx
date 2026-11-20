@@ -181,7 +181,10 @@ export function DocsShell({children, nav}: DocsShellProps) {
                 <SideNavItem
                   label="What's New"
                   href="/changelog"
-                  isSelected={pathname === '/changelog'}
+                  isSelected={
+                    pathname === '/changelog' ||
+                    pathname.startsWith('/changelog/')
+                  }
                 />
               </SideNavSection>
 

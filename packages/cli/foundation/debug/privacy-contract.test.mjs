@@ -101,6 +101,8 @@ describe('no raw stable identifier is recorded', () => {
   });
 
   it('leaves the hash null when no signal supplied a session', () => {
+    // The machine that runs the tests can export it, as agent sandboxes do.
+    vi.stubEnv('AGENT_SESSION_ID', '');
     const env = captureEnv();
     expect(env.agentSessionId).toBe(null);
     expect(env.agentSessionIdHash).toBe(null);

@@ -11,6 +11,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -73,7 +74,18 @@ describe('experimental theme editor show text output', () => {
   });
 
   it('prints each color note whole', () => {
-    for (const note of json.colorNotes) expect(text).toContain(`- ${note}`);
+    // Text starts each command in a note the way this project runs the CLI
+    // (JSON keeps the canonical `astryx …`): the note is the same otherwise.
+    const runs = `${getCliInvocation(cwd)} experimental theme`;
+    for (const note of json.colorNotes)
+      expect(text).toContain(
+        `- ${String(note).split('astryx experimental theme').join(runs)}`,
+      );
+    expect(
+      json.colorNotes.some((/** @type {string} */ n) =>
+        n.includes('astryx experimental theme editor set brand'),
+      ),
+    ).toBe(true);
   });
 
   it('lists the generated files last, each on one line', () => {
@@ -88,7 +100,9 @@ describe('experimental theme editor show text output', () => {
 
   it('says colors, never palette or family, before the file names', () => {
     const words = text.slice(0, text.indexOf('colorFiles:'));
-    expect(words).not.toMatch(/palette|(?<!font-)famil/i);
+    // As words: a name that holds one (the part command-palette-item, the
+    // token --font-family-body) is a name, not the word.
+    expect(words).not.toMatch(/(?<![\w-])(palette|famil)/i);
   });
 });
 

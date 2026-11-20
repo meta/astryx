@@ -1,0 +1,129 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+
+# Keeps the recorded Node test times (scripts/vitest-node-durations.json)
+# fresh from main's own runs. A missing or low entry costs leg balance and can
+# make a leg run long until the next refresh; no pull request fails on the
+# record. After each successful full unit run of main, this compares the
+# record with that run's measured times. When more than one in twenty of the
+# Node project's test files have no recorded time (an early warning, named in
+# the job summary and the pull request), or a recorded file ran far
+# past its entry, it regenerates the record from that run's Node legs (each
+# leg's slowdown taken out; new and far-off entries only) and
+# opens one durations-only pull request on a fixed branch, or force-updates
+# that branch and refreshes the open one
+# (.github/scripts/node-record-refresh.mjs). It never pushes to main.
+#
+# A push or pull request made with the workflow token starts no workflow, so
+# CI on the refresh pull request starts when someone with write access
+# reopens it.
+name: Node test record refresh
+
+on:
+  workflow_run:
+    workflows: [Main]
+    types: [completed]
+    branches: [main]
+  schedule:
+    # A backstop for a completed run this workflow missed: every six hours it
+    # reads main's latest successful full unit run.
+    - cron: '41 */6 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+# One refresh at a time, so two runs never race on the branch.
+concurrency:
+  group: node-record-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    # A completed Main run counts only when it is a successful full unit run
+    # (a dispatch; a push runs no Node leg) of this repository's main.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'workflow_dispatch' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      # Reads main's runs and their logs.
+      actions: read
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup
+
+      # The completed run that started this one, else main's latest
+      # successful full unit run. Its Node legs are named `test-node (N)`,
+      # which the recorder reads; it ignores every other job's lines.
+      - name: Read the Node leg logs of main's full unit run
+        id: run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMPLETED_RUN: ${{ github.event.workflow_run.id }}
+        run: |
+          run="$COMPLETED_RUN"
+          if [ -z "$run" ]; then
+            run=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow deploy.yml --branch main --event workflow_dispatch --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          fi
+          if [ -z "$run" ]; then
+            echo "::error title=No run to record from::main has no successful full unit run."
+            exit 1
+          fi
+          # Each leg's complete job log. `gh run view --log` stops reading a
+          # job's log at its first line over 64 KiB, and a test can print one,
+          # so the results after it never reach the record. Each line gets the
+          # leg's name and a step column, the shape the readers expect. The
+          # logs carry colour codes, which `gh api` writes out only with
+          # --allow-escape-sequences.
+          : > "$RUNNER_TEMP/main-run.log"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?filter=latest&per_page=100" \
+            --jq '.jobs[] | select(.name | test("^test-node \\([0-9]+\\)$")) | "\(.id)\t\(.name)"' > "$RUNNER_TEMP/node-legs.tsv"
+          if [ ! -s "$RUNNER_TEMP/node-legs.tsv" ]; then
+            echo "::error title=No Node legs::Run $run has no test-node job."
+            exit 1
+          fi
+          while IFS=$'\t' read -r job name; do
+            gh api --allow-escape-sequences "repos/$GITHUB_REPOSITORY/actions/jobs/$job/logs" > "$RUNNER_TEMP/leg.log"
+            sed "s/^/${name}\tlog\t/" "$RUNNER_TEMP/leg.log" >> "$RUNNER_TEMP/main-run.log"
+          done < "$RUNNER_TEMP/node-legs.tsv"
+          echo "url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run" >> "$GITHUB_OUTPUT"
+
+      - name: Check the record's coverage and drift against that run
+        id: check
+        run: node .github/scripts/node-record-refresh.mjs check --log "$RUNNER_TEMP/main-run.log" --reasons "$RUNNER_TEMP/refresh-reasons.json" --github-output
+
+      - name: Regenerate the record from that run
+        id: record
+        if: steps.check.outputs.refresh == 'true'
+        run: |
+          node .github/scripts/node-record-refresh.mjs regenerate --log "$RUNNER_TEMP/main-run.log"
+          if git diff --quiet -- scripts/vitest-node-durations.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push the record to the refresh branch and open or refresh its pull request
+        if: steps.record.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ steps.run.outputs.url }}
+        run: |
+          # A branch that already carries this record keeps its commit, so a
+          # CI run on the open pull request stays current.
+          if git fetch --quiet origin refs/heads/ci/node-durations-refresh &&
+            git diff --quiet FETCH_HEAD -- scripts/vitest-node-durations.json; then
+            echo "The refresh branch already carries this record."
+          else
+            git add scripts/vitest-node-durations.json
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit --quiet -m 'ci: refresh the recorded Node test times'
+            git push --force origin HEAD:refs/heads/ci/node-durations-refresh
+          fi
+          node .github/scripts/node-record-refresh.mjs pr --run-url "$RUN_URL" --reasons "$RUNNER_TEMP/refresh-reasons.json"

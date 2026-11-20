@@ -33,7 +33,7 @@ export const docs = {
       name: 'description',
       type: 'ReactNode',
       description:
-        "Secondary content below the label. String or ReactNode. Exposed as the checkbox's accessible description through aria-describedby, so assistive technology can tell it is the explanation for that choice.",
+        "Secondary content below the label: a string shows on one line and the row cuts long text with an ellipsis, so for full text pass a node, for example description={<Text type=\"supporting\">…</Text>}. String or ReactNode. The description is the checkbox's accessible description through aria-describedby, so assistive technology can tell it is the explanation for that choice.",
     },
     {
       name: 'endContent',
@@ -130,7 +130,7 @@ export const docsZh = {
       name: 'description',
       type: 'ReactNode',
       description:
-        '标签下方的辅助内容。可为字符串或 ReactNode。会通过 aria-describedby 作为复选框的无障碍描述暴露，便于辅助技术识别它是该选项的说明。',
+        '标签下方的辅助内容：字符串只显示一行，过长时以省略号截断；要显示完整文本，请传入节点，例如 description={<Text type="supporting">…</Text>}。可为字符串或 ReactNode。会通过 aria-describedby 作为复选框的无障碍描述暴露，便于辅助技术识别它是该选项的说明。',
     },
     {
       name: 'endContent',
@@ -188,7 +188,7 @@ export const docsDense = {
     value:
       'Identity key. Required when parent CheckboxList has a value array (throws without it).',
     description:
-      "Secondary content below label. String or ReactNode. Exposed as the checkbox's accessible description via aria-describedby.",
+      "Secondary content below label: a string shows on one line (ellipsis); for full text pass a node, e.g. <Text type=\"supporting\">. String or ReactNode. Exposed as the checkbox's accessible description via aria-describedby.",
     endContent: 'Content rendered after label area.',
     isDisabled: 'Whether this individual item is disabled.',
     isLoading:

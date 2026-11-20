@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'wallet',
+  group: 'money',
   description: 'A wallet, a balance, or stored payment methods.',
   words: ['wallet', 'balance', 'billfold'],
 };

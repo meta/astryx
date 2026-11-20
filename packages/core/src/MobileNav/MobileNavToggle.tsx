@@ -10,7 +10,9 @@
  * @position Standalone toggle button; can be placed anywhere in the AppShell tree.
  *
  * Hamburger button that opens/closes the mobile nav drawer.
- * Reads from AppShell mobile context — renders nothing above the mobile breakpoint.
+ * Reads from AppShell mobile context — renders nothing above the mobile
+ * breakpoint, without that context, or when AppShell has no mobile
+ * navigation.
  * Can be placed anywhere in the component tree (TopNav, content area, custom toolbar, etc.).
  * Host attributes and DOM handlers reach the button; its `aria-expanded` and
  * `aria-controls` stay component-owned, and a caller `onClick` runs after the
@@ -55,8 +57,10 @@ export interface MobileNavToggleProps extends Omit<
  * Mobile nav toggle button. Reads from AppShell context to open/close
  * the mobile navigation drawer.
  *
- * Renders nothing when above the mobile breakpoint — safe to include
- * unconditionally in your layout.
+ * Renders nothing above the mobile breakpoint, without an AppShell mobile
+ * context (AppShell's, or an `AppShellMobileContext` you provide), or when
+ * AppShell has no mobile navigation — safe to include unconditionally in
+ * your layout.
  *
  * @example
  * ```

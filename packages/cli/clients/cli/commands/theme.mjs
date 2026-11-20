@@ -40,6 +40,7 @@ import {spawn} from 'node:child_process';
 import {
   getCliInvocation,
   commandInFolder,
+  formatCliCommand,
   quoteCommandArgument,
 } from '../../../foundation/env/package-manager.mjs';
 import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
@@ -54,7 +55,11 @@ import {
   list,
 } from '../formatters/index.mjs';
 import {logger} from '../../../api/logger.mjs';
-import {cliError, themeGroupUnknownSubcommand} from '../lib/cli-error.mjs';
+import {
+  cliError,
+  failAfterOutput,
+  themeGroupUnknownSubcommand,
+} from '../lib/cli-error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
 import {warnOnIntegrationIssues} from '../../../foundation/integrations/integration-warnings.mjs';
@@ -94,6 +99,11 @@ import {
   generatedSourceCommand,
   writeDeferredBuildOutputs,
 } from '../../../api/theme/build/build.mjs';
+import {
+  commandAvailable,
+  exampleAvailable,
+  helpBase,
+} from '../lib/base-gate.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {NO_RESULT_SET, resultSet} from '../../../foundation/debug/index.mjs';
 import {doc as themeGroup} from './theme.doc.mjs';
@@ -699,6 +709,19 @@ function themeNextSteps(run, words = THEME_WORDS) {
 }
 
 /**
+ * The list's `wiredBy` line: the provider a theme's package wires it with.
+ * The list reads no app source; doctor checks where the app renders it.
+ * @param {import('../../../api/theme/theme.type.mjs').ThemeListEntry} theme
+ */
+function wiredByLine(theme) {
+  if (!theme.wiredBy) return theme;
+  return {
+    ...theme,
+    wiredBy: `wired by ${theme.wiredBy.export} from ${theme.wiredBy.from} when the app renders it; \`${getCliInvocation()} doctor\` checks where`,
+  };
+}
+
+/**
  * Print every field in the `theme.list` entries. Duplicate slugs stay separate
  * because each record names its owner.
  * @param {import('../../../api/theme/theme.type.mjs').ThemeListEntry[]} themes
@@ -721,7 +744,7 @@ function printThemeList(
   } else {
     emit(
       section('Themes', `${themes.length} available`),
-      records(themes, {
+      records(themes.map(wiredByLine), {
         fields: [
           'slug',
           'displayName',
@@ -729,12 +752,16 @@ function printThemeList(
           'maintained',
           'package',
           'source',
+          'owner',
+          'installed',
+          'wiredBy',
           'added',
           'default',
         ],
         layout: 'stacked',
         format: {
           maintained: (/** @type {boolean} */ value) => (value ? 'yes' : 'no'),
+          installed: (/** @type {boolean} */ value) => (value ? 'yes' : 'no'),
           added: (/** @type {boolean} */ value) => (value ? 'yes' : 'no'),
           default: (/** @type {boolean} */ value) => (value ? 'yes' : 'no'),
         },
@@ -778,6 +805,77 @@ function printThemeList(
 function printThemeApp(result) {
   const {themes, default: defaultSlug, modulePath, change} = result.data;
   if (result.package !== undefined) emit(record({package: result.package}));
+  // A shared theme added from a folder or an archive: where its copy went,
+  // what was installed for it, and that it is now the default.
+  const copy = result.data.copy;
+  if (copy) {
+    emit(
+      text(
+        `[ok] Copied the ${change.slug} theme from ${copy.from}${copy.folder === '.' ? '' : ` (${copy.folder})`} into ${copy.outputDir}: ${copy.files.length} files.`,
+      ),
+    );
+    if (copy.installed.length > 0)
+      emit(
+        text(
+          `[ok] Installed ${copy.installed.join(', ')}, which the theme imports.`,
+        ),
+      );
+    if (copy.installError)
+      emit(
+        text(
+          `[!] Not installed: ${copy.installError}.${copy.installRetryCommand ? ` Install it with: ${copy.installRetryCommand}` : ''}`,
+        ),
+      );
+    if (copy.installGuidance ?? copy.installCommand)
+      emit(
+        text(
+          `The theme also imports packages the app lacks, which theme add does not install for it; check them, then install them: ${copy.installGuidance ?? copy.installCommand}`,
+        ),
+      );
+    emit(
+      text(
+        `[ok] ${change.slug} is the app's default theme: an app wired to the generated module shows it now.`,
+      ),
+      text(`Wrote: ${copy.written.join(', ')}.`),
+      text(
+        `Changed: ${copy.config.module} (default ${copy.config.default})${copy.config.dependencies.length > 0 ? `; package.json dependencies ${copy.config.dependencies.join(', ')}` : ''}. ${copy.previousDefault ? `\`${formatCliCommand(`theme use ${copy.previousDefault}`, process.cwd())}\` then ` : ''}\`${formatCliCommand(`theme remove ${change.slug}`, process.cwd())}\` undoes this add.`,
+      ),
+    );
+  }
+  // A shared theme's add, undone by its remove.
+  const undo = result.data.undo;
+  if (undo) {
+    if (undo.removed.length > 0)
+      emit(
+        text(
+          `[ok] Deleted the files theme add wrote for ${change.slug}: ${undo.removed.join(', ')}.`,
+        ),
+      );
+    if (undo.kept.length > 0)
+      emit(
+        text(
+          `[note] Kept ${undo.kept.join(', ')}: changed since theme add wrote them.`,
+        ),
+      );
+    if (undo.uninstalled.length > 0)
+      emit(
+        text(
+          `[ok] Uninstalled ${undo.uninstalled.join(', ')}, which theme add installed for it.`,
+        ),
+      );
+    if (undo.uninstallError)
+      emit(text(`[!] Not uninstalled: ${undo.uninstallError}.`));
+  }
+  // A command that chooses the default says what it did, before the state
+  // it shares with every other receipt.
+  if (change.action === 'use')
+    emit(
+      text(
+        change.changed
+          ? `[ok] ${change.slug} is now the app's default theme: themes[defaultThemeSlug] is ${change.slug}.`
+          : `[ok] ${change.slug} was already the app's default theme; nothing changed.`,
+      ),
+    );
   emit(
     section('App themes', `${themes.length} added`),
     records(themes, {
@@ -824,7 +922,30 @@ function printThemeApp(result) {
   );
   for (const note of result.data.notes ?? []) emit(text(`[note] ${note}`));
   const stem = path.basename(modulePath, path.extname(modulePath));
+  const appProvider = result.data.appProvider;
+  // The one provider that takes the theme (its manifest's themeProp) is the
+  // app's wiring: each receipt shows that provider, with the module's theme
+  // passed to it, in place of a Theme wrap the app does not render.
+  const provider =
+    appProvider?.line && appProvider.wiredBy.length === 1
+      ? appProvider.wiredBy[0]
+      : null;
+  const providerCode = () =>
+    code(
+      `import {${provider?.export}} from '${provider?.from}';\n` +
+        `import {themes, defaultThemeSlug${/\bthemeModes\[/.test(String(appProvider?.line)) ? ', themeModes' : ''}} from './${stem}';\n\n` +
+        `${appProvider?.line}\n  <App />\n</${provider?.export}>`,
+    );
   if (change.moduleRemoved) {
+    if (appProvider && provider) {
+      emit(
+        text(
+          `Removed ${change.slug}, the only added theme, and deleted ${modulePath}. ${appProvider.wire}`,
+        ),
+        providerCode(),
+      );
+      return;
+    }
     emit(
       text(
         `Removed ${change.slug}, the only added theme, and deleted ${modulePath}. Undo its wiring in the app root: delete the module's import (and the Theme import when nothing else uses Theme), and keep only the children of the Theme wrapper:`,
@@ -840,7 +961,11 @@ function printThemeApp(result) {
   if (!change.firstAdd) {
     // The module now lists one-mode themes' modes: the app's wiring, made
     // without them, passes the selected theme's mode from now on.
-    if (change.wireModes)
+    if (change.wireModes) {
+      if (appProvider) {
+        emit(text(appProvider.wire), ...(provider ? [providerCode()] : []));
+        return;
+      }
       emit(
         text(
           "The theme module now exports themeModes. Pass the selected theme's mode to Theme in the app root:",
@@ -851,13 +976,19 @@ function printThemeApp(result) {
             "<Theme theme={themes[defaultThemeSlug]} mode={themeModes[defaultThemeSlug] ?? 'system'}>\n  <App />\n</Theme>",
         ),
       );
+    }
     return;
   }
   // With a theme of one color mode added, the generated module lists each
   // such theme's mode in `themeModes`, and the wiring passes the selected
   // theme's (none for a two-mode theme, which follows the system).
   const modes = result.data.themes.some(t => t.mode);
+  if (appProvider && provider) {
+    emit(text(appProvider.wire), providerCode());
+    return;
+  }
   emit(
+    ...(appProvider ? [text(appProvider.wire)] : []),
     text('Wire the generated module once in the app root:'),
     code(
       "import {Theme} from '@astryxdesign/core/theme';\n" +
@@ -909,8 +1040,8 @@ function printThemeEject(result, words = THEME_WORDS, like = 'neutral') {
     ...(data.missingPackages.length > 0
       ? [
           text(
-            data.installCommand
-              ? `The fork imports packages this app lacks. Install them first: ${data.installCommand}`
+            (data.installGuidance ?? data.installCommand)
+              ? `The fork imports packages this app lacks. Install them first: ${data.installGuidance ?? data.installCommand}`
               : `The fork imports packages this app lacks: ${data.missingPackages.join(', ')}. Install them first.`,
           ),
         ]
@@ -997,7 +1128,9 @@ export function registerTheme(program) {
         const {message, suggestions} = themeGroupUnknownSubcommand(
           'theme',
           String(extras[0]),
-          (theme.commands || []).map(c => c.name()),
+          (theme.commands || [])
+            .filter(c => commandAvailable(c, helpBase()))
+            .map(c => c.name()),
           theme,
         );
         return cliError(message, {
@@ -1015,12 +1148,30 @@ export function registerTheme(program) {
   // under `component`. Without this pointer the group reads as a build-tool
   // menu, and the component targets are unreachable from the noun the user
   // started at.
+  // Help leaves out a line whose command the run's base does not serve, or
+  // whose value names an item only Core has (the theme topic).
+  const overrides = [
+    [
+      'theme targets',
+      `  ${getCliInvocation()} theme targets            Every themeable class, with its props and states\n`,
+    ],
+    [
+      'component <Name>',
+      `  ${getCliInvocation()} component <Name>         One component's theming table\n`,
+    ],
+    [
+      'docs theme',
+      `  ${getCliInvocation()} docs theme               How component overrides work\n`,
+    ],
+  ];
   theme.addHelpText(
     'after',
-    `\nComponent style overrides:\n` +
-      `  ${getCliInvocation()} theme targets            Every themeable class, with its props and states\n` +
-      `  ${getCliInvocation()} component <Name>         One component's theming table\n` +
-      `  ${getCliInvocation()} docs theme               How component overrides work\n`,
+    () =>
+      `\nComponent style overrides:\n` +
+      overrides
+        .filter(([cli]) => exampleAvailable(program, cli, helpBase()))
+        .map(([, line]) => line)
+        .join(''),
   );
 
   registerThemeSubcommands(theme, program, THEME_DOCS, THEME_WORDS);
@@ -1193,7 +1344,8 @@ function registerThemeCommands(theme, program, docs, words) {
           : null;
         out.push(...(refused ? (refused.suggestions ?? []) : [s]));
       }
-      return out;
+      // Two guesses can lead to the same line: it is offered once.
+      return out.filter((s, i) => out.findIndex(x => x.name === s.name) === i);
     };
     /** @param {string} message @param {Parameters<typeof cliError>[1]} [opts] */
     const refuse = async (message, opts = {}) =>
@@ -1239,9 +1391,12 @@ function registerThemeCommands(theme, program, docs, words) {
         : (words.missingSource?.(entry.file, process.cwd()) ?? null);
       // A file another command generates, gone from a folder whose other
       // files carry that command's mark: that command writes it again; a
-      // blank theme template is no way back.
+      // blank theme template is no way back. A theme source that exists
+      // near the name given is what it meant instead.
       const by =
-        rewrite || looksGlobby ? null : generatedSourceCommand(entry.filePath);
+        rewrite || looksGlobby || guesses.length > 0
+          ? null
+          : generatedSourceCommand(entry.filePath);
       if (by)
         return await refuse(
           `File not found: ${entry.filePath}. It is a generated file: the files beside it are written by ${by}, so rebuild it with the command that made it.`,
@@ -1533,7 +1688,7 @@ function registerThemeCommands(theme, program, docs, words) {
             ).data.upToDate
           )
         ) {
-          process.exitCode = 1;
+          failAfterOutput(ERROR_CODES.ERR_THEME_STALE);
         }
         return NO_RESULT_SET;
       } catch (e) {
@@ -1726,6 +1881,23 @@ function registerThemeCommands(theme, program, docs, words) {
         if (report && compact) printCompactTrailer(trailers);
         else if (report) printBatchTrailer(trailers);
         if (entries.length > 1) err.message = `${entry.file}: ${err.message}`;
+        // The themes built before this one are written (a check writes
+        // nothing): the refusal says so, in text and --json alike, and its
+        // "nothing was written" speaks for this theme only.
+        const written = options.check
+          ? []
+          : results.flatMap(r =>
+              r.receipt?.type === 'theme.build' && r.receipt.data?.outputs
+                ? Object.values(r.receipt.data.outputs).filter(
+                    o => typeof o === 'string',
+                  )
+                : [],
+            );
+        if (written.length)
+          err.message = `${err.message.replace(
+            /\s*Nothing was written\.?$/,
+            ` Nothing was written for ${entry.file}.`,
+          )} The themes before it were built and written: ${written.join(', ')}.`;
         return await refuseTheme(
           entries.length === 1
             ? ((await words.follow?.(err, process.cwd())) ?? err)
@@ -1787,7 +1959,7 @@ function registerThemeCommands(theme, program, docs, words) {
 
     // Stale --check output is a failure after its receipt has been emitted.
     if (options.check && stale) {
-      process.exitCode = 1;
+      failAfterOutput(ERROR_CODES.ERR_THEME_STALE);
     }
 
     // Compiling a theme writes CSS; `--check` compares what is on disk. Both

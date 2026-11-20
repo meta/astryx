@@ -13,6 +13,7 @@ export const PROBE_TOKENS: Record<string, string> = {
   '--color-text-primary': 'rgb(240, 255, 0)',
   '--color-border': 'rgb(0, 224, 255)',
   '--radius-element': '13px',
+  '--radius-chat': '28px',
   '--spacing-4': '17px',
   '--duration-fast': '11ms',
   '--font-size-base': '15.5px',

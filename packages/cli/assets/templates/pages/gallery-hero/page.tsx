@@ -10,7 +10,7 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {Grid} from '@astryxdesign/core/Grid';
 import {AspectRatio} from '@astryxdesign/core/AspectRatio';
 import {rtlStyles} from '@astryxdesign/core/utils';
-import {ArrowRightIcon} from '@heroicons/react/20/solid';
+import {ArrowRightIcon} from '@astryxdesign/template-icons/20/solid';
 
 const IMAGES = [
   {
@@ -46,7 +46,7 @@ export default function GalleryHero() {
   return (
     <Layout
       content={
-        <LayoutContent padding={6}>
+        <LayoutContent role="main" padding={6}>
           <VStack gap={10}>
             <VStack gap={6} hAlign="center">
               <VStack gap={3} hAlign="center">
@@ -70,6 +70,7 @@ export default function GalleryHero() {
                 <Button
                   label="Get started"
                   variant="primary"
+                  href="#"
                   endContent={
                     <Icon
                       icon={ArrowRightIcon}
@@ -79,7 +80,7 @@ export default function GalleryHero() {
                     />
                   }
                 />
-                <Button label="Learn more" variant="secondary" />
+                <Button label="Learn more" variant="secondary" href="#" />
               </HStack>
             </VStack>
             <Grid columns={{minWidth: 200, repeat: 'fit'}} gap={4}>

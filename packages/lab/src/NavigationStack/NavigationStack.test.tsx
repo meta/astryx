@@ -109,6 +109,16 @@ describe('NavigationStack', () => {
     expect(screen.getByRole('button', {name: 'General'})).toBeInTheDocument();
   });
 
+  // A card is a stacking context at rest, as it is during a transition (a
+  // transform makes one), so screen content with any z-index stays under the
+  // bar, whose z-index is 1.
+  it("gives every card isolation: 'isolate' at rest", () => {
+    render(<Harness initial={['General']} />);
+    for (const title of ['Settings', 'General']) {
+      expect(getComputedStyle(screenCard(title)!).isolation).toBe('isolate');
+    }
+  });
+
   it('pushes a screen: its title shows, Back reads the previous title, the root is covered', async () => {
     render(<Harness />);
     fireEvent.click(screen.getByRole('button', {name: 'General'}));
@@ -154,6 +164,48 @@ describe('NavigationStack', () => {
 
     fireEvent.click(screen.getByRole('button', {name: 'Settings'}));
     await waitFor(() => expect(general).toHaveFocus(), {timeout: 3000});
+  });
+
+  it('keeps focus a person moved into the new screen before the push settles', async () => {
+    function Composer() {
+      return <input aria-label="Message" />;
+    }
+    function ComposerHarness() {
+      const [path, setPath] = useState<string[]>([]);
+      return (
+        <NavigationStack
+          label="Settings"
+          root={
+            <NavigationScreen title="Settings">
+              <button type="button" onClick={() => setPath(['Compose'])}>
+                Compose
+              </button>
+            </NavigationScreen>
+          }
+          path={path}
+          onPathChange={setPath}
+          getKey={entry => entry}
+          renderScreen={entry => (
+            <NavigationScreen title={entry}>
+              <Composer />
+            </NavigationScreen>
+          )}
+        />
+      );
+    }
+    render(<ComposerHarness />);
+    const compose = screen.getByRole('button', {name: 'Compose'});
+    compose.focus();
+    fireEvent.click(compose);
+    // Mid-push, the person moves focus into the new screen, as a tap on its
+    // composer does.
+    const field = screen.getByRole('textbox', {name: 'Message'});
+    field.focus();
+    expect(field).toHaveFocus();
+    // Wait past the push's settle (well under a second in jsdom); the bar
+    // title must not take focus from the field then.
+    await new Promise(resolve => setTimeout(resolve, 1200));
+    expect(field).toHaveFocus();
   });
 
   it('labels Back with the previous screen’s backTitle when it has one', () => {

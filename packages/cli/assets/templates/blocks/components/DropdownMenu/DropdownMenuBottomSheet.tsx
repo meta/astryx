@@ -4,11 +4,11 @@
 
 import {useState} from 'react';
 import {
-  ArchiveBoxIcon,
-  DocumentDuplicateIcon,
-  PencilIcon,
+  ArchiveIcon,
+  CopyIcon,
+  EditIcon,
   ShareIcon,
-} from '@heroicons/react/24/outline';
+} from '@astryxdesign/template-icons';
 import {DropdownMenu} from '@astryxdesign/core/DropdownMenu';
 import {VStack} from '@astryxdesign/core/Stack';
 import {Text} from '@astryxdesign/core/Text';
@@ -18,10 +18,10 @@ const COMPACT_TOUCH_QUERY =
   '(max-width: 639px) and (pointer: coarse) and (hover: none)';
 
 const ACTIONS = [
-  {label: 'Edit project', icon: PencilIcon},
-  {label: 'Duplicate project', icon: DocumentDuplicateIcon},
+  {label: 'Edit project', icon: EditIcon},
+  {label: 'Duplicate project', icon: CopyIcon},
   {label: 'Share project', icon: ShareIcon},
-  {label: 'Archive project', icon: ArchiveBoxIcon},
+  {label: 'Archive project', icon: ArchiveIcon},
 ] as const;
 
 export default function DropdownMenuBottomSheet() {
