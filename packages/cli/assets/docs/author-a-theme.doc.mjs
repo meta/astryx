@@ -128,6 +128,7 @@ export const docs = {
           ['ocean.js', 'ES module exporting the theme object with `__built: true` and pre-resolved token values.'],
           ['ocean.d.ts', 'TypeScript declarations for the theme and icon registry exports'],
           ['ocean.variants.d.ts', "(Optional) Module augmentations for custom component prop values"],
+          ['ocean.modules/', '(Only when the theme imports a local TypeScript or JSX module, such as an icon registry) Those modules compiled to JavaScript. ocean.js imports them from here, so copy and publish this folder with ocean.js.'],
         ]},
         {type: 'prose', text: 'The `__built: true` flag tells Theme to skip runtime `<style>` injection; the CSS file handles it. Load the generated CSS wherever you load the module.'},
         {type: 'code', lang: 'tsx', label: 'Using a custom built theme', code: "import {Theme} from '@astryxdesign/core/theme';\nimport {oceanTheme} from './themes/ocean';\nimport './themes/ocean.css';\n\n<Theme theme={oceanTheme}>\n  <App />\n</Theme>"},
