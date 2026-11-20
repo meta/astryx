@@ -54,7 +54,9 @@ const TEST_FILE = /\.test\.[cm]?[jt]sx?$/;
  * commands. A command's `kind` is `light`, or `build`, `test` or `knowledge`
  * for a heavy one. `stdout` writes the command's output to a file. `argsFrom`
  * adds arguments read from a file a command before it wrote; with no such
- * arguments the command does not run (`emptyMeans` says why).
+ * arguments the command does not run (`emptyMeans` says why). `argsAfter`
+ * goes after them: an option such as Playwright's `--project`, which takes
+ * every value that follows it, must come last.
  * @param {{scope: ReturnType<typeof classify>, mergeBase: string, changed: string[], browser: boolean, tmp: string, chromiumScope?: string}} input
  */
 export function planChecks({
@@ -370,8 +372,9 @@ export function planChecks({
             },
             {
               kind: 'test',
-              argv: ['pnpm', 'test:interaction', '--project', 'chromium'],
+              argv: ['pnpm', 'test:interaction'],
               argsFrom: selection,
+              argsAfter: ['--project', 'chromium'],
               parse: chromiumSpecs,
               emptyMeans: 'the change selects no Chromium proof',
             },
@@ -551,6 +554,7 @@ export function runChecks(checks, {exec, wrap = [], now = Date.now} = {}) {
         }
         argv = [...argv, ...(extra ?? [])];
       }
+      if (command.argsAfter) argv = [...argv, ...command.argsAfter];
       if (command.kind !== 'light' && wrap.length)
         argv = [...wrap, command.kind, ...argv];
       const code = exec(argv, {
