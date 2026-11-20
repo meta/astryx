@@ -19,5 +19,4 @@ export const doc = {
   ],
   isReady: true,
   category: 'Dashboard - Portfolio',
-  icons: {ArrowDownIcon: 'arrowDown', ArrowUpIcon: 'arrowUp'},
 };

@@ -3,10 +3,10 @@
 'use client';
 
 import {
-  CheckBadgeIcon,
-  ExclamationCircleIcon,
-  NoSymbolIcon,
-} from '@heroicons/react/24/solid';
+  VerifiedIcon,
+  AlertIcon,
+  BlockIcon,
+} from '@astryxdesign/template-icons/24/solid';
 import {useIcon} from '@astryxdesign/core/Icon';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
@@ -15,9 +15,9 @@ import {Theme, defineTheme, useTheme} from '@astryxdesign/core/theme';
 const statusIconTheme = defineTheme({
   name: 'status-icons-docs',
   icons: {
-    success: <CheckBadgeIcon width="1em" height="1em" />,
-    warning: <ExclamationCircleIcon width="1em" height="1em" />,
-    error: <NoSymbolIcon width="1em" height="1em" />,
+    success: <VerifiedIcon width="1em" height="1em" />,
+    warning: <AlertIcon width="1em" height="1em" />,
+    error: <BlockIcon width="1em" height="1em" />,
   },
 });
 

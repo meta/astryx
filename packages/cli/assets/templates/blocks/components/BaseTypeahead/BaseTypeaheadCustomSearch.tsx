@@ -16,7 +16,7 @@ import {
   radiusVars,
   spacingVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
-import {MagnifyingGlassIcon} from '@heroicons/react/24/outline';
+import {SearchIcon} from '@astryxdesign/template-icons';
 
 const frameworks: SearchableItem[] = [
   {id: 'react', label: 'React'},
@@ -64,7 +64,7 @@ export default function BaseTypeaheadCustomSearch() {
   return (
     <VStack gap={3} xstyle={styles.root}>
       <HStack ref={wrapperRef} gap={2} vAlign="center" xstyle={styles.field}>
-        <Icon icon={MagnifyingGlassIcon} size="sm" color="secondary" />
+        <Icon icon={SearchIcon} size="sm" color="secondary" />
         <BaseTypeahead
           aria-label="Search frameworks"
           searchSource={source}

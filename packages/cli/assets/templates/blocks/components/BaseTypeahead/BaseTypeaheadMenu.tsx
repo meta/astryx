@@ -22,7 +22,7 @@ import {
   radiusVars,
   spacingVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
-import {FunnelIcon} from '@heroicons/react/24/outline';
+import {FunnelIcon} from '@astryxdesign/template-icons';
 
 type Field = SearchableItem & {values: string[]};
 

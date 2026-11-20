@@ -39,8 +39,9 @@ const MAX_LISTED = 24;
  * @property {number} format - The render format of the embedded source.
  * @property {string} file - The rendered file's name.
  * @property {string} page - The page's path from its project's root; outside a project, its path among the files it carries.
- * @property {string} restored - Where --reverse writes the page by default, from the rendered file's folder.
+ * @property {string} restored - Where an import writes the page by default, from the rendered file's folder.
  * @property {string[]} files - The embedded files, page first.
+ * @property {string[]} [notCarried] - Files the page uses that the file does not carry.
  * @property {Record<string, string>} packages - The packages the page rendered with, by name: their versions.
  * @property {string[]} install - What a render outside a project must install first, as name@version.
  * @property {string} [title] - The title given with --title.
@@ -63,13 +64,20 @@ export function headerNote(facts) {
   const quotable = facts.title !== undefined && !/[<>]/.test(facts.title);
   const title = quotable ? ` --title ${shellArg(/** @type {string} */ (facts.title))}` : '';
   const lines = [
-    `Rendered by Astryx: astryx experimental render, @astryxdesign/cli ${facts.cli ?? '(version unknown)'}, render format ${facts.format}.`,
+    `Rendered by Astryx: astryx experimental export, @astryxdesign/cli ${facts.cli ?? '(version unknown)'}, render format ${facts.format}.`,
     "This is one file. The page's own script, at the end of the file, draws the page when it",
     'opens, so its buttons and other controls work. The render adds no network request.',
-    'It also carries the source of the page, so the page can come back exactly.',
+    facts.notCarried?.length
+      ? 'It also carries the source of the page, except the files named under "Not carried" below; experimental import gives back the rest.'
+      : 'It also carries the source of the page, so the page can come back exactly.',
     '',
     `Page: ${facts.page}`,
     `Carried files (${facts.files.length}): ${shown}${more}`,
+    ...(facts.notCarried?.length
+      ? [
+          `Not carried: ${facts.notCarried.slice(0, MAX_LISTED).join(', ')}${facts.notCarried.length > MAX_LISTED ? `, and ${facts.notCarried.length - MAX_LISTED} more` : ''} (experimental import cannot give them back)`,
+        ]
+      : []),
     ...(versions.length > 0 ? [`Rendered with: ${versions.join(', ')}`] : []),
     '',
     'To change the page, change its source and render it again. Do not edit this HTML:',
@@ -77,11 +85,11 @@ export function headerNote(facts) {
     'Run these commands in the folder that holds this file:',
     `  1. Get the source back. This writes ${facts.restored} and the files it imports`,
     `     (into ${facts.restored.split('/')[0]}-2/ and so on when that folder exists; the output names it):`,
-    `       ${run} experimental render --reverse ${file}`,
+    `       ${run} experimental import ${file}`,
     '  2. Edit the restored files.',
     '  3. Render again. A render replaces a file that a render wrote. Step 1 prints this',
     '     command with the folder it wrote:',
-    `       ${run} experimental render ${shellArg(facts.restored)} --out ${file}${title}`,
+    `       ${run} experimental export ${shellArg(facts.restored)} --out ${file}${title}`,
     ...(facts.title !== undefined && !quotable ? ['     The page was rendered with --title; step 1 prints the command with it.'] : []),
     `If you have the project, edit ${facts.page} there instead, and render it in the same way.`,
     "Inside a project, the project's own CLI answers these commands. A project CLI older than",
@@ -115,5 +123,5 @@ export function headerNote(facts) {
  * @returns {string} an HTML comment on one line
  */
 export function endNote(facts) {
-  return `<!-- Astryx render: the block above is the source of the page (render format ${facts.format}), as JSON; each file is base64 with its SHA-256. Get it back: ${commentSafe(cliCommand(facts.cli))} experimental render --reverse ${commentSafe(shellArg(facts.file))} -->`;
+  return `<!-- Astryx render: the block above is the source of the page (render format ${facts.format}), as JSON; each file is base64 with its SHA-256. Get it back: ${commentSafe(cliCommand(facts.cli))} experimental import ${commentSafe(shellArg(facts.file))} -->`;
 }

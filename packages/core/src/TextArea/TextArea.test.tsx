@@ -1521,3 +1521,65 @@ describe('TextArea caller aria-labelledby', () => {
     );
   });
 });
+
+describe('TextArea error without a message', () => {
+  const messagelessWarnings = (warn: {mock: {calls: unknown[][]}}) =>
+    warn.mock.calls.filter(call =>
+      String(call[0]).includes('an error status has no message'),
+    );
+
+  it('describes the field by hidden translated fallback text and warns once', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const {rerender} = render(
+      <TextArea
+        label="Email"
+        value=""
+        onChange={() => {}}
+        status={{type: 'error'}}
+      />,
+    );
+    const field = screen.getByRole('textbox', {name: 'Email'});
+    expect(field).toHaveAttribute('aria-invalid', 'true');
+    expect(field).toHaveAccessibleDescription('Invalid value');
+    rerender(
+      <TextArea
+        label="Email"
+        value="x"
+        onChange={() => {}}
+        status={{type: 'error'}}
+      />,
+    );
+    expect(messagelessWarnings(warn)).toHaveLength(1);
+    warn.mockRestore();
+  });
+
+  it('uses the caller message and no fallback when a message is given', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(
+      <TextArea
+        label="Email"
+        value=""
+        onChange={() => {}}
+        status={{type: 'error', message: 'Enter an email address'}}
+      />,
+    );
+    expect(
+      screen.getByRole('textbox', {name: 'Email'}),
+    ).toHaveAccessibleDescription('Enter an email address');
+    expect(screen.queryByText('Invalid value')).toBeNull();
+    expect(messagelessWarnings(warn)).toHaveLength(0);
+    warn.mockRestore();
+  });
+
+  it('adds no fallback for a warning without a message', () => {
+    render(
+      <TextArea
+        label="Email"
+        value=""
+        onChange={() => {}}
+        status={{type: 'warning'}}
+      />,
+    );
+    expect(screen.queryByText('Invalid value')).toBeNull();
+  });
+});
