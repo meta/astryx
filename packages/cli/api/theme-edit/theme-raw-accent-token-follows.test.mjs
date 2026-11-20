@@ -68,6 +68,24 @@ describe('a raw --color-accent token', () => {
     expect(halves('raw', '--color-accent')).toEqual(['#0d9488', '#0d9488']);
   }, 240_000);
 
+  it('set per mode, each mode grows its own shades', async () => {
+    await themeEditNew('modes', {cwd, like: 'neutral'});
+    await themeEditSet('modes', '--color-accent', '#0d9488', {
+      cwd,
+      mode: 'light',
+    });
+    await themeEditSet('modes', '--color-accent', '#a78bfa', {
+      cwd,
+      mode: 'dark',
+    });
+    expect(halves('modes', '--color-accent')).toEqual(['#0d9488', '#a78bfa']);
+    for (const token of SHADES) {
+      const [light, dark] = halves('modes', token);
+      expect(hueGap(light, '#0d9488'), `${token} light`).toBeLessThan(25);
+      expect(hueGap(dark, '#a78bfa'), `${token} dark`).toBeLessThan(25);
+    }
+  }, 240_000);
+
   it('set for one mode only, moves that mode only', async () => {
     await themeEditNew('darkonly', {cwd, like: 'neutral'});
     await themeEditNew('untouched', {cwd, like: 'neutral'});
