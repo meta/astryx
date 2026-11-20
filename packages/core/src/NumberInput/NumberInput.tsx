@@ -489,7 +489,8 @@ interface NumberInputPropsBase extends Omit<
   step?: number | null;
   /**
    * Formats the committed value while the input is not being edited.
-   * The raw numeric value is shown on focus so it remains editable.
+   * The plain number, with the locale's decimal separator, is shown on focus
+   * so it remains editable.
    */
   formatValue?: (value: number) => string;
   /**
@@ -544,7 +545,8 @@ type NumberInputPropsNonClearable = NumberInputPropsBase & {
 
 type NumberInputPropsClearable = NumberInputPropsBase & {
   /**
-   * Whether to show a clear button when a value is set.
+   * Whether to show a clear button when a value is set and the field is
+   * editable (not disabled or read-only).
    * When clicked, resets the value to null and returns focus to the input.
    *
    * When enabled, the `onChange` callback type widens to also accept `null`,
@@ -891,7 +893,8 @@ export function NumberInput({
   }, [formatValue, value]);
 
   // Preserve pending text while editing. Otherwise show the formatted value
-  // at rest and the raw numeric value while focused so it remains editable.
+  // at rest and, while focused, the plain number with the locale's decimal
+  // separator so it remains editable.
   const displayValue = useMemo(() => {
     if (holdDraft !== null) {
       return formatEditableNumber(holdDraft, locale);
