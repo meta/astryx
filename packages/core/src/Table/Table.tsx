@@ -420,9 +420,11 @@ function TableInner<T extends Record<string, unknown>>({
  * design tokens in the component styles.
  *
  * @compositionHint Use renderCell on columns to compose rich cell content.
- * Combine with Badge (status labels), StatusDot (colored indicators),
- * Text (formatted values), Avatar (user cells), and HStack/VStack
- * (multi-element cell layouts). Without renderCell, cells render as plain text.
+ * Combine with StatusDot beside a Text label (status columns), Text
+ * (formatted values), Avatar (user cells), and HStack/VStack (multi-element
+ * cell layouts). Keep Badge for a rare state that needs action; a solid badge
+ * in every row competes with the data. Without renderCell, cells render as
+ * plain text.
  * Columns without width remain equally flexible with a compact 60px readability
  * floor. Set one column's floor with proportional(1, { minWidth }), weight
  * columns with proportional(n), and fix widths with pixel().
@@ -439,7 +441,10 @@ function TableInner<T extends Record<string, unknown>>({
  *       </HStack>
  *     )},
  *     { key: 'status', header: 'Status', width: proportional(1), renderCell: (u) => (
- *       <Badge variant={u.active ? 'success' : 'error'} label={u.active ? 'Active' : 'Inactive'} />
+ *       <HStack gap={2} align="center">
+ *         <StatusDot variant={u.active ? 'success' : 'neutral'} label={u.active ? 'Active' : 'Inactive'} />
+ *         <Text>{u.active ? 'Active' : 'Inactive'}</Text>
+ *       </HStack>
  *     )},
  *   ]}
  *   density="compact"
