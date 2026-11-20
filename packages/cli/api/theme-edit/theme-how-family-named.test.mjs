@@ -200,6 +200,62 @@ describe('a mode said with capitals', () => {
   }, 240_000);
 });
 
+describe('a lone color after a piece', () => {
+  it('is the text of a part that is only text, the fill of a plain fill, and the accent after a button', async () => {
+    expect(
+      writes(await how('q0', 'bold headings, dark gray')).join('\n'),
+    ).toMatch(/color '#[0-9a-f]{6}' --on heading/);
+    expect(writes(await how('q0', 'large headings, navy')).join('\n')).toMatch(
+      /color '#[0-9a-f]{6}' --on heading/,
+    );
+    expect(writes(await how('q0', 'rounder cards, white')).join('\n')).toMatch(
+      /background-color '#ffffff' --on card/,
+    );
+    expect(
+      writes(await how('q0', 'big buttons, a sky blue, high contrast')).join(
+        '\n',
+      ),
+    ).toMatch(/accent '#[0-9a-f]{6}'/);
+  }, 240_000);
+});
+
+describe('a lone color after a link, a group or bare labels', () => {
+  it('is the link text, the group fill, and nothing on bare labels', async () => {
+    const link = writes(await how('q0', 'bold links, red')).join('\n');
+    expect(link).not.toMatch(/background-color '#dc2626' --on link/);
+    expect(link).toMatch(/'#dc2626'/);
+    expect(writes(await how('q0', 'rounded inputs, white')).join('\n')).toMatch(
+      /'#ffffff' --on inputs/,
+    );
+    expect(
+      writes(await how('q0', 'bold labels, dark gray')).join('\n'),
+    ).not.toMatch(/--on field-label/);
+  }, 240_000);
+});
+
+describe('a lone color after a part that draws with the accent', () => {
+  it('is the accent when it has a hue, and the part fill when it has none', async () => {
+    const box = writes(await how('q0', 'rounded checkboxes, navy')).join('\n');
+    expect(box).toMatch(/accent '#1e3a8a'/);
+    for (const [ask, part, ink] of [
+      ['rounded checkboxes, white', 'checkbox-indicator', '#ffffff'],
+      ['rounded checkboxes, black', 'checkbox-indicator', '#000000'],
+      ['rounded radios, white', 'radio-indicator', '#ffffff'],
+    ])
+      expect(writes(await how('q0', ask)).join('\n')).toMatch(
+        new RegExp(`background-color '${ink}' --on ${part}`),
+      );
+    for (const [ask, ink] of [
+      ['rounder buttons, white', '#ffffff'],
+      ['bigger buttons, black', '#000000'],
+      ['rounder buttons, gray', '#[0-9a-f]{6}'],
+    ])
+      expect(writes(await how('q0', ask)).join('\n')).toMatch(
+        new RegExp(`background-color '${ink}' --on button`),
+      );
+  }, 240_000);
+});
+
 describe('a family run that ends at a comma', () => {
   it('keeps the font', async () => {
     expect(
@@ -246,4 +302,17 @@ describe('a color-blind piece in a list', () => {
     expect(blind).toBeGreaterThanOrEqual(0);
     if (offer >= 0) expect(blind).toBeLessThan(offer);
   }, 240_000);
+});
+
+// (Asks reviewers raised on this reading that it does not answer yet: each
+// is the answer it should give.)
+describe('a lone color after a part, asks still open', () => {
+  it.todo('"rounder buttons, dark gray" fills the buttons, never the accent');
+  it.todo(
+    '"rounder buttons, white, headings in Lora" fills the buttons white and sets Lora on headings',
+  );
+  it.todo(
+    '"rounder progress bars, white" is the progress bar fill, never dropped',
+  );
+  it.todo('"small labels" offers form labels or badges and writes nothing');
 });

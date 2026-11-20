@@ -8642,6 +8642,20 @@ export function draftAnswer(ctx, env, question) {
       )
     )
       return 'inherit';
+    // ("big buttons, a sky blue, high contrast": a list piece that is only a
+    // color, with no look or part word of its own, is the theme's, never
+    // a fill on the part a piece before it named; "buttons rounder and
+    // red" is still the buttons'.)
+    if (
+      j.sep === 'comma' &&
+      j.list == null &&
+      c.colors.length &&
+      !aspectsOf(c.text).length &&
+      !lex.parts.some(([re]) => re.test(` ${c.text.toLowerCase()} `)) &&
+      !c.state &&
+      !c.dir
+    )
+      return 'theme';
     const subject =
       /^(?:the\s+|my\s+|our\s+|an?\s+)?(?:(?:[a-z]+\s+)?(?=(?:accent|neutral|brand|primary|success|warning|danger|error|info|destructive)\b))?([a-z]+)\b(?!-)(?:\s+([a-z-]+))?/.exec(
         c.text,
@@ -8952,8 +8966,10 @@ export function draftAnswer(ctx, env, question) {
       }
       if (named.size > 1) return 'theme';
     }
-    // A text color: the part's, when it holds text.
-    if (own.every(a => a === 'text'))
+    // A text color: the part's, when it holds text. (A color with no look
+    // of its own, "big buttons, a sky blue", is no text color: never the
+    // part's fill or text.)
+    if (own.length && own.every(a => a === 'text'))
       return c.colors.length && !before.parts.every(p => textOnlyPart(p.on))
         ? 'inherit'
         : 'theme';
@@ -9111,7 +9127,128 @@ export function draftAnswer(ctx, env, question) {
     const ownedHere =
       clauses.slice(0, i).some(o => o.parts.length > 0) ||
       Boolean(next?.parts.length);
-    if (!ownLook && (grayLook ? ownedHere : paintsAPart || namesAPart))
+    // (A list piece that is only a color, with no part in the piece after
+    // it, is the theme's: "big buttons, a sky blue, high contrast". "red,
+    // blue buttons" names its part right after, so it is the buttons'.)
+    const j = joinOf.get(c);
+    // (A part that is only text, "bold headings, dark gray", or that paints
+    // a plain fill at rest, "rounder cards, white", takes the color itself:
+    // its text or its fill. A part whose family draws with the accent, a
+    // button, leaves the color to the accent; a color said with a role,
+    // "amber warnings", is that role's.)
+    const prevParts = clauses[i - 1]?.parts ?? [];
+    const accentRoles = groupsOf(ctx);
+    const drawsAccent = (/** @type {string} */ on) =>
+      ['button-like', 'accent-fills'].some(g =>
+        (accentRoles[g] ?? []).includes(on),
+      );
+    // (Judged from resting fills only: a link's press overlay, an `:active`
+    // fill, is no fill it paints at rest.)
+    /** A part's fills at rest. @param {string} on */
+    const restFills = on =>
+      Object.entries(C.MAP[on]?.at?.['background-color'] ?? {})
+        .filter(([k]) => !/:/.test(k))
+        .map(([, v]) => String(v).trim())
+        .filter(v => !/^(?:transparent|none|initial|inherit|unset)$/.test(v));
+    const textOnly = (/** @type {string} */ on) =>
+      /(?:^|-)(?:heading|title|label|link|text|description)s?$/.test(on) &&
+      !restFills(on).length;
+    // (A part with a state that fills with the accent, a checked box,
+    // draws with the accent too.)
+    const accentFill = (/** @type {string} */ on) =>
+      drawsAccent(on) ||
+      Object.values(C.MAP[on]?.at?.['background-color'] ?? {}).some(v =>
+        /--color-accent\b/.test(String(v)),
+      );
+    const plainFill = (/** @type {string} */ on) =>
+      restFills(on).some(v => !/--color-accent\b/.test(v)) && !accentFill(on);
+    // (A group is judged by the members the census has a record of.)
+    // ("bold labels, dark gray": "labels" said bare reads two parts and
+    // writes nothing until one is chosen, so the color is not given to it.)
+    const bareLabels =
+      prevParts.length === 1 &&
+      prevParts[0].on === 'field-label' &&
+      /\blabels?\b/.test(clauses[i - 1]?.text ?? '') &&
+      !clauses.some(o =>
+        /\b(?:field|form|input|checkbox|switch|radio|select)s?\b/.test(o.text),
+      );
+    const takesItself = (
+      /** @type {string} */ aspect,
+      /** @type {(on: string) => boolean} */ test,
+    ) => {
+      if (!prevParts.length || bareLabels) return null;
+      const ok = prevParts.every(p => {
+        // (For a fill, a member that draws none of its own, a date-time
+        // input whose boxes are its pieces, is not judged.)
+        const members = (FAMILIES[p.on] ?? [p.on]).filter(
+          m => C.MAP[m] && (aspect !== 'background' || restFills(m).length),
+        );
+        return members.length > 0 && members.every(test);
+      });
+      return ok ? aspect : null;
+    };
+    /** Whether a color has no hue: white, black or a gray. @param {string | undefined} v */
+    const neutralInk = v => {
+      const rgb = parseColor(String(v ?? ''));
+      return Boolean(
+        rgb && Math.max(...rgb.slice(0, 3)) - Math.min(...rgb.slice(0, 3)) < 24,
+      );
+    };
+    const pieceOfList =
+      j?.sep === 'comma' &&
+      j.list == null &&
+      i > 0 &&
+      !next?.parts.length &&
+      !c.aspects.length &&
+      // ("page background is too blue, make it gray": a pronoun takes the
+      // part before it.)
+      !c.text.split(/\s+/).some(w => PRONOUN_WORD.test(w)) &&
+      // ("green, blue, red, yellow on badges": a run of colors is one list,
+      // never a lone color piece.)
+      ![clauses[i - 1], next].some(
+        o =>
+          o &&
+          o.colors.length &&
+          !o.aspects.length &&
+          !o.parts.length &&
+          // ("mint green for positive numbers", read as the success color:
+          // a color for a thing or a role is a piece of its own, never a
+          // run.)
+          !/\b(?:for|on|in|as|with|success|warning|danger|error|info|accent|neutral|brand|primary|status|colou?rs?)\b/.test(
+            o.text,
+          ),
+      );
+    const own =
+      pieceOfList &&
+      // (One color alone; "red #c8102e and blue #003da5 accents" is a run.)
+      !next?.colors.length &&
+      !/\b(?:success|warnings?|danger|errors?|info|neutral|accents?|brand|primary|status(?:es)?|highlights?|page|background|text|borders?)\b/.test(
+        c.text,
+      )
+        ? takesItself('text', textOnly) ||
+          takesItself('background', plainFill) ||
+          // (White, black or a gray is never an accent: after a part that
+          // draws with the accent, "rounder buttons, white", it is that
+          // part's fill.)
+          (neutralInk(c.colors[0])
+            ? takesItself('background', accentFill)
+            : null)
+        : null;
+    if (own && !c.aspects.length && !ownLook) {
+      c.parts = prevParts.map(p => ({...p}));
+      c.aspects = [own];
+      // (The look this reader gives is the clause's own: a later reader
+      // never swaps it for the part's look said before, "rounded
+      // checkboxes, white" keeps the fill.)
+      ownAspects.set(c, [own]);
+      continue;
+    }
+    const ownPiece = pieceOfList && !own;
+    if (
+      !ownLook &&
+      !ownPiece &&
+      (grayLook ? ownedHere : paintsAPart || namesAPart)
+    )
       continue;
     if (
       /\b(?:success|warning|danger|error|info|neutral|accent|brand|page|background|text|border)\b/.test(
