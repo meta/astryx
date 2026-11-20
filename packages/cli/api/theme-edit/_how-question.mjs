@@ -8298,6 +8298,10 @@ export function draftAnswer(ctx, env, question) {
     if (own && !c.aspects.length && !ownLook) {
       c.parts = prevParts.map(p => ({...p}));
       c.aspects = [own];
+      // (The look this reader gives is the clause's own: a later reader
+      // never swaps it for the part's look said before, "rounded
+      // checkboxes, white" keeps the fill.)
+      ownAspects.set(c, [own]);
       continue;
     }
     const ownPiece = pieceOfList && !own;

@@ -237,6 +237,14 @@ describe('a lone color after a part that draws with the accent', () => {
   it('is the accent when it has a hue, and the part fill when it has none', async () => {
     const box = writes(await how('q0', 'rounded checkboxes, navy')).join('\n');
     expect(box).toMatch(/accent '#1e3a8a'/);
+    for (const [ask, part, ink] of [
+      ['rounded checkboxes, white', 'checkbox-indicator', '#ffffff'],
+      ['rounded checkboxes, black', 'checkbox-indicator', '#000000'],
+      ['rounded radios, white', 'radio-indicator', '#ffffff'],
+    ])
+      expect(writes(await how('q0', ask)).join('\n')).toMatch(
+        new RegExp(`background-color '${ink}' --on ${part}`),
+      );
     for (const [ask, ink] of [
       ['rounder buttons, white', '#ffffff'],
       ['bigger buttons, black', '#000000'],
