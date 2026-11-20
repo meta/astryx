@@ -6,7 +6,7 @@ import {
   NO_SYNTAX_THEME,
   selectedSyntaxTheme,
   syntaxThemeChoices,
-  syntaxPresetIdentifier,
+  syntaxPresetName,
   syntaxThemeFor,
 } from '../components/component-detail/syntaxThemeChoices';
 
@@ -30,13 +30,13 @@ describe('the playground syntax theme control', () => {
     expect(syntaxThemeFor(preset.name)).toBe(preset);
   });
 
-  it('names a preset by its exported identifier in code', () => {
+  it('names the preset a value is', () => {
     const dracula = allSyntaxPresets.find(theme => theme.name === 'dracula');
     const oneDarkPro = allSyntaxPresets.find(
       theme => theme.name === 'one-dark-pro',
     );
-    expect(syntaxPresetIdentifier(dracula)).toBe('dracula');
-    expect(syntaxPresetIdentifier(oneDarkPro)).toBe('oneDarkPro');
-    expect(syntaxPresetIdentifier({name: 'dracula'})).toBeNull();
+    expect(syntaxPresetName(dracula)).toBe('dracula');
+    expect(syntaxPresetName(oneDarkPro)).toBe('one-dark-pro');
+    expect(syntaxPresetName({name: 'dracula'})).toBeNull();
   });
 });
