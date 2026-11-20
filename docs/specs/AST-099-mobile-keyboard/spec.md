@@ -141,7 +141,8 @@ app to turn on.
   comes from FR2 there too and FR8 governs how surfaces ride the keyboard, on any
   device that shows an on-screen keyboard; a browser that offers the report but
   shows no on-screen keyboard reads 0. A page that is not a secure context gets
-  no such report, so FR8 does not apply there.
+  no such report, so FR8 does not apply there. In Safari on iOS, which WebKit's
+  touch capabilities identify, FR8 governs the ride too (DEC-12).
 - **FR7 — Top-level documents only.** Inside an iframe the frame's visual
   viewport does not change when the keyboard opens, so the keyboard height is
   0 there and nothing changes. Behavior and evidence for this record come
@@ -170,6 +171,13 @@ app to turn on.
   FR2 reads 0: a keyboard-aware field's keyboard height is 0 there and it
   does not ride, since the browser has already made the room. Everywhere
   else, keyboard-aware surfaces ride the visual-viewport height (DEC-4).
+  Safari on iOS reports the keyboard's show once, as UIKit's keyboard starts
+  up, and its hide only once the keyboard is down. There Core's
+  keyboard-aware surfaces ride the keyboard (DEC-12): on show from
+  that report, and on hide from the blur that takes the keyboard down, as FR3
+  sets out for a fully expanded sheet. A hide that no blur predicts rides from
+  Safari's report. Focus that moves into a frame, a custom element or an open
+  shadow root whose field can keep the keyboard up predicts no hide.
   An Android browser without a keyboard geometry API
   that shrinks only its visual viewport, such as Firefox for Android, gets
   FR2–FR5 under FR6.
@@ -218,10 +226,11 @@ app to turn on.
     that scroll.
   - **Docked containers.** A field docked at the bottom of the viewport, in a
     bottom bar, a fixed toolbar, or a sheet, rides the keyboard: its docked
-    container moves up as the keyboard opens and back down as it closes, on
-    FR8's ride (DEC-2) where that applies, and following the visual-viewport
-    height (FR2) elsewhere, such as Safari on iOS. A Core host rides by applying
-    the keyboard height on its own element (FR3), and the field inside it is not
+    container moves up as the keyboard opens and back down as it closes. It
+    moves on FR8's ride where that applies: in Chrome on Android (DEC-2) and
+    Safari on iOS (DEC-12). Elsewhere, such as in Firefox for Android, it
+    follows the visual-viewport height (FR2). A Core host rides by applying the
+    keyboard height on its own element (FR3), and the field inside it is not
     moved a second time.
   - **App-owned docked containers.** A container the app owns rides too when it
     is fixed-position, does not fill the viewport, and is docked: its layout
@@ -277,12 +286,13 @@ app to turn on.
 - Supported feature/engine floor: the package's supported browsers
   (`spec:AST-013` FR3). FR2–FR5 apply to Safari on iOS, in the browser and as a
   home-screen app, and to Firefox for Android; FR8's ride applies wherever the
-  browser reports the keyboard itself, such as Chrome on Android.
+  browser reports the keyboard itself, such as Chrome on Android, and in
+  Safari on iOS from its report and its blur (DEC-12).
 - Unsupported behavior: with no on-screen keyboard, or no visual-viewport
   support, the keyboard height is 0 and nothing changes. During server render it
   renders nothing and reads no viewport.
 - Browser evidence: Safari on iOS, in the iOS Simulator or on a device and in a
-  top-level document, proves the iOS claims of FR2–FR5, and Chrome on Android
+  top-level document, proves the iOS claims of FR2–FR5 and FR8, and Chrome on Android
   in the Android emulator with Gboard proves FR8, with Firefox for Android in
   the emulator proving FR2–FR5 there
   (`spec:AST-013` FR10); DOM and visual-viewport tests prove the rest of
@@ -340,7 +350,10 @@ app to turn on.
   sheet in Chrome on Android keeps the keyboard accommodation
   `BottomSheet.doc.mjs` documents and moves with the keyboard, so no consumer
   loses behavior and no breaking change applies; `BottomSheet.doc.mjs` states
-  each platform's behavior. Firefox for Android gets FR2–FR5.
+  each platform's behavior. In Safari on iOS, the keyboard layout guide reads
+  UIKit's keyboard schedule, so the same sheet, ChatLayout's dock and a docked
+  container ride the keyboard (FR8, DEC-12). Firefox for Android
+  gets FR2–FR5.
 - No public API exposes the keyboard height, and FR3 keeps it that way.
 - The keyboard module reads the input stream's touch counts through one reader,
   `getTouches`, which `packages/core/src/utils/inputStream.ts` exports. A finger
@@ -424,11 +437,12 @@ loads (Gap 22). Each other gap below is open.
   it matches Chrome's own reveal (within 2 px); in that window an app that
   itself centres the focused field is undone too. BottomSheet's inset stays
   local to its own sheet.
-- **Gap 12 — A fully expanded sheet's hide in Firefox for Android.** Firefox
-  for Android reports no keyboard slide, so the sheet takes the same path as in
-  Safari on iOS (`packages/core/src/keyboard/useMobileKeyboard.ts`). But
-  Firefox reports the keyboard's hide once, at its end. The sheet's content
-  moves at that report, in one frame, instead of riding from the blur (FR3).
+- **Gap 12 — A fully expanded sheet's hide in Firefox for Android.** Firefox for
+  Android reports no keyboard slide and has no keyboard schedule, so the sheet
+  follows the visual viewport's reports
+  (`packages/core/src/keyboard/useMobileKeyboard.ts`). But Firefox reports the
+  keyboard's hide once, at its end. The sheet's content moves at that report, in
+  one frame, instead of riding from the blur (FR3).
 - **Gap 13 — The rise in Chrome on Android.** When the keyboard opens, a field
   in scrolling content moves into place in one frame, with no rise beside
   Gboard's slide. Chrome checks the focused field in the resize's own commit
@@ -471,6 +485,7 @@ that sets its own `translate`, to the app.
 | FR2–FR5  | Release gate: a physical iPhone in a top-level document (DEC-3)                                              | iPhone Safari with the toolbar expanded and collapsed; iPhone home-screen app; the phone's refresh rate                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | The page lurches, the field ends under the keyboard, or the surface does not follow the keyboard                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | FR3–FR4  | ChatLayout's keyboard tests in jsdom and its interaction proofs in Chromium and WebKit                       | the fixed and the sticky dock with the keyboard shown and hidden; the message area's end padding; a transcript at its newest message; a page pinch-zoomed with the keyboard up; focus by tap, Tab, `focus()` and Done, under a finger and under a mouse                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | The dock left under the keyboard or lifted with none; the newest message unable to scroll above the composer; a transcript at its newest message left behind; the page panned to the composer's text under a finger; focus left in the text after Done, or the composer group focusable outside Done's park                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | FR8      | ChatLayout's interaction proofs in Chromium with Chrome's keyboard report                                    | the dock riding Gboard's slide up from the report and down from the blur; reduced motion on                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | The dock lagging Gboard's slide, laying out or painting per frame, or jumping at the hand-back; the dock travelling under reduced motion instead of DR2's cross-fade                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| FR8      | Safari on iOS in the Simulator, every drawn frame read; release gate: a physical iPhone (DEC-3)              | ChatLayout's composer and a Tall sheet: keyboard shown, and hidden by a blur; a main thread blocked from the frame after Safari's report; reduced motion on; focus moving into a frame, a custom element or an open shadow root                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | A surface jumps at Safari's report, falls more than a frame behind the keyboard, or waits for the hide report instead of riding from the blur. Timing runs from Safari's report, so a ride that starts after its frame fails. A field inside a frame rides its hide from the report (FR7).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | FR9      | ChatLayout's keyboard tests in jsdom                                                                         | ChatComposer in the fixed and the sticky dock, above the keyboard after each focus route                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | ChatComposer ending under the keyboard, or moved a second time inside its dock, after any focus route                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | FR9      | TBD (Gap 1–11): a focus test per covered field, driving one keyboard change                                  | each covered field in the page, a Tall and a `hug` BottomSheet, ChatLayout's fixed and sticky dock, an app's fixed bar docked to the bottom edge with no `translate` of its own, and a fixed Toolbar docked there; focus by tap, Tab, and `focus()`; a field in scrolling content in the page and in a nested scroller; a field near its scroller's end; a field in a scroller inside a full-viewport fixed container                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | A focused page field or Core-host field left under the keyboard or less than 10 CSS px above it (a field with no scroller between it and a fixed container FR9 leaves to the app keeps the browser's own reveal and is not a failure; a field that a scroller holds inside such a container, left under the keyboard, is a failure), a field in an app's docked bar whose bar's bottom does not meet the keyboard's top, scroll range left at the scroller's end after the keyboard hides, a page pan or translate, a reveal later than the frame the keyboard is reported in (on iOS the rise starts in that frame and settles as FR9 states), or a second offset inside a host that already applies the height                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | FR9      | TBD (Gap 1): a source boundary check over the covered fields                                                 | every covered field's props type and source                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | A public prop, option, or context for the behavior                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
@@ -619,6 +634,40 @@ reported partway through the keyboard's slide; the content rides down from
 that report.
 
 Rejected: a fast slide, which Chrome's pan still overtakes when the page stalls; the VirtualKeyboard overlay setting, which changes DEC-4's measurement source and the page's layout.
+
+### DEC-12 — Safari on iOS rides the keyboard from its report and its blur
+
+**Reference:** `spec:AST-099/DEC-12`
+**Decider:** pending
+
+Safari on iOS reports the keyboard's show once, a little after UIKit's
+keyboard starts up, and its hide only once the keyboard is down. A surface that
+lands at the report jumps while the keyboard slides, and a surface that waits
+for the hide report sits over the page the keyboard has left. So Core's
+keyboard-aware surfaces ride the keyboard. The show rides from Safari's report
+on a critically damped spring at ω = 8π s⁻¹, cut and normalised at 330 ms.
+It never trails UIKit's keyboard frame spring, as Astryx's UIKit tables
+measure it. From 30 to 97% of the rise, it leads it by 3 to 18 ms. WebKit
+reports the keys a little after they start. Its inset counts the form
+accessory bar, which rides on the keys from their first frame. The lead
+offsets part of that lag. The hide rides
+UIKit's spring, which Core Animation cuts at the duration the keyboard
+notifications report. It starts at the blur that takes the keyboard down, as a
+prediction that Safari's report confirms, as FR3 sets out for a fully expanded
+sheet. A hide that no blur predicts, such as a downward dismissal, rides from
+Safari's report: the keyboard is already down, and the ride keeps the surface
+from jumping. Each surface rides the inset's edge, the accessory bar's top,
+with no bar height subtracted: it moves only while the edge is at it. A field
+inside a frame, a custom element or an open shadow root can keep the keyboard
+up, so focus that moves there predicts no hide. A ride starts once the task
+that delivers Safari's report ends, so work inside that task delays it; work
+after it does not. Safari on iOS's schedule loads with the touch runtime after
+the page's first paint; until then, Safari on iOS moves in one step.
+WebKit's touch capabilities select this schedule, never the user
+agent. Simulator evidence gates merge, and a physical iPhone gates release
+(DEC-3).
+
+Rejected: landing in one step at Safari's report, which jumps while the keyboard slides; a cubic-bézier stand-in for the spring, which drifts from the keyboard's own motion; UIKit's spring for the show, which trails Safari's late report and the accessory bar; moving each surface over its own travel along the whole curve, which floats a surface that rests above the keyboard's start.
 
 ## Open questions
 
