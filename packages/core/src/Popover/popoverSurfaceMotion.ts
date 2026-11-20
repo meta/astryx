@@ -89,6 +89,16 @@ function readState(animator: Animator, axis: 'x' | 'y'): SurfaceState {
   };
 }
 
+/**
+ * The element a touch presentation's input holds key on: the top-layer
+ * popover around the surface. The entrance hold, the hold until the grow's
+ * first frame and the grow's own hold then share one shield. The open shows
+ * it in the top layer once.
+ */
+export function holdLayerOf(surface: Element): Element {
+  return surface.closest('[popover]') ?? surface;
+}
+
 export interface PopoverSurfaceMotion {
   /**
    * The popover has just been shown in its touch presentation: grow it out
@@ -321,7 +331,7 @@ export function createPopoverSurfaceMotion(
     // Under a fine primary pointer, as on a touchscreen laptop, the page
     // stays live while it grows.
     releaseHold = isCoarsePointer(view)
-      ? holdInput(element, {until: handle, scope: 'viewport'})
+      ? holdInput(holdLayerOf(element), {until: handle, scope: 'viewport'})
       : null;
     void handle.finished.then(() => {
       if (presentHandle === handle) {
