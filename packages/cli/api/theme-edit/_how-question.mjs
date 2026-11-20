@@ -12511,10 +12511,12 @@ export function draftAnswer(ctx, env, question) {
         .replace(/^[^:]+:\s*/, '')
         .trim()
         .split(/\s+/)[1] ?? '';
+    // (A colour said as the list's first word, "cards: blue 2px border",
+    // "badges: red", is a value for every member, as main reads it.)
     const colorValue =
-      (colorsIn(lead0).length > 0 || lead0 === 'transparent') &&
-      (aspectsOf(next0).length > 0 ||
-        /^(?:top|bottom|left|right)$/.test(next0));
+      colorsIn(lead0).length > 0 ||
+      lead0 === 'transparent' ||
+      /^(?:top|bottom|left|right)$/.test(next0);
     if (variants.includes(lead0) && lead0 !== 'default' && !colorValue)
       c.parts = [{...c.parts[0], when: `variant:${lead0}`}];
     else if (
