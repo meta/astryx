@@ -284,6 +284,21 @@ describe('part words read in place', () => {
         ask,
       ).toBe(false);
     }
+    // (A bare "actions" before a look reads as main reads it: the word in
+    // its clause decides, never the word alone.)
+    for (const [ask, first] of [
+      ['actions 8px corners', 'set q0 corners 8px'],
+      ['actions 4px border', 'set q0 --border-width 4px'],
+    ])
+      expect(writes(await how('q0', ask))[0], ask).toBe(first);
+    {
+      const rs = await how('q0', 'make the actions 8px corners');
+      expect(writes(rs)).toEqual([]);
+      expect(rs.some(r => /no part is called "action"/.test(r.text))).toBe(
+        true,
+      );
+    }
+    expect(writes(await how('q0', 'actions blue'))).toEqual([]);
     // ("very tight" before a type word is that type's, never the theme's
     // spacing dial at its far rung.)
     for (const [ask, own] of [

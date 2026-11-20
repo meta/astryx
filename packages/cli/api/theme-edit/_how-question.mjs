@@ -88,6 +88,9 @@ import {render as renderStep} from './_how-commands.mjs';
 /** @typedef {import('./_how-commands.mjs').Step} Step */
 /** @typedef {import('./_how-commands.mjs').MeasureIntent} MeasureIntent */
 
+/** The regexes of the phrase overrides, read in their clause. */
+const OVERRIDE_RES = new Set(OVERRIDES.map(([re]) => re));
+
 /**
  * One answer: what it does, and the ways to do it. Each option is a list of
  * steps run in order; most options are one step. `smallest`: the options
@@ -24237,6 +24240,20 @@ export function draftAnswer(ctx, env, question) {
    * @param {string} w
    */
   /**
+   * Whether a word names a part. A catalog name is read alone; a phrase
+   * override ("actions" names the button only before "button" or at a
+   * phrase end) is read in its clause, so the place it stands decides.
+   * @param {string} w @param {string} [text] the clause it is read in
+   */
+  function partWord(w, text) {
+    return lex.parts.some(([re]) => {
+      if (text == null || !OVERRIDE_RES.has(re)) return re.test(` ${w} `);
+      const m = re.exec(` ${text} `);
+      return m != null && new RegExp(`\\b${w}\\b`).test(m[0]);
+    });
+  }
+
+  /**
    * Whether how knows a word as something other than a part's name. A piece
    * of a part's hyphenated name ("thumb" in slider-thumb, "trigger",
    * "overflow") is known only right before a part word, as a modifier
@@ -24275,7 +24292,7 @@ export function draftAnswer(ctx, env, question) {
       lex.vocab.includes(w) ||
       lex.vocab.includes(word) ||
       corrected(w, lex.vocab) !== w ||
-      lex.parts.some(([re]) => re.test(` ${w} `)) ||
+      partWord(w, text) ||
       aspectsOf(w).length ||
       aspectsOf(word).length ||
       stateWord(w) != null ||
