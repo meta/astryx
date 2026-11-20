@@ -1026,6 +1026,15 @@ function ownWords(k) {
  * 12px") is its own ask.
  */
 /**
+ * A negation that governs the rounding itself: "no rounding", "not
+ * rounded", "don't round", "without any rounding", "avoid rounding". Only
+ * small words may stand between, so a negation of another look ("no border
+ * rounded …") is never the rounding's.
+ */
+const ROUNDING_NEGATED =
+  /\b(?:no|not|never|without|none|don'?t|do\s+not|doesn'?t|avoid|stop|quit)\s+(?:(?:the|any|more|longer|be|being|get|have|to|so|too|very|much|at\s+all)\s+){0,2}(?:round\w*|radius|radii|curv\w*)\b/;
+
+/**
  * A length that belongs to another look said after it, with up to three
  * words between: "2px border", "8px blue border", "1px solid border",
  * "12px spacing", "2px underline".
@@ -21764,18 +21773,22 @@ export function draftAnswer(ctx, env, question) {
           // (Square said as a word, as taking the rounding away ("take the
           // rounding off", "remove the rounding", "unrounded"), or as a
           // negation of the rounding itself ("no rounding on the bottom
-          // corners", "cards not rounded at the bottom"). A negation of
-          // another look, "cards rounded on top without a border", leaves
-          // the corners as asked.)
+          // corners", "cards not rounded at the bottom", "don't round the
+          // bottom corners"). Only small words may stand between the
+          // negation and the round word, so a negation of another look,
+          // "cards rounded on top without a border", "cards with no border
+          // rounded top corners 8px", leaves the corners as asked.)
           const square =
             /\b(square[ds]?|sharp|squared off|unround\w*)\b/.test(c.text) ||
             /\b(?:take|takes|taking|took|strip|strips)\s+(?:the\s+)?(?:rounding|roundness|round|curves?|curvature)\s+off\b|\b(?:remove|removes|drop|drops|lose|loses)\s+(?:the\s+)?(?:rounding|roundness|curves?|curvature)\b/.test(
               c.text,
             ) ||
             (Boolean(c.neg) &&
-              /\b(?:no|not|never|without|none)\s+(?:\w+\s+){0,2}?(?:round\w*|radius|radii|curv\w*)\b/.test(
-                c.text,
-              ));
+              ROUNDING_NEGATED.test(c.text) &&
+              // (As said, too: the clause may carry a negation the reader
+              // moved from another look, "cards with no border rounded top
+              // corners 8px".)
+              ROUNDING_NEGATED.test(String(question).toLowerCase()));
           // (A negation of another look, "… without a border", is that
           // look's: the corners are measured as a corner ask, never as a
           // removal.)

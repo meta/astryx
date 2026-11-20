@@ -526,13 +526,32 @@ describe('the corners an ask names', () => {
       ),
     ).toBe(false);
     // (The 8px is the top corners'; the negation is the border's.)
+    // (A look noun between the negation and the round word: the negation
+    // is the border's.)
+    const before = await all('cards with no border rounded top corners 8px');
+    expect(before).toContain('border-start-start-radius 8px --on card');
+    expect(before.some(c => /radius 0\b/.test(c))).toBe(false);
     const sized = await all('cards top corners 8px without a border');
     expect(sized).toContain('border-start-start-radius 8px --on card');
     expect(sized).toContain('border-start-end-radius 8px --on card');
-    // (A negation of the rounding itself still squares.)
-    expect(await writes('no rounding on the bottom corners of tabs')).toEqual([
-      'border-end-start-radius 0 --on tab',
-      'border-end-end-radius 0 --on tab',
-    ]);
+    // (A negation of the rounding itself still squares, "no rounding" and
+    // "don't round", asked on a theme of its own whose tabs are rounded:
+    // the shared theme's tab bottoms may be square by now.)
+    await themeEditNew('neg', {cwd, like: 'neutral'});
+    for (const q of [
+      'no rounding on the bottom corners of tabs',
+      "don't round the bottom corners of tabs",
+    ]) {
+      const {data} = await themeEditHow(q, {cwd, theme: 'neg'});
+      expect(
+        (data.results?.[0]?.commands ?? []).map((/** @type {string} */ c) =>
+          c.replace(/^.*? editor set neg /, ''),
+        ),
+        q,
+      ).toEqual([
+        'border-end-start-radius 0 --on tab',
+        'border-end-end-radius 0 --on tab',
+      ]);
+    }
   }, 240_000);
 });
