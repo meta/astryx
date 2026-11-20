@@ -40,6 +40,7 @@ import {settledBox} from '../Layer/settledBox';
 import {isCoarsePointer} from '../utils/coarsePointer';
 import {
   createPopoverSurfaceMotion,
+  holdLayerOf,
   type PopoverSurfaceMotion,
   type PopoverSurfaceRect,
 } from './popoverSurfaceMotion';
@@ -99,7 +100,9 @@ function holdUntilNextFrame(surface: HTMLElement): () => void {
       resolve();
     }
   });
-  return holdInput(surface, {until: nextFrame, scope: 'viewport'});
+  // On the layer the entrance hold and the grow's hold use, so the open adds
+  // no second shield to the top layer.
+  return holdInput(holdLayerOf(surface), {until: nextFrame, scope: 'viewport'});
 }
 
 export function usePopoverSurfaceMotion({

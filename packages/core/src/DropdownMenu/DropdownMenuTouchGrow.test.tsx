@@ -16,6 +16,7 @@ import {act, fireEvent, render, screen} from '@testing-library/react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {__resetMenuPressForTest} from '../hooks/useMenuPress';
 import type * as InputHold from '../Layer/inputHold';
+import {holdInput} from '../Layer/inputHold';
 import type * as PopoverSurfaceMotion from '../Popover/popoverSurfaceMotion';
 import {scroll} from '../motion/uikit/scroll';
 import {DropdownMenu, type DropdownMenuOption} from './DropdownMenu';
@@ -36,13 +37,17 @@ const entranceHold = vi.hoisted(() => vi.fn(() => null));
 vi.mock('../Layer/holdEntranceInput', () => ({
   holdEntranceInput: entranceHold,
 }));
-// Counts the input holds that are up. jsdom hit-tests nothing, so no shield
-// is drawn.
-const inputHolds = vi.hoisted(() => ({up: 0}));
+// Counts the input holds that are up, with each hold's layer and scope. jsdom
+// hit-tests nothing, so no shield is drawn.
+const inputHolds = vi.hoisted(() => ({
+  up: 0,
+  raised: [] as {layer: Element; scope: string}[],
+}));
 vi.mock('../Layer/inputHold', async importOriginal => ({
   ...(await importOriginal<typeof InputHold>()),
-  holdInput: (_layer: Element, {until}: InputHold.InputHoldOptions) => {
+  holdInput: (layer: Element, {until, scope}: InputHold.InputHoldOptions) => {
     inputHolds.up += 1;
+    inputHolds.raised.push({layer, scope});
     let isUp = true;
     const end = () => {
       if (isUp) {
@@ -162,6 +167,7 @@ beforeEach(() => {
   __resetMenuPressForTest();
   vi.clearAllMocks();
   inputHolds.up = 0;
+  inputHolds.raised = [];
   vi.stubGlobal(
     'matchMedia',
     vi.fn().mockImplementation((query: string) => ({
@@ -508,5 +514,34 @@ describe('DropdownMenu touch grow', () => {
     expect(inputHolds.up).toBe(1);
     await runFrames();
     expect(inputHolds.up).toBe(0);
+  });
+
+  it("raises one viewport shield for a finger's open: the hold until the grow's first frame shares the entrance hold's layer, so the open shows one shield in the top layer (spec:AST-094 FR31)", async () => {
+    stubCoarsePointer();
+    const runFrames = stubFrames();
+    // A browser lists the CSS entrance as the open starts, so the entrance
+    // hold comes up too. It holds the layer until the entrance ends.
+    entranceHold.mockImplementation(((layer: Element) =>
+      holdInput(layer, {
+        until: new Promise<void>(() => {}),
+        scope: 'viewport',
+      })) as never);
+    render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
+    const trigger = screen.getByRole('button', {name: 'Actions'});
+    fireEvent.pointerDown(trigger, touch);
+    const layer = screen.getByRole('menu', {hidden: true}).closest('[popover]');
+    expect(layer).not.toBeNull();
+    const viewportHolds = inputHolds.raised.filter(
+      hold => hold.scope === 'viewport',
+    );
+    // A tap between the press and the grow's first frame stays held over the
+    // whole viewport.
+    expect(viewportHolds.length).toBe(2);
+    expect(new Set(viewportHolds.map(hold => hold.layer))).toEqual(
+      new Set([layer]),
+    );
+    await runFrames();
+    // The entrance hold stays up here, as its entrance never ends.
+    expect(inputHolds.up).toBe(1);
   });
 });
