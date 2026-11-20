@@ -1068,3 +1068,52 @@ describe('generateOnMediaCSS reads light-dark() and var() names in any spelling'
     expect(css).toContain('--_theme-root-color-background-muted:');
   });
 });
+
+describe('generateOnMediaCSS overlapping rules on a card a dark page flips', () => {
+  // Two width rules match together. One changes the emphasized border, which
+  // the dark side holds; the other makes the plain border refer to it. On a
+  // dark page the flipped card shows the light side, so the overlap block's
+  // light copy writes the light side's border under both rules, not its base.
+  const theme = defineTheme({
+    name: 'media-scheme-replay-flip-overlap',
+    tokens: {
+      '--color-background-inverted': ['#0a1317', '#f4f0e8'],
+      '--color-on-dark': ['#ffffff', '#ffffff'],
+      '--color-on-light': ['#111111', '#111111'],
+      '--color-border-emphasized': ['#777777', '#888888'],
+      '--color-border': ['#123456', '#456789'],
+    },
+    onDark: {tokens: {'--color-border-emphasized': '#cccccc'}},
+    adaptations: {
+      rules: [
+        {
+          when: {width: {below: 'xl'}},
+          value: {
+            tokens: {
+              '--color-border-emphasized': 'light-dark(#ff0000, #aa0000)',
+            },
+          },
+        },
+        {
+          when: {width: {below: 'lg'}},
+          value: {tokens: {'--color-border': 'var(--color-border-emphasized)'}},
+        },
+      ],
+    },
+  });
+  const css = generateOnMediaCSS(theme);
+
+  it("writes the light side's border under both rules, not its base", () => {
+    const nested = css.slice(css.lastIndexOf('\n@media (width < 1280px) {'));
+    const lightCopies = [...nested.matchAll(/([^{};]+)\{([^{}]*)\}/g)].filter(
+      match => match[1].includes('[data-astryx-media-dark-page="light"]'),
+    );
+    const borders = lightCopies.flatMap(
+      match => /--color-border:\s*([^;]+);/.exec(match[2])?.slice(1, 2) ?? [],
+    );
+    expect(borders.length).toBeGreaterThan(0);
+    for (const value of borders) {
+      expect(value.trim()).not.toBe('light-dark(#123456, #456789)');
+    }
+  });
+});

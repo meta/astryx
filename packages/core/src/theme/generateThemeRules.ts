@@ -2138,6 +2138,7 @@ function overlappingRuleBlocks(
     darkPageRestatements: (
       restatedBySide: ReadonlyMap<MediaSide, [string, string][]>,
       ownBySide: ReadonlyMap<MediaSide, ReadonlyMap<string, string>>,
+      shownBySide: ReadonlyMap<MediaSide, ReadonlyMap<string, string>>,
       location: string,
     ) => string[];
   },
@@ -2162,6 +2163,7 @@ function overlappingRuleBlocks(
     };
     const parts: string[] = [];
     const overlapBySide = new Map<MediaSide, [string, string][]>();
+    const shownBySide = new Map<MediaSide, ReadonlyMap<string, string>>();
     for (const surface of ['dark', 'light'] as const) {
       const laterReplays = later.get(surface);
       const earlierReplays = earlier.get(surface);
@@ -2178,6 +2180,7 @@ function overlappingRuleBlocks(
         ...earlierReplays.restated,
         ...laterReplays.restated,
       ]);
+      shownBySide.set(surface, shownUnderBoth);
       const held = new Set([
         ...excluded,
         ...[...shownUnderBoth]
@@ -2233,6 +2236,7 @@ function overlappingRuleBlocks(
       ...darkPageRestatements(
         overlapBySide,
         ruleOwnBySide[laterIndex] ?? new Map(),
+        shownBySide,
         `adaptations[${laterIndex}]`,
       ),
     );
@@ -2415,11 +2419,13 @@ export function generateOnMediaCSS(
    * The dark-page copies of one query's restatements. A side's restatement
    * also reaches a surface that a dark page flips to the other side. The copy
    * writes the flipped side's restatements. For a token only the other side
-   * restates, it writes this side's own value, its base replay, or `inherit`.
+   * restates, it writes the value this side shows under the same queries: its
+   * own value, else its re-declaration there, else `inherit`.
    */
   const darkPageRestatements = (
     restatedBySide: ReadonlyMap<MediaSide, [string, string][]>,
     ownBySide: ReadonlyMap<MediaSide, ReadonlyMap<string, string>>,
+    shownBySide: ReadonlyMap<MediaSide, ReadonlyMap<string, string>>,
     location: string,
   ): string[] => {
     const copies: string[] = [];
@@ -2428,14 +2434,13 @@ export function generateOnMediaCSS(
       const restated = restatedBySide.get(side) ?? [];
       const restatedNames = new Set(restated.map(([name]) => name));
       const own = ownBySide.get(side) ?? new Map<string, string>();
-      const baseReplays = new Map(surfaceReplays.get(side) ?? []);
-      // For each token the other side restates, the value this side shows:
-      // its own value, else its base replay, else the inherited value.
+      const shown =
+        shownBySide.get(side) ?? new Map(surfaceReplays.get(side) ?? []);
       const kept = (restatedBySide.get(other) ?? []).flatMap(
         ([name]): [string, string][] =>
           restatedNames.has(name)
             ? []
-            : [[name, own.get(name) ?? baseReplays.get(name) ?? 'inherit']],
+            : [[name, own.get(name) ?? shown.get(name) ?? 'inherit']],
       );
       const entries = [...restated, ...kept];
       if (entries.length === 0) {
@@ -2574,6 +2579,12 @@ export function generateOnMediaCSS(
       ...darkPageRestatements(
         restatedBySide,
         ownBySide,
+        new Map(
+          [...surfaceReplays].map(([side, replays]) => [
+            side,
+            new Map(replays),
+          ]),
+        ),
         `adaptations[${index}]`,
       ),
     );
