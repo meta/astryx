@@ -22,7 +22,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Use tickFormat for product-specific units or locale formatting, and truncate for long category labels. Leave maxTicks unset: the axis thins its labels to fit its width.',
+          'Use formatTick for product-specific units or locale formatting, and truncate for long category labels. Leave maxTicks unset: the axis thins its labels to fit its width.',
       },
       {
         guidance: false,
@@ -103,10 +103,10 @@ export const docs = {
         'Leave unset to thin labels to fit the axis width. A set value wins over that fit, so its labels can overlap on a narrow chart. Labels are thinned to at most this many; the first and last labels stay.',
     },
     {
-      name: 'tickFormat',
-      type: '(value: unknown) => string | null | undefined',
+      name: 'formatTick',
+      type: 'ChartValueFormat',
       description:
-        'Formats each retained tick. When omitted, or when it returns null or undefined, continuous scales use d3 formatting and band scales use their category strings.',
+        'Formats each retained tick. It receives the tick value, the provider locale, and the calendar the provider resolves, so a built-in formatter such as compactNumber needs no wrapper. When omitted, or when it returns null or undefined, continuous scales use d3 formatting and band scales use their category strings. truncate applies to the returned text.',
     },
     {
       name: 'truncate',
@@ -149,7 +149,7 @@ export const docs = {
   axes={
     <>
       <ChartAxis position="bottom" />
-      <ChartAxis position="left" tickFormat={value => String(value)} />
+      <ChartAxis position="left" formatTick={value => String(value)} />
     </>
   }
 />;`,

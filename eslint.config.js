@@ -342,7 +342,8 @@ export default defineConfig(
     },
   },
   // Core's internal subpaths (`@astryxdesign/core/internal/*`) and its
-  // gesture, motion and touch-support source are for Core and Lab only.
+  // gesture, motion and touch-support source are for Core and Lab. Charts
+  // may import the one internal subpath that the next block allows.
   {
     files: ['**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}'],
     ignores: ['packages/core/**', 'packages/lab/**', '**/dist/**'],
@@ -351,6 +352,21 @@ export default defineConfig(
     },
     rules: {
       '@astryx/no-core-internal-import': 'error',
+    },
+  },
+  // Charts reads the calendar that Core resolves, the one its date
+  // components show, from Core's calendar entry.
+  {
+    files: ['packages/charts/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}'],
+    ignores: ['**/dist/**'],
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-core-internal-import': [
+        'error',
+        {allow: ['@astryxdesign/core/internal/calendar-system']},
+      ],
     },
   },
   // Copyright header — all source files must have the Meta copyright notice

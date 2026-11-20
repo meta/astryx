@@ -51,6 +51,9 @@ const TIMESTAMP_TEST_ORACLE_FILE =
   'packages/core/src/Timestamp/Timestamp.test.tsx';
 const CALENDAR_TEST_ORACLE_FILE =
   'packages/core/src/Calendar/Calendar.test.tsx';
+const CHART_AXIS_TEST_ORACLE_FILE = 'packages/charts/src/ChartAxis.test.tsx';
+// ChartAxis's own source is not an oracle: the exception is the test file.
+const CHART_AXIS_FILE = 'packages/charts/src/ChartAxis.tsx';
 // A test file that is NOT one of the named oracle exceptions — proves the
 // allowlist is exact-file, not "any *.test.tsx".
 const OTHER_TEST_FILE = 'packages/core/src/DateInput/DateInput.test.tsx';
@@ -191,6 +194,10 @@ tester.run('no-raw-intl-locale', rule, {
     {
       code: `new Intl.DateTimeFormat('en', {year: 'numeric', month: 'long'}).format(date);`,
       filename: CALENDAR_TEST_ORACLE_FILE,
+    },
+    {
+      code: `new Intl.NumberFormat('fr', {notation: 'compact'}).format(1200000);`,
+      filename: CHART_AXIS_TEST_ORACLE_FILE,
     },
 
     // -- Date helper calls resolve through real imports and pass locale. --
@@ -570,6 +577,11 @@ tester.run('no-raw-intl-locale', rule, {
     {
       code: `new Intl.DateTimeFormat('en', {year: 'numeric', month: 'long'});`,
       filename: OTHER_TEST_FILE,
+      errors: [rawIntlLocale],
+    },
+    {
+      code: `new Intl.NumberFormat('fr', {notation: 'compact'}).format(1200000);`,
+      filename: CHART_AXIS_FILE,
       errors: [rawIntlLocale],
     },
 

@@ -435,7 +435,7 @@ function CompactAxes() {
       <ChartAxis position="bottom" />
       <ChartAxis
         position="left"
-        tickFormat={value => compactNumber(value, locale)}
+        formatTick={value => compactNumber(value, locale)}
       />
     </>
   );
