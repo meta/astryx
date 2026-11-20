@@ -306,7 +306,7 @@ for (const {story, count} of restStories) {
     for (const direction of ['ltr', 'rtl'] as const) {
       cases.push({
         key: `${story.replace('core-numberinput--', '')}-neutral-${mode}-${direction}`,
-        group: 'rest',
+        group: `rest-${story.replace('core-numberinput--', '')}`,
         story,
         theme: 'neutral',
         mode,
