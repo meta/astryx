@@ -46,7 +46,7 @@ Other readings fixed:
 
 - `astryx experimental theme editor how`:
 
-- A text color typed for a part is checked against the fill that part shows. That is the primary button's own fill, or the page under a see-through look such as a ghost or secondary button. When the color does not read on that fill, the answer says so and gives the ratio.
+- A text color typed beside a typed fill that does not read on it is written as typed, and the answer gives the ratio.
 - "ghost buttons gray text" colors the ghost buttons' text.
 - Tailwind class names are understood: "rounded-md" means 6px corners, and "text-sm" means 14px text.
 - "very compact" sets the tightest spacing, and "very roomy" the roomiest.

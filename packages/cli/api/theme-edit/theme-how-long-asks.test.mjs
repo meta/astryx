@@ -6,8 +6,7 @@
  * tabs <color>" after an underline clause is their text; the dark half of
  * a sidebar's mode pair is its fill, and the text after it the sidebar's; a
  * part's "<ink> text on <color>" is that part's fill; a fill for every
- * button keeps the destructive one's red, and each look whose text would
- * not read gets its text line. A hex counts as typed only in the clause
+ * button goes to the whole part, as main writes it. A hex counts as typed only in the clause
  * that drafted its step, and "works in dark mode" keeps an ask joined
  * after it by "and" or "&"; a dial ask refused for one mode is answered
  * with why.
