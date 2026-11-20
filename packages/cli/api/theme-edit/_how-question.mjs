@@ -631,7 +631,7 @@ function joinSideLists(q) {
       const before = clause
         .slice(0, at - from)
         .match(
-          /\b(?:borders?|bordered|edges?|outlines?|padding|margins?|spacing|gaps?|radius|corners?|space)\b/gi,
+          /\b(?:borders?|bordered|edges?|outlines?|lines?|padding|margins?|spacing|gaps?|radius|corners?|space)\b/gi,
         );
       const owner = before?.at(-1) ?? '';
       // (A look said right after the list is its own: "a border and top
@@ -652,11 +652,13 @@ function joinSideLists(q) {
       // padding's bottom. The sides before that comma are the earlier look's.)
       const lastComma =
         /(?:\s*,\s*(?:and\s+)?|\s+and\s+)(?:on\s+)?(?:the\s+)?[a-z]+$/i.exec(m);
-      // (Only a list said as where the earlier look goes, "on top", or right
-      // after it, "border top": "a border and top and bottom padding 6px"
+      // (Only a list said as where the earlier look goes, "on top", "along
+      // the top", "on its top", or right after it, "border top": "a border and top and bottom padding 6px"
       // lists the padding's sides.)
       const placed =
-        /\b(?:on|at)(?:\s+the)?\s*$/i.test(text.slice(0, at)) ||
+        /\b(?:on|at|along|across|around|over|down|by)(?:\s+(?:the|its|their))?\s*$/i.test(
+          text.slice(0, at),
+        ) ||
         /\b(?:borders?|bordered|edges?|outlines?|lines?|padding|margins?|spacing|space)\s*$/i.test(
           text.slice(0, at),
         );

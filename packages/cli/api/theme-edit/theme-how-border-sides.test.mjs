@@ -623,6 +623,22 @@ describe('per-side border asks', () => {
         "border-top '1px solid var(--color-border)' --on card",
         'padding-bottom 8px --on card',
       ]);
+      // (Placed with "along", "across" or "on its" too, and a line is a
+      // look of its own.)
+      for (const ask of [
+        'cards with a border along the top, bottom padding 8px',
+        'cards with a border across the top, bottom padding 8px',
+        'cards with a border on its top, bottom padding 8px',
+        'cards with an outline along the top, bottom padding 8px',
+      ])
+        expect(await first(ask), ask).toEqual([
+          "border-top '1px solid var(--color-border)' --on card",
+          'padding-bottom 8px --on card',
+        ]);
+      // (A line's side never takes the tail's padding.)
+      expect(await first('cards with a line top, bottom padding 8px')).toEqual([
+        'padding-bottom 8px --on card',
+      ]);
       // (Two sides of one look stay a list.)
       expect(await first('cards with a border on top and bottom')).toEqual([
         "border-top '1px solid var(--color-border)' --on card",
