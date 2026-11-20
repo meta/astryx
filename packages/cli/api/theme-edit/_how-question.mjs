@@ -12502,8 +12502,9 @@ export function draftAnswer(ctx, env, question) {
     const variants =
       C.variantValues(FAMILIES[holder]?.[0] ?? holder).variant ?? [];
     if (c.parts[0].when) continue;
-    // ("cards: green background", "badges: blue border": a color said
-    // before a look is that look's value, never the part's variant.)
+    // ("cards: green background", "badges: blue border", "cards:
+    // transparent bottom border": a color said before a look or a side is
+    // that look's value, never the part's variant.)
     const next0 =
       c.text
         .toLowerCase()
@@ -12511,7 +12512,9 @@ export function draftAnswer(ctx, env, question) {
         .trim()
         .split(/\s+/)[1] ?? '';
     const colorValue =
-      colorsIn(lead0).length > 0 && aspectsOf(next0).length > 0;
+      (colorsIn(lead0).length > 0 || lead0 === 'transparent') &&
+      (aspectsOf(next0).length > 0 ||
+        /^(?:top|bottom|left|right)$/.test(next0));
     if (variants.includes(lead0) && lead0 !== 'default' && !colorValue)
       c.parts = [{...c.parts[0], when: `variant:${lead0}`}];
     else if (

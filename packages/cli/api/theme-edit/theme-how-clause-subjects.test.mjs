@@ -245,6 +245,17 @@ const ROWS = [
     },
   ],
   [
+    'a see-through color before a side is the value, never a variant',
+    {
+      q: 'cards: transparent bottom border',
+      has: [
+        "--color-border '#0000000c' --on card --mode light",
+        "--color-border '#ffffff10' --on card --mode dark",
+      ],
+      never: /--when variant:transparent/,
+    },
+  ],
+  [
     'a size and corners together',
     {q: 'checkboxes 16px with 3px corners', never: /contradict/},
   ],
