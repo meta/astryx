@@ -37,15 +37,15 @@ import {Section} from '@astryxdesign/core/Section';
 import {useLongPress} from '@astryxdesign/core/hooks';
 
 import {
-  PlusIcon,
-  MagnifyingGlassIcon,
+  AddIcon,
+  SearchIcon,
   ArrowsUpDownIcon,
   FunnelIcon,
-  ArrowPathIcon,
-  CheckCircleIcon,
+  RefreshIcon,
+  SuccessIcon,
   InboxIcon,
-  ClipboardDocumentCheckIcon,
-} from '@heroicons/react/24/outline';
+  ChecklistIcon,
+} from '@astryxdesign/template-icons';
 
 // ============= TYPES =============
 
@@ -111,7 +111,7 @@ const COLUMNS: ColumnMeta[] = [
     tooltip: 'Items currently in progress.',
     emptyTitle: 'Nothing in progress',
     emptyDescription: 'Items being worked on appear here.',
-    emptyIcon: ArrowPathIcon,
+    emptyIcon: RefreshIcon,
   },
   {
     id: 'in-review',
@@ -120,7 +120,7 @@ const COLUMNS: ColumnMeta[] = [
     tooltip: 'Items waiting for your review.',
     emptyTitle: 'Nothing in review',
     emptyDescription: 'Items awaiting your review appear here.',
-    emptyIcon: ClipboardDocumentCheckIcon,
+    emptyIcon: ChecklistIcon,
   },
   {
     id: 'done',
@@ -129,7 +129,7 @@ const COLUMNS: ColumnMeta[] = [
     tooltip: 'Items that have been handled.',
     emptyTitle: 'Nothing done yet',
     emptyDescription: 'Completed items appear here.',
-    emptyIcon: CheckCircleIcon,
+    emptyIcon: SuccessIcon,
   },
 ];
 
@@ -817,7 +817,7 @@ export default function KanbanBoardTemplate() {
                       }
                     />
                     <IconButton
-                      icon={<Icon icon={MagnifyingGlassIcon} size="sm" />}
+                      icon={<Icon icon={SearchIcon} size="sm" />}
                       label="Search"
                       onClick={() =>
                         // Demo only: replace this toast with the call that performs the action.
@@ -831,7 +831,7 @@ export default function KanbanBoardTemplate() {
                   <Button
                     label="Add task"
                     variant="primary"
-                    icon={<Icon icon={PlusIcon} size="sm" />}
+                    icon={<Icon icon={AddIcon} size="sm" />}
                     onClick={() =>
                       // Demo only: replace this toast with the call that performs the action.
                       showToast({

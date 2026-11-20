@@ -15,6 +15,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {docs} from '../docs.mjs';
+import {projectIntegrationSkills} from '../_adapter.mjs';
 import {init} from '../../init/init.mjs';
 import {upgrade} from '../../upgrade/upgrade.mjs';
 import {discover} from '../../discover/discover.mjs';
@@ -28,7 +29,9 @@ import {validateLoadedIntegrationListed} from '../../../foundation/integrations/
 const dirs = [];
 /** @param {string} label */
 const tmp = label => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `astryx-int-skills-${label}-`));
+  const dir = fs.mkdtempSync(
+    path.join(os.tmpdir(), `astryx-int-skills-${label}-`),
+  );
   dirs.push(dir);
   return dir;
 };
@@ -46,7 +49,11 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
-  while (dirs.length) fs.rmSync(/** @type {string} */ (dirs.pop()), {recursive: true, force: true});
+  while (dirs.length)
+    fs.rmSync(/** @type {string} */ (dirs.pop()), {
+      recursive: true,
+      force: true,
+    });
 });
 
 /**
@@ -56,13 +63,25 @@ afterEach(() => {
 function withIntegration(docFiles) {
   fs.writeFileSync(
     path.join(project, 'package.json'),
-    JSON.stringify({name: 'app', dependencies: {'@astryxdesign/core': '*', '@acme/widgets': '1.0.0'}}),
+    JSON.stringify({
+      name: 'app',
+      dependencies: {'@astryxdesign/core': '*', '@acme/widgets': '1.0.0'},
+    }),
   );
-  fs.writeFileSync(path.join(project, 'astryx.config.mjs'), "export default {integrations: ['@acme/widgets']};\n");
+  fs.writeFileSync(
+    path.join(project, 'astryx.config.mjs'),
+    "export default {integrations: ['@acme/widgets']};\n",
+  );
   const pkg = path.join(project, 'node_modules', '@acme', 'widgets');
   fs.mkdirSync(path.join(pkg, 'docs'), {recursive: true});
-  fs.writeFileSync(path.join(pkg, 'package.json'), JSON.stringify({name: '@acme/widgets', version: '1.0.0'}));
-  fs.writeFileSync(path.join(pkg, 'astryx.integration.mjs'), "export default {docs: './docs'};\n");
+  fs.writeFileSync(
+    path.join(pkg, 'package.json'),
+    JSON.stringify({name: '@acme/widgets', version: '1.0.0'}),
+  );
+  fs.writeFileSync(
+    path.join(pkg, 'astryx.integration.mjs'),
+    "export default {docs: './docs'};\n",
+  );
   for (const [name, source] of Object.entries(docFiles)) {
     fs.writeFileSync(path.join(pkg, 'docs', name), source);
   }
@@ -70,7 +89,12 @@ function withIntegration(docFiles) {
 }
 
 /** @param {{name?: string, description?: string, topic?: string, prose?: string}} [o] */
-const skillDoc = ({name = 'acme-entities', description = 'Use when you show Acme entities in a page.', topic = 'acme-entities-guide', prose = 'Render each entity with AcmeEntity.'} = {}) => `export default {
+const skillDoc = ({
+  name = 'acme-entities',
+  description = 'Use when you show Acme entities in a page.',
+  topic = 'acme-entities-guide',
+  prose = 'Render each entity with AcmeEntity.',
+} = {}) => `export default {
   type: 'generic',
   name: ${JSON.stringify(topic)},
   title: 'Acme entities',
@@ -121,15 +145,58 @@ describe('docs skills', () => {
     expect(one.data.text).toContain('# Acme entities');
     expect(one.data.text).toContain('Render each entity with AcmeEntity.');
     const computer = await docs('skills/astryx', undefined, {cwd: project});
-    expect(computer).toMatchObject({type: 'docs.skill', package: '@astryxdesign/cli'});
-    const block = await docs('skills/astryx-project', undefined, {cwd: project});
+    expect(computer).toMatchObject({
+      type: 'docs.skill',
+      package: '@astryxdesign/cli',
+    });
+    const block = await docs('skills/astryx-project', undefined, {
+      cwd: project,
+    });
     if (block.type !== 'docs.skill') throw new Error(block.type);
     expect(block.data.text).toMatch(/^<!-- ASTRYX:START -->/u);
   });
 
+  it('a skill on a placed guide reads that guide, and init writes it', async () => {
+    withIntegration({
+      'acme.doc.mjs': `export default {
+  type: 'namespace',
+  name: 'acme',
+  title: 'Acme',
+  summary: 'Everything about the Acme kit.',
+  slots: {guides: {title: 'Guides', accepts: {kinds: ['generic']}}},
+};
+`,
+      'deploy.doc.mjs': `export default {
+  type: 'generic',
+  name: 'deploy',
+  title: 'Deploy the Acme kit',
+  description: 'How to deploy the Acme kit.',
+  placement: {parent: 'namespace:acme', slot: 'guides'},
+  skill: {name: 'acme-deploy', description: 'Use when you deploy a page that uses the Acme kit.'},
+  sections: [{id: 'steps', title: 'Steps', content: [{type: 'prose', text: 'Build, then ship the bundle.'}]}],
+};
+`,
+    });
+    const list = await docs('skills', undefined, {cwd: project});
+    expect(list.data.map(each => each.name)).toContain('acme-deploy');
+    const one = await docs('skills/acme-deploy', undefined, {cwd: project});
+    if (one.type !== 'docs.skill') throw new Error(one.type);
+    expect(one.data.text).toContain('# Deploy the Acme kit');
+    expect(one.data.text).toContain('Build, then ship the bundle.');
+    await init({to: 'skills'}, {cwd: project});
+    expect(read('.agents/skills/acme-deploy/SKILL.md')).toContain(
+      'Build, then ship the bundle.',
+    );
+    expect(read('.agents/skills/astryx-project/SKILL.md')).toContain(
+      'skills/acme-deploy',
+    );
+  });
+
   it('names the skills when the name is unknown', async () => {
     withIntegration({'entities.doc.mjs': skillDoc()});
-    await expect(docs('skills/nope', undefined, {cwd: project})).rejects.toMatchObject({
+    await expect(
+      docs('skills/nope', undefined, {cwd: project}),
+    ).rejects.toMatchObject({
       code: 'ERR_UNKNOWN_TOPIC',
     });
   });
@@ -140,13 +207,19 @@ describe('init --to skills with an integration skill', () => {
     withIntegration({'entities.doc.mjs': skillDoc()});
     const res = await init({to: 'skills'}, {cwd: project});
     if (res.type !== 'init.run') throw new Error(res.type);
-    expect(res.data.skills.filter(row => row.skill === 'acme-entities').map(row => [row.path, row.action])).toEqual([
+    expect(
+      res.data.skills
+        .filter(row => row.skill === 'acme-entities')
+        .map(row => [row.path, row.action]),
+    ).toEqual([
       ['.agents/skills/acme-entities/SKILL.md', 'created'],
       ['.claude/skills/acme-entities/SKILL.md', 'created'],
     ]);
     const skill = read('.agents/skills/acme-entities/SKILL.md');
     expect(skill).toBe(read('.claude/skills/acme-entities/SKILL.md'));
-    expect(skill).toMatch(/^---\nname: acme-entities\ndescription: "Use when you show Acme entities in a page."\n---\n\n<!-- ASTRYX:START -->\n<!-- astryx-managed sha256:/u);
+    expect(skill).toMatch(
+      /^---\nname: acme-entities\ndescription: "Use when you show Acme entities in a page."\n---\n\n<!-- ASTRYX:START -->\n<!-- astryx-managed sha256:/u,
+    );
     expect(skill).toContain('Render each entity with AcmeEntity.');
     expect(read('.agents/skills/astryx-project/SKILL.md')).toContain(
       '- `@acme/widgets` skill `acme-entities`: Use when you show Acme entities in a page. Read it with `astryx docs skills/acme-entities`.',
@@ -158,12 +231,19 @@ describe('init --to skills with an integration skill', () => {
     await init({to: 'skills'}, {cwd: project});
     // A new file: a module this process already imported is not read again.
     fs.rmSync(path.join(pkg, 'docs', 'entities.doc.mjs'));
-    fs.writeFileSync(path.join(pkg, 'docs', 'renamed.doc.mjs'), skillDoc({name: 'acme-renamed', topic: 'acme-renamed-guide'}));
+    fs.writeFileSync(
+      path.join(pkg, 'docs', 'renamed.doc.mjs'),
+      skillDoc({name: 'acme-renamed', topic: 'acme-renamed-guide'}),
+    );
     const res = await init({}, {cwd: project});
     if (res.type !== 'init.run') throw new Error(res.type);
     expect(exists('.agents/skills/acme-entities')).toBe(false);
     expect(exists('.agents/skills/acme-renamed/SKILL.md')).toBe(true);
-    expect(res.data.skills.some(row => row.skill === 'acme-entities' && row.action === 'removed')).toBe(true);
+    expect(
+      res.data.skills.some(
+        row => row.skill === 'acme-entities' && row.action === 'removed',
+      ),
+    ).toBe(true);
   });
 
   it('never sweeps a leftover skill through a skill folder linked out of the project', async () => {
@@ -172,20 +252,34 @@ describe('init --to skills with an integration skill', () => {
     // Another project's unedited Astryx skill, linked into this one.
     const other = tmp('other');
     fs.mkdirSync(path.join(other, 'acme-old'), {recursive: true});
-    fs.copyFileSync(path.join(project, '.claude', 'skills', 'acme-entities', 'SKILL.md'), path.join(other, 'acme-old', 'SKILL.md'));
-    fs.symlinkSync(path.join(other, 'acme-old'), path.join(project, '.claude', 'skills', 'acme-old'), 'dir');
+    fs.copyFileSync(
+      path.join(project, '.claude', 'skills', 'acme-entities', 'SKILL.md'),
+      path.join(other, 'acme-old', 'SKILL.md'),
+    );
+    fs.symlinkSync(
+      path.join(other, 'acme-old'),
+      path.join(project, '.claude', 'skills', 'acme-old'),
+      'dir',
+    );
     await init({}, {cwd: project});
     expect(fs.existsSync(path.join(other, 'acme-old', 'SKILL.md'))).toBe(true);
   });
 
   it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
-    'a docs folder it cannot read leaves that integration\'s skills out, keeps their copies, and init still finishes',
+    "a docs folder it cannot read leaves that integration's skills out, keeps their copies, and init still finishes",
     async () => {
       withIntegration({'entities.doc.mjs': skillDoc()});
       await init({to: 'agents-md,skills'}, {cwd: project});
       const pointer = '`@acme/widgets` skill `acme-entities`';
       expect(read('AGENTS.md')).toContain(pointer);
-      const drafts = path.join(project, 'node_modules', '@acme', 'widgets', 'docs', 'drafts');
+      const drafts = path.join(
+        project,
+        'node_modules',
+        '@acme',
+        'widgets',
+        'docs',
+        'drafts',
+      );
       fs.mkdirSync(drafts);
       fs.chmodSync(drafts, 0o000);
       try {
@@ -194,9 +288,14 @@ describe('init --to skills with an integration skill', () => {
         const list = await docs('skills', undefined, {cwd: project});
         expect(list.data.map(each => each.name)).not.toContain('acme-entities');
         expect(list.meta?.notes).toEqual([
-          expect.objectContaining({package: '@acme/widgets', message: expect.stringContaining('docs folder could not be read')}),
+          expect.objectContaining({
+            package: '@acme/widgets',
+            message: expect.stringContaining('docs folder could not be read'),
+          }),
         ]);
-        await expect(docs('skills/acme-entities', undefined, {cwd: project})).rejects.toThrow(
+        await expect(
+          docs('skills/acme-entities', undefined, {cwd: project}),
+        ).rejects.toThrow(
           'Note: @acme/widgets: its docs folder could not be read',
         );
         // The copies stay until the folder can be read; the block names only
@@ -204,7 +303,9 @@ describe('init --to skills with an integration skill', () => {
         expect(exists('.agents/skills/acme-entities/SKILL.md')).toBe(true);
         expect(exists('.claude/skills/acme-entities/SKILL.md')).toBe(true);
         expect(read('AGENTS.md')).not.toContain(pointer);
-        expect(read('.agents/skills/astryx-project/SKILL.md')).not.toContain(pointer);
+        expect(read('.agents/skills/astryx-project/SKILL.md')).not.toContain(
+          pointer,
+        );
       } finally {
         fs.chmodSync(drafts, 0o755);
       }
@@ -214,15 +315,69 @@ describe('init --to skills with an integration skill', () => {
   it('a package whose doc or manifest does not load is unread, so no copy is swept', async () => {
     const docs = tmp('docs');
     fs.writeFileSync(path.join(docs, 'entities.doc.mjs'), '');
-    const broken = await discoverIntegrationSkills([{name: '@acme/widgets', docs}], {
-      read: async () => {
-        throw new Error('broken');
+    const broken = await discoverIntegrationSkills(
+      [{name: '@acme/widgets', docs}],
+      {
+        read: async () => {
+          throw new Error('broken');
+        },
       },
-    });
+    );
     expect(broken.unread).toEqual(['@acme/widgets']);
-    expect(broken.problems[0]).toMatchObject({package: '@acme/widgets', unread: true});
-    const unloaded = await discoverIntegrationSkills([{name: '@acme/gone', __loadError: 'no manifest'}]);
+    expect(broken.problems[0]).toMatchObject({
+      package: '@acme/widgets',
+      unread: true,
+    });
+    const unloaded = await discoverIntegrationSkills([
+      {name: '@acme/gone', __loadError: 'no manifest'},
+    ]);
     expect(unloaded.unread).toEqual(['@acme/gone']);
+  });
+
+  it("a sibling doc the catalog withdraws keeps the skill's copies, with one note that names the load, not `replaces`", async () => {
+    const pkg = withIntegration({'entities.doc.mjs': skillDoc()});
+    await init({to: 'skills'}, {cwd: project});
+    expect(exists('.agents/skills/acme-entities/SKILL.md')).toBe(true);
+    // It loads, but a flat topic may not set `aliases`, so the catalog
+    // withdraws every doc of the package; before, this swept the copies.
+    fs.writeFileSync(
+      path.join(pkg, 'docs', 'notes.doc.mjs'),
+      `export default {
+  type: 'generic',
+  name: 'acme-notes',
+  title: 'Acme notes',
+  description: 'Notes about the Acme kit.',
+  aliases: ['acme-tips'],
+  sections: [{id: 'start', title: 'Start', content: [{type: 'prose', text: 'Start here.'}]}],
+};
+`,
+    );
+    const found = await projectIntegrationSkills(project);
+    expect(found.complete).toBe(false);
+    expect(found.unread).toEqual(['@acme/widgets']);
+    expect(found.problems).toEqual([
+      expect.objectContaining({
+        package: '@acme/widgets',
+        unread: true,
+        message: expect.stringContaining('a doc did not load'),
+      }),
+    ]);
+    await init({}, {cwd: project});
+    expect(exists('.agents/skills/acme-entities/SKILL.md')).toBe(true);
+    expect(exists('.claude/skills/acme-entities/SKILL.md')).toBe(true);
+  });
+
+  it('a doc that throws on import gets one note, not two', async () => {
+    const pkg = withIntegration({'entities.doc.mjs': skillDoc()});
+    fs.writeFileSync(
+      path.join(pkg, 'docs', 'broken.doc.mjs'),
+      "throw new Error('broken doc');\n",
+    );
+    const found = await projectIntegrationSkills(project);
+    expect(found.complete).toBe(false);
+    expect(
+      found.problems.filter(problem => problem.package === '@acme/widgets'),
+    ).toHaveLength(1);
   });
 
   it('init --remove --to a folder saved for this computer keeps the integration skills there', async () => {
@@ -231,11 +386,16 @@ describe('init --to skills with an integration skill', () => {
     // Another project's unedited integration skill in a computer folder.
     const team = path.join(os.homedir(), 'team-skills');
     fs.mkdirSync(path.join(team, 'acme-entities'), {recursive: true});
-    fs.copyFileSync(path.join(project, '.claude', 'skills', 'acme-entities', 'SKILL.md'), path.join(team, 'acme-entities', 'SKILL.md'));
+    fs.copyFileSync(
+      path.join(project, '.claude', 'skills', 'acme-entities', 'SKILL.md'),
+      path.join(team, 'acme-entities', 'SKILL.md'),
+    );
     await init({to: team}, {cwd: project});
     await init({remove: true, to: team}, {cwd: project});
     expect(fs.existsSync(path.join(team, 'astryx', 'SKILL.md'))).toBe(false);
-    expect(fs.existsSync(path.join(team, 'acme-entities', 'SKILL.md'))).toBe(true);
+    expect(fs.existsSync(path.join(team, 'acme-entities', 'SKILL.md'))).toBe(
+      true,
+    );
   });
 
   it('never writes an integration skill through a skill folder linked out of the project', async () => {
@@ -243,29 +403,46 @@ describe('init --to skills with an integration skill', () => {
     const other = tmp('other');
     fs.mkdirSync(path.join(other, 'acme-entities'), {recursive: true});
     fs.mkdirSync(path.join(project, '.claude', 'skills'), {recursive: true});
-    fs.symlinkSync(path.join(other, 'acme-entities'), path.join(project, '.claude', 'skills', 'acme-entities'), 'dir');
+    fs.symlinkSync(
+      path.join(other, 'acme-entities'),
+      path.join(project, '.claude', 'skills', 'acme-entities'),
+      'dir',
+    );
     await init({to: 'skills'}, {cwd: project});
-    expect(fs.existsSync(path.join(other, 'acme-entities', 'SKILL.md'))).toBe(false);
+    expect(fs.existsSync(path.join(other, 'acme-entities', 'SKILL.md'))).toBe(
+      false,
+    );
     expect(exists('.agents/skills/acme-entities')).toBe(false);
     // An older copy there is not rewritten by upgrade either.
     fs.writeFileSync(path.join(other, 'acme-entities', 'SKILL.md'), 'theirs\n');
     const core = path.join(project, 'node_modules', '@astryxdesign', 'core');
     fs.mkdirSync(core, {recursive: true});
-    fs.writeFileSync(path.join(core, 'package.json'), JSON.stringify({name: '@astryxdesign/core', version: '0.0.15'}));
+    fs.writeFileSync(
+      path.join(core, 'package.json'),
+      JSON.stringify({name: '@astryxdesign/core', version: '0.0.15'}),
+    );
     await upgrade({from: '0.0.15', apply: true}, {cwd: project});
-    expect(fs.readFileSync(path.join(other, 'acme-entities', 'SKILL.md'), 'utf8')).toBe('theirs\n');
+    expect(
+      fs.readFileSync(path.join(other, 'acme-entities', 'SKILL.md'), 'utf8'),
+    ).toBe('theirs\n');
   });
 
-  it('keeps a person\'s own skill of the same name, in both folders', async () => {
+  it("keeps a person's own skill of the same name, in both folders", async () => {
     withIntegration({'entities.doc.mjs': skillDoc()});
-    fs.mkdirSync(path.join(project, '.claude', 'skills', 'acme-entities'), {recursive: true});
-    fs.writeFileSync(path.join(project, '.claude', 'skills', 'acme-entities', 'SKILL.md'), '# mine\n');
+    fs.mkdirSync(path.join(project, '.claude', 'skills', 'acme-entities'), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(project, '.claude', 'skills', 'acme-entities', 'SKILL.md'),
+      '# mine\n',
+    );
     const res = await init({to: 'skills'}, {cwd: project});
     if (res.type !== 'init.run') throw new Error(res.type);
-    expect(res.data.skills.filter(row => row.skill === 'acme-entities').map(row => row.reason)).toEqual([
-      'pair-kept',
-      'not-astryx',
-    ]);
+    expect(
+      res.data.skills
+        .filter(row => row.skill === 'acme-entities')
+        .map(row => row.reason),
+    ).toEqual(['pair-kept', 'not-astryx']);
     expect(exists('.agents/skills/acme-entities')).toBe(false);
   });
 
@@ -274,11 +451,16 @@ describe('init --to skills with an integration skill', () => {
     await init({to: 'skills'}, {cwd: project});
     const res = await init({remove: true}, {cwd: project});
     if (res.type !== 'init.remove') throw new Error(res.type);
-    expect(res.data.skills.filter(row => row.path.includes('acme-entities')).map(row => row.skill)).toEqual([
-      'acme-entities',
-      'acme-entities',
-    ]);
-    expect(res.data.skills.filter(row => row.path.includes('astryx-project')).every(row => row.skill == null)).toBe(true);
+    expect(
+      res.data.skills
+        .filter(row => row.path.includes('acme-entities'))
+        .map(row => row.skill),
+    ).toEqual(['acme-entities', 'acme-entities']);
+    expect(
+      res.data.skills
+        .filter(row => row.path.includes('astryx-project'))
+        .every(row => row.skill == null),
+    ).toBe(true);
     expect(exists('.agents')).toBe(false);
     expect(exists('.claude')).toBe(false);
   });
@@ -303,34 +485,61 @@ describe('a skill that breaks a rule', () => {
     const loaded = {name: '@acme/widgets', docs: path.join(pkg, 'docs')};
     const {skills, problems} = await discoverIntegrationSkills([loaded]);
     expect(skills.map(each => each.name)).toEqual(['acme-other']);
-    expect(problems[0]?.message).toContain('entities.doc.mjs: skill name "Bad Name"');
+    expect(problems[0]?.message).toContain(
+      'entities.doc.mjs: skill name "Bad Name"',
+    );
     const topic = await docs('acme-entities-guide', undefined, {cwd: project});
     expect(topic.type).toBe('docs.detail');
     const checked = await validateLoadedIntegrationListed(
-      /** @type {any} */ ({...loaded, __packageDir: pkg, __manifestFile: path.join(pkg, 'astryx.integration.mjs')}),
+      /** @type {any} */ ({
+        ...loaded,
+        __packageDir: pkg,
+        __manifestFile: path.join(pkg, 'astryx.integration.mjs'),
+      }),
     );
-    expect(checked.notes.find(note => note.code === 'invalid_skill')).toMatchObject({next: true});
+    expect(
+      checked.notes.find(note => note.code === 'invalid_skill'),
+    ).toMatchObject({next: true});
   });
 
   it.each([
-    ['a description with the block end marker', `{name: 'acme-x', description: 'Use it <!-- ASTRYX:END -->'}`, 'marker'],
+    [
+      'a description with the block end marker',
+      `{name: 'acme-x', description: 'Use it <!-- ASTRYX:END -->'}`,
+      'marker',
+    ],
     ['no description', `{name: 'acme-x'}`, 'needs a description'],
     ['a string', `'acme-x'`, 'must be an object'],
-  ])('%s is left out, and every doc of the package still loads', async (_label, value, why) => {
-    const pkg = withIntegration({
-      'bad.doc.mjs': skillDoc({topic: 'acme-bad'}).replace(/skill: \{[^}]*\}/u, `skill: ${value}`),
-      'other.doc.mjs': skillDoc({topic: 'acme-other', name: 'acme-other'}),
-    });
-    const {skills, problems} = await discoverIntegrationSkills([{name: '@acme/widgets', docs: path.join(pkg, 'docs')}]);
-    expect(skills.map(each => each.name)).toEqual(['acme-other']);
-    expect(problems[0]?.message).toContain(why);
-    expect((await docs('acme-bad', undefined, {cwd: project})).type).toBe('docs.detail');
-  });
+  ])(
+    '%s is left out, and every doc of the package still loads',
+    async (_label, value, why) => {
+      const pkg = withIntegration({
+        'bad.doc.mjs': skillDoc({topic: 'acme-bad'}).replace(
+          /skill: \{[^}]*\}/u,
+          `skill: ${value}`,
+        ),
+        'other.doc.mjs': skillDoc({topic: 'acme-other', name: 'acme-other'}),
+      });
+      const {skills, problems} = await discoverIntegrationSkills([
+        {name: '@acme/widgets', docs: path.join(pkg, 'docs')},
+      ]);
+      expect(skills.map(each => each.name)).toEqual(['acme-other']);
+      expect(problems[0]?.message).toContain(why);
+      expect((await docs('acme-bad', undefined, {cwd: project})).type).toBe(
+        'docs.detail',
+      );
+    },
+  );
 
-  it('a person\'s own copy of an integration skill is named for that skill, not mixed with the project skill', async () => {
+  it("a person's own copy of an integration skill is named for that skill, not mixed with the project skill", async () => {
     withIntegration({'entities.doc.mjs': skillDoc()});
-    fs.mkdirSync(path.join(project, '.claude', 'skills', 'acme-entities'), {recursive: true});
-    fs.writeFileSync(path.join(project, '.claude', 'skills', 'acme-entities', 'SKILL.md'), '# mine\n');
+    fs.mkdirSync(path.join(project, '.claude', 'skills', 'acme-entities'), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(project, '.claude', 'skills', 'acme-entities', 'SKILL.md'),
+      '# mine\n',
+    );
     await init({to: 'skills'}, {cwd: project});
     const doctor = await runChecks({cwd: project});
     const check = doctor.checks.find(each => each.id === 'skill-places');
@@ -343,11 +552,25 @@ describe('a skill that breaks a rule', () => {
     // A second package ships a doc of the same name, with a skill of its own.
     const second = path.join(project, 'node_modules', '@acme', 'more');
     fs.mkdirSync(path.join(second, 'docs'), {recursive: true});
-    fs.writeFileSync(path.join(second, 'package.json'), JSON.stringify({name: '@acme/more', version: '1.0.0'}));
-    fs.writeFileSync(path.join(second, 'astryx.integration.mjs'), "export default {docs: './docs'};\n");
-    fs.writeFileSync(path.join(second, 'docs', 'same.doc.mjs'), skillDoc({name: 'more-skill'}));
-    fs.writeFileSync(path.join(project, 'astryx.config.mjs'), "export default {integrations: ['@acme/widgets', '@acme/more']};\n");
-    const pkg = JSON.parse(fs.readFileSync(path.join(project, 'package.json'), 'utf8'));
+    fs.writeFileSync(
+      path.join(second, 'package.json'),
+      JSON.stringify({name: '@acme/more', version: '1.0.0'}),
+    );
+    fs.writeFileSync(
+      path.join(second, 'astryx.integration.mjs'),
+      "export default {docs: './docs'};\n",
+    );
+    fs.writeFileSync(
+      path.join(second, 'docs', 'same.doc.mjs'),
+      skillDoc({name: 'more-skill'}),
+    );
+    fs.writeFileSync(
+      path.join(project, 'astryx.config.mjs'),
+      "export default {integrations: ['@acme/widgets', '@acme/more']};\n",
+    );
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(project, 'package.json'), 'utf8'),
+    );
     pkg.dependencies['@acme/more'] = '1.0.0';
     fs.writeFileSync(path.join(project, 'package.json'), JSON.stringify(pkg));
     const list = await docs('skills', undefined, {cwd: project});
@@ -355,7 +578,9 @@ describe('a skill that breaks a rule', () => {
     expect(list.data.map(each => each.name)).not.toContain('more-skill');
     await init({to: 'skills'}, {cwd: project});
     expect(exists('.agents/skills/more-skill')).toBe(false);
-    expect(read('.agents/skills/astryx-project/SKILL.md')).not.toContain('more-skill');
+    expect(read('.agents/skills/astryx-project/SKILL.md')).not.toContain(
+      'more-skill',
+    );
   });
 
   it('a name an earlier package holds is left out', async () => {
@@ -374,12 +599,21 @@ describe('upgrade, doctor, and a project with no declared skill', () => {
   it('upgrade --apply writes a missing integration skill', async () => {
     withIntegration({'entities.doc.mjs': skillDoc()});
     await init({to: 'skills'}, {cwd: project});
-    fs.rmSync(path.join(project, '.agents', 'skills', 'acme-entities'), {recursive: true});
+    fs.rmSync(path.join(project, '.agents', 'skills', 'acme-entities'), {
+      recursive: true,
+    });
     const core = path.join(project, 'node_modules', '@astryxdesign', 'core');
     fs.mkdirSync(core, {recursive: true});
-    fs.writeFileSync(path.join(core, 'package.json'), JSON.stringify({name: '@astryxdesign/core', version: '0.0.15'}));
+    fs.writeFileSync(
+      path.join(core, 'package.json'),
+      JSON.stringify({name: '@astryxdesign/core', version: '0.0.15'}),
+    );
     const dry = await upgrade({from: '0.0.15'}, {cwd: project});
-    expect(dry.data.agentDocs.skills.find(row => row.skill === 'acme-entities' && row.action === 'would-create')).toBeTruthy();
+    expect(
+      dry.data.agentDocs.skills.find(
+        row => row.skill === 'acme-entities' && row.action === 'would-create',
+      ),
+    ).toBeTruthy();
     const doctor = await runChecks({cwd: project});
     const check = doctor.checks.find(each => each.id === 'skill-places');
     expect(check?.status).toBe('warn');
@@ -404,21 +638,32 @@ describe('upgrade, doctor, and a project with no declared skill', () => {
     await init({to: 'skills'}, {cwd: project});
     // A new doc file: a module this process imported is not read again.
     fs.rmSync(path.join(pkg, 'docs', 'entities.doc.mjs'));
-    fs.writeFileSync(path.join(pkg, 'docs', 'entities2.doc.mjs'), skillDoc({topic: 'acme-entities-v2', prose: 'Use AcmeEntityCard now.'}));
+    fs.writeFileSync(
+      path.join(pkg, 'docs', 'entities2.doc.mjs'),
+      skillDoc({topic: 'acme-entities-v2', prose: 'Use AcmeEntityCard now.'}),
+    );
     const doctor = await runChecks({cwd: project});
     const check = doctor.checks.find(each => each.id === 'skill-places');
     expect(check?.status).toBe('warn');
-    expect(check?.message).toContain('from another release in .agents/skills/acme-entities/SKILL.md');
-    expect(check?.message).toContain('Skills left out: @acme/widgets: bad.doc.mjs');
+    expect(check?.message).toContain(
+      'from another release in .agents/skills/acme-entities/SKILL.md',
+    );
+    expect(check?.message).toContain(
+      'Skills left out: @acme/widgets: bad.doc.mjs',
+    );
     expect(check?.fix).toContain('init');
     expect(check?.fix).toContain('after an integration changes');
   });
 
   it('a block-only project hears about a left-out skill from init and doctor', async () => {
-    withIntegration({'bad.doc.mjs': skillDoc({topic: 'acme-bad', name: 'Bad Name'})});
+    withIntegration({
+      'bad.doc.mjs': skillDoc({topic: 'acme-bad', name: 'Bad Name'}),
+    });
     const warn = vi.spyOn(logger, 'warn');
     await init({}, {cwd: project});
-    expect(warn.mock.calls.flat().join('\n')).toContain('skill name "Bad Name"');
+    expect(warn.mock.calls.flat().join('\n')).toContain(
+      'skill name "Bad Name"',
+    );
     const doctor = await runChecks({cwd: project});
     const check = doctor.checks.find(each => each.id === 'skill-places');
     expect(check).toMatchObject({status: 'warn'});

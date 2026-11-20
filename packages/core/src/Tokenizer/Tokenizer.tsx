@@ -2026,7 +2026,7 @@ export function Tokenizer<T extends SearchableItem>({
             behavior="observeParent"
             overflowRenderer={items => (
               <span {...stylex.props(styles.overflowText)}>
-                +{items.length} more
+                {t('@astryx.tokenizer.overflowCount', {count: items.length})}
               </span>
             )}>
             {tokens}
@@ -2464,7 +2464,9 @@ export function Tokenizer<T extends SearchableItem>({
                 behavior="observeParent"
                 overflowRenderer={items => (
                   <span {...stylex.props(styles.overflowText)}>
-                    +{items.length} more
+                    {t('@astryx.tokenizer.overflowCount', {
+                      count: items.length,
+                    })}
                   </span>
                 )}>
                 {tokens}
