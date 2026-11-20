@@ -4,6 +4,9 @@
 
 export const docs = {
   name: 'TextInput',
+  playground: {
+    defaults: {label: 'Name', value: 'Jordan'},
+  },
   displayName: 'Text Input',
   category: 'Form Controls',
   keywords: ["textinput","textfield","input","search","clearable","prefix","suffix","adornment","validation"],
@@ -122,9 +125,9 @@ export const docs = {
     },
     {
       name: 'startIcon',
-      type: 'IconType',
+      type: 'ReactNode | IconType',
       description:
-        'SVG icon component displayed at the start of the input. See `astryx docs icons` for valid semantic names.',
+        'Icon displayed at the start of the input; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'status',
@@ -372,9 +375,9 @@ export const docsZh = {
     },
     {
       name: 'startIcon',
-      type: 'IconType',
+      type: 'ReactNode | IconType',
       description:
-        '显示在输入框起始位置的 SVG 图标组件（例如来自 heroicons 或 lucide）。',
+        '显示在输入框起始位置的图标；可传语义图标名称（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
     },
     {
       name: 'status',
@@ -559,7 +562,7 @@ export const docsDense = {
     isLoading: 'Loading state w/ spinner+aria-busy.',
     placeholder: 'Placeholder when input empty.',
     labelTooltip: 'Tooltip in info icon at label end.',
-    startIcon: 'SVG icon at input start (e.g. heroicons or lucide).',
+    startIcon: 'Icon at input start; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     status: 'Validation status; colored border+icon. Message floats below. Error sets aria-invalid.',
     statusVariant: 'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip hides the box and shows it on the status icon.',
     hasClear: 'Shows clear button when input has value. Clears value on click.',

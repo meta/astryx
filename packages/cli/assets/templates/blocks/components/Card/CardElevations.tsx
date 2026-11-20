@@ -16,7 +16,7 @@ const LEVELS = [
 
 export default function CardElevations() {
   return (
-    <Grid columns={2} gap={4} width={520}>
+    <Grid columns={2} gap={4} width={520} maxWidth="100%">
       {LEVELS.map(({elevation, caption}) => (
         <Card key={elevation} elevation={elevation}>
           <Stack direction="vertical" gap={1}>

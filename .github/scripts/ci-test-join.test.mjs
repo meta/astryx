@@ -17,12 +17,18 @@ const broad = {
   RELEASE_BUMP_RESULT: 'skipped',
   TEST_UI_RESULT: 'success',
   TEST_NODE_RESULT: 'success',
+  NODE_BROWSER_CONTRACTS_RESULT: 'success',
+  SWIZZLE_PROOF_SCOPE_RESULT: 'success',
+  SWIZZLE_PROOF_MODE: 'none',
+  SWIZZLE_PROOF_RESULT: 'skipped',
   TEST_BUILD_RESULT: 'success',
   TEST_NATIVE_SWIFT_RESULT: 'success',
   PR_INTERACTION_RESULT: 'success',
   PR_INTERACTION_WEBKIT_RESULT: 'success',
   PR_COMPONENT_A11Y_CONTRACTS_RESULT: 'success',
   PR_A11Y_DEPENDENT_AUDITS_RESULT: 'success',
+  A11Y_DEPENDENT_AUDITS_PLAN_RESULT: 'success',
+  A11Y_DEPENDENT_AUDITS_COUNT: '2',
 };
 
 // An override of `null` removes the variable, as a missing `needs` result would.
@@ -52,6 +58,12 @@ describe('pull-request test join', () => {
     for (const [name, value] of [
       ['TEST_UI_RESULT', 'failure'],
       ['TEST_NODE_RESULT', 'cancelled'],
+      ['NODE_BROWSER_CONTRACTS_RESULT', 'failure'],
+      ['NODE_BROWSER_CONTRACTS_RESULT', 'skipped'],
+      ['NODE_BROWSER_CONTRACTS_RESULT', null],
+      ['SWIZZLE_PROOF_SCOPE_RESULT', 'failure'],
+      ['SWIZZLE_PROOF_SCOPE_RESULT', 'skipped'],
+      ['SWIZZLE_PROOF_SCOPE_RESULT', null],
       ['TEST_BUILD_RESULT', 'skipped'],
       ['TEST_NATIVE_SWIFT_RESULT', 'failure'],
       ['TEST_NATIVE_SWIFT_RESULT', 'skipped'],
@@ -74,6 +86,82 @@ describe('pull-request test join', () => {
       ['PR_A11Y_DEPENDENT_AUDITS_RESULT', null],
     ]) {
       expect(run({[name]: value}), name).toMatchObject({status: 1});
+    }
+  });
+
+  it('requires the dependent-audit legs exactly when the plan owes an audit, and a plan that ran', () => {
+    // A plan that owes nothing starts no leg: skipped legs pass, run legs do not.
+    expect(
+      run({
+        A11Y_DEPENDENT_AUDITS_COUNT: '0',
+        PR_A11Y_DEPENDENT_AUDITS_RESULT: 'skipped',
+      }),
+    ).toMatchObject({status: 0});
+    for (const result of ['success', 'failure', 'cancelled', null]) {
+      expect(
+        run({
+          A11Y_DEPENDENT_AUDITS_COUNT: '0',
+          PR_A11Y_DEPENDENT_AUDITS_RESULT: result,
+        }),
+        `count 0, legs ${result}`,
+      ).toMatchObject({status: 1});
+    }
+    // Planned legs must succeed.
+    expect(run({A11Y_DEPENDENT_AUDITS_COUNT: '1'})).toMatchObject({status: 0});
+    // A plan that did not succeed fails the join, whatever its one leg did,
+    // and the message says to re-run.
+    for (const plan of ['failure', 'cancelled', 'skipped', null]) {
+      for (const [legs, count] of [
+        ['failure', ''],
+        ['success', '2'],
+        ['skipped', '0'],
+        ['failure', '3'],
+      ]) {
+        const outcome = run({
+          A11Y_DEPENDENT_AUDITS_PLAN_RESULT: plan,
+          A11Y_DEPENDENT_AUDITS_COUNT: count,
+          PR_A11Y_DEPENDENT_AUDITS_RESULT: legs,
+        });
+        expect(outcome, `plan ${plan}, legs ${legs}`).toMatchObject({
+          status: 1,
+        });
+        expect(outcome.output).toContain('re-run all jobs');
+      }
+    }
+    // A plan that succeeded without a readable count fails closed.
+    for (const count of ['', 'x', null]) {
+      expect(
+        run({A11Y_DEPENDENT_AUDITS_COUNT: count}),
+        `count ${count}`,
+      ).toMatchObject({status: 1});
+    }
+  });
+
+  it('requires the swizzle-proof legs exactly when the proof scope proves a target', () => {
+    for (const mode of ['affected', 'all']) {
+      expect(
+        run({SWIZZLE_PROOF_MODE: mode, SWIZZLE_PROOF_RESULT: 'success'}),
+        mode,
+      ).toMatchObject({status: 0});
+      for (const result of ['skipped', 'failure', 'cancelled', null]) {
+        expect(
+          run({SWIZZLE_PROOF_MODE: mode, SWIZZLE_PROOF_RESULT: result}),
+          `${mode} ${result}`,
+        ).toMatchObject({status: 1});
+      }
+    }
+    // A scope that proves no target must not have run the legs.
+    for (const result of ['success', 'failure', 'cancelled', null]) {
+      expect(
+        run({SWIZZLE_PROOF_RESULT: result}),
+        `none ${result}`,
+      ).toMatchObject({status: 1});
+    }
+    // An undecided scope fails closed.
+    for (const mode of ['', 'unknown', null]) {
+      expect(run({SWIZZLE_PROOF_MODE: mode}), `mode ${mode}`).toMatchObject({
+        status: 1,
+      });
     }
   });
 

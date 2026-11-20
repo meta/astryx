@@ -3,7 +3,7 @@
 /**
  * @file LayerDismissal.stories.tsx
  * @input Uses Dialog, Popover, Tooltip, InfoTip, Lightbox, MobileNav,
- *   BottomSheet, Button, Layout from @astryxdesign/core
+ *   BottomSheet, DropdownMenu, TextInput, Button, Layout from @astryxdesign/core
  * @output Storybook stories demonstrating shared layer dismissal
  * @position Storybook; the visual contract for the layer dismissal stack
  *
@@ -33,8 +33,11 @@ import {
   VStack,
 } from '@astryxdesign/core';
 import {BottomSheet} from '@astryxdesign/core/BottomSheet';
+import {DropdownMenu, DropdownMenuItem} from '@astryxdesign/core/DropdownMenu';
 import {InfoTip} from '@astryxdesign/core/InfoTip';
+import {TextInput} from '@astryxdesign/core/TextInput';
 import type {Meta, StoryObj} from '@storybook/react-vite';
+import {SAMPLE_IMAGES} from './assets/samples/samples';
 
 const sheetStyles = stylex.create({
   body: {padding: 24},
@@ -377,7 +380,7 @@ function RequiredModalWithLightboxExample() {
                 isOpen={isLightboxOpen}
                 onOpenChange={setIsLightboxOpen}
                 media={{
-                  src: 'https://picsum.photos/id/1015/1200/800',
+                  src: SAMPLE_IMAGES.canyon1200x800,
                   alt: 'A river through a canyon',
                 }}
               />
@@ -494,7 +497,7 @@ function LightboxAloneExample() {
         isOpen={isOpen}
         onOpenChange={setIsOpen}
         media={{
-          src: 'https://picsum.photos/id/1015/1200/800',
+          src: SAMPLE_IMAGES.canyon1200x800,
           alt: 'A river through a canyon',
         }}
       />
@@ -1221,4 +1224,265 @@ function ContinuouslyAnimatingTriggerExample() {
 
 export const ContinuouslyAnimatingTrigger: Story = {
   render: () => <ContinuouslyAnimatingTriggerExample />,
+};
+
+const inFlowDialogStyles = stylex.create({
+  // A closed `<dialog>` the page displays itself, in the document's flow. It
+  // never opens, so it never enters the top layer.
+  dialog: {
+    position: 'static',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 12,
+    margin: 0,
+    padding: 16,
+  },
+  hidden: {
+    display: 'none',
+  },
+});
+
+/**
+ * A native `<dialog>` that stays closed while the page displays it in flow, as
+ * a card. A Popover and a Tooltip anchored to controls inside it open on a
+ * press and on a hover. The Popover's field takes focus within the press.
+ */
+function LayersInClosedInFlowDialogExample() {
+  const [note, setNote] = useState('');
+
+  return (
+    <dialog {...stylex.props(inFlowDialogStyles.dialog)}>
+      <Text type="body">A closed dialog the page shows in flow</Text>
+      <Popover
+        content={
+          <VStack gap={2}>
+            <Text type="body">In-flow popover</Text>
+            <TextInput label="In-flow note" value={note} onChange={setNote} />
+          </VStack>
+        }>
+        <Button label="Open in-flow popover" variant="secondary" />
+      </Popover>
+      <Tooltip content="In-flow tip">
+        <Button label="In-flow tip trigger" variant="secondary" />
+      </Tooltip>
+    </dialog>
+  );
+}
+
+export const LayersInClosedInFlowDialog: Story = {
+  render: () => <LayersInClosedInFlowDialogExample />,
+};
+
+/**
+ * The same closed, displayed `<dialog>`, whose card first expands in flow. The
+ * press that opens the Popover comes after it, on a control the expansion
+ * shows.
+ */
+function LayerAfterInlineExpandInClosedDialogExample() {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  return (
+    <dialog {...stylex.props(inFlowDialogStyles.dialog)}>
+      <Button
+        label={isExpanded ? 'Collapse card' : 'Expand card'}
+        variant="secondary"
+        onClick={() => setIsExpanded(expanded => !expanded)}
+      />
+      {isExpanded ? (
+        <VStack gap={2}>
+          <Text type="body">Card details, shown in flow</Text>
+          <Popover content={<Text type="body">Pinned to the card</Text>}>
+            <Button label="Pin" variant="primary" />
+          </Popover>
+        </VStack>
+      ) : null}
+    </dialog>
+  );
+}
+
+export const LayerAfterInlineExpandInClosedDialog: Story = {
+  render: () => <LayerAfterInlineExpandInClosedDialogExample />,
+};
+
+/**
+ * A controlled Popover held open inside a Dialog that opens. Dialog displays
+ * its element in the render that opens it. It calls `showModal()` in an Effect
+ * after that, so the trigger has a box before the dialog is modal. The Popover
+ * opens after the dialog is in the top layer, anchored to its trigger and
+ * above the dialog.
+ */
+function PinnedPopoverInModalExample() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isPopoverOpen, setIsPopoverOpen] = useState(true);
+
+  return (
+    <>
+      <Button
+        label="Open modal"
+        variant="secondary"
+        onClick={() => {
+          setIsPopoverOpen(true);
+          setIsOpen(true);
+        }}
+      />
+      <Dialog
+        isOpen={isOpen}
+        onOpenChange={setIsOpen}
+        width={520}
+        aria-label="Modal with a pinned popover">
+        <Layout
+          header={
+            <DialogHeader
+              title="Modal with a pinned popover"
+              onOpenChange={setIsOpen}
+            />
+          }
+          content={
+            <LayoutContent>
+              <Popover
+                isOpen={isPopoverOpen}
+                onOpenChange={setIsPopoverOpen}
+                content={<Text type="body">Pinned popover</Text>}>
+                <Button label="Popover trigger" variant="secondary" />
+              </Popover>
+            </LayoutContent>
+          }
+        />
+      </Dialog>
+    </>
+  );
+}
+
+export const PinnedPopoverInModal: Story = {
+  render: () => <PinnedPopoverInModalExample />,
+};
+
+/**
+ * A controlled Popover held open inside a closed `<dialog>` that stays hidden
+ * (`display: none`) until a press displays it in flow. While it is hidden, the
+ * trigger has no box, so the Popover waits. Once it is displayed, the Popover
+ * opens anchored to its trigger.
+ */
+function PinnedPopoverInHiddenClosedDialogExample() {
+  const [isShown, setIsShown] = useState(false);
+  const [isPopoverOpen, setIsPopoverOpen] = useState(true);
+
+  return (
+    <VStack gap={3}>
+      <Button
+        label="Show the dialog in flow"
+        variant="secondary"
+        onClick={() => setIsShown(true)}
+      />
+      <dialog
+        {...stylex.props(
+          inFlowDialogStyles.dialog,
+          !isShown && inFlowDialogStyles.hidden,
+        )}>
+        <Popover
+          isOpen={isPopoverOpen}
+          onOpenChange={setIsPopoverOpen}
+          content={<Text type="body">Waits for a box</Text>}>
+          <Button label="Hidden dialog trigger" variant="secondary" />
+        </Popover>
+      </dialog>
+    </VStack>
+  );
+}
+
+export const PinnedPopoverInHiddenClosedDialog: Story = {
+  render: () => <PinnedPopoverInHiddenClosedDialogExample />,
+};
+
+/**
+ * Fields for the focus stories below. The first sits in a closed `<dialog>`
+ * that the page does not display, so it is no Tab stop.
+ */
+function DetailsFields() {
+  const [hiddenValue, setHiddenValue] = useState('');
+  const [name, setName] = useState('');
+  const [note, setNote] = useState('');
+
+  return (
+    <VStack gap={2}>
+      <dialog>
+        <TextInput
+          label="Hidden field"
+          value={hiddenValue}
+          onChange={setHiddenValue}
+        />
+      </dialog>
+      <TextInput label="Name" value={name} onChange={setName} />
+      <TextInput label="Note" value={note} onChange={setNote} />
+    </VStack>
+  );
+}
+
+/**
+ * The closed `<dialog>` that the page displays in flow, with a Popover that
+ * holds two fields and a DropdownMenu with a header and a footer. Tab moves
+ * through each layer and wraps at its edges, as it does for the same Popover
+ * in an open Dialog.
+ */
+function FocusInClosedInFlowDialogExample() {
+  const [query, setQuery] = useState('');
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  return (
+    <VStack gap={4}>
+      <dialog {...stylex.props(inFlowDialogStyles.dialog)}>
+        <Popover content={<DetailsFields />}>
+          <Button label="Edit details" variant="secondary" />
+        </Popover>
+        <DropdownMenu
+          button={{label: 'Labels'}}
+          header={
+            <TextInput
+              label="Filter labels"
+              isLabelHidden
+              placeholder="Filter labels"
+              value={query}
+              onChange={setQuery}
+            />
+          }
+          footer={
+            <Button label="Create label" variant="ghost" onClick={() => {}} />
+          }>
+          <DropdownMenuItem label="Bug" onClick={() => {}} />
+          <DropdownMenuItem label="Design" onClick={() => {}} />
+        </DropdownMenu>
+      </dialog>
+      <Button
+        label="Open dialog"
+        variant="secondary"
+        onClick={() => setIsDialogOpen(true)}
+      />
+      <Dialog
+        isOpen={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        width={520}
+        aria-label="Dialog with a popover">
+        <Layout
+          header={
+            <DialogHeader
+              title="Dialog with a popover"
+              onOpenChange={setIsDialogOpen}
+            />
+          }
+          content={
+            <LayoutContent>
+              <Popover content={<DetailsFields />}>
+                <Button label="Edit in dialog" variant="secondary" />
+              </Popover>
+            </LayoutContent>
+          }
+        />
+      </Dialog>
+    </VStack>
+  );
+}
+
+export const FocusInClosedInFlowDialog: Story = {
+  render: () => <FocusInClosedInFlowDialogExample />,
 };

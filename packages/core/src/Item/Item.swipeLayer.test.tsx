@@ -2,38 +2,31 @@
 
 /**
  * @file Item.swipeLayer.test.tsx
- * @input Item with and without swipe actions; the swipe layer module, spied
- * @output Verifies a row without swipe actions never renders the swipe layer.
- *   A row with them renders it into the root once it has loaded, however long
- *   the load takes.
- * @position Companion to Item.test.tsx for the lazily loaded swipe layer
+ * @input Item with and without swipe actions; the swipe layer modules, spied
+ * @output Verifies a row without swipe actions never renders the swipe layer. A
+ *   row given `swipe` renders it into the root at its first render, under a
+ *   fine primary pointer as under a phone's
+ * @position Companion to Item.test.tsx for where the swipe layer comes from;
+ *   Item.deprecatedSwipeLayer.test.tsx covers the deprecated props' loader
  */
 
 import {createElement, type ReactNode} from 'react';
-import {describe, expect, it, vi} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 import {act, render, screen} from '@testing-library/react';
 import {Item} from './Item';
-import type {ItemSwipeLayerProps} from './ItemSwipeLayer';
-import {swipeLayerLoaded} from './__tests__/swipeLayerLoaded';
+import {createSwipe} from '../Swipe/createSwipe';
+import type {SwipeLayerProps} from '../Swipe/swipeHost';
+import {emulateTouch} from './__tests__/emulateTouch';
 
-const {layerRenders, layerLoad} = vi.hoisted(() => {
-  let release = () => {};
-  const held = new Promise<void>(resolve => {
-    release = resolve;
-  });
-  return {layerRenders: vi.fn(), layerLoad: {held, release: () => release()}};
-});
+const {layerRenders} = vi.hoisted(() => ({layerRenders: vi.fn()}));
 
-vi.mock('./ItemSwipeLayer', async importOriginal => {
-  // The module loads only when the test releases it. A cold load on a loaded
-  // machine is as late, so a wait on a clock would read nothing.
-  await layerLoad.held;
+vi.mock('../Swipe/SwipeActionsLayer', async importOriginal => {
   const actual = await importOriginal<{
-    default: (props: ItemSwipeLayerProps) => ReactNode;
+    default: (props: SwipeLayerProps) => ReactNode;
   }>();
   return {
     ...actual,
-    default: (props: ItemSwipeLayerProps) => {
+    default: (props: SwipeLayerProps) => {
       layerRenders();
       return createElement(actual.default, props);
     },
@@ -41,6 +34,11 @@ vi.mock('./ItemSwipeLayer', async importOriginal => {
 });
 
 describe('Item and the swipe layer', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    layerRenders.mockClear();
+  });
+
   it('renders a row without swipe actions with no swipe layer at all', async () => {
     render(
       <ul>
@@ -62,22 +60,40 @@ describe('Item and the swipe layer', () => {
     expect(screen.getByTestId('row').childElementCount).toBe(1);
   });
 
-  it('renders the swipe layer into the root of a row with swipe actions', async () => {
+  it('renders the layer of a row given swipe at its first render, under a fine primary pointer too', () => {
+    // A touchscreen laptop: a fine primary pointer, and a finger beside it.
+    // The gesture reads each touch's pointer, so the layer is there; a mouse
+    // never starts it (Item.test.tsx).
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
     render(
       <Item
         label="Inbox"
         data-testid="row"
-        swipeActions={{trailing: [{label: 'Archive', onActivate: () => {}}]}}
+        swipe={createSwipe({
+          trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
+        })}
+      />,
+    );
+    // No chunk to wait for: the layer came with createSwipe.
+    expect(
+      screen.getByTestId('row').querySelector('[data-swipe-panel="trailing"]'),
+    ).not.toBeNull();
+    expect(layerRenders).toHaveBeenCalled();
+  });
+
+  it("renders the layer into the root of a row given swipe on a phone's pointer, adding nothing else", () => {
+    emulateTouch();
+    render(
+      <Item
+        label="Inbox"
+        data-testid="row"
+        swipe={createSwipe({
+          trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
+        })}
       />,
     );
     const row = screen.getByTestId('row');
-    // The layer's module is still loading: nothing is drawn yet.
-    expect(row.querySelector('[data-swipe-panel]')).toBeNull();
-    layerLoad.release();
-    await swipeLayerLoaded(row);
     const panel = row.querySelector('[data-swipe-panel="trailing"]');
-    expect(panel).not.toBeNull();
-    expect(layerRenders).toHaveBeenCalled();
     // The layer adds nothing but the panel: the root is still the content
     // followed by the out-of-flow panel, with no wrapper for either.
     expect(panel?.parentElement).toBe(row);

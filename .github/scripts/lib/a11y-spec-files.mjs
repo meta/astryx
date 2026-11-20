@@ -4,7 +4,8 @@
  * @file a11y-spec-files.mjs
  * @input Repository-relative paths
  * @output The browser accessibility spec globs `playwright.config.ts` runs,
- *   and `isA11ySpecFile`
+ *   `isA11ySpecFile`, and `globToRegExp`, which the Node leg planner's file
+ *   list (scripts/vitest-node-files.mjs) shares
  * @position The one list of browser accessibility spec files. The Playwright
  *   config matches them, and the default touched-components check (spec:AST-030
  *   FR12) uses the same list to find the specs a pull request changes. No
@@ -27,12 +28,15 @@ export const WEBKIT_A11Y_SPEC_GLOBS = Object.freeze([
 ]);
 
 /**
- * A glob in Playwright's subset (`**` any depth, `*` within one segment) as a
- * regular expression over a repository-relative path.
+ * A glob as a regular expression over a repository-relative path: `**` at any
+ * depth (before a slash, also no folder at all), `*` within one segment, and
+ * `{a,b}` alternatives. Playwright's and Vitest's globs here use only these
+ * forms.
  * @param {string} glob
  */
 export function globToRegExp(glob) {
   let source = '';
+  let braces = 0;
   for (let i = 0; i < glob.length; i += 1) {
     const char = glob[i];
     if (char === '*' && glob[i + 1] === '*') {
@@ -41,6 +45,14 @@ export function globToRegExp(glob) {
       i += glob[i + 2] === '/' ? 2 : 1;
     } else if (char === '*') {
       source += '[^/]*';
+    } else if (char === '{') {
+      braces += 1;
+      source += '(?:';
+    } else if (char === '}' && braces > 0) {
+      braces -= 1;
+      source += ')';
+    } else if (char === ',' && braces > 0) {
+      source += '|';
     } else {
       source += char.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
     }

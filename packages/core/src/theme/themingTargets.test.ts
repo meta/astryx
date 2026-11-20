@@ -1009,11 +1009,6 @@ describe('theming.targets matches the themeProps() call sites', () => {
  */
 const UNREFLECTED_STYLE_AXIS_EXCEPTIONS: ReadonlyMap<string, string> = new Map([
   [
-    'BaseTypeahead.size',
-    'The size pads the result row, and the result row has no target. The ' +
-      'missing row target is a recorded reachability gap.',
-  ],
-  [
     'ChatComposer.elevation',
     'The composer body paints the elevation but has no target. How to expose ' +
       'the body to themes is an open owner decision.',

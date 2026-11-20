@@ -30,6 +30,7 @@ const main = read('deploy.yml');
 
 const SUITE = {
   'pr-a11y-guards': 'a11y',
+  'pr-a11y-plan': 'a11y',
   'pr-a11y-specs': 'a11y',
   'pr-a11y': 'a11y',
   'visual-scout': 'visual',
@@ -100,6 +101,7 @@ describe('visual, accessibility and RTL owners', () => {
       visual: '${{ steps.decide.outputs.visual }}',
       a11y: '${{ steps.decide.outputs.a11y }}',
       rtl: '${{ steps.decide.outputs.rtl }}',
+      swizzle: '${{ steps.decide.outputs.swizzle }}',
     });
     expect(gate.steps[0].with).toMatchObject({
       'sparse-checkout':

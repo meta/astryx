@@ -22,22 +22,34 @@ export const doc = {
     'Read it, copy what you need into your own theme file, delete it. Use `theme add` to ' +
     'use an installed built theme, extend that theme for ordinary customization, or use ' +
     '`theme eject` for a complete source fork. This command starts a new blank theme. Refuses to overwrite without ' +
-    '`overwrite`, so it is safe to re-run.',
+    '`overwrite`, so it is safe to re-run. With no package.json at or above cwd, it writes in cwd ' +
+    'and the CLI warns; pass a cwd inside a project, or run `npm init -y` in that folder first, to ' +
+    'write it at a project root.',
   importPath: '@astryxdesign/cli/api',
   signature:
     'themeTemplate(options?: {targetPath?: string, overwrite?: boolean, cwd?: string}): ThemeTemplateResponse',
-  keywords: ['theme', 'template', 'starter', 'defineTheme', 'scaffold', 'reference', 'tokens'],
+  keywords: [
+    'theme',
+    'template',
+    'starter',
+    'defineTheme',
+    'scaffold',
+    'reference',
+    'tokens',
+  ],
   params: [
     {
       name: 'options.targetPath',
       type: 'string',
-      description: 'Destination file. Must resolve within cwd.',
+      description:
+        'Destination file, read from cwd. Must resolve within the project root: the nearest folder at or above cwd with a package.json. Left out, the template is written at the project root.',
       default: "'theme.template.ts'",
     },
     {
       name: 'options.overwrite',
       type: 'boolean',
-      description: 'Replace an existing file instead of reporting it untouched.',
+      description:
+        'Replace an existing file instead of reporting it untouched.',
       default: 'false',
     },
     {
@@ -55,7 +67,10 @@ export const doc = {
     },
   ],
   throws: [
-    {code: 'ERR_PATH_TRAVERSAL', when: 'the target path escapes cwd'},
+    {
+      code: 'ERR_PATH_TRAVERSAL',
+      when: 'the target path escapes the project root (the nearest folder at or above cwd with a package.json)',
+    },
     {
       code: 'ERR_INVALID_ARGUMENT',
       when: 'the target path is blank, names a folder, or is not a .ts file (with or without overwrite)',
@@ -74,5 +89,11 @@ export const doc = {
     },
   ],
   command: 'theme template',
-  related: ['themeAdd', 'themeEject', 'themeBuild', 'themeListAvailable', 'themeTargets'],
+  related: [
+    'themeAdd',
+    'themeEject',
+    'themeBuild',
+    'themeListAvailable',
+    'themeTargets',
+  ],
 };

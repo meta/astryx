@@ -9,6 +9,7 @@ import {
   costOf,
   fitLegsToBudget,
   medianOf,
+  percentileOf,
   slowestFirst,
   splitByDuration,
 } from './duration-split.mjs';
@@ -28,6 +29,19 @@ describe('splitting test files by recorded time', () => {
     });
     expect([cost('a'), cost('zero'), cost('new')]).toEqual([10, 0, 4]);
     expect(costOf(['x'], {})('x')).toBe(1);
+  });
+
+  it('books an item with no recorded time by the estimate its caller picks', () => {
+    const seconds = {a: 10, b: 4, c: 1, zero: 0};
+    const items = ['a', 'b', 'c', 'zero', 'new'];
+    const p90 = costOf(items, seconds, {
+      estimate: values => percentileOf(values, 0.9),
+    });
+    expect([p90('a'), p90('new')]).toEqual([10, 10]);
+    expect(percentileOf([5, 1, 3, 2, 4, 6, 7, 8, 9, 10], 0.9)).toBe(9);
+    expect(percentileOf([], 0.9)).toBe(1);
+    // With nothing recorded, an item counts 1 whatever the estimate.
+    expect(costOf(['x'], {}, {estimate: () => 50})('x')).toBe(1);
   });
 
   it('orders slowest first, ties by path, whatever order items came in', () => {

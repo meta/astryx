@@ -12,13 +12,17 @@ export const docs = {
     defaults: {
       label: 'Navigation',
       heading: {__element: 'TopNavHeading', props: {heading: 'My App'}},
+      children: [
+        {__element: 'TopNavItem', props: {label: 'Home', href: '#', isSelected: true}},
+        {__element: 'TopNavItem', props: {label: 'Projects', href: '#'}},
+      ],
     },
   },
   theming: {
     targets: [
       {className: 'astryx-top-nav', states: ['mode']},
       {className: 'astryx-top-nav-item', states: ['mode', 'selected']},
-      {className: 'astryx-top-nav-heading'},
+      {className: 'astryx-top-nav-heading', states: ['mode']},
       {className: 'astryx-top-nav-mega-menu', states: ['mode']},
       {className: 'astryx-top-nav-mega-menu-item', states: ['mode']},
       {className: 'astryx-top-nav-mega-menu-featured-card'},

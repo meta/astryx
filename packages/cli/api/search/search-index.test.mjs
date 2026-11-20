@@ -40,10 +40,11 @@ const GOLDEN = [
   'comment thread',
   'AcmeButton',
   'branded press target',
+  'zebra roster board',
 ];
 const ACME = '@acme/ui';
 
-/** An integration whose component description holds inline doc tokens. */
+/** An integration whose component and template descriptions hold inline doc tokens. */
 function writeAcme(dir) {
   const root = path.join(dir, 'node_modules', '@acme', 'ui');
   fs.mkdirSync(path.join(root, 'src'), {recursive: true});
@@ -58,7 +59,23 @@ function writeAcme(dir) {
   );
   fs.writeFileSync(
     path.join(root, 'astryx.integration.mjs'),
-    "export default {components: './src'};\n",
+    "export default {components: './src', templates: './templates'};\n",
+  );
+  fs.mkdirSync(path.join(root, 'templates'), {recursive: true});
+  fs.writeFileSync(
+    path.join(root, 'templates', 'zebra-board.doc.mjs'),
+    `export default ${JSON.stringify({
+      type: 'page',
+      name: 'zebra-board',
+      category: 'Acme',
+      description:
+        'Zebra roster board: read {@command docs icons}, then theme it as {@link @astryxdesign/cli:generic:theme} says.',
+      keywords: ['zebra', 'roster', 'board'],
+    })};\n`,
+  );
+  fs.writeFileSync(
+    path.join(root, 'templates', 'zebra-board.tsx'),
+    'export default function Page() { return null; }\n',
   );
   fs.writeFileSync(
     path.join(root, 'src', 'AcmeButton.tsx'),
@@ -144,6 +161,23 @@ describe('rankSearchIndex over stored indexes', () => {
     for (const dir of dirs) fs.rmSync(dir, {recursive: true, force: true});
   });
 
+  it('keeps fields only build reads out of every index', () => {
+    for (const index of indexes) {
+      for (const candidate of index.candidates) {
+        expect(candidate).not.toHaveProperty('_category');
+      }
+    }
+  });
+
+  it(
+    'never prints a field only build reads',
+    async () => {
+      const response = await search('data table with filters', {cwd: full});
+      expect(JSON.stringify(response)).not.toContain('_category');
+    },
+    SLOW,
+  );
+
   it.each(GOLDEN)(
     '`%s` from the whole-project index answers as search() does there',
     async query => {
@@ -162,6 +196,28 @@ describe('rankSearchIndex over stored indexes', () => {
     async query => {
       const expected = ranked(await search(query, {cwd: full, limit: 50}));
       const actual = ranked(await rankSearchIndex(query, indexes, {limit: 50}));
+      expect(actual).toEqual(expected);
+    },
+    SLOW,
+  );
+
+  it(
+    "a template's doc tokens and links read as search() prints them",
+    async () => {
+      const expected = ranked(
+        await search('zebra roster board', {cwd: full, type: 'template'}),
+      );
+      const hit = expected.data.results.find(
+        (/** @type {any} */ result) => result.name === 'zebra-board',
+      );
+      expect(hit.description).toBe(
+        'Zebra roster board: read `astryx docs icons`, then theme it as `astryx docs theme` says.',
+      );
+      const actual = ranked(
+        await rankSearchIndex('zebra roster board', indexes, {
+          type: 'template',
+        }),
+      );
       expect(actual).toEqual(expected);
     },
     SLOW,

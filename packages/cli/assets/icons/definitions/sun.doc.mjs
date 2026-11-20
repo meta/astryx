@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'sun',
+  group: 'colorMode',
   description: 'Light mode or daytime.',
   words: ['light mode', 'day', 'bright'],
 };
