@@ -28198,7 +28198,7 @@ export function draftAnswer(ctx, env, question) {
     // ("neutral grays", "grays with no tint"): grays without a hue. Grays
     // that already have none are said so; tinted ones take a mid gray
     // seed. A gray seed has no hue, so no shade made from it has one.
-    if (dial === 'neutral' && !c.mode && /\bneutral untinted\b/.test(t)) {
+    if (dial === 'neutral' && !c.mode && /\buntinted neutral grays\b/.test(t)) {
       /** @param {string} value */
       const chroma = value => {
         const rgb = parseColor(value);
@@ -28206,20 +28206,33 @@ export function draftAnswer(ctx, env, question) {
         const [, a, b] = oklabOf(rgb);
         return Math.hypot(a, b);
       };
-      const tinted = [
+      // (A token the theme sets itself keeps its value whatever the seed
+      // is, so only the grays the seed makes tell whether they are tinted.)
+      /** @param {string} k */
+      const setItself = k =>
+        env.data.settings.some(st => st.thing === k && !st.on);
+      const tintedOf = (/** @type {string[]} */ keys) =>
+        keys.filter(k =>
+          /** @type {const} */ (['light', 'dark']).some(
+            m => chroma(String(current(k, m) ?? '')) > UNTINTED_CHROMA,
+          ),
+        );
+      const grounds = [
         '--color-background-body',
         '--color-background-surface',
         '--color-background-muted',
         '--color-text-secondary',
-      ].some(k =>
-        /** @type {const} */ (['light', 'dark']).some(
-          m => chroma(String(current(k, m) ?? '')) > UNTINTED_CHROMA,
-        ),
-      );
-      return tinted
+      ];
+      const tintedOwn = tintedOf(grounds.filter(setItself));
+      if (tintedOf(grounds.filter(k => !setItself(k))).length)
+        return {
+          text: `the theme's grays without a tint: the page, surfaces, cards, popovers, muted fills, text and borders take plain grays in both modes; a part ${env.slug} sets itself keeps its own`,
+          options: [[set('neutral', '#737373')]],
+        };
+      return tintedOwn.length
         ? {
-            text: `the theme's grays without a tint: the page, surfaces, cards, popovers, muted fills, text and borders take plain grays in both modes; a part ${env.slug} sets itself keeps its own`,
-            options: [[set('neutral', '#737373')]],
+            text: `the grays of ${env.slug} have no tint; the tint is in ${tintedOwn.join(', ')}, which ${env.slug} sets itself, so the grays change nothing: set ${tintedOwn.length > 1 ? 'those tokens' : 'that token'} to a plain gray to lose it`,
+            options: [],
           }
         : {
             text: `the grays of ${env.slug} are already neutral, with no tint in either mode: nothing to change`,

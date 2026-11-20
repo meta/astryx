@@ -6,10 +6,11 @@
  * whose grays already have none, how says so and writes nothing; on a
  * tinted one (a warm gray), it gives the neutral color as a plain gray, and
  * the page, surfaces and secondary text lose their tint in both modes. The
- * hover tint is never the answer, and a negated ask writes nothing. A gray
- * given a hue ("cool neutral grays") or a typed color keeps its own
- * reading, and the clause keeps its line at the end of a long ask, while
- * change lines still come before lookups.
+ * hover tint is never the answer, and an ask turned away from the grays
+ * writes nothing; a tint the theme sets itself is named. A gray given a
+ * hue ("cool neutral grays") or a typed color keeps its own reading, and
+ * the clause keeps its line at the end of a long ask, while change lines
+ * still come before lookups.
  */
 
 import * as fs from 'node:fs';
@@ -41,6 +42,8 @@ beforeAll(async () => {
     await themeEditNew('plain', {cwd, like: 'neutral'});
     await themeEditNew('warm', {cwd, like: 'neutral'});
     await themeEditSet('warm', 'neutral', '#78716c', {cwd});
+    await themeEditNew('cream', {cwd, like: 'neutral'});
+    await themeEditSet('cream', '--color-background-body', '#faf3e8', {cwd});
   }
 }, 600_000);
 
@@ -124,7 +127,17 @@ describe('neutral grays', () => {
     'a negated ask never makes the grays neutral',
     async test => {
       needsBases(test);
-      for (const q of ["don't make the grays neutral", 'never neutral grays']) {
+      for (const q of [
+        "don't make the grays neutral",
+        'never neutral grays',
+        "don't use pure neutral grays",
+        'avoid using neutral grays',
+        'no more neutral grays',
+        'remove the neutral grays',
+        'get rid of the neutral grays',
+        'I hate the neutral grays',
+        'neutral grays are too cold, warm them up',
+      ]) {
         const results = await answer(q, 'warm');
         expect(
           results.flatMap(r => r.lines),
@@ -135,6 +148,9 @@ describe('neutral grays', () => {
           q,
         ).toBe(false);
       }
+      // A hue said after the grays keeps its own reading.
+      const blue = await answer('neutral grays with a blue tint', 'warm');
+      expect(blue.flatMap(r => r.lines)).not.toContain("neutral '#737373'");
       const [kept] = await answer("don't make the grays neutral", 'warm');
       expect(kept.text).toMatch(/you asked for it not to change/);
       // A negation of another look leaves the grays asked for.
@@ -143,6 +159,19 @@ describe('neutral grays', () => {
         'warm',
       );
       expect(both.lines).toContain("neutral '#737373'");
+    },
+    T,
+  );
+
+  it(
+    'a page color the theme sets itself is named, never a seed that keeps it',
+    async test => {
+      needsBases(test);
+      const results = await answer('neutral grays', 'cream');
+      expect(results.flatMap(r => r.lines)).toEqual([]);
+      expect(results[0].text).toMatch(
+        /--color-background-body, which cream sets itself/,
+      );
     },
     T,
   );
@@ -182,6 +211,12 @@ describe('neutral grays', () => {
       const results = await answer('neutral grays, not warm ones', 'warm');
       expect(results[0].lines).toEqual(["neutral '#737373'"]);
       expect(results.some(r => /untinted/.test(r.text))).toBe(false);
+      for (const q of [
+        'neutral grays everywhere but buttons',
+        'neutral grays on hover',
+      ])
+        for (const r of await answer(q, 'warm'))
+          expect(r.text, q).not.toMatch(/neutral untinted/);
     },
     T,
   );

@@ -1961,35 +1961,60 @@ export const typoLimit = typed => {
 const GRAY_TEMPERATURE =
   /\b(?:warm(?:er)?|cool(?:er)?|slate|stone|zinc|sand|sandy|beige|blue|bluish|navy|green|greenish|brown|brownish)\s+$/i;
 
+/** Where a clause breaks: punctuation, a dash, or a joining word. */
+const CLAUSE_BREAK =
+  /[,;.!?\u2013\u2014]|\b(?:and|but|then|plus|with|except)\b/gi;
+
 /**
- * A negation said right before the words, with only a verb or an article
- * between ("never neutral grays", "don't make the grays neutral"). A
- * negation of another look ("no rounded corners with neutral grays") does
- * not govern them.
+ * Words before the grays, in their clause, that turn the ask away from
+ * them: a negation, a removal, less of them, or a dislike ("don't use pure
+ * neutral grays", "get rid of the neutral grays", "I hate the neutral
+ * grays").
  */
-const NEGATED_BEFORE =
-  /\b(?:don'?t|do\s+not|never|not|no|without|avoid)(?:\s+(?:make|use|want|give|have|go\s+with|the|any|me|us|them))*\s+$/i;
+const AWAY_BEFORE =
+  /\b(?:don'?t|do\s+not|never|not|no|without|avoid|stop|remove|rid|drop|ditch|lose|less|fewer|hate|dislike|too)\b/i;
+
+/**
+ * Words after the grays, in their clause, that give them a hue or say
+ * something about them instead of asking for them ("neutral grays with a
+ * blue tint", "neutral grays are too cold").
+ */
+const HUE_OR_STATEMENT_AFTER =
+  /\b(?:tint(?:ed|s)?|hue|warm(?:er)?|cool(?:er)?|cold|blue|bluish|green|greenish|brown|brownish|beige|are|is|look|looks|feel|feels|seem|seems|too)\b/i;
 
 /** A color typed later in the same clause ("neutral grays: #64748b"). */
-const TYPED_COLOR_AFTER =
-  /^[^,;.!?\u2013\u2014]*?(?:#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|oklch|oklab|lab|lch)\()/i;
+const TYPED_COLOR = /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|oklch|oklab|lab|lch)\(/i;
 
 /**
  * "Neutral grays", "pure grays", "make the grays neutral", "grays with
  * no tint": grays without a hue of their own are the neutral color
- * without a tint (`neutral untinted`). Some asks keep their own words: a
- * gray given a hue ("cool neutral grays"), a color typed in the clause
- * ("neutral grays (#6b7280)"), as a typed value wins over a color word,
- * and a negated ask ("never neutral grays"), which the prohibition reader
- * answers.
+ * without a tint ("untinted neutral grays"). An ask that does not plainly ask
+ * for them keeps its own words and its own reading: a gray given a hue
+ * ("cool neutral grays", "neutral grays with a blue tint"), a color typed
+ * in the clause ("neutral grays (#6b7280)"), as a typed value wins over a
+ * color word, and an ask turned away from them ("never neutral grays",
+ * "remove the neutral grays").
  * @param {string} question
  * @returns {string}
  */
 export function untintedGraysWords(question) {
   /** @param {string} m @param {number} at @param {string} text */
-  const kept = (m, at, text) =>
-    NEGATED_BEFORE.test(text.slice(0, at)) ||
-    TYPED_COLOR_AFTER.test(text.slice(at + m.length));
+  const kept = (m, at, text) => {
+    const before = text.slice(0, at).split(CLAUSE_BREAK).pop() ?? '';
+    // ("grays with no tint", "neutral grays with a blue tint"): "with"
+    // joins what follows to the grays, and "no tint" is the same ask.
+    const after =
+      text
+        .slice(at + m.length)
+        .replace(/^\s*with\s+no\s+(?:colou?r\s+)?tint(?:s|ing)?\b/i, '')
+        .replace(/^\s*with\b/i, '')
+        .split(CLAUSE_BREAK)[0] ?? '';
+    return (
+      AWAY_BEFORE.test(before) ||
+      HUE_OR_STATEMENT_AFTER.test(after) ||
+      TYPED_COLOR.test(after)
+    );
+  };
   const untinted = question
     .replace(
       /\b(?:neutral|pure|plain|untinted|uncolou?red|true)\s+gr[ae]ys\b/gi,
@@ -1997,18 +2022,19 @@ export function untintedGraysWords(question) {
         GRAY_TEMPERATURE.test(String(text).slice(0, at)) ||
         kept(m, at, String(text))
           ? m
-          : 'neutral untinted',
+          : 'untinted neutral grays',
     )
     .replace(
       /\b(?:make\s+)?the\s+gr[ae]ys\s+(?:neutral|untinted|pure)\b|\bgr[ae]ys\s+(?:that\s+are\s+|stay(?:ing)?\s+|kept\s+)?(?:neutral|untinted)\b|\bgr[ae]ys\s+with\s+no\s+(?:colou?r\s+)?tint\b/gi,
-      (m, at, text) => (kept(m, at, String(text)) ? m : 'neutral untinted'),
+      (m, at, text) =>
+        kept(m, at, String(text)) ? m : 'untinted neutral grays',
     );
   // ("pure neutral grays, no tint", "neutral grays, not warm ones"): the
   // "no tint" or "not warm" said with them is the same ask, never the
   // hover tint or a part to keep apart.
-  return /\bneutral untinted\b/.test(untinted)
+  return /\buntinted neutral grays\b/.test(untinted)
     ? untinted.replace(
-        /(\bneutral untinted)(?:\s*[,;]?\s*(?:(?:with\s+|and\s+)?no\s+(?:colou?r\s+)?tint(?:s|ing)?|(?:but\s+)?(?:not|except)\s+(?:warm|cool|tinted)(?:\s+(?:ones|gr[ae]ys))?)\b)+/gi,
+        /(\buntinted neutral grays)(?:\s*[,;]?\s*(?:(?:with\s+|and\s+)?no\s+(?:colou?r\s+)?tint(?:s|ing)?|(?:but\s+)?(?:not|except)\s+(?:warm|cool|tinted)(?:\s+(?:ones|gr[ae]ys))?)\b)+/gi,
         '$1',
       )
     : untinted;
