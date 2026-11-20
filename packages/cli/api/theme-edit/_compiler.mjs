@@ -9,6 +9,7 @@
  * @position api/theme-edit — compile-time knowledge over the part data
  */
 
+import {ratioDown} from '../theme/palette/generate/color.mjs';
 import {DIRECT, GROUPS, HOW} from './_tables.mjs';
 import {splitTop} from './_css.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
@@ -38,6 +39,13 @@ const SOFT =
 /** @typedef {{message: string, run: string[], also: string[], soft?: boolean}} CheckFailure */
 /** @typedef {import('./_parts.mjs').PartData} PartData */
 /** @typedef {import('./_parts.mjs').TextPair} TextPair */
+
+/** The aspect group each property belongs to, the first group that lists it. */
+const GROUP_OF_PROP = new Map(
+  Object.entries(GROUPS)
+    .flatMap(([g, ps]) => ps.map(p => /** @type {[string, string]} */ ([p, g])))
+    .reverse(),
+);
 
 /**
  * @param {import('./_project.mjs').ThemeProject} project
@@ -90,8 +98,7 @@ export function makeCompiler(project, parts) {
   const isToken = tok => Object.hasOwn(TYPE, tok);
 
   /** @param {string} p */
-  const groupOfProp = p =>
-    Object.entries(GROUPS).find(([, ps]) => ps.includes(p))?.[0] ?? null;
+  const groupOfProp = p => GROUP_OF_PROP.get(p) ?? null;
 
   /** @param {string} t @returns {string | null} */
   function groupOfToken(t) {
@@ -458,10 +465,32 @@ export function makeCompiler(project, parts) {
           : g === 'background'
             ? ['background-color', 'background', 'background-image']
             : null;
+      // A fill token on a part Core also draws with no fill of its own
+      // where it sits in another part (main content inside an app shell is
+      // transparent there, and the shell's own fill shows; the census sees
+      // that clear fill in no condition of the part's own): the token still
+      // reaches what inside reads it, but not that part's look there. Said,
+      // with the property that paints the part itself everywhere.
+      const clear = ['background-color', 'background'].some(
+        prop =>
+          (MAP[target]?.own?.[prop]?.values ?? []).includes('transparent') &&
+          !Object.values(MAP[target]?.at?.[prop] ?? {}).includes('transparent'),
+      );
+      if (
+        g === 'background' &&
+        clear &&
+        fed.some(f => f.part === target && (wanted ?? []).includes(f.prop))
+      )
+        return {
+          soft: true,
+          message: `${target} is also drawn with no fill of its own inside another part (main content in an app shell is transparent, and the shell's fill shows), so there ${token} colors only what inside ${target} reads it, not ${target} itself. To paint ${target} itself everywhere: ${P} set ${theme} background-color ${quoteCommandArgument(value)} --on ${target}${when ? ` --when ${when}` : ''}${also}`,
+          run: [
+            `${P} set ${theme} background-color ${quoteCommandArgument(value)} --on ${target}${when ? ` --when ${when}` : ''}${also}`,
+          ],
+          also: [],
+        };
       // The part reads the token the user named: it is set as asked, and
       // the result names what it feeds.
-      void wanted;
-      void fed;
       return null;
     }
     // Only a token of the same kind takes the value: a weight never goes to
@@ -507,15 +536,35 @@ export function makeCompiler(project, parts) {
                 ? 'font-family'
                 : 'font-weight'
         : g && DIRECT[g];
-    if (direct)
-      run.push(
-        `${P} set ${theme} ${direct} ${v} --on ${target}   # sets it directly, whatever token it uses`,
-      );
     const kids = g
       ? (MAP[target]?.contains ?? [])
           .filter(c => partReads(c, g).length)
           .slice(0, 4)
       : [];
+    // A part that reads no font token of this kind, holding parts that do
+    // (a tab list's tabs size their text from --text-label-size): those
+    // tokens,
+    // set on it, reach each of them; the property set on it directly does
+    // not, since they set it themselves.
+    const kidTokens =
+      reads.length || g !== 'font'
+        ? []
+        : [
+            ...new Set(
+              kids.flatMap(c =>
+                partReads(c, /** @type {string} */ (g))
+                  .filter(r => kindOf(r.token) === kindOf(token))
+                  .map(r => r.token),
+              ),
+            ),
+          ].slice(0, 3);
+    run.push(
+      ...kidTokens.map(t => `${P} set ${theme} ${t} ${v} --on ${target}`),
+    );
+    if (direct && !kidTokens.length)
+      run.push(
+        `${P} set ${theme} ${direct} ${v} --on ${target}   # sets it directly, whatever token it uses`,
+      );
     const what = g
       ? `${target}'s ${g} comes from ${
           reads.length
@@ -525,7 +574,9 @@ export function makeCompiler(project, parts) {
                   r => r.token + fmtWhen(r.when) + statusNote(target, r.token),
                 )
                 .join(', ')
-            : 'no token, so set the property directly'
+            : kidTokens.length
+              ? `no token; the parts inside it read ${kidTokens.join(', ')} for theirs, so set ${kidTokens.length > 1 ? 'those' : 'that'} on ${target}`
+              : 'no token, so set the property directly'
         }`
       : `${target} reads: ${[...allReads(target)].slice(0, 8).join(', ')}`;
     return {
@@ -645,16 +696,25 @@ export function makeCompiler(project, parts) {
    * @param {(pair: TextPair, side: 'fg' | 'bg', mode: string) => string | null | undefined} value
    * @param {(pair: TextPair, side: 'fg' | 'bg', mode: string) => string | null | undefined} baseValue
    * @param {string[]} modes
-   * @param {{parseColor: (v: unknown) => [number, number, number] | null, ratio: (a: number[], b: number[]) => number, alphaOf: (v: unknown) => number, compositeOver: (over: [number, number, number], alpha: number, under: [number, number, number]) => [number, number, number], page: (mode: string) => string | null | undefined}} helpers
+   * @param {{parseColor: (v: unknown) => [number, number, number] | null, ratio: (a: number[], b: number[]) => number, alphaOf: (v: unknown) => number, compositeOver: (over: [number, number, number], alpha: number, under: [number, number, number]) => [number, number, number], page: (mode: string) => string | null | undefined, drawnByRule?: (pair: TextPair, side: 'fg' | 'bg', mode: string) => boolean}} helpers
    *   `page` is the page color in a mode: a see-through background is drawn
    *   over it, and see-through text over that background, before measuring.
+   *   `drawnByRule`: whether the base theme's own rule for a part draws a
+   *   side (not its token), so the side is named by its color.
    * @param {TextPair[]} [extra] more pairs to measure (a part's variants)
    */
   function contrast(
     value,
     baseValue,
     modes,
-    {parseColor, ratio, alphaOf, compositeOver, page},
+    {
+      parseColor,
+      ratio,
+      alphaOf,
+      compositeOver,
+      page,
+      drawnByRule = () => false,
+    },
     extra = [],
   ) {
     /**
@@ -744,9 +804,12 @@ export function makeCompiler(project, parts) {
       // needs no 4.5:1 (and must stay dimmer than the live text beside it).
       if (/^--color-(text|icon)-disabled$/.test(String(p.fg.tokens[0])))
         continue;
+      // (Text on another part that sets text of its own takes that part's
+      // text; a part's own color set on it, `ownColor`, is its text there.)
       if (
         p.fg.target !== p.bg.target &&
         p.bg.target &&
+        !(/** @type {any} */ (p).ownColor) &&
         partReads(p.bg.target, 'text').length
       )
         continue;
@@ -822,7 +885,15 @@ export function makeCompiler(project, parts) {
           m,
           baseBeneath,
         );
-        if (was && ratio(was[0], was[1]) <= r + 0.05) continue;
+        // No worse than the base theme draws it: none of the theme's own,
+        // and where the theme draws neither side, the base theme's own
+        // failure (`base`), a note with its line.
+        const baseDrawn =
+          fg === baseValue(p, 'fg', m) &&
+          bg === baseValue(p, 'bg', m) &&
+          beneath === baseBeneath;
+        if (was && ratio(was[0], was[1]) <= r + 0.05 && !baseDrawn) continue;
+        const base = Boolean(was && ratio(was[0], was[1]) <= r + 0.05);
         // Pairs alike in color are one problem only when they read the same
         // token on the same part: text on another token or on another part
         // is another fix, and shows as they part ways.
@@ -832,12 +903,14 @@ export function makeCompiler(project, parts) {
         out.push({
           part: p.text,
           mode: m,
-          ratio: Number(r.toFixed(2)),
+          // (Cut down, never rounded up: just under a need never meets it.)
+          ratio: ratioDown(r),
           sample: p.sample,
           // A side the theme changed is named by the value it set, not the
           // token the part reads without it.
+          // (So is one the base theme's own rule draws, not its token.)
           fg:
-            fg !== baseValue(p, 'fg', m)
+            fg !== baseValue(p, 'fg', m) || drawnByRule(p, 'fg', m)
               ? String(fg)
               : (p.fg.tokens[0] ?? String(fg)),
           bgPart: p.bg.target,
@@ -851,7 +924,7 @@ export function makeCompiler(project, parts) {
             ? `${bg}, its gradient where the text sits`
             : stops.length > 1
               ? `${bg}, a stop of its gradient`
-              : bg !== baseValue(p, 'bg', m)
+              : bg !== baseValue(p, 'bg', m) || drawnByRule(p, 'bg', m)
                 ? String(bg)
                 : (p.bg.tokens[0] ?? String(bg)),
           // What a fix needs: the token the text reads, the part that draws
@@ -862,6 +935,7 @@ export function makeCompiler(project, parts) {
           when: /** @type {any} */ (p).when ?? null,
           ground: pair[1],
           pair: p,
+          ...(base ? {base: true} : {}),
         });
       }
     }

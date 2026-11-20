@@ -19,7 +19,6 @@ import {
   COLOR_PROPS,
   COMMON_PROPERTIES,
   DIALS,
-  FAMILIES,
   GROUPS,
   HOW,
   LIKE,
@@ -40,6 +39,7 @@ import {
   themeSourceParseError,
   themeSourceProblem,
   baseRedraws,
+  groupsOf,
 } from './_settings.mjs';
 import {missedSteps} from './_missed.mjs';
 import {ASPECTS, settableStates} from './_check.mjs';
@@ -190,9 +190,11 @@ function withPrefix(value, cwd) {
  * @param {string} subject
  * @param {import('./theme-edit.type.mjs').ThemeEditHowOptions} options
  * @param {string} cwd
+ * @param {boolean} [blindSaid] the color-blind pieces were answered
+ *   already: the rest is asked as said, never split for them again
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditHowResponse['data']>}
  */
-async function answer(subject, options, cwd) {
+async function answer(subject, options, cwd, blindSaid = false) {
   const {list, at = [], count} = options;
   // "½rem": a fraction is a number before anything reads the question.
   const t = (subject ?? '')
@@ -366,12 +368,12 @@ async function answer(subject, options, cwd) {
     const kind = listKind(key);
     return {kind: 'list', subject: '', ...(await listItems(kind, '', cwd))};
   }
-  if (Object.hasOwn(FAMILIES, key)) {
+  if (Object.hasOwn(groupsOf(ctx), key)) {
     return {
       kind: 'group',
       subject: t,
       group: key,
-      members: FAMILIES[key],
+      members: groupsOf(ctx)[key],
       spreads: AUTO_SPREAD.includes(key),
     };
   }
@@ -580,6 +582,27 @@ async function answer(subject, options, cwd) {
         ?.toLowerCase() ?? 'kinds';
     return answer('', {...options, list: kind}, cwd);
   }
+  // (Color-blind readers asked about in a list of asks: the other pieces
+  // are answered as typed, in their case and order, and the color-blind
+  // answer follows them, before the first offer, as every answer does.)
+  const blind = blindSaid
+    ? {blind: false, rest: ''}
+    : colorBlindPieces(t.trim().replace(/[?.!]+$/, ''));
+  if (!tool && blind.blind && blind.rest) {
+    const rest = await answer(blind.rest, options, cwd, true);
+    const results = rest.results ?? [];
+    const firstOffer = results.findIndex(r => r.offer);
+    const at = firstOffer < 0 ? results.length : firstOffer;
+    return {
+      ...rest,
+      subject: t,
+      results: [
+        ...results.slice(0, at),
+        ...colorBlindAnswer(env),
+        ...results.slice(at),
+      ],
+    };
+  }
   if (tool)
     return {
       kind: 'question',
@@ -635,7 +658,7 @@ async function answer(subject, options, cwd) {
     const q = draftAnswer(ctx, env, t);
     const groups = q.aspects.filter(a => Object.hasOwn(GROUPS, a));
     const results = q.parts
-      .map(p => (FAMILIES[p] ? FAMILIES[p][0] : p))
+      .map(p => (groupsOf(ctx)[p] ? groupsOf(ctx)[p][0] : p))
       .filter(p => ctx.project.target.has(p))
       .map(p => {
         const toks = (groups.length ? groups : [null]).flatMap(g =>
@@ -680,7 +703,11 @@ async function answer(subject, options, cwd) {
   if (matchAsk && env.exists) {
     const q = draftAnswer(ctx, env, t.replace(matchAsk[0], ' '));
     const parts = q.parts.flatMap(p =>
-      FAMILIES[p] ? FAMILIES[p] : ctx.project.target.has(p) ? [p] : [],
+      groupsOf(ctx)[p]
+        ? groupsOf(ctx)[p]
+        : ctx.project.target.has(p)
+          ? [p]
+          : [],
     );
     if (parts.length) {
       const res = await resolvedTokens(ctx, env.slug).catch(() => null);
@@ -729,7 +756,11 @@ async function answer(subject, options, cwd) {
       h.aspects.some(a => a === 'background' || a === 'text'))
   ) {
     const parts = h.parts.flatMap(p =>
-      FAMILIES[p] ? FAMILIES[p] : ctx.project.target.has(p) ? [p] : [],
+      groupsOf(ctx)[p]
+        ? groupsOf(ctx)[p]
+        : ctx.project.target.has(p)
+          ? [p]
+          : [],
     );
     const res = await resolvedTokens(ctx, env.slug).catch(() => null);
     // (A missed entry never says otherwise than the question: where the
@@ -885,8 +916,10 @@ export function questionOnly(q) {
       t,
     ) ||
     /^(?:why not|what about|how about|what if)\b/.test(t) ||
-    // ("why are my headings not bold": a complaint is an ask.)
-    /^why\b.*\b(?:not|n'?t)\b/.test(t)
+    // ("why are my headings not bold", "why is everything so round": a
+    // complaint is an ask.)
+    /^why\b.*\b(?:not|n'?t)\b/.test(t) ||
+    /^why (?:is|are)\b.*\bso [a-z]+\b/.test(t)
   )
     return false;
   // A verb that asks for a change anywhere after the question's first
@@ -915,7 +948,7 @@ export function questionOnly(q) {
  * @param {import('./_how-question.mjs').Draft[]} drafts
  */
 function finish(env, drafts) {
-  /** @type {Array<{text: string, commands: string[], sequence?: boolean, refused?: Array<{command: string, why: string, run?: string[]}>}>} */
+  /** @type {Array<{text: string, commands: string[], sequence?: boolean, refused?: Array<{command: string, why: string, run?: string[]}>, offer?: boolean}>} */
   const out = [];
   // The measured check runs first on the drafts that carry what their
   // clause asks; a draft that joins them ("all of it, in order") then keeps
@@ -937,12 +970,18 @@ function finish(env, drafts) {
   const kept = new Set();
   /** @type {Map<object, string[]>} */
   const unmetOf = new Map();
+  // ("…, and make headings bigger": where an answer's first line fails the
+  // check and a later line of it passes, a joined answer takes that line
+  // in its place, never drops the ask unsaid.)
+  /** @type {Map<string, import('./_how-commands.mjs').Step[]>} */
+  const joinsInstead = new Map();
   if (typeof env.measure === 'function')
     for (const d of drafts) {
       if (!d.intent) continue;
       const intent = d.intent;
       /** @type {string[]} */
       const unmet = [];
+      const first = d.options[0];
       d.options = d.options.flatMap(o => {
         const why = env.measure(o, intent);
         if (why) {
@@ -964,6 +1003,8 @@ function finish(env, drafts) {
         if (why) unmet.push(why);
         return why ? [] : [o];
       });
+      if (first?.length === 1 && d.options.length && d.options[0] !== first)
+        joinsInstead.set(key(first[0]), d.options[0]);
       // One change in growing amounts: the first kept is the answer, and
       // the smaller amounts that fell short are no reason to tell.
       if (d.smallest && d.options.length) {
@@ -975,7 +1016,13 @@ function finish(env, drafts) {
   for (const d of drafts) {
     if (!d.intent && dropped.size) {
       d.options = d.options
-        .map(o => o.filter(st => !dropped.has(key(st)) || kept.has(key(st))))
+        .map(o =>
+          o.flatMap(st =>
+            !dropped.has(key(st)) || kept.has(key(st))
+              ? [st]
+              : (joinsInstead.get(key(st)) ?? []),
+          ),
+        )
         .filter(o => o.length);
       // A joined answer left holding what another answer already says is
       // that answer: it is not given twice (and never as "all of it").
@@ -1037,6 +1084,24 @@ function finish(env, drafts) {
       out.push({text: d.text, commands: lookups});
       continue;
     }
+    // (What the ask writes is in place already: said so, first, with no
+    // command, so an offer beside it is never taken for the answer.)
+    if (
+      !commands.length &&
+      d.options.length &&
+      !d.offer &&
+      refused.length &&
+      refused.every(r => /^it changes nothing/.test(r.why))
+    ) {
+      const steps = d.options[0];
+      const values = [...new Set(steps.map(st => String(st.value)))];
+      const parts = [...new Set(steps.map(st => st.on).filter(Boolean))];
+      out.push({
+        text: `already ${values.join(', ')}${parts.length ? ` on the ${parts.join(', ')}` : ''} in ${env.slug}, nothing to change (${d.text})`,
+        commands: lookups,
+      });
+      continue;
+    }
     if (!commands.length && d.options.length && !lookups.length) {
       out.push({
         text: `${d.text}: no command does it on ${env.slug}${refused[0] ? `: ${refused[0].why}` : ''}`,
@@ -1053,6 +1118,7 @@ function finish(env, drafts) {
       commands: [...commands, ...lookups],
       ...(d.sequence && commands.length ? {sequence: true} : {}),
       ...(refused.length ? {refused} : {}),
+      ...(d.offer ? {offer: true} : {}),
     });
   }
   if (!env.exists && out.some(r => r.commands.some(c => / set /.test(c))))
@@ -1064,8 +1130,16 @@ function finish(env, drafts) {
   // Changes first; a lookup ("how card") after the commands that change.
   const changes = (/** @type {{commands: string[]}} */ r) =>
     r.commands.some(c => / editor (set|undo|new) /.test(c)) ? 0 : 1;
+  // An offer, more than the ask, is never first or the answer: it follows
+  // every other result; left alone, a first line says the ask itself
+  // writes nothing here.
+  const offered = (/** @type {{offer?: boolean}} */ r) => (r.offer ? 1 : 0);
+  // (Its words first, with no command: "the mode the app shows first is
+  // set where it renders the theme"; the line it offers follows.)
+  if (out.length && out.every(r => r.offer))
+    out.unshift({text: out[0].text, commands: []});
   return out
-    .sort((a, b) => changes(a) - changes(b))
+    .sort((a, b) => offered(a) - offered(b) || changes(a) - changes(b))
     .filter(r => {
       const k = `${r.text}\n${r.commands.join('\n')}`;
       if (seen.has(k)) return false;
@@ -1088,7 +1162,7 @@ function lookupKey(t, ctx) {
     .trim();
   if (/\s/.test(k)) return t;
   const known = (/** @type {string} */ x) =>
-    Object.hasOwn(FAMILIES, x) ||
+    Object.hasOwn(groupsOf(ctx), x) ||
     ctx.project.target.has(x) ||
     ASPECTS.includes(x) ||
     Object.hasOwn(DIALS, x) ||
@@ -1137,7 +1211,7 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
       const v = blocks[t]?.base?.[token];
       const to =
         typeof v === 'string'
-          ? /^var\((--[\w-]+)\)$/.exec(v.trim())?.[1]
+          ? /^var\(\s*(--[\w-]+)\s*\)$/.exec(v.trim())?.[1]
           : null;
       if (to) return {token: to, on: t};
     }
@@ -1192,7 +1266,7 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
     components,
     recorded,
     group,
-    groupMembers: group ? FAMILIES[group] : [],
+    groupMembers: group ? groupsOf(ctx)[group] : [],
     spreads: group ? AUTO_SPREAD.includes(group) : false,
     variants: C.variantValues(key),
     states,
@@ -1491,6 +1565,88 @@ function colorsAnswer(env, dialCommands) {
   ];
 }
 
+/** A word for color-vision deficiency, as a pattern's source. */
+const COLOR_BLIND_WORD = String.raw`(?:colou?r[- ]?blind\w*|colou?r[- ]vision|cvd|deuteran\w*|protan\w*|tritan\w*)`;
+const COLOR_BLIND = new RegExp(String.raw`\b${COLOR_BLIND_WORD}\b`, 'i');
+
+/**
+ * An ask's pieces, split at commas and at an "and" that joins two asks
+ * ("color-blind friendly statuses and a blue accent"; "red and green for
+ * color-blind people" is one ask): whether a piece asks about color-blind
+ * readers, and the pieces that do not.
+ * @param {string} q
+ */
+function colorBlindPieces(q) {
+  const pieces = q
+    .split(
+      new RegExp(
+        String.raw`[,;:]|\s(?:and|plus|&)\s(?!(?:[\w-]+\s+){0,3}${COLOR_BLIND_WORD})`,
+        'i',
+      ),
+    )
+    .map(x => x.trim())
+    .filter(Boolean);
+  const blind = pieces.filter(x => COLOR_BLIND.test(x));
+  if (!blind.length) return {blind: false, rest: ''};
+  // (A color-blind piece that says a change, "warnings darker for
+  // color-blind users", is asked as said; a piece that is only about
+  // color-blind readers is read as the status colors it is about, so the
+  // list keeps its shape.)
+  const own = (/** @type {string} */ x) => {
+    const left = x
+      .replace(
+        new RegExp(
+          String.raw`\s*\b(?:that|which|so(?:\s+that)?|for|to)\s+(?:[\w-]+\s+){0,3}?${COLOR_BLIND_WORD}(?:\s+[\w-]+){0,5}\s*$`,
+          'i',
+        ),
+        '',
+      )
+      .replace(
+        new RegExp(
+          String.raw`\b${COLOR_BLIND_WORD}(?:[- ](?:friendly|safe|proof|readers?|users?|people))?`,
+          'gi',
+        ),
+        '',
+      )
+      .replace(/\s+/g, ' ')
+      .trim();
+    // (What is left is a change unless it is only words about the ask
+    // itself: "color-blind friendly statuses", "a color-blind safe
+    // palette".)
+    const said = left
+      .replace(
+        /\b(?:make|makes|making|it|its|this|that|the|a|an|be|is|are|please|our|my|your|theme|app|site|ui|friendly|safe|proof|accessible|people|users?|readers?|staff|folks|viewers?|visitors?|for|with|to|so|also|and|status(?:es)?|colou?rs?|palette|statuses|can|tell|apart|them)\b/gi,
+        '',
+      )
+      .replace(/[^\w#]+/g, '');
+    return said ? x : 'status colors';
+  };
+  const kept = blind.map(own);
+  if (blind.length === pieces.length && kept.every(x => x === 'status colors'))
+    return {blind: true, rest: ''};
+  const rest = blind
+    .reduce((t, x, k) => t.replace(x, ` ${kept[k]} `), q)
+    .replace(/\s+/g, ' ')
+    .trim();
+  return {blind: true, rest};
+}
+
+/**
+ * The answer about color-blind readers.
+ * @param {import('./_how-commands.mjs').HowTheme} env
+ */
+function colorBlindAnswer(env) {
+  return [
+    {
+      text: `color-blind readers: the editor checks that the status fills (info, success, warning, danger) stay apart for someone red-weak or green-weak, and show and set note a pair that may look alike, with a line that moves one of them lighter or darker. A status shown with its words or an icon does not rest on color alone; a status dot does, so its colors need lightness apart too. To choose the colors yourself, set each status color; keep warning light and danger dark so lightness, not only hue, tells them apart.`,
+      commands: [
+        ...(env.exists ? [`${P} show ${env.slug}`] : []),
+        `${HOW} "status colors"`,
+      ],
+    },
+  ];
+}
+
 /**
  * The answer to a question about the tool itself: help, a list, how to see
  * a change, or the difference between two things it names. 'list' means
@@ -1522,6 +1678,10 @@ function toolAnswer(t, env, targets) {
     )
   )
     return 'list';
+  // (Only an ask about color-blind readers alone; in a list of asks the
+  // other pieces are answered too (answer).)
+  if (colorBlindPieces(q).blind && !colorBlindPieces(q).rest)
+    return colorBlindAnswer(env);
   if (/\b(see|view|preview|check) (my |the )?(changes?|theme|edits?)\b/.test(q))
     return [
       {
@@ -1619,7 +1779,10 @@ function toolAnswer(t, env, targets) {
     // A question about a part's value now is answered with that value.
     (asks && !valueAsked(q)) ||
     /^which parts (are|does|do)\b/.test(q) ||
-    (/^why (is|are|does|do)\b/.test(q) && !/\bnot\b|n'?t\b/.test(q))
+    (/^why (is|are|does|do)\b/.test(q) &&
+      !/\bnot\b|n'?t\b/.test(q) &&
+      // ("why is everything so round": a complaint, an ask.)
+      !/^why (?:is|are)\b.*\bso [a-z]+\b/.test(q))
   ) {
     // The part or setting the question names gets its own lookup.
     const named = q
@@ -1779,7 +1942,7 @@ async function listItems(kind, filter, cwd) {
   if (kind === 'groups')
     return {
       list: kind,
-      items: Object.entries(FAMILIES)
+      items: Object.entries(groupsOf(await context(cwd)))
         .filter(([k, v]) => f(k) || v.some(f))
         .map(([name, members]) => ({
           name,

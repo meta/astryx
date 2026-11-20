@@ -16,7 +16,21 @@
  * @type {Array<[RegExp, {on: string, when?: string, role?: string, level?: string, missing?: string}]>}
  */
 export const OVERRIDES = [
+  // (Design systems' names for parts Core has under another name: an
+  // underline nav is a row of tabs; a navigation rail is the side nav.)
+  [/\bunderline[- ]?navs?\b/, {on: 'tab'}],
+  [/\b(?:navigation|nav) rails?\b/, {on: 'side-nav'}],
+  // (A page's title is its top heading, never the page.)
+  [/\bpage (?:titles?|headings?|headers?)\b/, {on: 'heading', level: '1'}],
   [/\b(?:dividers?|separators?)\b/, {on: 'divider'}],
+  // (An action, "a toast's action", is the button it holds: before
+  // "button" or at the end of a phrase only. "Action items", "the actions
+  // column" and "an actions menu" are other parts. A call to action is the
+  // primary button, below.)
+  [
+    /(?<!\bcalls? to )\bactions?(?:\s+buttons?\b|(?=\s*(?:$|[,.;:!?)])))/,
+    {on: 'button'},
+  ],
   // (The page's main panel, the area its content sits in.)
   [
     /\b(?:main\s+)?content\s+(?:area|panel|region|pane)s?\b|\bmain\s+(?:area|panel|pane)s?\b/,
@@ -84,14 +98,19 @@ export const OVERRIDES = [
     {on: 'top-nav-heading'},
   ],
   [
-    /(?<!\b(?:dialog|modal|card|drawer|sheet|popover|panel|section|table|menu)s? )\b(header|top ?bar|title ?bar|nav ?bar|app ?bar|masthead)\b/,
+    /(?<!\b(?:dialog|modal|card|drawer|sheet|popover|panel|section|table|menu)s? )\b(header|top ?bar|title ?bar|nav(?:igation)? ?bar|app ?bar|masthead)\b/,
     {on: 'app-shell-header'},
   ],
   [/\b(page|app background|whole background|body background)\b/, {on: 'page'}],
   // A radio's dot is its own part (the mark a checked radio shows).
   [/\bradio( button)?s?'?\s+dots?\b/, {on: 'radio-indicator-dot'}],
   [/\b(radio( buttons?)?|radios)\b/, {on: 'radio-indicator'}],
-  [/\b(primary|main) buttons?\b/, {on: 'button', when: 'variant:primary'}],
+  // (The accent buttons and the call to action are the primary button:
+  // the one the accent fills.)
+  [
+    /\b(primary|main|accent) buttons?\b|\b(?:ctas?|calls? to action)(?: buttons?)?\b/,
+    {on: 'button', when: 'variant:primary'},
+  ],
   [/\bsecondary buttons?\b/, {on: 'button', when: 'variant:secondary'}],
   [/\bghost buttons?\b/, {on: 'button', when: 'variant:ghost'}],
   [
@@ -160,13 +179,15 @@ export const OVERRIDES = [
   [/\bkey badges?\b/, {on: 'kbd-key'}],
   [/\b(badges?|chips?|tags?|lozenges?)\b/, {on: 'badge'}],
   [/\bh([1-6])\b/, {on: 'heading'}],
+  // (A large title, the biggest title a screen has, is its top heading.)
+  [/\blarge titles?\b/, {on: 'heading', level: '1'}],
   [/\b(headings?|titles?)\b/, {on: 'heading'}],
   [/\b(modals?|popups?)\b/, {on: 'dialog'}],
   [/\bcode\b/, {on: 'code', role: 'code'}],
   // Small, secondary and supporting text, captions and fine print: the
   // supporting text style, not the base size.
   [
-    /\b((?:small|secondary|supporting|helper|hint|caption|muted) (?:text|copy)|fine print|captions?)\b/,
+    /\b((?:small|secondary|supporting|helper|hint|caption|muted) (?:text|copy)|fine print|captions?|footnotes?)\b/,
     {on: 'body', role: 'supporting'},
   ],
   [/\bbody( text)?\b/, {on: 'body', role: 'body'}],

@@ -22,8 +22,11 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {CUT_SHORT_PREFIX, cutShortText} from './cut-short.mjs';
+import {LOW_CONTRAST_PREFIX, lowContrastText} from './drawn-contrast.mjs';
 import {NETWORK_URL_PATTERNS, QUIET_BROWSER_ARGS} from './offline.mjs';
 import {
+  FIT_CELLS,
+  PLACE_LAYERS,
   PICTURE_PAGES_AT_ONCE,
   PICTURE_TAKEN,
   PICTURE_WINDOW,
@@ -198,6 +201,10 @@ async function picture({html, png, mode}, i) {
   // page loads: it is run to its end, and a looping one held at a frame a
   // person sees (SETTLE_ANIMATIONS), before the picture.
   await send('Runtime.evaluate', {expression: SETTLE_ANIMATIONS}, sessionId);
+  // Text a part cuts when narrow gets the room it needs (FIT_CELLS).
+  await send('Runtime.evaluate', {expression: FIT_CELLS}, sessionId);
+  // An overlay drawn after its part sits under its opener (PLACE_LAYERS).
+  await send('Runtime.evaluate', {expression: PLACE_LAYERS}, sessionId);
   const metrics = await send('Page.getLayoutMetrics', {}, sessionId);
   const size = metrics.cssContentSize ?? metrics.contentSize;
   // A picture beyond the window makes the page see a resize; a part that
@@ -213,7 +220,9 @@ async function picture({html, png, mode}, i) {
       clip: {
         x: 0,
         y: 0,
-        width: PICTURE_WINDOW.width,
+        // The whole page: a part wider than the window (the page lays it out
+        // past the window's edge) is pictured whole, never cut at it.
+        width: Math.max(PICTURE_WINDOW.width, Math.ceil(size.width)),
         height: Math.max(1, Math.ceil(size.height)),
         scale: 1,
       },
@@ -237,6 +246,14 @@ async function picture({html, png, mode}, i) {
   ).catch(() => null);
   if (Array.isArray(measured?.result?.value) && !measured.exceptionDetails)
     say(i, `${CUT_SHORT_PREFIX}${JSON.stringify(measured.result.value)}`);
+  // The text the picture draws too faint to read, measured the same way.
+  const faint = await send(
+    'Runtime.evaluate',
+    {expression: `(${lowContrastText})()`, returnByValue: true},
+    sessionId,
+  ).catch(() => null);
+  if (Array.isArray(faint?.result?.value) && !faint.exceptionDetails)
+    say(i, `${LOW_CONTRAST_PREFIX}${JSON.stringify(faint.result.value)}`);
   await send('Target.closeTarget', {targetId}).catch(() => {});
   say(i, PICTURE_TAKEN);
 }

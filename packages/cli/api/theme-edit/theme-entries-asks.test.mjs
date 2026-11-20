@@ -987,10 +987,12 @@ describe('refusal suggests checked checks', () => {
         expect(r.run.join('\n')).not.toMatch(/ set b --color-text-primary /);
         await runsAll(r.run);
       }
-      const ok = await refusal(() =>
-        themeEditSet('b', 'color', 'red', {cwd, on: 'text'}),
-      );
-      expect(bare(ok.run)[0]).toBe('set b --color-text-primary red --on text');
+      // A color is taken, into the text tokens on the text.
+      await themeEditSet('b', 'color', 'red', {cwd, on: 'text'});
+      expect(
+        fs.readFileSync(path.join(cwd, 'themes/b/b.css'), 'utf8'),
+      ).toMatch(/--color-text-primary: red/);
+      await themeEditUndo('b', {cwd});
     }, 240_000);
 
     it('N19: headings --on heading offers the dial and the asked weight or tracking', async () => {
