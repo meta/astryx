@@ -2738,11 +2738,11 @@ const removalSaid = t => {
 };
 /**
  * What may follow a piece a removal takes away: nothing, the place it is
- * taken from ("on code blocks", "in tables", "everywhere"), or its own
- * background, which the removal then clears alone.
+ * taken from ("on code blocks", "in tables", "everywhere"), a closing
+ * "please", or its own background, which the removal then clears alone.
  */
 const PLACE_ONLY =
-  /^\s*(?:[,.;:!?]|$|(?:on|in|inside|of|from|for|at|across|throughout|within|everywhere|anywhere|entirely|completely|(?:background|backdrop|fill|bg)s?)\b)/;
+  /^\s*(?:[,.;:!?]|$|(?:on|in|inside|of|from|for|at|across|throughout|within|everywhere|anywhere|entirely|completely|please|thanks|thank you|(?:background|backdrop|fill|bg)s?)\b)/;
 /** Words that ask for a setting's earlier value: a reset, never a look. */
 const GOING_BACK =
   /\b(reset|revert|restore|back to|default|original|what it was|standard|clear|no custom|remove the override|(remove|clear|drop|delete) (my |the )?(\w+ )?overrides?|by mistake|^undo|take back|like before|as before|the way (it|they) (was|were)|by accident|accidentally|put .* back|.* back to normal)\b/;

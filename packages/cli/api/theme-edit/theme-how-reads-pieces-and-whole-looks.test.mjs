@@ -416,6 +416,9 @@ describe('a negation of a piece followed by more than a place', () => {
       expect(
         first(await answer('no copy button on code blocks, please')),
       ).toEqual(['set t display none --on code-block-copy-button']);
+      expect(first(await answer('no banner icon please'))).toEqual([
+        'set t display none --on banner-icon',
+      ]);
     },
     T,
   );
