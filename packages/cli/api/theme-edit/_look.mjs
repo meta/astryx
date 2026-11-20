@@ -547,7 +547,8 @@ function colorlessValue(res, t) {
  * The values that repair what can be repaired without a decision.
  * @typedef {object} LookRepair
  * @property {Record<string, string | [string, string]>} tokens token values to write
- * @property {Record<string, Record<string, Record<string, string>>>} components part styles to write: the theme's own text again, on each member of a group inside a bar
+ * @property {Record<string, Record<string, Record<string, true>>>} components part styles to write: each member of a group inside a bar spreads the shared const that holds the theme's own text
+ * @property {Record<string, Record<string, string>>} shared the consts those styles spread, by name: the theme's own text tokens
  * @property {Array<{token?: string, part?: string, group?: string, parts?: string[], value: string | [string, string], why: string, from?: string | [string, string], accept?: AcceptRecord[]}>} lines
  *   what each written value is for; a color the author set that a line
  *   moves names its old value (`from`) and the records that would keep it
@@ -746,15 +747,20 @@ export function lookRepair(look, problems) {
         }
   // The parts inside a bar take the theme's own text again, a group at a
   // time: every member of the group a failing part belongs to (its own
-  // part when it belongs to none), so the group stays alike.
+  // part when it belongs to none) spreads one shared const, so the person
+  // has one line to change.
   /** @type {LookRepair['components']} */
   const components = {};
+  /** @type {LookRepair['shared']} */
+  const shared = {};
   for (const p of problems) {
-    if (p.kind !== 'bar-text' || !p.token) continue;
+    if (p.kind !== 'bar-text' || !p.token || !p.part) continue;
     const l = colorIn(`var(${p.token})`, res.light, 'light');
     const d = colorIn(`var(${p.token})`, res.dark, 'dark');
     const value = l && d && l !== d ? `light-dark(${l}, ${d})` : (l ?? d);
     if (!value) continue;
+    const name = `${p.part.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase())}InsideText`;
+    (shared[name] ??= {})[p.token] = value;
     /** @type {Map<string, string[]>} */
     const groups = new Map();
     for (const q of p.parts ?? []) {
@@ -763,14 +769,15 @@ export function lookRepair(look, problems) {
     }
     for (const [group, members] of groups) {
       for (const q of members)
-        ((components[q] ??= {}).base ??= {})[p.token] = value;
-      lines.push({
-        group,
-        parts: members,
-        token: p.token,
-        value,
-        why: `inside ${p.part}: the theme's own text on their own fill`,
-      });
+        ((components[q] ??= {}).base ??= {})[`...${name}`] = true;
+      if (!lines.some(x => x.group === group && x.token === p.token))
+        lines.push({
+          group,
+          parts: members,
+          token: p.token,
+          value,
+          why: `inside ${p.part}: the theme's own text on their own fill, from ${name}`,
+        });
     }
   }
   const one = problems.find(p => p.kind === 'one-look');
@@ -778,6 +785,7 @@ export function lookRepair(look, problems) {
   return {
     tokens,
     components,
+    shared,
     lines,
     pin: one && darkPage ? sideOf(darkPage) : null,
     paint: problems.some(p => p.kind === 'page'),

@@ -2239,7 +2239,7 @@ export async function themeEditCheck(target, options = {}) {
       /** @type {string} */
       let after;
       try {
-        after = withThemeValues(before, exportName, tree);
+        after = withThemeValues(before, exportName, tree, repair.shared);
       } catch (e) {
         throw new AstryxError(
           `${file}: check cannot write there: ${/** @type {Error} */ (e).message}. Nothing was changed.`,

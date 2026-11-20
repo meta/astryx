@@ -249,6 +249,11 @@ describe('experimental theme check', () => {
         path.join(cwd, 'bar', 'barTheme.ts'),
         'utf8',
       );
+      // One shared const holds the text; each member spreads it.
+      expect(text).toMatch(
+        /^const topNavInsideText = \{\n {2}'--color-text-primary': '[^']+',\n\};$/m,
+      );
+      expect(text).toMatch(/base: \{\n\s+\.\.\.topNavInsideText,/);
       // The bar's own line stays as written.
       expect(text).toContain('"--color-text-primary": "#ffffff"');
     },

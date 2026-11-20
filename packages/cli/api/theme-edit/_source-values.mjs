@@ -2,10 +2,13 @@
 
 /**
  * @file Write values into the theme object of a theme source, as normal
- * lines: a token in `tokens`, a style in `components`. The text around
- * them stays as it is (comments, order, quotes). A key that is there gets
- * its new value in place; a missing key, or a missing object on the way to
- * it, is added at the start of the object that holds it.
+ * lines: a token in `tokens`, a style in `components`, and a shared const
+ * that several styles spread. The text around them stays as it is
+ * (comments, order, quotes). A key that is there gets its new value in
+ * place. A missing key, or a missing object on the way to it, is added at
+ * the start of the object that holds it, or at its end when the object
+ * spreads another, so the new key wins over the spread. A spread the
+ * writer adds goes first, so the object's own keys win over it.
  *
  * @input a theme source's text, the export the build reads, and the values
  * @output the new text
@@ -21,8 +24,9 @@ import {
 
 /**
  * A nested map of values to write: a string or a [light, dark] pair is a
- * value; an object holds more keys.
- * @typedef {{[key: string]: string | [string, string] | ValueTree}} ValueTree
+ * value; an object holds more keys; a key `...name` set to true spreads the
+ * const `name` into the object.
+ * @typedef {{[key: string]: string | [string, string] | true | ValueTree}} ValueTree
  */
 
 /** @param {string} s */
@@ -33,16 +37,19 @@ const keyText = k => (/^[A-Za-z_$][\w$]*$/.test(k) ? k : quoted(k));
 
 /**
  * A value as source text.
- * @param {string | [string, string] | ValueTree} v
+ * @param {string | [string, string] | true | ValueTree} v
  * @param {string} indent the indent of the line the value starts on
  * @returns {string}
  */
 function valueText(v, indent) {
   if (typeof v === 'string') return quoted(v);
   if (Array.isArray(v)) return `[${v.map(quoted).join(', ')}]`;
+  if (v === true) throw new Error('a spread is written only as a key');
   const inner = `${indent}  `;
-  const lines = Object.entries(v).map(
-    ([k, x]) => `${inner}${keyText(k)}: ${valueText(x, inner)},`,
+  const lines = Object.entries(v).map(([k, x]) =>
+    k.startsWith('...')
+      ? `${inner}${k},`
+      : `${inner}${keyText(k)}: ${valueText(x, inner)},`,
   );
   return `{\n${lines.join('\n')}\n${indent}}`;
 }
@@ -78,22 +85,42 @@ function lineIndent(text, at) {
 function editsFor(text, object, tree, edits, where) {
   /** @type {string[]} */
   const added = [];
+  /** @type {string[]} */
+  const spreads = [];
   const indent = `${lineIndent(text, object.start)}  `;
   const first = object.properties[0];
   const inner = first ? lineIndent(text, first.start) : indent;
+  if (
+    object.properties.some(
+      (/** @type {any} */ p) => p.type === 'ObjectProperty' && p.computed,
+    )
+  )
+    throw new Error(
+      `${where || 'the theme object'} has a computed key, so a value written beside it could be replaced`,
+    );
+  const spreading = object.properties.some(
+    (/** @type {any} */ p) => p.type === 'SpreadElement',
+  );
   for (const [key, value] of Object.entries(tree)) {
+    if (key.startsWith('...')) {
+      const name = key.slice(3);
+      const there = object.properties.some(
+        (/** @type {any} */ p) =>
+          p.type === 'SpreadElement' &&
+          p.argument?.type === 'Identifier' &&
+          p.argument.name === name,
+      );
+      if (!there) spreads.push(`${inner}${key},`);
+      continue;
+    }
     // The last property of a name wins in JavaScript: that one is changed.
     const prop = [...object.properties].reverse().find(p => nameOf(p) === key);
-    if (object.properties.some((/** @type {any} */ p) => !nameOf(p)))
-      throw new Error(
-        `${where || 'the theme object'} has a spread or a computed key, so a value written beside it could be replaced`,
-      );
     if (!prop) {
       added.push(`${inner}${keyText(key)}: ${valueText(value, inner)},`);
       continue;
     }
     const node = unwrapExpression(prop.value);
-    if (typeof value === 'object' && !Array.isArray(value)) {
+    if (value !== true && typeof value === 'object' && !Array.isArray(value)) {
       if (node?.type !== 'ObjectExpression')
         throw new Error(
           `${where ? `${where}.` : ''}${key} is not written as an object`,
@@ -107,15 +134,26 @@ function editsFor(text, object, tree, edits, where) {
       text: valueText(value, lineIndent(text, prop.start)),
     });
   }
-  if (!added.length) return;
-  // New keys go first in the object, one per line.
-  const open = /** @type {number} */ (object.start) + 1;
   const oneLine = !text.slice(object.start, object.end).includes('\n');
-  edits.push({
-    start: open,
-    end: open,
-    text: `\n${added.join('\n')}${oneLine && first ? `\n${inner}` : oneLine ? `\n${lineIndent(text, object.start)}` : ''}`,
-  });
+  const open = /** @type {number} */ (object.start) + 1;
+  // A spread the writer adds goes first, so the object's own keys win.
+  const atStart = [...spreads, ...(spreading ? [] : added)];
+  if (atStart.length)
+    edits.push({
+      start: open,
+      end: open,
+      text: `\n${atStart.join('\n')}${oneLine && first ? `\n${inner}` : oneLine ? `\n${lineIndent(text, object.start)}` : ''}`,
+    });
+  // Beside a spread a new key goes last, so it wins over the spread.
+  if (spreading && added.length) {
+    const last = object.properties[object.properties.length - 1];
+    const comma = text.slice(last.end, object.end).trimStart().startsWith(',');
+    edits.push({
+      start: last.end,
+      end: last.end,
+      text: `${comma ? '' : ','}\n${added.join('\n').replace(/,$/, comma ? ',' : '')}`,
+    });
+  }
 }
 
 /**
@@ -123,11 +161,13 @@ function editsFor(text, object, tree, edits, where) {
  * @param {string} source the theme source's text
  * @param {string} exportName the export the build reads
  * @param {ValueTree} tree keys under the theme object (`tokens`, `components`)
+ * @param {Record<string, ValueTree>} [shared] consts the tree spreads, by name
  * @returns {string}
- * @throws {Error} when the export is not one object literal in the file, or
- *   an object on the way has a spread or a computed key
+ * @throws {Error} when the export is not one object literal in the file, an
+ *   object on the way has a computed key, or a shared const's name is taken
+ *   by something other than an object
  */
-export function withThemeValues(source, exportName, tree) {
+export function withThemeValues(source, exportName, tree, shared = {}) {
   const ast = parseModule(source, {
     sourceType: 'module',
     plugins: ['typescript', 'jsx'],
@@ -141,6 +181,27 @@ export function withThemeValues(source, exportName, tree) {
   /** @type {Array<{start: number, end: number, text: string}>} */
   const edits = [];
   editsFor(source, object, tree, edits, '');
+  // A shared const goes before the statement that holds the theme, or is
+  // written into where it is already declared.
+  // (The theme object is in the file, so a top-level statement holds it.)
+  const at = /** @type {number} */ (
+    ast.program.body.find(
+      (/** @type {any} */ n) => n.start <= object.start && object.end <= n.end,
+    )?.start
+  );
+  for (const [name, values] of Object.entries(shared)) {
+    const there = unwrapExpression(consts.get(name));
+    if (there?.type === 'ObjectExpression') {
+      editsFor(source, there, values, edits, name);
+      continue;
+    }
+    if (there) throw new Error(`${name} is already declared as something else`);
+    edits.push({
+      start: at,
+      end: at,
+      text: `const ${name} = ${valueText(values, '')};\n\n`,
+    });
+  }
   let out = source;
   for (const e of edits.sort((a, b) => b.start - a.start))
     out = out.slice(0, e.start) + e.text + out.slice(e.end);
