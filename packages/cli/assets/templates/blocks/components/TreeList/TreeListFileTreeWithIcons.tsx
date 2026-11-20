@@ -4,7 +4,7 @@
 
 import {TreeList} from '@astryxdesign/core/TreeList';
 import {Icon} from '@astryxdesign/core/Icon';
-import {FolderIcon, DocumentIcon} from '@heroicons/react/24/outline';
+import {FolderIcon, FileIcon} from '@astryxdesign/template-icons';
 
 export default function TreeListFileTreeWithIcons() {
   return (
@@ -20,13 +20,13 @@ export default function TreeListFileTreeWithIcons() {
               id: 'app',
               label: 'App.tsx',
               onClick: () => {},
-              startContent: <Icon icon={DocumentIcon} size="sm" />,
+              startContent: <Icon icon={FileIcon} size="sm" />,
             },
             {
               id: 'index',
               label: 'index.tsx',
               onClick: () => {},
-              startContent: <Icon icon={DocumentIcon} size="sm" />,
+              startContent: <Icon icon={FileIcon} size="sm" />,
             },
           ],
         },
@@ -34,7 +34,7 @@ export default function TreeListFileTreeWithIcons() {
           id: 'pkg',
           label: 'package.json',
           onClick: () => {},
-          startContent: <Icon icon={DocumentIcon} size="sm" />,
+          startContent: <Icon icon={FileIcon} size="sm" />,
         },
       ]}
     />

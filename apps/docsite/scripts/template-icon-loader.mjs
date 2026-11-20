@@ -28,6 +28,7 @@ import {
   orderIconSets,
 } from '../../../packages/cli/foundation/discovery/icon-set-discovery.mjs';
 import {mapTemplateIcons} from '../../../packages/cli/foundation/discovery/template-icons.mjs';
+import {PLACEHOLDER_MODULE} from '../../../packages/cli/foundation/discovery/template-placeholders.mjs';
 import {discoverCoreTemplates} from '../../../packages/cli/foundation/discovery/template-adapter.mjs';
 
 /** The build setting that chooses the preview icon set. */
@@ -119,8 +120,17 @@ export async function rewriteTemplatePreview(source, file, options) {
   const template = templates.get(path.resolve(file));
   if (!template) return source;
   options.onDoc?.(template.docPath);
-  const declared = template.icons;
-  if (declared == null || typeof declared !== 'object') return source;
+  // A template that imports icons by meaning declares no `icons`: its
+  // placeholder imports carry the meanings, and mapping fills them.
+  const declared =
+    template.icons != null && typeof template.icons === 'object'
+      ? template.icons
+      : {};
+  if (
+    Object.keys(declared).length === 0 &&
+    !source.includes(PLACEHOLDER_MODULE)
+  )
+    return source;
   const iconSets = await previewIconSets(options.projectDir, options.list);
   return mapTemplateIcons(source, iconSets, declared).source;
 }

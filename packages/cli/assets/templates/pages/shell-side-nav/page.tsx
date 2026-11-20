@@ -25,15 +25,15 @@ import {useContainerReveal} from '@astryxdesign/core/hooks';
 import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {
   SparklesIcon,
-  PlusIcon,
-  MagnifyingGlassIcon,
-  BookOpenIcon,
-  Cog6ToothIcon,
+  AddIcon,
+  SearchIcon,
+  BookIcon,
+  SettingsIcon,
   UserCircleIcon,
   UserIcon,
-  BuildingOffice2Icon,
-  CodeBracketIcon,
-} from '@heroicons/react/24/outline';
+  BuildingIcon,
+  CodeIcon,
+} from '@astryxdesign/template-icons';
 
 type Conversation = {
   label: string;
@@ -72,7 +72,7 @@ const WORKSPACES: Workspace[] = [
   },
   {
     name: 'Acme Corp',
-    icon: BuildingOffice2Icon,
+    icon: BuildingIcon,
     chats: [
       {label: 'Q3 roadmap draft', status: 'accent', statusLabel: 'In progress'},
       {
@@ -90,7 +90,7 @@ const WORKSPACES: Workspace[] = [
   },
   {
     name: 'Open Source',
-    icon: CodeBracketIcon,
+    icon: CodeIcon,
     chats: [
       {
         label: 'StyleX migration notes',
@@ -200,14 +200,14 @@ export default function ShellSideNav() {
           }
           footer={
             <SideNavSection title="Account" isHeaderHidden>
-              <SideNavItem label="Settings" icon={Cog6ToothIcon} href="#" />
+              <SideNavItem label="Settings" icon={SettingsIcon} href="#" />
               <SideNavItem label="Sarah Chen" icon={UserCircleIcon} href="#" />
             </SideNavSection>
           }>
           <SideNavSection title="Menu" isHeaderHidden>
-            <SideNavItem label="New chat" icon={PlusIcon} href="#" />
-            <SideNavItem label="Search" icon={MagnifyingGlassIcon} href="#" />
-            <SideNavItem label="Library" icon={BookOpenIcon} href="#" />
+            <SideNavItem label="New chat" icon={AddIcon} href="#" />
+            <SideNavItem label="Search" icon={SearchIcon} href="#" />
+            <SideNavItem label="Library" icon={BookIcon} href="#" />
           </SideNavSection>
           <Divider />
           <SideNavSection title="Workspaces" isHeaderHidden>

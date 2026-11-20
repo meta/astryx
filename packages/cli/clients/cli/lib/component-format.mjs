@@ -12,7 +12,11 @@ import {
 import {loadDocs} from '../../../foundation/discovery/component-loader.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {firstSentence} from '../../../foundation/text/string-utils.mjs';
-import {buildSignature, formatHookReturns} from './hook-format.mjs';
+import {
+  buildSignature,
+  formatHookParameters,
+  formatHookReturns,
+} from './hook-format.mjs';
 
 /**
  * Derive the `defineTheme` component-override key from a theming target.
@@ -476,8 +480,9 @@ export function formatFull(docs, options = {}) {
     );
   }
 
-  // A read that resolves to a hook prints what it returns, as `hook <name>` does.
-  sections.push(...formatHookReturns(docs));
+  // A read that resolves to a hook prints what it takes and returns, as
+  // `hook <name>` does.
+  sections.push(...formatHookParameters(docs), ...formatHookReturns(docs));
 
   if (docs.examples?.length) {
     sections.push('## Examples\n');
@@ -727,6 +732,12 @@ export function formatCompact(docs, componentName, importHint, options = {}) {
     }
   }
 
+  // A hook's parameters print as its props do: one line each, with the
+  // description's first sentence; `--detail full` prints them whole.
+  if (docs.params?.length) {
+    sections.push('## Parameters\n');
+    sections.push(formatPropsList(docs.params) + '\n');
+  }
   sections.push(...formatHookReturns(docs));
 
   if (docs.theming?.componentIcons?.length) {

@@ -321,6 +321,7 @@ export function Token({
   'aria-describedby': ariaDescribedBy,
   'aria-haspopup': ariaHasPopup,
   'aria-expanded': ariaExpanded,
+  'aria-pressed': ariaPressed,
   ref,
   ...rest
 }: TokenProps) {
@@ -369,7 +370,8 @@ export function Token({
     </>
   );
 
-  // Naming and popup inputs reach the element that owns the token's action:
+  // Naming, popup and pressed inputs reach the element that owns the token's
+  // action:
   // the inner button of a clickable token, otherwise the root
   // (architecture:public-component-api INV5).
   const labellingProps = {
@@ -377,6 +379,7 @@ export function Token({
     'aria-describedby': ariaDescribedBy,
     'aria-haspopup': ariaHasPopup,
     'aria-expanded': ariaExpanded,
+    'aria-pressed': ariaPressed,
   };
 
   const sharedProps = {
