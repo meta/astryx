@@ -7,6 +7,7 @@ import {CLI_ROOT} from '../fs/paths.mjs';
 import {componentsInSource, parsedComponents} from './template-adapter.mjs';
 import {storedKey} from '../doc-compiler/stored-docs.mjs';
 import {parsedSpecifiers} from './template-needs.mjs';
+import {fillTemplatePlaceholders} from './template-placeholders.mjs';
 import {templateComponentsText} from '../../scripts/generate-template-components.mjs';
 
 // The file is written at `prepack`, so a checkout has none. Its text is read
@@ -19,6 +20,7 @@ describe('stored template component lists', () => {
   it('hold what parsing returns for every shipped template source', () => {
     const dir = path.join(CLI_ROOT, 'assets', 'templates', 'pages');
     let checked = 0;
+    let filledChecked = 0;
     for (const name of fs.readdirSync(dir)) {
       const file = path.join(dir, name, 'page.tsx');
       if (!fs.existsSync(file)) continue;
@@ -28,9 +30,19 @@ describe('stored template component lists', () => {
       expect(stored[`imports:${storedKey(source)}`], name).toEqual(
         parsedSpecifiers(source),
       );
+      // And those of its filled copy, which build's setup notes read when the
+      // template draws icons by meaning.
+      const {source: filled} = fillTemplatePlaceholders(source);
+      if (filled !== source) {
+        expect(stored[`imports:${storedKey(filled)}`], name).toEqual(
+          parsedSpecifiers(filled),
+        );
+        filledChecked++;
+      }
       checked++;
     }
     expect(checked).toBeGreaterThan(20);
+    expect(filledChecked).toBeGreaterThan(0);
   });
 
   it('answer a shipped source with what parsing it returns', () => {
