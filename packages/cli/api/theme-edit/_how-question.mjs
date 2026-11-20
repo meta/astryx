@@ -2721,6 +2721,13 @@ const removalSaid = t => {
     ).test(t)
   )
     return 'show';
+  // ("no row hidden", "nothing hidden": no piece is taken away.)
+  if (
+    new RegExp(
+      String.raw`\b(?:no|nothing|none)\b(?:\s+(?!(?:so|but|then|and|therefore|thus)\b)[^\s,;.]+){0,4}?\s+(?:is\s+|are\s+|gets?\s+)?(?:hidden|removed)\b`,
+    ).test(t)
+  )
+    return 'keep';
   // (A negation rules out the removal only in its own clause: "it isn't
   // useful so hide it" asks for the hide.)
   return new RegExp(
@@ -2729,6 +2736,13 @@ const removalSaid = t => {
     ? 'keep'
     : 'remove';
 };
+/**
+ * What may follow a piece a removal takes away: nothing, the place it is
+ * taken from ("on code blocks", "in tables", "everywhere"), or its own
+ * background, which the removal then clears alone.
+ */
+const PLACE_ONLY =
+  /^\s*(?:[,.;:!?]|$|(?:on|in|inside|of|from|for|at|across|throughout|within|everywhere|anywhere|entirely|completely|(?:background|backdrop|fill|bg)s?)\b)/;
 /** Words that ask for a setting's earlier value: a reset, never a look. */
 const GOING_BACK =
   /\b(reset|revert|restore|back to|default|original|what it was|standard|clear|no custom|remove the override|(remove|clear|drop|delete) (my |the )?(\w+ )?overrides?|by mistake|^undo|take back|like before|as before|the way (it|they) (was|were)|by accident|accidentally|put .* back|.* back to normal)\b/;
@@ -18889,21 +18903,25 @@ export function draftAnswer(ctx, env, question) {
     // "avoid hiding", keeps the piece.)
     const removal = removalSaid(c.text);
     const shown = removal === 'show';
-    // (Only a thing said after the removal word takes it away: "no copy
-    // button on code blocks"; "no truncation", "never wrap" name no piece. A
-    // removal ruled out or undone writes no display none, wherever it is
-    // said.)
+    // (Only a piece said right after the removal word, with nothing after
+    // it but a place, takes it away: "no copy button on code blocks";
+    // "no truncation", "never wrap" name no piece, and "no table row lines"
+    // asks about the rows' lines, not the rows. A removal ruled out or
+    // undone writes no display none, wherever it is said.)
     const removedSaid = (() => {
       const after = new RegExp(
         String.raw`\b(?:${REMOVAL_LEAD}|hid(?:e|es|den|ing)|un-?hide|remov(?:e|es|ed|ing))\s+(?:the\s+|any\s+|all\s+)?(.+)$`,
       ).exec(c.text.toLowerCase())?.[1];
-      return (
-        after != null &&
-        lex.parts.some(([re]) => {
-          const x = re.exec(` ${after} `);
-          return x != null && x.index <= 1;
-        })
-      );
+      if (after == null) return false;
+      const said = ` ${after} `;
+      return lex.parts.some(([re]) => {
+        const x = re.exec(said);
+        return (
+          x != null &&
+          x.index <= 1 &&
+          PLACE_ONLY.test(said.slice(x.index + x[0].length))
+        );
+      });
     })();
     if (
       c.parts.length &&

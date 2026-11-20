@@ -394,6 +394,33 @@ describe('a negation that takes no piece away', () => {
   );
 });
 
+describe('a negation of a piece followed by more than a place', () => {
+  it(
+    'hides nothing: "no table row lines" is about the lines, and "no row hidden" keeps the rows',
+    async () => {
+      for (const q of [
+        'no table row lines',
+        'no row dividers in tables',
+        'tables without row lines',
+        'tables with no row lines',
+        'no table cell lines',
+        'keep every row of the table, no row hidden',
+        'no row hidden',
+        'nothing hidden on tables',
+      ]) {
+        const data = await answer(q);
+        expect(first(data), q).toEqual([]);
+        expect(JSON.stringify(data.results), q).not.toMatch(/display none/);
+      }
+      // A piece with only a place after it is still taken away.
+      expect(
+        first(await answer('no copy button on code blocks, please')),
+      ).toEqual(['set t display none --on code-block-copy-button']);
+    },
+    T,
+  );
+});
+
 describe('a piece said before a part that has no such piece', () => {
   it(
     'reads the pieces the part holds: "icons in cards red" writes a color',
