@@ -10851,10 +10851,17 @@ export function draftAnswer(ctx, env, question) {
         .find(Boolean);
       const plural = !said || /s$/i.test(said);
       const colon = joinOf.get(c)?.list !== 'with';
+      // ("popover, tooltip and hover card: dark": a part said before the
+      // colon is one of the list's subjects, never an item of the first.)
+      const subjectOfColon =
+        !!said &&
+        /:/.test(c.text) &&
+        c.text.indexOf(said) < c.text.indexOf(':');
       if (
         holder &&
         head !== c &&
         inWith &&
+        !subjectOfColon &&
         C.MAP[holder] &&
         !c.parts.some(
           x => x.on === holder || (FAMILIES[holder] ?? []).includes(x.on),

@@ -375,6 +375,13 @@ const ROWS = [
     {q: 'Ecken eckiger', has: ['corners less']},
   ],
   [
+    'every part said before a colon is a subject of the list',
+    {
+      q: 'popover, tooltip and hover card: dark',
+      has: ["background-color '#1f2937' --on hover-card"],
+    },
+  ],
+  [
     'a part that paints no shadow takes the large shared shadow',
     {
       q: 'ugh the cards look so flat, fix it',
