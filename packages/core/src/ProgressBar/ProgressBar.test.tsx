@@ -408,8 +408,8 @@ describe('ProgressBar', () => {
     });
 
     // Mark color follows what the mark sits on: inside the filled area it
-    // takes the fill variant's on-color, out on the bare track it takes the
-    // primary text color. The choice is reflected as `data-placement`
+    // takes the accent on-color or the surface color, out on the bare track it
+    // takes the primary text color. The choice is reflected as `data-placement`
     // (plus `data-variant`, mirroring the fill) so themes can target it and
     // tests can assert it without reading atomic class names.
     it('marks the ticks inside the filled area as placed on the fill', () => {
@@ -497,10 +497,9 @@ describe('ProgressBar', () => {
       );
     });
 
-    it('keeps one plain foreground on both sides for neutral and disabled bars', () => {
-      // The neutral/disabled fill is the muted gray — it carries no semantic
-      // weight and has no on-token, so a mark on it takes the same plain
-      // foreground it would have out on the track.
+    it('gives a neutral or disabled bar a surface-colored mark on the fill', () => {
+      // The neutral/disabled fill is the secondary text color, so a mark on
+      // it takes the surface color, not the foreground it has on the track.
       for (const props of [
         {variant: 'neutral'} as const,
         {isDisabled: true} as const,
@@ -519,17 +518,19 @@ describe('ProgressBar', () => {
         const marks = container.querySelectorAll<HTMLElement>(MARK);
         expect(marks[0]).toHaveAttribute('data-placement', 'fill');
         expect(marks[1]).toHaveAttribute('data-placement', 'track');
-        expect(styleClasses(marks[0])).toBe(styleClasses(marks[1]));
+        expect(styleClasses(marks[0])).not.toBe(styleClasses(marks[1]));
+        expect(getComputedStyle(marks[0]).backgroundColor).toContain(
+          '--color-background-surface',
+        );
         unmount();
       }
     });
 
-    it("dims a disabled bar's marks below a live one's", () => {
+    it("dims a disabled bar's track marks below a live one's", () => {
       // A disabled bar is deliberately low-emphasis (its label and value text
-      // drop to muted colors), so its marks step down to the secondary
-      // foreground on both sides rather than shouting over the grayed-out
-      // bar. A live neutral bar — same muted gray fill — keeps the
-      // full-contrast primary foreground.
+      // drop to muted colors), so its marks on the track step down to the
+      // secondary foreground. On the fill, both take the surface color, which
+      // reads on the shared fill.
       const MARKS = [
         {value: 20, label: 'On fill'},
         {value: 90, label: 'On track'},
@@ -542,7 +543,7 @@ describe('ProgressBar', () => {
       );
       const liveMarks = live.querySelectorAll<HTMLElement>(MARK);
       const offMarks = off.querySelectorAll<HTMLElement>(MARK);
-      expect(styleClasses(offMarks[0])).not.toBe(styleClasses(liveMarks[0]));
+      expect(styleClasses(offMarks[0])).toBe(styleClasses(liveMarks[0]));
       expect(styleClasses(offMarks[1])).not.toBe(styleClasses(liveMarks[1]));
     });
 
@@ -1352,5 +1353,91 @@ describe('ProgressBar forced colors', () => {
     const css = getForcedColorsRules();
     expect(css).toContain('outline-style: solid;');
     expect(css).toContain('outline-color: canvastext;');
+  });
+
+  it('turns a disabled fill outline GrayText, since forced colors replace the fill color', () => {
+    const {unmount} = render(
+      <ProgressBar value={40} variant="neutral" label="Live" />,
+    );
+    const liveFill = screen.getByRole('progressbar')
+      .firstElementChild as HTMLElement;
+    const liveClasses = new Set(liveFill.className.split(/\s+/));
+    unmount();
+    render(<ProgressBar value={40} isDisabled label="Upload" />);
+    const disabledFill = screen.getByRole('progressbar')
+      .firstElementChild as HTMLElement;
+    const added = disabledFill.className
+      .split(/\s+/)
+      .filter(name => name !== '' && !liveClasses.has(name));
+    const css = getForcedColorsRules();
+    expect(
+      added.some(name =>
+        new RegExp(`\\.${name}[^{]*\\{[^}]*outline-color:\\s*graytext`).test(
+          css,
+        ),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe('ProgressBar fill colors', () => {
+  // A fill reads at 3:1 on the track only in roles a theme sets to read on
+  // its surfaces, so status fills take the status text roles and neutral and
+  // disabled fills take the secondary text role.
+  function fillColor(props: Partial<React.ComponentProps<typeof ProgressBar>>) {
+    render(<ProgressBar value={60} label="Progress" {...props} />);
+    const fill = screen.getByRole('progressbar')
+      .firstElementChild as HTMLElement;
+    return getComputedStyle(fill).backgroundColor;
+  }
+
+  it.each([
+    [{variant: 'accent'} as const, '--color-accent'],
+    [{variant: 'success'} as const, '--color-text-success'],
+    [{variant: 'warning'} as const, '--color-text-warning'],
+    [{variant: 'error'} as const, '--color-text-error'],
+    [{variant: 'neutral'} as const, '--color-text-secondary'],
+    [{isDisabled: true} as const, '--color-text-secondary'],
+  ])('fills %o with %s', (props, token) => {
+    expect(fillColor(props)).toContain(token);
+  });
+});
+
+describe('ProgressBar disabled treatment', () => {
+  // A disabled bar is exempt from the contrast floor but must read as quieter
+  // than a live neutral bar: its track dims, as Slider and Switch dim a
+  // disabled track.
+  function trackOf(container: HTMLElement): HTMLElement {
+    return container.querySelector('[role="progressbar"]') as HTMLElement;
+  }
+
+  it('dims a disabled bar and leaves a neutral one at full opacity', () => {
+    const {container: off} = render(
+      <ProgressBar value={60} label="Off" isDisabled />,
+    );
+    const {container: live} = render(
+      <ProgressBar value={60} label="Live" variant="neutral" />,
+    );
+    expect(getComputedStyle(trackOf(off)).opacity).toBe('0.5');
+    expect(getComputedStyle(trackOf(live)).opacity).not.toBe('0.5');
+  });
+
+  it('keeps a mark on a disabled bar at full opacity, so its focus ring keeps its contrast', () => {
+    const {container} = render(
+      <ProgressBar
+        value={60}
+        label="Off"
+        isDisabled
+        marks={[{value: 20, label: 'Start'}]}
+      />,
+    );
+    let element: HTMLElement | null = container.querySelector(
+      '.astryx-progress-bar-mark',
+    );
+    expect(element).not.toBeNull();
+    while (element != null && element !== container) {
+      expect(getComputedStyle(element).opacity).not.toBe('0.5');
+      element = element.parentElement;
+    }
   });
 });

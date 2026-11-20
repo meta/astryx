@@ -27,7 +27,7 @@ export default function TextTruncation() {
           <Text type="supporting" color="secondary" display="block">
             {label}
           </Text>
-          <div style={{border: '1px solid #ccc', padding: 8}}>
+          <div style={{border: '1px solid var(--color-border)', padding: 8}}>
             <Text type="body" maxLines={maxLines}>
               {LONG_TEXT}
             </Text>

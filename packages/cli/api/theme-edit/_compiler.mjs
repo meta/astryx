@@ -326,9 +326,10 @@ export function makeCompiler(project, parts) {
    * @param {string} value
    * @param {string} P
    * @param {string} [when] the --when the token is set under (`variant:strong`)
+   * @param {string} [also] the rest of the flags the setting carries (` --state hover --mode dark`), kept on the lines offered
    * @returns {CheckFailure | null}
    */
-  function checkTokenOn(theme, target, token, value, P, when) {
+  function checkTokenOn(theme, target, token, value, P, when, also = '') {
     if (!MAP[target]) {
       return {
         soft: true,
@@ -340,7 +341,13 @@ export function makeCompiler(project, parts) {
     const g = groupOfToken(token);
     // Under a variant: only what the part reads in that variant's rules (or
     // rules that name no variant) counts.
-    const [wProp, wVal] = String(when ?? '').split(':');
+    // (Several conditions, `variant:ghost+size:sm`: a rule counts when it
+    // names none of them otherwise; the message names the first.)
+    const whens = String(when ?? '')
+      .split('+')
+      .map(w => w.split(':'))
+      .filter(([p, v]) => p && v);
+    const [wProp, wVal] = whens[0] ?? [];
     if (wProp && wVal && allReads(target).has(token)) {
       const conds = [
         ...Object.values(MAP[target]?.own ?? {}).flatMap(
@@ -349,8 +356,10 @@ export function makeCompiler(project, parts) {
       ];
       const inVariant = (/** @type {string} */ c) => {
         const attrs = c.split(' ')[0].split(',');
-        const own = attrs.find(a => a.startsWith(`${wProp}=`));
-        return !own || own === `${wProp}=${wVal}`;
+        return whens.every(([p, v]) => {
+          const own = attrs.find(a => a.startsWith(`${p}=`));
+          return !own || own === `${p}=${v}`;
+        });
       };
       // (What a line inside the part declares is recorded as the part's
       // own already; any other part inside it that reads the token takes
@@ -381,8 +390,60 @@ export function makeCompiler(project, parts) {
             .slice(0, 3)
             .map(
               t =>
-                `${P} set ${theme} ${t} ${quoteCommandArgument(value)} --on ${target} --when ${when}`,
+                `${P} set ${theme} ${t} ${quoteCommandArgument(value)} --on ${target} --when ${when}${also}`,
             ),
+          also: [],
+        };
+      }
+    }
+    // Read only under conditions the part is not drawn in by default (a
+    // link reads --color-text-primary only as color primary; drawn as it
+    // is, it reads --color-text-accent): set on the part with no
+    // condition, it changes nothing in its default look. Said, with the
+    // token that look reads and the condition that reads this one.
+    if (
+      !wProp &&
+      allReads(target).has(token) &&
+      (g === 'text' || g === 'background')
+    ) {
+      const conds = [
+        ...Object.values(MAP[target]?.own ?? {}).flatMap(
+          x => /** @type {string[]} */ (x.tokens?.[token] ?? []),
+        ),
+      ];
+      const attrsOf = (/** @type {string} */ c) => c.split(' ')[0];
+      const drawn = [
+        ...new Set(
+          parts.pairs
+            .filter(p =>
+              g === 'text' ? p.fg.target === target : p.bg.target === target,
+            )
+            .map(p => (g === 'text' ? p.fg.tokens[0] : p.bg.tokens[0]))
+            .filter(Boolean),
+        ),
+      ];
+      const inside = (MAP[target]?.inside?.[token] ?? []).length > 0;
+      if (
+        conds.length &&
+        conds.every(c => /=/.test(attrsOf(c))) &&
+        drawn.length &&
+        !drawn.includes(token) &&
+        !inside
+      ) {
+        const named = [
+          ...new Set(
+            conds
+              .flatMap(c => attrsOf(c).split(','))
+              .map(a => a.replace('=', ':')),
+          ),
+        ];
+        return {
+          soft: true,
+          message: `${target} reads ${token} only when ${named.join(' or ')}; as drawn by default it reads ${drawn.join(', ')}, so this changes nothing in its default look. For the default look: ${P} set ${theme} ${drawn[0]} ${quoteCommandArgument(value)} --on ${target}${also}; for ${named[0]} alone: ${P} set ${theme} ${token} ${quoteCommandArgument(value)} --on ${target} --when ${named[0]}${also}`,
+          run: [
+            `${P} set ${theme} ${drawn[0]} ${quoteCommandArgument(value)} --on ${target}${also}`,
+            `${P} set ${theme} ${token} ${quoteCommandArgument(value)} --on ${target} --when ${named[0]}${also}`,
+          ],
           also: [],
         };
       }

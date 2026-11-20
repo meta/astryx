@@ -62,6 +62,7 @@ import {noteOutsideDismissal} from '../Layer/outsidePress';
 import {
   MenuBottomSheet,
   MenuBottomSheetActionList,
+  MenuBottomSheetWithoutActionList,
   preloadMenuBottomSheetActionList,
 } from '../DropdownMenu/lazyMenuBottomSheet';
 import {menuBottomSheetStyles} from '../DropdownMenu/menuBottomSheet.stylex';
@@ -155,6 +156,16 @@ const styles = stylex.create({
     ),
     overflowY: 'auto',
     '--_dropdown-menu-radius': radiusVars['--radius-container'],
+    // Theme corner variables inherit. Reset them, so a nested surface that the
+    // theme does not style hands out its own radius.
+    '--_dropdown-menu-radius-top-left': 'initial',
+    '--_dropdown-menu-radius-top-right': 'initial',
+    '--_dropdown-menu-radius-bottom-right': 'initial',
+    '--_dropdown-menu-radius-bottom-left': 'initial',
+    '--_dropdown-menu-radius-start-start': 'initial',
+    '--_dropdown-menu-radius-start-end': 'initial',
+    '--_dropdown-menu-radius-end-start': 'initial',
+    '--_dropdown-menu-radius-end-end': 'initial',
     '--_dropdown-menu-padding': spacingVars['--spacing-1'],
     padding: spacingVars['--spacing-1'],
     borderRadius: 'var(--_dropdown-menu-radius)',
@@ -201,6 +212,16 @@ const styles = stylex.create({
     gap: spacingVars['--spacing-0-5'],
     width: '100%',
     '--_dropdown-menu-radius': radiusVars['--radius-container'],
+    // Theme corner variables inherit. Reset them, so a nested surface that the
+    // theme does not style hands out its own radius.
+    '--_dropdown-menu-radius-top-left': 'initial',
+    '--_dropdown-menu-radius-top-right': 'initial',
+    '--_dropdown-menu-radius-bottom-right': 'initial',
+    '--_dropdown-menu-radius-bottom-left': 'initial',
+    '--_dropdown-menu-radius-start-start': 'initial',
+    '--_dropdown-menu-radius-start-end': 'initial',
+    '--_dropdown-menu-radius-end-start': 'initial',
+    '--_dropdown-menu-radius-end-end': 'initial',
     '--_dropdown-menu-padding': spacingVars['--spacing-1'],
     padding: spacingVars['--spacing-1'],
     borderRadius: 'var(--_dropdown-menu-radius)',
@@ -907,6 +928,9 @@ export function ContextMenu({
   // An inline trigger (`span`) lets prose own a context menu without
   // breaking its flow.
   const TriggerElement = triggerAs === 'div' ? 'div' : 'span';
+  const SheetForContent = usesSheetActionList
+    ? MenuBottomSheet
+    : MenuBottomSheetWithoutActionList;
 
   return (
     <>
@@ -941,12 +965,12 @@ export function ContextMenu({
       </TriggerElement>
 
       {usesBottomSheet ? (
-        <MenuBottomSheet
+        <SheetForContent
           isOpen={isOpen}
           onOpenChange={updateOpenState}
           label={sheetLabel}>
           {renderedBottomSheetContent}
-        </MenuBottomSheet>
+        </SheetForContent>
       ) : (
         layer.render(<LayerDepthProvider>{renderedMenu}</LayerDepthProvider>, {
           placement: 'below',

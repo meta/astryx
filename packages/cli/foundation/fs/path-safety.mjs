@@ -17,6 +17,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import {ERROR_CODES} from '../response/error-codes.mjs';
 
+export {homeRelativePath} from '../agent-docs/folder-scope.mjs';
+
 /**
  * Error thrown by path-safety guards. Carries a stable `code`
  * so callers (CLI handlers) can render a friendly message and

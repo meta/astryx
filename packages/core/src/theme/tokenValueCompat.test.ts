@@ -22,7 +22,8 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {defineTheme, generateThemeCSS} from './defineTheme';
+import {defineTheme} from './defineTheme';
+import {generateThemeCSS} from './generateThemeRules';
 import {resolveTokenValue} from './resolveThemeValues';
 
 /** Exactly what the pre-extraction implementation did with each shape. */

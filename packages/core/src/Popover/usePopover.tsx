@@ -5,7 +5,8 @@
 /**
  * @file usePopover.tsx
  * @input Uses useLayer, useFocusTrap, React hooks, and Layer's outside-pan watch (outsidePanClaim)
- * @output Exports the public usePopover hook with derived focus and guarded opening.
+ * @output Exports the public usePopover hook with derived focus, guarded opening
+ *   and an optional anchor apart from the trigger.
  *   For Popover.tsx (internal), exports usePopoverInternal and
  *   FALLBACK_CLOSE_SELECTOR.
  * @position Higher-level layer utility; used by DatePicker, Combobox, etc.
@@ -17,11 +18,20 @@
  * - /packages/core/src/Popover/index.ts
  */
 
-import React, {useCallback, useEffect, useRef, type ReactNode} from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {useLayerInternal, type ContextRenderProps} from '../Layer/useLayer';
 import {watchOutsidePans} from '../Layer/outsidePanClaim';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {resolvePopoverAnchor} from './popoverAnchor';
 import {useFocusTrapInternal} from '../hooks/useFocusTrap';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {
@@ -111,6 +121,11 @@ const styles = stylex.create({
       '@media (forced-colors: active)': 'CanvasText',
     },
   },
+  // An open popover whose separate anchor resolves to nothing shows no
+  // surface until it does: an unanchored layer would sit at the page origin.
+  unanchored: {
+    visibility: 'hidden',
+  },
   // Focus trap container. Shared :focus-visible styling keeps semantic focus
   // placement independent of pointer/keyboard indication.
   contentWrapper: {
@@ -156,6 +171,21 @@ const styles = stylex.create({
  * Options for usePopover
  */
 export interface UsePopoverOptions {
+  /**
+   * External ref to use as the popover anchor. When provided, the popover
+   * sits on this element instead of the trigger. The trigger keeps its toggle
+   * and ARIA attributes; the anchor gets neither, and it is never a trigger.
+   *
+   * Any element with a CSS box works (an HTML element or an `<svg>` element;
+   * a shape inside an `<svg>` warns in development). The ref is read when the
+   * popover opens, on each render of the component that calls `usePopover`,
+   * and on each `show()`; nothing watches the page. To move an open popover,
+   * set `anchorRef.current` and call `show()`. A `show()` while the ref holds
+   * no element in the document waits, and opens when the ref is next read and
+   * holds one. An open popover whose anchor is missing shows no surface.
+   */
+  anchorRef?: React.RefObject<Element | null>;
+
   /**
    * Callback fired when popover is shown.
    * Wrap in useCallback for stable identity.
@@ -419,6 +449,8 @@ export interface InternalPopoverOptions extends UsePopoverOptions {
    * moves the popover (`useLayerInternal`'s `writesEntranceSide`).
    */
   writesEntranceSide?: boolean;
+  /** Called after a scroll stop places the popover afresh (`useLayerInternal`'s `onPlacedAfresh`). */
+  onPlacedAfresh?: () => void;
 }
 
 /**
@@ -465,10 +497,12 @@ function usePopoverImplementation(
   options: InternalPopoverOptions = {},
 ): UsePopoverReturn {
   const {
+    anchorRef,
     onShow,
     onHide,
     onCloseStart,
     writesEntranceSide,
+    onPlacedAfresh,
     xstyle,
     className,
     style,
@@ -528,7 +562,9 @@ function usePopoverImplementation(
     watchesOutsidePans:
       hasLightDismiss && !ownsOutsidePan ? watchOutsidePans : undefined,
     writesEntranceSide,
+    onPlacedAfresh,
     onOpenPendingChange,
+    waitsForAnchor: anchorRef != null,
   });
 
   // Focus trap for the popover content. Escape stays registered while light
@@ -602,10 +638,62 @@ function usePopoverImplementation(
   // and its anchor name and anchor-clearance option, so nothing in it goes
   // stale.
   const layerRef = layer.ref;
+  // With `anchorRef`, the trigger keeps its role but is not the layer's
+  // anchor: the element the ref holds is.
+  const anchorOptionRef = useCommittedRef(anchorRef);
+  // The element bound as the anchor, `null` while the ref holds none, and
+  // `undefined` while the trigger is the anchor.
+  const boundAnchorRef = useRef<Element | null | undefined>(undefined);
+  const [isAnchorMissing, setIsAnchorMissing] = useState(false);
   const triggerRef = useCallback(
     (el: HTMLElement | null) => {
       triggerElementRef.current = el;
-      layerRef(el);
+      if (anchorOptionRef.current == null) {
+        layerRef(el);
+      }
+    },
+    [anchorOptionRef, layerRef],
+  );
+  const bindAnchor = useCallback(() => {
+    const option = anchorOptionRef.current;
+    if (option == null) {
+      return;
+    }
+    const element = resolvePopoverAnchor(option);
+    if (element !== boundAnchorRef.current) {
+      boundAnchorRef.current = element;
+      // The layer's ref reads only the element's style and box; an element
+      // with a box can carry an anchor name.
+      layerRef(element as HTMLElement | null);
+    }
+    // eslint-disable-next-line @eslint-react/set-state-in-effect -- whether the caller's anchor exists is a DOM fact; it hides the surface until it does
+    setIsAnchorMissing(element == null);
+  }, [anchorOptionRef, layerRef]);
+
+  // Syncs the layer's CSS anchor with the element the caller's `anchorRef`
+  // holds. The ref changes with no event here, so this reads it after every
+  // commit.
+  useIsomorphicLayoutEffect(() => {
+    if (anchorRef != null) {
+      bindAnchor();
+      return;
+    }
+    if (boundAnchorRef.current !== undefined) {
+      // The caller dropped its anchor: the trigger anchors again.
+      boundAnchorRef.current = undefined;
+      setIsAnchorMissing(false);
+      layerRef(triggerElementRef.current);
+    }
+  });
+  // React detaches a trigger's ref when the popover unmounts. The anchor is
+  // the caller's element, so this hook takes its anchor name off. Effects
+  // that run again bind the anchor again.
+  useIsomorphicLayoutEffect(
+    () => () => {
+      if (boundAnchorRef.current !== undefined) {
+        layerRef(null);
+        boundAnchorRef.current = undefined;
+      }
     },
     [layerRef],
   );
@@ -650,9 +738,11 @@ function usePopoverImplementation(
       // that renders on open (and the dialog-surface fallback) waits for the
       // effect's frame.
       focusOnShowRef.current = focusWithinEvent;
+      // The first frame is anchored: the anchor is read as the popover opens.
+      bindAnchor();
       layer.show();
     },
-    [layer, hasAutoFocus, contentRef],
+    [layer, hasAutoFocus, contentRef, bindAnchor],
   );
 
   // Toggle function. Opening delegates to show so every route inherits the
@@ -733,7 +823,10 @@ function usePopoverImplementation(
             )}
           </div>
         </LayerDepthProvider>,
-        {...props, xstyle: props?.xstyle},
+        {
+          ...props,
+          xstyle: [props?.xstyle, isAnchorMissing && styles.unanchored],
+        },
       );
     },
     [
@@ -751,6 +844,7 @@ function usePopoverImplementation(
       role,
       isModal,
       xstyle,
+      isAnchorMissing,
     ],
   );
 

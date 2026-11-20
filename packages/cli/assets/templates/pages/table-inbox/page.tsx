@@ -122,23 +122,25 @@ import {
   useTableSelectionState,
 } from '@astryxdesign/core/Table';
 import type {TableColumn, TablePlugin} from '@astryxdesign/core/Table';
+import {useToast} from '@astryxdesign/core/Toast';
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {
-  ArchiveBoxIcon,
+  ArchiveIcon,
   ArrowLeftIcon,
-  ArrowPathIcon,
-  ArrowUturnLeftIcon,
-  FaceSmileIcon,
-  FolderArrowDownIcon,
+  RefreshIcon,
+  UndoIcon,
+  EmojiIcon,
+  MoveToFolderIcon,
   InboxIcon,
   LinkIcon,
-  PaperAirplaneIcon,
-  PaperClipIcon,
-  PencilSquareIcon,
-  PhotoIcon,
-  TrashIcon,
+  SendIcon,
+  AttachIcon,
+  ComposeIcon,
+  ImageIcon,
+  DeleteIcon,
   UsersIcon,
-  XMarkIcon,
-} from '@heroicons/react/24/outline';
+  CloseIcon,
+} from '@astryxdesign/template-icons';
 
 // ============= DATA =============
 
@@ -765,13 +767,24 @@ function useSurfaceWidth() {
  * unless something stops it. Guarding centrally rather than hanging
  * `stopPropagation` on each control is what keeps this true for the next
  * control somebody adds — and it has to cover the selection checkbox, which
- * the plugin renders and the template never touches.
+ * the plugin renders and the template never touches. A row's delete
+ * confirmation renders inside the row too, and its keys bubble through it, so
+ * the dialog counts as well.
  */
 const INTERACTIVE_WITHIN_ROW =
-  'button, input, a, label, [role="checkbox"], [role="button"], [role="menuitem"]';
+  'button, input, a, label, dialog, [role="checkbox"], [role="button"], [role="menuitem"]';
 
-function isRowItself(event: {target: EventTarget | null}): boolean {
-  return !(event.target as HTMLElement | null)?.closest(INTERACTIVE_WITHIN_ROW);
+// Only a control inside this row counts: the page itself may sit inside a
+// dialog or a link, and those ancestors are not the row's own controls.
+function isRowItself(event: {
+  target: EventTarget | null;
+  currentTarget: EventTarget | null;
+}): boolean {
+  const control = (event.target as HTMLElement | null)?.closest(
+    INTERACTIVE_WITHIN_ROW,
+  );
+  const row = event.currentTarget as HTMLElement;
+  return !control || control === row || !row.contains(control);
 }
 
 // ============= ROW ACTIONS =============
@@ -779,14 +792,16 @@ function isRowItself(event: {target: EventTarget | null}): boolean {
 interface RowAction {
   id: string;
   label: string;
-  icon: typeof ArchiveBoxIcon;
+  icon: typeof ArchiveIcon;
+  /** The icon points along the reading order, so it mirrors in RTL. */
+  isDirectional?: boolean;
 }
 
 const ROW_ACTIONS: RowAction[] = [
-  {id: 'archive', label: 'Archive', icon: ArchiveBoxIcon},
-  {id: 'move', label: 'Move to folder', icon: FolderArrowDownIcon},
-  {id: 'delete', label: 'Delete', icon: TrashIcon},
-  {id: 'reply', label: 'Reply', icon: ArrowUturnLeftIcon},
+  {id: 'archive', label: 'Archive', icon: ArchiveIcon},
+  {id: 'move', label: 'Move to folder', icon: MoveToFolderIcon},
+  {id: 'delete', label: 'Delete', icon: DeleteIcon},
+  {id: 'reply', label: 'Reply', icon: UndoIcon, isDirectional: true},
 ];
 
 /**
@@ -989,6 +1004,8 @@ function ReceivedCell({
    */
   isOverlaid: boolean;
 }) {
+  const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
   return (
     /* `height` reserves the buttons' line box. Without it the row is 40px at
        rest and 44px with the actions in it, so every row nudges its
@@ -1011,7 +1028,34 @@ function ReceivedCell({
             size="sm"
             label={`${action.label} — ${item.subject}`}
             tooltip={action.label}
-            icon={<Icon icon={action.icon} size="sm" />}
+            icon={
+              <Icon
+                icon={action.icon}
+                size="sm"
+                xstyle={action.isDirectional ? rtlStyles.mirror : undefined}
+              />
+            }
+            onClick={() =>
+              action.id === 'delete'
+                ? confirm.show({
+                    title: `Delete “${item.subject}”?`,
+                    description: "This demo won't delete anything.",
+                    actionLabel: 'Delete',
+                    onAction: () => {
+                      confirm.hide();
+                      // Demo only: replace this toast with the call that performs the action.
+                      showToast({
+                        body: `Demo: “${item.subject}” would be deleted here`,
+                        uniqueID: `delete-${item.id}`,
+                      });
+                    },
+                  })
+                : // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: `Demo: ${action.label} would run on “${item.subject}” here`,
+                    uniqueID: `${action.id}-${item.id}`,
+                  })
+            }
           />
         ))}
       </HStack>
@@ -1050,7 +1094,7 @@ function ReceivedCell({
                says an attachment exists, so unlabelled it would take the fact
                away from anyone not looking at it. */
             <Icon
-              icon={PaperClipIcon}
+              icon={AttachIcon}
               size="sm"
               color="gray"
               label="Has attachments"
@@ -1067,6 +1111,7 @@ function ReceivedCell({
           </Text>
         </HStack>
       </StackItem>
+      {confirm.element}
     </HStack>
   );
 }
@@ -1203,7 +1248,7 @@ function AttachmentStrip({attachments}: {attachments: Attachment[]}) {
   return (
     <VStack gap={2}>
       <HStack gap={1} vAlign="center">
-        <Icon icon={PaperClipIcon} size="sm" color="gray" />
+        <Icon icon={AttachIcon} size="sm" color="gray" />
         <Text type="supporting" color="secondary">
           {attachments.length} attachment
           {attachments.length === 1 ? '' : 's'}
@@ -1350,6 +1395,8 @@ function ConversationPane({
   /** True when the pane has replaced the list rather than sitting beside it. */
   isFullWidth: boolean;
 }) {
+  const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
   // Named against the subject, because the pane is not the only Archive on
   // screen — every row in the list behind it has one.
   const threadActions = THREAD_ACTIONS.map(action => (
@@ -1358,7 +1405,34 @@ function ConversationPane({
       variant="ghost"
       label={`${action.label} — ${conversation.subject}`}
       tooltip={action.label}
-      icon={<Icon icon={action.icon} size="sm" />}
+      icon={
+        <Icon
+          icon={action.icon}
+          size="sm"
+          xstyle={action.isDirectional ? rtlStyles.mirror : undefined}
+        />
+      }
+      onClick={() =>
+        action.id === 'delete'
+          ? confirm.show({
+              title: `Delete “${conversation.subject}”?`,
+              description: "This demo won't delete anything.",
+              actionLabel: 'Delete',
+              onAction: () => {
+                confirm.hide();
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: `Demo: “${conversation.subject}” would be deleted here`,
+                  uniqueID: `delete-${conversation.id}`,
+                });
+              },
+            })
+          : // Demo only: replace this toast with the call that performs the action.
+            showToast({
+              body: `Demo: ${action.label} would run on “${conversation.subject}” here`,
+              uniqueID: `${action.id}-${conversation.id}`,
+            })
+      }
     />
   ));
 
@@ -1469,7 +1543,7 @@ function ConversationPane({
                   variant="ghost"
                   label="Close conversation"
                   tooltip="Close"
-                  icon={<Icon icon={XMarkIcon} size="sm" />}
+                  icon={<Icon icon={CloseIcon} size="sm" />}
                   onClick={onClose}
                 />
               </>
@@ -1536,7 +1610,9 @@ function ConversationPane({
               <Button
                 label="Reply"
                 variant="primary"
-                icon={<Icon icon={ArrowUturnLeftIcon} size="sm" />}
+                icon={
+                  <Icon icon={UndoIcon} size="sm" xstyle={rtlStyles.mirror} />
+                }
                 onClick={() => onReply(replyDraft(conversation, false))}
               />
               <Button
@@ -1552,6 +1628,7 @@ function ConversationPane({
           </HStack>
         </VStack>
       </StackItem>
+      {confirm.element}
     </VStack>
   );
 }
@@ -1648,12 +1725,12 @@ const RECIPIENT_SOURCE: SearchSource = {
 const COMPOSER_TOOLS: {
   id: string;
   label: string;
-  icon: typeof PaperClipIcon;
+  icon: typeof AttachIcon;
 }[] = [
-  {id: 'attach', label: 'Attach files', icon: PaperClipIcon},
+  {id: 'attach', label: 'Attach files', icon: AttachIcon},
   {id: 'link', label: 'Insert link', icon: LinkIcon},
-  {id: 'image', label: 'Insert image', icon: PhotoIcon},
-  {id: 'emoji', label: 'Insert emoji', icon: FaceSmileIcon},
+  {id: 'image', label: 'Insert image', icon: ImageIcon},
+  {id: 'emoji', label: 'Insert emoji', icon: EmojiIcon},
 ];
 
 /**
@@ -1709,6 +1786,7 @@ function ComposeWindow({
    */
   draft: ComposeDraft | null;
 }) {
+  const showToast = useToast();
   const [recipients, setRecipients] = useState<SearchableItem[]>([]);
   const [cc, setCc] = useState<SearchableItem[]>([]);
   const [bcc, setBcc] = useState<SearchableItem[]>([]);
@@ -1808,7 +1886,7 @@ function ComposeWindow({
                   variant="ghost"
                   label="Close composer"
                   tooltip="Close"
-                  icon={<Icon icon={XMarkIcon} size="sm" />}
+                  icon={<Icon icon={CloseIcon} size="sm" />}
                   onClick={() => onOpenChange(false)}
                 />
               }
@@ -1942,7 +2020,20 @@ function ComposeWindow({
                   <Button
                     label="Send"
                     variant="primary"
-                    icon={<Icon icon={PaperAirplaneIcon} size="sm" />}
+                    icon={
+                      <Icon
+                        icon={SendIcon}
+                        size="sm"
+                        xstyle={rtlStyles.mirror}
+                      />
+                    }
+                    onClick={() =>
+                      // Demo only: replace this toast with the call that performs the action.
+                      showToast({
+                        body: 'Demo: the message would send here',
+                        uniqueID: 'compose-send',
+                      })
+                    }
                   />
                   {COMPOSER_TOOLS.map(tool => (
                     <IconButton
@@ -1951,6 +2042,13 @@ function ComposeWindow({
                       label={tool.label}
                       tooltip={tool.label}
                       icon={<Icon icon={tool.icon} size="sm" />}
+                      onClick={() =>
+                        // Demo only: replace this toast with the call that performs the action.
+                        showToast({
+                          body: `Demo: ${tool.label} would open here`,
+                          uniqueID: `compose-${tool.id}`,
+                        })
+                      }
                     />
                   ))}
                 </>
@@ -1960,7 +2058,7 @@ function ComposeWindow({
                   variant="ghost"
                   label="Discard draft"
                   tooltip="Discard draft"
-                  icon={<Icon icon={TrashIcon} size="sm" />}
+                  icon={<Icon icon={DeleteIcon} size="sm" />}
                   onClick={discard}
                 />
               }
@@ -1975,6 +2073,8 @@ function ComposeWindow({
 // ============= PAGE =============
 
 export default function SupportInboxTemplate() {
+  const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
   const [category, setCategory] = useState<Category>('inbox');
   /**
    * Which thread the user has picked — `undefined` until they pick one.
@@ -2420,7 +2520,14 @@ export default function SupportInboxTemplate() {
                 <Button
                   label="Refresh"
                   variant="ghost"
-                  icon={<Icon icon={ArrowPathIcon} size="sm" />}
+                  icon={<Icon icon={RefreshIcon} size="sm" />}
+                  onClick={() =>
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: 'Demo: the inbox would refresh here',
+                      uniqueID: 'refresh',
+                    })
+                  }
                 />
                 {/* Compose belongs on this row rather than down with the tabs.
                     Starting a message is unconditional — as true with nine
@@ -2431,7 +2538,7 @@ export default function SupportInboxTemplate() {
                 <Button
                   label="Compose"
                   variant="primary"
-                  icon={<Icon icon={PencilSquareIcon} size="sm" />}
+                  icon={<Icon icon={ComposeIcon} size="sm" />}
                   onClick={() => setIsComposeOpen(true)}
                 />
               </HStack>
@@ -2487,7 +2594,40 @@ export default function SupportInboxTemplate() {
                               label={action.label}
                               variant="ghost"
                               size="sm"
-                              icon={<Icon icon={action.icon} size="sm" />}
+                              icon={
+                                <Icon
+                                  icon={action.icon}
+                                  size="sm"
+                                  xstyle={
+                                    action.isDirectional
+                                      ? rtlStyles.mirror
+                                      : undefined
+                                  }
+                                />
+                              }
+                              onClick={() =>
+                                action.id === 'delete'
+                                  ? confirm.show({
+                                      title:
+                                        'Delete the selected conversations?',
+                                      description:
+                                        "This demo won't delete anything.",
+                                      actionLabel: 'Delete',
+                                      onAction: () => {
+                                        confirm.hide();
+                                        // Demo only: replace this toast with the call that performs the action.
+                                        showToast({
+                                          body: 'Demo: the selected conversations would be deleted here',
+                                          uniqueID: 'bulk-delete',
+                                        });
+                                      },
+                                    })
+                                  : // Demo only: replace this toast with the call that performs the action.
+                                    showToast({
+                                      body: `Demo: ${action.label} would run on the selected conversations here`,
+                                      uniqueID: `bulk-${action.id}`,
+                                    })
+                              }
                             />
                           ))}
                         </HStack>
@@ -2593,7 +2733,7 @@ export default function SupportInboxTemplate() {
           </LayoutHeader>
         }
         content={
-          <LayoutContent ref={listRef} padding={4} isScrollable>
+          <LayoutContent role="main" ref={listRef} padding={4} isScrollable>
             {isPaneFullWidth && openConversation != null ? (
               <ConversationPane
                 conversation={openConversation}
@@ -2696,6 +2836,7 @@ export default function SupportInboxTemplate() {
         onOpenChange={setComposeOpen}
         draft={composeDraft}
       />
+      {confirm.element}
     </>
   );
 }

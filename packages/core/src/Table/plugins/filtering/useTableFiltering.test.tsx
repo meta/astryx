@@ -14,6 +14,8 @@ import userEvent from '@testing-library/user-event';
 import {FormLayout} from '../../../FormLayout/FormLayout';
 import {Table} from '../../Table';
 import {useTableFiltering, toSearchFilters} from './useTableFiltering';
+import {useTableSortable} from '../sortable/useTableSortable';
+import type {TableSortState} from '../sortable/useTableSortable';
 import type {
   TableFilterState,
   TableFilterVariant,
@@ -383,5 +385,125 @@ describe('date filter editor inside a FormLayout', () => {
     const input = screen.getByRole('combobox', {name: /Due/});
     fireEvent.change(input, {target: {value: '02/31/2026'}});
     expect(input).toHaveAttribute('aria-invalid', 'true');
+  });
+});
+
+/**
+ * The CSS declarations that apply to an element's own classes. StyleX runs
+ * with runtime injection under vitest, so the rules are in the document's
+ * style sheets.
+ */
+function cssDeclarationsOf(el: Element): string[] {
+  const classes = new Set(
+    (el as HTMLElement).className.split(/\s+/).filter(Boolean),
+  );
+  const declarations: string[] = [];
+  for (const sheet of Array.from(document.styleSheets)) {
+    for (const rule of Array.from(sheet.cssRules)) {
+      const text = rule.cssText;
+      const brace = text.indexOf('{');
+      if (brace === -1) {
+        continue;
+      }
+      const selector = text.slice(0, brace).replaceAll(':not(#\\#)', '').trim();
+      const match = /^\.([\w-]+)$/.exec(selector);
+      if (!match || !classes.has(match[1])) {
+        continue;
+      }
+      declarations.push(
+        ...text
+          .slice(brace + 1, text.lastIndexOf('}'))
+          .split(';')
+          .map(part => part.trim())
+          .filter(Boolean),
+      );
+    }
+  }
+  return declarations;
+}
+
+function SortFilterTable() {
+  const [sort, setSort] = useState<TableSortState>([]);
+  const [filters, setFilters] = useState<TableFilterState>({});
+  const sortPlugin = useTableSortable<TestRow>({sort, onSortChange: setSort});
+  const filterPlugin = useTableFiltering<TestRow>({
+    filters,
+    onFilterChange: (key, value) =>
+      setFilters(prev => ({...prev, [key]: value ?? undefined})),
+    variant: 'popover',
+    searchConfig,
+  });
+  return (
+    <Table
+      data={testData}
+      columns={[{key: 'name', header: 'Name', filter: 'name', sortable: true}]}
+      idKey="id"
+      plugins={{sort: sortPlugin, filter: filterPlugin}}
+    />
+  );
+}
+
+describe('header with a filter button in a narrow column', () => {
+  it('truncates the label only past the cell end padding, so the filter button stays inside its cell', () => {
+    render(<SortFilterTable />);
+    const filterButton = screen.getByRole('button', {name: /filter name/i});
+    const sortButton = screen
+      .getAllByRole('button')
+      .find(b => b !== filterButton && b.closest('th') != null)!;
+    const label = sortButton.parentElement!;
+    const labelRow = label.parentElement!;
+
+    expect(labelRow.contains(filterButton)).toBe(true);
+    // The row may grow into the cell's end padding, never past the cell.
+    expect(
+      cssDeclarationsOf(labelRow).some(
+        d =>
+          d.startsWith('max-width: calc(100% +') &&
+          d.includes('--_table-header-end-room'),
+      ),
+    ).toBe(true);
+    expect(
+      cssDeclarationsOf(filterButton.closest('th')!).some(d =>
+        d.startsWith('--_table-header-end-room:'),
+      ),
+    ).toBe(true);
+    expect(cssDeclarationsOf(label)).toEqual(
+      expect.arrayContaining([
+        '--_table-header-end-room: 0px',
+        'min-width: 0',
+        'overflow: hidden',
+        'text-overflow: ellipsis',
+      ]),
+    );
+
+    const [sortLabel, sortIcon] = Array.from(sortButton.children);
+    expect(cssDeclarationsOf(sortLabel)).toEqual(
+      expect.arrayContaining(['overflow: hidden', 'text-overflow: ellipsis']),
+    );
+    expect(cssDeclarationsOf(sortIcon)).toContain('flex-shrink: 0');
+  });
+
+  it('gives a Table nested in a last-column cell its own end room, not the outer cell end room', () => {
+    render(
+      <Table
+        data={[{id: 'outer', label: 'Outer'}]}
+        columns={[
+          {key: 'label', header: 'Label'},
+          {
+            key: 'nested',
+            header: 'Nested',
+            renderCell: () => <SortFilterTable />,
+          },
+        ]}
+        idKey="id"
+      />,
+    );
+    const innerCell = screen
+      .getByRole('button', {name: /filter name/i})
+      .closest('th')!;
+    // Every cell resets the edge inset; only a last-column cell sets it.
+    expect(cssDeclarationsOf(innerCell)).toContain(
+      '--_table-edge-inline-end: initial',
+    );
   });
 });

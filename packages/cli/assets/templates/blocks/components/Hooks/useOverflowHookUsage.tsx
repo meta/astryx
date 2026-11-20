@@ -7,6 +7,7 @@ import {useOverflow} from '@astryxdesign/core/hooks';
 import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
 import {DropdownMenu} from '@astryxdesign/core/DropdownMenu';
+import {useToast} from '@astryxdesign/core/Toast';
 
 const actions = [
   'Bold',
@@ -29,10 +30,7 @@ const styles = stylex.create({
     minWidth: 120,
     maxWidth: '100%',
   },
-  row: {
-    display: 'flex',
-    gap: GAP,
-  },
+  row: {display: 'flex', gap: GAP},
   // Takes no space and paints nothing, so the hook measures every item
   // without a flicker. Do not use display: none, which stops measurement.
   measure: {
@@ -45,16 +43,23 @@ const styles = stylex.create({
   },
 });
 
+const demo = (label: string) => ({body: `Demo: ${label} would apply here`});
+
 function MoreMenu({items}: {items: string[]}) {
+  const showToast = useToast();
   return (
     <DropdownMenu
       button={{label: 'More', variant: 'ghost', size: 'sm'}}
-      items={items.map(label => ({label}))}
+      items={items.map(label => ({
+        label,
+        onClick: () => showToast(demo(label)),
+      }))}
     />
   );
 }
 
 export default function UseOverflowHookUsage() {
+  const showToast = useToast();
   const {containerRef, measureRef, visibleCount, hasOverflow} = useOverflow(
     actions.length,
     {gap: GAP},
@@ -80,7 +85,13 @@ export default function UseOverflowHookUsage() {
         aria-label="Text formatting"
         {...stylex.props(styles.row)}>
         {actions.slice(0, visibleCount).map(label => (
-          <Button key={label} label={label} variant="ghost" size="sm" />
+          <Button
+            key={label}
+            label={label}
+            variant="ghost"
+            size="sm"
+            onClick={() => showToast(demo(label))}
+          />
         ))}
         {hasOverflow && <MoreMenu items={actions.slice(visibleCount)} />}
       </div>

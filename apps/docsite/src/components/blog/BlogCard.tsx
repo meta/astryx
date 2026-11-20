@@ -16,6 +16,7 @@ import {AuthorByline} from './AuthorByline';
 import {BlogCoverArt} from './BlogCoverArt';
 import {ReleaseCoverArt} from './ReleaseCoverArt';
 import {parseReleaseVersion} from '../../lib/blog/release';
+import {blogCoverUrl} from '../../lib/blog/coverImage';
 import css from './BlogCard.module.css';
 
 const styles = stylex.create({
@@ -100,7 +101,7 @@ export function BlogCard({
         <AspectRatio ratio={16 / 9} xstyle={styles.cover} className={css.cover}>
           {post.coverImage ? (
             <img
-              src={post.coverImage}
+              src={blogCoverUrl(post.coverImage)}
               alt={post.coverAlt ?? ''}
               {...stylex.props(styles.coverImg)}
             />

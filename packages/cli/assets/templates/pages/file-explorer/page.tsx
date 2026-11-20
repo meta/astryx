@@ -20,21 +20,22 @@ import {
   SegmentedControl,
   SegmentedControlItem,
 } from '@astryxdesign/core/SegmentedControl';
+import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
-  MagnifyingGlassIcon,
+  SearchIcon,
   ShareIcon,
   TagIcon,
-  EllipsisHorizontalIcon,
+  MoreHorizontalIcon,
   ViewColumnsIcon,
-  Squares2X2Icon,
-  Bars4Icon,
-  TableCellsIcon,
-  AdjustmentsHorizontalIcon,
-  DocumentIcon,
-} from '@heroicons/react/24/outline';
-import {FolderIcon} from '@heroicons/react/24/solid';
+  GridViewIcon,
+  ListViewIcon,
+  TableIcon,
+  AdjustmentsIcon,
+  FileIcon,
+} from '@astryxdesign/template-icons';
+import {FolderIcon} from '@astryxdesign/template-icons/24/solid';
 
 interface FileSystemItem {
   id: string;
@@ -394,18 +395,24 @@ export default function FileExplorerPage() {
           centerContent={
             <SegmentedControl
               value="column"
-              onChange={() => {}}
+              onChange={view =>
+                // Demo only: this page shows the column view; replace this toast with the view switch.
+                showToast({
+                  body: `Demo: the ${view} view would show here`,
+                  uniqueID: `view-${view}`,
+                })
+              }
               label="View mode">
               <SegmentedControlItem
                 value="grid"
                 label="Grid"
-                icon={<Icon icon={Squares2X2Icon} size="sm" />}
+                icon={<Icon icon={GridViewIcon} size="sm" />}
                 isLabelHidden
               />
               <SegmentedControlItem
                 value="list"
                 label="List"
-                icon={<Icon icon={Bars4Icon} size="sm" />}
+                icon={<Icon icon={ListViewIcon} size="sm" />}
                 isLabelHidden
               />
               <SegmentedControlItem
@@ -417,7 +424,7 @@ export default function FileExplorerPage() {
               <SegmentedControlItem
                 value="gallery"
                 label="Gallery"
-                icon={<Icon icon={TableCellsIcon} size="sm" />}
+                icon={<Icon icon={TableIcon} size="sm" />}
                 isLabelHidden
               />
             </SegmentedControl>
@@ -427,8 +434,15 @@ export default function FileExplorerPage() {
               <IconButton
                 variant="ghost"
                 size="sm"
-                icon={<Icon icon={AdjustmentsHorizontalIcon} size="sm" />}
+                icon={<Icon icon={AdjustmentsIcon} size="sm" />}
                 label="Group"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: grouping options would open here',
+                    uniqueID: 'group',
+                  })
+                }
               />
               <IconButton
                 variant="ghost"
@@ -448,25 +462,47 @@ export default function FileExplorerPage() {
                 size="sm"
                 icon={<Icon icon={TagIcon} size="sm" />}
                 label="Tags"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: tags for the selection would open here',
+                    uniqueID: 'tags',
+                  })
+                }
               />
               <IconButton
                 variant="ghost"
                 size="sm"
-                icon={<Icon icon={EllipsisHorizontalIcon} size="sm" />}
+                icon={<Icon icon={MoreHorizontalIcon} size="sm" />}
                 label="More"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: more actions would open here',
+                    uniqueID: 'more',
+                  })
+                }
               />
               <IconButton
                 variant="ghost"
                 size="sm"
-                icon={<Icon icon={MagnifyingGlassIcon} size="sm" />}
+                icon={<Icon icon={SearchIcon} size="sm" />}
                 label="Search"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: search in this folder would open here',
+                    uniqueID: 'search',
+                  })
+                }
               />
             </>
           }
         />
       }
       content={
-        <LayoutContent padding={0} isScrollable={false}>
+        <LayoutContent role="main" padding={0} isScrollable={false}>
+          <VisuallyHidden as="h1">Files</VisuallyHidden>
           <HStack height="100%" isScrollable>
             {columns.map((col, colIndex) => {
               const showDivider =
@@ -501,9 +537,7 @@ export default function FileExplorerPage() {
                             startContent={
                               <Icon
                                 icon={
-                                  item.type === 'folder'
-                                    ? FolderIcon
-                                    : DocumentIcon
+                                  item.type === 'folder' ? FolderIcon : FileIcon
                                 }
                                 color={
                                   item.type === 'folder'

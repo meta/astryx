@@ -15,6 +15,7 @@ import type {CSSProperties} from 'react';
 
 const panel: CSSProperties = {
   width: 450,
+  maxWidth: '100%',
   height: 600,
   borderRadius: 8,
   overflow: 'hidden',

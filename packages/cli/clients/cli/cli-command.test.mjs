@@ -114,7 +114,7 @@ describe('the setup nudge in a project with no CLI of its own', () => {
 
       const {stderr} = await runCli(['docs', 'tokens'], app);
       expect(stderr).toContain(
-        'Next step: run `npm install @astryxdesign/cli@0.0.1`, then `acme astryx init`',
+        'Next step: run `npm install -E @astryxdesign/cli@0.0.1`, then `acme astryx init`',
       );
     } finally {
       vi.unstubAllEnvs();
