@@ -109,6 +109,75 @@ describe("a part's rows and a product's words", () => {
     expect(kbd.writes.filter(w => !/ --on /.test(w))).toEqual([]);
   }, 240_000);
 
+  it('reads the head\'s own piece in its list as the one changed, and any other "on" as before', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('pb', {cwd, like: 'neutral'});
+    const fill = (
+      await answer('progress bars: white fill on a dark track', 'pb')
+    ).writes.join('\n');
+    expect(fill).toMatch(/background-color '#ffffff' --on progress-bar-fill/);
+    expect(fill).not.toMatch(/--on progress-bar-track/);
+    // (The fill said as the bar's "indicator" is the fill too, never the
+    // checkboxes' indicators.)
+    for (const ask of [
+      'progress bars: white indicator on a dark track',
+      'progress bars: white indicators',
+      'progress bars: white progress indicator on a dark track',
+    ]) {
+      const lines = (await answer(ask, 'pb')).writes.join('\n');
+      expect(lines, ask).toMatch(
+        /background-color '#ffffff' --on progress-bar-fill/,
+      );
+      expect(lines, ask).not.toMatch(/--on (?:checks|progress-bar-track)\b/);
+    }
+    // (A determiner before the head is the same head.)
+    expect(
+      (
+        await answer('the progress bars: white fill on a dark track', 'pb')
+      ).writes.join('\n'),
+    ).toMatch(/--on progress-bar-fill/);
+    // (An item that names a part of its own keeps it; a piece the head
+    // lacks is never the head.)
+    for (const [ask, line] of [
+      [
+        'progress bar: gray progress bar track',
+        "background-color 'light-dark(#9e9e9e, #525252)' --on progress-bar-track",
+      ],
+      [
+        'dropdown menu: white menu items',
+        "background-color '#ffffff' --on dropdown-menu-item --when variant:default --mode light",
+      ],
+      [
+        'side nav: white side nav items',
+        "background-color '#ffffff' --on side-nav-item --mode light",
+      ],
+      ['cards: blue icons', "--color-icon-primary '#2563eb'"],
+      // (A word that already names a group holding the head keeps it.)
+      ['checkboxes: 8px tall indicator', 'min-height 8px --on checks'],
+    ])
+      expect((await answer(ask, 'pb')).writes, ask).toContain(`set pb ${line}`);
+    // (An element named after "on" is still that element.)
+    for (const [ask, line] of [
+      [
+        'dropdown menu: blue background on the selected item',
+        "background-color '#2563eb' --on dropdown-menu-radio --state checked",
+      ],
+      [
+        'selects: blue background on the selected option',
+        "background-color '#2563eb' --on selector-option-row --state selected",
+      ],
+      [
+        'menus: gray background on the hovered item',
+        "background-color '#9e9e9e' --on dropdown-menu-item --state hover",
+      ],
+    ])
+      expect((await answer(ask, 'pb')).writes, ask).toContain(`set pb ${line}`);
+    // ("loading bars" said in the plural names no part, as on main.)
+    expect((await answer('loading bars track #e5e7eb', 'pb')).writes).toEqual(
+      [],
+    );
+  }, 240_000);
+
   it.each([
     // [ask, the parts read, a compound named, if any]
     ['make the radio buttons bold', ['radio-indicator'], null],
@@ -126,6 +195,9 @@ describe("a part's rows and a product's words", () => {
     // part: the word is no compound's noun.)
     ['buttons chunky', ['button'], null],
     ['header sticky', ['app-shell-header'], null],
+    // (A part word said in the plural is that part's whole name, as main
+    // reads it: "progress bars" is the bar's fill, never its track.)
+    ['progress bars white', ['progress-bar-fill'], null],
   ])('%s', async (ask, parts, compound) => {
     // (The bundled theme the cases above made; skipped with them.)
     if (unbuilt) return;

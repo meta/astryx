@@ -8945,6 +8945,78 @@ export function draftAnswer(ctx, env, question) {
       (c.colors.length > 0 ||
         c.aspects.some(a => ['background', 'text', 'border'].includes(a))),
   );
+  /** A word-table regex without its global flag. @param {RegExp} re */
+  const once = re => new RegExp(re.source, re.flags.replace('g', ''));
+  // The part the word table reads a list head as ("the progress bars"), and
+  // the words it read; never a piece the part does not have.
+  const headPartOf = (/** @type {string} */ headText) => {
+    for (const [re, x] of lex.parts) {
+      if (x.missing) continue;
+      const m = once(re).exec(` ${headText.toLowerCase()} `);
+      if (m) return {on: x.on, words: m[0].trim()};
+    }
+    return null;
+  };
+  // Whether a list item names the head's own piece: a word of the item that
+  // the word table reads with the head's words as the head's part
+  // ("progress bars: white indicator", "white fill": "progress indicator"
+  // and "progress fill" are the progress bar's fill), and no other part
+  // named in the item ("gray progress bar track", "white menu items" name
+  // their own parts). Only the words before "on" count; the part after
+  // "on" is where it sits.
+  const headOwnPiece = (
+    /** @type {string} */ headText,
+    /** @type {string} */ text,
+  ) => {
+    const head = headPartOf(headText);
+    const first = head ? /[a-z]+/.exec(head.words)?.[0] : null;
+    if (!head || !first) return null;
+    const at = /\s+on\s+(?:the\s+|an?\s+)?\S/i.exec(text);
+    const item = (at ? text.slice(0, at.index) : text).toLowerCase();
+    const own = item
+      .split(/[^a-z]+/)
+      .filter(w => w.length >= 3 && w !== first)
+      .find(w =>
+        lex.parts.some(([re, x]) => {
+          if (x.on !== head.on || x.missing) return false;
+          const m = once(re).exec(`${first} ${w}`);
+          // (The phrase must take both words: "progress indicator".)
+          return (
+            m != null &&
+            new RegExp(String.raw`\b${first}\b`).test(m[0]) &&
+            new RegExp(String.raw`\b${w}\b`).test(m[0])
+          );
+        }),
+      );
+    if (!own) return null;
+    // (A word that already reads a group holding the head, "checkboxes:
+    // white indicator" as the check and radio indicators, keeps that
+    // reading.)
+    const other = lex.parts.some(([re, x]) => {
+      if (x.on === head.on) return false;
+      const m = once(re).exec(` ${item} `);
+      return (
+        m != null &&
+        (m[0].trim() !== own || (FAMILIES[x.on] ?? []).includes(head.on))
+      );
+    });
+    return other ? null : head.on;
+  };
+  // ("progress bars: white indicator": an item of a part's colon list
+  // that names the head's own piece, by a word the word table reads with
+  // the head as the head's part, is the head; never another part that
+  // word names alone, the checkboxes' indicators.)
+  for (const c of clauses) {
+    const label = /^\s*([a-z][a-z' -]{1,40}?)\s*:\s*(\S.*)$/i.exec(c.text);
+    // (Never a screen named by what it shows, "a records table view:".)
+    if (
+      !label ||
+      new RegExp(String.raw`\b${PRODUCT_WORDS}\s*$`, 'i').test(label[1])
+    )
+      continue;
+    const own = headOwnPiece(label[1], label[2]);
+    if (own) c.parts = [{on: own}];
+  }
   // (Only for a look said as a look, "a theme in navy", or a color said
   // alone; never a statement, "I set the accent to red by mistake", nor a
   // color another dial names, "a more muted success green".)
@@ -10132,7 +10204,11 @@ export function draftAnswer(ctx, env, question) {
     // (Never a screen named by what it shows, "a records table view:".)
     if (
       label &&
-      !new RegExp(String.raw`\b${PRODUCT_WORDS}\s*$`, 'i').test(label[1])
+      !new RegExp(String.raw`\b${PRODUCT_WORDS}\s*$`, 'i').test(label[1]) &&
+      // ("progress bars: white fill on a dark track": an item that names
+      // the head's own piece is the head; the track after "on" is only
+      // where it sits.)
+      !headOwnPiece(label[1], label[2])
     )
       places.push({holderText: label[1], elementText: label[2], by: 'in'});
     // ("the date picker should circle today in #0969da": what a part should
@@ -10807,17 +10883,21 @@ export function draftAnswer(ctx, env, question) {
           );
       // ("progress bar: #0d6efd fill and #e9ecef track": a word naming a
       // piece of the head's own part, its track, is that piece.)
+      // ("progress bars: white fill on a dark track": the first piece
+      // named is the one said; a piece the head is itself, its fill, keeps
+      // the head, and the track after "on" is only where it sits.)
       if (head && holder && head !== c && inWith) {
         const segs = holder.split('-');
-        const piece = c.text
+        const named = c.text
           .toLowerCase()
           .split(/[^a-z]+/)
           .filter(w => w.length >= 3 && !head.text.toLowerCase().includes(w))
           .flatMap(w =>
             segs
               .map((_, n) => `${segs.slice(0, n + 1).join('-')}-${singular(w)}`)
-              .filter(k => k !== holder && C.MAP[k]),
+              .filter(k => C.MAP[k]),
           )[0];
+        const piece = named === holder ? undefined : named;
         if (piece) {
           c.parts = [{on: piece}];
           continue;
