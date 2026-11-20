@@ -795,12 +795,14 @@ describe('Slider', () => {
       pointerId: 1,
       pointerType: 'mouse',
       button: 0,
+      buttons: 1,
     });
     fireEvent.pointerMove(track, {
       clientX: 240,
       clientY: 10,
       pointerId: 1,
       pointerType: 'mouse',
+      buttons: 1,
     });
     expect(onChange).toHaveBeenLastCalledWith(100);
 

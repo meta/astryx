@@ -992,9 +992,9 @@ export function Slider({ref, ...props}: SliderProps) {
       if (isDisabled) {
         return;
       }
-      // Home, End, and pointer-selected `max` skip step snapping (`snap: false`).
-      // The step grid is anchored at `min`, but `max` may lie off the grid
-      // (max 100 with step 3 would otherwise snap to 99, not 100).
+      // Home, End, and a pointer that selects `max` skip snapping.
+      // The step grid starts at `min`, so `max` can fall between steps.
+      // With a minimum of 0 and a step of 3, snapping rounds 100 down to 99.
       const clamped = clamp(
         snap ? snapToStep(newVal, min, step) : newVal,
         min,
