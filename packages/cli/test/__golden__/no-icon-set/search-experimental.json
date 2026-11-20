@@ -3,23 +3,8 @@
   "type": "search",
   "data": {
     "query": "experimental",
-    "matchCount": 17,
+    "matchCount": 16,
     "results": [
-      {
-        "domain": "doc",
-        "name": "authoring/field-reference",
-        "package": "@astryxdesign/cli",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "section": "<text>",
-        "title": "<text>",
-        "command": "astryx docs authoring/field-reference authored-doc-graph-fields",
-        "parent": "astryx docs authoring/field-reference --index",
-        "mentions": [
-          "keyword \"[experimental]\""
-        ]
-      },
       {
         "domain": "doc",
         "name": "author-a-theme",
