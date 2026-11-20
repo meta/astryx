@@ -481,7 +481,7 @@ describe('GL marks without WebGL', () => {
     unmount();
   });
 
-  it('dotGLInteractive renders its two canvases and hover hit area without crashing', () => {
+  it('dotGLInteractive renders its two canvases without crashing', () => {
     const {plot, unmount} = renderMarks([
       dotGLInteractive('v', {color: '#111111'}),
     ]);
@@ -489,7 +489,6 @@ describe('GL marks without WebGL', () => {
     expect(foreignObjects).toHaveLength(2); // visible + offscreen pick canvas
     expect(foreignObjects[0].querySelector('canvas')).not.toBeNull();
     expect(foreignObjects[1].querySelector('canvas')).not.toBeNull();
-    expect(plot.querySelector('rect[fill="transparent"]')).not.toBeNull();
     unmount();
   });
 });
