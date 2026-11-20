@@ -85,26 +85,23 @@ describe('a missed line', () => {
   );
 
   it(
-    'for a status fill on a media part takes the text that reads on the new fill, and makes no problem',
+    'is not needed for a status fill on a media part the status color reaches, and that makes no problem',
     async () => {
-      await themeEditSet('t', 'danger', '#dc2626', {cwd});
+      // The danger color reaches the error toast's fill itself; the toast's
+      // text takes the readable side of its media surface.
+      const r = await run(
+        "astryx experimental theme editor set t danger '#dc2626'",
+      );
       const now =
         /** @type {Array<{part: string, why: string, line: string}>} */ (
           /** @type {any} */ (
             await themeEditShow('t', {cwd, section: 'actions'})
           ).data.missed
         );
-      const toast = now.find(
-        m => m.part === 'toast' && /error color/.test(m.why),
-      );
-      expect(toast?.line).toMatch(
-        / color '#[0-9a-f]{6}' --on toast --when type:error/,
-      );
-      /** @type {string[]} */
-      let problems = [];
-      for (const one of String(toast?.line).split(' && '))
-        problems = (await run(one)).problems;
-      expect(problems.filter(x => /^text in toast\b/.test(x))).toEqual([]);
+      expect(
+        now.filter(m => m.part === 'toast' && /error color/.test(m.why)),
+      ).toEqual([]);
+      expect(r.problems.filter(x => /^text in toast\b/.test(x))).toEqual([]);
     },
     T,
   );
