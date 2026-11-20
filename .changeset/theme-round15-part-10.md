@@ -21,6 +21,4 @@
 
 - `astryx experimental theme editor set … --on status-surfaces|overlay-headers`: two more family groups read from each part's structure: `status-surfaces` (a message with a control of its own whose fill follows the theme's status roles: banners, toasts) and `overlay-headers` (an overlay's header holding its title and its close button). A gradient said of a banner reaches the toasts, and a rule under one overlay's header is offered for every overlay header.
 
-- `astryx experimental theme editor`: with a tinted gray, the text on an inverted or dark surface, such as a toast or a card over the scrim, takes the tint too, so it matches the surface it sits on.
-
 @josephfarina
