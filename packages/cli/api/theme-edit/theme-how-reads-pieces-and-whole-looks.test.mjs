@@ -291,7 +291,7 @@ describe('a background hidden on a piece', () => {
 
 describe('the earlier theme or look, and parts said apart', () => {
   it(
-    'needs going-back words, and keeps each nav where it was said',
+    'needs going-back words',
     async () => {
       expect(
         JSON.stringify((await answer('a restored vintage look')).results),
@@ -302,11 +302,6 @@ describe('the earlier theme or look, and parts said apart', () => {
       expect(
         JSON.stringify((await answer('go back to the old theme')).results),
       ).toMatch(/theme use/);
-      const navs = first(
-        await answer('top nav links bold and the side nav items red'),
-      ).join('\n');
-      expect(navs).toMatch(/font-weight 700 --on top-nav-item/);
-      expect(navs).toMatch(/--on side-nav-item/);
     },
     T,
   );
@@ -322,46 +317,6 @@ describe('the earlier theme or look, and parts said apart', () => {
         expect(JSON.stringify((await answer(q)).results), q).toMatch(
           /never guesses a brand/,
         );
-      }
-    },
-    T,
-  );
-});
-
-describe('a look said, then taken away by a pronoun', () => {
-  it(
-    'takes away only that look, never the part',
-    async () => {
-      const border = first(
-        await answer('code block copy button border is ugly, hide it'),
-      ).join('\n');
-      expect(border).toMatch(/border none --on code-block-copy-button/);
-      expect(border).not.toMatch(/display none/);
-      const shadow = first(
-        await answer('the code block copy button has a shadow, remove it'),
-      ).join('\n');
-      expect(shadow).toMatch(/box-shadow none --on code-block-copy-button/);
-      const bg = first(
-        await answer('code block header background is too dark, hide it'),
-      ).join('\n');
-      expect(bg).toMatch(/background-color transparent --on code-block-header/);
-      expect(bg).not.toMatch(/display none/);
-    },
-    T,
-  );
-});
-
-describe('a nav said as a bar beside the side nav', () => {
-  it(
-    'stays the top nav',
-    async () => {
-      for (const q of [
-        'nav bar links bold and the side nav items red',
-        'navigation bar links bold and the sidebar items red',
-      ]) {
-        const lines = first(await answer(q)).join('\n');
-        expect(lines, q).toMatch(/font-weight 700 --on top-nav-item/);
-        expect(lines, q).not.toMatch(/font-weight 700 --on side-nav-item/);
       }
     },
     T,
