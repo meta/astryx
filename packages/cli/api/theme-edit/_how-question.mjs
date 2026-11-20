@@ -30455,6 +30455,9 @@ export function draftAnswer(ctx, env, question) {
       d.options.some(o => o.some(x => !fillSteps.includes(x)))
     )
       continue;
+    // (An offer, "to change the … variants too", is measured as main
+    // measures it: its first line only.)
+    if (d.offer) fillSteps.splice(1);
     const st = fillSteps[0];
     if (
       !st.on ||
