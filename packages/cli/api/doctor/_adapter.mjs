@@ -112,7 +112,10 @@ import {
 import {cssImports} from '../../foundation/render/embedded-imports.mjs';
 import {postcss} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {hostedRun} from '../../foundation/runtime/package-root.mjs';
-import {pointsToDoctor} from '../../foundation/integrations/integration-warnings.mjs';
+import {
+  doctorChecksOutside,
+  pointsToDoctor,
+} from '../../foundation/integrations/integration-warnings.mjs';
 import {isValidSemver, satisfiesRange} from '../../foundation/env/semver.mjs';
 import * as path from 'node:path';
 import {
@@ -1558,9 +1561,7 @@ export async function computerIntegrationsOutside(cwd) {
   }
   /** @type {Array<{name: string, __computer?: boolean, __loadError?: string}>} */
   const loaded = project.loadedIntegrations;
-  const used = loaded
-    .filter(i => i.__computer && !i.__loadError)
-    .map(i => i.name);
+  const used = loaded.filter(doctorChecksOutside).map(i => i.name);
   // The everyday commands count these issues when they point at doctor, so
   // doctor names them. Where doctor reads no Core, they name a comparison
   // with Core components themselves.
