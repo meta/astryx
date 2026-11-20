@@ -5269,13 +5269,15 @@ export function draftAnswer(ctx, env, question) {
   // pronoun is that look, never the part: only the look goes, and the
   // asks before it stay as said.)
   question = String(question).replace(
-    /(^|[,;.]\s*)([^,;.]*?\b(?:borders?|shadows?|outlines?|underlines?|backgrounds?|gradients?)\b[^,;.]*)[,;.]\s*(?:(?:so|and|then|please|just)\s+)*(?:hide|remove|drop|lose|get\s+rid\s+of)\s+(?:it|them)\b\s*[.!]?$/i,
+    /(^|[,;.]\s*)([^,;.]*?\b(?:borders?|shadows?|outlines?|underlines?|backgrounds?|gradients?)\b(?![\s-]*(?:radius|radii|width|colou?r|style|image|spacing)\b)[^,;.]*)[,;.]\s*(?:(?:so|and|then|please|just)\s+)*(?:hide|remove|drop|lose|get\s+rid\s+of)\s+(?:it|them)\b\s*[.!]?$/i,
     (m, lead, said) => {
       // ("it" is the nearest look said before it: "the button shadow is too
       // strong and the card border is ugly, hide it" is the card border.)
       const looks = [
         ...said.matchAll(
-          /\b(borders?|shadows?|outlines?|underlines?|backgrounds?|gradients?)\b/gi,
+          // (A look word that names another aspect, "border radius", is
+          // never the look taken away.)
+          /\b(borders?|shadows?|outlines?|underlines?|backgrounds?|gradients?)\b(?![\s-]*(?:radius|radii|width|colou?r|style|image|spacing)\b)/gi,
         ),
       ];
       const last = looks[looks.length - 1];

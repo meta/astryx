@@ -431,6 +431,11 @@ describe('a look said, then taken away by a pronoun', () => {
           "the dialog's card border is ugly, hide it",
           /border none --on card\b/,
         ],
+        // ("border radius" names the corners, never the border taken away.)
+        [
+          'the card border radius is too big, remove it',
+          /^(?![\s\S]*border none)/,
+        ],
         [
           'the shadow on the cards is too strong and the headings should be bold, remove it',
           /box-shadow none --on card\b[\s\S]*headings bold/,
