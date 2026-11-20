@@ -406,6 +406,15 @@ describe('a negation of a piece followed by more than a place', () => {
       expect(first(await answer('no banner icon please'))).toEqual([
         'set t display none --on banner-icon',
       ]);
+      // A keep said after the hide only bounds it.
+      for (const q of [
+        'hide the tab underline so nothing else is hidden',
+        'hide the tab underline and nothing else',
+        'hide the tab underline too',
+      ])
+        expect(first(await answer(q)), q).toEqual([
+          'set t display none --on tab-indicator',
+        ]);
     },
     T,
   );

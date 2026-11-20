@@ -2721,11 +2721,14 @@ const removalSaid = t => {
     ).test(t)
   )
     return 'show';
-  // ("no row hidden", "nothing hidden": no piece is taken away.)
+  // ("no row hidden", "nothing hidden": no piece is taken away. After a
+  // hide said first, "so nothing else is hidden" only bounds that hide.)
+  const kept = new RegExp(
+    String.raw`\b(?:no|nothing|none)\b(?:\s+(?!(?:so|but|then|and|therefore|thus)\b)[^\s,;.]+){0,4}?\s+(?:is\s+|are\s+|gets?\s+)?(?:hidden|removed)\b`,
+  ).exec(t);
   if (
-    new RegExp(
-      String.raw`\b(?:no|nothing|none)\b(?:\s+(?!(?:so|but|then|and|therefore|thus)\b)[^\s,;.]+){0,4}?\s+(?:is\s+|are\s+|gets?\s+)?(?:hidden|removed)\b`,
-    ).test(t)
+    kept &&
+    !/\b(?:hide|hiding|remove|removing)\b/.test(t.slice(0, kept.index))
   )
     return 'keep';
   // (A negation rules out the removal only in its own clause: "it isn't
@@ -2738,11 +2741,12 @@ const removalSaid = t => {
 };
 /**
  * What may follow a piece a removal takes away: nothing, the place it is
- * taken from ("on code blocks", "in tables", "everywhere"), a closing
- * "please", or its own background, which the removal then clears alone.
+ * taken from ("on code blocks", "in tables", "everywhere"), "too", a
+ * closing "please", a clause of its own ("so nothing else is hidden"), or
+ * its own background, which the removal then clears alone.
  */
 const PLACE_ONLY =
-  /^\s*(?:[,.;:!?]|$|(?:on|in|inside|of|from|for|at|across|throughout|within|everywhere|anywhere|entirely|completely|please|thanks|thank you|(?:background|backdrop|fill|bg)s?)\b)/;
+  /^\s*(?:[,.;:!?]|$|(?:on|in|inside|of|from|for|at|across|throughout|within|everywhere|anywhere|entirely|completely|too|as well|also|only|so|but|because|since|while|and nothing|please|thanks|thank you|(?:background|backdrop|fill|bg)s?)\b)/;
 /** Words that ask for a setting's earlier value: a reset, never a look. */
 const GOING_BACK =
   /\b(reset|revert|restore|back to|default|original|what it was|standard|clear|no custom|remove the override|(remove|clear|drop|delete) (my |the )?(\w+ )?overrides?|by mistake|^undo|take back|like before|as before|the way (it|they) (was|were)|by accident|accidentally|put .* back|.* back to normal)\b/;
