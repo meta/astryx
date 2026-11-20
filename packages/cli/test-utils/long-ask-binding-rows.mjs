@@ -173,7 +173,11 @@ export const LOCK = [
     ['--color-background-body'],
     ['app-shell', 'layout-content', 'side-nav', 'side-nav-item'],
   ],
-  ['kbd hints #2e3035 with #8a8f98 text and 4px corners', [], []],
+  [
+    'kbd hints #2e3035 with #8a8f98 text and 4px corners',
+    [],
+    ['kbd', 'kbd-key'],
+  ],
   ['toggle lists with gray arrows, 14px text and no borders', [], ['switch']],
   [
     'table rows 40px tall, row borders #ebeef1 and row hover #f6f8fa',

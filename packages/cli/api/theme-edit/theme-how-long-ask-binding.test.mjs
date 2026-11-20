@@ -118,8 +118,16 @@ const ROWS = [
     },
   ],
   [
-    'a with-list under a subject that names no part writes nothing theme-wide',
-    {q: 'kbd hints #2e3035 with #8a8f98 text and 4px corners', noWide: true},
+    'a with-list under a part and its own noun stays on that part',
+    {
+      q: 'kbd hints #2e3035 with #8a8f98 text and 4px corners',
+      has: [
+        "background-color '#2e3035' --on kbd-key",
+        "--color-text-primary '#8a8f98' --on kbd",
+        'border-radius 4px --on kbd-key',
+      ],
+      noWide: true,
+    },
   ],
   [
     'a mode pair stays on the list part',
