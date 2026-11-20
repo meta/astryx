@@ -399,7 +399,11 @@ export async function themePartValues(cwd, name, part) {
           property.startsWith('--') && theme.tokenVia
             ? theme.tokenVia(property, key, true)
             : theme.propertyVia
-              ? theme.propertyVia(property, key, setWhen, state || null)
+              ? // A variant row with no rule of its own shows the rest rule:
+                // ask with the condition of the rule the value comes from.
+                ruleKey === k
+                ? theme.propertyVia(property, key, setWhen, state || null)
+                : theme.propertyVia(property, key, null, null)
               : 'part',
         ];
       else if (mine.length) [source, via] = ['theme', tokenVia];

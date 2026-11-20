@@ -253,6 +253,24 @@ describe('show --on: what one part of a theme shows', () => {
     });
   }, 120_000);
 
+  it('credits a property set on the part at rest to the part in every variant row that shows it, beside a whole-theme dial', async () => {
+    const r = /** @type {any} */ (
+      await themeEditShow('brand', {cwd, on: 'card'})
+    );
+    // `brand` has the whole-theme dial `corners pill` and `padding 24px`
+    // on the card with no --when: each variant row that shows that rest
+    // padding comes from the part's own setting, not from the dial.
+    const rows = r.data.values.filter(
+      (/** @type {any} */ v) =>
+        v.when != null &&
+        v.property === 'padding-inline-start' &&
+        v.value === '24px',
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    for (const v of rows)
+      expect(v).toMatchObject({source: 'theme', via: 'part'});
+  }, 120_000);
+
   it('gives a button’s corner radius once, not once per corner', async () => {
     const r = /** @type {any} */ (
       await themeEditShow('neutral', {cwd, on: 'button'})
