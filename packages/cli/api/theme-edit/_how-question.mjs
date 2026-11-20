@@ -31152,6 +31152,14 @@ export function draftAnswer(ctx, env, question) {
   // own, named, with a line for each to change it too.
   /** @type {Draft[]} */
   const keptLines = [];
+  /**
+   * The variant lines a text color asked alone is written as, one for each
+   * variant it does not barely show on, in every mode: the per-mode pass
+   * below leaves them as they are, and `set` names a mode where one does
+   * not read.
+   * @type {WeakSet<object>}
+   */
+  const textAloneLines = new WeakSet();
   for (const d of result)
     for (const o of /contradict/.test(d.text) ? [] : d.options) {
       // (Parts the answer keeps a variant or state of apart, as asked.)
@@ -31449,13 +31457,11 @@ export function draftAnswer(ctx, env, question) {
             return !!f && ratio(ink, f) < 3;
           });
           if (!lost.length || lost.length === variants.length) continue;
-          o.splice(
-            i,
-            1,
-            ...variants
-              .filter(v => !lost.includes(v))
-              .map(v => ({...st, when: `variant:${v}`})),
-          );
+          const lines = variants
+            .filter(v => !lost.includes(v))
+            .map(v => ({...st, when: `variant:${v}`}));
+          for (const line of lines) textAloneLines.add(line);
+          o.splice(i, 1, ...lines);
           if (!/keep their own text|keeps its own text/.test(d.text))
             d.text += ` (${lost.join(', ')} ${lost.length > 1 ? 'keep their own text' : 'keeps its own text'}: ${st.value} would barely show on ${lost.length > 1 ? 'their' : 'its'} fill; give ${lost.length > 1 ? 'them' : 'it'} a fill too to change ${lost.length > 1 ? 'them' : 'it'})`;
           continue;
@@ -32130,6 +32136,7 @@ export function draftAnswer(ctx, env, question) {
             /^--color-text-(?:primary|secondary)$/.test(st.thing)),
       );
       if (!inks.length || inks.length !== o.length) continue;
+      if (inks.every(st => textAloneLines.has(st))) continue;
       const on = String(inks[0].on);
       if (filled.has(on) || !C.MAP[one(on)] || C.MAP[one(on)]?.media) continue;
       if (inks.some(st => st.value !== inks[0].value)) continue;
