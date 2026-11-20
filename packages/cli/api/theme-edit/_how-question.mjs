@@ -31907,6 +31907,17 @@ export function draftAnswer(ctx, env, question) {
           o.splice(i, 1, ...namedVariants.values());
           continue;
         }
+        // ("badges with a subtle colored background and dark text": a fill
+        // said for the part that the answer writes nowhere gives the text no
+        // ground to be measured on, so the text is not split by variant;
+        // the per-mode pass below keeps it to the mode it reads in.)
+        if (
+          /\b(?:background|fill)\b/.test(q) &&
+          !result
+            .flatMap(r => r.options.flat())
+            .some(x => x.on === st.on && /^background/.test(x.thing))
+        )
+          continue;
         // (Each mode the theme draws: a text color that reads on a
         // variant's fill in one mode only is that mode's; text needs 4.5:1.)
         const modes = /** @type {Array<'light' | 'dark'>} */ (
