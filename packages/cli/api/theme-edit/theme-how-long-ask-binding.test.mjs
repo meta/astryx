@@ -243,3 +243,18 @@ describe('long asks bind each clause to its own part', () => {
     expect(await linesBeyond(answer, 3)).toEqual([]);
   }, 300_000);
 });
+
+describe('icons in a container', () => {
+  // Icons are the app's own content, so a container holds them: both icon
+  // tokens are offered on it, as for any part it holds.
+  it('icons in cards red offers both icon tokens on the card', async test => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      test.skip();
+    }
+    const {data} = await themeEditHow('icons in cards red', {cwd, theme: 'n'});
+    const all = JSON.stringify(data);
+    expect(all).toContain("--color-icon-secondary '#dc2626' --on card");
+    expect(all).toContain("--color-icon-primary '#dc2626' --on card");
+  }, 300_000);
+});

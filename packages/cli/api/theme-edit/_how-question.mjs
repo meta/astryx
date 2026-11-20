@@ -18253,11 +18253,15 @@ export function draftAnswer(ctx, env, question) {
             Object.values(C.MAP[t]?.own ?? {}).some(
               (/** @type {any} */ x) => tok in (x.tokens ?? {}),
             ) || tok in (C.MAP[t]?.inside ?? {});
-          const holdsPart = (FAMILIES[p.on] ?? [p.on]).some(
-            m =>
-              holds.has(m) ||
-              [...holds].some(h => (C.MAP[h]?.contains ?? []).includes(m)),
-          );
+          // (Icons are the app's own content, placed in any container, and
+          // no Core part names them: a container always holds icons.)
+          const holdsPart =
+            p.on === 'icons' ||
+            (FAMILIES[p.on] ?? [p.on]).some(
+              m =>
+                holds.has(m) ||
+                [...holds].some(h => (C.MAP[h]?.contains ?? []).includes(m)),
+            );
           const reached = (/** @type {Step} */ st) =>
             holdsPart || [...holds].some(h => readsTok(h, String(st.thing)));
           const scopable = (/** @type {Step} */ st) =>
