@@ -64,9 +64,7 @@ import {
 import {isColorToken} from './_compiler.mjs';
 import {
   radioCircle,
-  selfSizedBox,
   selfSizedBoxLines,
-  selfSizedWhy,
   sizesItsOwnBox,
   pillShapes,
   DIAL_RADII,
