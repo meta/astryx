@@ -1623,20 +1623,27 @@ for (const rate of [1, 0.25]) {
           await frame();
         }
         // Two frames in a row give the velocity on screen. The new target is
-        // set in the second, within 1 ms of its frame.
+        // set in the second, within 1 ms of its frame. The two frames are at
+        // most 20 ms apart in real time. Over a longer gap, such as a dropped
+        // frame, the spring's own acceleration skews the speed they give.
         return new Promise<Record<string, number>>(resolve => {
-          let previous: {at: number; drawn: number} | null = null;
+          let previous: {at: number; real: number; drawn: number} | null = null;
           let tries = 0;
           const step = () => {
             const at = Number(document.timeline.currentTime);
+            const real = Number(reference.currentTime);
             const drawn = x();
-            const late = performance.now() - Number(reference.currentTime);
-            if (previous == null || (late > 1 && tries < 120)) {
+            const late = performance.now() - real;
+            if (
+              previous == null ||
+              ((late > 1 || real - previous.real > 20) && tries < 120)
+            ) {
               tries += 1;
-              previous = {at, drawn};
+              previous = {at, real, drawn};
               requestAnimationFrame(step);
               return;
             }
+            const gap = real - previous.real;
             const onScreen =
               ((drawn - previous.drawn) / (at - previous.at)) * 1000;
             window.animator.animate({x: 0}, {spring});
@@ -1657,6 +1664,7 @@ for (const rate of [1, 0.25]) {
               resolve({
                 late,
                 tries,
+                gap,
                 drawn,
                 onScreen,
                 from,
@@ -1680,6 +1688,7 @@ for (const rate of [1, 0.25]) {
       description: JSON.stringify(result),
     });
     expect(result.late).toBeLessThanOrEqual(1);
+    expect(result.gap).toBeLessThanOrEqual(20);
     expect(result.slowedBy > 100).toBe(rate < 1);
     expect(result.drawn).toBeGreaterThan(1);
     expect(result.onScreen).toBeGreaterThan(50);
@@ -1975,6 +1984,140 @@ test('in an iframe made after the page, an engine made without its element and d
   expect(result.finished).toBe(false);
   expect(result.after).toBeLessThan(50);
 });
+
+// Engines in two documents can move in one task. Each reads its own
+// document's clock, whichever moves first. Both start at the frame that
+// commits them, and a retarget goes on from the value on screen.
+for (const first of ['the page', 'the iframe'] as const) {
+  test(`an engine in the page and one in an iframe made after it move in one task, ${first} first, each on its own clock`, async ({
+    page,
+  }) => {
+    await open(page);
+    await page.waitForTimeout(1000);
+    const result = await page.evaluate(
+      async ({spring, travel, iframeFirst}) => {
+        const iframe = document.createElement('iframe');
+        iframe.style.cssText =
+          'position: absolute; top: 120px; left: 0; width: 400px; height: 200px; border: 0';
+        iframe.srcdoc = `<!doctype html><style>
+          html, body { margin: 0; }
+          #box { position: absolute; top: 40px; left: 0; width: 48px; height: 48px; background: #36c; }
+        </style><div id="box"></div>`;
+        const loaded = new Promise(resolve => {
+          iframe.addEventListener('load', resolve, {once: true});
+        });
+        document.body.append(iframe);
+        await loaded;
+        const view = iframe.contentWindow as Window & typeof globalThis;
+        const frameBox = view.document.getElementById('box') as HTMLElement;
+        const engines = [
+          {
+            animator: window.animator,
+            box: document.getElementById('box') as HTMLElement,
+            view: window,
+          },
+          {animator: Motion.createMotionEngine(frameBox), box: frameBox, view},
+        ];
+        const ordered = iframeFirst ? [engines[1], engines[0]] : engines;
+        const x = (engine: (typeof engines)[number]) =>
+          Number.parseFloat(
+            engine.view.getComputedStyle(engine.box).translate.split(' ')[0],
+          ) || 0;
+        const reference = new DocumentTimeline();
+        // A timeline at real speed in each document, for how long after its
+        // own frame a read there runs.
+        const references = engines.map(
+          engine => new engine.view.DocumentTimeline(),
+        );
+        const frame = async () =>
+          new Promise<void>(resolve => {
+            requestAnimationFrame(() => resolve());
+          });
+        // From rest, in one task.
+        for (const engine of ordered) {
+          engine.animator.animate({x: travel}, {spring});
+        }
+        for (let i = 0; i < 10; i++) {
+          await frame();
+        }
+        return new Promise<{
+          originGap: number;
+          late: number;
+          drawn: number[];
+          got: number[];
+          since: number[];
+          speed: number[];
+          next: number[];
+        }>(resolve => {
+          let tries = 0;
+          let previous: {at: number; drawn: number[]} | null = null;
+          const step = () => {
+            const at = Number(document.timeline.currentTime);
+            const drawn = engines.map(x);
+            const late = performance.now() - Number(reference.currentTime);
+            if (previous == null || (late > 1 && tries < 120)) {
+              tries += 1;
+              previous = {at, drawn};
+              requestAnimationFrame(step);
+              return;
+            }
+            const before = previous;
+            const got = engines.map(engine => engine.animator.get('x'));
+            const since = engines.map(
+              (engine, index) =>
+                engine.view.performance.now() -
+                Number(references[index].currentTime),
+            );
+            // A retarget of both in one callback, in the same order.
+            for (const engine of ordered) {
+              engine.animator.animate({x: 0}, {spring});
+            }
+            requestAnimationFrame(() => {
+              resolve({
+                originGap: view.performance.timeOrigin - performance.timeOrigin,
+                late,
+                drawn,
+                got,
+                since,
+                speed: drawn.map(
+                  (value, index) =>
+                    ((value - before.drawn[index]) / (at - before.at)) * 1000,
+                ),
+                next: engines.map(x),
+              });
+            });
+          };
+          requestAnimationFrame(step);
+        });
+      },
+      {spring: SLOW, travel: TRAVEL, iframeFirst: first === 'the iframe'},
+    );
+    test.info().annotations.push({
+      type: `two documents, ${first} first`,
+      description: JSON.stringify(result),
+    });
+    expect(result.originGap).toBeGreaterThan(500);
+    expect(result.late).toBeLessThanOrEqual(1);
+    const [pageDrawn, frameDrawn] = result.drawn;
+    // Both started at the frame that committed them, so one spring is drawn
+    // at one place in both documents.
+    expect(pageDrawn).toBeGreaterThan(1);
+    expect(pageDrawn).toBeLessThan(TRAVEL / 2);
+    expect(Math.abs(pageDrawn - frameDrawn)).toBeLessThanOrEqual(5);
+    for (const [index, drawn] of result.drawn.entries()) {
+      // A read runs a little after its frame. The element moves on
+      // meanwhile, at the speed it is drawn moving.
+      const sinceFrame =
+        (Math.abs(result.speed[index]) * Math.max(0, result.since[index])) /
+        1000;
+      expect(Math.abs(result.got[index] - drawn)).toBeLessThanOrEqual(
+        0.5 + sinceFrame,
+      );
+      // The retarget goes on from the value on screen.
+      expect(Math.abs(result.next[index] - drawn)).toBeLessThanOrEqual(10);
+    }
+  });
+}
 
 /** Sets the page's animation speed as DevTools does, through its protocol. */
 async function setTimelineSpeed(page: Page, rate: number) {

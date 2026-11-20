@@ -766,9 +766,9 @@ const MAX_DURATION_MS = 30_000;
 const SAME_VALUE = 1e-6;
 
 /**
- * The task calls from rest are made in, shared by every call made in it
- * (every animator's), so one motion's parts that are separate calls start
- * together (startAfterBlock).
+ * The task calls from rest are made in, shared by every call made in it in
+ * one document (every animator's there). So one motion's parts that are
+ * separate calls start together (startAfterBlock).
  */
 interface TaskMark {
   /**
@@ -788,27 +788,49 @@ interface TaskMark {
   nextFrame?: boolean;
 }
 
-/** The task the current calls from rest are made in, until it ends. */
-let openTask: TaskMark | null = null;
+/**
+ * The tasks the current calls from rest are made in, one per document, each
+ * until it ends.
+ */
+let openTask: Map<Document | undefined, TaskMark> | null = null;
 
 /** How many of the animators' animation-frame callbacks are running now. */
 let frameDepth = 0;
 
-/** The mark of the running task, opened by its first call from rest. */
-function markTask(time: number, clock: () => number): TaskMark {
-  if (openTask == null) {
-    const task: TaskMark = {first: time};
-    openTask = task;
-    queueMicrotask(() => {
-      task.ended = clock();
-      openTask = null;
-    });
+/**
+ * The mark of the running task in `doc`, opened by its first call from rest
+ * there. Each document's mark is on that document's clock.
+ */
+function markTask(
+  time: number,
+  clock: () => number,
+  doc: Document | undefined,
+): TaskMark {
+  const tasks = (openTask ??= new Map());
+  const open = tasks.get(doc);
+  if (open != null) {
+    return open;
   }
-  return openTask;
+  const task: TaskMark = {first: time};
+  tasks.set(doc, task);
+  queueMicrotask(() => {
+    task.ended = clock();
+    tasks.delete(doc);
+    if (openTask === tasks && tasks.size === 0) {
+      openTask = null;
+    }
+  });
+  return task;
 }
 
-/** The first read of the time an animation frame runs, by its timestamp. */
-let frameRead: {readonly frame: number; readonly time: number} | null = null;
+/**
+ * The first read of the time an animation frame runs, by its timestamp, for
+ * each document.
+ */
+let frameRead: {
+  readonly frame: number;
+  readonly time: Map<Document | undefined, number>;
+} | null = null;
 
 /** What names a clock: a caller's own, or the document an engine reads. */
 type ClockSource = (() => number) | Document | undefined;
@@ -889,25 +911,45 @@ function flushSheetReads() {
 
 /**
  * Per animator, the first of its calls that still wait for the frame that
- * commits them. An animator removes its entry once nothing of its waits: a
- * rebuild or a hidden page committed its calls, or it was disposed or moved.
- * The frame's first read takes every entry.
+ * commits them, and its document. An animator removes its entry once nothing
+ * of its waits: a rebuild or a hidden page committed its calls, or it was
+ * disposed or moved. The frame's first read takes every entry.
  */
-const waitingCalls = new Map<object, number>();
-
-/** The first waiting call, read once by the frame with this timestamp. */
-let waitingRead: {readonly frame: number; readonly first: number} | null = null;
+const waitingCalls = new Map<
+  object,
+  {readonly first: number; readonly doc: Document | undefined}
+>();
 
 /**
- * The first call that the animation frame with timestamp `frame` commits.
- * The frame reads it once, so every animator in it judges a late commit from
- * the same call. `own` is the first of the reading animator's calls.
+ * The first waiting call of each document, read once by the frame with this
+ * timestamp.
  */
-function firstCommitted(frame: number | undefined, own: number): number {
+let waitingRead: {
+  readonly frame: number;
+  readonly first: Map<Document | undefined, number>;
+} | null = null;
+
+/**
+ * The first call in `doc` that the animation frame with timestamp `frame`
+ * commits. The frame reads it once, so every animator in it judges a late
+ * commit from the same call. Each document has its own, on its own clock.
+ * `own` is the first of the reading animator's calls.
+ */
+function firstCommitted(
+  frame: number | undefined,
+  own: number,
+  doc: Document | undefined,
+): number {
   if (frame != null && waitingRead?.frame === frame) {
-    return Math.min(waitingRead.first, own);
+    return Math.min(waitingRead.first.get(doc) ?? own, own);
   }
-  const first = Math.min(own, ...waitingCalls.values());
+  const first = new Map<Document | undefined, number>([[doc, own]]);
+  for (const call of waitingCalls.values()) {
+    first.set(
+      call.doc,
+      Math.min(first.get(call.doc) ?? call.first, call.first),
+    );
+  }
   // The frame commits every call that waits now. An animator whose look
   // never runs, such as one on another frame source, counts once at most.
   waitingCalls.clear();
@@ -921,34 +963,45 @@ function firstCommitted(frame: number | undefined, own: number): number {
       }
     }, 0);
   }
-  return first;
+  return first.get(doc) ?? own;
 }
 
 /**
- * The time the animation frame with timestamp `frame` runs, read once in
- * that frame. Every animator's callback in the frame takes that read, so the
- * calls from rest that one frame commits start together. A long callback
- * before them does not move their start. A call on a moving element keeps
- * its own clock. The read ends with the frame's task, so a frame
- * source that repeats a timestamp still reads each frame anew. A frame
- * source with no timestamp reads the clock.
+ * The time the animation frame with timestamp `frame` runs in `doc`, read
+ * once in that frame. Every animator's callback in the frame takes that
+ * read, so the calls from rest that one frame commits start together. A long
+ * callback before them does not move their start. Each document has its own
+ * read, on its own clock. A call on a moving element keeps its own clock.
+ * The read ends with the frame's task, so a frame source that repeats a
+ * timestamp still reads each frame anew. A frame source with no timestamp
+ * reads the clock.
  */
-function frameTime(frame: number | undefined, clock: () => number): number {
+function frameTime(
+  frame: number | undefined,
+  clock: () => number,
+  doc: Document | undefined,
+): number {
   if (frame == null) {
     return clock();
   }
-  if (frameRead?.frame === frame) {
-    return frameRead.time;
+  let read = frameRead;
+  if (read == null || read.frame !== frame) {
+    const fresh = {frame, time: new Map<Document | undefined, number>()};
+    read = fresh;
+    frameRead = fresh;
+    // A browser runs every callback of a frame before its next task.
+    setTimeout(() => {
+      if (frameRead === fresh) {
+        frameRead = null;
+      }
+    }, 0);
   }
-  const read = {frame, time: clock()};
-  frameRead = read;
-  // A browser runs every callback of a frame before its next task.
-  setTimeout(() => {
-    if (frameRead === read) {
-      frameRead = null;
-    }
-  }, 0);
-  return read.time;
+  let time = read.time.get(doc);
+  if (time === undefined) {
+    time = clock();
+    read.time.set(doc, time);
+  }
+  return time;
 }
 
 /**
@@ -1303,11 +1356,14 @@ export function createMotionEngine(
   // unmount too.
   let clockDocument = element?.ownerDocument;
   const now = options.now ?? (() => motionNow(clockDocument));
-  // What names its clock, so engines on one document share call times.
-  const clockSource = (): ClockSource =>
-    options.now ??
-    clockDocument ??
+  // The document whose time base the clock reads, which keys the reads that
+  // engines share. A caller's own clock counts as the page's. The `now`
+  // option is a clock on the document timeline's time base.
+  const clockDoc = (): Document | undefined =>
+    (options.now == null ? clockDocument : undefined) ??
     (typeof document === 'undefined' ? undefined : document);
+  // What names its clock, so engines on one clock share call times.
+  const clockSource = (): ClockSource => options.now ?? clockDoc();
   const frameSource =
     options.requestFrame ??
     (typeof requestAnimationFrame === 'function'
@@ -2184,7 +2240,10 @@ export function createMotionEngine(
             animation.startTime == null &&
             animation.playState === 'running'
           ) {
-            (waiting.latest ??= new Map()).set(channel, frameTime(frame, now));
+            (waiting.latest ??= new Map()).set(
+              channel,
+              frameTime(frame, now, clockDoc()),
+            );
           }
         });
       }
@@ -2908,7 +2967,7 @@ export function createMotionEngine(
     // The task that creates the animations, not the call's: a presented
     // call's is its second frame's callback, wherever in its frame the call
     // was made.
-    group.task = markTask(now(), now);
+    group.task = markTask(now(), now, clockDoc());
     // The call's `start: 'next-frame'` marks its task, so the calls made
     // before the task's first microtask move together. A call after it opens
     // a new mark.
@@ -2952,7 +3011,7 @@ export function createMotionEngine(
       if (group.resolved) {
         return;
       }
-      const at = frameTime(frame, now);
+      const at = frameTime(frame, now, clockDoc());
       if (
         group.madeInFrame !== true &&
         // A call made in an input event's own task says so with
@@ -3129,8 +3188,7 @@ export function createMotionEngine(
    * keeps the browser's start.
    */
   const startAfterBlock = (group: StartGroup, start: number): number => {
-    const doc =
-      clockDocument ?? (typeof document === 'undefined' ? undefined : document);
+    const doc = clockDoc();
     const timeline = doc?.timeline?.currentTime as number | null | undefined;
     // A start well after the animations were created is the browser's
     // commit of them.
@@ -3605,7 +3663,7 @@ export function createMotionEngine(
     if (first === Infinity) {
       waitingCalls.delete(waitKey);
     } else {
-      waitingCalls.set(waitKey, first);
+      waitingCalls.set(waitKey, {first, doc: clockDoc()});
     }
   };
 
@@ -3836,12 +3894,13 @@ export function createMotionEngine(
     if (target == null) {
       return;
     }
-    const at = frameTime(frame, now);
+    const at = frameTime(frame, now, clockDoc());
     const late =
       at -
         firstCommitted(
           frame,
           Math.min(...entries.map(([, entry]) => entry.since)),
+          clockDoc(),
         ) >
       LATE_START_MS;
     const changed: MotionProperty[] = [];
