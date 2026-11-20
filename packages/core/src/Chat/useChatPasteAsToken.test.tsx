@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file useChatPasteAsToken.test.ts
+ * @file useChatPasteAsToken.test.tsx
  * @input Uses vitest, @testing-library/react, useChatPasteAsToken hook
  * @output Unit tests for the paste-as-token threshold and token factory
  * @position Testing; validates useChatPasteAsToken.ts implementation
@@ -11,6 +11,8 @@
 
 import {describe, it, expect, vi} from 'vitest';
 import {renderHook} from '@testing-library/react';
+import type {ReactNode} from 'react';
+import {InternationalizationProvider} from '../i18n';
 import {useChatPasteAsToken} from './useChatPasteAsToken';
 import type {
   ChatComposerInputHandle,
@@ -187,5 +189,43 @@ describe('useChatPasteAsToken — unattached input', () => {
     const {result} = renderHook(() => useChatPasteAsToken({inputRef: ref}));
 
     expect(() => result.current.onPaste(pasteEvent, chars(201))).not.toThrow();
+  });
+});
+
+describe('useChatPasteAsToken — default token label', () => {
+  it('labels the token with the catalog count message', () => {
+    const {ref, insertToken} = makeInputRef();
+    const {result} = renderHook(() => useChatPasteAsToken({inputRef: ref}));
+    result.current.onPaste(pasteEvent, `${chars(150)}\n${chars(149)}`);
+    expect(insertToken).toHaveBeenCalledWith(
+      expect.objectContaining({label: '2 lines, 300 chars'}),
+    );
+    result.current.onPaste(pasteEvent, chars(1234));
+    expect(insertToken).toHaveBeenLastCalledWith(
+      expect.objectContaining({label: '1234 chars'}),
+    );
+  });
+
+  it('labels the token in the provider language', () => {
+    const {ref, insertToken} = makeInputRef();
+    const wrapper = ({children}: {children: ReactNode}) => (
+      <InternationalizationProvider
+        locale="fr"
+        overrides={{
+          fr: {
+            '@astryx.chat.pastedText.label':
+              '{lines, plural, =1 {{chars} car.} other {{lines} lignes, {chars} car.}}',
+          },
+        }}>
+        {children}
+      </InternationalizationProvider>
+    );
+    const {result} = renderHook(() => useChatPasteAsToken({inputRef: ref}), {
+      wrapper,
+    });
+    result.current.onPaste(pasteEvent, chars(201));
+    expect(insertToken).toHaveBeenCalledWith(
+      expect.objectContaining({label: '201 car.'}),
+    );
   });
 });

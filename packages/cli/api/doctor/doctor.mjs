@@ -114,6 +114,8 @@ import {
 import {
   keptFileCheck,
   THEME_WIRING_CODEC,
+  CORE_PROPS_CODEC,
+  BUTTON_ACTIONS_CODEC,
   alignCommand,
   addCliCommandFor,
   dependencyInstallFor,
@@ -3193,7 +3195,7 @@ export function checkGatherCache(ctx) {
     label: 'Kept catalog cache',
     status: 'info',
     brief: `${entries} (${size}) in ${summary.dir}. \`${formatCliCommand('doctor --json', ctx.cwd)}\` lists every kept item and the size limits. To clear the caches, run: ${removeFolderCommand(kept)}.`,
-    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list and whether the installed Core still matches the stored one, Core's and integrations' components with the doc parts the component matcher scores, Core hooks' declared keywords, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys, token names and settings the browser won't show as written, the lookup commands' not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, what template reads from a template's source to name the components it uses, discover's record of the integrations a project loads and what each adds, and what it searches in its sources' saved copies, which search's discover line reads, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${entries}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, the installed CLI's own files judged by its build id and folder (an upgrade, a reinstall or a copy in another folder changes them; in-place edits aren't supported), and deleting the folder clears it. A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's \`integration check\` of itself, for npm's list. On Linux, when a debug handler is set, runs also keep the locale and time zone here. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB, dropping oldest entries first; the transpile cache in ${summary.transpiledDir} keeps its copies in ${SUBFOLDERS} subfolders, each holding at most 1/${SUBFOLDERS} of that, and drops the copies made longest ago first.`,
+    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list and whether the installed Core still matches the stored one, Core's and integrations' components with the doc parts the component matcher scores, Core hooks' declared keywords, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys, token names and settings the browser won't show as written, the lookup commands' not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, what template reads from a template's source to name the components it uses, discover's record of the integrations a project loads and what each adds, and what it searches in its sources' saved copies, which search's discover line reads, doctor's docs checks and theme-wiring scan, what doctor's Core-props check finds in the project's source files, keyed by the folders it lists and the files it reads, and by the TypeScript, Core and project-config versions it used, and what doctor's Core-button check finds in the project's source files, keyed by the folders it lists and the files it reads, and by the installed packages and Node.js version it used) in ${summary.dir} (${entries}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, the installed CLI's own files judged by its build id and folder (an upgrade, a reinstall or a copy in another folder changes them; in-place edits aren't supported), and deleting the folder clears it. A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's \`integration check\` of itself, for npm's list. On Linux, when a debug handler is set, runs also keep the locale and time zone here. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB, dropping oldest entries first; the transpile cache in ${summary.transpiledDir} keeps its copies in ${SUBFOLDERS} subfolders, each holding at most 1/${SUBFOLDERS} of that, and drops the copies made longest ago first.`,
   };
 }
 
@@ -3535,19 +3537,32 @@ export async function runChecks(options = {}) {
   }
 
   // The props scan reads the app's source, Core's docs, and Core's types
-  // with the project's TypeScript; a scan that fails leaves the check out.
+  // with the project's TypeScript, and runs nothing, so it is kept like the
+  // docs checks; a scan that fails leaves the check out.
   if (readsCore) {
     try {
-      ctx.coreProps = await findUnknownCoreProps(findPackageRoot(cwd) ?? cwd);
+      const projectDir = findPackageRoot(cwd) ?? cwd;
+      ctx.coreProps = await keptFileCheck(
+        {name: 'core-props', ...where},
+        () => findUnknownCoreProps(projectDir),
+        CORE_PROPS_CODEC,
+      );
     } catch {
       ctx.coreProps = null;
     }
   }
 
-  // A project on Core scans its own source for buttons that do nothing.
+  // A project on Core scans its own source for buttons that do nothing. The
+  // scan reads only files and folders and runs nothing, so it is kept like
+  // the docs checks.
   if (readsCore) {
     try {
-      ctx.buttonActions = findButtonsWithoutAction(findPackageRoot(cwd) ?? cwd);
+      const projectDir = findPackageRoot(cwd) ?? cwd;
+      ctx.buttonActions = await keptFileCheck(
+        {name: 'button-actions', ...where},
+        async () => findButtonsWithoutAction(projectDir),
+        BUTTON_ACTIONS_CODEC,
+      );
     } catch {
       // A scan that fails leaves the check out.
       ctx.buttonActions = null;
