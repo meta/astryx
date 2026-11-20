@@ -159,7 +159,7 @@ async function loadThemeFont(page: Page, theme: string, font: string) {
 }
 
 for (const [theme, font] of THEME_FONTS) {
-  test(`the track keeps its length in ${theme}'s ${font}, at each end, between them and in a range`, async ({
+  test(`the track keeps its length in ${theme}'s ${font}, at every value, in a range, a fractional step and a word scale`, async ({
     page,
   }) => {
     await mount(page, 'core-slider--custom-step', 'ltr');
@@ -191,6 +191,22 @@ for (const [theme, font] of THEME_FONTS) {
       ...(await widthsWhilePressing(page, start, 'PageUp', 12)),
     ]);
     expect([...range]).toHaveLength(1);
+
+    // A fractional step: the value one step in ("0.1") is wider than both ends.
+    const opacity = page.getByRole('slider', {name: 'Opacity'});
+    await opacity.focus();
+    await page.keyboard.press('Home');
+    expect([
+      ...(await widthsWhilePressing(page, opacity, 'ArrowRight', 10)),
+    ]).toHaveLength(1);
+
+    // A word scale whose widest word ("Not good") is between the ends.
+    const rating = page.getByRole('slider', {name: 'Rating'});
+    await rating.focus();
+    await page.keyboard.press('Home');
+    expect([
+      ...(await widthsWhilePressing(page, rating, 'ArrowRight', 4)),
+    ]).toHaveLength(1);
   });
 }
 

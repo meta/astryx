@@ -1677,22 +1677,37 @@ export function Slider({ref, ...props}: SliderProps) {
   const fillEnd = getPercent(values[isRange ? 1 : 0], min, max) / 100;
   const fillStyle: FillStyle = {[FILL_START]: fillStart, [FILL_END]: fillEnd};
 
+  const longestText = useMemo(() => {
+    if (valueDisplay !== 'text') {
+      return 0;
+    }
+    const format = formatValue ?? String;
+    const count = step > 0 ? Math.floor((max - min) / step) : 0;
+    const shown =
+      count <= 200
+        ? Array.from({length: count + 1}, (_, i) => min + i * step)
+        : [min, min + step, max - step];
+    return Math.max(
+      ...[...shown, max].map(
+        value => format(clamp(snapToStep(value, min, step), min, max)).length,
+      ),
+    );
+  }, [valueDisplay, formatValue, min, max, step]);
+
   // Text value display. The box has a floor of one ch per character of the
-  // longer end text, plus one ch, and the text sits at its end. The track then
-  // keeps one length while the value changes and while a thumb is dragged, so
-  // the thumb stays under the pointer. A value text longer than both ends
-  // (a custom format) can still widen the box.
+  // longest text a value shows, plus one ch, and the text sits at its end. The
+  // track then keeps one length while the value changes and while a thumb is
+  // dragged, so the thumb stays under the pointer. Up to 200 steps, every
+  // value is formatted to find the longest text; above that, the ends and the
+  // values one step in from them.
   let textDisplay = null;
   if (valueDisplay === 'text') {
     const texts = values.map(displayValue);
-    const longest = Math.max(
-      ...[min, max].map(value => displayValue(value).length),
-    );
     textDisplay = (
       <span
         {...stylex.props(
           styles.textValue,
-          styles.textValueReserve(`${texts.length * (longest + 3) - 2}ch`),
+          styles.textValueReserve(`${texts.length * (longestText + 3) - 2}ch`),
         )}>
         {texts.join(' – ')}
       </span>
