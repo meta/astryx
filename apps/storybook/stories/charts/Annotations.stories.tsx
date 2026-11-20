@@ -11,7 +11,14 @@ import {
   ChartGrid,
   ChartAxis,
 } from '@astryxdesign/charts';
-import {salesData, predictionData} from './_data';
+import {
+  apiErrorRateData,
+  conversionTestData,
+  cpuUtilizationData,
+  latencyByConcurrencyData,
+  salesData,
+  signupForecastData,
+} from './_data';
 
 /**
  * Annotations mark values on a chart: targets, ranges, events, uncertainty.
@@ -35,16 +42,21 @@ const axes = (
   </>
 );
 
-/** A single horizontal reference line at a fixed y value. */
+/**
+ * A horizontal reference line marks a fixed threshold, here a 1% service
+ * level objective (SLO). Two hours breach it: 09:00 and 15:00. Check: the
+ * dashed line sits at 1% with its label, and exactly two bars cross it.
+ */
 export const ReferenceLine: StoryObj = {
   render: () => (
     <Chart
-      data={salesData}
-      xKey="month"
-      title="Sales vs target"
+      data={apiErrorRateData}
+      xKey="hour"
+      title="API error rate"
+      subtitle="Percent of requests that failed, by hour of day"
       series={[
-        bar('sales', {color: '#3b82f6'}),
-        referenceLine({y: 50, label: 'Target', color: '#ef4444'}),
+        bar('errorRate', {color: '#3b82f6', label: 'Error rate'}),
+        referenceLine({y: 1, label: 'SLO 1%', color: '#ef4444'}),
       ]}
       grid={<ChartGrid />}
       axes={axes}
@@ -53,22 +65,28 @@ export const ReferenceLine: StoryObj = {
   ),
 };
 
-/** A shaded band between two y values (y + y2). */
+/**
+ * A reference range (`y` + `y2`) shades a band between two values, here the
+ * healthy CPU range of 40–70%. Utilization falls below the range at night and
+ * rises above it at midday and in the early evening. Check: the band spans
+ * 40–70% and the line leaves it on both sides.
+ */
 export const ReferenceRange: StoryObj = {
   render: () => (
     <Chart
-      data={salesData}
-      xKey="month"
-      title="Acceptable range"
+      data={cpuUtilizationData}
+      xKey="hour"
+      title="CPU utilization"
+      subtitle="Percent of capacity, by hour of day. Shaded: healthy range, 40–70%"
       series={[
-        bar('sales', {color: '#3b82f6'}),
         referenceLine({
           y: 40,
-          y2: 60,
-          label: 'Acceptable',
+          y2: 70,
+          label: 'Healthy',
           color: '#22c55e',
           bandOpacity: 0.12,
         }),
+        line('cpu', {color: '#3b82f6', label: 'CPU'}),
       ]}
       grid={<ChartGrid />}
       axes={axes}
@@ -77,16 +95,25 @@ export const ReferenceRange: StoryObj = {
   ),
 };
 
-/** A vertical reference line at a fixed x value (linear x scale only). */
+/**
+ * A vertical reference line (`x`) marks a value on a numeric x axis, here the
+ * tested capacity of 800 concurrent users. Latency rises steeply above it.
+ * Check: the x axis is numeric, and the line sits at 800 users.
+ */
 export const VerticalReferenceLine: StoryObj = {
   render: () => (
     <Chart
-      data={predictionData}
-      xKey="x"
-      title="Event marker"
+      data={latencyByConcurrencyData}
+      xKey="users"
+      title="Latency under load"
+      subtitle="95th-percentile response time (ms) by concurrent users"
       series={[
-        line('mean', {color: '#3b82f6'}),
-        referenceLine({x: 10, label: 'Launch', color: '#6b1efd'}),
+        line('p95LatencyMs', {
+          color: '#3b82f6',
+          dots: true,
+          label: 'p95 latency',
+        }),
+        referenceLine({x: 800, label: 'Capacity', color: '#6b1efd'}),
       ]}
       grid={<ChartGrid />}
       axes={axes}
@@ -95,28 +122,36 @@ export const VerticalReferenceLine: StoryObj = {
   ),
 };
 
-/** Confidence bands (80% + 95%) around a forecast line. */
+/**
+ * Nested bands show forecast uncertainty: the inner band is the 80% interval
+ * and the outer band is the 95% interval. Both widen as the forecast goes
+ * further out. Check: the forecast starts where the actuals end (week 8), and
+ * the inner band stays inside the outer band.
+ */
 export const ConfidenceBand: StoryObj = {
   render: () => (
     <Chart
-      data={predictionData}
-      xKey="x"
-      title="Forecast with confidence bands"
+      data={signupForecastData}
+      xKey="week"
+      title="Weekly signups"
+      subtitle="Signups per week. Weeks 1–8 actual; weeks 9–20 forecast with 80% and 95% intervals"
       series={[
         band({
           upper: 'upper95',
           lower: 'lower95',
-          color: '#3b82f6',
+          color: '#f59e0b',
           opacity: 0.12,
         }),
         band({
           upper: 'upper80',
           lower: 'lower80',
-          color: '#3b82f6',
+          color: '#f59e0b',
           opacity: 0.22,
         }),
-        line('mean', {color: '#3b82f6', strokeWidth: 2}),
+        line('actual', {color: '#3b82f6', strokeWidth: 2, label: 'Actual'}),
+        line('forecast', {color: '#f59e0b', strokeWidth: 2, label: 'Forecast'}),
       ]}
+      legend
       grid={<ChartGrid />}
       axes={axes}
       height={320}
@@ -124,16 +159,22 @@ export const ConfidenceBand: StoryObj = {
   ),
 };
 
-/** Error bars pair with a value mark (here, bars) to show a high/low range. */
+/**
+ * Error bars pair with a value mark (here, bars) to show a range, here the
+ * 95% confidence interval of each variant. Only Variant C's interval does not
+ * overlap Control's. Check: each bar has a whisker, and Variant C's lower cap
+ * is above Control's upper cap.
+ */
 export const ErrorBars: StoryObj = {
   render: () => (
     <Chart
-      data={salesData}
-      xKey="month"
-      title="Sales with error bars"
+      data={conversionTestData}
+      xKey="variant"
+      title="Checkout conversion by variant"
+      subtitle="Percent of sessions that converted, with 95% confidence intervals"
       series={[
-        bar('sales', {color: '#3b82f6'}),
-        errorBar({high: 'errorHigh', low: 'errorLow', color: '#1e3a5f'}),
+        bar('conversionRate', {color: '#3b82f6', label: 'Conversion rate'}),
+        errorBar({high: 'ciHigh', low: 'ciLow', color: '#1e3a5f'}),
       ]}
       grid={<ChartGrid />}
       axes={axes}

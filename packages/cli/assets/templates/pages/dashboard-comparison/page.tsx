@@ -55,11 +55,11 @@ import {
 import {
   ArrowUpIcon,
   ArrowDownIcon,
-  ArrowDownTrayIcon,
+  DownloadIcon,
   UsersIcon,
-  CursorArrowRaysIcon,
-} from '@heroicons/react/24/outline';
-import {StopIcon} from '@heroicons/react/24/solid';
+  ClickIcon,
+} from '@astryxdesign/template-icons';
+import {StopIcon} from '@astryxdesign/template-icons/24/solid';
 
 // ============= TYPES =============
 
@@ -105,7 +105,7 @@ const COLORS = {
 const GRID_STROKE = 'var(--color-border, rgba(5, 54, 89, 0.1))';
 const AXIS_TICK = {
   fontSize: 'var(--font-size-sm, 12px)',
-  fill: 'var(--color-text-secondary, #4E606F)',
+  fill: 'var(--color-text-secondary, #445564)',
 };
 
 // ============= DETERMINISTIC SERIES =============
@@ -547,7 +547,9 @@ function ActiveUsersTrend() {
             tick={AXIS_TICK}
             axisLine={false}
             tickLine={false}
-            width={40}
+            // Holds the widest tick label ("1200K") at the touch type size
+            // without a layout pass, so the chart edge does not clip it.
+            width={56}
             unit="K"
           />
           <Tooltip
@@ -821,7 +823,7 @@ export default function DataDashboardPage() {
               <Button
                 label="Export"
                 variant="secondary"
-                icon={<Icon icon={ArrowDownTrayIcon} size="sm" />}
+                icon={<Icon icon={DownloadIcon} size="sm" />}
                 onClick={() =>
                   // Demo only: replace this toast with the call that performs the action.
                   showToast({
@@ -857,7 +859,7 @@ export default function DataDashboardPage() {
               <SectionHeading
                 title="Devices"
                 hint="Daily active users (thousands)"
-                icon={CursorArrowRaysIcon}
+                icon={ClickIcon}
               />
               <Card padding={6}>
                 <VStack gap={6}>

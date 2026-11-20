@@ -30,13 +30,13 @@ import {PAGE_EXTENSIONS, embeddedPathProblem, renderToFile, reverseToFile} from 
  * @returns {Promise<import('./render.type.mjs').RenderPageResponse | import('./render.type.mjs').RenderReverseResponse>}
  */
 export async function render(file, options = {}) {
-  const {cwd = process.cwd(), reverse = false, overwrite = false, title} = options;
+  const {cwd = process.cwd(), reverse = false, overwrite = false, title, keepClassNames = false} = options;
   if (typeof file !== 'string' || !file.trim()) {
     throw new AstryxError(
       reverse ? 'A rendered HTML file is required' : 'A page file is required',
       [
         reverse
-          ? {name: 'astryx experimental export --reverse page.html', reason: 'turn a rendered file back into a page'}
+          ? {name: 'astryx experimental import page.html', reason: 'turn a rendered file back into a page'}
           : {name: 'astryx experimental export page.tsx', reason: 'export a page as one HTML file'},
       ],
       ERROR_CODES.ERR_MISSING_ARGUMENT,
@@ -55,16 +55,19 @@ export async function render(file, options = {}) {
     if (title != null) {
       throw new AstryxError('--title applies only to rendering, not to --reverse', [], ERROR_CODES.ERR_INVALID_ARGUMENT);
     }
+    if (keepClassNames) {
+      throw new AstryxError('keepClassNames applies only to rendering, not to reverse', [], ERROR_CODES.ERR_INVALID_ARGUMENT);
+    }
     if (!/\.html?$/i.test(input)) {
       throw new AstryxError(
-        `--reverse reads a rendered .html file; ${file} is not one`,
+        `Turning a file back into a page reads a rendered .html file; ${file} is not one`,
         [{name: `astryx experimental export ${file}`, reason: 'export the page instead'}],
         ERROR_CODES.ERR_INVALID_ARGUMENT,
       );
     }
     if (output && !PAGE_EXTENSIONS.includes(path.extname(output).toLowerCase())) {
       throw new AstryxError(
-        `--out for --reverse must be a page module (${PAGE_EXTENSIONS.join(', ')})`,
+        `When turning a file back into a page, --out must be a page module (${PAGE_EXTENSIONS.join(', ')})`,
         [],
         ERROR_CODES.ERR_INVALID_ARGUMENT,
       );
@@ -74,7 +77,7 @@ export async function render(file, options = {}) {
       : null;
     if (output && outProblem) {
       throw new AstryxError(
-        `--out for --reverse must name a page module, not ${outProblem.reason}`,
+        `When turning a file back into a page, --out must name a page module, not ${outProblem.reason}`,
         [],
         ERROR_CODES.ERR_INVALID_ARGUMENT,
       );
@@ -87,17 +90,17 @@ export async function render(file, options = {}) {
   if (!PAGE_EXTENSIONS.includes(path.extname(input).toLowerCase())) {
     throw new AstryxError(
       /\.html?$/i.test(input)
-        ? `${file} is already HTML; pass --reverse to turn it back into a page`
+        ? `${file} is already HTML; turn it back into a page with experimental import`
         : `render reads a page module (${PAGE_EXTENSIONS.join(', ')}); ${file} is not one`,
       /\.html?$/i.test(input)
-        ? [{name: `astryx experimental export --reverse ${file}`, reason: 'turn it back into a page'}]
+        ? [{name: `astryx experimental import ${file}`, reason: 'turn it back into a page'}]
         : [],
       ERROR_CODES.ERR_INVALID_ARGUMENT,
     );
   }
   if (overwrite) {
     throw new AstryxError(
-      '--overwrite applies only to --reverse; rendering replaces an existing HTML file only when a render wrote it',
+      '--overwrite applies only to turning a file back into a page (experimental import); rendering replaces an existing HTML file only when a render wrote it',
       [],
       ERROR_CODES.ERR_INVALID_ARGUMENT,
     );
@@ -108,6 +111,6 @@ export async function render(file, options = {}) {
   const target = output ?? input.replace(/\.[^.]+$/, '.html');
   return {
     type: 'render.page',
-    data: await renderToFile({cwd, input, output: target, title, absolute: Boolean(options.out) && path.isAbsolute(/** @type {string} */ (options.out))}),
+    data: await renderToFile({cwd, input, output: target, title, keepClassNames, absolute: Boolean(options.out) && path.isAbsolute(/** @type {string} */ (options.out))}),
   };
 }

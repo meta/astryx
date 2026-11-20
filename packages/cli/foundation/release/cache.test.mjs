@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect, afterEach} from 'vitest';
-import {spawn} from 'node:child_process';
+import {spawn, spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import fsMutable from 'node:fs';
 import {syncBuiltinESMExports} from 'node:module';
@@ -18,6 +18,8 @@ import {
   npmCommand,
   resolveLatestRelease,
   runNpm,
+  npmEnvironment,
+  readNpmNoProxy,
   tryLock,
   endRecordedInstall,
   isReleaseInstall,
@@ -1164,6 +1166,79 @@ const waitFor = async (done, ms) => {
   return done();
 };
 
+describe("npm's own noproxy setting", () => {
+  /** npm as a script that answers `config get noproxy` with `answer`. */
+  const npmAnswering = (/** @type {string} */ answer, status = 0) => ({
+    command: process.execPath,
+    prefix: [
+      '-e',
+      `process.stdout.write(${JSON.stringify(answer)}); process.exit(${status});`,
+    ],
+    shell: /** @type {const} */ (false),
+  });
+
+  it('is read from npm, and is none when npm sets none or cannot say', () => {
+    expect(readNpmNoProxy(npmAnswering('localhost,127.0.0.1,::1\n'))).toBe(
+      'localhost,127.0.0.1,::1',
+    );
+    expect(readNpmNoProxy(npmAnswering('\n'))).toBeNull();
+    expect(readNpmNoProxy(npmAnswering('null\n'))).toBeNull();
+    expect(readNpmNoProxy(npmAnswering('localhost', 1))).toBeNull();
+  });
+
+  it('replaces a NO_PROXY that names the registry, so npm uses the proxy it is configured with', () => {
+    const shell = {
+      PATH: '/usr/bin',
+      NO_PROXY: 'localhost,.example.net',
+      no_proxy: 'localhost,.example.net',
+      npm_config_proxy: 'http://proxy.example:8080',
+    };
+    expect(npmEnvironment(shell, 'localhost')).toEqual({
+      ...shell,
+      NO_PROXY: 'localhost',
+      no_proxy: 'localhost',
+    });
+    // Nothing set in npm, or the same list: the shell's stands.
+    expect(npmEnvironment(shell, null)).toBe(shell);
+    expect(
+      npmEnvironment(
+        {NO_PROXY: 'localhost', no_proxy: 'localhost'},
+        'localhost',
+      ),
+    ).toEqual({NO_PROXY: 'localhost', no_proxy: 'localhost'});
+  });
+
+  it('reaches the npm runNpm starts, through the guard it runs under', () => {
+    const shell = {
+      NO_PROXY: process.env.NO_PROXY,
+      no_proxy: process.env.no_proxy,
+    };
+    process.env.NO_PROXY = '.example.net';
+    process.env.no_proxy = '.example.net';
+    try {
+      const result = runNpm(['view'], {
+        timeoutMs: 30_000,
+        noProxy: 'localhost',
+        npm: {
+          command: process.execPath,
+          prefix: [
+            '-e',
+            'process.stdout.write(`${process.env.NO_PROXY}|${process.env.no_proxy}`);',
+          ],
+          shell: false,
+        },
+      });
+      expect(result.status).toBe(0);
+      expect(result.stdout).toBe('localhost|localhost');
+    } finally {
+      for (const [name, value] of Object.entries(shell)) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
+  });
+});
+
 describe('runNpm time limit', () => {
   it('ends a package manager that ignores SIGTERM, leaving no process behind', async () => {
     const marker = tempDir('npm-pid');
@@ -1269,4 +1344,63 @@ describe('no install outlives its run', () => {
       await waitFor(() => !alive(/** @type {number} */ (leftover.pid)), 5_000),
     ).toBe(true);
   }, 30_000);
+});
+
+describe('a stop signal during the install', () => {
+  const CACHE = new URL('./cache.mjs', import.meta.url).href;
+  /**
+   * Run `ensureRelease` in a child Node with a stand-in npm, at the top level
+   * or inside an I/O callback, and print what the run does after it.
+   * @param {'term-during-install' | 'npm-stopped'} what
+   * @param {'top' | 'io-callback'} where
+   */
+  const child = (what, where) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-stop-'));
+    const script = path.join(dir, 'run.mjs');
+    fs.writeFileSync(
+      script,
+      `import * as fs from 'node:fs';
+import {ensureRelease, settleSignals} from ${JSON.stringify(CACHE)};
+const run = args => {
+  if (args[0] !== 'install')
+    return {status: 0, stdout: 'https://registry.example/\\n', stderr: ''};
+  if (${JSON.stringify(what)} === 'npm-stopped')
+    return {status: null, signal: 'SIGINT', stdout: '', stderr: ''};
+  // A signal sent to this process while npm runs synchronously.
+  process.kill(process.pid, 'SIGTERM');
+  return {status: 1, stdout: '', stderr: 'npm error code ECONNREFUSED'};
+};
+const go = async () => {
+  const release = ensureRelease('0.6.8', {cacheDir: ${JSON.stringify(dir)}, run});
+  console.log('returned', 'reason' in release);
+  await settleSignals();
+  console.log('answered');
+};
+if (${JSON.stringify(where)} === 'io-callback') fs.readFile(${JSON.stringify(script)}, () => go());
+else go();
+`,
+    );
+    try {
+      return spawnSync(process.execPath, [script], {
+        encoding: 'utf-8',
+        timeout: 60_000,
+      });
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  };
+
+  for (const where of /** @type {const} */ (['top', 'io-callback'])) {
+    it(`stops the run before it answers (${where})`, () => {
+      const result = child('term-during-install', where);
+      expect(result.signal).toBe('SIGTERM');
+      expect(result.stdout).not.toContain('answered');
+    });
+  }
+
+  it('ends the run at once when the signal stopped npm', () => {
+    const result = child('npm-stopped', 'io-callback');
+    expect(result.signal).toBe('SIGINT');
+    expect(result.stdout).toBe('');
+  });
 });

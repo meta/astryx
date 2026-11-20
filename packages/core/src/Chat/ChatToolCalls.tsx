@@ -44,6 +44,11 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Chat/ChatToolCalls.generated';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 
@@ -571,6 +576,13 @@ export function ChatToolCalls(props: ChatToolCallsProps) {
     ref,
     ...rest
   } = props;
+  if (process.env.NODE_ENV !== 'production' && !Array.isArray(calls)) {
+    throw devPropError(
+      'ChatToolCalls',
+      'calls',
+      "must be an array of tool calls, for example calls={[{name: 'search', status: 'complete'}]}.",
+    );
+  }
 
   const autoDefault = defaultIsExpanded ?? false;
   const [internalExpanded, setInternalExpanded] = useState(autoDefault);

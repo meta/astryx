@@ -2573,7 +2573,11 @@ describe('Pagination', () => {
         // A router sets the page after the click, so `onChange` keeps none.
         const {rerender} = render(<LinksBesideButton />);
         screen.getByRole('link', {name: 'Go to next page'}).focus();
-        await user.keyboard('{Enter}');
+        // The press shows page 3 at once and goes back to the controlled page
+        // when its transition ends. The assertion waits for that end.
+        await act(async () => {
+          await user.keyboard('{Enter}');
+        });
         // The page did not arrive: Next shows page 2 again, as a link.
         expect(
           screen.getByRole('link', {name: 'Go to next page'}),

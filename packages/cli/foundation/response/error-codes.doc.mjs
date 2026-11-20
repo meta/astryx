@@ -248,7 +248,7 @@ export const doc = {
     {
       value: 'ERR_DEP_MISSING',
       description:
-        'A required external dependency (e.g. jscodeshift) is missing.',
+        'A required external dependency (e.g. jscodeshift) is missing, or an installed package needs a package it declares that is not installed (a broken install; installing again repairs it).',
     },
 
     // GitHub CLI
@@ -365,19 +365,19 @@ export const doc = {
       value: 'ERR_RENDER_NOT_ASTRYX',
       stability: 'experimental',
       description:
-        '`export --reverse` was given a file that a render did not write, with no embedded source and no Astryx markup. Nothing was written. Raised only by the experimental export command.',
+        '`experimental export` was given a page that uses no Astryx components or styles (its script holds no module of an Astryx package and it imports no Astryx stylesheet), or `experimental import` (or `export --reverse`) was given a file that a render did not write, with no embedded source and no Astryx markup. Nothing was written; don\'t add Astryx to such an app to export it: share the page with the app\'s own build instead (for a Vite app, a single-file build). Raised only by the experimental import and export commands.',
     },
     {
       value: 'ERR_RENDER_SOURCE_DAMAGED',
       stability: 'experimental',
       description:
-        '`export --reverse` refused the received file, and nothing was written: its embedded source was removed (a file a render wrote, with no Astryx components left to rebuild from), is cut short (also a file a render wrote that ends before it), or is damaged (not valid, a file does not match its checksum, or it names a CLI version that is not a release version), the page holds merge conflict markers, lists a path twice, carries a module, stylesheet or JSON file the page does not reach through its own imports, or an image, font or media file whose bytes are not one, or carries a file a render never embeds: a dotfile or dot-folder, anything under node_modules, a package manifest, lockfile or tool configuration, a file a test, story or benchmark runner would run, or any kind but a module, stylesheet, JSON file or image. Raised only by the experimental export command.',
+        '`experimental import` (or `export --reverse`) refused the received file, and nothing was written: its embedded source was removed (a file a render wrote, with no Astryx components left to rebuild from), is cut short (also a file a render wrote that ends before it), or is damaged (not valid, a file does not match its checksum, or it names a CLI version that is not a release version), the page holds merge conflict markers, lists a path twice, carries a module, stylesheet or JSON file the page does not reach through its own imports, or an image, font or media file whose bytes are not one, or carries a file a render never embeds: a dotfile or dot-folder, anything under node_modules, a package manifest, lockfile or tool configuration, a file a test, story or benchmark runner would run, or any kind but a module, stylesheet, JSON file or image. Raised only by the experimental import and export commands.',
     },
     {
       value: 'ERR_RENDER_NEWER_FORMAT',
       stability: 'experimental',
       description:
-        '`export --reverse` was given a file in a newer render format than this CLI reads. Nothing was written. The message names the version of the CLI that wrote the file, which reads it. Raised only by the experimental export command.',
+        '`experimental import` (or `export --reverse`) was given a file in a newer render format than this CLI reads. Nothing was written. The message names the version of the CLI that wrote the file, which reads it. Raised only by the experimental import and export commands.',
     },
     {
       value: 'ERR_RENDER_SCRIPT',
