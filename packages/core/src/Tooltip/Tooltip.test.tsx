@@ -984,6 +984,15 @@ describe('Tooltip', () => {
   });
 });
 
+/** A tooltip that a new `generation` mounts afresh. */
+function SaveField({generation}: {generation: number}) {
+  return (
+    <Tooltip key={generation} content="Save changes" delay={0}>
+      <button type="button">Save</button>
+    </Tooltip>
+  );
+}
+
 describe('Tooltip layer mounts at its first show', () => {
   // A tooltip's layer is not in the page until the tooltip first opens, so a
   // table with a tooltip on every row mounts no closed layers.
@@ -1053,15 +1062,67 @@ describe('Tooltip layer mounts at its first show', () => {
       expect(tooltips).toHaveLength(1);
       expect(tooltips[0]).toHaveTextContent('Save changes');
       expect(popoverOpenState.get(tooltips[0])).toBe(true);
-      // The description stays the hidden copy, and the shown text is hidden
-      // from assistive technology, so the description reads once.
-      expect(describedBy(trigger)).toHaveTextContent('Save changes');
-      expect(describedBy(trigger)).not.toBe(tooltips[0]);
-      expect(tooltips[0].firstElementChild).toHaveAttribute(
-        'aria-hidden',
-        'true',
+      // The mounted layer's content is now the description, and the hidden
+      // copy is gone, so the text renders once and reads once.
+      expect(describedBy(trigger)).toBe(tooltips[0].firstElementChild);
+      expect(tooltips[0].firstElementChild).not.toHaveAttribute('aria-hidden');
+      expect(document.querySelector('span[hidden][id$="-description"]')).toBe(
+        null,
       );
       expect(trigger).toHaveAccessibleDescription('Save changes');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('renders the text once before the first show, while shown, after it hides, and again from a fresh mount', () => {
+    vi.useFakeTimers();
+    // The elements whose own text is the tooltip text.
+    const holders = (text: string) =>
+      Array.from(document.body.querySelectorAll<HTMLElement>('*')).filter(
+        element =>
+          Array.from(element.childNodes).some(
+            node =>
+              node.nodeType === Node.TEXT_NODE && node.textContent === text,
+          ),
+      );
+    try {
+      const {rerender} = render(<SaveField generation={0} />);
+      const trigger = () => screen.getByRole('button', {name: 'Save'});
+      // Before the first show: the hidden copy alone describes the trigger.
+      expect(holders('Save changes')).toHaveLength(1);
+      expect(describedBy(trigger())).toBe(holders('Save changes')[0]);
+      expect(describedBy(trigger())).toHaveAttribute('hidden');
+      expect(trigger()).toHaveAccessibleDescription('Save changes');
+
+      // Shown: the layer's content alone holds the text and describes it.
+      fireEvent.mouseEnter(trigger());
+      act(() => {
+        vi.advanceTimersByTime(0);
+      });
+      expect(holders('Save changes')).toHaveLength(1);
+      expect(describedBy(trigger())).toBe(holders('Save changes')[0]);
+      expect(describedBy(trigger())?.closest('[role="tooltip"]')).not.toBe(
+        null,
+      );
+      expect(trigger()).toHaveAccessibleDescription('Save changes');
+
+      // Hidden again: the layer stays mounted, so no copy comes back.
+      fireEvent.mouseLeave(trigger());
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(holders('Save changes')).toHaveLength(1);
+      expect(describedBy(trigger())?.closest('[role="tooltip"]')).not.toBe(
+        null,
+      );
+      expect(trigger()).toHaveAccessibleDescription('Save changes');
+
+      // A fresh mount has no layer yet, so the copy describes it again.
+      rerender(<SaveField generation={1} />);
+      expect(holders('Save changes')).toHaveLength(1);
+      expect(describedBy(trigger())).toHaveAttribute('hidden');
+      expect(trigger()).toHaveAccessibleDescription('Save changes');
     } finally {
       vi.useRealTimers();
     }

@@ -30,6 +30,7 @@ import {getNodeText} from '../utils/getNodeText';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
   TooltipDescribesContext,
+  TooltipDescriptionIdContext,
   TooltipPresentInterestContext,
 } from './tooltipPresentInterest';
 import {createTriggerFocusGate, isFocusOnTrigger} from '../utils/triggerFocus';
@@ -332,10 +333,10 @@ export function isTooltipDescription(element: Element): boolean {
 }
 
 /**
- * The trigger's description: a hidden copy of the tooltip text (the `hidden`
- * attribute). `aria-describedby` reads a hidden node it names directly, and
- * browse mode skips it, so the text is read once. It is a sibling after the
- * trigger, never inside it. Group rules that find the last member
+ * The trigger's description until the layer first mounts: a hidden copy of
+ * the tooltip text (the `hidden` attribute). `aria-describedby` reads a hidden
+ * node it names directly, and browse mode skips it. It is a sibling after the
+ * trigger, never inside it, and the commit that mounts the layer removes it. Group rules that find the last member
  * (ButtonGroup's trailing radius) skip it. A Core component that renders the
  * tooltip under `TooltipDescribesContext` `false` gets none.
  */
@@ -424,11 +425,13 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     id: layerId,
     render: renderLayer,
   } = layer;
-  // The trigger's description is a hidden copy of the tooltip text. It is in
-  // server and client markup, before the first show. The shown content is
-  // hidden from assistive technology, so the text is read once.
+  // The trigger's description is a hidden copy of the tooltip text until the
+  // layer first mounts: it is in server and client markup before the first
+  // show. Once the layer is mounted, its content is the description, and the
+  // copy is gone.
   const describes = use(TooltipDescribesContext);
-  const descriptionId = `${layerId}${DESCRIPTION_SUFFIX}`;
+  const givenDescriptionId = use(TooltipDescriptionIdContext);
+  const descriptionId = givenDescriptionId ?? `${layerId}${DESCRIPTION_SUFFIX}`;
 
   const popoverXstyle = styles.container;
 
@@ -1095,11 +1098,6 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
 
       return (
         <>
-          {describes && (
-            <TooltipDescription id={descriptionId}>
-              {children}
-            </TooltipDescription>
-          )}
           {renderLayer(
             // FR11: React bubbles a press on the surface to the trigger's
             // ancestors, portaled or not. A registered surface counts as
@@ -1109,15 +1107,28 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
             // The hold's announcement reads this element's text.
             <div
               ref={contentRefs}
-              // The trigger already reads this text: its description, its own
-              // label (a cut label), or a reason it names. A pinned tooltip
-              // stays readable: its text is announced and the pinning button
+              // Once the layer is mounted, its content is the trigger's
+              // description, so the text renders once.
+              id={describes ? descriptionId : undefined}
+              // Without a description, the trigger already reads this text
+              // (its own label, or a reason it names). A pinned tooltip stays
+              // readable: its text is announced and the pinning button
               // controls it.
-              aria-hidden={isHoldShown ? undefined : true}
+              aria-hidden={describes || isHoldShown ? undefined : true}
               {...stylex.props(styles.content)}>
               {children}
             </div>,
-            renderProps,
+            {
+              ...renderProps,
+              // Before the layer first mounts, a hidden copy of the text
+              // describes the trigger. The commit that mounts the layer
+              // removes it.
+              whileUnmounted: describes ? (
+                <TooltipDescription id={descriptionId}>
+                  {children}
+                </TooltipDescription>
+              ) : null,
+            },
           )}
         </>
       );

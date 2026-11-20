@@ -149,9 +149,10 @@ export interface TooltipStateFacts {
    */
   readonly isBeforeFirstShow?: boolean;
   /**
-   * Whether the trigger's aria-describedby names a hidden copy of
-   * the tooltip's text instead of the tooltip, with the shown tooltip's
-   * content hidden from assistive technology.
+   * Whether the trigger's aria-describedby names a description element
+   * instead of the tooltip itself: a hidden copy of the tooltip's text, or,
+   * once the binding mounts the tooltip, the tooltip's content in its place,
+   * so the text renders and reads once.
    */
   readonly describesWithCopy?: boolean;
 }

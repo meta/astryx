@@ -49,7 +49,7 @@ import type {IconType} from '../Icon';
 import type {InputStatus} from '../Field/types';
 import {Spinner} from '../Spinner/Spinner';
 import {useTooltip} from '../Tooltip/useTooltip';
-import {TooltipDescribesContext} from '../Tooltip/tooltipPresentInterest';
+import {TooltipDescriptionIdContext} from '../Tooltip/tooltipPresentInterest';
 import {mergeProps} from '../utils/mergeProps';
 import {rtlStyles} from '../utils/rtlStyles';
 import {withholdCallerHandlers} from '../utils/disabledInteraction';
@@ -658,20 +658,16 @@ export function CheckboxInput({
       )}
       {isDisabled && disabledMessage ? (
         <>
-          {/* A hidden reason: aria-describedby reads it, and browse mode
-              skips it, so the reason is read once. */}
-          <span id={disabledMessageID} hidden>
-            {disabledMessage}
-          </span>
-          {/* The hidden reason above describes the input, so the tooltip
-              adds no description of its own. */}
-          <TooltipDescribesContext value={false}>
+          {/* The tooltip's description is the reason the input's
+              aria-describedby names: a hidden copy until the tooltip first
+              mounts, then the tooltip's text, so the reason renders once. */}
+          <TooltipDescriptionIdContext value={disabledMessageID}>
             <DisabledMessageTooltip
               message={disabledMessage}
               rowRef={rowElementRef}
               inputRef={inputRef}
             />
-          </TooltipDescribesContext>
+          </TooltipDescriptionIdContext>
         </>
       ) : null}
     </div>

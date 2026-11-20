@@ -592,6 +592,37 @@ describe('CheckboxInput', () => {
       );
     });
 
+    it('renders the reason once before and after its tooltip first shows, and the checkbox reads it once', async () => {
+      const REASON = 'Terms are managed by your administrator';
+      const holders = () =>
+        Array.from(document.body.querySelectorAll<HTMLElement>('*')).filter(
+          element =>
+            Array.from(element.childNodes).some(
+              node =>
+                node.nodeType === Node.TEXT_NODE && node.textContent === REASON,
+            ),
+        );
+      render(
+        <CheckboxInput
+          label="Accept terms"
+          value={false}
+          onChange={() => {}}
+          isDisabled
+          disabledMessage={REASON}
+        />,
+      );
+      const checkbox = screen.getByRole('checkbox', h);
+      expect(holders()).toHaveLength(1);
+      expect(checkbox).toHaveAccessibleDescription(REASON);
+      fireEvent.mouseEnter(getRow());
+      await waitFor(() =>
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open'),
+      );
+      expect(holders()).toHaveLength(1);
+      expect(screen.getByRole('tooltip', h)).toContainElement(holders()[0]);
+      expect(checkbox).toHaveAccessibleDescription(REASON);
+    });
+
     it('shows the reason tooltip on keyboard focus', async () => {
       const user = userEvent.setup();
       render(

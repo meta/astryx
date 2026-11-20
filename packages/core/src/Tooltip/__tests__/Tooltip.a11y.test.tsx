@@ -30,7 +30,6 @@ import {
   TOOLTIP_EXCLUSIONS,
   type TooltipBindingState,
 } from './Tooltip.a11y.states';
-import {getTooltipDescriptions} from '../../__tests__/tooltipDescription';
 
 function triggerFor(state: TooltipBindingState): HTMLElement {
   return state.triggerRole == null
@@ -45,13 +44,16 @@ function relatedFor(
     before: screen.getByRole('button', {name: 'Before the trigger'}),
     after: screen.getByRole('button', {name: 'After the trigger'}),
   };
-  // The trigger's description: the hidden copy its aria-describedby names.
+  // The trigger's description: the element its aria-describedby names whose
+  // id ends in `-description`. Before the first show it is the hidden copy;
+  // once the tooltip is mounted, the tooltip's content.
+  const descriptionId =
+    (triggerFor(state).getAttribute('aria-describedby') ?? '')
+      .split(/\s+/)
+      .find(id => id.endsWith('-description')) ?? '';
   const description =
-    getTooltipDescriptions().find(element =>
-      (triggerFor(state).getAttribute('aria-describedby') ?? '')
-        .split(/\s+/)
-        .includes(element.id),
-    ) ?? document.body;
+    (descriptionId === '' ? null : document.getElementById(descriptionId)) ??
+    document.body;
   if (state.facts.isBeforeFirstShow === true) {
     return {description, ...neighbours};
   }

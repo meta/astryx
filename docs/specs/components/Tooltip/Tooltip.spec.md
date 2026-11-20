@@ -145,7 +145,7 @@ Consumer migration instructions belong in consumer docs and release notes.
   (FR2–FR8), including a `show()` hold and the announcement when a tooltip pins
   (FR9, FR10, FR12).
 - The trigger's description (AR1): a hidden copy of the tooltip text
-  after the trigger. A tooltip whose text is its anchor's own content turns it
+  after the trigger until the layer first mounts, then the tooltip's content. A tooltip whose text is its anchor's own content turns it
   off through `TooltipDescribesContext` in `Tooltip/tooltipPresentInterest`,
   the internal trigger contract.
 
@@ -212,14 +212,13 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Accessibility contract
 
-- **AR1 — Description.** The trigger's `aria-describedby` names a hidden copy
-  (the `hidden` attribute) of the tooltip text, rendered with the trigger in
-  server and client markup, so the description is present before the tooltip
-  first shows; the shown tooltip's content is hidden from assistive
-  technology, so the text is read once. A truncation tooltip whose text is its
-  element's own content adds no description. While `show()` pins the tooltip
-  (FR9), its shown text stays readable, and FR10 announces it. Apart from
-  FR2's changed-trigger and server-markup gaps.
+- **AR1 — Description.** Before the tooltip first mounts, the trigger's
+  `aria-describedby` names a hidden copy of its text rendered with the trigger
+  in server and client markup; once mounted, it names the tooltip's content and
+  the copy is removed, so the text renders once. A truncation tooltip whose text
+  is its element's own content adds no description. While `show()` pins the
+  tooltip (FR9), its shown text stays readable, and FR10 announces it. Apart
+  from FR2's changed-trigger and server-markup gaps.
 - **AR2 — Content on hover or focus.** The tooltip is hoverable, dismissible,
   and persistent per WCAG 1.4.13 (FR3, FR6), except FR6's other-document gap.
 - **AR3 — Focus modality.** Only `:focus-visible` focus opens it (FR4).

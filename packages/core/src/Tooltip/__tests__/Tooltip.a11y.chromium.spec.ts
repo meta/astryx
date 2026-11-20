@@ -79,7 +79,8 @@ async function mountState(
       exact: true,
     }),
   };
-  // The trigger's description: the hidden copy its aria-describedby names.
+  // The trigger's description: the hidden copy its aria-describedby names
+  // before the first show, then the tooltip's content.
   const ids = ((await subject.getAttribute('aria-describedby')) ?? '').split(
     /\s+/,
   );
