@@ -81,7 +81,7 @@
  *   (`spec:AST-105` FR2).
  */
 
-import {LATE_START_MS} from './frameBlock';
+import {LATE_START_MS, motionNow} from './frameBlock';
 import {linearEasing, sampleCount} from './linearEasing';
 import {
   sharedKey,
@@ -508,7 +508,7 @@ function settleAnimation(
         animation.currentTime != null
           ? Number(animation.currentTime) >= at
           : animation.startTime != null &&
-            view.performance.now() >= Number(animation.startTime) + at;
+            motionNow(view.document) >= Number(animation.startTime) + at;
       if (!isSettled) {
         return false;
       }
@@ -573,14 +573,14 @@ function settleTransition(
   }
   // Its moments on the clock, so a frame that lands on one counts: a
   // subtraction from the frame's time can round short of it.
-  const start = view.performance.now();
+  const start = motionNow(view.document);
   const settleAt = start + settled;
   const endAt = start + durationMs;
   let isWritten = false;
   const stop = watchSettle(view, {
     element,
     frame: () => {
-      const now = view.performance.now();
+      const now = motionNow(view.document);
       if (!isWritten && now >= settleAt) {
         writePresentedResolve(element);
         isWritten = true;
@@ -635,7 +635,7 @@ function presentGlide(
     return undefined;
   }
   const styled = element as Element & ElementCSSInlineStyle;
-  const now = () => view.performance.now();
+  const now = () => motionNow(view.document);
   // The translate drawn at `time`: the keyframes are linear between samples.
   const drawnAt = (time: number) => {
     const start = animation.startTime;
@@ -801,7 +801,7 @@ const changeStarts = sharedWeakMap<Document, ChangeStart>(
 
 /** The clock of the document whose timeline a start is read on. */
 function clockOf(doc: Document): number {
-  return (doc.defaultView?.performance ?? performance).now();
+  return motionNow(doc);
 }
 
 /**

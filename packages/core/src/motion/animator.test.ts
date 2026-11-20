@@ -5694,4 +5694,37 @@ describe('motionNow', () => {
     clock = 400;
     expect(motionNow(doc)).toBe(400);
   });
+
+  it("reads the clock of the document it is given, on that document's time origin", () => {
+    // An iframe made later than the page: its clock reads less.
+    class Reference {
+      get currentTime() {
+        return 600;
+      }
+    }
+    const doc = {
+      timeline: {currentTime: 600},
+      defaultView: {DocumentTimeline: Reference, performance: {now: () => 610}},
+    } as unknown as Document;
+    clock = 2100;
+    expect(motionNow(doc)).toBe(610);
+  });
+
+  it('reads its window clock for a document with no timeline', () => {
+    const doc = {
+      defaultView: {performance: {now: () => 420}},
+    } as unknown as Document;
+    clock = 400;
+    expect(motionNow(doc)).toBe(420);
+  });
+
+  it('reads performance.now() with no document, as on a server', () => {
+    vi.stubGlobal('document', undefined);
+    try {
+      clock = 400;
+      expect(motionNow()).toBe(400);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

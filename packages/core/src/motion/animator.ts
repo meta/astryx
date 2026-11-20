@@ -189,7 +189,7 @@
  */
 
 import {cubicBezier} from './bezier';
-import {LATE_START_MS} from './frameBlock';
+import {LATE_START_MS, motionNow} from './frameBlock';
 import {solveSpring, toSpring, type SpringDescription} from './spring';
 import {
   clearPresentedResolve,
@@ -256,7 +256,7 @@ export interface RebaseOptions {
  */
 export interface AnimateOptions {
   /**
-   * Start time on the document timeline (ms, `performance.now()` clock).
+   * Start time on the document timeline (ms, the `motionNow` clock).
    * Defaults to now. Pass one value to several animators to put their
    * animations on one clock.
    */
@@ -1205,68 +1205,7 @@ function expand(values: MotionValues): Partial<Record<MotionProperty, number>> {
   return out;
 }
 
-/**
- * A timeline that runs at real speed, one per document, or null where the
- * browser has no `DocumentTimeline` constructor. DevTools' animation speed
- * slows only the document timeline, so the gap between the two is how far
- * the document timeline runs behind real time.
- */
-const realSpeedTimelines = new WeakMap<Document, AnimationTimeline | null>();
-
-/**
- * Each document's last frame as both timelines read it, and the document
- * timeline's speed against real time between its two last frames.
- */
-const timelineFrames = new WeakMap<
-  Document,
-  {timeline: number; real: number; speed: number}
->();
-
-function realSpeedTimeline(doc: Document): AnimationTimeline | null {
-  let timeline = realSpeedTimelines.get(doc);
-  if (timeline === undefined) {
-    const Timeline = doc.defaultView?.DocumentTimeline;
-    timeline = typeof Timeline === 'function' ? new Timeline() : null;
-    realSpeedTimelines.set(doc, timeline);
-  }
-  return timeline;
-}
-
-/**
- * The time the motion clock reads: `performance.now()`, on the time of `doc`'s
- * timeline, which draws the curves. At full speed the two are one clock.
- * While DevTools slows the timeline, the clock reads the timeline's time for
- * the current frame. It adds the real time since that frame, at the
- * timeline's speed. Both timelines keep their frame's time for a whole task,
- * so the clock still moves at real speed through a long task at full speed.
- */
-export function motionNow(
-  doc: Document | undefined = typeof document === 'undefined'
-    ? undefined
-    : document,
-): number {
-  const now =
-    typeof performance === 'undefined' ? Date.now() : performance.now();
-  const timeline = doc?.timeline?.currentTime;
-  if (doc == null || typeof timeline !== 'number') {
-    return now;
-  }
-  const real = realSpeedTimeline(doc)?.currentTime;
-  if (typeof real !== 'number' || real === timeline) {
-    return now;
-  }
-  const last = timelineFrames.get(doc);
-  let speed = last?.speed ?? 1;
-  if (last != null && real > last.real) {
-    const measured = (timeline - last.timeline) / (real - last.real);
-    speed = Number.isFinite(measured) && measured >= 0 ? measured : speed;
-  }
-  if (last == null || real !== last.real) {
-    timelineFrames.set(doc, {timeline, real, speed});
-  }
-  const sinceFrame = (doc.defaultView?.performance ?? performance).now() - real;
-  return now - (real - timeline) - (1 - speed) * sinceFrame;
-}
+export {motionNow};
 
 /**
  * Whether the user asked for reduced motion (`prefers-reduced-motion:
@@ -3177,10 +3116,10 @@ export function createMotionEngine(
    * keeps the browser's start.
    */
   const startAfterBlock = (group: StartGroup, start: number): number => {
-    const timeline =
-      typeof document === 'undefined'
-        ? null
-        : (document.timeline?.currentTime as number | null | undefined);
+    const doc =
+      element?.ownerDocument ??
+      (typeof document === 'undefined' ? undefined : document);
+    const timeline = doc?.timeline?.currentTime as number | null | undefined;
     // A start well after the animations were created is the browser's
     // commit of them.
     if (

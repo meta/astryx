@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] While DevTools slows the page's animations, reading or stopping an animation gives the value on screen. A stop holds the element in place instead of jumping it ahead. The motion clock follows the document timeline's own time. At full speed nothing changes.
+[fix] The motion clock follows the timeline that draws each motion. While DevTools slows animations, a read, a stop or a new target starts from the value on screen. Layout glides and Reduce Motion fades start on time. In an iframe or a second window, a motion starts at once, and a stop holds it in place. At full speed in the page itself, nothing changes.
 
 @vjeux
