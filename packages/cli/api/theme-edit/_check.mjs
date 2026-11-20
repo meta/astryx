@@ -7965,7 +7965,13 @@ function checkOne(
       if (sides?.length === 1) {
         s.value = sides[0][1];
         const said = `"${v.trim()}" is ${s.value} on every side, the one length ${hit} takes there`;
-        s.note = s.note ? `${s.note}; ${said}` : said;
+        // The value's own typo note, which the check below gives only to a
+        // setting with no note yet, is kept beside it.
+        const typo = fallbackVarTypo(
+          String(s.value),
+          ctx.project.core.tokenDefaults ?? {},
+        );
+        s.note = [s.note, said, typo].filter(Boolean).join('; ');
       } else if (sides)
         return {
           ...s,

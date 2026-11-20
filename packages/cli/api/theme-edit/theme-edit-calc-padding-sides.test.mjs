@@ -384,4 +384,16 @@ describe('a padding of several lengths where only one works', () => {
     },
     T,
   );
+
+  it(
+    'keeps the typo note when every side is the same mistyped variable',
+    async () => {
+      const notes = await set('var(--spacng-3, 8px) var(--spacng-3, 8px)');
+      expect(saved()).toEqual(['padding var(--spacng-3, 8px)']);
+      expect(notes.join('\n')).toMatch(/--spacng-3 is not a design token/);
+      await themeEditUndo('t', {cwd});
+      expect(saved()).toEqual([]);
+    },
+    T,
+  );
 });
