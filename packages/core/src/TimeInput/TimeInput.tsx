@@ -928,7 +928,7 @@ function TimeField({
             }
             aria-busy={isBusy || undefined}
             aria-labelledby={controlLabelledBy}
-            dir={textDirection}
+            dir={controlProps.dir ?? textDirection}
             {...stylex.props(
               styles.input,
               localeTextStyles.pageAlign,

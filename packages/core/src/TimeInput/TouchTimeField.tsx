@@ -447,7 +447,7 @@ export function TouchTimeField({
             ? joinAriaIDs(ariaLabelledBy ?? fieldLabelID, ariaLabelledByProp)
             : ariaLabelledBy
         }
-        dir={textDirection}
+        dir={controlProps.dir ?? textDirection}
         {...stylex.props(styles.input, localeTextStyles.pageAlign)}
       />
       {isBusy && <Spinner size="sm" aria-hidden="true" />}

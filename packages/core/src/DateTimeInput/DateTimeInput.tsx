@@ -1909,7 +1909,7 @@ function PointerDateTimeField({
                 aria-controls={popover.isOpen ? popover.id : undefined}
                 aria-autocomplete="none"
                 autoComplete="off"
-                dir={textDirection}
+                dir={controlProps.dir ?? textDirection}
                 {...stylex.props(
                   styles.input,
                   localeTextStyles.pageAlign,

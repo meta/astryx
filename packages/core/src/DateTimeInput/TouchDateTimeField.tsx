@@ -1382,7 +1382,7 @@ export function TouchDateTimeField({
             aria-haspopup="dialog"
             aria-autocomplete="none"
             autoComplete="off"
-            dir={textDirection}
+            dir={controlProps.dir ?? textDirection}
             {...stylex.props(
               styles.input,
               styles.touchInput,

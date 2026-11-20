@@ -9,9 +9,8 @@
  * @position Internal helper for TimeInput, DateTimeInput and their touch
  *   fields; not part of the public surface
  *
- * Formatted time and date-time text reads in the direction of the locale
- * that formats it, not the page's (design:bidirectionality DR2). "9:00 AM"
- * from an English locale keeps its order on a right-to-left page. The field's
+ * The page direction would reorder text a locale formats: an English
+ * "9:00 AM" would show as "AM 9:00" on a right-to-left page. The field's
  * layout, such as the icon side, stays on the page direction.
  *
  * SYNC: When modified, update these files to stay in sync:
