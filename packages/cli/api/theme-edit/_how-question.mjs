@@ -10140,6 +10140,15 @@ export function draftAnswer(ctx, env, question) {
           continue;
         }
       }
+      // (A part said in the plural, "compact tables", names that part
+      // across the app; a part said once, "bold title", "action button
+      // text", is a piece of the head said in its list.)
+      const said = lex.parts
+        .filter(([, x]) => x.on === c.parts[0]?.on)
+        .map(([re]) => re.exec(` ${c.text} `)?.[0]?.trim())
+        .find(Boolean);
+      const plural = !said || /s$/i.test(said);
+      const colon = joinOf.get(c)?.list !== 'with';
       if (
         holder &&
         head !== c &&
@@ -10154,30 +10163,22 @@ export function draftAnswer(ctx, env, question) {
         // "navigation rail: …, rounder cards" names the app's cards, which
         // no rail holds. A part that sits in running text, a link, is held
         // where that text is: "dark navigation bar with white links". In a
-        // colon list it is the head's even where the head holds no text:
-        // "tabs: …, blue links" asks for links in the tabs.)
-        [c.parts[0].on, ...(FAMILIES[c.parts[0].on] ?? [])].some(x => {
-          const holds = C.MAP[holder].contains ?? [];
-          const inText = (C.MAP.text?.contains ?? []).includes(x);
-          return (
-            holds.includes(x) ||
-            (inText &&
-              (holds.includes('text') || joinOf.get(c)?.list !== 'with'))
-          );
-        })
+        // colon list a link is the head's even where the head holds no
+        // text, "tabs: …, blue links", and so is a part said once.)
+        ((colon && !plural) ||
+          [c.parts[0].on, ...(FAMILIES[c.parts[0].on] ?? [])].some(x => {
+            const holds = C.MAP[holder].contains ?? [];
+            const inText = (C.MAP.text?.contains ?? []).includes(x);
+            return (
+              holds.includes(x) || (inText && (holds.includes('text') || colon))
+            );
+          }))
       ) {
         c.container = holder;
         c.placeStrict = {holder, part: c.parts[0].on};
-        // (A colon list only guesses the place. A part said in the plural,
-        // "compact tables", names that part across the app, so an item the
-        // head cannot keep is the part's own ask; a part said once, "action
-        // button text", is the head's own piece.)
-        const said = lex.parts
-          .filter(([, x]) => x.on === c.parts[0].on)
-          .map(([re]) => re.exec(` ${c.text} `)?.[0]?.trim())
-          .find(Boolean);
-        if (joinOf.get(c)?.list !== 'with' && said && /s$/i.test(said))
-          c.placeGuessed = true;
+        // (A colon list only guesses the place of a part said in the
+        // plural: when the head cannot keep it, it is the part's own ask.)
+        if (colon && said && plural) c.placeGuessed = true;
         continue;
       }
     }
