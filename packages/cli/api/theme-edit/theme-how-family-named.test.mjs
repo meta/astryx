@@ -383,11 +383,14 @@ describe('a lone color that names a role or variant', () => {
 });
 
 describe('a lone color the accent dial does not take', () => {
-  it('fills the part as before: a modified, two-word or light hue', async () => {
+  it('fills the part as before: a modified, shaded, two-word or light hue', async () => {
     for (const [ask, ink] of [
       ['bigger buttons, bright red', '#dc2626'],
       ['bigger buttons, teal blue', '#0d9488'],
       ['bigger buttons, light blue', '#dbeafe'],
+      ['bigger buttons, dark red', '#991b1b'],
+      ['bigger buttons, pastel pink', '#f1a9c9'],
+      ['bigger buttons, lavender', '#c4b5fd'],
     ]) {
       const lines = writes(await how('q0', ask)).join('\n');
       expect(lines, ask).toMatch(
