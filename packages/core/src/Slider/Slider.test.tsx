@@ -2319,6 +2319,22 @@ describe('Slider after a render React discards', () => {
 });
 
 describe('Slider text value', () => {
+  it('reserves room for a max that lies off the step grid, which End shows', () => {
+    render(
+      <Slider
+        label="Off grid"
+        min={0}
+        max={10.25}
+        step={1}
+        value={0}
+        valueDisplay="text"
+      />,
+    );
+    const text = screen.getByText('0');
+    // "10.25" is the longest text: five characters plus one.
+    expect(text.getAttribute('style') ?? '').toContain('6ch');
+  });
+
   it('renders without a duplicate-key warning when both ends format alike', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     render(

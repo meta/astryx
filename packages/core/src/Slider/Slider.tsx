@@ -1687,8 +1687,10 @@ export function Slider({ref, ...props}: SliderProps) {
       count <= 200
         ? Array.from({length: count + 1}, (_, i) => min + i * step)
         : [min, min + step, max - step];
+    // End shows `max` itself, which can lie off the step grid.
     return Math.max(
-      ...[...shown, max].map(
+      format(max).length,
+      ...shown.map(
         value => format(clamp(snapToStep(value, min, step), min, max)).length,
       ),
     );
