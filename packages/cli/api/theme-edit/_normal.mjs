@@ -1815,11 +1815,14 @@ function dialWords(key) {
  * value: each reads it whole, or the parts they carry cover every typed
  * token. A part alone (`all` for `all 200`, `bold` for `extra bold`) is not
  * offered.
+ * A line read whole that offers one of several typed values (`padding-top
+ * 2px` for `2px 15px 3px`) carries the tokens it offers.
  * @param {Array<true | number[] | {oneOf: number[]} | false>} reads
  * @param {string} typed
  * @param {string} [thing] the setting typed (its numbers' reading)
+ * @param {Array<string | undefined>} [offered] each line's value, beside its read
  */
-export function coversTyped(reads, typed, thing = '') {
+export function coversTyped(reads, typed, thing = '', offered = []) {
   const T = tokensOf(
     typedReading(listWords(thing, typed), {
       thousands: thousandsSetting(thing),
@@ -1835,6 +1838,13 @@ export function coversTyped(reads, typed, thing = '') {
   const typedCount = new Map();
   for (const w of T) typedCount.set(w, (typedCount.get(w) ?? 0) + 1);
   for (const r of reads) if (Array.isArray(r)) r.forEach(carry);
+  for (const [i, r] of reads.entries())
+    if (r === true && offered[i] != null)
+      for (const w of tokensOf(
+        String(offered[i]).replace(/^(["'])(.*)\1$/, '$2'),
+      ))
+        if ((carried.get(w) ?? 0) < (typedCount.get(w) ?? 0))
+          carried.set(w, (carried.get(w) ?? 0) + 1);
   // A line whose one token may be any of several takes one the others
   // left.
   for (const r of reads)

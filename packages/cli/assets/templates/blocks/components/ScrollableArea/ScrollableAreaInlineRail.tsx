@@ -20,7 +20,7 @@ const FILES = [
 
 export default function ScrollableAreaInlineRail() {
   return (
-    <Card width={460} padding={4}>
+    <Card width={460} maxWidth="100%" padding={4}>
       <VStack gap={3}>
         <HStack hAlign="between" vAlign="center">
           <VStack gap={0.5}>

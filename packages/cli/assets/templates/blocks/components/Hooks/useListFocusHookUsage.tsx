@@ -6,6 +6,7 @@ import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
 import {useListFocus} from '@astryxdesign/core/hooks';
 import {VStack} from '@astryxdesign/core/Layout';
+import {useToast} from '@astryxdesign/core/Toast';
 
 const RECENT_FILES = [
   'Q3 roadmap.pdf',
@@ -15,6 +16,7 @@ const RECENT_FILES = [
 ];
 
 export default function UseListFocusHookUsage() {
+  const showToast = useToast();
   const {listRef, handleKeyDown, handleFocus} = useListFocus({
     itemSelector: 'button',
     orientation: 'vertical',
@@ -34,7 +36,12 @@ export default function UseListFocusHookUsage() {
         onKeyDown={handleKeyDown}
         onFocus={handleFocus}>
         {RECENT_FILES.map(name => (
-          <Button key={name} label={name} variant="ghost" />
+          <Button
+            key={name}
+            label={name}
+            variant="ghost"
+            onClick={() => showToast({body: `Demo: ${name} would open here`})}
+          />
         ))}
       </VStack>
     </Card>

@@ -3,7 +3,7 @@
 /**
  * @file What each themeable part reads, derived from the installed Core
  * itself: render a catalog of every component on the server with the
- * project's own React (the machinery of `astryx experimental render`), then
+ * project's own React (the machinery of `astryx experimental export`), then
  * join each element's classes to the rules in Core's shipped stylesheet.
  * The result names, for every part, the CSS properties it sets and the
  * public tokens that feed each one (under which variant or state), the parts
@@ -24,7 +24,7 @@ import {fileURLToPath} from 'node:url';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {importPathOf, installLine, literals} from './_project.mjs';
-import {removeEmptyFolder} from './_palette.mjs';
+import {removeEmptyFolder} from '../../foundation/fs/empty-folder.mjs';
 import {VOID} from '../../foundation/render/html-reader.mjs';
 import {
   RENDER_TIMEOUT_MS,
@@ -612,7 +612,8 @@ function sweepRenders(themes) {
  * @param {import('./_project.mjs').ThemeProject} project
  * @param {string} file name inside the render folder
  * @param {string} source
- * @param {Array<{name: string, from: string}>} [extra] files copied beside it
+ * @param {Array<{name: string, from?: string, text?: string}>} [extra] files
+ *   written beside it: `text` as given, else a copy of `from`
  * @param {{openLayers?: boolean}} [opts] `openLayers`: the overlays it shows
  *   or opens are drawn and added after its markup
  * @returns {Promise<{html: string, markup: string}>}
@@ -660,7 +661,9 @@ export async function renderGenerated(
     fs.writeFileSync(entry, stripTemplateAssetRefs(source));
     for (const x of extra) {
       fs.mkdirSync(path.dirname(path.join(dir, x.name)), {recursive: true});
-      fs.copyFileSync(x.from, path.join(dir, x.name));
+      if (x.text != null) fs.writeFileSync(path.join(dir, x.name), x.text);
+      else
+        fs.copyFileSync(/** @type {string} */ (x.from), path.join(dir, x.name));
     }
     // The editor's pages render every component, and a busy machine slows
     // them down: they get three times the page limit.

@@ -20,6 +20,7 @@ import {
   keptTmp,
   freshTmp,
   readKept,
+  hasModuleHooks,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
 
 usePackedCli();
@@ -115,7 +116,7 @@ describe.skipIf(process.platform !== 'linux')(
       const {dir, docs} = projectWithDocs();
       try {
         expect(listedDocs(tmp, dir)).toEqual(['widgets-setup']);
-        expect(docNameEntries(tmp)).toHaveLength(1);
+        expect(docNameEntries(tmp)).toHaveLength(hasModuleHooks ? 1 : 0);
         expect(listedDocs(tmp, dir)).toEqual(['widgets-setup']);
         // A new doc, then a renamed one: each shows on the next run, as a
         // fresh run gives it.
@@ -274,8 +275,11 @@ describe.skipIf(process.platform !== 'linux')(
           // its own: a record one folder kept never answers for the other.
           expect(answers(tmp, other.dir)).toBe(false);
           expect(answers(tmp, src)).toBe(true);
+          // Without module hooks no run keeps a record.
           expect(savedSearchEntries(tmp).sort()).toEqual(
-            [fs.realpathSync(other.dir), fs.realpathSync(src)].sort(),
+            hasModuleHooks
+              ? [fs.realpathSync(other.dir), fs.realpathSync(src)].sort()
+              : [],
           );
         }
       } finally {

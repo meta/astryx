@@ -28,6 +28,7 @@ import {
   gatherCandidatesReused,
   loadSearchData,
   searchIconSection,
+  withoutShareGuides,
 } from './_adapter.mjs';
 import {rankLexical} from './_lexical.mjs';
 import {searchView} from './_named-keywords.mjs';
@@ -84,6 +85,7 @@ async function searchRead(query, options) {
     const icons = await searchIconSection(query, {
       cwd: options.cwd ?? process.cwd(),
       declaredNames: declaredNames(catalog.all),
+      resultDomains: response.data.results.map(result => result.domain),
       limit: options.limit ?? 20,
     });
     if (icons) response.data.icons = icons;
@@ -221,7 +223,8 @@ async function searchCoreRead(query, options) {
         withoutNotReady(
           options.ownKeywords
             ? await searchCatalog(options)
-            : await gatherCandidatesReused(options),
+            : // build ranks without the shareable-page guides
+              withoutShareGuides(await gatherCandidatesReused(options)),
           options.readyTemplatesOnly === true,
         ),
       ),

@@ -7,7 +7,7 @@ import {HStack} from '@astryxdesign/core/Layout';
 
 export default function AvatarStatusDotShowcase() {
   return (
-    <HStack gap={4} vAlign="center">
+    <HStack gap={4} vAlign="center" wrap="wrap">
       <Avatar
         name="Online User"
         size="xl"

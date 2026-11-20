@@ -223,10 +223,7 @@ import type {
   TablePlugin,
   TableSortComparator,
 } from '@astryxdesign/core/Table';
-import {
-  ArrowDownTrayIcon,
-  MagnifyingGlassIcon,
-} from '@heroicons/react/24/outline';
+import {DownloadIcon, SearchIcon} from '@astryxdesign/template-icons';
 
 // ============= DATA =============
 
@@ -885,7 +882,7 @@ export default function InvoiceLineItemsTemplate() {
                 <Button
                   label="Download PDF"
                   variant="secondary"
-                  icon={<Icon icon={ArrowDownTrayIcon} size="sm" />}
+                  icon={<Icon icon={DownloadIcon} size="sm" />}
                   onClick={() =>
                     // Demo only: replace this toast with the call that performs the action.
                     showToast({
@@ -931,7 +928,7 @@ export default function InvoiceLineItemsTemplate() {
                   value={query}
                   onChange={setQuery}
                   placeholder="Search…"
-                  startIcon={<Icon icon={MagnifyingGlassIcon} size="sm" />}
+                  startIcon={<Icon icon={SearchIcon} size="sm" />}
                 />
               </VStack>
             </HStack>

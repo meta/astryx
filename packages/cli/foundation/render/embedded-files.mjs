@@ -2,7 +2,7 @@
 
 /**
  * @file Which files a rendered page may carry, for `astryx experimental
- * render`. Rendering embeds only these, and `--reverse` writes only these: a
+ * export`. Rendering embeds only these, and `--reverse` writes only these: a
  * file someone sends can name nothing else. A page is a module; beside it go
  * only the stylesheets, JSON and images it imports. Never a dotfile or a
  * dot-folder (such as `.git/`), never `node_modules`, never a package
