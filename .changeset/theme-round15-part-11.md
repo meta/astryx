@@ -12,7 +12,7 @@
 - A mode pair stays on one part: "borders #d5dbe1 in light mode and #30313d in dark mode" in an inputs list writes both halves on the inputs.
 - A bare color said of a part that paints no fill of its own (a tab, a side nav item at rest), in an ask that speaks of that part's text elsewhere, is its text color: "tabs 14px text, …, other tabs #666666".
 - "#f7f8f8 text on #1c1d1f" after a part keeps the text on that part, in its state.
-- Items said with a subject that names no part ("kbd hints … with … text and 4px corners") are held with it and written nowhere.
+- Items said with a part and a noun of its own ("kbd hints #2e3035 with #8a8f98 text and 4px corners") stay on that part: the fill and corners on the kbd key, the text on kbd, nothing on the whole theme.
 - A color said of a part that fills when checked (a switch, a checkbox, a radio) is its checked fill, in a list of parts too, so off switches and unchecked boxes keep their look: "switches, checkboxes, progress bars and tab underlines in magenta".
 - A list's rows are its head part's own items: "menus with 4px padding and 32px rows".
 
