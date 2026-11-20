@@ -962,6 +962,26 @@ describe('how <picture>', () => {
     ).toBe(true);
   });
 
+  it('offers a theme-wide reading where only another part sets that aspect', async () => {
+    await themeEditNew('pz', {cwd, like: 'neutral'});
+    await themeEditSet('pz', 'corners', '12px', {cwd, on: 'card'});
+    fs.writeFileSync(path.join(cwd, 'look.png'), encodePng(controlsPage()));
+    const d = /** @type {any} */ (
+      (await themeEditHow('look.png', {cwd, theme: 'pz'})).data
+    );
+    const lines = /** @type {string[]} */ (
+      d.results.flatMap((/** @type {any} */ r) => r.commands)
+    );
+    expect(lines.some(l => / set pz --radius-element 4px$/.test(l))).toBe(true);
+    expect(
+      d.unsure.some((/** @type {any} */ u) =>
+        /--radius-element|corners on controls: .* sets corners on card/.test(
+          u.text,
+        ),
+      ),
+    ).toBe(false);
+  });
+
   it('keeps a spacing dial the theme sets, which already sizes the controls', async () => {
     await themeEditNew('ps', {cwd, like: 'neutral'});
     await themeEditSet('ps', 'spacing', 'compact', {cwd});

@@ -2295,6 +2295,13 @@ function checksBoxSteps(ctx, settings, px) {
  */
 async function pictureLook(cwd, name, read) {
   const ctx = await context(cwd);
+  const groups = groupsOf(ctx);
+  /** @param {string} family @param {string} on */
+  const familyHolds = (family, on) => {
+    const families =
+      family === 'controls' ? ['button-like', 'inputs'] : [family];
+    return families.some(f => on === f || (groups[f] ?? []).includes(on));
+  };
   const env = await howTheme(ctx, cwd, name);
   const own = env.data.settings;
   /** @type {Array<{text: string, commands: string[], refused?: Array<{command: string, why: string, run?: string[]}>}>} */
@@ -2318,12 +2325,11 @@ async function pictureLook(cwd, name, read) {
           (s.on === 'checks' ||
             (FAMILIES.checks ?? []).includes(String(s.on ?? '')))
         : aspectsOf(s.thing).some(a => aspectsOf(step.thing).includes(a)) &&
-          (!s.on ||
-            !step.on ||
-            s.on === step.on ||
-            // (A member of the family the reading is for, `--on button`
-            // for a button-like reading, sets it itself.)
-            (groupsOf(ctx)[step.on] ?? []).includes(s.on)),
+          // (A part's own setting keeps a reading only for the family the
+          // reading is of, or a member of it: `corners --on button` keeps a
+          // button-like reading, never a theme-wide radius the card sets
+          // apart from.)
+          (!s.on || familyHolds(step.on ?? tr.on, String(s.on))),
     );
     const box = checksSize
       ? checksBoxSteps(ctx, own, Number.parseFloat(String(step.value)))
