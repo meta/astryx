@@ -19025,10 +19025,24 @@ export function draftAnswer(ctx, env, question) {
       if (pieces.length === 1 && C.MAP[pieces[0]]) {
         const own = pieces[0];
         seenPart(own);
-        const control = (C.MAP[own]?.tags ?? []).some(
-          (/** @type {string} */ t) =>
+        const isControl = (/** @type {string} */ k) =>
+          (C.MAP[k]?.tags ?? []).some((/** @type {string} */ t) =>
             /^(?:button|input|select|textarea|a)$/.test(String(t)),
+          );
+        const control = isControl(own);
+        // (A piece that holds a control, "the dialog header" with its close
+        // button: hiding it takes that control away too, so nothing is
+        // written, and the answer names the control.)
+        const held = (C.MAP[own]?.contains ?? []).filter(
+          (/** @type {string} */ k) => k !== own && isControl(k),
         );
+        if (!control && held.length) {
+          push({
+            text: `${own} holds ${held.length > 1 ? 'controls' : 'a control'} (${held.join(', ')}); hiding ${own} takes ${held.length > 1 ? 'them' : 'it'} away for everyone using the theme, so nothing is written (hide a piece of it that holds no control instead)`,
+            options: [],
+          });
+          continue;
+        }
         push({
           text: `no ${own}: it is not drawn, and the room it takes goes with it${control ? `; it is a control, so what it does is gone for everyone using the theme` : ''}`,
           options: [[set('display', 'none', {on: own})]],
@@ -27538,12 +27552,25 @@ export function draftAnswer(ctx, env, question) {
       ) &&
       (earlier.test(t) ||
         /\b(?:use|switch to|go back to|back to|return to)\s+the\b/.test(t))
-    )
-      return {
-        text: `the app picks its theme: astryx theme use ${env.data.like ?? '<base>'} makes ${env.data.like ?? 'the base theme'} its default; to keep ${env.slug} and take back its settings instead: how "back to the base theme"`,
-        options: [],
-        lookup: `astryx theme use ${env.data.like ?? '<base>'}`,
-      };
+    ) {
+      // (`theme use` runs only on a theme the app has added, so the line
+      // adds the base first; a theme with no base has none to go back to.)
+      const base =
+        env.data.like && env.data.like !== 'none'
+          ? String(env.data.like)
+          : null;
+      return base
+        ? {
+            text: `the app picks its theme: astryx theme add ${base} adds ${base} to the app (nothing changes when it is there already), then astryx theme use ${base} makes it the default; to keep ${env.slug} and take back its settings instead: how "back to the base theme"`,
+            options: [],
+            lookup: `astryx theme add ${base}`,
+          }
+        : {
+            text: `${env.slug} has no base theme, so there is none to go back to; astryx theme list shows the themes the app has, and astryx theme use <name> makes one the default`,
+            options: [],
+            lookup: 'astryx theme list',
+          };
+    }
     if (
       (/\b(undo|revert|go back|take back)\b/.test(t) && !c.colors.length) ||
       (back && earlier.test(t))
@@ -32253,7 +32280,8 @@ export function draftAnswer(ctx, env, question) {
     new RegExp(`${NAMED_LOOK}[a-z]`).test(q) ||
     /\blooks?\s+like\s+(?!(?:this|that|the|a|an|my|our|these|those)\b)[a-z]/.test(
       q,
-    ) || q.split(/[,;:]|\band\b/).filter(x => x.trim()).length >= 3;
+    ) ||
+    q.split(/[,;:]|\band\b/).filter(x => x.trim()).length >= 3;
   if (!gateAll && lookAsk) {
     const answeredText = result
       .map(d => `${d.text} ${JSON.stringify(d.options)}`)

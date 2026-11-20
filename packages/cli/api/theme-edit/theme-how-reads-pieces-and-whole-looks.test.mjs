@@ -345,6 +345,23 @@ describe('a top nav said beside a side nav', () => {
   );
 });
 
+describe('a piece that holds a control', () => {
+  it(
+    'is never hidden whole: the answer names the control and writes nothing',
+    async () => {
+      // (A code block's header holds its copy button.)
+      expect(first(await answer('hide the code block header'))).toEqual([]);
+      const data = await answer('remove the dialog header');
+      expect(first(data)).toEqual([]);
+      expect(JSON.stringify(data.results)).toMatch(
+        /dialog-header holds a control/,
+      );
+      expect(JSON.stringify(data.results)).not.toMatch(/display none/);
+    },
+    T,
+  );
+});
+
 describe('a negation that takes no piece away', () => {
   it(
     'never hides the part: a behavior word, or an owner without that piece',
@@ -451,7 +468,6 @@ describe("a part's own piece taken away", () => {
       for (const [q, on] of [
         ['hide the code block copy button', 'code-block-copy-button'],
         ['no copy button on code blocks', 'code-block-copy-button'],
-        ['hide the code block header', 'code-block-header'],
         ['hide the tab underline', 'tab-indicator'],
         ['hide the banner icon', 'banner-icon'],
         ['alerts without icons', 'banner-icon'],
