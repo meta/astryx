@@ -4598,11 +4598,9 @@ export function draftAnswer(ctx, env, question) {
       'larger text',
     )
     // ("a theme that works in dark mode": a theme with both modes, which it
-    // has; never an ask scoped to dark. Both modes said, "works in light
-    // and dark mode", are read below as both modes; any other clause after
-    // "and" or "&" is its own ask and stays.)
+    // has; never an ask scoped to dark.)
     .replace(
-      /\b(?:that\s+|which\s+)?(?:works|looks good|holds up|also works|is usable|works well)\s+in\s+(?:dark|light)\s+modes?\b(?!\s*(?:and|&)\s+(?:in\s+)?(?:light|dark)\b)/gi,
+      /\b(?:that\s+|which\s+)?(?:works|looks good|holds up|also works|is usable|works well)\s+in\s+(?:both\s+)?(?:dark|light)(?:\s+(?:and|&)\s+(?:dark|light))?\s+modes?\b/gi,
       ' ',
     )
     // ("green text on a black page": the text's color and the page's, each
@@ -4735,13 +4733,6 @@ export function draftAnswer(ctx, env, question) {
     .replace(/\bsafety[- ]orange\b/gi, 'safetyorange')
     // ("slate blue-gray": the tinted gray reader takes blue-gray.)
     .replace(/\bslate\s+(?=blue[- ]gr[ae]y\b)/gi, '')
-    // ("works in light and dark"): both modes.
-    .replace(
-      // (A wish before it, "should work in light and dark mode", "it needs
-      // to look good in dark and light", is the same ask.)
-      /\b(?:that\s+|which\s+)?(?:(?:it|this|that|the theme)\s+)?(?:(?:should|must|needs?\s+to|has\s+to|have\s+to|will|to)\s+)?(?:works?|working|look good|looks good|holds? up|also works?|is usable|be usable|works? well)\s+in\s+(?:both\s+)?(?:light\s+(?:and|&)\s+dark|dark\s+(?:and|&)\s+light)(?:\s+modes?)?\b/gi,
-      'light and dark modes',
-    )
     // ("…, 13px text, light and dark": the two modes said as a clause of
     // their own are the theme's modes, never a light and a dark color.)
     .replace(

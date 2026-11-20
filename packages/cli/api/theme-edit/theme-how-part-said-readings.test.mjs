@@ -113,18 +113,6 @@ describe("a part said beside a mode, a role or a look is that part's", () => {
     const rs = await how('q0', 'remove the shadow from the images');
     expect(writes(rs).some(c => /--shadow-/.test(c))).toBe(false);
   });
-  it('works in light and dark is both modes on a one-mode theme', async () => {
-    await themeEditNew('lo', {cwd, like: 'neutral'});
-    await themeEditSet('lo', 'mode', 'light-only', {cwd});
-    for (const ask of [
-      'works in light and dark',
-      'works in light and dark mode',
-      'looks good in dark and light modes',
-      'should work in light and dark mode',
-      'it needs to look good in dark and light',
-    ])
-      expect(writes(await how('lo', ask)), ask).toContain('set lo mode both');
-  });
   it('a look named for a brand asks for its colors; a feel word is only not taken', async () => {
     // (By position: a word the editor does not hold, said as a look's
     // name, names a thing.)
