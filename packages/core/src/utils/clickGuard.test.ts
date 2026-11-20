@@ -14,7 +14,7 @@
  * @position Unit tests of packages/core/src/utils/clickGuard.ts
  */
 
-import {afterEach, describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 
 import {GestureHost} from '../gestures/GestureHost';
 import {coarsePrimaryPointer} from '../gestures/__tests__/pointerQuery';
@@ -29,6 +29,7 @@ import {
   isClickGuardArmed,
   withoutClickGuard,
 } from './clickGuard';
+import {__setEventTrustForTest} from './eventTrust';
 
 afterEach(() => {
   __resetClickGuardForTest();
@@ -53,6 +54,43 @@ function mouse(
   detail = 1,
 ): MouseEvent {
   const event = new MouseEvent(type, {bubbles: true, cancelable: true, detail});
+  target.dispatchEvent(event);
+  return event;
+}
+
+// jsdom sends no trusted event. The events in this set stand in for the
+// browser's own (./eventTrust.ts).
+const browserEvents = new WeakSet<Event>();
+beforeEach(() => {
+  __setEventTrustForTest(event => browserEvents.has(event));
+});
+afterEach(() => {
+  __setEventTrustForTest(null);
+});
+
+/** A click that the browser itself sends, with `detail` 1. */
+function browserClick(target: EventTarget): MouseEvent {
+  const event = new MouseEvent('click', {
+    bubbles: true,
+    cancelable: true,
+    detail: 1,
+  });
+  browserEvents.add(event);
+  target.dispatchEvent(event);
+  return event;
+}
+
+/** A compatibility mousedown or mouseup that the browser itself sends. */
+function browserMouse(
+  type: 'mousedown' | 'mouseup',
+  target: EventTarget,
+): MouseEvent {
+  const event = new MouseEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    detail: 1,
+  });
+  browserEvents.add(event);
   target.dispatchEvent(event);
   return event;
 }
@@ -353,7 +391,7 @@ describe('clickGuard', () => {
     expect(click(target).defaultPrevented).toBe(true);
   });
 
-  it('armed after a touchstart that was not cancelable, stays armed after the cancelled touchend and takes the compatibility mousedown, mouseup and click that WebKit still sends in a Home Screen web app (spec:AST-094 FR21)', () => {
+  it('armed by the menu press model, stays armed after the cancelled touchend and takes the compatibility mousedown, mouseup and click that WebKit can still send in a Home Screen web app, whether or not the touchstart was cancelable (spec:AST-094 FR21)', () => {
     const target = button();
     const onPage = vi.fn();
     for (const type of ['mousedown', 'mouseup', 'click']) {
@@ -363,21 +401,21 @@ describe('clickGuard', () => {
       armClickGuard(document, {
         staysInstalled: true,
         cancelsTouchEnd: true,
-        touchStartCancelable: false,
+        staysArmedAfterTouchEnd: true,
       });
       expect(touchEnd(target).defaultPrevented).toBe(true);
       expect(isClickGuardArmed(document)).toBe(true);
       // A keyboard's or a screen reader's click still passes.
       expect(click(target, 0).defaultPrevented).toBe(false);
       onPage.mockClear();
-      expect(mouse('mousedown', target).defaultPrevented).toBe(true);
-      expect(mouse('mouseup', target).defaultPrevented).toBe(true);
-      expect(click(target).defaultPrevented).toBe(true);
+      expect(browserMouse('mousedown', target).defaultPrevented).toBe(true);
+      expect(browserMouse('mouseup', target).defaultPrevented).toBe(true);
+      expect(browserClick(target).defaultPrevented).toBe(true);
       expect(onPage).not.toHaveBeenCalled();
       // The click spends it: the next mousedown and click are the page's.
       expect(isClickGuardArmed(document)).toBe(false);
-      expect(mouse('mousedown', target).defaultPrevented).toBe(false);
-      expect(click(target).defaultPrevented).toBe(false);
+      expect(browserMouse('mousedown', target).defaultPrevented).toBe(false);
+      expect(browserClick(target).defaultPrevented).toBe(false);
     } finally {
       for (const type of ['mousedown', 'mouseup', 'click']) {
         window.removeEventListener(type, onPage);
@@ -385,12 +423,37 @@ describe('clickGuard', () => {
     }
   });
 
-  it("armed after a touchstart that was not cancelable, keeps a full window from the cancelled touchend; after it, and after the next pointerdown, a tap's mouse events and click reach the page", () => {
+  it("armed by the menu press model, lets a page's own mousedown, mouseup and click act after the cancelled touchend: no tracked gesture is behind them (module:DropdownMenu/useMenuPress FR5)", () => {
+    const target = button();
+    const onPage = vi.fn();
+    for (const type of ['mousedown', 'mouseup', 'click']) {
+      window.addEventListener(type, onPage);
+    }
+    try {
+      armClickGuard(document, {
+        staysInstalled: true,
+        cancelsTouchEnd: true,
+        staysArmedAfterTouchEnd: true,
+      });
+      expect(touchEnd(target).defaultPrevented).toBe(true);
+      // A script's dispatchEvent, with detail 1.
+      expect(mouse('mousedown', target).defaultPrevented).toBe(false);
+      expect(mouse('mouseup', target).defaultPrevented).toBe(false);
+      expect(click(target).defaultPrevented).toBe(false);
+      expect(onPage).toHaveBeenCalledTimes(3);
+    } finally {
+      for (const type of ['mousedown', 'mouseup', 'click']) {
+        window.removeEventListener(type, onPage);
+      }
+    }
+  });
+
+  it("armed by the menu press model, keeps a full window from the cancelled touchend; after it, and after the next pointerdown, a tap's mouse events and click reach the page", () => {
     vi.useFakeTimers();
     const target = button();
     armClickGuard(document, {
       cancelsTouchEnd: true,
-      touchStartCancelable: false,
+      staysArmedAfterTouchEnd: true,
     });
     // A busy main thread can hold the touchend until late in the window.
     vi.advanceTimersByTime(CLICK_GUARD_WINDOW_MS - 50);
@@ -412,7 +475,7 @@ describe('clickGuard', () => {
     }
     armClickGuard(document, {
       cancelsTouchEnd: true,
-      touchStartCancelable: false,
+      staysArmedAfterTouchEnd: true,
     });
     expect(touchEnd(target).defaultPrevented).toBe(true);
     // A new press is a new gesture: its click is the page's.
