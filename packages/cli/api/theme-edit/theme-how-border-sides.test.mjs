@@ -723,4 +723,27 @@ describe('per-side border asks', () => {
     },
     T,
   );
+
+  it(
+    'moves a shorthand before its side only within one list',
+    async () => {
+      if (unbuilt) return;
+      // (Across a sentence or a "then", the later one is the next step.)
+      expect(
+        await first(
+          'Give cards a red top border. Then give cards a 1px solid gray border.',
+        ),
+      ).toEqual([
+        "border-top '1px solid #dc2626' --on card",
+        "border '1px solid #9e9e9e' --on card",
+      ]);
+      expect(
+        await first('tabs: a 2px bottom border, then a 1px gray border'),
+      ).toEqual([
+        "border-bottom '2px solid var(--color-border)' --on tab",
+        "border '1px solid #9e9e9e' --on tab",
+      ]);
+    },
+    T,
+  );
 });

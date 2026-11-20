@@ -266,6 +266,23 @@ describe('a one-mode color on a part that draws no border', () => {
   );
 });
 
+describe('a side width the theme sets, with no style', () => {
+  it(
+    'draws no line, so the color still brings its border',
+    async () => {
+      await themeEditSet('u', 'border-top-width', '2px', {cwd, on: 'tab'});
+      const r = await themeEditSet('u', 'border-color', '#999999', {
+        cwd,
+        on: 'tab',
+      });
+      expect(r.data.notes.join('\n')).toContain('added a');
+      await themeEditUndo('u', {cwd});
+      await themeEditUndo('u', {cwd});
+    },
+    T,
+  );
+});
+
 describe("how's check", () => {
   it(
     'writes a color the theme saves already after the border it brings',
