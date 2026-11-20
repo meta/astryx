@@ -5,11 +5,9 @@
  * @input A BCP 47 locale
  * @output createListFormatter, a function that joins strings as a list in
  *   that locale
- * @position Internal formatter that joins items as a conjunction list.
- *   useListFormatter.ts binds it to the provider locale for components; the
- *   PowerSearch value formatters call it directly, because the server-safe
- *   `PowerSearch/utils` entry cannot import a client hook. Not exported from
- *   the i18n barrel.
+ * @position Internal list formatter with no React dependency.
+ *   `useListFormatter` binds it to the provider locale. The server-safe
+ *   PowerSearch formatters call it directly.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/i18n/useListFormatter.ts

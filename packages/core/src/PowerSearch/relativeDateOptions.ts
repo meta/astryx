@@ -5,9 +5,9 @@
  * @input An operator's `date_relative` value and a translator
  * @output buildRelativeDateOptions, the relative-date choices an operator
  *   offers; relativeDateLabel, the choice label for a stored value
- * @position Shared by the value editors, the sheet presentation's rows and
- *   both token formatters, so a stored value (`3d_ago`) reads as the same
- *   catalog message ("3 days ago") everywhere. Server-safe: no React.
+ * @position The value editors, the sheet's rows and both token formatters
+ *   use it. A stored value (`3d_ago`) then reads as one catalog message
+ *   ("3 days ago") everywhere. It has no React dependency.
  */
 
 import type {OperatorValue} from './types';
