@@ -5,7 +5,6 @@
  */
 
 import fs from 'node:fs';
-import {renderTokens} from '../../foundation/doc-compiler/links.mjs';
 import {CORE_PACKAGE} from '../../foundation/discovery/component-discovery.mjs';
 import {discoverTemplates} from '../template/template.mjs';
 import {listAvailableThemes} from '../theme/_adapter.mjs';
@@ -124,7 +123,7 @@ export async function gatherTemplates(cwd) {
         return derive();
       },
       ...(weakKeywordBound ? {weakKeywordBound} : {}),
-      description: renderTokens(t.description || ''),
+      description: t.description || '',
       // A template's own keywords name the many ideas it serves, so they score
       // as its prose does, not as a name: one of them matching one word of a
       // short idea is not a direct match.
@@ -132,6 +131,12 @@ export async function gatherTemplates(cwd) {
       // A display name that names the block's subject is another name of it
       // and its title (subjectName).
       ...subjectName(t),
+      // The components a block uses, as its doc lists them: search reads
+      // them as what the block renders, not as its own keywords
+      // (_named-keywords.mjs).
+      ...(Array.isArray(t.componentsUsed) && t.componentsUsed.length
+        ? {_uses: [...t.componentsUsed]}
+        : {}),
       _displayName: t.name,
       _package: t.package ?? CORE_PACKAGE,
       _kind: t.type, // 'page' | 'block'

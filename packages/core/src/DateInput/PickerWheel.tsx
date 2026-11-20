@@ -147,6 +147,7 @@ const styles = stylex.create({
     paddingInline: spacingVars['--spacing-2'],
     boxSizing: 'border-box',
     fontSize: typeScaleVars['--text-large-size'],
+    lineHeight: typeScaleVars['--text-large-leading'],
     fontWeight: fontWeightVars['--font-weight-normal'],
     color: colorVars['--color-text-primary'],
     whiteSpace: 'nowrap',

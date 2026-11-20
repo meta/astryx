@@ -179,7 +179,7 @@ export async function context(cwd) {
  * Core's registry of the variables a part's plain border-radius or padding
  * also writes (a card's inner corners), or empty on a Core without it.
  * @param {string} coreDir
- * @returns {Promise<Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string}>>>}
+ * @returns {Promise<Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string, corners?: boolean}>>>}
  */
 async function derivedVars(coreDir) {
   const file = path.join(coreDir, 'dist', 'theme', 'derivedVarRegistry.js');
@@ -876,7 +876,9 @@ export function themeImageNotes(ctx, slug) {
     else if (named.kind === 'missing')
       notes.set(
         named.ref,
-        `${named.ref} was not found beside the theme (${where}/), so neither the previews nor the app show it.`,
+        named.ref.startsWith('/')
+          ? `${named.ref} was not found in ${shown(ctx.project.cwd, path.join(at.root, 'public'))}/, where a path from the site's root is read, so neither the previews nor the app show it.`
+          : `${named.ref} was not found beside the theme (${where}/), so neither the previews nor the app show it.`,
       );
     else if (named.kind === 'not-file')
       notes.set(
@@ -1167,9 +1169,10 @@ export function baseWeightNotes(ctx, data) {
  * @param {any} before
  * @param {any} after
  * @param {any} [base] the base theme, whose own values a write that repeats them does not change
+ * @param {(target: string, prop: string) => string | null} [drawn] the value Core itself writes for a part's property, as written (a token reference: `var(--radius-full)`), when it is the same at rest and in every state; a write of that same value repeats it and is not listed
  * @returns {string[]}
  */
-export function styledChanges(before, after, base) {
+export function styledChanges(before, after, base, drawn) {
   /** @type {string[]} */
   const out = [];
   /** A value as CSS reads it, for comparing. @param {any} v */
@@ -1243,6 +1246,16 @@ export function styledChanges(before, after, base) {
           continue;
         }
         if (repeatsBase(x[prop], y[prop], shown)) continue;
+        // (A part's plain rule that writes what Core draws there already.)
+        if (
+          key === 'base' &&
+          x[prop] === undefined &&
+          shown === undefined &&
+          typeof y[prop] !== 'object' &&
+          drawn &&
+          repeatsBase(undefined, y[prop], drawn(target, cssName(prop)))
+        )
+          continue;
         out.push(
           `${where}: ${cssName(prop)} ${y[prop] === undefined ? '(removed)' : typeof y[prop] === 'string' ? y[prop] : JSON.stringify(y[prop])}`,
         );

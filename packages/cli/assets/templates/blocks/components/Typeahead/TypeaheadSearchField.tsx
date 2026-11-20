@@ -6,7 +6,7 @@ import {useState} from 'react';
 import {Typeahead} from '@astryxdesign/core/Typeahead';
 import type {SearchableItem, SearchSource} from '@astryxdesign/core/Typeahead';
 import {Center} from '@astryxdesign/core/Center';
-import {MagnifyingGlassIcon} from '@heroicons/react/24/outline';
+import {SearchIcon} from '@astryxdesign/template-icons';
 
 const items: SearchableItem[] = [
   {id: '1', label: 'Olivia Martin'},
@@ -35,7 +35,7 @@ export default function TypeaheadSearchField() {
         searchSource={searchSource}
         value={value}
         onChange={setValue}
-        startIcon={MagnifyingGlassIcon}
+        startIcon={SearchIcon}
         hasEntriesOnFocus
       />
     </Center>

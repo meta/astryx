@@ -27,8 +27,8 @@ asks `astryx build` where to begin. A page template already carries the frame,
 the spacing, and the section rhythm the system decided on; a page composed from
 components has to rediscover all of that. So build's answer always starts from
 a template: it names one page template to scaffold, the command that scaffolds
-exactly that template, the next best templates, and the blocks and components
-that fill it.
+exactly that template, the next best templates, the components that fill it,
+and block examples the builder reads for reference.
 
 A scaffolded template builds only when the project has what its source needs. So
 the `template.copy` receipt from `astryx template`, and the start and each
@@ -79,9 +79,10 @@ own ranking and output, and template owners own what each template is.
   app shell (FR2) when it gives no page. A family's base template is that page
   only when the ranker leads with it, and never when the family word heads the
   request and also ends a component's name: the request then asks for that
-  piece, not for a part of the family's page (DEC-13). The blocks and components in the kit
-  carry the part itself. A request that changes a page the builder already has
-  starts from the app shell (FR2): the page is the builder's to keep (FR9), and
+  piece, not for a part of the family's page (DEC-13). The components in the
+  kit carry the part itself, and its block examples show how such a part is
+  built (DEC-14). A request that changes a page the builder already has starts
+  from the app shell (FR2): the page is the builder's to keep (FR9), and
   no template scaffolds it. A request that adds something to a place that
   names no page, only the app or product as a whole, changes no page the
   builder has: build reads what it adds as if the request gave no place. One
@@ -110,13 +111,14 @@ own ranking and output, and template owners own what each template is.
   next best page templates, at most two, each with its scaffold command.
   Templates that rank the same keep one fixed order on every host, so the same
   request gets the same start and alternatives on any machine.
-- **FR8 — The kit fills the template.** Build MUST list the blocks that fill
-  the start before the components, and name the always-on frame and
-  foundation components. The order of the listed blocks follows
-  `spec:AST-083`.
+- **FR8 — The kit shows block examples.** Build MUST list block examples for
+  the parts of the start before the components, and name the always-on frame
+  and foundation components. A block example is a reference the builder reads,
+  not a section build tells them to insert; the `blocks` field lists these
+  examples (DEC-14). The order of the listed blocks follows `spec:AST-083`.
 - **FR9 — An existing page is kept.** Build's text output MUST tell a builder
-  who is changing a page they already have to keep it and use only the blocks
-  and components.
+  who is changing a page they already have to keep it, add components, and
+  read a block example when it helps.
 - **FR10 — The recommendation is data.** The JSON response MUST carry the
   recommendation itself (the start with its name, command, basis, reason, and
   alternatives), so no caller derives it from other fields.
@@ -126,14 +128,14 @@ own ranking and output, and template owners own what each template is.
   values (which templates, blocks, or components appear, and in what order);
   it does not change a field's shape or meaning.
 - **FR12 — Text leads with the start.** Build's text output MUST lead with the
-  start, then the alternatives, then the blocks, then the components. Every
-  response field keeps a text projection as `spec:AST-017` requires: short by
-  default, and whole under `--verbose`.
+  start, then the alternatives, then the block examples, then the components.
+  Every response field keeps a text projection as `spec:AST-017` requires:
+  short by default, and whole under `--verbose`.
 - **FR13 — Every agent-facing surface agrees.** The build playbook, the
   generated agent docs, and the consumer guides that describe building a page
-  MUST describe the same workflow: scaffold the named template, fill it with
-  blocks, and compose only what is left. No surface tells builders to compose
-  a page from primitives first.
+  MUST describe the same workflow: scaffold the named template, build its
+  parts with components, and read block examples for reference. No surface
+  tells builders to compose a page from primitives first.
 - **FR14 — The written source names what it needs.** The packages a template
   needs MUST be the packages named by the imports in the source the command
   writes: its import declarations, type-only ones included, its export-from
@@ -154,16 +156,23 @@ own ranking and output, and template owners own what each template is.
   directory that declares a workspace, by a `pnpm-workspace.yaml` or a
   package.json `workspaces` field; outside a workspace it is the directory of
   the nearest package.json, and with no package.json the project declares
-  nothing. `missingPackages` MUST list each needed package (FR14) that the
-  project does not declare, once, and is empty when none is missing.
+  nothing. Outside a project, in a hosted run, each package that the
+  `package.json` of the root serving the run lists in `dependencies` or
+  `optionalDependencies` counts as declared too (`spec:AST-081` FR3).
+  `missingPackages` MUST list each needed package (FR14) that the project does
+  not declare, once, and is empty when none is missing.
 - **FR16 — Astryx packages count like any other.** An Astryx package MUST count
   under FR14 and FR15 like any other package: a source that imports one the
   project does not declare lists it in `missingPackages`, and in the install
   command when there is one (FR17). No package is exempt by name.
 - **FR17 — One install command, in the project's package manager.** When
-  `missingPackages` is not empty and the package manager is not ambiguous
-  (FR19), `installCommand` MUST be one command that installs every missing
-  package with the project's package manager; otherwise it is null. The nearest
+  `missingPackages` is not empty, the package manager is not ambiguous (FR19),
+  and a package.json holds the target directory, `installCommand` MUST be one
+  command that installs every missing package with the project's package
+  manager; otherwise it is null. In a target directory that no package.json
+  holds, an install would make the directory a project (`spec:AST-081` FR3), so
+  `notes` names the missing packages for the project that uses the source
+  instead. The nearest
   directory, from the target directory up to the workspace root, that has a
   package.json `packageManager` field or a lockfile decides the package manager.
   The field names it. Without the field, the lockfiles name the package manager
@@ -206,8 +215,10 @@ own ranking and output, and template owners own what each template is.
   fields, with the values the receipt carries when that template is scaffolded
   into the directory where build ran, from the source its scaffold command (FR5)
   writes. `notes` holds one line for each thing the project lacks: the missing
-  packages with their install command or the reason there is none (FR19), and a
-  missing StyleX compiler (FR20); the receipt's `notes` is empty when the
+  packages with their install command, or in its place the install guidance a
+  loaded integration gives (`spec:AST-039` FR16), the reason there is none
+  (FR19), or the project that installs them (FR17), and a missing StyleX
+  compiler (FR20); the receipt's `notes` is empty when the
   project lacks nothing. One exception keeps build's response additive (FR22):
   on build's start and alternatives, `notes` is present only when it holds a
   line. Text shows each template's readiness beside it, as FR12 and
@@ -251,8 +262,8 @@ This record changes these surfaces:
 
 - the `build.kit` response carries the start, with its command, basis, reason,
   and alternatives; every existing field keeps its shape and meaning;
-- build's text leads with the start and the alternatives, then the blocks and
-  the components;
+- build's text leads with the start and the alternatives, then the block
+  examples and the components;
 - the build playbook, the generated agent docs, and the consumer guides that
   describe building a page start from a template;
 - the `template.copy` receipt reports scaffold readiness as FR14–FR20 state,
@@ -295,8 +306,8 @@ This record changes these surfaces:
 **Decider:** `josephfarina`, `2026-09-28`
 
 Templates carry the spacing judgment and a kit of loose parts does not, so the
-recommendation is always a full page template, and blocks and components fill
-it.
+recommendation is always a full page template, and components fill it; blocks
+are examples to read (DEC-14).
 
 Rejected: naming a template only on an exact match and a layout reference
 otherwise, which leaves most builders composing from primitives.
@@ -329,8 +340,9 @@ Rejected: a single pick with no alternatives.
 
 A part is built inside a page. When the request gives that page, its template
 is where the part goes; when it gives none, the app shell is the frame, and the
-blocks and components carry the part. A change to an existing page is the same
-case: the page is the builder's own, so no template is its start.
+components carry the part, with block examples to read (DEC-14). A change to an
+existing page is the same case: the page is the builder's own, so no template
+is its start.
 
 Rejected: starting a part from whichever page template shares a word with it,
 which scaffolds an unrelated page for a single control; and giving a part no
@@ -462,6 +474,20 @@ Rejected: hosting on any base whose family word appears anywhere in the
 request, which starts every request that mentions a table from the table page
 once a table base is ready; and a list of family words that never host, which
 needs an update for each new family.
+
+### DEC-14 — Blocks are examples, not sections to insert
+
+**Reference:** `spec:AST-048/DEC-14`
+**Decider:** `josephfarina`, `2026-11-18`
+
+The page template carries the frame and spacing; the parts inside it are the
+builder's own work with components. A block shows how a part like the
+requested one is built, so build lists blocks as examples to read, and its text
+never tells the builder to paste one into the page. The `blocks` field keeps
+its shape (`spec:AST-017`) and holds these examples.
+
+Rejected: dropping blocks from the answer, which leaves the builder with no
+worked example of a part.
 
 ## Open questions
 

@@ -61,10 +61,14 @@ describe("a part in another component's place", () => {
     // Core paints a ghost button transparent at rest.
     expect(at('--color-neutral')).not.toContain('--when variant:ghost');
     expect(at('--color-overlay-pressed')).not.toContain('--when variant:ghost');
-    // The current page's fill is a condition of its own, a state set names.
-    expect(at('--color-neutral').join(' ')).toMatch(
-      /--when variant:ghost --state current/,
-    );
     expect(at('--color-neutral')).toContain('--when variant:secondary');
+    // The current page's fill is its pagination cell's, in a state set names.
+    const cell = await themeEditHow('pagination-item', {cwd, theme: 'n'});
+    const cellReads = /** @type {Array<{token: string, when: string[]}>} */ (
+      cell.data.reads.background
+    );
+    expect(
+      cellReads.find(r => r.token === '--color-neutral')?.when ?? [],
+    ).toContain('--state selected');
   }, 240_000);
 });

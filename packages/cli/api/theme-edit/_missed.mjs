@@ -24,7 +24,7 @@ import {blurScaled} from './_how-question.mjs';
 
 /**
  * @typedef {{thing: string, value: string, on?: string, when?: string, state?: string, mode?: string}} MissedStep
- * @typedef {{kind: number, part: string, state?: string, why: string, steps: MissedStep[], aspect: string}} Missed
+ * @typedef {{kind: number, part: string, state?: string, when?: string, why: string, steps: MissedStep[], aspect: string}} Missed
  */
 
 /**
@@ -369,6 +369,7 @@ export function missedSteps(ctx, data, res, base) {
         found.push({
           kind: 3,
           part: p,
+          ...(when ? {when} : {}),
           why: `${when ? `${when.replace(':', ' ')}, ` : ''}its fill is still the base's ${st} color (${r.token}), which the theme's ${STATUS[st][0]} color does not reach`,
           aspect: 'background',
           // (A media part's text picks its side from the new fill: where
@@ -408,7 +409,7 @@ export function missedSteps(ctx, data, res, base) {
     // the base points the role token at another one there (stone's and
     // gothic's info banner reads the categorical blue), or a variant named
     // for the role draws a color of the base's palette written out (stone's
-    // accent progress fill in its pale blue). Listed once the theme moved
+    // accent progress fill in its blue). Listed once the theme moved
     // that role, in each mode where it looks different, with a line that
     // gives the part the theme's role color there.
     for (const [key, look] of Object.entries(
@@ -463,6 +464,7 @@ export function missedSteps(ctx, data, res, base) {
         found.push({
           kind: 8,
           part: p,
+          ...(when ? {when} : {}),
           why: `${when ? `${when.replace(':', ' ')}, ` : ''}the base theme points ${names.join(' and ')} there, so the theme's own color does not reach it`,
           aspect: 'background',
           steps: pointed,
@@ -500,6 +502,7 @@ export function missedSteps(ctx, data, res, base) {
         found.push({
           kind: 8,
           part: p,
+          ...(when ? {when} : {}),
           why: `${String(when).replace(':', ' ')}, its ${side === 'text' ? 'text' : 'fill'} is a color of the base theme's palette written out (${v}), which the theme's ${named} color does not reach`,
           aspect: side === 'text' ? 'text' : 'background',
           steps: [{thing, value: `var(${token})`, on: p, when}],
@@ -562,6 +565,7 @@ export function missedSteps(ctx, data, res, base) {
         found.push({
           kind: 8,
           part: p,
+          ...(when ? {when} : {}),
           why: `${when ? `${when.replace(':', ' ')}, ` : ''}its ${thing === 'color' ? 'text' : thing.replace('-color', '')} is the base theme's own accent (${String(v)}), written as a color, which the accent leaves as it is`,
           aspect:
             thing === 'color'
@@ -610,10 +614,25 @@ export function missedSteps(ctx, data, res, base) {
             ),
         )
       : [];
+    // (The looks the status fill is drawn in, when none is at rest.)
+    const statusLooks = statusReads.some((/** @type {any} */ r) =>
+      r.when.includes(''),
+    )
+      ? []
+      : [
+          ...new Set(
+            statusReads.flatMap((/** @type {any} */ r) =>
+              r.when
+                .filter((/** @type {string} */ w) => /^variant=[\w-]+$/.test(w))
+                .map((/** @type {string} */ w) => w.replace('=', ':')),
+            ),
+          ),
+        ];
     if (statuses.length && !covers(p, FILL))
       found.push({
         kind: 3,
         part: p,
+        ...(statusLooks.length ? {when: statusLooks.join(', ')} : {}),
         why: `still the base's ${statuses.join(', ')} color${statuses.length > 1 ? 's' : ''} (${statusReads[0].token}): not generated at the theme's vibrancy`,
         aspect: 'background',
         steps: statuses.map(st => ({

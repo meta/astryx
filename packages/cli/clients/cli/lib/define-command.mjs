@@ -338,6 +338,16 @@ export function defineCommand(
   for (const o of doc.options ?? []) {
     const desc = o.description ?? (o.param ? paramDesc(o.param) : '');
     const option = cmd.createOption(o.flag, renderTokens(desc));
+    if (o.pointers?.length) {
+      describeOption(option, [
+        renderTokens(desc),
+        ...o.pointers.map(part =>
+          typeof part === 'string'
+            ? renderTokens(part)
+            : {commands: part.commands, text: renderTokens(part.text)},
+        ),
+      ]);
+    }
     if (o.default != null) option.default(o.default);
     cmd.addOption(option);
   }

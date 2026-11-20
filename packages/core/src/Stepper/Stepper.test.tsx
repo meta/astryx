@@ -164,6 +164,21 @@ describe('Stepper', () => {
     expect(list).toHaveAttribute('data-orientation', 'vertical');
   });
 
+  it('keeps a vertical step body within its step, whatever the width of its content', () => {
+    render(
+      <Stepper activeStep={0} orientation="vertical">
+        <Step step={0} label="Step 1">
+          <div data-testid="content">Content</div>
+        </Step>
+      </Stepper>,
+    );
+    // The body is a flex item of the step row: without the reset, its
+    // min-content floor lets wide content push it past the step.
+    const body = screen.getByTestId('content').closest('li > div');
+    expect(body).not.toBeNull();
+    expect(getComputedStyle(body as Element).minWidth).toBe('0');
+  });
+
   it('calls onStepClick when a completed step is clicked', async () => {
     const user = userEvent.setup();
     const handleClick = vi.fn();
@@ -1243,6 +1258,31 @@ describe('Stepper', () => {
       expect(list.style.width).toBe('');
     });
 
+    it('marks the compact summary as the selected step', () => {
+      atWidth(320, fourSteps({}));
+      const summary = document.querySelector<HTMLElement>(SUMMARY);
+      expect(summary).not.toBeNull();
+      const summaryStep = summary!.querySelector('.astryx-step');
+      expect(summaryStep).toHaveAttribute('data-selected', 'selected');
+      expect(summaryStep).toHaveAttribute('data-progress', 'in-progress');
+      expect(summary!.querySelector('.astryx-step-label')).toHaveAttribute(
+        'data-selected',
+        'selected',
+      );
+      // Only the current step is marked in the collapsed list too.
+      const listSteps = [
+        ...screen
+          .getByRole('list')
+          .querySelectorAll<HTMLElement>('.astryx-step'),
+      ];
+      expect(listSteps.map(el => el.dataset.selected ?? null)).toEqual([
+        null,
+        'selected',
+        null,
+        null,
+      ]);
+    });
+
     it('puts horizontal className on the frame without moving list DOM props or ref', () => {
       const ref = createRef<HTMLOListElement>();
       atWidth(
@@ -2203,6 +2243,73 @@ describe('step-label and step-description theme targets', () => {
     expect(container.querySelectorAll('.astryx-step-description')).toHaveLength(
       2,
     );
+  });
+});
+
+describe('current step selected state', () => {
+  // The current step carries the shared `selected` state that tabs, side
+  // and top navigation, segmented controls and lists use, so one theme rule for
+  // selected items reaches it. `aria-current` stays the accessible cue.
+  const parts = (root: ParentNode, target: string) => [
+    ...root.querySelectorAll<HTMLElement>(`.astryx-${target}`),
+  ];
+
+  it.each(['separated', 'on-track'] as const)(
+    'marks only the current step, its indicator and its label (%s)',
+    indicatorPosition => {
+      const {container} = render(
+        <Stepper activeStep={1} indicatorPosition={indicatorPosition}>
+          <Step step={0} label="Account" description="a" />
+          <Step step={1} label="Payment" description="b" />
+          <Step step={2} label="Review" description="c" />
+        </Stepper>,
+      );
+      for (const target of ['step', 'step-indicator', 'step-label']) {
+        expect(parts(container, target).map(el => el.dataset.selected)).toEqual(
+          [undefined, 'selected', undefined],
+        );
+      }
+      for (const el of parts(container, 'step-description')) {
+        expect(el).not.toHaveAttribute('data-selected');
+      }
+      const current = parts(container, 'step')[1];
+      expect(current).toHaveAttribute('aria-current', 'step');
+    },
+  );
+
+  it('moves with the active step, to the first and the last step', () => {
+    const steps = (
+      <>
+        <Step step={0} label="Account" />
+        <Step step={1} label="Payment" />
+        <Step step={2} label="Review" />
+      </>
+    );
+    const {container, rerender} = render(
+      <Stepper activeStep={0}>{steps}</Stepper>,
+    );
+    const selected = () =>
+      parts(container, 'step').map(el => el.dataset.selected ?? null);
+    expect(selected()).toEqual(['selected', null, null]);
+    rerender(<Stepper activeStep={2}>{steps}</Stepper>);
+    expect(selected()).toEqual([null, null, 'selected']);
+    rerender(<Stepper activeStep={3}>{steps}</Stepper>);
+    expect(selected()).toEqual([null, null, null]);
+  });
+
+  it('emits theme selectors for the state', () => {
+    const theme = defineTheme({
+      name: 'step-selected-state-test',
+      components: {
+        step: {'selected:selected': {backgroundColor: 'rgb(1, 2, 3)'}},
+        'step-indicator': {'selected:selected': {borderRadius: '999px'}},
+        'step-label': {'selected:selected': {fontWeight: '700'}},
+      },
+    });
+    const {component: css} = generateThemeCSS(theme);
+    expect(css).toContain('.astryx-step[data-selected="selected"]');
+    expect(css).toContain('.astryx-step-indicator[data-selected="selected"]');
+    expect(css).toContain('.astryx-step-label[data-selected="selected"]');
   });
 });
 

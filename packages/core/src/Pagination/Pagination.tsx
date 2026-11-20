@@ -234,12 +234,14 @@ const styles = stylex.create({
     minHeight: sizeVars['--size-element-md'],
     color: colorVars['--color-text-secondary'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     userSelect: 'none',
   },
   ellipsisSm: {
     minWidth: sizeVars['--size-element-sm'],
     minHeight: sizeVars['--size-element-sm'],
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
   },
   infoText: {
     display: 'flex',
@@ -291,18 +293,22 @@ const styles = stylex.create({
   inputLabel: {
     color: colorVars['--color-text-secondary'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     userSelect: 'none',
   },
   inputLabelSm: {
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
   },
   inputTotal: {
     color: colorVars['--color-text-secondary'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     userSelect: 'none',
   },
   inputTotalSm: {
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
   },
   pageSizeSelector: {
     display: 'flex',
@@ -400,9 +406,29 @@ function navigatesHere(event: React.MouseEvent<HTMLElement>): boolean {
  * Button replaces the element when the control starts or stops being a link.
  * The new element takes the focus.
  */
-function PaginationButton(props: React.ComponentProps<typeof Button>) {
+function PaginationButton({
+  isCurrent = false,
+  rowEnd,
+  ...props
+}: React.ComponentProps<typeof Button> & {
+  isCurrent?: boolean;
+  rowEnd?: 'first' | 'last';
+}) {
   const ref = useFocusAcrossSwap<HTMLButtonElement>();
-  return <Button {...props} ref={ref} />;
+  return (
+    <Button
+      {...props}
+      {...themeProps('pagination-item', {
+        selected: isCurrent ? 'selected' : null,
+        // A theme that joins the controls into one strip reads the row's ends
+        // here. A control with a tooltip renders its layer after it in the
+        // row, so `:last-child` can miss the last control.
+        first: rowEnd === 'first' ? 'first' : null,
+        last: rowEnd === 'last' ? 'last' : null,
+      })}
+      ref={ref}
+    />
+  );
 }
 
 // =============================================================================
@@ -696,9 +722,9 @@ export function Pagination({
                   <span
                     key={`ellipsis-${previousPage}-${nextPage}`}
                     aria-hidden="true"
-                    {...stylex.props(
-                      styles.ellipsis,
-                      isSm && styles.ellipsisSm,
+                    {...mergeProps(
+                      themeProps('pagination-ellipsis'),
+                      stylex.props(styles.ellipsis, isSm && styles.ellipsisSm),
                     )}>
                     …
                   </span>
@@ -717,6 +743,7 @@ export function Pagination({
                   {...controlProps(item, true)}
                   isDisabled={isDisabled}
                   aria-current={isActive ? 'page' : undefined}
+                  isCurrent={isActive}
                   xstyle={isActive && styles.activePage}>
                   {item}
                 </PaginationButton>
@@ -920,7 +947,10 @@ export function Pagination({
         </div>
       )}
       <div
-        {...stylex.props(styles.controls)}
+        {...mergeProps(
+          themeProps('pagination-list', {variant, size}),
+          stylex.props(styles.controls),
+        )}
         // A key or pointer press can arrive before that task. The click that
         // it starts counts from the current page too.
         onKeyDownCapture={countFromCurrentPage}
@@ -941,6 +971,7 @@ export function Pagination({
             {...controlProps(1, hasPrevious)}
             isDisabled={isDisabled || !hasPrevious}
             isIconOnly
+            rowEnd="first"
             xstyle={variant === 'compact' && styles.compactFirst}
           />
         )}
@@ -960,6 +991,7 @@ export function Pagination({
           {...controlProps(clampPage(linkPage - step), hasPrevious)}
           isDisabled={isDisabled || !hasPrevious}
           isIconOnly
+          rowEnd={showFirstLast ? undefined : 'first'}
         />
 
         {renderIndicator()}
@@ -979,6 +1011,7 @@ export function Pagination({
           {...controlProps(clampPage(linkPage + step), hasNext)}
           isDisabled={isDisabled || !hasNext}
           isIconOnly
+          rowEnd={showFirstLast ? undefined : 'last'}
         />
 
         {showFirstLast && (
@@ -997,6 +1030,7 @@ export function Pagination({
             {...controlProps(computedTotalPages ?? optimisticPage, hasNext)}
             isDisabled={isDisabled || !hasNext}
             isIconOnly
+            rowEnd="last"
             xstyle={variant === 'compact' && styles.compactLast}
           />
         )}

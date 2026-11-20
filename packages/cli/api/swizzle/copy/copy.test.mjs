@@ -446,6 +446,10 @@ describe('swizzle.copy — the module graph (spec:AST-110 FR1, FR2)', () => {
       );
       expect(r.data.filesCopied).toBe(r.data.files.length);
       expect(r.data.files).not.toContain('../i18n/InternationalizationContext.ts');
+      // The translator's English default comes from the package's public entry.
+      expect(r.data.files).not.toContain('../i18n/translatingContext.ts');
+      expect(r.data.files).not.toContain('../i18n/resolve.ts');
+      expect(r.data.dependencies).not.toHaveProperty('intl-messageformat');
       const files = filesUnder(out())
         .filter(rel => /\.tsx?$/.test(rel) && !rel.startsWith('node_modules'))
         .map(rel => path.join(out(), rel));
@@ -728,6 +732,32 @@ describe('swizzle.copy — a name the package exports only as a type (spec:AST-1
       expect(r.data.files).toContain('../utils/shape.ts');
       expect(source).toContain("import {size} from '@astryxdesign/core';");
       expect(r.data.files).not.toContain('../utils/size.ts');
+    },
+    SLOW,
+  );
+
+  it(
+    'reads the package surface again after an edit to a module it exports',
+    async () => {
+      await swizzle('Button', {cwd: project});
+      // The package root now exports `shape` as a value too.
+      const index = path.join(
+        project,
+        'node_modules/@astryxdesign/core/src/index.ts',
+      );
+      fs.writeFileSync(
+        index,
+        fs
+          .readFileSync(index, 'utf-8')
+          .replace('export type {shape}', 'export {shape}'),
+      );
+      const r = await swizzle('Button', {cwd: project, overwrite: true});
+      const source = fs.readFileSync(
+        path.join(project, 'components/astryx/Button/Button.tsx'),
+        'utf-8',
+      );
+      expect(source).toContain("import {shape} from '@astryxdesign/core';");
+      expect(r.data.files).not.toContain('../utils/shape.ts');
     },
     SLOW,
   );

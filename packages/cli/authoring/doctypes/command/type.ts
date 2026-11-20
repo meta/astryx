@@ -55,6 +55,13 @@ export interface CommandOptionDoc {
    *  `--like <theme>`. A run whose `--base` names no installed package
    *  suggests the same run with that value given to this option instead. */
   names?: 'component' | 'hook' | 'topic' | 'template' | 'theme';
+  /** Parts that continue the description, in order: text, or a pointer
+   *  that names other commands or options by their command paths, such as
+   *  `{commands: ['theme build'], text: ', and for theme build reports'}`.
+   *  Help leaves a pointer out when the run's base does not serve every
+   *  path it names; `astryx manifest`, `astryx docs`, and search read every
+   *  part. */
+  pointers?: (string | {commands: string[]; text: string})[];
 }
 
 /**

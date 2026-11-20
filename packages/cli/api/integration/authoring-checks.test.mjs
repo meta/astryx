@@ -1277,6 +1277,50 @@ describe('links in component docs and topic descriptions', () => {
     ]);
   });
 
+  it("notes a template description's link that names no doc, marked next, and passes one to its own topic", async () => {
+    writeLinkedComponent({
+      usage: 'A button.',
+      topicDescription: 'Install Acme.',
+    });
+    fs.writeFileSync(
+      path.join(tmpDir, 'astryx.integration.mjs'),
+      `export default {components: './components', docs: './docs', templates: './templates'};\n`,
+    );
+    fs.mkdirSync(path.join(tmpDir, 'templates'), {recursive: true});
+    fs.writeFileSync(
+      path.join(tmpDir, 'templates', 'acme-hero.doc.mjs'),
+      `export default ${JSON.stringify({
+        type: 'block',
+        name: 'Acme hero',
+        description:
+          'Set it up as {@link generic:acme-setup} says, then {@link generic:acme-nothing}.',
+      })};\n`,
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'templates', 'acme-hero.tsx'),
+      'export default function AcmeHero() { return null; }\n',
+    );
+
+    const {data} = await validateIntegration(undefined, {cwd: tmpDir});
+    const links = (data.notes ?? []).filter(
+      (/** @type {any} */ note) => note.code === 'invalid_doc_graph',
+    );
+    expect(links).toEqual([
+      {
+        code: 'invalid_doc_graph',
+        message: expect.stringMatching(
+          /^template acme-hero \(description\): "generic:acme-nothing" names no doc\./,
+        ),
+        next: true,
+      },
+    ]);
+    expect(
+      data.issues.filter(
+        (/** @type {any} */ issue) => issue.code === 'invalid_doc_graph',
+      ),
+    ).toEqual([]);
+  });
+
   it("warns on a topic description's link that names no doc", async () => {
     writeLinkedComponent({
       usage: 'A button.',

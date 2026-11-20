@@ -22,7 +22,7 @@ export default function AspectRatioImageGallery() {
   // the `width="100%"` grid collapses to zero — AspectRatio positions its
   // child absolutely, so it has no intrinsic width to size the grid from.
   return (
-    <Center width={600}>
+    <Center width={600} maxWidth="100%">
       <Grid columns={3} gap={4} width="100%">
         {images.map(({id, alt}) => (
           <AspectRatio key={id} ratio={4 / 3} fit="cover">
