@@ -319,6 +319,19 @@ export interface ComponentPlaygroundConfig {
    *  drawer open state interactive, and notes the simulation under the
    *  rendered component (#4983). */
   appShellMobile?: boolean;
+  /** Props merged over `defaults` for a second render at a phone viewport
+   *  for a component whose layout changes at phone width (AppShell's mobile
+   *  layout: its menu button in the top bar, its drawer). The theme editor's
+   *  part census renders it as one more item, so a theme reaches the parts
+   *  only that layout draws. Values are primitives, plain config objects or
+   *  ElementDescriptors, as in `defaults`.
+   *
+   *  @example
+   *  ```
+   *  playground: {mobile: {mobileNav: {defaultIsMobile: true, isOpen: true}}}
+   *  ```
+   */
+  mobile?: Record<string, unknown>;
   /** Required parent wrapper for sub-components that depend on a parent
    *  context provider (e.g. `Tab` calls `useTabListContext()` and throws
    *  standalone). The preview wraps the component in this parent before
@@ -488,6 +501,12 @@ export interface ComponentThemingDerivedVar {
    *  (e.g. TextArea's flush wrapper drives the inner textarea's inline
    *  padding). Without this, the property is emitted alongside the var. */
   replaces?: boolean;
+  /** On a `borderRadius` entry whose component reads each corner on its
+   *  own: the theme pipeline also writes every corner of the radius to
+   *  `<var>-top-left`, … (from the shorthand or a physical longhand) and
+   *  `<var>-start-start`, … (from a logical longhand), so a radius of
+   *  different corners reaches what the component hands each corner to. */
+  corners?: boolean;
 }
 
 /**

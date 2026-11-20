@@ -88,6 +88,29 @@ describe('ChartAxis bottom (band scale)', () => {
     expect(within(axis).queryByText('Feb')).not.toBeInTheDocument();
   });
 
+  it('keeps the last label when thinning cannot land on it', () => {
+    const days = Array.from({length: 14}, (_, index) => ({
+      month: `Day ${index + 1}`,
+      sales: index,
+    }));
+    renderChart(<ChartAxis position="bottom" maxTicks={7} />, days);
+    const axis = screen.getByRole('group', {name: 'bottom axis'});
+    const labels = Array.from(axis.querySelectorAll('text')).map(
+      text => text.textContent,
+    );
+    // 14 labels capped at 7 → step 2. Day 13 would be the last kept label;
+    // Day 14 replaces it because it sits closer than one step.
+    expect(labels).toEqual([
+      'Day 1',
+      'Day 3',
+      'Day 5',
+      'Day 7',
+      'Day 9',
+      'Day 11',
+      'Day 14',
+    ]);
+  });
+
   it('automatically reduces categorical labels as the plot narrows', () => {
     const denseData = Array.from({length: 20}, (_, index) => ({
       month: `Period ${index + 1}`,

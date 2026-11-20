@@ -23,6 +23,7 @@ import {
   hasModuleHooks,
   readKept,
   writeKept,
+  maskCacheCount,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
 
 usePackedCli();
@@ -34,8 +35,10 @@ usePackedCli();
  */
 function kindOf(file) {
   const key = JSON.parse(readKept(file).key);
-  const [first, second] = key.slice(5);
+  const [first, second, third] = key.slice(5);
   if (first === 'derived') return String(second);
+  // A summary (kept-tree.mjs) by the kind it summarizes.
+  if (first === 'summary' && second === 'kept-tree') return String(third);
   return typeof first === 'string' &&
     !first.includes('/') &&
     !first.includes('\\')
@@ -185,10 +188,7 @@ describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)(
         const r = run(ask, {tmp: where, cwd: other.dir});
         return {
           ...r,
-          stdout: r.stdout
-            .split(where)
-            .join('<cache>')
-            .replace(/\(\d+ entr(?:y|ies), [\d.]+ MB\)/g, '(<count>)'),
+          stdout: maskCacheCount(r.stdout.split(where).join('<cache>')),
         };
       });
 
@@ -216,7 +216,9 @@ describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)(
       expect(keptInodes(primed)).toEqual(warm);
       // The catalog, its table and block catalog, the integration's checks,
       // the issue list, the template records, the integration's theme
-      // records, doctor's docs checks and the CLI's own docs tree.
+      // records, doctor's docs checks, the CLI's own docs tree, the parses
+      // of the stored docs the runs read, and the check that the stored
+      // component list matches the installed Core.
       expect(
         new Set(
           [...keptInodes(primed).keys()].map(file =>
@@ -234,6 +236,8 @@ describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)(
           'integration-themes',
           'doctor-check',
           'docs-tree-inputs',
+          'doc-parse',
+          'stored-component-list-check',
         ]),
       );
     });

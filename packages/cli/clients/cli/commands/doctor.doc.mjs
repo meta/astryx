@@ -18,6 +18,8 @@ export const doc = {
     'Runs project health diagnostics by default: Node version, @astryxdesign/core ' +
     'install and version alignment, theme packages, generated app themes when present, earlier copied-theme migration, config, integrations (every one astryx.config names must load, linked without a config entry, ' +
     'provider identity, contribution issues), agent docs, core peer dependencies, package manager, ' +
+    'Astryx buttons in the project source that do nothing when pressed, ' +
+    'props the project source gives Core components that they do not take, ' +
     "the docs the CLI reads, the newest release the computer knows of, with the install and upgrade commands when the project's release is older, and every `astryx` command on the search path, warning when the first one is not the Astryx CLI or predates the hand-off. Loading astryx.config runs that file's code. " +
     'The `integration` subcommands provide authoring checks for one integration package. ' +
     'Outside a project it checks the computer instead: the Node version, the release that answered, ' +

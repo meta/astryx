@@ -67,6 +67,10 @@ export const overlayPaddingReset = stylex.create({
     '--container-corner-start-end': '0px',
     '--container-corner-end-start': '0px',
     '--container-corner-end-end': '0px',
+    // The block bleed a Table takes: the overlay root is not the page
+    // container's edge.
+    '--_container-bleed-block-start': '0px',
+    '--_container-bleed-block-end': '0px',
     // Added by descendants — fall through to each reader's own default.
     '--layout-padding-outer-x': 'initial',
     '--layout-padding-outer-y': 'initial',

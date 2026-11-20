@@ -9,10 +9,13 @@
 
 // Every ring in core and lab comes from here, except Switch's: its condition
 // is a component-scoped ancestor marker, which cannot be shared without
-// leaking focus state. A component may override only the offset. The values
-// come from the `--focus-outline-*` tokens, so a theme restyles every ring at
-// once. The `:focus-visible` condition is not themeable, so a theme cannot
-// show the ring to pointer users.
+// leaking focus state. A plain TreeList row reads the variables that
+// `publishFocusVisibleVars` sets, with no focus-inside branch; its ring stays
+// in TreeListItem, so this file adds no public member. A component may
+// override only the offset. The values come from the `--focus-outline-*`
+// tokens, so a theme restyles every ring at once. The `:focus-visible`
+// condition is not themeable, so a theme cannot show the ring to pointer
+// users.
 
 import * as stylex from '@stylexjs/stylex';
 import {focusVars} from '../theme/tokens.stylex';

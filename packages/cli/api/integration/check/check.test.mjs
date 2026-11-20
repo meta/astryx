@@ -474,9 +474,9 @@ describe('integrationCheck', () => {
     const strict = await integrationCheck({cwd: pkg, strict: true});
 
     expect(loose.data).toMatchObject({errors: 0, failures: [], failed: false});
-    // The unknown key is validate's, and every check starts from validate's
-    // issues: it counts once.
-    expect(loose.data.warnings).toBe(2);
+    // The unknown key is a note: it is usually a key from a newer CLI, so
+    // it counts nowhere, with or without strict.
+    expect(loose.data.warnings).toBe(1);
     expect(strict.data).toMatchObject({strict: true, errors: 0, failed: true});
     expect(strict.data.warnings).toBe(loose.data.warnings);
     // Same data: the same checks, read once each, in both modes.
@@ -495,7 +495,6 @@ describe('integrationCheck', () => {
       })),
     ).toEqual(warningsAndSkips(loose));
     expect(strict.data.failures.map(f => [f.check, f.code])).toEqual([
-      ['validate', 'unknown_manifest_key'],
       ['templates', 'template_id_conflict'],
     ]);
   });

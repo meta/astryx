@@ -55,12 +55,16 @@
  * preview per `SelectableCard`; many choices use one `Selector` and one live
  * preview below it. Prefer the real component being configured so the sample
  * cannot drift. For detail most readers do not need, expand a `Collapsible`
- * inside the row. Never open a dialog from this dialog: nested focus traps and
- * two overlapping dismiss paths are not progressive disclosure. If the detail
- * is too large to expand in place, it belongs on a page.
+ * inside the row. Never open a dialog from this dialog to show more detail:
+ * nested focus traps and two overlapping dismiss paths are not progressive
+ * disclosure. If the detail is too large to expand in place, it belongs on a
+ * page. The one exception is an `AlertDialog` that confirms a destructive
+ * action, such as deleting the account: it asks one question, and Escape
+ * closes only the alert, never this dialog.
  */
 
 import {Button} from '@astryxdesign/core/Button';
+import {useToast} from '@astryxdesign/core/Toast';
 import {AspectRatio} from '@astryxdesign/core/AspectRatio';
 import {Card} from '@astryxdesign/core/Card';
 import {Center} from '@astryxdesign/core/Center';
@@ -71,6 +75,7 @@ import {HStack} from '@astryxdesign/core/HStack';
 import {useMediaQuery} from '@astryxdesign/core/hooks';
 import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import {Kbd} from '@astryxdesign/core/Kbd';
 import {Layout, LayoutContent} from '@astryxdesign/core/Layout';
 import {ListItem} from '@astryxdesign/core/List';
@@ -90,59 +95,60 @@ import {neutralTheme} from '@astryxdesign/theme-neutral/built';
 import {Token} from '@astryxdesign/core/Token';
 import {Tooltip} from '@astryxdesign/core/Tooltip';
 import {VStack} from '@astryxdesign/core/VStack';
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {
-  ArrowDownOnSquareIcon,
-  ArrowDownTrayIcon,
-  ArrowUturnLeftIcon,
-  AtSymbolIcon,
-  Bars3BottomLeftIcon,
-  Bars3Icon,
-  BeakerIcon,
-  BellIcon,
-  BriefcaseIcon,
-  CalendarDaysIcon,
-  ChatBubbleLeftRightIcon,
+  SaveIcon,
+  DownloadIcon,
+  UndoIcon,
+  MentionIcon,
+  PanelLeftIcon,
+  MenuIcon,
+  ExperimentIcon,
+  NotificationIcon,
+  WorkIcon,
+  ScheduleIcon,
+  ConversationIcon,
   ChevronRightIcon,
   ClockIcon,
-  CodeBracketIcon,
-  Cog6ToothIcon,
-  CommandLineIcon,
-  ComputerDesktopIcon,
+  CodeIcon,
+  SettingsIcon,
+  KeyboardIcon,
+  DesktopIcon,
   CreditCardIcon,
-  CubeIcon,
-  DevicePhoneMobileIcon,
-  DocumentMagnifyingGlassIcon,
-  DocumentTextIcon,
-  EnvelopeIcon,
+  PackageIcon,
+  MobileIcon,
+  DocumentSearchIcon,
+  DocumentIcon,
+  MailIcon,
   EyeIcon,
-  FingerPrintIcon,
+  FingerprintIcon,
   FolderIcon,
-  GlobeAltIcon,
-  HandRaisedIcon,
+  GlobeIcon,
+  RaiseHandIcon,
   KeyIcon,
   LanguageIcon,
   LinkIcon,
-  LockClosedIcon,
-  MagnifyingGlassIcon,
-  MapPinIcon,
+  LockIcon,
+  SearchIcon,
+  LocationIcon,
   MoonIcon,
   PaintBrushIcon,
-  PencilSquareIcon,
-  PuzzlePieceIcon,
-  QuestionMarkCircleIcon,
-  ReceiptPercentIcon,
-  ShieldCheckIcon,
+  ComposeIcon,
+  IntegrationIcon,
+  HelpIcon,
+  DiscountIcon,
+  ShieldIcon,
   SignalIcon,
   SparklesIcon,
-  SpeakerWaveIcon,
+  AudioIcon,
   SunIcon,
   SwatchIcon,
   TagIcon,
-  TrashIcon,
+  DeleteIcon,
   UserCircleIcon,
   UserIcon,
   UsersIcon,
-} from '@heroicons/react/24/outline';
+} from '@astryxdesign/template-icons';
 import * as stylex from '@stylexjs/stylex';
 import {
   Children,
@@ -383,7 +389,7 @@ const PANEL_GROUPS: {label: string; panels: PanelConfig[]}[] = [
         id: 'security',
         label: 'Login & security',
         description: 'Sign-in methods and the devices signed in right now.',
-        icon: LockClosedIcon,
+        icon: LockIcon,
       },
       {
         id: 'billing',
@@ -406,19 +412,19 @@ const PANEL_GROUPS: {label: string; panels: PanelConfig[]}[] = [
         id: 'notifications',
         label: 'Notifications',
         description: 'What reaches you, and where it arrives.',
-        icon: BellIcon,
+        icon: NotificationIcon,
       },
       {
         id: 'shortcuts',
         label: 'Keyboard shortcuts',
         description: 'Rebind or switch off any shortcut on this surface.',
-        icon: CommandLineIcon,
+        icon: KeyboardIcon,
       },
       {
         id: 'language',
         label: 'Language & region',
         description: 'Language, formats, and time zone.',
-        icon: GlobeAltIcon,
+        icon: GlobeIcon,
       },
     ],
   },
@@ -429,19 +435,19 @@ const PANEL_GROUPS: {label: string; panels: PanelConfig[]}[] = [
         id: 'privacy',
         label: 'Privacy',
         description: 'What you share, and what we keep.',
-        icon: ShieldCheckIcon,
+        icon: ShieldIcon,
       },
       {
         id: 'integrations',
         label: 'Connected apps',
         description: 'Services with access to this workspace.',
-        icon: PuzzlePieceIcon,
+        icon: IntegrationIcon,
       },
       {
         id: 'developer',
         label: 'Developer',
         description: 'API access and pre-release features.',
-        icon: CodeBracketIcon,
+        icon: CodeIcon,
       },
     ],
   },
@@ -483,7 +489,7 @@ const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     title: 'Active sessions',
     description: 'Devices currently signed in to this account',
     panel: 'security',
-    icon: ComputerDesktopIcon,
+    icon: DesktopIcon,
   },
   {
     title: 'Plan',
@@ -507,7 +513,7 @@ const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     title: 'Email notifications',
     description: 'Mentions, comments, and the weekly digest',
     panel: 'notifications',
-    icon: EnvelopeIcon,
+    icon: MailIcon,
   },
   {
     title: 'Quiet hours',
@@ -519,37 +525,37 @@ const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     title: 'Keyboard shortcuts',
     description: 'Rebind a shortcut, or switch one off',
     panel: 'shortcuts',
-    icon: CommandLineIcon,
+    icon: KeyboardIcon,
   },
   {
     title: 'Time zone',
     description: 'Used for scheduling and timestamps',
     panel: 'language',
-    icon: GlobeAltIcon,
+    icon: GlobeIcon,
   },
   {
     title: 'Read receipts',
     description: 'Let people see when you have read a message',
     panel: 'privacy',
-    icon: ShieldCheckIcon,
+    icon: ShieldIcon,
   },
   {
     title: 'Export my data',
     description: 'Download everything this account holds',
     panel: 'privacy',
-    icon: ArrowDownTrayIcon,
+    icon: DownloadIcon,
   },
   {
     title: 'Connected apps',
     description: 'Calendar, storage, and chat integrations',
     panel: 'integrations',
-    icon: PuzzlePieceIcon,
+    icon: IntegrationIcon,
   },
   {
     title: 'API access',
     description: 'Personal access tokens and webhooks',
     panel: 'developer',
-    icon: CodeBracketIcon,
+    icon: CodeIcon,
   },
 ];
 
@@ -843,7 +849,7 @@ function ProfilePanel({settings, update}: PanelProps) {
         />
         <SettingsRow
           title="Job title"
-          icon={BriefcaseIcon}
+          icon={WorkIcon}
           description="Appears under your name on your profile card."
           control={
             <TextInput
@@ -917,6 +923,7 @@ function ProfilePanel({settings, update}: PanelProps) {
 }
 
 function SecurityPanel({settings, update}: PanelProps) {
+  const showToast = useToast();
   return (
     <VStack gap={5}>
       <SettingsCard title="Sign-in">
@@ -924,13 +931,26 @@ function SecurityPanel({settings, update}: PanelProps) {
           title="Password"
           description="Last changed 4 months ago."
           icon={KeyIcon}
-          control={<Button label="Change" variant="secondary" size="sm" />}
+          control={
+            <Button
+              label="Change"
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: 'Demo: changing the password would start here',
+                  uniqueID: 'change-password',
+                })
+              }
+            />
+          }
         />
         <SettingsRow
           title="Two-factor authentication"
           titleAccessory={<Token label="Recommended" size="sm" color="green" />}
           description="Ask for a code from your authenticator app at sign-in."
-          icon={ShieldCheckIcon}
+          icon={ShieldIcon}
           control={
             <Switch
               label="Two-factor authentication"
@@ -942,9 +962,22 @@ function SecurityPanel({settings, update}: PanelProps) {
         />
         <SettingsRow
           title="Passkeys"
-          icon={FingerPrintIcon}
+          icon={FingerprintIcon}
           description="No passkeys yet."
-          control={<Button label="Add passkey" variant="secondary" size="sm" />}
+          control={
+            <Button
+              label="Add passkey"
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: 'Demo: adding a passkey would start here',
+                  uniqueID: 'add-passkey',
+                })
+              }
+            />
+          }
         />
       </SettingsCard>
 
@@ -953,19 +986,45 @@ function SecurityPanel({settings, update}: PanelProps) {
           title="MacBook Pro · Chrome"
           titleAccessory={<Token label="This device" size="sm" />}
           description="San Francisco, California · Active now"
-          icon={ComputerDesktopIcon}
+          icon={DesktopIcon}
         />
         <SettingsRow
           title="iPhone 15 · Safari"
           description="San Francisco, California · 2 hours ago"
-          icon={DevicePhoneMobileIcon}
-          control={<Button label="Sign out" variant="ghost" size="sm" />}
+          icon={MobileIcon}
+          control={
+            <Button
+              label="Sign out"
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: 'Demo: iPhone 15 · Safari would be signed out here',
+                  uniqueID: 'sign-out-iphone',
+                })
+              }
+            />
+          }
         />
         <SettingsRow
           title="Windows · Edge"
           description="Austin, Texas · March 30 at 19:31"
-          icon={ComputerDesktopIcon}
-          control={<Button label="Sign out" variant="ghost" size="sm" />}
+          icon={DesktopIcon}
+          control={
+            <Button
+              label="Sign out"
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: 'Demo: Windows · Edge would be signed out here',
+                  uniqueID: 'sign-out-windows',
+                })
+              }
+            />
+          }
         />
       </SettingsCard>
     </VStack>
@@ -973,22 +1032,47 @@ function SecurityPanel({settings, update}: PanelProps) {
 }
 
 function BillingPanel({settings, update}: PanelProps) {
+  const showToast = useToast();
   return (
     <VStack gap={5}>
       <SettingsCard title="Plan">
         <SettingsRow
           title="Current plan"
-          icon={CubeIcon}
+          icon={PackageIcon}
           titleAccessory={<Token label="Team" size="sm" color="blue" />}
           description="$12 per seat, per month. Renews on April 1."
-          control={<Button label="Upgrade" variant="primary" size="sm" />}
+          control={
+            <Button
+              label="Upgrade"
+              variant="primary"
+              size="sm"
+              onClick={() =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: 'Demo: the plan upgrade would start here',
+                  uniqueID: 'upgrade',
+                })
+              }
+            />
+          }
         />
         <SettingsRow
           title="Seats"
           icon={UsersIcon}
           description="18 of 25 seats in use."
           control={
-            <Button label="Manage seats" variant="secondary" size="sm" />
+            <Button
+              label="Manage seats"
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: 'Demo: seat management would open here',
+                  uniqueID: 'manage-seats',
+                })
+              }
+            />
           }
         />
       </SettingsCard>
@@ -996,7 +1080,7 @@ function BillingPanel({settings, update}: PanelProps) {
       <SettingsCard title="Invoices">
         <SettingsRow
           title="Billing email"
-          icon={EnvelopeIcon}
+          icon={MailIcon}
           description="Where receipts and payment failures are sent."
           control={
             <TextInput
@@ -1012,7 +1096,7 @@ function BillingPanel({settings, update}: PanelProps) {
         />
         <SettingsRow
           title="Email invoices"
-          icon={ReceiptPercentIcon}
+          icon={DiscountIcon}
           description="Send a PDF copy every time we charge the card."
           control={
             <Switch
@@ -1027,7 +1111,20 @@ function BillingPanel({settings, update}: PanelProps) {
           title="Payment method"
           description="Visa ending 4242 · Expires 09/28"
           icon={CreditCardIcon}
-          control={<Button label="Update" variant="secondary" size="sm" />}
+          control={
+            <Button
+              label="Update"
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: 'Demo: updating the payment method would start here',
+                  uniqueID: 'update-payment',
+                })
+              }
+            />
+          }
         />
       </SettingsCard>
     </VStack>
@@ -1130,7 +1227,7 @@ const THEME_CHOICES: {
     value: 'system',
     label: 'System',
     scheme: 'system',
-    icon: ComputerDesktopIcon,
+    icon: DesktopIcon,
   },
 ];
 
@@ -1309,7 +1406,7 @@ function AppearancePanel({settings, update}: PanelProps) {
       <SettingsCard title="Typography">
         <SettingsRow
           title="Interface font"
-          icon={DocumentTextIcon}
+          icon={DocumentIcon}
           description="Menus, labels, and message text."
           control={
             <Selector
@@ -1332,7 +1429,7 @@ function AppearancePanel({settings, update}: PanelProps) {
       <SettingsCard title="Layout">
         <SettingsRow
           title="Interface density"
-          icon={Bars3Icon}
+          icon={MenuIcon}
           description="How much breathing room rows and lists get."
           control={
             <SegmentedControl
@@ -1347,7 +1444,7 @@ function AppearancePanel({settings, update}: PanelProps) {
         />
         <SettingsRow
           title="Reduce motion"
-          icon={HandRaisedIcon}
+          icon={RaiseHandIcon}
           description="Skip transitions and animated transforms."
           control={
             <Switch
@@ -1370,7 +1467,7 @@ function NotificationsPanel({settings, update}: PanelProps) {
         <SettingsRow
           title="Mentions"
           description="Someone types your name."
-          icon={AtSymbolIcon}
+          icon={MentionIcon}
           control={
             <Switch
               label="Email me about mentions"
@@ -1383,7 +1480,7 @@ function NotificationsPanel({settings, update}: PanelProps) {
         <SettingsRow
           title="Comments"
           description="Replies on threads you are part of."
-          icon={ChatBubbleLeftRightIcon}
+          icon={ConversationIcon}
           control={
             <Switch
               label="Email me about comments"
@@ -1396,7 +1493,7 @@ function NotificationsPanel({settings, update}: PanelProps) {
         <SettingsRow
           title="Weekly digest"
           description="One summary every Monday morning."
-          icon={EnvelopeIcon}
+          icon={MailIcon}
           control={
             <Switch
               label="Send the weekly digest"
@@ -1411,7 +1508,7 @@ function NotificationsPanel({settings, update}: PanelProps) {
       <SettingsCard title="Desktop">
         <SettingsRow
           title="Desktop notifications"
-          icon={ComputerDesktopIcon}
+          icon={DesktopIcon}
           description="Requires permission from your browser."
           control={
             <Switch
@@ -1424,7 +1521,7 @@ function NotificationsPanel({settings, update}: PanelProps) {
         />
         <SettingsRow
           title="Play a sound"
-          icon={SpeakerWaveIcon}
+          icon={AudioIcon}
           control={
             <Switch
               label="Play a sound"
@@ -1482,37 +1579,37 @@ const SHORTCUTS: ShortcutDef[] = [
   {
     id: 'search',
     label: 'Search everything',
-    icon: MagnifyingGlassIcon,
+    icon: SearchIcon,
     binding: {mod: true, key: 'k'},
   },
   {
     id: 'new',
     label: 'New item',
-    icon: PencilSquareIcon,
+    icon: ComposeIcon,
     binding: {mod: true, key: 'n'},
   },
   {
     id: 'save',
     label: 'Save',
-    icon: ArrowDownOnSquareIcon,
+    icon: SaveIcon,
     binding: {mod: true, key: 's'},
   },
   {
     id: 'settings',
     label: 'Open settings',
-    icon: Cog6ToothIcon,
+    icon: SettingsIcon,
     binding: {mod: true, key: ','},
   },
   {
     id: 'sidebar',
     label: 'Toggle the sidebar',
-    icon: Bars3BottomLeftIcon,
+    icon: PanelLeftIcon,
     binding: {mod: true, shift: true, key: 'b'},
   },
   {
     id: 'help',
     label: 'Shortcut cheat sheet',
-    icon: QuestionMarkCircleIcon,
+    icon: HelpIcon,
     binding: {shift: true, key: '?'},
   },
 ];
@@ -1662,7 +1759,9 @@ function ShortcutRow({
           {isCustom && (
             <IconButton
               label={`Reset ${def.label} to its default`}
-              icon={<Icon icon={ArrowUturnLeftIcon} size="sm" />}
+              icon={
+                <Icon icon={UndoIcon} size="sm" xstyle={rtlStyles.mirror} />
+              }
               variant="ghost"
               size="sm"
               onClick={onReset}
@@ -1782,7 +1881,9 @@ function ShortcutsPanel() {
               label="Reset all to defaults"
               variant="ghost"
               size="sm"
-              icon={<Icon icon={ArrowUturnLeftIcon} size="sm" />}
+              icon={
+                <Icon icon={UndoIcon} size="sm" xstyle={rtlStyles.mirror} />
+              }
               onClick={() => {
                 setOverrides({});
               }}
@@ -1821,7 +1922,7 @@ function LanguagePanel({settings, update}: PanelProps) {
       />
       <SettingsRow
         title="Region format"
-        icon={MapPinIcon}
+        icon={LocationIcon}
         description="Dates, numbers, and currency."
         control={
           <Selector
@@ -1842,7 +1943,7 @@ function LanguagePanel({settings, update}: PanelProps) {
       />
       <SettingsRow
         title="Time zone"
-        icon={GlobeAltIcon}
+        icon={GlobeIcon}
         description="Used for scheduling and every timestamp you see."
         control={
           <Selector
@@ -1868,7 +1969,7 @@ function LanguagePanel({settings, update}: PanelProps) {
       />
       <SettingsRow
         title="Start the week on"
-        icon={CalendarDaysIcon}
+        icon={ScheduleIcon}
         control={
           <SegmentedControl
             label="Start the week on"
@@ -1885,12 +1986,14 @@ function LanguagePanel({settings, update}: PanelProps) {
 }
 
 function PrivacyPanel({settings, update}: PanelProps) {
+  const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
   return (
     <VStack gap={5}>
       <SettingsCard title="Visibility">
         <SettingsRow
           title="Discoverable by email"
-          icon={MagnifyingGlassIcon}
+          icon={SearchIcon}
           description="Let people find your profile by searching your address."
           control={
             <Switch
@@ -1946,42 +2049,116 @@ function PrivacyPanel({settings, update}: PanelProps) {
         <SettingsRow
           title="Export my data"
           description="We will email a download link within 24 hours."
-          icon={ArrowDownTrayIcon}
+          icon={DownloadIcon}
           control={
-            <Button label="Request export" variant="secondary" size="sm" />
+            <Button
+              label="Request export"
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: 'Demo: a data export request would be sent here',
+                  uniqueID: 'request-export',
+                })
+              }
+            />
           }
         />
         <SettingsRow
           title="Delete my account"
           description="Permanent, and it takes the workspace with it."
-          icon={TrashIcon}
-          control={<Button label="Delete" variant="destructive" size="sm" />}
+          icon={DeleteIcon}
+          control={
+            <Button
+              label="Delete"
+              variant="destructive"
+              size="sm"
+              onClick={() =>
+                confirm.show({
+                  title: 'Delete your account?',
+                  description:
+                    "This demo won't delete anything. In your app, this would permanently delete your account and the workspace with it.",
+                  actionLabel: 'Delete account',
+                  onAction: () => {
+                    confirm.hide();
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: 'Demo: your account would be deleted here',
+                      uniqueID: 'delete-account',
+                    });
+                  },
+                })
+              }
+            />
+          }
         />
       </SettingsCard>
+      {confirm.element}
     </VStack>
   );
 }
 
 function IntegrationsPanel() {
+  const showToast = useToast();
   return (
     <SettingsCard title="Connected apps">
       <SettingsRow
         title="Calendar"
         description="Connected as alex@example.com"
-        icon={CalendarDaysIcon}
-        control={<Button label="Disconnect" variant="ghost" size="sm" />}
+        icon={ScheduleIcon}
+        control={
+          <Button
+            label="Disconnect"
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({
+                body: 'Demo: Calendar would be disconnected here',
+                uniqueID: 'disconnect-calendar',
+              })
+            }
+          />
+        }
       />
       <SettingsRow
         title="File storage"
         description="Attach files straight from your drive."
         icon={FolderIcon}
-        control={<Button label="Connect" variant="secondary" size="sm" />}
+        control={
+          <Button
+            label="Connect"
+            variant="secondary"
+            size="sm"
+            onClick={() =>
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({
+                body: 'Demo: File storage would be connected here',
+                uniqueID: 'connect-file-storage',
+              })
+            }
+          />
+        }
       />
       <SettingsRow
         title="Chat"
         description="Post updates to a channel when work ships."
-        icon={ChatBubbleLeftRightIcon}
-        control={<Button label="Connect" variant="secondary" size="sm" />}
+        icon={ConversationIcon}
+        control={
+          <Button
+            label="Connect"
+            variant="secondary"
+            size="sm"
+            onClick={() =>
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({
+                body: 'Demo: Chat would be connected here',
+                uniqueID: 'connect-chat',
+              })
+            }
+          />
+        }
       />
     </SettingsCard>
   );
@@ -1994,7 +2171,7 @@ function DeveloperPanel({settings, update}: PanelProps) {
         <SettingsRow
           title="API access"
           description="Issue tokens that act on your behalf."
-          icon={CodeBracketIcon}
+          icon={CodeIcon}
           control={
             <Switch
               label="API access"
@@ -2026,7 +2203,7 @@ function DeveloperPanel({settings, update}: PanelProps) {
       <SettingsCard title="Pre-release">
         <SettingsRow
           title="Early access features"
-          icon={BeakerIcon}
+          icon={ExperimentIcon}
           titleAccessory={<Token label="Beta" size="sm" color="purple" />}
           description="Unfinished work, turned on for your account only."
           control={
@@ -2040,7 +2217,7 @@ function DeveloperPanel({settings, update}: PanelProps) {
         />
         <SettingsRow
           title="Verbose logging"
-          icon={DocumentMagnifyingGlassIcon}
+          icon={DocumentSearchIcon}
           description="Write a detailed trace to the browser console."
           control={
             <Switch
@@ -2215,7 +2392,12 @@ function SettingsSearchResults({
             <Icon icon={setting.icon} size="sm" color="secondary" />
           }
           endContent={
-            <Icon icon={ChevronRightIcon} size="sm" color="secondary" />
+            <Icon
+              icon={ChevronRightIcon}
+              size="sm"
+              color="secondary"
+              xstyle={rtlStyles.mirror}
+            />
           }
           isSelected={index === activeIndex}
           onMouseEnter={() => onActiveIndexChange(index)}
@@ -2246,7 +2428,7 @@ function SettingsSearchInput({search}: {search: SettingsSearch}) {
       // The bare component, NOT `<Icon icon={...} />`: `TextInput` tints an icon
       // it renders itself, and returns an already-rendered element verbatim —
       // which leaves the magnifier a step darker than the placeholder beside it.
-      startIcon={MagnifyingGlassIcon}
+      startIcon={SearchIcon}
       role="combobox"
       aria-autocomplete="list"
       aria-controls="settings-search-results"
@@ -2292,7 +2474,7 @@ function SettingsSideNav({
         <HStack gap={2} align="center" paddingInline={2} minHeight={32}>
           {/* Also the dialog's accessible name (`aria-labelledby`), so the
               painted title and the announced one cannot drift apart. */}
-          <Heading level={4} id={titleId}>
+          <Heading level={4} accessibilityLevel={1} id={titleId}>
             Settings
           </Heading>
         </HStack>
@@ -2455,10 +2637,9 @@ function SettingsNarrowShell({
     <VStack gap={0} height="100%">
       <HStack gap={2} align="center" paddingInline={3} paddingBlock={3}>
         <StackItem size="fill">
-          {/* The element `aria-labelledby` points at in this shell. A title row,
-              not the head of a navigation column, so it stays a label — the
-              phone layout's only heading should be the panel's own. */}
-          <Text type="label" id={titleId}>
+          {/* The element `aria-labelledby` points at in this shell, and the
+              page's level-1 heading; it keeps the label look. */}
+          <Text type="label" as="h1" id={titleId}>
             Settings
           </Text>
         </StackItem>
@@ -2540,7 +2721,7 @@ export default function SettingsDialogTemplate() {
   return (
     // `Center` is the page root — the rubric's root for a content page, and
     // what puts the inline dialog in the middle of the page it stands in for.
-    <Center height="100dvh">
+    <Center role="main" height="100dvh">
       <Dialog
         isOpen
         // `isInline` renders this same dialog WITHOUT the `<dialog>` element, so
@@ -2549,7 +2730,8 @@ export default function SettingsDialogTemplate() {
         // transform or `overflow: hidden` can clip — an open one inside a scaled
         // preview tile paints over the whole gallery instead of inside its tile.
         // The docsite's own preview is also a Dialog, which a modal here would
-        // then nest inside, and Astryx forbids nesting dialogs.
+        // then nest inside, and Astryx does not nest dialogs, apart from an
+        // AlertDialog that confirms a destructive action.
         //
         // Everything else on this page is the composition you want: drop
         // `isInline`, drive `isOpen` from state, hand `onOpenChange` the setter,

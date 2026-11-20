@@ -16,17 +16,19 @@ import {
   SegmentedControlItem,
 } from '@astryxdesign/core/SegmentedControl';
 import {Button} from '@astryxdesign/core/Button';
+import {useToast} from '@astryxdesign/core/Toast';
 import {MetadataList, MetadataListItem} from '@astryxdesign/core/MetadataList';
 import {List, ListItem} from '@astryxdesign/core/List';
 import {Icon} from '@astryxdesign/core/Icon';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {TreeList} from '@astryxdesign/core/TreeList';
 import type {TreeListItemData} from '@astryxdesign/core/TreeList';
+import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {
   FolderIcon,
-  DocumentTextIcon,
-  MagnifyingGlassIcon,
-} from '@heroicons/react/24/outline';
+  DocumentIcon,
+  SearchIcon,
+} from '@astryxdesign/template-icons';
 
 const styles: Record<string, CSSProperties> = {
   contentFill: {
@@ -140,7 +142,7 @@ function buildFileTree(
   const file = (id: string): TreeListItemData => ({
     id,
     label: label(id),
-    startContent: <Icon icon={DocumentTextIcon} size="xsm" />,
+    startContent: <Icon icon={DocumentIcon} size="xsm" />,
     onClick: () => onFileClick(id),
   });
   return [
@@ -202,6 +204,7 @@ const HISTORY_ITEMS = [
 
 export default function ResizableWorkspacePage() {
   const [activeFile, setActiveFile] = useState('Counter.tsx');
+  const showToast = useToast();
   const [activeTermTab, setActiveTermTab] = useState('terminal');
   const [activePropertiesTab, setActivePropertiesTab] = useState('properties');
   const fileTree = useMemo(() => buildFileTree(setActiveFile), []);
@@ -237,7 +240,8 @@ export default function ResizableWorkspacePage() {
     <Layout
       height="fill"
       content={
-        <LayoutContent padding={0}>
+        <LayoutContent role="main" padding={0}>
+          <VisuallyHidden as="h1">Code editor</VisuallyHidden>
           <Layout
             height="fill"
             start={
@@ -258,7 +262,7 @@ export default function ResizableWorkspacePage() {
                           value=""
                           placeholder="Search"
                           size="md"
-                          startIcon={MagnifyingGlassIcon}
+                          startIcon={SearchIcon}
                         />
                         <TreeList items={fileTree} density="compact" />
                       </Stack>
@@ -403,7 +407,10 @@ export default function ResizableWorkspacePage() {
                                   gap={3}
                                   style={styles.propertiesContent}>
                                   <Stack direction="vertical" gap={1}>
-                                    <Heading level={3} maxLines={1}>
+                                    <Heading
+                                      level={3}
+                                      accessibilityLevel={2}
+                                      maxLines={1}>
                                       {activeFile}
                                     </Heading>
                                     <Text
@@ -430,16 +437,37 @@ export default function ResizableWorkspacePage() {
                                       label="Format Document"
                                       size="sm"
                                       variant="secondary"
+                                      onClick={() =>
+                                        // Demo only: replace this toast with the call that performs the action.
+                                        showToast({
+                                          body: `Demo: ${activeFile} would be formatted here`,
+                                          uniqueID: 'format',
+                                        })
+                                      }
                                     />
                                     <Button
                                       label="Go to Definition"
                                       size="sm"
                                       variant="secondary"
+                                      onClick={() =>
+                                        // Demo only: replace this toast with the call that performs the action.
+                                        showToast({
+                                          body: 'Demo: the definition would open here',
+                                          uniqueID: 'go-to-definition',
+                                        })
+                                      }
                                     />
                                     <Button
                                       label="Find References"
                                       size="sm"
                                       variant="secondary"
+                                      onClick={() =>
+                                        // Demo only: replace this toast with the call that performs the action.
+                                        showToast({
+                                          body: 'Demo: references would be listed here',
+                                          uniqueID: 'find-references',
+                                        })
+                                      }
                                     />
                                   </Stack>
                                 </Stack>
