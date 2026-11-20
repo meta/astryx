@@ -58,7 +58,7 @@ describe('a track the base theme draws from the emphasized border', () => {
       /follows? it/.test(n),
     );
     expect(line).toMatch(
-      /the parts the base theme draws from it: .*progress-bar/,
+      /the parts the base theme draws from (it|them): .*progress-bar/,
     );
     expect(line).toMatch(/switch/);
   });
