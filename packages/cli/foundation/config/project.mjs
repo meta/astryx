@@ -363,7 +363,9 @@ function readPackageJson(dir) {
  * An integration issue tagged with the owner package. The base
  * {@link import('../integrations/issue').AstryxIntegrationIssue} fields plus the
  * `package` that produced it, which Project tracks for routing/dedup.
- * @typedef {import('../integrations/issue').AstryxIntegrationIssue & {package: string}} ProjectIntegrationIssue
+ * `needsCore` marks one that compares a component with Core's components,
+ * which needs a Core to be judged.
+ * @typedef {import('../integrations/issue').AstryxIntegrationIssue & {package: string, needsCore?: boolean}} ProjectIntegrationIssue
  */
 
 /** Default issue tracker used when neither config nor integration routes one. */
@@ -798,7 +800,7 @@ export class Project {
   /**
    * Record a single integration issue, deduped by (package, code, message).
    * @param {string} pkg
-   * @param {import('../integrations/issue').AstryxIntegrationIssue} issue
+   * @param {import('../integrations/issue').AstryxIntegrationIssue & {needsCore?: boolean}} issue
    */
   #pushIssue(pkg, issue) {
     const code = issue?.code ?? 'unknown';
@@ -812,6 +814,7 @@ export class Project {
       code,
       severity: issue?.severity ?? 'error',
       message,
+      ...(issue?.needsCore ? {needsCore: true} : {}),
     });
   }
 
@@ -964,6 +967,7 @@ export class Project {
           code: finding.code,
           severity: finding.severity,
           message: finding.message,
+          ...(finding.needsCore ? {needsCore: true} : {}),
         });
       }
       return replacements;
