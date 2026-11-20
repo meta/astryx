@@ -12,6 +12,7 @@ owners: [cixzhang, imdreamrunner]
 applies_to:
   [
     packages/core/src/theme/generateThemeRules.ts,
+    packages/core/src/theme/declarationBoundary.ts,
     packages/core/src/theme/statusRoleDefaults.ts,
     packages/core/src/theme/themeAdaptations.ts,
     packages/core/src/theme/derivedVarRegistry.ts,
@@ -33,6 +34,8 @@ verified_by:
     packages/core/src/theme/defineTheme.test.ts,
     packages/core/src/theme/themeAdaptations.test.ts,
     packages/core/src/theme/onMediaTokens.test.ts,
+    packages/cli/api/theme/build/build.media-lowered-scheme.test.mjs,
+    packages/core/src/theme/declarationBoundary.test.ts,
     packages/core/src/theme/Theme.test.tsx,
     packages/core/src/theme/derivedVarRegistry.test.ts,
     packages/cli/clients/cli/commands/build-theme.adaptations.test.mjs,
@@ -167,7 +170,31 @@ Platform-specific details stay inside that compiler.
 - **INV12 — Adaptation order is observable.** Root declarations emit first,
   adaptation blocks remain separate in authored order, and media-surface overrides
   emit last. Duplicate conditions and later root-restoring writes are preserved
-  exactly; runtime and static output use the same blocks.
+  exactly; runtime and static output use the same blocks. A media surface
+  re-declares every scheme-dependent value the theme root declares, under the
+  base rules and under each adaptation's query, so it resolves under the
+  surface's color scheme even when a consumer's bundler lowers `light-dark()`.
+  In a re-declared value, a reference to a token the surface declares itself
+  takes the theme's value of that token, and so does a reference to a theme
+  token that does not depend on the scheme, so CSS that keeps `light-dark()`
+  resolves as before. Any other reference in a re-declared value, to a token
+  the surface does not hold with a value of its own (its own tokens, or a
+  re-declaration other than `inherit`), refers to the theme root's private
+  alias of it (`--_theme-root-<name>`), with the reference's fallback, which
+  the root resolves, so the surface reads the value every other descendant
+  reads. Under a query where the surface inherits a token, a value that refers
+  to it is restated with the alias. When the theme does not declare a token the
+  surface declares itself, the surface does not re-declare a token that refers
+  to it.
+  A token that depends on the color scheme only through tokens the theme does
+  not declare is not re-declared.
+  Where two adaptation queries match together and a surface's re-declared
+  value differs from the value the root resolves under both, the surface
+  inherits that token there. A token the surface re-declares does
+  not take a value set for it on the theme root, or on an element between
+  the theme root and the surface. `substituteVarReferences` in `declarationBoundary.ts` writes those
+  values with the declaration scanner, so a comment or a string never counts as
+  a reference.
 
 - **INV13 — A declaration stays inside its boundary.** The web compiler rejects
   only an authored property name or value that would escape or invalidate its CSS
@@ -439,6 +466,7 @@ tiers.
 | INV9, INV10      | Platform compiler tests when another compiler ships                                                                                                                                                                                                                                                                                                                                                                                                    | CSS details enter shared authoring, or shared theme intent silently disappears                                                                                                                                                                                                                    |
 | INV11            | `defineTheme.test.ts` and `build.test.mjs` local-token fixtures                                                                                                                                                                                                                                                                                                                                                                                        | Runtime/static output rewrites a local name, disagrees, or leaves partial output after failure                                                                                                                                                                                                    |
 | INV12            | `themeAdaptations.test.ts` and CLI adaptation build fixtures                                                                                                                                                                                                                                                                                                                                                                                           | Rule blocks merge/reorder/drop, surfaces lose precedence, or runtime/static CSS diverges                                                                                                                                                                                                          |
+| INV12            | `build.media-lowered-scheme.test.mjs` (every published theme built and lowered by lightningcss) and the `onMediaTokens.test.ts` scheme-dependent replay cases                                                                                                                                                                                                                                                                                          | A token inside a light or dark media surface keeps the page's scheme after `light-dark()` lowering, a re-declared value differs from the root's, or a reference to a surface token takes the surface's value                                                                                      |
 | INV18            | `colorModeBlocks.test.ts` output tests, `build-theme.color-mode-blocks.test.mjs` (CLI-built CSS), and `colorModeBlocks.a11y.chromium.spec.ts` (the ColorModeBlocks story: the Theme's mode, system preference, a mode that is neither, nested Theme, media surfaces one and more deep, explicit Text and Heading props alike at the root and on a surface, a press, Pagination's current page and a text field's status border kept in the other mode) | A mode block applies in the other mode, overrides a base-layer rule there, or changes CSS for a theme without blocks beyond INV21's dark-page rules                                                                                                                                               |
 | INV19            | `generateThemeRules.test.ts` (the scope-root font rule), `reset.test.ts` (the `html` font rule, no font on `body`), and `reset.font.a11y.chromium.spec.ts` (a label measured in a span in `body` has its drawn width in the theme root; a page with no token keeps its font)                                                                                                                                                                           | Text measured or drawn in `body` uses a different font from the token at the page root, or a page with no token changes font                                                                                                                                                                      |
 | INV20            | `Theme.test.tsx` (the wrapper's body size and body leading) and `reset.test.ts` (no font size on `html` or `body`)                                                                                                                                                                                                                                                                                                                                     | Text inside a Theme with no size or line height of its own                                                                                                                                                                                                                                        |

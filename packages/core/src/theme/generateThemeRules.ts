@@ -51,6 +51,8 @@ import {
 import {cssVar, classPrefix, dataAttrNamespace} from '../naming';
 import {
   analyzeDeclarationValue,
+  substituteVarReferences,
+  canonicalizeDeclarationName,
   checkDeclarationName,
   checkDeclarationValue,
 } from './declarationBoundary';
@@ -1834,6 +1836,424 @@ function resolvedAdaptationRules(
 }
 
 /**
+ * Root tokens that a media surface re-declares, so that they resolve under the
+ * surface's own color scheme.
+ *
+ * A bundler that lowers `light-dark()` for older browsers writes each value as
+ * `var()` switches. A custom property resolves its `var()` references on the
+ * element that declares it. So the theme root fixes such a token in the page's
+ * scheme, and a surface that does not re-declare it inherits that value. A
+ * token depends on the scheme when its value holds `light-dark()` or refers to
+ * a token in `values` that does. A token outside `values`, such as a Core
+ * default, resolves on the page root, where a surface re-declaration cannot
+ * change it.
+ */
+function schemeDependentEntries(
+  values: Record<string, string>,
+  candidates: Iterable<string>,
+  exclude: ReadonlySet<string>,
+): [string, string][] {
+  const dependsOnScheme = schemeDependence(values);
+  const entries: [string, string][] = [];
+  for (const name of candidates) {
+    if (!exclude.has(name) && dependsOnScheme(name)) {
+      entries.push([name, values[name]]);
+    }
+  }
+  return entries;
+}
+
+const schemeDependenceByValues = new WeakMap<
+  Record<string, string>,
+  (name: string) => boolean
+>();
+
+/** Whether a token in `values` depends on the color scheme. */
+function schemeDependence(
+  values: Record<string, string>,
+): (name: string) => boolean {
+  const cached = schemeDependenceByValues.get(values);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const known = new Map<string, boolean>();
+  const dependsOnScheme = (name: string, visiting: Set<string>): boolean => {
+    const result = known.get(name);
+    if (result !== undefined) {
+      return result;
+    }
+    const value = values[name];
+    if (typeof value !== 'string' || visiting.has(name)) {
+      return false;
+    }
+    visiting.add(name);
+    const isDependent =
+      LIGHT_DARK_CALL.test(value) ||
+      analyzeDeclarationValue(value).references.some(reference =>
+        dependsOnScheme(reference, visiting),
+      );
+    visiting.delete(name);
+    known.set(name, isDependent);
+    return isDependent;
+  };
+  const check = (name: string) => dependsOnScheme(name, new Set());
+  schemeDependenceByValues.set(values, check);
+  return check;
+}
+
+// A `light-dark()` call in any case. CSS function names are ASCII
+// case-insensitive.
+const LIGHT_DARK_CALL = /(?:^|[^\w-])light-dark\(/i;
+
+const ROOT_ALIAS_PREFIX = '--_theme-root-';
+const ROOT_ALIAS_REFERENCE = /var\((--_theme-root-[^\s,()]+)/gi;
+// The start of a `var()` call up to the referenced name: any case, spaces and
+// comments.
+const VAR_CALL_HEAD = /^var\(\s*(?:\/\*[\s\S]*?\*\/\s*)*/i;
+
+// A custom property name as written, with CSS escapes.
+const WRITTEN_NAME =
+  /^--(?:[A-Za-z0-9_\-\u0080-\uFFFF]|\\[0-9a-fA-F]{1,6}[ \t\n\r\f]?|\\[^\n\r\f0-9a-fA-F])*/;
+
+/**
+ * The call `var(<name>, <fallback>)` written as `var(--_theme-root-<name>,
+ * <fallback>)`, with the name in its canonical spelling, or `null` when the
+ * name the call writes is not `reference`.
+ */
+function rootAliasCall(reference: string, call: string): string | null {
+  const head = VAR_CALL_HEAD.exec(call)?.[0] ?? '';
+  const written = WRITTEN_NAME.exec(call.slice(head.length))?.[0] ?? '';
+  if (written === '' || canonicalizeDeclarationName(written) !== reference) {
+    return null;
+  }
+  return `var(${ROOT_ALIAS_PREFIX}${reference.slice(2)}${call.slice(head.length + written.length)}`;
+}
+
+/**
+ * The value with each reference to a token the surface does not hold pointed
+ * at the token's root alias, with the same fallback. References in a fallback
+ * are pointed the same way.
+ */
+function withRootAliasesFor(value: string, held: ReadonlySet<string>): string {
+  return substituteVarReferences(value, (reference, call) => {
+    if (held.has(reference) || reference.startsWith(ROOT_ALIAS_PREFIX)) {
+      return null;
+    }
+    const aliased = rootAliasCall(reference, call);
+    return aliased === null ? null : withRootAliasesFor(aliased, held);
+  });
+}
+
+/**
+ * A block's re-declarations, with every reference to a token the surface does
+ * not hold with a value of its own pointed at the token's root alias. The root
+ * resolves the alias, so the surface reads the value every other descendant of
+ * the root reads, not a value set between the root and the surface. The
+ * surface holds its own tokens and each re-declaration that is not `inherit`.
+ * `carried` are re-declarations that apply under the block but that it does
+ * not restate; the block restates each one that refers to a token it does not
+ * hold.
+ */
+function withRootAliases(
+  entries: [string, string][],
+  carried: ReadonlyArray<[string, string]>,
+  ownNames: ReadonlySet<string>,
+): [string, string][] {
+  const restatedNames = new Set(entries.map(([name]) => name));
+  const held = new Set(ownNames);
+  for (const [name, value] of carried) {
+    if (!restatedNames.has(name) && value !== 'inherit') {
+      held.add(name);
+    }
+  }
+  for (const [name, value] of entries) {
+    if (value === 'inherit') {
+      held.delete(name);
+    } else {
+      held.add(name);
+    }
+  }
+  const aliased = entries.map(([name, value]): [string, string] => [
+    name,
+    value === 'inherit' ? value : withRootAliasesFor(value, held),
+  ]);
+  for (const [name, value] of carried) {
+    if (restatedNames.has(name) || value === 'inherit') {
+      continue;
+    }
+    const restated = withRootAliasesFor(value, held);
+    if (restated !== value) {
+      aliased.push([name, restated]);
+    }
+  }
+  return aliased;
+}
+
+/**
+ * The theme root's declarations of the private aliases that the media-surface
+ * blocks refer to. Each alias resolves on the theme root, where the token it
+ * names takes its value from the root or an ancestor, so a surface reads the
+ * value every other descendant of the root reads.
+ */
+function rootAliasEntries(blocks: ReadonlyArray<string>): [string, string][] {
+  const aliases = new Set(
+    blocks.flatMap(block =>
+      [...block.matchAll(ROOT_ALIAS_REFERENCE)].map(match => match[1]),
+    ),
+  );
+  return [...aliases]
+    .sort()
+    .map(alias => [alias, `var(--${alias.slice(ROOT_ALIAS_PREFIX.length)})`]);
+}
+
+/**
+ * The value a re-declared root token takes on a media surface, or `null` when
+ * the surface must not re-declare it. A reference to a token the surface
+ * declares itself is replaced with the theme's value of that token. Without
+ * lowering, the root resolves the reference and the surface inherits the
+ * result, so the surface's own value never applies; the replacement keeps that
+ * result. When the theme does not declare the referenced token, its value
+ * comes from an ancestor this theme cannot see, so the token is not
+ * re-declared. A reference to a theme token that does not depend on the
+ * scheme is replaced with the theme's value too: the surface does not
+ * re-declare that token, so after lowering the reference would resolve on the
+ * surface and take a value set between the root and the surface. Any other
+ * reference stays as it is; `withRootAliases` then points it at the root alias
+ * when the surface does not hold the token.
+ */
+function withRootValuesForSurfaceTokens(
+  value: string,
+  surfaceNames: ReadonlySet<string>,
+  declaredValues: Record<string, string>,
+  resolving: ReadonlySet<string> = new Set(),
+): string | null {
+  let isUnknown = false;
+  const dependsOnScheme = schemeDependence(declaredValues);
+  const result = substituteVarReferences(value, reference => {
+    if (resolving.has(reference) || reference.startsWith(ROOT_ALIAS_PREFIX)) {
+      return null;
+    }
+    const declared = declaredValues[reference];
+    if (!surfaceNames.has(reference)) {
+      return typeof declared !== 'string' ||
+        dependsOnScheme(reference) ||
+        analyzeDeclarationValue(declared).important
+        ? null
+        : withRootValuesForSurfaceTokens(
+            declared,
+            surfaceNames,
+            declaredValues,
+            new Set([...resolving, reference]),
+          );
+    }
+    const replaced =
+      typeof declared !== 'string' ||
+      analyzeDeclarationValue(declared).important
+        ? null
+        : withRootValuesForSurfaceTokens(
+            declared,
+            surfaceNames,
+            declaredValues,
+            new Set([...resolving, reference]),
+          );
+    if (replaced === null) {
+      isUnknown = true;
+    }
+    return replaced;
+  });
+  return isUnknown ? null : result;
+}
+
+/** Each entry's surface value; an entry the surface must not re-declare is dropped. */
+function surfaceValues(
+  entries: [string, string][],
+  surfaceNames: ReadonlySet<string>,
+  declaredValues: Record<string, string>,
+): [string, string][] {
+  return entries.flatMap(([name, value]): [string, string][] => {
+    const surfaceValue = withRootValuesForSurfaceTokens(
+      value,
+      surfaceNames,
+      declaredValues,
+    );
+    return surfaceValue === null ? [] : [[name, surfaceValue]];
+  });
+}
+
+/**
+ * Drops re-declarations that would close a `var()` cycle with the surface's
+ * own declarations. A custom property in a cycle is invalid, so such a token
+ * keeps its inherited value instead.
+ */
+function withoutDeclarationCycles(
+  replayed: [string, string][],
+  own: [string, string][],
+): [string, string][] {
+  let kept = replayed;
+  for (;;) {
+    const declared = Object.fromEntries([...kept, ...own]);
+    const next = kept.filter(
+      ([name, value]) =>
+        !tokenValuesWouldHaveCycleWithValue(declared, name, value),
+    );
+    if (next.length === kept.length) {
+      return kept;
+    }
+    kept = next;
+  }
+}
+
+/**
+ * Per surface, the tokens one adaptation rule's block restates and the names
+ * the surface keeps as its own under that rule.
+ */
+type RuleSurfaceReplays = Map<
+  'dark' | 'light',
+  {restated: Map<string, string>; excluded: Set<string>}
+>;
+
+/**
+ * Blocks for a later rule that matches together with an earlier one. Each
+ * rule's surface block restates values that the root resolves under that rule
+ * alone. When both rules match, the root resolves a reference with the values
+ * of both, so the later rule's restatement can be wrong. There the surface
+ * inherits the token instead, which is the value the root resolves. The block
+ * applies only where both queries match, and follows the later rule's block.
+ */
+function overlappingRuleBlocks(
+  laterIndex: number,
+  rules: ReadonlyArray<{query: string}>,
+  scopeSelector: string,
+  context: {
+    rootValues: Record<string, string>;
+    ruleRootValues: ReadonlyArray<Record<string, string>>;
+    ruleSurfaceReplays: ReadonlyArray<RuleSurfaceReplays>;
+    surfaceReplays: ReadonlyMap<'dark' | 'light', [string, string][]>;
+    sink: DiagnosticSink;
+    /** Each rule's own values per side (the surface's tokens and roles). */
+    ruleOwnBySide: ReadonlyArray<
+      ReadonlyMap<MediaSide, ReadonlyMap<string, string>>
+    >;
+    /** The dark-page copies of a query's restatements. */
+    darkPageRestatements: (
+      restatedBySide: ReadonlyMap<MediaSide, [string, string][]>,
+      ownBySide: ReadonlyMap<MediaSide, ReadonlyMap<string, string>>,
+      shownBySide: ReadonlyMap<MediaSide, ReadonlyMap<string, string>>,
+      location: string,
+    ) => string[];
+  },
+): string[] {
+  const {
+    rootValues,
+    ruleRootValues,
+    ruleSurfaceReplays,
+    surfaceReplays,
+    sink,
+    ruleOwnBySide,
+    darkPageRestatements,
+  } = context;
+  const later = ruleSurfaceReplays[laterIndex];
+  const blocks: string[] = [];
+  for (let earlierIndex = 0; earlierIndex < laterIndex; earlierIndex++) {
+    const earlier = ruleSurfaceReplays[earlierIndex];
+    const declared = {
+      ...rootValues,
+      ...ruleRootValues[earlierIndex],
+      ...ruleRootValues[laterIndex],
+    };
+    const parts: string[] = [];
+    const overlapBySide = new Map<MediaSide, [string, string][]>();
+    const shownBySide = new Map<MediaSide, ReadonlyMap<string, string>>();
+    for (const surface of ['dark', 'light'] as const) {
+      const laterReplays = later.get(surface);
+      const earlierReplays = earlier.get(surface);
+      if (!laterReplays || !earlierReplays) {
+        continue;
+      }
+      const excluded = new Set([
+        ...laterReplays.excluded,
+        ...earlierReplays.excluded,
+      ]);
+      // The surface's re-declarations where both queries match, later wins.
+      const shownUnderBoth = new Map([
+        ...(surfaceReplays.get(surface) ?? []),
+        ...earlierReplays.restated,
+        ...laterReplays.restated,
+      ]);
+      shownBySide.set(surface, shownUnderBoth);
+      const held = new Set([
+        ...excluded,
+        ...[...shownUnderBoth]
+          .filter(([, value]) => value !== 'inherit')
+          .map(([name]) => name),
+      ]);
+      const inherited: [string, string][] = [];
+      for (const name of new Set([
+        ...laterReplays.restated.keys(),
+        ...earlierReplays.restated.keys(),
+      ])) {
+        const shown =
+          laterReplays.restated.get(name) ?? earlierReplays.restated.get(name);
+        if (excluded.has(name) || shown === undefined || shown === 'inherit') {
+          continue;
+        }
+        const value = declared[name];
+        const resolvedValue =
+          typeof value === 'string'
+            ? withRootValuesForSurfaceTokens(value, excluded, declared)
+            : null;
+        const resolved =
+          resolvedValue === null
+            ? null
+            : withRootAliasesFor(resolvedValue, held);
+        if (resolved !== shown) {
+          inherited.push([name, 'inherit']);
+        }
+      }
+      // A value that refers to a token the surface now inherits is restated
+      // with that token's root alias.
+      const overlapEntries =
+        inherited.length > 0
+          ? withRootAliases(
+              inherited,
+              [...shownUnderBoth].filter(
+                ([name]) => !inherited.some(([n]) => n === name),
+              ),
+              excluded,
+            )
+          : [];
+      if (overlapEntries.length > 0) {
+        const declarations = joinDeclarations(
+          overlapEntries,
+          `adaptations[${laterIndex}].on${surface}.tokens.`,
+          sink,
+        );
+        parts.push(`  ${mediaSelector(surface)} {\n${declarations}\n  }`);
+        overlapBySide.set(surface, overlapEntries);
+      }
+    }
+    parts.push(
+      ...darkPageRestatements(
+        overlapBySide,
+        ruleOwnBySide[laterIndex] ?? new Map(),
+        shownBySide,
+        `adaptations[${laterIndex}]`,
+      ),
+    );
+    if (parts.length > 0) {
+      blocks.push(
+        `@media ${rules[earlierIndex].query} {\n${generateAdaptationMediaBlock(
+          rules[laterIndex].query,
+          parts,
+          scopeSelector,
+        )}\n}`,
+      );
+    }
+  }
+  return blocks;
+}
+
+/**
  * Generate CSS for on-media token and component overrides.
  *
  * Emitted in an unbounded @scope (no `to` limit) so the rules can reach
@@ -1854,6 +2274,14 @@ export function generateOnMediaCSS(
     'dark' | 'light',
     [string, string][]
   >();
+  // The values the theme root declares.
+  const rootValues: Record<string, string> = {
+    ...theme.tokens,
+    ...Object.fromEntries(rootAliases),
+    ...theme.localTokens,
+  };
+  const surfaceOwnNames = new Map<'dark' | 'light', Set<string>>();
+  const surfaceReplays = new Map<'dark' | 'light', [string, string][]>();
 
   // One surface's token and component rules, into `out`.
   // A dark-page copy repeats rules already checked, so it reports nothing.
@@ -1878,10 +2306,29 @@ export function generateOnMediaCSS(
       rootAliases,
     );
     mediaStatusRoleDefaults.set(side, statusRoleDefaults);
-    const tokenEntries = [
+    const ownNames = new Set([
+      ...Object.keys(onMedia.tokens),
+      ...statusRoleDefaults.map(([role]) => role),
+    ]);
+    surfaceOwnNames.set(side, ownNames);
+    const ownEntries = [
       ...Object.entries(onMedia.tokens),
       ...statusRoleDefaults,
     ];
+    const replayedEntries = withRootAliases(
+      withoutDeclarationCycles(
+        surfaceValues(
+          schemeDependentEntries(rootValues, Object.keys(rootValues), ownNames),
+          ownNames,
+          rootValues,
+        ),
+        ownEntries,
+      ),
+      [],
+      ownNames,
+    );
+    surfaceReplays.set(side, replayedEntries);
+    const tokenEntries = [...replayedEntries, ...ownEntries];
     if (tokenEntries.length > 0) {
       // The surface re-declares font sizes the way a theme's root does, so they
       // keep following the reader's text size there (see dynamicType.ts).
@@ -1968,13 +2415,72 @@ export function generateOnMediaCSS(
     }
   }
 
+  /**
+   * The dark-page copies of one query's restatements. A side's restatement
+   * also reaches a surface that a dark page flips to the other side. The copy
+   * writes the flipped side's restatements. For a token only the other side
+   * restates, it writes the value this side shows under the same queries: its
+   * own value, else its re-declaration there, else `inherit`.
+   */
+  const darkPageRestatements = (
+    restatedBySide: ReadonlyMap<MediaSide, [string, string][]>,
+    ownBySide: ReadonlyMap<MediaSide, ReadonlyMap<string, string>>,
+    shownBySide: ReadonlyMap<MediaSide, ReadonlyMap<string, string>>,
+    location: string,
+  ): string[] => {
+    const copies: string[] = [];
+    for (const side of flipped) {
+      const other: MediaSide = side === 'dark' ? 'light' : 'dark';
+      const restated = restatedBySide.get(side) ?? [];
+      const restatedNames = new Set(restated.map(([name]) => name));
+      const own = ownBySide.get(side) ?? new Map<string, string>();
+      const shown =
+        shownBySide.get(side) ?? new Map(surfaceReplays.get(side) ?? []);
+      const kept = (restatedBySide.get(other) ?? []).flatMap(
+        ([name]): [string, string][] =>
+          restatedNames.has(name)
+            ? []
+            : [[name, own.get(name) ?? shown.get(name) ?? 'inherit']],
+      );
+      const entries = [...restated, ...kept];
+      if (entries.length === 0) {
+        continue;
+      }
+      const declarations = joinDeclarations(
+        entries,
+        `${location}.on${side}.tokens.`,
+        quiet,
+      );
+      copies.push(
+        `  ${mediaSelector(`${side}@dark-page`)} {\n${declarations}\n  }`,
+        `  @media (prefers-color-scheme: dark) {\n  ${mediaSelector(`${side}@dark-page-preference`)} {\n${declarations}\n  }\n  }`,
+      );
+    }
+    return copies;
+  };
+
   const adaptationMediaRoleBlocks: string[] = [];
+  const adaptationAliases = adaptationStatusRoleDefaults(context);
+  // Per rule: the values it writes on the theme root, and per surface the
+  // tokens its block restates and the names the surface keeps as its own.
+  const ruleRootValues: Record<string, string>[] = [];
+  const ruleSurfaceReplays: RuleSurfaceReplays[] = [];
+  const ruleOwnBySide: Map<MediaSide, Map<string, string>>[] = [];
   for (const [index, rule] of rules.entries()) {
     const authoredRoles = authoredStatusRoleEntries(rule.tokens);
-    if (authoredRoles.length === 0) {
-      continue;
-    }
+    // The values this rule writes on the theme root under its query.
+    const ruleValues: Record<string, string> = {
+      ...rule.tokens,
+      ...Object.fromEntries(adaptationAliases[index] ?? []),
+      ...rule.localTokens,
+    };
+    ruleRootValues.push(ruleValues);
+    const surfaceReplaysOfRule: RuleSurfaceReplays = new Map();
+    ruleSurfaceReplays.push(surfaceReplaysOfRule);
     const roleParts: string[] = [];
+    const restatedBySide = new Map<MediaSide, [string, string][]>();
+    const ownBySide = new Map<MediaSide, Map<string, string>>();
+    ruleOwnBySide.push(ownBySide);
     for (const surface of ['dark', 'light'] as const) {
       const onMedia = surface === 'dark' ? theme.__onDark : theme.__onLight;
       if (!onMedia) {
@@ -1986,6 +2492,73 @@ export function generateOnMediaCSS(
       const restorationEntries: [string, string][] = authoredRoles
         .filter(([role]) => generatedRoles.has(role))
         .map(([role, value]) => [role, mediaRoleRestorationValue(role, value)]);
+      const ownSurfaceEntries = [
+        ...Object.entries(onMedia.tokens),
+        ...(mediaStatusRoleDefaults.get(surface) ?? []),
+        ...restorationEntries,
+      ];
+      const excluded = new Set([
+        ...(surfaceOwnNames.get(surface) ?? []),
+        ...restorationEntries.map(([role]) => role),
+      ]);
+      // Under this query the root declares the rule's values over the base
+      // values. The surface restates each re-declaration whose value changes:
+      // a token that becomes scheme-dependent, or a base replay that refers to
+      // a token the rule sets. A base replay that no longer applies inherits.
+      const ruleDeclared = {...rootValues, ...ruleValues};
+      const baseReplayValues = new Map(surfaceReplays.get(surface) ?? []);
+      const candidateNames = new Set([
+        ...schemeDependentEntries(
+          ruleDeclared,
+          Object.keys(ruleDeclared),
+          excluded,
+        ).map(([name]) => name),
+        ...baseReplayValues.keys(),
+      ]);
+      const ruleReplays = [...candidateNames].flatMap(
+        (name): [string, string][] => {
+          if (excluded.has(name)) {
+            return [];
+          }
+          const ruleValue =
+            withRootValuesForSurfaceTokens(
+              ruleDeclared[name],
+              excluded,
+              ruleDeclared,
+            ) ?? (baseReplayValues.has(name) ? 'inherit' : null);
+          return ruleValue === null || baseReplayValues.get(name) === ruleValue
+            ? []
+            : [[name, ruleValue]];
+        },
+      );
+      const restatedNames = new Set(ruleReplays.map(([name]) => name));
+      // Under this query the surface also holds the base replays this rule
+      // does not restate.
+      const baseReplays = (surfaceReplays.get(surface) ?? []).filter(
+        ([name]) => !restatedNames.has(name),
+      );
+      const schemeEntries = withRootAliases(
+        withoutDeclarationCycles(ruleReplays, [
+          ...baseReplays,
+          ...ownSurfaceEntries,
+        ]),
+        baseReplays,
+        excluded,
+      );
+      surfaceReplaysOfRule.set(surface, {
+        restated: new Map(schemeEntries),
+        excluded,
+      });
+      restatedBySide.set(surface, schemeEntries);
+      ownBySide.set(surface, new Map(ownSurfaceEntries));
+      if (schemeEntries.length > 0) {
+        const declarations = joinDeclarations(
+          schemeEntries,
+          `adaptations[${index}].on${surface}.tokens.`,
+          sink,
+        );
+        roleParts.push(`  ${mediaSelector(surface)} {\n${declarations}\n  }`);
+      }
       if (restorationEntries.length === 0) {
         continue;
       }
@@ -2002,11 +2575,48 @@ export function generateOnMediaCSS(
         );
       }
     }
+    roleParts.push(
+      ...darkPageRestatements(
+        restatedBySide,
+        ownBySide,
+        new Map(
+          [...surfaceReplays].map(([side, replays]) => [
+            side,
+            new Map(replays),
+          ]),
+        ),
+        `adaptations[${index}]`,
+      ),
+    );
     if (roleParts.length > 0) {
       adaptationMediaRoleBlocks.push(
         generateAdaptationMediaBlock(rule.query, roleParts, scopeSelector),
       );
     }
+    adaptationMediaRoleBlocks.push(
+      ...overlappingRuleBlocks(index, rules, scopeSelector, {
+        rootValues,
+        ruleRootValues,
+        ruleSurfaceReplays,
+        surfaceReplays,
+        sink,
+        ruleOwnBySide,
+        darkPageRestatements,
+      }),
+    );
+  }
+
+  const aliasEntries = rootAliasEntries([
+    ...parts,
+    ...adaptationMediaRoleBlocks,
+  ]);
+  if (aliasEntries.length > 0) {
+    const declarations = joinDeclarations(
+      aliasEntries,
+      'onMedia.rootAliases.',
+      sink,
+    );
+    parts.unshift(`  :scope {\n${declarations}\n  }`);
   }
 
   if (parts.length === 0 && adaptationMediaRoleBlocks.length === 0) {

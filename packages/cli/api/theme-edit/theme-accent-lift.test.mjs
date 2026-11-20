@@ -40,24 +40,34 @@ it('keeps the official secondary text lift on a new accent while it reads', asyn
   }
   await themeEditNew('t', {cwd, like: 'neutral'});
   // The lifted rules, not the base theme's own coloured-card secondary
-  // text, which its card rule sets for each card colour.
+  // text, which its card rule sets for each card colour. A media surface
+  // restates the root's scheme-dependent values; those copies are not lifts
+  // of their own.
+  const MEDIA_BLOCK = /\[data-astryx-media="(?:dark|light)"\] \{[^}]*\}/g;
   /** @param {string} css */
   const lifts = css =>
     [
-      ...css.matchAll(
-        /\n {2}([^{\n]+) \{\s*--color-text-secondary: (light-dark\([^;]*\));/g,
-      ),
+      ...css
+        .replace(MEDIA_BLOCK, '')
+        .matchAll(
+          /\n {2}([^{\n]+) \{\s*--color-text-secondary: (light-dark\([^;]*\));/g,
+        ),
     ]
       .filter(m => !/^\.astryx-card\[data-variant=/.test(m[1]))
       .map(m => m[2]);
-  const before = lifts(
-    fs.readFileSync(path.join(cwd, 'themes/t/t.css'), 'utf8'),
-  );
+  /** @param {string} css */
+  const mediaCopies = css =>
+    (css.match(MEDIA_BLOCK) ?? []).filter(block =>
+      block.includes('--color-text-secondary:'),
+    ).length;
+  const beforeCss = fs.readFileSync(path.join(cwd, 'themes/t/t.css'), 'utf8');
+  const before = lifts(beforeCss);
   expect(before.length).toBe(5);
+  expect(mediaCopies(beforeCss)).toBe(2);
   const r = await themeEditSet('t', 'accent', '#E11D48', {cwd});
-  const after = lifts(
-    fs.readFileSync(path.join(cwd, 'themes/t/t.css'), 'utf8'),
-  );
+  const afterCss = fs.readFileSync(path.join(cwd, 'themes/t/t.css'), 'utf8');
+  const after = lifts(afterCss);
   expect(after).toEqual(before);
+  expect(mediaCopies(afterCss)).toBe(2);
   expect(r.data.styled.filter(x => /color-text-secondary/.test(x))).toEqual([]);
 }, 240_000);
