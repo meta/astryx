@@ -169,6 +169,16 @@ export const rootLeadsOf = new WeakMap();
 export const movedRootsOf = new WeakMap();
 
 /**
+ * The parts, by lexical response, whose root leads them on hits weaker than
+ * keyword strength (STRONG_TOKEN_SCORE; see rankLexical): such a root leads
+ * its part
+ * only inside the part's run. Module-private, so they never enter search's
+ * JSON.
+ * @type {WeakMap<object, Set<object>>}
+ */
+export const weakRootsOf = new WeakMap();
+
+/**
  * The query words a match answered: the terms its reason lists, folded, or
  * null when it answered the whole query (a name, keyword, or title hit).
  * @param {string | undefined} reason
