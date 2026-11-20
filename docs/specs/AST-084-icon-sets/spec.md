@@ -325,7 +325,7 @@ draws each meaning a bundled template imports.
   first, each with its `group` and `relatives` as a match has them, and
   says how to get a set (`next`). With no set, a matching definition that
   Core does not draw also lists the built-in it falls back to (FR23),
-  unless a definition with no built-in to fall back to matches better: that
+  unless a definition with no built-in to fall back to ranks above it: that
   built-in takes the better of its own place and the definition's place
   when the query also matches it, and otherwise comes after the built-ins
   that match.

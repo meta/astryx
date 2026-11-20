@@ -189,11 +189,15 @@ describe('astryx experimental icon with no icon set installed', () => {
     expect(review[0]).toBe('check');
     expect(review.indexOf('info')).toBeGreaterThan(review.indexOf('success'));
     expect(review.indexOf('info')).toBeLessThan(review.indexOf('review'));
-    // A better match that Core cannot draw at all keeps a weaker match's
+    // A match ranked above that Core cannot draw at all keeps a lower match's
     // fallback out: `settings` has no built-in, and `columnSettings`, which
-    // falls back to `viewColumns`, matches it less well.
+    // falls back to `viewColumns`, ranks below it.
     expect(await names('settings')).not.toContain('viewColumns');
     expect((await names('column settings'))[0]).toBe('viewColumns');
+    // On equal scores the rank decides: `pen` matches `compose`, `edit` and
+    // `review` alike, `compose` ranks first and has no built-in, so the
+    // fallback of `review` (`info`) stays out.
+    expect(await names('pen')).not.toContain('info');
   });
 
   it('lists built-in names before other definitions, at most --limit', async () => {
