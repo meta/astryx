@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'chevronDown',
+  group: 'chevrons',
   description: 'Open a dropdown or expand a section.',
   words: ['expand', 'dropdown', 'caret'],
   builtIn: true,

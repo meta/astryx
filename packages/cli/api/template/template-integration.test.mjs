@@ -300,6 +300,47 @@ describe('integration template discovery', () => {
     expect(result.data.type).toBe('page');
   });
 
+  it('names no run-from-its-folder command for an integration template, which a folder outside the project cannot find', async () => {
+    const pkgDir = installWidgets(tmpDir);
+    writeTemplate(pkgDir, 'pricing', {kind: 'page'});
+    const outside = path.join(
+      path.dirname(tmpDir),
+      `astryx-no-such-folder-${path.basename(tmpDir)}`,
+      'pricing.tsx',
+    );
+
+    const err = await template('pricing', {
+      type: 'page',
+      targetPath: outside,
+      cwd: tmpDir,
+    }).catch(e => e);
+    expect(err.code).toBe('ERR_PATH_TRAVERSAL');
+    expect(err.suggestions.length).toBeGreaterThan(0);
+    expect(err.suggestions.some(s => s.name.startsWith('cd '))).toBe(false);
+    expect(fs.existsSync(path.dirname(outside))).toBe(false);
+  });
+
+  it('names no run-from-its-folder command for a Core template an integration replaces, even asked for by package', async () => {
+    const pkgDir = installWidgets(tmpDir);
+    writeTemplate(pkgDir, 'acme-app-shell', {kind: 'page'});
+    declareReplaces(pkgDir, {'acme-app-shell': 'shell-side-nav'});
+    const outside = path.join(
+      path.dirname(tmpDir),
+      `astryx-no-such-folder-${path.basename(tmpDir)}`,
+      'shell.tsx',
+    );
+    for (const options of [{}, {package: '@astryxdesign/core'}]) {
+      const err = await template('shell-side-nav', {
+        type: 'page',
+        ...options,
+        targetPath: outside,
+        cwd: tmpDir,
+      }).catch(e => e);
+      expect(err.code, JSON.stringify(options)).toBe('ERR_PATH_TRAVERSAL');
+      expect(err.suggestions.some(s => s.name.startsWith('cd '))).toBe(false);
+    }
+  });
+
   it('copies a page template into a directory as page.tsx', async () => {
     const pkgDir = installWidgets(tmpDir);
     writeTemplate(pkgDir, 'pricing', {kind: 'page'});
@@ -636,7 +677,10 @@ describe('integration template discovery', () => {
         ]),
       );
     }
-    const selected = await template('shell-side-nav', {show: true, cwd: tmpDir});
+    const selected = await template('shell-side-nav', {
+      show: true,
+      cwd: tmpDir,
+    });
     expect(selected.data.template).toBe('shell-side-nav');
   });
 
@@ -662,7 +706,10 @@ describe('integration template discovery', () => {
         }),
       ]),
     );
-    const selected = await template('shell-side-nav', {show: true, cwd: tmpDir});
+    const selected = await template('shell-side-nav', {
+      show: true,
+      cwd: tmpDir,
+    });
     expect(selected.data.template).toBe('shell-side-nav');
   });
 
@@ -688,7 +735,10 @@ describe('integration template discovery', () => {
     const discovered = await discoverAllWithErrors(tmpDir);
     expect(discovered.errors).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({template: 'acme-shell', replacementTarget: 'dashboard'}),
+        expect.objectContaining({
+          template: 'acme-shell',
+          replacementTarget: 'dashboard',
+        }),
       ]),
     );
   });
@@ -1210,7 +1260,7 @@ describe('build names a start its command selects', () => {
     expect(kit.data.start).toMatchObject({
       name: 'acme-app-shell',
       command:
-        'astryx template shell-side-nav --type page src/pages/acme-app-shell',
+        'astryx template shell-side-nav --type page src/pages/acme-app-shell.tsx',
     });
     const selected = await template('shell-side-nav', {
       type: 'page',
@@ -1230,7 +1280,7 @@ describe('build names a start its command selects', () => {
     expect(kit.data.start).toMatchObject({
       name: 'contact-form',
       command:
-        'astryx template contact-form --type page src/pages/contact-form',
+        'astryx template contact-form --type page src/pages/contact-form.tsx',
     });
     const selected = await template('contact-form', {
       type: 'page',
@@ -1279,5 +1329,4 @@ describe('build names a start its command selects', () => {
     });
     expect(secondTemplate.data.source).toContain('Final chain replacement');
   }, 30_000);
-
 });

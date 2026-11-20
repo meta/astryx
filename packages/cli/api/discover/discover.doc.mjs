@@ -91,7 +91,7 @@ export const doc = {
     {
       type: 'discover.list',
       description:
-        'What the project has: the integrations it loads and the official packages it declares (package, the npm package and always equal to name; name, category, components, version, and a list per other kind they add), official packages first. meta.available lists what the project could add, official packages first, each with its package and the command that adds it; inside a project, an integration installed for the computer that the project does not install is listed there too, with source `installed for this computer` and the install command for the project in `install`. meta.sources reports each source, the official list last. When it lists no integration it carries meta.configured.',
+        'What the project has: the integrations it loads and the official packages it declares (package, the npm package and always equal to name; name, category, components, version, and a list per other kind they add), official packages first. meta.available lists what the project could add, official packages first, each with its package and how to add it: the install guidance an integration of the project gives, else the package-manager command; inside a project, an integration installed for the computer that the project does not install is listed there too, with source `installed for this computer` and how to add it in `install`. meta.sources reports each source, the official list last. When it lists no integration it carries meta.configured.',
     },
     {
       type: 'discover.detail',
