@@ -242,11 +242,9 @@ describe('InputClearButton', () => {
       'utf-8',
     );
     expect(source).not.toContain('--_input-clear-hit-inset');
+    expect(source).toContain("const FINE_POINTER = '@media (pointer: fine)';");
     expect(source).toContain(
-      "const NOT_TOUCH = '@media not (pointer: coarse)';",
-    );
-    expect(source).toContain(
-      "'--_input-clear-target': {default: null, [NOT_TOUCH]: '\"\"'}",
+      "'--_input-clear-target': {default: null, [FINE_POINTER]: '\"\"'}",
     );
   });
 

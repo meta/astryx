@@ -92,7 +92,7 @@ const CLEAR_BUTTON_HIT_AREA: TouchHitAreaOptions = {
 // `::after` has a hole over the button's own box, so a pointer there reaches
 // the glyph and the glyph's hover style applies. StyleX reads these at build
 // time.
-const NOT_TOUCH = '@media not (pointer: coarse)';
+const FINE_POINTER = '@media (pointer: fine)';
 const BLOCK_GROWTH = 'calc((24px - 20px) / 2)';
 const END_GROWTH = 'calc(24px - 20px)';
 const HOLE_LTR = `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, 0 ${BLOCK_GROWTH}, calc(100% - ${END_GROWTH}) ${BLOCK_GROWTH}, calc(100% - ${END_GROWTH}) calc(100% - ${BLOCK_GROWTH}), 0 calc(100% - ${BLOCK_GROWTH}), 0 ${BLOCK_GROWTH})`;
@@ -104,7 +104,7 @@ const styles = stylex.create({
     flexShrink: 0,
     // A pseudo-element takes no media condition here, so the button holds
     // the conditions and its `::after` reads them.
-    '--_input-clear-target': {default: null, [NOT_TOUCH]: '""'},
+    '--_input-clear-target': {default: null, [FINE_POINTER]: '""'},
     '--_input-clear-target-hole': {default: HOLE_LTR, ':dir(rtl)': HOLE_RTL},
     '::after': {
       content: 'var(--_input-clear-target)',
