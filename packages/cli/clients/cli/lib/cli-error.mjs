@@ -60,6 +60,7 @@ import {setOutcome} from '../../../foundation/debug/index.mjs';
 import {
   formatCliCommand,
   getCliInvocation,
+  splitCommandInFolder,
 } from '../../../foundation/env/package-manager.mjs';
 import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
 import {doc as experimentalEditorDoc} from '../commands/experimental-theme-editor.doc.mjs';
@@ -134,10 +135,7 @@ export function cliError(message, options = {}) {
   if (suggestions?.length) {
     lines.push('');
     for (const s of suggestions) {
-      // A suggested command stays bare in JSON and is prefixed here.
-      const name = /^astryx(\s|$)/.test(s.name)
-        ? formatCliCommand(s.name)
-        : s.name;
+      const name = shownCommand(s.name);
       const tag = s.reason ? `  ${name}  (${s.reason})` : `  ${name}`;
       lines.push(tag);
     }
@@ -326,4 +324,21 @@ export function themeGroupUnknownSubcommand(group, word, names, loaded) {
       moved,
     ),
   };
+}
+
+/**
+ * A suggested command as printed: it stays bare in JSON and the run that
+ * answers is prefixed here. A command run in another folder
+ * (commandInFolder) keeps its change of folder in front, and its invocation
+ * is chosen for that folder (`spec:AST-081` FR5).
+ * @param {string} name
+ * @returns {string}
+ */
+function shownCommand(name) {
+  const inFolder = splitCommandInFolder(name);
+  if (inFolder && /^astryx(\s|$)/.test(inFolder.command)) {
+    const lead = name.slice(0, name.length - inFolder.command.length);
+    return `${lead}${formatCliCommand(inFolder.command, inFolder.dir)}`;
+  }
+  return /^astryx(\s|$)/.test(name) ? formatCliCommand(name) : name;
 }

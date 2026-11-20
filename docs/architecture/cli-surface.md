@@ -319,7 +319,7 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   writes outside a project or output folder are the per-user ones
   `spec:AST-081` FR7 lists: releases, records, kept search catalogs,
   integration check results, template discovery's records, the component list, whether the installed Core matches the component list the CLI was published with, Core's and each integration's components with the doc parts the not-found matcher scores, Core hooks' declared keywords for the not-found hint, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys, token names and settings the browser won't show as written, the lookup commands'
-  not-found hint's name summaries, npm's list of the files an integration package packs, the locale and time zone a run's debug record names (on Linux), the CLI's own docs tree, each stored doc's checked contents, keyed by its text, what template reads from a template's source to name the components it uses, keyed by the source's text and the parser's release, discover's record of the loaded integrations and what each adds, and what it searches in its sources' saved copies (for `discover` and search's discover line), doctor's docs checks and theme-wiring scan, what doctor's Core-props check finds in the project's source files, keyed by the folders it lists and the files it reads, and by the TypeScript, Core and project-config versions it used, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
+  not-found hint's name summaries, npm's list of the files an integration package packs, the locale and time zone a run's debug record names (on Linux), the CLI's own docs tree, each stored doc's checked contents, keyed by its text, what template reads from a template's source to name the components it uses, keyed by the source's text and the parser's release, discover's record of the loaded integrations and what each adds, and what it searches in its sources' saved copies (for `discover` and search's discover line), doctor's docs checks and theme-wiring scan, what doctor's Core-props check finds in the project's source files, keyed by the folders it lists and the files it reads, and by the TypeScript, Core and project-config versions it used, what doctor's Core-button check finds in the project's source files, keyed by the folders it lists and the files it reads, and by the installed packages and Node.js version it used, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
   file with its links or copy in the home folder. None follows a link in its place, and none replaces
   anything the CLI did not create. A template that
   `astryx template <name> <path>` writes may also go, as a scratch copy, to a
@@ -1352,6 +1352,29 @@ the editor shows each mode itself.
 Rejected: following the viewer for every page (a one-mode theme is unreadable
 in the other scheme), and running the theme module to read its modes (a render
 runs no theme code).
+
+### DEC-20 — A refused template path names the same write from its folder
+
+**Decider:** `josephfarina`, `2026-11-18`
+
+When `astryx template <name> <path>` refuses a destination outside the project
+and outside the temp folder (named absolutely, from the home folder, or through
+`..`), the refusal also names a command that writes that same destination: `cd`
+into the nearest folder on the destination's path that exists, then run the
+template command with the rest of the path, using the CLI command that folder
+would use (`spec:AST-081` FR5). Run from that folder, the write stays inside
+the folder the command runs from (INV10), so the caller gets the copy where
+they named it without a second refusal. The command is named only for a Core
+template that no integration replaces: outside the project the project's
+integrations do not load, so an integration's template would not be found
+there, and a replaced Core template would be the Core version instead of the
+project's replacement. No command is named when no folder on the path exists
+except the disk's root. A destination reached through `..` that lands in the
+temp folder is not a scratch copy (DEC-15); the refusal names the same
+destination as an absolute path, which DEC-15 accepts as a scratch copy.
+
+Rejected: writing the named destination from the current folder (it leaves the
+folder a template write is confined to).
 
 ## Verification
 
