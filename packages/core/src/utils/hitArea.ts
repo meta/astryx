@@ -11,7 +11,9 @@
  *   and `resolveHitTarget` answer from rects. `watchHitArea` keeps a control's
  *   insets live where the primary pointer is coarse. `groupGrowth` sizes a
  *   group's box from its edge members, and shrinks a side the members do not
- *   reach. `INTERACTIVE_SELECTOR` names what a touch can land on
+ *   reach. `INTERACTIVE_SELECTOR` names what a touch can land on.
+ *   `screenScale` reads how far transforms scale a box, and `layoutSize` a
+ *   box's untransformed size (hooks/useOverflow.ts uses both)
  * @position Core-internal utility, not exported from `@astryxdesign/core/utils`.
  *   Groups that measure their actions at press start pass `resolveHitTarget`;
  *   a standalone control writes `watchHitArea`'s insets to an invisible
@@ -448,14 +450,64 @@ function plainRect(element: Element): HitRect {
 /** A box that the transforms around it leave at its layout size. */
 const UNSCALED = {x: 1, y: 1} as const;
 
+/**
+ * What `screenScale` reads as unscaled. `pixels`: a box within this many
+ * pixels of its whole-pixel offset size, read without a style lookup (0 turns
+ * the shortcut off). `ratio`: a scale less than this far from 1.
+ */
+export interface ScreenScaleTolerance {
+  readonly pixels: number;
+  readonly ratio: number;
+}
+
 /** One axis of a box's scale on screen: its client size over its layout size. */
-function axisScale(onScreen: number, layout: number): number {
+function axisScale(onScreen: number, layout: number, ratio: number): number {
   if (!(layout > 0) || !(onScreen > 0)) {
     return 1;
   }
   const scale = onScreen / layout;
-  // Within rounding of 1 the box is at its layout size: no change to the rects.
-  return Math.abs(scale - 1) < 1e-3 ? 1 : scale;
+  // Within the tolerance of 1 the box is at its layout size.
+  return Math.abs(scale - 1) < ratio ? 1 : scale;
+}
+
+/**
+ * Hit areas: within a pixel of its layout size a box reads as unscaled, which
+ * bounds the inset error at about a pixel and skips a style lookup.
+ */
+const HIT_AREA_TOLERANCE: ScreenScaleTolerance = {pixels: 1, ratio: 1e-3};
+
+/**
+ * A box's border-box size in layout px, from its computed style. Transforms
+ * do not change it, and it keeps the sub-pixel size a scaled rect loses to
+ * the browser's rounding. Null when the style has no pixel width.
+ */
+export function layoutSize(
+  element: Element,
+): {width: number; height: number} | null {
+  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
+  if (style == null || !style.width.endsWith('px')) {
+    return null;
+  }
+  const px = (value: string) => Number.parseFloat(value) || 0;
+  const isContentBox = style.boxSizing !== 'border-box';
+  return {
+    width:
+      px(style.width) +
+      (isContentBox
+        ? px(style.paddingLeft) +
+          px(style.paddingRight) +
+          px(style.borderLeftWidth) +
+          px(style.borderRightWidth)
+        : 0),
+    height:
+      px(style.height) +
+      (isContentBox
+        ? px(style.paddingTop) +
+          px(style.paddingBottom) +
+          px(style.borderTopWidth) +
+          px(style.borderBottomWidth)
+        : 0),
+  };
 }
 
 /**
@@ -464,9 +516,10 @@ function axisScale(onScreen: number, layout: number): number {
  * the layout box keeps the size the layer settles at. Only a scale is
  * expected: a rotated or skewed box would read as a larger scale.
  */
-function screenScale(
+export function screenScale(
   element: Element,
   onScreen: HitRect,
+  tolerance: ScreenScaleTolerance,
 ): {x: number; y: number} {
   // The offset size is the layout size in whole pixels, unaffected by
   // transforms, and costs no style resolution. A box with none, such as an SVG
@@ -477,40 +530,24 @@ function screenScale(
   if (offsetWidth === 0 || offsetHeight === 0) {
     return UNSCALED;
   }
-  // Within a pixel of its layout size the box reads as unscaled, which bounds
-  // the inset error at about a pixel. Only a box that a transform shrinks or
-  // grows reads its exact size from the computed style.
+  // Within `tolerance.pixels` of its layout size the box reads as unscaled.
+  // Any other box reads its exact size from the computed style.
   if (
-    Math.abs(onScreen.right - onScreen.left - offsetWidth) <= 1 &&
-    Math.abs(onScreen.bottom - onScreen.top - offsetHeight) <= 1
+    tolerance.pixels > 0 &&
+    Math.abs(onScreen.right - onScreen.left - offsetWidth) <=
+      tolerance.pixels &&
+    Math.abs(onScreen.bottom - onScreen.top - offsetHeight) <= tolerance.pixels
   ) {
     return UNSCALED;
   }
-  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
-  if (style == null || !style.width.endsWith('px')) {
+  const size = layoutSize(element);
+  if (size == null) {
     return UNSCALED;
   }
-  const px = (value: string) => Number.parseFloat(value) || 0;
-  const isContentBox = style.boxSizing !== 'border-box';
-  const width =
-    px(style.width) +
-    (isContentBox
-      ? px(style.paddingLeft) +
-        px(style.paddingRight) +
-        px(style.borderLeftWidth) +
-        px(style.borderRightWidth)
-      : 0);
-  const height =
-    px(style.height) +
-    (isContentBox
-      ? px(style.paddingTop) +
-        px(style.paddingBottom) +
-        px(style.borderTopWidth) +
-        px(style.borderBottomWidth)
-      : 0);
+  const {width, height} = size;
   return {
-    x: axisScale(onScreen.right - onScreen.left, width),
-    y: axisScale(onScreen.bottom - onScreen.top, height),
+    x: axisScale(onScreen.right - onScreen.left, width, tolerance.ratio),
+    y: axisScale(onScreen.bottom - onScreen.top, height, tolerance.ratio),
   };
 }
 
@@ -684,7 +721,7 @@ function measureOne(
   candidates: ReadonlyArray<Candidate>,
 ): {target: HitRect; insets: HitInsets; neighbours: HitRect[]} {
   const target = plainRect(watch.element);
-  const scale = screenScale(watch.element, target);
+  const scale = screenScale(watch.element, target, HIT_AREA_TOLERANCE);
   // Two targets each growing up to half the minimum reach each other from a
   // minimum apart.
   const reach = Math.max(0, watch.minSize);

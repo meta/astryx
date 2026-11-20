@@ -64,7 +64,7 @@ const INDEX_CODE = [
  * name it declares with whether it is placed, as docs discovery loads it
  * (docs-discovery.mjs integrationDocDeclaration); null when it does not load.
  * `segment` is the name as a route segment, folded.
- * @typedef {{rel: string, declared: {name: string, placed: boolean, segment: string} | null}} DocEntry
+ * @typedef {{rel: string, declared: {name: string, placed: boolean, level: string | null, segment: string} | null}} DocEntry
  */
 
 /**

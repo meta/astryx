@@ -169,6 +169,16 @@ export const docs = {
         default: 'var(--color-overlay-pressed)',
         private: true,
       },
+      {
+        name: '--_checkbox-input-gap',
+        description:
+          'Room between the box and its label; set by gap on the checkbox-input target',
+        default: 'var(--spacing-2)',
+        private: true,
+      },
+    ],
+    derived: [
+      {property: 'gap', vars: ['--_checkbox-input-gap'], replaces: true},
     ],
   },
   usage: {
@@ -425,6 +435,16 @@ export const docsZh = {
         default: 'var(--color-overlay-pressed)',
         private: true,
       },
+      {
+        name: '--_checkbox-input-gap',
+        description:
+          '复选框与其标签之间的间距；由 checkbox-input 目标上的 gap 设置',
+        default: 'var(--spacing-2)',
+        private: true,
+      },
+    ],
+    derived: [
+      {property: 'gap', vars: ['--_checkbox-input-gap'], replaces: true},
     ],
   },
 };

@@ -11,5 +11,4 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['TopNav', 'TopNavHeading', 'TopNavItem', 'TopNavMenu'],
-  icons: {ChartBarIcon: 'chart', Cog6ToothIcon: 'settings'},
 };

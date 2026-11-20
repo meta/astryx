@@ -122,6 +122,21 @@ export const doc = {
         'The command your users run the Astryx CLI with, when it is not their package manager, such as a wrapper your company ships. Every command the CLI prints in an app that loads your package starts with it, in place of `pnpm exec astryx` or `yarn astryx`: hints, errors, Doctor fixes, and doc text. One line, without a subcommand. If two loaded packages set different commands, neither is used and `{@command doctor}` warns. An invalid value is ignored with an `invalid_cli_command` warning, and the rest of the manifest still loads. JSON output keeps commands bare.',
       example: "'acme astryx'",
     },
+    {
+      name: 'installGuidance',
+      type: 'string',
+      description:
+        "How an app that uses your package adds a dependency, when its package manager's add command (`pnpm add`, `yarn add`, `npm install`) is the wrong step there, for example because your apps share one lockfile that a script rebuilds. One line; `{packages}` stands for the packages to add. The CLI prints it in place of the package-manager command wherever it prints a step that adds packages the app lacks: template readiness, the theme step of `{@command init}`, `{@command doctor}` fixes, theme hints and errors, `{@command theme eject}`, the theme editor's notes, and `{@command discover}` add commands; a receipt with an `installCommand` gives it beside that as `installGuidance`. A step that moves Astryx's own packages to another release, or adds `@astryxdesign/cli` at the release of the project's Core, is not an add and keeps the package-manager command. If two loaded packages give different guidance, neither is used and `{@command doctor}` warns. An invalid value is ignored with an `invalid_install_guidance` warning, and the rest of the manifest still loads.",
+      example:
+        "'Add {packages} to package.json, commit, then run the repository relock script'",
+    },
+    {
+      name: 'base',
+      type: '{adapters?: Record<string, string>}',
+      description:
+        "Makes your package a base: a component library that stands in for Core in the apps that use it. `adapters` maps a capability, as `BaseCapability` lists them, to the module, relative to the package, that performs its platform steps; the functions the module exports are the steps your base serves. `base: {}` serves content only. A run reads one base: `--base`; else, in an integration package, the base it is or builds on; else the app's Core; else its one installed base; else Core. Help hides a command whose step the base does not serve, and running it fails with `ERR_BASE_CAPABILITY`. Commands do not call adapter steps yet, so a base other than Core serves no step, whatever `adapters` declares. The CLI imports an adapter by its path with Node's own loader (no `exports` resolution and no TypeScript), so ship it as a JavaScript module listed in `files`. A capability here is a CLI platform step group, not an app's native capability. An integration builds on each base it lists in `peerDependencies`; with none, a base builds on no base and any other integration builds on Core. It contributes only to runs on a base it builds on or is.",
+      example: "{adapters: {themes: './astryx/themes.mjs'}}",
+    },
   ],
   examples: [
     {

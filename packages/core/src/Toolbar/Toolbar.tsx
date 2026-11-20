@@ -51,10 +51,17 @@ const spacingStepToVar: Record<SpacingStep, keyof typeof spacingVars> = {
   10: '--spacing-10',
 };
 
+// A lane that holds an OverflowList as its own child. OverflowList's theme
+// class marks the list's visible row.
+const HOLDS_OVERFLOW_LIST = ':has(> .astryx-overflow-list)';
+
 const styles = stylex.create({
-  // Two-slot layout (no centerContent): flex row, space-between
+  // Two-lane layout (no centerContent). A lane keeps its controls on one
+  // line, so when the lanes do not fit, the row wraps and the end lane moves
+  // to a following line.
   baseFlex: {
     display: 'flex',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
@@ -75,6 +82,7 @@ const styles = stylex.create({
   // Vertical orientation
   vertical: {
     flexDirection: 'column',
+    flexWrap: 'nowrap',
     alignItems: 'stretch',
   },
   // Slot containers
@@ -111,9 +119,42 @@ const styles = stylex.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
   },
+  // A two-lane lane keeps its controls on one line, capped at the toolbar's
+  // width. A lane wider than the toolbar wraps its own controls.
+  twoLane: {
+    flexWrap: 'wrap',
+    minWidth: stylex.firstThatWorks('fit-content', '-webkit-fit-content'),
+  },
+  // The end lane fills the rest of its line, so its controls stay at the
+  // inline end, also on a following line.
+  twoLaneEnd: {
+    flexGrow: 1,
+  },
   // When only startContent is present, let it fill
   startOnly: {
     flex: '1 1 0%',
+  },
+  // A start lane that holds an OverflowList takes the width the end lane
+  // leaves, and its automatic minimum stops counting the list's unfolded
+  // items. The list then folds to that width, down to its own floor.
+  startFolds: {
+    flexGrow: {default: null, [HOLDS_OVERFLOW_LIST]: 1},
+    flexBasis: {default: null, [HOLDS_OVERFLOW_LIST]: '0%'},
+    minWidth: {default: null, [HOLDS_OVERFLOW_LIST]: 0},
+  },
+  // A two-lane start lane: `twoLane`, except that a lane holding an
+  // OverflowList folds it. Such a lane takes all the free space, because the
+  // end lane grows by 1 and this factor dwarfs it, so the end lane stays at
+  // its content width. It does not wrap, because a wrapping lane would move
+  // the list, at its unfolded width, to a line of its own.
+  twoLaneStart: {
+    flexWrap: {default: 'wrap', [HOLDS_OVERFLOW_LIST]: 'nowrap'},
+    minWidth: {
+      default: stylex.firstThatWorks('fit-content', '-webkit-fit-content'),
+      [HOLDS_OVERFLOW_LIST]: 0,
+    },
+    flexGrow: {default: null, [HOLDS_OVERFLOW_LIST]: 1_000_000},
+    flexBasis: {default: null, [HOLDS_OVERFLOW_LIST]: '0%'},
   },
   // When only endContent, push to end
   endOnly: {
@@ -165,8 +206,7 @@ const defaultBlockPaddingForSize: Record<ElementSize, SpacingStep> = {
 };
 
 /**
- * Whether a three-lane row has wrapped: its lanes no longer share one
- * vertical band.
+ * Whether a row has wrapped: its lanes no longer share one vertical band.
  */
 function lanesHaveWrapped(row: Element): boolean {
   // An empty lane is a box with no height, so it shares every line.
@@ -326,7 +366,10 @@ export function Toolbar({
   // padding. That is right only while the lanes share one line, so a wrapped
   // row keeps the indicator on its tab. The row reports a wrap after layout,
   // in a resize observation.
-  const watchesWrap = hasCenterContent && hasBottomDivider;
+  const canWrap =
+    hasCenterContent ||
+    (hasStartContent && hasEndContent && orientation !== 'vertical');
+  const watchesWrap = canWrap && hasBottomDivider;
   const [isWrapped, setIsWrapped] = useState(false);
   useAttachment(
     listRef,
@@ -454,6 +497,9 @@ export function Toolbar({
                   {...stylex.props(
                     styles.startSlot,
                     !hasEndContent && styles.startOnly,
+                    hasEndContent && orientation !== 'vertical'
+                      ? styles.twoLaneStart
+                      : orientation === 'horizontal' && styles.startFolds,
                     edgeCompSlot.inset(edgeCompInsetForSize[size]),
                     dynamicStyles.gap(gapVar),
                   )}>
@@ -464,6 +510,11 @@ export function Toolbar({
                 <div
                   {...stylex.props(
                     styles.endSlot,
+                    hasStartContent &&
+                      orientation !== 'vertical' && [
+                        styles.twoLane,
+                        styles.twoLaneEnd,
+                      ],
                     !hasStartContent && styles.endOnly,
                     edgeCompSlot.inset(edgeCompInsetForSize[size]),
                     dynamicStyles.gap(gapVar),

@@ -77,7 +77,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: "When a project's own CLI is installed but cannot start, Astryx runs the CLI version equal to the project's Core instead, installing it once into a cache in your home folder and reusing it. It uses npm for that, so your npm registry, proxy, and offline settings apply. Deleting the cache is safe: versions come back when a project needs them. Where it lives: {@link generic:reference}.",
+          text: "When a project's own CLI is installed but cannot start, Astryx runs the CLI version equal to the project's Core instead, installing it once into a cache in your home folder and reusing it. It uses npm for that, so your npm registry, proxy, and offline settings apply. Its registry calls use Astryx's own short retry and timeout, not npm's fetch-retry or fetch-timeout settings: one retry after a 2-second wait, and at most 30 seconds per request. Deleting the cache is safe: versions come back when a project needs them. Where it lives: {@link generic:reference}.",
         },
       ],
     },

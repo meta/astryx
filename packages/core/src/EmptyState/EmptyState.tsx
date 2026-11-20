@@ -54,6 +54,7 @@ const styles = stylex.create({
   },
   titleCompact: {
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
   },
   description: {
     margin: 0,
@@ -65,6 +66,7 @@ const styles = stylex.create({
   },
   descriptionCompact: {
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
   },
   textGroup: {
     display: 'flex',

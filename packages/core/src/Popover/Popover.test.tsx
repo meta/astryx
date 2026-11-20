@@ -188,6 +188,58 @@ describe('Popover', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
   });
 
+  it('names its surface in aria-controls only while it is open (AR6)', () => {
+    render(
+      <Popover content={<span>Popover content</span>} label="Test">
+        <button type="button">Open</button>
+      </Popover>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Open'});
+    expect(trigger).not.toHaveAttribute('aria-controls');
+
+    fireEvent.click(trigger);
+    const controlled = document.getElementById(
+      trigger.getAttribute('aria-controls') ?? '',
+    );
+    expect(controlled).not.toBeNull();
+    expect(controlled).toContainElement(
+      screen.getByRole('dialog', {hidden: true}),
+    );
+
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).not.toHaveAttribute('aria-controls');
+  });
+
+  it('gives an anchorRef trigger no aria-controls while closed, across a re-attach (AR6)', () => {
+    function AnchorRefTest({label}: {label: string}) {
+      const ref = useRef<HTMLButtonElement>(null);
+      return (
+        <>
+          <button type="button" ref={ref}>
+            Anchor
+          </button>
+          <Popover
+            anchorRef={ref as React.RefObject<HTMLElement>}
+            content={<span>Sibling content</span>}
+            label={label}
+          />
+        </>
+      );
+    }
+    const {rerender} = render(<AnchorRefTest label="First" />);
+    const anchor = screen.getByRole('button', {name: 'Anchor'});
+    expect(anchor).not.toHaveAttribute('aria-controls');
+    rerender(<AnchorRefTest label="Second" />);
+    expect(anchor).toHaveAttribute('aria-expanded', 'false');
+    expect(anchor).not.toHaveAttribute('aria-controls');
+
+    fireEvent.click(anchor);
+    expect(
+      document.getElementById(anchor.getAttribute('aria-controls') ?? ''),
+    ).toContainElement(screen.getByRole('dialog', {hidden: true}));
+  });
+
   it('renders popover content with role=dialog while open', () => {
     render(
       <Popover content={<span>Hello</span>} label="Greeting">
@@ -344,7 +396,7 @@ describe('Popover', () => {
     // explicit width is clamped to the viewport, never to the span beside
     // the trigger (FR2).
     expect(layer?.className).toContain('useLayer__styles.viewportFit');
-    expect(layer?.className).toContain('useLayer__styles.gutterInlineEnd');
+    expect(layer?.className).toContain('useLayer__styles.alignInlineStart');
     expect(layer?.className).toContain('Popover__styles.customWidth');
     expect(layer?.getAttribute('style')).toContain('min(640px, calc(100vw');
     expect(layer?.getAttribute('style')).not.toContain('100%');
@@ -526,10 +578,8 @@ describe('Popover', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Open'}));
 
     const layer = document.querySelector('[popover]');
-    expect(layer?.className).toContain('useLayer__styles.gutterInlineEnd');
-    expect(layer?.className).not.toContain(
-      'useLayer__styles.gutterInlineStart',
-    );
+    expect(layer?.className).toContain('useLayer__styles.alignInlineStart');
+    expect(layer?.className).not.toContain('useLayer__styles.alignInlineEnd');
     expect(layer?.className).toContain('Popover__styles.matchTrigger');
     expect(layer).toHaveStyle(
       'min-width: min(anchor-size(width),calc(100vi - calc(max(var(--spacing-4), env(safe-area-inset-left, 0px)) + var(--astryx-layer-inset-inline-start, 0px)) - calc(max(var(--spacing-4), env(safe-area-inset-right, 0px)) + var(--astryx-layer-inset-inline-end, 0px))))',
@@ -546,8 +596,8 @@ describe('Popover', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Open'}));
 
     const layer = document.querySelector('[popover]');
-    expect(layer?.className).toContain('useLayer__styles.gutterInlineStart');
-    expect(layer?.className).not.toContain('useLayer__styles.gutterInlineEnd');
+    expect(layer?.className).toContain('useLayer__styles.alignInlineEnd');
+    expect(layer?.className).not.toContain('useLayer__styles.alignInlineStart');
   });
 
   it('reserves both inline gutters for centered popovers', () => {
@@ -560,8 +610,7 @@ describe('Popover', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Open'}));
 
     const layer = document.querySelector('[popover]');
-    expect(layer?.className).toContain('useLayer__styles.gutterInlineStart');
-    expect(layer?.className).toContain('useLayer__styles.gutterInlineEnd');
+    expect(layer?.className).toContain('useLayer__styles.centerInline');
     // One match-trigger minimum for every alignment: the cap is the viewport.
     expect(layer?.className).toContain('Popover__styles.matchTrigger');
   });
@@ -580,8 +629,8 @@ describe('Popover', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Open'}));
 
     const layer = document.querySelector('[popover]');
-    expect(layer?.className).toContain('useLayer__styles.gutterBlockEnd');
-    expect(layer?.className).not.toContain('useLayer__styles.gutterInlineEnd');
+    expect(layer?.className).toContain('useLayer__styles.alignBlockStart');
+    expect(layer?.className).not.toContain('useLayer__styles.alignInlineStart');
   });
 
   it('preserves the dialog aria-haspopup contract for render-prop triggers', () => {

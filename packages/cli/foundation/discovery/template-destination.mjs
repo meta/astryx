@@ -20,6 +20,7 @@ import {
   pagesRouterPage,
   sameUrlPage,
 } from './next-routes.mjs';
+import {resolveLocalModule} from './module-exports.mjs';
 
 /**
  * The project-relative path to scaffold a template into, read from the
@@ -31,14 +32,22 @@ import {
  * holds the root layout when that folder has none of its own; else, in an
  * app with only the Pages Router, to the page file `pages/<id>.tsx` (or
  * `src/pages/<id>.tsx`). A block goes beside the routes:
- * `app/components/<id>` with a root `app/` folder, `components/<id>` with a
- * root `pages/` folder only, else `src/components/<id>`. Every other project
- * gets `src/pages/<id>` for a page and `src/components/<id>` for a block.
+ * `app/components/<id>.tsx` with a root `app/` folder,
+ * `components/<id>.tsx` with a root `pages/` folder only, else
+ * `src/components/<id>.tsx`. Every other project gets `src/pages/<id>.tsx`
+ * for a page and `src/components/<id>.tsx` for a block.
+ *
+ * Outside the App Router the path is the file the copy writes, so an import
+ * of that path finds it: a folder would hold a `page.tsx` that a bare import
+ * of the folder does not resolve.
  *
  * When that path exists, or another page already serves its URL (a page in
- * a route group, a Pages Router file), the id becomes `<id>-2`, `<id>-3` and
- * so on, the first one that is free, so the command runs as printed, the
- * app still builds, and nothing the app owns is written into.
+ * a route group, a Pages Router file), or, for a file outside the App Router,
+ * an import of it already resolves to a module (a folder's index, or a file
+ * with another extension), the id becomes `<id>-2`, `<id>-3` and so on, the
+ * first one that is free, so the command runs as printed, the app still
+ * builds, an import of the path finds the new file, and nothing the app owns
+ * is written into.
  *
  * @param {string} projectDir the folder the command runs in
  * @param {'page' | 'block'} type
@@ -56,7 +65,12 @@ export function templateDestination(projectDir, type, id) {
         : routes.pages === 'pages' && !routes.app
           ? 'components'
           : 'src/components';
-    return firstFree(projectDir, id, n => `${parent}/${n}`);
+    return firstFree(
+      projectDir,
+      id,
+      n => `${parent}/${n}.tsx`,
+      rel => moduleAt(projectDir, rel),
+    );
   }
   if (routes.app) {
     const app = path.join(projectDir, routes.app);
@@ -80,7 +94,27 @@ export function templateDestination(projectDir, type, id) {
       file => pagesRouterPage(projectDir, file.slice(pages.length + 1, -4)),
     );
   }
-  return firstFree(projectDir, id, n => `src/pages/${n}`);
+  return firstFree(
+    projectDir,
+    id,
+    n => `src/pages/${n}.tsx`,
+    rel => moduleAt(projectDir, rel),
+  );
+}
+
+/**
+ * The module a bare import of `rel` without its extension already resolves
+ * to, as the app's bundler resolves it, or null: a new file there would
+ * shadow it, or be shadowed by it.
+ * @param {string} projectDir
+ * @param {string} rel a `.tsx` path
+ * @returns {string | null}
+ */
+function moduleAt(projectDir, rel) {
+  const stem = rel.slice(0, -'.tsx'.length);
+  return resolveLocalModule(`./${stem}`, path.join(projectDir, 'index.js'), {
+    bundler: true,
+  });
 }
 
 /**

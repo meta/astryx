@@ -7,6 +7,8 @@ import * as path from 'node:path';
 import {Project, DEFAULT_ISSUES_URL, findConfigPath} from './project.mjs';
 import {InMemoryConfigCache} from './config-cache.mjs';
 import {getCliInvocation} from '../env/package-manager.mjs';
+import {warnOnIntegrationIssues} from '../integrations/integration-warnings.mjs';
+import {installCommandFor} from '../discovery/template-needs.mjs';
 import * as componentDiscovery from '../discovery/component-discovery.mjs';
 import {discoverCoreTemplates} from '../discovery/template-adapter.mjs';
 import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
@@ -35,6 +37,7 @@ function scaffold({
   unknownKeys = null,
   agentDocs = null,
   cliCommand = null,
+  installGuidance = null,
   integrationIssuesUrl = 'https://example.com/widgets/issues',
 } = {}) {
   fs.writeFileSync(
@@ -62,6 +65,7 @@ function scaffold({
   if (docs) manifest.docs = './docs';
   if (agentDocs != null) manifest.agentDocs = agentDocs;
   if (cliCommand != null) manifest.cliCommand = cliCommand;
+  if (installGuidance != null) manifest.installGuidance = installGuidance;
   if (unknownKeys) Object.assign(manifest, unknownKeys);
   if (integrationIssuesUrl) manifest.issuesUrl = integrationIssuesUrl;
   fs.writeFileSync(
@@ -292,30 +296,62 @@ describe('Project.load', () => {
   });
 });
 
-describe('Project.issues and a near-miss manifest key', () => {
+describe('Project.issues leaves out a near-miss manifest key', () => {
   it.each([
     [
       'alone, while the loaded integration fills providerId from the package name',
       {providerID: '@acme/widgets'},
-      'Fix: rename "providerID" to "providerId" in astryx.integration.mjs.',
     ],
     [
       'beside the key it suggests',
       {providerID: '@acme/widgets', providerId: '@acme/widgets'},
-      'Fix: remove "providerID" from astryx.integration.mjs; it already sets "providerId".',
     ],
-  ])(
-    'reads the keys the manifest declares: providerID %s',
-    async (_label, unknownKeys, fix) => {
-      scaffold({unknownKeys});
-      const project = await Project.load(tmpDir);
-      const keys = (await project.issues()).filter(
-        issue => issue.code === 'unknown_manifest_key',
-      );
-      expect(keys).toHaveLength(1);
-      expect(keys[0].message).toContain(fix);
-    },
-  );
+  ])('providerID %s', async (_label, unknownKeys) => {
+    // A key this CLI does not know is a note in validate, never a project
+    // issue the everyday nudge would count.
+    scaffold({unknownKeys});
+    const project = await Project.load(tmpDir);
+    const keys = (await project.issues()).filter(
+      issue => issue.code === 'unknown_manifest_key',
+    );
+    expect(keys).toEqual([]);
+  });
+});
+
+describe('Project.load and the installGuidance an integration gives', () => {
+  const guidance = 'Add {packages} to package.json, commit, then run the relock script';
+
+  it('records it, so install steps print it with the packages filled in', async () => {
+    scaffold({installGuidance: guidance});
+    const project = await Project.load(tmpDir);
+    expect(project.loadedIntegrations[0].installGuidance).toBe(guidance);
+    const {installGuidance, installCommand} = installCommandFor(['recharts'], tmpDir);
+    expect(installGuidance).toBe(
+      'Add recharts to package.json, commit, then run the relock script',
+    );
+    // The package-manager command stays beside it for older readers.
+    expect(installCommand).toMatch(/recharts/);
+  });
+
+  it('ignores an invalid one with a warning and keeps the rest of the package', async () => {
+    scaffold({installGuidance: 'two\nlines'});
+    const project = await Project.load(tmpDir);
+    const [widgets] = project.loadedIntegrations;
+    expect(widgets.__loadError).toBeUndefined();
+    expect(widgets.installGuidance).toBeUndefined();
+    expect(widgets.components).toBeDefined();
+    expect(installCommandFor(['recharts'], tmpDir).installGuidance).toBeNull();
+    const issues = await project.issues();
+    expect(issues).toContainEqual(
+      expect.objectContaining({code: 'invalid_install_guidance', severity: 'warning'}),
+    );
+  });
+
+  it('gives no guidance where no integration sets one', async () => {
+    scaffold();
+    await Project.load(tmpDir, {fresh: true});
+    expect(installCommandFor(['recharts'], tmpDir).installGuidance).toBeNull();
+  });
 });
 
 describe('Project.load and the cliCommand an integration declares', () => {
@@ -621,13 +657,18 @@ describe('Project forward compatibility', () => {
     const {integration} = await project.codemods('0.1.0', '0.2.0');
     expect(integration).toHaveLength(1);
 
+    // Keys from a newer CLI are version skew, not a problem with the
+    // package: no project issue, so the everyday nudge stays quiet.
     const issues = await project.issues();
-    expect(issues.every(i => i.severity !== 'error')).toBe(true);
-    const unknown = issues.filter(i => i.code === 'unknown_manifest_key');
-    expect(unknown).toHaveLength(1);
-    expect(unknown[0].severity).toBe('warning');
-    expect(unknown[0].message).toContain('"futureRoot"');
-    expect(unknown[0].message).toContain('"anotherOne"');
+    expect(issues.filter(i => i.code === 'unknown_manifest_key')).toEqual([]);
+    const lines = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation(line => lines.push(line));
+    try {
+      await warnOnIntegrationIssues(project);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(lines).toEqual([]);
   });
 
   it('still refuses a known key of the wrong type', async () => {

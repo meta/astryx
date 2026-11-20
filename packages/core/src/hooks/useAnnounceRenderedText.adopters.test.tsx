@@ -134,7 +134,6 @@ const ADOPTERS: Record<string, () => Promise<void>> = {
         autoHideDuration={0}
         onDismiss={() => {}}
         gestureDirection={1}
-        isLiveRegion={false}
         isRenderedBodyAnnouncement
         announce={announce}
         timerKey="upload"
