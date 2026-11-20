@@ -78,7 +78,6 @@ import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
-import {matchesMediaQuery} from '../utils/coarsePointer';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {isRtlElement} from '../hooks/isRtlElement';
@@ -90,6 +89,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/MobileNav/MobileNav.generated';
+import {reducesMotion} from '../motion/reducedMotion';
 
 registerEnglishFallback(english);
 // =============================================================================
@@ -349,12 +349,7 @@ function resolveCloseDelay(dialog: HTMLDialogElement): number {
   // Reduced motion makes the close sooner; it must not make the hold shorter.
   // Shrinking both leaves no slack — one slow frame between the commit and this
   // macrotask and the drawer has already stopped being rendered.
-  const cap = matchesMediaQuery(
-    dialog.ownerDocument.defaultView,
-    '(prefers-reduced-motion: reduce)',
-  )
-    ? 0
-    : MAX_CLOSE_DELAY_MS;
+  const cap = reducesMotion(dialog) ? 0 : MAX_CLOSE_DELAY_MS;
 
   const hold = parseShortestDurationMs(
     window.getComputedStyle(dialog).transitionDuration,

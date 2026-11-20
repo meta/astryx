@@ -59,6 +59,7 @@ import {
 } from './keyboardTarget';
 import {distanceIntoBand} from './revealBand';
 import {rideKeyboard} from './rideKeyboard';
+import {reducesMotion} from '../motion/reducedMotion';
 
 /** How a target keeps a focused field above the on-screen keyboard. */
 export interface MobileKeyboardOptions {
@@ -380,10 +381,9 @@ export function useMobileKeyboard(
           body.scrollTop += distance;
           return;
         }
-        // Reduce Motion applies on any pointer.
-        const reduceMotion =
-          typeof window.matchMedia === 'function' &&
-          window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        // Reduce Motion (the setting, or a theme's reducedMotion: 'always')
+        // applies on any pointer.
+        const reduceMotion = reducesMotion(body);
         const behavior = smoothly && !reduceMotion ? 'smooth' : 'instant';
         if (behavior === 'smooth') {
           smoothTarget = body.scrollTop + distance;

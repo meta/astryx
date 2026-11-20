@@ -75,6 +75,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Carousel/Carousel.generated';
+import {reducesMotion} from '../motion/reducedMotion';
 
 registerEnglishFallback(english);
 /**
@@ -535,14 +536,10 @@ export function Carousel({
       ) {
         return;
       }
-      // Respect the user's reduced-motion preference — mirrors the CSS
-      // scroll-behavior override so button-driven scrolling doesn't animate
-      // for users who opted out of motion.
-      const prefersReducedMotion =
-        typeof window !== 'undefined' &&
-        typeof window.matchMedia === 'function' &&
-        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      const behavior = prefersReducedMotion ? 'auto' : 'smooth';
+      // Under reduced motion (the person's setting, or a theme's
+      // reducedMotion: 'always') button-driven scrolling does not animate,
+      // as the CSS scroll-behavior override does.
+      const behavior = reducesMotion(el) ? 'auto' : 'smooth';
       // Under RTL the scroll axis is inverted (start is scrollLeft 0, the end
       // is negative), so flip the physical delta sign.
       const rtlSign = isRtlElement(el) ? -1 : 1;
@@ -596,10 +593,7 @@ export function Carousel({
     }
     const clamped = Math.max(0, Math.min(index, items.length - 1));
     const target = items[clamped] as HTMLElement;
-    const prefersReducedMotion =
-      typeof window !== 'undefined' &&
-      typeof window.matchMedia === 'function' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const prefersReducedMotion = reducesMotion(target);
     // Bring the item to the start edge by scrolling the container by the
     // measured gap between the item and the container edge. Using scrollBy
     // (not scrollIntoView) keeps the scroll contained to the carousel and

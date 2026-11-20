@@ -77,6 +77,7 @@ import {
   resolveSettleOffset,
   scrimOpacityForOffset,
 } from './snapOffsets';
+import {reducesMotion} from '../motion/reducedMotion';
 
 /**
  * The stops a sheet of a given height rests at: offsets from fully-open in px,
@@ -144,14 +145,14 @@ const DRAG_PROMOTION_SLOP = 8;
 // Short haptic tick on detent settle where supported. iOS Safari doesn't
 // expose navigator.vibrate, so this is a no-op there; skipped under
 // reduced-motion.
-function hapticTick(): void {
+function hapticTick(sheet: Element | null): void {
   if (
     typeof navigator === 'undefined' ||
     typeof navigator.vibrate !== 'function'
   ) {
     return;
   }
-  if (prefersReducedMotion()) {
+  if (reducesMotion(sheet)) {
     return;
   }
   navigator.vibrate(8);
@@ -529,13 +530,6 @@ export interface UseSheetGesturesResult {
   settledLayoutOffset: number;
 }
 
-function prefersReducedMotion(): boolean {
-  if (typeof window === 'undefined' || !window.matchMedia) {
-    return false;
-  }
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
-
 /**
  * Drag + snap machinery for the bottom sheet. Returns props to spread on the
  * grab handle and the sliding surface, plus live drag state. A slow drag
@@ -677,7 +671,7 @@ export function useSheetGestures({
       if (
         shouldAnimate &&
         Math.abs(renderedOffset - targetOffset) > 0.5 &&
-        !prefersReducedMotion()
+        !reducesMotion(sheetElRef.current)
       ) {
         pendingScrollPreservationInsetRef.current = targetInset;
         settlingLayoutOffsetRef.current = layoutOffset;
@@ -1187,7 +1181,7 @@ export function useSheetGestures({
           scrimOpacityForOffset(target, offsets, dismissOffset, peekOffset),
         );
         if (target !== baseOffset) {
-          hapticTick();
+          hapticTick(sheetElRef.current);
         }
       };
 
