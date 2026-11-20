@@ -6604,7 +6604,15 @@ async function changeOnce(
           continue;
         const edge = borderFor(ctx, slug, data, x);
         if (edge) {
-          data.settings.splice(data.settings.indexOf(x), 0, edge);
+          // (Before the part's own border settings and the color both.)
+          data.settings.splice(
+            Math.min(
+              broughtBorderAt(ctx, data.settings, edge),
+              data.settings.indexOf(x),
+            ),
+            0,
+            edge,
+          );
           borderAdded = edge;
         }
       }
@@ -6642,7 +6650,11 @@ async function changeOnce(
     // that has lost the border it needs (the none that hid it undone).
     const edge = sub === 'set' ? borderFor(ctx, slug, data, s) : null;
     if (edge) {
-      data.settings.splice(prevIdx, 0, edge);
+      data.settings.splice(
+        Math.min(broughtBorderAt(ctx, data.settings, edge), prevIdx),
+        0,
+        edge,
+      );
       borderAdded = edge;
     }
   } else {

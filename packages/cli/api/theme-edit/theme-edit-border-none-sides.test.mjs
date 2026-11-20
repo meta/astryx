@@ -233,19 +233,52 @@ describe('undoing a border none', () => {
   );
 
   it(
+    "brings it again before the part's own border settings",
+    async () => {
+      await themeEditNew('s2', {cwd, like: 'neutral'});
+      // (A color saved with no border, as an earlier editor saved it,
+      // beside a bottom the theme turned off.)
+      const file = path.join(cwd, 'themes/s2/s2.settings.json');
+      const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
+      saved.settings.push(
+        {thing: 'border-bottom', value: 'none', source: 'property', on: 'tab'},
+        {
+          thing: 'border-color',
+          value: '#999999',
+          source: 'property',
+          on: 'tab',
+        },
+      );
+      fs.writeFileSync(file, JSON.stringify(saved, null, 2));
+      // (The same color again brings the border, before the bottom's none.)
+      const r = await themeEditSet('s2', 'border-color', '#999999', {
+        cwd,
+        on: 'tab',
+      });
+      expect(r.data.notes.join('\n')).toContain('added a');
+      const built = fs.readFileSync(path.join(cwd, 'themes/s2/s2.css'), 'utf8');
+      expect(built).toMatch(
+        /\.astryx-tab \{\s*border: var\(--border-width\) solid transparent;\s*border-bottom: none;\s*border-color: #999999;/,
+      );
+    },
+    T,
+  );
+
+  it(
     'takes back the border set added, and does not write it again',
     async () => {
-      await themeEditSet('s', 'border-color', '#999999', {cwd, on: 'tab'});
-      await themeEditUndo('s', {cwd, thing: 'border', on: 'tab'});
+      await themeEditNew('s3', {cwd, like: 'neutral'});
+      await themeEditSet('s3', 'border-color', '#999999', {cwd, on: 'tab'});
+      await themeEditUndo('s3', {cwd, thing: 'border', on: 'tab'});
       const saved = JSON.parse(
-        fs.readFileSync(path.join(cwd, 'themes/s/s.settings.json'), 'utf8'),
+        fs.readFileSync(path.join(cwd, 'themes/s3/s3.settings.json'), 'utf8'),
       );
       expect(
         saved.settings.filter(
           (/** @type {any} */ x) => x.thing === 'border' && x.on === 'tab',
         ),
       ).toEqual([]);
-      await themeEditUndo('s', {cwd, thing: 'border-color', on: 'tab'});
+      await themeEditUndo('s3', {cwd, thing: 'border-color', on: 'tab'});
     },
     T,
   );
