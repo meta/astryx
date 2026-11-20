@@ -1469,9 +1469,7 @@ export function mapPalette(
       each(m => {
         const grounds = [...surfaces(m, f.id), ...mutedSeen(m)];
         const from = fill[m] as StopRef;
-        const own = exactFill[m]
-          ? solid(exactFill[m] as string, m, f.id)
-          : null;
+        const own = exactFill[m] ? solid(exactFill[m], m, f.id) : null;
         if (
           own &&
           Math.min(...grounds.map(([, bg]) => contrast(own, bg))) >= NON_TEXT

@@ -75,7 +75,7 @@ export const PALETTE_RECIPE = 'astryx-oklch-v1';
  */
 export const PALETTE_RECIPE_V2 = 'astryx-oklch-v2';
 /**
- * v2, and a dusty seed's pale tints stay at or below its own chroma even
+ * v2, and a dusty seed's palest tints (shade 90 and paler) stay at or below its own chroma even
  * where the gamut is wide, so a muted olive gives an earthy tint, not
  * chartreuse. The newest recipe: new palettes name it.
  */

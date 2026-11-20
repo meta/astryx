@@ -260,8 +260,8 @@ TypeScript declaration metadata is not executable runtime behavior.
     the stops picked by contrast against the surfaces, are measured against
     the installed Core's default surfaces and follow them. Secondary text
     lifted on a tinted part follows Core's defaults in both cases. The CLI
-    theme editor names
-    `astryx-oklch-v2` explicitly for a new palette.
+    theme editor names the newest recipe, `astryx-oklch-v3`, explicitly for
+    a new palette.
   - It builds the same generation request as the CLI theme editor builds for
     the same color settings: one family per seed, the seed pinned exactly at
     its nearest light stop, and in dark when it reads there.
@@ -269,7 +269,8 @@ TypeScript declaration metadata is not executable runtime behavior.
     mapping, against Core's default token values: neutral stops for surfaces,
     text, borders, and icons; and for the accent and each status color its
     fill, the text on that fill, its text, icon, muted fill, and border,
-    picked by contrast against the surfaces as the editor picks them.
+    picked by contrast against the surfaces as the editor picks them: text
+    at 4.5:1, and an icon, a graphic, at 3:1.
   - `defineTheme({palette})` writes those tokens under the theme's own
     `tokens`: an explicit token wins, token by token. A theme without
     `palette`, `color`, and every official theme build exactly as before.
