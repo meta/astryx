@@ -12,8 +12,13 @@ import * as path from 'node:path';
 import {
   extractImportedPackages,
   analyzeTemplateNeeds,
+  installCommandFor,
+  installStepFor,
   parsedSpecifiers,
 } from './template-needs.mjs';
+import {_resetHostedRun, activateHostedRun} from '../runtime/package-root.mjs';
+import {CLI_VERSION} from '../../test-utils/release-fixtures.mjs';
+import {recordDeclaredSettings} from '../env/cli-command.mjs';
 
 // ── extractImportedPackages ─────────────────────────────────────────────────
 
@@ -414,6 +419,114 @@ describe('analyzeTemplateNeeds', () => {
   });
 });
 
+describe('installCommandFor names a package Astryx releases with Core at the project Core release', () => {
+  const theme = '@astryxdesign/theme-neutral';
+  let dir;
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tmpl-needs-core-'));
+  });
+  afterEach(() => {
+    fs.rmSync(dir, {recursive: true, force: true});
+  });
+  /** @param {Record<string, string>} dependencies @param {string} [lockfile] */
+  const app = (dependencies, lockfile = 'package-lock.json') => {
+    fs.writeFileSync(
+      path.join(dir, 'package.json'),
+      JSON.stringify({name: 'app', dependencies}),
+    );
+    fs.writeFileSync(path.join(dir, lockfile), '{}');
+    return dir;
+  };
+
+  it('adds it at the Core release a project pins, saved exactly, with its package manager', () => {
+    expect(
+      installCommandFor([theme], app({'@astryxdesign/core': '0.7.10'}))
+        .installCommand,
+    ).toBe(`npm install -E ${theme}@0.7.10`);
+    fs.rmSync(path.join(dir, 'package-lock.json'));
+    fs.writeFileSync(
+      path.join(dir, 'pnpm-lock.yaml'),
+      "lockfileVersion: '9.0'\n",
+    );
+    expect(installCommandFor([theme], dir).installCommand).toBe(
+      `pnpm add -E ${theme}@0.7.10`,
+    );
+  });
+
+  it('adds it at the Core range a project declares, quoted for the shell', () => {
+    expect(
+      installCommandFor([theme], app({'@astryxdesign/core': '^0.7.10'}))
+        .installCommand,
+    ).toBe(`npm install "${theme}@^0.7.10"`);
+  });
+
+  it('adds it at the release of the CLI that answers when the project has no Core', () => {
+    expect(installCommandFor([theme], app({})).installCommand).toBe(
+      `npm install ${theme}@${CLI_VERSION}`,
+    );
+  });
+
+  it('takes the release of the CLI that answers when the declared Core is not a plain version range', () => {
+    expect(
+      installCommandFor([theme], app({'@astryxdesign/core': 'workspace:*'}))
+        .installCommand,
+    ).toBe(`npm install ${theme}@${CLI_VERSION}`);
+    const crafted = installCommandFor(
+      [theme],
+      app({'@astryxdesign/core': '^0.7.0"; echo INJECTED; "'}),
+    ).installCommand;
+    expect(crafted).toBe(`npm install ${theme}@${CLI_VERSION}`);
+    expect(crafted).not.toContain('INJECTED');
+  });
+
+  it("quotes a declared Core range in an integration's install guidance", () => {
+    const ranged = app({'@astryxdesign/core': '>=0.7.0 <0.8.0'});
+    recordDeclaredSettings(ranged, [
+      {name: '@acme/a', installGuidance: 'acme add {packages}'},
+    ]);
+    try {
+      expect(installCommandFor([theme], ranged).installGuidance).toBe(
+        `acme add "${theme}@>=0.7.0 <0.8.0"`,
+      );
+    } finally {
+      recordDeclaredSettings(ranged, []);
+    }
+  });
+
+  it('adds Core itself at the same release as a package released with Core', () => {
+    expect(
+      installCommandFor(['@astryxdesign/core'], app({})).installCommand,
+    ).toBe(`npm install @astryxdesign/core@${CLI_VERSION}`);
+    expect(
+      installCommandFor(
+        ['@astryxdesign/core'],
+        app({'@astryxdesign/core': '0.7.10'}),
+      ).installCommand,
+    ).toBe('npm install -E @astryxdesign/core@0.7.10');
+  });
+
+  it('leaves any other package to the package manager, and saves nothing exactly beside it', () => {
+    const pinned = app({'@astryxdesign/core': '0.7.10'});
+    expect(installCommandFor(['left-pad'], pinned).installCommand).toBe(
+      'npm install left-pad',
+    );
+    expect(installCommandFor([theme, 'left-pad'], pinned).installCommand).toBe(
+      `npm install ${theme}@0.7.10 left-pad`,
+    );
+  });
+
+  it('names the release in the line it prints when the lockfiles disagree', () => {
+    const pinned = app({'@astryxdesign/core': '0.7.10'}, 'yarn.lock');
+    fs.writeFileSync(
+      path.join(pinned, 'pnpm-lock.yaml'),
+      "lockfileVersion: '9.0'\n",
+    );
+    expect(installStepFor([theme], pinned).line).toBe(
+      `npm install -E ${theme}@0.7.10`,
+    );
+  });
+});
+
 describe('parsedSpecifiers', () => {
   it('reads a template literal with nothing put in it as the string it holds', () => {
     expect(
@@ -421,5 +534,109 @@ describe('parsedSpecifiers', () => {
         'await import(`../shared.ts`);\nrequire(`./a.css`);\nawait import(`./${x}.ts`);',
       ),
     ).toEqual(['../shared.ts', './a.css']);
+  });
+});
+
+describe('analyzeTemplateNeeds in a hosted run', () => {
+  const dirs = [];
+  const temp = prefix => {
+    const made = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+    dirs.push(made);
+    return made;
+  };
+  afterEach(() => {
+    _resetHostedRun();
+    for (const made of dirs.splice(0)) {
+      fs.rmSync(made, {recursive: true, force: true});
+    }
+  });
+  const source = `
+    import {Button} from '@astryxdesign/core';
+    import {ArrowIcon} from '@heroicons/react/24/outline';
+    import {LineChart} from 'recharts';
+  `;
+
+  it("counts a package the host's set declares as installed outside a project", () => {
+    const set = temp('tmpl-needs-set-');
+    fs.writeFileSync(
+      path.join(set, 'package.json'),
+      JSON.stringify({dependencies: {'@heroicons/react': '2.2.0'}}),
+    );
+    const outside = temp('tmpl-needs-outside-');
+
+    // A folder no package.json holds gets no install step, which would make
+    // it a project.
+    expect(analyzeTemplateNeeds(source, outside)).toMatchObject({
+      missingPackages: ['@heroicons/react', 'recharts'],
+      installCommand: null,
+      notes: [
+        'Missing dependencies: @heroicons/react, recharts. Install them in the project that uses this page.',
+      ],
+    });
+    activateHostedRun({startingRoot: set});
+    const result = analyzeTemplateNeeds(source, outside);
+    expect(result).toMatchObject({
+      missingPackages: ['recharts'],
+      installCommand: null,
+      notes: [
+        'Missing dependencies: recharts. Install them in the project that uses this page.',
+      ],
+    });
+  });
+
+  it('counts an integration the host approves and its set holds as installed outside a project, as render serves it', () => {
+    const set = temp('tmpl-needs-set-');
+    fs.writeFileSync(path.join(set, 'package.json'), JSON.stringify({}));
+    const kit = path.join(set, 'node_modules', '@acme', 'astryx-kit');
+    fs.mkdirSync(kit, {recursive: true});
+    fs.writeFileSync(
+      path.join(kit, 'package.json'),
+      JSON.stringify({name: '@acme/astryx-kit', version: '1.0.0'}),
+    );
+    const outside = temp('tmpl-needs-outside-');
+    const page = `
+      import {Button} from '@astryxdesign/core';
+      import {Banner} from '@acme/astryx-kit';
+    `;
+
+    expect(analyzeTemplateNeeds(page, outside).missingPackages).toEqual([
+      '@acme/astryx-kit',
+    ]);
+    activateHostedRun({startingRoot: set, integrations: ['@acme/astryx-kit']});
+    expect(analyzeTemplateNeeds(page, outside)).toMatchObject({
+      missingPackages: [],
+      installCommand: null,
+      notes: [],
+    });
+  });
+
+  it('still names an integration the host approves that its set does not hold, which render cannot serve', () => {
+    const set = temp('tmpl-needs-set-');
+    fs.writeFileSync(path.join(set, 'package.json'), JSON.stringify({}));
+    const outside = temp('tmpl-needs-outside-');
+    activateHostedRun({startingRoot: set, integrations: ['@acme/astryx-kit']});
+    expect(
+      analyzeTemplateNeeds("import {Banner} from '@acme/astryx-kit';", outside)
+        .missingPackages,
+    ).toEqual(['@acme/astryx-kit']);
+  });
+
+  it('still names it inside a project, which installs its own packages', () => {
+    const set = temp('tmpl-needs-set-');
+    fs.writeFileSync(
+      path.join(set, 'package.json'),
+      JSON.stringify({dependencies: {'@heroicons/react': '2.2.0'}}),
+    );
+    const app = temp('tmpl-needs-app-');
+    fs.writeFileSync(
+      path.join(app, 'package.json'),
+      JSON.stringify({dependencies: {'@astryxdesign/core': '0.7.16'}}),
+    );
+    activateHostedRun({startingRoot: set, projectRoot: app});
+
+    expect(analyzeTemplateNeeds(source, app).missingPackages).toEqual([
+      '@heroicons/react',
+      'recharts',
+    ]);
   });
 });

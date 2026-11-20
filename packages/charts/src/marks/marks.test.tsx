@@ -172,6 +172,40 @@ describe('line', () => {
   });
 });
 
+describe('default curve', () => {
+  // Straight segments by default; a page asks for a smooth curve. A cubic
+  // segment shows up as a `C` command.
+  it('joins line points with straight segments', () => {
+    const {plot} = renderMarks([line('v')]);
+    const d = plot.querySelector('path')?.getAttribute('d') ?? '';
+    expect(d).toMatch(/^M/);
+    expect(d).not.toMatch(/C/);
+  });
+
+  it('joins area points with straight segments', () => {
+    const {plot} = renderMarks([area('v')]);
+    const paths = [...plot.querySelectorAll('path')];
+    expect(paths.length).toBeGreaterThan(0);
+    for (const path of paths) {
+      const d = path.getAttribute('d') ?? '';
+      expect(d).toMatch(/^M/);
+      expect(d).not.toMatch(/C/);
+    }
+  });
+
+  it('joins band bounds with straight segments', () => {
+    const {plot} = renderMarks([band({upper: 'hi', lower: 'lo'})], BOUNDS);
+    const d = plot.querySelector('path')?.getAttribute('d') ?? '';
+    expect(d).toMatch(/^M/);
+    expect(d).not.toMatch(/C/);
+  });
+
+  it('still smooths a line when a page asks for it', () => {
+    const {plot} = renderMarks([line('v', {curve: 'monotone'})]);
+    expect(plot.querySelector('path')?.getAttribute('d') ?? '').toMatch(/C/);
+  });
+});
+
 describe('dot', () => {
   it('renders one circle per datum with the configured radius', () => {
     const {plot} = renderMarks([dot('v', {radius: 5})]);
@@ -232,6 +266,24 @@ describe('area', () => {
     expect(gradient.querySelectorAll('stop')).toHaveLength(2);
     const fillPath = plot.querySelector('path')!;
     expect(fillPath.getAttribute('fill')).toBe(`url(#${gradient.id})`);
+  });
+
+  it("gives each chart on a page its own gradient, so a fill never takes another chart's", () => {
+    // Same series index and key in both charts: the id must still differ.
+    const first = renderMarks([area('v', {gradient: true})]);
+    const second = renderMarks([area('v', {gradient: true})]);
+    const ids = [first.plot, second.plot].map(
+      plot => plot.querySelector('linearGradient')!.id,
+    );
+    expect(ids[0]).not.toBe(ids[1]);
+    for (const [index, plot] of [first.plot, second.plot].entries()) {
+      expect(plot.querySelector('path')!.getAttribute('fill')).toBe(
+        `url(#${ids[index]})`,
+      );
+      // A url(#id) reference cannot hold a colon.
+      expect(ids[index]).toMatch(/^[a-zA-Z0-9_-]+$/);
+    }
+    expect(document.querySelectorAll(`[id="${ids[1]}"]`)).toHaveLength(1);
   });
 });
 

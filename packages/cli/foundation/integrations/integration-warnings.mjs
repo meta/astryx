@@ -24,6 +24,17 @@ import {validateLoadedIntegration} from './validate-contributions.mjs';
 import {formatCliCommand} from '../env/package-manager.mjs';
 
 /**
+ * Whether the nudge counts `issue` and points to doctor for it. A provider
+ * conflict carries the specific message that `doctor integration validate`
+ * would not explain, so the nudge prints it instead.
+ * @param {{code: string}} issue
+ * @returns {boolean}
+ */
+export function pointsToDoctor(issue) {
+  return issue.code !== 'duplicate_provider';
+}
+
+/**
  * For each configured (already-loaded) integration, compute its issues using
  * the shared integration validators and, if any exist, print exactly
  * ONE line per integration to stderr:
@@ -48,9 +59,7 @@ export async function warnOnIntegrationIssues(source, {json = false} = {}) {
     if (fromProject) {
       const issues = await source.issues();
       for (const issue of issues) {
-        // A provider-conflict issue carries the specific message that
-        // `doctor integration validate` would not explain. Print it directly.
-        if (issue.code === 'duplicate_provider') {
+        if (!pointsToDoctor(issue)) {
           console.error(`Warning: ${issue.message}`);
           continue;
         }

@@ -13,7 +13,7 @@
  * composed from components carries none of that, so the kit never recommends
  * composing from scratch while a template exists. Next to the start it names
  * the ranker's next two templates, then groups the unified search into the
- * blocks that cover parts and the domain components to fill gaps, plus the
+ * block examples to read and the domain components for the parts, plus the
  * always-on frame + foundation names. `pages` and `directMatch` describe
  * search's matches that build could start from.
  *

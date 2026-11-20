@@ -113,7 +113,7 @@ import {persistedGather} from '../fs/gather-cache.mjs';
 import {iconFeatureGate} from '../integrations/icon-features.mjs';
 import {INSTALLED_ICON_SET_DOC} from '../discovery/name-roots.mjs';
 
-import {recordDeclaredCliCommands} from '../env/cli-command.mjs';
+import {recordDeclaredSettings} from '../env/cli-command.mjs';
 import {
   hostedRun,
   recordResolvedIntegrations,
@@ -420,7 +420,9 @@ const BASES = new WeakMap();
 /**
  * The provider ledger a Project resolved at load: one outcome for every
  * package directory configured, autolinked, or authored. Internal: upgrade
- * resolves on top of it, and tests account for every candidate with it.
+ * resolves on top of it, `doctor integration validate` finds the folder's
+ * own copy of a package in it, loaded or not, and tests account for every
+ * candidate with it.
  * @param {Project} project
  * @returns {import('../integrations/provider-resolution.mjs').ProviderLedger}
  */
@@ -653,9 +655,10 @@ export class Project {
     }
     // A hosted run returns each package it resolved (cli-surface INV30).
     recordResolvedIntegrations(loadedIntegrations);
-    // The picker (getCliInvocation) is synchronous, so the commands these
-    // integrations declare are recorded here, where they become known.
-    recordDeclaredCliCommands(projectDir, loadedIntegrations);
+    // The picker (getCliInvocation) and the install-command printers are
+    // synchronous, so the commands and install guidance these integrations
+    // declare are recorded here, where they become known.
+    recordDeclaredSettings(projectDir, loadedIntegrations);
 
     // The debug recorder resolves its settings synchronously, long before any
     // command gets here, so this is where a project's `debug` block gets a

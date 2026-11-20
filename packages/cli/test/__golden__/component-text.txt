@@ -4,18 +4,18 @@ package: @acme/kit
 
 A zorblax card that groups one topic.
 
-**Import:** `import {AcmeCard} from '@acme/kit';`
+**Import:** `import { AcmeCard } from '@acme/kit';`
 
-## Best Practices
+## Usage
 
-Do:
-- Keep one idea per card.
-
-Don't:
-- Do not nest cards.
+```tsx
+<AcmeCard title="..." />
+```
 
 ## Props
 
 - `title`: `string` **(required)** - Heading text.
 - `tone`: `'calm' | 'loud'` = `'calm'` - Visual weight.
+
+Full output, with anatomy, best practices, examples and theming (classes, data attributes, CSS variables): `pnpm exec astryx component AcmeCard --detail full`
 

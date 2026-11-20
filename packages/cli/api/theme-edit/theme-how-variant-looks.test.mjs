@@ -10,7 +10,7 @@
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
-import {themeEditHow, themeEditNew} from './theme-edit.mjs';
+import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -34,15 +34,22 @@ beforeAll(async () => {
   unbuilt = await installRealBaseThemes(cwd, ['neutral']);
   if (unbuilt) return;
   await themeEditNew('n', {cwd, like: 'neutral'});
+  // (A theme that already fills one badge variant itself.)
+  await themeEditNew('bf', {cwd, like: 'neutral'});
+  await themeEditSet('bf', 'background-color', '#dcfce7', {
+    cwd,
+    on: 'badge',
+    when: 'variant:success',
+  });
 }, 600_000);
 
 afterAll(() => {
   removeLinkedFixture(cwd);
 });
 
-/** @param {string} q */
-const answer = async q => {
-  const {data} = await themeEditHow(q, {cwd, theme: 'n'});
+/** @param {string} q @param {string} [theme] */
+const answer = async (q, theme = 'n') => {
+  const {data} = await themeEditHow(q, {cwd, theme});
   const results = data.results ?? [];
   const sets = (/** @type {string[]} */ cs) =>
     cs
@@ -130,6 +137,28 @@ describe('a plain fill on a part with colored variants', () => {
       expect((await answer('make the blue cards rounder')).first).toEqual([
         'corners more --on card --when variant:blue',
       ]);
+    },
+    T,
+  );
+});
+
+describe('no fill', () => {
+  it(
+    'is see-through on the part and on each variant the theme fills itself, never a fill taken back',
+    async test => {
+      needsBases(test);
+      for (const q of [
+        'badges outlined, no fill',
+        'badges: no fill',
+        'badges with no background',
+      ]) {
+        const r = await answer(q, 'bf');
+        expect(r.all, q).toContain('background-color transparent --on badge');
+        expect(r.all, q).toContain(
+          'background-color transparent --on badge --when variant:success',
+        );
+        expect(r.all.join('\n'), q).not.toMatch(/^undo /m);
+      }
     },
     T,
   );

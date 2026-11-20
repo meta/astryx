@@ -262,7 +262,8 @@ export function mergeConflicts(base, head, root = ROOT) {
   }
 }
 
-function changedFiles(fork, head) {
+/** The changed files against the merge base: `head`'s commits, or the working tree. */
+export function changedFiles(fork, head) {
   const tracked = parseNameStatus(
     git(['diff', '--name-status', '-M', fork, ...(head ? [head] : [])]),
   );

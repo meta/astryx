@@ -7,17 +7,13 @@ import {ToggleButton, ToggleButtonGroup} from '@astryxdesign/core/ToggleButton';
 import {Stack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 import {Icon} from '@astryxdesign/core/Icon';
-import {
-  ListBulletIcon,
-  Squares2X2Icon,
-  TableCellsIcon,
-} from '@heroicons/react/24/outline';
+import {ListIcon, GridViewIcon, TableIcon} from '@astryxdesign/template-icons';
 import {
   BoldIcon,
   ItalicIcon,
   UnderlineIcon,
   StrikethroughIcon,
-} from '@heroicons/react/24/outline';
+} from '@astryxdesign/template-icons';
 
 export default function ToggleButtonGroupBlock() {
   const [view, setView] = useState<string | null>('list');
@@ -33,19 +29,19 @@ export default function ToggleButtonGroupBlock() {
           <ToggleButton
             value="list"
             label="List view"
-            icon={<Icon icon={ListBulletIcon} />}
+            icon={<Icon icon={ListIcon} />}
             isIconOnly
           />
           <ToggleButton
             value="grid"
             label="Grid view"
-            icon={<Icon icon={Squares2X2Icon} />}
+            icon={<Icon icon={GridViewIcon} />}
             isIconOnly
           />
           <ToggleButton
             value="table"
             label="Table view"
-            icon={<Icon icon={TableCellsIcon} />}
+            icon={<Icon icon={TableIcon} />}
             isIconOnly
           />
         </ToggleButtonGroup>
