@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {afterEach, describe, expect, it} from 'vitest';
 import {
   createRepository,
@@ -44,6 +45,9 @@ import {classifyReleaseDiff} from './release-paths.mjs';
 const CUT = '1'.repeat(40);
 const HEAD = '2'.repeat(40);
 const NEXT_HEAD = '3'.repeat(40);
+const ACTIVE_RELEASE = fileURLToPath(
+  new URL('./active-release.mjs', import.meta.url),
+);
 const BRANCH = 'release/v0.6.5';
 const roots = [];
 
@@ -352,6 +356,46 @@ describe('one branch per release lifecycle', () => {
         false,
       ),
     ).not.toThrow();
+  });
+
+  it('runs create over an authenticated archived tag and binds the recut authority', () => {
+    const {root, cutSha} = cutFixture();
+    git(root, 'tag', 'v0.6.4');
+    git(root, 'tag', 'v0.6.5');
+    const reference = ownerRecutReceipt(root);
+
+    execFileSync(
+      process.execPath,
+      [
+        ACTIVE_RELEASE,
+        'create',
+        '--root',
+        root,
+        '--version',
+        '0.6.5',
+        '--branch',
+        BRANCH,
+        '--cut-sha',
+        cutSha,
+        '--owner-recut-receipt',
+        reference,
+      ],
+      {encoding: 'utf8'},
+    );
+
+    const plan = JSON.parse(
+      fs.readFileSync(path.join(root, '.release/plan.json'), 'utf8'),
+    );
+    const marker = JSON.parse(
+      fs.readFileSync(path.join(root, '.release/active.json'), 'utf8'),
+    );
+    expect(plan.ownerRecut).toMatchObject({
+      version: '0.6.5',
+      tagName: 'v0.6.5',
+      tagSha: git(root, 'rev-parse', 'v0.6.5^{commit}'),
+      receiptSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+    });
+    expect(marker.ownerRecut).toEqual(plan.ownerRecut);
   });
 
   it('refuses an owner recut receipt when the archived tag is absent', () => {

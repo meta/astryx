@@ -88,17 +88,35 @@ export function workspaceVersions(root) {
  * @param {object} input
  * @param {string} input.version  release version named by the cut or marker
  * @param {string[]} [input.tags]  defaults to the repository's tags
+ * @param {string|null} [input.archivedTag] authenticated never-published tag omitted from the release base
  * @returns {{declared: string|null, latestStable: string|null, tier: 'patch'|'minor'|null, entries: object[], problems: string[]}}
  */
-export function admitRelease(root, {version, tags = repositoryTags(root)}) {
+export function admitRelease(
+  root,
+  {version, tags = repositoryTags(root), archivedTag = null},
+) {
+  const authorityProblems = [];
+  let releaseBaseTags = tags;
+  if (archivedTag !== null) {
+    if (archivedTag !== `v${version}`)
+      authorityProblems.push(
+        `the archived owner-recut tag ${archivedTag} does not match release ${version}`,
+      );
+    else if (!tags.includes(archivedTag))
+      authorityProblems.push(
+        `the archived owner-recut tag ${archivedTag} is not present`,
+      );
+    else releaseBaseTags = tags.filter(tag => tag !== archivedTag);
+  }
   const config = readJson(path.join(root, '.changeset/config.json'));
   const entries = pendingEntries(root);
   const result = checkAdmission({
     fixedGroups: config.fixed || [],
     versionByName: workspaceVersions(root),
     entries,
-    latestStable: latestStableVersion(tags),
+    latestStable: latestStableVersion(releaseBaseTags),
   });
+  result.problems.unshift(...authorityProblems);
   if (result.declared && result.declared !== version) {
     result.problems.unshift(
       `the release version is ${version}, but main declares ${result.declared}. A release branch releases the version main's package.json declares.`,

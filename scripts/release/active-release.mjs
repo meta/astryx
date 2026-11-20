@@ -171,12 +171,13 @@ function changesetEntries(root) {
     });
 }
 
-function buildPlan({root, version, branch, cutSha}) {
+function buildPlan({root, version, branch, cutSha, ownerRecut = null}) {
   return {
     schemaVersion: 2,
     version,
     branch,
     cutSha,
+    ...(ownerRecut ? {ownerRecut} : {}),
     changesets: changesetEntries(root),
   };
 }
@@ -188,6 +189,7 @@ function buildMarker(plan) {
     version: plan.version,
     branch: plan.branch,
     cutSha: plan.cutSha,
+    ...(plan.ownerRecut ? {ownerRecut: plan.ownerRecut} : {}),
     planDigest: computePlanDigest(plan),
   };
 }
@@ -212,6 +214,20 @@ function validateIdentity(marker, plan) {
     if (plan?.[key] !== marker?.[key])
       errors.push(`plan ${key} must match marker`);
   }
+  if (
+    canonicalJson(plan?.ownerRecut ?? null) !==
+    canonicalJson(marker?.ownerRecut ?? null)
+  )
+    errors.push('plan ownerRecut must match marker');
+  const ownerRecut = plan?.ownerRecut ?? null;
+  if (
+    ownerRecut !== null &&
+    (ownerRecut.version !== marker?.version ||
+      ownerRecut.tagName !== `v${marker?.version}` ||
+      !SHA_RE.test(ownerRecut.tagSha ?? '') ||
+      !/^[0-9a-f]{64}$/.test(ownerRecut.receiptSha256 ?? ''))
+  )
+    errors.push('ownerRecut authority is invalid');
   if (computePlanDigest(plan) !== marker?.planDigest)
     errors.push('plan digest does not match marker');
   const seen = new Set();
@@ -1816,6 +1832,12 @@ function validateOwnerRecutReceipt(root, reference, version) {
     throw new Error(
       'owner-recut receipt does not match the release version and tag',
     );
+  return {
+    version,
+    tagName: tag.name,
+    tagSha,
+    receiptSha256: digest,
+  };
 }
 
 function versionTagExists(root, version) {
@@ -1829,6 +1851,23 @@ function versionTagExists(root, version) {
   } catch {
     return false;
   }
+}
+
+function ownerRecutForCreate(root, values, version) {
+  if (versionTagExists(root, version)) {
+    if (!values['owner-recut-receipt'])
+      throw new Error(
+        `version v${version} already has an immutable tag; use a new release branch and version`,
+      );
+    return validateOwnerRecutReceipt(
+      root,
+      values['owner-recut-receipt'],
+      version,
+    );
+  }
+  if (values['owner-recut-receipt'])
+    throw new Error('owner-recut receipt requires the archived tag');
+  return null;
 }
 
 /**
@@ -1904,6 +1943,7 @@ function writeAuthority(root, values, refresh) {
   const planPath = path.join(dir, PLAN_FILE);
   const markerExists = fs.existsSync(markerPath);
   const planExists = fs.existsSync(planPath);
+  let ownerRecut = null;
 
   if (refresh) {
     if (!markerExists || !planExists)
@@ -1914,6 +1954,7 @@ function writeAuthority(root, values, refresh) {
     const existingPlan = readJson(planPath);
     const identityErrors = validateIdentity(existingMarker, existingPlan);
     if (identityErrors.length) throw new Error(identityErrors.join('\n'));
+    ownerRecut = existingPlan.ownerRecut ?? null;
     for (const [key, value] of [
       ['version', version],
       ['branch', branch],
@@ -1927,19 +1968,11 @@ function writeAuthority(root, values, refresh) {
       throw new Error(
         'release authority already exists; a release branch cannot be reused',
       );
-    if (versionTagExists(root, version)) {
-      if (!values['owner-recut-receipt'])
-        throw new Error(
-          `version v${version} already has an immutable tag; use a new release branch and version`,
-        );
-      validateOwnerRecutReceipt(root, values['owner-recut-receipt'], version);
-    } else if (values['owner-recut-receipt']) {
-      throw new Error('owner-recut receipt requires the archived tag');
-    }
+    ownerRecut = ownerRecutForCreate(root, values, version);
   }
 
   fs.mkdirSync(dir, {recursive: true});
-  const plan = buildPlan({root, version, branch, cutSha});
+  const plan = buildPlan({root, version, branch, cutSha, ownerRecut});
   const marker = buildMarker(plan);
   fs.writeFileSync(planPath, `${JSON.stringify(plan, null, 2)}\n`);
   fs.writeFileSync(markerPath, `${JSON.stringify(marker, null, 2)}\n`);
@@ -1954,9 +1987,21 @@ async function main() {
   if (command === 'create' || command === 'refresh') {
     // FR48/FR49: admission runs where the plan is made. Loaded here so the
     // trusted CI copy of this file needs no other module.
+    const version = required(values, 'version');
+    let ownerRecut;
+    if (command === 'create') {
+      ownerRecut = ownerRecutForCreate(root, values, version);
+    } else {
+      const marker = readJson(path.join(root, RELEASE_DIR, MARKER_FILE));
+      const plan = readJson(path.join(root, RELEASE_DIR, PLAN_FILE));
+      const identityErrors = validateIdentity(marker, plan);
+      if (identityErrors.length) throw new Error(identityErrors.join('\n'));
+      ownerRecut = plan.ownerRecut ?? null;
+    }
     const {admitRelease} = await import('./release-inputs.mjs');
     const admission = admitRelease(root, {
-      version: required(values, 'version'),
+      version,
+      archivedTag: ownerRecut?.tagName ?? null,
     });
     if (admission.problems.length)
       throw new Error(

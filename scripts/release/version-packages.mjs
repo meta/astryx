@@ -172,7 +172,10 @@ async function main(argv) {
     );
   }
 
-  const admission = admitRelease(root, {version: marker.version});
+  const admission = admitRelease(root, {
+    version: marker.version,
+    archivedTag: plan.ownerRecut?.tagName ?? null,
+  });
   if (admission.problems.length) {
     throw new Error(
       `release admission refused ${marker.version}:\n  - ${admission.problems.join('\n  - ')}`,
