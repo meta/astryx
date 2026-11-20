@@ -1242,14 +1242,6 @@ export function planPaletteRequest(dials, options, context) {
   if (Object.keys(fills).length) {
     config.families = anchorDarkFills(config, dials, fills, context);
   }
-  // The editor grows more families (context.editor).
-  if (context.editor) {
-    for (const family of grownFamilies(dials, context)) {
-      if (!config.families.some(f => f?.id === family.id)) {
-        config.families.push(family);
-      }
-    }
-  }
   return {config, fills};
 }
 /**
@@ -2328,7 +2320,10 @@ export function mapPalette(candidate, dials, fills, context) {
    */
   const statuses = context.editor ? mapStatuses() : {roles: {}, why: []};
   const code = context.editor ? mapCode() : [];
-  const cvd = statusClashes();
+  /**
+   * @type {PaletteMapping['cvd']}
+   */
+  const cvd = context.editor ? statusClashes() : [];
   /**
    * The status fills, as the theme shows them, that someone red-weak or
    * green-weak may not tell apart, in each mode, where the theme changed at
