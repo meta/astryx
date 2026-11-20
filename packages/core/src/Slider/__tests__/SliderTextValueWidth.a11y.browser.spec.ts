@@ -3,12 +3,15 @@
 /**
  * @file SliderTextValueWidth.a11y.browser.spec.ts
  * @input Built Slider stories "Custom Step", "With Format Value" and "Text
- *   Value Widths" in real Chromium and WebKit, left to right and right to left
+ *   Value Widths" in real Chromium and WebKit, left to right and right to
+ *   left, in the default font and in each bundled theme's body font
  * @output Browser evidence that a text value display keeps the track's length
  *   while the value changes, so a dragged thumb stays under the pointer
  * @position Slider proof of component:Slider FR3 and FR7 for `valueDisplay="text"`
  */
 
+import fs from 'node:fs';
+import {fileURLToPath} from 'node:url';
 import {
   expect,
   test,
@@ -127,6 +130,70 @@ for (const font of ['monospace', '"DejaVu Sans"']) {
   });
 }
 
+/** The body fonts the bundled themes ship, each in its theme's folder. */
+const THEME_FONTS = [
+  ['butter', 'outfit'],
+  ['chocolate', 'albert-sans'],
+  ['gothic', 'fustat'],
+  ['matcha', 'dm-sans'],
+  ['neutral', 'figtree'],
+  ['y2k', 'poppins'],
+] as const;
+
+/** Loads a bundled theme font and sets it on every value text. */
+async function loadThemeFont(page: Page, theme: string, font: string) {
+  const file = fileURLToPath(
+    new URL(
+      `../../../../themes/${theme}/fonts/${font}-latin-400-normal.woff2`,
+      import.meta.url,
+    ),
+  );
+  const data = fs.readFileSync(file).toString('base64');
+  await page.addStyleTag({
+    content: `@font-face { font-family: "Theme ${font}"; src: url(data:font/woff2;base64,${data}) format("woff2"); }
+.astryx-slider-control ~ span { font-family: "Theme ${font}" !important; }`,
+  });
+  await page.evaluate(async name => {
+    await document.fonts.load(`16px "${name}"`);
+  }, `Theme ${font}`);
+}
+
+for (const [theme, font] of THEME_FONTS) {
+  test(`the track keeps its length in ${theme}'s ${font}, at each end, between them and in a range`, async ({
+    page,
+  }) => {
+    await mount(page, 'core-slider--custom-step', 'ltr');
+    await loadThemeFont(page, theme, font);
+    const thumb = page.getByRole('slider');
+    await thumb.focus();
+    await page.keyboard.press('Home');
+    const widths = await widthsWhilePressing(page, thumb, 'PageUp', 12);
+    expect([...widths]).toHaveLength(1);
+
+    await mount(page, 'core-slider--with-format-value', 'ltr');
+    await loadThemeFont(page, theme, font);
+    const unit = page.getByRole('slider', {name: 'Temperature'});
+    await unit.focus();
+    await page.keyboard.press('Home');
+    expect([
+      ...(await widthsWhilePressing(page, unit, 'PageUp', 4)),
+    ]).toHaveLength(1);
+
+    await mount(page, 'core-slider--text-value-widths', 'ltr');
+    await loadThemeFont(page, theme, font);
+    const [start, end] = await page
+      .getByRole('group', {name: 'Price range'})
+      .getByRole('slider')
+      .all();
+    const range = new Set([
+      ...(await widthsWhilePressing(page, start, 'Home', 1)),
+      ...(await widthsWhilePressing(page, end, 'End', 1)),
+      ...(await widthsWhilePressing(page, start, 'PageUp', 12)),
+    ]);
+    expect([...range]).toHaveLength(1);
+  });
+}
+
 test('a fractional step keeps the track length from 0 to 0.8', async ({
   page,
 }) => {
@@ -154,59 +221,6 @@ test('a value text wider in the middle than at the ends does not clip', async ({
       return text == null ? true : text.scrollWidth > text.clientWidth + 1;
     });
     expect(clips).toBe(false);
-    await page.keyboard.press('ArrowRight');
-  }
-});
-
-/** The value text box's width, and its text's own width. */
-async function textBox(thumb: Locator) {
-  return thumb.evaluate(el => {
-    const box = el
-      .closest('.astryx-slider')
-      ?.querySelector<HTMLElement>('.astryx-slider-control ~ span');
-    if (box == null) {
-      return null;
-    }
-    const range = document.createRange();
-    range.selectNodeContents(box);
-    return {
-      box: box.getBoundingClientRect().width,
-      text: range.getBoundingClientRect().width,
-    };
-  });
-}
-
-test('ends of the same shape reserve no blank space, and the track keeps its length', async ({
-  page,
-}) => {
-  await mount(page, 'core-slider--with-format-value', 'ltr');
-  const thumb = page.getByRole('slider', {name: 'Temperature'});
-  await thumb.focus();
-  await page.keyboard.press('Home');
-  const widths = new Set<number>();
-  for (let i = 0; i < 4; i++) {
-    const measured = await textBox(thumb);
-    expect(measured).not.toBeNull();
-    expect(
-      Math.abs((measured?.box ?? 0) - (measured?.text ?? Infinity)),
-    ).toBeLessThan(0.5);
-    widths.add(await trackWidth(thumb));
-    await page.keyboard.press('PageUp');
-  }
-  expect([...widths]).toHaveLength(1);
-});
-
-test('a word value reserves no blank space', async ({page}) => {
-  await mount(page, 'core-slider--text-value-widths', 'ltr');
-  const thumb = page.getByRole('slider', {name: 'Rating'});
-  await thumb.focus();
-  await page.keyboard.press('Home');
-  for (let i = 0; i < 5; i++) {
-    const measured = await textBox(thumb);
-    expect(measured).not.toBeNull();
-    expect(
-      Math.abs((measured?.box ?? 0) - (measured?.text ?? Infinity)),
-    ).toBeLessThan(0.5);
     await page.keyboard.press('ArrowRight');
   }
 });

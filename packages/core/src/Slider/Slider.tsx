@@ -511,14 +511,11 @@ const styles = stylex.create({
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
     lineHeight: typeScaleVars['--text-label-leading'],
-    fontVariantNumeric: 'tabular-nums',
-    // Kerning would change a digit pair's width ("11").
-    fontKerning: 'none',
     color: colorVars['--color-text-primary'],
     whiteSpace: 'nowrap',
     flexShrink: 0,
   },
-  // The width the widest end text needs, so the box keeps one width.
+  // A floor wider than any end text, so the box keeps one width.
   textValueReserve: (minInlineSize: string) => ({minInlineSize}),
   marksContainer: {
     position: 'absolute',
@@ -1680,35 +1677,22 @@ export function Slider({ref, ...props}: SliderProps) {
   const fillEnd = getPercent(values[isRange ? 1 : 0], min, max) / 100;
   const fillStyle: FillStyle = {[FILL_START]: fillStart, [FILL_END]: fillEnd};
 
-  // Text value display. When the two ends of the range show digits and have
-  // different shapes (digit counts, or other characters around them), the box
-  // reserves the width of the wider end, so the track keeps its length while
-  // the value changes and a dragged thumb stays under the pointer. A digit or
-  // a space counts as 1ch, the width of the font's own zero, and any other
-  // character as 1em, plus 1px for rounding. Ends of the same shape (60°F and
-  // 90°F) and words reserve nothing, so the text keeps its own width.
+  // Text value display. The box has a floor of one ch per character of the
+  // longer end text, plus one ch, and the text sits at its end. The track then
+  // keeps one length while the value changes and while a thumb is dragged, so
+  // the thumb stays under the pointer. A value text longer than both ends
+  // (a custom format) can still widen the box.
   let textDisplay = null;
   if (valueDisplay === 'text') {
     const texts = values.map(displayValue);
-    const ends = [min, max].map(value => {
-      const text = displayValue(value);
-      return isRange ? `${text} – ${text}` : text;
-    });
-    const shape = (text: string) => text.replace(/\d/g, '0');
-    const [ch, em] = ends.reduce(
-      ([c, e], text) => {
-        const n = text.replace(/[^\d ]/g, '').length;
-        return [Math.max(c, n), Math.max(e, text.length - n)];
-      },
-      [0, 0],
+    const longest = Math.max(
+      ...[min, max].map(value => displayValue(value).length),
     );
     textDisplay = (
       <span
         {...stylex.props(
           styles.textValue,
-          /\d/.test(ends.join('')) &&
-            shape(ends[0]) !== shape(ends[1]) &&
-            styles.textValueReserve(`calc(${ch}ch + ${em}em + 1px)`),
+          styles.textValueReserve(`${texts.length * (longest + 3) - 2}ch`),
         )}>
         {texts.join(' – ')}
       </span>
