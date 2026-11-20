@@ -197,18 +197,14 @@ const ROWS = [
     },
   ],
   [
-    'colors before their role',
+    'a color after a part is its text; the next color before accents is the accent',
     {
       q: 'bold headings, red #c8102e and blue #003da5 accents',
-      never: /--on heading$/,
-    },
-  ],
-  [
-    'two colors before one accent: the last is it, as on main, and the rest is kept',
-    {
-      q: 'bold headings, red #c8102e and blue #003da5 accents',
-      has: ['headings bold', "accent '#003da5'"],
-      never: /^accent '#c8102e'|--on heading$/,
+      has: [
+        'headings bold',
+        "color '#c8102e' --on heading",
+        "accent '#003da5'",
+      ],
     },
   ],
   [
