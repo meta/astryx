@@ -591,7 +591,7 @@ export function projectHasBuiltCheck(dir) {
 }
 
 /** The first release whose CLI has `experimental export`. */
-const EXPORT_SINCE = '0.7.18';
+const EXPORT_SINCE = '0.7.17';
 
 /**
  * Whether the project at `dir` can run `astryx experimental export`, read from
