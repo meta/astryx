@@ -615,15 +615,15 @@ they are separately named.
   nothing (FR20). The required `build`, `test` and `docsite-test` contexts
   report success with the notice "Lab-only: Lab tests + Storybook build",
   never a skip. A Lab component's entry files are its routes in
-  `internal/shadcn-registry/routes.lock.json`, its entry in the Lab package's
-  part of `packages/cli/assets/discover/official-packages.json`, and a new
+  `internal/shadcn-registry/routes.lock.json` and a new
   story `apps/storybook/stories/<Name>.stories.tsx` that imports from
   `@astryxdesign/lab`, for a Lab component named for its own folder, which
   the change touches. A component in a family folder keeps the full suite.
   The classifier reads those files' diffs as data and never runs them; a diff
   it cannot read, or a line naming anything else, makes the change mixed. A
-  Lab-only change also runs the CLI official-packages check on the first Node
-  leg, and, when its route lock differs from the merge base (or the merge base
+  Lab-only change also runs, on the first Node leg, the check that the CLI's
+  official package list (spec:AST-051 FR11) still builds from the repository,
+  and, when its route lock differs from the merge base (or the merge base
   is unknown), the route-lock check: the docsite's data generation at the
   canary target, against the packages the Storybook build made. One that adds
   or changes a story also builds Storybook, which the lane always does. A change to any other path is mixed and runs CI as for any

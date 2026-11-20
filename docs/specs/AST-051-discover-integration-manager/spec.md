@@ -191,8 +191,9 @@ source, packages}`. `source` has `name`, `generatedAt`, and `complete`. Each
 - **FR11 — The CLI carries the official list.** Each CLI release carries the
   list of official packages: every package that release publishes that adds at
   least one item discover lists. The list is generated from the repository when
-  the CLI is built and never edited by hand, and a check fails when it no longer
-  matches the repository. It holds no versions. An entry's latest release is the
+  the CLI is packed and is never committed or edited by hand; a checkout
+  derives the same list from the repository, so a new package needs no edit
+  outside its own folder. It holds no versions. An entry's latest release is the
   newest release the CLI knows: its own version on a release CLI, or the
   project's Core version when that is a newer release. An entry for a package
   that always releases at Core's version lists a release CLI's own version and
