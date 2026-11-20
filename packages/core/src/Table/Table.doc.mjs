@@ -205,7 +205,7 @@ export const docs = {
       name: 'columns',
       type: 'TableColumn<T>[]',
       description:
-        'Column definitions: each column has {key, header, width?, align?, renderCell?}. The `header` field sets the column heading text. If omitted, columns are auto-generated from data object keys. The `width` field is typed as `ColumnWidth` (not a number); use `proportional(n)` or `pixel(n)` helpers imported from `@astryxdesign/core/Table`. Omitting `width` keeps an equal flexible share with a compact 60px readability floor. To give one column a different floor, set `width: proportional(1, {minWidth: 80})`; its `minWidth` replaces the 60px floor for that column. Example: `width: pixel(120)` for 120px fixed, `width: proportional(1)` for a flexible column with a 120px default minimum.',
+        'Column definitions: each column has {key, header, width?, align?, renderCell?}, and Table has no onRowClick prop, so a row\'s action goes in its main cell\'s renderCell. The `header` field sets the column heading text. If omitted, columns are auto-generated from data object keys. The `width` field is typed as `ColumnWidth` (not a number); use `proportional(n)` or `pixel(n)` helpers imported from `@astryxdesign/core/Table`. Omitting `width` keeps an equal flexible share with a compact 60px readability floor. To give one column a different floor, set `width: proportional(1, {minWidth: 80})`; its `minWidth` replaces the 60px floor for that column. Example: `width: pixel(120)` for 120px fixed, `width: proportional(1)` for a flexible column with a 120px default minimum.',
     },
     {
       name: 'idKey',
@@ -318,7 +318,7 @@ export const docs = {
   ],
   usage: {
     description:
-      'Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. There is no onRowClick prop: act from the main cell\'s renderCell. Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.',
+      'Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.',
     bestPractices: [
       {
         guidance: true,
@@ -421,7 +421,7 @@ const columns = [
 export const docsZh = {
   usage: {
     description:
-      'Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. 没有 onRowClick 属性：请在主单元格的 renderCell 中操作。Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.',
+      'Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.',
     bestPractices: [
       {
         guidance: true,
@@ -469,7 +469,7 @@ export const docsDense = {
     'Data-driven table w/ rich cell content via renderCell. Compose cells w/ Badge, StatusDot, Text, Avatar, layout primitives. BaseTable provides unstyled structural core w/ composable plugin pipeline.',
   usage: {
     description:
-      'Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. No onRowClick prop: act from the main cell\'s renderCell. Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.',
+      'Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.',
     bestPractices: [
       {
         guidance: true,
