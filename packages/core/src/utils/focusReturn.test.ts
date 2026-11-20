@@ -10,6 +10,7 @@ import {
   moveFocusLeftBehind,
   noteFocusWithin,
   returnFocusForLastInput,
+  takesFocusAsIs,
 } from './focusReturn';
 import {isFocusDetached} from './isFocusDetached';
 import {
@@ -53,6 +54,33 @@ describe('isFocusDetached', () => {
       documentElement: document.documentElement,
     } as unknown as Document;
     expect(isFocusDetached(doc)).toBe(true);
+  });
+});
+
+describe('takesFocusAsIs', () => {
+  const hosts: HTMLElement[] = [];
+  function make(html: string): HTMLElement {
+    const host = document.createElement('div');
+    host.innerHTML = html;
+    document.body.append(host);
+    hosts.push(host);
+    return host.firstElementChild as HTMLElement;
+  }
+  afterEach(() => {
+    hosts.splice(0).forEach(host => host.remove());
+  });
+
+  it.each([
+    ['a button', '<button>Go</button>'],
+    ['an element made focusable with tabindex', '<div tabindex="-1">Row</div>'],
+    ['an editable region', '<div contenteditable="true">Text</div>'],
+    ['a media element with controls', '<audio controls></audio>'],
+  ])('is true for %s', (_name, html) => {
+    expect(takesFocusAsIs(make(html))).toBe(true);
+  });
+
+  it('is false for a box that is only a place to sit', () => {
+    expect(takesFocusAsIs(make('<div>Card</div>'))).toBe(false);
   });
 });
 

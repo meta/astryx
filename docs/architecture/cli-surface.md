@@ -319,7 +319,7 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   writes outside a project or output folder are the per-user ones
   `spec:AST-081` FR7 lists: releases, records, kept search catalogs,
   integration check results, template discovery's records, the component list, whether the installed Core matches the component list the CLI was published with, Core's and each integration's components with the doc parts the not-found matcher scores, Core hooks' declared keywords for the not-found hint, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys, token names and settings the browser won't show as written, the lookup commands'
-  not-found hint's name summaries, npm's list of the files an integration package packs, the locale and time zone a run's debug record names (on Linux), the CLI's own docs tree, each stored doc's checked contents, keyed by its text, what template reads from a template's source to name the components it uses, keyed by the source's text and the parser's release, discover's record of the loaded integrations and what each adds, and what it searches in its sources' saved copies (for `discover` and search's discover line), doctor's docs checks and theme-wiring scan, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
+  not-found hint's name summaries, npm's list of the files an integration package packs, the locale and time zone a run's debug record names (on Linux), the CLI's own docs tree, each stored doc's checked contents, keyed by its text, what template reads from a template's source to name the components it uses, keyed by the source's text and the parser's release, discover's record of the loaded integrations and what each adds, and what it searches in its sources' saved copies (for `discover` and search's discover line), doctor's docs checks and theme-wiring scan, what doctor's Core-props check finds in the project's source files, keyed by the folders it lists and the files it reads, and by the TypeScript, Core and project-config versions it used, what doctor's Core-button check finds in the project's source files, keyed by the folders it lists and the files it reads, and by the installed packages and Node.js version it used, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
   file with its links or copy in the home folder. None follows a link in its place, and none replaces
   anything the CLI did not create. A template that
   `astryx template <name> <path>` writes may also go, as a scratch copy, to a
@@ -935,16 +935,34 @@ non-interactive guarantee.
   every restored file matches its recorded checksum.
   `astryx experimental import` follows the same rule: it reports the same
   `missing` and `exact`.
-- `api/render` and `foundation/discovery/core-augmentation-points.mjs` — the
-  `unknown-prop-value` warning of `astryx experimental export`: each string a
-  page writes for a Core component's prop whose type is a closed set of
-  strings, checked against Core's docs for that component in the page's own
-  Core. Where the prop's type in Core's source takes the keys of an interface
-  a theme can widen by declaration merging (the module theme build also
-  resolves its augmentations with), the keys the project's own TypeScript
-  files and its installed theme and integration packages' declaration files
-  add are values the prop has; a project that cannot be read in full leaves
-  such a prop unchecked.
+- `api/render`, `foundation/discovery/written-prop-values.mjs` and
+  `foundation/discovery/core-augmentation-points.mjs` — the
+  `unknown-prop-value` warning of `astryx experimental export`. It reads the
+  values a page certainly gives a Core component's prop: a literal, a
+  conditional of certain branches, a logical expression whose result is
+  certain, a `const` bound to one, or the first value of `useState`; a prop a
+  later spread attribute can replace, and a value cast to `never`, `any` or
+  `unknown`, is not read. Each such string for a prop
+  whose type is a closed set of strings is checked against Core's docs for
+  that component in the page's own Core. Where the
+  prop's type in Core's source takes the keys of an interface a theme can
+  widen by declaration merging (the module theme build also resolves its
+  augmentations with), the keys the project's own TypeScript files and its
+  installed theme and integration packages' declaration files add are values
+  the prop has; a project that cannot be read in full leaves such a prop
+  unchecked. Each such value of a kind the prop's declared type in Core's
+  source does not take (a string where it takes an object) warns too; a value
+  or a type the reader cannot be certain of is not checked. The same wrong kind
+  for one prop on several lines of a file is one warning that lists the lines.
+- `api/render` and `foundation/discovery/unknown-core-props.mjs` — the
+  `unknown-prop` warning of `astryx experimental export`: each prop name the
+  page's own files give a Core component, read and judged as INV42 reads and
+  judges it: with the docs and types of the Core the page finds installed,
+  read with the project's own TypeScript and React types; a page that finds
+  no installed Core, or a project without them, gets no judgment. Each
+  element gets one warning, and React's console line for a prop it names is
+  not printed as page output. Only the docs are read while every prop is
+  documented.
 - `foundation/agent-docs` — the shared expected-block renderer and managed-file
   writer used by init and upgrade, and the layout that decides which files hold
   the block (INV31).
@@ -1352,6 +1370,29 @@ the editor shows each mode itself.
 Rejected: following the viewer for every page (a one-mode theme is unreadable
 in the other scheme), and running the theme module to read its modes (a render
 runs no theme code).
+
+### DEC-20 — A refused template path names the same write from its folder
+
+**Decider:** `josephfarina`, `2026-11-18`
+
+When `astryx template <name> <path>` refuses a destination outside the project
+and outside the temp folder (named absolutely, from the home folder, or through
+`..`), the refusal also names a command that writes that same destination: `cd`
+into the nearest folder on the destination's path that exists, then run the
+template command with the rest of the path, using the CLI command that folder
+would use (`spec:AST-081` FR5). Run from that folder, the write stays inside
+the folder the command runs from (INV10), so the caller gets the copy where
+they named it without a second refusal. The command is named only for a Core
+template that no integration replaces: outside the project the project's
+integrations do not load, so an integration's template would not be found
+there, and a replaced Core template would be the Core version instead of the
+project's replacement. No command is named when no folder on the path exists
+except the disk's root. A destination reached through `..` that lands in the
+temp folder is not a scratch copy (DEC-15); the refusal names the same
+destination as an absolute path, which DEC-15 accepts as a scratch copy.
+
+Rejected: writing the named destination from the current folder (it leaves the
+folder a template write is confined to).
 
 ## Verification
 
