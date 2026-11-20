@@ -345,9 +345,8 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     disabledRendersRef.current += 1;
   }
 
-  // An Escape dismissal sets this flag. Closing the surface can give the
-  // trigger a mouseenter with no pointer movement. While the flag is set, that
-  // enter shows nothing. A pointer leave or a focus leave clears the flag.
+  // Closing the surface can give the trigger a mouseenter with no pointer
+  // movement. While this is set, that enter shows nothing.
   const dismissedByEscapeRef = useRef(false);
   // Whether the pointer is over the trigger or the tooltip surface. An
   // Escape dismissal arms the flag above only while this is set, so a
