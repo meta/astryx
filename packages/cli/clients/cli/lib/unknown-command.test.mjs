@@ -218,6 +218,14 @@ describe('an icon word', () => {
     expect(await names(['--json', 'icons', 'arrow'])).toEqual([
       'astryx --json docs icons',
     ]);
+    // The guide keeps the program's own options, never the finder's.
+    expect(await names(['icons', '--json'])).toEqual([
+      'astryx docs icons --json',
+    ]);
+    expect(await names(['icon', '--list'])).toEqual(['astryx docs icons']);
+    expect(
+      await names(['icon', 'trash', '--set', 'lucide', '--base', '@acme/ui']),
+    ).toEqual(['astryx docs icons --base @acme/ui']);
   });
 
   it('names the icon finder with the words after it, then the guide, where icon features are on', async () => {
@@ -235,6 +243,28 @@ describe('an icon word', () => {
     expect(await names(['icon', 'list'], on)).toEqual([
       'astryx experimental icon --list',
       'astryx docs icons',
+    ]);
+    expect(await names(['icon', '--list'], on)).toEqual([
+      'astryx experimental icon --list',
+      'astryx docs icons',
+    ]);
+    // The finder's list takes no words and no set, so a list word before
+    // words asks for those icons, and every run named works.
+    expect(await names(['icon', 'list', 'arrows'], on)).toEqual([
+      'astryx experimental icon arrows',
+      'astryx docs icons',
+    ]);
+    expect(await names(['icon', '--list', 'arrows'], on)).toEqual([
+      'astryx experimental icon arrows',
+      'astryx docs icons',
+    ]);
+    expect(await names(['icon', 'list', '--set', 'lucide'], on)).toEqual([
+      'astryx experimental icon --list',
+      'astryx docs icons',
+    ]);
+    expect(await names(['icon', '--set', 'lucide'], on)).toEqual([
+      'astryx docs icons',
+      'astryx experimental icon --help',
     ]);
     // With no words to look for, the guide comes first, then the finder's help.
     expect(await names(['icon'], on)).toEqual([

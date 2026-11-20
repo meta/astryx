@@ -510,12 +510,49 @@ async function otherCliWords({word, before, after: rest}, program, findEntry) {
 }
 
 /**
+ * The words of a run that are neither options of `cmd` nor their values.
+ * @param {CommandLike} cmd
+ * @param {string[]} words
+ * @returns {string[]}
+ */
+function plainWords(cmd, words) {
+  const options = optionsInReach(
+    /** @type {any} */ (cmd),
+    (/** @type {OptionLike} */ o) => !o.hidden,
+  );
+  /** @type {string[]} */
+  const plain = [];
+  for (let i = 0; i < words.length; i += 1) {
+    const word = words[i];
+    if (!word.startsWith('-')) {
+      plain.push(word);
+      continue;
+    }
+    const [flag, inline] = word.split(/=(.*)/s);
+    const option = options.find(o => o.long === flag || o.short === flag);
+    const next = words[i + 1];
+    if (
+      option &&
+      (option.required || option.optional) &&
+      inline === undefined &&
+      next !== undefined &&
+      !next.startsWith('-')
+    )
+      i += 1;
+  }
+  return plain;
+}
+
+/**
  * The runs an icon word (`icon`, `icons`) points at: the stable icons guide
- * (`docs icons`), and where icon features are on, the icon finder with the
- * words to look for (`icon search arrow` is `experimental icon arrow`, `icon
- * list` is `experimental icon --list`). The finder comes first when there
- * are words to look for; with none, the guide does, then the finder's help.
- * Where icon features are off, the answer names no experimental command
+ * (`docs icons`), and where icon features are on, the icon finder. With
+ * words to look for, the finder run comes first, with those words and the
+ * options given (`icon search arrow` is `experimental icon arrow`); a leading
+ * word that only asks to look or list is left out, and so is `--list`, which
+ * takes no words (`icon list arrows` is `experimental icon arrows`). A list
+ * word or `--list` with nothing to look for asks for `experimental icon
+ * --list`. With neither, the guide comes first, then the finder's help. Where
+ * icon features are off, the answer names no experimental command
  * (spec:AST-017 FR27).
  * @param {{word: string, before: string[], after: string[]}} run the word,
  *   and the words of the run before and after it
@@ -526,29 +563,40 @@ async function otherCliWords({word, before, after: rest}, program, findEntry) {
 async function iconRuns({before, after: rest}, program, iconFeatures) {
   /** @param {string[]} parts @param {string} reason */
   const run = (parts, reason) => ({words: [...before, ...parts], reason});
-  // The program's options written after the word stay with the guide
-  // (`icons --json`); the words to look for do not.
-  const options = rest.filter(w => w.startsWith('-'));
-  const guide = runParses(program, [...before, 'docs', 'icons', ...options])
-    ? run(['docs', 'icons', ...options], 'the guide to icons in Astryx')
-    : run(['docs', 'icons'], 'the guide to icons in Astryx');
+  // The guide keeps only the program's own options written after the word
+  // (`icons --json`): the finder's (`--list`, `--set`) are not the guide's,
+  // and `docs icons --list` fails.
+  const guide = run(
+    ['docs', 'icons', ...fitWords(program, rest)],
+    'the guide to icons in Astryx',
+  );
   const finder = ['experimental', 'icon'];
   if (!served(program, finder) || !(await iconFeatures().catch(() => false)))
     return [guide];
+  const finderCmd = /** @type {CommandLike} */ (
+    visible(
+      /** @type {CommandLike} */ (
+        visible(program).find(c => c.name() === finder[0])
+      ),
+    ).find(c => c.name() === finder[1])
+  );
   const [lead, ...more] = rest;
-  const lower = lead?.toLowerCase();
-  const asks =
-    lower !== undefined && LOOK_WORDS.has(lower)
-      ? more
-      : lower !== undefined && LIST_WORDS.has(lower)
-        ? ['--list', ...more]
-        : rest;
+  const lower = lead?.toLowerCase() ?? '';
+  const listWord = LIST_WORDS.has(lower);
+  const words = listWord || LOOK_WORDS.has(lower) ? more : rest;
   const reason =
     'the command is experimental icon (experimental): it finds the icon for what you mean in your icon sets';
-  // With no words to look for, the guide answers first.
-  if (!asks.some(w => !w.startsWith('-')) && !asks.includes('--list'))
-    return [guide, run([...finder, '--help'], reason)];
-  return [run([...finder, ...asks], reason), guide];
+  if (plainWords(finderCmd, words).length > 0)
+    return [
+      run([...finder, ...words.filter(w => w !== '--list')], reason),
+      guide,
+    ];
+  if (listWord || words.includes('--list'))
+    return [
+      run([...finder, '--list', ...fitWords(program, words)], reason),
+      guide,
+    ];
+  return [guide, run([...finder, '--help'], reason)];
 }
 
 /**
@@ -803,7 +851,10 @@ export async function unknownCommandAnswer(
       reason: r.reason,
     }));
   if (runs.length > 0) return {word, message, suggestions: runs};
-  const near = nearNames(word, visible(program).map(c => c.name()));
+  const near = nearNames(
+    word,
+    visible(program).map(c => c.name()),
+  );
   // When nothing fits, the help lists every command with what it does. A
   // bare list of names would put the first one (`init`, which writes files)
   // where a reader looks for the answer.
