@@ -24,6 +24,7 @@ import {
   useOptimistic,
   useTransition,
   type DragEvent,
+  type FocusEvent,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
@@ -844,15 +845,25 @@ export function FileInput({
     : null;
 
   // Input mode keeps its prompt on one line, as a Button keeps its label. A
-  // prompt that a narrow field cuts shows in full on keyboard focus. The
-  // disabled reason's tooltip opens on that focus too, so it wins.
+  // prompt that a narrow field cuts shows in full while keyboard focus is on
+  // the trigger. The field's other controls (the status and clear buttons)
+  // show their own tooltips, and the disabled reason's tooltip opens on the
+  // same focus, so each of those wins.
   const promptRef = useRef<HTMLSpanElement | null>(null);
+  const showsPrompt = mode === 'input' && !hasFiles && !isBusy;
   const cutPrompt = useCutTextOnKeyboardFocus({
     anchorRef: containerRef,
     measureRef: promptRef,
-    isEnabled: mode === 'input' && !hasFiles && !isBusy,
+    isEnabled: showsPrompt,
     isSuppressed: () => showsDisabledMessage,
   });
+  const onPromptFocus = (event: FocusEvent<HTMLElement>) => {
+    if (event.target === triggerRef.current) {
+      cutPrompt.onFocus(event);
+    } else {
+      cutPrompt.hide();
+    }
+  };
 
   // The tooltip placement renders no message box: its focusable status button
   // is the only place the message lives, and the trigger's aria-describedby
@@ -975,7 +986,7 @@ export function FileInput({
         }}
         onClick={!isSelectionDisabled ? onContainerClick : undefined}
         onMouseUp={!isSelectionDisabled ? onContainerMouseUp : undefined}
-        onFocus={cutPrompt.onFocus}
+        onFocus={onPromptFocus}
         onBlur={cutPrompt.onBlur}
         onPointerDown={cutPrompt.onPointerDown}
         {...dragDropProps}
@@ -1065,7 +1076,7 @@ export function FileInput({
       )}
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}
-      {cutPrompt.cutText != null && cutPrompt.Tooltip ? (
+      {showsPrompt && cutPrompt.cutText != null && cutPrompt.Tooltip ? (
         <cutPrompt.Tooltip
           anchorRef={containerRef}
           content={cutPrompt.cutText}

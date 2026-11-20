@@ -6,8 +6,9 @@
  * @output Unit tests for the tooltip that shows an input-mode FileInput's
  *   prompt when the prompt is cut
  * @position Testing; validates that a cut prompt shows in full on keyboard
- *   focus only, adds no description, yields to the disabled reason, and that
- *   a prompt that fits or a dropzone shows no tooltip
+ *   focus on the trigger only, adds no description, closes when focus moves
+ *   to the status button or a file is chosen, yields to the disabled reason,
+ *   and that a prompt that fits shows no tooltip
  */
 
 import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
@@ -74,6 +75,13 @@ function focusByKeyboard(trigger: HTMLElement) {
   });
 }
 
+/** The tooltips that show the prompt; the field's status button keeps its own. */
+function promptTooltips() {
+  return screen
+    .queryAllByRole('tooltip', {hidden: true})
+    .filter(tooltip => tooltip.textContent?.includes(PROMPT));
+}
+
 async function expectNoTooltip() {
   await new Promise(resolve => setTimeout(resolve, 50));
   expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
@@ -129,6 +137,47 @@ describe('FileInput cut prompt tooltip', () => {
     render(<FileInput label="Resume" value={null} onChange={() => {}} />);
     focusByKeyboard(screen.getByRole('button', {name: 'Resume'}));
     await expectNoTooltip();
+  });
+
+  it('closes when focus moves to the status button', async () => {
+    restore = withCutPrompt(true);
+    render(
+      <FileInput
+        label="Resume"
+        value={null}
+        onChange={() => {}}
+        status={{type: 'error', message: 'File must be under 10MB'}}
+        statusVariant="tooltip"
+      />,
+    );
+    focusByKeyboard(screen.getByRole('button', {name: 'Resume'}));
+    await waitFor(() => {
+      expect(promptTooltips()).toHaveLength(1);
+    });
+    act(() => {
+      screen.getByRole('button', {name: 'Error details'}).focus();
+    });
+    await waitFor(() => {
+      expect(promptTooltips()).toHaveLength(0);
+    });
+  });
+
+  it('closes when a file is chosen while the field has focus', async () => {
+    restore = withCutPrompt(true);
+    const {rerender} = render(
+      <FileInput label="Resume" value={null} onChange={() => {}} />,
+    );
+    focusByKeyboard(screen.getByRole('button', {name: 'Resume'}));
+    await waitFor(() => {
+      expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(
+        PROMPT,
+      );
+    });
+    const file = new File(['cv'], 'resume.pdf', {type: 'application/pdf'});
+    rerender(<FileInput label="Resume" value={file} onChange={() => {}} />);
+    await waitFor(() => {
+      expect(promptTooltips()).toHaveLength(0);
+    });
   });
 
   it('shows only the disabled reason when the field has one', async () => {
