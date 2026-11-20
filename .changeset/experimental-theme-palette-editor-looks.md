@@ -2,9 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] The theme editor's palette looks (`astryx experimental theme editor`) change in two ways; `themePalette()` and `defineTheme({palette})` in Core are unchanged.
-
-- A coloured card's secondary text: before, the editor lifted it like the official Neutral theme's selected rows; now it stays the card's own ink. To keep the old look, set `--color-text-secondary` on that card variant (`set <theme> --color-text-secondary <color> --on card --when variant:<color>`).
-- A tinted neutral: the text on inverted surfaces (`--color-on-dark`, `--color-on-light`: a toast, a card over the scrim) now carries its tint; before, that text kept the base theme's colors. To keep the old look, set those two tokens back to the base theme's values.
+[experimental] In the theme editor (`astryx experimental theme editor`), a tinted neutral now tints the text on dark inverted surfaces (`--color-on-dark`: a toast, a card over the scrim); before, that text kept the base theme's white. To keep the old look, set `--color-on-dark` back to the base theme's value. `themePalette()` and `defineTheme({palette})` in Core are unchanged.
 
 @josephfarina

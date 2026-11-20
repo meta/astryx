@@ -17,7 +17,7 @@
   - A status text made darker "for contrast" (or to be easier to read) now gains contrast in both modes: darker in light mode, lighter in dark mode.
   - "tooltips: #f5eff7 12px text" now sets both the text color and the size. "menus 14px text" now sets the menu's type sizes instead of being refused.
 
-- In `astryx experimental theme editor how`, "strip" said as a noun ("pagination pages in one bordered strip") no longer reads as "remove", so the answer no longer sets every border to 0. When `how` understands a clause's look but no answer takes it, the answer now names that clause in the asker's own words.
+- In `astryx experimental theme editor how`, when `how` understands a clause's look but no answer takes it, the answer now names that clause in the asker's own words.
 
 - `astryx experimental theme editor set … corners 4px`: corners of an explicit size name the parts drawn as circles that keep their shape (a calendar's picked day, avatars), with the line that gives each of them those corners too, as square corners already did.
 
