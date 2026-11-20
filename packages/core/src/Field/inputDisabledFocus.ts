@@ -53,7 +53,7 @@ export const inputDisabledFocusStyles = stylex.create({
   // (a collapsed layer-mode Tokenizer's placeholder).
   selfRing: {
     borderColor: {
-      default: colorVars['--color-border-emphasized'],
+      default: colorVars['--color-border-control'],
       ':focus-visible': {
         default: colorVars['--color-accent'],
         // Forced colors repaint author borders in one system color and drop

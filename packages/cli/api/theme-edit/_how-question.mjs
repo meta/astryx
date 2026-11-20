@@ -25186,7 +25186,7 @@ export function draftAnswer(ctx, env, question) {
               continue;
             // (A border shorthand keeps its width in both modes: only its
             // color is the light mode's, the dark mode keeping the border
-            // color the part draws now, an input's emphasized one, else the
+            // color the part draws now, an input's control edge, else the
             // theme's.)
             if (st.thing === 'border') {
               const own =
