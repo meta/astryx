@@ -17,6 +17,7 @@ import {
   listedPackageInstall,
   projectAddCommand,
   globalBehind,
+  globalUpdateBesideCli,
   globalUpgradeCommand,
   lastNoticeSkip,
   projectLag,
@@ -110,6 +111,9 @@ import {
 } from '../../foundation/discovery/module-exports.mjs';
 import {cssImports} from '../../foundation/render/embedded-imports.mjs';
 import {postcss} from '../../foundation/runtime/lazy-dependencies.mjs';
+import {hostedRun} from '../../foundation/runtime/package-root.mjs';
+import {pointsToDoctor} from '../../foundation/integrations/integration-warnings.mjs';
+import {CORE_COMPARISON_CODES} from '../../foundation/discovery/component-replacement.mjs';
 import {isValidSemver, satisfiesRange} from '../../foundation/env/semver.mjs';
 import * as path from 'node:path';
 import {
@@ -1521,38 +1525,74 @@ export function readPackageJson(file) {
 
 /**
  * The integrations installed for the computer, and, outside a project, which
- * of them the folder loads (spec AST-081 FR12): those it uses, and the names
- * of the integrations the folder loads itself, whose copies win.
+ * of them the folder loads (spec AST-081 FR12): those it uses, the issues in
+ * their contributions, and the names of the integrations the folder loads
+ * itself, whose copies win. Also how such a package is updated: the command
+ * beside a CLI installed for the computer, or by the tool whose package set
+ * runs this CLI.
  * @param {string} cwd
- * @returns {Promise<{computerIntegrations: import('../../foundation/integrations/computer-integrations.mjs').ComputerIntegrationCandidate[], loadedComputerIntegrations: string[], folderIntegrations: string[]}>}
+ * @returns {Promise<{computerIntegrations: import('../../foundation/integrations/computer-integrations.mjs').ComputerIntegrationCandidate[], loadedComputerIntegrations: string[], computerIntegrationIssues: Array<{package: string, severity: string, message: string}>, folderIntegrations: string[], integrationUpdate: ((name: string) => string | null) | null, integrationsUpdateWithTool: boolean}>}
  */
 export async function computerIntegrationsOutside(cwd) {
   const computerIntegrations = computerIntegrationCandidates(cwd);
-  if (computerIntegrations.length === 0) {
-    return {
-      computerIntegrations,
-      loadedComputerIntegrations: [],
-      folderIntegrations: [],
-    };
-  }
+  const globalCopy = isGlobalCopy(CLI_ROOT);
+  const update = {
+    integrationUpdate: globalCopy
+      ? (/** @type {string} */ name) => globalUpdateBesideCli(CLI_ROOT, name)
+      : null,
+    integrationsUpdateWithTool: hostedRun() != null,
+  };
+  const none = {
+    computerIntegrations,
+    loadedComputerIntegrations: [],
+    computerIntegrationIssues: [],
+    folderIntegrations: [],
+    ...update,
+  };
+  if (computerIntegrations.length === 0) return none;
+  /** @type {import('../../foundation/config/project.mjs').Project} */
+  let project;
   try {
-    const project = await Project.load(cwd, {core: 'project'});
-    /** @type {Array<{name: string, __computer?: boolean, __loadError?: string}>} */
-    const loaded = project.loadedIntegrations;
-    return {
-      computerIntegrations,
-      loadedComputerIntegrations: loaded
-        .filter(i => i.__computer && !i.__loadError)
-        .map(i => i.name),
-      folderIntegrations: loaded.filter(i => !i.__computer).map(i => i.name),
-    };
+    project = await Project.load(cwd, {core: 'project'});
   } catch {
-    return {
-      computerIntegrations,
-      loadedComputerIntegrations: [],
-      folderIntegrations: [],
-    };
+    return none;
   }
+  /** @type {Array<{name: string, __computer?: boolean, __loadError?: string}>} */
+  const loaded = project.loadedIntegrations;
+  const used = loaded
+    .filter(i => i.__computer && !i.__loadError)
+    .map(i => i.name);
+  // The everyday commands count these issues when they point at doctor, so
+  // doctor names them. Doctor reads no Core outside a project, so it leaves
+  // out the comparisons with Core components; the everyday commands judge
+  // those against the Core they carry. Core's templates come with the CLI.
+  const names = new Set(used);
+  const noCore = project.coreDir() == null;
+  /** @type {Array<{package: string, severity: string, message: string}>} */
+  let issues = [];
+  try {
+    issues = (await project.issues())
+      .filter(
+        issue =>
+          names.has(issue.package) &&
+          pointsToDoctor(issue) &&
+          !(noCore && CORE_COMPARISON_CODES.has(issue.code)),
+      )
+      .map(issue => ({
+        package: issue.package,
+        severity: issue.severity,
+        message: issue.message,
+      }));
+  } catch {
+    // The integrations loaded; only their issues could not be read.
+  }
+  return {
+    computerIntegrations,
+    loadedComputerIntegrations: used,
+    computerIntegrationIssues: issues,
+    folderIntegrations: loaded.filter(i => !i.__computer).map(i => i.name),
+    ...update,
+  };
 }
 
 /**
