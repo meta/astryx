@@ -1,6 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, expect, it} from 'vitest';
+import type {CalendarSystem, Locale} from '@astryxdesign/core/i18n';
+import {describe, expect, expectTypeOf, it} from 'vitest';
 import {
   compactNumber,
   currency,
@@ -8,6 +9,14 @@ import {
   percent,
   shortDate,
 } from './formatters';
+import type {ChartValueFormat} from './index';
+
+function compactIntl(locale: Locale, value: number): string {
+  return new Intl.NumberFormat(locale, {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(value);
+}
 
 describe('chart formatters', () => {
   it('formats numbers with the requested locale and keeps caches locale-keyed', () => {
@@ -129,6 +138,111 @@ describe('chart formatters', () => {
     expect(compactNumber(Infinity, 'en-US')).toBe('Infinity');
     expect(percent('not-a-number', 'en-US')).toBe('not-a-number');
     expect(shortDate('not-a-date', 'en-US')).toBe('not-a-date');
-    expect(monthYear(null, 'en-US')).toBe('null');
+    expect(monthYear('not-a-date', 'en-US')).toBe('not-a-date');
+  });
+});
+
+describe('chart formatters as chart value formats', () => {
+  const builtIns: ReadonlyArray<[string, ChartValueFormat]> = [
+    ['compactNumber', compactNumber],
+    ['percent', percent],
+    ['shortDate', shortDate],
+    ['monthYear', monthYear],
+    ["currency('$')", currency('$')],
+    ["currency('$', 'en-US')", currency('$', 'en-US')],
+  ];
+
+  it.each(builtIns)(
+    '%s returns undefined for null and undefined',
+    (_name, format) => {
+      expect(format(null, 'en-US', 'gregory')).toBeUndefined();
+      expect(format(undefined, 'en-US', 'gregory')).toBeUndefined();
+    },
+  );
+
+  it('keeps the output for present values, zero included', () => {
+    expect(compactNumber(0, 'en-US')).toBe(compactIntl('en-US', 0));
+    expect(percent(0, 'en-US')).toBe(
+      new Intl.NumberFormat('en-US', {style: 'percent'}).format(0),
+    );
+    expect(currency('$', 'en-US')(0)).toBe(
+      `$${new Intl.NumberFormat('en-US').format(0)}`,
+    );
+    expect(monthYear('2024-01-05', 'en-US')).toBe(
+      new Intl.DateTimeFormat('en-US', {
+        month: 'short',
+        year: 'numeric',
+      }).format(new Date(2024, 0, 5)),
+    );
+  });
+
+  it('types present inputs as string and empty inputs as undefined', () => {
+    const value: unknown = 1;
+    expectTypeOf(compactNumber(1, 'en')).toEqualTypeOf<string>();
+    expectTypeOf(percent(0.5, 'en')).toEqualTypeOf<string>();
+    expectTypeOf(shortDate('2024-01-05', 'en')).toEqualTypeOf<string>();
+    expectTypeOf(
+      monthYear(new Date(), 'en', 'persian'),
+    ).toEqualTypeOf<string>();
+    expectTypeOf(currency('$')(1)).toEqualTypeOf<string>();
+    expectTypeOf(currency('$')(1, 'en')).toEqualTypeOf<string>();
+    expectTypeOf(compactNumber(null, 'en')).toEqualTypeOf<undefined>();
+    expectTypeOf(currency('$')(undefined)).toEqualTypeOf<undefined>();
+    expectTypeOf(compactNumber(value, 'en')).toEqualTypeOf<
+      string | undefined
+    >();
+    expectTypeOf(currency('$')(value, 'en')).toEqualTypeOf<
+      string | undefined
+    >();
+  });
+
+  it('accepts each built-in and a locale-free closure without a wrapper', () => {
+    expectTypeOf<Parameters<ChartValueFormat>>().toEqualTypeOf<
+      [value: unknown, locale: Locale, calendar: CalendarSystem]
+    >();
+    expectTypeOf<ReturnType<ChartValueFormat>>().toEqualTypeOf<
+      string | null | undefined
+    >();
+    expectTypeOf(compactNumber).toExtend<ChartValueFormat>();
+    expectTypeOf(percent).toExtend<ChartValueFormat>();
+    expectTypeOf(shortDate).toExtend<ChartValueFormat>();
+    expectTypeOf(monthYear).toExtend<ChartValueFormat>();
+    expectTypeOf(currency('$')).toExtend<ChartValueFormat>();
+    expectTypeOf((value: unknown) =>
+      String(value),
+    ).toExtend<ChartValueFormat>();
+  });
+});
+
+describe('currency() locale precedence', () => {
+  it('uses the factory locale when only the factory has one', () => {
+    expect(currency('€', 'de-DE')(1234.5)).toBe(
+      `€${compactIntl('de-DE', 1234.5)}`,
+    );
+  });
+
+  it('uses the call-time locale when the factory has none', () => {
+    expect(currency('€')(1234.5, 'de-DE')).toBe(
+      `€${compactIntl('de-DE', 1234.5)}`,
+    );
+    expect(currency('€')(12.5, 'de-DE')).toBe(
+      `€${new Intl.NumberFormat('de-DE').format(12.5)}`,
+    );
+  });
+
+  it('keeps the factory locale when both are given', () => {
+    expect(currency('€', 'en-US')(1234.5, 'de-DE')).toBe(
+      `€${compactIntl('en-US', 1234.5)}`,
+    );
+    expect(currency('€', 'de-DE')(1234.5, 'en-US')).toBe(
+      `€${compactIntl('de-DE', 1234.5)}`,
+    );
+  });
+
+  it('keeps the one-argument output of a factory locale', () => {
+    expect(currency('€', 'de-DE')(1234.5)).toBe(
+      currency('€', 'de-DE')(1234.5, 'de-DE'),
+    );
+    expect(compactIntl('de-DE', 1234.5)).not.toBe(compactIntl('en-US', 1234.5));
   });
 });

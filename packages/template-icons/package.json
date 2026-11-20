@@ -1,0 +1,41 @@
+{
+  "name": "@astryxdesign/template-icons",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Icon placeholders for Astryx templates: one export per icon meaning, drawn with Heroicons, or Lucide in the lucide look.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./24/solid": {
+      "types": "./24/solid/index.d.ts",
+      "default": "./24/solid/index.js"
+    },
+    "./20/solid": {
+      "types": "./20/solid/index.d.ts",
+      "default": "./20/solid/index.js"
+    },
+    "./16/solid": {
+      "types": "./16/solid/index.d.ts",
+      "default": "./16/solid/index.js"
+    },
+    "./lucide": {
+      "types": "./lucide/index.d.ts",
+      "default": "./lucide/index.js"
+    }
+  },
+  "peerDependencies": {
+    "@heroicons/react": "^2.2.0",
+    "lucide-react": "^1.66.0",
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "lucide-react": {
+      "optional": true
+    }
+  }
+}

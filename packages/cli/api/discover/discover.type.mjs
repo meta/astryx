@@ -62,6 +62,7 @@
  * @property {string[]} [themes] Theme slugs, when it adds any.
  * @property {string[]} [codemods] `<version>/<id>`, when it adds any.
  * @property {string[]} [agentDocs] Agent guidance, when a source lists any.
+ * @property {string[]} [skills] The skills its docs declare, by name, when it declares any: an app that keeps the Astryx skill in a skills folder gets each one, and `astryx docs skills/<name>` reads it. Installed packages only.
  * @property {string[]} [iconSets] Icon set names, when it adds any. Experimental: may change or be removed in a patch release.
  * @property {['iconSets']} [experimentalFields] Set on an entry a discover
  *   source lists when it carries `iconSets`: the fields that list an

@@ -218,6 +218,11 @@ export class SwitchTouchController {
   /** The thumb's default diameter in each state, for the first change. */
   private defaultThumb: {readonly off: number; readonly on: number} | null =
     null;
+  /**
+   * The thumb's diameter a theme sets for the state it attached in
+   * (`--_switch-thumb-width`), or null where the theme sets none.
+   */
+  private attachedThumb: number | null = null;
   private isOn: boolean;
   private isInteractive = true;
   /** The side the visuals show or head to. */
@@ -297,6 +302,15 @@ export class SwitchTouchController {
       return;
     }
     registerSwitchTable();
+    // A theme's thumb size for this state, read from its private variable:
+    // a style read, never a layout (the boxes wait for the first press). A
+    // value change before any press grows the thumb from it.
+    const themed = /^\s*(\d*\.?\d+)px\s*$/.exec(
+      getComputedStyle(elements.thumb).getPropertyValue(
+        '--_switch-thumb-width',
+      ),
+    );
+    this.attachedThumb = themed ? Number(themed[1]) : null;
     this.thumb = createMotionEngine(elements.thumb);
     // The layer rests clear (its class's opacity 0) while the visuals show
     // the value; from here its opacity is the animator's. The stylesheet
@@ -464,13 +478,15 @@ export class SwitchTouchController {
     // rest moves whole instead, keeping its start time and velocity. A
     // reduced-motion dip shifts whole, its end included, and keeps going.
     // A value change before any measurement reads the boxes once here. The
-    // track is the rendered one, but the circle is already the new value's,
-    // so the previous circle is the state's default size.
+    // track is the rendered one, but the circle is already the new value's.
+    // The previous circle is the state it attached in: the theme's size for
+    // it, read then, else the state's default size.
     let measured: SwitchTouchGeometry | null = null;
     if (!this.isGeometryMeasured && this.defaultThumb != null) {
       this.measureGeometry();
       measured = this.geometry;
-      const size = this.defaultThumb[previous ? 'on' : 'off'];
+      const size =
+        this.attachedThumb ?? this.defaultThumb[previous ? 'on' : 'off'];
       this.geometry = switchTouchGeometry(
         measured.trackWidth,
         measured.trackHeight,

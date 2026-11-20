@@ -59,6 +59,16 @@ export function isShownAsPopover(element: Element): boolean {
   }
 }
 
+/** Whether `element` is a modal dialog: open with `showModal()`. */
+export function isModalDialog(element: Element): boolean {
+  try {
+    return element.tagName === 'DIALOG' && element.matches(':modal');
+  } catch {
+    // An engine without `:modal` reports no modal dialog.
+    return false;
+  }
+}
+
 /**
  * Whether `dialog` is in the top layer: open, or shown as a popover. A
  * non-modal Drawer is shown with `showPopover()` and never sets `open`.

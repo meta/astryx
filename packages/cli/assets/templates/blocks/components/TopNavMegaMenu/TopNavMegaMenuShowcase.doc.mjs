@@ -16,11 +16,4 @@ export const doc = {
     'TopNavMegaMenuItem',
     'TopNavMegaMenuFeaturedCard',
   ],
-  icons: {
-    BookOpenIcon: 'book',
-    CodeBracketIcon: 'code',
-    MagnifyingGlassIcon: 'search',
-    RocketLaunchIcon: 'rocket',
-    ShieldCheckIcon: 'shield',
-  },
 };

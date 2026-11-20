@@ -4,7 +4,13 @@
 
 import {useState} from 'react';
 
-import {VStack, HStack, Layout, LayoutContent} from '@astryxdesign/core/Layout';
+import {
+  VStack,
+  HStack,
+  Layout,
+  LayoutContent,
+  StackItem,
+} from '@astryxdesign/core/Layout';
 import {Text, Heading} from '@astryxdesign/core/Text';
 import {Card} from '@astryxdesign/core/Card';
 import {Grid, GridSpan} from '@astryxdesign/core/Grid';
@@ -31,7 +37,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
-import {ArrowUpIcon, ArrowDownIcon} from '@heroicons/react/24/outline';
+import {ArrowUpIcon, ArrowDownIcon} from '@astryxdesign/template-icons';
 
 // ============= DATA =============
 
@@ -394,7 +400,7 @@ function PortfolioChart() {
           tickFormatter={(v: number) => xAxisLabels[v] ?? ''}
           tick={{
             fontSize: 'var(--font-size-sm, 12px)',
-            fill: 'var(--color-text-secondary, #4E606F)',
+            fill: 'var(--color-text-secondary, #445564)',
           }}
           axisLine={false}
           tickLine={false}
@@ -405,7 +411,7 @@ function PortfolioChart() {
           tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`}
           tick={{
             fontSize: 'var(--font-size-sm, 12px)',
-            fill: 'var(--color-text-secondary, #4E606F)',
+            fill: 'var(--color-text-secondary, #445564)',
           }}
           axisLine={false}
           tickLine={false}
@@ -747,18 +753,20 @@ export default function DashboardPortfolioTemplate() {
                   Past 24 hours
                 </Text>
               </VStack>
-              <Button
-                label="View more"
-                variant="secondary"
-                size="lg"
-                onClick={() =>
-                  // Demo only: replace this toast with the call that performs the action.
-                  showToast({
-                    body: 'Demo: the full market overview would open here',
-                    uniqueID: 'more-market',
-                  })
-                }
-              />
+              <StackItem>
+                <Button
+                  label="View more"
+                  variant="secondary"
+                  size="lg"
+                  onClick={() =>
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: 'Demo: the full market overview would open here',
+                      uniqueID: 'more-market',
+                    })
+                  }
+                />
+              </StackItem>
             </HStack>
 
             {/* Market index cards */}

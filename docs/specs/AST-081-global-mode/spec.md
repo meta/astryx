@@ -436,12 +436,15 @@ works on is `spec:AST-040` FR9's.
     in the package's own folder), the locale and time zone a run's debug
     record names (on Linux, kept by any command that delivers a debug
     record), the CLI's own docs tree, each stored doc's checked contents,
-    keyed by its text, discover's record of the integrations a project loads
+    keyed by its text, what `template` reads from a template's source to
+    name the components it uses, keyed by the source's text and the parser's
+    release, discover's record of the integrations a project loads
     and what each adds, and what it searches in its sources' saved copies
-    (which `search` reads for its discover line), and
-    doctor's
-    file-only docs checks and theme-wiring scan, which doctor keeps only
-    while the folder exists), a
+    (which `search` reads for its discover line), doctor's file-only docs
+    checks and theme-wiring scan, and what doctor's Core-props check finds in
+    the project's source files, keyed by the folders it lists and the files it
+    reads, and by the TypeScript, Core and project-config versions it used;
+    doctor keeps these only while the folder exists), a
     folder only the user can
     reach (made `0700` by the first run that keeps a gather: `search` or
     `build`, or another of those commands where an integration can load,
@@ -500,7 +503,29 @@ works on is `spec:AST-040` FR9's.
     `<folder>/astryx-project/SKILL.md` (the project skill) when the folder is
     in the project, else `<folder>/astryx/SKILL.md` (the computer-level
     text). The project skills folders `--to skills` writes sit in the folder
-    where `init` writes agent docs.
+    where `init` writes agent docs. `astryx upgrade --apply` refreshes the
+    project places astryx.config `skills.to` saves under the same rules as
+    `init`: the copies of a place are written together or not at all, an
+    edited file or one Astryx did not write is kept, nothing is written
+    through a folder linked out of the project, and none is written in the
+    home folder or a settings folder. An Astryx block is refreshed wherever
+    it is; only the advice to add one is left out where `skills.to` saves no
+    `agents-md`. `astryx doctor`'s `skill-places` check reports each saved
+    file (current, missing, from another release, or kept), copies of a
+    place that differ, the block and the skill both present without both
+    being saved, and a project skill named `astryx`, and scans no skill
+    folder in the home folder or a settings folder.
+    `astryx init --to <places> --once` writes a copy saved nowhere, so no
+    later run touches it, and refuses the block and any place already
+    saved. `astryx init --remove` (`--remove-agents` is the same option)
+    removes the skill from every place the project saves, or with `--to`
+    from the places named, drops each from what is saved, and removes the
+    block when no `--to` is given or `--to` names `agents-md`; folders saved
+    for this computer stay unless `--to` names them. A skill file Astryx did
+    not write is kept, a linked skill folder's included; an unedited Astryx
+    file is the place's own, through a link too, and a folder saved for this
+    computer where every file was kept is not saved. In the project, linked
+    copy folders share one file, written and removed once.
 
   No run writes a project's agent docs into the home folder or a settings folder
   in it (`architecture:cli-surface` INV31); the computer-level agent text above
@@ -521,11 +546,16 @@ works on is `spec:AST-040` FR9's.
     it names no version, no release-specific command or prop, and only entry
     points every release keeps (`search`, `docs`, `component`, and the like),
     so an older copy never misleads.
+    Inside a project that has its own Astryx text (the `astryx-project` skill,
+    or an Astryx block in AGENTS.md or CLAUDE.md), it tells the agent to follow
+    that text, which knows the project's version and setup.
     It also gives the build route the project agent docs give, through their
-    shared workflow wording: work in a project folder, new or existing, adding
-    `@astryxdesign/core` and `@astryxdesign/cli`, or, where the project already
-    installs Core, the CLI at that Core's version; run `astryx init` there; then
-    start from a template, check, and deliver the built project.
+    shared workflow wording: work in a project folder; a new project adds
+    `@astryxdesign/core` and `@astryxdesign/cli`, an existing app that does not
+    use Astryx keeps its current UI stack unless the user asks for Astryx (then
+    it adds both), and a project that already installs Core adds the CLI at that
+    Core's version; a project that has or adds Astryx runs `astryx init`, starts
+    from a template, checks, and delivers the built project.
     When it names `astryx`, it ends with
     ``If `astryx` is not found, run `<install step>` first.``, where the
     step installs the CLI for the computer with the package manager and folder
@@ -550,7 +580,10 @@ works on is `spec:AST-040` FR9's.
     own: the global copy refreshes `<folder>/astryx/SKILL.md` on the same
     schedule while the file is there, an edited file kept, and never writes
     it again once it is deleted; `astryx init --to <folder>` writes it
-    again.
+    again, and `astryx init --remove --to <folder>` removes it and forgets
+    the folder. Doctor's computer-level text check names these folders,
+    which are missing and which are from another release, also while the
+    computer-level text is turned off.
   - The settings file is `astryx/settings.json` in the per-user configuration
     directory (FR7): `computerAgentText.install`, `true` or `false`, and
     `computerAgentText.links`, the links the CLI made, so removal removes
@@ -591,8 +624,10 @@ works on is `spec:AST-040` FR9's.
     Starting again is not a hand-off: the same copy runs, with the same
     arguments, folder, and standard streams.
   - A command that acts on the computer rather than the folder it runs in,
-    `astryx init --user` (FR8) and `astryx docs global` with its pages, the
-    docs of global mode itself, is never handed to a project's release: it is
+    `astryx init --user` (FR8), `astryx init --to` naming only places outside
+    the project (`user`, or folders outside it) with no feature beyond the
+    agent docs (FR8), and `astryx docs global` with its pages, the docs of
+    global mode itself, is never handed to a project's release: it is
     answered as outside a project wherever it runs, so those docs read the same
     inside a project whose release predates them, and its standard-error line
     says it answered for the computer.
