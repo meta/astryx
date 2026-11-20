@@ -3526,67 +3526,55 @@ export const BORDER_TO_COLOR = 'var(--border-width) solid transparent';
  * @param {string} part
  */
 function borderSetToNone(ctx, data, s, part) {
-  const asked = borderSides(String(/** @type {any} */ (s).thing ?? ''));
-  return [...(data?.settings ?? [])].reverse().find(
-    (/** @type {any} */ x) =>
-      x.source === 'property' &&
-      /^border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?(?:-(?:width|style))?$/.test(
-        String(x.thing),
-      ) &&
-      // (Only a none that hides every side the color is on: "border-width
-      // 0 0 1px" still draws the bottom.)
-      asked.every(side =>
-        hiddenSides(String(x.thing), String(x.value)).includes(side),
-      ) &&
-      // (A none set for one look hides only that look: a color for every
-      // button still shows on the others.)
-      (!x.when || x.when === s.when) &&
-      (!x.state || x.state === s.state) &&
-      partsOf(ctx, x).includes(part),
-  );
-}
-
-const BOX_SIDES = /** @type {const} */ (['top', 'right', 'bottom', 'left']);
-
-/**
- * The sides a border property names: one side, a logical pair, or all four.
- * @param {string} thing
- * @returns {string[]}
- */
-function borderSides(thing) {
-  const m =
-    /^border-(top|right|bottom|left|block|inline)(?:-(start|end))?/.exec(thing);
-  if (!m) return [...BOX_SIDES];
-  if (m[1] === 'block')
-    return m[2] ? [m[2] === 'start' ? 'top' : 'bottom'] : ['top', 'bottom'];
-  if (m[1] === 'inline')
-    return m[2] ? [m[2] === 'start' ? 'left' : 'right'] : ['left', 'right'];
-  return [m[1]];
+  const turned = borderTurnedOff(ctx, data, s, part);
+  return turned?.whole ? turned.setting : undefined;
 }
 
 /**
- * The sides a border width, style or shorthand leaves with no line: a whole
- * none, hidden or zero token. A width or style of one to four values names
- * each side as CSS reads them ("0 0 1px" hides the top and the sides).
- * @param {string} thing
- * @param {string} value
- * @returns {string[]}
+ * The latest none or zero the theme sets on a part's border where a color
+ * is asked, and whether it turns the whole border off: `border none` (or
+ * `0`), a single-value `border-width 0` or `border-style none`, with no
+ * later setting on the part that draws a side again. A per-side, logical
+ * or multi-value none (`border-bottom none`, `border-width '0 0 1px'`)
+ * leaves a side that may draw: it is not whole.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {any} data
+ * @param {{on?: string, when?: string, state?: string}} s
+ * @param {string} part
+ * @returns {{setting: any, whole: boolean} | null}
  */
-function hiddenSides(thing, value) {
-  const sides = borderSides(thing);
-  const tokens = value.trim().split(/\s+/).filter(Boolean);
-  const blank = (/** @type {string | undefined} */ t) =>
-    /^(?:none|hidden|0(?:px|rem|em)?)$/i.test(t ?? '');
-  if (/-(?:width|style)$/.test(thing) && sides.length === 4) {
-    const at = [
-      [0, 0, 0, 0],
-      [0, 1, 0, 1],
-      [0, 1, 2, 1],
-      [0, 1, 2, 3],
-    ][Math.min(tokens.length, 4) - 1] ?? [0, 0, 0, 0];
-    return BOX_SIDES.filter((_, i) => blank(tokens[at[i]]));
+function borderTurnedOff(ctx, data, s, part) {
+  const settings = /** @type {any[]} */ (data?.settings ?? []);
+  const edge =
+    /^border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?(?:-(?:width|style))?$/;
+  const here = (/** @type {any} */ x) =>
+    x.source === 'property' &&
+    edge.test(String(x.thing)) &&
+    // (A none set for one look hides only that look.)
+    (!x.when || x.when === s.when) &&
+    (!x.state || x.state === s.state) &&
+    partsOf(ctx, x).includes(part);
+  const blank = (/** @type {string} */ t) =>
+    /^(?:none|hidden|0(?:px|rem|em)?)$/i.test(t);
+  for (let i = settings.length - 1; i >= 0; i--) {
+    const x = settings[i];
+    if (!here(x)) continue;
+    const tokens = String(x.value).trim().split(/\s+/).filter(Boolean);
+    if (!tokens.some(blank)) continue;
+    const whole =
+      (x.thing === 'border' ||
+        ((x.thing === 'border-width' || x.thing === 'border-style') &&
+          tokens.length === 1)) &&
+      // (A later setting on the part that draws a side again.)
+      !settings
+        .slice(i + 1)
+        .some(
+          (/** @type {any} */ y) =>
+            here(y) && !String(y.value).trim().split(/\s+/).some(blank),
+        );
+    return {setting: x, whole};
   }
-  return tokens.some(t => blank(t)) ? sides : [];
+  return null;
 }
 
 /**
@@ -3624,7 +3612,9 @@ export function borderFor(ctx, slug, data, s) {
         drawsLine(ctx.C, [t], 'border', null, s.when) ||
         (s.state && drawsLine(ctx.C, [t], 'border', s.state, s.when)) ||
         bordersBeyondCore(ctx, data, s, t) ||
-        borderSetToNone(ctx, data, s, t),
+        // (Any none the theme sets there, a whole one or one side's: the
+        // color is saved as written, and no border is brought.)
+        borderTurnedOff(ctx, data, s, t) != null,
     )
   )
     return null;
@@ -3640,10 +3630,9 @@ export function borderFor(ctx, slug, data, s) {
 }
 
 /**
- * Refuses a border color on a part whose border the theme itself sets to
- * none on every side the color is on (`border none --on tab`): the two say
- * opposite things, so neither is changed for the other. The refusal names
- * the none and offers its undo.
+ * Refuses a border color on a part whose whole border the theme itself turns
+ * off (`border none --on tab`): the two say opposite things, so neither is
+ * changed for the other. The refusal names the none and offers its undo.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {any} data

@@ -6,9 +6,10 @@
  * tab, a primary button, a banner), a border color, one color or one per
  * side, brings the border it needs: a transparent one at rest, as wide as
  * the theme's border width, written in the same change and named in the
- * result, so one undo takes back both. Where the theme itself sets that
- * border to none on every side the color is on, the color is refused,
- * naming the none and its undo; a none on fewer sides is no conflict. Whether a part draws a border is read
+ * result, so one undo takes back both.
+ * Where the theme itself turns the whole border off, the color is refused,
+ * naming the none and its undo; a none on one side or in a list of values
+ * is no conflict, and brings no border. Whether a part draws a border is read
  * one way for set and how: drawsLine, by the variant asked, with a side
  * cleared only on the first or last child still drawn on the others.
  */
@@ -207,34 +208,26 @@ describe('a border none read exactly', () => {
   );
 });
 
-describe('a none that hides only some sides', () => {
+describe('a none that turns off only part of the border', () => {
   it(
-    'refuses a color only where a none hides every side it is on',
+    'is no conflict, and brings no border: the color is saved as written',
     async () => {
       for (const [thing, value] of [
         ['border-width', '0 0 1px'],
         ['border-style', 'none none solid'],
         ['border-bottom', 'none'],
+        ['border-block-width', '0 1px'],
       ]) {
-        await themeEditSet('u', thing, value, {cwd, on: 'inputs'});
-        // (Saved, never refused: a side still draws.)
-        await themeEditSet('u', 'border-color', '#999999', {
+        await themeEditSet('u', thing, value, {cwd, on: 'tab'});
+        const r = await themeEditSet('u', 'border-color', '#999999', {
           cwd,
-          on: 'inputs',
+          on: 'tab',
         });
+        expect(r.data.setting.thing).toBe('border-color');
+        expect(r.data.notes.join('\n')).not.toContain('added a');
         await themeEditUndo('u', {cwd});
         await themeEditUndo('u', {cwd});
       }
-      // (The side it hides, said alone, is refused.)
-      await themeEditSet('u', 'border-bottom', 'none', {cwd, on: 'inputs'});
-      const bottom = await refusal(() =>
-        themeEditSet('u', 'border-bottom-color', '#999999', {
-          cwd,
-          on: 'inputs',
-        }),
-      );
-      expect(bottom.message).toContain('u sets border-bottom none on inputs');
-      await themeEditUndo('u', {cwd});
     },
     T,
   );
