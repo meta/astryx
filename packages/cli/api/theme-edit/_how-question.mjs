@@ -8637,19 +8637,32 @@ export function draftAnswer(ctx, env, question) {
     };
     // ("inputs: 1px border #79747e, 2px #6750a4 when focused": a length and
     // a color, or a color, with no look of its own, after the part's line
-    // in the same list, is that line, in its own state.)
+    // in the same list, is that line, in its own state. Other parts' asks
+    // said in between, "…, rounder cards, compact tables, 2px #6750a4 when
+    // focused", keep the list: the line is the last one said before.)
+    let line = a;
+    for (
+      let k = i - 1;
+      k >= 1 &&
+      !b.parts.length &&
+      line.parts.length &&
+      !(line.aspects.length === 1 && line.aspects[0] === 'border') &&
+      !/[;\n.]/.test(clauses[k].joint ?? '');
+      k--
+    )
+      line = clauses[k - 1];
     if (
       (!b.parts.length ||
-        b.parts.every(x => a.parts.some(y => y.on === x.on))) &&
+        b.parts.every(x => line.parts.some(y => y.on === x.on))) &&
       !b.aspects.length &&
       b.colors.length >= 1 &&
       // (A line is a width and a color: a bare color, "pink #DB2777",
       // is read by the readers after.)
       b.lengths.length > 0 &&
       oneColor &&
-      a.parts.length &&
-      a.aspects.length === 1 &&
-      a.aspects[0] === 'border' &&
+      line.parts.length &&
+      line.aspects.length === 1 &&
+      line.aspects[0] === 'border' &&
       !/[;\n.]/.test(b.joint ?? '') &&
       b.text
         .trim()
@@ -8664,7 +8677,7 @@ export function draftAnswer(ctx, env, question) {
         )
     ) {
       typedOnly();
-      b.parts = a.parts.map(x => ({...x}));
+      b.parts = line.parts.map(x => ({...x}));
       b.aspects = ['border'];
       continue;
     }

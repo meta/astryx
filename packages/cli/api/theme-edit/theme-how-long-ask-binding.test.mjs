@@ -170,6 +170,15 @@ const ROWS = [
     },
   ],
   [
+    "a part's line said again after other parts' asks is that line",
+    {
+      q: 'inputs: 1px border #79747e, rounder cards, compact tables, 2px #6750a4 when focused',
+      has: ["border '2px solid #6750a4' --on inputs --state focus-within"],
+      never: /background-color '#6750a4'/,
+      says: /^(?![\s\S]*not used: "2px #6750a4)/,
+    },
+  ],
+  [
     'links in tabs, which hold no link, are named, never written on the tab',
     {
       q: 'tabs: 14px text, blue links',
