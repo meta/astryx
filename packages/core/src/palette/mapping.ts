@@ -1061,14 +1061,6 @@ export function planPaletteRequest(
   if (Object.keys(fills).length) {
     config.families = anchorDarkFills(config, dials, fills, context);
   }
-  // The editor grows more families (context.editor).
-  if (context.editor) {
-    for (const family of grownFamilies(dials, context)) {
-      if (!config.families.some(f => f?.id === family.id)) {
-        config.families.push(family);
-      }
-    }
-  }
   return {config, fills};
 }
 
