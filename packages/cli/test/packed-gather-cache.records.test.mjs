@@ -117,6 +117,9 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
       "what doctor's Core-props check finds in the project's source files, keyed by the folders it lists and the files it reads, and by the TypeScript, Core and project-config versions it used",
     );
     expect(plain).toContain(
+      "what doctor's Core-button check finds in the project's source files, keyed by the folders it lists and the files it reads, and by the installed packages and Node.js version it used",
+    );
+    expect(plain).toContain(
       'On Linux, when a debug handler is set, runs also keep the locale and time zone here.',
     );
     // The row names the other checks that can make the folder.
