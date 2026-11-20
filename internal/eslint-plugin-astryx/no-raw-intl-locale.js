@@ -115,6 +115,7 @@ const APPROVED_IMPLEMENTATION_FILES = [
   'packages/core/src/PowerSearch/formatFilterValue.ts',
   // NumberInput's locale-aware read of typed and pasted text: it derives the
   // grouping/decimal separators and group sizes from Intl rather than a table.
+  // It also writes ProgressBar's default percentage.
   'packages/core/src/NumberInput/numberParser.ts',
   // DateInput/DateTimeInput typed dates in any calendar: month, era and
   // weekday names, field order and digits read off Intl and parsed back, the

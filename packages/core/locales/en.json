@@ -1031,6 +1031,10 @@
     "defaultMessage": "Required",
     "description": "Screen-reader-only text that a required Slider adds to its description. One word, neutral tone."
   },
+  "@astryx.slider.rangeValue": {
+    "defaultMessage": "{start} – {end}",
+    "description": "Text value of a range slider beside its track: the two selected values. `{start}` and `{end}` are already formatted numbers. Example: `20 – 80`."
+  },
   "@astryx.tabBar.badgedItem": {
     "defaultMessage": "{label}, {badge}",
     "description": "Screen-reader name of a bottom tab bar item that shows a badge (\"Library, 3\"). {label} is the tab's visible name; {badge} is the badge's count or its own label (\"3 unread\"). Translators may reorder the two or change the separator."
@@ -1294,6 +1298,14 @@
   "@astryx.dateRangeInput.dialogLabel": {
     "defaultMessage": "Choose date range",
     "description": "Screen-reader-only accessible name for the popover dialog opened from a DateRangeInput. Imperative verb + noun phrase."
+  },
+  "@astryx.dateRangeInput.triggerLabel": {
+    "defaultMessage": "{label}: {value}",
+    "description": "Accessible name of the date range field trigger. `{label}` is the field label; `{value}` is the selected range, or the placeholder when nothing is selected. Example: `Travel dates: Mar 1 – Mar 10`."
+  },
+  "@astryx.dateRangeInput.rangeValue": {
+    "defaultMessage": "{start} – {end}",
+    "description": "The selected range on the date range field trigger. `{start}` and `{end}` are already formatted dates. Example: `Mar 1 – Mar 10`."
   },
   "@astryx.dateTimeInput.placeholder": {
     "defaultMessage": "Select a date",
@@ -1939,6 +1951,10 @@
     "defaultMessage": "Thumbnail",
     "description": "Generic screen-reader name for a Thumbnail (image preview) that has no `alt` or `label`. Last-resort fallback so the control is never nameless; prefer a real name via `alt` or `label`."
   },
+  "@astryx.thumbnail.nameWithAlt": {
+    "defaultMessage": "{label} — {alt}",
+    "description": "Accessible name of a thumbnail that has both a label and image alt text. `{label}` is the caller label, such as a file name; `{alt}` describes the image. Example: `Invoice.pdf — First page of the invoice`."
+  },
   "@astryx.timeInput.clearLabel": {
     "defaultMessage": "Clear {label}",
     "description": "Screen-reader-only label on the X that clears the value from a TimeInput. Example: `Clear Start time`."
@@ -1998,6 +2014,14 @@
   "@astryx.multiSelector.selectedCount": {
     "defaultMessage": "{count, plural, one {# selected} other {# selected}}",
     "description": "Visible text on a closed MultiSelector's trigger when it shows a count of the chosen options (`triggerDisplay=\"count\"`), for example `2 selected`. `{count}` is the number of chosen options; use a plural form if your language needs one."
+  },
+  "@astryx.multiSelector.labelsOverflow": {
+    "defaultMessage": "{labels}, +{count, number}",
+    "description": "Trigger text of a multi-select that shows selected option labels, when more are selected than it shows. `{labels}` is the shown labels already joined as a list; `{count}` is how many more are selected. Example: `Red, Green, Blue, +2`. Translators may reorder the two and replace the plus sign."
+  },
+  "@astryx.multiSelector.badgesOverflow": {
+    "defaultMessage": "+{count, number}",
+    "description": "Overflow marker after the selected-option badges on a multi-select trigger, when more are selected than it shows. `{count}` is how many more. Example: `+2`. Translators may replace the plus sign."
   },
   "@astryx.multiSelector.createOption": {
     "defaultMessage": "Create \"{query}\"",

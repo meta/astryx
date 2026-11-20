@@ -121,6 +121,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/MultiSelector/MultiSelector.generated';
+import {useListFormatter} from '../i18n/useListFormatter';
 
 // Bundlers replace this value at build time. The declaration lets a product
 // without Node's types type-check this file.
@@ -1210,6 +1211,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         controlStyle != null),
   );
   const t = useComponentTranslator();
+  const formatList = useListFormatter();
   const pressable = usePressFeedback();
   const {
     isRequired: isEffectivelyRequired,
@@ -1990,10 +1992,14 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       case 'labels': {
         const displayed = selectedLabels.slice(0, 3);
         const remaining = selectedLabels.length - displayed.length;
+        const labels = formatList(displayed);
         const text =
           remaining > 0
-            ? `${displayed.join(', ')}, +${remaining}`
-            : displayed.join(', ');
+            ? t('@astryx.multiSelector.labelsOverflow', {
+                labels,
+                count: remaining,
+              })
+            : labels;
         return (
           <span {...stylex.props(styles.triggerText)}>
             {formatValue?.(selectedItems) ?? text}
@@ -2011,7 +2017,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
             ))}
             {remaining > 0 && (
               <span {...stylex.props(styles.triggerOverflow)}>
-                +{remaining}
+                {t('@astryx.multiSelector.badgesOverflow', {count: remaining})}
               </span>
             )}
           </span>
@@ -2027,6 +2033,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     formatValue,
     maxBadges,
     t,
+    formatList,
   ]);
 
   // Render search input
