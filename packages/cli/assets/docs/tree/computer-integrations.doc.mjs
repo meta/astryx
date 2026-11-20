@@ -73,7 +73,7 @@ export const docs = {
           type: 'list',
           style: 'unordered',
           items: [
-            'Outside a project, `{@command doctor}` lists the global integrations it uses and warns about each it skips.',
+            'Outside a project, `{@command doctor}` lists the global integrations it uses, warns about each it skips, and names the issues in the files of each it uses, except issues that need a comparison with Core components.',
             'Inside a project, `{@command doctor}` and `{@command discover}` list the ones the project could add.',
           ],
         },

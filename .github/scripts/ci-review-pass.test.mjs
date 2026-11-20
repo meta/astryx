@@ -64,6 +64,7 @@ function stubGithub({
   statuses = {},
   reviews = null,
   permission = 'write',
+  events = [],
 }) {
   const calls = {reRunWorkflow: [], listWorkflowRuns: []};
   const github = {
@@ -92,13 +93,24 @@ function stubGithub({
         },
       },
       repos: {
-        getCollaboratorPermissionLevel: async () => ({data: {permission}}),
+        // One permission for everyone, or one per login.
+        getCollaboratorPermissionLevel: async ({username}) => ({
+          data: {
+            permission:
+              typeof permission === 'string'
+                ? permission
+                : (permission[username] ?? 'read'),
+          },
+        }),
         listCommitStatusesForRef: async ({ref}) => ({
           data:
             typeof statuses[ref] === 'function'
               ? statuses[ref]()
               : (statuses[ref] ?? []),
         }),
+      },
+      issues: {
+        listEvents: async () => ({data: events}),
       },
       actions: {
         listWorkflowRuns: async options => {
@@ -131,8 +143,21 @@ function stubGithub({
   return {github, calls};
 }
 
-const passed = [{context: 'review-required', state: 'success'}];
-const pending = [{context: 'review-required', state: 'pending'}];
+/** The spec half as Review signal's spec-owner job writes it. */
+const specOk = {
+  context: 'spec-owner-approval',
+  state: 'success',
+  creator: {login: 'github-actions[bot]'},
+  description: 'Mirrors review-required · spec ok (owner1)',
+};
+const specWaiting = {
+  context: 'spec-owner-approval',
+  state: 'pending',
+  creator: {login: 'github-actions[bot]'},
+  description: 'Mirrors review-required · spec waiting',
+};
+const passed = [{context: 'review-required', state: 'success'}, specOk];
+const pending = [{context: 'review-required', state: 'pending'}, specWaiting];
 const pull = (number, sha, extra = {}) => ({
   number,
   state: 'open',
@@ -326,6 +351,147 @@ describe('starting the heavy suites', () => {
       pull: pull(1, 'h1'),
     });
     expect(stub.calls.reRunWorkflow).toEqual([12]);
+  });
+});
+
+describe("the heavy turn's review (DEC-32)", () => {
+  // A fork's author, as the workflow token sees a private organization member
+  // or an outside contributor alike: no repository access of their own.
+  const FORK = {repo: {full_name: 'vjeux/r'}};
+  const forkPull = (sha, extra = {}) =>
+    pull(1, sha, {user: {login: 'vjeux'}, ...extra, head: {sha, ...FORK}});
+  const labelled = (actor, name = 'ci:run') => ({
+    event: 'labeled',
+    label: {name},
+    actor: {login: actor},
+  });
+  const MAINTAINER = {maint: 'write', vjeux: 'read', reader: 'read'};
+  // [heavy turn, merge gate (DEC-11, unchanged)]
+  const both = async (
+    pr,
+    {reviews, events = [], permission = MAINTAINER, statuses = passed} = {},
+  ) => {
+    const stub = stubGithub({
+      pulls: [pr],
+      statuses: {[pr.head.sha]: statuses},
+      permission,
+      events,
+      ...(reviews ? {reviews: {1: reviews}} : {}),
+    });
+    const input = {...REVIEW, ...stub, owner: 'o', repo: 'r', pull: pr};
+    return [
+      await turn.heavyReviewPasses(input),
+      await turn.reviewPasses(input),
+    ];
+  };
+
+  it("starts a maintainer-admitted fork's head the review app approved, while merging still needs an engineering owner", async () => {
+    expect(await both(forkPull('h1'), {events: [labelled('maint')]})).toEqual([
+      true,
+      false,
+    ]);
+    // The admission stays when the label is gone (FR29).
+    expect(
+      await both(forkPull('h1'), {
+        events: [
+          labelled('maint'),
+          {event: 'unlabeled', label: {name: 'ci:run'}, actor: {login: 'bot'}},
+        ],
+      }),
+    ).toEqual([true, false]);
+  });
+
+  it('does not let the review app start a fork no maintainer admitted', async () => {
+    // No ci:run, or one from a reader or a bot.
+    for (const events of [
+      [],
+      [labelled('reader')],
+      [labelled('github-actions[bot]')],
+      [labelled('maint', 'ci:run-a11y')],
+    ])
+      expect((await both(forkPull('h1'), {events}))[0]).toBe(false);
+    // A head with no repository (a deleted fork) is a fork.
+    expect(
+      (
+        await both(
+          pull(1, 'h1', {user: {login: 'x'}, head: {sha: 'h1', repo: null}}),
+        )
+      )[0],
+    ).toBe(false);
+    // An engineering owner's approval still counts, as it does to merge.
+    expect(
+      await both(forkPull('h1'), {
+        reviews: [
+          {user: {login: 'owner1'}, commit_id: 'h1', state: 'APPROVED'},
+        ],
+      }),
+    ).toEqual([true, true]);
+  });
+
+  it('does not count an approval of an older head', async () => {
+    expect(
+      await both(forkPull('h2'), {
+        reviews: [appApproval('h1')],
+        events: [labelled('maint')],
+      }),
+    ).toEqual([false, false]);
+  });
+
+  it("never counts the author's own approval", async () => {
+    const own = pull(1, 'h1', {user: {login: 'owner1'}});
+    expect(
+      await both(own, {
+        reviews: [
+          {user: {login: 'owner1'}, commit_id: 'h1', state: 'APPROVED'},
+        ],
+      }),
+    ).toEqual([false, true]);
+  });
+
+  it('reads only the spec half of the gate, never review-required success', async () => {
+    const codeWaiting = [
+      {context: 'review-required', state: 'pending'},
+      specOk,
+    ];
+    // review-required waits for an engineering owner; the heavy turn starts.
+    expect(
+      await both(forkPull('h1'), {
+        events: [labelled('maint')],
+        statuses: codeWaiting,
+      }),
+    ).toEqual([true, false]);
+    // The spec half not passed: never, whoever approved.
+    expect(
+      (await both(pull(1, 'h1'), {statuses: pending, permission: 'write'}))[0],
+    ).toBe(false);
+  });
+
+  it("starts a write-access author's approved head, as before", async () => {
+    expect(await both(pull(1, 'h1'), {permission: 'write'})).toEqual([
+      true,
+      true,
+    ]);
+  });
+
+  it('starts the deferred run for an admitted fork head', async () => {
+    const pr = forkPull('h1');
+    const stub = stubGithub({
+      pulls: [pr],
+      runs: [ciRun(11, 'h1')],
+      jobs: {11: deferredJobs},
+      statuses: {h1: [{context: 'review-required', state: 'pending'}, specOk]},
+      permission: MAINTAINER,
+      events: [labelled('maint')],
+    });
+    const said = await turn.startHeavy({
+      ...REVIEW,
+      ...stub,
+      owner: 'o',
+      repo: 'r',
+      pull: pr,
+    });
+    expect(stub.calls.reRunWorkflow).toEqual([11]);
+    expect(said).toContain('started run 11 again in full');
   });
 });
 

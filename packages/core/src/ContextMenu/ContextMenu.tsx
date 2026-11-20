@@ -444,15 +444,24 @@ export function ContextMenu({
   const focusOnShowRef = useRef(false);
   const focusFirstRef = useRef<() => void>(() => {});
   const [submenuPath, setSubmenuPath] = useState<ContextMenuItemData[]>([]);
+  // The row reads a node label's text as the level opens. That text names the
+  // sheet.
+  const [submenuTitles, setSubmenuTitles] = useState<(string | undefined)[]>(
+    [],
+  );
   const currentSubmenu = submenuPath.at(-1);
   const currentItems = currentSubmenu?.items ?? items;
   const currentTitle = currentSubmenu?.label ?? label;
-  const sheetLabel = typeof currentTitle === 'string' ? currentTitle : label;
+  const sheetLabel =
+    typeof currentTitle === 'string'
+      ? currentTitle
+      : submenuTitles.at(-1) || label;
 
   const updateOpenState = useCallback(
     (nextIsOpen: boolean) => {
       if (!nextIsOpen) {
         setSubmenuPath([]);
+        setSubmenuTitles([]);
       }
       setIsOpen(nextIsOpen);
       onOpenChange?.(nextIsOpen);
@@ -908,7 +917,10 @@ export function ContextMenu({
                 <Icon icon="chevronLeft" size="sm" xstyle={rtlStyles.mirror} />
               }
               isIconOnly
-              onClick={() => setSubmenuPath(path => path.slice(0, -1))}
+              onClick={() => {
+                setSubmenuPath(path => path.slice(0, -1));
+                setSubmenuTitles(titles => titles.slice(0, -1));
+              }}
             />
             {sheetViewHeading}
           </div>
@@ -918,7 +930,10 @@ export function ContextMenu({
         <MenuBottomSheetActionList
           items={currentItems}
           onSelect={handleBottomSheetSelect}
-          onOpenSubmenu={item => setSubmenuPath(path => [...path, item])}
+          onOpenSubmenu={(item, title) => {
+            setSubmenuPath(path => [...path, item]);
+            setSubmenuTitles(titles => [...titles, title]);
+          }}
         />
       </div>
     ) : (

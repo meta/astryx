@@ -27,6 +27,9 @@ import {
   vi,
 } from 'vitest';
 import {__resetLiveRegionsForTest} from '../../hooks/useAnnounce';
+import {defineTheme} from '../../theme/defineTheme';
+import {Theme} from '../../theme/Theme';
+import {resetThemes} from '../../theme/themeRegistry';
 import {useContainerReveal} from '../../hooks/useContainerReveal';
 import {LinkProvider} from '../../Link/LinkProvider';
 import {InternationalizationProvider} from '../../i18n';
@@ -392,13 +395,34 @@ describe('createMarkdownHeadingLinks', () => {
     expect(permalink).toHaveTextContent('#');
   });
 
-  it('fails softly without navigation when clipboard writing rejects', async () => {
+  it('shows and announces a failed copy without navigation when clipboard writing rejects', async () => {
+    vi.useFakeTimers();
     clipboardWrite().mockRejectedValueOnce(new Error('clipboard denied'));
     render(<Markdown plugins={[headingLinks]}>{'# Overview'}</Markdown>);
     const permalink = screen.getByRole('button', {
       name: 'Copy link to Overview',
     });
     const locationBefore = window.location.href;
+    // One entry per write that adds text to a live region, to count
+    // announcements. A failure is an error, so it goes to the assertive one.
+    const announcements: string[] = [];
+    const announcementObserver = new MutationObserver(records => {
+      for (const {target, addedNodes} of records) {
+        const text = addedNodes.length ? target.textContent?.trim() : '';
+        if (
+          text &&
+          (target as Element).matches?.('[data-astryx-live-region]')
+        ) {
+          announcements.push(
+            `${(target as Element).getAttribute('data-astryx-live-region')}: ${text}`,
+          );
+        }
+      }
+    });
+    announcementObserver.observe(document.body, {
+      subtree: true,
+      childList: true,
+    });
 
     await act(async () => {
       fireEvent.click(permalink);
@@ -406,14 +430,40 @@ describe('createMarkdownHeadingLinks', () => {
     });
 
     expect(window.location.href).toBe(locationBefore);
+    expect(permalink).toHaveAccessibleName(
+      'Failed to copy value to clipboard.',
+    );
+    expect(permalink).not.toHaveTextContent('#');
+    expect(permalink.querySelector('.astryx-icon')).toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(20);
+      await Promise.resolve();
+    });
+    expect(
+      document.querySelector('[data-astryx-live-region="assertive"]'),
+    ).toHaveTextContent('Failed to copy value to clipboard.');
+
+    await act(async () => {
+      vi.advanceTimersByTime(1480);
+      await Promise.resolve();
+    });
     expect(permalink).toHaveAccessibleName('Copy link to Overview');
     expect(permalink).toHaveTextContent('#');
-    expect(
-      document.querySelector('[data-astryx-live-region="polite"]'),
-    ).toBeNull();
+    // One more frame after the reset, so a repeat on reset would be seen.
+    await act(async () => {
+      vi.advanceTimersByTime(50);
+      await Promise.resolve();
+    });
+    // The failure is announced once, not again while it shows or on reset.
+    announcementObserver.disconnect();
+    expect(announcements).toEqual([
+      'assertive: Failed to copy value to clipboard.',
+    ]);
   });
 
-  it('fails softly when the Clipboard API is unavailable', async () => {
+  it('shows a failed copy when the Clipboard API is unavailable', async () => {
+    vi.useFakeTimers();
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: undefined,
@@ -430,6 +480,24 @@ describe('createMarkdownHeadingLinks', () => {
     });
 
     expect(window.location.href).toBe(locationBefore);
+    expect(permalink).toHaveAccessibleName(
+      'Failed to copy value to clipboard.',
+    );
+    expect(permalink).not.toHaveTextContent('#');
+    expect(permalink.querySelector('.astryx-icon')).toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(20);
+      await Promise.resolve();
+    });
+    expect(
+      document.querySelector('[data-astryx-live-region="assertive"]'),
+    ).toHaveTextContent('Failed to copy value to clipboard.');
+
+    await act(async () => {
+      vi.advanceTimersByTime(1480);
+      await Promise.resolve();
+    });
     expect(permalink).toHaveAccessibleName('Copy link to Overview');
     expect(permalink).toHaveTextContent('#');
   });
@@ -633,5 +701,51 @@ describe('createMarkdownHeadingLinks', () => {
 
     expect(received).toEqual(['nested', 'root']);
     expect(screen.queryByRole('button', {name: /Copy link to/})).toBeNull();
+  });
+});
+
+describe('heading copy-link failure glyph', () => {
+  // Label each shared icon's artwork, so a test reads which name rendered.
+  const icons = {
+    check: <span data-icon="check" />,
+    close: <span data-icon="close" />,
+  };
+
+  afterEach(() => {
+    resetThemes();
+    __resetLiveRegionsForTest();
+    vi.restoreAllMocks();
+  });
+
+  function glyphOf(name: string) {
+    const button = screen.getByRole('button', {name});
+    return button.querySelector('[data-icon]')?.getAttribute('data-icon');
+  }
+
+  it.each([
+    ['clipboard writing rejects', 'reject'],
+    ['the Clipboard API is unavailable', 'missing'],
+  ] as const)('draws the close glyph when %s', async (_, how) => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value:
+        how === 'missing'
+          ? undefined
+          : {writeText: vi.fn().mockRejectedValue(new Error('denied'))},
+    });
+    render(
+      <Theme theme={defineTheme({name: `heading-link-glyph-${how}`, icons})}>
+        <Markdown plugins={[createMarkdownHeadingLinks()]}>
+          {'# Overview'}
+        </Markdown>
+      </Theme>,
+    );
+    fireEvent.click(
+      screen.getByRole('button', {name: 'Copy link to Overview'}),
+    );
+    await screen.findByRole('button', {
+      name: 'Failed to copy value to clipboard.',
+    });
+    expect(glyphOf('Failed to copy value to clipboard.')).toBe('close');
   });
 });
