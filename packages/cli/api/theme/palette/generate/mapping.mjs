@@ -266,6 +266,7 @@ export const OFFICIAL_NEUTRAL_STOPS = ownTable({
   '--color-icon-secondary': [{stop: 45}, {stop: 65}],
   '--color-icon-disabled': [{stop: 60}, {stop: 35}],
   '--color-border-emphasized': [{stop: 85}, {stop: 35}],
+  '--color-border-control': [{stop: 55}, {stop: 50}],
   '--color-skeleton': [{stop: 85}, {stop: 35}],
   '--color-on-dark': [{stop: 100}, {stop: 100}],
   '--color-on-light': [{stop: 5}, {stop: 5}],
