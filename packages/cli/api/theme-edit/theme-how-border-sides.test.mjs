@@ -709,4 +709,18 @@ describe('per-side border asks', () => {
     },
     T,
   );
+
+  it(
+    'names the card looks that draw no border, with the line that gives one',
+    async () => {
+      if (unbuilt) return;
+      const lines = await first('cards with a #eee #eee #ddd border');
+      // (No border brought: the default card draws one.)
+      expect(lines.join('\n')).not.toMatch(/border-width|border-style/);
+      expect(await said('cards with a #eee #eee #ddd border')).toMatch(
+        /card looks .*draw no border, so the colors show on the others; to give one a border: .* border 'var\(--border-width\) solid #eee' --on card --when variant:/,
+      );
+    },
+    T,
+  );
 });

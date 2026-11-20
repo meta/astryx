@@ -20302,6 +20302,22 @@ export function draftAnswer(ctx, env, question) {
   }
 
   /**
+   * The variant looks of a part that draw no border around themselves,
+   * where its default look does: a card's transparent, muted and color
+   * looks. Empty when the default draws none too (set brings the border
+   * then) or the part has no such looks.
+   * @param {string} part
+   * @param {string | undefined} state
+   * @returns {string[]}
+   */
+  function lineLessLooks(part, state) {
+    if (!drawsLineAround(ctx, part, state, undefined)) return [];
+    return (C.variantValues(part)?.variant ?? []).filter(
+      v => !drawsLineAround(ctx, part, state, `variant:${v}`),
+    );
+  }
+
+  /**
    * The side word of a padding ask ("top", "horizontal", "block"), read with
    * the clause's part names taken out ("code block", "top nav" are parts,
    * not sides).
@@ -23996,9 +24012,23 @@ export function draftAnswer(ctx, env, question) {
           })
             ? null
             : perSide0;
+        // (With no width or style said, the colors show on the looks that
+        // draw a border; the looks that draw none, a card's muted or color
+        // looks, get no brought border, which would grow them: named, with
+        // the line that gives one a border.)
+        const undrawnLooks =
+          perSide &&
+          !c.lengths.length &&
+          !f.when &&
+          !/\b(dashed|dotted|double|solid)\b/.test(c.text)
+            ? lineLessLooks(one(on), f.state)
+            : [];
+        const lookNote = undrawnLooks.length
+          ? ` (${one(on)} looks ${undrawnLooks.slice(0, 4).join(', ')}${undrawnLooks.length > 4 ? ` and ${undrawnLooks.length - 4} more` : ''} draw no border, so the colors show on the others; to give one a border: astryx experimental theme editor set ${env.slug} border 'var(--border-width) solid ${perSide?.[0]}' --on ${one(on)} --when variant:${undrawnLooks[0]})`
+          : '';
         if (perSide && c.lengths.length <= 1)
           return {
-            text: `the border colors${where}, one per side as written (${SIDE_ORDER[perSide.length]}): ${c.lengths.length ? 'border-width and border-style, then ' : /\b(dashed|dotted|double|solid)\b/.test(c.text) ? 'border-style, then ' : ''}border-color`,
+            text: `the border colors${where}, one per side as written (${SIDE_ORDER[perSide.length]}): ${c.lengths.length ? 'border-width and border-style, then ' : /\b(dashed|dotted|double|solid)\b/.test(c.text) ? 'border-style, then ' : ''}border-color${lookNote}`,
             options: [
               [
                 ...(c.lengths.length
