@@ -61,7 +61,7 @@ export const doc = {
       flag: '--only',
       param: 'options.only',
       description:
-        'With one member of an always-alike group (inputs, checks), style just that part instead of the whole group; with a height or vertical padding on a bar, keep it off the row inside it',
+        'With one member of an always-alike group (inputs, checks), style just that part instead of the whole group',
     },
     {
       flag: '--png',
