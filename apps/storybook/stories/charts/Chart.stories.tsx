@@ -1,6 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import type {Meta, StoryObj} from '@storybook/react';
+import * as stylex from '@stylexjs/stylex';
 import {
   Chart,
   ChartAxis,
@@ -8,6 +9,7 @@ import {
   area,
   band,
   bar,
+  compactNumber,
   dot,
   line,
   referenceLine,
@@ -16,8 +18,15 @@ import {
   type SeriesDef,
   type YBaseline,
 } from '@astryxdesign/charts';
+import {Grid, VStack, useLocale} from '@astryxdesign/core';
 import {dataVars} from '@astryxdesign/core/theme/dataTokens.stylex';
-import {monthlyData} from './_data';
+import {
+  latencyByConcurrencyData,
+  monthlyData,
+  monthlyRevenueData,
+  subscriberGrowthData,
+  visitsByDeviceData,
+} from './_data';
 
 const largeData = Array.from({length: 51}, (_, index) => ({
   month: `Period ${index + 1}`,
@@ -62,6 +71,12 @@ interface ChartStoryArgs {
 
 const MARK_OPTIONS: MarkType[] = ['bar', 'line', 'area', 'dot'];
 
+/**
+ * `Chart` draws one or more series on a shared x and y scale. Playground has
+ * controls for the marks, tooltip, annotations, grid, axes, y range and
+ * legend. Each other story shows one fixed chart state. For missing values (a
+ * gap in a line), see the Missing Data story on the Charts/Marks/Line page.
+ */
 const meta: Meta<ChartStoryArgs> = {
   title: 'Charts/Chart',
   tags: ['autodocs'],
@@ -408,4 +423,279 @@ function PlaygroundChart(args: ChartStoryArgs) {
  */
 export const Playground: Story = {
   render: args => <PlaygroundChart {...args} />,
+};
+
+/** The chart-state stories render fixed scenarios, so they show no controls. */
+const fixedScenario = {controls: {disable: true}};
+
+function CompactAxes() {
+  const locale = useLocale();
+  return (
+    <>
+      <ChartAxis position="bottom" />
+      <ChartAxis
+        position="left"
+        tickFormat={value => compactNumber(value, locale)}
+      />
+    </>
+  );
+}
+
+const Y_BASELINES = [
+  {yBaseline: 'auto', title: 'yBaseline="auto" (default)'},
+  {yBaseline: 'zero', title: 'yBaseline="zero"'},
+  {yBaseline: 'data', title: 'yBaseline="data"'},
+] as const;
+
+/**
+ * `yBaseline` sets how the y axis fits the data when `yDomain` is not set.
+ * With `auto`, a chart with only lines or dots gets headroom: 8% of the data
+ * range above and below. `zero` makes the axis symmetric around 0. `data` fits
+ * the data range with no headroom. Every mode then rounds the axis ends out to
+ * round numbers.
+ *
+ * To check: subscribers go from 12.4K in January to 28.9K in December. With
+ * `auto` the labels run from 10K to 30K, and the axis has headroom above 30K.
+ * With `zero` the labels run from −30K to 30K, so the line uses only the top
+ * half. With `data` the labels run from 15K to 30K, and January sits just
+ * above the bottom edge, below the 15K label.
+ */
+export const YBaselineLine: Story = {
+  name: 'Y baseline: line',
+  parameters: fixedScenario,
+  render: () => (
+    <Grid columns={{minWidth: 280, max: 3}} gap={6}>
+      {Y_BASELINES.map(({yBaseline, title}) => (
+        <Chart
+          key={yBaseline}
+          data={subscriberGrowthData}
+          xKey="month"
+          title={title}
+          subtitle="Newsletter subscribers at the end of each month"
+          series={[line('subscribers', {label: 'Subscribers'})]}
+          yBaseline={yBaseline}
+          tooltip
+          grid={<ChartGrid />}
+          axes={<CompactAxes />}
+          height={220}
+        />
+      ))}
+    </Grid>
+  ),
+};
+
+/**
+ * The same three `yBaseline` modes on bars. A bar always grows from 0, so its
+ * length shows its value only when 0 is on the axis. With `auto`, a chart
+ * with bars or areas always includes 0. This story shows current behavior.
+ *
+ * - `zero` makes the axis symmetric, so all-positive bars use only the top
+ *   half of the plot.
+ * - `data` starts the axis near the smallest value. 0 is then below the plot,
+ *   so each bar loses its bottom part at the plot edge, and the bar lengths no
+ *   longer compare. A fixed `yDomain` that leaves out 0 does the same.
+ *
+ * To check: revenue goes from $79.6K in February to $152.3K in December. With
+ * `auto` the labels run from 0 to 150K, the axis has headroom above 150K, and
+ * every bar starts at 0. With `zero` the labels run from −200K to 200K, and
+ * the bars start at the 0 line in the middle. With `data` the labels run from
+ * 80K to 160K, with no 0 label: the bars start at the bottom edge of the plot,
+ * below the 80K label, and December looks almost six times as tall as
+ * January, not 1.8 times.
+ */
+export const YBaselineBar: Story = {
+  name: 'Y baseline: bars',
+  parameters: fixedScenario,
+  render: () => (
+    <Grid columns={{minWidth: 280, max: 3}} gap={6}>
+      {Y_BASELINES.map(({yBaseline, title}) => (
+        <Chart
+          key={yBaseline}
+          data={monthlyRevenueData}
+          xKey="month"
+          title={title}
+          subtitle="Monthly revenue in US dollars"
+          series={[bar('revenue', {label: 'Revenue'})]}
+          yBaseline={yBaseline}
+          tooltip
+          grid={<ChartGrid />}
+          axes={<CompactAxes />}
+          height={220}
+        />
+      ))}
+    </Grid>
+  ),
+};
+
+/**
+ * `yDomain` sets the exact ends of the y axis. The chart does not round them
+ * and ignores `yBaseline`. Use it to keep the same scale across charts or
+ * reloads. Marks are clipped to the plot, so values outside the domain are cut
+ * at the plot edge. The tooltip still shows the real value.
+ *
+ * To check: the axis runs from exactly 0 to 300 ms. The line leaves the top of
+ * the plot just after 1,000 users (290 ms), and the 410 ms and 580 ms points
+ * are not drawn. Hover 1,200 users: the tooltip reads 580.
+ */
+export const FixedYDomain: Story = {
+  name: 'Fixed y domain',
+  parameters: fixedScenario,
+  render: () => (
+    <Chart
+      data={latencyByConcurrencyData}
+      xKey="users"
+      title="Response time under load"
+      subtitle="95th-percentile response time in milliseconds, by concurrent users. The y axis is fixed at 0–300 ms"
+      series={[line('p95LatencyMs', {label: 'p95 response time'})]}
+      yDomain={[0, 300]}
+      tooltip
+      grid={<ChartGrid />}
+      axes={
+        <>
+          <ChartAxis position="bottom" />
+          <ChartAxis position="left" />
+        </>
+      }
+      height={300}
+    />
+  ),
+};
+
+const CASH_FLOW_MONTHS = [
+  {
+    month: 'Jan',
+    productSales: 62000,
+    services: 18000,
+    payroll: -41000,
+    suppliers: -20600,
+  },
+  {
+    month: 'Feb',
+    productSales: 48000,
+    services: 15000,
+    payroll: -41000,
+    suppliers: -28200,
+  },
+  {
+    month: 'Mar',
+    productSales: 66000,
+    services: 19500,
+    payroll: -42000,
+    suppliers: -19400,
+  },
+  {
+    month: 'Apr',
+    productSales: 51000,
+    services: 16200,
+    payroll: -42000,
+    suppliers: -38000,
+  },
+  {
+    month: 'May',
+    productSales: 58000,
+    services: 17100,
+    payroll: -43000,
+    suppliers: -22400,
+  },
+  {
+    month: 'Jun',
+    productSales: 54000,
+    services: 16600,
+    payroll: -43000,
+    suppliers: -31000,
+  },
+];
+
+/** Cash in and out per month in US dollars. Money out is negative. */
+const cashFlowData = CASH_FLOW_MONTHS.map(row => ({
+  ...row,
+  net: row.productSales + row.services + row.payroll + row.suppliers,
+}));
+
+/**
+ * Positive and negative values in one column need two stacks: one for the
+ * series that are always positive and one for the series that are always
+ * negative. Each stack grows from 0, so money in goes up and money out goes
+ * down. Neither stack has a `group`, so in current behavior both draw in the
+ * same column. A line shows the net.
+ *
+ * Current behavior: series with different signs in one `stack` do not split
+ * at 0. Stacking adds each value to the running total, so a negative series
+ * starts at the top of the positive series below it and draws back over it.
+ *
+ * To check: in every month the Product sales and Payroll bars touch at the 0
+ * grid line, and no bars overlap. April has the largest money out ($80K, the
+ * bottom of the axis) and a net of −$12.8K. March has the largest money in
+ * ($85.5K) and a net of $24.1K.
+ */
+export const MixedSignStacks: Story = {
+  name: 'Mixed signs: two stacks',
+  parameters: fixedScenario,
+  render: () => (
+    <Chart
+      data={cashFlowData}
+      xKey="month"
+      title="Monthly cash flow"
+      subtitle="Money in and out in US dollars, January to June. Money out is negative"
+      series={[
+        bar('productSales', {label: 'Product sales', stack: 'in'}),
+        bar('services', {label: 'Services', stack: 'in'}),
+        bar('payroll', {label: 'Payroll', stack: 'out'}),
+        bar('suppliers', {label: 'Suppliers', stack: 'out'}),
+        line('net', {label: 'Net cash flow', dots: true}),
+      ]}
+      legend
+      tooltip
+      grid={<ChartGrid />}
+      axes={<CompactAxes />}
+      height={320}
+    />
+  ),
+};
+
+const styles = stylex.create({
+  phoneWidth: {
+    width: '100%',
+    maxWidth: 358,
+  },
+});
+
+/**
+ * Both charts are at most 358 px wide: a 390 px phone screen less the page
+ * padding. A legend at the top or bottom wraps and keeps the full plot.
+ *
+ * Current behavior: with the legend at the start or end, the chart sizes the
+ * plot for its full width, as if there were no legend. The legend then takes
+ * part of that width, so the end of the plot is cut off. This happens at
+ * every width. On a narrow chart it hides whole months.
+ *
+ * To check: the bottom-legend chart shows all 12 months, January to December.
+ * The end-legend chart shows the legend beside the plot. November, December
+ * and part of October are cut off at the legend.
+ */
+export const NarrowSideLegend: Story = {
+  name: 'Narrow width: side legend',
+  parameters: fixedScenario,
+  render: () => (
+    <VStack gap={8} xstyle={styles.phoneWidth}>
+      {(['bottom', 'end'] as const).map(position => (
+        <Chart
+          key={position}
+          data={visitsByDeviceData}
+          xKey="month"
+          title={`Legend: ${position}`}
+          subtitle="Website visits per month, by device"
+          series={[
+            bar('mobile', {label: 'Mobile', group: 'device'}),
+            bar('desktop', {label: 'Desktop', group: 'device'}),
+          ]}
+          legend={{position}}
+          tooltip
+          grid={<ChartGrid />}
+          axes={<CompactAxes />}
+          height={240}
+        />
+      ))}
+    </VStack>
+  ),
 };
