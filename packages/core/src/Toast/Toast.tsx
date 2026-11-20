@@ -127,14 +127,16 @@ const styles = stylex.create({
   variantError: {
     backgroundColor: colorVars['--color-background-error-inverted'],
   },
-  // The card's text takes the on-color of the side it picks (FR14). The
-  // media surface sets that side's color scheme, so light-dark() reads the
-  // side's on-color, on a dark page too.
+  // The card's text takes the on-color of the side it picks (FR14), so a
+  // caller's text follows it too.
   sideText: {
     display: 'contents',
   },
-  sideTextOnColor: {
-    '--color-text-primary': `light-dark(${colorVars['--color-on-light']}, ${colorVars['--color-on-dark']})`,
+  sideTextOnDark: {
+    '--color-text-primary': colorVars['--color-on-dark'],
+  },
+  sideTextOnLight: {
+    '--color-text-primary': colorVars['--color-on-light'],
   },
   content: {
     flex: 1,
@@ -484,6 +486,10 @@ export function ToastSurface({
     pickInvertedSide,
   );
   const mediaMode = measuredMediaMode ?? fallbackMediaMode;
+  // Before the measurement, a page whose side is not yet known keeps the
+  // ambient text until the card is measured.
+  const textSide =
+    measuredMediaMode != null || darkPageSide == null ? mediaMode : 'off';
 
   return (
     <div
@@ -508,7 +514,8 @@ export function ToastSurface({
           <div
             {...stylex.props(
               styles.sideText,
-              mediaMode !== 'off' && styles.sideTextOnColor,
+              textSide === 'dark' && styles.sideTextOnDark,
+              textSide === 'light' && styles.sideTextOnLight,
             )}>
             {renderContent ? (
               renderContent({

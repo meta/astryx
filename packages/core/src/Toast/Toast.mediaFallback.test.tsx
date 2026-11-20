@@ -134,12 +134,10 @@ describe('Toast media side before measurement', () => {
 // without this the card paints the page scheme's text (3.61:1 on the dark
 // error card).
 describe('Toast text on its media side', () => {
-  const onColorText = stylex
+  const onDarkText = stylex
     .props(
       stylex.create({
-        text: {
-          '--color-text-primary': `light-dark(${colorVars['--color-on-light']}, ${colorVars['--color-on-dark']})`,
-        },
+        text: {'--color-text-primary': colorVars['--color-on-dark']},
       }).text,
     )
     .className!.split(' ')
@@ -156,11 +154,11 @@ describe('Toast text on its media side', () => {
       />,
     );
 
-  it('restates the text inside the media surface for an error and an info card', () => {
+  it("gives a dark error or info card the dark side's on-color text", () => {
     for (const type of ['error', 'info'] as const) {
       const html = markup(type);
       const inside = html.slice(html.indexOf('data-astryx-media='));
-      for (const name of onColorText) {
+      for (const name of onDarkText) {
         expect(inside, type).toContain(name);
       }
     }
