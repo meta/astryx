@@ -710,7 +710,9 @@ export interface BaseTableProps<
     afterTable?: ReactNode;
   }>;
   /**
-   * How default-rendered body cell text behaves when it exceeds column width.
+   * How default-rendered cell text behaves when it exceeds column width.
+   * Header cells follow the same mode: under `'wrap'` a long heading wraps in
+   * a data-driven table, and in children mode its column grows to fit it.
    *
    * - `'wrap'` (default) — text wraps and the row grows taller
    * - `'truncate'` — text is clipped with an ellipsis; default-rendered cells

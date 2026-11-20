@@ -11,6 +11,19 @@ export const docs = {
   // it opens below the bar instead of pinning to the viewport corner (#4905).
   playground: {
     wrapper: {component: 'TopNav'},
+    defaults: {
+      label: 'Products',
+      items: [
+        {
+          __element: 'TopNavMegaMenuItem',
+          props: {title: 'Analytics', description: 'Usage metrics', href: '#'},
+        },
+        {
+          __element: 'TopNavMegaMenuItem',
+          props: {title: 'Automation', description: 'Workflows', href: '#'},
+        },
+      ],
+    },
   },
   props: [
     {

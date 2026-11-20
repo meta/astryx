@@ -11,5 +11,4 @@ export const doc = {
   isReady: true,
   aspectRatio: 4 / 3,
   componentsUsed: ['Icon', 'Text', 'Layout'],
-  icons: {ChevronDownIcon: 'chevronDown', ChevronRightIcon: 'chevronRight'},
 };

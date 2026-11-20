@@ -4,7 +4,7 @@
 
 /**
  * @file useComponentTranslator.ts
- * @input InternationalizationContext (via use())
+ * @input InternationalizationContext from translatingContext (via use())
  * @output useComponentTranslator, and registerEnglishFallback re-exported for
  *   the same importers
  * @position Internal translator for Core components. Not exported from the
@@ -25,12 +25,13 @@
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/i18n/useTranslator.ts
+ * - /packages/core/src/i18n/translatingContext.ts
  * - /packages/core/src/i18n/englishFallback.ts
  * - /scripts/i18n-english-fallback.mjs
  */
 
 import {use} from 'react';
-import {InternationalizationContext} from './InternationalizationContext';
+import {InternationalizationContext} from './translatingContext';
 import type {TranslatorFn} from './useTranslator';
 
 export {registerEnglishFallback} from './englishFallback';

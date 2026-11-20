@@ -13,7 +13,7 @@ export default function SwitchWithStatus() {
   const [twoFactor, setTwoFactor] = useState(true);
 
   return (
-    <Center width={400}>
+    <Center width={400} maxWidth="100%">
       <VStack gap={6} width="100%" style={{maxWidth: 400}}>
         <Switch
           label="Accept terms and conditions"

@@ -28,6 +28,7 @@ import {
 import {
   computerAgentTextSettings,
   recordComputerAgentTextSettings,
+  recordComputerSkillFolders,
 } from '../env/user-settings.mjs';
 import {userConfigDir} from '../env/user-dirs.mjs';
 import {renderComputerAgentText} from '../agent-docs/computer-agent-text.mjs';
@@ -279,6 +280,23 @@ describe('maybeKeepAgentText', () => {
     expect(started).toHaveLength(3);
   });
 
+  it('starts after the text was turned off when init --to saved a folder outside any project', () => {
+    const stateDir = tempDir('state');
+    const configDir = tempDir('config');
+    /** @type {string[]} */
+    const started = [];
+    recordComputerAgentTextSettings({install: false, links: []}, configDir);
+    recordComputerSkillFolders(['~/team-skills'], configDir);
+    expect(
+      maybeKeepAgentText({
+        ...setup(stateDir),
+        configDir,
+        start: worker => started.push(worker),
+      }),
+    ).toBe(true);
+    expect(started).toHaveLength(1);
+  });
+
   it('starts nothing after the person turned the text off, or for a release without the step', () => {
     const stateDir = tempDir('state');
     const configDir = tempDir('config');
@@ -377,5 +395,41 @@ describe('agent-text-worker.mjs', () => {
       ).status,
     ).toBe(0);
     expect(fs.existsSync(path.join(home, '.agents'))).toBe(false);
+  });
+
+  it('refreshes each copy init --to saved outside a project while it is there, even with the text turned off, keeps an edited one, and never brings back a deleted one', () => {
+    const home = tempDir('home');
+    const env = {
+      ...process.env,
+      HOME: home,
+      USERPROFILE: home,
+      XDG_CONFIG_HOME: path.join(home, '.config'),
+    };
+    const configDir = userConfigDir({home, env});
+    const absolute = path.join(tempDir('elsewhere'), 'skills');
+    recordComputerAgentTextSettings({install: false, links: []}, configDir);
+    recordComputerSkillFolders(['~/team-skills', absolute], configDir);
+    // The worker refreshes a copy that is there.
+    const team = path.join(home, 'team-skills', 'astryx', 'SKILL.md');
+    fs.mkdirSync(path.dirname(team), {recursive: true});
+    fs.writeFileSync(team, renderComputerAgentText({command: 'astryx', install: 'old'}));
+    const edited = path.join(absolute, 'astryx', 'SKILL.md');
+    fs.mkdirSync(path.dirname(edited), {recursive: true});
+    fs.writeFileSync(edited, '# mine\n');
+    const worker = fileURLToPath(
+      new URL('./agent-text-worker.mjs', import.meta.url),
+    );
+    const stateDir = path.join(home, '.config', 'astryx');
+    expect(spawnSync(process.execPath, [worker, stateDir], {env}).status).toBe(0);
+    expect(
+      fs.readFileSync(path.join(home, 'team-skills', 'astryx', 'SKILL.md'), 'utf8'),
+    ).toBe(renderComputerAgentText({command: 'astryx'}));
+    expect(fs.readFileSync(edited, 'utf8')).toBe('# mine\n');
+    expect(fs.existsSync(path.join(home, '.agents'))).toBe(false);
+    // A deleted copy stays deleted.
+    fs.rmSync(path.join(home, 'team-skills'), {recursive: true});
+    expect(spawnSync(process.execPath, [worker, stateDir], {env}).status).toBe(0);
+    expect(fs.existsSync(path.join(home, 'team-skills'))).toBe(false);
+    expect(readGlobalState(stateDir).agentText).toEqual({writtenBy: CLI_VERSION});
   });
 });

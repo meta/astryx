@@ -58,6 +58,13 @@ import {isGlobalCopy} from '../release/choose.mjs';
 import {astryxCommandsOnSearchPath} from '../env/search-path.mjs';
 import {resolveProviders} from '../integrations/provider-resolution.mjs';
 import {
+  recordBaseCandidates,
+  resolveBase,
+  splitForBase,
+} from '../bases/resolve.mjs';
+import {requestedBase} from '../bases/state.mjs';
+import {coreBase} from '../bases/core.mjs';
+import {
   setProject as setDebugProject,
   setEventHandler as setDebugEventHandler,
   setIntegrationEventHandlers as setDebugIntegrationEventHandlers,
@@ -103,8 +110,10 @@ import {
 } from '../../assets/codemods/integration-discovery.mjs';
 import {validateLoadedIntegration} from '../integrations/validate-contributions.mjs';
 import {persistedGather} from '../fs/gather-cache.mjs';
+import {iconFeatureGate} from '../integrations/icon-features.mjs';
+import {INSTALLED_ICON_SET_DOC} from '../discovery/name-roots.mjs';
 
-import {recordDeclaredCliCommands} from '../env/cli-command.mjs';
+import {recordDeclaredSettings} from '../env/cli-command.mjs';
 import {
   hostedRun,
   recordResolvedIntegrations,
@@ -114,6 +123,7 @@ import {
   cacheKey,
   configContentHash,
 } from './config-cache.mjs';
+import {currentNonCoreBase} from '../bases/state.mjs';
 
 /** Issues are plain records, kept as they are. */
 const ISSUES_CODEC = {
@@ -353,7 +363,9 @@ function readPackageJson(dir) {
  * An integration issue tagged with the owner package. The base
  * {@link import('../integrations/issue').AstryxIntegrationIssue} fields plus the
  * `package` that produced it, which Project tracks for routing/dedup.
- * @typedef {import('../integrations/issue').AstryxIntegrationIssue & {package: string}} ProjectIntegrationIssue
+ * `needsCore` marks one that compares a component with Core's components,
+ * which needs a Core to be judged.
+ * @typedef {import('../integrations/issue').AstryxIntegrationIssue & {package: string, needsCore?: boolean}} ProjectIntegrationIssue
  */
 
 /** Default issue tracker used when neither config nor integration routes one. */
@@ -402,9 +414,17 @@ function inheritsIntegrationDebug(projectDir) {
 const PROVIDER_LEDGERS = new WeakMap();
 
 /**
+ * The base each project load resolved, and the integrations it left out.
+ * @type {WeakMap<Project, {resolution: import('../bases/resolve.mjs').BaseResolution, leftOut: Array<{integration: import('../integrations/integrations.mjs').LoadedIntegration, buildsOn: string[]}>}>}
+ */
+const BASES = new WeakMap();
+
+/**
  * The provider ledger a Project resolved at load: one outcome for every
  * package directory configured, autolinked, or authored. Internal: upgrade
- * resolves on top of it, and tests account for every candidate with it.
+ * resolves on top of it, `doctor integration validate` finds the folder's
+ * own copy of a package in it, loaded or not, and tests account for every
+ * candidate with it.
  * @param {Project} project
  * @returns {import('../integrations/provider-resolution.mjs').ProviderLedger}
  */
@@ -603,11 +623,44 @@ export class Project {
         : []),
     ]);
     loadedIntegrations = resolution.integrations;
+    // The run reads one base. Only the integrations that are that base or
+    // build on it contribute; the rest are kept aside for the commands that
+    // list them.
+    // A package that failed to load is no base, but `--base` naming it says
+    // why: the ledger keeps its load error.
+    // Each is named both as the project reached it and by its own package
+    // name, which differ for an npm alias.
+    const failedToLoad = [...resolution.ledger.values()].flatMap(entry => {
+      if (entry.outcome !== 'load-failed' || entry.error == null) return [];
+      const error = entry.error;
+      const names = new Set([
+        entry.candidate.spec ?? entry.label,
+        readPackageJson(entry.key)?.name,
+      ]);
+      return [...names].flatMap(name =>
+        typeof name === 'string' ? [{name, error}] : [],
+      );
+    });
+    recordBaseCandidates(cwd, loadedIntegrations, failedToLoad);
+    const base = resolveBase({
+      cwd,
+      integrations: loadedIntegrations,
+      requested: requestedBase(),
+      failedToLoad,
+    });
+    /** @type {Array<{integration: import('../integrations/integrations.mjs').LoadedIntegration, buildsOn: string[]}>} */
+    let leftOut = [];
+    if (base.ok) {
+      const split = splitForBase(loadedIntegrations, base.base);
+      loadedIntegrations = split.kept;
+      leftOut = split.leftOut;
+    }
     // A hosted run returns each package it resolved (cli-surface INV30).
     recordResolvedIntegrations(loadedIntegrations);
-    // The picker (getCliInvocation) is synchronous, so the commands these
-    // integrations declare are recorded here, where they become known.
-    recordDeclaredCliCommands(projectDir, loadedIntegrations);
+    // The picker (getCliInvocation) and the install-command printers are
+    // synchronous, so the commands and install guidance these integrations
+    // declare are recorded here, where they become known.
+    recordDeclaredSettings(projectDir, loadedIntegrations);
 
     // The debug recorder resolves its settings synchronously, long before any
     // command gets here, so this is where a project's `debug` block gets a
@@ -650,6 +703,7 @@ export class Project {
     });
     PROVIDER_LEDGERS.set(project, resolution.ledger);
     LAST_LOADED.set(path.resolve(cwd), {project, run: hostedRun()});
+    BASES.set(project, {resolution: base, leftOut});
     return project;
   }
 
@@ -694,6 +748,23 @@ export class Project {
     return this.#loadedIntegrations;
   }
 
+  /**
+   * The base this project's run reads, or the reason it does not resolve.
+   * @returns {import('../bases/resolve.mjs').BaseResolution}
+   */
+  get base() {
+    return BASES.get(this)?.resolution ?? {ok: true, base: coreBase()};
+  }
+
+  /**
+   * Installed integrations that do not build on the run's base, with the
+   * bases each builds on. They contribute nothing to the run.
+   * @returns {Array<{integration: import('../integrations/integrations.mjs').LoadedIntegration, buildsOn: string[]}>}
+   */
+  get integrationsLeftOut() {
+    return BASES.get(this)?.leftOut ?? [];
+  }
+
   /** @returns {string} */
   get cwd() {
     return this.#cwd;
@@ -729,7 +800,7 @@ export class Project {
   /**
    * Record a single integration issue, deduped by (package, code, message).
    * @param {string} pkg
-   * @param {import('../integrations/issue').AstryxIntegrationIssue} issue
+   * @param {import('../integrations/issue').AstryxIntegrationIssue & {needsCore?: boolean}} issue
    */
   #pushIssue(pkg, issue) {
     const code = issue?.code ?? 'unknown';
@@ -743,6 +814,7 @@ export class Project {
       code,
       severity: issue?.severity ?? 'error',
       message,
+      ...(issue?.needsCore ? {needsCore: true} : {}),
     });
   }
 
@@ -783,9 +855,10 @@ export class Project {
       return;
     }
     try {
-      // An experimental root is checked only in a project that opts in
+      // An experimental root is checked only where icon features are on
       // (spec:AST-017 FR27); the package's own checks read it either way.
-      const checked = this.#config.experimental?.iconSet
+      const iconFeatures = iconFeatureGate(this).on;
+      const checked = iconFeatures
         ? integration
         : {...integration, iconSets: undefined};
       // A function of the files the checks read, which the kept gather
@@ -796,7 +869,7 @@ export class Project {
           this.#cwd,
           integration.__packageDir ?? null,
           integration.name ?? null,
-          Boolean(this.#config.experimental?.iconSet),
+          iconFeatures,
         ],
         () => validateLoadedIntegration(checked),
         ISSUES_CODEC,
@@ -894,6 +967,7 @@ export class Project {
           code: finding.code,
           severity: finding.severity,
           message: finding.message,
+          ...(finding.needsCore ? {needsCore: true} : {}),
         });
       }
       return replacements;
@@ -1053,22 +1127,24 @@ export class Project {
    * whose module does not resolve from the project is withdrawn without one.
    *
    * Icon sets are experimental (spec:AST-017 FR27): every surface but
-   * `astryx experimental icon` reads them only in a project that sets
-   * `experimental.iconSet`. Without it this answers no sets and records no
-   * issue, unless `experimental` asks for the installed sets anyway.
+   * `astryx experimental icon` reads them only where the icon feature gate
+   * (foundation/integrations/icon-features.mjs) is on. Where it is off this
+   * answers no sets and records no issue, unless `experimental` asks for the
+   * installed sets anyway.
    *
    * @param {{experimental?: boolean}} [options] `experimental`: read the
-   *   installed sets without the opt-in, for `astryx experimental icon`
+   *   installed sets with the gate off, for `astryx experimental icon`
    * @returns {Promise<{sets: import('../discovery/icon-set-discovery.mjs').DiscoveredIconSet[], withdrawn: import('../discovery/icon-set-discovery.mjs').WithdrawnIconSet[], choice: import('../discovery/icon-set-discovery.mjs').IconSetChoice}>}
    */
   async iconSets({experimental = false} = {}) {
-    if (!experimental && !this.#config.experimental?.iconSet) {
+    if (!experimental && !iconFeatureGate(this).on) {
       return {
         sets: [],
         withdrawn: [],
         choice: {
           status: /** @type {const} */ ('none'),
-          reason: 'astryx.config sets no experimental.iconSet.',
+          reason:
+            'No icon-set package is installed and astryx.config sets no experimental.iconSet.',
         },
       };
     }
@@ -1236,10 +1312,20 @@ export class Project {
         }
       }
 
-      // With the opt-in (`iconSets()` reads no set without it), each installed
+      // Where icon features are on (`iconSets()` reads no set otherwise), each installed
       // icon set's own icon definitions join Astryx's under the
       // `icon-definitions` namespace, marked with their package.
-      const {sets} = await this.iconSets();
+      const {sets, choice} = await this.iconSets();
+      // The project's set adds one section to `icons`, in the name of the
+      // package that ships it: how to find an icon from that set.
+      if (choice.set) {
+        catalog.add({
+          name: 'installed-icon-set',
+          package: choice.set.package,
+          path: INSTALLED_ICON_SET_DOC,
+          extendsTopic: 'icons',
+        });
+      }
       for (const set of sets) {
         if (set.definitions.length === 0) continue;
         const at = this.#loadedIntegrations.findIndex(
@@ -1274,7 +1360,10 @@ export class Project {
    */
   async codemods(fromVersion, toVersion) {
     return this.#memo(`codemods:${fromVersion}..${toVersion}`, async () => {
-      const core = await getTransformsBetween(fromVersion, toVersion);
+      // Core's codemods ship in the CLI for Core: none in a run on another base.
+      const core = currentNonCoreBase()
+        ? []
+        : await getTransformsBetween(fromVersion, toVersion);
 
       // Discover integration codemods per integration so a single broken
       // integration is skipped (issue collected) without losing the others.
@@ -1417,7 +1506,7 @@ export class Project {
           this.#loadedIntegrations.map(
             integration => integration.__packageDir ?? integration.name ?? null,
           ),
-          Boolean(this.#config.experimental?.iconSet),
+          iconFeatureGate(this).on,
           this.#unloadedDependencies(),
           before,
         ],

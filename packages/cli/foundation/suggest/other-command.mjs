@@ -16,7 +16,8 @@
  * declared keywords. A better tier wins; inside a tier, commands win in
  * {@link LOOKUP_COMMANDS} order, and docs routes with the fewest segments
  * first, then in tree order. The hint goes right after the command's own
- * suggestions that match at its tier or a better one, and the list never
+ * suggestions that match at its tier or a better one (an own suggestion that
+ * declares the name as a keyword or synonym matches at the folded tier), and the list never
  * grows: the last suggestion drops, and a hint that would come last is left
  * out.
  *
@@ -38,7 +39,11 @@ import {
   integrationsFilesNaming,
 } from '../discovery/entry-name-files.mjs';
 import {BUILTIN_DOCS_DIR, rootNamespaceName} from '../discovery/name-roots.mjs';
-import {hasNameLine, keptTreeSummary} from '../fs/kept-tree.mjs';
+import {
+  hasNameLine,
+  keptTreeSummary,
+  keptTreeSummaryAsync,
+} from '../fs/kept-tree.mjs';
 import {findCoreDir} from '../fs/paths.mjs';
 import {mayHaveIntegrations} from '../integrations/may-have-integrations.mjs';
 import {
@@ -204,7 +209,7 @@ function bestMatch(command, names, typed) {
  * @param {number} tier
  * @returns {Found}
  */
-function hintFor(command, name, from, tier) {
+export function hintFor(command, name, from, tier) {
   return {
     hint: {
       name: `astryx ${command} ${name}`,
@@ -248,10 +253,14 @@ export function otherCommand(typed, entries, from) {
  * ({@link MATCH_TIER}), so it goes first when no suggestion does. The list
  * never grows: the last suggestion drops, and a hint that would come last is
  * left out. The hint is the only suggestion when `alone` holds or when the
- * list is empty, since then no suggestion shares a word with the name. For a
+ * list is empty, since then no suggestion shares a word with the name. A
+ * suggestion also matches at the folded tier when one of its `keywordsOf`
+ * folds to the typed name ({@link foldEntryName}): a name the suggestion
+ * declares is as good as its own name without spaces and hyphens. For a
  * near hook or hook keyword hint, a suggestion also matches as well when one
  * of its names is a near name or carries every typed word, and, for a hook
  * keyword hint, when one of its `keywordsOf` has exactly the typed words.
+ * The first `pinned` suggestions always stay ahead of the hint.
  * @template {Suggestion} T
  * @param {T[] | undefined} suggestions
  * @param {Found | null} found
@@ -261,6 +270,7 @@ export function otherCommand(typed, entries, from) {
  *   alone?: boolean,
  *   namesOf?: (suggestion: T) => Array<string | undefined>,
  *   keywordsOf?: (suggestion: T) => string[],
+ *   pinned?: number,
  * }} options `namesOf` gives the names the command matched a suggestion by;
  *   by default its name. `keywordsOf` gives the keywords the suggestion's doc
  *   declares and the synonyms its search card lists; by default none
@@ -275,13 +285,20 @@ export function withOtherCommand(
     alone = false,
     namesOf = suggestion => [suggestion.name],
     keywordsOf = () => [],
+    pinned = 0,
   },
 ) {
   if (!found) return suggestions;
   if (alone || !suggestions || suggestions.length === 0) return [found.hint];
   const byHook = found.tier >= MATCH_TIER.near;
+  const wanted = foldEntryName(typed);
+  /** @param {T} suggestion */
+  const declares = suggestion =>
+    found.tier >= MATCH_TIER.folded &&
+    keywordsOf(suggestion).some(keyword => foldEntryName(keyword) === wanted);
   /** @param {T} suggestion */
   const matchesAsWell = suggestion =>
+    declares(suggestion) ||
     namesOf(suggestion).some(
       name =>
         name &&
@@ -291,9 +308,9 @@ export function withOtherCommand(
     (found.tier === MATCH_TIER.keyword &&
       synonymMatches(typed, {own: {synonyms: keywordsOf(suggestion)}}).size >
         0);
-  let at = 0;
+  let at = Math.min(pinned, suggestions.length);
   suggestions.forEach((suggestion, index) => {
-    if (matchesAsWell(suggestion)) at = index + 1;
+    if (matchesAsWell(suggestion)) at = Math.max(at, index + 1);
   });
   return [
     ...suggestions.slice(0, at),
@@ -479,9 +496,7 @@ export async function findOtherCommand(
   }
   if (!best && coreDir && !isPath && from != null && NEAR_HOOK_FROM.has(from)) {
     try {
-      const {discoverHookKeywords} =
-        await import('../discovery/hook-discovery.mjs');
-      const found = hookByMeaning(typed, discoverHookKeywords(coreDir), {
+      const found = hookByMeaning(typed, await coreHookKeywords(coreDir), {
         keywords: from === 'component',
       });
       if (found) best = hintFor('hook', found.name, from, found.tier);
@@ -490,6 +505,48 @@ export async function findOtherCommand(
     }
   }
   return best;
+}
+
+/** The code that makes the kept hook keywords. */
+const HOOK_KEYWORDS_CODE = [
+  fileURLToPath(import.meta.url),
+  fileURLToPath(new URL('../discovery/hook-discovery.mjs', import.meta.url)),
+];
+
+/**
+ * Each Core hook with the keywords its doc declares, as
+ * hook-discovery.mjs discoverHookKeywords reads them: a summary kept while
+ * every folder of Core's `src` the hook lookup can list, every doc it read
+ * and every path it probed are unchanged, so a warm miss reads no hook doc.
+ * @param {string} coreDir
+ * @returns {Promise<Array<{name: string, keywords: string[]}>>}
+ */
+export async function coreHookKeywords(coreDir) {
+  const {HOOK_SKIP_DIRS, discoverHookKeywords} =
+    await import('../discovery/hook-discovery.mjs');
+  return keptTreeSummaryAsync(
+    {
+      kind: 'core-hook-keywords',
+      roots: [path.join(coreDir, 'src')],
+      code: HOOK_KEYWORDS_CODE,
+      skip: name => HOOK_SKIP_DIRS.has(name),
+      recorded: true,
+      // A stored value that is not such a list is read again.
+      accept: value =>
+        Array.isArray(value) &&
+        value.every(
+          hook =>
+            hook !== null &&
+            typeof hook === 'object' &&
+            typeof hook.name === 'string' &&
+            Array.isArray(hook.keywords) &&
+            hook.keywords.every(
+              (/** @type {unknown} */ keyword) => typeof keyword === 'string',
+            ),
+        ),
+    },
+    async () => discoverHookKeywords(coreDir),
+  );
 }
 
 /**
@@ -539,7 +596,8 @@ export function hookByMeaning(typed, hooks, {keywords = true} = {}) {
  * names and doc text: the CLI's flat topics and root namespaces, the levels
  * that hold the flat topics, and each integration's topics and root
  * namespaces. Only a CLI tree file whose name `isWanted` accepts, and only an
- * integration doc whose text spells the name, is read.
+ * integration doc whose text spells the name, is read. A doc the run's base
+ * leaves out is no hint.
  * @param {Array<string | undefined>} docsDirs the integrations' docs folders
  * @param {import('./name-index.mjs').NameIndex} index
  * @param {string} wanted the folded name
@@ -547,8 +605,19 @@ export function hookByMeaning(typed, hooks, {keywords = true} = {}) {
  * @returns {Promise<string[]>}
  */
 async function rootDocNames(docsDirs, index, wanted, isWanted) {
+  const {coreOnlyDocNames} = await import('../bases/core-docs.mjs');
+  const leftOut = await coreOnlyDocNames();
+  /** @param {string} name */
+  const served = name => isWanted(name) && !leftOut.has(name);
+  // A level exists while a topic sits in it; an integration's topic keeps
+  // its level on any base.
+  const filled = new Set(
+    index.docs.flat().flatMap(({declared}) =>
+      declared?.level ? [declared.level] : [],
+    ),
+  );
   const builtin = [
-    ...index.topics.filter(isWanted),
+    ...index.topics.filter(served),
     ...index.treeStems.filter(isWanted).flatMap(stem => {
       const name = rootNamespaceName(
         fs.readFileSync(
@@ -556,9 +625,11 @@ async function rootDocNames(docsDirs, index, wanted, isWanted) {
           'utf8',
         ),
       );
-      return name && isWanted(name) ? [name] : [];
+      return name && served(name) ? [name] : [];
     }),
-    ...index.levels.filter(isWanted),
+    ...index.levels.filter(
+      level => served(level) || (isWanted(level) && filled.has(level)),
+    ),
   ];
   if (builtin.length > 0) return builtin;
   // A topic or root namespace: a doc without `placement`.

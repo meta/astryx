@@ -24,6 +24,7 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {registerCountIndependentPlugin} from '../../tableRowContextUsage';
+import {scrollEdgeFadeOff} from '../../../hooks/scrollEdgeFade';
 
 import {colorVars, durationVars, easeVars} from '../../../theme/tokens.stylex';
 import type {
@@ -790,6 +791,13 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
         return {
           ...props,
           htmlProps: {...props.htmlProps, ref: mergedRef},
+          // A pinned edge marks its hidden columns with its own shadow, and
+          // the pinned column sits at that edge, so the edge does not fade.
+          xstyle: [
+            ...props.xstyle,
+            ...(stateRef.current.hasStart ? [scrollEdgeFadeOff.start] : []),
+            ...(stateRef.current.hasEnd ? [scrollEdgeFadeOff.end] : []),
+          ],
         };
       },
     }),

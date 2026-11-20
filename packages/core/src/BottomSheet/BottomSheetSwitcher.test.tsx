@@ -2100,3 +2100,107 @@ describe('BottomSheetSwitcher', () => {
     });
   });
 });
+
+describe('focus return when a flow closes without its scrim or unmounts', () => {
+  function NonModalFlow() {
+    const [step, setStep] = useState<string | null>(null);
+    return (
+      <>
+        <button type="button" onClick={() => setStep('filters')}>
+          Filters
+        </button>
+        <BottomSheetSwitcher
+          activeSheet={step}
+          onActiveSheetChange={setStep}
+          hasScrim={false}>
+          <BottomSheet
+            sheetId="filters"
+            label="Filters"
+            data-testid="filters-sheet">
+            <button type="button" onClick={() => setStep(null)}>
+              Done
+            </button>
+          </BottomSheet>
+        </BottomSheetSwitcher>
+      </>
+    );
+  }
+
+  it('returns focus to the opener when a flow without the scrim closes with focus inside', () => {
+    render(<NonModalFlow />);
+    const opener = screen.getByRole('button', {name: 'Filters'});
+    act(() => opener.focus());
+    fireEvent.click(opener);
+    const done = screen.getByRole('button', {name: 'Done'});
+    act(() => done.focus());
+    fireEvent.click(done);
+    finishSheetTransition(getSheetLayer('filters-sheet'), 'transform');
+    expect(opener).toHaveFocus();
+  });
+
+  it('leaves focus where it is when a flow without the scrim closes with focus outside', () => {
+    render(
+      <>
+        <NonModalFlow />
+        <button type="button">Elsewhere</button>
+      </>,
+    );
+    const opener = screen.getByRole('button', {name: 'Filters'});
+    act(() => opener.focus());
+    fireEvent.click(opener);
+    const elsewhere = screen.getByRole('button', {name: 'Elsewhere'});
+    act(() => elsewhere.focus());
+    fireEvent.click(screen.getByRole('button', {name: 'Done', hidden: true}));
+    finishSheetTransition(getSheetLayer('filters-sheet'), 'transform');
+    expect(elsewhere).toHaveFocus();
+  });
+
+  function MountedFlow({hasScrim}: {hasScrim: boolean}) {
+    const [step, setStep] = useState<string | null>(null);
+    return (
+      <>
+        <button type="button" onClick={() => setStep('filters')}>
+          Filters
+        </button>
+        <button type="button" onClick={() => setStep(null)}>
+          Close filters
+        </button>
+        {step !== null && (
+          <BottomSheetSwitcher
+            activeSheet={step}
+            onActiveSheetChange={setStep}
+            hasScrim={hasScrim}>
+            <BottomSheet sheetId="filters" label="Filters">
+              <button type="button">Inside</button>
+            </BottomSheet>
+          </BottomSheetSwitcher>
+        )}
+      </>
+    );
+  }
+
+  it.each([
+    ['with the scrim', true],
+    ['without the scrim', false],
+  ])(
+    'returns focus to the opener when the switcher unmounts while a sheet is open, %s',
+    async (_name, hasScrim) => {
+      render(<MountedFlow hasScrim={hasScrim} />);
+      const opener = screen.getByRole('button', {name: 'Filters'});
+      act(() => opener.focus());
+      fireEvent.click(opener);
+      act(() =>
+        screen.getByRole('button', {name: 'Inside', hidden: true}).focus(),
+      );
+      // The page behind a modal sheet is inert, so the close comes from code.
+      act(() => {
+        screen
+          .getByRole('button', {name: 'Close filters', hidden: true})
+          .click();
+      });
+      // The repair runs once the commit has finished.
+      await act(async () => {});
+      expect(opener).toHaveFocus();
+    },
+  );
+});

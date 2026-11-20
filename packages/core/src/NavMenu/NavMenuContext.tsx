@@ -51,6 +51,19 @@ export const NavHeadingDismissContext = createSharedContext<{
 NavHeadingDismissContext.displayName = 'NavHeadingDismissContext';
 
 /**
+ * Internal (not exported from the NavMenu entry): true inside the named
+ * `role="menu"` region a SideNavHeading or TopNavHeading popover wraps around
+ * its `menu`. A NavHeadingMenu there renders no menu of its own, so its items
+ * belong to the heading's menu.
+ */
+export const NavHeadingMenuHostContext = createSharedContext<boolean>(
+  'NavHeadingMenuHostContext',
+  1,
+  false,
+);
+NavHeadingMenuHostContext.displayName = 'NavHeadingMenuHostContext';
+
+/**
  * Size and close context provided by NavHeadingMenu to its children.
  * Items read this for consistent padding and dismiss-on-click.
  */

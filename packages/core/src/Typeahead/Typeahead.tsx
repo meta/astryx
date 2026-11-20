@@ -80,6 +80,9 @@ import type {SearchableItem, SearchSource} from './types';
 import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
+import {isStatusButtonPress} from '../hooks/statusButtonPress';
+import {isRenderable} from '../utils/isRenderable';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
@@ -385,18 +388,20 @@ function EndLane({
   loadingLabel,
   anchorRef,
   clear,
+  statusIcon,
 }: {
   lane: BusyIndicatorLane;
   loadingLabel: string;
   anchorRef: RefObject<Element | null>;
   clear: ReactNode;
+  statusIcon: ReactNode;
 }) {
   const isBusy = useIsBusy(lane);
   // The search Spinner stays named (family:input-fields FR7) but is not a
   // live region; the field announces each search's busy start instead
   // (spec:AST-086 FR8).
   useBusyAnnouncement(isBusy, loadingLabel, anchorRef);
-  if (!isBusy && clear == null) {
+  if (!isBusy && clear == null && !isRenderable(statusIcon)) {
     return null;
   }
   return (
@@ -408,6 +413,7 @@ function EndLane({
         </SpinnerOwnerContext>
       )}
       {clear}
+      {statusIcon}
     </div>
   );
 }
@@ -676,23 +682,40 @@ export function Typeahead<T extends SearchableItem>({
     [editingValue, focusTokenNextFrame],
   );
 
-  // Click wrapper to focus input or enter edit mode
-  const handleWrapperClick = useCallback(() => {
-    if (isDisabled) {
-      return;
-    }
-    if (showToken) {
-      handleEnterEditMode();
-    } else {
-      inputRef.current?.focus();
-    }
-  }, [isDisabled, showToken, handleEnterEditMode]);
+  const {statusIcon, describedBy: statusTooltipDescribedBy} =
+    useInputStatusIcon({
+      status,
+      statusVariant,
+      isInGroup: !!inputGroup,
+    });
+
+  // A click on the status info-tip leaves focus on it, so its tip can open.
+  const handleWrapperClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (
+        isDisabled ||
+        isStatusButtonPress(event.target, statusTooltipDescribedBy)
+      ) {
+        return;
+      }
+      if (showToken) {
+        handleEnterEditMode();
+      } else {
+        inputRef.current?.focus();
+      }
+    },
+    [isDisabled, showToken, handleEnterEditMode, statusTooltipDescribedBy],
+  );
 
   const {ariaLabelledBy, ariaDescribedBy} = getInputARIA(
     inputLabelId,
     [
       description ? descriptionId : null,
-      status?.message ? statusMessageId : null,
+      // Field draws no message box inside an InputGroup or for `tooltip`.
+      !inputGroup && statusVariant !== 'tooltip' && status?.message
+        ? statusMessageId
+        : null,
+      statusTooltipDescribedBy,
       showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
     ],
     inputGroup,
@@ -850,6 +873,7 @@ export function Typeahead<T extends SearchableItem>({
               />
             ) : null
           }
+          statusIcon={statusIcon}
         />
       </div>
       {showsDisabledMessage &&

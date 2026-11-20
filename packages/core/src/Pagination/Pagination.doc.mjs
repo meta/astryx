@@ -9,6 +9,12 @@ const anatomy = [
       'Navigation landmark containing the current paging controls and optional page-size selector.',
   },
   {
+    name: 'Control row',
+    required: true,
+    description:
+      'The row that holds the previous/next, first/last and page-number buttons and the readout between them.',
+  },
+  {
     name: 'Page-size selector',
     required: false,
     description: 'Optional Selector for choosing how many items appear per page.',
@@ -208,6 +214,9 @@ export const docs = {
   theming: {
     targets: [
       {className: 'astryx-pagination', visualProps: ['size', 'variant']},
+      {className: 'astryx-pagination-list', visualProps: ['size', 'variant']},
+      {className: 'astryx-pagination-item', states: ['selected', 'first', 'last']},
+      {className: 'astryx-pagination-ellipsis'},
       {className: 'astryx-pagination-dot', visualProps: ['size'], states: ['active']},
       {className: 'astryx-pagination-input-label', visualProps: ['size']},
       {className: 'astryx-pagination-input-total', visualProps: ['size']},
@@ -374,6 +383,9 @@ export const docsZh = {
   theming: {
     targets: [
       {className: 'astryx-pagination', visualProps: ['size', 'variant']},
+      {className: 'astryx-pagination-list', visualProps: ['size', 'variant']},
+      {className: 'astryx-pagination-item', states: ['selected', 'first', 'last']},
+      {className: 'astryx-pagination-ellipsis'},
       {className: 'astryx-pagination-dot', visualProps: ['size'], states: ['active']},
       {className: 'astryx-pagination-input-label', visualProps: ['size']},
       {className: 'astryx-pagination-input-total', visualProps: ['size']},

@@ -45,6 +45,7 @@ import {LayoutHeader} from '../Layout/LayoutHeader';
 import {LayoutPanel} from '../Layout/LayoutPanel';
 import {LayoutContent} from '../Layout/LayoutContent';
 import {LayoutAreaContext} from '../Layout/LayoutAreaContext';
+import {LayoutContainerContext} from '../Layout/LayoutContainerContext';
 import {LayoutDividerContext} from '../Layout/LayoutDividerContext';
 import {
   DEFAULT_LAYOUT_SLOTS,
@@ -67,9 +68,13 @@ import {
   type LayoutChange,
   type LayoutSwap,
 } from '../motion/animatedLayout';
-import {TopNavRenderContext} from '../TopNav/TopNavRenderContext';
+import {
+  TopNavRenderContext,
+  TopNavUnreadRegionContext,
+} from '../TopNav/TopNavRenderContext';
 import {TopNavMobileContentContext} from '../TopNav/TopNavMobileContentContext';
 import {AppShellMobileContext} from './AppShellMobileContext';
+import {UNREAD_STYLES, unreadWidthPoint} from './unreadWidthPoint';
 import {AppShellNestingContext, useAppShellMainId} from './useAppShellMainId';
 import type {AppShellMobileContextValue} from './AppShellMobileContext';
 import type {SpacingStep} from '../utils/types';
@@ -79,6 +84,7 @@ import {
   focusOutlineProps,
   focusOutlineStyles,
 } from '../utils/focusOutline.stylex';
+import {useIsHydrating} from '../hooks/useIsHydrating';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {matchesMediaQuery} from '../utils/coarsePointer';
 import {observeResize} from '../utils/sharedResizeObserver';
@@ -87,6 +93,7 @@ import {useThemeDefinition} from '../theme/useTheme';
 import {
   DEFAULT_WIDTH_BREAKPOINTS,
   type WidthBreakpointName,
+  widthBelowFeature,
 } from '../theme/themeAdaptations';
 import type {AppShellVariantMap} from './index';
 
@@ -194,9 +201,13 @@ export interface MobileNavConfig {
 
   /**
    * SSR hint: whether the initial render should assume mobile layout.
-   * Seeds the breakpoint state so the server-rendered HTML matches
-   * the client on mobile devices, avoiding a layout flash. Ignored when
-   * `breakpoint` is `none`, which is always non-mobile.
+   * Seeds the breakpoint state so the server-rendered HTML is the phone
+   * layout, menu toggle included. Without it, when the theme keeps the
+   * standard width points, the server-rendered wide layout still paints
+   * without its inline side nav, and with only the top nav's heading and end
+   * content, below the breakpoint, and the toggle arrives when the page's
+   * script runs. Ignored when `breakpoint` is
+   * `none`, which is always non-mobile.
    *
    * Derive from the User-Agent header or a device-detection cookie
    * in a server component, then pass down.
@@ -390,6 +401,7 @@ const styles = stylex.create({
     textDecoration: 'none',
     fontWeight: fontWeightVars['--font-weight-semibold'],
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
   },
   // Programmatic focus target for the skip link. While main fits, it is only
   // focusable via tabIndex={-1} (never tabbable), so a focus ring around the
@@ -622,25 +634,27 @@ export function AppShell({
   // Mobile nav open state (controlled + uncontrolled)
   // =========================================================================
   const activeWidthBreakpoints = activeTheme?.__adaptations?.widthBreakpoints;
-  const breakpointQuery =
+  const breakpointWidth =
     sideNavBreakpoint === 'none'
-      ? '(width < 0px)'
-      : `(width < ${
-          activeWidthBreakpoints?.[sideNavBreakpoint] ??
-          DEFAULT_WIDTH_BREAKPOINTS[sideNavBreakpoint]
-        }px)`;
+      ? null
+      : (activeWidthBreakpoints?.[sideNavBreakpoint] ??
+        DEFAULT_WIDTH_BREAKPOINTS[sideNavBreakpoint]);
+  const breakpointQuery = widthBelowFeature(breakpointWidth ?? 0);
+  const isMobileOnServer =
+    breakpointWidth != null && mobileNavConfig?.defaultIsMobile === true;
+  const isBelowBreakpointNow = useMediaQuery(breakpointQuery, isMobileOnServer);
+  const hasReadWindow = !useIsHydrating();
   // The client's first answer can differ from the server's. That correction
   // is an urgent update, and it changes the mobile context above the page.
   // React answers an urgent update above content it has not hydrated by
   // rendering that content again in place of its server HTML. A deferred
   // value takes the client's answer in a transition, which waits for that
   // content to hydrate.
-  const isBelowBreakpoint = useDeferredValue(
-    useMediaQuery(
-      breakpointQuery,
-      sideNavBreakpoint === 'none' ? false : mobileNavConfig?.defaultIsMobile,
-    ),
+  const layoutWidth = useDeferredValue(
+    !hasReadWindow ? 'unread' : isBelowBreakpointNow ? 'mobile' : 'wide',
   );
+  const isBelowBreakpoint =
+    layoutWidth === 'unread' ? isMobileOnServer : layoutWidth === 'mobile';
   const [uncontrolledMobileOpen, setUncontrolledMobileOpen] = useState(false);
   const isMobileNavOpen = mobileNavConfig?.isOpen ?? uncontrolledMobileOpen;
 
@@ -851,6 +865,19 @@ export function AppShell({
   // Determine if sideNav should show as overlay (mobile) or inline
   // =========================================================================
   const showSideNavInline = hasSideNav && !isBelowBreakpoint;
+  // Until the shell reads the window, a phone can be showing the server's wide
+  // layout. CSS then hides the inline side nav and flattens the elevated
+  // corner below the breakpoint. A theme that moves the point has no compiled
+  // rule, so its shell keeps the server's layout until it reads the window.
+  const unreadPoint = unreadWidthPoint(
+    layoutWidth === 'unread',
+    sideNavBreakpoint,
+    breakpointWidth,
+  );
+  const unreadStyles =
+    showSideNavInline && unreadPoint != null
+      ? UNREAD_STYLES[unreadPoint]
+      : undefined;
 
   // Mobile nav rendering modes:
   // 1. ReactNode shorthand — user provided <MobileNav> directly
@@ -912,13 +939,27 @@ export function AppShell({
     </SideNavRenderContext>
   ) : null;
 
+  const topNavTakesMobileBar = !mobileNavDisabled && mobileNavReactNode == null;
+  // Until the shell reads the window, the server's full bar can be showing on
+  // a phone. The full bar then hides its start and center content below the
+  // breakpoint, as the mobile bar does. The toggle arrives when the shell
+  // reads the window. A theme that moves the point has no compiled rule, so
+  // its bar keeps the server's layout until then.
+  const unreadTopNavRegion =
+    !isBelowBreakpoint && topNavTakesMobileBar && unreadPoint != null
+      ? UNREAD_STYLES[unreadPoint].topNavRegion
+      : null;
   const topNavContent = hasTopNav ? (
-    isBelowBreakpoint && !mobileNavDisabled && mobileNavReactNode == null ? (
+    isBelowBreakpoint && topNavTakesMobileBar ? (
       <TopNavMobileContentContext value={mobileContentValue}>
         <TopNavRenderContext value="mobile-bar">{topNav}</TopNavRenderContext>
       </TopNavMobileContentContext>
     ) : (
-      topNav
+      // Always present on this branch, so reading the window keeps the bar
+      // mounted.
+      <TopNavUnreadRegionContext value={unreadTopNavRegion}>
+        {topNav}
+      </TopNavUnreadRegionContext>
     )
   ) : null;
 
@@ -1118,6 +1159,7 @@ export function AppShell({
         navAreaStyle,
         isAuto && stickyBgStyle,
         isAuto && styles.panelAutoFill,
+        unreadStyles?.sideNav,
       ]}>
       <SideNavShellContext value={sideNavShell}>{sideNav}</SideNavShellContext>
     </LayoutPanel>
@@ -1258,7 +1300,10 @@ export function AppShell({
           : styles.contentWrapper,
       )}>
       {shouldElevateWithCorner && (
-        <div ref={backdropRef} {...stylex.props(styles.elevatedBackdrop)} />
+        <div
+          ref={backdropRef}
+          {...stylex.props(styles.elevatedBackdrop, unreadStyles?.corner)}
+        />
       )}
       {mainInner}
     </div>
@@ -1344,56 +1389,58 @@ export function AppShell({
         <LayoutAreaContext value={null}>
           <LayoutSlotsContext value={DEFAULT_LAYOUT_SLOTS}>
             <LayoutDividerContext value={null}>
-              {/* Skip-to-content link */}
-              <a
-                href={`#${mainContentId}`}
-                onClick={handleSkipLinkClick}
-                {...focusOutlineProps.focusVisible(styles.skipLink)}
-                data-testid="skip-to-content">
-                {t('@astryx.appShell.skipToContent')}
-              </a>
+              <LayoutContainerContext value={null}>
+                {/* Skip-to-content link */}
+                <a
+                  href={`#${mainContentId}`}
+                  onClick={handleSkipLinkClick}
+                  {...focusOutlineProps.focusVisible(styles.skipLink)}
+                  data-testid="skip-to-content">
+                  {t('@astryx.appShell.skipToContent')}
+                </a>
 
-              <Layout
-                height={height}
-                padding={0}
-                header={
-                  <>
-                    {headerContent}
-                    {autoMobileTopBar}
-                  </>
-                }
-                start={sideNavContent}
-                content={mainContent}
-              />
+                <Layout
+                  height={height}
+                  padding={0}
+                  header={
+                    <>
+                      {headerContent}
+                      {autoMobileTopBar}
+                    </>
+                  }
+                  start={sideNavContent}
+                  content={mainContent}
+                />
 
-              {/* Mobile nav — always mounted below breakpoint via Activity so DOM
+                {/* Mobile nav — always mounted below breakpoint via Activity so DOM
             presence detection works. Hidden until the drawer opens. */}
-              {shouldRenderMobileNavReactNode && mobileNavReactNode}
-              {shouldRenderConfigContent && mobileNavConfigContent}
-              {isBelowBreakpoint &&
-                !mobileNavDisabled &&
-                mobileNavReactNode == null &&
-                !mobileNavConfigContent && (
-                  <ActivityWrapper
-                    mode={isMobileNavActivityVisible ? 'visible' : 'hidden'}>
-                    {/* SideNav drawer — always mounted so presence detection works.
+                {shouldRenderMobileNavReactNode && mobileNavReactNode}
+                {shouldRenderConfigContent && mobileNavConfigContent}
+                {isBelowBreakpoint &&
+                  !mobileNavDisabled &&
+                  mobileNavReactNode == null &&
+                  !mobileNavConfigContent && (
+                    <ActivityWrapper
+                      mode={isMobileNavActivityVisible ? 'visible' : 'hidden'}>
+                      {/* SideNav drawer — always mounted so presence detection works.
                 Hidden when TopNav owns the drawer (combined mode passes
                 sideNav via TopNav's mobile content context instead). */}
-                    {hasSideNav && !hasTopNav && (
-                      <SideNavRenderContext value="drawer">
-                        {sideNav}
-                      </SideNavRenderContext>
-                    )}
-                    {hasTopNav && (
-                      <TopNavMobileContentContext
-                        value={drawerMobileContentValue}>
-                        <TopNavRenderContext value="drawer">
-                          {topNav}
-                        </TopNavRenderContext>
-                      </TopNavMobileContentContext>
-                    )}
-                  </ActivityWrapper>
-                )}
+                      {hasSideNav && !hasTopNav && (
+                        <SideNavRenderContext value="drawer">
+                          {sideNav}
+                        </SideNavRenderContext>
+                      )}
+                      {hasTopNav && (
+                        <TopNavMobileContentContext
+                          value={drawerMobileContentValue}>
+                          <TopNavRenderContext value="drawer">
+                            {topNav}
+                          </TopNavRenderContext>
+                        </TopNavMobileContentContext>
+                      )}
+                    </ActivityWrapper>
+                  )}
+              </LayoutContainerContext>
             </LayoutDividerContext>
           </LayoutSlotsContext>
         </LayoutAreaContext>

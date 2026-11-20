@@ -112,7 +112,7 @@ export const docs = {
       name: 'marks',
       type: 'ReadonlyArray<{value: number; label: string}>',
       description:
-        "Fixed target marks drawn on the track at values in the same 0..max scale as value (e.g. a goal line). They stay visible whether progress is below or past them, and take their color from what they sit on: a mark inside the filled area uses the fill variant's on-color (on-accent, on-warning, on-error, and so on), a mark still out on the bare track uses the primary text color (the secondary one on a disabled bar, which dims everything it draws). Each mark requires a label: it is the mark's accessible name and the text revealed via a tooltip on hover/focus. Ignored when indeterminate.",
+        "Fixed target marks drawn on the track at values in the same 0..max scale as value (e.g. a goal line). They stay visible whether progress is below or past them, and take their color from what they sit on: a mark inside the filled area uses the color that reads on the fill (on-accent on an accent fill, the surface color on the others), a mark still out on the bare track uses the primary text color (the secondary one on a disabled bar, whose track and fill dim). Each mark requires a label: it is the mark's accessible name and the text revealed via a tooltip on hover/focus. Ignored when indeterminate.",
     },
     {
       name: 'isDisabled',
@@ -256,7 +256,7 @@ export const docsZh = {
       name: 'marks',
       type: 'ReadonlyArray<{value: number; label: string}>',
       description:
-        '在轨道上按与 value 相同的 0..max 刻度绘制的固定目标标记（例如目标线）。无论进度低于还是超过它们都保持可见，并根据所处位置取色：位于已填充区域内的标记使用与填充变体配对的前景色（on-accent、on-warning、on-error 等），仍位于空轨道上的标记使用主文本颜色（禁用状态下会降为次要文本颜色，与其整体弱化的呈现保持一致）。每个标记都必须提供 label——它既是标记的无障碍名称，也是悬停/聚焦时通过工具提示显示的文本。不确定模式下忽略。',
+        '在轨道上按与 value 相同的 0..max 刻度绘制的固定目标标记（例如目标线）。无论进度低于还是超过它们都保持可见，并根据所处位置取色：位于已填充区域内的标记使用能在填充上读清的颜色（强调填充上为 on-accent，其他填充上为表面颜色），仍位于空轨道上的标记使用主文本颜色（禁用状态下会降为次要文本颜色，此时轨道和填充会变淡）。每个标记都必须提供 label——它既是标记的无障碍名称，也是悬停/聚焦时通过工具提示显示的文本。不确定模式下忽略。',
     },
     {
       name: 'isDisabled',
