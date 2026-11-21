@@ -1391,6 +1391,104 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
   );
 
   it(
+    'measures what create-made bars and pages hide: segments, header fields, placed fills, variant images and state fills',
+    async () => {
+      // Segments in a dark header whose own text token wins over the bar's.
+      const own = await check(
+        themeFile('segown', READABLE, {
+          'app-shell-header': {
+            base: {
+              backgroundColor: '#142145',
+              '--color-text-primary': '#ffffff',
+              '--color-text-secondary': '#dddddd',
+            },
+          },
+          'segmented-control-item': {
+            base: {'@light': {'--color-text-secondary': '#474747'}},
+          },
+        }),
+      );
+      expect(
+        own.problems.some(
+          p =>
+            p.kind === 'bar-ground' &&
+            p.mode === 'light' &&
+            /segmented-control-item's own style sets --color-text-secondary/.test(
+              p.message,
+            ),
+        ),
+      ).toBe(true);
+      // A search field in a header that re-points its text to white.
+      expect(
+        own.problems.some(
+          p => p.kind === 'bar-text' && (p.parts ?? []).includes('text-input'),
+        ),
+      ).toBe(true);
+      // Segments in a dark header with no text of the bar's own: the
+      // problem names the edit in the bar's own style.
+      const plain = await check(
+        themeFile('segplain', READABLE, {
+          'app-shell-header': {base: {backgroundColor: '#142145'}},
+        }),
+      );
+      expect(
+        plain.problems.some(
+          p =>
+            p.kind === 'bar-ground' &&
+            /in app-shell-header's own style/.test(p.message),
+        ),
+      ).toBe(true);
+      // A fill placed under a structural selector is the part's fill.
+      const placed = await check(
+        themeFile('placedfill', READABLE, {
+          'layout-content': {
+            base: {
+              ':not(.astryx-dialog *, .astryx-drawer *)': {
+                backgroundColor: '#dddddd',
+              },
+            },
+          },
+        }),
+      );
+      expect(
+        placed.problems.some(
+          p => p.part === 'layout-content' && p.mode === 'dark',
+        ),
+      ).toBe(true);
+      // A pointer tint that paints a fill of its own over Core's state:
+      // light text on a white hover in dark.
+      const state = await check(
+        themeFile('statefill', {
+          ...READABLE,
+          '--color-overlay-hover': ['#0000000d', '#ffffff'],
+        }),
+      );
+      expect(
+        state.problems.some(
+          p => p.kind === 'part-text' && /hover fill/.test(p.message),
+        ),
+      ).toBe(true);
+      // An image a part paints only in one of its variants is said.
+      const variant = await check(
+        themeFile('variantimage', READABLE, {
+          layout: {
+            'height:fill': {
+              backgroundImage:
+                'linear-gradient(#ffffff, #ffffff), linear-gradient(120deg, #ffb547, #e83fc0)',
+            },
+          },
+        }),
+      );
+      expect(
+        variant.problems.some(
+          p => p.kind === 'page-image' && p.part === 'layout',
+        ),
+      ).toBe(true);
+    },
+    T,
+  );
+
+  it(
     'refuses what it cannot check, with the documented codes, and changes nothing',
     async () => {
       /** @param {Promise<unknown>} p */

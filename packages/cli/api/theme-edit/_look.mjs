@@ -171,12 +171,25 @@ export function partValue(components, part, keys, m, when = null) {
   for (const block of [when, 'base']) {
     const style = block ? blocks[block] : null;
     if (!style || typeof style !== 'object') continue;
-    for (const inner of [style[`@${m}`], style])
+    // A block under a structural selector (`:not(.astryx-dialog *)`) is
+    // the part at rest in most places: it counts after the plain block.
+    const placed = Object.entries(style)
+      .filter(([k, v]) => REST_SELECTOR.test(k) && v && typeof v === 'object')
+      .flatMap(([, v]) => [v[`@${m}`], v]);
+    for (const inner of [style[`@${m}`], style, ...placed])
       if (inner && typeof inner === 'object')
         for (const k of keys) if (typeof inner[k] === 'string') return inner[k];
   }
   return null;
 }
+
+/**
+ * A selector key that places a style without a state: `:not(…)`,
+ * `:where(…)`, `:is(…)`, or one naming a class or an attribute — never a
+ * pointer, focus or check state.
+ */
+const REST_SELECTOR =
+  /^(?!.*:(hover|active|focus|focus-visible|focus-within|disabled|checked|visited)\b)(:not\(|:where\(|:is\(|&|\.|\[)/;
 
 /**
  * The fill a part's own style paints in a block: a background image that
@@ -663,7 +676,12 @@ function barTextProblems(look) {
               ['backgroundColor', 'background'],
               m,
               block,
-            ) ?? (p.bg.tokens[0] ? `var(${p.bg.tokens[0]})` : p.bg.raw);
+            ) ??
+            // (A fill token the bar sets for its own parts draws them.)
+            (p.bg.tokens[0]
+              ? (partValue(components, part, [p.bg.tokens[0]], m) ??
+                `var(${p.bg.tokens[0]})`)
+              : p.bg.raw);
           const fill = shown(colorIn(fillValue, res[m], m), bar);
           if (!fill) continue;
           const r = ratio(fg, fill);
@@ -774,6 +792,13 @@ function barTextProblems(look) {
   // Text a part inside a page bar draws on the bar's own fill (the part
   // paints none of its own): the text, its own or the bar's, must read on
   // the bar.
+  /** The parts a menu holds: they sit on the menu, not on a bar. */
+  const inMenus = new Set(
+    menuParts(map).flatMap(({part: menu}) => [
+      menu,
+      ...(map[menu]?.contains ?? []),
+    ]),
+  );
   for (const part of PAGE_BARS) {
     const blocks = components?.[part];
     if (!blocks || typeof blocks !== 'object') continue;
@@ -781,9 +806,9 @@ function barTextProblems(look) {
     for (const m of look.modes) {
       const page = shown(colorIn(`var(${PAGE})`, res[m], m), null);
       const barValue = ownFill(components, part, m, null, res[m]);
-      // A bar painted with one opaque gradient is measured at each of its
-      // stops: text crosses all of them.
-      const bars = (
+      // A bar painted with one opaque gradient is measured at its middle
+      // color, as the contrast measure reads text on a gradient.
+      const stopsOf = (
         barValue != null && /gradient\(/.test(barValue)
           ? (fillStops(barValue) ?? [])
           : barValue != null
@@ -792,7 +817,16 @@ function barTextProblems(look) {
       )
         .map(v => shown(colorIn(v, res[m], m), page))
         .filter(/** @returns {c is Rgb} */ c => c != null);
-      if (!bars.length) continue;
+      if (!stopsOf.length) continue;
+      /** @type {Rgb[]} */
+      const bars = [
+        /** @type {Rgb} */ (
+          stopsOf[0].map(
+            (_, k) =>
+              stopsOf.reduce((sum, c) => sum + c[k], 0) / stopsOf.length,
+          )
+        ),
+      ];
       for (const p of pairs) {
         const q = p.bg.target;
         // The text sits in the bar: its part is one the bar holds, or the
@@ -800,20 +834,39 @@ function barTextProblems(look) {
         const sits =
           within.has(String(p.fg.target)) ||
           /** @type {any} */ (p.within ?? []).includes(part);
-        // (Text on the bar's own fill is measured with the bar's fill.)
+        // (Text on the bar's own fill is measured with the bar's fill;
+        // text in a menu the bar opens sits on the menu's own fill; text
+        // drawn disabled has no reading floor.)
         if (!q || q === part || !sits) continue;
+        if (inMenus.has(String(p.fg.target)) || inMenus.has(q)) continue;
+        if (/disabled/.test(p.fg.tokens[0] ?? '')) continue;
         const block = pairBlock(map, p);
         // A ground inside the bar that paints its own fill is the text's;
         // a ground outside it (the page the census drew) is under the bar.
+        // A see-through ground inside the bar (a segmented control's
+        // track) lays its tint over the bar: the text is measured on that.
+        let grounds = bars;
         if (within.has(q)) {
           if (ownFill(components, q, m, block, res[m]) != null) continue;
-          const fillValue = p.bg.tokens[0]
-            ? `var(${p.bg.tokens[0]})`
+          const fillToken = p.bg.tokens[0];
+          const fillValue = fillToken
+            ? (partValue(components, q, [fillToken], m, block) ??
+              partValue(components, part, [fillToken], m) ??
+              `var(${fillToken})`)
             : p.bg.raw;
           const c = colorIn(fillValue, res[m], m);
-          if (c != null && alphaOf(c) > 0) continue;
+          if (c != null && alphaOf(c) >= 1) continue;
+          if (c != null && alphaOf(c) > 0)
+            grounds = bars
+              .map(b => shown(c, b))
+              .filter(/** @returns {g is Rgb} */ g => g != null);
+          if (!grounds.length) continue;
         }
         const tok = p.fg.tokens[0];
+        // (A text token the text's own part sets wins over the bar's.)
+        const ownText =
+          tok != null &&
+          partValue(components, p.fg.target, [tok], m, block) != null;
         const text =
           partValue(components, p.fg.target, ['color'], m, block) ??
           (tok
@@ -822,9 +875,9 @@ function barTextProblems(look) {
               partValue(components, part, [tok], m) ??
               `var(${tok})`)
             : null);
-        const fg = shown(colorIn(text, res[m], m), bars[0]);
+        const fg = shown(colorIn(text, res[m], m), grounds[0]);
         if (!fg) continue;
-        const r = Math.min(...bars.map(b => ratio(fg, b)));
+        const r = Math.min(...grounds.map(b => ratio(fg, b)));
         if (r >= TEXT) continue;
         const key = `ground|${part}|${tok}|${m}`;
         const had = out.get(key);
@@ -833,23 +886,31 @@ function barTextProblems(look) {
           if (r < /** @type {number} */ (had.ratio)) had.ratio = fixed(r);
           continue;
         }
-        out.set(key, {
+        const problem = /** @type {LookProblem} */ ({
           kind: 'bar-ground',
           mode: m,
-          message: '',
+          message: ownText ? `own:${p.fg.target}` : '',
           part,
           ...(tok ? {token: tok} : {}),
           parts: [p.text],
           ratio: fixed(r),
           needs: TEXT,
         });
+        out.set(key, problem);
       }
     }
   }
   for (const p of out.values()) {
     const groups = [...new Set((p.parts ?? []).map(q => familyOf(q) ?? q))];
     if (p.kind === 'bar-ground') {
-      p.message = `text of ${(p.parts ?? []).slice(0, 3).join(', ')} sits on ${p.part}'s own fill at ${p.ratio}:1 in ${p.mode}${p.token ? `: set ${p.token} in ${p.part}'s own style to a color that reads there` : ''}`;
+      const own = p.message.startsWith('own:') ? p.message.slice(4) : null;
+      p.message = `text of ${(p.parts ?? []).slice(0, 3).join(', ')} sits on ${p.part}'s own fill at ${p.ratio}:1 in ${p.mode}${
+        own
+          ? `: ${own}'s own style sets ${p.token}, which wins over the bar's; take it out of ${own}'s style so the text follows ${p.part}, or give it a color that reads on both`
+          : p.token
+            ? `: set ${p.token} in ${p.part}'s own style to a color that reads there`
+            : ''
+      }`;
       continue;
     }
     p.message =
@@ -1052,12 +1113,23 @@ function partImageProblems(look) {
     );
     // Each mode decides on its own: a gradient can be opaque in one mode
     // and see-through in the other.
-    const unread = look.modes.filter(m => {
+    // Every block the part draws in (a `height:fill` layout, a selected
+    // row), not only the plain one.
+    const drawnIn = [
+      null,
+      ...Object.keys(blocks).filter(k => k !== 'base' && !/^[:@]/.test(k)),
+    ];
+    const unread = look.modes.filter(m =>
+      drawnIn.some(block => imageUnread(m, block)),
+    );
+    /** @param {Mode} m @param {string | null} block */
+    function imageUnread(m, block) {
       const v = partValue(
         look.components,
         part,
         ['backgroundImage', 'background'],
         m,
+        block,
       );
       if (typeof v !== 'string' || !isPattern(v, look.res[m])) return false;
       if (/url\(/.test(v)) return true;
@@ -1067,7 +1139,7 @@ function partImageProblems(look) {
       // A see-through sheen over a fill the part sets is measured on that
       // fill; a variable the theme's tokens do not answer leaves it unread.
       return /var\(/.test(read) || !setsFill;
-    });
+    }
     if (!unread.length) continue;
     out.push({
       kind: 'page-image',
@@ -1087,6 +1159,10 @@ const FREE_PARTS = [
   'badge',
   'token',
   'button',
+  'icon-button',
+  'text-input',
+  'power-search',
+  'tokenizer',
 ];
 /** The bars and panels a page is built from. */
 const PAGE_BARS = [
@@ -1179,7 +1255,7 @@ function hoverProblems(look) {
     /** @type {Array<{key: string, value: string, layer: boolean}>} */
     const hovers = [];
     for (const [key, value] of Object.entries(at))
-      if (/:hover(::before)?$/.test(key))
+      if (/:(hover|active)(::before)?$/.test(key))
         hovers.push({key, value, layer: key.endsWith('::before')});
     for (const [key, value] of Object.entries(
       rec?.at?.['background-image'] ?? {},
@@ -1187,12 +1263,13 @@ function hoverProblems(look) {
       const flat = /^linear-gradient\((.+),\s*\1\)$/.exec(
         String(value).replace(/\s+/g, ''),
       );
-      if (/:hover$/.test(key) && flat)
+      if (/:(hover|active)$/.test(key) && flat)
         hovers.push({key, value: flat[1], layer: true});
     }
     for (const {key, value, layer} of hovers) {
-      const hovered = /^(.*?)\s*:hover(::before)?$/.exec(key);
+      const hovered = /^(.*?)\s*:(hover|active)(::before)?$/.exec(key);
       if (!hovered) continue;
+      const pressed = hovered[2] === 'active';
       const restKey = hovered[1] || 'always';
       const variant = /(?:^|,)variant=([\w-]+)/.exec(restKey)?.[1];
       const block = variant ? `variant:${variant}` : null;
@@ -1233,7 +1310,14 @@ function hoverProblems(look) {
           const top = c ? /** @type {Rgb} */ (parseColor(c)) : null;
           const hover =
             top && rest ? compositeOver(top, alphaOf(c), rest) : rest;
-          return rest && hover ? oklabDistance(rest, hover) : null;
+          return rest && hover
+            ? {
+                d: oklabDistance(rest, hover),
+                rest,
+                hover,
+                alpha: c ? alphaOf(c) : 0,
+              }
+            : null;
         };
         const theme = paints(
           aroundTokens(part, m),
@@ -1242,7 +1326,50 @@ function hoverProblems(look) {
         );
         const core = paints(base, {}, null);
         if (theme == null || core == null) continue;
-        if (core < HOVER_SHOWS || theme >= HOVER_SAME) continue;
+        // Text on the state's fill, as the theme draws it: it read at rest
+        // and must read under the pointer or the press too.
+        const stateName = pressed ? 'press' : 'hover';
+        // (A light tint over the rest fill moves text little: a state that
+        // paints a fill of its own is the one that can hide it.)
+        for (const pr of theme.alpha >= 0.5 ? look.pairs : []) {
+          if (pr.fg.target !== part || pairBlock(map, pr) !== block) continue;
+          if (/disabled/.test(pr.fg.tokens[0] ?? '')) continue;
+          const tokens = aroundTokens(part, m)[m];
+          const tok = pr.fg.tokens[0];
+          const textValue =
+            partValue(components, part, ['color'], m, block) ??
+            (tok
+              ? (partValue(components, part, [tok], m, block) ?? `var(${tok})`)
+              : null);
+          const fg = shown(colorIn(textValue, tokens, m), theme.hover);
+          if (!fg) continue;
+          const r = ratio(fg, theme.hover);
+          // A state is passed in a moment: text on it is a problem when it
+          // falls below 3:1 and below 95% of Core's own on the same state
+          // (Core's own state fills sit under 4.5:1 too).
+          const coreFg = tok
+            ? shown(colorIn(`var(${tok})`, base[m], m), core.hover)
+            : null;
+          const floor = Math.min(
+            NON_TEXT,
+            coreFg ? EDGE_SHARE * ratio(coreFg, core.hover) : NON_TEXT,
+          );
+          if (r + 0.005 >= floor || ratio(fg, theme.rest) < TEXT) continue;
+          const sk = `${stateName}|${part}|${block ?? ''}|${m}`;
+          if (out.has(sk)) continue;
+          out.set(sk, {
+            kind: 'part-text',
+            mode: m,
+            part,
+            ...(tok ? {token: tok} : {}),
+            parts: [`${part}${variant ? ` (${block})` : ''}`],
+            ratio: fixed(r),
+            needs: fixed(floor),
+            message: `text on ${part}${variant ? ` (${block})` : ''}'s ${stateName} fill is ${fixed(r)}:1 in ${m} (needs ${fixed(floor)}), where it reads at rest: give its ':${pressed ? 'active' : 'hover'}' style a fill the text reads on`,
+          });
+        }
+        if (pressed) continue;
+        if (core.d < HOVER_SHOWS || theme.d >= HOVER_SAME) continue;
         const name = `${part}${variant ? ` (${block})` : ''}`;
         // Hover the theme's overlay token flattens, with no style of the
         // part's own, is one problem per mode: one line to change.
@@ -1286,7 +1413,7 @@ function hoverProblems(look) {
     }
   }
   for (const p of out.values())
-    if (p.token)
+    if (p.kind === 'hover' && p.token)
       p.message = `nothing changes under the pointer in ${p.mode} on ${(p.parts ?? []).length} parts (${(p.parts ?? []).slice(0, 3).join(', ')}${(p.parts ?? []).length > 3 ? ', …' : ''}), where Core's own does: the theme sets ${p.token} to show nothing`;
   return [...out.values()];
 }
