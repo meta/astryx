@@ -1157,7 +1157,7 @@ export function cornersNamed(text, part = null, names = []) {
       new RegExp(re.source, re.flags.includes('g') ? re.flags : `${re.flags}g`),
       ' ',
     );
-  t = t.replace(/\bupper\b/g, 'top').replace(/\blower\b/g, 'bottom');
+  t = t.replace(/\bupper\b/g, 'top');
   const KEY = /** @type {Record<string, string>} */ ({
     'top-left': 'start-start',
     'top-right': 'start-end',
@@ -1788,7 +1788,6 @@ function withoutAmount(text) {
       '$1$2',
     )
     .replace(/\b\d*\.?\d+(?:px)?\s*(?:times|x|×)(?=\s|$|\b)/g, ' ')
-    .replace(/(^|\s)[x×]\s?\d*\.?\d+\b/g, ' ')
     .replace(/(^|[\s(])[+-]\s?\d{1,3}(?:\.\d+)?(?:px)?\s?(%|percent\b)/g, ' ')
     .replace(/(?:^|\s)0?\.\d+(?:px)?\s+(?=(the|of)\b)/g, ' ')
     .replace(
@@ -2448,11 +2447,7 @@ function keepsAsExcept(question) {
       },
     );
   if (!kept.length) return question;
-  rest = rest
-    .replace(/^\s*(?:[,;]|and\b|but\b|then\b)\s*/i, '')
-    .replace(/\s*(?:[,;]|\band|\bbut|\bthen)\s*$/i, '')
-    .replace(/\s{2,}/g, ' ')
-    .trim();
+  rest = rest.replace(/^\s*(?:[,;]|and\b|but\b|then\b)\s*/i, '').trim();
   // Only a keep: nothing to change.
   if (!/[a-z]/i.test(rest)) return question;
   return /\bexcept\b/i.test(rest)
@@ -2591,8 +2586,7 @@ export function exactFactor(text) {
     .replace(/⅓/g, ' 1/3 ')
     .replace(/×/g, ' x ')
     .replace(/(\d)(?:px)?\s*percent\b/g, '$1%')
-    .replace(/(\d)px(?=\s*(?:%|times|x\b))/g, '$1')
-    .replace(/\s+/g, ' ');
+    .replace(/(\d)px(?=\s*(?:%|times|x\b))/g, '$1');
   // (Fainter and weaker are less of a line or tint: "50% fainter" is half
   // its strength.)
   const SHRINK =
@@ -3932,15 +3926,10 @@ function clausesOf(q, partWords, words = null) {
       )
       // "when I tab to a link": the key, not the tab part.
       .replace(/\b(i |we |you )?tab(bing)? (to|through|into)\b/g, ' ')
-      // "slide in", "zoom out": a motion, not the slider part.
-      .replace(/\b(?:fade|slide|zoom)[sd]?[- ](?:in|out)\b/g, ' ')
       // "from the page color to …": the page's color as a value (a stop),
       // never the page as a part to change (PAGE_COLOR_REF).
       .replace(PAGE_COLOR_REF, ' ')
-      .replace(/\bvar\([^)]*\)|--[a-z][\w-]*/g, ' ')
-      .replace(/\b[a-z]+(?:-[a-z]+)+\b/g, m =>
-        cssProperties().has(m) ? ' ' : m,
-      );
+      .replace(/\bvar\([^)]*\)|--[a-z][\w-]*/g, ' ');
     const cornerWords = /\b(round|corner|radius|shape|circular)/.test(text);
     for (const [re, part] of partWords) {
       if (!mayMatch(re, rest)) continue;
@@ -4658,10 +4647,6 @@ export function namedProperty(text) {
     const rest = flat
       .slice((m.index ?? 0) + m[0].length)
       .replace(/^(?:to|of|is|=)\s+/, '')
-      .replace(
-        /\s+(?:on|for|in|when|while|if)\s+(?:the\s+|all\s+|every\s+)?[a-z][\w-]*.*$/,
-        '',
-      )
       .trim();
     const tokens = valueWords(rest);
     // "padding NaNpx": a length the property cannot take.
@@ -4891,25 +4876,6 @@ function numberWord(m) {
   if (/^(half|a half|an half)/.test(w)) return '0.5';
   if (/quarter/.test(w)) return '0.25';
   return String(w.split(' ').reduce((n, x) => n + (NUMBER_WORDS[x] ?? 0), 0));
-}
-
-/**
- * Whether a few words name a color or a font, for "swap A for B".
- * @param {string} words lower-case
- * @returns {'color' | 'font' | undefined}
- */
-function valueKind(words) {
-  const w = words.trim();
-  if (parseColor(w) || Object.hasOwn(HUES, w)) return 'color';
-  const slug = w.replace(/\s+/g, '-');
-  if (
-    Object.hasOwn(OPEN_FONTS, slug) ||
-    Object.hasOwn(FONTS, slug) ||
-    Object.values(OPEN_FONTS).some(f => f.family.toLowerCase() === w) ||
-    Object.values(FONTS).some(f => String(f[0]).toLowerCase() === w)
-  )
-    return 'font';
-  return undefined;
 }
 
 /**
@@ -5251,14 +5217,9 @@ export function draftAnswer(ctx, env, question) {
       const mode = modeNear(w);
       return mode ? ` in ${mode} mode ` : m;
     })
-    .replace(/\b(dark|light)[- ]?mode\b/gi, '$1 mode')
     .replace(
       /\b(?:at night|in the night|night ?(?:mode|theme)|night ?time)\b/gi,
       'in dark mode',
-    )
-    .replace(
-      /\b(?:in the day|during the day|day ?(?:mode|theme)|day ?time)\b/gi,
-      'in light mode',
     );
   // "darker but not darker than #1e3a8a": a color bound is a limit every
   // color the answer writes is held to (after the answers are made), never
@@ -5359,12 +5320,6 @@ export function draftAnswer(ctx, env, question) {
         !/\bfocus\s+rings?\b/i.test(String(whole))
           ? 'focus ring'
           : m,
-    )
-    // ("large text", "small type": the text's size the way said.)
-    // ("small text" names the supporting text, never a way.)
-    .replace(
-      /\b(large|big|huge)\s+(text|type|print|lettering)\b(?!\s+(?:bigger|smaller|larger|on|in|for)\b)/gi,
-      'larger $2',
     )
     // ("grayscale", "black and white only, no color": no color in the
     // generated colors, the vibrancy dial at 0.)
@@ -5516,9 +5471,6 @@ export function draftAnswer(ctx, env, question) {
     // ("bold headings without being loud": a feel to stay clear of, its own
     // clause, never a "without" that undoes the ask before it.)
     .replace(/[,;]?\s*\bwithout\s+(?:being|looking|feeling)\s+/gi, ', not ')
-    // ("off-white", "ink blue", "grass green", "safety orange", "slate
-    // blue-gray": a color named in two words is one name in the table.)
-    .replace(/\boff[- ]white\b/gi, 'offwhite')
     .replace(/\bink[- ]blue\b/gi, 'inkblue')
     .replace(/\bgrass[- ]green\b/gi, 'grassgreen')
     .replace(/\bsafety[- ]orange\b/gi, 'safetyorange')
@@ -5533,49 +5485,6 @@ export function draftAnswer(ctx, env, question) {
     .replace(
       /(?<!\bnot\s)\b(?:pure|true|plain|solid)\s+(white|black)\b/gi,
       (_m, w) => (String(w).toLowerCase() === 'white' ? '#ffffff' : '#000000'),
-    )
-    // ("amber for warnings", "red only for alerts": the role color.)
-    .replace(
-      /(?<![\w#-])((?:[a-z]+\s+)?(?:[a-z]+|#[0-9a-f]{3,8})(?:\s+#[0-9a-f]{3,8})?)\s+(?:only\s+|just\s+)?(?:for|reserved for|on)\s+(?:the\s+|all\s+)?(warnings?|success(?:es)?|info(?:rmation)?|notices?|errors?)\b/gi,
-      (m, color, role, at, whole) => {
-        if (!colorsIn(String(color).toLowerCase()).length) return m;
-        // (Only a color said alone for the role, "amber for warnings":
-        // "red text on the info banner" is the banner's text, in its info
-        // look, never the info color.)
-        const colorAlone = String(color)
-          .toLowerCase()
-          .split(/\s+/)
-          .every(
-            w =>
-              /^#[0-9a-f]{3,8}$/.test(w) ||
-              colorsIn(w).length ||
-              /^(?:light|dark|pale|deep|soft|bright|warm|cool|muted|vivid|rich|pastel)$/.test(
-                w,
-              ),
-          );
-        const next = String(whole)
-          .slice(Number(at) + m.length)
-          .toLowerCase()
-          .split(/[,;.:]/)[0]
-          .trim()
-          .split(/\s+/)
-          .slice(0, 3)
-          .join(' ');
-        const partFollows = partLexicon(ctx).parts.some(([re]) =>
-          re.test(` ${next} `),
-        );
-        if (!colorAlone || partFollows) return m;
-        // (A typed value said with a name is the color.)
-        const typed = /#[0-9a-f]{3,8}/i.exec(String(color))?.[0];
-        const r = /^warn/i.test(role)
-          ? 'warning'
-          : /^succ/i.test(role)
-            ? 'success'
-            : /^err/i.test(role)
-              ? 'danger'
-              : 'info';
-        return `${r} color ${typed ?? color}`;
-      },
     )
     // ("status colors: green #15803d, amber #b45309, red #b91c1c"): with
     // status said, each hue is its status's color, green success, amber
@@ -5645,16 +5554,6 @@ export function draftAnswer(ctx, env, question) {
     .replace(
       /\b(?:big|bigger|large|larger|huge)\s+(?:and\s+)?(?:readable\s+|legible\s+)?(?:type|text|font|lettering)\b/gi,
       'larger text',
-    )
-    // (Theme-wide only: "a thin border" on a part is its own line.)
-    .replace(
-      /\b(?:thin|hairline|fine|gentle|subtle)\s+(borders|lines)\b/gi,
-      (m, what, at, whole) =>
-        partLexicon(ctx).parts.some(([re]) =>
-          re.test(` ${String(whole).toLowerCase()} `),
-        )
-          ? m
-          : `thinner ${what}`,
     )
     .replace(
       /\b(?:lots of|plenty of|generous|lots more)\s+(?:white\s*space|whitespace|breathing room|room)\b/gi,
@@ -5846,12 +5745,6 @@ export function draftAnswer(ctx, env, question) {
         return next && colorsIn(next.toLowerCase()).length ? '' : m;
       },
     )
-    .replace(
-      /\bmore\s+(?:cheerful|lively|vibrant|joyful|fun)\b|\b(?:cheerful|lively|joyful)\b/gi,
-      'more colorful',
-    )
-    // ("tailwind shadow-sm"): the shadow sizes by their class names.
-    .replace(/\bshadow-(?:xs|sm)\b/gi, 'small shadow')
     .replace(/\bshadow-(?:lg|xl|2xl)\b/gi, 'large shadow')
     .replace(/\bshadow-md\b/gi, 'medium shadow')
     // ("divided by 1px lines", "separated by thin lines": lines between,
@@ -5874,7 +5767,6 @@ export function draftAnswer(ctx, env, question) {
       (m, color) =>
         colorsIn(String(color).toLowerCase()).length ? `${color} page ` : m,
     )
-    .replace(/\bpaper\s+(?=background\b)/gi, 'paper page ')
     // ("32px menu items", "40px rows": a length before an item noun is its
     // height.)
     .replace(
@@ -5891,12 +5783,6 @@ export function draftAnswer(ctx, env, question) {
       /\b((?:[a-z]+\s+)?(?:items?|rows?))\s+with\s+(?:an?\s+)?(\d+px\s+)?(?:thin\s+)?(?:lines?|dividers?|rules?|separators?)\b/gi,
       (_m, what, w) =>
         `${w ? String(w).trim() : '1px'} bottom border on ${what}`,
-    )
-    // ("32px rows in the menu", "dividers between list rows": a menu's or a
-    // list's rows are its items.)
-    .replace(
-      /\brows?\s+(?:in|of)\s+(?:the\s+|a\s+)?(menus?|dropdowns?|lists?|selects?)\b/gi,
-      '$1 items',
     )
     .replace(/\b(menu|dropdown|list)\s+rows?\b/gi, '$1 items')
     // ("make it calmer", "a calm dark mode": with no part named, the theme
@@ -6553,16 +6439,11 @@ export function draftAnswer(ctx, env, question) {
       /\b(?:rimuovi|togli|elimina|entferne|quita|retire)\b\s*(?:l'|la |le |il |lo |el |los |las |o |a |os |as |die |der |das |den )?/gi,
       'no ',
     )
-    .replace(
-      /\b(?:sans|sin|sem|ohne)\s+(?=(?:l'|la |le |el |o |a |den )?(?:ombres?|bordures?|sombras?|bordes?|bordas?|schatten|rand)\b)/gi,
-      'no ',
-    )
     // "those dialog shadows are heavy": too heavy, so lighter.
     .replace(
       /\b(?:are|is|look|looks|seem|seems) (?:so |very |way |kinda |pretty |quite )?(heavy|strong|harsh|loud|thick|dark|bright)\b/gi,
       'too $1',
     )
-    .replace(/\b(dark|light)mode\b/gi, '$1 mode')
     .replace(/\b(?:nuke|kill|zap|axe)\b/gi, 'remove')
     .replace(
       /\bsharpen (?:the |all the |every |all )?([a-z]+)/gi,
@@ -6876,8 +6757,6 @@ export function draftAnswer(ctx, env, question) {
       ),
       '$1 text',
     )
-    // "exactly 36px": the value said.
-    .replace(/\bexactly\s+(?=\d*\.?\d+\s?(?:px|rem|em|%)\b)/gi, '')
     // ("darker by a third": the share before the way, as said either way;
     // "a third darker", "a quarter lighter": that share of the way;
     // "half as dark" is half the darkness, lighter.)
@@ -7092,15 +6971,7 @@ export function draftAnswer(ctx, env, question) {
     // Questions in a script how cannot read word by word keep their ask.
     if (/[^ -~]/.test(t0.replace(/[\u{1F000}-\u{1FFFF}\u2000-\u2BFF]/gu, '')))
       return true;
-    if (
-      VERB.test(
-        raw
-          .replace(POLITE, '')
-          .replace(/^(?:the|my|our|all|every|a|an)\s+/, '')
-          .trim(),
-      )
-    )
-      return true;
+    if (VERB.test(raw.replace(POLITE, '').trim())) return true;
     const t = t0
       .replace(POLITE, '')
       .replace(
@@ -7222,7 +7093,7 @@ export function draftAnswer(ctx, env, question) {
     !/\b(?:please|pls)\b/i.test(raw0) &&
     (raw0.match(/[A-Z]/g) ?? []).length <= 12 &&
     raw0.replace(/\b[A-Z]{2,}\b/g, '').toLowerCase() ===
-      raw0.replace(/\b[A-Z]{2,}\b/g, '').replace(/^./, ch => ch.toLowerCase());
+      raw0.replace(/\b[A-Z]{2,}\b/g, '');
   const SARCASTIC_REPLY = /^\s*(?:yes|yeah|yep|sure|oh yes)\b[\s,]+because\b/i;
   // A question about how the theme is now ("is the shadow still there?"),
   // with the rest only naming looks, no verb, no request ("cards no
@@ -7330,7 +7201,6 @@ export function draftAnswer(ctx, env, question) {
         const aside = x
           .trim()
           .replace(/^(?:and|or|but|also|plus)\s+/i, '')
-          .replace(/[\s,]+(?:please|pls|plz|thanks|thx)[.!]*$/i, '')
           .trim();
         if (
           !part &&
@@ -7418,12 +7288,6 @@ export function draftAnswer(ctx, env, question) {
       new RegExp(`\\bless (?:${densityWords('dense', 'crowded')})\\b`, 'gi'),
       'roomier',
     )
-    // "less light", "less heavy", "less tight", "less thin": one step back on
-    // the same aspect.
-    .replace(
-      /\bless (?:light|thin|skinny)\b(?= (?:headings?|titles?|text|fonts?|weight)|\s*$)/gi,
-      'bolder',
-    )
     .replace(
       /\b(headings?|titles?|text|fonts?) (?:a bit |slightly )?less (?:light|thin)\b/gi,
       '$1 bolder',
@@ -7451,11 +7315,6 @@ export function draftAnswer(ctx, env, question) {
       /\bnot (bright|dark|bold|round|big|light|soft|warm|cool) enough\b/gi,
       (_, w) =>
         `${{bright: 'brighter', dark: 'darker', bold: 'bolder', round: 'rounder', big: 'bigger', light: 'lighter', soft: 'softer', warm: 'warmer', cool: 'cooler'}[/** @type {'bright'} */ (w.toLowerCase())]}`,
-    )
-    // "change only light to violet": light mode, not a light-only theme.
-    .replace(
-      /\b(?:change |set |make )?only (light|dark)(?: mode)? (?=to\b)/gi,
-      'in $1 mode change ',
     )
     // "links not underlined until hover": none, then underlined on hover.
     .replace(
@@ -7506,7 +7365,6 @@ export function draftAnswer(ctx, env, question) {
     )
     // "not pure black": a near-black; "not pure white": a near-white.
     .replace(/\bnot (?:pure |true |full )?black\b/gi, '#111111')
-    .replace(/\bnot (?:pure |true |full )?white\b/gi, '#fafafa')
     // "dropdown shadow": the dropdown's menu, the part that floats.
     .replace(/\bdropdowns? (?=shadows?|elevation)/gi, 'dropdown-menu ')
     // "½rem": a fraction is a number.
@@ -7516,7 +7374,6 @@ export function draftAnswer(ctx, env, question) {
       /(\d*)(?:½|1\u20442)(?!\s*(?:rem|px|em|%|x\b|×|times\b))/g,
       (_, n) => (n ? `${n}½` : ' half '),
     )
-    .replace(/(\d*)(?:½|1\u20442)/g, (_, n) => `${n ? Number(n) + 0.5 : '0.5'}`)
     .replace(
       /(\d*)(?:¼|1\u20444)/g,
       (_, n) => `${n ? Number(n) + 0.25 : '0.25'}`,
@@ -7587,9 +7444,6 @@ export function draftAnswer(ctx, env, question) {
         return ` qq${quoted.length - 1}qq `;
       },
     )
-    // Each line of a list is its own ask: a "no" on one line never reaches
-    // the next.
-    .replace(/^[ \t]*(?:[-*\u2022\u25e6]|\d+[.)])[ \t]+/gm, '')
     .replace(/\s*[\r\n]+\s*/g, ' ; ')
     // "1) square corners 2) no shadows": a marker is a break, never a
     // value. "N)" is a marker anywhere; "N." only at the start or after a
@@ -7611,7 +7465,6 @@ export function draftAnswer(ctx, env, question) {
     .replace(/(?<=[a-z])\.(?=[a-z])/gi, ' ')
     .replace(/(?<![\w-])\.(?=[a-z])/gi, ' ')
     .replace(/\s*=\s*/g, ' ')
-    .replace(/\bon\s*:\s*/g, 'on ')
     // Near-white and near-black are their own colors.
     // ("off-white" is a color word; a typed value said with it wins.)
     .replace(/\boff[- ]?white\b/gi, (m, _at, whole) =>
@@ -7643,19 +7496,10 @@ export function draftAnswer(ctx, env, question) {
       /\b(?:slightly |a bit |a little )?(?:less|not so|not as) (black|dark)\b/g,
       'lighter',
     )
-    .replace(
-      /\b(?:slightly |a bit |a little )?(?:less|not so|not as) (white|bright)\b/g,
-      'dimmer',
-    )
     // "8 or so px", "about 8 px": the number.
     .replace(/\b(\d+(?:\.\d+)?)\s+or so\s+(?=px|rem|em|pixels?)/g, '$1 ')
     // "0.5 rem", "14 px": a number and its unit are one length.
     .replace(/\b(\d+(?:\.\d+)?)\s+(px|rem|em|pt|vh|vw|ch)\b/gi, '$1$2')
-    // Typography words for the properties they name.
-    .replace(
-      /\btabular (numbers|numerals|figures|nums)\b/g,
-      'font-variant-numeric: tabular-nums',
-    )
     .replace(
       /\bbalance (?:the )?(?:(\w+) )?(?:line breaks|lines|wrapping)\b/g,
       '$1 text-wrap: balance',
@@ -7727,11 +7571,6 @@ export function draftAnswer(ctx, env, question) {
       /(\bfont[- ]family\s*:?\s*[^,;]+?)\s*,\s*(?=(?:serif|sans-serif|monospace|system-ui|cursive|ui-monospace|ui-sans-serif|ui-serif)\b)/g,
       '$1\u2e34 ',
     )
-    // "rounder? or maybe not. actually yes": the ask stands.
-    .replace(
-      /[?.!]?\s*\b(?:or )?maybe not\b[.?!,]*\s*(?:actually|ok(?:ay)?|no wait)?,?\s*(?:yes|do it)\b[.!]*/g,
-      '. ',
-    )
     // "the gray text fails contrast": gray text is the secondary text,
     // when no color is typed for it.
     // ("ghost buttons gray text": a part's gray text is that part's text,
@@ -7750,17 +7589,6 @@ export function draftAnswer(ctx, env, question) {
     .replace(
       /\b(?:replace|swap)\s+(?:out\s+)?(?:the\s+)?((?:shadows?|borders?|gradients?|underlines?|outlines?)\b[^,;]*?)\s+(?:with|for)\s+/g,
       'no $1 ; ',
-    )
-    // "swap Inter for Manrope", "replace red with #e11d48": B is the ask,
-    // but only when A and B are the same kind of value. "Replace the shadow
-    // with a border" keeps both words.
-    .replace(
-      /\b(?:swap|replace|switch)\s+(?:out\s+)?(?:the\s+)?([^,;]+?)\s+(?:for|with)\s+(?=(#[0-9a-f]{3,8}\b|[a-z][\w-]*(?:\s+[a-z][\w-]*)?))/g,
-      (m, a, b) => {
-        const kind = valueKind(a) ?? null;
-        const bKind = valueKind(b) ?? valueKind(b.split(/\s+/)[0]);
-        return kind && kind === bKind ? 'use ' : m;
-      },
     )
     // "bg #fff text #000": a new color after a color starts a new ask.
     .replace(
@@ -7790,7 +7618,6 @@ export function draftAnswer(ctx, env, question) {
     )
     // Tailwind classes: "border-2" is 2px, "rounded-full" a pill.
     .replace(/\bborder-(\d)\b/g, 'border width $1px')
-    .replace(/\brounded-full\b/g, 'pill corners')
     .replace(/\brounded-none\b/g, 'square corners')
     // "1e3px" is 1000px.
     .replace(
@@ -7824,21 +7651,6 @@ export function draftAnswer(ctx, env, question) {
     .replace(
       /\s*,?\s*\bbut\s+(?=(?:(?:a )?(?:bit|little|touch|lot)\s+|slightly\s+|much\s+|\d{1,2}\s?%\s+)?(?:lighter|darker|brighter|paler|deeper|warmer|cooler)\s*(?:$|[,;.!]))/gi,
       ' ',
-    )
-    // "cards, buttons or inputs": a comma list of parts ending in "or" names
-    // every one of them, as the "and" list does.
-    .replace(
-      /((?:\b[a-z][a-z-]*\s*,\s*)+)([a-z][a-z-]*),?\s+or\s+([a-z][a-z-]*)\b/gi,
-      (m, head, b, last) =>
-        [
-          ...String(head)
-            .split(/\s*,\s*/)
-            .filter(Boolean),
-          b,
-          last,
-        ].every(w => lex.parts.some(([re]) => re.test(` ${w} `)))
-          ? `${head}${b} and ${last}`
-          : m,
     )
     // "as well as" is "and"; "compared to", "relative to", "versus" compare.
     .replace(/\bas well as\b/gi, 'and')
@@ -8131,7 +7943,6 @@ export function draftAnswer(ctx, env, question) {
       /\b(apart from|other than|excluding|but not (on|in|for)|but not)\b/g,
       'except',
     )
-    .replace(/\s+/g, ' ')
     .trim();
   // "cramped on mobile": the editor has no media conditions; the rest of
   // the ask is answered, with a note.
@@ -8140,7 +7951,7 @@ export function draftAnswer(ctx, env, question) {
     'g',
   );
   const media = MEDIA_RE.test(q);
-  if (media) q = q.replace(MEDIA_RE, ' ').replace(/\s+/g, ' ').trim();
+  if (media) q = q.replace(MEDIA_RE, ' ').trim();
   // Two colors of the whole theme joined by "and" before one way ("the
   // accent and danger darker", "--color-accent and --color-danger
   // darker"): each takes that way, as two parts joined by "and" do.
@@ -9652,7 +9463,6 @@ export function draftAnswer(ctx, env, question) {
             ),
             ' ',
           )
-          .replace(/\s+/g, ' ')
           .trim();
         const again = clausesOf(text, lex.parts, {
           known: knownWord,
@@ -10361,8 +10171,7 @@ export function draftAnswer(ctx, env, question) {
       const named = holderWord.word
         .toLowerCase()
         .replace(/^(?:the|a|an|my)\s+/, '')
-        .replace(/(?:'s|s'|s)$/, '')
-        .replace(/\s+/g, '-');
+        .replace(/(?:'s|s'|s)$/, '');
       const members = [
         ...(FAMILIES[holder] ?? [holder]),
         ...(named !== holder && keys.includes(named) ? [named] : []),
@@ -10676,8 +10485,7 @@ export function draftAnswer(ctx, env, question) {
       // dropdown": dropdown-menu-item.)
       const placeWord = holderWord.word
         .toLowerCase()
-        .replace(/^(?:the|a|an|my)\s+/, '')
-        .replace(/(?:'s|s'|s)$/, '');
+        .replace(/^(?:the|a|an|my)\s+/, '');
       // (A group drawn in a place, "the inputs in cards", is as plain as
       // one part: every input, so it is kept to the place too.)
       const specific =
@@ -11587,7 +11395,6 @@ export function draftAnswer(ctx, env, question) {
     const c = clauses[i];
     const rest = c.text
       .replace(/#[0-9a-f]+|\b(?:rgba?|hsla?|oklch)\([^)]*\)/g, '')
-      .replace(/\b(the|a|an|it|its|is|like|please|pls|thanks|ok)\b/g, '')
       .trim();
     if (c.colors.length && !rest && !c.parts.length && !c.aspects.length) {
       clauses[i - 1].colors = [...c.colors, ...clauses[i - 1].colors];
@@ -12249,7 +12056,6 @@ export function draftAnswer(ctx, env, question) {
               /\b(?:make|set|turn|change|please|only|and|a bit|slightly|much|darker|lighter|brighter|dimmer|bolder|softer|stronger|deeper|paler)\b/g,
               ' ',
             )
-            .replace(/\s+/g, ' ')
             .trim();
       if (subject) {
         c.text = `${subject} ${c.text}`;
@@ -13274,15 +13080,10 @@ export function draftAnswer(ctx, env, question) {
         c.mode === 'dark'
           ? `light-dark(${light}, transparent)`
           : `light-dark(transparent, ${dark})`;
-      const v = now
-        .replace(
-          /light-dark\(\s*([^,()]+(?:\([^()]*\))?)\s*,\s*([^()]+(?:\([^()]*\))?)\s*\)/gi,
-          (_m, l, d) => half(l.trim(), d.trim()),
-        )
-        .replace(
-          /(^|[\s,])((?:#[0-9a-f]{3,8}|(?:rgba?|hsla?|oklch|oklab|lab|lch|hwb)\([^()]*\)))(?=[\s,]|$)/gi,
-          (_m, pre, col) => `${pre}${half(col, col)}`,
-        );
+      const v = now.replace(
+        /light-dark\(\s*([^,()]+(?:\([^()]*\))?)\s*,\s*([^()]+(?:\([^()]*\))?)\s*\)/gi,
+        (_m, l, d) => half(l.trim(), d.trim()),
+      );
       return held({...st, value: v});
     };
     /**
@@ -14906,9 +14707,7 @@ export function draftAnswer(ctx, env, question) {
     if (/[{}]|--[a-z]|^set\s/.test(t)) return null;
     const body = t
       .replace(POLITE, '')
-      .replace(/^(?:i want|we want|let'?s)\s+/, '')
       .replace(VERB, '')
-      .replace(/^(?:nudge|undo|revert|reset|restore)\b/, '')
       .trim()
       .replace(/^(?:the|my|our|a|an|all(?: the)?|every|each)\s+/, '');
     /** @type {string[]} */
@@ -19891,15 +19690,10 @@ export function draftAnswer(ctx, env, question) {
   function inMode(value, mode) {
     let v = String(value);
     for (let i = 0; i < 6; i++) {
-      const next = v
-        .replace(
-          /var\(\s*(--[a-z0-9-]+)\s*(?:,\s*([^()]*))?\)/gi,
-          (_m, t, fb) => String(current(t, mode) || fb || ''),
-        )
-        .replace(
-          /light-dark\(\s*((?:[^(),]|\([^()]*\))+)\s*,\s*((?:[^(),]|\([^()]*\))+)\s*\)/gi,
-          (_m, a, b) => (mode === 'dark' ? b : a),
-        );
+      const next = v.replace(
+        /var\(\s*(--[a-z0-9-]+)\s*(?:,\s*([^()]*))?\)/gi,
+        (_m, t, fb) => String(current(t, mode) || fb || ''),
+      );
       if (next === v) break;
       v = next;
     }
@@ -30208,11 +30002,6 @@ export function draftAnswer(ctx, env, question) {
         )
         .replace(/var\(\s*(--[a-z0-9-]+)\s*\)/g, (_m, tok) =>
           String(partNow(tok, mode) ?? _m),
-        )
-        // (Each light-dark() color as the mode asked shows it.)
-        .replace(
-          /light-dark\(((?:[^(),]|\([^()]*\))*),\s*((?:[^(),]|\([^()]*\))*)\)/g,
-          (_m, light, dark) => (mode === 'dark' ? dark : light).trim(),
         );
       const drawn = splitTop(read, ',').filter(
         layer =>
