@@ -28520,7 +28520,7 @@ export function draftAnswer(ctx, env, question) {
           !/inverted|^--color-on-|overlay/.test(k),
       );
       // (A value is tinted by its color, within one limit everywhere: a
-      // ground or fill up to the ground limit, any other gray up to the
+      // ground or fill (a skeleton's included) up to the ground limit, any other gray up to the
       // gray limit. Past it, it is a color of its own, never a tint.)
       /** @param {string} token @param {string} value */
       const tintedAs = (token, value) => {
@@ -28528,7 +28528,9 @@ export function draftAnswer(ctx, env, question) {
         return (
           c > UNTINTED_CHROMA &&
           c <
-            (/^--color-background-|^background(?:-color)?$/.test(token)
+            (/^--color-background-|^--color-skeleton|^background(?:-color)?$/.test(
+              token,
+            )
               ? GROUND_CHROMA
               : GRAY_CHROMA)
         );

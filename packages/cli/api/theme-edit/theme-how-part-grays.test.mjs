@@ -91,6 +91,8 @@ beforeAll(async () => {
     await themeEditSet('bluepage', '--color-background-body', '#2563eb', {
       cwd,
     });
+    await themeEditNew('skel', {cwd, like: 'neutral'});
+    await themeEditSet('skel', '--color-skeleton', '#fef3c7', {cwd});
     await themeEditNew('loud', {cwd, like: 'neutral'});
     await themeEditSet('loud', '--color-text-secondary', '#d00000', {
       cwd,
@@ -183,6 +185,7 @@ describe('part grays', () => {
         ['mutedcard', /card --color-background-muted/],
         ['edgecard', /card border-bottom-color/],
         ['ringcard', /card outline-color/],
+        ['skel', /--color-skeleton/],
       ]) {
         const [top] = await grays(theme);
         expect(top.text, theme).not.toMatch(/already neutral/);
