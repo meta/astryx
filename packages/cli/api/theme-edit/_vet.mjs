@@ -44,7 +44,9 @@ export function vetSuggestions(e, ctx, slug, data) {
         structuredClone(data),
         line.thing,
         line.value,
-        line.flags,
+        // `set` reads a typed box shorthand as its sides, so the line is
+        // checked the way it runs.
+        {...line.flags, sides: true},
         false,
       );
       return null;

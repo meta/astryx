@@ -9,6 +9,7 @@
 
 import {describe, it, expect, beforeAll, vi} from 'vitest';
 import {render, screen, waitFor} from '@testing-library/react';
+import {InternationalizationProvider} from '../i18n/InternationalizationProvider';
 import {ProgressBar} from './ProgressBar';
 import {getForcedColorsRules} from '../__tests__/forcedColors';
 import {readFileSync} from 'node:fs';
@@ -52,6 +53,19 @@ describe('ProgressBar', () => {
   it('shows value label when hasValueLabel is true', () => {
     render(<ProgressBar value={75} label="Upload" hasValueLabel />);
     expect(screen.getByText('75%')).toBeInTheDocument();
+  });
+
+  it('writes the default value text as the provider locale writes a percentage', () => {
+    render(
+      <InternationalizationProvider locale="tr">
+        <ProgressBar value={45} label="Upload" hasValueLabel />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByText('%45')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar')).toHaveAttribute(
+      'aria-valuetext',
+      '%45',
+    );
   });
 
   it('uses custom formatValueLabel', () => {
