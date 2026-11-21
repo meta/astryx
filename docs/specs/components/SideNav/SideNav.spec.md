@@ -78,6 +78,16 @@ a row's depth and its row padding.
 
 Consumer migration instructions belong in consumer docs and release notes.
 
+## Current-state impact
+
+- **A deep row's indent can leave too little room at a large text size.** At
+  200% text in the matcha and y2k themes, a depth-3 row's indent (three
+  `--spacing-6` steps plus the row's padding, both rem-based) leaves a content
+  box of about 20 px, narrower than a "New" badge alone, so the badge
+  overflows the row and the label wraps very narrowly (`spec:AST-020` FR1).
+  The planned fix caps the nesting indent so the content box keeps at least
+  4em.
+
 ## Ownership boundary
 
 **Owns**
