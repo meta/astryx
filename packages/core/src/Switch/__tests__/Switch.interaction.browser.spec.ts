@@ -180,7 +180,12 @@ async function sampleChange(
   ms = 700,
 ): Promise<ChangeSample[]> {
   await page.evaluate(duration => {
-    const w = window as unknown as {__change: unknown[]};
+    const w = window as unknown as {
+      __change: unknown[];
+      __changeStart: number;
+      __changeActedAt?: number;
+      __changeDone?: boolean;
+    };
     const track = document.querySelector<HTMLElement>(
       '#storybook-root .astryx-switch',
     )!;
@@ -195,9 +200,19 @@ async function sampleChange(
       return scale === 'none' ? 1 : Number(scale.split(' ')[0]);
     };
     w.__change = [];
+    w.__changeActedAt = undefined;
+    w.__changeDone = false;
     const start = performance.now();
+    w.__changeStart = start;
+    const wasChecked = input.checked;
+    // The sampling runs `duration` ms past the value's change. A loaded page
+    // can reach the change late, after a window counted from here.
+    let changedAt: number | null = null;
     const tick = () => {
       const t = performance.now() - start;
+      if (changedAt == null && input.checked !== wasChecked) {
+        changedAt = t;
+      }
       const faded = Number(getComputedStyle(track, '::after').opacity);
       w.__change.push({
         t,
@@ -211,14 +226,27 @@ async function sampleChange(
         on: input.checked ? 1 - faded : faded,
         fill: getComputedStyle(track).backgroundColor,
       });
-      if (t < duration) {
+      // Without a change, the window ends `duration` ms after the action.
+      const from = changedAt ?? w.__changeActedAt;
+      if (t < duration || from == null || t < from + duration) {
         requestAnimationFrame(tick);
+      } else {
+        w.__changeDone = true;
       }
     };
     requestAnimationFrame(tick);
   }, ms);
   await act();
-  await page.waitForTimeout(ms + 100);
+  await page.evaluate(() => {
+    const w = window as unknown as {
+      __changeStart: number;
+      __changeActedAt?: number;
+    };
+    w.__changeActedAt ??= performance.now() - w.__changeStart;
+  });
+  await page.waitForFunction(
+    () => (window as unknown as {__changeDone?: boolean}).__changeDone,
+  );
   return page.evaluate(
     () => (window as unknown as {__change: ChangeSample[]}).__change,
   );
@@ -304,11 +332,32 @@ function expectCrossFade(samples: ChangeSample[]): void {
     }
   }
   // A fade, not a jump: some frame shows the thumb or the colour part-way.
-  expect(
-    samples.some(
-      s => (s.opacity > 0.1 && s.opacity < 0.9) || (s.on > 0.1 && s.on < 0.9),
-    ),
-  ).toBe(true);
+  // With none, the frames that show each end opaque bracket the change. A
+  // gap there over FRAME_STARVATION_MS (50 ms) fails by name as starved.
+  // A shorter one keeps a plain red: the change was a jump.
+  const partWay = (s: ChangeSample) =>
+    (s.opacity > 0.1 && s.opacity < 0.9) || (s.on > 0.1 && s.on < 0.9);
+  if (!samples.some(partWay)) {
+    const showsEnd = (s: ChangeSample, end: ChangeSample) =>
+      s.opacity >= 0.9 && Math.abs(s.left - end.left) < 0.75;
+    let lastOld = samples.length - 1;
+    while (lastOld > 0 && !showsEnd(samples[lastOld], first)) {
+      lastOld -= 1;
+    }
+    // A thumb that never shows the new end opaque never landed: a plain red.
+    const firstNew = samples.findIndex(
+      (s, i) => i > lastOld && showsEnd(s, last),
+    );
+    expect(
+      firstNew,
+      'a frame shows the thumb landed at its new end',
+    ).toBeGreaterThan(lastOld);
+    requireFrames(samples.slice(lastOld, firstNew + 1), {
+      min: 1,
+      during: 'the thumb or the colour faded',
+      where: partWay,
+    });
+  }
   // Each fade, the thumb's and the colour's, lasts the bound or less. The
   // colour starts at the release and the thumb at the commit. A busy page can
   // start them frames apart, so each is measured on its own. Both samples of
