@@ -18,6 +18,7 @@ const PAIRS = /** @type {const} */ ([
   ['themeEditPreviewApp', 'experimental-theme-preview-app'],
   ['themeEditPreviewList', 'experimental-theme-preview-list'],
   ['themeEditPreviewRemove', 'experimental-theme-preview-remove'],
+  ['themeEditCheck', 'experimental-theme-check'],
 ]);
 
 /**

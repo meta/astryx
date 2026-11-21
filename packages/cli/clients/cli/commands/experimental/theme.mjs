@@ -39,6 +39,7 @@ import {
 import {AstryxError} from '../../../../api/error.mjs';
 import {defineCommand} from '../../lib/define-command.mjs';
 import {
+  themeEditCheck,
   themeEditHow,
   themeEditNew,
   themeEditPreviewAdd,
@@ -113,6 +114,8 @@ import {doc as previewAppFn} from '../../../../api/theme-edit/themeEditPreviewAp
 import {doc as previewListFn} from '../../../../api/theme-edit/themeEditPreviewList.doc.mjs';
 import {doc as previewRemoveFn} from '../../../../api/theme-edit/themeEditPreviewRemove.doc.mjs';
 import {doc as howFn} from '../../../../api/theme-edit/themeEditHow.doc.mjs';
+import {doc as checkDoc} from '../experimental-theme-check.doc.mjs';
+import {doc as checkFn} from '../../../../api/theme-edit/themeEditCheck.doc.mjs';
 import {quoteCommandArgument} from '../../../../foundation/env/package-manager.mjs';
 import {
   commandAvailable,
@@ -2816,6 +2819,27 @@ export function registerExperimentalTheme(group, program) {
     {tokens: true},
   );
 
+  explained(
+    defineCommand(theme, checkDoc, {
+      fn: checkFn,
+      action: (/** @type {string} */ name, /** @type {any} */ o) =>
+        run(
+          program,
+          () => themeEditCheck(name, {cwd: process.cwd(), fix: o.fix ?? false}),
+          r => checkLines(r.data, name, o.fix ?? false),
+          r => {
+            const n = r.data.problems.length;
+            // Problems left, text not measured, or a repair a protected file
+            // kept back are a result, and the run fails on them.
+            if (n || r.data.unmeasured || r.data.protectedFiles.length)
+              process.exitCode = 1;
+            return resultSet({count: n, resultKind: 'mixed', empty: n === 0});
+          },
+        ),
+    }).allowExcessArguments(false),
+    checkDoc,
+  );
+
   registerThemeSubcommands(
     theme,
     program,
@@ -2847,6 +2871,102 @@ export function registerExperimentalTheme(group, program) {
       colorModes: editorColorModes,
     },
   );
+}
+
+/** How many problems the text lists before it counts the rest. */
+const CHECK_SHOWN = 12;
+
+/**
+ * The text of a check: what fix wrote, then the problems left, or that
+ * nothing was found. Each line is a JSON value: a problem's message, a
+ * written value with its token or part and why.
+ * @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditCheckResponse['data']} d
+ * @param {string} name the theme as typed
+ * @param {boolean} fix
+ * @returns {Array<string | import('../../formatters/index.mjs').Block>}
+ */
+function checkLines(d, name, fix) {
+  /** @type {Array<string | import('../../formatters/index.mjs').Block>} */
+  const out = [
+    ...(d.unmeasured
+      ? [
+          `[warn] text on the components was not measured (${d.unmeasured.code}): ${d.unmeasured.cause}`,
+        ]
+      : []),
+    record({
+      file: d.file,
+      modes: d.modes.join(', '),
+      accepted: String(d.accepted),
+    }),
+  ];
+  if (d.fixed.length)
+    out.push(
+      section(`fixed (files: ${d.files.join(', ')}):`),
+      records(
+        d.fixed.map(f => ({
+          ...(f.group ? {group: f.group} : {}),
+          ...(f.token ? {token: f.token} : {}),
+          ...(f.part ? {part: f.part} : {}),
+          value: Array.isArray(f.value) ? f.value.join(', ') : f.value,
+          ...(f.from
+            ? {from: Array.isArray(f.from) ? f.from.join(', ') : f.from}
+            : {}),
+          why: f.why,
+        })),
+        {layout: 'inline'},
+      ),
+    );
+  // A moved color the author set can be kept as designed instead: the
+  // records to put in the theme's .accepted.json, each with a reason.
+  const keep = d.fixed.flatMap(f => f.accept ?? []);
+  if (keep.length)
+    out.push(
+      section(
+        'to keep a moved color as designed, add to <theme>.accepted.json:',
+      ),
+      records(
+        keep.map(r => ({
+          part: r.part,
+          ground: r.ground,
+          ...(r.when ? {when: r.when} : {}),
+          mode: r.mode,
+          ratio: String(r.ratio),
+          color: r.color ?? '',
+          groundColor: r.groundColor ?? '',
+          reason: r.reason || '(write why)',
+        })),
+      ),
+    );
+  if (d.protectedFiles.length)
+    out.push(
+      section(`protected (${d.code ?? 'ERR_CODEMOD_PROTECTED'}):`),
+      records(
+        d.protectedFiles.map(p => ({file: p.file, declaration: p.declaration})),
+        {layout: 'inline'},
+      ),
+    );
+  if (!d.problems.length && !d.unmeasured && !d.protectedFiles.length)
+    out.push('[ok] nothing broken');
+  else if (d.problems.length) {
+    const more = d.problems.length - CHECK_SHOWN;
+    out.push(
+      section(`problems (${d.problems.length}):`),
+      list(
+        d.problems.slice(0, CHECK_SHOWN).map(p => `${p.kind}: ${p.message}`),
+      ),
+      ...(more > 0 ? [`… ${more} more problems: --json lists them`] : []),
+    );
+  }
+  if (d.notes.length) out.push(section('notes:'), list(d.notes));
+  // One plain next step, last, while problems remain: the fix, or after
+  // it the edit it cannot make.
+  if (d.next)
+    out.push(
+      fix
+        ? `next: ${d.next}`
+        : `next: ${PREFIX} check ${quoteCommandArgument(name)} --fix`,
+    );
+  return out;
 }
 
 /**

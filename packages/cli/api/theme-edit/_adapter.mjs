@@ -36,8 +36,10 @@ import {
   blankOptionProblem,
   buildInputProblem,
   buildSuggestion,
+  loadThemeExport,
   realLocation,
   refusedOutput,
+  themeBuild,
 } from '../theme/build/build.mjs';
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
@@ -45,6 +47,7 @@ import * as path from 'node:path';
 import * as edit from './_edit.mjs';
 import {
   baseInstalled,
+  baseResolved,
   installLine,
   packageInstalled,
   refusePlugAndPlay,
@@ -103,11 +106,34 @@ import {
   fontsourceSuggestion,
   themeSourceRefusal,
   typedThemeName,
+  mediaTextTokens,
 } from './_settings.mjs';
 
 // Every build of a theme writes its app copy (src/themes/<theme>/).
 setAfterBuild(writeAppCopy);
 import {LOCAL_THEME_ROOT} from '../../foundation/config/theme-state.mjs';
+import {discoverThemeDirectory} from '../../foundation/discovery/theme-discovery.mjs';
+import {colorIn, lookProblems, lookRepair} from './_look.mjs';
+import {withThemeValues} from './_source-values.mjs';
+import {acceptedFileName, parseAccepted} from './_accepted.mjs';
+
+/** The tokens Core's media-surface rule reads. */
+const MEDIA_RULE_TOKENS = [
+  '--color-background-body',
+  '--color-background-inverted',
+  '--color-background-error-inverted',
+  '--color-on-dark',
+  '--color-on-light',
+  '--color-text-primary',
+];
+import {collectUnloadedFonts} from '../theme/build/font-warning.mjs';
+import {
+  PAGE_CSS,
+  appThemeUse,
+  paintAppPage,
+  pinAppMode,
+  protectedBy,
+} from './_app-use.mjs';
 
 export {parsePoints} from './_how.mjs';
 export {
@@ -2020,4 +2046,408 @@ export function editorMissingSource(file, cwd) {
  */
 export function editorThemeTemplate(options) {
   return writeThemeTemplate(options, true);
+}
+
+/**
+ * The theme source a check names: a file, or a theme of the app's local
+ * theme root (src/themes/<name>/) by name. A theme the editor made is
+ * refused: the editor writes its source again from its settings, and
+ * `editor show` lists its problems.
+ * @param {string} root the project root
+ * @param {string} from the folder the command ran in
+ * @param {string} target
+ * @returns {string} the absolute source path
+ */
+function checkedThemeSource(root, from, target) {
+  const word = String(target ?? '').trim();
+  if (!word)
+    throw new AstryxError(
+      'Name the theme to check: its name in src/themes/ or its theme file.',
+      [{name: runLine(from, 'theme list'), reason: "the app's themes"}],
+      ERROR_CODES.ERR_MISSING_ARGUMENT,
+    );
+  const asFile = path.resolve(from, word);
+  const editor =
+    editorThemeAt(root, asFile) ??
+    (fs.existsSync(asFile) ? null : editorThemeAt(root, word));
+  if (editor)
+    throw new AstryxError(
+      `${editor.slug} is a theme the editor made: the editor writes its source again from its settings, so check writes nothing there. ${P} show ${editor.slug} lists its problems.`,
+      [
+        {
+          name: runLine(from, `experimental theme editor show ${editor.slug}`),
+          reason: 'its problems, with the lines that fix them',
+        },
+      ],
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  if (fs.existsSync(asFile) && fs.statSync(asFile).isFile()) return asFile;
+  const local = path.join(root, LOCAL_THEME_ROOT);
+  /** @type {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme[]} */
+  let found;
+  try {
+    found = discoverThemeDirectory(local, LOCAL_THEME_ROOT, {
+      allowUnmigrated: true,
+    });
+  } catch {
+    // No local theme root, or one that does not read: no theme by name.
+    found = [];
+  }
+  const hit = found.find(t => t.slug === word);
+  if (hit) return path.resolve(hit.sourceDir, hit.entry);
+  throw new AstryxError(
+    `No theme file ${word} and no theme ${word} in ${LOCAL_THEME_ROOT}/.${found.length ? ` Themes there: ${found.map(t => t.slug).join(', ')}.` : ''} Pass the theme's source file.`,
+    found.length
+      ? [
+          {
+            name: runLine(from, `experimental theme check ${found[0].slug}`),
+            reason: 'a theme of this app',
+          },
+        ]
+      : [],
+    ERROR_CODES.ERR_UNKNOWN_THEME,
+  );
+}
+
+/**
+ * Compile a theme source as `experimental theme compile` does: its checks
+ * first, then the build. A build that fails is thrown.
+ * @param {string} root
+ * @param {string} file the source, from the root
+ * @returns {Promise<string[]>} the source and its built module, absolute
+ */
+async function compileForCheck(root, file) {
+  const refused = await editorCompileProblem([file], {cwd: root});
+  if (refused) throw refused;
+  const receipt = /** @type {any} */ (await themeBuild(file, {}, {cwd: root}));
+  const js = receipt?.data?.outputs?.js;
+  return [path.resolve(root, file), ...(js ? [path.resolve(root, js)] : [])];
+}
+
+/**
+ * The look of a built theme source, as the check reads it.
+ * @param {any} ctx the editor context (project, part data, compiler)
+ * @param {string} root
+ * @param {string} file the source, from the root
+ * @param {string[]} built the source and its built module
+ */
+async function lookOf(ctx, root, file, built) {
+  const {theme, exportName} = await loadThemeExport(file, {cwd: root});
+  const {core} = ctx.project;
+  const app = await appThemeUse(root, built);
+  const acceptedFile = path.join(
+    path.dirname(path.resolve(root, file)),
+    acceptedFileName(String(theme.name)),
+  );
+  const accepted = fs.existsSync(acceptedFile)
+    ? parseAccepted(
+        fs.readFileSync(acceptedFile, 'utf8'),
+        path.relative(root, acceptedFile),
+      )
+    : [];
+  /** @type {Array<'light' | 'dark'>} */
+  const modes = app?.pinned ? [app.pinned] : ['light', 'dark'];
+  const base = await baseResolved(ctx.project, undefined);
+  /** @type {import('./_look.mjs').Look} */
+  const look = {
+    modes,
+    res: {
+      light: withLocalTokens(
+        theme,
+        'light',
+        core.resolveThemeTokens(theme, {mode: 'light'}),
+      ),
+      dark: withLocalTokens(
+        theme,
+        'dark',
+        core.resolveThemeTokens(theme, {mode: 'dark'}),
+      ),
+    },
+    own: new Set(Object.keys(theme.tokens ?? {})),
+    resolveWith: extra => {
+      const more = {...theme, tokens: {...theme.tokens, ...extra}};
+      return {
+        light: withLocalTokens(
+          theme,
+          'light',
+          core.resolveThemeTokens(more, {mode: 'light'}),
+        ),
+        dark: withLocalTokens(
+          theme,
+          'dark',
+          core.resolveThemeTokens(more, {mode: 'dark'}),
+        ),
+      };
+    },
+    components: theme.components ?? {},
+    base: {light: base.light, dark: base.dark},
+    defaults: core.tokenDefaults ?? {},
+    pairs: ctx.parts.pairs,
+    accepted,
+    unloadedFonts: collectUnloadedFonts(theme),
+    fontInstall: family => {
+      const s = fontsourceSuggestion(family);
+      return s ? {...s, install: installLine(root, [s.pkg])} : null;
+    },
+    map: ctx.C.MAP,
+    contrast: ctx.C.contrast,
+    // (Core's rule reads its colors as drawn: each one it reads resolved.)
+    textTokens: (pair, fill, tokens, mode) =>
+      mediaTextTokens(
+        ctx,
+        pair,
+        fill,
+        Object.fromEntries(
+          MEDIA_RULE_TOKENS.map(t => [
+            t,
+            colorIn(`var(${t})`, tokens, mode) ?? '',
+          ]),
+        ),
+        mode,
+        pair.bg.tokens[0] === '--color-background-error-inverted',
+      ),
+    app: app
+      ? {
+          themed: app.elements.length > 0,
+          pinned: app.pinned,
+          modeByExpression: app.modeByExpression,
+          painted: app.painted,
+          fonts: app.fonts,
+          pageImage: app.pageImage,
+          entry: app.entry ? path.relative(root, app.entry) : null,
+        }
+      : null,
+  };
+  return {look, exportName, app};
+}
+
+/**
+ * A mode's resolved tokens with the theme's own local tokens beside them
+ * (`localTokens`, which a style reads by `var()`), each as that mode
+ * draws it.
+ * @param {any} theme @param {'light' | 'dark'} mode
+ * @param {Record<string, string>} tokens
+ * @returns {Record<string, string>}
+ */
+function withLocalTokens(theme, mode, tokens) {
+  /** @type {Record<string, string>} */
+  const out = {};
+  for (const [k, v] of Object.entries(theme.localTokens ?? {})) {
+    const value = Array.isArray(v) ? v[mode === 'light' ? 0 : 1] : v;
+    if (typeof value === 'string') out[k] = value;
+  }
+  return {...out, ...tokens};
+}
+
+/**
+ * The edit that repairs a problem fix left, in plain words, in the file
+ * it belongs in: the theme's, or the app's for its mode and page.
+ * @param {import('./theme-edit.type.mjs').ThemeEditCheckProblem} p
+ * @param {string} file the theme file, as shown
+ * @param {Array<{file: string}>} kept the app files protection kept back
+ * @param {string | null} shared the map of themes every `<Theme>` picks from, when it holds several
+ * @returns {string}
+ */
+function checkNextEdit(p, file, kept, shared) {
+  const app = kept[0]?.file ?? "the app's file that renders <Theme>";
+  const pin = /mode="(light|dark)"/.exec(p.message)?.[1] ?? 'dark';
+  if (p.kind === 'one-look' && shared)
+    return `in ${shared}, set this theme's mode to "${pin}": its <Theme> serves every theme there`;
+  if (p.kind === 'one-look')
+    return `in ${app}, add mode="${pin}" to the <Theme> that wears the theme`;
+  if (p.kind === 'page')
+    return `in a stylesheet ${app === "the app's file that renders <Theme>" ? 'the app loads' : `${app} loads`}, add body { background: var(--color-background-body); }`;
+  const at = `in ${file}, `;
+  if (p.kind === 'hover' && !p.part)
+    return `${at}set ${p.token} to a tint that shows on ${(p.parts ?? []).slice(0, 3).join(', ')}`;
+  if (p.kind === 'hover')
+    return `${at}give ${p.part}${p.parts?.length ? ` ${p.parts[0].replace(/^\S+ /, '')}` : ''} a ':hover' fill that differs from its fill at rest`;
+  if (p.kind === 'blend' && p.part) {
+    const edit = p.message.split('. In ')[1];
+    return edit
+      ? `in ${edit}`
+      : `${at}give ${p.part}'s style a shadow or a border`;
+  }
+  if (p.kind === 'bar-ground' && p.token)
+    return `${at}set ${p.token} in ${p.part}'s own style to a color that reads on its fill`;
+  if (p.kind === 'bar-fill')
+    return `${at}change ${p.token} in ${p.part}'s own style so the text of ${(p.parts ?? []).slice(0, 3).join(', ')} reads on it`;
+  if (p.kind === 'half-painted' && p.part)
+    return `${at}give ${p.part}'s backgroundColor a value for each mode`;
+  if (p.kind === 'chart-ground')
+    return `${at}set ${(p.parts ?? [p.token]).slice(0, 3).join(', ')} to colors that show on ${p.on} in ${p.mode}`;
+  if (p.kind === 'page-image' || p.kind === 'font-unloaded') return p.message;
+  if (p.token && p.needs != null)
+    return `${at}set ${p.token} to a color that reads at ${p.needs}:1${p.on ? ` on ${p.on}` : ''} in ${p.mode}${p.kind === 'text' || p.kind === 'part-text' ? ", or, for a color you set, keep it as designed with a record in the theme's .accepted.json" : ''}`;
+  if (p.part) return `${at}change ${p.part}'s own style: ${p.message}`;
+  return `${at}${p.message}`;
+}
+
+/**
+ * `astryx experimental theme check`: build a theme source, list what a
+ * person would see as broken in light and dark, and with `fix` write the
+ * repair as normal lines in the theme source (and pin or paint the app),
+ * then check again.
+ * @param {string} target a theme name in src/themes/ or a theme file
+ * @param {import('./theme-edit.type.mjs').ThemeEditCheckOptions} [options]
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditCheckResponse>}
+ */
+export async function themeEditCheck(target, options = {}) {
+  const from = path.resolve(options.cwd ?? process.cwd());
+  const root = projectRoot(from);
+  const ctx = await context(root);
+  const abs = checkedThemeSource(root, from, target);
+  const file = path.relative(root, abs).split(path.sep).join('/');
+  // A theme file the repair may not write is refused before the build
+  // writes anything beside it.
+  const sourceProtection = options.fix ? protectedBy(root, abs) : null;
+  if (sourceProtection)
+    throw new AstryxError(
+      `${file} is protected (${sourceProtection}), so check --fix writes nothing there. Nothing was changed.`,
+      [
+        {
+          name: runLine(
+            from,
+            `experimental theme check ${quoteCommandArgument(String(target))}`,
+          ),
+          reason: 'the check without the repair',
+        },
+      ],
+      ERROR_CODES.ERR_CODEMOD_PROTECTED,
+    );
+  const built = await compileForCheck(root, file);
+  const first = await lookOf(ctx, root, file, built);
+  const {exportName, app} = first;
+  let {look} = first;
+  let measured = lookProblems(look);
+  let problems = measured.problems;
+  /** @type {import('./theme-edit.type.mjs').ThemeEditCheckResponse['data']['fixed']} */
+  const fixed = [];
+  /** @type {string[]} */
+  const files = [];
+  /** @type {string[]} */
+  const notes = [];
+  /** @type {Array<{file: string, declaration: string}>} */
+  const protectedFiles = [];
+  /** A file as named from the folder the command ran in. @param {string} f */
+  const shown = f =>
+    path.relative(from, path.resolve(root, f)).split(path.sep).join('/');
+  if (options.fix) {
+    const repair = lookRepair(look, problems);
+    // Every app file the repair can write is classified first: a protection
+    // source that cannot be read stops the run before anything is written.
+    if (app)
+      for (const f of [
+        ...(repair.pin ? app.elements.map(e => e.file) : []),
+        ...(repair.paint && app.entry
+          ? [app.entry, path.join(path.dirname(app.entry), PAGE_CSS)]
+          : []),
+      ])
+        protectedBy(root, f);
+    const tree = /** @type {import('./_source-values.mjs').ValueTree} */ ({
+      ...(Object.keys(repair.tokens).length ? {tokens: repair.tokens} : {}),
+      ...(Object.keys(repair.components).length
+        ? {components: repair.components}
+        : {}),
+    });
+    if (Object.keys(tree).length) {
+      const before = fs.readFileSync(abs, 'utf8');
+      /** @type {string} */
+      let after;
+      try {
+        after = withThemeValues(before, exportName, tree, repair.shared);
+      } catch (e) {
+        throw new AstryxError(
+          `${file}: check cannot write there: ${/** @type {Error} */ (e).message}. Nothing was changed.`,
+          [],
+          ERROR_CODES.ERR_THEME_INVALID,
+        );
+      }
+      fs.writeFileSync(abs, after);
+      try {
+        await compileForCheck(root, file);
+      } catch (e) {
+        fs.writeFileSync(abs, before);
+        await compileForCheck(root, file).catch(() => {});
+        throw new AstryxError(
+          `${file}: the repair did not build (${/** @type {Error} */ (e).message}); the file is as it was.`,
+          [],
+          ERROR_CODES.ERR_THEME_INVALID,
+        );
+      }
+      fixed.push(...repair.lines);
+      files.push(shown(file));
+    }
+    if (repair.pin && app) {
+      const r = pinAppMode(root, app, repair.pin);
+      notes.push(...r.declined);
+      protectedFiles.push(...r.protectedFiles);
+      if (r.files.length) {
+        files.push(...r.files.map(shown));
+        fixed.push({
+          value: repair.pin,
+          why: "pinned the app's <Theme> mode: the theme has one look",
+        });
+      }
+    }
+    if (repair.paint && app) {
+      const r = paintAppPage(root, app);
+      notes.push(...r.declined);
+      protectedFiles.push(...r.protectedFiles);
+      if (r.files.length) {
+        files.push(...r.files.map(shown));
+        fixed.push({
+          value: shown(r.files[0]),
+          why: "painted the app's page with the theme",
+        });
+      }
+    }
+    if (files.length) {
+      ({look} = await lookOf(ctx, root, file, built));
+      measured = lookProblems(look);
+      problems = measured.problems;
+    }
+  }
+  // (One file can keep back both app repairs: it is listed once.)
+  const kept = [...new Map(protectedFiles.map(p => [p.file, p])).values()];
+  const next = !problems.length
+    ? null
+    : options.fix
+      ? checkNextEdit(
+          problems[0],
+          shown(file),
+          kept,
+          app?.elements.length && app.elements.every(e => e.shared)
+            ? path.relative(
+                root,
+                /** @type {string} */ (app.elements[0].shared),
+              )
+            : null,
+        )
+      : 'run the check again with --fix';
+  return {
+    type: 'themeEdit.check',
+    data: {
+      file: shown(file),
+      modes: look.modes,
+      problems,
+      ...(next ? {next} : {}),
+      accepted: measured.accepted,
+      fixed,
+      files: [...new Set(files)],
+      notes,
+      protectedFiles: kept,
+      ...(ctx.unchecked
+        ? {
+            unmeasured: {
+              code: ctx.uncheckedCode ?? ERROR_CODES.ERR_RENDER_FAILED,
+              cause: ctx.unchecked,
+            },
+          }
+        : {}),
+      ...(protectedFiles.length
+        ? {code: /** @type {const} */ ('ERR_CODEMOD_PROTECTED')}
+        : {}),
+    },
+  };
 }

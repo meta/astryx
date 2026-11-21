@@ -15,11 +15,12 @@ export const doc = {
   summary:
     'Make and change a theme one checked change at a time, preview it in the app, and the experimental copies of the theme commands',
   description:
-    "Themes, experimental. `editor` makes and changes a theme one checked change at a time: every change is checked against what the installed Core's components really read, and a change that cannot take effect is refused. `preview` writes a page into the app that shows the theme on real pages; with no app yet, `preview app <dir>` makes a starter app that shows it. The group also carries experimental copies of the `astryx theme` commands (compile, the copy of theme build; list, add, remove, use, eject, template, targets), with the same functions and output. Colors come from `editor set` (accent, neutral, success, warning, danger, info, vibrancy), which generates them, so the group has no command of its own for that. Experimental: it may change or be removed in a patch release.",
+    "Themes, experimental. `editor` makes and changes a theme one checked change at a time: every change is checked against what the installed Core's components really read, and a change that cannot take effect is refused. `preview` writes a page into the app that shows the theme on real pages; with no app yet, `preview app <dir>` makes a starter app that shows it. `check` builds a theme and lists what a person would see as broken in light and dark; `check --fix` repairs it in the theme file. The group also carries experimental copies of the `astryx theme` commands (compile, the copy of theme build; list, add, remove, use, eject, template, targets), with the same functions and output. Colors come from `editor set` (accent, neutral, success, warning, danger, info, vibrancy), which generates them, so the group has no command of its own for that. Experimental: it may change or be removed in a patch release.",
   subcommands: [
     'editor',
     'preview',
     'compile',
+    'check',
     'list',
     'add',
     'remove',

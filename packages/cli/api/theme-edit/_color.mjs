@@ -32,7 +32,12 @@ import {
   parseColor,
   readColor,
 } from '../../foundation/color/css-color.mjs';
-import {contrastRatio, ratioDown} from '../theme/palette/generate/color.mjs';
+import {
+  contrastRatio,
+  hexToOklch,
+  oklchClampedHex,
+  ratioDown,
+} from '../theme/palette/generate/color.mjs';
 
 export {splitTop};
 export {
@@ -334,6 +339,64 @@ export function ratioWords(r) {
 export function ratio(a, b) {
   return contrastRatio(hex(a), hex(b));
 }
+
+/**
+ * The plain black or white that stands out most from a drawn color: what a
+ * fix sets text or a border to so it reads.
+ * @param {[number, number, number]} rgb
+ */
+export function plainOn(rgb) {
+  return ratio([0, 0, 0], rgb) >= ratio([255, 255, 255], rgb)
+    ? '#000000'
+    : '#ffffff';
+}
+
+/** How far apart the lightness steps of {@link nearestReadingLightness} are. */
+const LIGHTNESS_STEP = 0.005;
+
+/**
+ * A color with only its lightness moved, its hue and chroma kept (as the
+ * gamut allows), to the nearest lightness that reaches a contrast on each
+ * ground: a brand-colored text stays that color. Black or white, whichever
+ * stands out on the first ground, when no lightness does.
+ * @param {[number, number, number]} from
+ * @param {Array<[number, number, number]>} grounds
+ * @param {number} need
+ * @returns {string}
+ */
+export function nearestReadingLightness(from, grounds, need) {
+  const moved = nearestLightness(from, c =>
+    grounds.every(g => ratio(c, g) >= need),
+  );
+  return moved ? hex(moved) : plainOn(grounds[0]);
+}
+
+/**
+ * The nearest lightness of a color (hue and chroma kept, as the gamut
+ * allows) that passes a test, searched both ways from its own; null when
+ * none does.
+ * @param {[number, number, number]} from
+ * @param {(c: [number, number, number]) => boolean} test
+ * @returns {[number, number, number] | null}
+ */
+export function nearestLightness(from, test) {
+  const {L, C, H} = hexToOklch(hex(from));
+  for (let d = 0; d <= 1; d += LIGHTNESS_STEP)
+    for (const at of [L - d, L + d]) {
+      if (at < 0 || at > 1) continue;
+      const c = /** @type {[number, number, number]} */ (
+        parseColor(oklchClampedHex(at, C, H))
+      );
+      if (test(c)) return c;
+    }
+  return null;
+}
+
+/**
+ * How close two fills may look before a person cannot tell them apart at a
+ * glance: their OKLab distance.
+ */
+export const LOOKS_ALIKE = 0.1;
 
 /**
  * A value that is one var() of a custom property and nothing else, with
