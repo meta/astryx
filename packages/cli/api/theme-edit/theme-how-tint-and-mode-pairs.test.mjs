@@ -269,6 +269,10 @@ describe('a tint word', () => {
       expect(two).toContain(
         "background-color '#bfd5ff' --on card --when variant:muted --mode light",
       );
+      // (One clause on every variant tints them all: none keeps the solid.)
+      expect(
+        (await lines('buttons tinted blue with white text')).join('\n'),
+      ).not.toMatch(/'#2563eb'/);
       // (A pale color still darker than its tint is tinted in both modes.)
       expect(await lines('cards tinted sand')).toContain(
         "background-color '#4d3800' --on card --when variant:default --mode dark",

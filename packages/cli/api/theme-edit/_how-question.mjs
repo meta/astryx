@@ -31700,7 +31700,7 @@ export function draftAnswer(ctx, env, question) {
   // is written as said.
   /** The look a fill is on: its part, variant and state. @param {Step} st */
   const lookKey = st => [st.on, st.when ?? '', st.state ?? ''].join('\0');
-  /** @type {Array<{parts: Set<string>, colors: number[][], looks: Set<string>, modeSaid: boolean}>} */
+  /** @type {Array<{parts: Set<string>, colors: number[][], others: Set<string>, modeSaid: boolean}>} */
   const tints = [];
   for (const d of result) {
     const c = draftClause.get(d);
@@ -31723,13 +31723,15 @@ export function draftAnswer(ctx, env, question) {
         ? c.parts.map(x => x.on)
         : d.options.flat().map(st => st.on))
         if (p) parts.add(p);
-    // (Only the looks this clause fills take its tint: "muted cards tinted
-    // blue, default cards blue" tints the muted card alone.)
-    // (The clause's own answers, an offer to change the other variants
-    // too included.)
-    const looks = new Set(
+    // (A look another clause fills on the same part keeps that clause's
+    // fill: "muted cards tinted blue, default cards blue" tints the muted
+    // card alone.)
+    const others = new Set(
       result
-        .filter(x => x === d || draftClause.get(x) === c || x.offer)
+        .filter(x => {
+          const xc = draftClause.get(x);
+          return xc && xc !== c;
+        })
         .flatMap(x => x.options.flat())
         .filter(
           st =>
@@ -31739,8 +31741,20 @@ export function draftAnswer(ctx, env, question) {
         )
         .map(lookKey),
     );
-    if (colors.length && parts.size && looks.size)
-      tints.push({parts, colors, looks, modeSaid: Boolean(c.mode)});
+    const looks = new Set(
+      d.options
+        .flat()
+        .filter(
+          st =>
+            st.on &&
+            parts.has(st.on) &&
+            /^background(?:-color)?$/.test(st.thing),
+        )
+        .map(lookKey),
+    );
+    for (const k of looks) others.delete(k);
+    if (colors.length && parts.size)
+      tints.push({parts, colors, others, modeSaid: Boolean(c.mode)});
   }
   /** The tint fills written, by part, state and variant: the text check below measures text on them. @type {Map<string, {light: string, dark: string}>} */
   const tintFills = new Map();
@@ -31768,7 +31782,7 @@ export function draftAnswer(ctx, env, question) {
           !tints.some(
             t =>
               t.parts.has(String(st.on)) &&
-              t.looks.has(lookKey(st)) &&
+              !t.others.has(lookKey(st)) &&
               t.colors.some(c => c.every((n, x) => Math.abs(n - v[x]) < 1)),
           )
         )
@@ -31776,7 +31790,7 @@ export function draftAnswer(ctx, env, question) {
         const tint = tints.find(
           t =>
             t.parts.has(String(st.on)) &&
-            t.looks.has(lookKey(st)) &&
+            !t.others.has(lookKey(st)) &&
             t.colors.some(c => c.every((n, x) => Math.abs(n - v[x]) < 1)),
         );
         const shades = tintShades(hex(v.slice(0, 3)));
