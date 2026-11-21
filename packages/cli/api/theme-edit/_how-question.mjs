@@ -4716,7 +4716,7 @@ export function draftAnswer(ctx, env, question) {
         const together = spans.every(
           (sp, i) =>
             i === 0 ||
-            /^\s*,?\s*(?:and\s+)?(?:the\s+)?$/.test(
+            /^\s*(?:,\s*(?:and\s+)?|and\s+)(?:the\s+)?$/.test(
               text.slice(spans[i - 1][1], sp[0]),
             ),
         );

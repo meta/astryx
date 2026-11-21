@@ -474,6 +474,7 @@ describe('a look taken away by a pronoun over listed parts', () => {
       for (const q of [
         'I like the cards and the dialog border is ugly, hide it',
         'the cards and buttons in the dialog have a shadow, remove it',
+        'the dialog buttons and cards have an ugly border, remove it',
       ]) {
         const lines = (first(await answer(q)) ?? []).join('\n');
         expect(lines, q).not.toMatch(/(?:border|box-shadow) none --on card\b/);
