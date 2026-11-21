@@ -328,10 +328,10 @@ describe('plain looks', () => {
       `set q0 --color-text-primary '#333333' --mode light`,
       `set q0 --color-text-primary '#cccccc' --mode dark`,
     ]);
-    expect(top(await how('q0', 'gentle dark mode'))).toEqual([
-      `set q0 --color-text-primary '#cccccc' --mode dark`,
-      `set q0 --color-background-body '#292929' --mode dark`,
-    ]);
+    // (A mood word for the dark mode names no page color: the page and the
+    // surfaces keep their steps.)
+    expect(writes(await how('q0', 'gentle dark mode'))).toEqual([]);
+    expect(writes(await how('q0', 'softer dark mode please'))).toEqual([]);
     expect(writes(await how('q0', 'big readable text'))).toEqual([
       'set q0 text-size more',
     ]);
