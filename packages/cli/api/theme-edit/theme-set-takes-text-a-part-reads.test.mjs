@@ -239,6 +239,23 @@ describe('a text size or weight on a part that holds its text', () => {
     },
     T,
   );
+
+  it(
+    'that draws text of its own beside a held part is still refused',
+    async () => {
+      fs.writeFileSync(file(), fresh);
+      // (A paragraph's prose inherits its size; only its inline code reads
+      // --text-code-size.)
+      const r = await set([
+        '--text-body-size',
+        '13px',
+        '--on',
+        'markdown-paragraph',
+      ]);
+      expect(r.error).toMatch(/never reads --text-body-size/);
+    },
+    T,
+  );
 });
 
 describe('a bare 0 read inside calc()', () => {

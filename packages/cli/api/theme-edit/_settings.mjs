@@ -16398,7 +16398,7 @@ export function namesToken(value, token) {
  * The one text size token the parts a part holds read (a tab list's tabs,
  * --text-label-size), for a text size token said of that part alone, with
  * no state, that set's token check refused: the part reads none and draws
- * no text pieces of its own. Read from that refusal's own list, so the
+ * no text of its own (no element inside it sets a text property). Read from that refusal's own list, so the
  * refusal and the accept never differ. Null otherwise, and for a value that
  * names that token (it would read itself).
  * @param {{MAP: Record<string, any>}} C
@@ -16417,7 +16417,13 @@ export function heldSizeTokenFor(C, s, part, thing, value, refused) {
     held[0] === thing ||
     !/^--text-[a-z0-9-]*size$/.test(thing) ||
     !/^--text-[a-z0-9-]*size$/.test(held[0]) ||
-    innerPropTokens(C, part, 'font-size').length
+    // (A part that draws text of its own, a paragraph with its inline code
+    // held, keeps that text at the size it inherits: refused as before.)
+    Object.values(C.MAP[part]?.inside ?? {}).some(props =>
+      /** @type {string[]} */ (props).some(p =>
+        /^(?:font-|line-height$|letter-spacing$)/.test(p),
+      ),
+    )
   )
     return null;
   return new RegExp(`var\\(\\s*${held[0]}\\s*[,)]`).test(String(value))
