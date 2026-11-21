@@ -75,39 +75,113 @@ function lineIndent(text, at) {
 }
 
 /**
- * The expression for a key of a value that may be absent: `name?.key`.
- * @param {string} name @param {string} key
+ * The object literal an expression stands for in the module (itself, a
+ * const it names, or a key of one), or null when the source does not show.
+ * @param {any} node @param {Map<string, any>} consts
+ * @returns {any}
  */
-function memberOf(name, key) {
-  return /^[A-Za-z_$][\w$]*$/.test(key)
-    ? `${name}?.${key}`
-    : `${name}?.[${JSON.stringify(key)}]`;
+function objectOf(node, consts) {
+  const n = unwrapExpression(node);
+  if (n?.type === 'ObjectExpression') return n;
+  if (n?.type === 'Identifier') {
+    const init = unwrapExpression(consts.get(n.name));
+    return init?.type === 'ObjectExpression' ? init : null;
+  }
+  if (
+    n?.type === 'MemberExpression' &&
+    !n.computed &&
+    n.property?.type === 'Identifier'
+  ) {
+    const outer = objectOf(n.object, consts);
+    const prop = outer
+      ? [...outer.properties].reverse().find(p => nameOf(p) === n.property.name)
+      : null;
+    return prop ? objectOf(prop.value, consts) : null;
+  }
+  return null;
 }
 
 /**
- * A tree written over values it spreads: each spread first, then at each
- * nested object the spreads' own value at that key, so nothing the
- * spreads hold below is lost.
- * @param {string[]} names the expressions spread
- * @param {ValueTree} tree
- * @returns {ValueTree}
+ * A spread source one key down: `source.key` and the object it holds, null
+ * when the source holds no such key, undefined when it cannot be told.
+ * @param {{text: string, node: any}} source @param {string} key
+ * @param {Map<string, any>} consts
+ * @returns {{text: string, node: any} | null | undefined}
  */
-function spreadInto(names, tree) {
+function keyOf(source, key, consts) {
+  const prop = [...source.node.properties]
+    .reverse()
+    .find((/** @type {any} */ p) => nameOf(p) === key);
+  if (!prop)
+    return source.node.properties.some(
+      (/** @type {any} */ p) => p.type === 'SpreadElement',
+    )
+      ? undefined
+      : null;
+  const node = objectOf(prop.value, consts);
+  if (!node) return undefined;
+  return {
+    text: /^[A-Za-z_$][\w$]*$/.test(key)
+      ? `${source.text}.${key}`
+      : `${source.text}[${JSON.stringify(key)}]`,
+    node,
+  };
+}
+
+/**
+ * A tree written over objects it spreads: each spread first, then at each
+ * nested object the spreads' own value at that key, where a spread holds
+ * one, so nothing the spreads hold below is lost.
+ * @param {Array<{text: string, node: any}>} sources the objects spread
+ * @param {ValueTree} tree
+ * @param {Map<string, any>} consts
+ * @returns {ValueTree}
+ * @throws {Error} when what a spread holds below a key cannot be told
+ */
+function spreadInto(sources, tree, consts) {
   /** @type {ValueTree} */
   const out = {};
-  for (const n of names) out[`...${n}`] = true;
-  for (const [k, v] of Object.entries(tree))
-    out[k] =
-      !k.startsWith('...') &&
-      v !== true &&
-      typeof v === 'object' &&
-      !Array.isArray(v)
-        ? spreadInto(
-            names.map(n => memberOf(n, k)),
-            v,
-          )
-        : v;
+  for (const src of sources) out[`...${src.text}`] = true;
+  for (const [k, v] of Object.entries(tree)) {
+    if (
+      k.startsWith('...') ||
+      v === true ||
+      typeof v !== 'object' ||
+      Array.isArray(v)
+    ) {
+      out[k] = v;
+      continue;
+    }
+    /** @type {Array<{text: string, node: any}>} */
+    const below = [];
+    for (const src of sources) {
+      const next = keyOf(src, k, consts);
+      if (next === undefined)
+        throw new Error(
+          `the check cannot see what ${src.text} holds under ${k}, so a value written beside it could drop part of it`,
+        );
+      if (next) below.push(next);
+    }
+    out[k] = spreadInto(below, v, consts);
+  }
   return out;
+}
+
+/**
+ * The object a spread or a named style stands for, as a spread source.
+ * @param {string} text the module's text @param {any} node
+ * @param {Map<string, any>} consts
+ * @returns {{text: string, node: any}}
+ * @throws {Error} when the source does not show what it holds
+ */
+function sourceOf(text, node, consts) {
+  const src = text.slice(node.start, node.end);
+  const object = objectOf(node, consts);
+  if (!object)
+    throw new Error(
+      `the check cannot see what ${src} holds, so a value written beside it could drop part of it`,
+    );
+  return {text: /^[\w$.]+$/.test(src) ? src : `(${src})`, node: object};
 }
 
 /**
@@ -117,8 +191,9 @@ function spreadInto(names, tree) {
  * @param {ValueTree} tree
  * @param {Array<{start: number, end: number, text: string}>} edits
  * @param {string} where the path so far, for an error
+ * @param {Map<string, any>} consts the module's consts, by name
  */
-function editsFor(text, object, tree, edits, where) {
+function editsFor(text, object, tree, edits, where, consts) {
   /** @type {string[]} */
   const added = [];
   /** @type {string[]} */
@@ -154,21 +229,26 @@ function editsFor(text, object, tree, edits, where) {
     if (!prop) {
       // Beside a spread, a new object takes the spread's own value at that
       // key first, so a nested style the spread holds is kept.
-      const names = object.properties
+      const sources = object.properties
         .filter((/** @type {any} */ p) => p.type === 'SpreadElement')
-        .map((/** @type {any} */ p) =>
-          text.slice(p.argument.start, p.argument.end),
-        );
-      const written =
-        names.length &&
-        value !== true &&
-        typeof value === 'object' &&
-        !Array.isArray(value)
-          ? spreadInto(
-              names.map((/** @type {string} */ n) => memberOf(n, key)),
-              value,
-            )
-          : value;
+        .map((/** @type {any} */ p) => sourceOf(text, p.argument, consts));
+      const isTree =
+        value !== true && typeof value === 'object' && !Array.isArray(value);
+      /** @type {ValueTree[string]} */
+      let written = value;
+      if (sources.length && isTree) {
+        /** @type {Array<{text: string, node: any}>} */
+        const below = [];
+        for (const src of sources) {
+          const next = keyOf(src, key, consts);
+          if (next === undefined)
+            throw new Error(
+              `the check cannot see what ${src.text} holds under ${key}, so a value written beside it could drop part of it`,
+            );
+          if (next) below.push(next);
+        }
+        written = spreadInto(below, /** @type {ValueTree} */ (value), consts);
+      }
       added.push(`${inner}${keyText(key)}: ${valueText(written, inner)},`);
       continue;
     }
@@ -182,7 +262,7 @@ function editsFor(text, object, tree, edits, where) {
           start: prop.value.start,
           end: prop.value.end,
           text: valueText(
-            spreadInto([text.slice(node.start, node.end)], value),
+            spreadInto([sourceOf(text, node, consts)], value, consts),
             indentOf,
           ),
         });
@@ -192,7 +272,14 @@ function editsFor(text, object, tree, edits, where) {
         throw new Error(
           `${where ? `${where}.` : ''}${key} is not written as an object`,
         );
-      editsFor(text, node, value, edits, where ? `${where}.${key}` : key);
+      editsFor(
+        text,
+        node,
+        value,
+        edits,
+        where ? `${where}.${key}` : key,
+        consts,
+      );
       continue;
     }
     edits.push({
@@ -250,7 +337,7 @@ export function withThemeValues(source, exportName, tree, shared = {}) {
     );
   /** @type {Array<{start: number, end: number, text: string}>} */
   const edits = [];
-  editsFor(source, object, tree, edits, '');
+  editsFor(source, object, tree, edits, '', consts);
   // A shared const goes before the statement that holds the theme, or is
   // written into where it is already declared.
   // (The theme object is in the file, so a top-level statement holds it.)
@@ -262,7 +349,7 @@ export function withThemeValues(source, exportName, tree, shared = {}) {
   for (const [name, values] of Object.entries(shared)) {
     const there = unwrapExpression(consts.get(name));
     if (there?.type === 'ObjectExpression') {
-      editsFor(source, there, values, edits, name);
+      editsFor(source, there, values, edits, name, consts);
       continue;
     }
     if (there) throw new Error(`${name} is already declared as something else`);

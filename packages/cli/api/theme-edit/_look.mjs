@@ -57,7 +57,7 @@ import {
 /**
  * One problem a person would see.
  * @typedef {object} LookProblem
- * @property {'text' | 'part-text' | 'bar-text' | 'see-through' | 'blend' | 'edge' | 'half-painted' | 'one-look' | 'page' | 'hover' | 'font' | 'font-unloaded' | 'charts' | 'page-image' | 'bar-fill' | 'chart-ground'} kind
+ * @property {'text' | 'part-text' | 'bar-text' | 'see-through' | 'blend' | 'edge' | 'half-painted' | 'one-look' | 'page' | 'hover' | 'font' | 'font-unloaded' | 'charts' | 'page-image' | 'bar-fill' | 'chart-ground' | 'bar-ground'} kind
  * @property {Mode | 'both'} mode
  * @property {string} message
  * @property {string} [token] the token that draws it
@@ -82,7 +82,7 @@ import {
  * @property {TextPair[]} pairs every real text-on-background pair
  * @property {Record<string, import('./_parts.mjs').PartRecord>} map the part data
  * @property {(value: any, base: any, modes: string[], helpers: any) => {problems: any[]}} contrast the compiler's contrast measure
- * @property {{themed: boolean, pinned: Mode | null, modeByExpression?: boolean, painted: boolean, fonts: Set<string> | null, entry: string | null, pageImage: {file: string, value: string} | null} | null} app what the app does with the theme, the font families it loads (as family keys) and the file that loads Core's stylesheet; null outside an app
+ * @property {{themed: boolean, pinned: Mode | null, modeByExpression?: boolean, painted: boolean, fonts: Set<string> | null, entry: string | null, pageImage: Array<{file: string, value: string}>} | null} app what the app does with the theme, the font families it loads (as family keys) and the file that loads Core's stylesheet; null outside an app
  * @property {AcceptRecord[]} accepted the contrast the theme keeps as designed
  * @property {(extra: Record<string, [string, string]>) => Record<Mode, Record<string, string>>} [resolveWith] the theme's tokens resolved again with more set, as Core resolves them
  * @property {(family: string) => {pkg: string, known: boolean, install: string} | null} fontInstall the package to suggest for a font family (`known` false when Fontsource may not publish it) and the command that installs it; null for a font a system ships
@@ -208,7 +208,10 @@ function ownFill(components, part, m, block = null) {
 const opaqueGradient = image =>
   /^(linear|radial)-gradient\(/.test(image.trim()) &&
   (image.match(/gradient\(/g) ?? []).length === 1 &&
-  !/rgba?\([^)]*,\s*0?\.\d|hsla\(|transparent|#[0-9a-f]{8}\b/i.test(image);
+  // (Any alpha below 1, in any syntax, is a see-through stop.)
+  !/\/\s*[\d.]+%?\s*\)|rgba?\([^)]*,\s*(0?\.\d|0\s*\))|hsla\(|transparent|#[0-9a-f]{8}\b|#[0-9a-f]{4}\b/i.test(
+    image,
+  );
 
 /**
  * The opaque color a value shows over the page, or null.
@@ -235,6 +238,11 @@ const fixed = r => Number(r.toFixed(2));
  */
 function inside(map, part) {
   const within = new Set(map[part]?.contains ?? []);
+  // A page bar holds whatever controls an app puts in it (a filter's
+  // segmented control, tabs, badges), and what they hold.
+  if (PAGE_BARS.includes(part))
+    for (const q of FREE_PARTS)
+      for (const r of [q, ...(map[q]?.contains ?? [])]) within.add(r);
   // A menu opens in place inside the control that opens it, so it takes
   // the text tokens of every part around that control.
   if ([...within].some(q => MENU_OPENERS.includes(q)))
@@ -684,8 +692,66 @@ function barTextProblems(look) {
       }
     }
   }
+  // Text a part inside a page bar draws on the bar's own fill (the part
+  // paints none of its own): the text, its own or the bar's, must read on
+  // the bar.
+  for (const part of PAGE_BARS) {
+    const blocks = components?.[part];
+    if (!blocks || typeof blocks !== 'object') continue;
+    const within = inside(map, part);
+    for (const m of look.modes) {
+      const page = shown(colorIn(`var(${PAGE})`, res[m], m), null);
+      const barValue = ownFill(components, part, m);
+      const bar =
+        barValue != null ? shown(colorIn(barValue, res[m], m), page) : null;
+      if (!bar) continue;
+      for (const p of pairs) {
+        const q = p.bg.target;
+        if (!q || q === part || !within.has(q)) continue;
+        const block = pairBlock(map, p);
+        if (ownFill(components, q, m, block) != null) continue;
+        const fillValue = p.bg.tokens[0] ? `var(${p.bg.tokens[0]})` : p.bg.raw;
+        const c = colorIn(fillValue, res[m], m);
+        if (c != null && alphaOf(c) > 0) continue;
+        const tok = p.fg.tokens[0];
+        const text =
+          partValue(components, p.fg.target, ['color'], m, block) ??
+          (tok
+            ? (partValue(components, p.fg.target, [tok], m, block) ??
+              partValue(components, q, [tok], m, block) ??
+              partValue(components, part, [tok], m) ??
+              `var(${tok})`)
+            : null);
+        const fg = shown(colorIn(text, res[m], m), bar);
+        if (!fg) continue;
+        const r = ratio(fg, bar);
+        if (r >= TEXT) continue;
+        const key = `ground|${part}|${tok}|${m}`;
+        const had = out.get(key);
+        if (had) {
+          if (!had.parts?.includes(p.text)) had.parts?.push(p.text);
+          if (r < /** @type {number} */ (had.ratio)) had.ratio = fixed(r);
+          continue;
+        }
+        out.set(key, {
+          kind: 'bar-ground',
+          mode: m,
+          message: '',
+          part,
+          ...(tok ? {token: tok} : {}),
+          parts: [p.text],
+          ratio: fixed(r),
+          needs: TEXT,
+        });
+      }
+    }
+  }
   for (const p of out.values()) {
     const groups = [...new Set((p.parts ?? []).map(q => familyOf(q) ?? q))];
+    if (p.kind === 'bar-ground') {
+      p.message = `text of ${(p.parts ?? []).slice(0, 3).join(', ')} sits on ${p.part}'s own fill at ${p.ratio}:1 in ${p.mode}${p.token ? `: set ${p.token} in ${p.part}'s own style to a color that reads there` : ''}`;
+      continue;
+    }
     p.message =
       p.kind === 'bar-fill'
         ? `${p.part} sets ${p.token}, so ${(p.parts ?? []).slice(0, 3).join(', ')} inside it draw their text on that fill: ${p.ratio}:1 in ${p.mode}. Change ${p.token} in ${p.part}'s style, or the text those parts draw there`
@@ -913,6 +979,15 @@ function partImageProblems(look) {
   return out;
 }
 
+/** Controls an app may put in any bar of the page. */
+const FREE_PARTS = [
+  'segmented-control',
+  'segmented-control-item',
+  'tab',
+  'badge',
+  'token',
+  'button',
+];
 /** The bars and panels a page is built from. */
 const PAGE_BARS = [
   'app-shell-header',
@@ -1442,11 +1517,14 @@ export function lookProblems(look) {
   }
   // Text on an image the app paints its page with is not measured: said,
   // never passed as clean.
-  if (app?.themed && app.pageImage && isPattern(app.pageImage.value, res.light))
+  const image = app?.themed
+    ? app.pageImage.find(x => isPattern(x.value, res.light))
+    : null;
+  if (image)
     out.push({
       kind: 'page-image',
       mode: 'both',
-      message: `${app.pageImage.file} paints the page with an image (${app.pageImage.value.slice(0, 60)}); text on it is not measured: give text on it a plain fill, or check it by eye`,
+      message: `${image.file} paints the page with an image (${image.value.slice(0, 60)}); text on it is not measured: give text on it a plain fill, or check it by eye`,
     });
   if (app?.themed && own.has(PAGE) && !app.painted)
     out.push({

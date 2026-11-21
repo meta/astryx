@@ -1090,9 +1090,9 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
       const text = fs.readFileSync(abs, 'utf8');
       // The menu's own base comes first, then the repair.
       expect(text).toMatch(
-        /\.\.\.menuSurface\?\.base,\n\s+\.\.\.appShellHeaderInsideText,/,
+        /\.\.\.menuSurface\.base,\n\s+\.\.\.appShellHeaderInsideText,/,
       );
-      expect(text.match(/\.\.\.menuSurface\?\.base,/g)).toHaveLength(2);
+      expect(text.match(/\.\.\.menuSurface\.base,/g)).toHaveLength(2);
     },
     T,
   );
@@ -1133,6 +1133,73 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
       expect(has(p => p.kind === 'page-image' && p.part === 'layout')).toBe(
         true,
       );
+    },
+    T,
+  );
+
+  it(
+    "spreads a style's own value only at keys it holds, and says a page painted with the page color and an image",
+    async () => {
+      const file = themeFile('lacks', READABLE, {
+        'app-shell-header': {
+          base: {'--color-text-primary': '#ffffff', backgroundColor: '#101010'},
+        },
+      });
+      const abs = path.join(cwd, file);
+      fs.writeFileSync(
+        abs,
+        fs
+          .readFileSync(abs, 'utf8')
+          .replace(
+            'export const lacksTheme',
+            "const shared = {button: {base: {borderRadius: '2px'}}};\n\nexport const lacksTheme",
+          )
+          .replace('  components: {', '  components: {\n    ...shared,'),
+      );
+      await check(file, {fix: true});
+      const text = fs.readFileSync(abs, 'utf8');
+      // `shared` holds no menu: nothing spreads a key it does not have.
+      expect(text).not.toMatch(/shared\??\.(popover|\[)/);
+      expect(text).not.toMatch(/\.\.\.shared\??\.\["dropdown-menu"\]/);
+      const root = app('mixed', {painted: true});
+      fs.writeFileSync(
+        path.join(root, 'src', 'index.css'),
+        ":root { background: var(--app-surface); }\nbody { background: var(--color-background-body) url('/noise.png'); }\n",
+      );
+      const src = themeFile('mixed', READABLE);
+      fs.renameSync(
+        path.join(cwd, src),
+        path.join(root, 'src', 'mixedTheme.ts'),
+      );
+      const d = (await themeEditCheck('src/mixedTheme.ts', {cwd: root})).data;
+      expect(d.problems.find(p => p.kind === 'page-image')?.message).toMatch(
+        /noise\.png/,
+      );
+    },
+    T,
+  );
+
+  it(
+    'counts the controls an app puts in a page bar as inside it',
+    async () => {
+      const d = await check(
+        themeFile('filters', READABLE, {
+          'layout-header': {
+            base: {
+              '--color-text-primary': '#ffffff',
+              backgroundColor: '#0050c8',
+            },
+          },
+        }),
+      );
+      // A filter's selected segment, white text on its white pill.
+      expect(
+        d.problems.some(
+          p =>
+            p.kind === 'bar-text' &&
+            (p.parts ?? []).includes('segmented-control-item'),
+        ),
+      ).toBe(true);
     },
     T,
   );

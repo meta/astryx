@@ -2270,6 +2270,8 @@ function checkNextEdit(p, file, kept, shared) {
       ? `in ${edit}`
       : `${at}give ${p.part}'s style a shadow or a border`;
   }
+  if (p.kind === 'bar-ground' && p.token)
+    return `${at}set ${p.token} in ${p.part}'s own style to a color that reads on its fill`;
   if (p.kind === 'bar-fill')
     return `${at}change ${p.token} in ${p.part}'s own style so the text of ${(p.parts ?? []).slice(0, 3).join(', ')} reads on it`;
   if (p.kind === 'half-painted' && p.part)

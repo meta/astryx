@@ -50,7 +50,7 @@ const PAGE_RULE =
  * @property {boolean} painted whether a stylesheet of the app paints the page with the theme
  * @property {string | null} entry the file that loads Core's stylesheet
  * @property {Set<string> | null} fonts the font families the app loads, as family keys
- * @property {{file: string, value: string} | null} pageImage the image the app paints its page with, and the stylesheet that does
+ * @property {Array<{file: string, value: string}>} pageImage the page backgrounds the app's stylesheets set that may paint an image, each with its stylesheet
  */
 
 /**
@@ -77,14 +77,15 @@ function paintsPage(css) {
 }
 
 /**
- * The image a stylesheet paints the page with (a `url()` or a gradient on
- * `html`, `body` or `:root`), or null.
+ * The page backgrounds a stylesheet sets on `html`, `body` or `:root` that
+ * may paint an image: each one with a `url()`, a gradient or a `var()`
+ * (which the check reads from the theme's tokens).
  * @param {string} css
- * @returns {string | null}
+ * @returns {string[]}
  */
 function pageImageOf(css) {
-  /** @type {string | null} */
-  let found = null;
+  /** @type {string[]} */
+  const found = [];
   try {
     postcss()
       .parse(css)
@@ -92,11 +93,8 @@ function pageImageOf(css) {
         if (!rule.selectors.some(s => /^(html|body|:root)$/.test(s.trim())))
           return;
         rule.walkDecls(/^background(-image)?$/, decl => {
-          if (
-            /url\(|gradient\(|var\(--/.test(decl.value) &&
-            !/^var\(--color-background-body\b/.test(decl.value.trim())
-          )
-            found ??= decl.value.trim();
+          if (/url\(|gradient\(|var\(--/.test(decl.value))
+            found.push(decl.value.trim());
         });
       });
   } catch {
@@ -271,16 +269,13 @@ export async function appThemeUse(root, themeFiles) {
       )
     : false;
   // An image the app paints its page with: text on it is not measured.
-  /** @type {{file: string, value: string} | null} */
-  let pageImage = null;
+  /** @type {Array<{file: string, value: string}>} */
+  const pageImage = [];
   if (app)
     for (const f of files) {
       if (!f.endsWith('.css') || !isWithin(app, f)) continue;
-      const value = pageImageOf(fs.readFileSync(f, 'utf8'));
-      if (value) {
-        pageImage = {file: path.relative(root, f), value};
-        break;
-      }
+      for (const value of pageImageOf(fs.readFileSync(f, 'utf8')))
+        pageImage.push({file: path.relative(root, f), value});
     }
   return {
     elements,
