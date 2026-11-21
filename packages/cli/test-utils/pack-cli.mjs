@@ -30,6 +30,13 @@ const REPO_DIR = path.resolve(CLI_DIR, '..', '..');
  */
 export const PREPACK_FILES = [
   {
+    file: 'assets/discover/official-packages.json',
+    script: 'scripts/generate-official-packages.mjs',
+    // The copy holds only packages/cli and packages/core: the list is read
+    // from the repository.
+    args: ['--root', REPO_DIR],
+  },
+  {
     file: 'assets/templates/components.generated.json',
     script: 'scripts/generate-template-components.mjs',
   },
@@ -62,13 +69,6 @@ export const PREPACK_FILES = [
     script: 'scripts/generate-search-catalog.mjs',
   },
   {
-    file: 'assets/discover/official-packages.json',
-    script: 'scripts/generate-official-packages.mjs',
-    // The copy holds only packages/cli and packages/core: the list is read
-    // from the repository.
-    args: ['--root', REPO_DIR],
-  },
-  {
     file: 'clients/cli/build-id.generated.json',
     script: 'scripts/generate-build-id.mjs',
   },
@@ -79,6 +79,9 @@ export const PREPACK_FILES = [
  * what an earlier one wrote, and the scripts within a stage are independent.
  */
 const PREPACK_STAGES = [
+  // The official list reads only the repository. It comes first because the
+  // self-audit, docs routes and manifest record the package's files.
+  ['scripts/generate-official-packages.mjs'],
   [
     'scripts/generate-template-components.mjs',
     'scripts/generate-stored-docs.mjs',
@@ -92,12 +95,8 @@ const PREPACK_STAGES = [
     'scripts/generate-docs-routes.mjs',
     'scripts/generate-manifest.mjs',
   ],
-  // Search's catalog reads every store above. The official list reads only
-  // the repository.
-  [
-    'scripts/generate-search-catalog.mjs',
-    'scripts/generate-official-packages.mjs',
-  ],
+  // Search's catalog reads every store above.
+  ['scripts/generate-search-catalog.mjs'],
   ['scripts/generate-build-id.mjs'],
 ];
 
