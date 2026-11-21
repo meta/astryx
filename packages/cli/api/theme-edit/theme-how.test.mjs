@@ -5233,38 +5233,3 @@ describe('r19 (2): not dark enough / not light enough', () => {
     }
   });
 });
-
-describe('a stripe made transparent', () => {
-  // "even rows transparent" takes that stripe away, as "no stripes on even
-  // rows" does, in the mode the ask names.
-  it.each([
-    [
-      'even rows transparent',
-      /^set q background-color transparent --on table-row --when parity:even$/,
-    ],
-    [
-      'odd rows transparent',
-      /^set q background-color transparent --on table-row --when parity:odd$/,
-    ],
-    [
-      'make the even rows transparent',
-      /^set q background-color transparent --on table-row --when parity:even$/,
-    ],
-    [
-      'even rows transparent in dark mode',
-      /^set q background-color transparent --on table-row --when parity:even --mode dark$/,
-    ],
-    // (on striped tables: only there)
-    [
-      'even rows transparent on striped tables',
-      /^set q background-color transparent --on table-row --when parity:even --state striped$/,
-    ],
-  ])('%s', async (question, want) => {
-    const {data} = await themeEditHow(question, {cwd, theme: 'q'});
-    const top = (data.results ?? []).find(
-      (/** @type {{commands: string[]}} */ r) =>
-        r.commands.some(c => / editor set /.test(c)),
-    );
-    expect(bare(top?.commands[0] ?? '')).toMatch(want);
-  });
-});

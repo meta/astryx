@@ -26811,18 +26811,14 @@ export function draftAnswer(ctx, env, question) {
           // shaded"): that stripe's fill on the row, in every table, and the
           // other stripe of a striped table cleared, where Core draws its
           // own. A theme with no stripe of its own and no color keeps Core's.
-          // ("even rows transparent" takes that stripe away, as "no stripes
-          // on even rows" does.)
-          const clears =
-            c.neg || (!value && /\btransparent\b/.test(noMode(c.text)));
-          if (parityOn && paritySaid.length === 1 && (value || clears)) {
+          if (parityOn && paritySaid.length === 1 && value) {
             const p = paritySaid[0];
             const other = parities.find(v => v !== p);
             const clearsOther =
-              !clears && !offStriped && !!coreParity && other === coreParity;
-            const keepsStriped = !clears && offStriped;
+              !c.neg && !offStriped && !!coreParity && other === coreParity;
+            const keepsStriped = !c.neg && offStriped;
             const steps = [
-              set('background-color', value ?? 'transparent', {
+              set('background-color', value, {
                 on: parityOn,
                 when: `parity:${p}`,
                 ...striped,
@@ -26852,7 +26848,7 @@ export function draftAnswer(ctx, env, question) {
                 : []),
             ];
             return {
-              text: clears
+              text: c.neg
                 ? `no stripe on the ${p} rows of ${parityOn}${onStriped ? ` ${stripedWhere}` : ''}. On a table with hover those rows lose Core's hover color too`
                 : `a stripe on the ${p} rows of ${parityOn} (the first body row is odd), ${stripedWhere}${keepsStriped ? '; a table marked isStriped keeps those rows as Core draws them (a table that is not striped has no condition of its own, so the stripe goes on every table and is taken back on striped ones)' : ''}${clearsOther ? `; the ${other} rows of a striped table, where Core paints its own stripe, are cleared` : ''}. On a table with hover the stripe${clearsOther ? ' and the cleared rows' : ''} cover Core's hover color${limit}`,
               options: [steps],
