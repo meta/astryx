@@ -94,7 +94,7 @@ import {
  * What the mapping reads around the palette.
  * @typedef {object} PaletteMappingContext
  * @property {PaletteBase} [base]
- * @property {PaletteEditorRules} [editor] * The theme editor's own rules, beyond `themePalette()`'s mapping: the colors a look grows (category and chart colors, the status roles a theme leaves unset, code colors) and a base theme's own pairs kept readable for those colors. They never change a token `themePalette()` maps. The editor passes its own rules module (editor-look) here, so an app that imports only `themePalette()` ships none of them.
+ * @property {PaletteEditorRules} [editor] * The rules for the colors a look grows beyond the seeds' own (category, chart and code colors, the status roles a theme leaves unset) and a base theme's own pairs kept readable for those colors: the editor-look module, which `themePalette()` and the theme editor both pass. A mapping without it maps the seeds' own tokens only.
  * @property {(token: string) => boolean} has Whether a token exists, so the mapping sets it.
  * @property {Readonly<Record<string, unknown>>} [defaults] Core's default value of each token, as written: a token the official theme leaves to Core follows the family at Core's lightness.
  * @property {PaletteColorReader} reader

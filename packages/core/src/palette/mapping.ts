@@ -94,13 +94,11 @@ export interface PaletteBase {
 export interface PaletteMappingContext {
   base?: PaletteBase;
   /**
-   * The theme editor's own rules, beyond `themePalette()`'s mapping: the
-   * colors a look grows (category and chart colors, the status roles a
-   * theme leaves unset, code colors) and a base theme's own pairs kept
-   * readable for those colors. They never change a token
-   * `themePalette()` maps. The editor passes its own rules module
-   * (editor-look) here, so an app that imports only `themePalette()` ships
-   * none of them.
+   * The rules for the colors a look grows beyond the seeds' own (category,
+   * chart and code colors, the status roles a theme leaves unset) and a base
+   * theme's own pairs kept readable for those colors: the editor-look
+   * module, which `themePalette()` and the theme editor both pass. A
+   * mapping without it maps the seeds' own tokens only.
    */
   editor?: PaletteEditorRules;
   /** Whether a token exists, so the mapping sets it. */
@@ -1772,10 +1770,10 @@ export function mapPalette(
     }
   }
 
-  // The colors the theme editor grows beyond this mapping, from its own
-  // rules (context.editor, which themePalette() never passes): the look's
-  // category, chart and code colors, the status roles the theme leaves
-  // unset, and a base theme's own pairs kept where they read.
+  // The colors a look grows beyond the seeds' own, from the editor-look
+  // rules (context.editor): the category, chart and code colors, the
+  // status roles the theme leaves unset, and a base theme's own pairs kept
+  // where they read.
   const {categories, statuses, code, cvd, keptAtBase}: EditorLookResult =
     context.editor
       ? context.editor.growLook({
