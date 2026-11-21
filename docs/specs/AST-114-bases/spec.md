@@ -196,6 +196,7 @@ theme` differs from `integration add component`. A step a command can do
   | `experimental export --reverse`                 | `render.reverse`                   |
   | `experimental import`                           | `render.reverse`                   |
   | `experimental theme compile`                    | `themes.compile`                   |
+  | `experimental theme check`                      | `themes.compile`                   |
   | `experimental theme add`, `use`, `remove`       | `themes.appModule`                 |
   | `experimental theme template`                   | `themes.template`                  |
   | `experimental theme targets`                    | `themes.targets`                   |

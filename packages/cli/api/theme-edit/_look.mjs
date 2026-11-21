@@ -1,0 +1,1174 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * @file What a person would see as broken in a built theme, in each mode,
+ * and the values that repair it. Text is measured on every real
+ * text-on-background pair of the part data. Menus, control edges, the
+ * page and the parts the theme styles are measured from the theme's own
+ * resolved values. The repair fills the colors the theme leaves unset from
+ * the palette generator (seeded by the colors it sets), moves only the
+ * lightness of the theme's own text until it reads, and changes no other
+ * color the theme sets.
+ *
+ * @input the theme's resolved tokens and part styles, Core's defaults, the
+ *   part data and what the app does with the theme
+ * @output problems, and the values that repair them
+ * @position api/theme-edit — pure; used by the adapter's theme check
+ */
+
+import {
+  LOOKS_ALIKE,
+  alphaOf,
+  compositeOver,
+  hex,
+  nearestReadingLightness,
+  oklabDistance,
+  parseColor,
+  plainOn,
+  ratio,
+  splitTop,
+  LIGHTNESS_STEP,
+} from './_color.mjs';
+import {hexToOklch, oklchClampedHex} from '../theme/palette/generate/color.mjs';
+import * as editorLook from '../theme/palette/generate/editor-look.mjs';
+import {acceptCovers} from './_accepted.mjs';
+import {familyOf} from './_tables.mjs';
+import {
+  hasGenericFamily,
+  namedFontFamilies,
+} from '../theme/build/font-warning.mjs';
+import {
+  NON_TEXT,
+  STATUS_TOKEN,
+  TEXT,
+  mapPalette,
+  planPaletteRequest,
+} from '../theme/palette/generate/mapping.mjs';
+import {
+  PALETTE_RECIPE_V2,
+  generateTonalPalette,
+} from '../theme/palette/generate/generator.mjs';
+
+/** @typedef {'light' | 'dark'} Mode */
+/** @typedef {[number, number, number]} Rgb */
+/** @typedef {import('./_parts.mjs').TextPair} TextPair */
+/** @typedef {import('./_parts.mjs').PaintSide} PaintSide */
+
+/**
+ * One problem a person would see.
+ * @typedef {object} LookProblem
+ * @property {'text' | 'part-text' | 'bar-text' | 'see-through' | 'blend' | 'edge' | 'half-painted' | 'one-look' | 'page' | 'hover' | 'font' | 'charts'} kind
+ * @property {Mode | 'both'} mode
+ * @property {string} message
+ * @property {string} [token] the token that draws it
+ * @property {string} [on] what it sits on: a token, or a part's fill
+ * @property {string} [part] the part whose own style draws it
+ * @property {string[]} [parts] the parts where it shows
+ * @property {number} [ratio]
+ * @property {number} [needs]
+ */
+
+/** @typedef {import('./_accepted.mjs').AcceptRecord} AcceptRecord */
+
+/**
+ * What the check reads.
+ * @typedef {object} Look
+ * @property {Mode[]} modes
+ * @property {Record<Mode, Record<string, string>>} res the theme's resolved tokens per mode
+ * @property {Set<string>} own the tokens the theme sets
+ * @property {Record<string, Record<string, any>>} components the theme's part styles
+ * @property {Record<Mode, Record<string, string>>} base Core's own resolved tokens per mode
+ * @property {Record<string, string>} defaults Core's token defaults
+ * @property {TextPair[]} pairs every real text-on-background pair
+ * @property {Record<string, import('./_parts.mjs').PartRecord>} map the part data
+ * @property {(value: any, base: any, modes: string[], helpers: any) => {problems: any[]}} contrast the compiler's contrast measure
+ * @property {{themed: boolean, pinned: Mode | null, painted: boolean} | null} app what the app does with the theme; null outside an app
+ * @property {AcceptRecord[]} accepted the contrast the theme keeps as designed
+ * @property {string[]} unloadedFonts the font families the theme names that are neither generic nor installed with the system
+ * @property {(pair: TextPair, fill: string | null, tokens: Record<string, string>, mode: Mode) => string[]} textTokens
+ *   the text tokens a pair's text reads on its fill in a mode, as the
+ *   editor reads Core's media surface
+ */
+
+/** The page and the grounds text and controls sit on. */
+const PAGE = '--color-background-body';
+const POPOVER = '--color-background-popover';
+const CARD = '--color-background-card';
+const SURFACE = '--color-background-surface';
+const GROUNDS = [PAGE, SURFACE, CARD, POPOVER];
+const EDGE = '--color-border-emphasized';
+/**
+ * The nearest lightness of a color (hue and chroma kept, as the gamut
+ * allows) that passes a test, or null when none does.
+ * @param {Rgb} from @param {(c: Rgb) => boolean} test
+ * @returns {Rgb | null}
+ */
+function nearestLightness(from, test) {
+  const {L, C, H} = hexToOklch(hex(from));
+  for (let step = LIGHTNESS_STEP; step <= 1; step += LIGHTNESS_STEP)
+    for (const l of [L - step, L + step]) {
+      if (l < 0 || l > 1) continue;
+      const c = parseColor(oklchClampedHex(l, C, H));
+      if (c && test(c)) return c;
+    }
+  return null;
+}
+
+/** The category colors (Badge, Token and Card tints) and the chart colors. */
+const CATEGORY_OR_CHART =
+  /^--color-(data-[a-z0-9-]+|(background|text|icon|border)-(red|orange|yellow|green|teal|cyan|blue|purple|pink|gray))$/;
+/** The surfaces Core's media parts paint and hold their on-colors on. */
+const INVERTED_SURFACES = [
+  '--color-background-inverted',
+  '--color-background-error-inverted',
+];
+/** The share of Core's own edge contrast a control edge must reach. */
+const EDGE_SHARE = 0.95;
+const TEXT_TOKEN = /^--color-(text|icon)-/;
+/** Tokens drawn only as text or icons, never as a fill: the ones a repair may move. */
+const DRAWN_AS_TEXT = /^--color-(text|icon|on)-/;
+
+/**
+ * A value as one mode draws it: the side of a `light-dark()` pair, each
+ * `var()` read from the resolved tokens. Null when it gives no one color.
+ * @param {unknown} value
+ * @param {Record<string, string>} res
+ * @param {Mode} m
+ * @param {Set<string>} [seen]
+ * @returns {string | null}
+ */
+export function colorIn(value, res, m, seen = new Set()) {
+  const v = String(value ?? '').trim();
+  if (!v) return null;
+  if (parseColor(v)) return v;
+  const fn = /^([a-z-]+)\((.*)\)$/is.exec(v);
+  if (!fn) return null;
+  const name = fn[1].toLowerCase();
+  if (name === 'light-dark') {
+    const halves = splitTop(fn[2], ',');
+    return halves.length === 2
+      ? colorIn(halves[m === 'dark' ? 1 : 0], res, m, seen)
+      : null;
+  }
+  if (name !== 'var') return null;
+  const [ref, ...rest] = splitTop(fn[2], ',');
+  const t = ref.trim();
+  if (seen.has(t)) return null;
+  seen.add(t);
+  return (
+    colorIn(res[t], res, m, seen) ??
+    (rest.length ? colorIn(rest.join(','), res, m, seen) : null)
+  );
+}
+
+/**
+ * The value a part's own style gives a property in a mode, or null: the
+ * variant block the pair is drawn in, else the plain one, a mode block
+ * inside it first.
+ * @param {Record<string, Record<string, any>>} components
+ * @param {string | null} part
+ * @param {string[]} keys the property names, as a theme writes them
+ * @param {Mode} m
+ * @param {string | null} [when] a variant block (`variant:primary`)
+ * @returns {string | null}
+ */
+export function partValue(components, part, keys, m, when = null) {
+  if (!part) return null;
+  const blocks = components?.[part];
+  if (!blocks || typeof blocks !== 'object') return null;
+  for (const block of [when, 'base']) {
+    const style = block ? blocks[block] : null;
+    if (!style || typeof style !== 'object') continue;
+    for (const inner of [style[`@${m}`], style])
+      if (inner && typeof inner === 'object')
+        for (const k of keys) if (typeof inner[k] === 'string') return inner[k];
+  }
+  return null;
+}
+
+/**
+ * The opaque color a value shows over the page, or null.
+ * @param {string | null} v @param {Rgb | null} page
+ * @returns {Rgb | null}
+ */
+function shown(v, page) {
+  const c = v ? /** @type {Rgb | null} */ (parseColor(v)) : null;
+  if (!c) return null;
+  const a = alphaOf(v);
+  return a < 1 && page ? compositeOver(c, a, page) : c;
+}
+
+/** Light or dark, by the text that reads on it. @param {Rgb} rgb @returns {Mode} */
+const sideOf = rgb => (plainOn(rgb) === '#000000' ? 'light' : 'dark');
+
+/** @param {number} r */
+const fixed = r => Number(r.toFixed(2));
+
+/**
+ * The parts inside a part, as the part data records them.
+ * @param {Look['map']} map @param {string} part
+ * @returns {Set<string>}
+ */
+function inside(map, part) {
+  return new Set(map[part]?.contains ?? []);
+}
+
+/**
+ * The record that would keep each text problem's pairs as designed, by
+ * problem: what a repair names beside a color it moves.
+ * @type {WeakMap<LookProblem, Array<Omit<AcceptRecord, 'reason'>>>}
+ */
+const ACCEPT = new WeakMap();
+
+/**
+ * Text problems: every real pair below 4.5:1 now, measured with the
+ * theme's tokens and its own part styles, and lower than in Core's own
+ * look. (A pair Core's own look draws as low is one the part data does not
+ * see as drawn, such as text on a toast's inverted surface, which sets its
+ * own text.) Grouped by what draws the text, what it sits on and the mode.
+ * @param {Look} look
+ * @returns {{problems: LookProblem[], accepted: number}}
+ */
+function textProblems(look) {
+  const {res, base, components} = look;
+  /**
+   * A side of a pair as drawn: the part's own style, else its token.
+   * @param {Record<Mode, Record<string, string>>} tokens
+   * @param {Record<string, Record<string, any>>} styles
+   * @returns {(p: TextPair, side: 'fg' | 'bg', m: string) => string | null}
+   */
+  const drawnBy = (tokens, styles) => {
+    /** @type {(p: TextPair, side: 'fg' | 'bg', m: string) => string | null} */
+    const drawn = (p, side, m) => {
+      const mode = /** @type {Mode} */ (m);
+      const s = p[side];
+      const when = /** @type {any} */ (p).when ?? null;
+      const own = partValue(
+        styles,
+        s.target,
+        side === 'fg' ? ['color'] : ['backgroundColor', 'background'],
+        mode,
+        when ? String(when).replace(/^(\w+)=/, '$1:') : null,
+      );
+      if (own != null) return colorIn(own, tokens[mode], mode) ?? own;
+      let tok = s.tokens[0];
+      // Core's media surface (a toast, a lightbox) draws the text it holds
+      // in its own on-colors: read as the editor reads it.
+      if (side === 'fg' && tok)
+        tok =
+          look.textTokens(p, drawn(p, 'bg', m), tokens[mode], mode)[0] ?? tok;
+      if (side === 'fg' && tok) {
+        // A text token a part sets for itself wins over the theme's: the
+        // text's own part first, then the part it sits on.
+        const block = when ? String(when).replace(/^(\w+)=/, '$1:') : null;
+        const set =
+          partValue(styles, p.fg.target, [tok], mode, block) ??
+          partValue(styles, p.bg.target, [tok], mode, block);
+        if (set != null) return colorIn(set, tokens[mode], mode) ?? set;
+      }
+      if (tok) return colorIn(`var(${tok})`, tokens[mode], mode);
+      return s.raw;
+    };
+    return drawn;
+  };
+  const {problems} = look.contrast(
+    drawnBy(res, components),
+    drawnBy(base, {}),
+    look.modes,
+    {
+      parseColor,
+      ratio,
+      alphaOf,
+      compositeOver,
+      page: (/** @type {Mode} */ m) => colorIn(`var(${PAGE})`, res[m], m),
+    },
+  );
+  /** @type {Map<string, LookProblem>} */
+  const out = new Map();
+  const drawn = drawnBy(res, components);
+  let accepted = 0;
+  for (const x of problems) {
+    /** @type {TextPair} */
+    const p = x.pair;
+    const mode = /** @type {Mode} */ (x.mode);
+    const when = /** @type {any} */ (p).when ?? null;
+    const block = when ? String(when).replace(/^(\w+)=/, '$1:') : null;
+    const fg = shown(drawn(p, 'fg', mode), x.ground);
+    /** @type {Omit<AcceptRecord, 'reason'> | null} */
+    const record = fg
+      ? {
+          part: p.text,
+          ground: p.bg.target ?? 'page',
+          ...(block ? {when: block} : {}),
+          mode,
+          ratio: x.ratio,
+          color: hex(fg),
+          groundColor: hex(x.ground),
+        }
+      : null;
+    const ownFg = partValue(components, p.fg.target, ['color'], mode, block);
+    const ownBg = partValue(
+      components,
+      p.bg.target,
+      ['backgroundColor', 'background'],
+      mode,
+      block,
+    );
+    const part =
+      ownBg != null ? p.bg.target : ownFg != null ? p.fg.target : null;
+    const token = ownFg == null ? (p.fg.tokens[0] ?? null) : null;
+    const on = ownBg == null ? (p.bg.tokens[0] ?? null) : null;
+    // A record keeps only a color the theme's author set: a color the
+    // check or compile made that does not read is a fault, never a design.
+    const authored = ownFg != null || (token != null && look.own.has(token));
+    if (
+      record &&
+      authored &&
+      look.accepted.some(a => acceptCovers(a, record))
+    ) {
+      accepted += 1;
+      continue;
+    }
+    const key = `${part ?? ''}|${token ?? ''}|${on ?? ''}|${mode}`;
+    const had = out.get(key);
+    const where = p.text;
+    if (had) {
+      if (!had.parts?.includes(where)) had.parts?.push(where);
+      if (x.ratio < /** @type {number} */ (had.ratio)) had.ratio = x.ratio;
+      if (record) ACCEPT.get(had)?.push(record);
+      continue;
+    }
+    const problem = /** @type {LookProblem} */ ({
+      kind: part ? 'part-text' : 'text',
+      mode,
+      message: '',
+      ...(token ? {token} : {}),
+      ...(on ? {on} : {}),
+      ...(part ? {part} : {}),
+      parts: [where],
+      ratio: x.ratio,
+      needs: TEXT,
+    });
+    out.set(key, problem);
+    ACCEPT.set(problem, record ? [record] : []);
+  }
+  for (const p of out.values()) {
+    const what = p.part
+      ? `text in ${p.part}'s own style`
+      : `${p.token ?? 'text'} on ${p.on ?? 'its part'}`;
+    p.message = `${what} is ${p.ratio}:1 in ${p.mode} (needs ${TEXT}), in ${(p.parts ?? []).slice(0, 3).join(', ')}${(p.parts ?? []).length > 3 ? ` and ${(p.parts ?? []).length - 3} more` : ''}`;
+  }
+  return {problems: [...out.values()], accepted};
+}
+
+/**
+ * The parts with the menu fill, each with the shadow tokens it reads: what
+ * sets a menu apart from what it opens over.
+ * @param {Look['map']} map
+ * @returns {Array<{part: string, shadows: string[]}>}
+ */
+function menuParts(map) {
+  /** @type {Array<{part: string, shadows: string[]}>} */
+  const out = [];
+  for (const [part, rec] of Object.entries(map)) {
+    const own = rec?.own ?? {};
+    const fill = Object.entries(own).some(
+      ([prop, v]) => /^background/.test(prop) && POPOVER in (v.tokens ?? {}),
+    );
+    if (fill)
+      out.push({
+        part,
+        shadows: Object.keys(own['box-shadow']?.tokens ?? {}).sort(),
+      });
+  }
+  return out;
+}
+
+/** A shadow, border or width value that draws nothing. @param {unknown} v */
+const drawsNothing = v => /^(none|0|0px|hidden)?$/.test(String(v ?? '').trim());
+
+/**
+ * The menus that stand apart from nothing in a mode: no shadow drawn (a
+ * part style that removes it, or every shadow token it reads flat) and no
+ * border of its own, on a fill like the page's. Split by what flattens
+ * them: the shadow tokens, or the part's own style.
+ * @param {Look} look @param {Mode} m @param {(fill: Rgb) => boolean} likePage
+ * @returns {{tokens: string[], parts: string[]}}
+ */
+function flatMenus(look, m, likePage) {
+  const {res, components} = look;
+  const page = shown(colorIn(`var(${PAGE})`, res[m], m), null);
+  /** @type {Set<string>} */
+  const tokens = new Set();
+  /** @type {string[]} */
+  const parts = [];
+  for (const {part, shadows} of menuParts(look.map)) {
+    const own = (/** @type {string[]} */ keys) =>
+      partValue(components, part, keys, m);
+    const fill = shown(
+      colorIn(
+        own(['backgroundColor', 'background']) ?? `var(${POPOVER})`,
+        res[m],
+        m,
+      ),
+      page,
+    );
+    if (!fill || !likePage(fill)) continue;
+    const width = own(['borderWidth']);
+    const border =
+      (own(['border']) != null && !drawsNothing(own(['border']))) ||
+      (width != null &&
+        !drawsNothing(width) &&
+        !drawsNothing(own(['borderStyle']) ?? 'none'));
+    if (border) continue;
+    const shadow = own(['boxShadow']);
+    if (shadow != null) {
+      if (drawsNothing(colorlessValue(res[m], '', shadow))) parts.push(part);
+      continue;
+    }
+    if (
+      shadows.length &&
+      shadows.every(t => drawsNothing(colorlessValue(res[m], t)))
+    )
+      for (const t of shadows) tokens.add(t);
+  }
+  return {tokens: [...tokens].sort(), parts};
+}
+
+/**
+ * The style block a pair is drawn in: its own variant, else the one
+ * variant of its part whose fill reads the pair's ground token (a Button
+ * drawn as its default variant), else none (the plain block).
+ * @param {Look['map']} map @param {TextPair} p
+ * @returns {string | null}
+ */
+function pairBlock(map, p) {
+  const when = /** @type {any} */ (p).when;
+  if (when) return String(when).replace(/^(\w+)=/, '$1:');
+  const q = p.bg.target;
+  const tok = p.bg.tokens[0];
+  if (!q || !tok || q !== p.fg.target) return null;
+  const conds = map[q]?.own?.['background-color']?.tokens?.[tok] ?? [];
+  const variants = new Set(
+    conds.map(c => /(?:^|,)variant=([\w-]+)/.exec(c)?.[1]).filter(Boolean),
+  );
+  return variants.size === 1 ? `variant:${[...variants][0]}` : null;
+}
+
+/**
+ * The style blocks of the parts inside a bar whose text failed, by bar
+ * problem: `part|block`, the block `base` or a variant (`variant:primary`).
+ * The repair writes only there.
+ * @type {WeakMap<LookProblem, Set<string>>}
+ */
+const BAR_BLOCKS = new WeakMap();
+
+/**
+ * Bar text: a part whose own style sets a text token sets it for every
+ * part inside it. A part inside it that paints its own fill (a menu, a
+ * field) then draws that text on its fill.
+ * @param {Look} look
+ * @returns {LookProblem[]}
+ */
+function barTextProblems(look) {
+  const {res, components, map, pairs} = look;
+  /** @type {Map<string, LookProblem>} */
+  const out = new Map();
+  for (const [part, blocks] of Object.entries(components ?? {})) {
+    if (!blocks || typeof blocks !== 'object') continue;
+    const within = inside(map, part);
+    if (!within.size) continue;
+    for (const m of look.modes) {
+      const page = shown(colorIn(`var(${PAGE})`, res[m], m), null);
+      // What the bar paints: a see-through fill inside it shows the bar.
+      const bar =
+        shown(
+          colorIn(
+            partValue(components, part, ['backgroundColor', 'background'], m),
+            res[m],
+            m,
+          ),
+          page,
+        ) ?? page;
+      const style = blocks.base ?? {};
+      const tokens = new Set(
+        [...Object.keys(style), ...Object.keys(style[`@${m}`] ?? {})].filter(
+          k => TEXT_TOKEN.test(k),
+        ),
+      );
+      for (const token of tokens) {
+        const set = partValue(components, part, [token], m);
+        const fg = shown(colorIn(set, res[m], m), bar);
+        if (!fg) continue;
+        for (const p of pairs) {
+          const q = p.bg.target;
+          if (!q || q === part || !within.has(q) || p.fg.tokens[0] !== token)
+            continue;
+          const block = pairBlock(map, p);
+          // A part that sets the token again for itself draws its own.
+          if (partValue(components, q, [token], m, block) != null) continue;
+          const fillValue =
+            partValue(
+              components,
+              q,
+              ['backgroundColor', 'background'],
+              m,
+              block,
+            ) ?? (p.bg.tokens[0] ? `var(${p.bg.tokens[0]})` : p.bg.raw);
+          const fill = shown(colorIn(fillValue, res[m], m), bar);
+          if (!fill) continue;
+          const r = ratio(fg, fill);
+          if (r >= TEXT) continue;
+          const key = `${part}|${token}|${m}`;
+          const had = out.get(key);
+          const at = `${q}|${block ?? 'base'}`;
+          if (had) {
+            if (!had.parts?.includes(q)) had.parts?.push(q);
+            if (r < /** @type {number} */ (had.ratio)) had.ratio = fixed(r);
+            BAR_BLOCKS.get(had)?.add(at);
+            continue;
+          }
+          const problem = /** @type {LookProblem} */ ({
+            kind: 'bar-text',
+            mode: m,
+            message: '',
+            part,
+            token,
+            parts: [q],
+            ratio: fixed(r),
+            needs: TEXT,
+          });
+          out.set(key, problem);
+          BAR_BLOCKS.set(problem, new Set([at]));
+        }
+      }
+    }
+  }
+  for (const p of out.values()) {
+    const groups = [...new Set((p.parts ?? []).map(q => familyOf(q) ?? q))];
+    p.message = `${p.part} sets ${p.token}, so ${(p.parts ?? []).slice(0, 3).join(', ')} inside it draw that text on their own fill: ${p.ratio}:1 in ${p.mode}. The fix sets the theme's own ${p.token} again on ${groups.join(', ')}`;
+  }
+  return [...out.values()];
+}
+
+/** The smallest OKLab step a person sees as a change when a pointer moves on. */
+const HOVER_SHOWS = 0.02;
+
+/**
+ * The hover fill a part's own style gives in a block, or null.
+ * @param {Look['components']} components
+ * @param {string} part @param {Mode} m @param {string | null} block
+ */
+function ownHover(components, part, m, block) {
+  for (const b of [block, 'base']) {
+    const hover = b ? components?.[part]?.[b]?.[':hover'] : null;
+    if (!hover || typeof hover !== 'object') continue;
+    for (const inner of [hover[`@${m}`], hover])
+      if (inner && typeof inner === 'object')
+        for (const k of ['backgroundColor', 'background'])
+          if (typeof inner[k] === 'string') return inner[k];
+  }
+  return null;
+}
+
+/**
+ * Hover that shows nothing: a part Core paints differently under the
+ * pointer (its own hover fill, or the hover overlay over its fill) that the
+ * theme paints the same as at rest. Read from the states the part data
+ * records, per variant; measured on the fill a painted part around it
+ * gives, else the page.
+ * @param {Look} look
+ * @returns {LookProblem[]}
+ */
+function hoverProblems(look) {
+  const {res, base, components, map} = look;
+  /** @type {Map<string, LookProblem>} */
+  const out = new Map();
+  /** The painted part a part sits in, its fill. @param {string} part @param {Mode} m */
+  const around = (part, m) => {
+    for (const [outer, rec] of Object.entries(map)) {
+      if (!(rec?.contains ?? []).includes(part)) continue;
+      const v = partValue(
+        components,
+        outer,
+        ['backgroundColor', 'background'],
+        m,
+      );
+      if (v != null) return colorIn(v, res[m], m);
+    }
+    return null;
+  };
+  for (const [part, rec] of Object.entries(map)) {
+    const at = rec?.at?.['background-color'] ?? {};
+    for (const key of Object.keys(at)) {
+      const hovered = /^(.*?)\s*:hover(::before)?$/.exec(key);
+      if (!hovered) continue;
+      const restKey = hovered[1] || 'always';
+      const variant = /(?:^|,)variant=([\w-]+)/.exec(restKey)?.[1];
+      const block = variant ? `variant:${variant}` : null;
+      for (const m of look.modes) {
+        /**
+         * The rest and hover paint, opaque, with a theme's tokens and styles.
+         * @param {Record<Mode, Record<string, string>>} tokens
+         * @param {Look['components']} styles @param {string | null} ground
+         */
+        const paints = (tokens, styles, ground) => {
+          const page = shown(colorIn(`var(${PAGE})`, tokens[m], m), null);
+          const under = shown(ground, page) ?? page;
+          const restValue =
+            partValue(
+              styles,
+              part,
+              ['backgroundColor', 'background'],
+              m,
+              block,
+            ) ??
+            at[restKey] ??
+            'transparent';
+          const rest = shown(colorIn(restValue, tokens[m], m), under) ?? under;
+          // Core's hover sits in its base layer, under the theme's part
+          // rules: a fill the part's own style gives at rest, with no hover
+          // of its own, stays under the pointer.
+          const ownRest = partValue(
+            styles,
+            part,
+            ['backgroundColor', 'background'],
+            m,
+            block,
+          );
+          const hoverValue =
+            ownHover(styles, part, m, block) ??
+            (ownRest != null && !hovered[2] ? ownRest : at[key]);
+          const c = colorIn(hoverValue, tokens[m], m);
+          const top = c ? /** @type {Rgb} */ (parseColor(c)) : null;
+          const hover =
+            top && rest ? compositeOver(top, alphaOf(c), rest) : rest;
+          return rest && hover ? oklabDistance(rest, hover) : null;
+        };
+        const theme = paints(res, components, around(part, m));
+        const core = paints(base, {}, null);
+        if (theme == null || core == null) continue;
+        if (core < HOVER_SHOWS || theme >= HOVER_SHOWS) continue;
+        const k = `${part}|${block ?? ''}|${m}`;
+        if (out.has(k)) continue;
+        out.set(k, {
+          kind: 'hover',
+          mode: m,
+          part,
+          ...(variant ? {parts: [`${part} (${block})`]} : {}),
+          message: `${part}${variant ? ` (${block})` : ''} looks the same under the pointer as at rest in ${m}, where Core's own changes`,
+        });
+      }
+    }
+  }
+  return [...out.values()];
+}
+
+/**
+ * Font families the theme names that nothing loads and that end in no
+ * generic family: the browser then shows its default serif.
+ * @param {Look} look
+ * @returns {LookProblem[]}
+ */
+function fontProblems(look) {
+  /** @type {LookProblem[]} */
+  const out = [];
+  for (const t of [...look.own].filter(x => /^--font-family/.test(x)).sort()) {
+    const value = String(look.res.light[t] ?? '');
+    if (!value || hasGenericFamily(value)) continue;
+    const missing = namedFontFamilies(value).filter(f =>
+      look.unloadedFonts.some(u => u.toLowerCase() === f.toLowerCase()),
+    );
+    if (!missing.length) continue;
+    out.push({
+      kind: 'font',
+      mode: 'both',
+      token: t,
+      message: `${t} names ${missing.join(', ')}, which nothing loads, and no generic family after it: the browser shows its default serif`,
+    });
+  }
+  return out;
+}
+
+/**
+ * The generic family Core's own value of a font token ends in, or null.
+ * @param {Look} look @param {string} t
+ */
+function coreGeneric(look, t) {
+  const families = String(look.base.light[t] ?? look.defaults[t] ?? '')
+    .split(',')
+    .map(f => f.trim())
+    .filter(Boolean);
+  return families.reverse().find(f => !namedFontFamilies(f).length) ?? null;
+}
+
+/**
+ * Chart colors left at Core's own while the theme sets its own page or
+ * accent: the fill derives them from the theme's colors.
+ * @param {Look} look
+ * @returns {LookProblem[]}
+ */
+function chartProblems(look) {
+  const looks = (/** @type {string} */ t) => t.startsWith('--color-data-');
+  if (![PAGE, SURFACE, '--color-accent'].some(t => look.own.has(t))) return [];
+  if ([...look.own].some(looks)) return [];
+  const derived = Object.keys(filledColors(look)).filter(looks).sort();
+  if (!derived.length) return [];
+  return [
+    {
+      kind: 'charts',
+      mode: 'both',
+      token: derived.find(t => t.startsWith('--color-data-')) ?? derived[0],
+      message: `charts keep Core's own colors while the theme sets its own: ${derived.length} chart colors can follow the theme`,
+    },
+  ];
+}
+
+/**
+ * Everything a person would see as broken, in each mode, and how many
+ * measured pairs the theme's accepted records keep as designed.
+ * @param {Look} look
+ * @returns {{problems: LookProblem[], accepted: number}}
+ */
+export function lookProblems(look) {
+  const {res, base, modes, own, app} = look;
+  const text = textProblems(look);
+  /** @type {LookProblem[]} */
+  const out = [
+    ...text.problems,
+    ...barTextProblems(look),
+    ...hoverProblems(look),
+    ...fontProblems(look),
+    ...chartProblems(look),
+  ];
+  for (const m of modes) {
+    const at = (/** @type {string} */ t) => colorIn(`var(${t})`, res[m], m);
+    const page = shown(at(PAGE), null);
+    if (!page) continue;
+    const popoverValue = at(POPOVER);
+    const popover = shown(popoverValue, page);
+    if (popoverValue && alphaOf(popoverValue) < 1)
+      out.push({
+        kind: 'see-through',
+        mode: m,
+        token: POPOVER,
+        message: `menus and dropdowns are see-through in ${m} (${POPOVER} is ${popoverValue})`,
+      });
+    const card = shown(at(CARD), page);
+    const flat = flatMenus(look, m, fill =>
+      [page, card].every(g => !g || oklabDistance(fill, g) < LOOKS_ALIKE),
+    );
+    if (popover && (flat.tokens.length || flat.parts.length))
+      out.push({
+        kind: 'blend',
+        mode: m,
+        ...(flat.tokens.length
+          ? {token: flat.tokens[0]}
+          : {part: flat.parts[0]}),
+        ...(flat.parts.length ? {parts: flat.parts} : {}),
+        message: `menus and dialogs blend into the page in ${m}: the same fill as the page and cards, and no shadow (${[
+          ...flat.tokens,
+          ...flat.parts.map(q => `${q}'s own boxShadow`),
+        ].join(', ')})`,
+      });
+    // Control edges: at least EDGE_SHARE of Core's own edge contrast on
+    // Core's same ground, and 3:1 always passes.
+    const edge = shown(at(EDGE), page);
+    if (edge)
+      for (const g of GROUNDS) {
+        const ground = shown(at(g), page);
+        const coreEdge = shown(colorIn(`var(${EDGE})`, base[m], m), null);
+        const coreGround = shown(colorIn(`var(${g})`, base[m], m), null);
+        if (!ground || !coreEdge || !coreGround) continue;
+        const core = ratio(coreEdge, coreGround);
+        const needs = Math.min(NON_TEXT, EDGE_SHARE * core);
+        const r = ratio(edge, ground);
+        // (Within rounding of the second decimal the ratios print with.)
+        if (r + 0.005 >= needs) continue;
+        out.push({
+          kind: 'edge',
+          mode: m,
+          token: EDGE,
+          on: g,
+          ratio: fixed(r),
+          needs: fixed(needs),
+          message: `checkbox, switch and field edges barely show on ${g} in ${m}: ${fixed(r)}:1 (Core's own edge there is ${fixed(core)}:1; needs ${fixed(needs)}:1)`,
+        });
+      }
+    // A main surface on the other side of light and dark from the page.
+    for (const g of [SURFACE, CARD]) {
+      const ground = shown(at(g), page);
+      if (!ground || sideOf(ground) === sideOf(page)) continue;
+      if (ratio(ground, page) < NON_TEXT) continue;
+      out.push({
+        kind: 'half-painted',
+        mode: m,
+        token: g,
+        on: PAGE,
+        message: `${g} is ${sideOf(ground)} while the page is ${sideOf(page)} in ${m}: the page looks half painted`,
+      });
+    }
+  }
+  const same = [PAGE, SURFACE, '--color-text-primary'].every(
+    t =>
+      colorIn(`var(${t})`, res.light, 'light') ===
+      colorIn(`var(${t})`, res.dark, 'dark'),
+  );
+  const darkPage = shown(colorIn(`var(${PAGE})`, res.dark, 'dark'), null);
+  if (modes.length > 1 && same && app?.themed && !app.pinned && darkPage) {
+    const lookSide = sideOf(darkPage);
+    out.push({
+      kind: 'one-look',
+      mode: 'both',
+      message: `the theme has one ${lookSide} look for both modes, but the app does not pin the mode: in ${lookSide === 'dark' ? 'light' : 'dark'} mode Core's own colors mix in. Pin it with <Theme mode="${lookSide}">`,
+    });
+  }
+  if (app?.themed && own.has(PAGE) && !app.painted)
+    out.push({
+      kind: 'page',
+      mode: 'both',
+      token: PAGE,
+      message: `the app's page is not painted: outside an AppShell the browser's white shows. Paint html and body with var(${PAGE})`,
+    });
+  return {problems: out, accepted: text.accepted};
+}
+
+/**
+ * A token's value with no color reading, as written in a mode's tokens,
+ * each lone `var()` followed (or a raw value's).
+ * @param {Record<string, string>} res @param {string} t @param {string} [raw]
+ */
+function colorlessValue(res, t, raw = undefined) {
+  let v = String(raw ?? res[t] ?? '');
+  for (let i = 0; i < 8; i++) {
+    const ref = /^var\(\s*(--[\w-]+)\s*\)$/.exec(v.trim());
+    if (!ref) break;
+    v = String(res[ref[1]] ?? '');
+  }
+  return v;
+}
+
+/**
+ * The values that repair what can be repaired without a decision.
+ * @typedef {object} LookRepair
+ * @property {Record<string, string | [string, string]>} tokens token values to write
+ * @property {Record<string, Record<string, Record<string, true>>>} components part styles to write: each member of a group inside a bar spreads the shared const that holds the theme's own text
+ * @property {Record<string, Record<string, string>>} shared the consts those styles spread, by name: the theme's own text tokens
+ * @property {Array<{token?: string, part?: string, group?: string, parts?: string[], value: string | [string, string], why: string, from?: string | [string, string], accept?: AcceptRecord[]}>} lines
+ *   what each written value is for; a color the author set that a line
+ *   moves names its old value (`from`) and the records that would keep it
+ *   as designed instead (`accept`, with the reason left to write)
+ * @property {Mode | null} pin the mode to pin the app to
+ * @property {boolean} paint whether to paint the app's page
+ */
+
+/**
+ * The colors the theme leaves unset, filled from the ones it sets: the
+ * palette generator grows a family from each color the theme sets (its
+ * surface or page, its accent, its status colors) and maps them to every
+ * color token as the official themes do. Each mode takes the side of the
+ * palette its page is on.
+ * @param {Look} look
+ * @returns {Record<string, Partial<Record<Mode, string>>>}
+ */
+function filledColors(look) {
+  const {res, own, modes, base, defaults} = look;
+  const page = (/** @type {Mode} */ m) =>
+    shown(colorIn(`var(${PAGE})`, res[m], m), null);
+  /** @type {Record<Mode, Mode>} */
+  const side = {light: 'light', dark: 'dark'};
+  for (const m of modes) {
+    const p = page(m);
+    if (p) side[m] = sideOf(p);
+  }
+  /** The mode a side of the palette stands for. @param {Mode} s */
+  const modeOf = s => modes.find(m => side[m] === s) ?? s;
+  /** A token the theme sets, as a seed. @param {string} t */
+  const seedOf = t => {
+    if (!own.has(t)) return null;
+    const m = modeOf('light');
+    const c = parseColor(colorIn(`var(${t})`, res[m], m));
+    return c ? hex(c) : null;
+  };
+  /** @type {Array<{id: string, seed: string}>} */
+  const dials = [];
+  const neutral = seedOf(SURFACE) ?? seedOf(PAGE);
+  if (neutral) dials.push({id: 'neutral', seed: neutral});
+  const accent = seedOf('--color-accent');
+  if (accent) dials.push({id: 'accent', seed: accent});
+  for (const [dial, word] of Object.entries(STATUS_TOKEN)) {
+    const seed = seedOf(`--color-${word}`);
+    if (seed) dials.push({id: dial, seed});
+  }
+  if (!dials.length) return {};
+  /** @type {import('../theme/palette/generate/mapping.mjs').PaletteMappingContext} */
+  const context = {
+    base,
+    has: t => t in defaults,
+    reader: {
+      rgb: v => /** @type {Rgb | null} */ (parseColor(v)),
+      alpha: v => alphaOf(v),
+    },
+    settingOf: (t, s) => (own.has(t) ? res[modeOf(s)][t] : undefined),
+    colorIn: (v, s) => colorIn(v, res[modeOf(s)], modeOf(s)),
+    setExactly: t => own.has(t),
+  };
+  const plan = planPaletteRequest(dials, {recipe: PALETTE_RECIPE_V2}, context);
+  if (!plan) return {};
+  const candidate = generateTonalPalette(/** @type {any} */ (plan.config));
+  const mapping = mapPalette(candidate, dials, plan.fills, context);
+  // The category and chart colors, by the editor's own rules (Core's
+  // context.editor): their hues grow with the look beside the theme's own
+  // colors (grownFamilies), and the palette derives each one from them.
+  const config = /** @type {any} */ (plan.config);
+  const grown = editorLook
+    .grownFamilies(dials, {base, reader: context.reader})
+    .filter(
+      f => !config.families.some((/** @type {any} */ x) => x?.id === f.id),
+    );
+  const looks = mapPalette(
+    generateTonalPalette({...config, families: [...config.families, ...grown]}),
+    dials,
+    plan.fills,
+    {...context, editor: editorLook, defaults},
+  ).tokens;
+  /** @type {Record<string, Partial<Record<Mode, string>>>} */
+  const out = {};
+  for (const [t, refs] of [
+    ...Object.entries(mapping.tokens),
+    ...Object.entries(looks).filter(([t]) => CATEGORY_OR_CHART.test(t)),
+  ]) {
+    if (own.has(t)) continue;
+    for (const m of modes) {
+      const color = refs[side[m]]?.color;
+      if (color) (out[t] ??= {})[m] = color;
+    }
+  }
+  // A category or chart color the palette could not derive, in a mode
+  // whose page is on the other side (a dark look shown in light): Core's
+  // own color for the side the page is on.
+  for (const t of Object.keys(defaults)) {
+    if (!CATEGORY_OR_CHART.test(t) || own.has(t) || out[t]) continue;
+    for (const m of modes) {
+      if (side[m] === m) continue;
+      const color = colorIn(`var(${t})`, base[side[m]], side[m]);
+      if (color) (out[t] ??= {})[m] = color;
+    }
+  }
+  return out;
+}
+
+/**
+ * The repair for a theme's problems: unset colors filled, the theme's own
+ * unreadable text moved in lightness just far enough to read, parts
+ * inside a bar given the theme's own text again, a flat menu given Core's
+ * overlay shadow, a one-look theme's mode pinned, the page painted. It
+ * changes no color the theme sets but its own text and icon colors.
+ * @param {Look} look
+ * @param {LookProblem[]} problems
+ * @returns {LookRepair}
+ */
+export function lookRepair(look, problems) {
+  const {own, modes} = look;
+  /** @type {Record<string, Partial<Record<Mode, string>>>} */
+  const perMode = {};
+  /** @type {Record<string, string>} */
+  const why = {};
+  const fills = filledColors(look);
+  const filledHad = new Set(Object.keys(fills));
+  for (const [t, v] of Object.entries(fills)) {
+    perMode[t] = v;
+    why[t] = 'unset: filled from the colors the theme sets';
+  }
+  // Measured again with the filled colors, so each move is made on the
+  // grounds the theme will have.
+  /** @type {Record<Mode, Record<string, string>>} */
+  const res = {light: {...look.res.light}, dark: {...look.res.dark}};
+  for (const [t, mv] of Object.entries(perMode))
+    for (const m of modes) if (mv[m]) res[m][t] = /** @type {string} */ (mv[m]);
+  // An inverted surface the theme leaves unset (a toast's, an error
+  // toast's): Core draws the theme's own text on it where that reads at
+  // 3:1, else the on-color that reads better. Where what Core draws there
+  // does not read, the surface's lightness moves to the nearest where it
+  // does.
+  for (const t of INVERTED_SURFACES) {
+    if (own.has(t)) continue;
+    for (const m of modes) {
+      const c = shown(colorIn(`var(${t})`, res[m], m), null);
+      if (!c) continue;
+      const read = (/** @type {string} */ x) =>
+        shown(colorIn(`var(${x})`, res[m], m), c);
+      const text = read('--color-text-primary');
+      const sides = [read('--color-on-dark'), read('--color-on-light')].filter(
+        x => x != null,
+      );
+      if (!sides.length) continue;
+      /** What Core draws on a fill reads at 4.5:1. @param {Rgb} f */
+      const reads = f =>
+        (text && ratio(text, f) >= 3
+          ? ratio(text, f)
+          : Math.max(...sides.map(x => ratio(x, f)))) >= TEXT;
+      if (reads(c)) continue;
+      const moved = nearestLightness(c, reads);
+      if (!moved) continue;
+      (perMode[t] ??= {})[m] = res[m][t] = hex(moved);
+      why[t] =
+        `${filledHad.has(t) ? 'unset: filled from the colors the theme sets, ' : 'unset: '}as light or dark as the text Core draws on it needs to read`;
+    }
+  }
+  const filled = new Set(Object.keys(perMode));
+  /** @type {Record<string, Array<Omit<AcceptRecord, 'reason'>>>} */
+  const keep = {};
+  const now = lookProblems({...look, res}).problems;
+  // Text the theme sets, and edges the fill set, that do not read: the
+  // grounds each fails on, by token and mode, and the nearest color that
+  // reads on all of them. Only grounds on the page's side count: text on
+  // a ground of the other side is drawn by another token.
+  /** @type {Map<string, {token: string, mode: Mode, needs: number}>} */
+  const nudge = new Map();
+  for (const p of now)
+    if (
+      p.token &&
+      p.mode !== 'both' &&
+      ((p.kind === 'text' &&
+        (own.has(p.token) || filled.has(p.token)) &&
+        DRAWN_AS_TEXT.test(p.token)) ||
+        (p.kind === 'edge' && filled.has(p.token)))
+    )
+      nudge.set(`${p.token}|${p.mode}`, {
+        token: p.token,
+        mode: p.mode,
+        needs: Math.max(
+          p.needs ?? TEXT,
+          ...now
+            .filter(q => q.token === p.token && q.mode === p.mode)
+            .map(q => q.needs ?? TEXT),
+        ),
+      });
+  for (const {token, mode, needs} of nudge.values()) {
+    const page = shown(colorIn(`var(${PAGE})`, res[mode], mode), null);
+    const fg = shown(colorIn(`var(${token})`, res[mode], mode), page);
+    if (!fg || !page) continue;
+    const all = now
+      .filter(p => p.token === token && p.mode === mode && p.on)
+      .map(p => shown(colorIn(`var(${p.on})`, res[mode], mode), page))
+      .filter(/** @returns {g is Rgb} */ g => g != null);
+    // Text on a fill (--color-on-*) sides with its first fill; other text
+    // with the page.
+    const side = sideOf(/^--color-on-/.test(token) ? (all[0] ?? page) : page);
+    const grounds = all.filter(g => sideOf(g) === side);
+    if (!grounds.length) continue;
+    (perMode[token] ??= {})[mode] = nearestReadingLightness(fg, grounds, needs);
+    why[token] = own.has(token)
+      ? 'did not read on every surface it sits on'
+      : 'unset: filled, then moved until it shows on every surface';
+    // A color the author set is moved in the open: the line names the
+    // record that keeps it as designed instead.
+    if (own.has(token))
+      for (const p of now)
+        if (p.token === token && p.mode === mode && p.kind === 'text')
+          (keep[token] ??= []).push(...(ACCEPT.get(p) ?? []));
+  }
+  /** @type {Record<string, string | [string, string]>} */
+  const tokens = {};
+  /** @type {LookRepair['lines']} */
+  const lines = [];
+  for (const [t, mv] of Object.entries(perMode)) {
+    const at = (/** @type {Mode} */ m) =>
+      mv[m] ?? colorIn(`var(${t})`, res[m], m) ?? undefined;
+    // Both halves are written: a mode the app does not show keeps its own
+    // value.
+    const light = at('light');
+    const dark = at('dark');
+    if (!light || !dark) continue;
+    /** @type {string | [string, string]} */
+    const value = light === dark ? light : [light, dark];
+    tokens[t] = value;
+    const was = (/** @type {Mode} */ m) => colorIn(`var(${t})`, look.res[m], m);
+    const from =
+      was('light') === was('dark') ? was('light') : [was('light'), was('dark')];
+    lines.push({
+      token: t,
+      value,
+      why: why[t],
+      ...(keep[t]
+        ? {
+            from: /** @type {string | [string, string]} */ (from),
+            accept: keep[t].map(r => ({...r, reason: ''})),
+          }
+        : {}),
+    });
+  }
+  const {defaults} = look;
+  for (const p of problems) {
+    if (p.kind !== 'font' || !p.token) continue;
+    const generic = coreGeneric(look, p.token);
+    if (!generic) continue;
+    tokens[p.token] = `${String(look.res.light[p.token]).trim()}, ${generic}`;
+    lines.push({
+      token: p.token,
+      value: tokens[p.token],
+      why: `named a font nothing loads with no generic after it: ${generic}, as in Core's own stack`,
+    });
+  }
+  for (const p of problems)
+    if (p.kind === 'blend' && p.mode !== 'both')
+      for (const t of flatMenus(look, p.mode, () => true).tokens)
+        if (defaults[t] && !tokens[t]) {
+          tokens[t] = String(defaults[t]);
+          lines.push({
+            token: t,
+            value: tokens[t],
+            why: "menus blended into the page: Core's own overlay shadow",
+          });
+        }
+  // The parts inside a bar take the theme's own text again: the style
+  // block whose text failed spreads one shared const, so the person has
+  // one line to change; the lines are told by group.
+  /** @type {LookRepair['components']} */
+  const components = {};
+  /** @type {LookRepair['shared']} */
+  const shared = {};
+  for (const p of problems) {
+    if (p.kind !== 'bar-text' || !p.token || !p.part) continue;
+    const l = colorIn(`var(${p.token})`, res.light, 'light');
+    const d = colorIn(`var(${p.token})`, res.dark, 'dark');
+    const value = l && d && l !== d ? `light-dark(${l}, ${d})` : (l ?? d);
+    if (!value) continue;
+    const name = `${p.part.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase())}InsideText`;
+    (shared[name] ??= {})[p.token] = value;
+    // Only the style block whose text failed (a variant, else the plain
+    // block) takes the text: the part elsewhere, and its other variants,
+    // keep the bar's text.
+    /** @type {Map<string, string[]>} */
+    const groups = new Map();
+    for (const at of BAR_BLOCKS.get(p) ?? []) {
+      const [q, block] = at.split('|');
+      ((components[q] ??= {})[block] ??= {})[`...${name}`] = true;
+      const group = familyOf(q) ?? q;
+      groups.set(group, [
+        ...(groups.get(group) ?? []),
+        block === 'base' ? q : `${q} (${block})`,
+      ]);
+    }
+    for (const [group, members] of groups)
+      if (!lines.some(x => x.group === group && x.token === p.token))
+        lines.push({
+          group,
+          parts: members,
+          token: p.token,
+          value,
+          why: `inside ${p.part}: the theme's own text on their own fill, from ${name}`,
+        });
+  }
+  const one = problems.find(p => p.kind === 'one-look');
+  const darkPage = shown(colorIn(`var(${PAGE})`, res.dark, 'dark'), null);
+  return {
+    tokens,
+    components,
+    shared,
+    lines,
+    pin: one && darkPage ? sideOf(darkPage) : null,
+    paint: problems.some(p => p.kind === 'page'),
+  };
+}

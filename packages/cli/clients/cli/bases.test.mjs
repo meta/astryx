@@ -489,6 +489,7 @@ const DECLARED = {
   'experimental export --reverse': ['render.reverse'],
   'experimental import': ['render.reverse'],
   'experimental theme compile': ['themes.compile'],
+  'experimental theme check': ['themes.compile'],
   'experimental theme add': ['themes.appModule'],
   'experimental theme use': ['themes.appModule'],
   'experimental theme remove': ['themes.appModule'],
