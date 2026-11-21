@@ -177,6 +177,19 @@ describe('neutral grays', () => {
           q,
         ).toBe(false);
       }
+      // (A removal word in another clause, or "drop shadows" as a thing,
+      // turns nothing away: the grays are read.)
+      for (const q of [
+        'neutral grays, drop shadows on cards',
+        'zero radius corners, neutral grays',
+        'remove the card borders, neutral grays',
+      ]) {
+        const results = await answer(q, 'warm');
+        expect(
+          results.flatMap(r => r.lines),
+          q,
+        ).toContain("neutral '#777777'");
+      }
       // A hue in the "with", "but" or comma clause after the grays keeps
       // the clause's own reading: no plain gray, and no "pick one".
       for (const q of [

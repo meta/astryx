@@ -2184,6 +2184,13 @@ const REMOVAL_VERBS =
   '(?:without|remove|removing|drop|get rid of|lose|ditch|kill|strip(?!\\s*(?:$|[,.;:!?]))|nix|scrap|take away|take off)(?: all the| the| all| any)?';
 const REMOVAL_LEAD = `(?:no|zero|${REMOVAL_VERBS})`;
 /**
+ * The words that lead a dislike of a thing ("I hate the shadows", "not a
+ * fan of the rounded buttons", "skip the shadows"), shared by the reader
+ * that turns a whole-ask dislike into a removal and by the neutral-grays
+ * reading's turn-away check.
+ */
+const DISLIKE_LEAD = String.raw`(?:i )?(?:hate|dislike|can'?t stand|don'?t like|am not a fan of|not a fan of|skip|ditch)`;
+/**
  * A clause that forbids a change ("don't make buttons rounder", "never hide
  * the tab underline", "inputs shouldn't be round", a likeness said with
  * "not", "never" or "don't let/want", "ghost buttons not look like primary
@@ -5524,13 +5531,26 @@ export function draftAnswer(ctx, env, question) {
     question,
     text => !graysLook(text) && (/[\d#]/.test(text) || namesPart(text)),
     text => !graysLook(text) && namesPart(text),
-    // (The words that lead a removal, a prohibition or a dislike, as the
-    // clause readers read them.)
-    text =>
-      new RegExp(
-        `\\b(?:${REMOVAL_LEAD}|avoid|instead of|except|never|not|don'?t|do not|hate|dislike|can'?t stand|not a fan of|skip)\\b`,
-        'i',
-      ).test(text) || PROHIBITION.test(text),
+    // (A removal, a prohibition or a dislike that leads the clause the grays
+    // sit in turns them away with the rest of its list: "remove rounded
+    // corners and neutral grays". The lead words are the clause readers'
+    // own; "drop shadows" is a thing, never a removal, and a lead in
+    // another clause governs only its own.)
+    text => {
+      const clause =
+        text
+          .split(/[,;.!?\n]/)
+          .find(c => /\b(?:neutral|untinted) gr[ae]ys\b/i.test(c)) ?? '';
+      const before = clause
+        .slice(0, clause.search(/\b(?:neutral|untinted) gr[ae]ys\b/i))
+        .replace(/\bdrop\s+shadows?\b/gi, '');
+      return (
+        new RegExp(
+          `\\b(?:${REMOVAL_VERBS}|${DISLIKE_LEAD}|no|avoid|never|not|don'?t|do not|instead of|except)\\b`,
+          'i',
+        ).test(before) || PROHIBITION.test(text)
+      );
+    },
   );
   question = question
     // ("mint green for positive numbers", "red for destructive actions"):
@@ -7232,7 +7252,7 @@ export function draftAnswer(ctx, env, question) {
     // "I hate the shadows", "not a fan of the rounded buttons": none of it,
     // when that is the whole ask.
     .replace(
-      /^\s*(?:i )?(?:hate|dislike|can'?t stand|don'?t like|am not a fan of|not a fan of|skip|ditch)(?: the)? ([^,.;?!]+?)[.!]?\s*$/i,
+      new RegExp(`^\\s*${DISLIKE_LEAD}(?: the)? ([^,.;?!]+?)[.!]?\\s*$`, 'i'),
       'no $1',
     )
     // "pointer cursor on hover": the cursor, no state needed.
