@@ -381,7 +381,7 @@ const ROWS = [
     "a part's own items said after its name are the part's",
     {
       q: 'pagination pages in one bordered strip',
-      has: ["border '1px solid var(--color-border)' --on pagination"],
+      has: ["border '1px solid var(--color-border)' --on pagination-list"],
       never: /--border-width/,
     },
   ],

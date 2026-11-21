@@ -87,6 +87,8 @@ import {
   nearest,
   closestOf,
   partsOf,
+  boxFrameOf,
+  rowFrameOf,
   undoArgs,
   isCheckNote,
   withoutBadValues,
@@ -6212,7 +6214,7 @@ async function changeOnce(
   }
   let k = keyOf(s);
   // (The settings as the theme held them before this change: what a carried
-  // height read there.)
+  // height read there, and which box a pager's border drew on.)
   const settingsBefore = [...data.settings];
   // (A saved control height the shared one gives way to is replaced below,
   // with the sizes it keeps.)
@@ -7830,6 +7832,46 @@ async function changeOnce(
   // said once, for every side written.)
   const stateNote = shorthand?.stateNote ?? s.stateNote;
   if (stateNote) notes.push(stateNote);
+  // (A border or shadow on a pager goes on the row that frames its pages:
+  // said, with its undo, when it changed something.)
+  {
+    const frame = sub === 'set' && !r.unchanged ? boxFrameOf(ctx, s) : null;
+    if (frame)
+      notes.push(
+        `wrote on ${frame}, the row that frames ${s.on}'s controls as one strip, so they draw one box together; to undo it: ${P} undo ${slug} ${undoArgs(s)}`,
+      );
+    // (A fill set or undone on a pager changes which box its border,
+    // radius and shadow draw on: the filled bar, or the row that frames
+    // its pages. Each one that moves is said, with the line that puts it
+    // back.)
+    const row = s.on ? rowFrameOf(ctx, s.on) : null;
+    if (
+      row &&
+      !r.unchanged &&
+      /^background/.test(kebab(String(s.thing))) &&
+      (sub === 'set' || sub === 'undo')
+    ) {
+      const same = (/** @type {any} */ x) =>
+        x.on === s.on &&
+        x.thing === s.thing &&
+        (x.state ?? null) === (s.state ?? null) &&
+        (x.when ?? null) === (s.when ?? null) &&
+        (x.mode ?? null) === (s.mode ?? null);
+      const after = data.settings;
+      const box = (/** @type {any} */ x, /** @type {any[]} */ settings) =>
+        boxFrameOf({...ctx, themeSettings: settings}, x) ?? x.on;
+      for (const x of after) {
+        if (same(x)) continue;
+        if (x.on !== s.on || x.source !== 'property') continue;
+        const from = box(x, settingsBefore);
+        const to = box(x, after);
+        if (from === to) continue;
+        notes.push(
+          `${x.thing} on ${s.on} draws on ${to} now, not on ${from}: ${to === s.on ? `${s.on} is filled, so it is its own box` : `${s.on} shows no fill, so its pages draw one strip on ${row}`}; to put it back: ${sub === 'set' ? `${P} undo ${slug} ${undoArgs(s)}` : `${P} set ${slug} ${s.thing} ${quoteCommandArgument(String(s.value ?? ''))} --on ${s.on}`}`,
+        );
+      }
+    }
+  }
   // A fill on the plain part covers the paints Core gives its variants and
   // states (a primary button's accent, a checked box's): said, with the
   // lines that change one of them, or only the part at rest.
@@ -8671,6 +8713,7 @@ export async function themeEditShow(theme, options = {}) {
     throw await savedDamageRefusal(e, theme, cwd);
   }
   const ctx = await context(cwd);
+  ctx.themeSettings = data.settings;
   // show --png takes its sheet too, after any build it makes.
   ctx.takesPictures = png ? {sheet: section ? `sheet-${section}` : null} : null;
   // The app copy is written once show succeeds (at its end), never by a

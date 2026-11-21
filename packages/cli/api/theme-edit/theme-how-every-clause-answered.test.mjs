@@ -386,9 +386,9 @@ const ROWS = [
     'a strip said as a noun takes nothing away',
     {
       q: 'pagination pages in one bordered strip',
-      // (The pagination's own pages: its border, as "pagination in a
-      // bordered strip" is.)
-      has: ["border '1px solid var(--color-border)' --on pagination"],
+      // (The pagination's own pages: its border, on the row that frames
+      // them, as "pagination in a bordered strip" is.)
+      has: ["border '1px solid var(--color-border)' --on pagination-list"],
       never: /border-width 0/,
     },
   ],
