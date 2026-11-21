@@ -163,8 +163,8 @@ describe('corners', () => {
     expect(
       (await top('make pill buttons less round', 'st')).commands[0],
     ).toMatch(/corners less --on button$/);
-    await themeEditNew('y', {cwd, like: 'y2k'});
-    const badge = await top('make badges 4px less round', 'y');
+    await themeEditNew('nb', {cwd, like: 'neutral'});
+    const badge = await top('make badges 4px less round', 'nb');
     expect(badge.text).toMatch(/half its height/);
     expect(badge.commands[0]).not.toMatch(/999\dpx/);
   }, 240_000);

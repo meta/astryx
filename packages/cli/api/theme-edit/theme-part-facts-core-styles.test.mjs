@@ -171,12 +171,12 @@ describe('a group kept alike', () => {
 });
 
 describe('the corners dial on bases that pin radii', () => {
-  it("leaves a part Core rounds with a token the dial never moves (y2k's pill badge)", async ctx => {
+  it("keeps a base's badge on the element corners the dial moves (y2k)", async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('y', {cwd, like: 'y2k'});
     await themeEditSet('y', 'corners', 'pill', {cwd});
     const badge = ruleOf('y', '.astryx-badge');
-    expect(badge).toMatch(/border-radius: 9999px/);
+    expect(badge).toMatch(/border-radius: var\(--radius-element\)/);
     expect(badge).not.toMatch(/border-radius: var\(--radius-full\)/);
   }, 240_000);
 

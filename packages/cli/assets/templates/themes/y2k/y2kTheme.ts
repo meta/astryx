@@ -564,7 +564,8 @@ export const y2kTheme = defineTheme({
 
     badge: {
       base: {
-        borderRadius: '9999px',
+        // Badges take the element corners (square), as every other box does.
+        borderRadius: 'var(--radius-element)',
         borderWidth: '1.5px',
         borderStyle: 'solid',
         borderColor: 'color-mix(in srgb, currentColor 30%, transparent)',

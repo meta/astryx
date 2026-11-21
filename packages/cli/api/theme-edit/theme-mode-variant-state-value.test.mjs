@@ -225,9 +225,10 @@ describe('the corners dial and parts whose base rule gives a radius', () => {
         /border-radius: var\(--radius-(element|container)\)/,
       );
     // The badge is a pill in the base: a step down rounds it less.
-    await themeEditNew('c2', {cwd, like: 'y2k'});
-    await themeEditSet('c2', 'corners', 'less', {cwd, on: 'badge'});
+    await themeEditNew('c3', {cwd, like: 'neutral'});
+    await themeEditSet('c3', 'corners', 'less', {cwd, on: 'badge'});
     // The button is square in the base: a step up rounds it.
+    await themeEditNew('c2', {cwd, like: 'y2k'});
     await themeEditSet('c2', 'corners', 'more', {cwd, on: 'button'});
     expect(ruleOf('c2', '.astryx-button')).not.toMatch(/border-radius: 0px/);
   }, 240_000);
