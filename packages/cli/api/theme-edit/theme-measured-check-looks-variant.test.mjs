@@ -229,6 +229,23 @@ describe('heading levels', () => {
     },
     T,
   );
+  it(
+    'a keep word after the kept level ("h1 keeps h1 as it is") keeps h1',
+    async () => {
+      const r = await answer('all headings red except h1 keeps h1 as it is');
+      expect(r.commands[0]).toBe("set q color '#dc2626' --on heading");
+      expect(r.commands.slice(1).map(c => c.split(' ')[2])).toEqual([
+        '--color-text-primary',
+        '--color-text-secondary',
+      ]);
+      expect(
+        r.commands.slice(1).every(c => / --on heading --when level:1$/.test(c)),
+      ).toBe(true);
+      expect(r.text).toMatch(/heading \(level 1\) keeps what it has now/);
+      expect(r.text).not.toMatch(/names no part/);
+    },
+    T,
+  );
   it.each(
     /** @type {Array<[string, string[]]>} */ ([
       ['headings 1 through 3 bolder', ['1', '2', '3']],
