@@ -411,6 +411,10 @@ close their own layers independently:
   watch,
   which closes on a press that starts and ends outside the field and the list
   and forgets a cancelled press (a scroll);
+- a `usePopover` popover with `tabBehavior: 'pageOrder'`, a manual popover,
+  uses the same watch: its trigger counts as inside, and a touch pan is not a
+  press (`spec:AST-116` FR15). A press in a modal dialog that does not hold
+  the popover is left to that dialog, and the popover stays open;
 - native dialogs handle backdrop clicks locally;
 - ContextMenu uses a local outside `mousedown` listener, which skips the
   compatibility mouse events of the finger press that opened the menu;
@@ -922,10 +926,11 @@ it on the surface inside the layer and run no layout while it plays.
   menu focus, and exposure-induced re-hover suppression.
 - `Layer/useTouchTrigger.ts` owns touch trigger classification and the current
   touch-only outside listener for Tooltip/HoverCard.
-- `Layer/outsidePress.ts` owns the outside-press watch for a text field's
-  manual layer, used by BaseTypeahead, DateInput, DateTimeInput and
-  ChatComposerInput's trigger menu, and the per-document count of outside
-  closes that a modal backdrop press reads (`family:overlay-dismissal` FR11).
+- `Layer/outsidePress.ts` owns the outside-press watch for a manual layer,
+  used by BaseTypeahead, DateInput, DateTimeInput, ChatComposerInput's
+  trigger menu and a `usePopover` popover with `tabBehavior: 'pageOrder'`,
+  and the per-document count of outside closes that a modal backdrop press
+  reads (`family:overlay-dismissal` FR11).
 - `DropdownMenuContext` and `DropdownMenuSubMenu` own the current local
   menu-cascade parent-close chain.
 - Dialog families own native modal/backdrop presentation and their local channel
