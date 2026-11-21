@@ -5020,9 +5020,30 @@ export function borderFrames(ctx, data, value) {
     );
   /** @type {Array<{part: string, why: string, steps: Array<{thing: string, value: string, on: string, when?: string}>}>} */
   const out = [];
-  for (const p of borderlessSurfaces(C).filter(
-    x => ctx.project.target.has(x) && !covered(x),
-  )) {
+  // (The parts the surfaces dial styles keep the edge it gives them; a
+  // surface drawn inside another bare surface (a dropdown menu's list in
+  // its popover) takes that one's frame, never a ring of its own.)
+  const rung = surfacesRung(data);
+  const styled = rung ? surfaceStyledParts(ctx) : new Map();
+  const bare = borderlessSurfaces(C).filter(
+    x => ctx.project.target.has(x) && !covered(x) && !styled.has(x),
+  );
+  const groups = groupsOf(ctx);
+  const floating = new Set([
+    ...(groups.overlays ?? []),
+    ...(groups.menus ?? []),
+  ]);
+  // (A container counts whether the build frames it or the theme gives
+  // it a border of its own: either way it draws the edge.)
+  const nested = (/** @type {string} */ p) =>
+    floating.has(p) &&
+    [...floating].some(
+      q =>
+        q !== p &&
+        ctx.project.target.has(q) &&
+        (C.MAP?.[q]?.contains ?? []).includes(p),
+    );
+  for (const p of bare.filter(x => !nested(x))) {
     // A part whose variants differ, some with a filled box and some with
     // none (a button's ghost): only the variants that draw a filled box
     // at rest get a frame; one with no fill is borderless on purpose.
@@ -5094,8 +5115,8 @@ export function edgeCopies(ctx, data, s) {
   // (A theme border width frames the floating surfaces already; one of
   // zero asks for no borders at all, so no edge is drawn.)
   const width = wholeBorderWidth(data);
-  if (framingSetting(ctx, data) || (width && zeroLength(width.value)))
-    return [];
+  if (width && zeroLength(width.value)) return [];
+  const framed = Boolean(framingSetting(ctx, data));
   const groups = groupsOf(ctx);
   const floating = [
     ...new Set([...(groups.overlays ?? []), ...(groups.menus ?? [])]),
@@ -5104,12 +5125,30 @@ export function edgeCopies(ctx, data, s) {
   const bare = new Set(C ? borderlessSurfaces(C) : []);
   /** @type {Setting[]} */
   const out = [];
+  const rung = surfacesRung(data);
+  const styledParts = rung ? surfaceStyledParts(ctx) : new Map();
   for (const p of floating) {
-    if (!ctx.project.target.has(p) || !bare.has(p)) continue;
-    const reads = (C?.partReads(p, 'shadow') ?? []).some(
-      (/** @type {{token: string}} */ r) => r.token === s.thing,
-    );
-    if (!reads) continue;
+    if (!ctx.project.target.has(p)) continue;
+    // (A part the surfaces dial styles is judged by the look it gives it:
+    // an edge where that look draws no border and its shadow is the one
+    // taken away.)
+    const dialPart = styledParts.get(p);
+    const look = rung && dialPart ? surfaceLook(dialPart, rung) : null;
+    if (look) {
+      if (String(look.borderStyle ?? 'none') !== 'none') continue;
+      if (!String(look.boxShadow ?? '').includes(`var(${s.thing})`)) continue;
+    } else {
+      if (framed || !bare.has(p)) continue;
+      const reads = (C?.partReads(p, 'shadow') ?? []).some(
+        (/** @type {{token: string}} */ r) => r.token === s.thing,
+      );
+      if (!reads) continue;
+    }
+    // (One drawn inside another floating surface takes that one's edge.)
+    if (
+      floating.some(q => q !== p && (C?.MAP?.[q]?.contains ?? []).includes(p))
+    )
+      continue;
     if (
       data.settings.some(
         x =>
@@ -5183,18 +5222,25 @@ export function disabledCopies(ctx, data, s) {
       state: 'disabled',
       only: true,
     };
-    if (
+    /** The theme's own disabled settings of a property on this part. @param {RegExp} things */
+    const ownDisabled = things =>
       data.settings.some(
         x =>
           x.state === 'disabled' &&
-          /^background(-image)?$/.test(kebab(String(x.thing))) &&
+          things.test(kebab(String(x.thing))) &&
           // (One set for one variant keeps that variant only.)
           (!x.when || x.when === copy.when) &&
           partsOf(ctx, x).includes(t),
-      )
-    )
-      continue;
-    out.push(copy);
+      );
+    // (A disabled image or background of the theme's own wins; a disabled
+    // fill of its own shows with only the image taken off, whatever the
+    // order they were set in.)
+    if (ownDisabled(/^background(-image)?$/)) continue;
+    out.push(
+      ownDisabled(/^background-color$/)
+        ? {...copy, thing: 'background-image'}
+        : copy,
+    );
   }
   return out;
 }
@@ -5254,6 +5300,65 @@ export function frameCopies(ctx, data, s) {
     );
 }
 
+/**
+ * The parts the surfaces dial writes its look on, each with the dial part
+ * whose look it takes: each of its parts; for a frame that paints nothing
+ * (the banner's), the part inside it that paints the rounded fill, which
+ * takes the edge; and a part drawn on one of them (a multi-selector's popup
+ * on its popover), which the dial's rule reaches on that element.
+ * @param {Ctx} ctx
+ * @returns {Map<string, string>}
+ */
+export function surfaceStyledParts(ctx) {
+  const MAP = /** @type {any} */ (ctx).C?.MAP ?? {};
+  /** @type {Map<string, string>} */
+  const out = new Map();
+  for (const t of SURFACE_PARTS) {
+    out.set(t, t);
+    if (!MAP[t]?.at?.['background-color'] && !MAP[t]?.at?.['border-radius']) {
+      const fill = (MAP[t]?.contains ?? []).find(
+        (/** @type {string} */ k) =>
+          MAP[k]?.at?.['background-color'] && MAP[k]?.at?.['border-radius'],
+      );
+      if (fill) out.set(fill, t);
+    }
+  }
+  for (const [p, rec] of Object.entries(MAP)) {
+    if (out.has(p) || /** @type {any} */ (rec)?.alone) continue;
+    const on = /** @type {any} */ (rec?.drawnAs ?? []).find(
+      (/** @type {string} */ q) => SURFACE_PARTS.includes(q),
+    );
+    if (on) out.set(p, on);
+  }
+  return out;
+}
+
+/**
+ * The rung the theme's surfaces dial sets, if it sets one.
+ * @param {ThemeData} data
+ * @returns {string | null}
+ */
+export function surfacesRung(data) {
+  const x = [...data.settings]
+    .reverse()
+    .find(y => y.source === 'dial' && y.thing === 'surfaces' && !y.on);
+  return x ? String(x.value) : null;
+}
+
+/**
+ * The look the surfaces dial gives a part at a rung (a floating panel's
+ * own where it differs).
+ * @param {string} part @param {string} rung
+ * @returns {Record<string, string>}
+ */
+function surfaceLook(part, rung) {
+  return /** @type {any} */ (
+    FLOATING_PANELS.includes(part) && FLOATING_SURFACES[rung]
+      ? FLOATING_SURFACES[rung]
+      : (SURFACES[rung] ?? {})
+  );
+}
+
 /** Whether a length is zero. @param {unknown} v */
 function zeroLength(v) {
   return /^0(?:px|rem|em)?$/.test(String(v).trim());
@@ -5282,18 +5387,12 @@ export function wholeBorderWidth(data) {
  * the build: the edges dial at outlines (every box, at the theme's width,
  * unless that width is zero), else the theme's border width when it is
  * wider than Core's own (a thinner width frames nothing new); whatever
- * their order. None where the surfaces dial sets the surfaces' look, which
- * decides their edges itself.
+ * their order. The parts the surfaces dial styles keep the edge it gives
+ * them (borderFrames).
  * @param {Ctx} ctx @param {ThemeData} data
  * @returns {Setting | null}
  */
 export function framingSetting(ctx, data) {
-  if (
-    data.settings.some(
-      x => x.source === 'dial' && x.thing === 'surfaces' && !x.on,
-    )
-  )
-    return null;
   const width = wholeBorderWidth(data);
   const outlines = outlinesOf(data);
   if (width && zeroLength(width.value)) return null;

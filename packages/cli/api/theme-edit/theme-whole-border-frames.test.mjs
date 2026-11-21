@@ -118,12 +118,32 @@ describe('a whole-theme border width', () => {
     await themeEditSet('ro', 'edges', 'outlines', {cwd});
     await themeEditSet('ro', '--border-width', '1px', {cwd});
     expect(rulesOf(cssOf('ro'), 'dialog')).toMatch(FRAME);
-    // (A surfaces dial decides the surfaces' edges: nothing is framed over
-    // it.)
+    // (A part the surfaces dial styles keeps the edge it gives; the rest
+    // are framed, and the buttons line stays.)
     await themeEditNew('sr', {cwd, like: 'neutral'});
     await themeEditSet('sr', 'surfaces', 'raised', {cwd});
-    await themeEditSet('sr', '--border-width', '3px', {cwd});
+    const sr = /** @type {any} */ (
+      await themeEditSet('sr', '--border-width', '3px', {cwd})
+    );
     expect(rulesOf(cssOf('sr'), 'dialog')).not.toMatch(FRAME);
+    expect(JSON.stringify(sr.data.leftOut ?? [])).toMatch(/--on /);
+    // (The banner's edge is the dial's too, on the part that paints its
+    // fill.)
+    expect(rulesOf(cssOf('sr'), 'banner')).not.toMatch(
+      /border: var\(--border-width\) solid/,
+    );
+    // (A popover with a border of its own still holds the menu list: the
+    // list takes no second ring.)
+    await themeEditNew('pbw', {cwd, like: 'neutral'});
+    await themeEditSet('pbw', 'border', 'none', {cwd, on: 'popover'});
+    await themeEditSet('pbw', '--border-width', '3px', {cwd});
+    expect(rulesOf(cssOf('pbw'), 'dropdown-menu')).not.toMatch(
+      /border: var\(--border-width\) solid/,
+    );
+    await themeEditNew('so', {cwd, like: 'neutral'});
+    await themeEditSet('so', 'surfaces', 'raised', {cwd});
+    await themeEditSet('so', 'edges', 'outlines', {cwd});
+    expect(rulesOf(cssOf('so'), 'badge')).toMatch(FRAME);
     await themeEditNew('ol', {cwd, like: 'neutral'});
     await themeEditSet('ol', '--border-width', '3px', {cwd});
     const out = await themeEditSet('ol', 'edges', 'outlines', {cwd});

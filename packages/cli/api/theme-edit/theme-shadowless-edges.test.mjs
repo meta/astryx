@@ -80,6 +80,23 @@ describe('a theme with no elevation shadows', () => {
     );
   }, 240_000);
 
+  it('keeps an edge where the surfaces dial raises a surface on the shadow taken away', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('ra', {cwd, like: 'neutral'});
+    await themeEditSet('ra', 'surfaces', 'raised', {cwd});
+    const r = await themeEditSet('ra', '--shadow-med', 'none', {cwd});
+    expect(r.data.notes.join(' ')).toMatch(/keep an edge[^(]*\([^)]*popover/);
+    // (Glass draws its own rim: no edge over it.)
+    await themeEditNew('gl', {cwd, like: 'neutral'});
+    await themeEditSet('gl', 'surfaces', 'glass', {cwd});
+    const g = await themeEditSet('gl', '--shadow-low', 'none', {cwd});
+    expect(g.data.notes.join(' ')).not.toMatch(
+      /keep an edge[^(]*\([^)]*popover/,
+    );
+    // (A popup drawn on the popover takes the dial's look there too.)
+    expect(g.data.notes.join(' ')).not.toMatch(/multi-selector-popup/);
+  }, 240_000);
+
   it('keeps no edge where the theme draws no borders at all', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('nb', {cwd, like: 'neutral'});
