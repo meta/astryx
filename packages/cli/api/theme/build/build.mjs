@@ -899,16 +899,11 @@ export const CLI_VERSION_LINE = /^( \* CLI: @astryxdesign\/cli@)(\S+)(\s*)$/u;
 /**
  * `lines` with the command in each of a built module's built-by lines as
  * `<command>`. A theme module has one built-by line and a family module one
- * per member. When two lines name the same theme, the lines are unchanged,
- * so a second line for a theme stays significant.
+ * per member.
  * @param {string[]} lines
  * @returns {string[]}
  */
 export function withBuiltByCommandPlaceholder(lines) {
-  const themes = lines.flatMap(line => BUILT_BY_LINE.exec(line)?.[1] ?? []);
-  if (themes.length === 0 || new Set(themes).size !== themes.length) {
-    return lines;
-  }
   return lines.map(line => line.replace(BUILT_BY_LINE, '$1<command>$3$4'));
 }
 
@@ -947,8 +942,8 @@ export function withCliReleasePlaceholder(lines) {
  * Normalize generated file content for staleness comparison: without the
  * header's `Command:` line ({@link withoutBuildCommandLine}), with the release
  * that the header's one `CLI:` line names as `<version>`
- * ({@link withCliReleasePlaceholder}), and with the command in a built
- * module's one {@link BUILT_BY_LINE} as `<command>`. Which release
+ * ({@link withCliReleasePlaceholder}), and with the command in each of a
+ * built module's {@link BUILT_BY_LINE}s (one per theme) as `<command>`. Which release
  * answers, and the command that starts it, depend on how the CLI was started
  * (a global install, a tool that runs it, or the project's own copy) and
  * change with each update, so the same outputs built another way are not
@@ -5712,8 +5707,7 @@ async function themeBuildInternal(
         at => {
           for (const [layer, {lineOf}] of writtenIn.entries())
             for (const keys of declarationPaths(at, blocks))
-              if (lineOf(keys) != null)
-                return {path: keys, layer};
+              if (lineOf(keys) != null) return {path: keys, layer};
           return null;
         },
         {
@@ -5726,9 +5720,7 @@ async function themeBuildInternal(
     )) {
       // At its line in the theme's file, or in the local theme it extends
       // that writes it (a family member's included).
-      const writer = writtenIn.find(
-        w => w.lineOf(entry.path) != null,
-      );
+      const writer = writtenIn.find(w => w.lineOf(entry.path) != null);
       const line = writer?.lineOf(entry.path) ?? null;
       const file =
         writer && writer.file !== filePath

@@ -105,7 +105,8 @@ describe('theme build --check and the command in the built-by lines', () => {
   }, 120_000);
 
   it('still reads a family whose member content changed as out of date', async () => {
-    await runCli(FAMILY, dir);
+    const built = await runCli(FAMILY, dir);
+    expect(built.code, built.stderr).toBe(0);
     nameAnotherCommand('ocean-family.js');
     fs.writeFileSync(
       path.join(dir, 'ocean-calm.mjs'),
@@ -116,7 +117,8 @@ describe('theme build --check and the command in the built-by lines', () => {
   }, 120_000);
 
   it('still reads a second built-by line for one theme as out of date', async () => {
-    await runCli(['theme', 'build', 'ocean.mjs'], dir);
+    const built = await runCli(['theme', 'build', 'ocean.mjs'], dir);
+    expect(built.code, built.stderr).toBe(0);
     const target = path.join(dir, 'ocean.js');
     const content = fs.readFileSync(target, 'utf8');
     const line =
