@@ -1131,6 +1131,29 @@ describe('useResizable percentage configuration (AST-010)', () => {
       container.remove();
     });
 
+    it('writes back a restored size that a percentage maximum clamps', () => {
+      // Storage keeps the size the panel shows: a saved 900 under a 50%
+      // maximum of a 1000px container is 500.
+      content = 1000;
+      localStorage.setItem(
+        'astryx-resizable:restored-clamped',
+        JSON.stringify({size: 900, isCollapsed: false}),
+      );
+      const containerRef = makeContainer();
+      const {result} = renderHook(() =>
+        useResizable({
+          defaultSize: 300,
+          maxSize: '50%',
+          containerRef,
+          autoSaveId: 'restored-clamped',
+        }),
+      );
+      expect(result.current.size).toBe(500);
+      expect(localStorage.getItem('astryx-resizable:restored-clamped')).toBe(
+        JSON.stringify({size: 500, isCollapsed: false}),
+      );
+    });
+
     it('saves a collapse made before the first measurement against the real container only', () => {
       // Before the container is measured, 1200px stands in for it. A size
       // resolved against that stand-in must never reach storage.

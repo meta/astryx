@@ -506,10 +506,8 @@ export function createResizableAs(
   let notified: {size: number; isCollapsed: boolean} | null = null;
   let written: {key: string; size: number; isCollapsed: boolean} | null = null;
   let mustWrite = false;
-  // Storage keeps a size someone chose: a drag or key step that changed the
-  // size or collapse state, or a collapse, expand or resize call that did.
-  // The default's first resolution, a restored size and a press that moves
-  // nothing are not written.
+  // Storage keeps only a size that a person chose. The default's first
+  // resolution, a restored size and a press that moves nothing do not count.
   let hasBeenResized = false;
   let stateAtGestureStart: {size: number; isCollapsed: boolean} | null = null;
   let snapshot: ResizableSnapshot | null = null;
@@ -847,17 +845,18 @@ export function createResizableAs(
   }
 
   /**
-   * Nothing is written before the region is first resized, while the basis
-   * stands in, nor while a gesture runs.
+   * Nothing is written while the basis stands in, nor while a gesture runs.
+   * Before the region is first resized, only a restored size that the bounds
+   * or snap points changed is written, so storage keeps the size it shows.
    */
   function persist(): void {
     const key = opts.autoSaveId;
-    if (
-      key == null ||
-      key === '' ||
-      !hasBeenResized ||
-      !derived.isBasisMeasured
-    ) {
+    if (key == null || key === '' || !derived.isBasisMeasured) {
+      return;
+    }
+    const isRestoredSizeChanged =
+      persisted?.size != null && persisted.size !== derived.size;
+    if (!hasBeenResized && !isRestoredSizeChanged) {
       return;
     }
     if (isGestureActive) {
