@@ -160,11 +160,21 @@ describe('a saved setting and how far it reaches', () => {
       on: 'text-input',
     });
     expect(partsWith('narrow', 'border-color')).toContain('text-area');
-    await themeEditSet('narrow', 'border-color', '#ff0000', {
-      cwd,
-      on: 'text-input',
-      only: true,
-    });
+    const r = /** @type {any} */ (
+      await themeEditSet('narrow', 'border-color', '#ff0000', {
+        cwd,
+        on: 'text-input',
+        only: true,
+      })
+    );
+    // (The group version is named as the setting it replaces, never as a
+    // copy listed twice.)
+    expect(r.data.replaced).toEqual(
+      expect.objectContaining({thing: 'border-color', on: 'text-input'}),
+    );
+    expect(r.data.replaced.only).toBeFalsy();
+    expect(r.data.notes.join('\n')).toMatch(/^replaces border-color/m);
+    expect(r.data.notes.join('\n')).not.toMatch(/listed twice/);
     const entries = saved('narrow').settings.filter(
       (/** @type {any} */ x) => x.thing === 'border-color',
     );
@@ -273,5 +283,23 @@ describe('a saved setting and how far it reaches', () => {
     expect(u2.data.widened?.[0]?.parts).toEqual(
       expect.arrayContaining(['text-area']),
     );
+  }, 240_000);
+
+  it('undoing a change that named a growth names it no second time', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('once', {cwd, like: 'neutral'});
+    await themeEditSet('once', 'border-color', '#ff0000', {
+      cwd,
+      on: 'text-input',
+    });
+    narrowRecord('once', 'border-color|');
+    const r = /** @type {any} */ (
+      await themeEditSet('once', 'corners', '4px', {cwd})
+    );
+    expect(r.data.widened?.[0]?.parts).toEqual(
+      expect.arrayContaining(['text-area']),
+    );
+    const u = /** @type {any} */ (await themeEditUndo('once', {cwd}));
+    expect(u.data.widened ?? []).toEqual([]);
   }, 240_000);
 });

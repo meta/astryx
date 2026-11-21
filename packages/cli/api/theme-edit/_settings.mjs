@@ -18236,10 +18236,18 @@ function recordReach(ctx, slug, data, before) {
     const parts = partsOf(ctx, s);
     if (!parts.some(t => t !== s.on)) continue;
     const k = keyOf(s);
+    // (What the settings file recorded before this command counts as named
+    // too: an undo that restores an older record names no part again.)
     const was = recorded[k];
-    const added = Array.isArray(was)
-      ? parts.filter(t => !was.map(String).includes(t))
-      : [];
+    const prior = before?.reached?.[k];
+    const known = [
+      ...(Array.isArray(was) ? was : []),
+      ...(Array.isArray(prior) ? prior : []),
+    ].map(String);
+    const added =
+      Array.isArray(was) || Array.isArray(prior)
+        ? parts.filter(t => !known.includes(t))
+        : [];
     if (added.length && savedKeys.has(k))
       out.push({
         setting: describe(s),

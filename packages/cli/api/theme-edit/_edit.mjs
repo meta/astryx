@@ -6796,6 +6796,12 @@ async function changeOnce(
     alsoReplaced = data.settings.filter(replaced);
     data.settings = data.settings.filter((x, i) => !replaced(x, i));
   }
+  // (The same setting with or without `--only` is named as replaced, never
+  // as a copy listed twice.)
+  const twinsReplaced = alsoReplaced.filter(
+    x => keyOf(x) !== k && sameSettingKey(x) === sameSettingKey(s),
+  );
+  const listedTwice = alsoReplaced.filter(x => !twinsReplaced.includes(x));
   // The other heights that set controls at that size give way to it, so
   // every control at that size takes the one height.
   /** @type {import('./_settings.mjs').Setting[]} */
@@ -7629,11 +7635,16 @@ async function changeOnce(
           ...(sizeNote ? [sizeNote] : []),
         ]
       : []),
-    ...(alsoReplaced.length && prev
+    ...(listedTwice.length && prev
       ? [
-          `${describe({...prev, value: '?'}).replace(' = ?', '')} was listed ${alsoReplaced.length === 1 ? 'twice' : `${alsoReplaced.length + 1} times`} (${[...alsoReplaced, prev].map(x => x.value).join(', ')}); each is ${sub === 'set' ? 'replaced' : 'removed'}`,
+          `${describe({...prev, value: '?'}).replace(' = ?', '')} was listed ${listedTwice.length === 1 ? 'twice' : `${listedTwice.length + 1} times`} (${[...listedTwice, prev].map(x => x.value).join(', ')}); each is ${sub === 'set' ? 'replaced' : 'removed'}`,
         ]
       : []),
+    // (The same setting with or without `--only`, replaced by this one.)
+    ...twinsReplaced.map(
+      x =>
+        `replaces ${describe(x)}: ${s.only ? `the look leaves the rest of ${x.on}'s group` : `the look reaches ${s.on}'s group again`}`,
+    ),
     ...(covered.length ? [`replaces ${covered.map(describe).join(', ')}`] : []),
     ...(ownPartHits.length
       ? [
@@ -8475,7 +8486,12 @@ async function changeOnce(
       // the notes name them all.
       replaced:
         sub === 'set'
-          ? (prev ?? typedBefore[0] ?? covered[0] ?? longhands[0] ?? null)
+          ? (prev ??
+            twinsReplaced[0] ??
+            typedBefore[0] ??
+            covered[0] ??
+            longhands[0] ??
+            null)
           : null,
       // A whole-theme dial names the value it replaced, as base and mode do.
       was:
@@ -10748,7 +10764,7 @@ function valueIs(saved, typed) {
  */
 function lastStepTakes(cwd, slug, now) {
   const steps = readHistory(themeFiles(cwd, slug).history).steps;
-  const at = JSON.stringify({...now, lifted: 0, built: 0});
+  const at = JSON.stringify({...now, lifted: 0, built: 0, reached: 0});
   for (let i = steps.length - 1; i >= 0; i--) {
     const before = settingsJson(steps[i]);
     if (
@@ -10757,7 +10773,8 @@ function lastStepTakes(cwd, slug, now) {
       !Array.isArray(before.settings)
     )
       return [];
-    if (JSON.stringify({...before, lifted: 0, built: 0}) === at) continue;
+    if (JSON.stringify({...before, lifted: 0, built: 0, reached: 0}) === at)
+      continue;
     return stepTakesBack(now, before);
   }
   return [];
@@ -10972,8 +10989,8 @@ async function undoTheme(theme, options) {
     return (
       x !== undefined &&
       y !== undefined &&
-      JSON.stringify({...x, lifted: 0, built: 0}) ===
-        JSON.stringify({...y, lifted: 0, built: 0})
+      JSON.stringify({...x, lifted: 0, built: 0, reached: 0}) ===
+        JSON.stringify({...y, lifted: 0, built: 0, reached: 0})
     );
   };
   while (history.length && same(history[history.length - 1], nowText))
