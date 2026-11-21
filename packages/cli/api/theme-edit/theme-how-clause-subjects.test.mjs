@@ -461,6 +461,16 @@ const ROWS = [
     },
   ],
   [
+    'an example said inside a sentence never frees another sentence\'s item',
+    {
+      q: 'Header: navy, e.g. a dark blue. Cards: white background, gray header.',
+      has: [
+        "background-color '#1e3a8a' --on app-shell-header",
+        "background-color '#ffffff' --on card --when variant:default --mode light",
+      ],
+    },
+  ],
+  [
     'a subject on its own line stays a subject',
     {
       q: 'Sidebar: navy\nPopover and hover card: dark',
