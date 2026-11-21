@@ -2714,7 +2714,7 @@ async function checkFamilyRegistries(registries, aggregatePath, {outDir, modules
   // from its source, as before.
   const written = new Set(writes.map(write => write.dest));
   registries = registries.map(({compiledCopy, ...registry}) => (compiledCopy && written.has(compiledCopy) ? {...registry, compiledCopy} : registry));
-  if (check) return validateRegistryGraphs(registries.map(({compiledCopy, ...registry}) => registry), aggregatePath);
+  if (check) return validateRegistryGraphs(registries.map(({specifier, exportName}) => ({specifier, exportName})), aggregatePath);
   if (!registries.some(registry => registry.compiledCopy)) return validateRegistryGraphs(registries, aggregatePath);
   const checkDir = fs.mkdtempSync(path.join(outDir, `.${path.basename(modulesDir)}-check-`));
   /** @param {string} file */
