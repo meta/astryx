@@ -148,6 +148,34 @@ describe('filledStatePaint', () => {
     }
   });
 
+  it('shows hover and press on a near-black fill under a faint black overlay', () => {
+    // A 5% black overlay on #1b1b1b keeps white text readable but moves the
+    // fill by almost nothing: hover would look like rest, and a press would
+    // show only as a scale, which reduced motion turns off.
+    const fill = rgb('#1b1b1b');
+    const paints = Object.fromEntries(
+      deriveFilledStatePaints({
+        '--color-accent': '#1b1b1b',
+        '--color-on-accent': '#ffffff',
+        '--color-overlay-hover': '#0000000D',
+        '--color-overlay-pressed': '#0000001A',
+      }),
+    );
+    for (const [state, need] of [
+      ['hover', VISIBLE_STEP],
+      ['pressed', 2 * VISIBLE_STEP],
+    ] as const) {
+      const value = paints[`--_button-primary-${state}`];
+      const light = /light-dark\((#[0-9A-Fa-f]{8})/.exec(value)?.[1];
+      expect(light, state).toBeDefined();
+      const over = composite(rgb(light!), fill);
+      expect(colorStep(over, fill), state).toBeGreaterThan(need);
+      expect(contrastRatio(rgb('#ffffff'), over), state).toBeGreaterThanOrEqual(
+        4.5,
+      );
+    }
+  });
+
   it('keeps the shared overlay for a fill it cannot measure', () => {
     const paints = Object.fromEntries(
       deriveFilledStatePaints({

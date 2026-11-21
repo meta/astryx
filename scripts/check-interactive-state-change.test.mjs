@@ -182,4 +182,30 @@ describe('filled button states', () => {
         .map(row => `${row.where}: moves ${row.step.toFixed(0)}`),
     ).toEqual([]);
   });
+
+  it('show hover and press on the near-black primary fills of neutral, stone and gothic', () => {
+    for (const theme of ['neutral', 'stone', 'gothic'])
+      for (const state of ['hover', 'pressed'])
+        for (const how of state === 'hover' ? [''] : ['', ' with the mouse']) {
+          const where = `${theme} light primary button ${state}${how}`;
+          const row = rows.find(r => r.where === where);
+          expect(row, where).toBeDefined();
+          expect(row.step, where).toBeGreaterThan(row.need);
+          expect(row.ratio, where).toBeGreaterThanOrEqual(4.5);
+        }
+  });
+
+  it('keep the press paint under reduced motion: only the scale stops', () => {
+    // A reduced-motion rule in Button.tsx sets only the transform or the
+    // transition time, never the overlay paint or the fill, so the measured
+    // press paint still shows a press with no scale.
+    const source = fs.readFileSync(BUTTON_SOURCE, 'utf8');
+    const rules = [
+      ...source.matchAll(
+        /'@media \(prefers-reduced-motion: reduce\)[^']*':\s*'([^']+)'/g,
+      ),
+    ].map(m => m[1]);
+    expect(rules.length).toBeGreaterThan(0);
+    expect(rules.every(v => v === 'scale(1)' || v === '0s')).toBe(true);
+  });
 });
