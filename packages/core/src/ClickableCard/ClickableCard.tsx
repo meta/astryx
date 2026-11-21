@@ -52,6 +52,7 @@ import type {CardVariant} from '../Card/Card';
 import {useClickableContainer} from '../hooks/useClickableContainer';
 import type {BaseProps} from '../BaseProps';
 import {useLinkComponent} from '../Link/useLinkComponent';
+import {computeTargetAndRel} from '../Link/computeTargetAndRel';
 import {themeProps} from '../utils/themeProps';
 import {
   focusOwnerProps,
@@ -265,7 +266,8 @@ export interface ClickableCardProps extends BaseProps {
   href?: string;
 
   /**
-   * Link target for href navigation.
+   * Link target for href navigation. `"_blank"` also sets
+   * `rel="noopener noreferrer"`.
    * @default '_self'
    */
   target?: string;
@@ -409,6 +411,10 @@ export function ClickableCard({
   );
 
   const LinkComponent = useLinkComponent();
+  const {target: computedTarget, rel: computedRel} = computeTargetAndRel(
+    target,
+    undefined,
+  );
 
   const {onClick, onMouseUp, onPointerDown} = useClickableContainer({
     containerRef,
@@ -479,7 +485,8 @@ export function ClickableCard({
         <LinkRoot
           ref={setInteractiveRef}
           href={isDisabled ? undefined : href}
-          target={isDisabled ? undefined : target}
+          target={isDisabled ? undefined : computedTarget}
+          rel={isDisabled ? undefined : computedRel}
           role={isDisabled ? 'link' : undefined}
           {...(isDisabled ? disabledInteractionProps() : null)}
           aria-label={label}
