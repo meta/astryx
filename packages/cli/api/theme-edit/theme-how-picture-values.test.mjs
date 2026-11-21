@@ -88,3 +88,22 @@ it('a gradient without the background word keeps its color an ask of its own', a
     ),
   ).toBe(false);
 }, 240_000);
+
+it('a gradient said for one mode is never cut at its size', async () => {
+  expect(
+    (
+      await commands(
+        'header background linear-gradient(#0001 1px, transparent 1px) 0 0 / 24px 24px in dark mode',
+      )
+    ).some(line =>
+      /'linear-gradient\(#0001 1px, transparent 1px\) 0 0'/.test(line),
+    ),
+  ).toBe(false);
+}, 240_000);
+
+it('a slash between asks after a gradient still splits them', async () => {
+  const lines = await commands(
+    'header background linear-gradient(#ffffff, #eeeeee) / cards red',
+  );
+  expect(lines.some(l => /--on card\b/.test(l))).toBe(true);
+}, 240_000);
