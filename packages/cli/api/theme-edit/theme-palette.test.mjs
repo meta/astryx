@@ -3499,16 +3499,21 @@ describe('parts36', () => {
   });
 
   it('takes one length where Core reads the padding inside calc(), on every such part', async () => {
-    for (const [prop, on] of [
-      ['padding', 'segmented-control'],
-      ['padding', 'dropdown-menu'],
-      ['padding-inline', 'item'],
-    ])
-      expect(
-        (await refusal(() => themeEditSet('p', prop, '4px 8px', {cwd, on})))
-          .code,
-        `${prop} ${on}`,
-      ).toBe('ERR_THEME_BAD_VALUE');
+    expect(
+      (
+        await refusal(() =>
+          themeEditSet('p', 'padding-inline', '4px 8px', {cwd, on: 'item'}),
+        )
+      ).code,
+    ).toBe('ERR_THEME_BAD_VALUE');
+    // (A padding of several lengths there is written as its sides.)
+    for (const on of ['segmented-control', 'dropdown-menu']) {
+      const r = await themeEditSet('p', 'padding', '4px 8px', {cwd, on});
+      expect(r.data.notes.join('\n'), on).toContain(
+        "wrote padding '4px 8px' as its sides, padding-block 4px, padding-inline 8px",
+      );
+      await themeEditUndo('p', {cwd});
+    }
     // A bare 0 is the length 0px there.
     const group = await themeEditSet('p', 'padding', '0', {cwd, on: 'menus'});
     expect(JSON.stringify(group)).toMatch(/0 is saved as 0px/);
@@ -3528,21 +3533,17 @@ describe('parts36', () => {
         on: 'segmented-control',
       });
     }
-    const keeps = await refusal(() =>
-      themeEditSet('p', 'padding', 'var(--spacing-2) var(--spacing-3)', {
-        cwd,
-        on: 'segmented-control',
-      }),
-    );
     // (Each side keeps the variable typed for it.)
-    expect(keeps.run).toEqual([
-      expect.stringMatching(
-        /padding-block 'var\(--spacing-2\)' --on segmented-control$/,
-      ),
-      expect.stringMatching(
-        /padding-inline 'var\(--spacing-3\)' --on segmented-control$/,
-      ),
-    ]);
+    const keeps = await themeEditSet(
+      'p',
+      'padding',
+      'var(--spacing-2) var(--spacing-3)',
+      {cwd, on: 'segmented-control'},
+    );
+    expect(keeps.data.notes.join('\n')).toContain(
+      'as its sides, padding-block var(--spacing-2), padding-inline var(--spacing-3)',
+    );
+    await themeEditUndo('p', {cwd});
   });
 
   it('takes a state padding on a card through the padding model', async () => {
