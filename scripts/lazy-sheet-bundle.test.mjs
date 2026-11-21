@@ -66,8 +66,10 @@ function importOf(entry, name) {
     logLevel: 'silent',
   });
   const outputs = result.metafile.outputs;
-  const entryOutput = Object.keys(outputs).find(
-    key => outputs[key].entryPoint != null,
+  // Each `import()` target is an entry point too: the eager chunk is this
+  // file's own entry.
+  const entryOutput = Object.keys(outputs).find(key =>
+    outputs[key].entryPoint?.endsWith(`${name}.mjs`),
   );
   const eager = new Set();
   const pending = [entryOutput];

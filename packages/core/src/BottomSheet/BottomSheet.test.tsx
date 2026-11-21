@@ -17,6 +17,7 @@ import {
   beforeEach,
   afterEach,
   onTestFinished,
+  beforeAll,
 } from 'vitest';
 import {act, cleanup, render, screen, fireEvent} from '@testing-library/react';
 import {
@@ -38,6 +39,13 @@ import {__focusTakeoverCallersForTest} from '../keyboard/keyboardHeight';
 import {__resetRevealsAtReportForTest} from '../keyboard/useMobileKeyboard';
 import {getKeyboardLayoutGuide} from '../keyboard/keyboardLayoutGuide';
 import {animatorFor} from '../motion/animator';
+import {__loadTouchRuntimeForTest} from '../utils/touchRuntime';
+
+// These cases drive touch motion, which comes with the shared touch runtime
+// once the page has loaded it.
+beforeAll(async () => {
+  await __loadTouchRuntimeForTest();
+});
 
 // A sheet has no stops unless its host asks for them, so the tests that
 // exercise detents pass their own. These three — a 14% peek, a half-height

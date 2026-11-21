@@ -171,7 +171,10 @@ one pending load per module, caches a success, and resets after a failure.
   touch module. INV2's listeners recognize no gesture, so a base import that
   defers its surface carries no touch code for it. Telling a tap from a
   scroll belongs to the loaded surface, which reads the `click` that follows
-  a tap.
+  a tap. The one exception is the shared touch loader
+  (`architecture:react-component-runtime` INV13), whose `import()` loads the
+  touch modules, and a component's touch part through it, at most once per
+  page after first paint; a surface module still imports them statically.
 - **INV9 — A check holds the boundaries per entry.** A CI check builds each
   entry in the entry list (Text, Heading, Button, IconButton, Link, Table,
   List, CheckboxList, Selector, DropdownMenu, and each entry an owner adds)

@@ -358,8 +358,9 @@ app to turn on.
 ### Implementation gaps
 
 TextInput, TextArea, and NumberInput meet FR9 apart from the missing scroll
-range (Gap 11), a modal BottomSheet shorter than `tall` (Gap 19), and Back in
-Firefox for Android (Gap 21). Each other gap below is open.
+range (Gap 11), a modal BottomSheet shorter than `tall` (Gap 19), Back in
+Firefox for Android (Gap 21), and a field focused before the touch runtime
+loads (Gap 22). Each other gap below is open.
 
 - **Gap 1 — The keyboard module.** Partly met: the keyboard module
   (`packages/core/src/keyboard/`) measures the keyboard, keeps focus from
@@ -372,7 +373,8 @@ Firefox for Android (Gap 21). Each other gap below is open.
   to the keyboard module, which keeps the focused field above the keyboard as
   FR9 describes, apart from the missing scroll range (Gap 11), the rise in
   Chrome on Android (Gap 13), a modal BottomSheet shorter than `tall` (Gap 19),
-  and Back in Firefox for Android (Gap 21).
+  Back in Firefox for Android (Gap 21), and a field focused before the touch
+  runtime loads (Gap 22).
 - **Gap 3 — The typed fields of DateInput, DateTimeInput, and TimeInput.** No
   keyboard handling. Their touch picker fields are read-only with no
   input mode and bring up no keyboard, so they are outside FR9.
@@ -441,6 +443,11 @@ Firefox for Android (Gap 21). Each other gap below is open.
   slow device, Back with the keyboard up sometimes leaves the page where the
   reveal scrolled it (observed 2 of 14 in the Android emulator with a
   slow-device profile). Firefox's own reveal does the same with no Core reveal.
+- **Gap 22 — A field focused before the touch runtime loads.** Until the shared
+  loader has run (after first paint, at idle within its cap; `spec:AST-080`
+  DEC-5), a focused field keeps the browser's own reveal: TextInput, TextArea
+  and NumberInput load their keyboard module with the touch runtime, and a
+  field in a sheet does not ride the keyboard.
 
 ### Follow-up
 

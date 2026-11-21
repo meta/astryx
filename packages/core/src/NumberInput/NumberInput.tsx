@@ -247,7 +247,7 @@ import {
 } from '../Field/useEntryErrorReport';
 import {useValueReplacesEntry} from '../Field/useValueReplacesEntry';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
-import {useMobileKeyboard} from '../keyboard/useMobileKeyboard';
+import {useDeferredMobileKeyboard} from '../keyboard/useDeferredMobileKeyboard';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -749,7 +749,9 @@ export function NumberInput({
   const statusMessageID = useId();
   const unitsID = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
-  useMobileKeyboard(inputRef);
+  // The keyboard module is this field's touch part, which the touch loader
+  // loads after first paint.
+  const mobileKeyboard = useDeferredMobileKeyboard(inputRef);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const inputGroup = useInputGroup();
   const inputGroupState = use(InputGroupInternalContext);
@@ -1618,6 +1620,7 @@ export function NumberInput({
       {inputWrapper}
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}
+      {mobileKeyboard}
     </Field>
   );
 }

@@ -13,7 +13,7 @@
  */
 
 import {StrictMode, useState} from 'react';
-import {describe, it, expect, vi, beforeEach} from 'vitest';
+import {describe, it, expect, vi, beforeAll, beforeEach} from 'vitest';
 import {
   act,
   cleanup,
@@ -31,6 +31,13 @@ import {
   getAllInjectedCss,
   getForcedColorsRules,
 } from '../__tests__/forcedColors';
+import {__loadTouchRuntimeForTest} from '../utils/touchRuntime';
+
+// These cases drive the selection motion, which comes with the shared touch
+// runtime once the page has loaded it.
+beforeAll(async () => {
+  await __loadTouchRuntimeForTest();
+});
 
 // Mock showPopover/hidePopover (not implemented in jsdom) so the tooltip layer
 // reflects its open state via a `popover-open` attribute the tests can assert.
