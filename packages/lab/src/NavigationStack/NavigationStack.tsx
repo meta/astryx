@@ -859,6 +859,8 @@ function usePlatformAnimatedTraversal(): {
         navigationTarget?.addEventListener('navigate', mark);
         return () => {
           view.cancelAnimationFrame(frame);
+          // The frame that clears the mark does not run, so clear it here.
+          markRef.current = false;
           view.removeEventListener('popstate', mark, {capture: true});
           navigationTarget?.removeEventListener('navigate', mark);
         };
