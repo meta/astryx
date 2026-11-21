@@ -5179,7 +5179,12 @@ export function edgeCopies(ctx, data, s) {
     }
     // (One drawn inside another floating surface takes that one's edge.)
     if (
-      floating.some(q => q !== p && (C?.MAP?.[q]?.contains ?? []).includes(p))
+      floating.some(
+        q =>
+          q !== p &&
+          ctx.project.target.has(q) &&
+          (C?.MAP?.[q]?.contains ?? []).includes(p),
+      )
     )
       continue;
     if (
@@ -5269,11 +5274,33 @@ export function disabledCopies(ctx, data, s) {
     // fill of its own shows with only the image taken off, whatever the
     // order they were set in.)
     if (ownDisabled(/^background(-image)?$/)) continue;
-    out.push(
-      ownDisabled(/^background-color$/)
-        ? {...copy, thing: 'background-image'}
-        : copy,
+    // (Only the image comes off in a mode the theme's own disabled fill
+    // covers; another mode keeps the whole copy, so its fill shows.)
+    const fills = data.settings.filter(
+      x =>
+        x.state === 'disabled' &&
+        kebab(String(x.thing)) === 'background-color' &&
+        (!x.when || x.when === copy.when) &&
+        partsOf(ctx, x).includes(t),
     );
+    /** @param {string | undefined} m */
+    const covers = m => fills.some(x => !x.mode || !m || x.mode === m);
+    const imageOnly = {...copy, thing: 'background-image'};
+    if (!fills.length) out.push(copy);
+    else if (copy.mode || fills.some(x => !x.mode))
+      out.push(covers(copy.mode) ? imageOnly : copy);
+    else
+      for (const m of modesOf(data))
+        out.push(
+          ...(covers(m)
+            ? [{...imageOnly, mode: m}]
+            : // (A mode's copy is written as longhands: a shorthand set
+              // for one mode is written as its color alone.)
+              [
+                {...copy, thing: 'background-color', mode: m},
+                {...imageOnly, mode: m},
+              ]),
+        );
   }
   return out;
 }
