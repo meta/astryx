@@ -72,6 +72,11 @@ describe('clear said of a removable thing', () => {
     for (const ask of [
       'clear my card background changes',
       'clear the card overrides',
+      'clear my changes to the border',
+      'clear changes to the card background',
+      'clear my background and border changes',
+      'clear the card border color',
+      'clear the border I added to cards',
     ]) {
       const rs = await how(ask);
       expect(
@@ -83,4 +88,30 @@ describe('clear said of a removable thing', () => {
       );
     }
   }, 120_000);
+
+  it('takes away a thing named after more words', async () => {
+    expect(
+      (await how('clear the dark mode secondary button background')).flatMap(
+        r => r.commands,
+      ),
+    ).toContain(
+      'set ne background-color transparent --on button --when variant:secondary --mode dark',
+    );
+  }, 120_000);
+
+  it('never removes when clear says what a thing should look like', async () => {
+    for (const ask of [
+      'links should have a clear underline',
+      'give inputs a clear border',
+      'give cards a clear shadow',
+      'accessible forms: clear borders and focus rings',
+      'cards with clear borders and shadows',
+      'tables with clear borders between rows',
+    ]) {
+      const cmds = (await how(ask)).flatMap(r => r.commands).join(' ;; ');
+      expect(cmds, ask).not.toMatch(
+        /(?:border|box-shadow|text-decoration) none|--focus-outline-width 0px|--border-width 0px/,
+      );
+    }
+  }, 240_000);
 });
