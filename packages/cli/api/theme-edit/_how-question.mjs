@@ -12740,7 +12740,14 @@ export function draftAnswer(ctx, env, question) {
     // text".)
     const onBody = (/** @type {Clause} */ o) =>
       o.parts.every(x => x.on === 'body');
-    for (const o of [c, ...clauses.filter(x => x !== c && onBody(x))]) {
+    // (Another clause counts only when a text-size answer reads it, so the
+    // size the leading is measured against is the size written.)
+    for (const o of [
+      c,
+      ...clauses.filter(
+        x => x !== c && onBody(x) && x.aspects.includes('fontsize'),
+      ),
+    ]) {
       const px = pxLengthsSaid(o.text).text;
       if (px != null) return px;
     }
@@ -22311,6 +22318,8 @@ export function draftAnswer(ctx, env, question) {
         // (On a part, the pixels as typed: its text size is its own.)
         const leadOnBody = !on || on === 'body' || p?.role === 'body';
         const textPxSaid = leadPx == null || !leadOnBody ? null : saidTextPx(c);
+        const ownTextPx =
+          leadPx == null || !leadOnBody ? null : pxLengthsSaid(c.text).text;
         const textPx =
           textPxSaid ??
           (leadPx == null || !leadOnBody
@@ -22378,7 +22387,16 @@ export function draftAnswer(ctx, env, question) {
             // (A leading typed in pixels names its reading, so the answer
             // says what it read.)
             text: `body line height: --text-body-leading${pxRatio != null && textPx ? `, ${leadPx}px over ${textPx}px text: ${pxRatio}` : ''}${now ? ` (now ${now})` : ''}`,
-            options: [[set(tok, value)]],
+            // (A text size said in its own clause that no text-size answer
+            // reads, "13px line height 18px", is written with it.)
+            ...(ownTextPx != null && !c.aspects.includes('fontsize')
+              ? {
+                  options: [
+                    [set('text-size', String(ownTextPx)), set(tok, value)],
+                  ],
+                  sequence: true,
+                }
+              : {options: [[set(tok, value)]]}),
           };
         return {
           text: `line height${where}${numeric && !n ? ` (now ${now})` : ''}`,
