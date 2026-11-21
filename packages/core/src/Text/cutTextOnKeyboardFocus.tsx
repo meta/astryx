@@ -138,6 +138,7 @@ export function useCutTextOnKeyboardFocus({
         <loaded.UndescribedTooltip
           anchorRef={anchorRef}
           content={cutText}
+          isOpen
           onHide={hide}
         />
       ) : null,

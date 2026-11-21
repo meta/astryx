@@ -557,8 +557,47 @@ describe('the truncation tooltip mounts on the first interaction', () => {
         },
         {timeout: 3000},
       );
-      expect(text.getAttribute('aria-describedby')).toBe(
-        screen.getByRole('tooltip', {hidden: true}).id,
+      // Its text is the element's own: no description, read once.
+      expect(text).not.toHaveAttribute('aria-describedby');
+    } finally {
+      restore();
+    }
+  });
+
+  it('adds no description after a hover and then a keyboard focus', async () => {
+    const {showPopover, restore} = withOverflowAndPopover();
+    try {
+      const user = userEvent.setup();
+      render(
+        <Text type="body" maxLines={1}>
+          <a href="#details">{LABEL}</a>
+        </Text>,
+      );
+      const link = screen.getByRole('link', {name: LABEL});
+      const text = link.parentElement as HTMLElement;
+      fireEvent.pointerEnter(text, {pointerType: 'mouse'});
+      await waitFor(
+        () => {
+          expect(showPopover).toHaveBeenCalled();
+        },
+        {timeout: 3000},
+      );
+      expect(text).not.toHaveAttribute('aria-describedby');
+      expect(link).not.toHaveAttribute('aria-describedby');
+      fireEvent.pointerLeave(text, {pointerType: 'mouse'});
+      // Tab focus matches :focus-visible in a browser; jsdom does not model it
+      // for a tab.
+      const realMatches = link.matches.bind(link);
+      vi.spyOn(link, 'matches').mockImplementation((selector: string) =>
+        selector === ':focus-visible' ? true : realMatches(selector),
+      );
+      await user.tab();
+      expect(link).toHaveFocus();
+      // The mounted tooltip still adds nothing to read.
+      expect(text).not.toHaveAttribute('aria-describedby');
+      expect(link).not.toHaveAttribute('aria-describedby');
+      expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(
+        LABEL,
       );
     } finally {
       restore();
@@ -693,6 +732,9 @@ describe('the truncation tooltip mounts on the first interaction', () => {
         },
         {timeout: 3000},
       );
+      // The focused text is announced once: the tooltip adds no description.
+      expect(link).not.toHaveAttribute('aria-describedby');
+      expect(link.parentElement).not.toHaveAttribute('aria-describedby');
     } finally {
       restore();
     }
