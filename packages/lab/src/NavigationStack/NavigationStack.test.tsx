@@ -14,7 +14,7 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {useEffect, useState, type ReactNode} from 'react';
+import {Activity, useEffect, useState, type ReactNode} from 'react';
 import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {List, ListItem} from '@astryxdesign/core/List';
 import {
@@ -209,6 +209,52 @@ describe('NavigationStack', () => {
       traverse(['General'], true);
       expect(screenCard('General')).toHaveAttribute('data-navigation-top');
       expect(document.activeElement).toBe(
+        screen.getByRole('heading', {name: 'General'}),
+      );
+    });
+
+    it('still slides the next push when a platform-animated traversal hides the stack before the mark clears', () => {
+      let showStack: () => void = () => {};
+      function HiddenHarness() {
+        const [isVisible, setIsVisible] = useState(true);
+        const [path, setPath] = useState<string[]>([]);
+        showStack = () => setIsVisible(true);
+        useEffect(() => {
+          // The traversal goes to a route that hides the stack, without
+          // changing the stack's own path.
+          const onPopState = () => setIsVisible(false);
+          window.addEventListener('popstate', onPopState);
+          return () => window.removeEventListener('popstate', onPopState);
+        }, []);
+        return (
+          <Activity mode={isVisible ? 'visible' : 'hidden'}>
+            <NavigationStack
+              label="Settings"
+              root={
+                <NavigationScreen title="Settings">
+                  <Root />
+                </NavigationScreen>
+              }
+              path={path}
+              onPathChange={setPath}
+              getKey={entry => entry}
+              renderScreen={entry => (
+                <NavigationScreen title={entry}>
+                  <Detail entry={entry} />
+                </NavigationScreen>
+              )}
+            />
+          </Activity>
+        );
+      }
+      render(<HiddenHarness />);
+      traverse([], true);
+      act(() => showStack());
+
+      fireEvent.click(screen.getByRole('button', {name: 'General'}));
+
+      // A slid push moves focus to the new title once it settles, not at once.
+      expect(document.activeElement).not.toBe(
         screen.getByRole('heading', {name: 'General'}),
       );
     });
