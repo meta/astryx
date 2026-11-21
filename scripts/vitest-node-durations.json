@@ -1011,6 +1011,7 @@
     "packages/cli/api/theme-edit/theme-sheet-cells.test.mjs": 6.6,
     "packages/cli/api/theme-edit/theme-sheet-modes.test.mjs": 15.8,
     "packages/cli/api/theme-edit/theme-sheet-overlay-open-light.test.mjs": 49.8,
+    "packages/cli/api/theme-edit/theme-sheet-pages-pictures.test.mjs": 2.2,
     "packages/cli/api/theme-edit/theme-shorthand-mode-points-color.test.mjs": 6.9,
     "packages/cli/api/theme-edit/theme-show-sizes-skip-phones.test.mjs": 0.8,
     "packages/cli/api/theme-edit/theme-show-source-stylesheet.test.mjs": 2.2,
