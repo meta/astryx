@@ -276,8 +276,13 @@ export function selectionRangesOf(
 ): ReadonlyArray<AbstractRange> {
   const selection = view?.getSelection();
   // In Chromium, getComposedRanges brings pending styles up to date, also for
-  // an empty selection. So an empty or collapsed selection returns before it.
-  if (selection == null || selection.rangeCount === 0 || selection.isCollapsed) {
+  // an empty selection. So an empty selection, or a collapsed one that no
+  // shadow root can hold, returns before it.
+  if (
+    selection == null ||
+    selection.rangeCount === 0 ||
+    (selection.isCollapsed && !touchesShadowHost(selection))
+  ) {
     return [];
   }
   const composed = composedRangesOf(selection, []);
@@ -289,6 +294,23 @@ export function selectionRangesOf(
     ranges.push(selection.getRangeAt(index).cloneRange());
   }
   return ranges;
+}
+
+/**
+ * Whether a collapsed selection sits beside or on an element with an open
+ * shadow root. Chromium reports a selection inside a shadow root to the
+ * document as collapsed at its host.
+ */
+function touchesShadowHost(selection: Selection): boolean {
+  const node = selection.anchorNode;
+  if (node == null) {
+    return false;
+  }
+  const offset = selection.anchorOffset;
+  return [node, node.childNodes[offset], node.childNodes[offset - 1]].some(
+    candidate =>
+      candidate?.nodeType === 1 && (candidate as Element).shadowRoot != null,
+  );
 }
 
 /**
