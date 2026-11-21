@@ -389,6 +389,22 @@ describe('a top nav link colored for a dark bar', () => {
     );
   }, 240_000);
 
+  it('holds nothing in a mode a one-mode theme never shows', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('omd', {cwd, like: 'neutral'});
+    await themeEditSet('omd', 'background-color', '#222222', {
+      cwd,
+      on: 'app-shell-header',
+    });
+    await themeEditSet('omd', 'color', '#bfbfbf', {cwd, on: 'top-nav-item'});
+    await themeEditSet('omd', 'mode', 'dark-only', {cwd});
+    // (The light link reads on the dark phone menu: no hold is built.)
+    const rules = (cssOf('omd').match(/[^{}]+\{[^}]*\}/g) ?? []).filter(
+      r => /top-nav-item/.test(r) && /drawer/.test(r),
+    );
+    expect(rules.some(r => /revert-layer/.test(r))).toBe(false);
+  }, 240_000);
+
   it('holds nothing for a text variant or a heading level', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('tx', {cwd, like: 'neutral'});
