@@ -14810,6 +14810,19 @@ export function draftAnswer(ctx, env, question) {
     // (A font's name before "font": "Inter font", "SF Pro font".)
     if (/^(?:fonts?|typefaces?|famil(?:y|ies)|serif|sans|mono)$/.test(stop))
       return null;
+    // (The system type as the whole subject, "bold system type", names no
+    // part: it is the theme's text, as "bold system font" is.)
+    const sysWords = (label ?? body)
+      .replace(/[^a-z\s-]/g, ' ')
+      .trim()
+      .split(/\s+/);
+    if (
+      /\bsystem type$/.test(sysWords.join(' ')) &&
+      sysWords.every(
+        w => /^(?:system|type)$/.test(w) || aspectsOf(w).length > 0,
+      )
+    )
+      return null;
     // (Words before the theme's accent or neutral name its color or its
     // product, never a part: "system blue accent", "brand red accent",
     // "Windows 11 accent".)
