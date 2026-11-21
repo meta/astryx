@@ -1276,8 +1276,9 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
       expect(
         g.problems.some(p => p.kind === 'page-image' && p.part === 'card'),
       ).toBe(false);
-      // A gradient written with the theme's own variables over a fill is
-      // read with them: dark stops over a white fallback are the ground.
+      // A gradient whose variables the theme's tokens do not answer (one
+      // set inside the part) over a fill is not read: it is said, never
+      // passed as a sheen over the white fallback.
       const over = await check(
         themeFile('varover', READABLE, {
           card: {
@@ -1290,10 +1291,28 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
         }),
       );
       expect(
-        over.problems.some(
-          p =>
-            (p.part === 'card' && p.kind === 'page-image') ||
-            (p.kind === 'part-text' && p.part === 'card'),
+        over.problems.some(p => p.part === 'card' && p.kind === 'page-image'),
+      ).toBe(true);
+      // The same gradient in the shorthand is no silent pass either.
+      const short = await check(
+        themeFile('shortvar', READABLE, {
+          card: {base: {background: 'linear-gradient(var(--y), var(--y))'}},
+        }),
+      );
+      expect(
+        short.problems.some(p => p.part === 'card' && p.kind === 'page-image'),
+      ).toBe(true);
+      // A bar painted with an opaque gradient is measured at its stops.
+      const gbar = await check(
+        themeFile('gradbar', READABLE, {
+          'app-shell-header': {
+            base: {backgroundImage: 'linear-gradient(#101010, #101010)'},
+          },
+        }),
+      );
+      expect(
+        gbar.problems.some(
+          p => p.kind === 'bar-ground' && p.part === 'app-shell-header',
         ),
       ).toBe(true);
       // A stop built from a variable, or written as one, may be

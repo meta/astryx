@@ -201,6 +201,12 @@ function ownFill(components, part, m, block = null, tokens = null) {
   // One opaque gradient paints over the color under it: text sits on it.
   const read = typeof image === 'string' ? withTokens(image, tokens) : null;
   if (read && opaqueGradient(read)) return read;
+  // A gradient written in the shorthand is read the same way: one opaque
+  // gradient is the fill; any other is not a fill the check can measure.
+  if (typeof color === 'string' && /gradient\(/.test(color)) {
+    const shorthand = withTokens(color, tokens);
+    return opaqueGradient(shorthand) ? shorthand : null;
+  }
   return color;
 }
 
@@ -725,9 +731,18 @@ function barTextProblems(look) {
     for (const m of look.modes) {
       const page = shown(colorIn(`var(${PAGE})`, res[m], m), null);
       const barValue = ownFill(components, part, m, null, res[m]);
-      const bar =
-        barValue != null ? shown(colorIn(barValue, res[m], m), page) : null;
-      if (!bar) continue;
+      // A bar painted with one opaque gradient is measured at each of its
+      // stops: text crosses all of them.
+      const bars = (
+        barValue != null && /gradient\(/.test(barValue)
+          ? colorsIn(barValue)
+          : barValue != null
+            ? [barValue]
+            : []
+      )
+        .map(v => shown(colorIn(v, res[m], m), page))
+        .filter(/** @returns {c is Rgb} */ c => c != null);
+      if (!bars.length) continue;
       for (const p of pairs) {
         const q = p.bg.target;
         // The text sits in the bar: its part is one the bar holds, or the
@@ -757,9 +772,9 @@ function barTextProblems(look) {
               partValue(components, part, [tok], m) ??
               `var(${tok})`)
             : null);
-        const fg = shown(colorIn(text, res[m], m), bar);
+        const fg = shown(colorIn(text, res[m], m), bars[0]);
         if (!fg) continue;
-        const r = ratio(fg, bar);
+        const r = Math.min(...bars.map(b => ratio(fg, b)));
         if (r >= TEXT) continue;
         const key = `ground|${part}|${tok}|${m}`;
         const had = out.get(key);

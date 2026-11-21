@@ -467,11 +467,10 @@ export function paintAppPage(root, use) {
       ],
       protectedFiles: [],
     };
-  // The new stylesheet is classified as an existing file is: a protected
-  // path, or a link in its place, is not written.
-  const cssWhy = fs.lstatSync(css, {throwIfNoEntry: false})?.isSymbolicLink()
-    ? 'a link in its place'
-    : protectedBy(root, css);
+  // The new stylesheet is classified as an existing file is (a link in its
+  // place, or in a folder above it, is protected): a protected path is not
+  // written.
+  const cssWhy = protectedBy(root, css);
   if (cssWhy) {
     const rel = path.relative(root, css);
     return {
