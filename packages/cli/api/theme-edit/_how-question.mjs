@@ -33257,7 +33257,11 @@ function fontIn(cl, question) {
     new RegExp(`(?:^|[\\s,;:])${NAME}\\s+type\\b`, 'g'),
   ]) {
     for (const m of question.matchAll(re)) {
-      const name = m[1].replace(/ (Font|Typeface)$/, '');
+      // ("Font: MS Sans Serif-like pixel sans": a label's name keeps no
+      // likeness suffix.)
+      const name = m[1]
+        .replace(/ (Font|Typeface)$/, '')
+        .replace(/-(?:like|style|esque)$/i, '');
       if (GENERIC.test(name.split(' ')[0]) || OS_FONT.test(name)) continue;
       if (/\stype\b/.test(m[0]) && !/\s/.test(name)) continue;
       // ("NYT-style serif headings"): a name said as like another, or
@@ -33265,7 +33269,7 @@ function fontIn(cl, question) {
       // a look, never the family: the kind said wins.
       if (/-(?:like|style|esque)\b|\stype\b/.test(m[0])) {
         const kindOf = (/** @type {string} */ t) =>
-          /\b(?:mono(?:space)?|code)\b/i.test(t)
+          /\b(?:mono(?:space|spaced)?|code)\b/i.test(t)
             ? 'mono'
             : /\bserif\b/i.test(t) && !/\bsans\b/i.test(t)
               ? 'serif'
@@ -33274,6 +33278,18 @@ function fontIn(cl, question) {
                 : null;
         const said = kindOf(c.replace(name.toLowerCase(), ''));
         if (said && said !== (kindOf(name) ?? 'sans')) continue;
+        // ("Comic Sans type"): a shipped font whose family the name begins
+        // is that font, with its own fallbacks.
+        const shippedFamily = known
+          ? String(FONTS[known]?.[0] ?? OPEN_FONTS[known]?.family ?? '')
+          : '';
+        if (
+          shippedFamily
+            .replace(/"/g, '')
+            .toLowerCase()
+            .startsWith(name.toLowerCase())
+        )
+          continue;
       }
       // ("titles in All Caps", "body text in Sentence Case": a casing said
       // in words is the text's case, never a family.)

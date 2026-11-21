@@ -77,6 +77,15 @@ describe('a family said as like another', () => {
     const nyt = await commandsFor('NYT-style serif headings');
     expect(nyt).not.toMatch(/ font '?NYT'?/);
     expect(nyt).toMatch(/ font serif --on heading/);
+    expect(
+      await commandsFor('Bloomberg-like monospaced numbers in tables'),
+    ).not.toMatch(/Bloomberg/);
+    // (A shipped font the name begins is that font; a label keeps no
+    // likeness suffix.)
+    expect(await commandsFor('Comic Sans type')).toMatch(/ font comic(\s|$)/);
+    expect(await commandsFor('Font: MS Sans Serif-like pixel sans')).toContain(
+      `font 'MS Sans Serif'`,
+    );
     expect(await commandsFor('a sans font')).toMatch(/ font system(\s|$)/);
   }, 240_000);
 });
