@@ -124,4 +124,16 @@ it('a saved sized gradient made darker for one mode is answered for that mode', 
     r => r.text,
   );
   expect(texts.some(t => /cannot be dark mode only/.test(t))).toBe(false);
+  const commands = /** @type {Array<{commands: string[]}>} */ (
+    data.results ?? []
+  )
+    .flatMap(r => r.commands)
+    .map(c => c.replace(/^.*? editor /, ''));
+  expect(
+    commands.some(c =>
+      /^set pd background 'linear-gradient\(#[0-9a-f]{6} 1px, transparent 1px\) 0 0 \/ 24px 24px' --on app-shell-header --mode dark$/.test(
+        c,
+      ),
+    ),
+  ).toBe(true);
 }, 240_000);
