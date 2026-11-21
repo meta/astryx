@@ -12,7 +12,8 @@
  *   tracks. `pr --run-url <url>...`: the regenerated record and `gh`.
  * @output `median` writes each spec's median over those runs under the key,
  *   and the median mean time a test, so one slow or fast run does not move a
- *   time alone; a tracked spec no run timed keeps its recorded time. `coverage` prints how many spec files the record times and, below
+ *   time alone; a tracked spec no run timed keeps its recorded time, and an
+ *   untracked file leaves the record. `coverage` prints how many spec files the record times and, below
  *   nine in ten, an early warning (a workflow warning and a step summary
  *   line); it always exits 0. `pr` opens the refresh pull request, or edits
  *   the open one, so at most one is ever open.
@@ -26,6 +27,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
+import {mergeRecord} from '../../scripts/lib/duration-split.mjs';
 import {coverage, openOrRefresh, percent} from './node-record-refresh.mjs';
 import {DURATIONS, isInteractionSpec} from './playwright-legs.mjs';
 
@@ -69,23 +71,22 @@ export function medianTimes(runs) {
 }
 
 /**
- * The new times, plus the recorded time of each spec file git still tracks
- * that no run timed: a spec added after the latest full run keeps the time a
- * pull request run recorded, so the record does not drop under nine in ten
- * between full runs. A file git no longer tracks is dropped.
- * @param {Record<string, number>} times the runs' times
+ * The record after a refresh: each spec's median over the runs replaces its
+ * time, a spec git still tracks that no run timed keeps its recorded time, and
+ * a file git no longer tracks leaves the record (mergeRecord). Daily full runs
+ * normally time every spec, so the kept times are those no recent full run
+ * measured: one recorded after the latest full run, or every time while the
+ * daily runs fail. The files keep the record's byte order.
  * @param {Record<string, number>} previous the record before this refresh
+ * @param {Record<string, number>[]} runs each run's times
  * @param {string[]} tracked the interaction spec files git tracks
  * @returns {Record<string, number>}
  */
-export function keepUnmeasured(times, previous, tracked) {
-  const kept = {...times};
-  for (const file of tracked)
-    if (kept[file] == null && previous[file] != null)
-      kept[file] = previous[file];
-  return Object.fromEntries(
-    Object.entries(kept).sort(([a], [b]) => (a < b ? -1 : 1)),
-  );
+export function refreshTimes(previous, runs, tracked) {
+  const known = new Set(tracked);
+  return mergeRecord(previous, medianTimes(runs), file => known.has(file), {
+    compare: (a, b) => (a < b ? -1 : a > b ? 1 : 0),
+  });
 }
 
 /** @param {number[]} values */
@@ -159,9 +160,9 @@ function main(args) {
     if (files.length === 0)
       throw new Error('median needs one times file per run');
     const runs = files.map(file => JSON.parse(fs.readFileSync(file, 'utf8')));
-    durations[key] = keepUnmeasured(
-      medianTimes(runs.map(run => run.times)),
+    durations[key] = refreshTimes(
       durations[key] ?? {},
+      runs.map(run => run.times),
       trackedSpecs(),
     );
     // The mean time a test, for a spec with no recorded time: its median too.

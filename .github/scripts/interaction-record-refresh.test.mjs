@@ -17,8 +17,8 @@ import yaml from 'yaml';
 import {
   BRANCH,
   earlyWarning,
-  keepUnmeasured,
   medianTimes,
+  refreshTimes,
   prBody,
   specCoverage,
 } from './interaction-record-refresh.mjs';
@@ -71,20 +71,31 @@ describe('medianTimes', () => {
   });
 });
 
-describe('keepUnmeasured', () => {
-  it('keeps the recorded time of a tracked spec the runs did not time, sorted', () => {
-    // b was added after the latest full run; c is no longer in the tree.
-    expect(
-      keepUnmeasured({a: 5, d: 2}, {a: 4, b: 3, c: 9}, ['a', 'b', 'd']),
-    ).toEqual({a: 5, b: 3, d: 2});
-    expect(Object.keys(keepUnmeasured({d: 2}, {b: 3}, ['b', 'd']))).toEqual([
-      'b',
-      'd',
-    ]);
+describe('refreshTimes', () => {
+  it("replaces each spec's time with its median over the runs", () => {
+    expect(refreshTimes({a: 4}, [{a: 5}, {a: 7}, {a: 6}], ['a'])).toEqual({
+      a: 6,
+    });
   });
 
-  it("lets a run's new time replace the recorded one", () => {
-    expect(keepUnmeasured({a: 5}, {a: 4}, ['a'])).toEqual({a: 5});
+  it('keeps the recorded time of a tracked spec no run timed', () => {
+    // b was timed by hand after the latest full run.
+    expect(refreshTimes({a: 4, b: 3}, [{a: 5}], ['a', 'b'])).toEqual({
+      a: 5,
+      b: 3,
+    });
+  });
+
+  it('drops a file git no longer tracks, recorded or timed by a run', () => {
+    expect(refreshTimes({a: 4, gone: 9}, [{a: 5, renamed: 3}], ['a'])).toEqual({
+      a: 5,
+    });
+  });
+
+  it("keeps the record's byte order", () => {
+    expect(
+      Object.keys(refreshTimes({b: 1, B: 2}, [{a: 3}], ['a', 'b', 'B'])),
+    ).toEqual(['B', 'a', 'b']);
   });
 });
 

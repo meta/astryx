@@ -48,7 +48,7 @@
     "packages/core/src/Field/__tests__/SearchKeyboard.interaction.browser.spec.ts": 6.7,
     "packages/core/src/Field/__tests__/TextFieldFocusTiming.interaction.browser.spec.ts": 24.7,
     "packages/core/src/Indicator/__tests__/BoxHold.interaction.browser.spec.ts": 60.8,
-    "packages/core/src/Indicator/__tests__/MarksFitTheBox.interaction.browser.spec.ts": 3.2,
+    "packages/core/src/Indicator/__tests__/MarksFitTheBox.interaction.browser.spec.ts": 3.3,
     "packages/core/src/Indicator/__tests__/TouchTargets.interaction.browser.spec.ts": 8,
     "packages/core/src/Item/__tests__/ItemSwipeActions.interaction.browser.spec.ts": 128.9,
     "packages/core/src/Layer/__tests__/LayerCloseLayout.interaction.browser.spec.ts": 9.7,
