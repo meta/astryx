@@ -20,16 +20,6 @@
     ]
   ],
   [
-    "neutral grays",
-    "stony",
-    [
-      [
-        "The gray of the theme: surfaces (cards, panels, popovers, mu",
-        ["how neutral"]
-      ]
-    ]
-  ],
-  [
     "warm toned neutral grays",
     "warm",
     [
@@ -273,26 +263,6 @@
           "set plain --color-overlay-hover '#ffffff09' --mode dark"
         ]
       ],
-      [
-        "The gray of the theme: surfaces (cards, panels, popovers, mu",
-        ["how neutral"]
-      ]
-    ]
-  ],
-  [
-    "neutral grays",
-    "creamy",
-    [
-      [
-        "The gray of the theme: surfaces (cards, panels, popovers, mu",
-        ["how neutral"]
-      ]
-    ]
-  ],
-  [
-    "neutral grays",
-    "cream",
-    [
       [
         "The gray of the theme: surfaces (cards, panels, popovers, mu",
         ["how neutral"]
