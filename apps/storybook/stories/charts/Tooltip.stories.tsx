@@ -73,7 +73,7 @@ function TooltipChart({showLineDots = false}: {showLineDots?: boolean}) {
       axes={
         <>
           <ChartAxis position="bottom" />
-          <ChartAxis position="left" tickFormat={currency('$', locale)} />
+          <ChartAxis position="left" formatTick={currency('$', locale)} />
         </>
       }
       height={320}

@@ -70,7 +70,6 @@ const getListFormat = byLocale(
   locale => new Intl.ListFormat(locale, {style: 'long', type: 'conjunction'}),
 );
 
-/** A value that is neither `null` nor `undefined`. */
 type PresentValue = NonNullable<unknown>;
 
 /** Format labels as a conjunction list using the provider locale. */
@@ -119,9 +118,9 @@ export function compactNumber(
  *
  * @example
  * ```
- * <ChartAxis tickFormat={currency('$', locale)} />  // $1.5K
- * <ChartAxis tickFormat={currency('€', locale)} />  // €1.5K
- * <ChartAxis tickFormat={currency('¥', locale)} />  // ¥1.5K
+ * <ChartAxis formatTick={currency('$', locale)} />  // $1.5K
+ * <ChartAxis formatTick={currency('€', locale)} />  // €1.5K
+ * <ChartAxis formatTick={currency('¥', locale)} />  // ¥1.5K
  * ```
  */
 export function currency(

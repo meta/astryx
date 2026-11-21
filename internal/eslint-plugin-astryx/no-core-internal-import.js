@@ -6,7 +6,9 @@
  * internal, gesture, motion and touch-support source. The repo config turns it on for
  * every linted file outside packages/core and packages/lab (the global
  * ignores still leave some scripts unlinted), so only Core and Lab may import
- * them.
+ * them, apart from the subpaths an `allow` option names. Each `allow` entry
+ * is one exact internal subpath; the repo config gives packages/charts
+ * `@astryxdesign/core/internal/calendar-system` and no other.
  *
  * Reported, by `import`, `export … from`, `import()`, `require()` and
  * `typeof import()` (a dynamic import or require named by a string or by a
@@ -17,8 +19,9 @@
  *   - `@astryxdesign/core/gestures`, `@astryxdesign/core/motion` and their
  *     subpaths, and any path into `core/src/internal`, `core/src/gestures`,
  *     `core/src/motion` or `core/src/touch-support`: Core's source, which a
- *     package outside Core and Lab reaches only through public entries
- *     (architecture:react-component-runtime INV13).
+ *     package outside Core and Lab reaches only through Core's package
+ *     entries (architecture:react-component-runtime INV13). An `allow` entry
+ *     never opens these.
  *
  * A custom rule rather than a `no-restricted-imports` block, because flat
  * config overrides a same-named rule per file: a repo-wide block would undo
@@ -38,22 +41,45 @@ const rule = {
     type: 'problem',
     docs: {
       description:
-        "Disallow importing Core's internal subpaths (@astryxdesign/core/internal/*) outside Core and Lab",
+        "Disallow importing Core's internal subpaths (@astryxdesign/core/internal/*) outside Core and Lab, except the exact subpaths an `allow` option names",
     },
-    schema: [],
+    schema: [
+      {
+        type: 'object',
+        properties: {
+          allow: {
+            type: 'array',
+            items: {type: 'string', pattern: '^@astryxdesign/core/internal/'},
+            uniqueItems: true,
+          },
+        },
+        additionalProperties: false,
+      },
+    ],
     messages: {
       internal:
-        "'{{source}}' is one of Core's internal subpaths, reserved for Astryx's own packages (Core and Lab) and outside the compatibility promise. Use Core's public API instead.",
+        "'{{source}}' is one of Core's internal subpaths, reserved for Astryx's own packages (Core, Lab and Charts) and outside the compatibility promise. Use Core's public API instead.",
+      notAllowed:
+        "'{{source}}' is one of Core's internal subpaths that this package may not import. It may import only {{allowed}}. Use Core's public API instead.",
       deep: "'{{source}}' reaches into Core's internal, gesture, motion or touch-support source, which is for Core and Lab only (architecture:react-component-runtime INV13). Use Core's public API instead.",
     },
   },
   create(context) {
+    const allow = context.options[0]?.allow ?? [];
+    const allowed = allow.map(entry => `'${entry}'`).join(', ');
     function check(node, source) {
       if (typeof source !== 'string') {
         return;
       }
       if (INTERNAL.test(source)) {
-        context.report({node, messageId: 'internal', data: {source}});
+        if (allow.includes(source)) {
+          return;
+        }
+        context.report(
+          allow.length > 0
+            ? {node, messageId: 'notAllowed', data: {source, allowed}}
+            : {node, messageId: 'internal', data: {source}},
+        );
       } else if (DEEP.some(pattern => pattern.test(source))) {
         context.report({node, messageId: 'deep', data: {source}});
       }
