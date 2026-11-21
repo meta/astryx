@@ -98,6 +98,24 @@ describe('a state Core paints from an ARIA attribute', () => {
   }, 240_000);
 });
 
+describe('a state a target declares', () => {
+  it('builds an open selector as its expanded state', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('o', {cwd, like: 'neutral'});
+    const {data} = await themeEditHow('selector', {cwd, theme: 'o'});
+    expect(data.states).toContain('expanded');
+    await themeEditSet('o', 'background-color', '#dc2626', {
+      cwd,
+      on: 'selector',
+      state: 'expanded',
+      only: true,
+    });
+    expect(cssOf('o')).toMatch(
+      /\.astryx-selector\[data-expanded="expanded"\]\s*\{\s*background-color: #dc2626/,
+    );
+  }, 240_000);
+});
+
 describe('several states at once', () => {
   it('takes a checked and disabled box as one state, where Core paints it', async ctx => {
     if (needBases(ctx)) return;

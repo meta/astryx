@@ -4428,6 +4428,12 @@ export const probeTheme = defineTheme({
         borderColor: 'hsl(25.9 71% 25%)',
         outlineColor: 'hsl(86.5 79% 25%)',
       },
+      expanded: {
+        backgroundColor: 'hsl(186.9 86% 45%)',
+        color: 'hsl(320.2 92% 12%)',
+        borderColor: 'hsl(290.0 85% 25%)',
+        outlineColor: 'hsl(181.3 73% 25%)',
+      },
     },
     'selector-check': {
       base: {

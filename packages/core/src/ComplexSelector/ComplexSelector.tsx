@@ -84,12 +84,6 @@ registerEnglishFallback(english);
 // runtime's.
 const CONTENT_BLOCK_CAP = '480px';
 
-/**
- * The trigger's own list is open. A press does not scale the box then, so the
- * list anchors to the box at rest.
- */
-const LAYER_OPEN: string = ':has([aria-expanded="true"])';
-
 const styles = stylex.create({
   // The status glyph or info-tip keeps its size when the trigger text is long.
   statusTip: {
@@ -172,21 +166,7 @@ const styles = stylex.create({
       ':focus-within': 'none',
     },
     fontWeight: fontWeightVars['--font-weight-medium'],
-    transitionProperty: {
-      default: 'background-image, background-color, color, opacity, transform',
-      // The press scale goes at once as the list opens.
-      [LAYER_OPEN]: 'background-image, background-color, color, opacity',
-    },
-    transform: {
-      default: 'scale(1)',
-      // A mouse press; under a coarse pointer the touch press model writes
-      // `data-astryx-press` instead (see interactionOverlay.stylex.ts).
-      [`:active:not(${LAYER_OPEN})`]: {
-        default: 'scale(0.98)',
-        '@media (pointer: coarse)': 'scale(1)',
-      },
-      [`[data-astryx-press="on"]:not(${LAYER_OPEN})`]: 'scale(0.98)',
-    },
+    transitionProperty: 'background-image, background-color, color, opacity',
   },
   // Keep the input-family width contract while reusing ghost's borderless paint
   // and the neutral resting fill used by secondary buttons.
@@ -202,27 +182,10 @@ const styles = stylex.create({
       ':focus-within': 'none',
     },
     fontWeight: fontWeightVars['--font-weight-medium'],
-    transitionProperty: {
-      default: 'background-image, background-color, color, opacity, transform',
-      // The press scale goes at once as the list opens.
-      [LAYER_OPEN]: 'background-image, background-color, color, opacity',
-    },
-    transform: {
-      default: 'scale(1)',
-      [`:active:not(${LAYER_OPEN})`]: {
-        default: 'scale(0.98)',
-        '@media (pointer: coarse)': 'scale(1)',
-      },
-      [`[data-astryx-press="on"]:not(${LAYER_OPEN})`]: 'scale(0.98)',
-    },
+    transitionProperty: 'background-image, background-color, color, opacity',
   },
   triggerGhostDisabled: {
     backgroundImage: 'none',
-    transform: {
-      default: 'none',
-      ':active': 'none',
-      '[data-astryx-press="on"]': 'none',
-    },
   },
   // Only what Icon does not already provide: `sm` gives the 16px box and
   // `color="secondary"` the color, but the glyph still must not shrink inside

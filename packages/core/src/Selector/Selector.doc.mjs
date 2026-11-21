@@ -146,7 +146,7 @@ export const docs = {
       {
         className: 'astryx-selector',
         visualProps: ['variant', 'size', 'status'],
-        states: ['disabled', 'readonly'],
+        states: ['disabled', 'readonly', 'expanded'],
       },
       {className: 'astryx-selector-option'},
       {
