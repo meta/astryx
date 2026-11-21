@@ -149,7 +149,10 @@ test('records column-windowing range-plus-commit and no-op scroll timing at 1,00
     // Each range step moves one column pitch, so one column enters and one
     // leaves. The first step starts one pitch before the first sample.
     await scrollColumns(9 * COLUMN_PITCH);
-    const firstWindowed: number[] = [];
+    // The column before the first step, so the check covers every step.
+    const firstWindowed: number[] = [
+      Math.min(...(await mountedColumns()).filter(index => index > 1)),
+    ];
     await page.evaluate(() => window.__rowRelease.startRangeProbe());
     for (let sample = 0; sample < SAMPLES; sample++) {
       await scrollColumns((10 + sample) * COLUMN_PITCH);
@@ -220,7 +223,7 @@ test('records column-windowing range-plus-commit and no-op scroll timing at 1,00
           .map((index, step) => index - firstWindowed[step]),
         'first windowed column per range step',
       )
-      .toEqual(Array.from({length: SAMPLES - 1}, () => 1));
+      .toEqual(Array.from({length: SAMPLES}, () => 1));
     expect
       .soft(noopScroll.length, 'column no-op scroll samples')
       .toBeGreaterThanOrEqual(SAMPLES);
