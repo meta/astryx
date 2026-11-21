@@ -994,6 +994,13 @@ describe('stripe answers keep to the stripe', () => {
     'odd rows #f9f9f9 in every table, even on striped tables',
     'odd rows #f9f9f9 on plain tables and on striped tables',
     'odd rows #f9f9f9 on plain and on striped tables',
+    'odd rows #f9f9f9 on striped tables and on plain tables',
+    'odd rows #f9f9f9 on striped tables, also on plain tables',
+    'odd rows #f9f9f9 on striped tables and every other table',
+    'odd rows #f9f9f9 on striped tables and all other tables',
+    'odd rows #f9f9f9 on striped tables and on every table',
+    'odd rows #f9f9f9 on striped tables and on non-striped tables',
+    'odd rows #f9f9f9 on striped tables and plain tables',
   ])('stays on every table for %s', async question => {
     const {data} = await themeEditHow(question, {cwd, theme: 'q'});
     expect(
@@ -1029,6 +1036,34 @@ describe('stripe answers keep to the stripe', () => {
     ],
     [
       'make all buttons rounder and odd rows #f9f9f9 on striped tables',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables and bold text in every table header',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables, and a 1px border on every table',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables and every table header bold',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables, and every table gets a 1px border',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables and all table headers bold',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables, and all tables get rounded corners',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables and plain tables get a 1px border',
       /'#f9f9f9' --on table-row --when parity:odd --state striped/,
     ],
   ])('keeps the striped scope for %s', async (question, want) => {
