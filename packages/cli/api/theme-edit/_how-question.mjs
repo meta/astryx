@@ -344,15 +344,16 @@ function grayStop(family, stop) {
 }
 
 /**
+ * A plural part said to work in both modes, "headings that work in light
+ * and dark mode"; never after a modal ("must", "should", "could", "needs
+ * to").
+ */
+const PLURAL_BOTH_MODES =
+  /\b(?:that\s+|which\s+)?(?<!\b(?:must|should|shall|will|would|could|can|may|might|to|needs?\s+to|has\s+to|have\s+to)\s+)(?:work(?:\s+well)?|look\s+good|hold\s+up|are\s+usable)\s+in\s+(?:both\s+)?(?:light\s+(?:and|&)\s+dark|dark\s+(?:and|&)\s+light)\s+modes?\b/i;
+/**
  * The palette names among the hues (terracotta, sage, slate…): read when
  * said whole, never a word a typo is corrected to ("state" is no slate).
  */
-/**
- * A plural part said to work in both modes, "headings that work in light
- * and dark mode"; never after "must", "should" or "needs to".
- */
-const PLURAL_BOTH_MODES =
-  /\b(?:that\s+|which\s+)?(?<!\b(?:must|should|shall|will|can|to|needs?\s+to|has\s+to|have\s+to)\s+)(?:work(?:\s+well)?|look\s+good|hold\s+up|are\s+usable)\s+in\s+(?:both\s+)?(?:light\s+(?:and|&)\s+dark|dark\s+(?:and|&)\s+light)\s+modes?\b/i;
 const PALETTE_NAMES = new Set([
   'sky',
   'tan',
@@ -33146,7 +33147,9 @@ export function draftAnswer(ctx, env, question) {
   }
   // (A part said to work in both modes asks that it reads in both: a text
   // color written for both that one mode's page makes hard to read says
-  // so, with that mode, the ratio and the way to keep it readable there.)
+  // so, with that mode, the ratio and the way to keep it readable there.
+  // Only text on the page: a part that draws its own fill, a button,
+  // puts its text on that fill, never on the page.)
   if (modal && PLURAL_BOTH_MODES.test(asked0))
     for (const r of result) {
       /** @type {string[]} */
@@ -33155,7 +33158,10 @@ export function draftAnswer(ctx, env, question) {
         if (
           step.verb !== 'set' ||
           step.mode ||
-          !(step.thing === 'color' || /^--color-text-/.test(String(step.thing)))
+          !(
+            step.thing === 'color' || /^--color-text-/.test(String(step.thing))
+          ) ||
+          (step.on && !textOnlyPart(String(step.on)))
         )
           continue;
         const rgb = parseColor(String(step.value));

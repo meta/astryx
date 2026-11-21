@@ -231,6 +231,15 @@ describe('light and dark said as what the theme must work in', () => {
     expect(links.map(r => r.text).join('\n')).toMatch(
       /#1e3a8a reads \d+\.\d\d:1 on the dark page \(under 4\.5:1\); for dark mode, set a lighter color with --mode dark/,
     );
+    // (Text on a part's own fill, a button's, is not measured against the
+    // page.)
+    const buttons = await results(
+      'fresh',
+      'buttons that work in light and dark mode should have white text',
+    );
+    expect(buttons.map(r => r.text).join('\n')).not.toMatch(
+      /reads \d+\.\d\d:1 on the light page/,
+    );
   }, 300_000);
   it('asks for nothing when "not" comes before it', async () => {
     for (const q of [
