@@ -30,7 +30,11 @@ export type CurveType = keyof typeof CURVES;
 
 export interface LineOptions {
   color?: string;
-  /** How points join. Default `'linear'`: straight segments. */
+  /**
+   * How points join. Default `'linear'`: straight segments, which measured
+   * data keeps so each value reads as a point. `'monotone'` and `'natural'`
+   * draw smoothed values between the points.
+   */
   curve?: CurveType;
   strokeWidth?: number;
   dots?: boolean;

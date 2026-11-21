@@ -16,7 +16,7 @@
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditHow, themeEditNew} from './theme-edit.mjs';
-import {shadowAlphaScaled} from './_how-question.mjs';
+import {shadowAlphaScaled} from './_how-steps.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
