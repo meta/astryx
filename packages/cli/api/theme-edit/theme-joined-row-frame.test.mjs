@@ -459,4 +459,40 @@ describe('a border, radius, shadow or corners on a row of joined controls', () =
     );
     expect(refusal.message).not.toMatch(/corners 4px --on pagination\b/);
   }, 240_000);
+
+  it('says so when a wider border set or undone moves a variant border between the bar and the row', async test => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      test.skip();
+    }
+    await themeEditNew('x', {cwd, like: 'neutral'});
+    await themeEditSet('x', 'background-color', '#f8f9fa', {
+      cwd,
+      on: 'pagination',
+      when: 'variant:pages',
+    });
+    const pages = await themeEditSet('x', 'border', '1px solid #dddddd', {
+      cwd,
+      on: 'pagination',
+      when: 'variant:pages',
+    });
+    expect(pages.data.parts).toEqual(['pagination']);
+    // The plain border is the wider frame: the pages border follows it.
+    const wide = await themeEditSet('x', 'border', '1px solid #cccccc', {
+      cwd,
+      on: 'pagination',
+    });
+    expect(wide.data.notes.join('\n')).toMatch(
+      /border on pagination \(--when variant:pages\) draws on pagination-list now, not on pagination: it goes with the wider pagination frame it narrows[^\n]*to put it back: [^\n]* undo x border --on pagination/,
+    );
+    // Undoing it moves the pages border back onto the filled bar.
+    const undone = await themeEditUndo('x', {
+      cwd,
+      thing: 'border',
+      on: 'pagination',
+    });
+    expect(undone.data.notes.join('\n')).toMatch(
+      /border on pagination \(--when variant:pages\) draws on pagination now, not on pagination-list[^\n]*to put it back: [^\n]* set x border '1px solid #cccccc' --on pagination/,
+    );
+  }, 240_000);
 });

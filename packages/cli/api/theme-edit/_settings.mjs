@@ -15807,7 +15807,7 @@ export function fillsPart(settings, part, scope = {}) {
 }
 
 /** A frame's whole outline: its border (and width, style, color), radius or shadow. */
-const FRAME_THING =
+export const FRAME_THING =
   /^(?:box-shadow|border(?:-(?:width|style|color))?|border(?:-(?:top|bottom)-(?:left|right))?-radius|border-(?:start|end)-(?:start|end)-radius)$/;
 
 /**

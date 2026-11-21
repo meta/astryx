@@ -88,6 +88,8 @@ import {
   closestOf,
   partsOf,
   boxFrameOf,
+  FRAME_THING,
+  fillsPart,
   rowFrameOf,
   undoArgs,
   isCheckNote,
@@ -7840,15 +7842,17 @@ async function changeOnce(
       notes.push(
         `wrote on ${frame}, the row that frames ${s.on}'s controls as one strip, so they draw one box together; to undo it: ${P} undo ${slug} ${undoArgs(s)}`,
       );
-    // (A fill set or undone on a pager changes which box its border,
-    // radius and shadow draw on: the filled bar, or the row that frames
-    // its pages. Each one that moves is said, with the line that puts it
+    // (A fill or a frame setting set or undone on a pager can change which
+    // box its other border, radius and shadow entries draw on: the filled
+    // bar, or the row that frames its pages, as the wider frame they
+    // narrow does. Each one that moves is said, with the line that puts it
     // back.)
     const row = s.on ? rowFrameOf(ctx, s.on) : null;
     if (
       row &&
       !r.unchanged &&
-      /^background/.test(kebab(String(s.thing))) &&
+      (/^background/.test(kebab(String(s.thing))) ||
+        FRAME_THING.test(kebab(String(s.thing)))) &&
       (sub === 'set' || sub === 'undo')
     ) {
       const same = (/** @type {any} */ x) =>
@@ -7874,8 +7878,17 @@ async function changeOnce(
         const from = box(x, settingsBefore);
         const to = box(x, after);
         if (from === to) continue;
+        const scope = {mode: x.mode, when: x.when};
+        const fillMoved =
+          fillsPart(settingsBefore, String(s.on), scope) !==
+          fillsPart(after, String(s.on), scope);
+        const why = fillMoved
+          ? to === s.on
+            ? `${s.on} is filled there, so it is its own box`
+            : `${s.on} shows no fill there, so its pages draw one strip on ${row}`
+          : `it goes with the wider ${s.on} frame it narrows, on ${to}`;
         notes.push(
-          `${x.thing} on ${s.on}${x.when ? ` (--when ${x.when})` : ''}${x.mode ? ` (--mode ${x.mode})` : ''} draws on ${to} now, not on ${from}: ${to === s.on ? `${s.on} is filled, so it is its own box` : `${s.on} shows no fill, so its pages draw one strip on ${row}`}; to put it back: ${putBack}`,
+          `${x.thing} on ${s.on}${x.when ? ` (--when ${x.when})` : ''}${x.mode ? ` (--mode ${x.mode})` : ''} draws on ${to} now, not on ${from}: ${why}; to put it back: ${putBack}`,
         );
       }
     }
