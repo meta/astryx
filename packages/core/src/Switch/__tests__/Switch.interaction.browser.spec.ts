@@ -2178,6 +2178,7 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     // during the stall, so it spans the stall too.
     const FRAME_MS = 1000 / 60;
     const STALL_MS = 3 * FRAME_MS;
+    const MAX_STALLS = 2;
     const HELD_PX = 0.5;
     const perFrame = read.slice(1).map(([time, x], i) => {
       const before = read[i - 1];
@@ -2193,6 +2194,19 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
       return (Math.abs(x - read[i][1]) * FRAME_MS) / Math.max(span, FRAME_MS);
     });
     expect(Math.max(...perFrame), JSON.stringify(read)).toBeLessThan(4);
+    // One frame stall is a CI hiccup and stays tolerated. Repeated stalls in
+    // one run are likely a freeze in the product, so they fail. The count is
+    // written on every run, so the CI summary shows it.
+    const stalls = samples
+      .slice(1)
+      .filter(([time], i) => time - samples[i][0] > STALL_MS).length;
+    test.info().annotations.push({
+      type: 'P14 frame stalls',
+      description: `${stalls} frame gap(s) longer than three frames`,
+    });
+    expect(stalls, 'frame gaps longer than three frames').toBeLessThanOrEqual(
+      MAX_STALLS,
+    );
   }
 
   // The jump check on recorded samples, with no page. A frame stall that
@@ -2235,6 +2249,30 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
         [51 + 1000 / 60, 91],
       ]),
     ).toThrow();
+  });
+
+  // The stall count on recorded samples, with no page. One stall that holds
+  // a moving thumb still passes; three stalls in one run fail, even when each
+  // catch-up alone reads as motion.
+  test('P14 · the jump check tolerates one frame stall and fails on three', () => {
+    const FRAME = 1000 / 60;
+    const run = (stallAt: number[]): [number, number][] => {
+      const samples: [number, number][] = [];
+      let time = 0;
+      let x = 98;
+      for (let i = 0; i < 30; i++) {
+        const stalled = stallAt.includes(i);
+        time += stalled ? 120 : FRAME;
+        // Out for 15 frames, then back: a turn short of the on end.
+        x += (i < 15 ? 1 : -1) * (stalled ? 0 : 1);
+        samples.push([time, x]);
+      }
+      return samples;
+    };
+    expectCaughtWithoutAJump(run([8]));
+    expect(() => expectCaughtWithoutAJump(run([5, 12, 20]))).toThrow(
+      /frame gaps longer than three frames/,
+    );
   });
 
   test('P14 · a second tap mid-travel catches the thumb where it is and sends it back, without a jump', async ({
