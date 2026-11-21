@@ -1076,9 +1076,9 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   each carry an amendment for touch presentations (FR11, FR14, Platform
   support); `design:motion` DR3 and DR5 (draft) are departed from or met as
   FR4 and FR8 state.
-- FR11 gap: a pen press paints at once only on a surface that owns a control's
-  box. On any other surface inside a scroll view, the press controller waits
-  150 ms for a pen as for a finger.
+- FR11 gap: inside a scroll view, the press controller paints a pen press
+  150 ms after pointerdown, as it does a finger's, except on a surface that owns
+  a control's box.
 - FR6 gap: a retarget made inside a page's own frame or ResizeObserver
   callback shows its new curve one frame later.
 - FR6 gap: under a starved compositor, Chromium can show a frame 40 to 60 ms
