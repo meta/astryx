@@ -195,7 +195,7 @@ describe('light and dark said as what the theme must work in', () => {
     expect(headings).not.toContain('set lo mode both');
     expect(headings.join('\n')).not.toMatch(/headings light/);
     // (The heading's text takes the color; nothing reads a weight in it.)
-    expect(headings.join('\n')).toMatch(/--on heading/);
+    expect(headings.join('\n')).toMatch(/color '#1e3a8a' --on heading/);
     expect(headings.join('\n')).not.toMatch(/font-weight|headings bold/);
     // (On a theme that draws both modes, the color is for both: a light
     // one is not kept to light mode.)
@@ -207,6 +207,17 @@ describe('light and dark said as what the theme must work in', () => {
     ).flatMap(r => r.commands);
     expect(cards.join('\n')).toMatch(/'#ffffff' --on card/);
     expect(cards.join('\n')).not.toMatch(/--mode light/);
+    // ("must work" is no plural part said to work: the text is kept to the
+    // mode it reads in, as before.)
+    const must = (
+      await results(
+        'fresh',
+        'text that must work in light and dark mode should be #111111',
+      )
+    ).flatMap(r => r.commands);
+    expect(must.join('\n')).toMatch(
+      /--color-text-primary '#111111' --mode light/,
+    );
   }, 300_000);
   it('asks for nothing when "not" comes before it', async () => {
     for (const q of [
