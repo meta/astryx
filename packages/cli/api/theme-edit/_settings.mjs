@@ -7626,14 +7626,6 @@ export function compileTheme(ctx, data, base) {
             delete mb[k];
       mb[prop] = v;
     } else b[prop] = v;
-    if (/^outline(-style|-width)?$/.test(kebab(prop)) && !s.state)
-      withFocusOutline(s, target);
-    if (
-      kebab(prop) === 'background' &&
-      !s.state &&
-      !/gradient\(|url\(/i.test(String(v))
-    )
-      withOverlayStates(s, target);
     if (kebab(prop) === 'box-shadow' && !s.state) withRingStates(s, target, v);
     // A hover or press shadow on a ringed part: Core draws its hover ring
     // only while the part is not focused, so a focused part keeps its
@@ -7693,144 +7685,12 @@ export function compileTheme(ctx, data, base) {
     }
   };
   /**
-   * A resting background shorthand on a part whose hover and press Core
-   * draws as a background image (a layer over the fill): the shorthand
-   * resets that image too, so the part would show nothing under the
-   * pointer. Each such state gets Core's image back, for each variant that
-   * draws its own, unless the theme sets that state's background itself.
-   * @param {Setting} s @param {string} target
-   */
-  const withOverlayStates = (s, target) => {
-    const at = ctx.C.MAP[target]?.at?.['background-image'] ?? {};
-    const asked = /^variant:(.+)$/.exec(String(s.when ?? ''))?.[1];
-    for (const state of ['hover', 'active']) {
-      if (
-        data.settings.some(
-          y =>
-            y.source === 'property' &&
-            /^background(-image)?$/.test(kebab(y.thing)) &&
-            y.state === state &&
-            (y.when == null || y.when === s.when) &&
-            partsOf(ctx, y).includes(target),
-        )
-      )
-        continue;
-      /** @type {Map<string, string>} */
-      const byVariant = new Map();
-      for (const [k, val] of Object.entries(at)) {
-        const [attrs, ...rest] = k.split(' ');
-        if (!new RegExp(`^:${state}(?![\\w-])`).test(rest.join(' '))) continue;
-        if (/^\s*none\s*$/i.test(String(val))) continue;
-        const variant =
-          attrs
-            .split(',')
-            .map(a => a.split('='))
-            .find(([key]) => key === 'variant')?.[1] ?? '';
-        if (!byVariant.has(variant)) byVariant.set(variant, String(val));
-      }
-      for (const [variant, image] of byVariant) {
-        if (asked && variant && variant !== asked) continue;
-        const when = asked
-          ? s.when
-          : variant
-            ? `variant:${variant}`
-            : undefined;
-        block({...s, state, when}, target).backgroundImage = image;
-      }
-    }
-  };
-  /**
-   * A resting outline on a part that draws its keyboard focus as an
-   * outline would hide that focus (an outline of none, or one of the
-   * theme's that replaces Core's): the part's focus state gets Core's focus
-   * outline back, for each variant that draws its own, unless the theme
-   * sets an outline for that state itself.
-   * @param {Setting} s @param {string} target
-   */
-  const withFocusOutline = (s, target) => {
-    const at = ctx.C.MAP[target]?.at ?? {};
-    const state = focusStateOf(ctx, target) ?? 'focus-visible';
-    // The theme's own outline for the part's focus keeps it as set.
-    if (
-      data.settings.some(
-        y =>
-          y.source === 'property' &&
-          /^outline/.test(kebab(y.thing)) &&
-          /^focus/.test(String(y.state ?? '')) &&
-          partsOf(ctx, y).includes(target),
-      )
-    )
-      return;
-    /** Core's focus values of a property, by the variant each is for ('' for all). @param {string} p */
-    const focusValues = p => {
-      /** @type {Map<string, string>} */
-      const out = new Map();
-      for (const [k, val] of Object.entries(at[p] ?? {})) {
-        const [attrs, ...rest] = k.split(' ');
-        if (!/:focus/.test(rest.join(' '))) continue;
-        const variant =
-          attrs
-            .split(',')
-            .map(a => a.split('='))
-            .find(([key]) => key === 'variant')?.[1] ?? '';
-        if (!out.has(variant)) out.set(variant, String(val));
-      }
-      return out;
-    };
-    // The variants Core draws at all, and whether each draws its focus as an
-    // outline: one that shows focus another way (an input-like selector's
-    // ring) gets no outline.
-    const variants = new Set(
-      Object.values(at)
-        .flatMap(m => Object.keys(m ?? {}))
-        .map(
-          k =>
-            k
-              .split(' ')[0]
-              .split(',')
-              .map(a => a.split('='))
-              .find(([key]) => key === 'variant')?.[1] ?? '',
-        ),
-    );
-    const drawn = ['outline-style', 'outline-width'].some(p =>
-      [...focusValues(p).values()].some(
-        x => !/^(none|0(px)?|hidden)$/i.test(x),
-      ),
-    );
-    if (!drawn) return;
-    for (const p of [
-      'outline-style',
-      'outline-width',
-      'outline-color',
-      'outline-offset',
-    ]) {
-      const vals = focusValues(p);
-      if (!vals.size) continue;
-      const asked = /^variant:(.+)$/.exec(String(s.when ?? ''))?.[1];
-      const counts = new Map();
-      for (const x of vals.values()) counts.set(x, (counts.get(x) ?? 0) + 1);
-      const common = [...counts].sort((a, b) => b[1] - a[1])[0][0];
-      if (asked) {
-        const x = vals.get(asked) ?? vals.get('');
-        if (x != null) block({...s, state}, target)[camel(p)] = x;
-        continue;
-      }
-      const everyVariant =
-        vals.has('') || [...variants].every(x => !x || vals.has(x));
-      if (everyVariant)
-        block({...s, state, when: undefined}, target)[camel(p)] = common;
-      for (const [variant, x] of vals)
-        if (variant && (!everyVariant || x !== common))
-          block({...s, state, when: `variant:${variant}`}, target)[camel(p)] =
-            x;
-    }
-  };
-  /**
    * A resting shadow on a part that draws rings in its box-shadow in some
    * states (an input's hover and focus rings): for each set of the part's
    * renders Core styles apart (a variant, each status), in each state Core
-   * rings any of them in, what Core draws for that set in that state over
-   * the theme's shadow (`<ring>, <shadow>`), so every ring still shows and a set that draws none there (a focused status input) gets the
+   * rings any of them in, the theme's shadow with what Core draws for that
+   * set in that state after it (`<shadow>, <ring>`), so every ring still
+   * shows and a set that draws none there (a focused status input) gets the
    * shadow alone. A shadow of none puts the rings back in their states and
    * keeps a set's own none where the ring of the set it refines would
    * reach it. A write for one set (`--when status:error`) composes that set
@@ -7954,10 +7814,7 @@ export function compileTheme(ctx, data, base) {
           {...s, state, when: set.pairs.join('+') || undefined},
           target,
         );
-        // Core's ring goes first, over the theme's shadow: a shadow with
-        // inset layers of its own (a bevel) would cover a ring drawn under
-        // it, and the state would show nothing.
-        rb.boxShadow = none ? core : coreNone ? v : `${core}, ${v}`;
+        rb.boxShadow = none ? core : coreNone ? v : `${v}, ${core}`;
       }
     }
   };

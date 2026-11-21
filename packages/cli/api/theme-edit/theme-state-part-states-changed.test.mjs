@@ -178,7 +178,7 @@ describe('a resting shadow on inputs', () => {
     });
     const css = cssOf('e');
     expect(css).toMatch(
-      /\.astryx-text-input\[data-status="error"\]:focus-within \{\s*box-shadow: inset 0 0 0 2px var\(--color-accent-muted\), 0 2px 6px #0000004d;/,
+      /\.astryx-text-input\[data-status="error"\]:focus-within \{\s*box-shadow: 0 2px 6px #0000004d, inset 0 0 0 2px var\(--color-accent-muted\);/,
     );
     // The plain field is not written at all.
     expect(css).not.toMatch(/\.astryx-text-input:focus-within/);
