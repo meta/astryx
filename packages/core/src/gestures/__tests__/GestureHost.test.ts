@@ -6581,27 +6581,26 @@ describe('Touch Events from a browser that exposes no ontouchstart', () => {
 describe('every pointer where the primary pointer is fine (spec:AST-094 FR19, FR24, FR43)', () => {
   /** The page listeners live now, by type: what was added and not removed. */
   function pageListeners(): () => string[] {
-    const counts = new Map<string, number>();
-    // The prototype's own methods: the test environment's window forwards
-    // its methods through the global object, which the spy replaces.
-    const add = EventTarget.prototype.addEventListener;
-    const remove = EventTarget.prototype.removeEventListener;
-    for (const target of [document, window] as EventTarget[]) {
-      vi.spyOn(target, 'addEventListener').mockImplementation(
-        (type, listener, options) => {
+    // Plain spies, which pass each call through to the real method.
+    const added = [document, window].map(target =>
+      vi.spyOn(target as EventTarget, 'addEventListener'),
+    );
+    const removed = [document, window].map(target =>
+      vi.spyOn(target as EventTarget, 'removeEventListener'),
+    );
+    return () => {
+      const counts = new Map<string, number>();
+      for (const spy of added) {
+        for (const [type] of spy.mock.calls) {
           counts.set(type, (counts.get(type) ?? 0) + 1);
-          add.call(target, type, listener, options);
-        },
-      );
-      vi.spyOn(target, 'removeEventListener').mockImplementation(
-        (type, listener, options) => {
+        }
+      }
+      for (const spy of removed) {
+        for (const [type] of spy.mock.calls) {
           counts.set(type, (counts.get(type) ?? 0) - 1);
-          remove.call(target, type, listener, options);
-        },
-      );
-    }
-    return () =>
-      [...counts]
+        }
+      }
+      return [...counts]
         .filter(
           ([type, count]) =>
             count > 0 &&
@@ -6611,6 +6610,7 @@ describe('every pointer where the primary pointer is fine (spec:AST-094 FR19, FR
         )
         .map(([type]) => type)
         .sort();
+    };
   }
 
   function fineHost(): GestureHost {
