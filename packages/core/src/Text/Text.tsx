@@ -58,7 +58,7 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {TextClampContext} from './textClampContext';
-import {textDirectionProps, textDirectionStyles} from '../utils/textDirection';
+import {textDirectionProps, truncatedTextStyles} from '../utils/textDirection';
 
 export type {TextType, TextSize};
 
@@ -319,7 +319,7 @@ export function Text({
             textWrap && textWrapStyles[textWrap],
             // Justify (text alignment)
             justify !== 'start' && justifyStyles[justify],
-            cutDirection != null && textDirectionStyles.pageAlign,
+            cutDirection != null && truncatedTextStyles.pageAlign,
             // Capsize
             hasCapsize && capsizeStyles.enabled,
             // Decorations

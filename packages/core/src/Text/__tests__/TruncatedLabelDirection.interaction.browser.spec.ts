@@ -8,7 +8,7 @@
  *   right-to-left page every label (a Latin label reads "Mon…"), on a
  *   left-to-right page every label with no right-to-left letter
  * @position Interaction proof for the cut-label direction
- *   (utils/textDirection.ts textDirectionStyles)
+ *   (utils/textDirection.ts truncatedTextStyles)
  */
 
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
