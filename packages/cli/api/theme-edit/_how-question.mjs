@@ -99,6 +99,7 @@ import {
   partsOf,
   MOMENT_STATES,
   groupsOf,
+  growsWithContent,
   fontsourceSuggestion,
   partComponentDocs,
 } from './_settings.mjs';
@@ -24299,7 +24300,14 @@ export function draftAnswer(ctx, env, question) {
                     };
                   })
                   .filter(x => x.tok);
-                if (!inner.length || inner.some(x => x.tok !== inner[0].tok))
+                // (A control that grows with its content keeps Core's block
+                // padding, so its padding never sets its height.)
+                if (
+                  !inner.length ||
+                  inner.some(
+                    x => x.tok !== inner[0].tok || growsWithContent(ctx, x.k),
+                  )
+                )
                   return null;
                 const px = (/** @type {string} */ t) =>
                   lengthPx(String(resolvedValue(t) || current(t) || ''));
