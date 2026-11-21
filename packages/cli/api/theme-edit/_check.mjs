@@ -157,6 +157,10 @@ import {
   dialValueFits,
   groupsOf,
   onlyFits,
+  growsWithContent,
+  notGrowingWhens,
+  sharedControlHeight,
+  controlHeightValue,
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
 import {
@@ -1012,6 +1016,8 @@ export function storedProblems(ctx, slug, data, skip = '') {
           mode: s.mode,
           only: s.only,
         },
+        false,
+        {saved: true},
       );
     } catch (e) {
       if (!(e instanceof AstryxError)) throw e;
@@ -2393,6 +2399,53 @@ function isShadow(value) {
     );
     return !(lengths[2] ?? '').startsWith('-');
   });
+}
+
+/**
+ * The tokens a control height written as a size token reads on its way
+ * back to that token, ending with it; null when it never reads it. A
+ * custom property's var() resolves on the element that sets it, so only
+ * the tokens set where this one is written are followed: on the controls
+ * group, and on the one control for its own height (where its own tokens
+ * win).
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {{token: string, own: boolean, setting: import('./_settings.mjs').Setting}} asToken
+ * @param {string} value
+ * @returns {string[] | null}
+ */
+function heightTokenLoop(data, asToken, value) {
+  const scopes = asToken.own ? ['controls', asToken.setting.on] : ['controls'];
+  /** @type {Map<string, string>} */
+  const held = new Map();
+  for (const on of scopes)
+    for (const x of data.settings)
+      if (
+        x.source === 'token' &&
+        x.on === on &&
+        !x.when &&
+        !x.state &&
+        (x.mode ?? null) === (asToken.setting.mode ?? null)
+      )
+        held.set(x.thing, String(x.value));
+  held.set(asToken.token, value);
+  /** @param {string} v */
+  const refs = v =>
+    [
+      ...v.matchAll(new RegExp(String.raw`var\(\s*(${CUSTOM_PROPERTY})`, 'gi')),
+    ].map(m => m[1]);
+  const seen = new Set();
+  /** @param {string} v @param {string[]} path @returns {string[] | null} */
+  const walk = (v, path) => {
+    for (const t of refs(v)) {
+      if (t === asToken.token) return [...path, t];
+      if (seen.has(t) || !held.has(t)) continue;
+      seen.add(t);
+      const found = walk(/** @type {string} */ (held.get(t)), [...path, t]);
+      if (found) return found;
+    }
+    return null;
+  };
+  return walk(value, []);
 }
 
 /**
@@ -4260,11 +4313,13 @@ export function coveredPaints(ctx, part, prop) {
  * @param {string | undefined} value
  * @param {SetFlags} flags
  * @param {boolean} [unset] an undo of one setting: only the identity of the setting is checked
- * @param {{reads?: ReadonlySet<string>, element?: Record<string, unknown>}} [scope] `reads`: the custom
+ * @param {{reads?: ReadonlySet<string>, element?: Record<string, unknown>, saved?: boolean}} [scope] `reads`: the custom
  *   properties the theme itself sets where the value is read, which a var()
  *   in it reads as it reads a design token; `element`: the custom properties
  *   set on the element the value is set on, when that is not the theme's
- *   root (a surface's own tokens), the only ones that can loop back to it
+ *   root (a surface's own tokens), the only ones that can loop back to it;
+ *   `saved`: the setting is read from the settings file, not typed in, so a
+ *   rule about what a new `set` writes does not refuse it
  * @returns {import('./_settings.mjs').Setting}
  */
 export function checkSetting(
@@ -4381,7 +4436,7 @@ function keepTypedScope(e, ctx, slug, data, flags) {
  * @param {string | undefined} value
  * @param {SetFlags} flags
  * @param {boolean} [unset]
- * @param {{reads?: ReadonlySet<string>, element?: Record<string, unknown>}} [scope]
+ * @param {{reads?: ReadonlySet<string>, element?: Record<string, unknown>, saved?: boolean}} [scope]
  * @returns {import('./_settings.mjs').Setting}
  */
 function checkTyped(
@@ -4392,7 +4447,7 @@ function checkTyped(
   value,
   flags,
   unset = false,
-  {reads, element} = {},
+  {reads, element, saved = false} = {},
 ) {
   // Any other dial's value pasted with its property name (`font-size:
   // 18px;` for text-size, `color: #e11d48` for accent) is the value: one
@@ -5041,6 +5096,7 @@ function checkTyped(
     unset,
     reads,
     element,
+    saved,
   );
   // A var() with a fallback always gives a value; a name one slip from a
   // design token is noted as a likely typo, and the setting stands.
@@ -5159,6 +5215,7 @@ function fallbackVarTypo(v, TOKENS) {
  * @param {Record<string, unknown>} [element] the custom properties set on
  *   the element the value is set on, when that is not the theme's root (a
  *   surface's own tokens): only these can loop back to it
+ * @param {boolean} [saved] read from the settings file, not typed in
  * @returns {import('./_settings.mjs').Setting}
  */
 function checkSettingAsTyped(
@@ -5171,6 +5228,7 @@ function checkSettingAsTyped(
   unset = false,
   reads = undefined,
   element = undefined,
+  saved = false,
 ) {
   const s = checkOne(
     ctx,
@@ -5182,6 +5240,7 @@ function checkSettingAsTyped(
     unset,
     reads,
     element,
+    saved,
   );
   const why = unset ? null : valueProblem(s);
   if (why)
@@ -5212,6 +5271,7 @@ function checkSettingAsTyped(
  * @param {boolean} unset
  * @param {ReadonlySet<string>} [reads] custom properties the theme sets where the value is read
  * @param {Record<string, unknown>} [element] the custom properties set on the element the value is set on, when that is not the theme's root
+ * @param {boolean} [saved] read from the settings file, not typed in
  * @returns {import('./_settings.mjs').Setting}
  */
 function checkOne(
@@ -5224,6 +5284,7 @@ function checkOne(
   unset,
   reads,
   element = undefined,
+  saved = false,
 ) {
   const {C} = ctx;
   const TARGET = ctx.project.target;
@@ -5464,12 +5525,59 @@ function checkOne(
       );
     // (One predicate with the settings reader: a member of a group that
     // spreads.)
-    if (!onlyFits(s)) {
+    if (!onlyFits(s, ctx)) {
       s.only = undefined;
       if (!unset)
         s.note = `${s.on} is styled on its own already (only the ${AUTO_SPREAD.join(' and ')} groups spread), so --only changes nothing: it is saved without it`;
     }
   }
+  // A control that grows with its content takes its top and bottom padding
+  // from its size's height, so controls keep one height at each size: a
+  // padding of those sides alone changes nothing on it.
+  if (
+    s.on &&
+    /^padding-(top|bottom|block(-start|-end)?)$/.test(kebab(String(thing)))
+  ) {
+    const reached = partsOf(ctx, /** @type {any} */ (s));
+    if (
+      reached.length &&
+      reached.every(
+        t =>
+          growsWithContent(ctx, t, s.when) &&
+          !notGrowingWhens(ctx, t, s.when).length,
+      )
+    )
+      refuse(
+        E.ERR_THEME_NO_EFFECT,
+        `${s.on} keeps Core's top and bottom padding, so a theme's padding never makes it taller than the other controls at its size; ${thing} changes nothing on it. Set its height instead: ${P} set ${slug} height <length> --on ${s.on} (every control's height at that size; add --only for ${s.on} alone).`,
+        {run: [`${HOW} height`]},
+      );
+  }
+  // A control's height is a size every control shares, which Core reads
+  // inside its own sums: a word (auto) cannot be one. Only a height set
+  // writes as a size token is refused (one predicate with set): a variant
+  // that is not a size keeps a plain height. (A saved word height was built
+  // as a plain height, and still is.)
+  const asToken =
+    !unset && !saved
+      ? sharedControlHeight(ctx, {...s, source: 'property'})
+      : null;
+  if (asToken && !controlHeightValue(String(value)))
+    refuse(
+      E.ERR_THEME_BAD_VALUE,
+      `${value} is not a size, and a height on ${s.on} ${asToken.own ? `is written as its own size token (${asToken.token})` : 'is the size every control takes (buttons, inputs, selectors, input groups)'}: give a length, as in ${P} set ${slug} height <length> --on ${s.on}${asToken.own ? ' --only' : ''}.`,
+      {run: [`${HOW} height`]},
+    );
+  // (The height is written as that size's token: a value that reads the
+  // token, itself or through the tokens set on the controls, would read
+  // itself.)
+  const loop = asToken ? heightTokenLoop(data, asToken, String(value)) : null;
+  if (asToken && loop)
+    refuse(
+      E.ERR_THEME_BAD_VALUE,
+      `${value} reads ${loop.length > 1 ? `${loop.slice(0, -1).join(', which reads ')}, which reads ` : ''}${asToken.token}, which is the token this height is written as, so it would read itself: give a length, as in ${P} set ${slug} height <length> --on ${s.on}${s.when ? ` --when ${s.when}` : ''}${asToken.own ? ' --only' : ''}.`,
+      {run: [`${HOW} height`]},
+    );
   // A font role in other letters (Body, CODE) is that role.
   if (
     thing === 'font' &&
@@ -7795,6 +7903,15 @@ function checkOne(
       multipliedTokens(ctx.project).has(thing),
       data.settings.some(x => x.thing === thing),
     );
+    // A control's size token takes what a control's height takes (one
+    // predicate with `set height --on <control>`): no percentage. Only a
+    // typed value is refused; a saved one still opens.
+    if (!saved && /^--size-element-/.test(thing) && !controlHeightValue(v))
+      refuse(
+        E.ERR_THEME_BAD_VALUE,
+        `${v} is not a size a control can take: ${thing} is a control's height, which Core reads inside its own sums, so it takes a length and no percentage, as in ${setLine(slug, thing, '40px', s)}.`,
+        {run: [`${HOW} ${thing}`]},
+      );
     checkCycle(thing, v, TOKENS, data, ctx.project.cwd, s, element);
     // With no part data, what reads the token is unknown: save, unchecked.
     if (ctx.unchecked) return s;

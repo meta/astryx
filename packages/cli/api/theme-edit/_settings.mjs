@@ -42,6 +42,7 @@ import {
   familyRoles,
   partHeightPx,
   censusStatesOf,
+  CONTROL_HEIGHT_PROPS,
 } from './_parts.mjs';
 import {
   hexToOklch,
@@ -116,6 +117,7 @@ import {
   hex,
   isColorValue,
   isSafeValue,
+  isSize,
   parseColor,
   oklabDistance,
   ratio,
@@ -2367,8 +2369,9 @@ function readEntryWords(data, early = /** @type {string[]} */ ([])) {
 
 /**
  * An `only` that means nothing where it is saved (on a part styled on its
- * own, onlyMeans: an editor that took --only there saved it) is read as
- * without it, which is how the build applies it, and said once with the
+ * own, onlyMeans: an editor that took --only there saved it; never one
+ * with the shape of a control's own height, onlyHeightShape, which `set`
+ * keeps on a control) is read as without it, which is how the build applies it, and said once with the
  * line that removes it. Read so, an entry can fall on the place of another
  * (a plain one beside it): the later one is the one the build shows, so it
  * is kept, and the earlier one is named.
@@ -2387,13 +2390,23 @@ function readMeaninglessOnly(data, notes) {
       typeof s.on !== 'string'
     )
       continue;
-    if (onlyMeans(s.on) !== 'own') continue;
+    if (onlyMeans(s.on) !== 'own' || onlyHeightShape(s)) continue;
     delete s.only;
     read.add(s);
-    notes.push(
-      `${describe({...s, value: '?'}).replace(' = ?', '')} was saved with only, which changes nothing there (${s.on} is styled on its own already; only ${AUTO_SPREAD.join(' and ')} spread to their group), so it is read as without it; the next change saves it so`,
-    );
+    notes.push(onlyReadNote(s));
   }
+  dropEarlierOfRead(data, read, notes);
+}
+
+/**
+ * Read without its `only`, an entry can fall on the place of another (a
+ * plain one beside it): the later one is the one the build shows, so it is
+ * kept, and the earlier one is left out and named, never saved twice.
+ * @param {any} data
+ * @param {Set<any>} read the entries read without their `only`
+ * @param {string[]} notes
+ */
+function dropEarlierOfRead(data, read, notes) {
   if (!read.size) return;
   /** @type {Map<string, any>} */
   const last = new Map();
@@ -2414,6 +2427,37 @@ function readMeaninglessOnly(data, notes) {
     notes.push(
       `${describe(s)} sits where a later entry of the same setting does, read without only, and that later one is the one that shows; the earlier one is left out`,
     );
+}
+
+/**
+ * The note for a saved `only` read as without it.
+ * @param {any} s
+ */
+function onlyReadNote(s) {
+  return `${describe({...s, value: '?'}).replace(' = ?', '')} was saved with only, which changes nothing there (${s.on} is styled on its own already; only ${AUTO_SPREAD.join(' and ')} spread to their group), so it is read as without it; the next change saves it so`;
+}
+
+/**
+ * Read each saved `only` the settings reader kept for its height shape
+ * (onlyHeightShape) by the whole rule `set` follows, now that Core is read
+ * (onlyFits): on a part that is no control, a bar, it changes nothing, so
+ * it is read as without it, with the reader's note.
+ * @param {Ctx} ctx
+ * @param {ThemeData} data
+ */
+function readSavedOnly(ctx, data) {
+  /** @type {Set<any>} */
+  const read = new Set();
+  const notes = ENTRY_NOTES.get(data) ?? [];
+  for (const s of data.settings ?? []) {
+    if (!s || s.only !== true || typeof s.on !== 'string') continue;
+    if (onlyMeans(s.on) !== 'own' || onlyFits(s, ctx)) continue;
+    delete s.only;
+    read.add(s);
+    notes.push(onlyReadNote(s));
+  }
+  dropEarlierOfRead(data, read, notes);
+  if (!ENTRY_NOTES.has(data)) ENTRY_NOTES.set(data, notes);
 }
 
 /** @type {WeakMap<object, string[]>} */
@@ -2459,12 +2503,44 @@ export function entryDamage(s) {
 /**
  * Whether `only` fits a setting, as `set --only` takes it and the settings
  * reader keeps it ({@link onlyMeans}): it names one member of a group that
- * spreads (a text input of inputs). A bar's height or padding spreads
- * through no group, so `only` changes nothing there.
+ * spreads (a text input of inputs), or it keeps a control's height on that
+ * one control, where a height is every control's height at its size. A
+ * bar's height or padding spreads through no group, so `only` changes
+ * nothing there.
+ * @param {any} s
+ * @param {Ctx} [ctx]
+ */
+export function onlyFits(s, ctx) {
+  const on = typeof s?.on === 'string' ? s.on : undefined;
+  if (onlyMeans(on) === 'member') return true;
+  return (
+    !!ctx &&
+    !!on &&
+    onlyHeightShape(s) &&
+    !groupsOf(ctx)[on] &&
+    isControlHeight(ctx, s) &&
+    (groupsOf(ctx).controls ?? []).includes(on)
+  );
+}
+
+/**
+ * Whether a setting has the shape of a control's own height, the part of
+ * {@link onlyFits} that needs no Core: a height (or min-height) on a part,
+ * in no state, at the default size or one size. The settings reader, which
+ * runs before Core is read, keeps a saved `only` of this shape, as `set`
+ * keeps it on a control; `set` and the checks hold the rest of the rule.
  * @param {any} s
  */
-export function onlyFits(s) {
-  return onlyMeans(typeof s?.on === 'string' ? s.on : undefined) === 'member';
+export function onlyHeightShape(s) {
+  return (
+    typeof s?.on === 'string' &&
+    CONTROL_HEIGHT_PROPS.test(kebab(String(s.thing ?? ''))) &&
+    // (Only where it is written as that control's own size token: a height
+    // in a state or under a variant that is not a size stays a plain
+    // height, which keeps to its part anyway.)
+    !s.state &&
+    (s.when == null || /^size:(sm|md|lg)$/.test(String(s.when)))
+  );
 }
 
 /**
@@ -4505,7 +4581,7 @@ const groupTables = new WeakMap();
  * Every group `--on` takes, by name: the editor's own groups (inputs,
  * menus, …) and the family roles the census shows (button-like, overlays,
  * option-rows, selected-items, accent-fills, inset-fields, status-surfaces,
- * overlay-headers), each read from the parts' structure.
+ * overlay-headers, controls), each read from the parts' structure.
  * Without a census (no context), the editor's own groups alone.
  * @param {{project?: any, C?: any} | null | undefined} ctx
  * @returns {Record<string, string[]>}
@@ -4544,6 +4620,342 @@ export function membersOf(ctx, name) {
 }
 
 /**
+ * Whether a control grows with its content: its height is a least height
+ * read from a size token (a selector, whose box holds its chosen values),
+ * where a fixed height (a text input) holds whatever pads it.
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @param {string | null} [when] the variant a setting is for (`mode:dropzone`)
+ */
+export function growsWithContent(ctx, part, when = undefined) {
+  if (!(groupsOf(ctx).controls ?? []).includes(part)) return false;
+  const at = /** @type {any} */ (ctx).C?.MAP?.[part]?.at ?? {};
+  // (A part drawn in more than one way, a file input's field and its drop
+  // zone, grows only where it is drawn so: a variant the setting names
+  // keeps to the rules drawn for that value.)
+  const terms = when
+    ? String(when)
+        .split(/[+,]/)
+        .map(t => t.trim().split(':'))
+    : [];
+  /** @param {string} cond */
+  const drawnFor = cond =>
+    terms.every(([axis, value]) => {
+      const named = String(cond)
+        .split(',')
+        .map(c => c.split('='))
+        .find(([a]) => a === axis);
+      return !named || named[1] === value;
+    });
+  /** @param {string} prop */
+  const readsSize = prop =>
+    Object.entries(at[prop] ?? {}).some(
+      ([cond, v]) =>
+        drawnFor(cond) && /var\(\s*--size-element-(sm|md|lg)\b/.test(String(v)),
+    );
+  return readsSize('min-height') && !readsSize('height');
+}
+
+/**
+ * The variants of a control that grows with its content in which it is
+ * drawn without growing (a file input's drop zone, which pads itself), when
+ * it is drawn both ways; none otherwise. A padding set on the whole part
+ * keeps its top and bottom sides there.
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @returns {string[]} each as a `--when` names it (`mode:dropzone`)
+ */
+export function variantsNotGrowing(ctx, part) {
+  if (!growsWithContent(ctx, part)) return [];
+  const attrs = /** @type {any} */ (ctx).C?.MAP?.[part]?.attrs ?? {};
+  for (const [axis, values] of Object.entries(attrs)) {
+    const not = /** @type {unknown[]} */ (values)
+      .map(String)
+      .filter(v => !growsWithContent(ctx, part, `${axis}:${v}`));
+    if (not.length && not.length < /** @type {unknown[]} */ (values).length)
+      return not.map(v => `${axis}:${v}`);
+  }
+  return [];
+}
+
+/**
+ * The `--when` values under which a padding set with `when` reaches a part
+ * drawn without growing: each variant `variantsNotGrowing` names, joined to
+ * `when` when it names another axis (`status:error+mode:dropzone`).
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @param {string} [when]
+ * @returns {string[]}
+ */
+export function notGrowingWhens(ctx, part, when = undefined) {
+  if (when != null && String(when).includes(',')) return [];
+  const axes =
+    when == null
+      ? []
+      : String(when)
+          .split('+')
+          .map(t => t.trim().split(':')[0]);
+  return variantsNotGrowing(ctx, part)
+    .filter(v => !axes.includes(v.split(':')[0]))
+    .map(v => (when == null ? v : `${when}+${v}`));
+}
+
+/**
+ * Whether a setting's property is the height of the controls it is set on:
+ * a height or a block size, or a least height on controls that grow with
+ * their content, whose least height is their height. A least height on a
+ * control of fixed height (a button) only floors it, so it stays that
+ * part's own property.
+ * @param {Ctx} ctx
+ * @param {{thing?: unknown, on?: unknown, when?: unknown}} s
+ */
+export function isControlHeight(ctx, s) {
+  const prop = kebab(String(s.thing ?? ''));
+  if (prop === 'height' || prop === 'block-size') return true;
+  if (prop !== 'min-height' || typeof s.on !== 'string') return false;
+  const controls = new Set(groupsOf(ctx).controls ?? []);
+  const reached = membersOf(ctx, s.on).filter(t => controls.has(t));
+  return (
+    reached.length > 0 &&
+    reached.every(t =>
+      growsWithContent(ctx, t, typeof s.when === 'string' ? s.when : undefined),
+    )
+  );
+}
+
+/** The sizes a control has, each with its own height token. */
+export const CONTROL_SIZES = /** @type {const} */ (['sm', 'md', 'lg']);
+
+/**
+ * The size a control-height setting is for: the size its `--when` names,
+ * else the default size; null for a variant that is not a size.
+ * @param {string | null | undefined} when
+ * @returns {'sm' | 'md' | 'lg' | null}
+ */
+function controlSizeOf(when) {
+  if (when == null) return 'md';
+  const m = /^size:(sm|md|lg)$/.exec(String(when));
+  return m ? /** @type {'sm' | 'md' | 'lg'} */ (m[1]) : null;
+}
+
+/**
+ * A height set on a control is the height every control takes at that
+ * size: buttons, inputs, selectors and input groups share one height at
+ * each size. So the setting a `set` of a height on controls writes is the
+ * size's token on the controls group, at the size its `--when` names (the
+ * default size without one). Null for any other setting: one with
+ * `--only` or a state, on a part that is not a control, or with a variant
+ * that is not a size.
+ * @param {Ctx} ctx
+ * @param {Setting} s
+ * @returns {{setting: Setting, size: 'sm' | 'md' | 'lg', token: string, own: boolean} | null}
+ */
+export function sharedControlHeight(ctx, s) {
+  if (s.source !== 'property' || !s.on || s.state) return null;
+  if (!isControlHeight(ctx, s)) return null;
+  if (!namesControls(ctx, s.on)) return null;
+  // (With --only, one control: its own size token, on it alone.)
+  if (s.only && !(groupsOf(ctx).controls ?? []).includes(s.on)) return null;
+  const size = controlSizeOf(s.when);
+  if (!size) return null;
+  const token = `--size-element-${size}`;
+  if (!(token in (ctx.project.core.tokenDefaults ?? {}))) return null;
+  return {
+    size,
+    token,
+    own: !!s.only,
+    setting: /** @type {Setting} */ ({
+      thing: token,
+      value: String(s.value),
+      source: 'token',
+      on: s.only ? s.on : 'controls',
+      // (A member of a group that spreads keeps to itself with only.)
+      ...(s.only && onlyMeans(s.on) === 'member' ? {only: true} : {}),
+      ...(s.mode ? {mode: s.mode} : {}),
+    }),
+  };
+}
+
+/**
+ * Whether a value can be a control's height: a size as every size token
+ * takes it (isSize: a length in any CSS unit, a variable, env(), or a CSS
+ * function that gives a length), with no percentage. A word (auto,
+ * fit-content) or a percentage cannot be a size token, which Core reads
+ * inside its own sums.
+ * @param {string} v
+ */
+export function controlHeightValue(v) {
+  const x = String(v).trim();
+  // (A percentage is of the box around the control, never a size; one
+  // inside a variable's fallback is the variable's.)
+  if (x.replace(/var\([^)]*\)/g, '').includes('%')) return false;
+  return isSize(x, 'height');
+}
+
+/**
+ * Whether `--on` names controls: a control, the controls group, or a group
+ * whose members are controls (inputs, whose text area sizes itself by its
+ * rows, holds controls too).
+ * @param {Ctx} ctx
+ * @param {string} on
+ */
+export function namesControls(ctx, on) {
+  const controls = new Set(groupsOf(ctx).controls ?? []);
+  if (controls.size < 2) return false;
+  // (A group that mixes controls with parts that are not, a button with a
+  // progress fill, keeps a plain height. The inputs' own parts that are not
+  // controls, a text area, do not count against them.)
+  const members = membersOf(ctx, on);
+  const inputs = new Set(groupsOf(ctx).inputs ?? []);
+  return (
+    members.some(t => controls.has(t)) &&
+    members.every(t => controls.has(t) || inputs.has(t))
+  );
+}
+
+/**
+ * Whether a saved setting sets the height of some controls at a size:
+ * a height (not `--only`, not in a state) that reaches a control, for that
+ * size or for every size, or that size's token on controls. A height on
+ * another part reaches controls when it spreads to them (a text area's
+ * height reaches the inputs drawn alike).
+ * @param {Ctx} ctx
+ * @param {Setting} x
+ * @param {'sm' | 'md' | 'lg'} size
+ */
+export function setsControlHeight(ctx, x, size) {
+  if (x.state || x.only || !x.on) return false;
+  // (A size token on one control is that control's own height, as --only
+  // gives it; on a group it is the height of the controls in it, also on a
+  // group that mixes controls with other parts, such as the button-like
+  // parts a picture's answer wrote it on.)
+  if (x.source === 'token') {
+    const controls = new Set(groupsOf(ctx).controls ?? []);
+    return (
+      !!groupsOf(ctx)[x.on] &&
+      membersOf(ctx, x.on).some(t => controls.has(t)) &&
+      x.thing === `--size-element-${size}` &&
+      x.when == null
+    );
+  }
+  if (
+    x.source !== 'property' ||
+    !isControlHeight(ctx, x) ||
+    (x.when != null && x.when !== `size:${size}`)
+  )
+    return false;
+  const controls = new Set(groupsOf(ctx).controls ?? []);
+  return partsOf(ctx, x).some(t => controls.has(t));
+}
+
+/**
+ * The saved settings that give some controls a height at a size the other
+ * controls do not take: a height on one control (a button 31px tall at
+ * every size while the inputs follow the size tokens), or a size token on
+ * some controls only. Each with its controls' height at each size it
+ * splits and the other controls' heights there, and the line that makes it
+ * every control's height at its size.
+ * @param {Ctx} ctx
+ * @param {ThemeData} data
+ * @param {Record<string, string>} resolved the theme's resolved tokens (one mode)
+ * @returns {Array<{setting: Setting, part: string, reaches: string[], at: Array<{size: string, value: string, others: string[]}>, line: Setting}>}
+ */
+export function controlHeightSplits(ctx, data, resolved) {
+  const controls = groupsOf(ctx).controls ?? [];
+  if (controls.length < 2) return [];
+  /**
+   * A control's height at a size: the last saved setting that sets it,
+   * else the size's token as the theme resolves it.
+   * @param {string} part @param {'sm' | 'md' | 'lg'} size
+   */
+  const heightOf = (part, size) => {
+    const last = data.settings
+      .filter(
+        x => setsControlHeight(ctx, x, size) && partsOf(ctx, x).includes(part),
+      )
+      .at(-1);
+    return {
+      setting: last ?? null,
+      value: String(last?.value ?? resolved[`--size-element-${size}`] ?? ''),
+    };
+  };
+  /** @type {Map<Setting, {part: string, reaches: string[], at: Array<{size: string, value: string, others: string[]}>}>} */
+  const splits = new Map();
+  for (const size of CONTROL_SIZES) {
+    const heights = controls.map(t => ({part: t, ...heightOf(t, size)}));
+    for (const h of heights) {
+      if (!h.setting || h.setting.on === 'controls') continue;
+      // (A saved height that is not a size has no line that joins it:
+      // it is not missed.)
+      if (!controlHeightValue(String(h.setting.value))) continue;
+      const others = [
+        ...new Set(
+          heights
+            .filter(o => o.setting !== h.setting && o.value !== h.value)
+            .map(o => o.value),
+        ),
+      ];
+      if (!others.length) continue;
+      const known = splits.get(h.setting) ?? {
+        part: String(h.setting.on),
+        reaches: heights.filter(o => o.setting === h.setting).map(o => o.part),
+        at: [],
+      };
+      if (!known.at.some(a => a.size === size))
+        known.at.push({size, value: h.value, others});
+      splits.set(h.setting, known);
+    }
+  }
+  return [...splits].map(([setting, v]) => ({
+    setting,
+    ...v,
+    // A height set on a part that is not a control keeps to its part
+    // (--only); one set on controls becomes every control's height. One set
+    // on a group that mixes controls with other parts is joined to the
+    // others on a control it reaches.
+    line: /** @type {Setting} */ ({
+      thing: setting.source === 'token' ? 'height' : setting.thing,
+      value: String(setting.value),
+      source: 'property',
+      on:
+        groupsOf(ctx)[String(setting.on)] &&
+        !namesControls(ctx, String(setting.on))
+          ? (v.reaches[0] ?? String(setting.on))
+          : String(setting.on),
+      ...(namesControls(ctx, String(setting.on)) ||
+      groupsOf(ctx)[String(setting.on)]
+        ? {}
+        : {only: true}),
+      ...(setting.when ? {when: setting.when} : {}),
+      ...(setting.source === 'token'
+        ? {when: `size:${/^--size-element-(\w+)$/.exec(setting.thing)?.[1]}`}
+        : {}),
+      ...(setting.mode ? {mode: setting.mode} : {}),
+    }),
+  }));
+}
+
+/**
+ * Whether a part has the variant values a `--when` names: every term of it
+ * (`variant:secondary`, joined with `+`) is a value of that part's axis.
+ * No `--when` fits every part.
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @param {string | null | undefined} when
+ * @param {RegExp} [sep] what joins the terms (a comma list or + by default)
+ */
+export function partHasWhen(ctx, part, when, sep = /[+,]/) {
+  if (!when) return true;
+  return String(when)
+    .split(sep)
+    .every(term => {
+      const [axis, value] = term.split(':');
+      const vals = /** @type {any} */ (ctx).C?.variantValues?.(part)?.[axis];
+      return Array.isArray(vals) && vals.map(String).includes(value);
+    });
+}
+
+/**
  * The parts a setting styles: the group when `--on` names one, the whole
  * group of an always-alike member unless `--only`, else the one part.
  * @param {Ctx} ctx
@@ -4568,22 +4980,32 @@ export function partsOf(ctx, s) {
   // (Set on one member under a condition of its own, "--on selector
   // --when variant:secondary": only the members that have that value
   // take it; the others have no such variant to show it in.)
-  const takesWhen = (/** @type {string} */ m) => {
-    if (m === s.on || !s.when) return true;
-    return String(s.when)
-      .split(',')
-      .every(term => {
-        const [axis, value] = term.split(':');
-        const vals = /** @type {any} */ (ctx).C?.variantValues?.(m)?.[axis];
-        return Array.isArray(vals) && vals.map(String).includes(value);
-      });
-  };
+  // (A setting under conditions joined with + keeps to its own part, as
+  // before: only a comma list reaches the others that have each value.)
+  const takesWhen = (/** @type {string} */ m) =>
+    m === s.on || partHasWhen(ctx, m, s.when, /,/);
+  // A height set on a member that is not a control (a text area, which
+  // sizes itself by its rows) never reaches the controls: they take their
+  // height from the size tokens they share.
+  const controls = CONTROL_HEIGHT_PROPS.test(kebab(String(s.thing)))
+    ? new Set(groupsOf(ctx).controls ?? [])
+    : null;
+  // (A height on a part that is not a control, in a group that holds
+  // controls, stays on that part: a text area's rows are not a complex
+  // selector's. A group with no controls, the checks, spreads it as any
+  // other property.)
+  const keepsOwnHeight = (/** @type {string} */ m) =>
+    !controls ||
+    controls.has(String(s.on)) ||
+    m === s.on ||
+    !(groupsOf(ctx)[fam ?? ''] ?? []).some(x => controls.has(x));
   if (fam && onlyMeans(s.on) === 'member' && !s.only)
     return spread(
       (groupsOf(ctx)[fam] ?? [])
         .filter(has)
         .filter(m => drawnAlike(ctx, s, m))
-        .filter(takesWhen),
+        .filter(takesWhen)
+        .filter(keepsOwnHeight),
     );
   return [s.on];
 }
@@ -8069,6 +8491,25 @@ export function compileTheme(ctx, data, base) {
           ))
             if (!new RegExp(`var\\(\\s*${tok}\\s*[,)]`).test(String(s.value)))
               putComp(s, t, tok, s.value);
+        // A control that grows with its content takes its top and bottom
+        // padding from its size's height, so it keeps the height the other
+        // controls share: only the inline sides of a padding reach it.
+        if (
+          /^padding(-|$)/.test(kebab(s.thing)) &&
+          growsWithContent(ctx, t, s.when)
+        ) {
+          const sides = paddingSides(kebab(s.thing), String(s.value));
+          for (const [x, v] of Object.entries(sides))
+            if (/^(left|right|inline-(start|end))$/.test(x))
+              putComp(s, t, camel(`padding-${x}`), v);
+          // (Where it is drawn without growing, a padding on the whole part
+          // keeps its top and bottom sides.)
+          for (const when of notGrowingWhens(ctx, t, s.when))
+            for (const [x, v] of Object.entries(sides))
+              if (!/^(left|right|inline-(start|end))$/.test(x))
+                putComp({...s, when}, t, camel(`padding-${x}`), v);
+          continue;
+        }
         // A padding on a part whose box reads Core's padding variables is
         // resolved with the rest of that part's padding, below.
         if (padVars(t) && /^padding(-|$)/.test(kebab(s.thing))) {
@@ -15168,11 +15609,13 @@ export function savedStateRead(ctx, s) {
 /**
  * Read each saved entry's state on a part in place, as savedStateRead
  * reads it, with a note: what a change does before it saves the settings,
- * so the file then holds the part's own spelling.
+ * so the file then holds the part's own spelling. A saved `only` is read
+ * by the whole --only rule first (readSavedOnly).
  * @param {Ctx} ctx
  * @param {ThemeData} data
  */
 export function readSavedStates(ctx, data) {
+  readSavedOnly(ctx, data);
   for (const s of data.settings ?? []) {
     const read = savedStateRead(ctx, s);
     const was = SAVED_STATE.get(s) ?? s?.state;
