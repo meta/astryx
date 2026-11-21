@@ -2006,11 +2006,13 @@ const TONE_WORDS = new Set([
  * with a purple tint" is the tint's hue; "blush pink everything" is the
  * page. Never a theme of one mode, or an accent. The mode stays said
  * first, so a clause after it keeps that mode ("dark mode is plum, gold
- * buttons"). Only a color said by
- * itself, said at the start of its clause (or of a line or a list item)
- * and ending it, is read so: a
- * phrase with a part, role or token word ("a red accent", "blue links", "red for errors"), one a
- * "with", "and" or "but" goes on from, and a gray, are left as said.
+ * buttons"). Only a color said by itself, said at the start of its clause
+ * (or of a line or a list item, or after a comma and an "and"), is read
+ * so. A "with", "and" or "but" after it that says more ("cream with blue
+ * buttons", "navy and light mode is cream") is a clause of its own; one
+ * that only adds a color ("navy and white") is left as said. A phrase
+ * with a part, role or token word ("a red accent", "blue links", "red for
+ * errors"), and a gray, are left as said.
  * @param {string} question
  * @param {(word: string) => boolean} isHue
  * @param {(word: string) => boolean} isShade the color reader's shade words
@@ -2030,10 +2032,39 @@ export function colorsSaidForPages(question, isHue, isShade) {
   const colorAlone = words =>
     wordsOf(words).some(hue) &&
     wordsOf(words).every(w => hue(w) || isShade(w) || TONE_WORDS.has(w));
-  return question
-    .replace(
-      /(^\s*(?:[-*•]\s+)?|[,.;!\n]\s*(?:[-*•]\s+)?)(dark|light)[- ]mode\s+(?:is|goes|should\s+(?:be|go)|becomes|turns|gets)\s+(?:a\s+|an\s+)?((?:(?!with\b|and\b|but\b)[a-z-]+\s*?){1,4}?)(?:\s+with\s+(?:a\s+)?([a-z]+)\s+tint(?:ed)?)?(?=\s*[,.;!\n]|\s*$)/gi,
-      (m, lead, mode, phrase, tint) => {
+  /**
+   * Whether what a "with", "and" or "but" after the color goes on to says
+   * more than one more color: a part, a role, a look, or the other mode.
+   * @param {string} rest the ask after the "with", "and" or "but"
+   */
+  const saysMore = rest => {
+    const said = /^\s+([^,.;!\n]*)/.exec(rest)?.[1];
+    if (said == null) return false;
+    if (/\b(?:dark|light)[- ]mode\b/i.test(said)) return true;
+    return wordsOf(said).some(
+      w =>
+        !isHue(w) &&
+        !isShade(w) &&
+        !TONE_WORDS.has(w) &&
+        !/^(?:the|some)$/.test(w),
+    );
+  };
+  /** One pass of the mode rule. @param {string} text */
+  const modePages = text =>
+    text.replace(
+      /(^\s*(?:[-*•]\s+)?|[,.;!\n]\s*(?:(?:and|but)\s+)?(?:[-*•]\s+)?)(dark|light)[- ]mode\s+(?:is|goes|should\s+(?:be|go)|becomes|turns|gets)\s+(?:a\s+|an\s+)?((?:(?!with\b|and\b|but\b)[a-z-]+\s*?){1,4}?)(?:\s+with\s+(?:a\s+)?([a-z]+)\s+tint(?:ed)?)?(?:(?=\s*[,.;!\n]|\s*$)|(\s+(?:with|and|but))(?=\s))/gi,
+      (m, lead, mode, phrase, tint, more, at, whole) => {
+        const rest = String(whole).slice(Number(at) + m.length);
+        if (more && !saysMore(rest)) return m;
+        // (What follows is a clause of its own in the same mode, said
+        // again, "light mode: page cream, light mode: blue buttons", so a
+        // look said there, "more contrast", is the theme's, never the
+        // page's; one that names the other mode starts its own.)
+        const after = !more
+          ? ''
+          : /^\s+(?:dark|light)[- ]mode\b/i.test(rest)
+            ? ','
+            : `, ${mode} mode:`;
         // (With a tint, the tint gives the hue; the rest is tone words.)
         const said = tint
           ? colorAlone(String(tint)) &&
@@ -2042,13 +2073,15 @@ export function colorsSaidForPages(question, isHue, isShade) {
             )
           : colorAlone(String(phrase));
         return said
-          ? `${lead}${mode} mode: page ${String(tint ?? phrase).trim()}`
+          ? `${lead}${mode} mode: page ${String(tint ?? phrase).trim()}${after}`
           : m;
       },
-    )
-    .replace(
-      /(^\s*(?:[-*•]\s+)?|[,.;!\n]\s*(?:[-*•]\s+)?)((?:[a-z]+\s+)?[a-z]+(?:\s+[a-z]+)?)\s+everything\b/gi,
-      (m, lead, color) =>
-        colorAlone(String(color)) ? `${lead}${color} page` : m,
     );
+  // (Twice: a clause the first pass closes, "navy, light mode is cream",
+  // lets the clause after it start.)
+  return modePages(modePages(question)).replace(
+    /(^\s*(?:[-*•]\s+)?|[,.;!\n]\s*(?:[-*•]\s+)?)((?:[a-z]+\s+)?[a-z]+(?:\s+[a-z]+)?)\s+everything\b/gi,
+    (m, lead, color) =>
+      colorAlone(String(color)) ? `${lead}${color} page` : m,
+  );
 }
