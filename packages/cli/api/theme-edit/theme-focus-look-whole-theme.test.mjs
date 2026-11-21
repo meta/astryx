@@ -82,7 +82,7 @@ describe('the focus dial', () => {
     await themeEditSet('s', 'box-shadow', bevel, {cwd, on: 'inputs'});
     await themeEditSet('s', 'focus', 'glow', {cwd});
     expect(cssOf('s')).toContain(
-      `.astryx-text-input:focus-within {\n    box-shadow: ${GLOW}, ${bevel};`,
+      `.astryx-text-input:focus-within {\n    box-shadow: ${bevel}, ${GLOW};`,
     );
   }, 240_000);
 
