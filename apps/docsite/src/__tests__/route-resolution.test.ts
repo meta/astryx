@@ -114,6 +114,7 @@ describe('route resolution', () => {
         'cli-experimental-share-a-page',
         'cli-host-entry',
         'cli-skill-places',
+        'cli-visualization-charting',
         'global',
         'internationalization',
         'is-my-code-good',
