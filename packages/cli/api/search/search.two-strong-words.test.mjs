@@ -93,7 +93,7 @@ describe('the every-word tier in search', () => {
   it('counts the start of a word of its own name as a strong word', () => {
     const folding = entry('component', 'ZentaFoldablePanel', {
       keywords: ['panel'],
-      description: 'Tucks its content away.',
+      description: 'Can fold its content away.',
     });
     const view = rankLexical(
       'fold panel',

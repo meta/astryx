@@ -334,7 +334,7 @@ export function scoreQuery(
   // stays on the token sum below an exact hit on one word. In search's
   // reading (`ownEvidence`), an entry that is not a doc needs two strong
   // words: a hit of keyword strength, or a word of its own name, display
-  // name or title. One strong word and a mention of the others is a match on
+  // name or title, or the start of one. One strong word and a mention of the others is a match on
   // that word, not on the ask. A doc answers in prose, so it keeps the bar
   // of one.
   //
