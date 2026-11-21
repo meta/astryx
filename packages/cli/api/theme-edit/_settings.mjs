@@ -10664,6 +10664,12 @@ export async function resolvedTokens(ctx, slug) {
         if (k.startsWith('--') && typeof v === 'string')
           (parts[target] ??= {})[k] = v;
   Object.defineProperty(out, 'parts', {value: parts, enumerable: false});
+  // The part styles the built theme gives (a border, a shadow), as it
+  // writes them: what is drawn, whatever setting or rule made it.
+  Object.defineProperty(out, 'components', {
+    value: t?.components ?? {},
+    enumerable: false,
+  });
   return out;
 }
 
@@ -13082,6 +13088,17 @@ function floatingEdgeProblems(ctx, data, res, base) {
     return k == null ? null : String(at[k]);
   };
   const surfaces = last('', /^surfaces$/)?.value ?? null;
+  // The panels that float over the page: the known ones, and every part
+  // the part data draws with the popover's fill (an open list, a context
+  // menu).
+  const popoverFilled = new Set(
+    Object.keys(map).filter(t =>
+      Object.values(map[t]?.at?.['background-color'] ?? {}).some(v =>
+        /var\(\s*--color-background-popover\s*\)/.test(String(v)),
+      ),
+    ),
+  );
+  const floating = [...new Set([...FLOATING_PANELS, ...popoverFilled])];
   // A part the theme fills that sits on the page (an info banner made
   // beige on a cream page) gets the same look, as a note: it may sit on
   // the page by design, but a fill that barely differs from the page
@@ -13099,14 +13116,29 @@ function floatingEdgeProblems(ctx, data, res, base) {
         )
         .flatMap(x => partsOf(ctx, x)),
     ),
-  ].filter(t => !FLOATING_PANELS.includes(t));
+  ].filter(t => !floating.includes(t));
   /** @type {ThemeProblem[]} */
   const out = [];
-  for (const t of [...FLOATING_PANELS, ...filled]) {
-    const floats = FLOATING_PANELS.includes(t);
+  for (const t of [...floating, ...filled]) {
+    const floats = floating.includes(t);
     if (!ctx.project.target.has(t) || !map[t]) continue;
-    // Its edge as the theme draws it: a border or a shadow of its own, the
-    // surfaces dial's, else Core's (and the base theme's) at rest.
+    // Its edge as the theme draws it: the border the built theme writes on
+    // it at rest (from any setting or rule), a border or a shadow of its
+    // own, the surfaces dial's, else Core's (and the base theme's) at rest.
+    const built = /** @type {any} */ (res).components?.[t]?.base ?? {};
+    const builtBorder = [
+      built.border,
+      built.borderWidth != null || built.borderStyle != null
+        ? `${built.borderWidth ?? '1px'} ${built.borderStyle ?? 'solid'}`
+        : null,
+    ].find(v => v != null);
+    if (
+      builtBorder != null &&
+      !/(^|\s)(none|hidden)(\s|$)|^0(px)?(\s|$)/.test(
+        String(builtBorder).trim(),
+      )
+    )
+      continue;
     const borderSet = last(t, /^border(-style|-width)?$/);
     const border = borderSet
       ? !/(^|\s)(none|hidden)(\s|$)|^0(px)?(\s|$)/.test(String(borderSet.value))
@@ -13158,7 +13190,34 @@ function floatingEdgeProblems(ctx, data, res, base) {
       const fill = parseColor(read(fillValue, t, mode));
       const page = parseColor(String(res[mode]['--color-background-body']));
       if (!fill || !page || alphaOf(read(fillValue, t, mode)) < 1) continue;
-      const r = ratio(fill, page);
+      // (A panel drawn with the popover's fill, an open list or a menu,
+      // opens over the page or over what sits on it, a surface or a card:
+      // it needs an edge against each. The others, a dialog over its
+      // scrim, are measured on the page.)
+      const opensOver = popoverFilled.has(t);
+      const under = opensOver
+        ? [
+            ['the page', page],
+            [
+              'a surface',
+              parseColor(read('var(--color-background-surface)', t, mode)),
+            ],
+            [
+              'a card',
+              parseColor(read('var(--color-background-card)', t, mode)),
+            ],
+          ].filter(([, c]) => c)
+        : [['the page', page]];
+      const [where, ground] =
+        /** @type {[string, [number, number, number]]} */ (
+          under.reduce((a, b) =>
+            ratio(fill, /** @type {any} */ (b[1])) <
+            ratio(fill, /** @type {any} */ (a[1]))
+              ? b
+              : a,
+          )
+        );
+      const r = ratio(fill, ground);
       if (r >= FLOATING_SHOWS) continue;
       // A part filled exactly as the page (the app frame painted the page
       // color) is meant to be the page: nothing to see by.
@@ -13167,7 +13226,7 @@ function floatingEdgeProblems(ctx, data, res, base) {
         floats
           ? {
               key: `floating|${t}|${mode}`,
-              text: `the ${t} (${hex(fill)}) is ${ratioWords(r)}:1 on the page (${hex(page)}) in ${mode}, with no border or shadow: a panel floating over the page has no edge to be seen by`,
+              text: `the ${t} (${hex(fill)}) is ${ratioWords(r)}:1 on ${where} (${hex(ground)}) in ${mode}, with no border or shadow: a panel floating over it has no edge to be seen by`,
               fix: `${P} set ${data.name} border '1px solid var(--color-border)' --on ${t}`,
             }
           : {

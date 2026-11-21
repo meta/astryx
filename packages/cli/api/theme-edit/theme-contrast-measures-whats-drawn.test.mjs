@@ -3,8 +3,10 @@
 /**
  * @file Contrast is measured on the color drawn under the text: a
  * see-through fill over the region it sits in (a top nav item in a
- * translucent top bar), never over the bare page; and a fill color and
- * its on-color set inside a part are measured as that part draws them.
+ * translucent top bar), never over the bare page; a fill color and its
+ * on-color set inside a part are measured as that part draws them; and a
+ * floating panel drawn with the popover's fill needs an edge against the
+ * page and what sits on it.
  */
 
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
@@ -107,6 +109,51 @@ describe('contrast measures what is drawn', () => {
           /^inside app-shell-header/.test(p.problem),
         ),
       ).toEqual([]);
+    },
+    T,
+  );
+
+  it(
+    'names an open list or menu with no edge against the page or a surface',
+    async () => {
+      if (unbuilt) return;
+      await themeEditNew('sf', {cwd, like: 'neutral'});
+      for (const tok of ['--shadow-low', '--shadow-med', '--shadow-high'])
+        await themeEditSet('sf', tok, 'none', {cwd});
+      const open = texts(await themeEditShow('sf', {cwd})).filter(p =>
+        /with no border or shadow: a panel floating over it/.test(p.problem),
+      );
+      for (const part of ['popover', 'context-menu', 'multi-selector-popup'])
+        expect(
+          open.find(p => p.problem.startsWith(`the ${part} `)),
+          part,
+        ).toMatchObject({
+          problem: expect.stringMatching(
+            / on a surface \(#[0-9a-f]{6}\) in light/,
+          ),
+          fix: expect.stringMatching(
+            new RegExp(
+              ` set sf border '1px solid var\\(--color-border\\)' --on ${part}$`,
+            ),
+          ),
+        });
+      // A border the built theme draws on a panel is its edge, whatever
+      // wrote it; one taken away again is not.
+      await themeEditSet('sf', 'border', '1px solid var(--color-border)', {
+        cwd,
+        on: 'popover',
+      });
+      const edged = texts(await themeEditShow('sf', {cwd}));
+      expect(edged.some(p => p.problem.startsWith('the popover '))).toBe(false);
+      expect(edged.some(p => p.problem.startsWith('the context-menu '))).toBe(
+        true,
+      );
+      await themeEditSet('sf', 'border', 'none', {cwd, on: 'popover'});
+      expect(
+        texts(await themeEditShow('sf', {cwd})).some(p =>
+          p.problem.startsWith('the popover '),
+        ),
+      ).toBe(true);
     },
     T,
   );
