@@ -90,8 +90,7 @@ export function gitGlobalConfig(env = process.env, home = os.homedir()) {
  * Points the home folder and every per-user folder setting at `home`, and
  * the temp folder at `tmp`, and unsets the package managers' own folder
  * settings, so pnpm, corepack, Yarn and Bun keep their folders in `home`, and
- * npm its cache. npm's global folder and global configuration are read in
- * place, where Node is installed.
+ * npm its cache.
  * Playwright still finds the browsers the developer installed, and git its
  * global configuration: each reads them in place and writes nothing there.
  * The temp folder must not hold `home`: the CLI takes no scratch copy in a
