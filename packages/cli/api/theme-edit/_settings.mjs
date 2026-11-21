@@ -16080,15 +16080,32 @@ function partTokenValues(css) {
 }
 
 /**
+ * The parts Core draws in its own scheme whatever the theme's mode (a
+ * toast, a lightbox, a scrim), with every part they hold: where a one-mode
+ * theme's other mode is seen.
+ * @param {Ctx} ctx
+ * @returns {Set<string>}
+ */
+function otherModeParts(ctx) {
+  const map = /** @type {Record<string, any>} */ (ctx.C.MAP);
+  const out = new Set(Object.keys(map).filter(t => map[t]?.media));
+  for (const t of out) for (const held of map[t]?.contains ?? []) out.add(held);
+  return out;
+}
+
+/**
  * Each part token whose built value changed between two stylesheets, as a
  * changedTokens line: the property, the rule it is set on, and each mode
  * whose half moved (the theme's own mode first).
  * @param {string | null} before
  * @param {string | null} after
  * @param {Array<'light' | 'dark'>} modes the modes the theme has
+ * @param {Set<string>} [otherDrawn] the parts Core draws in a mode the
+ *   theme does not have (a toast, a lightbox, and what they hold): a rule
+ *   on another part changes nothing seen in that mode, so it is left out
  * @returns {string[]}
  */
-function partTokenChanges(before, after, modes) {
+function partTokenChanges(before, after, modes, otherDrawn = new Set()) {
   if (!before || !after) return [];
   const was = partTokenValues(before);
   const now = partTokenValues(after);
@@ -16118,10 +16135,13 @@ function partTokenChanges(before, after, modes) {
     );
     const one =
       sides.length === 2 && ha.light === ha.dark && hb.light === hb.dark;
-    for (const m of one ? [order[0]] : sides)
+    const part = /\.astryx-([a-z][\w-]*)/.exec(selector)?.[1] ?? '';
+    for (const m of one ? [order[0]] : sides) {
+      if (!one && !modes.includes(m) && !otherDrawn.has(part)) continue;
       out.push(
         `${prop} on ${where}${one ? '' : ` (${m})`}: ${ha[m] ?? 'unset'} -> ${hb[m] ?? 'unset'}`,
       );
+    }
   }
   return out;
 }
@@ -16505,6 +16525,23 @@ export async function commitTheme(
       const order = modes.includes('light')
         ? ['light', 'dark']
         : ['dark', 'light'];
+      // A one-mode theme draws the other mode only where Core draws it
+      // (a toast, a lightbox): a change there is seen only in what those
+      // parts and their insides read, or in a token set for that mode.
+      /** @type {Set<string> | null} */
+      let otherSeen = null;
+      const seenInOther = (
+        /** @type {string} */ k,
+        /** @type {string} */ m,
+      ) => {
+        otherSeen ??= new Set(
+          [...otherModeParts(ctx)].flatMap(t => [...ctx.C.allReads(t)]),
+        );
+        return (
+          otherSeen.has(k) ||
+          data.settings.some(s => s.thing === k && s.mode === m)
+        );
+      };
       for (const m of order) {
         const own = modes.includes(m);
         for (const k of Object.keys(res[m])) {
@@ -16512,6 +16549,7 @@ export async function commitTheme(
           if (same(resBefore[m][k], res[m][k])) continue;
           const modal = MODAL.has(ctx.C.typeOf(k));
           if (!modal && m === 'dark') continue;
+          if (modal && !own && !seenInOther(k, m)) continue;
           // A one-mode theme writes its mode on both sides: the other side
           // that moved with it says nothing new. A setting for the other
           // mode applies where Core draws that mode, so its change is named.
@@ -16532,7 +16570,9 @@ export async function commitTheme(
     // on a selected row, a dropzone) moves with the dials too: each one
     // whose built value changed is listed, by its rule, in each mode.
     if (resBefore)
-      changedParts.push(...partTokenChanges(cssBefore, cssNow(), modes));
+      changedParts.push(
+        ...partTokenChanges(cssBefore, cssNow(), modes, otherModeParts(ctx)),
+      );
     const found = await contrastProblems(ctx, data, res);
     problemList = found.filter(x => !isCheckNote(x));
     problems = problemList.map(x => x.text);

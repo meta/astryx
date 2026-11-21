@@ -4,9 +4,10 @@
  * @file Contrast is measured on the color drawn under the text: a
  * see-through fill over the region it sits in (a top nav item in a
  * translucent top bar), never over the bare page; a fill color and its
- * on-color set inside a part are measured as that part draws them; and a
+ * on-color set inside a part are measured as that part draws them; a
  * floating panel drawn with the popover's fill needs an edge against the
- * page and what sits on it.
+ * page and what sits on it; and a one-mode theme lists other-mode changes
+ * only where Core draws that mode.
  */
 
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
@@ -154,6 +155,34 @@ describe('contrast measures what is drawn', () => {
           p.problem.startsWith('the popover '),
         ),
       ).toBe(true);
+    },
+    T,
+  );
+
+  it(
+    'lists a dark-only theme light changes only where Core draws light',
+    async () => {
+      if (unbuilt) return;
+      await themeEditNew('dk', {cwd, like: 'neutral'});
+      await themeEditSet('dk', 'mode', 'dark-only', {cwd});
+      const r = /** @type {any} */ (
+        await themeEditSet('dk', 'neutral', '#78716c', {cwd})
+      ).data;
+      const light = [...r.changedTokens, ...r.changedPartTokens].filter(
+        (/** @type {string} */ l) => / \(light\):/.test(l),
+      );
+      // (A toast is drawn light: its text tokens are named.)
+      expect(
+        light.some((/** @type {string} */ l) =>
+          /^--color-text-secondary \(light\)/.test(l),
+        ),
+      ).toBe(true);
+      // (The page and a selected row are never drawn light here.)
+      expect(
+        light.filter((/** @type {string} */ l) =>
+          /^--color-background-body \(light\)| on item\[/.test(l),
+        ),
+      ).toEqual([]);
     },
     T,
   );
