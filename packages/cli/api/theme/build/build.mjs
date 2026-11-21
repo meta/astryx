@@ -2672,9 +2672,9 @@ function hasNamedExport(/** @type {string} */ file, /** @type {string} */ name, 
   return esm ? unknown ? null : false : null;
 }
 // prettier-ignore
-async function validateRegistryGraphs(/** @type {Array<{specifier: string, exportName: string}>} */ registries, /** @type {string} */ aggregatePath) {
-  /** @type {Array<{specifier: string, parent: string, commonJs: boolean, imports: string[], root?: {exportName: string}}>} */ const pending = registries.map(root => ({specifier: root.specifier, parent: aggregatePath, commonJs: false, imports: [root.exportName], root}));
-  /** @type {Array<{file: string, exportName: string}>} */ const runtimeChecks = []; const seen = new Set();
+async function validateRegistryGraphs(/** @type {Array<{specifier: string, exportName: string, compiled?: boolean}>} */ registries, /** @type {string} */ aggregatePath, /** @type {{import: (id: string) => Promise<any>}} */ sourceLoader) {
+  /** @type {Array<{specifier: string, parent: string, commonJs: boolean, imports: string[], root?: {exportName: string, compiled?: boolean}}>} */ const pending = registries.map(root => ({specifier: root.specifier, parent: aggregatePath, commonJs: false, imports: [root.exportName], root}));
+  /** @type {Array<{file: string, exportName: string, compiled?: boolean}>} */ const runtimeChecks = []; const seen = new Set();
   while (pending.length > 0) {
     const current = pending.pop(); if (!current) break; const {specifier, parent, commonJs, imports, root} = current;
     if (/\.css(?:$|[?#])/i.test(specifier)) throw registryGraphError(`Theme family registry graph imports CSS: ${specifier}`);
@@ -2682,12 +2682,17 @@ async function validateRegistryGraphs(/** @type {Array<{specifier: string, expor
     if (/\.css$/i.test(file)) throw registryGraphError(`Theme family registry graph imports CSS: ${file}`);
     const external = file.split(path.sep).includes('node_modules');
     for (const name of imports) if (external) runtimeChecks.push({file, exportName: name}); else { const named = hasNamedExport(file, name); if (named === false) throw registryGraphError(`Family registry ${file} does not export "${name}".`); if (named === null) runtimeChecks.push({file, exportName: name}); }
-    if (root) runtimeChecks.push({file, exportName: root.exportName});
+    if (root) runtimeChecks.push({file, exportName: root.exportName, compiled: root.compiled});
     if (seen.has(file)) continue; seen.add(file);
     if (/\.[cm]?[jt]sx?$/i.test(file)) for (const edge of moduleDependencies(fs.readFileSync(file, 'utf8'), file)) pending.push({...edge, parent: file});
   }
   for (const [index, root] of runtimeChecks.entries()) {
-    let exports; try { exports = await import(`${pathToFileURL(root.file).href}?astryx-family-check=${Date.now()}-${index}`); }
+    // A registry the build compiles into the modules folder loads through the
+    // build's own loader, as the member did: the family module imports the
+    // compiled copy, and Node cannot import `.tsx` or `.jsx`, imports `.ts`
+    // only from 22.18, and does not resolve an import without its extension.
+    // Any other registry loads as the family module will load it.
+    let exports; try { exports = root.compiled ? await sourceLoader.import(root.file) : await import(`${pathToFileURL(root.file).href}?astryx-family-check=${Date.now()}-${index}`); }
     catch (error) { throw registryGraphError(`Cannot import family registry ${root.file}: ${error instanceof Error ? error.message : String(error)}`); }
     if (!(root.exportName in exports)) throw registryGraphError(`Family registry ${root.file} does not export "${root.exportName}".`);
   }
@@ -6627,7 +6632,7 @@ function allocateFamilyBindings(members) {
  * function, so its static values are written as JSON alone.
  * @param {any} member
  * @param {any} parent - The member's parent in the family, if any.
- * @param {{themeBinding: string | undefined, parentBinding: string | null | undefined, outDir: string, registryImports: Array<{specifier: string, exportName: string}>, expression: (own: string | null, inherited: string | null) => string | undefined, compileLocal?: (importPath: string, filePath: string) => {specifier: string, sourceFile: string} | null}} context
+ * @param {{themeBinding: string | undefined, parentBinding: string | null | undefined, outDir: string, registryImports: Array<{specifier: string, exportName: string, compiled?: boolean}>, expression: (own: string | null, inherited: string | null) => string | undefined, compileLocal?: (importPath: string, filePath: string) => {specifier: string, sourceFile: string} | null}} context
  * @returns {{imports: Array<{importPath: string, importedName: string, localName: string}>, expression: string, mergeName?: string} | null}
  */
 function familyComponentIcons(member, parent, context) {
@@ -6658,6 +6663,7 @@ function familyComponentIcons(member, parent, context) {
     context.registryImports.push({
       specifier: input.validate ?? importPath,
       exportName: info.exportName,
+      compiled: input.validate != null,
     });
   } else {
     // Without an import, a member's own slots are the ones that differ from
@@ -7029,7 +7035,7 @@ async function buildFamily(
       // prettier-ignore
       const indicator = familyRegistryInput(member.indicatorInfo, member.filePath, outDir, undefined, compileLocal);
       // prettier-ignore
-      for (const registry of [icon, indicator]) if (registry.info) registryImports.push({specifier: registry.validate ?? registry.specifier ?? registry.info.importPath, exportName: registry.info.exportName});
+      for (const registry of [icon, indicator]) if (registry.info) registryImports.push({specifier: registry.validate ?? registry.specifier ?? registry.info.importPath, exportName: registry.info.exportName, compiled: registry.validate != null});
       const ownIcons = icon.info ? `${themeBinding}Icons` : null;
       // A parent with function entries keeps them in `__icons`; its `icons`
       // is the node view.
@@ -7077,7 +7083,7 @@ async function buildFamily(
       );
     })
     .join('\n');
-  await validateRegistryGraphs(registryImports, jsPath);
+  await validateRegistryGraphs(registryImports, jsPath, familyLoader);
   const declarations = members
     .map((member, index) =>
       generateBuiltTypes(member.theme, member.iconInfo, null, {

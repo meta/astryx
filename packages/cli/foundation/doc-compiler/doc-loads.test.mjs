@@ -85,10 +85,10 @@ const RUNNERS = {
     sites: ['import(<computed>)'],
   },
   'api/theme/build/build.mjs': {
-    runs: "theme source modules, and a built theme module that imports a module of its theme's folder, through jiti, with the stylesheets their modules import loaded as empty modules; the project's installed Core, and a Core's root entry once a theme imports it; a base theme package a theme imports whole, to name the themes it exports by name; a family build drops the modules it loaded from require.cache when it ends",
+    runs: "theme source modules, and a built theme module that imports a module of its theme's folder, through jiti, with the stylesheets their modules import loaded as empty modules; the project's installed Core, and a Core's root entry once a theme imports it; a base theme package a theme imports whole, to name the themes it exports by name; a family build drops the modules it loaded from require.cache when it ends; a family build's registry check loads a member's local TypeScript or JSX registry through the family loader",
     sites: [
       '.evalModule() ×2',
-      '.import() ×2',
+      '.import() ×3',
       'createJiti ×7',
       'import(<computed>) ×3',
       'require(<computed>)',
