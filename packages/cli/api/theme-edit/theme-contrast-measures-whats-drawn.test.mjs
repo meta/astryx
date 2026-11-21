@@ -218,6 +218,20 @@ describe('contrast measures what is drawn', () => {
       expect(
         texts(group).filter(p => /^inside app-shell-header/.test(p.problem)),
       ).toEqual([]);
+      // So is one set on a part inside it that holds a reader.
+      await themeEditNew('tn', {cwd, like: 'neutral'});
+      await themeEditSet('tn', '--color-on-accent', '#000000', {
+        cwd,
+        on: 'top-nav',
+      });
+      const held = await themeEditSet('tn', '--color-accent', '#ffffff', {
+        cwd,
+        on: 'app-shell-header',
+        mode: 'light',
+      });
+      expect(
+        texts(held).filter(p => /^inside app-shell-header/.test(p.problem)),
+      ).toEqual([]);
       // A see-through fill shows the part under it, not one known color.
       const glass = await themeEditSet(
         'wa',

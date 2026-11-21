@@ -12749,6 +12749,13 @@ function scopedFillPairProblems(ctx, data, res) {
     // scope reads.)
     const around = (/** @type {string} */ t) =>
       (map[t]?.contains ?? []).includes(x.on);
+    // (A part inside this one that holds a reader, the top nav in the top
+    // bar, sets the color its readers draw as much as the reader does.)
+    const holdsReader = (/** @type {string} */ t) =>
+      (map[x.on]?.contains ?? []).includes(t) &&
+      (map[t]?.contains ?? []).some((/** @type {string} */ c) =>
+        readers.includes(c),
+      );
     const touches = (/** @type {Setting} */ y) =>
       y.on == null
         ? Boolean(y.when || y.state)
@@ -12756,6 +12763,7 @@ function scopedFillPairProblems(ctx, data, res) {
             t =>
               around(t) ||
               readers.includes(t) ||
+              holdsReader(t) ||
               (t === x.on && (y.on !== x.on || y.when || y.state)),
           );
     if (
