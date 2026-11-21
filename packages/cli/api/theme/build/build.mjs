@@ -67,6 +67,7 @@ import {createRequire, isBuiltin} from 'node:module';
 import {moduleImports} from '../../../foundation/render/embedded-imports.mjs';
 import {projectMapsImport} from '../../../foundation/render/ts-paths.mjs';
 import {STYLESHEET_FILE} from '../../../foundation/fs/stylesheet-file.mjs';
+import {packageNameAt} from '../../../foundation/fs/package-name.mjs';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {babelParse as parse} from '../../../foundation/runtime/lazy-dependencies.mjs';
 import {jitiCacheOptions} from '../../../foundation/fs/jiti-cache.mjs';
@@ -2008,14 +2009,8 @@ function resolveCoreRoot() {
 function corePackageRoot(file) {
   let dir = path.dirname(file);
   for (;;) {
-    try {
-      const pkg = JSON.parse(
-        fs.readFileSync(path.join(dir, 'package.json'), 'utf-8'),
-      );
-      if (pkg?.name === '@astryxdesign/core') return dir;
-    } catch {
-      // No readable package.json here; keep walking up.
-    }
+    if (packageNameAt(path.join(dir, 'package.json')) === '@astryxdesign/core')
+      return dir;
     const parent = path.dirname(dir);
     if (parent === dir) return null;
     dir = parent;
