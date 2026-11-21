@@ -25,6 +25,14 @@ import {
 import {luminance} from '../theme/palette/generate/color.mjs';
 import {OVERRIDES} from './_part-words.mjs';
 import {
+  BAR_PARTS,
+  TEXT_LOOKS,
+  addRunLooks,
+  barLinksAreNavItems,
+  colorInOtherDraft,
+  weightIn,
+} from './_text-looks.mjs';
+import {
   DESIGN,
   DENSITY,
   DIALS,
@@ -1710,25 +1718,6 @@ function inkAtRatio(ink, grounds, target) {
     if (out && under.every(g => ratio(out, g) >= target)) return moved;
   }
   return null;
-}
-
-/**
- * A font weight written in a clause: a number from 100 to 900, or a weight
- * word ("semibold").
- * @param {{text: string}} c
- */
-function weightIn(c) {
-  const n = /\b([1-9]00)\b(?!\s*(px|ms|%))/.exec(c.text)?.[1];
-  if (n) return n;
-  // "weight 450": any weight from 1 to 1000 written beside the word.
-  const typed =
-    /\bweight\s*:?\s*(\d{1,4})\b(?!\s*(?:px|ms|%|rem|em))/.exec(c.text)?.[1] ??
-    /\b(\d{1,4})\s+(?:font\s+)?weight\b/.exec(c.text)?.[1];
-  if (typed && Number(typed) >= 1 && Number(typed) <= 1000) return typed;
-  const w = /\b(semi-?bold|medium|regular|normal)\b/.exec(c.text)?.[1];
-  return w
-    ? HEADING_WEIGHTS[w === 'normal' ? 'regular' : w.replace('-', '')]
-    : null;
 }
 
 /** Scale a CSS length. @param {string} v @param {number} f */
@@ -3988,7 +3977,15 @@ function clausesOf(q, partWords, words = null) {
           )) ||
         (new RegExp(String.raw`^${PRODUCT_WORDS}$`).test(m[0].trim()) &&
           /^\s*:/.test(afterPart) &&
-          /\b[a-z]+\s+$/.test(rest.slice(0, m.index ?? 0)))
+          /\b[a-z]+\s+$/.test(rest.slice(0, m.index ?? 0)) &&
+          // (Never after an article alone as written, "the page: a
+          // gradient": that is the page itself. The written clause is read,
+          // since part words before it, "the notifications page:", are
+          // already taken out of the rest.)
+          !new RegExp(
+            String.raw`(?:^|[,.;:!?])\s*(?:the|a|an|my|our|your|this|that)\s+${m[0].trim()}\s*:`,
+            'i',
+          ).test(text))
       ) {
         rest = rest.replace(re, ' ');
         continue;
@@ -4944,8 +4941,10 @@ const STRIPE_NAMES = new WeakMap();
  * turns them on: the prop whose description names the `parity` a row's
  * stripe is, whose description leads with the stripes' plain names
  * ("Stripes alternate rows (every other row, zebra striping): …"). A name
- * matches by its words no other prop of that component uses, or, when all its
- * words are common ("every other row"), as the whole phrase.
+ * matches by its words no other prop of that component uses, in any form
+ * ("alternating"), or, when all its words are common ("every other row"), as
+ * the whole phrase, which may name the component before its last word
+ * ("every other table row").
  * @param {{components?: Record<string, any>}} project
  * @returns {(text: string) => boolean}
  */
@@ -4959,7 +4958,20 @@ function stripeNamesOf(project) {
       .match(/[a-z][a-z-]*/g) ?? [];
   /** @type {RegExp[]} */
   const names = [];
-  for (const info of Object.values(project.components ?? {})) {
+  /**
+   * A word's own forms: "alternate" → alternate, alternates, alternated,
+   * alternating, alternately; "stripes" → stripe, stripes, striped,
+   * striping. Never another word that starts the same ("strip",
+   * "alternative").
+   * @param {string} w
+   */
+  const forms = w => {
+    const base = w.replace(/s$/, '');
+    return base.endsWith('e')
+      ? `${base.slice(0, -1)}(?:e|es|ed|ing|ely)`
+      : `${base}s?`;
+  };
+  for (const [component, info] of Object.entries(project.components ?? {})) {
     const props = Object.values(info?.props ?? {});
     const flag = props.find(pr =>
       /`parity`/.test(String(pr?.description ?? '')),
@@ -4975,11 +4987,13 @@ function stripeNamesOf(project) {
       .filter(Boolean)) {
       const words = wordsOf(phrase);
       const own = words.filter(w => !others.has(w));
+      const named = `(?:${wordsOf(component).join('\\s+')}\\s+)?`;
+      const bare = words.map(w => w.replace(/s$/, ''));
       names.push(
         own.length
-          ? new RegExp(`\\b(?:${own.join('|')})\\b`)
+          ? new RegExp(`\\b(?:${own.map(forms).join('|')})\\b`)
           : new RegExp(
-              `\\b${words.map(w => w.replace(/s$/, '')).join('s?\\s+')}s?\\b`,
+              `\\b${bare.slice(0, -1).join('s?\\s+')}s?\\s+${named}${bare.at(-1)}s?\\b`,
             ),
       );
     }
@@ -5599,15 +5613,12 @@ export function draftAnswer(ctx, env, question) {
           ? `${what}${hex}`
           : m,
     )
-    // ("less contrast", "a softer dark mode", "big type", "thin borders",
-    // "lots of white space": the readers' own words for them.)
+    // ("less contrast", "big type", "thin borders", "lots of white space":
+    // the readers' own words for them. A mood word for the dark mode, "a
+    // gentle dark mode", names no color, so it writes no page color.)
     .replace(
       /\b(?:less|lower|softer|gentler|reduced)\s+contrast\b/gi,
       'softer text',
-    )
-    .replace(
-      /\b(?:soft|softer|gentle|gentler|easy|easier)\s+dark\s+mode\b/gi,
-      'softer text in dark mode, lighter page in dark mode',
     )
     .replace(
       /\b(?:big|bigger|large|larger|huge)\s+(?:and\s+)?(?:readable\s+|legible\s+)?(?:type|text|font|lettering)\b/gi,
@@ -9250,7 +9261,6 @@ export function draftAnswer(ctx, env, question) {
       });
   // ("badges uppercase bold": two looks of a part's text said together are
   // each an ask of their own, run in turn.)
-  const TEXT_LOOKS = ['case', 'weight', 'italic', 'tracking', 'fontsize'];
   for (const [ci, c] of [...clauses.entries()].reverse()) {
     // ("large bold headings", "bigger, bolder headings": a heading's size
     // word beside its weight is its text size.)
@@ -11891,6 +11901,14 @@ export function draftAnswer(ctx, env, question) {
       if (!nearest || c.parts.length) return true;
       if (listOwner(c)) return true;
       if (prev === nearest && ownsPart(prev)) return true;
+      // (A brief's labelled line, "Surface: filled fields. Feel: 8% tint on
+      // hover.": a state look led by a label that names no part is a look
+      // of the part the brief named before it, as main reads it.)
+      const ledByLabel = new RegExp(
+        String.raw`(?:^|[.;!?\n]\s*)[a-z][a-z ]{1,20}:\s*${c.text.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+        'i',
+      ).test(asked0);
+      if (ledByLabel && c.state && ownsPart(nearest)) return true;
       // (After an except, its own run reads it: "… taller except the large
       // ones and bolder".)
       if (prev?.except) return true;
@@ -13889,6 +13907,7 @@ export function draftAnswer(ctx, env, question) {
     if (
       literals.length &&
       steps.length &&
+      !colorInOtherDraft(c, steps, Object.keys(HUES), literals) &&
       !steps.some(x => x.verb !== 'set') &&
       !literals.some(l => values.some(v => v.includes(l)))
     )
@@ -14810,6 +14829,19 @@ export function draftAnswer(ctx, env, question) {
     // (A font's name before "font": "Inter font", "SF Pro font".)
     if (/^(?:fonts?|typefaces?|famil(?:y|ies)|serif|sans|mono)$/.test(stop))
       return null;
+    // (The system type as the whole subject, "bold system type", names no
+    // part: it is the theme's text, as "bold system font" is.)
+    const sysWords = (label ?? body)
+      .replace(/[^a-z\s-]/g, ' ')
+      .trim()
+      .split(/\s+/);
+    if (
+      /\bsystem type$/.test(sysWords.join(' ')) &&
+      sysWords.every(
+        w => /^(?:system|type)$/.test(w) || aspectsOf(w).length > 0,
+      )
+    )
+      return null;
     // (Words before the theme's accent or neutral name its color or its
     // product, never a part: "system blue accent", "brand red accent",
     // "Windows 11 accent".)
@@ -14870,9 +14902,9 @@ export function draftAnswer(ctx, env, question) {
         ),
     );
     if (!unknown.length) return null;
-    // (A subject is a thing on the page: a plural noun, a word of a part's
-    // own name, or a name in capitals, "FAB"; a brand or a mood said
-    // before a look, "IBM Carbon:", "design feedback:", is not one.)
+    // (A subject is a thing on the page: a plural noun or a word of a
+    // part's own name; a brand or a mood said before a look, "IBM Carbon:",
+    // "design feedback:", is not one.)
     const thing =
       unknown.some(w => /[a-z]{2}[^su']s$/.test(w)) ||
       near(unknown.join(' ')) !== '' ||
@@ -14891,9 +14923,7 @@ export function draftAnswer(ctx, env, question) {
           a =>
             !THEME_ASPECTS.includes(a) &&
             !['colors', 'mode', 'contrast', 'spacing', 'corners'].includes(a),
-        )) ||
-      (words.length === 1 &&
-        new RegExp(`\\b${words[0].toUpperCase()}\\b`).test(raw0));
+        ));
     return thing ? phrase : null;
   };
   // ("filled blue with white text on hover": a state said at the end of
@@ -15434,6 +15464,15 @@ export function draftAnswer(ctx, env, question) {
     drafts.splice(from, 0, d);
     draftClause.set(d, gc);
   };
+  barLinksAreNavItems(
+    clauses,
+    t => lex.parts.some(([re, p]) => BAR_PARTS.has(p.on) && re.test(` ${t} `)),
+    c => {
+      for (let n = placeNotes.length - 1; n >= 0; n--)
+        if (placeNotes[n].c === c) placeNotes.splice(n, 1);
+    },
+  );
+  addRunLooks(clauses, Object.keys(HUES));
   for (const c of clauses) {
     clauseNow = c;
     settleSubject();
@@ -21343,7 +21382,6 @@ export function draftAnswer(ctx, env, question) {
       }
       const pageMode = pageModeOf(c, String(color));
       const pm = pageMode ? {mode: pageMode} : {};
-      // (The frame and main panel follow, below, for every page answer.)
       // ("green text on a black page"": the text color said with the page
       // is the theme's text, in the page's mode, with it.)
       const ink = /\btext\b/.test(c.text) ? colorFor(c, 'text') : null;
@@ -21372,9 +21410,25 @@ export function draftAnswer(ctx, env, question) {
           ],
           sequence: true,
         };
+      // (The main panel, drawn over the page with a fill of its own, shows
+      // that fill: the second line paints it with the frame, so the page
+      // looks the color asked.)
+      const panelRead = C.MAP['layout-content']
+        ? restRead(C.partReads('layout-content', 'background') ?? [], '')
+        : null;
+      const panel =
+        panelRead && panelRead !== '--color-background-body' ? panelRead : null;
       return {
-        text: `the page background: --color-background-body${pageModeSaid(c, pageMode)}`,
-        options: [[set('--color-background-body', color, pm)]],
+        text: `the page background: --color-background-body${pageModeSaid(c, pageMode)}${panel ? `; the main panel (layout-content) draws ${panel} over it, so the second line paints the frame and the main panel too` : ''}`,
+        options: [
+          [set('--color-background-body', color, pm)],
+          [
+            set('background', color, {on: 'app-shell', ...pm}),
+            ...(panel
+              ? [set('background-color', color, {on: 'layout-content', ...pm})]
+              : []),
+          ],
+        ],
       };
     }
     if (on === 'icons') {
@@ -31840,56 +31894,11 @@ export function draftAnswer(ctx, env, question) {
       : `${d.text}: nothing is written: ${[...new Set(why)].join('; ')}`;
     if (!kept.length) delete d.sequence;
   }
-  // A page color reaches the whole page: the body token, and the frame
-  // and main panel the app shell draws over it (each with its own fill,
-  // the main panel the surface), in the same mode, so no part of the
-  // page keeps the old color.
+  // A page color is the body token. The frame and the main panel keep
+  // their own fills (the main panel the surface, which the cards and other
+  // surfaces step from), as main reads it: a page answer offers painting
+  // them as its own line.
   {
-    const panelRead = C.MAP['layout-content']
-      ? restRead(C.partReads('layout-content', 'background') ?? [], '')
-      : null;
-    const panel =
-      panelRead && panelRead !== '--color-background-body' ? panelRead : null;
-    if (TARGET.has('app-shell'))
-      for (const d of result) {
-        let grew = false;
-        d.options = d.options.map(o => {
-          const out = [];
-          for (const st of o) {
-            out.push(st);
-            if (
-              st.thing !== '--color-background-body' ||
-              st.on ||
-              st.verb !== 'set'
-            )
-              continue;
-            const same = (/** @type {Step} */ x, /** @type {string} */ on) =>
-              x.on === on && (x.mode ?? '') === (st.mode ?? '');
-            const m = st.mode ? {mode: st.mode} : {};
-            if (!o.some(x => same(x, 'app-shell'))) {
-              out.push(
-                set('background', String(st.value), {on: 'app-shell', ...m}),
-              );
-              grew = true;
-            }
-            if (panel && !o.some(x => same(x, 'layout-content'))) {
-              out.push(
-                set('background-color', String(st.value), {
-                  on: 'layout-content',
-                  ...m,
-                }),
-              );
-              grew = true;
-            }
-          }
-          return out;
-        });
-        if (grew) {
-          d.sequence = true;
-          if (!/the frame and the main panel/.test(d.text))
-            d.text = `${d.text}; the app shell's frame${panel ? ` and the main panel (layout-content, which draws ${panel})` : ''} take it too, so the whole page shows it`;
-        }
-      }
     // (Where the page color shows: only a part that draws the token at
     // rest paints it, as the part data reads. A page built from none of
     // them, a stack or layout set straight inside the theme, keeps the
@@ -32268,7 +32277,16 @@ export function draftAnswer(ctx, env, question) {
   // color that does, in its own line: primary text white or black,
   // secondary text the farthest shade toward the page that still reads.
   for (const [di, d] of [...result.entries()].reverse()) {
-    if (d.options.length !== 1) continue;
+    // (A page answer's own second line, the frame and the main panel, is
+    // part of the same answer.)
+    const frameLine =
+      d.options.length === 2 &&
+      d.options[1].every(
+        x =>
+          (x.on === 'app-shell' || x.on === 'layout-content') &&
+          /^background(?:-color)?$/.test(x.thing),
+      );
+    if (d.options.length !== 1 && !frameLine) continue;
     const pages = d.options[0].filter(
       x =>
         !x.on &&

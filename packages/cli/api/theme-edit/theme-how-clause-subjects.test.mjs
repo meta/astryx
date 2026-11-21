@@ -78,7 +78,17 @@ const ROWS = [
     'unknown subject said as a sentence',
     {q: 'the command palette should have 8px corners', none: true},
   ],
-  ['unknown acronym', {q: 'FAB 16px corners', none: true, says: /"fab"/}],
+  [
+    'a name in capitals that no part has is no subject',
+    {q: 'FAB 16px corners', has: ['corners 16px']},
+  ],
+  [
+    'a look said after a name in capitals is written',
+    {
+      q: 'FAB 16px corners, bold text',
+      has: ['corners 16px', '--text-body-weight 700'],
+    },
+  ],
   [
     'a font name before "font" is no subject',
     {q: 'Inter font', has: ['font inter']},
@@ -415,6 +425,60 @@ const ROWS = [
   [
     'a product label is the whole theme',
     {q: 'spreadsheet tool: 12px text, square corners', has: ['corners square']},
+  ],
+  [
+    'the system type names no part: it makes the body text bold',
+    {q: 'bold system type', has: ['--text-body-weight 700'], never: /^font /},
+  ],
+  [
+    'a look said after the system type is its own',
+    {
+      q: 'bold system type, blue accent',
+      has: ['--text-body-weight 700', "accent '#2563eb'"],
+    },
+  ],
+  [
+    'a dial said after the system type with "and" is its own',
+    {
+      q: 'bold system type and rounded corners',
+      has: ['--text-body-weight 700', 'corners round'],
+    },
+  ],
+  [
+    'the system type said after an unknown subject leaves that subject unknown',
+    {
+      q: 'FABs 16px corners in the system type',
+      none: true,
+      says: /no part is called "fab"/,
+    },
+  ],
+  [
+    'a look said "with" an unknown subject is still that subject\'s',
+    {
+      q: 'FABs 16px corners with a blue background',
+      none: true,
+      says: /no part is called "fab"/,
+    },
+  ],
+  [
+    'a plural noun with a describing word after it holds its whole list',
+    {q: 'widgets very round, bold text', none: true, says: /no part is called/},
+  ],
+  [
+    'the system type before an unknown subject leaves that subject unknown',
+    {q: 'system type FABs 16px corners', none: true, says: /no part is called/},
+  ],
+  [
+    'a plural noun as the unknown subject holds its whole list',
+    {q: 'FABs 16px corners, bold text', none: true, says: /no part is called/},
+  ],
+  [
+    'a label as the unknown subject holds its whole list',
+    {
+      q: 'widgets: 16px corners, bold text',
+      none: true,
+      says: /no part is called/,
+    },
   ],
 ];
 
