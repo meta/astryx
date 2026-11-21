@@ -166,6 +166,9 @@ describe('neutral grays', () => {
         'ditch rounded corners and neutral grays',
         'skip rounded corners and neutral grays',
         'I dislike rounded corners and neutral grays',
+        // (A prohibition anywhere keeps the base answer.)
+        "buttons shouldn't be round, neutral grays",
+        "don't make buttons rounder, neutral grays",
       ]) {
         const results = await answer(q, 'warm');
         expect(
@@ -186,12 +189,9 @@ describe('neutral grays', () => {
         'cards with drop shadows and neutral grays',
         'cards with drop-shadows and neutral grays',
         'zero radius corners and neutral grays',
-        // (Grays with a lead verb of their own start a new ask, and a
-        // prohibition in another clause governs only its own.)
+        // (Grays with a lead verb of their own start a new ask.)
         'remove rounded corners and use neutral grays',
         'I hate rounded corners and want neutral grays',
-        "buttons shouldn't be round, neutral grays",
-        "don't make buttons rounder, neutral grays",
       ]) {
         const results = await answer(q, 'warm');
         expect(

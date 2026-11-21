@@ -5534,9 +5534,12 @@ export function draftAnswer(ctx, env, question) {
     // (A removal, a prohibition or a dislike that leads the clause the grays
     // sit in turns them away with the rest of its list: "remove rounded
     // corners and neutral grays". The lead words are the clause readers'
-    // own; "drop shadows" is a thing, never a removal; a lead in another
-    // clause governs only its own; and grays with a lead verb of their own,
-    // "… and use neutral grays", start a new ask.)
+    // own; "drop shadows" is a thing, never a removal; a removal or dislike
+    // lead in another clause governs only its own; and grays with a lead
+    // verb of their own, "… and use neutral grays", start a new ask. A
+    // prohibition anywhere keeps the base answer: the clause reader takes
+    // it as an exception to what is asked, so the grays are not read
+    // beside it.)
     text => {
       const clause =
         text
@@ -5553,7 +5556,7 @@ export function draftAnswer(ctx, env, question) {
         new RegExp(
           `\\b(?:${REMOVAL_VERBS}|${DISLIKE_LEAD}|no|avoid|never|not|don'?t|do not|instead of|except)\\b`,
           'i',
-        ).test(before) || PROHIBITION.test(before)
+        ).test(before) || PROHIBITION.test(text)
       );
     },
   );
