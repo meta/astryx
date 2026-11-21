@@ -4679,6 +4679,40 @@ export function draftAnswer(ctx, env, question) {
       const word = look.toLowerCase().replace(/s$/, '');
       // (Only an ask said on its own: one joined to another by "and",
       // "but" or "then" keeps the reading it has without the pronoun.)
+      const JUDGING =
+        /^(?:s|the|a|an|my|our|its|their|this|that|these|those|on|of|in|around|is|are|was|were|looks?|seems?|feels?|has|have|too|so|very|really|way|kind|bit|little|much|just|quite|ugly|strong|heavy|thick|harsh|loud|busy|distracting|weird|bad|wrong|off|hard|noisy|messy|annoying|i|hate|dislike|don|t|like|it|do|not)$/;
+      // ("the shadow and border on cards are ugly, remove them": looks
+      // listed with "and" on one part each go.)
+      if (
+        looks.length > 1 &&
+        /\bthem\b\s*[.!]?$/i.test(m) &&
+        !/\b(?:but|then)\b/i.test(said)
+      ) {
+        const hit = partLexicon(ctx)
+          .parts.map(([re]) => re.exec(` ${said.toLowerCase()} `))
+          .filter(x => x != null)
+          .sort(
+            (x, y) =>
+              /** @type {RegExpExecArray} */ (y)[0].length -
+              /** @type {RegExpExecArray} */ (x)[0].length,
+          )[0];
+        const left = hit
+          ? looks
+              .reduce(
+                (t, l) => t.replace(new RegExp(`\\b${l[1]}\\b`, 'i'), ' '),
+                ` ${said.toLowerCase()} `.replace(hit[0], ' '),
+              )
+              .split(/[^a-z]+/)
+              .filter(w => w && w !== 'and')
+          : ['?'];
+        if (hit && left.every(w => JUDGING.test(w)))
+          return `${String(lead).replace(/[!?]/, '.')}${looks
+            .map(
+              l =>
+                `no ${l[1].toLowerCase().replace(/s$/, '')} on ${hit[0].trim()}`,
+            )
+            .join(', ')}`;
+      }
       if (/\b(?:and|but|then)\b/i.test(said)) return m;
       const own = String(said);
       // (The one part the look's own words name, by its longest match.)
@@ -4700,8 +4734,6 @@ export function draftAnswer(ctx, env, question) {
         .replace(new RegExp(`\\b${look}\\b`, 'i'), ' ')
         .split(/[^a-z]+/)
         .filter(Boolean);
-      const JUDGING =
-        /^(?:s|the|a|an|my|our|its|their|this|that|these|those|on|of|in|around|is|are|was|were|looks?|seems?|feels?|has|have|too|so|very|really|way|kind|bit|little|much|just|quite|ugly|strong|heavy|thick|harsh|loud|busy|distracting|weird|bad|wrong|off|hard|noisy|messy|annoying|i|hate|dislike|don|t|like|it|do|not)$/;
       if (!others.every(w => JUDGING.test(w))) return m;
       // ("them" names more than one thing: read it only over one part said
       // in the plural.)

@@ -435,6 +435,31 @@ describe('a look said, then taken away by a pronoun', () => {
   );
 });
 
+describe('two looks taken away by a pronoun', () => {
+  it(
+    'takes each away on that part',
+    async () => {
+      for (const [q, ...want] of [
+        [
+          'the shadow and border on cards are ugly, remove them',
+          /box-shadow none --on card\b/,
+          /border none --on card\b/,
+        ],
+        [
+          'the card border and shadow are ugly, remove them',
+          /box-shadow none --on card\b/,
+          /border none --on card\b/,
+        ],
+      ]) {
+        const lines = (first(await answer(String(q))) ?? []).join('\n');
+        for (const w of want) expect(lines, String(q)).toMatch(w);
+        expect(lines, String(q)).not.toMatch(/--shadow-|border '1px/);
+      }
+    },
+    T,
+  );
+});
+
 describe('a nav said as a bar', () => {
   it(
     'is the top nav beside a side nav; a side nav bar is the side nav',
