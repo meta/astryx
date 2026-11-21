@@ -94,7 +94,7 @@ export const docs = {
   ],
   usage: {
     description:
-      "Adds overlay behavior to a container you already render, such as a Card or a custom media frame, without the wrapper Overlay adds. Spread containerRef and containerProps on the container, then render element (or renderOverlay(children)) once inside it. The scrim is absolutely positioned, so it covers the nearest positioned ancestor: the container itself, or a positioned section inside it such as an image area. Visibility is CSS-driven from the container's :hover and :focus-within, so with showOn 'hover' a keyboard user reveals the content by moving focus into the container. Hidden content is not focusable, so the container needs a focusable element before the overlay content in tab order. A revealed scrim takes pointer input over the area it covers, so put that element outside the scrim, or use a top or bottom strip and keep it in the part the strip leaves uncovered.",
+      "Adds overlay behavior to a container you already render, such as a Card or a custom media frame, without the wrapper Overlay adds. Spread containerRef and containerProps on the container, then render element (or renderOverlay(children)) once inside it. The scrim is absolutely positioned, so it covers the nearest positioned ancestor: the container itself, or a positioned section inside it such as an image area. Visibility is CSS-driven from the container's :hover and :focus-within, so with showOn 'hover' a keyboard user reveals the content by moving focus into the container. On a device with a mouse or trackpad, content that a hover or focus reveal hides stays in the tab order, so Tab reaches an action in it and focus reveals the scrim. On a touch-primary device a hover overlay stays inert until a tap. A revealed scrim takes pointer input over the area it covers, so keep any other control in the container outside the scrim, or use a top or bottom strip and keep the control in the part the strip leaves uncovered.",
     bestPractices: [
       {
         guidance: true,
@@ -104,7 +104,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Put a focusable element (a link or the card title) before the overlay content in the container, so Tab reveals the content and the next Tab reaches it.',
+          'Give an overlay action a label that names what it does. With a mouse or trackpad, Tab reaches it while the overlay is hidden, and focus reveals the overlay.',
       },
       {
         guidance: true,
@@ -114,7 +114,7 @@ export const docs = {
       {
         guidance: false,
         description:
-          'Put the only way to reach an action behind hover with nothing focusable before it; keyboard users cannot focus content that is hidden.',
+          'Put information people need to choose the item, such as its title or price, only in a hover or focus overlay; on a touch device a hover overlay shows only after a tap, and a focus overlay does not show.',
       },
     ],
   },
@@ -127,7 +127,7 @@ export const docs = {
 /** @type {import('@astryxdesign/cli/authoring').HookTranslationDoc} */
 export const docsDense = {
   description:
-    "Overlay behavior on a container you already render (Card, media frame) w/o Overlay's wrapper. Spread containerRef + containerProps on it, render element / renderOverlay(children) once inside. CSS-driven via container :hover/:focus-within; hover mode also reveals on keyboard focus. Hidden content is not focusable, so put a focusable element before it, outside the area a revealed scrim covers (the scrim takes pointer input).",
+    "Overlay behavior on a container you already render (Card, media frame) w/o Overlay's wrapper. Spread containerRef + containerProps on it, render element / renderOverlay(children) once inside. CSS-driven via container :hover/:focus-within; hover mode also reveals on keyboard focus. With a mouse or trackpad, hidden content stays tabbable; focus reveals it. Keep other controls outside the area a revealed scrim covers (the scrim takes pointer input).",
   paramDescriptions: {
     options: 'overlay config; all fields optional.',
     'options.content':
@@ -150,7 +150,7 @@ export const docsDense = {
   },
   usage: {
     description:
-      'Overlay behavior on an existing container: spread containerRef + containerProps, render element once inside. Scrim covers nearest positioned ancestor. CSS :hover/:focus-within; hover mode reveals on keyboard focus too. Put a focusable element before hidden content.',
+      'Overlay behavior on an existing container: spread containerRef + containerProps, render element once inside. Scrim covers nearest positioned ancestor. CSS :hover/:focus-within; hover mode reveals on keyboard focus too; with a mouse or trackpad, hidden content stays tabbable.',
     bestPractices: [
       {
         guidance: true,
@@ -160,7 +160,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Put a focusable element before the overlay content so Tab reveals it, next Tab reaches it.',
+          'Label overlay actions by what they do; with a mouse or trackpad, Tab reaches them while hidden, focus reveals.',
       },
       {
         guidance: true,
@@ -169,7 +169,7 @@ export const docsDense = {
       {
         guidance: false,
         description:
-          'Hide the only route to an action behind hover with nothing focusable before it.',
+          'Put info needed to choose the item (title, price) only in a hover/focus overlay; touch shows hover after a tap, never focus.',
       },
     ],
   },
