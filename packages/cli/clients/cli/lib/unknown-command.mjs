@@ -627,7 +627,7 @@ async function iconRuns({before, after: rest}, program, iconFeatures) {
   if (sub)
     return [
       run(
-        [...finder, sub.name(), '--help'],
+        [...finder, sub.name(), '--help', ...fitWords(program, rest)],
         `the command is experimental icon ${sub.name()} (experimental); its help says what it takes`,
       ),
       guide,
@@ -644,7 +644,10 @@ async function iconRuns({before, after: rest}, program, iconFeatures) {
       run([...finder, '--list', ...fitWords(program, words)], reason),
       guide,
     ];
-  return [guide, run([...finder, '--help'], reason)];
+  return [
+    guide,
+    run([...finder, '--help', ...fitWords(program, rest)], reason),
+  ];
 }
 
 /**
@@ -907,8 +910,17 @@ export async function unknownCommandAnswer(
       ].join(' '),
       reason: r.reason,
     }));
+  // The help keeps the program options the reader typed (`--json`), as
+  // every run the answer names does.
   const help = {
-    name: 'astryx help',
+    name: [
+      'astryx',
+      ...[
+        ...fitWords(program, first.before),
+        'help',
+        ...fitWords(program, first.after),
+      ].map(quoteCommandArgument),
+    ].join(' '),
     reason: 'every command, with what it does',
   };
   // A word that names one of the project's own package.json scripts (`test`,
