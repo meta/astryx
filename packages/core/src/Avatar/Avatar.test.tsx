@@ -67,18 +67,58 @@ describe('Avatar', () => {
     expect(innerImg).toHaveAttribute('alt', '');
   });
 
-  it('renders fallback initials at the proportional size via a StyleX class, not an inline property', () => {
-    render(<Avatar name="Ada Lovelace" size="sm" data-testid="a" />);
-    const initials = initialsElement('AL');
-    // The default proportional size (sm = 24 × 0.4 = 9.6px) is fed to StyleX as
-    // a dynamic value: StyleX applies `font-size` through a class and sets only
-    // the computed value inline (as a custom property). Because the property
-    // lands via a class, a theme's `.astryx-avatar-fallback.<size>` rule in the
-    // theme layer overrides it per size tier — no internal var seam needed.
-    const style = initials.getAttribute('style') ?? '';
-    expect(style).toMatch(/9\.6\d*px/);
-    // Regression guard: the seam must NOT reintroduce the removed internal var.
-    expect(style).not.toContain('--_avatar-fallback-font-size');
+  // StyleX compiles these values into atomic classes, so they are only visible
+  // in the injected stylesheet: read the declaration the element's own classes
+  // carry.
+  function declaredValue(el: HTMLElement, property: string): string | null {
+    const classes = el.className.split(/\s+/).filter(Boolean);
+    const pattern = new RegExp(
+      String.raw`^\.([\w-]+)[^{]*\{\s*${property}:\s*([^;]+);`,
+    );
+    for (const sheet of Array.from(document.styleSheets)) {
+      for (const rule of Array.from(sheet.cssRules)) {
+        const match = rule.cssText.match(pattern);
+        if (match != null && classes.includes(match[1])) {
+          return match[2].trim();
+        }
+      }
+    }
+    return null;
+  }
+
+  it.each([
+    ['sm', 'sm'],
+    ['md', 'md'],
+    ['lg', 'lg'],
+    ['xl', 'xl'],
+    ['a numeric size', 32],
+  ] as const)(
+    'sizes initials at 40%% of the rendered box for %s, through a class and not an inline property',
+    (_label, size) => {
+      render(<Avatar name="Ada Lovelace" size={size} />);
+      const initials = initialsElement('AL');
+      expect(declaredValue(initials, 'font-size')).toBe('40cqw');
+      expect(initials.getAttribute('style') ?? '').not.toMatch(/font-size/);
+    },
+  );
+
+  // jsdom cannot parse `max()` with container units, so the minimum's value is
+  // not readable from the stylesheet; assert which style each size takes.
+  it('gives only xsm initials the 10px minimum', () => {
+    const {rerender} = render(<Avatar name="Ada Lovelace" size="xsm" />);
+    expect(initialsElement('AL').className).toContain(
+      'initialsSizeStyles.proportionalWithMinimum',
+    );
+    rerender(<Avatar name="Ada Lovelace" size="sm" />);
+    expect(initialsElement('AL').className).not.toContain(
+      'proportionalWithMinimum',
+    );
+  });
+
+  it('measures the initials against the content box, which is a size container', () => {
+    render(<Avatar name="Ada Lovelace" size="md" />);
+    const content = initialsElement('AL').parentElement as HTMLElement;
+    expect(declaredValue(content, 'container-type')).toBe('inline-size');
   });
 
   it('marks the fallback surface with the stable theming class (initials and icon)', () => {
