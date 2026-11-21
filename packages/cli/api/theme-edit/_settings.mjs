@@ -7975,26 +7975,73 @@ export function compileTheme(ctx, data, base) {
       theme.typography.heading = {family: f.family, fallbacks: f.fallbacks};
     }
   }
-  // A heading font of its own, other than the body's, reaches the parts
-  // drawn as a heading element that inherit the body's family (an empty
-  // state's title); where the two are one family nothing is written.
+  // The parts drawn as a heading element that inherit the body's family (an
+  // empty state's title) take the heading font, as every other heading
+  // does, when the two fonts end up as different families: after a heading
+  // font of its own, or after a body font set alone (which keeps the base
+  // theme's heading font) on a base that draws its headings and body in one
+  // family. A base with two families draws that title in the body's
+  // family, and a body font keeps it so. A title given a font of its own,
+  // or inside a part given one, keeps it.
   {
-    const said = [...data.settings]
-      .reverse()
-      .find(
+    const latest = (/** @type {(x: Setting) => boolean} */ f) =>
+      [...data.settings].reverse().find(f);
+    /** @param {string} token @param {Record<string, any>} [from] */
+    const fontFamilyOf = (token, from) =>
+      fontOf((from ? from[token]?.light : undefined) ?? base.light[token] ?? '')
+        .family;
+    const baseOneFamily =
+      fontFamilyOf('--font-family-heading') ===
+      fontFamilyOf('--font-family-body');
+    const said =
+      latest(
         x => x.source === 'dial' && x.thing === 'font' && x.on === 'heading',
+      ) ??
+      (baseOneFamily
+        ? latest(
+            x =>
+              (x.source === 'dial' && x.thing === 'font' && x.on === 'body') ||
+              (x.source === 'token' &&
+                x.thing === '--font-family-body' &&
+                !x.on),
+          )
+        : undefined);
+    // The families the built theme draws: an exact token wins over a font
+    // dial, as Core applies the tokens after the typography.
+    /** @param {'heading' | 'body'} role */
+    const drawn = role =>
+      tok[`--font-family-${role}`]?.light != null
+        ? fontFamilyOf(`--font-family-${role}`, tok)
+        : (theme.typography?.[role]?.family ??
+          fontFamilyOf(`--font-family-${role}`));
+    const headingFamily = drawn('heading');
+    const bodyFamily = drawn('body');
+    /**
+     * A part whose font a plain font-family setting already gives: one on
+     * the part itself, or on a part around it, whose font it inherits.
+     * @param {string} t
+     */
+    const ownFont = t =>
+      data.settings.some(
+        x =>
+          x.source === 'property' &&
+          x.thing === 'font-family' &&
+          !x.when &&
+          !x.state &&
+          partsOf(ctx, x).some(
+            p =>
+              p === t ||
+              /** @type {any} */ (ctx.C.MAP[p]?.contains ?? []).includes(t),
+          ),
       );
-    const headingFamily = theme.typography?.heading?.family;
-    const bodyFamily =
-      theme.typography?.body?.family ??
-      fontOf(base.light['--font-family-body'] ?? '').family;
     if (said && headingFamily && headingFamily !== bodyFamily)
       for (const t of headingElements(
         'font-family',
         k => k === '--font-family-heading',
       ))
-        block({...said, on: undefined, mode: undefined}, t).fontFamily =
-          'var(--font-family-heading)';
+        if (!ownFont(t))
+          block({...said, on: undefined, mode: undefined}, t).fontFamily =
+            'var(--font-family-heading)';
   }
   // A scale steeper or flatter than the standard one changes the headings;
   // the steps below the base text size keep the standard ratio, so small
