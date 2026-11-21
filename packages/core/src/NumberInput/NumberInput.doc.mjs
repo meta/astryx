@@ -165,7 +165,7 @@ export const docs = {
       name: 'formatValue',
       type: '(value: number) => string',
       description:
-        'Formats the committed value while the input is not focused. The raw numeric value is shown on focus for editing and the formatted value is exposed through aria-valuetext.',
+        'Formats the committed value while the input is not focused. The plain number, with the locale\'s decimal separator, is shown on focus for editing and the formatted value is exposed through aria-valuetext.',
     },
     {
       name: 'isWheelEnabled',
@@ -196,7 +196,7 @@ export const docs = {
       name: 'hasClear',
       type: 'boolean',
       description:
-        'Shows a clear (\u00d7) button when the input has a value. When true, the onChange callback also accepts null to signal the user cleared the input.',
+        'Shows a clear (\u00d7) button while the input has a value and is editable (not disabled or read-only). When true, the onChange callback also accepts null to signal the user cleared the input.',
       default: 'false',
     },
     {
@@ -499,7 +499,7 @@ export const docsZh = {
       name: 'formatValue',
       type: '(value: number) => string',
       description:
-        '输入框未聚焦时格式化已提交的值。聚焦编辑时显示原始数值，并通过 aria-valuetext 提供格式化值。',
+        '输入框未聚焦时格式化已提交的值。聚焦编辑时显示使用当前语言小数分隔符的普通数值，并通过 aria-valuetext 提供格式化值。',
     },
     {
       name: 'isWheelEnabled',
@@ -529,7 +529,7 @@ export const docsZh = {
       name: 'hasClear',
       type: 'boolean',
       description:
-        '输入有值时显示清除 (×) 按鈕。启用后， onChange 回调还接受 null 表示用户已清空输入。',
+        '输入有值且可编辑（未禁用、非只读）时显示清除 (×) 按钮。启用后， onChange 回调还接受 null 表示用户已清空输入。',
       default: 'false',
     },
     {
@@ -798,7 +798,7 @@ export const docsDense = {
     max: 'Maximum value allowed.',
     step: 'Step increment.',
     formatValue:
-      'Formats committed value at rest; raw number is shown while editing.',
+      'Formats committed value at rest; plain number (locale decimal separator) is shown while editing.',
     isWheelEnabled:
       'Allow focused wheel gestures to step value. Defaults to true.',
     hasNumberSteppers:
@@ -806,7 +806,7 @@ export const docsDense = {
     units: 'Units suffix (e.g. "%" or "GB").',
     isIntegerOnly: 'Only allow integer values.',
     hasClear:
-      'Shows clear button when input has value. onChange also accepts null on clear.',
+      'Shows clear button when input has a value and is editable. onChange also accepts null on clear.',
     htmlName:
       'HTML name for form submissions; while blur keeps rejected text, posts the committed number until an edit or a new value.',
     autoComplete: 'HTML autocomplete attribute.',
