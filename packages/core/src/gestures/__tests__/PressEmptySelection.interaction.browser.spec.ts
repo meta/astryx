@@ -4,9 +4,9 @@
  * @file PressEmptySelection.interaction.browser.spec.ts
  * @input SegmentedControl's Default story, with 3,000 rows whose styles a
  *   capture-phase pointerdown listener changes, and no text selected
- * @output Proves a mouse press on a segment brings no pending styles up to
- *   date inside the press: Chromium's trace shows no restyle of the rows in
- *   the pointerdown dispatch
+ * @output Proves a mouse press on a segment reads no composed selection
+ *   ranges, and brings no pending styles up to date inside the press:
+ *   Chromium's trace shows no restyle of the rows in the pointerdown dispatch
  * @position Interaction proof for utils/selectionLock.ts selectionRangesOf,
  *   which GestureHost calls at each mouse or pen press
  */
@@ -102,4 +102,43 @@ test('a mouse press with no text selected restyles no unrelated rows inside the 
   );
   expect(inPress).toEqual([]);
   await expect(segment).toBeChecked();
+});
+
+test('a mouse press with no text selected reads no composed selection ranges', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName === 'webkit',
+    'WebKit has no getComposedRanges to count',
+  );
+  await page.goto(
+    `${storybook()}/iframe.html?id=core-segmentedcontrol--default&viewMode=story`,
+  );
+  const segment = page.getByRole('radio', {name: 'List'});
+  await segment.waitFor();
+  await page.evaluate(() => {
+    const proto = Selection.prototype as Selection & {
+      getComposedRanges?: (...args: unknown[]) => StaticRange[];
+    };
+    const original = proto.getComposedRanges;
+    const calls = {count: 0};
+    (window as unknown as {__composedReads: typeof calls}).__composedReads =
+      calls;
+    if (original != null) {
+      proto.getComposedRanges = function (this: Selection, ...args) {
+        calls.count += 1;
+        return original.apply(this, args);
+      };
+    }
+    getSelection()?.removeAllRanges();
+  });
+  await segment.click();
+  await expect(segment).toBeChecked();
+  const reads = await page.evaluate(
+    () =>
+      (window as unknown as {__composedReads: {count: number}}).__composedReads
+        .count,
+  );
+  expect(reads).toBe(0);
 });
