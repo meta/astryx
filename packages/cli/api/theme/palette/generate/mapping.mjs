@@ -31,8 +31,6 @@ import {
 
 /** @typedef {import('./types.mjs').TonalPaletteGenerationInput} TonalPaletteGenerationInput */
 
-/** @typedef {import('./derive-look.mjs').DerivedState} DerivedState */
-
 /** @typedef {import('./editor-look.mjs').EditorLookResult} EditorLookResult */
 
 /** @typedef {import('./editor-look.mjs').PaletteEditorRules} PaletteEditorRules */
@@ -104,6 +102,7 @@ import {
  * @property {(value: string, mode: PaletteMode) => string | null} [colorIn] The fixed color a written value gives in a mode, or null.
  * @property {(token: string) => boolean} [setExactly] Whether a token is set exactly in any mode.
  * @property {(thing: string, value: string, mode?: PaletteMode) => string} [setLine] The line that sets a value, for a note that offers one; without it, the note offers none.
+ * @property {ReadonlyArray<PaletteMode>} [shown] The modes the theme shows: the derived colors' notes name only these.
  */
 
 /**
@@ -140,8 +139,8 @@ import {
  * @property {{ a: string; b: string; vision: 'red-weak' | 'green-weak'; mode: PaletteMode; colors: [string, string]; page?: string; pages?: string[]; }[]} cvd Status fills someone red-weak or green-weak may not tell apart.
  * @property {string[]} code The code colors that keep the base theme's because none of their family's stops reads on the code background and the page.
  * @property {{token: string; mode: PaletteMode; pair: BasePair; ratio: number}[]} kept The look's colors kept at the base theme's in a mode, because a text/fill pair the base theme draws with them would not read.
- * @property {{ roles: Record<string, 'derived' | 'unreadable' | 'alike'>; why: string[]; }} statuses The status roles the theme leaves unset, each derived from the look or kept at the base theme's, and why.
- * @property {{ badges: DerivedState; chart: DerivedState; merged: string[]; unreadable: string[]; }} categories Whether the category colors (Badge, Token, Card tints) and the chart colors follow the look, and the hues a refused mapping would draw alike.
+ * @property {{ roles: Record<string, 'derived'>; why: string[]; short: string[]; }} statuses The status roles the theme leaves unset, each derived from the look, what they gave up to stay written, and the roles that gave something up.
+ * @property {{ badges: 'derived' | 'none'; chart: 'derived' | 'none'; limits: string[]; moved: string[]; alike: boolean; unread: boolean; }} categories Whether the category colors (Badge, Token, Card tints) and the chart colors follow the look, and what they gave up to stay written.
  */
 
 /** A value a mapping table holds. */
@@ -1905,10 +1904,12 @@ export function mapPalette(candidate, dials, fills, context) {
         categories: {
           badges: 'none',
           chart: 'none',
-          merged: [],
-          unreadable: [],
+          limits: [],
+          moved: [],
+          alike: false,
+          unread: false,
         },
-        statuses: {roles: {}, why: []},
+        statuses: {roles: {}, why: [], short: []},
         code: [],
         cvd: [],
         keptAtBase: [],

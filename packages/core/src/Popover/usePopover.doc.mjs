@@ -49,7 +49,7 @@ export const docs = {
       name: 'hasEscapeDismiss',
       type: 'boolean',
       description:
-        'Whether pressing Escape dismisses the popover. Only takes full effect together with hasLightDismiss: false, since native light dismiss also closes on Escape.',
+        "Whether pressing Escape dismisses the popover. Only takes full effect together with hasLightDismiss: false, since native light dismiss also closes on Escape. A popover with tabBehavior: 'pageOrder' does not use native light dismiss, so false always turns its Escape off.",
       default: 'true',
     },
     {
@@ -89,8 +89,15 @@ export const docs = {
       name: 'isModal',
       type: 'boolean',
       description:
-        'Whether a dialog-role popover is modal (aria-modal). Only applies when role is "dialog".',
+        'Whether a dialog-role popover is modal (aria-modal). Only applies when role is "dialog". Tab stays inside the popover either way; tabBehavior decides that.',
       default: 'true',
+    },
+    {
+      name: 'tabBehavior',
+      type: "'contain' | 'pageOrder'",
+      description:
+        "Where Tab and Shift+Tab go while the popover is open. 'contain' cycles them inside the popover. 'pageOrder' holds nothing: Tab moves through the page. Where the browser supports popover invokers, the popover's controls come after its trigger, or after an anchor that can take focus when it has no trigger. When another layer opened from the same trigger or anchor closes (a menu, a hover card), the popover's controls leave the Tab order until the popover opens again. Escape closes it only while focus is inside it, or on or inside its anchor or trigger; and it never carries aria-modal. Use 'pageOrder' for a coachmark or a tour step, whose reader must reach the control it describes. isModal: true with 'pageOrder' is a type error.",
+      default: "'contain'",
     },
     {
       name: 'hasSurface',
@@ -223,14 +230,17 @@ export const docsDense = {
     xstyle: 'StyleX styles for content wrapper, after default surface.',
     hasLightDismiss: 'whether outside click dismisses popover.',
     hasEscapeDismiss:
-      'whether Escape dismisses; full effect only w/ hasLightDismiss false.',
+      "whether Escape dismisses; full effect only w/ hasLightDismiss false or tabBehavior 'pageOrder'.",
     hasAutoFocus:
       'focus genuine content on open; dialog surface fallback; generated close excluded.',
     hasCloseButton: 'whether hidden keyboard close button is included.',
     closeButtonLabel: 'label for hidden close button.',
     dialogLabel: 'accessible label for popover dialog (role="dialog" only).',
     role: 'content wrapper ARIA role; "none" for listbox/menu popups.',
-    isModal: 'whether a dialog-role popover is modal (aria-modal).',
+    isModal:
+      'whether a dialog-role popover is modal (aria-modal); Tab stays inside either way.',
+    tabBehavior:
+      "'contain' cycles Tab inside; 'pageOrder' lets Tab pass through in page order (popover after its trigger, or after a focusable anchor when it has no trigger; needs browser popover invokers; lost until it reopens when another layer opened from the same element closes), scopes Escape to focus in the popover or on its trigger/anchor, never aria-modal.",
     hasSurface: 'apply default surface background/radius/shadow.',
     padding: 'spacing-scale padding on the painted surface; omit for none.',
     surfaceTarget:

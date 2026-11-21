@@ -2,6 +2,7 @@
 
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen, fireEvent} from '@testing-library/react';
+import {InternationalizationProvider} from '../i18n/InternationalizationProvider';
 import userEvent from '@testing-library/user-event';
 import {Thumbnail} from './Thumbnail';
 import {
@@ -105,6 +106,19 @@ describe('Thumbnail', () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole('button', {name: 'Remove file.png — Clickable'}),
+    ).toBeInTheDocument();
+  });
+
+  it('joins the label and alt through one catalog message', () => {
+    render(
+      <InternationalizationProvider
+        locale="ja"
+        overrides={{ja: {'@astryx.thumbnail.nameWithAlt': '{alt}（{label}）'}}}>
+        <Thumbnail src="/img.jpg" alt="表紙" label="file.png" />
+      </InternationalizationProvider>,
+    );
+    expect(
+      screen.getByRole('group', {name: '表紙（file.png）'}),
     ).toBeInTheDocument();
   });
 
