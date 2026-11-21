@@ -160,7 +160,7 @@ describe('doctor core-props', () => {
       link(app, 'typescript', path.join(REPO, 'node_modules', 'typescript'));
       const noCore = (await runChecks({cwd: app})).checks.find(each => each.id === 'core-props');
       expect(noCore?.status).toBe('info');
-      expect(noCore?.message).toMatch(/^Not checked: Core is not installed where the pages that import it can find it/);
+      expect(noCore?.message).toMatch(/^Not checked: Core is not installed where the pages that import it can find it, so the props were not checked\. Install `@astryxdesign\/core` in the project that holds the pages\.$/);
     },
     SLOW,
   );
