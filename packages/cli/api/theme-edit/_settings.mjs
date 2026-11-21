@@ -4072,12 +4072,7 @@ function blockOf(file, keys) {
   /** @type {Map<string, string | null>} */
   const out = new Map();
   try {
-    const ast = /** @type {any} */ (
-      parseModule(fs.readFileSync(file, 'utf8'), {
-        sourceType: 'module',
-        plugins: ['typescript'],
-      })
-    );
+    const ast = parsedModule(fs.readFileSync(file, 'utf8'));
     for (const st of ast.program.body) {
       const decl = st.declaration?.declarations?.[0];
       /** @type {any} */
@@ -4115,6 +4110,40 @@ function blockOf(file, keys) {
     // No build yet, or not one this reads.
   }
   return out;
+}
+
+/**
+ * The modules blockOf parsed last, by their text: a command reads the same
+ * built module, settings and base for every part and scope, and parses each
+ * text once. A file whose text changed parses again.
+ * @type {Map<string, any>}
+ */
+const PARSED_MODULES = new Map();
+
+/** The texts PARSED_MODULES keeps. */
+const PARSED_MODULES_KEPT = 8;
+
+/**
+ * A module's syntax tree, parsed once for each text.
+ * @param {string} source
+ * @returns {any}
+ */
+export function parsedModule(source) {
+  const kept = PARSED_MODULES.get(source);
+  if (kept) {
+    PARSED_MODULES.delete(source);
+    PARSED_MODULES.set(source, kept);
+    return kept;
+  }
+  const ast = parseModule(source, {
+    sourceType: 'module',
+    plugins: ['typescript'],
+  });
+  PARSED_MODULES.set(source, ast);
+  const oldest = PARSED_MODULES.keys().next().value;
+  if (PARSED_MODULES.size > PARSED_MODULES_KEPT && oldest !== undefined)
+    PARSED_MODULES.delete(oldest);
+  return ast;
 }
 
 /**
