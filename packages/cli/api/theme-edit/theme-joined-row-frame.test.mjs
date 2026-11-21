@@ -251,4 +251,27 @@ describe('a border, radius, shadow or corners on a row of joined controls', () =
     expect(lines).toMatch(/box-shadow .* --on pagination\b(?!-)/);
     expect(lines).not.toMatch(/box-shadow .* --on pagination-list\b/);
   }, 240_000);
+
+  it('says so when a fill on the pager moves its strip back onto the bar', async test => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      test.skip();
+    }
+    await themeEditNew('m', {cwd, like: 'neutral'});
+    await themeEditSet('m', 'border', '1px solid #dddddd', {
+      cwd,
+      on: 'pagination',
+    });
+    const {data} = await themeEditSet('m', 'background-color', '#f8f9fa', {
+      cwd,
+      on: 'pagination',
+    });
+    expect(data.notes.join('\n')).toMatch(
+      /pagination is filled now[^\n]*border draws on pagination again, not on pagination-list[^\n]* undo m background-color --on pagination/,
+    );
+    const css = fs.readFileSync(themeFiles(cwd, 'm').css, 'utf8');
+    expect(css).toMatch(
+      /\.astryx-pagination\s*\{[^}]*border: 1px solid #dddddd/,
+    );
+  }, 240_000);
 });

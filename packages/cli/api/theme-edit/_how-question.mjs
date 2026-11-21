@@ -77,6 +77,7 @@ import {
   borderParts,
   cornerParts,
   rowFrameOf,
+  fillsPart,
   givesEdge,
   isRowFrame,
   roundsCorners,
@@ -12571,14 +12572,7 @@ export function draftAnswer(ctx, env, question) {
         !o.neg &&
         o.aspects.includes('background') &&
         o.parts.some(q => q.on === part),
-    ) ||
-    (env.data?.settings ?? []).some(
-      (/** @type {any} */ x) =>
-        x.source === 'property' &&
-        x.on === part &&
-        /^background/.test(String(x.thing)) &&
-        givesEdge(x),
-    );
+    ) || fillsPart(env.data?.settings ?? [], part);
   for (const c of clauses)
     if (
       c.aspects.some(a =>

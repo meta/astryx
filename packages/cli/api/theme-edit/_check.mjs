@@ -4165,11 +4165,16 @@ export function checkSetting(
   unset = false,
   scope = {},
 ) {
-  ctx.settingsNow = data.settings;
+  // (The settings a part's reach reads are this theme's, for this check
+  // only.)
+  const before = ctx.themeSettings;
+  ctx.themeSettings = data.settings;
   try {
     return checkTyped(ctx, slug, data, thing, value, flags, unset, scope);
   } catch (e) {
     throw keepTypedScope(e, ctx, slug, data, flags);
+  } finally {
+    ctx.themeSettings = before;
   }
 }
 

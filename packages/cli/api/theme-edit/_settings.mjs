@@ -199,7 +199,7 @@ setOwnTokenReader((cwd, slug) => ownSourceTokenValues(cwd, slug));
 /** What lifted secondary text sits on: the contrast check measures it there. */
 const LIFT_GROUND_TOKENS = new Set(LIFT_PARTS.map(([, , g]) => g));
 
-/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, uncheckedCode?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}, keepStops?: ReturnType<typeof stopsIn> | null, keepRadii?: Record<string, string> | null, settingsNow?: Setting[], sizeNotes?: string[], compileNotes?: string[], derived?: Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string, corners?: boolean}>>, takesPictures?: {sheet: string | null} | null}} Ctx */
+/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, uncheckedCode?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}, keepStops?: ReturnType<typeof stopsIn> | null, keepRadii?: Record<string, string> | null, themeSettings?: Setting[], sizeNotes?: string[], compileNotes?: string[], derived?: Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string, corners?: boolean}>>, takesPictures?: {sheet: string | null} | null}} Ctx */
 /** @typedef {import('./_parts.mjs').PaintSide} PaintSide */
 /** @typedef {import('./_parts.mjs').TextPair} TextPair */
 
@@ -4614,16 +4614,7 @@ export function boxFrameOf(ctx, s) {
     return null;
   // (On a part the theme fills, the fill is its box: its border, radius
   // and shadow stay on it, as they always did.)
-  if (
-    (ctx.settingsNow ?? []).some(
-      x =>
-        x.on === s.on &&
-        x.source === 'property' &&
-        /^background/.test(String(x.thing)) &&
-        givesEdge(x),
-    )
-  )
-    return null;
+  if (fillsPart(ctx.themeSettings ?? [], s.on)) return null;
   const own = ctx.C?.MAP?.[s.on]?.own ?? {};
   if (Object.keys(own).some(k => /^(?:border(?!.*radius)|background)/.test(k)))
     return null;
@@ -5811,7 +5802,7 @@ export function roleReach(ctx, data, base) {
  * @returns {any}
  */
 export function compileTheme(ctx, data, base) {
-  ctx.settingsNow = data.settings;
+  ctx.themeSettings = data.settings;
   ctx.sizeNotes = [];
   ctx.compileNotes = [];
   // A setting the editor no longer accepts never reaches the build; a
@@ -14325,6 +14316,22 @@ export function cornerParts(ctx, part) {
   if (!rec || rec.own?.['border-radius']) return [part];
   const inner = roundedPartsInside(ctx, part);
   return inner.length ? inner : [part];
+}
+
+/**
+ * Whether a theme's settings fill a part at rest: a background on the part
+ * itself that is not none or transparent.
+ * @param {ReadonlyArray<Partial<Setting>>} settings
+ * @param {string} part
+ */
+export function fillsPart(settings, part) {
+  return settings.some(
+    x =>
+      x.on === part &&
+      x.source === 'property' &&
+      /^background/.test(String(x.thing)) &&
+      givesEdge(x),
+  );
 }
 
 /**

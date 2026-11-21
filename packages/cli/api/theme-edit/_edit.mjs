@@ -80,6 +80,8 @@ import {
   closestOf,
   partsOf,
   boxFrameOf,
+  fillsPart,
+  rowFrameOf,
   undoArgs,
   isCheckNote,
   withoutBadValues,
@@ -7422,6 +7424,32 @@ async function changeOnce(
       notes.push(
         `wrote on ${frame}, the row that frames ${s.on}'s controls as one strip, so they draw one box together; to undo it: ${P} undo ${slug} ${undoArgs(s)}`,
       );
+    // (A fill on the pager makes the bar its box: a border, radius or
+    // shadow written on its row moves back onto the bar. Said, with the
+    // undo that keeps the strip.)
+    const row = s.on ? rowFrameOf(ctx, s.on) : null;
+    const others = data.settings.filter(
+      x => !(x.on === s.on && x.thing === s.thing && !x.state && !x.when),
+    );
+    const moved =
+      sub === 'set' &&
+      !r.unchanged &&
+      row &&
+      !s.state &&
+      !s.when &&
+      /^background/.test(String(s.thing)) &&
+      !fillsPart(others, String(s.on))
+        ? others.filter(
+            x =>
+              x.on === s.on &&
+              x.source === 'property' &&
+              boxFrameOf({...ctx, themeSettings: others}, x) === row,
+          )
+        : [];
+    if (moved.length)
+      notes.push(
+        `${s.on} is filled now, so it is its own box: ${moved.map(x => x.thing).join(', ')} ${moved.length > 1 ? 'draw' : 'draws'} on ${s.on} again, not on ${row}; to keep the strip on ${row}, undo this fill: ${P} undo ${slug} ${undoArgs(s)}`,
+      );
   }
   // A fill on the plain part covers the paints Core gives its variants and
   // states (a primary button's accent, a checked box's): said, with the
@@ -8229,6 +8257,7 @@ export async function themeEditShow(theme, options = {}) {
     throw await savedDamageRefusal(e, theme, cwd);
   }
   const ctx = await context(cwd);
+  ctx.themeSettings = data.settings;
   // show --png takes its sheet too, after any build it makes.
   ctx.takesPictures = png ? {sheet: section ? `sheet-${section}` : null} : null;
   // The app copy is written once show succeeds (at its end), never by a
