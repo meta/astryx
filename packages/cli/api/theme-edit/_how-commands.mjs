@@ -76,6 +76,7 @@ export const EXAMPLE_THEME = 'my-theme';
  * @property {(steps: Step[]) => {ok: true} | {ok: false, why: string, run?: string[]}} check
  * @property {(steps: Step[], part: string, prop: string) => {light: string, dark: string} | null} valueAfter what a part shows for a property at rest after the steps, in each mode, or null when it reads none
  * @property {(steps: Step[], token: string) => {light: string, dark: string} | null} tokenAfter what a whole-theme token shows after the steps, in each mode, or null when the steps do not build
+ * @property {(steps: Step[]) => {light: Record<string, string>, dark: Record<string, string>} | null} tokensAfter the theme's own token values after the steps, built in memory, or null when a step does not apply
  * @property {(steps: Step[], intent: MeasureIntent) => string | null} measure the measured check: why the built result does not do what the question asks, or null
  */
 
@@ -228,6 +229,22 @@ export async function howTheme(ctx, cwd, name) {
   // A damaged preview record refuses every preview command, so an answer
   // names its fix instead of a preview command.
   const {previewRecordProblem} = await import('./_preview-app.mjs');
+  /**
+   * The theme's own token values after the steps, built in memory with the
+   * same compile `set` builds from (nothing is written); null when a step
+   * does not apply.
+   * @param {Step[]} steps
+   */
+  const tokensAfterSteps = steps => {
+    const d = JSON.parse(JSON.stringify(theme));
+    const checkCtx = /** @type {any} */ ({...ctx, base});
+    try {
+      for (const st of steps) apply(checkCtx, slug, d, st);
+    } catch {
+      return null;
+    }
+    return ownTokens(compileTheme(ctx, d, base), base, ctx.project?.core);
+  };
   return {
     slug,
     exists,
@@ -278,24 +295,20 @@ export async function howTheme(ctx, cwd, name) {
       return measureFit(ctx, base, was, now, intent, steps, visible);
     },
     /**
+     * The theme's own token values after the steps, built in memory with
+     * the same compile `set` builds from (nothing is written).
+     * @param {Step[]} steps
+     */
+    tokensAfter: steps => tokensAfterSteps(steps),
+    /**
      * What a whole-theme token shows after the steps (built in memory,
      * nothing written), every var() written out, in each mode.
      * @param {Step[]} steps
      * @param {string} token
      */
     tokenAfter(steps, token) {
-      const d = JSON.parse(JSON.stringify(theme));
-      const checkCtx = /** @type {any} */ ({...ctx, base});
-      try {
-        for (const st of steps) apply(checkCtx, slug, d, st);
-      } catch {
-        return null;
-      }
-      const toks = ownTokens(
-        compileTheme(ctx, d, base),
-        base,
-        ctx.project?.core,
-      );
+      const toks = tokensAfterSteps(steps);
+      if (!toks) return null;
       /** @param {'light' | 'dark'} m */
       const shown = m => {
         let v = `var(${token})`;
