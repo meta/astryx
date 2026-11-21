@@ -373,8 +373,9 @@ const QUESTIONS = [
   [
     'glossy gradient header',
     {
-      top: /^set q background 'linear-gradient\(.*\)' --on app-shell-header$/,
-      adds: /app-shell-header\.base\.background=linear-gradient/,
+      // (A gloss is the part's own color in each mode: the sample is help,
+      // never written.)
+      top: null,
     },
   ],
   // borders
@@ -528,7 +529,7 @@ const QUESTIONS = [
     'square corners everywhere',
     {
       // (The dial squares the pills that are a styling choice itself.)
-      top: /^set q corners square$/,
+      top: /^set q corners square && set q --radius-full '?0px'?$/,
       adds: /--radius-element=0px/,
     },
   ],
@@ -3372,7 +3373,7 @@ const QUESTIONS_J = [
   [
     'zero radius everywhere',
     {
-      top: /^set q corners square$/,
+      top: /^set q corners square && set q --radius-full '?0px'?$/,
       adds: /--radius-element=0px/,
     },
   ],

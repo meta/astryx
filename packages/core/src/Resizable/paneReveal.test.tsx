@@ -3,10 +3,12 @@
 /**
  * @file paneReveal.test.tsx
  * @input vitest (jsdom), Testing Library, Layout with a LayoutPanel beside a
- *   ResizeHandle, the useResizable hook's region, and a recording
- *   stand-in for the animated-layout module's edge reveal
+ *   ResizeHandle, the useResizable hook's region, a recording stand-in for
+ *   the animated-layout module's edge reveal, and a stand-in for
+ *   Element.animate
  * @output Checks when a LayoutPanel's pane slides on collapse and open, from
- *   which edge and around which commit
+ *   which edge and around which commit. A press before a slide's first frame
+ *   catches the pane where it shows
  * @position Integration tests for createResizable.ts, resizablePane.ts,
  *   LayoutPanel.tsx and ResizeHandle.tsx
  */
@@ -16,6 +18,7 @@ import {useLayoutEffect, useState} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import type * as AnimatedLayoutModule from '../motion/animatedLayout';
+import {createAnimatedLayout, playLayoutFrames} from '../motion/animatedLayout';
 import {Layout} from '../Layout/Layout';
 import {LayoutContent} from '../Layout/LayoutContent';
 import {LayoutPanel} from '../Layout/LayoutPanel';
@@ -650,5 +653,148 @@ describe("a LayoutPanel's pane slides on collapse and open (component:Resizable 
       expect(reveals).toHaveLength(0);
       view.unmount();
     }
+  });
+});
+
+describe('a press before the first frame of a closing slide (component:Resizable FR8)', () => {
+  /** The stand-in's state for one animation, as the Web Animations model keeps it. */
+  interface Stub {
+    readonly element: Element;
+    readonly duration: number;
+    startTime: number | null;
+    /** The current time while paused or play-pending. */
+    holdTime: number | null;
+    isPaused: boolean;
+    isCancelled: boolean;
+    animation?: Animation;
+  }
+  let stubs: Stub[] = [];
+  /** The document timeline's time and the page's clock, ms. */
+  let now = 1000;
+  const originalAnimate = Element.prototype.animate;
+  const originalGetAnimations = Element.prototype.getAnimations;
+
+  beforeEach(() => {
+    stubs = [];
+    now = 1000;
+    Object.defineProperty(document, 'timeline', {
+      configurable: true,
+      get: () => ({currentTime: now}),
+    });
+    vi.spyOn(performance, 'now').mockImplementation(() => now);
+    // No frame runs: each press below comes before the first one.
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(() => 0);
+    Element.prototype.animate = function (
+      this: Element,
+      _keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
+      options?: number | KeyframeAnimationOptions,
+    ) {
+      const timing = options as KeyframeAnimationOptions;
+      // A new animation that plays is play-pending, at current time 0.
+      const stub: Stub = {
+        element: this,
+        duration: Number(timing.duration),
+        startTime: null,
+        holdTime: 0,
+        isPaused: false,
+        isCancelled: false,
+      };
+      stubs.push(stub);
+      const currentTime = () =>
+        stub.holdTime ?? (stub.startTime == null ? null : now - stub.startTime);
+      const animation = {
+        get startTime() {
+          return stub.startTime;
+        },
+        set startTime(value: number | null) {
+          stub.startTime = value;
+          stub.holdTime = null;
+        },
+        get currentTime() {
+          return currentTime();
+        },
+        set currentTime(value: number | null) {
+          if (stub.startTime == null) {
+            stub.holdTime = value;
+          } else {
+            stub.startTime = now - Number(value);
+          }
+        },
+        get playState() {
+          if (stub.isCancelled) {
+            return 'idle';
+          }
+          if (stub.isPaused) {
+            return 'paused';
+          }
+          return Number(currentTime()) >= stub.duration
+            ? 'finished'
+            : 'running';
+        },
+        pause() {
+          stub.holdTime = currentTime();
+          stub.startTime = null;
+          stub.isPaused = true;
+        },
+        play() {
+          if (stub.isPaused) {
+            stub.startTime = now - Number(stub.holdTime);
+            stub.holdTime = null;
+            stub.isPaused = false;
+          }
+        },
+        cancel() {
+          stub.isCancelled = true;
+        },
+        addEventListener() {},
+        finished: new Promise(() => {}),
+        effect: {
+          getTiming: () => ({
+            fill: timing.fill ?? 'auto',
+            duration: stub.duration,
+          }),
+          getComputedTiming: () => ({duration: stub.duration}),
+          updateTiming() {},
+        },
+      } as unknown as Animation;
+      stub.animation = animation;
+      return animation;
+    };
+    Element.prototype.getAnimations = function (this: Element) {
+      return stubs
+        .filter(stub => stub.element === this && !stub.isCancelled)
+        .map(stub => stub.animation as Animation);
+    };
+  });
+
+  afterEach(() => {
+    Element.prototype.animate = originalAnimate;
+    Element.prototype.getAnimations = originalGetAnimations;
+    delete (document as {timeline?: unknown}).timeline;
+    vi.restoreAllMocks();
+  });
+
+  it('catches the pane where it shows while its slide holds its first keyframe', () => {
+    render(<PropsSplit />);
+    const zone = grabZone();
+    fireEvent.pointerDown(zone, {pointerId: 1, clientX: 300});
+    fireEvent.pointerMove(zone, {pointerId: 1, clientX: 110});
+    fireEvent.pointerUp(zone, {pointerId: 1, clientX: 110});
+    expect(propsRegion?.isCollapsed).toBe(true);
+    // The engine makes the pane's slide in the collapse's task, from rest.
+    // It holds its first keyframe until the first frame drawn after that task.
+    playLayoutFrames(
+      createAnimatedLayout(() => pane().parentElement),
+      [{element: pane(), frames: p => ({opacity: 1 - p})}],
+    );
+    // The finger catches it before that frame, then passes the minimum.
+    fireEvent.pointerDown(zone, {pointerId: 2, clientX: 110});
+    fireEvent.pointerMove(zone, {pointerId: 2, clientX: 113});
+    expect(propsRegion?.isCollapsed).toBe(true);
+    fireEvent.pointerMove(zone, {pointerId: 2, clientX: 140});
+    expect(propsRegion?.isCollapsed).toBe(false);
+    expect(propsRegion?.size).toBeGreaterThan(65);
+    expect(propsRegion?.size).toBeLessThan(80);
+    fireEvent.pointerUp(zone, {pointerId: 2, clientX: 140});
   });
 });

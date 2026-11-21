@@ -840,6 +840,31 @@ describe('a palette made with a recipe this CLI does not know, or an older one',
   );
 
   it(
+    "a named undo of a one-mode setting of a token the newer module does not map writes this CLI's shade",
+    async () => {
+      const xat = (/** @type {string} */ p) => path.join(cwd, 'themes/x', p);
+      const module = () => fs.readFileSync(xat('x.settings.ts'), 'utf8');
+      expect(module()).not.toContain('"--color-text-accent"');
+      await themeEditSet('x', '--color-text-accent', '#0d0e0f', {
+        cwd,
+        mode: 'light',
+      });
+      await themeEditUndo('x', {
+        cwd,
+        thing: '--color-text-accent',
+        mode: 'light',
+      });
+      // (A one-mode setting writes no pair, so its undo takes the token
+      // from this CLI's mapping of the saved palette, as the release note
+      // says.)
+      const after = module();
+      expect(after).not.toMatch(/#0d0e0f/i);
+      expect(after).toMatch(/"--color-text-accent": \[\s*palette\./);
+    },
+    T,
+  );
+
+  it(
     'a whole-theme token the palette maps, set for both modes and removed by hand, shows the palette shade again',
     async () => {
       const bat = (/** @type {string} */ p) => path.join(cwd, 'themes/nb', p);

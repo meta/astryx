@@ -298,6 +298,26 @@ describe('one branch per release lifecycle', () => {
     );
   });
 
+  it('keeps ordinary create stderr empty when the version tag is absent', async () => {
+    const {root, cutSha} = cutFixture();
+    git(root, 'tag', 'v0.6.4');
+
+    const {stderr} = await execFileAsync(process.execPath, [
+      ACTIVE_RELEASE,
+      'create',
+      '--root',
+      root,
+      '--version',
+      '0.6.5',
+      '--branch',
+      BRANCH,
+      '--cut-sha',
+      cutSha,
+    ]);
+
+    expect(stderr).toBe('');
+  });
+
   it('allows only an authenticated unpublished owner recut over an existing tag', () => {
     const {root, cutSha} = cutFixture();
     git(root, 'tag', 'v0.6.5');

@@ -247,7 +247,10 @@ describe('SideNav rail motion (component:SideNav FR6, component:AppShell FR17)',
     );
     expect(slide.keyframes[0].translate).toBe(`${EXPANDED - COLLAPSED}px 0px`);
     expect(slide.keyframes.at(-1)?.translate).toBe('0px 0px');
-    // Every part plays on one clock.
+    // Every part plays on one clock, from the first frame after the task.
+    await new Promise<void>(resolve => {
+      requestAnimationFrame(() => resolve());
+    });
     const starts = new Set(recorded.map(entry => entry.animation.startTime));
     expect(starts).toEqual(new Set([1000]));
     const durations = new Set(recorded.map(entry => entry.options.duration));

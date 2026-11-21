@@ -3203,16 +3203,16 @@ describe('toast announcements via singleton live regions', () => {
     act(() => {
       fireEvent.click(screen.getByText('Show'));
     });
-    // Announced once when the toast is dispatched.
+    // The flattened text reaches the polite singleton region (the sink),
+    // once.
+    await waitFor(() => {
+      expect(politeRegion()).toHaveTextContent('Update ready Restart to apply');
+    });
     expect(announceSpy).toHaveBeenCalledTimes(1);
     expect(announceSpy).toHaveBeenCalledWith(
       'Update ready Restart to apply',
       'polite',
     );
-    // The flattened text reaches the polite singleton region (the sink).
-    await waitFor(() => {
-      expect(politeRegion()).toHaveTextContent('Update ready Restart to apply');
-    });
     // Status toasts never touch the assertive region.
     expect(assertiveRegion()).toHaveTextContent('');
   });
@@ -3253,6 +3253,81 @@ describe('toast announcements via singleton live regions', () => {
     });
     expect(announceSpy).toHaveBeenCalledWith('Draft saved', 'polite');
     expect(assertiveRegion()).toHaveTextContent('');
+  });
+
+  it('announces a body that mixes text and a component with the words it shows', async () => {
+    function Amount() {
+      return <strong>$120.00</strong>;
+    }
+    renderViewport(
+      <ShowToastButton
+        options={{
+          body: (
+            <>
+              Payment received: <Amount />
+            </>
+          ),
+        }}
+        triggerLabel="Show"
+      />,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Show'));
+    });
+
+    await waitFor(() => {
+      expect(politeRegion()).toHaveTextContent('Payment received: $120.00');
+    });
+    expect(announceSpy).toHaveBeenCalledTimes(1);
+    expect(announceSpy).toHaveBeenCalledWith(
+      'Payment received: $120.00',
+      'polite',
+    );
+  });
+
+  it('announces a mixed body once, though its component changes after the toast shows', async () => {
+    let resolveAmount = () => {};
+    function Amount() {
+      const [amount, setAmount] = useState('…');
+      resolveAmount = () => {
+        setAmount('$120.00');
+      };
+      return <strong>{amount}</strong>;
+    }
+    renderViewport(
+      <ShowToastButton
+        options={{
+          body: (
+            <>
+              Payment received: <Amount />
+            </>
+          ),
+        }}
+        triggerLabel="Show"
+      />,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Show'));
+    });
+    await waitFor(() => {
+      expect(announceSpy).toHaveBeenCalledTimes(1);
+    });
+    expect(announceSpy).toHaveBeenCalledWith('Payment received: …', 'polite');
+
+    act(() => {
+      resolveAmount();
+    });
+    expect(screen.getByText('$120.00')).toBeInTheDocument();
+    // Dismissing renders the card again with the new words on screen.
+    act(() => {
+      fireEvent.click(
+        screen.getByRole('button', {name: 'Dismiss notification'}),
+      );
+    });
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+    expect(announceSpy).toHaveBeenCalledTimes(1);
   });
 
   it('announces a component body in full, its link included', async () => {

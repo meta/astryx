@@ -183,7 +183,7 @@ export function parsePropType(
   if (t === 'DefinedTheme') {
     return {kind: 'theme'};
   }
-  if (t === 'SyntaxTheme') {
+  if (t === 'SyntaxThemeDefinition') {
     return {kind: 'syntax-theme'};
   }
   if (t === 'IconType' || t === 'IconName') {
