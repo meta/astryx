@@ -8198,10 +8198,21 @@ const PHONE_SIZES_NOTE =
  * @experimental
  * @param {string} theme
  * @param {import('./theme-edit.type.mjs').ThemeEditShowOptions} [options]
- * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditShowResponse>}
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditShowResponse | import('./theme-edit.type.mjs').ThemeEditShowPartResponse>}
  */
 export async function themeEditShow(theme, options = {}) {
   const {cwd = process.cwd(), png = false} = options;
+  if (options.on != null) {
+    requireProject(cwd);
+    if (png || options.section)
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `--on looks up what one part shows and writes nothing; --png and --section are for the pages show writes, so drop ${png && options.section ? 'them' : png ? '--png' : '--section'}.`,
+        {run: [`${P} show ${theme} --on ${options.on}`]},
+      );
+    const {themePartValues} = await import('./_resolved.mjs');
+    return themePartValues(cwd, theme, String(options.on));
+  }
   // Without the theme lock (it cannot be taken), show writes nothing: it
   // reports the last build as it is.
   const readOnly = Boolean(/** @type {any} */ (options).readOnly);

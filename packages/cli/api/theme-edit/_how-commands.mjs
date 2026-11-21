@@ -89,7 +89,7 @@ export const EXAMPLE_THEME = 'my-theme';
  * @param {any} [core] the project's Core module, which expands the scale
  * @returns {{light: Record<string, string>, dark: Record<string, string>}}
  */
-function ownTokens(compiled, base, core) {
+export function ownTokens(compiled, base, core) {
   const out = {light: {...base.light}, dark: {...base.dark}};
   const scale = compiled?.typography?.scale;
   if (
@@ -397,7 +397,7 @@ const kebab = k => k.replace(/[A-Z]/g, m => `-${m.toLowerCase()}`);
  * @param {any} comp the part's compiled styles
  * @returns {Map<string, string>}
  */
-function partValues(comp) {
+export function partValues(comp) {
   /** @type {Map<string, string>} */
   const out = new Map();
   for (const [when, rules] of Object.entries(comp ?? {}))
@@ -422,7 +422,7 @@ function partValues(comp) {
  * @param {Record<string, string>} map
  * @param {'light' | 'dark'} mode
  */
-function resolveIn(v, map, mode) {
+export function resolveIn(v, map, mode) {
   let out = String(v ?? '');
   for (let i = 0; i < 8; i++) {
     const next = out
@@ -811,6 +811,133 @@ const CHROMA_STEP = 0.005;
 const luminance = c => c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114;
 
 /**
+ * One part's rules: each source's declarations on top of the one before,
+ * condition by condition (a rule that sets one property keeps the earlier
+ * rule's others).
+ * @param {...Record<string, any>} sources the part's rules, earliest first
+ * @returns {Record<string, Record<string, any>>}
+ */
+export function mergeRules(...sources) {
+  /** @type {Record<string, Record<string, any>>} */
+  const rules = {};
+  for (const src of sources)
+    for (const [when, rule] of Object.entries(src ?? {}))
+      rules[when] =
+        rule && typeof rule === 'object' && !Array.isArray(rule)
+          ? {...(rules[when] ?? {}), ...rule}
+          : rule;
+  return rules;
+}
+
+/**
+ * The tokens inside a part in one mode: the theme's, with each token the
+ * part's own rule sets (a part-scoped dial's `--spacing-4`) over them, and a
+ * variant's rule over the part's in that variant.
+ * @param {Record<string, Record<string, any>>} rules the part's rules
+ * @param {Record<string, string>} tokens the theme's tokens in that mode
+ * @param {string} when the rule's condition (`base` at rest)
+ * @returns {Record<string, string>}
+ */
+export function scopedTokens(rules, tokens, when) {
+  /** @type {Record<string, string>} */
+  const t = {...tokens};
+  for (const w of when === 'base' ? ['base'] : ['base', when])
+    for (const [k, v] of Object.entries(rules[w] ?? {}))
+      if (k.startsWith('--') && typeof v === 'string') t[k] = v;
+  return t;
+}
+
+/**
+ * The values a part shows, by `when|state|prop` and mode: its own
+ * compiled rules (the base theme's, with the theme's on top), then each
+ * token it reads for a property, with every var() written out from the
+ * part's tokens in that mode. `raw` is the declaration as written.
+ * @param {any} C the part data (what each part reads, from Core)
+ * @param {Record<string, any>} baseComponents the base theme's own part styles
+ * @param {any} compiled the theme's own compiled styles
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} toks
+ * @param {string} part
+ * @returns {Map<string, {light: string, dark: string, raw: string}>}
+ */
+export function partShows(C, baseComponents, compiled, toks, part) {
+  const rules = mergeRules(
+    baseComponents?.[part] ?? {},
+    compiled.components?.[part] ?? {},
+  );
+  const own = partValues(rules);
+  const scoped = (
+    /** @type {'light' | 'dark'} */ m,
+    /** @type {string} */ when,
+  ) => scopedTokens(rules, toks[m], when);
+  /** @type {Map<string, string>} */
+  const raw = new Map(own);
+  // The part at rest in its main variant is its `base` too (a set with no
+  // --when writes base).
+  const mainWhen = (/** @type {string[]} */ ws) =>
+    ws.some(
+      w =>
+        w === '' ||
+        /^variant=(default|primary|accent|neutral)$|^size=md$/.test(w),
+    );
+  // What Core writes for a property in a rule (a card's padding is its
+  // container padding less the border width): the whole declaration, so
+  // a value is never read from one token of several.
+  const declOf = (
+    /** @type {string} */ prop,
+    /** @type {string} */ w,
+    /** @type {string} */ token,
+  ) => {
+    const at = C.MAP[part]?.at?.[prop] ?? {};
+    const attrs = w ? w.split(' ') : [];
+    const key = Object.keys(at).find(k =>
+      attrs.every(x => k.split(',').includes(x)),
+    );
+    // (Only a declaration of several theme tokens: one token alone is
+    // read as that token.)
+    const decl = key ? String(at[key]) : '';
+    const tokens = new Set(
+      [...decl.matchAll(/var\(\s*(--[a-z][a-z0-9-]*)/g)]
+        .map(m => m[1])
+        .filter(t => !/^--(_|astryx-)/.test(t)),
+    );
+    return decl.includes(token) && tokens.size > 1 ? decl : `var(${token})`;
+  };
+  for (const g of Object.keys(GROUPS))
+    for (const r of C.partReads(part, g) ?? [])
+      if (mainWhen(r.when?.length ? r.when : ['']))
+        for (const prop of r.props ?? []) {
+          const key = `base||${prop}`;
+          const w = (r.when?.length ? r.when : ['']).find(
+            (/** @type {string} */ x) => mainWhen([x]),
+          );
+          if (!raw.has(key)) raw.set(key, declOf(prop, w ?? '', r.token));
+        }
+  for (const g of Object.keys(GROUPS))
+    for (const r of C.partReads(part, g) ?? [])
+      for (const prop of r.props ?? [])
+        for (const w of r.when?.length ? r.when : [''])
+          if (!/::|:active|:hover|:focus|:checked|:disabled/.test(w)) {
+            const key = `${w ? w.replace('=', ':') : 'base'}||${prop}`;
+            // A variant with no rule of its own takes the part's own base
+            // rule over the token it reads.
+            if (!raw.has(key))
+              raw.set(
+                key,
+                own.get(`base||${prop}`) ?? declOf(prop, w, r.token),
+              );
+          }
+  /** @type {Map<string, {light: string, dark: string, raw: string}>} */
+  const out = new Map();
+  for (const [k, v] of raw)
+    out.set(k, {
+      light: resolveIn(v, scoped('light', k.split('|')[0]), 'light'),
+      dark: resolveIn(v, scoped('dark', k.split('|')[0]), 'dark'),
+      raw: v,
+    });
+  return out;
+}
+
+/**
  * Hold the after build to the intent; why it does not fit, or null.
  * @param {any} ctx
  * @param {any} base
@@ -834,109 +961,12 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
   });
   const subjects = new Set(intent.subjects.flatMap(members));
   /**
-   * The values a part shows, by `when|state|prop` and mode: its own
-   * compiled rules, then each token it reads for a property.
    * @param {any} compiled
    * @param {{light: Record<string, string>, dark: Record<string, string>}} toks
    * @param {string} part
    */
-  const shown = (compiled, toks, part) => {
-    // Each rule of the part: the base theme's own declarations with the
-    // theme's on top, condition by condition (a theme rule that sets one
-    // property keeps the base rule's others).
-    /** @type {Record<string, Record<string, any>>} */
-    const rules = {};
-    for (const src of [
-      base.components?.[part] ?? {},
-      compiled.components?.[part] ?? {},
-    ])
-      for (const [when, rule] of Object.entries(src))
-        rules[when] =
-          rule && typeof rule === 'object' && !Array.isArray(rule)
-            ? {...(rules[when] ?? {}), ...rule}
-            : rule;
-    const own = partValues(rules);
-    // A token the part's own rule sets (a part-scoped dial's --spacing-4)
-    // is the value inside the part.
-    // A token a variant's rule sets holds in that variant, over the part's.
-    const scoped = (
-      /** @type {'light' | 'dark'} */ m,
-      /** @type {string} */ when,
-    ) => {
-      /** @type {Record<string, string>} */
-      const t = {...toks[m]};
-      for (const w of when === 'base' ? ['base'] : ['base', when])
-        for (const [k, v] of Object.entries(rules[w] ?? {}))
-          if (k.startsWith('--') && typeof v === 'string') t[k] = v;
-      return t;
-    };
-    /** @type {Map<string, string>} */
-    const raw = new Map(own);
-    // The part at rest in its main variant is its `base` too (a set with no
-    // --when writes base).
-    const mainWhen = (/** @type {string[]} */ ws) =>
-      ws.some(
-        w =>
-          w === '' ||
-          /^variant=(default|primary|accent|neutral)$|^size=md$/.test(w),
-      );
-    // What Core writes for a property in a rule (a card's padding is its
-    // container padding less the border width): the whole declaration, so
-    // a value is never read from one token of several.
-    const declOf = (
-      /** @type {string} */ prop,
-      /** @type {string} */ w,
-      /** @type {string} */ token,
-    ) => {
-      const at = C.MAP[part]?.at?.[prop] ?? {};
-      const attrs = w ? w.split(' ') : [];
-      const key = Object.keys(at).find(k =>
-        attrs.every(x => k.split(',').includes(x)),
-      );
-      // (Only a declaration of several theme tokens: one token alone is
-      // read as that token.)
-      const decl = key ? String(at[key]) : '';
-      const tokens = new Set(
-        [...decl.matchAll(/var\(\s*(--[a-z][a-z0-9-]*)/g)]
-          .map(m => m[1])
-          .filter(t => !/^--(_|astryx-)/.test(t)),
-      );
-      return decl.includes(token) && tokens.size > 1 ? decl : `var(${token})`;
-    };
-    for (const g of Object.keys(GROUPS))
-      for (const r of C.partReads(part, g) ?? [])
-        if (mainWhen(r.when?.length ? r.when : ['']))
-          for (const prop of r.props ?? []) {
-            const key = `base||${prop}`;
-            const w = (r.when?.length ? r.when : ['']).find(
-              (/** @type {string} */ x) => mainWhen([x]),
-            );
-            if (!raw.has(key)) raw.set(key, declOf(prop, w ?? '', r.token));
-          }
-    for (const g of Object.keys(GROUPS))
-      for (const r of C.partReads(part, g) ?? [])
-        for (const prop of r.props ?? [])
-          for (const w of r.when?.length ? r.when : [''])
-            if (!/::|:active|:hover|:focus|:checked|:disabled/.test(w)) {
-              const key = `${w ? w.replace('=', ':') : 'base'}||${prop}`;
-              // A variant with no rule of its own takes the part's own base
-              // rule over the token it reads.
-              if (!raw.has(key))
-                raw.set(
-                  key,
-                  own.get(`base||${prop}`) ?? declOf(prop, w, r.token),
-                );
-            }
-    /** @type {Map<string, {light: string, dark: string, raw: string}>} */
-    const out = new Map();
-    for (const [k, v] of raw)
-      out.set(k, {
-        light: resolveIn(v, scoped('light', k.split('|')[0]), 'light'),
-        dark: resolveIn(v, scoped('dark', k.split('|')[0]), 'dark'),
-        raw: v,
-      });
-    return out;
-  };
+  const shown = (compiled, toks, part) =>
+    partShows(C, base.components, compiled, toks, part);
   // Parts the question keeps: every value they show is the same after.
   for (const {part, prefix} of keeps) {
     const a = shown(was, tw, part);
