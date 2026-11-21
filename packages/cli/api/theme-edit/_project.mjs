@@ -611,7 +611,7 @@ export function baseThemeFile(project, like) {
  * Resolved tokens of the base theme in both modes.
  * @param {ThemeProject} project
  * @param {string | undefined} like
- * @returns {Promise<{light: Record<string, string>, dark: Record<string, string>, components: Record<string, any>, onDark: Record<string, string>}>}
+ * @returns {Promise<{light: Record<string, string>, dark: Record<string, string>, components: Record<string, any>, onDark: Record<string, string>, onLight: Record<string, string>}>}
  */
 export async function baseResolved(project, like) {
   const {core} = project;
@@ -635,6 +635,12 @@ export async function baseResolved(project, like) {
     // values there; Core's own when the base sets none.
     onDark: Object.fromEntries(
       Object.entries(theme.__onDark?.tokens ?? {}).filter(
+        ([k, v]) => k.startsWith('--') && typeof v === 'string',
+      ),
+    ),
+    // The same for its light media rule (a toast's card drawn light).
+    onLight: Object.fromEntries(
+      Object.entries(theme.__onLight?.tokens ?? {}).filter(
         ([k, v]) => k.startsWith('--') && typeof v === 'string',
       ),
     ),

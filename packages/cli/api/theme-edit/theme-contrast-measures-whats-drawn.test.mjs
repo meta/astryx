@@ -34,7 +34,7 @@ let unbuilt = '';
 beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-measures-drawn-', FIXTURE_PACKAGES);
   writeFixtureBaseTheme(cwd, 'neutral');
-  unbuilt = await installRealBaseThemes(cwd, ['neutral']);
+  unbuilt = await installRealBaseThemes(cwd, ['neutral', 'gothic']);
 }, T);
 afterAll(() => {
   if (cwd) removeLinkedFixture(cwd);
@@ -290,6 +290,18 @@ describe('contrast measures what is drawn', () => {
       expect(
         [...accent.changedTokens, ...(accent.changedPartTokens ?? [])].filter(
           (/** @type {string} */ l) => /^--color-accent \(light\)/.test(l),
+        ),
+      ).toEqual([]);
+      // (The tokens are the base's own media rule: a gothic light-only
+      // theme's accent change lists nothing the dark rule replaces.)
+      await themeEditNew('gl', {cwd, like: 'gothic'});
+      await themeEditSet('gl', 'mode', 'light-only', {cwd});
+      const gothic = /** @type {any} */ (
+        await themeEditSet('gl', 'accent', '#7c3aed', {cwd})
+      ).data;
+      expect(
+        [...gothic.changedTokens, ...(gothic.changedPartTokens ?? [])].filter(
+          (/** @type {string} */ l) => /^--color-text-accent \(dark\)/.test(l),
         ),
       ).toEqual([]);
       // (An undo that takes away a light setting lists the value removed.)
