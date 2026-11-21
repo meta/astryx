@@ -22,7 +22,12 @@ import {
   ratio,
   ratioWords,
 } from './_color.mjs';
-import {luminance} from '../theme/palette/generate/color.mjs';
+import {
+  hexToOklch,
+  luminance,
+  oklchClampedHex,
+  toneToOklabLightness,
+} from '../theme/palette/generate/color.mjs';
 import {OVERRIDES} from './_part-words.mjs';
 import {DESIGN_WORDS, HUES, STATE_WORDS, TRANSLATE} from './_how-words.mjs';
 import {joinSideLists, sideColorsIn} from './_how-sides.mjs';
@@ -401,6 +406,23 @@ const SHADED = wordTable(
  * Right before a written color (a hex, a color function): a role word there
  * names that color, "our brand color #1e3a8a", never the role's token.
  */
+/**
+ * A gloss of one fill: a gradient from the fill a palette step lighter at
+ * the top to a palette step darker at the bottom, through the fill, in its
+ * own hue and chroma (the tone scale the palette's stops are on).
+ * @param {string} fill an opaque hex color
+ */
+function glossOf(fill) {
+  const {L, C: chroma, H} = hexToOklch(fill);
+  // (The tone of the fill on the palette's scale, from its lightness.)
+  const tone = L > 0.2069 ? 116 * L - 16 : L ** 3 * 903.3;
+  const at = (/** @type {number} */ t) => {
+    const l = toneToOklabLightness(Math.max(0, Math.min(100, t)));
+    return oklchClampedHex(l, chroma, H);
+  };
+  return `linear-gradient(${at(tone + 10)} 0%, ${fill} 45%, ${at(tone - 10)} 100%)`;
+}
+
 const BEFORE_WRITTEN_COLOR = String.raw`(?!\s*(?:,\s*)?(?:#[0-9a-f]{3,8}\b|(?:rgba?|hsla?|oklch|oklab|lab|lch|hwb)\())`;
 
 /** The color tokens a word for a color the theme uses names. */
@@ -27037,6 +27059,64 @@ export function draftAnswer(ctx, env, question) {
               ],
               sequence: true,
             };
+        }
+        // "glossy buttons": a gloss of the part's own fill in each mode, a
+        // lighter top and a darker bottom a palette step from it, written
+        // as its colors.
+        if (design === 'glossy') {
+          const said = colorFor(c, 'fill');
+          const token = on
+            ? restRead(C.partReads(one(on), 'background') ?? [], f.when)
+            : '--color-background-body';
+          const saidMode = f.mode ?? modeOf(c).mode;
+          const modes = /** @type {Array<'light' | 'dark'>} */ (
+            saidMode
+              ? [saidMode]
+              : env.data.mode === 'dark-only'
+                ? ['dark']
+                : env.data.mode === 'light-only'
+                  ? ['light']
+                  : ['light', 'dark']
+          );
+          const owns = modes.map(
+            m => said ?? (token ? String(current(token, m) ?? '') : ''),
+          );
+          const glosses = owns.map(own => {
+            const rgb = parseColor(own);
+            return rgb && alphaOf(own) >= 1 ? glossOf(hex(rgb)) : null;
+          });
+          // (A part that draws no fill of its own shows what is behind it,
+          // the bar around a top nav: that keeps the gloss.)
+          if (
+            on &&
+            !said &&
+            (!token ||
+              owns.every(
+                own =>
+                  /^(?:transparent|none)$/i.test(own.trim()) ||
+                  alphaOf(own) === 0,
+              ))
+          )
+            return {
+              text: `${on} draws no fill of its own here, so what is behind it shows, and its gloss with it; nothing is written on it`,
+              options: [],
+            };
+          if (glosses.some(x => x == null))
+            return {
+              text: `a glossy fill${where} is drawn from the part's own fill color, and ${on ?? 'the page'} has no plain fill color here; name one ("glossy blue ${on ?? 'page'}")`,
+              options: [],
+            };
+          const oneGloss = new Set(glosses).size === 1 && !saidMode;
+          return {
+            text: `a glossy fill${where}: its own fill${said ? ` ${said}` : ''}, a lighter top and a darker bottom${oneGloss ? '' : saidMode ? ` in ${saidMode} mode` : ', in each mode'}`,
+            options: [
+              oneGloss
+                ? [set('background', String(glosses[0]), f)]
+                : glosses.map((g, i) =>
+                    set('background', String(g), {...f, mode: modes[i]}),
+                  ),
+            ],
+          };
         }
         if (design)
           return {
