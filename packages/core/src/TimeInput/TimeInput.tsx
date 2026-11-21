@@ -80,7 +80,8 @@ import {useTooltip} from '../Tooltip';
 import {themeProps} from '../utils/themeProps';
 import {useLocale} from '../i18n';
 import {formatLocaleTime, resolveHourFormat} from '../utils/timeFormat';
-import {localeTextDirection, localeTextStyles} from '../utils/textDirection';
+import {getLocaleDirection} from '../i18n/getLocaleDirection';
+import {localeTextStyles} from '../utils/textDirection';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {NativeTimeSegment} from '../DateTimeInput/NativeTimeSegment';
@@ -517,7 +518,7 @@ function TimeField({
     };
   const t = useComponentTranslator();
   const locale = useLocale();
-  const textDirection = localeTextDirection(locale);
+  const textDirection = getLocaleDirection(locale);
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
     placeholderFromProps ?? t('@astryx.timeInput.placeholder');

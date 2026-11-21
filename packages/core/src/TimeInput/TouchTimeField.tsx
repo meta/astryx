@@ -50,7 +50,8 @@ import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {Icon} from '../Icon';
 import {useLocale} from '../i18n';
 import {formatLocaleTime} from '../utils/timeFormat';
-import {localeTextDirection, localeTextStyles} from '../utils/textDirection';
+import {getLocaleDirection} from '../i18n/getLocaleDirection';
+import {localeTextStyles} from '../utils/textDirection';
 import {spacingVars} from '../theme/tokens.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {Spinner} from '../Spinner';
@@ -210,7 +211,7 @@ export function TouchTimeField({
   } = rest;
   const t = useComponentTranslator();
   const locale = useLocale();
-  const textDirection = localeTextDirection(locale);
+  const textDirection = getLocaleDirection(locale);
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
     placeholderFromProps ?? t('@astryx.timeInput.placeholder');

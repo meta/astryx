@@ -114,7 +114,8 @@ import {
   parseLocaleTime,
   resolveHourFormat,
 } from '../utils/timeFormat';
-import {localeTextDirection, localeTextStyles} from '../utils/textDirection';
+import {getLocaleDirection} from '../i18n/getLocaleDirection';
+import {localeTextStyles} from '../utils/textDirection';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
@@ -755,7 +756,7 @@ function PointerDateTimeField({
   };
   const t = useComponentTranslator();
   const locale = useLocale();
-  const textDirection = localeTextDirection(locale);
+  const textDirection = getLocaleDirection(locale);
   const usesNativePicker = nativeMode !== 'off';
   // `forced` (`presentation="native"`, FR2): no Astryx fallback. `adaptive`
   // (`adaptive-native` coarse) and `legacy` (deprecated `always`):

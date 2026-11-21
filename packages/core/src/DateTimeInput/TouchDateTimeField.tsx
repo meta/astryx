@@ -72,7 +72,8 @@ import {rtlStyles} from '../utils/rtlStyles';
 import {themeProps} from '../utils/themeProps';
 import {normalizeDayOfWeek} from '../utils/dateTypes';
 import {formatLocaleTime} from '../utils/timeFormat';
-import {localeTextDirection, localeTextStyles} from '../utils/textDirection';
+import {getLocaleDirection} from '../i18n/getLocaleDirection';
+import {localeTextStyles} from '../utils/textDirection';
 import {getWeekdayHeaders} from '../Calendar/getWeekdayHeaderNames';
 import {
   formatISOTime,
@@ -480,7 +481,7 @@ export function TouchDateTimeField({
   const t = useComponentTranslator();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const {locale} = use(InternationalizationContext);
-  const textDirection = localeTextDirection(locale);
+  const textDirection = getLocaleDirection(locale);
   const placeholder =
     placeholderFromProps ?? t('@astryx.dateTimeInput.placeholder');
   const timePlaceholder =

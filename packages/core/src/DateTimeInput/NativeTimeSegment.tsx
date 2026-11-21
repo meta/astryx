@@ -36,7 +36,8 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import {Icon} from '../Icon';
 import {useLocale} from '../i18n';
 import {formatLocaleTime} from '../utils/timeFormat';
-import {localeTextDirection, localeTextStyles} from '../utils/textDirection';
+import {getLocaleDirection} from '../i18n/getLocaleDirection';
+import {localeTextStyles} from '../utils/textDirection';
 import type {ThemeProps} from '../utils/themeProps';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {
@@ -143,7 +144,7 @@ export function NativeTimeSegment({
     ...inputProps
   } = controlProps ?? {};
   const locale = useLocale();
-  const textDirection = localeTextDirection(locale);
+  const textDirection = getLocaleDirection(locale);
   const isTouchPointer = useMediaQuery('(pointer: coarse)');
   const internalInputRef = useRef<HTMLInputElement | null>(null);
   const mergedInputRef = useMergedRefs(inputRef, internalInputRef);
