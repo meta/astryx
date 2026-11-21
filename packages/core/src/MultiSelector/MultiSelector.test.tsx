@@ -626,6 +626,29 @@ describe('MultiSelector', () => {
     ).toBeInTheDocument();
   });
 
+  it('gives the overflow count the locale direction, so a right-to-left locale keeps its form', () => {
+    const {container} = render(
+      <InternationalizationProvider locale="he-IL">
+        <MultiSelector
+          label="Team"
+          options={['Design', 'עיצוב', 'שיווק', 'Sales', 'Support']}
+          value={['Design', 'עיצוב', 'שיווק', 'Sales', 'Support']}
+          onChange={() => {}}
+          triggerDisplay="labels"
+        />
+      </InternationalizationProvider>,
+    );
+    const spans = [...container.querySelectorAll('span[dir]')].filter(span =>
+      ['Design', 'עיצוב', 'שיווק', '+2'].includes(span.textContent ?? ''),
+    );
+    expect(spans.map(span => span.getAttribute('dir'))).toEqual([
+      'auto',
+      'auto',
+      'auto',
+      'rtl',
+    ]);
+  });
+
   it('isolates each label and the overflow count, keeping the trigger text', () => {
     const {container} = render(
       <MultiSelector
@@ -639,10 +662,17 @@ describe('MultiSelector', () => {
     expect(
       screen.getByText(textContentIs('Design, עיצוב, שיווק, +2')),
     ).toBeInTheDocument();
-    const isolated = [...container.querySelectorAll('span[dir="auto"]')].map(
-      span => span.textContent,
-    );
-    expect(isolated).toEqual(['Design', 'עיצוב', 'שיווק', '+2']);
+    const isolated = [...container.querySelectorAll('span[dir]')]
+      .filter(span =>
+        ['Design', 'עיצוב', 'שיווק', '+2'].includes(span.textContent ?? ''),
+      )
+      .map(span => [span.textContent, span.getAttribute('dir')]);
+    expect(isolated).toEqual([
+      ['Design', 'auto'],
+      ['עיצוב', 'auto'],
+      ['שיווק', 'auto'],
+      ['+2', 'ltr'],
+    ]);
     // A screen reader reads the same name and text: no bidi control characters.
     const trigger = screen.getByRole('combobox');
     expect(trigger).toHaveAccessibleName('Team');
