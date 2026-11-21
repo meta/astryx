@@ -321,22 +321,50 @@ addCase({
       const box = await radio.boundingBox();
       check(box != null, `radio ${index} has no box`);
       if (box == null) {
-        return false;
+        return 'no-box';
       }
       await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-      const hovered = await radio.evaluate(el => el.matches(':hover'));
-      check(hovered, `radio ${index} is not under the pointer`);
+      // The pointer is on this row when the nearest hovered ancestor holds
+      // this radio and no other. A row that takes no pointer events passes
+      // the hit through to an ancestor, which still holds this radio.
+      const hovered = await radio.evaluate(el => {
+        let row = el.parentElement;
+        while (row != null && !row.matches(':hover')) {
+          row = row.parentElement;
+        }
+        if (
+          row != null &&
+          row.querySelectorAll('.astryx-radio-indicator').length === 1
+        ) {
+          return 'row';
+        }
+        const r = el.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          r.left + r.width / 2,
+          r.top + r.height / 2,
+        );
+        return hit != null && hit.contains(el) ? 'passed-through' : 'elsewhere';
+      });
+      check(
+        hovered !== 'elsewhere',
+        `the pointer is not on the row of radio ${index}`,
+      );
       return hovered;
     };
-    await pointAt(enabledIndex);
+    const enabledHit = await pointAt(enabledIndex);
+    check(enabledHit === 'row', `enabled row hit ${enabledHit}`);
     await settle(page);
     const hovered = (await radios(page))[enabledIndex];
     check(
       hovered.border !== rest[enabledIndex].border,
       `hover border ${hovered.border}, rest ${rest[enabledIndex].border}`,
     );
-    await frame('hover-enabled', {rest: rest[enabledIndex], hovered});
-    await pointAt(disabledIndex);
+    await frame('hover-enabled', {
+      rest: rest[enabledIndex],
+      hovered,
+      hit: enabledHit,
+    });
+    const disabledHit = await pointAt(disabledIndex);
     await settle(page);
     const disabledHover = (await radios(page))[disabledIndex];
     check(
@@ -344,7 +372,11 @@ addCase({
         disabledHover.fill === rest[disabledIndex].fill,
       `disabled hover ${disabledHover.border}/${disabledHover.fill}, rest ${rest[disabledIndex].border}/${rest[disabledIndex].fill}`,
     );
-    await frame('hover-disabled', {rest: rest[disabledIndex], disabledHover});
+    await frame('hover-disabled', {
+      rest: rest[disabledIndex],
+      disabledHover,
+      hit: disabledHit,
+    });
   },
 });
 
