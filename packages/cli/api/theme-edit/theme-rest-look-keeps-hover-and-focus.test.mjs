@@ -200,6 +200,36 @@ describe('a resting outline', () => {
     expect(rules).toMatch(/outline: 2px dotted #000000/);
   }, 240_000);
 
+  it("lets a variant's whole focus outline win over a whole-part focus color under a resting outline for that variant and a size", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('vo', {cwd, like: 'neutral'});
+    await themeEditSet('vo', 'outline-color', '#ff0000', {
+      cwd,
+      on: 'button',
+      state: 'focus-visible',
+    });
+    await themeEditSet('vo', 'outline', '2px solid #000000', {
+      cwd,
+      on: 'button',
+      state: 'focus-visible',
+      when: 'variant:ghost',
+    });
+    await themeEditSet('vo', 'outline', 'none', {
+      cwd,
+      on: 'button',
+      when: 'variant:ghost+size:sm',
+    });
+    const rules = scoped(cssOf('vo'), ':focus-visible', [
+      'data-variant="ghost"',
+      'data-size="sm"',
+    ]);
+    // (The variant's outline comes after the whole part's color, so its
+    // black wins, as the theme draws it.)
+    expect(rules).toMatch(
+      /outline-color: #ff0000;[^}]*outline: 2px solid #000000;/,
+    );
+  }, 240_000);
+
   it('keeps a whole-part focus color under a resting outline for one variant', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('wf', {cwd, like: 'neutral'});
