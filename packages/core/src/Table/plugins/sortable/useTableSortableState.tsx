@@ -4,7 +4,7 @@
 
 /**
  * @file useTableSortableState.tsx
- * @input React, TableSortState types
+ * @input React, TableSortState types, isInvalidDate from columnUtils
  * @output Exports useTableSortableState hook and config types
  * @position Sort state helper; manages sort state + applies local sort to data.
  *   Pairs with useTableSortable (the headless sort plugin).
@@ -21,6 +21,7 @@ import {useState, useMemo, useCallback, useRef} from 'react';
 import type {TableSortState, UseTableSortableConfig} from './useTableSortable';
 import {useCollator} from '../../../i18n/useCollator';
 import {useCommittedRef} from '../../../hooks/useCommittedRef';
+import {isInvalidDate} from '../../columnUtils';
 
 // =============================================================================
 // Comparator Types
@@ -33,6 +34,14 @@ import {useCommittedRef} from '../../../hooks/useCommittedRef';
  * comparators should always sort in ascending order.
  */
 export type TableSortComparator<T> = (a: T, b: T) => number;
+
+function isMissingSortValue(value: unknown): boolean {
+  return (
+    value == null ||
+    (typeof value === 'number' && Number.isNaN(value)) ||
+    isInvalidDate(value)
+  );
+}
 
 function toSortableString(value: unknown): string {
   if (value instanceof Date) {
@@ -170,13 +179,11 @@ function defaultCompare<T extends Record<string, unknown>>(
   const aVal = a[sortKey];
   const bVal = b[sortKey];
 
-  // null/undefined/NaN sort to the end. NaN must not reach the numeric fast
-  // path: a NaN comparator result reads as "equal" to Array.sort, which makes
-  // the comparator inconsistent and corrupts the order of the other rows.
-  const aMissing =
-    aVal == null || (typeof aVal === 'number' && Number.isNaN(aVal));
-  const bMissing =
-    bVal == null || (typeof bVal === 'number' && Number.isNaN(bVal));
+  // Missing values never reach the comparisons below. Array.sort reads a NaN
+  // result as equal, which breaks the order of the other rows. toISOString
+  // throws for an Invalid Date.
+  const aMissing = isMissingSortValue(aVal);
+  const bMissing = isMissingSortValue(bVal);
   if (aMissing && bMissing) {
     return 0;
   }

@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'paddingHorizontal',
+  group: 'padding',
   description: 'Space on the left and right sides inside an item.',
   words: ['horizontal padding', 'inline padding'],
 };

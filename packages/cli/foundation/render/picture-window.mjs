@@ -15,13 +15,16 @@
 /**
  * The script run on a page before its picture: each animation that ends (an
  * overlay's fade-in) is run to its end, so the picture shows the part as it
- * looks once it has played; each that loops (a skeleton's shimmer, a pulsing
+ * looks once it has played, except a part drawn pressed, whose press
+ * animation (a flash that fades) is held at its start, the moment of the
+ * press; each that loops (a skeleton's shimmer, a pulsing
  * dot, a spinner) is held at the middle of its first round, a frame a person
  * sees as it plays, never its first frame, where a part can be faint or gone.
  */
 export const SETTLE_ANIMATIONS = `for (const a of document.getAnimations()) {
   const t = a.effect?.getComputedTiming();
   if (!t) continue;
+  if (typeof CSSAnimation === 'function' && a instanceof CSSAnimation && t.iterations !== Infinity && a.effect.target?.closest?.('[data-astryx-state~="active"]')) { a.pause(); a.currentTime = Number(a.effect.getTiming().delay) || 0; continue; }
   if (t.iterations !== Infinity) { a.finish(); continue; }
   a.pause();
   a.currentTime = (Number(a.effect.getTiming().delay) || 0) + (typeof t.duration === 'number' ? t.duration : 0) / 2;
@@ -89,6 +92,101 @@ export async function eachAtOnce(jobs, atOnce, run) {
   const first = /** @type {{error: unknown} | null} */ (failed);
   if (first) throw first.error;
 }
+
+/**
+ * The script run on a sheet before its picture: text a part cuts with an
+ * ellipsis when it is narrow (a stepper's step names, a section heading)
+ * gets the room it needs, and so does a row that scrolls sideways (a
+ * carousel's slides), so its picture shows every item and cuts none at its
+ * edge. Each sheet item holding such text or row grows by what it lacks, a
+ * few rounds while the layout settles, up to the room an item has in a cell
+ * as wide as the sheet's content box (the sheet's width less its padding,
+ * the cell's padding and border, and the item's margins), so a grown cell
+ * stays inside the sheet and the picture keeps the window's width. A part
+ * whose own width is fixed keeps it, and what it still cuts is the theme's
+ * to fix. A page with no sheet items is left as it is.
+ */
+export const FIT_CELLS = `(() => {
+  for (let round = 0; round < 4; round++) {
+    let grew = false;
+    for (const item of document.querySelectorAll('.cs-item')) {
+      let need = 0;
+      for (const el of item.querySelectorAll('*')) {
+        // A text cut by less than a pixel still ends in an ellipsis. Text
+        // drawn in no width at all (a label only a screen reader reads) is
+        // not cut: no width given to it would show it.
+        if (el.clientWidth < 2 || el.scrollWidth <= el.clientWidth) continue;
+        const cs = getComputedStyle(el);
+        const scrolls = /^(?:auto|scroll)$/.test(cs.overflowX);
+        if (cs.textOverflow !== 'ellipsis' && !scrolls) continue;
+        need = Math.max(need, el.scrollWidth - el.clientWidth + 1);
+      }
+      if (!need) continue;
+      const width = item.getBoundingClientRect().width;
+      const sheet = item.closest('.cs-sheet');
+      if (!sheet) continue;
+      const sides = (el, a, b) => {
+        const s = getComputedStyle(el);
+        return (parseFloat(s[a]) || 0) + (parseFloat(s[b]) || 0);
+      };
+      const cell = item.closest('.cs-cell');
+      const most = Math.floor(
+        sheet.clientWidth -
+          sides(sheet, 'paddingLeft', 'paddingRight') -
+          (cell
+            ? sides(cell, 'paddingLeft', 'paddingRight') +
+              sides(cell, 'borderLeftWidth', 'borderRightWidth')
+            : 0) -
+          sides(item, 'marginLeft', 'marginRight'),
+      );
+      const next = Math.min(Math.ceil(width + need), Math.max(most, width));
+      if (next > width + 0.5) {
+        item.style.minWidth = next + 'px';
+        grew = true;
+      }
+    }
+    if (!grew) break;
+  }
+})()`;
+
+/**
+ * The script run on a sheet before its picture: an overlay drawn open
+ * after its part (a toolbar's menu) moves along the row to sit under the
+ * control that opens it, as a browser places it, as far as its item has
+ * room for what it draws. A flyout drawn beside its menu stays there. A
+ * panel as wide as the window is drawn as wide as its cell. A dialog drawn
+ * in its cell is not in the top layer, so the browser draws no backdrop
+ * for it: one with no background of its own (a lightbox, its controls
+ * drawn for the dark backdrop) gets its backdrop's colour as its own.
+ */
+export const PLACE_LAYERS = `(() => {
+  for (const layer of document.querySelectorAll('.cs-item [data-astryx-layer-root]')) {
+    if (layer.parentElement?.closest('[data-astryx-layer-root], [data-astryx-layer-nest]')) continue;
+    const item = layer.closest('.cs-item');
+    const ids = [layer, ...layer.querySelectorAll('[id]')].map(e => e.id).filter(Boolean);
+    const opener = [...item.querySelectorAll('[aria-controls]')].find(c => !layer.contains(c) && !c.closest('[data-astryx-layer-root]') && ids.includes(c.getAttribute('aria-controls')));
+    if (!opener) continue;
+    // The layer box spans its row; what it draws is its content, so the
+    // room is measured from the content's right edge.
+    const at = layer.getBoundingClientRect();
+    const drawn = Math.max(at.left, ...[...layer.children].map(c => c.getBoundingClientRect().right));
+    const shift = Math.min(opener.getBoundingClientRect().left - at.left, item.getBoundingClientRect().right - drawn);
+    if (shift > 0.5) layer.style.setProperty('margin-inline-start', shift + 'px', 'important');
+  }
+  // A panel as wide as the window (a navigation drawer's dialog) is drawn as
+  // wide as its cell: the window's width would stretch the cell, and the
+  // page, past it.
+  for (const dialog of document.querySelectorAll('.cs-cell dialog')) {
+    if (dialog.getBoundingClientRect().width >= window.innerWidth - 0.5)
+      dialog.style.setProperty('width', '100%', 'important');
+  }
+  const clear = color => /^transparent$|rgba\\([^)]*,\\s*0\\)$/.test(color.trim());
+  for (const dialog of document.querySelectorAll('.cs-cell dialog')) {
+    const backdrop = getComputedStyle(dialog, '::backdrop').backgroundColor;
+    if (clear(getComputedStyle(dialog).backgroundColor) && backdrop && !clear(backdrop))
+      dialog.style.setProperty('background-color', backdrop, 'important');
+  }
+})()`;
 
 export const PICTURE_WINDOW = Object.freeze({width: 1280, height: 900});
 
@@ -195,30 +293,198 @@ function featureHolds(feature) {
   return ok;
 }
 
+/** @typedef {boolean | null} Answer true, false, or null where the window does not judge */
+
+/** @param {Answer} a @returns {Answer} */
+const not = a => (a == null ? null : !a);
+
+/**
+ * Thrown for a query the browser reads as invalid, which never matches: a
+ * media type followed by a condition with `or` at its top level (after a
+ * feature, a group, or `not` and a group), whatever the type and its `not`;
+ * or `and` or `or` written straight against `(`.
+ */
+const INVALID_QUERY = new SyntaxError('invalid media query');
+
+/**
+ * The answer of a media condition (Media Queries level 4): a feature in
+ * parentheses, `not` before one, or several joined by `and` or by `or` (not
+ * both at one level), each of which can be a condition in parentheses.
+ * A feature the window does not judge holds; with `sure` its answer is
+ * unknown, stays unknown through `not`, and decides `and` and `or` only when
+ * no known answer does. Throws on text it cannot read; with `withoutOr` (the
+ * condition after a media type), throws INVALID_QUERY on `or` at its top
+ * level.
+ * @param {string} text
+ * @param {boolean} sure
+ * @param {boolean} [withoutOr]
+ * @returns {Answer}
+ */
+function conditionAnswer(text, sure, withoutOr = false) {
+  let at = 0;
+  const skip = () => {
+    while (at < text.length && /\s/.test(text[at])) at += 1;
+  };
+  /** @param {string} word */
+  const take = word => {
+    skip();
+    const found = new RegExp(`^${word}(?![\\w-])`, 'i').exec(text.slice(at));
+    if (!found) return false;
+    // CSS reads `not(` as a function, never as the keyword: `and(` and `or(`
+    // make the query invalid, and `not(…)` is an unknown group (operand).
+    if (text[at + found[0].length] === '(') {
+      if (word === 'not') return false;
+      throw INVALID_QUERY;
+    }
+    at += found[0].length;
+    return true;
+  };
+  /**
+   * One operand: a group in parentheses, or `not(…)`, which the browser
+   * reads as a group it cannot answer (unknown, even without `sure`).
+   * @returns {Answer}
+   */
+  const operand = () => {
+    skip();
+    if (!/^not\(/i.test(text.slice(at))) return inParens();
+    let depth = 0;
+    for (at += 3; at < text.length; at += 1) {
+      if (text[at] === '(') depth += 1;
+      if (text[at] === ')' && --depth === 0) {
+        at += 1;
+        return null;
+      }
+    }
+    throw new SyntaxError(text);
+  };
+  /** @returns {Answer} */
+  const inParens = () => {
+    skip();
+    if (text[at] !== '(') throw new SyntaxError(text);
+    at += 1;
+    skip();
+    if (text[at] === '(' || /^not(?![\w-])/i.test(text.slice(at))) {
+      const answer = condition(false);
+      skip();
+      if (text[at] !== ')') throw new SyntaxError(text);
+      at += 1;
+      return answer;
+    }
+    const end = text.indexOf(')', at);
+    const feature = text.slice(at, end);
+    if (end < 0 || feature.includes('(')) throw new SyntaxError(text);
+    at = end + 1;
+    return featureHolds(feature) ?? (sure ? null : true);
+  };
+  /** @param {boolean} top @returns {Answer} */
+  const condition = top => {
+    if (take('not')) {
+      const answer = not(inParens());
+      const rest = at;
+      if (top && withoutOr && take('or')) throw INVALID_QUERY;
+      at = rest;
+      return answer;
+    }
+    const answers = [operand()];
+    let join = '';
+    for (;;) {
+      const word = take('and') ? 'and' : take('or') ? 'or' : '';
+      if (!word) break;
+      if (word === 'or' && top && withoutOr) throw INVALID_QUERY;
+      if (join && word !== join) throw new SyntaxError(text);
+      join = word;
+      answers.push(operand());
+    }
+    const decided = join === 'or' ? true : false;
+    if (answers.includes(decided)) return decided;
+    if (answers.includes(null)) return null;
+    return !decided;
+  };
+  const answer = condition(true);
+  skip();
+  if (at !== text.length) throw new SyntaxError(text);
+  return answer;
+}
+
+/**
+ * Whether one query of a list matches: its media type is the screen's and
+ * its condition holds (conditionAnswer); `not` turns it round. Throws on text
+ * conditionAnswer cannot read.
+ * @param {string} part
+ * @param {boolean} sure
+ * @returns {Answer}
+ */
+function queryAnswer(part, sure) {
+  const text = part.trim();
+  if (/^(\(|not\s*\()/i.test(text)) return conditionAnswer(text, sure);
+  const head = /^(?:(not|only)\s+)?([a-z]+)(?:\s+and\s+([\s\S]+))?$/i.exec(
+    text,
+  );
+  if (!head) throw new SyntaxError(text);
+  const [, modifier, type, rest] = head;
+  const screen = !/^(print|speech)$/i.test(type);
+  const condition = rest == null ? true : conditionAnswer(rest, sure, true);
+  const answer = screen ? condition : false;
+  return modifier?.toLowerCase() === 'not' ? not(answer) : answer;
+}
+
+/**
+ * The reading for a query that queryAnswer cannot parse: every feature in
+ * innermost parentheses must hold, and a leading `not` turns it round.
+ * @param {string} part
+ * @param {boolean} sure
+ * @returns {boolean}
+ */
+function featuresMatch(part, sure) {
+  const type = /^\s*(?:not\s+|only\s+)?([a-z]+)\s*(?:and\b|$)/i.exec(part)?.[1];
+  const screen = type == null || !/^(print|speech)$/i.test(type);
+  const answers = [...part.matchAll(/\(([^()]*)\)/g)].map(([, feature]) =>
+    featureHolds(feature),
+  );
+  if (sure && answers.includes(null)) return false;
+  const all = screen && answers.every(a => a !== false);
+  return /^\s*not\s/.test(part) ? !all : all;
+}
+
+/**
+ * The queries of a list, split at the commas outside parentheses.
+ * @param {string} query
+ * @returns {string[]}
+ */
+function queryList(query) {
+  const parts = [''];
+  let depth = 0;
+  for (const char of query) {
+    if (char === '(') depth += 1;
+    if (char === ')') depth -= 1;
+    if (char === ',' && depth === 0) parts.push('');
+    else parts[parts.length - 1] += char;
+  }
+  return parts;
+}
+
 /**
  * Whether a media query matches in the window a picture is taken in
- * (PICTURE_WINDOW, a desktop's, with a mouse): each comma-separated query
- * matches when its media type is the screen's and every feature holds
- * (featureHolds); `not` turns it round. A feature the window does not judge
- * holds, as in the chart document (no motion); with `sure`, a query that
- * holds one never matches, so only what the window answers counts.
+ * (PICTURE_WINDOW, a desktop's, with a mouse): one query of the list must
+ * match, by its media type and its condition, read as Media Queries level 4
+ * reads it (queryAnswer). A feature the window does not judge holds, as in
+ * the chart document (no motion); with `sure`, a query whose answer depends
+ * on one never matches, so only what the window answers counts. A query
+ * the browser reads as invalid in the ways INVALID_QUERY names never
+ * matches; a query the reader cannot parse falls back to featuresMatch.
  * @param {string} query
  * @param {{sure?: boolean}} [options]
  * @returns {boolean}
  */
 export function desktopMatches(query, {sure = false} = {}) {
-  return String(query)
-    .split(',')
-    .some(part => {
-      const type = /^\s*(?:not\s+|only\s+)?([a-z]+)\s*(?:and\b|$)/i.exec(
-        part,
-      )?.[1];
-      const screen = type == null || !/^(print|speech)$/i.test(type);
-      const answers = [...part.matchAll(/\(([^()]*)\)/g)].map(([, feature]) =>
-        featureHolds(feature),
-      );
-      if (sure && answers.includes(null)) return false;
-      const all = screen && answers.every(a => a !== false);
-      return /^\s*not\s/.test(part) ? !all : all;
-    });
+  return queryList(String(query)).some(part => {
+    let answer;
+    try {
+      answer = queryAnswer(part, sure);
+    } catch (error) {
+      if (error === INVALID_QUERY) return false;
+      return featuresMatch(part, sure);
+    }
+    return answer === true;
+  });
 }

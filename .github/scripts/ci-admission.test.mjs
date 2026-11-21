@@ -647,8 +647,9 @@ describe('peaks', () => {
     const others = onPullRequest
       .map(name => legs(ci.jobs[name], 'pull_request'))
       .reduce((sum, count) => sum + count, 0);
-    // The widening matrix starts with the first jobs: test-node needs only
-    // the waits.
+    // The widening matrix counts with the first jobs: test-node needs only
+    // the waits and build-core, one short job, so counting its legs from the
+    // start covers it.
     const startedAt = mode =>
       Object.values(widths).reduce((sum, width) => sum + width[mode], others);
     const widen = Object.values(widths).reduce(

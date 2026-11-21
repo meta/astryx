@@ -234,8 +234,11 @@ function EntryRow({
 }
 
 export interface TimestampHoverCardProps {
-  /** The rows to render, each a labelled instant, optionally copyable. */
-  lines: ReadonlyArray<TimestampTooltipLine>;
+  /**
+   * The rows to render, each a labelled instant, optionally copyable. The card
+   * reads them only while it shows, so a closed card formats nothing.
+   */
+  getLines: () => ReadonlyArray<TimestampTooltipLine>;
   /** Accessible name for the card. */
   label: string;
   /** Persistent anchor, rendered outside the lazy boundary. */
@@ -264,6 +267,43 @@ function gridTemplateFor(
 }
 
 /**
+ * The card's rows, as a semantic `<dl>` grid. The layer renders it only while
+ * the card shows, so the rows are formatted then.
+ */
+function CardLines({
+  getLines,
+}: {
+  getLines: () => ReadonlyArray<TimestampTooltipLine>;
+}): ReactNode {
+  const lines = getLines();
+  // A label column is only reserved when some row is labelled; otherwise the
+  // value sits flush at the card's leading edge. An action column is only
+  // reserved when some row is copyable (option B), so a fully read-only card
+  // has no trailing gutter.
+  const hasLabelColumn = lines.some(
+    line => line.label != null && line.label !== '',
+  );
+  const hasActionColumn = lines.some(line => line.isCopyable);
+  return (
+    <dl
+      {...stylex.props(
+        styles.dl,
+        gridTemplateFor(hasLabelColumn, hasActionColumn),
+      )}>
+      {lines.map((line, index) => (
+        <EntryRow
+          // eslint-disable-next-line @eslint-react/no-array-index-key -- rows are fixed positional slots and two entries may legitimately be identical
+          key={index}
+          line={line}
+          hasLabelColumn={hasLabelColumn}
+          hasActionColumn={hasActionColumn}
+        />
+      ))}
+    </dl>
+  );
+}
+
+/**
  * The copyable hover card for Timestamp. Renders a semantic `<dl>` as a grid:
  * an optional label column, the value, and — when any row is copyable — a
  * trailing action column carrying that row's copy button, so buttons align
@@ -273,7 +313,7 @@ function gridTemplateFor(
  * interactive.
  */
 export default function TimestampHoverCard({
-  lines,
+  getLines,
   label,
   triggerRef,
   onCardOpenChange,
@@ -320,34 +360,7 @@ export default function TimestampHoverCard({
     };
   }, [triggerRef, positionRef, interactionRef, show, id]);
 
-  // A label column is only reserved when some row is labelled; otherwise the
-  // value sits flush at the card's leading edge. An action column is only
-  // reserved when some row is copyable (option B), so a fully read-only card
-  // has no trailing gutter.
-  const hasLabelColumn = lines.some(
-    line => line.label != null && line.label !== '',
-  );
-  const hasActionColumn = lines.some(line => line.isCopyable);
-
-  const cardContent = (
-    <dl
-      {...stylex.props(
-        styles.dl,
-        gridTemplateFor(hasLabelColumn, hasActionColumn),
-      )}>
-      {lines.map((line, index) => (
-        <EntryRow
-          // eslint-disable-next-line @eslint-react/no-array-index-key -- rows are fixed positional slots and two entries may legitimately be identical
-          key={index}
-          line={line}
-          hasLabelColumn={hasLabelColumn}
-          hasActionColumn={hasActionColumn}
-        />
-      ))}
-    </dl>
-  );
-
-  return renderHoverCard(cardContent);
+  return renderHoverCard(<CardLines getLines={getLines} />);
 }
 
 TimestampHoverCard.displayName = 'TimestampHoverCard';

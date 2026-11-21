@@ -135,18 +135,22 @@ export function noteStoredExport(value, key, name) {
 
 /**
  * Where a stored doc's export, as the readers parse it, is stored at publish.
+ * The key names the zod release that made the parse: an install that loads
+ * another zod release finds no stored parse and parses the doc.
  * @param {string} key the doc's key
  * @param {string} name the export's name
+ * @param {string} zod the version of the zod copy the doc parsers load
  * @returns {string}
  */
-export function storedParseKey(key, name) {
-  return `parsed:${name}:${key}`;
+export function storedParseKey(key, name, zod) {
+  return `parsed:${name}:${key}:${zod}`;
 }
 
 /**
  * The parse of `value`, read from the store, when `value` is a stored doc's
- * export whose parse was stored at publish: a fresh value, as a parse gives.
- * Undefined otherwise, or when the store cannot be read.
+ * export whose parse was stored at publish with the zod release the doc
+ * parsers load now: a fresh value, as a parse gives. Undefined otherwise, or
+ * when the store or the zod release cannot be read.
  * @param {unknown} value
  * @returns {any}
  */
@@ -154,9 +158,11 @@ export function storedParse(value) {
   if (!value || typeof value !== 'object') return undefined;
   const at = storedExports.get(value);
   if (!at) return undefined;
+  const zod = docParserZodVersion();
+  if (zod == null) return undefined;
   try {
     const parsed = readStore(STORED_DOCS_FILE).get(
-      storedParseKey(at.key, at.name),
+      storedParseKey(at.key, at.name, zod),
     );
     return parsed != null && typeof parsed === 'object' ? parsed : undefined;
   } catch {
@@ -186,7 +192,7 @@ let parserZodVersion;
  * reinstall can put another zod beside the same build.
  * @returns {string | null} null when it cannot be read
  */
-function docParserZodVersion() {
+export function docParserZodVersion() {
   if (parserZodVersion === undefined) {
     parserZodVersion = withoutRecording(() => {
       try {

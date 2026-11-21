@@ -85,7 +85,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 - Measuring truncation and deciding when to compose the truncation Tooltip.
 - The internal hook that shows a component's cut text in an undescribed
   tooltip on keyboard focus (`useCutTextOnKeyboardFocus` in
-  `Text/TruncationTooltip.tsx`), which `component:Button` FR18 and
+  `Text/cutTextOnKeyboardFocus.tsx`, with its measurement in
+  `Text/cutText.tsx`, loaded after first paint), which `component:Button` FR18 and
   `component:TableHeaderCell` FR2 use. It is not part of the package's public
   exports.
 - The clamp it provides to its content. A Link inside a clamped Text lays out

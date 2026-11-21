@@ -8,7 +8,7 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {Heading} from '@astryxdesign/core/Text';
 import {Stack} from '@astryxdesign/core/Layout';
 import {Card} from '@astryxdesign/core/Card';
-import {FunnelIcon, PlusIcon} from '@heroicons/react/24/outline';
+import {FunnelIcon, AddIcon} from '@astryxdesign/template-icons';
 import {useToast} from '@astryxdesign/core/Toast';
 
 const SIZES = [
@@ -20,7 +20,7 @@ const SIZES = [
 export default function ToolbarSizes() {
   const showToast = useToast();
   return (
-    <Stack direction="vertical" gap={4} style={{width: 500}}>
+    <Stack direction="vertical" gap={4} style={{width: 500, maxWidth: '100%'}}>
       {SIZES.map(({size, label}) => (
         <Card key={size}>
           <Toolbar
@@ -43,7 +43,7 @@ export default function ToolbarSizes() {
                     showToast({body: 'Demo: a new item form would open here'})
                   }
                   label="Add"
-                  icon={<Icon icon={PlusIcon} />}
+                  icon={<Icon icon={AddIcon} />}
                 />
               </>
             }

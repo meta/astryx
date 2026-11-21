@@ -191,7 +191,7 @@ describe('init() — receipts + side effects', () => {
     expect(exists('AGENTS.md')).toBe(true);
     const res = await init({removeAgents: true}, {cwd: tmpDir});
     expect(res.type).toBe('init.remove');
-    expect(res.data).toEqual({removed: true});
+    expect(res.data).toEqual({removed: true, from: ['agents-md'], skills: [], user: null});
     expect(exists('AGENTS.md')).toBe(false);
   });
 });
@@ -455,10 +455,10 @@ describe('init() — what changed in each agent-doc file', () => {
       [
         'mode', 'features', 'docsWritten', 'agentDocsStatus', 'docsChanges', 'docsError', 'theme',
         'themeTemplate', 'themeTemplatePath', 'template', 'templatePath', 'nextSteps',
-        'to', 'skills', 'user',
+        'to', 'once', 'skills', 'user',
       ].sort(),
     );
-    expect(receipt.data).toMatchObject({to: ['agents-md'], skills: [], user: null});
+    expect(receipt.data).toMatchObject({to: ['agents-md'], once: false, skills: [], user: null});
     expect(receipt.data.docsChanges.map(c => c.path)).toEqual(receipt.data.docsWritten);
   });
 });

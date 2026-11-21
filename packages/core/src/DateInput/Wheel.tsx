@@ -163,6 +163,7 @@ const styles = stylex.create({
     // a wheel the value under the band is the whole interface, and the rows
     // above and below are read at a glance while moving.
     fontSize: typeScaleVars['--text-large-size'],
+    lineHeight: typeScaleVars['--text-large-leading'],
     fontWeight: fontWeightVars['--font-weight-normal'],
     color: colorVars['--color-text-primary'],
     whiteSpace: 'nowrap',

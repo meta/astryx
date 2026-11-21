@@ -367,6 +367,52 @@ export function isVersionRange(spec) {
  */
 
 /**
+ * The hosts npm is configured to reach without its proxy, its own `noproxy`
+ * setting (from its config files or `npm_config_noproxy`), as npm reports
+ * it; null when npm sets none or cannot say.
+ * @param {{command: string, prefix: string[]}} npm how npm is started
+ * @returns {string | null}
+ */
+export function readNpmNoProxy(npm) {
+  const result = spawnSync(
+    npm.command,
+    [...npm.prefix, 'config', 'get', 'noproxy'],
+    {
+      cwd: os.tmpdir(),
+      encoding: 'utf-8',
+      shell: false,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 30_000,
+      windowsHide: true,
+    },
+  );
+  const value = result.status === 0 ? String(result.stdout ?? '').trim() : '';
+  return value === '' || value === 'null' || value === 'undefined'
+    ? null
+    : value;
+}
+
+/**
+ * The environment npm runs in: `env`, with `NO_PROXY` and `no_proxy` set to
+ * the `noproxy` npm is configured with, when it has one. npm documents the
+ * variable as that setting's default only, but npm 11 lets the variable win.
+ * So when a shell's `NO_PROXY` names the registry's domain while npm's own
+ * settings send it through a proxy, as on some managed machines, npm goes
+ * straight to a registry it cannot reach and waits until the time limit.
+ * @param {NodeJS.ProcessEnv} env
+ * @param {string | null} noProxy npm's own setting ({@link readNpmNoProxy})
+ * @returns {NodeJS.ProcessEnv}
+ */
+export function npmEnvironment(env, noProxy) {
+  if (noProxy == null) return env;
+  if (env.NO_PROXY === noProxy && env.no_proxy === noProxy) return env;
+  return {...env, NO_PROXY: noProxy, no_proxy: noProxy};
+}
+
+/** @type {string | null | undefined} */
+let configuredNoProxy;
+
+/**
  * Run npm synchronously with no output on the caller's streams.
  * @param {string[]} args
  * npm runs under npm-guard.mjs, which gives it a process group of its own
@@ -375,18 +421,31 @@ export function isVersionRange(spec) {
  * outlives the run that started it.
  *
  * @param {string[]} args
- * @param {{cwd?: string, timeoutMs?: number, pidFile?: string, npm?: {command: string, prefix: string[], shell?: false}}} [options]
+ * @param {{cwd?: string, timeoutMs?: number, pidFile?: string, npm?: {command: string, prefix: string[], shell?: false}, noProxy?: string | null}} [options]
  *   `pidFile` receives npm's process id while it runs (the release lock's
- *   record); `npm` replaces how npm is started (tests).
+ *   record); `npm` replaces how npm is started, and `noProxy` the `noproxy`
+ *   setting read from it (tests). npm runs with its own `noproxy` setting
+ *   ({@link npmEnvironment}), read from npm once per run.
  * @returns {NpmResult}
  */
 export function runNpm(args, options = {}) {
-  const {command, prefix} = options.npm ?? npmCommand();
+  const npm = options.npm ?? npmCommand();
+  const {command, prefix} = npm;
+  const noProxy =
+    options.noProxy !== undefined
+      ? options.noProxy
+      : options.npm
+        ? null
+        : configuredNoProxy === undefined
+          ? (configuredNoProxy = readNpmNoProxy(npm))
+          : configuredNoProxy;
+  const env = npmEnvironment(process.env, noProxy);
   const timeoutMs = options.timeoutMs ?? 300_000;
   const direct = process.platform === 'win32';
   const result = direct
     ? spawnSync(command, [...prefix, ...args], {
         cwd: options.cwd ?? os.tmpdir(),
+        env,
         encoding: 'utf-8',
         // Never a shell: a declared range must not reach one.
         shell: false,
@@ -409,6 +468,7 @@ export function runNpm(args, options = {}) {
         ],
         {
           cwd: options.cwd ?? os.tmpdir(),
+          env,
           encoding: 'utf-8',
           stdio: ['ignore', 'pipe', 'pipe'],
           // A backstop only: the guard ends npm at the limit itself.
@@ -1181,7 +1241,11 @@ function ensureLocked(
   // A run stopped mid-install (Ctrl-C, a closed terminal) frees the lock and
   // its scratch folder on the way out; a killed one is taken over by the
   // owner check in tryLock.
+  let released = false;
   const release = () => {
+    // Once freed, the lock may be another run's: it is never removed again.
+    if (released) return;
+    released = true;
     for (const entry of safeList(root)) {
       if (entry.startsWith(`.tmp-${version}-${process.pid}-`)) {
         fs.rmSync(path.join(root, entry), {recursive: true, force: true});
@@ -1204,6 +1268,8 @@ function ensureLocked(
     for (const signal of signals) process.off(signal, onSignal);
   };
   for (const signal of signals) process.on(signal, onSignal);
+  /** @type {CachedRelease | ReleaseUnavailable | undefined} */
+  let result;
   try {
     const again = cachedRelease(version, cacheDir);
     if (again) return again;
@@ -1220,11 +1286,41 @@ function ensureLocked(
     removeAside(path.join(root, version));
     verified.delete(`${cacheDir}\0${version}`);
     onProgress('install', version);
-    return installLocked(version, {cacheDir, run, nodeVersion});
+    result = installLocked(version, {cacheDir, run, nodeVersion});
+    return result;
   } finally {
-    removeSignalHandlers();
-    release();
+    try {
+      release();
+    } finally {
+      // An install a signal stopped re-raises it at once (ensureRelease), so
+      // its handlers go now. Otherwise npm ran synchronously: a signal sent to
+      // this process meanwhile waits for the event loop's poll phase, and the
+      // handlers stay until it has run (see settleSignals).
+      if (result && 'signal' in result && result.signal)
+        removeSignalHandlers();
+      else afterPoll(removeSignalHandlers);
+    }
   }
+}
+
+/**
+ * Call `fn` after the event loop's next poll phase, wherever this runs: two
+ * check phases away, since code that runs in an I/O callback reaches a check
+ * phase before the next poll.
+ * @param {() => void} fn
+ */
+function afterPoll(fn) {
+  setImmediate(() => setImmediate(fn));
+}
+
+/**
+ * Let a signal sent to this process while a release installed stop the run
+ * before it goes on: npm runs synchronously, so such a signal waits for the
+ * event loop.
+ * @returns {Promise<void>}
+ */
+export function settleSignals() {
+  return new Promise(resolve => afterPoll(resolve));
 }
 
 /**

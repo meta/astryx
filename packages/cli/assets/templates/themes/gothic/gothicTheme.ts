@@ -30,7 +30,10 @@ const SURFACE_TEXT = {
   '--color-text-accent': neutral.dark[95],
 };
 
-/** Core's selector for a striped table's painted rows. */
+/**
+ * Core's selector for a striped table's painted rows, under the row's
+ * `striped` state.
+ */
 const STRIPED_ROW = ':nth-child(even of :not([data-expansion-panel]))';
 
 /**
@@ -60,7 +63,7 @@ const OWN_FILL_RULES: ReadonlyArray<readonly [string, string, string?]> = [
   ['avatar-group-overflow', 'base'],
   ['segmented-control-item', 'selected'],
   ['step-indicator', 'progress:not-started'],
-  ['table-row', 'base', STRIPED_ROW],
+  ['table-row', 'striped', STRIPED_ROW],
   ['banner-content', 'base'],
   ['input-group-text', 'base'],
   ['text-input', 'base'],
@@ -173,6 +176,13 @@ const SECONDARY_SELECTOR = {
     borderWidth: SECONDARY_BUTTON.borderWidth,
   },
 } as const;
+
+/**
+ * Gothic draws one color mode, dark, in light and dark pages alike. Tools
+ * read this to judge it in that mode; the build writes it into the built
+ * module.
+ */
+export const colorModes = ['dark'] as const;
 
 export const gothicTheme = defineTheme({
   name: 'gothic',
@@ -329,6 +339,8 @@ export const gothicTheme = defineTheme({
     '--radius-element': '0.5rem',
     '--radius-container': '0.75rem',
     '--radius-page': '1.5rem',
+    // Chat surfaces stay rounder than cards.
+    '--radius-chat': '28px',
     '--radius-full': '9999px',
 
     // =========================================================================

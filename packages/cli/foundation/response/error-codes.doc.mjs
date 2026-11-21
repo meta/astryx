@@ -248,7 +248,7 @@ export const doc = {
     {
       value: 'ERR_DEP_MISSING',
       description:
-        'A required external dependency (e.g. jscodeshift) is missing.',
+        'A required external dependency (e.g. jscodeshift) is missing, or an installed package needs a package it declares that is not installed (a broken install; installing again repairs it).',
     },
 
     // GitHub CLI
@@ -365,7 +365,7 @@ export const doc = {
       value: 'ERR_RENDER_NOT_ASTRYX',
       stability: 'experimental',
       description:
-        '`experimental import` (or `export --reverse`) was given a file that a render did not write, with no embedded source and no Astryx markup. Nothing was written. Raised only by the experimental import and export commands.',
+        '`experimental export` was given a page that uses no Astryx components or styles (its script holds no module of an Astryx package and it imports no Astryx stylesheet), or `experimental import` (or `export --reverse`) was given a file that a render did not write, with no embedded source and no Astryx markup. Nothing was written; don\'t add Astryx to such an app to export it: share the page with the app\'s own build instead (for a Vite app, a single-file build). Raised only by the experimental import and export commands.',
     },
     {
       value: 'ERR_RENDER_SOURCE_DAMAGED',

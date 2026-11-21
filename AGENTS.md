@@ -24,6 +24,9 @@ nested `AGENTS.md`.
   `.github/PULL_REQUEST_TEMPLATE/`; read `docs/contributing/pull-requests.md`
   before opening or reviewing a mixed change. Before you request review, run
   `pnpm review:pre` and its checklist from a fresh session.
+- Before you mark a pull request ready: `pnpm preflight` runs `pnpm review:pre`
+  and CI's checks scoped to the change (`--browser` adds the browser specs;
+  `--quick` is a fast subset, not CI-equivalent).
 - Component work: derive the review's semantic triggers, load matching `current`
   global baseline claims with `node scripts/review-global-baselines.mjs
 --authority-commit <base-sha> --review-head <head-sha> --triggers

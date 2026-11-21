@@ -6,7 +6,7 @@
 // test fixture. Regenerate with: pnpm visual:probe-theme
 //
 // defineTheme takes six things and this covers all six:
-//   components  290 targets, 930 selectors (generated from the docs)
+//   components  every theming target, one entry each (generated from the docs)
 //   tokens      custom properties, read back off the themed element
 //   icons       every registry entry swapped for a marked glyph
 //   indicators  check / radio / checkbox swapped — the swap that reaches furthest
@@ -684,6 +684,22 @@ export const probeTheme = defineTheme({
         color: 'hsl(228.2 75% 12%)',
         borderColor: 'hsl(181.5 92% 25%)',
         outlineColor: 'hsl(303.5 82% 25%)',
+      },
+    },
+    'banner-message': {
+      base: {
+        backgroundColor: 'hsl(50.1 85% 62%)',
+        color: 'hsl(315.7 75% 12%)',
+        borderColor: 'hsl(339.7 85% 25%)',
+        outlineColor: 'hsl(259.7 74% 25%)',
+      },
+    },
+    'banner-title': {
+      base: {
+        backgroundColor: 'hsl(278.0 91% 55%)',
+        color: 'hsl(82.4 80% 12%)',
+        borderColor: 'hsl(346.0 70% 25%)',
+        outlineColor: 'hsl(284.8 85% 25%)',
       },
     },
     blockquote: {
@@ -3797,6 +3813,18 @@ export const probeTheme = defineTheme({
         borderColor: 'hsl(5.5 92% 25%)',
         outlineColor: 'hsl(181.6 72% 25%)',
       },
+      first: {
+        backgroundColor: 'hsl(69.6 80% 49%)',
+        color: 'hsl(321.6 89% 12%)',
+        borderColor: 'hsl(105.3 73% 25%)',
+        outlineColor: 'hsl(35.1 94% 25%)',
+      },
+      last: {
+        backgroundColor: 'hsl(288.3 84% 56%)',
+        color: 'hsl(292.7 76% 12%)',
+        borderColor: 'hsl(229.3 73% 25%)',
+        outlineColor: 'hsl(116.0 92% 25%)',
+      },
     },
     'pagination-list': {
       base: {
@@ -4774,6 +4802,12 @@ export const probeTheme = defineTheme({
         borderColor: 'hsl(202.4 90% 25%)',
         outlineColor: 'hsl(333.9 88% 25%)',
       },
+      selected: {
+        backgroundColor: 'hsl(264.5 86% 61%)',
+        color: 'hsl(167.6 88% 12%)',
+        borderColor: 'hsl(39.7 75% 25%)',
+        outlineColor: 'hsl(0.2 70% 25%)',
+      },
     },
     'step-bar': {
       base: {
@@ -4806,6 +4840,12 @@ export const probeTheme = defineTheme({
         borderColor: 'hsl(109.9 93% 25%)',
         outlineColor: 'hsl(179.2 75% 25%)',
       },
+      selected: {
+        backgroundColor: 'hsl(340.2 88% 52%)',
+        color: 'hsl(106.2 80% 12%)',
+        borderColor: 'hsl(8.4 83% 25%)',
+        outlineColor: 'hsl(248.1 87% 25%)',
+      },
     },
     'step-label': {
       base: {
@@ -4813,6 +4853,12 @@ export const probeTheme = defineTheme({
         color: 'hsl(323.4 90% 12%)',
         borderColor: 'hsl(185.0 92% 25%)',
         outlineColor: 'hsl(186.3 83% 25%)',
+      },
+      selected: {
+        backgroundColor: 'hsl(18.5 89% 56%)',
+        color: 'hsl(355.6 93% 12%)',
+        borderColor: 'hsl(186.4 76% 25%)',
+        outlineColor: 'hsl(332.2 84% 25%)',
       },
     },
     stepper: {
@@ -5127,6 +5173,12 @@ export const probeTheme = defineTheme({
         color: 'hsl(257.2 90% 12%)',
         borderColor: 'hsl(151.6 83% 25%)',
         outlineColor: 'hsl(17.2 94% 25%)',
+      },
+      striped: {
+        backgroundColor: 'hsl(282.7 90% 52%)',
+        color: 'hsl(298.3 85% 12%)',
+        borderColor: 'hsl(70.8 75% 25%)',
+        outlineColor: 'hsl(126.6 74% 25%)',
       },
     },
     'table-scroll-wrapper': {
@@ -5943,6 +5995,12 @@ export const probeTheme = defineTheme({
         color: 'hsl(192.0 86% 12%)',
         borderColor: 'hsl(273.2 82% 25%)',
         outlineColor: 'hsl(341.5 79% 25%)',
+      },
+      mode: {
+        backgroundColor: 'hsl(289.1 73% 57%)',
+        color: 'hsl(329.3 80% 12%)',
+        borderColor: 'hsl(82.6 88% 25%)',
+        outlineColor: 'hsl(140.5 91% 25%)',
       },
     },
     'top-nav-item': {

@@ -319,6 +319,12 @@ const channel = (
  */
 async function closeMidPresentation(page: Page) {
   const {trigger} = await openPage(page);
+  // A long entrance, so a close that a loaded engine runs late still lands
+  // inside it. A long exit, so the fade spans several frames even where a
+  // loaded renderer paints only a few a second. Where the fade starts, and
+  // that it only falls, do not depend on either length.
+  await setToken(page, '--duration-medium-max', '2000ms');
+  await setToken(page, '--duration-exit', '1200ms');
   await trigger.evaluate(opener => (opener as HTMLElement).click());
   return page.evaluate(async () => {
     const element = document.querySelector('dialog') as HTMLElement;

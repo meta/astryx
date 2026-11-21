@@ -36,6 +36,7 @@ import {
   useTransition,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputRowSizeStyles} from '../Field/inputStyles.stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useCalendarConstraints} from '../Calendar';
 import type {DateInputProps} from './DateInput';
@@ -64,7 +65,6 @@ import {Spinner} from '../Spinner';
 import {
   colorVars,
   radiusVars,
-  sizeVars,
   spacingVars,
   typeScaleVars,
   typographyVars,
@@ -245,9 +245,9 @@ const styles = stylex.create({
 });
 
 const sizeStyles = stylex.create({
-  sm: {height: sizeVars['--size-element-sm'], minWidth: 180},
-  md: {height: sizeVars['--size-element-md'], minWidth: 180},
-  lg: {height: sizeVars['--size-element-lg'], minWidth: 180},
+  sm: {minWidth: 180},
+  md: {minWidth: 180},
+  lg: {minWidth: 180},
 });
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -635,6 +635,7 @@ export function NativeDateField({
           inputWrapperStyles.base,
           inputWrapperStyles.textField,
           sizeStyles[size],
+          inputRowSizeStyles[size],
           styles.wrapper,
           // Disabled paint belongs to the disabled state only; a busy field
           // keeps its ordinary paint and shows the Spinner (spec:AST-085

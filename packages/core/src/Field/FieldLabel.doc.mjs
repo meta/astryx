@@ -67,7 +67,7 @@ export const docs = {
       name: 'labelIcon',
       type: 'ReactNode | IconType',
       description:
-        'Icon before the label text; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
+        'Icon before the label text; pass a built-in meaning such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'labelTooltip',
@@ -172,7 +172,7 @@ export const docsZh = {
     {
       name: 'labelIcon',
       type: 'ReactNode | IconType',
-      description: '标签文本前的图标或已渲染图标内容；可传语义图标名称（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
+      description: '标签文本前的图标或已渲染图标内容；可传内置含义（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
     },
     {
       name: 'labelTooltip',
@@ -228,7 +228,7 @@ export const docsDense = {
     isDisabled: 'Use disabled label presentation.',
     isOptional: 'Show localized optional exception indicator.',
     isRequired: 'Show localized required exception indicator.',
-    labelIcon: 'Icon before label text; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
+    labelIcon: 'Icon before label text; built-in meaning OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     labelTooltip: 'Help text for the info button after the label.',
     description: 'Supporting content outside the accessible name.',
     descriptionID: 'ID for caller-owned aria-describedby wiring.',
