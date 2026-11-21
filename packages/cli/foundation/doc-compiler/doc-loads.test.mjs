@@ -401,6 +401,10 @@ const RUNNERS = {
     runs: 'the ignore matcher (CommonJS), loaded when a resolver first reads an ignore file',
     sites: ['require(ignore)'],
   },
+  'foundation/discovery/official-list.mjs': {
+    runs: "the CLI's own official-list generator, in a checkout with no packed list, to derive the list from the repository",
+    sites: ['child_process.execFileSync'],
+  },
   'foundation/discovery/copied-passages.mjs': {
     runs: "the CLI's own guides and the package's topics, to compare their prose for passages two topics repeat",
     sites: ['builtinGuideFiles', 'loadTopicModule'],
