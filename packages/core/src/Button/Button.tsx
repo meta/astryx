@@ -315,9 +315,9 @@ const elevationStyles = stylex.create({
 });
 
 /**
- * Each filled variant paints hover and press with the paint filledStatePaint.ts
- * derives: the shared overlay where it keeps the label at 4.5:1, else a tint
- * that does. A theme's own button rule for these tokens wins.
+ * Each filled variant paints hover and press with its own tint
+ * (filledStatePaint.ts). The page overlay tints one way only, so it vanishes
+ * on some fills. A theme's own button rule for these tokens wins.
  *
  * Variant styles using backgroundImage for layered colors
  * Pseudo-classes are nested within properties per StyleX recommendation

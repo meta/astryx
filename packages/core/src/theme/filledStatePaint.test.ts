@@ -72,23 +72,7 @@ describe('filledStatePaint', () => {
     }
   });
 
-  it('keeps the shared overlay on a fill it keeps readable', () => {
-    // A near-black fill under white text reads at well over 4.5:1 under a
-    // lightening overlay, so the button keeps the page's overlay.
-    const paints = Object.fromEntries(
-      deriveFilledStatePaints({
-        '--color-accent': '#111111',
-        '--color-on-accent': '#ffffff',
-        '--color-overlay-hover': '#FFFFFF26',
-        '--color-overlay-pressed': '#FFFFFF40',
-      }),
-    );
-    expect(paints['--_button-primary-hover']).toBe(
-      'light-dark(#FFFFFF26, #FFFFFF26)',
-    );
-  });
-
-  it('replaces the shared overlay where it drops the label under 4.5:1', () => {
+  it('paints its own tint where the shared overlay drops the label under 4.5:1', () => {
     // White text on #767676 reads at 4.54:1; a lightening overlay drops it.
     const paints = Object.fromEntries(
       deriveFilledStatePaints({
@@ -162,23 +146,6 @@ describe('filledStatePaint', () => {
         contrastRatio(label, composite(paint, fill)),
       ).toBeGreaterThanOrEqual(4.5);
     }
-  });
-
-  it('replaces only the state the shared overlay drops under 4.5:1', () => {
-    // White text on #767676 (4.54:1) under a darkening hover and a lightening
-    // press: the hover reads, so only the press is replaced.
-    const paints = Object.fromEntries(
-      deriveFilledStatePaints({
-        '--color-accent': '#767676',
-        '--color-on-accent': '#ffffff',
-        '--color-overlay-hover': '#00000026',
-        '--color-overlay-pressed': '#FFFFFF40',
-      }),
-    );
-    expect(paints['--_button-primary-hover']).toBe(
-      'light-dark(#00000026, #00000026)',
-    );
-    expect(paints['--_button-primary-pressed']).not.toContain('#FFFFFF40');
   });
 
   it('keeps the shared overlay for a fill it cannot measure', () => {

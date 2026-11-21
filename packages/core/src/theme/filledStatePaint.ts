@@ -5,8 +5,8 @@
  * @input A theme's portable and local token maps, its generated status roles,
  *   and its `button` rules
  * @output The hover and pressed paint of each filled Button variant, per mode,
- *   as private `--_button-<variant>-<state>` values. A state keeps the shared
- *   overlay where it reads. Else it takes a readable tint.
+ *   as private `--_button-<variant>-<state>` values: a tint that shows and
+ *   keeps the label readable
  * @position Theme generation step beside statusRoleDerivation, called by
  *   generateThemeRules; Core's own values are precomputed in
  *   filledStatePaint.stylex.ts
@@ -136,31 +136,6 @@ function paintsAlong(
   };
 }
 
-/**
- * Whether the shared overlay keeps the label at its floor, per state. It is
- * measured over the fill and over a theme's own hover fill, since a mouse
- * press is also a hover.
- */
-function sharedOverlayReads(
-  resolved: Record<string, string>,
-  fill: RGBA,
-  label: RGBA,
-  hoverFill: RGBA,
-): Record<'hover' | 'pressed', boolean> {
-  const floor = Math.min(TEXT_RATIO, contrastRatio(label, fill));
-  const hover = parseConcreteColor(resolved['--color-overlay-hover']);
-  const pressed = parseConcreteColor(resolved['--color-overlay-pressed']);
-  const readsOver = (paint: RGBA | null, unders: RGBA[]) =>
-    paint === null ||
-    unders.every(
-      under => contrastRatio(label, composite(paint, under)) + 1e-9 >= floor,
-    );
-  return {
-    hover: readsOver(hover, [hoverFill]),
-    pressed: readsOver(pressed, [fill, hoverFill]),
-  };
-}
-
 function opaque(color: RGBA | null, under: RGBA | null): RGBA | null {
   if (color === null) {
     return null;
@@ -205,13 +180,9 @@ function paintsFor(
     }
     const hover = parseConcreteColor(resolved[RULE_HOVER_FILL(variant)]);
     const hoverFill = hover ? composite(hover, f) : f;
-    const reads = sharedOverlayReads(resolved, f, l, hoverFill);
-    const paints =
-      reads.hover && reads.pressed ? null : paintsAlong(f, l, hoverFill);
+    const paints = paintsAlong(f, l, hoverFill);
     for (const state of states) {
-      out[filledStatePaintVar(variant as FilledVariant, state)] = reads[state]
-        ? null
-        : (paints?.[state] ?? null);
+      out[filledStatePaintVar(variant as FilledVariant, state)] = paints[state];
     }
   }
   return out;

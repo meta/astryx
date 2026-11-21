@@ -1,18 +1,17 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Filled buttons keep their label readable on hover and on press, with
- *   no theme and in every official theme
+ * @file Filled buttons keep their label readable and change visibly on hover
+ *   and on press, with no theme and in every official theme
  * @input Core's built theme compilation (filledStatePaint) and the official
  *   themes' token maps and button rules
  * @output A failure for each theme (or Core alone), mode and filled variant
- *   whose label reads under 4.5:1 at rest, hovered or pressed, or whose
- *   replaced hover or press paint does not visibly change the fill
+ *   whose label reads under 4.5:1 at rest, hovered or pressed, or whose hover
+ *   or press does not visibly change the fill
  * @position Theme guard beside the text contrast checks
  *
- * A filled variant keeps the shared overlay where it keeps the label at
- * 4.5:1, else paints the tint Core derives for its own fill and label; a
- * theme's button rule for the overlay tokens wins. A change is visible when the fill's red, green and blue move by more
+ * A filled variant paints the tint Core derives for its own fill and label;
+ * a theme's button rule for the overlay tokens wins. A change is visible when the fill's red, green and blue move by more
  * than 24 in total; a press must move twice as far.
  */
 
@@ -127,14 +126,6 @@ function measurements() {
           const paint = raw.startsWith('var(')
             ? at(raw.slice(4, -1))
             : parseConcreteColor(raw);
-          // The shared overlay is main's paint, kept where it reads.
-          const overlay = at(token);
-          const shared =
-            paint !== null &&
-            overlay !== null &&
-            ['r', 'g', 'b', 'a'].every(
-              c => Math.abs(paint[c] - overlay[c]) < 1e-3,
-            );
           // A mouse press is also a hover; a touch press is not.
           const hovered = composite(at('--zz-hover-fill'), fill);
           const unders =
@@ -149,7 +140,7 @@ function measurements() {
             rows.push({
               where: `${where} ${state}${how}`,
               ratio: contrastRatio(label, over),
-              step: shared ? undefined : colorStep(over, fill),
+              step: colorStep(over, fill),
               need: state === 'hover' ? VISIBLE_STEP : 2 * VISIBLE_STEP,
             });
           }
@@ -184,7 +175,7 @@ describe('filled button states', () => {
     ).toEqual([]);
   });
 
-  it('change the fill visibly on hover and on press where they replace the shared overlay', () => {
+  it('change the fill visibly on hover and on press', () => {
     expect(
       rows
         .filter(row => row.step !== undefined && !(row.step > row.need))
