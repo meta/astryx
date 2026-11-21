@@ -180,6 +180,7 @@ describe('a color said for one mode is its page', () => {
       'light mode is warm beige',
       'dark mode is midnight navy',
       'dark mode is a dusty plum',
+      'dark mode is bright red',
     ])
       expect(colorsSaidForPages(ask, isHue, isShade), ask).toBe(ask);
     expect(
@@ -207,14 +208,25 @@ describe('a color said for one mode is its page', () => {
   });
 
   it(
-    'keeps the mode on a clause after the page: gold buttons and blue links in dark mode only',
+    'keeps the mode on what follows the page: gold buttons and blue links in dark mode only',
     async test => {
       needsBases(test);
-      const gold = await first('dark mode is plum, gold buttons');
-      const buttons = gold.filter(l => /--on button\b/.test(l));
-      expect(buttons.length).toBeGreaterThan(0);
-      for (const l of buttons) expect(l).toMatch(/--mode dark$/);
-      expect(pageIn(gold, 'dark')).not.toBeNull();
+      for (const ask of [
+        'dark mode is plum, gold buttons',
+        'dark mode is plum. gold buttons',
+        'dark mode is plum; gold buttons',
+        'light mode is pale blush, dark mode is plum, gold buttons',
+      ]) {
+        const lines = await first(ask);
+        const buttons = lines.filter(l => /--on button\b/.test(l));
+        expect(buttons.length, ask).toBeGreaterThan(0);
+        for (const l of buttons) expect(l, ask).toMatch(/--mode dark$/);
+        expect(pageIn(lines, 'dark'), ask).not.toBeNull();
+      }
+      const links = await first('dark mode is navy, with blue links');
+      const accent = links.filter(l => /--color-text-accent/.test(l));
+      expect(accent.length).toBeGreaterThan(0);
+      for (const l of accent) expect(l).toMatch(/--mode dark$/);
     },
     T,
   );
