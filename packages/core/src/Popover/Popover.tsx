@@ -997,7 +997,8 @@ export function Popover({
     attached.detach();
   }, [setPopoverTrigger]);
 
-  // Sibling mode attaches to the element `anchorRef` holds. Children mode
+  // Effect: syncs the trigger element's listeners and ARIA attributes with the
+  // popover. Sibling mode attaches to the element `anchorRef` holds. Children mode
   // anchors to the wrapper, which takes no pressed-state transform. It
   // attaches to the button inside the wrapper. The check runs after every
   // commit, so a trigger the caller replaces is attached too. It attaches
@@ -1064,6 +1065,8 @@ export function Popover({
       text: button == null ? '' : readTriggerText(button),
     };
   });
+  // Effect: removes the trigger element's listeners and ARIA attributes when
+  // the Popover unmounts.
   useIsomorphicLayoutEffect(() => detachTrigger, [detachTrigger]);
 
   // Sync controlled state: show or hide the anchored popover, the one surface
