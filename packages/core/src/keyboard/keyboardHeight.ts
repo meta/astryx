@@ -9,7 +9,8 @@
  * @output The on-screen keyboard module: measureKeyboardHeight,
  *   isKeyboardMeasurable, hasVirtualKeyboard, subscribeKeyboardHeight,
  *   getKeyboardHeight, isTextEntryControl, findTextEntryControl,
- *   refuseFocusReveal, watchRevealPan and panVisualViewportTo
+ *   refuseFocusReveal, watchRevealPan, panVisualViewportTo and
+ *   NON_TEXT_INPUT_TYPES
  * @position Core's one source for the on-screen keyboard. It is internal to
  *   core and never exported from the package.
  *
@@ -36,7 +37,7 @@ const HIDE_STEP_WAIT_MS = 300;
 // How long a hide's steps wait in all, from the first. A toolbar's moves
 // while a lower keyboard stays up cannot hold the layout longer.
 const HIDE_STEP_LIMIT_MS = 1000;
-const NON_TEXT_INPUT_TYPES = new Set([
+export const NON_TEXT_INPUT_TYPES: ReadonlySet<string> = new Set([
   'button',
   'checkbox',
   'color',

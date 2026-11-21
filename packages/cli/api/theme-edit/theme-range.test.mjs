@@ -58,7 +58,7 @@ const answer = async (q, theme) => {
 };
 
 describe('a calendar range', () => {
-  it('its band is read, and set through the token it paints with', async ctx => {
+  it('its band is the calendar-range part, set with its own fill', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('r', {cwd, like: 'neutral'});
     await themeEditSet('r', '--color-accent-muted', '#bfdbfe', {
@@ -66,8 +66,9 @@ describe('a calendar range', () => {
       on: 'calendar',
     });
     const band = await answer('make the calendar range band blue', 'r');
+    expect(band.parts).toEqual(['calendar-range']);
     expect(band.writes.join('\n')).toMatch(
-      /--color-accent-muted .* --on calendar\b/,
+      /background-color '#[0-9a-f]{6}' --on calendar-range$/,
     );
   }, 240_000);
 });

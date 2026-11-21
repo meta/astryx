@@ -134,6 +134,15 @@ const flushMicrotasks = async () => {
   await Promise.resolve();
 };
 
+/**
+ * Runs the next frame. A change made with no motion running starts its
+ * motions there, at the first frame drawn after its task.
+ */
+const nextFrame = async () =>
+  new Promise<void>(resolve => {
+    requestAnimationFrame(() => resolve());
+  });
+
 function lastOn(element: Element): Played | undefined {
   return played.filter(entry => entry.element === element).at(-1);
 }
@@ -243,6 +252,7 @@ describe('the one-state edge reveal (spec:AST-105 FR9)', () => {
       toggle(true);
       playLayoutChange(handle, content);
       await flushMicrotasks();
+      await nextFrame();
       // Long after the reveal ended.
       setTimeline(61_000);
       toggle(false);
@@ -263,6 +273,7 @@ describe('the one-state edge reveal (spec:AST-105 FR9)', () => {
     toggle(true);
     playLayoutChange(handle, content);
     await flushMicrotasks();
+    await nextFrame();
     const reveal = lastOn(content) as Played;
     const {frame, at} = frameAt(reveal, 6);
     setTimeline(1000 + at);
@@ -769,6 +780,7 @@ describe('the edge reveal of a resized element, with no copy (spec:AST-105 FR9)'
   it('starts a change made while it runs from the extent it shows', async () => {
     const {pane, resize} = paneSetup();
     resize(48, 'inline-end');
+    await nextFrame();
     const [conceal] = clipsOf(pane);
     const index = 6;
     const frame = conceal.keyframes[index];

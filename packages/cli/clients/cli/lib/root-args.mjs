@@ -21,6 +21,7 @@
  * @typedef {object} RootArgs
  * @property {string | undefined} operand the first word that is not an
  *   option or an option's value
+ * @property {number} operandAt where the operand is in the arguments, or -1
  * @property {Map<string, string | true>} values each given root option by its
  *   long flag, with its value, or true for a flag
  * @property {boolean} printsVersion `--version` was given
@@ -40,17 +41,23 @@
  */
 export function scanRootArgs(argv, options, {unknown = 'stop', pastOperand = false} = {}) {
   /** @type {RootArgs} */
-  const result = {operand: undefined, values: new Map(), printsVersion: false, stopped: false};
+  const result = {operand: undefined, operandAt: -1, values: new Map(), printsVersion: false, stopped: false};
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     // Commander reads a lone `-` as an operand, as it reads any word.
     if (arg.length < 2 || arg[0] !== '-') {
-      result.operand ??= arg;
+      if (result.operand === undefined) {
+        result.operand = arg;
+        result.operandAt = i;
+      }
       if (!pastOperand) break;
       continue;
     }
     if (arg === '--' && unknown === 'skip') {
-      result.operand ??= argv[i + 1];
+      if (result.operand === undefined && i + 1 < argv.length) {
+        result.operand = argv[i + 1];
+        result.operandAt = i + 1;
+      }
       break;
     }
     const equals = arg.startsWith('--') ? arg.indexOf('=') : -1;

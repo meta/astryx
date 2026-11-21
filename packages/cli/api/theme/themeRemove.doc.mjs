@@ -11,7 +11,7 @@ export const doc = {
   displayName: 'themeRemove()',
   summary: "Remove a theme from an app's generated theme module.",
   description:
-    'Reads the generated module record, removes one added theme, and regenerates the whole module. The default cannot be removed while other themes are added: themeUse selects another one first. The only added theme can be removed: that removes the module file when it is exactly what the CLI wrote.',
+    'Reads the generated module record, removes one added theme, and regenerates the whole module. The default cannot be removed while other themes are added: themeUse selects another one first. The only added theme can be removed: that removes the module file when it is exactly what the CLI wrote. Removing a theme that themeAdd copied from a shared theme also undoes that add (the files it wrote that are unchanged, and the packages it installed that no theme still in the record is owned by or imports); the receipt carries data.undo.',
   importPath: '@astryxdesign/cli/api',
   signature:
     'themeRemove(slug: string, options?: {cwd?: string}): Promise<ThemeAppResponse>',

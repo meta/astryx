@@ -15,7 +15,7 @@ import {HStack, VStack, StackItem} from '@astryxdesign/core/Stack';
 import {DropdownMenu} from '@astryxdesign/core/DropdownMenu';
 import {OverflowList} from '@astryxdesign/core/OverflowList';
 import {Center} from '@astryxdesign/core/Center';
-import {MagnifyingGlassIcon} from '@heroicons/react/24/outline';
+import {SearchIcon} from '@astryxdesign/template-icons';
 
 interface LibraryItem {
   id: string;
@@ -334,7 +334,7 @@ function LibrarySection({
   return (
     <VStack gap={6}>
       <Heading level={2}>{category}</Heading>
-      <Grid columns={{minWidth: 320}} gap={4}>
+      <Grid columns={{minWidth: 320, max: 6}} gap={4}>
         {items.map(item => (
           <LibraryCard key={item.id} item={item} />
         ))}
@@ -406,7 +406,7 @@ export default function LibraryPage() {
                 placeholder="Search..."
                 value={search}
                 onChange={setSearch}
-                startIcon={MagnifyingGlassIcon}
+                startIcon={SearchIcon}
                 size="lg"
               />
               <HStack vAlign="center" gap={4}>

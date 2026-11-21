@@ -27,6 +27,7 @@ import {describe, expect, it, vi} from 'vitest';
 import yaml from 'yaml';
 
 import {ungated} from './ci-pr-gate.mjs';
+import {withoutCheckoutRetries} from './lib/checkout-retries.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const read = file => yaml.parse(fs.readFileSync(path.join(root, file), 'utf8'));
@@ -509,6 +510,12 @@ function conclusion(id, {fork, cancelled, rerunFailed, headNow = 'old'}) {
     return cancelled ? 'cancelled' : 'skipped';
   for (const step of job.steps) {
     if (step.if != null && !evaluate(step.if, context)) continue;
+    // A checkout succeeds on its first try.
+    if (
+      step.id != null &&
+      String(step.uses ?? '').startsWith('actions/checkout@')
+    )
+      steps[step.id] = {outcome: 'success', outputs: {}};
     // The head check reads the pull request's head as it is now.
     if (step.uses?.endsWith('/.github/actions/superseded-runs'))
       steps[step.id] = {
@@ -522,16 +529,17 @@ function conclusion(id, {fork, cancelled, rerunFailed, headNow = 'old'}) {
 describe('a superseded run in ci.yml', () => {
   it('room reads the head first and stops before it takes room', () => {
     const {room} = ci.jobs;
-    const names = room.steps.map(step => step.name);
+    const steps = withoutCheckoutRetries(room.steps);
+    const names = steps.map(step => step.name);
     expect(names.indexOf("Check the pull request's head")).toBe(1);
     expect(names.indexOf('Stop for a superseded head')).toBe(2);
     expect(names.indexOf('Stop for a superseded head')).toBeLessThan(
       names.indexOf('Wait for room under the CI ceiling'),
     );
-    const check = room.steps[1];
+    const check = steps[1];
     expect(check.uses).toBe('./.ci-admission/.github/actions/superseded-runs');
     expect(check.with).toEqual({rule: 'newest-run'});
-    expect(room.steps[2].if).toBe("steps.head.outputs.superseded == 'true'");
+    expect(steps[2].if).toBe("steps.head.outputs.superseded == 'true'");
     expect(room.outputs.superseded).toBe(
       '${{ steps.head.outputs.superseded }}',
     );

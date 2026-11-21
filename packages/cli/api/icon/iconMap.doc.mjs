@@ -58,12 +58,12 @@ export const doc = {
     {
       type: 'icon.mapMany',
       description:
-        "With pairs: the set, the data file, each entry with the icon it replaced, and whether the file changed. `templateMeanings.unmapped` lists the icon definitions the bundled templates use that the set's `map` does not name, each with its template count, most used first.",
+        "With pairs: the set, the data file, each entry with the icon it replaced, and whether the file changed; `replacedKeys` lists each `map` key that named a replaced definition and was written under its successor's name. `templateMeanings.unmapped` lists the icon definitions the bundled templates use that the set's `map` does not name, each with its template count, most used first.",
     },
     {
       type: 'icon.map',
       description:
-        "The set, the data file, the definition, the icon now mapped, the icon it replaced, and whether the file changed. `templateMeanings.unmapped` lists the icon definitions the bundled templates use that the set's `map` does not name, each with its template count, most used first.",
+        "The set, the data file, the definition, the icon now mapped, the icon it replaced, and whether the file changed; `replacedKeys` lists each `map` key that named a replaced definition and was written under its successor's name. `templateMeanings.unmapped` lists the icon definitions the bundled templates use that the set's `map` does not name, each with its template count, most used first.",
     },
   ],
   throws: [

@@ -8,6 +8,7 @@ import {renderComputerAgentText} from './computer-agent-text.mjs';
 import {
   generateCompressedIndex,
   projectHasBuiltCheck,
+  projectHasExport,
   detectStylingSystem,
   getXdsVersion,
   installAgentDocs,
@@ -24,8 +25,12 @@ import {
   isAstryxInitialized,
   AgentDocsHomeError,
   resolveAgentDocsRoot,
+  ICON_FINDER_LINE,
 } from './agent-docs.mjs';
 import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
+import {writeIconSetProject} from '../../test-utils/icon-set-fixture.mjs';
+import {Project} from '../config/project.mjs';
+import {iconFeatureGate} from '../integrations/icon-features.mjs';
 
 let tmpDir;
 
@@ -156,6 +161,47 @@ describe('generateCompressedIndex', () => {
   });
 
 
+
+  it('names a command and option this CLI has', async () => {
+    const {doc} = await import(
+      '../../clients/cli/commands/experimental-export.doc.mjs'
+    );
+    expect(doc.name).toBe('experimental export');
+    expect(doc.options.map((/** @type {{flag: string}} */ o) => o.flag)).toContain(
+      '--reverse',
+    );
+  });
+
+  describe('projectHasExport reads the CLI the project installs', () => {
+    /** @param {string | null} cliVersion */
+    const project = cliVersion => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-export-check-'));
+      fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({name: 'web'}));
+      if (cliVersion) {
+        const cliDir = path.join(root, 'node_modules', '@astryxdesign', 'cli');
+        fs.mkdirSync(cliDir, {recursive: true});
+        fs.writeFileSync(
+          path.join(cliDir, 'package.json'),
+          JSON.stringify({name: '@astryxdesign/cli', version: cliVersion}),
+        );
+      }
+      return root;
+    };
+    it.each([
+      ['an installed CLI 0.7.17', '0.7.17', true],
+      ['an installed CLI 0.8.0', '0.8.0', true],
+      ['an installed CLI 0.7.16', '0.7.16', false],
+      ['an installed 0.7.17 canary', '0.7.17-canary.b25f95e', false],
+      ['no installed CLI', null, false],
+    ])('%s', (_label, cliVersion, expected) => {
+      const root = project(cliVersion);
+      try {
+        expect(projectHasExport(root)).toBe(expected);
+      } finally {
+        fs.rmSync(root, {recursive: true, force: true});
+      }
+    });
+  });
 
   it('includes theme nudge rule', () => {
     const result = generateCompressedIndex('1.0.0');
@@ -361,6 +407,23 @@ describe('generateCompressedIndex', () => {
     ).toBe(true);
   });
 
+  it('names the one-file share route after the workflow, only when the CLI has it', () => {
+    const share =
+      'When asked to share a page as one file, run `astryx experimental export <page.tsx>`: the file opens anywhere and its controls work; `--reverse` gets the source back.';
+    const block = generateCompressedIndex('1.0.0', {topics: [], exportCheck: true});
+    expect(block).toContain(share);
+    expect(block.indexOf(share)).toBeLessThan(block.indexOf('RULES:'));
+    const withDoctor = generateCompressedIndex('1.0.0', {
+      topics: [],
+      builtCheck: true,
+      exportCheck: true,
+    });
+    expect(withDoctor).toContain(`don't deliver it if it fails.\n${share}\n`);
+    expect(generateCompressedIndex('1.0.0', {topics: []})).not.toContain(
+      'experimental export',
+    );
+  });
+
   it('caps the configured project at 32 integration lines', () => {
     const agentDocs = Array.from({length: 5}, (_, packageIndex) => ({
       package: `@acme/package-${packageIndex}`,
@@ -372,6 +435,83 @@ describe('generateCompressedIndex', () => {
     expect(() => generateCompressedIndex('1.0.0', {agentDocs})).toThrow(
       /32-line project limit/,
     );
+  });
+});
+
+describe('the icon finder line in the agent block', () => {
+  /** @type {string} */
+  let root;
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-agent-icon-line-'));
+  });
+  afterEach(() => {
+    fs.rmSync(root, {recursive: true, force: true});
+  });
+
+  /**
+   * The block's lines in a pnpm project with these icon-set packages.
+   * @param {Array<Record<string, unknown>>} packages
+   * @param {Record<string, unknown>} [config]
+   */
+  async function blockLines(packages, config) {
+    const project = writeIconSetProject(root, {packages, config});
+    fs.writeFileSync(
+      path.join(project, 'pnpm-lock.yaml'),
+      "lockfileVersion: '9.0'\n",
+    );
+    const block = await renderAgentDocsBlock(project);
+    const lines = block.split('\n');
+    const cli = lines.findIndex(line =>
+      line.startsWith('CLI: run every command as'),
+    );
+    expect(cli).toBeGreaterThan(-1);
+    return {block, lines, cli};
+  }
+
+  it('no icon-set package: the block has no icon line', async () => {
+    const {block, lines, cli} = await blockLines([]);
+    expect(block).not.toContain('experimental icon');
+    expect(lines[cli + 1]).toBe('');
+    const withoutIcons = generateCompressedIndex(null, {
+      invocation: 'pnpm exec astryx',
+      topics: ['getting-started'],
+    });
+    const withIconsOff = generateCompressedIndex(null, {
+      invocation: 'pnpm exec astryx',
+      topics: ['getting-started'],
+      iconFeatures: false,
+    });
+    expect(withIconsOff).toBe(withoutIcons);
+  });
+
+  it('an installed icon-set package: the line follows the runner line', async () => {
+    const {lines, cli} = await blockLines([{}]);
+    // The line writes the bare command; the runner line above it names the
+    // project's runner, as for every command in the block.
+    expect(lines[cli]).toMatch(/^CLI: run every command as `pnpm /);
+    expect(lines[cli + 1]).toBe(ICON_FINDER_LINE);
+    expect(lines.filter(line => line === ICON_FINDER_LINE)).toHaveLength(1);
+  });
+
+  it('the computer-level skill never gets the line', () => {
+    const text = renderComputerAgentText({command: 'astryx'});
+    expect(text).not.toContain(ICON_FINDER_LINE);
+    expect(text).not.toContain('experimental icon');
+  });
+
+  it('experimental.iconSet in the config turns the line on too', async () => {
+    const {lines, cli} = await blockLines([{}], {
+      experimental: {iconSet: 'glyphs'},
+    });
+    expect(lines[cli + 1]).toBe(ICON_FINDER_LINE);
+  });
+
+  it('experimental.iconSet with no package installed: the line follows the gate', async () => {
+    const config = {experimental: {iconSet: 'glyphs'}};
+    const {block} = await blockLines([], config);
+    const project = await Project.load(path.join(root, 'app'), {fresh: true});
+    expect(iconFeatureGate(project).on).toBe(true);
+    expect(block.includes(ICON_FINDER_LINE)).toBe(iconFeatureGate(project).on);
   });
 });
 

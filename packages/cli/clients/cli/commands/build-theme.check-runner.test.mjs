@@ -1,24 +1,16 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `theme build --check` does not read a theme as out of date when only
- * the package manager that ran the build differs.
+ * @file `theme build --check` does not read a theme or a theme family as out
+ * of date when only the command named in its built-by lines differs.
  *
- * The built module's doc comment names the command that built it ("built by
- * `pnpm dlx … theme build`"), and that command follows the package manager
- * and host of the run. A theme built with pnpm and checked with npm (a
- * project's CI, for example) has the same outputs in every other line.
+ * A built module's doc comment names the command that built it, once per
+ * theme: a family module has one line per member. Outputs that an earlier
+ * release built with another command (`pnpm dlx … theme build`, for example)
+ * have the same content in every other line.
  */
 
-import {
-  describe,
-  it,
-  expect,
-  beforeAll,
-  beforeEach,
-  afterEach,
-  vi,
-} from 'vitest';
+import {describe, it, expect, beforeAll, beforeEach, afterEach} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {ensureCoreBuilt} from './ensure-core-built.mjs';
@@ -42,11 +34,34 @@ export const oceanCalmTheme = defineTheme({
   tokens: {'--color-background-body': '#eeeeee'},
 });
 `;
-const PNPM = 'pnpm/11.10.0 npm/? node/v24.0.0 linux x64';
-const NPM = 'npm/10.9.0 node/v24.0.0 linux x64 workspaces/false';
+const FAMILY = [
+  'theme',
+  'build',
+  '--family',
+  'ocean.mjs',
+  'ocean-calm.mjs',
+  '--family-key',
+  'ocean-family',
+];
+const BUILT_BY = / theme — built by `[^`]+ theme build`/g;
 
 /** @type {string} */
 let dir;
+
+/** Rewrites every built-by line of `file` to name another command. */
+function nameAnotherCommand(file) {
+  const target = path.join(dir, file);
+  const content = fs.readFileSync(target, 'utf8');
+  const lines = content.match(BUILT_BY) ?? [];
+  fs.writeFileSync(
+    target,
+    content.replace(
+      BUILT_BY,
+      ' theme — built by `pnpm dlx @astryxdesign/cli theme build`',
+    ),
+  );
+  return lines.length;
+}
 
 beforeAll(() => {
   ensureCoreBuilt();
@@ -60,22 +75,15 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  vi.unstubAllEnvs();
   removeLinkedFixture(dir);
 });
 
-describe('theme build --check and the package manager that built the theme', () => {
-  it('reads a theme built with pnpm as up to date when npm checks it', async () => {
-    vi.stubEnv('npm_config_user_agent', PNPM);
+describe('theme build --check and the command in the built-by lines', () => {
+  it('reads a theme as up to date when its built-by line names another command', async () => {
     const built = await runCli(['theme', 'build', 'ocean.mjs'], dir);
     expect(built.code, built.stderr).toBe(0);
-    // The module names the command that built it, so this case is not
-    // vacuous: the build under npm would write another command here.
-    expect(fs.readFileSync(path.join(dir, 'ocean.js'), 'utf8')).toMatch(
-      /ocean theme — built by `pnpm .* theme build`/,
-    );
+    expect(nameAnotherCommand('ocean.js')).toBe(1);
 
-    vi.stubEnv('npm_config_user_agent', NPM);
     const checked = await runCli(
       ['--json', 'theme', 'build', 'ocean.mjs', '--check'],
       dir,
@@ -87,42 +95,39 @@ describe('theme build --check and the package manager that built the theme', () 
     });
   }, 120_000);
 
-  it('still reads any other change to the module as out of date', async () => {
-    vi.stubEnv('npm_config_user_agent', PNPM);
+  it('reads a family as up to date when every member line names another command', async () => {
+    const built = await runCli(FAMILY, dir);
+    expect(built.code, built.stderr).toBe(0);
+    expect(nameAnotherCommand('ocean-family.js')).toBe(2);
+
+    const checked = await runCli(['--json', ...FAMILY, '--check'], dir);
+    expect(checked.code, checked.stdout + checked.stderr).toBe(0);
+  }, 120_000);
+
+  it('still reads a family whose member content changed as out of date', async () => {
+    await runCli(FAMILY, dir);
+    nameAnotherCommand('ocean-family.js');
+    fs.writeFileSync(
+      path.join(dir, 'ocean-calm.mjs'),
+      CALM.replace('#eeeeee', '#dddddd'),
+    );
+    const checked = await runCli(['--json', ...FAMILY, '--check'], dir);
+    expect(checked.code).toBe(1);
+  }, 120_000);
+
+  it('still reads a second built-by line for one theme as out of date', async () => {
     await runCli(['theme', 'build', 'ocean.mjs'], dir);
-    fs.appendFileSync(path.join(dir, 'ocean.js'), '// drift\n');
-    vi.stubEnv('npm_config_user_agent', NPM);
+    const target = path.join(dir, 'ocean.js');
+    const content = fs.readFileSync(target, 'utf8');
+    const line =
+      content.match(/^ \* \S.* theme — built by `[^`]+ theme build`$/mu)?.[0] ??
+      '';
+    expect(line).not.toBe('');
+    fs.writeFileSync(target, content.replace(line, `${line}\n${line}`));
     const checked = await runCli(
       ['--json', 'theme', 'build', 'ocean.mjs', '--check'],
       dir,
     );
     expect(checked.code).toBe(1);
-    expect(JSON.parse(checked.stdout).data.stale).toEqual([
-      {path: 'ocean.js', reason: 'outdated'},
-    ]);
-  }, 120_000);
-
-  it('reads a family built with pnpm as up to date when npm checks it', async () => {
-    const family = [
-      'theme',
-      'build',
-      '--family',
-      'ocean.mjs',
-      'ocean-calm.mjs',
-      '--family-key',
-      'ocean-family',
-    ];
-    vi.stubEnv('npm_config_user_agent', PNPM);
-    const built = await runCli(family, dir);
-    expect(built.code, built.stderr).toBe(0);
-    // One `built by` line per member, each naming the pnpm command.
-    const module = fs.readFileSync(path.join(dir, 'ocean-family.js'), 'utf8');
-    expect(
-      module.match(/ theme — built by `pnpm .* theme build`/g),
-    ).toHaveLength(2);
-
-    vi.stubEnv('npm_config_user_agent', NPM);
-    const checked = await runCli(['--json', ...family, '--check'], dir);
-    expect(checked.code, checked.stdout + checked.stderr).toBe(0);
   }, 120_000);
 });
