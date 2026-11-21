@@ -131,11 +131,18 @@ export async function gatherTemplates(cwd) {
       // A display name that names the block's subject is another name of it
       // and its title (subjectName).
       ...subjectName(t),
+      // The components a block uses, as its doc lists them: search reads
+      // them as what the block renders, not as its own keywords
+      // (_named-keywords.mjs).
+      ...(Array.isArray(t.componentsUsed) && t.componentsUsed.length
+        ? {_uses: [...t.componentsUsed]}
+        : {}),
       _displayName: t.name,
       _package: t.package ?? CORE_PACKAGE,
       _kind: t.type, // 'page' | 'block'
       _resultName: t.dirName,
       _commandName: commandName,
+      ...(t.isReady === false ? {_notReady: /** @type {const} */ (true)} : {}),
     };
     if (readSource)
       derivedFromSource.set(candidate, {

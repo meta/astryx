@@ -137,6 +137,17 @@ describe('upgrade argument validation', () => {
     expect(exitCode).toBe(1);
   });
 
+  it('outside a project, names the project as what is missing, not --from', async () => {
+    const result = await runJson(['--json', 'upgrade']);
+    expect(result).toEqual({
+      apiVersion: 1,
+      error:
+        'This folder is outside a project, so there is no code to upgrade. Run upgrade with `--from <old version>` in the folder of the app that installs @astryxdesign/core.',
+      code: 'ERR_INVALID_ARGUMENT',
+    });
+    expect(exitCode).toBe(1);
+  });
+
   it('allows receipt-only upgrades without --from', async () => {
     writeSourceFile();
     const result = await runJson([

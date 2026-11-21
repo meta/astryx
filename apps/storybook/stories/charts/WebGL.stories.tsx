@@ -1,7 +1,14 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import type {Meta, StoryObj} from '@storybook/react';
-import {useRef, useEffect, useState, type MutableRefObject} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from 'react';
+import {Button, HStack, VStack} from '@astryxdesign/core';
 import {
   Chart,
   dotGL,
@@ -12,10 +19,10 @@ import {
   ChartGrid,
   ChartAxis,
 } from '@astryxdesign/charts';
-import {scatterData, heatmapData} from './_data';
+import {createStreamSamples, scatterData, heatmapData} from './_data';
 
 const meta: Meta<typeof Chart> = {
-  title: 'Charts/WebGL',
+  title: 'Charts/Marks/WebGL',
   component: Chart,
 };
 export default meta;
@@ -102,38 +109,108 @@ export const Heatmap: StoryObj = {
   ),
 };
 
-/** Streaming line via an imperative push handle + a sliding domain window. */
+const STREAM_WINDOW = 60;
+const STREAM_INITIAL_COUNT = 60;
+const STREAM_INTERVAL_MS = 200;
+
+type StreamSample = {x: number; y: number};
+
+function createStream() {
+  const next = createStreamSamples();
+  return {next, samples: Array.from({length: STREAM_INITIAL_COUNT}, next)};
+}
+
+function replaySamples(handle: StreamGLHandle, samples: StreamSample[]) {
+  handle.clear();
+  for (const sample of samples) {
+    handle.push(sample.x, sample.y);
+  }
+}
+
+/**
+ * Streaming line via an imperative push handle + a sliding domain window. It
+ * starts from the same seeded samples on every load and then streams live.
+ * Pause stops the stream; Step pushes one sample while paused; Reset returns to
+ * the initial samples.
+ */
 export const Streaming: StoryObj = {
-  render: () => {
-    const handleRef = useRef<StreamGLHandle | null>(
-      null,
-    ) as MutableRefObject<StreamGLHandle | null>;
-    const WINDOW = 60;
-    const [windowEnd, setWindowEnd] = useState(WINDOW);
+  render: function StreamingStory() {
+    const streamRef = useRef<ReturnType<typeof createStream> | null>(null);
+    if (streamRef.current == null) {
+      streamRef.current = createStream();
+    }
+    // The stream mark creates its push handle only when the plot mounts, which
+    // can be after this story's first effects. Each mount has an empty ring
+    // buffer, so every new handle gets the samples so far.
+    const [handleRef] = useState(() => {
+      let handle: StreamGLHandle | null = null;
+      const ref: MutableRefObject<StreamGLHandle | null> = {
+        get current() {
+          return handle;
+        },
+        set current(next) {
+          handle = next;
+          if (next != null) {
+            replaySamples(next, streamRef.current?.samples ?? []);
+          }
+        },
+      };
+      return ref;
+    });
+    const [sampleCount, setSampleCount] = useState(STREAM_INITIAL_COUNT);
+    const [isPaused, setIsPaused] = useState(false);
+
+    const pushSample = useCallback(() => {
+      const stream = streamRef.current;
+      if (stream == null) {
+        return;
+      }
+      const sample = stream.next();
+      stream.samples.push(sample);
+      handleRef.current?.push(sample.x, sample.y);
+      setSampleCount(stream.samples.length);
+    }, [handleRef]);
+
+    const reset = () => {
+      const stream = createStream();
+      streamRef.current = stream;
+      if (handleRef.current != null) {
+        replaySamples(handleRef.current, stream.samples);
+      }
+      setSampleCount(STREAM_INITIAL_COUNT);
+    };
+
     useEffect(() => {
-      let t = 0;
-      const interval = setInterval(() => {
-        handleRef.current?.push(
-          t,
-          50 + Math.sin(t / 10) * 30 + Math.random() * 10,
-        );
-        t++;
-        setWindowEnd(Math.max(WINDOW, t));
-      }, 200);
+      if (isPaused) {
+        return;
+      }
+      const interval = setInterval(pushSample, STREAM_INTERVAL_MS);
       return () => clearInterval(interval);
-    }, []);
+    }, [isPaused, pushSample]);
+
+    const windowEnd = Math.max(STREAM_WINDOW, sampleCount);
     return (
-      <Chart
-        data={[]}
-        xKey="x"
-        title="Live stream (streamGL)"
-        xDomain={[Math.max(0, windowEnd - WINDOW), windowEnd]}
-        yDomain={[0, 100]}
-        series={[streamGL({handleRef, color: '#3b82f6'})]}
-        grid={<ChartGrid />}
-        axes={axes}
-        height={300}
-      />
+      <VStack gap={2}>
+        <HStack gap={2}>
+          <Button
+            label={isPaused ? 'Resume' : 'Pause'}
+            onClick={() => setIsPaused(paused => !paused)}
+          />
+          <Button label="Step" isDisabled={!isPaused} onClick={pushSample} />
+          <Button label="Reset" onClick={reset} />
+        </HStack>
+        <Chart
+          data={[]}
+          xKey="x"
+          title="Live stream (streamGL)"
+          xDomain={[windowEnd - STREAM_WINDOW, windowEnd]}
+          yDomain={[0, 100]}
+          series={[streamGL({handleRef, color: '#3b82f6'})]}
+          grid={<ChartGrid />}
+          axes={axes}
+          height={300}
+        />
+      </VStack>
     );
   },
 };

@@ -24,6 +24,7 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {registerCountIndependentPlugin} from '../../tableRowContextUsage';
+import {scrollEdgeFadeOff} from '../../../hooks/scrollEdgeFade';
 
 import {colorVars, durationVars, easeVars} from '../../../theme/tokens.stylex';
 import type {
@@ -193,25 +194,52 @@ function countPinnedRuns(
 type StickySide = {edge: 'start' | 'end'; offset: string};
 
 /**
- * Resolve how a single column should be pinned given the start/end configs and
- * the full column list. A key (mis)configured on both edges resolves to start.
- * Returns `null` for columns that should not be pinned.
+ * Resolves how one column is pinned from the precomputed offsets. A key on
+ * both edges resolves to start. Returns `null` for a column that is not
+ * pinned.
  */
 function resolveStickySide(
-  columns: ReadonlyArray<TableColumn<Record<string, unknown>>> | undefined,
+  offsets: PinnedOffsets,
   columnKey: string,
-  startKeys: string[],
-  endKeys: string[],
 ): StickySide | null {
-  const startOffsets = computeStartOffsets(columns, startKeys);
-  if (startOffsets?.has(columnKey)) {
-    return {edge: 'start', offset: startOffsets.get(columnKey) ?? '0px'};
+  if (offsets.start?.has(columnKey)) {
+    return {edge: 'start', offset: offsets.start.get(columnKey) ?? '0px'};
   }
-  const endOffsets = computeEndOffsets(columns, endKeys);
-  if (endOffsets?.has(columnKey)) {
-    return {edge: 'end', offset: endOffsets.get(columnKey) ?? '0px'};
+  if (offsets.end?.has(columnKey)) {
+    return {edge: 'end', offset: offsets.end.get(columnKey) ?? '0px'};
   }
   return null;
+}
+
+interface PinnedOffsets {
+  start: Map<string, string> | null;
+  end: Map<string, string> | null;
+}
+
+/**
+ * Returns a reader of the pinned offsets for a column list. The offsets
+ * depend only on the columns and the pinned keys. Each cell of a render reads
+ * one result.
+ */
+function createPinnedOffsetsReader(
+  startKeys: string[],
+  endKeys: string[],
+): (
+  columns: ReadonlyArray<TableColumn<Record<string, unknown>>> | undefined,
+) => PinnedOffsets {
+  let lastColumns:
+    ReadonlyArray<TableColumn<Record<string, unknown>>> | undefined;
+  let last: PinnedOffsets | undefined;
+  return columns => {
+    if (last === undefined || columns !== lastColumns) {
+      lastColumns = columns;
+      last = {
+        start: computeStartOffsets(columns, startKeys),
+        end: computeEndOffsets(columns, endKeys),
+      };
+    }
+    return last;
+  };
 }
 
 // =============================================================================
@@ -675,6 +703,10 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
     refreshRef.current?.();
   });
 
+  const readOffsets = useMemo(
+    () => createPinnedOffsetsReader(pinned.start, pinned.end),
+    [pinned],
+  );
   const plugin = useMemo(
     (): TablePlugin<T> => ({
       rowModel: 'flat',
@@ -690,8 +722,7 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
         props: HeaderCellRenderProps,
         column: TableColumn<T>,
       ): HeaderCellRenderProps {
-        const {start: s, end: e} = pinned;
-        const side = resolveStickySide(props.columns, column.key, s, e);
+        const side = resolveStickySide(readOffsets(props.columns), column.key);
         if (!side) {
           return props;
         }
@@ -731,8 +762,7 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
         props: BodyCellRenderProps,
         column: TableColumn<T>,
       ): BodyCellRenderProps {
-        const {start: s, end: e} = pinned;
-        const side = resolveStickySide(props.columns, column.key, s, e);
+        const side = resolveStickySide(readOffsets(props.columns), column.key);
         if (!side) {
           return props;
         }
@@ -790,13 +820,20 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
         return {
           ...props,
           htmlProps: {...props.htmlProps, ref: mergedRef},
+          // A pinned edge marks its hidden columns with its own shadow, and
+          // the pinned column sits at that edge, so the edge does not fade.
+          xstyle: [
+            ...props.xstyle,
+            ...(stateRef.current.hasStart ? [scrollEdgeFadeOff.start] : []),
+            ...(stateRef.current.hasEnd ? [scrollEdgeFadeOff.end] : []),
+          ],
         };
       },
     }),
-    // `pinned` keeps its identity while the pinned keys keep their values, and
-    // `attachScrollShadow` is stable, so the plugin object is reused until the
-    // pinned keys change.
-    [attachScrollShadow, pinned],
+    // `attachScrollShadow` is stable, and `readOffsets` changes only with the
+    // pinned keys. So the plugin object changes only when the pinned keys
+    // change.
+    [attachScrollShadow, readOffsets],
   );
   registerPinnedColumnRuns(plugin, columns =>
     countPinnedRuns(columns, pinned.start, pinned.end),

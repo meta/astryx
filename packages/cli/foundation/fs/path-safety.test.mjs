@@ -6,9 +6,12 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import {
   assertWithin,
+  homeRelativePath,
   sanitizeName,
   isFilePathArg,
   PathSafetyError,
+  tempFolderOf,
+  tempFolders,
 } from './path-safety.mjs';
 
 let tmpDir;
@@ -94,6 +97,29 @@ describe('assertWithin', () => {
   it('rejects empty / non-string input', () => {
     expect(() => assertWithin('', tmpDir)).toThrow(/non-empty/i);
     expect(() => assertWithin(null, tmpDir)).toThrow();
+  });
+});
+
+describe('homeRelativePath', () => {
+  const home = path.join(path.parse(process.cwd()).root, 'home', 'someone');
+
+  it('reads `~` and `~/` as the home folder, as a shell expands them', () => {
+    expect(homeRelativePath('~', home)).toBe(home);
+    expect(homeRelativePath('~/scratch/page.tsx', home)).toBe(
+      path.join(home, 'scratch', 'page.tsx'),
+    );
+  });
+
+  it('leaves every other path alone', () => {
+    for (const value of [
+      'src/pages/x',
+      './~/x',
+      '~other/x',
+      'a~/x',
+      '/abs/x',
+    ]) {
+      expect(homeRelativePath(value, home), value).toBeNull();
+    }
   });
 });
 
@@ -349,4 +375,91 @@ describe('assertWithin allowAbsolute', () => {
       'ERR_PATH_TRAVERSAL',
     );
   });
+});
+
+describe('tempFolderOf', () => {
+  const tmpdir = process.env.TMPDIR;
+  const home = process.env.HOME;
+  afterEach(() => {
+    if (tmpdir === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = tmpdir;
+    if (home === undefined) delete process.env.HOME;
+    else process.env.HOME = home;
+  });
+
+  it('names the system temp folder that holds a path, and nothing for any other path', () => {
+    expect(tempFolderOf(path.join(os.tmpdir(), 'a', 'b'))).toBe(
+      path.resolve(os.tmpdir()),
+    );
+    expect(
+      tempFolderOf(
+        path.join(path.parse(os.tmpdir()).root, 'astryx-no-such-folder'),
+      ),
+    ).toBeNull();
+  });
+
+  // A test run's home folder sits in /tmp, so these cases give themselves a
+  // home folder outside it; the case below covers one that /tmp holds.
+  const homeOutsideTmp = '/astryx-home-outside-tmp';
+
+  it.skipIf(process.platform === 'win32')(
+    'takes /tmp on a POSIX system when it does not hold the home folder',
+    () => {
+      process.env.HOME = homeOutsideTmp;
+      expect(tempFolderOf('/tmp/astryx/x')).toBe('/tmp');
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'lists the temp folder and /tmp once each',
+    () => {
+      process.env.HOME = homeOutsideTmp;
+      process.env.TMPDIR = '/tmp';
+      expect(tempFolders()).toEqual(['/tmp']);
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'takes no /tmp that holds the home folder',
+    () => {
+      process.env.HOME = '/tmp/astryx-home-in-tmp';
+      process.env.TMPDIR = '/tmp';
+      expect(tempFolders()).toEqual([]);
+      expect(tempFolderOf('/tmp/astryx/x')).toBeNull();
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'takes a TMPDIR inside the home folder, and leaves out one that holds it',
+    () => {
+      process.env.TMPDIR = path.join(os.homedir(), 'tmp');
+      expect(tempFolders()).toContain(path.join(os.homedir(), 'tmp'));
+      process.env.TMPDIR = path.dirname(os.homedir());
+      expect(tempFolders()).not.toContain(path.dirname(os.homedir()));
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'compares real locations, so a link cannot open the home folder or the disk',
+    () => {
+      const users = path.join(tmpDir, 'users');
+      fs.mkdirSync(path.join(users, 'joe'), {recursive: true});
+      fs.symlinkSync(path.join(users, 'joe'), path.join(tmpDir, 'home'), 'dir');
+      process.env.HOME = path.join(tmpDir, 'home');
+      process.env.TMPDIR = users;
+      expect(tempFolders()).not.toContain(users);
+
+      fs.symlinkSync('/', path.join(tmpDir, 'root'), 'dir');
+      process.env.TMPDIR = path.join(tmpDir, 'root');
+      expect(tempFolders()).not.toContain(path.join(tmpDir, 'root'));
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'is no temp folder when it holds the home folder',
+    () => {
+      process.env.TMPDIR = path.dirname(os.homedir());
+      expect(tempFolderOf(path.join(os.homedir(), 'notes'))).toBeNull();
+    },
+  );
 });

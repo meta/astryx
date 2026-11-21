@@ -103,7 +103,7 @@ const isNarrow = useMediaQuery('(max-width: 1024px)');
       content: [
         {
           type: 'prose',
-          text: 'For columns that reflow on small screens, use `Grid columns={{minWidth, max}}`. A numeric `columns` is exactly N columns at every width and never reflows: `columns={4}` on a 390px phone renders four tracks under 100px wide, and the row overflows the page as soon as their content cannot shrink to fit. `{minWidth: 240, max: 4}` renders at most four columns, each at least 240px, and drops to one full-width column when the container is narrow; `max` is what lets that last column shrink to the container, and `gap` counts toward the room the columns need.',
+          text: 'For columns that reflow on small screens, use `Grid columns={{minWidth, max}}`. A numeric `columns` is exactly N columns at every width and never reflows: `columns={4}` on a 390px phone renders four tracks under 100px wide, and the row overflows the page as soon as their content cannot shrink to fit. `{minWidth: 240, max: 4}` renders at most four columns, each at least 240px, and drops to one full-width column when the container is narrow. `max` caps the count on wide screens; with or without it, a lone column shrinks to a container narrower than `minWidth`. `gap` counts toward the room the columns need.',
         },
         {
           type: 'code',
@@ -123,7 +123,7 @@ const isNarrow = useMediaQuery('(max-width: 1024px)');
           type: 'list',
           style: 'unordered',
           items: [
-            '`{minWidth}` alone: as many columns as fit at the floor, no cap; a container narrower than `minWidth` overflows, so add `max` for anything that reaches a phone',
+            '`{minWidth}` alone: as many columns as fit at the floor, no cap; in a container narrower than `minWidth`, one column shrinks to the container width',
             "`{minWidth, repeat: 'fit'}`: empty tracks collapse so present items stretch",
             "A numeric `GridSpan` wider than the grid's current columns adds implicit columns to the whole grid; items placed before and after the span flow into them, and `columns='full'` then covers only the explicit columns. In a reflowing grid keep spans within the smallest count it can reach, or use `'full'`, which adds none",
             'Styling that changes the room columns have to fit changes the count a reflowing shape reaches: a `columnGap` or `gap` step, inline padding on the grid, or `grid-auto-flow: column` through `xstyle`, which places items into extra implicit columns. A `className` rule replaces the computed track list only when it wins the cascade against the generated styles; prefer `xstyle` for overrides',

@@ -395,6 +395,28 @@ describe('useTypeahead', () => {
       expect(typed.onMatch).toHaveBeenLastCalledWith(1);
     });
 
+    it('reaches a stroked letter typed with AltGr, which reports Control and Alt (INV17)', () => {
+      const {onMatch, api} = setupLabels(['Anna', 'Lublin', 'Łódź']);
+      const handled = api.onKeyDown(
+        new KeyboardEvent('keydown', {
+          key: 'ł',
+          ctrlKey: true,
+          altKey: true,
+          modifierAltGraph: true,
+        }),
+      );
+      expect(handled).toBe(true);
+      expect(onMatch).toHaveBeenLastCalledWith(2);
+    });
+
+    it('still ignores Control+L without AltGr', () => {
+      const {onMatch, api} = setupLabels(['Anna', 'Lublin', 'Łódź']);
+      expect(
+        api.onKeyDown(new KeyboardEvent('keydown', {key: 'l', ctrlKey: true})),
+      ).toBe(false);
+      expect(onMatch).not.toHaveBeenCalled();
+    });
+
     it('folds letters Unicode does not decompose (ł, ø)', () => {
       const {onMatch, api} = setupLabels(['Anna', 'Łukasz']);
       api.onKeyDown(key('l'));

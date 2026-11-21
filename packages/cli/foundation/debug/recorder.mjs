@@ -88,6 +88,8 @@ let _configGateSkipped = false;
 let _startedAt = 0;
 /** @type {string | undefined} */
 let _cliVersion;
+/** @type {(() => {locale: string | null, timezone: string | null}) | undefined} */
+let _intl;
 
 /**
  * Captured stdout/stderr, and the originals to restore.
@@ -292,9 +294,12 @@ function reportConfigGateMiss() {
  * @param {object} [options]
  * @param {string[]} [options.argv] - argv after the binary.
  * @param {string} [options.cliVersion]
+ * @param {() => {locale: string | null, timezone: string | null}} [options.intl] -
+ *   what gives the default locale and time zone at delivery (the CLI hands
+ *   its kept copy, env/intl-defaults.mjs); Intl now by default.
  * @returns {boolean} whether collection started.
  */
-export function begin({argv = process.argv.slice(2), cliVersion} = {}) {
+export function begin({argv = process.argv.slice(2), cliVersion, intl} = {}) {
   let started = false;
   guard(() => {
     if (_event) return;
@@ -302,6 +307,7 @@ export function begin({argv = process.argv.slice(2), cliVersion} = {}) {
     _startedAt = Date.now();
     _finished = false;
     _cliVersion = cliVersion;
+    _intl = intl;
     _event = createEvent({argv});
 
     if (!_listenerInstalled) {
@@ -634,7 +640,7 @@ export function finish({exitCode} = {}) {
     const handlers = effectiveHandlers();
     if (handlers.length === 0) return;
 
-    _event.env = captureEnv({cliVersion: _cliVersion});
+    _event.env = captureEnv({cliVersion: _cliVersion, intl: _intl});
     _event.output.stdout = collected(_stdout);
     _event.output.stderr = collected(_stderr);
     _event.output.stdoutBytes = _stdout.bytes;

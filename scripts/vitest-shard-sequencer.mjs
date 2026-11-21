@@ -89,19 +89,56 @@ const NODE_LEG_JOB = /^test-node \(\d+(?:\/\d+)?\)$/;
 const SWIZZLE_PROOF_JOB = /^swizzle-proof \(\d+(?:\/\d+)?\)$/;
 
 /**
+ * A log's text without colour codes. They arrive as escape bytes, or, in
+ * `gh run view --log` output, spelled out as `^[[…m`.
+ */
+export const plainLog = text => text.replace(/(?:\x1b|\^\[)\[[0-9;]*m/g, '');
+
+/**
+ * Each Node leg's lines in a whole run's log, by the job name each line
+ * starts with (`test-node (2)`, `test-node (2/5)`).
+ * @param {string} text
+ * @returns {Map<string, string>}
+ */
+export function nodeLegLogs(text) {
+  /** @type {Map<string, string[]>} */
+  const legs = new Map();
+  for (const line of text.split('\n')) {
+    const job = line.split('\t')[0];
+    if (!NODE_LEG_JOB.test(job)) continue;
+    // Append in place: copying the leg's lines for each line is quadratic on
+    // a whole run's log.
+    const lines = legs.get(job);
+    if (lines) lines.push(line);
+    else legs.set(job, [line]);
+  }
+  return new Map([...legs].map(([job, lines]) => [job, lines.join('\n')]));
+}
+
+/**
+ * How many test files a Vitest run counted, from its last `Test Files … (N)`
+ * summary, or null when it printed none (a run that stopped early).
+ * @param {string} text
+ */
+export function countedTestFiles(text) {
+  const summary = plainLog(text)
+    .match(/Test Files\s+[^\n]*\(\d+\)/g)
+    ?.pop();
+  return summary ? Number(/\((\d+)\)\s*$/.exec(summary)[1]) : null;
+}
+
+/**
  * Seconds per Node test file from Vitest's default reporter lines. A whole
  * run's log (`gh run view --log`) names each line's job in its first
  * tab-separated column: only the Node legs' lines count, since other jobs (the
  * build job runs its own `--project node` tests, which the Node legs skip)
  * would book time no leg spends. The swizzle-proof legs' lines count for the
  * slice files, which run there. A single leg's own log has no job column.
+ * Every file a Node leg's reporter names gets an entry.
  */
 export function recordDurations(text) {
   const seconds = {};
-  // Colour codes arrive as escape bytes, or, in `gh run view --log` output,
-  // spelled out as `^[[…m`.
-  const plain = text.replace(/(?:\x1b|\^\[)\[[0-9;]*m/g, '');
-  for (const line of plain.split('\n')) {
+  for (const line of plainLog(text).split('\n')) {
     const columns = line.split('\t');
     if (columns.length >= 3 && !NODE_LEG_JOB.test(columns[0])) {
       if (!SWIZZLE_PROOF_JOB.test(columns[0])) continue;
@@ -117,13 +154,21 @@ export function recordDurations(text) {
       seconds[match[1]] = Math.round(value * 10) / 10;
       continue;
     }
-    // A file whose every test skips in the leg costs the leg nothing: it is
-    // recorded at 0, so a time another job gave it never stays booked.
-    const skipped =
-      /↓\s+\|?node\|?\s+(\S+\.(?:test|spec)\.[cm]?[jt]sx?)\s+\((\d+) tests? \| (\d+) skipped\)/.exec(
+    // A file none of whose tests run in the leg (each skipped or todo) costs
+    // the leg nothing: it is recorded at 0, so a time another job gave it
+    // never stays booked.
+    const idle =
+      /↓\s+\|?node\|?\s+(\S+\.(?:test|spec)\.[cm]?[jt]sx?)\s+\((\d+) tests?((?: \| \d+ (?:skipped|todo))+)\)/.exec(
         line,
       );
-    if (skipped && skipped[2] === skipped[3]) seconds[skipped[1]] = 0;
+    if (
+      idle &&
+      [...idle[3].matchAll(/(\d+) (?:skipped|todo)/g)].reduce(
+        (sum, count) => sum + Number(count[1]),
+        0,
+      ) === Number(idle[2])
+    )
+      seconds[idle[1]] = 0;
   }
   return seconds;
 }

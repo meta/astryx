@@ -2,7 +2,18 @@
 
 import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
+import * as stylex from '@stylexjs/stylex';
+import {BottomSheet} from '@astryxdesign/core/BottomSheet';
+import {Button} from '@astryxdesign/core/Button';
+import {Card} from '@astryxdesign/core/Card';
+import {Heading} from '@astryxdesign/core/Heading';
+import {NumberInput} from '@astryxdesign/core/NumberInput';
+import {Section} from '@astryxdesign/core/Section';
+import {VStack} from '@astryxdesign/core/Stack';
+import {Text} from '@astryxdesign/core/Text';
+import {TextArea} from '@astryxdesign/core/TextArea';
 import {TextInput} from '@astryxdesign/core/TextInput';
+import {Toolbar} from '@astryxdesign/core/Toolbar';
 import {
   MagnifyingGlassIcon,
   EnvelopeIcon,
@@ -633,3 +644,354 @@ export const KeyboardTraits: Story = {
     );
   },
 };
+
+/**
+ * Mobile keyboard: on a phone, the keyboard never covers the focused field.
+ * The fields sit low on the first screen, and the page scrolls the focused one
+ * 10 px above the keyboard. The Message field sits in a toolbar fixed at the
+ * viewport's bottom, which rides up with the keyboard, its bottom on the
+ * keyboard's top.
+ */
+export const MobileKeyboard: Story = {
+  name: 'Mobile keyboard',
+  parameters: {layout: 'fullscreen'},
+  render: () => <MobileKeyboardPage bar="docked" />,
+};
+
+/**
+ * Mobile keyboard, with the toolbar floating 16 px above the bottom edge. The
+ * app positions that toolbar, so it stays where the app puts it.
+ */
+export const MobileKeyboardFloatingBar: Story = {
+  name: 'Mobile keyboard: floating bar',
+  parameters: {layout: 'fullscreen'},
+  render: () => <MobileKeyboardPage bar="floating" />,
+};
+
+/**
+ * Mobile keyboard, with a toolbar that sets its own `translate`. The app
+ * positions that toolbar, so it stays where the app puts it.
+ */
+export const MobileKeyboardOwnTranslate: Story = {
+  name: 'Mobile keyboard: bar with its own translate',
+  parameters: {layout: 'fullscreen'},
+  render: () => <MobileKeyboardPage bar="translated" />,
+};
+
+/**
+ * Mobile keyboard, at the end of a short page. The page scrolls 84 px, and its
+ * last field sits at its end.
+ */
+export const MobileKeyboardEndOfPage: Story = {
+  name: 'Mobile keyboard: end of a short page',
+  parameters: {layout: 'fullscreen'},
+  render: () => <EndOfPageFixture />,
+};
+
+/**
+ * Mobile keyboard, at the end of a scroll area that fills the viewport. The
+ * area scrolls 84 px, and its last field sits at its end.
+ */
+export const MobileKeyboardEndOfScrollArea: Story = {
+  name: 'Mobile keyboard: end of a scroll area',
+  parameters: {layout: 'fullscreen'},
+  render: () => <EndOfScrollAreaFixture />,
+};
+
+/**
+ * Mobile keyboard, in a scroll area low on the page. The keyboard covers the
+ * area's whole box, so the page scrolls the focused field above it.
+ */
+export const MobileKeyboardLowScrollArea: Story = {
+  name: 'Mobile keyboard: a scroll area low on the page',
+  parameters: {layout: 'fullscreen'},
+  render: () => <LowScrollAreaFixture />,
+};
+
+/**
+ * Mobile keyboard, in a scroll area inside a panel that floats above the
+ * bottom edge. The keyboard covers the panel, so the page brings the focused
+ * field into view.
+ */
+export const MobileKeyboardFloatingPanel: Story = {
+  name: 'Mobile keyboard: a scroll area in a floating panel',
+  parameters: {layout: 'fullscreen'},
+  render: () => <FloatingPanelFixture />,
+};
+
+/**
+ * Mobile keyboard, in a scroll area that fills a full-viewport panel. The
+ * panel's scroll area brings the focused field above the keyboard, and the
+ * page does not move.
+ */
+export const MobileKeyboardFullViewportPanel: Story = {
+  name: 'Mobile keyboard: a scroll area in a full-viewport panel',
+  parameters: {layout: 'fullscreen'},
+  render: () => <FullViewportPanelFixture />,
+};
+
+/**
+ * Mobile keyboard, in a bottom sheet of a set height. The keyboard covers the
+ * sheet, so the page brings the focused field into view.
+ */
+export const MobileKeyboardSheet: Story = {
+  name: 'Mobile keyboard: a field in a sheet of a set height',
+  render: () => <SheetFixture />,
+};
+
+const keyboardFixtureStyles = stylex.create({
+  page: {padding: 16, paddingBlockEnd: 160},
+  intro: {minHeight: '60vh'},
+  fields: {width: 320},
+  tail: {minHeight: '40vh'},
+  bar: {position: 'fixed', insetInline: 0, insetBlockEnd: 0},
+  floatingBar: {insetBlockEnd: 16},
+  translatedBar: {translate: '0 -8px'},
+});
+
+const BAR_NOTES = {
+  docked:
+    'The toolbar rides up with the keyboard, its bottom on the keyboard’s top, and back down when it closes.',
+  floating:
+    'The toolbar floats above the bottom edge, so the app positions it and it stays in place.',
+  translated:
+    'The toolbar sets its own translate, so the app positions it and it stays in place.',
+} as const;
+
+function MobileKeyboardPage({
+  bar,
+}: {
+  bar: 'docked' | 'floating' | 'translated';
+}) {
+  const [title, setTitle] = useState('');
+  const [quantity, setQuantity] = useState<number | null>(null);
+  const [notes, setNotes] = useState('');
+  const [message, setMessage] = useState('');
+  return (
+    <div {...stylex.props(keyboardFixtureStyles.page)}>
+      <div {...stylex.props(keyboardFixtureStyles.intro)}>
+        <VStack gap={2}>
+          <Heading level={3}>Mobile keyboard</Heading>
+          <Text type="supporting" color="secondary">
+            Focus each field. The page scrolls the focused field above the
+            mobile keyboard and never pans. {BAR_NOTES[bar]}
+          </Text>
+        </VStack>
+      </div>
+      <div {...stylex.props(keyboardFixtureStyles.fields)}>
+        <VStack gap={4}>
+          <TextInput label="Title" value={title} onChange={setTitle} />
+          <NumberInput
+            label="Quantity"
+            value={quantity}
+            onChange={setQuantity}
+          />
+          <TextArea label="Notes" value={notes} onChange={setNotes} />
+        </VStack>
+      </div>
+      <div {...stylex.props(keyboardFixtureStyles.tail)} />
+      <div
+        {...stylex.props(
+          keyboardFixtureStyles.bar,
+          bar === 'floating' && keyboardFixtureStyles.floatingBar,
+          bar === 'translated' && keyboardFixtureStyles.translatedBar,
+        )}>
+        <Card>
+          <Toolbar
+            label="Reply"
+            startContent={
+              <TextInput
+                label="Message"
+                isLabelHidden
+                value={message}
+                onChange={setMessage}
+              />
+            }
+            endContent={<Button label="Send" onClick={() => setMessage('')} />}
+          />
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+const endFixtureStyles = stylex.create({
+  endColumn: {
+    display: 'flex',
+    flexDirection: 'column',
+    boxSizing: 'border-box',
+    minHeight: 'calc(100dvh + 84px)',
+    padding: 16,
+  },
+  grow: {flexGrow: 1},
+  scrollArea: {height: '100dvh', overflowY: 'auto'},
+});
+
+function EndIntro({where}: {where: string}) {
+  return (
+    <VStack gap={2}>
+      <Heading level={3}>Mobile keyboard</Heading>
+      <Text type="supporting" color="secondary">
+        {where} scrolls 84 px. Focus its last field, at its end: the field ends
+        above the mobile keyboard.
+      </Text>
+    </VStack>
+  );
+}
+
+function EndOfPageFixture() {
+  const [value, setValue] = useState('');
+  return (
+    <div {...stylex.props(endFixtureStyles.endColumn)}>
+      <EndIntro where="The page" />
+      <div {...stylex.props(endFixtureStyles.grow)} />
+      <TextInput label="Last field" value={value} onChange={setValue} />
+    </div>
+  );
+}
+
+function EndOfScrollAreaFixture() {
+  const [value, setValue] = useState('');
+  return (
+    <div {...stylex.props(endFixtureStyles.scrollArea)}>
+      <div {...stylex.props(endFixtureStyles.endColumn)}>
+        <EndIntro where="The scroll area" />
+        <div {...stylex.props(endFixtureStyles.grow)} />
+        <TextInput label="Last field" value={value} onChange={setValue} />
+      </div>
+    </div>
+  );
+}
+
+const lowFixtureStyles = stylex.create({
+  page: {padding: 16},
+  intro: {minHeight: '60dvh'},
+  area: {height: 220, overflowY: 'auto'},
+  tail: {height: 400},
+});
+
+function LowScrollAreaFixture() {
+  const [first, setFirst] = useState('');
+  const [second, setSecond] = useState('');
+  return (
+    <div {...stylex.props(lowFixtureStyles.page)}>
+      <div {...stylex.props(lowFixtureStyles.intro)}>
+        <VStack gap={2}>
+          <Heading level={3}>Mobile keyboard</Heading>
+          <Text type="supporting" color="secondary">
+            Focus a field in the scroll area below. The keyboard covers the
+            area's whole box, so the page scrolls the field above the keyboard.
+          </Text>
+        </VStack>
+      </div>
+      <div {...stylex.props(lowFixtureStyles.area)}>
+        <VStack gap={4}>
+          <TextInput label="First field" value={first} onChange={setFirst} />
+          <TextInput label="Second field" value={second} onChange={setSecond} />
+          <div {...stylex.props(lowFixtureStyles.tail)} />
+        </VStack>
+      </div>
+    </div>
+  );
+}
+
+const panelFixtureStyles = stylex.create({
+  page: {padding: 16},
+  panel: {
+    position: 'fixed',
+    insetInline: 16,
+    insetBlockEnd: 16,
+    height: 220,
+    overflowY: 'auto',
+  },
+  tail: {height: 400},
+});
+
+function FloatingPanelFixture() {
+  const [first, setFirst] = useState('');
+  const [second, setSecond] = useState('');
+  return (
+    <div {...stylex.props(panelFixtureStyles.page)}>
+      <VStack gap={2}>
+        <Heading level={3}>Mobile keyboard</Heading>
+        <Text type="supporting" color="secondary">
+          Focus a field in the floating panel below. The keyboard covers the
+          panel, so the page brings the field into view.
+        </Text>
+      </VStack>
+      <div {...stylex.props(panelFixtureStyles.panel)}>
+        <Card>
+          <VStack gap={4}>
+            <TextInput label="Panel field" value={first} onChange={setFirst} />
+            <TextInput
+              label="Second panel field"
+              value={second}
+              onChange={setSecond}
+            />
+            <div {...stylex.props(panelFixtureStyles.tail)} />
+          </VStack>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+const fullPanelFixtureStyles = stylex.create({
+  panel: {
+    position: 'fixed',
+    inset: 0,
+    overflowY: 'auto',
+    padding: 16,
+  },
+  intro: {minHeight: '60dvh'},
+  tail: {height: '100dvh'},
+});
+
+function FullViewportPanelFixture() {
+  const [value, setValue] = useState('');
+  return (
+    <div {...stylex.props(fullPanelFixtureStyles.panel)}>
+      <div {...stylex.props(fullPanelFixtureStyles.intro)}>
+        <VStack gap={2}>
+          <Heading level={3}>Mobile keyboard</Heading>
+          <Text type="supporting" color="secondary">
+            Focus the field below. The panel's scroll area brings it above the
+            keyboard, and the page does not move.
+          </Text>
+        </VStack>
+      </div>
+      <TextInput label="Panel field" value={value} onChange={setValue} />
+      <div {...stylex.props(fullPanelFixtureStyles.tail)} />
+    </div>
+  );
+}
+
+const sheetFixtureStyles = stylex.create({
+  sheet: {height: 300},
+  tail: {height: 400},
+});
+
+function SheetFixture() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [value, setValue] = useState('');
+  return (
+    <VStack gap={2}>
+      <Heading level={3}>Mobile keyboard</Heading>
+      <Text type="supporting" color="secondary">
+        Open the sheet and focus its field. The keyboard covers the sheet, so
+        the page brings the field into view.
+      </Text>
+      <Button label="Open sheet" onClick={() => setIsOpen(true)} />
+      <BottomSheet
+        isOpen={isOpen}
+        onOpenChange={setIsOpen}
+        label="Sheet of a set height"
+        xstyle={sheetFixtureStyles.sheet}>
+        <Section padding={4}>
+          <TextInput label="Sheet field" value={value} onChange={setValue} />
+          <div {...stylex.props(sheetFixtureStyles.tail)} />
+        </Section>
+      </BottomSheet>
+    </VStack>
+  );
+}

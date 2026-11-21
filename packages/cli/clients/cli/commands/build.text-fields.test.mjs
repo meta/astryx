@@ -62,16 +62,16 @@ describe('build kit text fields mirror the JSON keys', () => {
     }
   }, SLOW);
 
-  it('leads with the start, then the alternatives, blocks and components', async () => {
+  it('leads with the start, then the alternatives, block examples and components', async () => {
     const human = await runCli(['build', 'analytics dashboard'], REPO);
     expect(human.status).toBe(0);
     const headings = human.stdout
       .split('\n')
-      .filter(line => /^(TEMPLATE|OTHER TEMPLATES|BLOCKS|COMPONENTS)$/.test(line));
-    expect(headings).toEqual(['TEMPLATE', 'OTHER TEMPLATES', 'BLOCKS', 'COMPONENTS']);
+      .filter(line => /^(TEMPLATE|OTHER TEMPLATES|BLOCK EXAMPLES|COMPONENTS)$/.test(line));
+    expect(headings).toEqual(['TEMPLATE', 'OTHER TEMPLATES', 'BLOCK EXAMPLES', 'COMPONENTS']);
     // A builder changing a page they already have keeps it.
     expect(human.stdout).toContain(
-      'Changing a page you already have? Keep it, and use only the blocks and components.',
+      'Changing a page you already have? Keep it, and add components; read a block example when it helps.',
     );
   }, SLOW);
 

@@ -29,6 +29,13 @@ import {
 } from '../hooks/useAdaptivePresentation';
 import type {InteractionModalityTracking} from '../utils/interactionModality';
 import {useFocusReturnVisibility} from '../hooks/useFocusReturnVisibility';
+import {useOutsidePress} from '../Layer/outsidePress';
+import {
+  containsAlongFlatTree,
+  deepActiveElement,
+  shadowRootsOutward,
+} from '../utils/flatTree';
+import {isShadowRoot} from '../utils/nodeType';
 import {
   createPresentationHold,
   usePresentationHold,
@@ -66,6 +73,9 @@ interface SelectorPresentationController {
   popover: UsePopoverReturn;
   show: () => boolean;
 }
+
+/** The browser light-dismisses the list; the press watch only reports. */
+function closesNothing(): void {}
 
 export function useSelectorPresentation({
   presentation,
@@ -107,33 +117,85 @@ export function useSelectorPresentation({
     prepareFocusReturn,
     resetFocusReturn,
   } = useFocusReturnVisibility(triggerModality);
+  // A press inside the list, such as a pick, can focus a container around it,
+  // such as a dialog's content box. The person did not choose that focus.
+  const isLastPressInListRef = useRef(false);
+  const pressWatch = useOutsidePress();
 
   const handlePopoverHide = useCallback(() => {
     onHideRef.current();
     const trigger = triggerRef.current;
-    // A light dismiss caused by pressing another focusable element has already
-    // moved focus there; taking it back would leave the next key on this
-    // closed Selector (spec:Popover AR4 returns focus only when it would
-    // otherwise be lost). Escape, a choice in the list, or a press on nothing
-    // focusable still returns focus to the trigger.
-    const active = document.activeElement;
+    const isPressInList = isLastPressInListRef.current;
+    pressWatch.stop();
+    // A light dismiss by a press on another control has already moved focus
+    // there. Taking it back would send the next key to this closed Selector.
+    // Escape, a press inside the list, or a press on nothing focusable returns
+    // focus to the trigger. So does a press on a container around the list
+    // that is no Tab stop, such as one with `tabIndex={-1}`.
+    // Read through open shadow roots: the document reports a root's host.
+    const active = deepActiveElement(document);
+    const list = popoverContentRef.current?.current ?? null;
+    // The press inside the list explains focus only while that focus still
+    // holds the list. A later key can move focus to another field.
+    const isFocusFromPressInList =
+      isPressInList &&
+      active != null &&
+      list != null &&
+      containsAlongFlatTree(active, list);
+    // A closed shadow root hides which element inside it holds focus, so its
+    // host is not a container around the list: focus may be on another field.
+    const isClosedRootHost =
+      active != null &&
+      active.shadowRoot == null &&
+      list != null &&
+      shadowRootsOutward(list.getRootNode()).some(({host}) => host === active);
     const focusLandedElsewhere =
       !isFocusReturnAlways &&
+      !isFocusFromPressInList &&
       active instanceof HTMLElement &&
       active !== document.body &&
       active !== trigger &&
-      !popoverContentRef.current?.current?.contains(active);
+      list?.contains(active) !== true &&
+      (active.tabIndex >= 0 ||
+        isClosedRootHost ||
+        list == null ||
+        !containsAlongFlatTree(active, list));
     if (focusLandedElsewhere) {
       return;
     }
     prepareFocusReturn();
     trigger?.focus();
-  }, [isFocusReturnAlways, onHideRef, prepareFocusReturn, triggerRef]);
+  }, [
+    isFocusReturnAlways,
+    onHideRef,
+    prepareFocusReturn,
+    pressWatch,
+    triggerRef,
+  ]);
   const handlePopoverShow = useCallback(() => {
     didShowPopoverRef.current = true;
     resetFocusReturn();
+    isLastPressInListRef.current = false;
+    const trigger = triggerRef.current;
+    if (trigger != null) {
+      const root = trigger.getRootNode();
+      pressWatch.start(
+        trigger,
+        path => {
+          const list = popoverContentRef.current?.current;
+          return list != null && path.includes(list);
+        },
+        closesNothing,
+        {
+          root: isShadowRoot(root) ? root : null,
+          onPress: isInside => {
+            isLastPressInListRef.current = isInside;
+          },
+        },
+      );
+    }
     onShowRef.current();
-  }, [onShowRef, resetFocusReturn]);
+  }, [onShowRef, pressWatch, resetFocusReturn, triggerRef]);
   const popover = usePopoverInternal({
     ...popoverOptions,
     onHide: handlePopoverHide,

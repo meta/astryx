@@ -413,7 +413,7 @@ export function Thumbnail({
   });
   const accessibleName =
     label && alt
-      ? `${label} — ${alt}`
+      ? t('@astryx.thumbnail.nameWithAlt', {label, alt})
       : (label ?? alt ?? t('@astryx.thumbnail.fallbackName'));
 
   // Without `alt`, the image is explicitly decorative rather than silently
@@ -522,7 +522,8 @@ export function Thumbnail({
             onKeyDown={isInteractive ? undefined : suppressActivationKeys}
             aria-label={t('@astryx.thumbnail.open', {accessibleName})}
             aria-disabled={isInteractive ? undefined : 'true'}
-            {...stylex.props(styles.interactiveButton)}>
+            // The container draws Open's ring.
+            {...focusOutlineProps.suppressed(styles.interactiveButton)}>
             {imageContent}
           </button>
         ) : (

@@ -86,6 +86,9 @@ describe('run-labels decision', () => {
     expect(notRunSentence('rtl')).toBe(
       'RTL did not run on this pull request; add `ci:run-rtl` to run it.',
     );
+    expect(notRunSentence('swizzle')).toBe(
+      'Swizzle proof did not run on this pull request; add `ci:run-swizzle` to run it.',
+    );
   });
 
   it('names one label per suite', () => {
@@ -93,6 +96,7 @@ describe('run-labels decision', () => {
       visual: 'ci:run-visual',
       a11y: 'ci:run-a11y',
       rtl: 'ci:run-rtl',
+      swizzle: 'ci:run-swizzle',
     });
   });
 
@@ -138,7 +142,12 @@ describe('run-labels decision', () => {
       permissions: {maintainer: 'write', flaky: 'write'},
       failPermission: ['flaky'],
     });
-    expect(outputs).toEqual({visual: 'true', a11y: 'false', rtl: 'false'});
+    expect(outputs).toEqual({
+      visual: 'true',
+      a11y: 'false',
+      rtl: 'false',
+      swizzle: 'false',
+    });
   });
 
   it("judges each label's newest application, not an earlier one", async () => {
@@ -151,7 +160,12 @@ describe('run-labels decision', () => {
       ],
       permissions: {maintainer: 'write', triager: 'read'},
     });
-    expect(outputs).toEqual({visual: 'false', a11y: 'false', rtl: 'true'});
+    expect(outputs).toEqual({
+      visual: 'false',
+      a11y: 'false',
+      rtl: 'true',
+      swizzle: 'false',
+    });
   });
 
   it('runs nothing for a removed label, even though its event is in the timeline', async () => {
@@ -159,13 +173,18 @@ describe('run-labels decision', () => {
       labels: [],
       events: [{actor: {login: 'maintainer'}, label: {name: 'ci:run-visual'}}],
     });
-    expect(outputs).toEqual({visual: 'false', a11y: 'false', rtl: 'false'});
+    expect(outputs).toEqual({
+      visual: 'false',
+      a11y: 'false',
+      rtl: 'false',
+      swizzle: 'false',
+    });
   });
 
   it('fails closed when the lookup fails or finds no label event', async () => {
     expect(
       (await decide({labels: ['ci:run-visual'], failLookup: true})).outputs,
-    ).toEqual({visual: 'false', a11y: 'false', rtl: 'false'});
+    ).toEqual({visual: 'false', a11y: 'false', rtl: 'false', swizzle: 'false'});
     expect(
       (await decide({labels: ['ci:run-visual'], events: []})).outputs.visual,
     ).toBe('false');
@@ -182,6 +201,7 @@ describe('run-labels decision', () => {
       visual: 'false',
       a11y: 'false',
       rtl: 'false',
+      swizzle: 'false',
     });
   });
 
@@ -192,6 +212,7 @@ describe('run-labels decision', () => {
         visual: 'false',
         a11y: 'false',
         rtl: 'false',
+        swizzle: 'false',
       });
     }
   });

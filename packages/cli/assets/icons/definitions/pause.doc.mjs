@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'pause',
+  group: 'playback',
   description: 'Pause media or a running task.',
   words: ['hold', 'wait'],
 };

@@ -111,12 +111,14 @@ describe.skipIf(!built)('story tree shape', () => {
   });
 
   it('never nests a component deeper than <Package>/<Component>', () => {
-    // Charts/Chrome/*, Lab/3DChart/* and Lab/ChartTheming/* (one feature in
-    // four renderers) are deliberate sub-grouping; anything else three deep is
-    // a story name that leaked into the title.
+    // Charts/Chrome/*, Charts/Marks/* (the marks a chart is built from),
+    // Lab/3DChart/* and Lab/ChartTheming/* (one feature in four renderers) are
+    // deliberate sub-grouping; anything else three deep is a story name that
+    // leaked into the title.
     const allowedGroups = [
       ...NON_COMPONENT_GROUPS,
       'Chrome',
+      'Marks',
       '3DChart',
       'Chart Interactions',
       'ChartTheming',

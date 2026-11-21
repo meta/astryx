@@ -33,6 +33,7 @@
 
 import {writeThemeTemplate} from '../theme/template/template.mjs';
 import {
+  blankOptionProblem,
   buildInputProblem,
   buildSuggestion,
   realLocation,
@@ -46,13 +47,19 @@ import {
   baseInstalled,
   installLine,
   packageInstalled,
+  refusePlugAndPlay,
   themeCacheRoot,
 } from './_project.mjs';
 import * as preview from './_preview-app.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {findPackageRoot} from '../../foundation/fs/paths.mjs';
-import {baseWeightNotes, context, coreApp} from './_context.mjs';
+import {
+  baseWeightNotes,
+  context,
+  coreApp,
+  loneFamilyNotes,
+} from './_context.mjs';
 import {APP_COPY_MARK} from './_marks.mjs';
 import {irregularFileKind} from '../../foundation/fs/regular-file.mjs';
 import {
@@ -65,11 +72,13 @@ import {
   getCliInvocation,
   quoteCommandArgument,
 } from '../../foundation/env/package-manager.mjs';
-import {LIKE, P} from './_tables.mjs';
+import {LIKE, P, knowBuiltInThemes} from './_tables.mjs';
+import {discoverBundledThemes} from '../../foundation/discovery/theme-discovery.mjs';
 
 /** The preview command, as a person runs it. */
 const PREVIEW_WORDS = P.replace(/ editor$/, ' preview');
 import {setLine} from './_check.mjs';
+export {modeDialValue} from './_check.mjs';
 import {followLine, splitCommand} from './_vet.mjs';
 import {
   SHOWCASE_GROUPS,
@@ -141,6 +150,10 @@ export async function themeEditHow(subject, options = {}) {
   });
 }
 
+// The built-in themes come from the installed packages: found here, in the
+// adapter, and handed to the editor's tables.
+knowBuiltInThemes(discoverBundledThemes().map(t => t.slug));
+
 /** The built-in themes a theme can build on (`--like`). */
 export const builtInThemes = () => [...LIKE];
 
@@ -158,9 +171,17 @@ export const editorBaseIn = (slug, cwd) =>
 /** The sections `show --section` takes. */
 export const showSections = () => [...SHOWCASE_GROUPS];
 
+/**
+ * A free folder for a new starter app here, the one `preview app`'s own
+ * refusals offer.
+ * @param {string} cwd
+ */
+export const editorFreeAppFolder = cwd => preview.freeAppFolder(cwd);
+
 export {
   dialTakesText,
   dialValueFits,
+  slugOk as editorNameOk,
   usableNewName as editorFreeName,
 } from './_settings.mjs';
 
@@ -286,6 +307,9 @@ async function withLock(root, name, fn, bestEffort = false, again = null) {
   // A preview command, which holds the preview lock, suggests the list of
   // previews (what the other command may be changing).
   again ??= name === 'preview' ? 'experimental theme preview list' : null;
+  // A Plug'n'Play app has no node_modules to keep the lock in, and the editor
+  // refuses it: refuse before any lock folder, read-only commands included.
+  if (!isOutsideProject(root)) refusePlugAndPlay(root);
   /** @type {string | null} */
   let dir;
   try {
@@ -957,6 +981,8 @@ export function editorThemeRefusal(err, cwd) {
 
 /** The shared typo rule, for a typed subcommand. */
 export {booleanWord, typoNear, typoOf} from './_normal.mjs';
+// How a setting is named in a result: one wording for the API and the CLI.
+export {describe, namesSetting, needsPart} from './_settings.mjs';
 
 /**
  * The editor themes of the app the folder `cwd` is in, by name; none when
@@ -1078,6 +1104,32 @@ export async function editorCompileProblem(
 ) {
   const cwdRoot = projectRoot(cwd);
   const COMPILE = {group: 'experimental theme', build: 'compile'};
+  // An empty or blank --out or --icons-specifier names nothing: refused
+  // before anything is built, with the compile without it.
+  const blank =
+    blankOptionProblem(
+      '--out',
+      out,
+      'name a file or folder, or leave out --out to write beside the source',
+      buildSuggestion(
+        files.length === 1 ? files[0] : files,
+        {check, iconsSpecifier},
+        cwd,
+        COMPILE,
+      ),
+    ) ??
+    blankOptionProblem(
+      '--icons-specifier',
+      iconsSpecifier,
+      "name the registry module, or leave out --icons-specifier to keep the theme source's own import",
+      buildSuggestion(
+        files.length === 1 ? files[0] : files,
+        {check, out},
+        cwd,
+        COMPILE,
+      ),
+    );
+  if (blank) return blank;
   /**
    * The compile of `source` (from `from`) with the caller's mode: a check
    * stays a check, and --out names the same file from there.
@@ -1235,11 +1287,22 @@ export async function editorCompileProblem(
         );
       }
       // Its source too: a compile of the copy builds neither the theme
-      // nor a current copy.
+      // nor a current copy. The compile offered is the one this check
+      // takes (an --out in the theme's own folder is refused there, and its
+      // refusal's line is offered instead).
+      const ownRefused = await editorCompileProblem([own], {
+        cwd,
+        check,
+        family,
+        iconsSpecifier,
+        out,
+      });
       return new AstryxError(
         `${file} is ${relParts.length === 3 ? '' : 'part of '}${t}'s app copy, which the editor writes from themes/${t}/ after every build; compile the theme itself.`,
         [
-          {name: compileLine(own, cwd), reason: 'do this instead'},
+          ...(ownRefused?.suggestions?.length
+            ? ownRefused.suggestions
+            : [{name: compileLine(own, cwd), reason: 'do this instead'}]),
           {
             name: runLine(cwdRoot, `experimental theme editor show ${t}`),
             reason: 'writes the app copy again from the theme',
@@ -1798,6 +1861,8 @@ export async function editorBuildExtra(file, cwd, opts) {
         ...edit.ownPhoneNotes(root, slug, data),
         // A weight the base theme's font stylesheet does not load.
         ...baseWeightNotes(await context(root), data),
+        // A font role built as one family with no fallback.
+        ...loneFamilyNotes(await context(root), data),
       ];
     } catch {
       notices = [];

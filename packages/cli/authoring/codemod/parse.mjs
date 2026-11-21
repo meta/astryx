@@ -14,53 +14,74 @@ import {formatZodError} from '../_shared/errors.mjs';
 /** @typedef {import('./type.js').AstryxConfigCodemod} AstryxConfigCodemod */
 /** @typedef {import('./type.js').AstryxCodemodTransform} AstryxCodemodTransform */
 
-const transform = /** @type {z.ZodType<AstryxCodemodTransform>} */ (
-  z.custom(value => typeof value === 'function', {
-    message: 'Expected a function',
-  })
-);
+function buildSchemas() {
+  const transform = /** @type {z.ZodType<AstryxCodemodTransform>} */ (
+    z.custom(value => typeof value === 'function', {
+      message: 'Expected a function',
+    })
+  );
 
-const codeCodemodSchema = z
-  .object({
-    title: z.string(),
-    description: z.string().optional(),
-    isOptional: z.boolean().optional().default(false),
-    fileExtensions: z.array(z.string()).optional(),
-    transform,
-    type: z.literal('code'),
-  })
-  .strict();
+  const codeCodemodSchema = z
+    .object({
+      title: z.string(),
+      description: z.string().optional(),
+      isOptional: z.boolean().optional().default(false),
+      fileExtensions: z.array(z.string()).optional(),
+      transform,
+      type: z.literal('code'),
+    })
+    .strict();
 
-const configCodemodSchema = z
-  .object({
-    title: z.string(),
-    description: z.string().optional(),
-    isOptional: z.boolean().optional().default(false),
+  const configCodemodSchema = z
+    .object({
+      title: z.string(),
+      description: z.string().optional(),
+      isOptional: z.boolean().optional().default(false),
+      transform,
+      type: z.literal('config'),
+    })
+    .strict();
+
+  /**
+   * The load-boundary contract: a stamped codemod default export, discriminated
+   * by `type` (`'code'` may carry `fileExtensions`; `'config'` may not).
+   */
+  const codemodEnvelopeSchema = z.discriminatedUnion('type', [
+    codeCodemodSchema,
+    configCodemodSchema,
+  ]);
+
+  /**
+   * Compile-time drift-lock: sealed envelope must infer exactly the public
+   * stamped-codemod union.
+   *
+   * @typedef {import('../_shared/contract.js').Expect<
+   *   import('../_shared/contract.js').Equal<
+   *     z.infer<typeof codemodEnvelopeSchema>,
+   *     AstryxCodemod | AstryxConfigCodemod
+   *   >
+   * >} _CodemodDriftLock
+   */
+
+  return {
     transform,
-    type: z.literal('config'),
-  })
-  .strict();
+    codeCodemodSchema,
+    configCodemodSchema,
+    codemodEnvelopeSchema,
+  };
+}
+
+/** @type {ReturnType<typeof buildSchemas> | undefined} */
+let builtSchemas;
 
 /**
- * The load-boundary contract: a stamped codemod default export, discriminated
- * by `type` (`'code'` may carry `fileExtensions`; `'config'` may not).
+ * This parser's schemas, built when it first parses, not when this module
+ * loads: most runs load the module and never call it.
+ * @returns {ReturnType<typeof buildSchemas>}
  */
-const codemodEnvelopeSchema = z.discriminatedUnion('type', [
-  codeCodemodSchema,
-  configCodemodSchema,
-]);
-
-/**
- * Compile-time drift-lock: sealed envelope must infer exactly the public
- * stamped-codemod union.
- *
- * @typedef {import('../_shared/contract.js').Expect<
- *   import('../_shared/contract.js').Equal<
- *     z.infer<typeof codemodEnvelopeSchema>,
- *     AstryxCodemod | AstryxConfigCodemod
- *   >
- * >} _CodemodDriftLock
- */
+function schemas() {
+  return (builtSchemas ??= buildSchemas());
+}
 
 /**
  * Validate an unknown value as a stamped codemod default export, or throw.
@@ -70,7 +91,7 @@ const codemodEnvelopeSchema = z.discriminatedUnion('type', [
  * @returns {AstryxCodemod | AstryxConfigCodemod}
  */
 export function parseCodemod(input, label = 'codemod') {
-  const result = codemodEnvelopeSchema.safeParse(input);
+  const result = schemas().codemodEnvelopeSchema.safeParse(input);
   if (!result.success) {
     throw new Error(formatZodError(label, result.error));
   }
