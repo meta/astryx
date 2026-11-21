@@ -90,6 +90,7 @@
  * @property {string} theme
  * @property {'set' | 'undo'} action
  * @property {ThemeEditSetting} setting - The setting written, or for `undo` the one removed.
+ * @property {{thing: string, value: string, sides: ThemeEditSetting[]}} [asSides] - On `set` of a box shorthand a part takes one length of (a menu's `padding '5px 0'`): the value typed and the sides written for it in this change, `setting` being the first.
  * @property {string} [now] - On `undo`: what applies instead of the setting removed: a dial that still writes the token (such as the generated accent color), a whole-theme setting of the same thing, or the base theme's value.
  * @property {ThemeEditSetting} [removed] - On `undo`: the setting removed (the same as `setting`); the value now in effect is the base theme's, and `changedTokens` lists it.
  * @property {ThemeEditSetting[]} [alsoRemoved] - On `undo` of a setting listed more than once by hand: the other entries, removed with it.
