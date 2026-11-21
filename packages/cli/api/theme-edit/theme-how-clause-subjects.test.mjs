@@ -486,6 +486,22 @@ const ROWS = [
     },
   ],
   [
+    'an example never reaches across a line break',
+    {
+      q: 'Cards: white background, e.g. snow\nHeader: navy',
+      has: ["background-color '#1e3a8a' --on app-shell-header"],
+      never: /#1e3a8a' --on card/,
+    },
+  ],
+  [
+    '"etc." before another ask still ends its sentence',
+    {
+      q: 'cards white, buttons blue etc. header navy',
+      has: ["background-color '#1e3a8a' --on app-shell-header"],
+      never: /#2563eb' --on app-shell-header/,
+    },
+  ],
+  [
     'a subject on its own line stays a subject',
     {
       q: 'Sidebar: navy\nPopover and hover card: dark',
