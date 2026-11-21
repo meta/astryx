@@ -67,7 +67,7 @@ describe('what a change reports', () => {
         await themeEditSet(
           'b',
           'border',
-          '1px solid light-dark(#d5dbe1, var(--color-border-emphasized))',
+          '1px solid light-dark(#d5dbe1, var(--color-border-control))',
           {cwd, on: 'inputs'},
         )
       ).data;
