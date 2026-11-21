@@ -1017,8 +1017,8 @@ export function AppShell({
   } | null>(null);
   // The running swap: when it started and its wraps' starting opacities, so a
   // change made during it starts its cross-fade from what the content shows.
-  // Its start is read when needed: a change made from rest takes its start at
-  // the first frame drawn after its task.
+  // Its start can still move after the swap is made (layoutStartReaderFor),
+  // so it is read when needed.
   const lastSwapRef = useRef<{
     startedAt: () => number;
     held: number;

@@ -747,13 +747,9 @@ function safeAnimate(
   const doc = element.ownerDocument;
   // Every animation of one change, in one document, shares one start. A
   // change made while another of this module's motions runs starts on the
-  // document timeline's current time, not on the next frame. So a retargeted
-  // glide keeps moving through the frame it is replaced in, and a part keeps
-  // the clock of the glide it rides. A change made from rest starts with the
-  // first frame drawn after its task (startWaiting). Until then its animation
-  // holds its first keyframe, the content's old place (holdForFirstFrame). So
-  // the rest of that task, however long it runs, delays the motion instead of
-  // skipping it.
+  // document timeline's current time. So a retargeted glide keeps moving
+  // through the frame it is replaced in, and a part keeps the clock of the
+  // glide it rides. A change made from rest waits (holdForFirstFrame).
   const now = doc.timeline?.currentTime;
   if (now != null) {
     // The start of the change it is part of, captured when that change made
@@ -787,9 +783,8 @@ function safeAnimate(
  * of them was made. Then they start at the moment the first of them is made.
  * The frame time is from before the block, so a motion started on it would
  * skip into its curve, or past all of it. Chromium holds the timeline at the
- * frame before a long task once anything in the task reads it. A change made
- * from rest takes its start the same way, at the first frame drawn after its
- * task (startWaiting).
+ * frame before a long task once anything in the task reads it. startWaiting
+ * applies the same rule at the first frame of a change made from rest.
  */
 interface ChangeStart {
   /** The frame time the timeline read. */
@@ -799,9 +794,8 @@ interface ChangeStart {
   /** When the last of them was made, on the document's clock. */
   last: number;
   /**
-   * The animations of a change made from rest, each holding its first
-   * keyframe until the first frame drawn after the change's task starts them
-   * all. Null once they start, and for a change made while a motion runs.
+   * The animations a change made from rest holds (holdForFirstFrame). Null
+   * once they start, and for a change made while a motion runs.
    */
   waiting: Set<Animation> | null;
 }
@@ -915,10 +909,9 @@ function isStillHeld(animation: Animation, held: number): boolean {
 }
 
 /**
- * Start the animations a change made from rest holds, at the first frame
- * drawn after the change's task, all at one moment. That moment is the
- * frame's time. After a long task, a frame can carry the time of a frame
- * scheduled before it. Then the moment is when the frame runs.
+ * Start the animations a change made from rest holds, all at one moment: the
+ * first frame's time. After a long task, a frame can carry the time of a
+ * frame scheduled before it. Then the moment is when the frame runs.
  */
 function startWaiting(doc: Document, start: ChangeStart): void {
   const {waiting} = start;
@@ -971,9 +964,8 @@ function clockOf(doc: Document): number {
  * rest of a commit or a slow swap. The start holds while the timeline reads
  * the same frame: through the task that made it and the microtasks after it.
  * A change that begins after a block takes a start of its own (beginChange).
- * A change made from rest, with none of this module's motions running, waits
- * for the first frame drawn after its task (startWaiting). A change made
- * before that frame joins it.
+ * A change made from rest waits for its first frame (startWaiting), and a
+ * change made before that frame joins it.
  */
 function startFor(doc: Document, frame: number): ChangeStart {
   const now = clockOf(doc);
@@ -1041,8 +1033,7 @@ export function layoutStartFor(document: Document): number {
 /**
  * Reads, when called, the start `layoutStartFor` gives now. Code that keeps
  * the start of a change, to measure a later change against, keeps this
- * reader. A change made from rest takes its start at the first frame drawn
- * after its task, after that code has run.
+ * reader. A change made from rest takes its start later (startWaiting).
  */
 export function layoutStartReaderFor(document: Document): () => number {
   const now = document.timeline?.currentTime;
@@ -3727,9 +3718,8 @@ export function playLayoutEdge(
   const clip = (hidden: number) => pxClip(edge, hidden, rtl);
   const now = () => Number(element.ownerDocument.timeline?.currentTime ?? 0);
   // The start this change's animations share, which after a block is later
-  // than the frame time the timeline still reads. A change made from rest
-  // takes it at the first frame drawn after its task (startFor), so it is
-  // read when needed.
+  // than the frame time the timeline still reads. It can still move
+  // (startWaiting), so it is read when needed.
   const changeStart = changeStartIn(
     areaOf(handle, element),
     element.ownerDocument,
