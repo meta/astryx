@@ -352,6 +352,61 @@ describe('--quick with workspace builds missing', () => {
       ).toBe('skipped, workspace builds missing; run `pnpm build` first');
   });
 
+  const SKIPPED = 'skipped, workspace builds missing; run `pnpm build` first';
+  const unresolved = (file, specifier) =>
+    `${file}(1,1): error TS2307: Cannot find module '${specifier}' or its corresponding type declarations.`;
+  const implicitAny = (file, code = 'TS7006') =>
+    `${file}(2,3): error ${code}: Parameter 'v' implicitly has an 'any' type.`;
+
+  it('counts any unresolved workspace package import as a missing build, bare or by subpath', () => {
+    for (const specifier of [
+      '@astryxdesign/lab',
+      '@astryxdesign/core',
+      '@astryxdesign/core/utils',
+      '@astryxdesign/core/theme/tokens.stylex',
+    ])
+      expect(missingBuilds(unresolved('src/a.ts', specifier)), specifier).toBe(
+        SKIPPED,
+      );
+    // A package outside the workspace scope is still a real error.
+    expect(missingBuilds(unresolved('src/a.ts', '@astryx/other'))).toBeNull();
+  });
+
+  it('treats implicit-any errors in a file with an unresolved workspace import as follow-ons', () => {
+    expect(
+      missingBuilds(
+        [
+          unresolved('src/Chart/webgl.ts', '@astryxdesign/core/utils'),
+          implicitAny('src/Chart/webgl.ts'),
+          implicitAny('src/Chart/webgl.ts', 'TS7031'),
+        ].join('\n'),
+      ),
+    ).toBe(SKIPPED);
+  });
+
+  it('still fails on an implicit-any error in a file with no unresolved workspace import', () => {
+    expect(
+      missingBuilds(
+        [
+          unresolved('src/Chart/webgl.ts', '@astryxdesign/core/utils'),
+          implicitAny('src/Other/other.ts'),
+        ].join('\n'),
+      ),
+    ).toBeNull();
+    expect(missingBuilds(implicitAny('src/Other/other.ts'))).toBeNull();
+  });
+
+  it('still fails on any other error beside the unresolved imports', () => {
+    expect(
+      missingBuilds(
+        [
+          unresolved('src/a.ts', '@astryxdesign/lab'),
+          "src/a.ts(3,5): error TS2322: Type 'string' is not assignable to type 'number'.",
+        ].join('\n'),
+      ),
+    ).toBeNull();
+  });
+
   it('plans the quick typecheck to keep its output and judge it', () => {
     const typecheck = byId(
       plan(['packages/core/src/Button/Button.tsx'], {quick: true}),

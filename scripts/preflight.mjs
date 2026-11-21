@@ -478,21 +478,41 @@ function quickChecks({scope, mergeBase, changed, tmp}) {
 const MISSING_BUILDS =
   'skipped, workspace builds missing; run `pnpm build` first';
 
-/** A missing module that is a workspace package's build output. */
+/**
+ * A missing module that a run without `pnpm build` lacks: any workspace
+ * package import (`@astryxdesign/<pkg>`, bare or by subpath; its exports name
+ * build output), or a relative path into a `dist` folder.
+ */
 const BUILD_OUTPUT =
-  /error TS2307: Cannot find module '(?:@astryxdesign\/[^']+\/built(?:\/[^']*)?|\.\.?\/(?:[^']*\/)?dist(?:\/[^']*)?)'/;
+  /error TS2307: Cannot find module '(?:@astryxdesign\/[^']+|\.\.?\/(?:[^']*\/)?dist(?:\/[^']*)?)'/;
+
+/** An implicit-any error, which an unresolved import causes in its own file. */
+const IMPLICIT_ANY = /error TS(?:7006|7031):/;
+
+/** The file a TypeScript error line names: the text before `(line,col)`. */
+const errorFile = line =>
+  line.match(/^(.*?)\(\d+,\d+\): error TS/)?.[1] ?? null;
 
 /**
- * Why a failed typecheck is skipped, or null: every TypeScript error names a
- * workspace package's build output (`@astryxdesign/<pkg>/built`, or a relative
- * path into a `dist` folder) that a run without `pnpm build` lacks. A
- * third-party package's `dist` subpath is not one.
+ * Why a failed typecheck is skipped, or null: every TypeScript error is a
+ * missing build output, or an implicit-any error (TS7006, TS7031) in a file
+ * that also has a missing build output. An implicit-any error in any other
+ * file, or any other error, is real. A third-party package's `dist` subpath is
+ * not a build output.
  * @param {string} text the typecheck's output
  * @returns {string | null}
  */
 export function missingBuilds(text) {
   const errors = text.split('\n').filter(line => /error TS\d+/.test(line));
-  if (errors.length === 0 || !errors.every(line => BUILD_OUTPUT.test(line)))
+  if (errors.length === 0) return null;
+  const unresolved = new Set(
+    errors.filter(line => BUILD_OUTPUT.test(line)).map(errorFile),
+  );
+  const followOn = line =>
+    IMPLICIT_ANY.test(line) &&
+    errorFile(line) != null &&
+    unresolved.has(errorFile(line));
+  if (!errors.every(line => BUILD_OUTPUT.test(line) || followOn(line)))
     return null;
   return MISSING_BUILDS;
 }
