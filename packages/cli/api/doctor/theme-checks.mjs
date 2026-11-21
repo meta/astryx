@@ -1991,6 +1991,54 @@ export async function checkAppThemes(cwd) {
             },
   );
 
+  // The text contrast each local theme's color tokens give, measured as the
+  // theme editor's check measures a setting: a warning, never a failure.
+  if (localThemes.length > 0 && !incompleteResolution) {
+    const {tokenContrastWarnings} =
+      await import('../theme-edit/_theme-contrast.mjs');
+    /** @type {string[]} */
+    const lines = [];
+    /** @type {Set<string>} */
+    const fixes = new Set();
+    for (const theme of localThemes) {
+      const loaded = await resolveRecordedTheme(
+        state.projectDir,
+        theme.slug,
+      ).catch(() => null);
+      const built = Object.values(loaded?.module ?? {}).find(
+        v =>
+          v &&
+          typeof v === 'object' &&
+          typeof (/** @type {{name?: unknown}} */ (v).name) === 'string',
+      );
+      if (!built) continue;
+      for (const p of await tokenContrastWarnings(
+        state.projectDir,
+        /** @type {any} */ (built),
+      )) {
+        lines.push(`${theme.slug}: ${p.text}`);
+        if (p.fix) fixes.add(`${theme.slug}: ${p.fix}`);
+      }
+    }
+    checks.push(
+      lines.length > 0
+        ? {
+            id: 'theme-contrast',
+            label: 'Theme text contrast',
+            status: 'warn',
+            message: `${lines.length} ${lines.length === 1 ? 'text reads' : 'texts read'} below 4.5:1 with the theme's color tokens: ${lines.join('; ')}.`,
+            ...(fixes.size ? {fix: `${[...fixes].join('; ')}.`} : {}),
+          }
+        : {
+            id: 'theme-contrast',
+            label: 'Theme text contrast',
+            status: 'pass',
+            message:
+              'The color tokens of the added local themes keep their text at 4.5:1 or more.',
+          },
+    );
+  }
+
   // The inputs load with Core, and doctor reads only the Core the project
   // installed, never the one the answering copy carries.
   const privateCoreMissing =

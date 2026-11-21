@@ -11628,11 +11628,25 @@ export async function resolvedTokens(ctx, slug) {
     } finally {
       fs.rmSync(copy, {force: true});
     }
-  const t = withoutNullTokens(
+  return themeResolved(
+    ctx,
+    slug,
     Object.values(mod).find(
       v => v && typeof v === 'object' && typeof v.name === 'string',
     ),
   );
+}
+
+/**
+ * Resolved tokens of a theme object in both modes, with the tokens each
+ * part sets for itself (not enumerable: `parts`).
+ * @param {Ctx} ctx
+ * @param {string} slug the theme's name in messages
+ * @param {any} theme a defined or built theme
+ * @returns {{light: Record<string, string>, dark: Record<string, string>}}
+ */
+export function themeResolved(ctx, slug, theme) {
+  const t = withoutNullTokens(theme);
   const {core} = ctx.project;
   // A token value an own theme source gives as a number (8 for 8px)
   // reads as its text, never as a crash.
@@ -11853,10 +11867,14 @@ export function nonTextMessage(ctx, slug, [name, value, kind = 'value']) {
  * @param {Ctx} ctx
  * @param {ThemeData} data
  * @param {{light: Record<string, string>, dark: Record<string, string>}} res
+ * @param {{base?: Awaited<ReturnType<typeof baseResolved>>}} [opts] `base`:
+ *   the tokens and part rules the settings are measured over, instead of
+ *   the base theme the data names (a theme written by hand: see
+ *   _theme-contrast.mjs)
  * @returns {Promise<ThemeProblem[]>}
  */
-export async function contrastProblems(ctx, data, res) {
-  const base = await baseResolved(ctx.project, data.like);
+export async function contrastProblems(ctx, data, res, {base: given} = {}) {
+  const base = given ?? (await baseResolved(ctx.project, data.like));
   // The parts each setting lands on, read once for this check: the lookups
   // ask again for every pair, side and mode, and the check changes no
   // setting.
