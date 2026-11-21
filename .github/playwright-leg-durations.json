@@ -27,6 +27,7 @@
     "packages/core/src/Chat/__tests__/ChatLayoutPanelView.interaction.browser.spec.ts": 1.3,
     "packages/core/src/Chat/__tests__/ChatMessageAvatar.interaction.browser.spec.ts": 0.7,
     "packages/core/src/CheckboxInput/__tests__/SelectionMarkFinePress.interaction.browser.spec.ts": 14.3,
+    "packages/core/src/Citation/__tests__/CitationTextSize.interaction.browser.spec.ts": 1.0,
     "packages/core/src/DateInput/__tests__/DateInputFocusLeave.interaction.browser.spec.ts": 2.7,
     "packages/core/src/DateInput/__tests__/DateInputRejectedEntry.interaction.browser.spec.ts": 6.6,
     "packages/core/src/DateInput/__tests__/MonthScroller.interaction.browser.spec.ts": 6.5,
