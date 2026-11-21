@@ -11,6 +11,7 @@
     "packages/core/src/BottomSheet/__tests__/BottomSheetDetent.interaction.browser.spec.ts": 25.5,
     "packages/core/src/BottomSheet/__tests__/BottomSheetDragRestyle.interaction.browser.spec.ts": 3,
     "packages/core/src/BottomSheet/__tests__/BottomSheetKeyboardInset.interaction.browser.spec.ts": 18.3,
+    "packages/core/src/Button/__tests__/ButtonCutLabel.interaction.browser.spec.ts": 4.8,
     "packages/core/src/Button/__tests__/ButtonHitArea.interaction.browser.spec.ts": 6.1,
     "packages/core/src/Button/__tests__/ButtonPress.interaction.browser.spec.ts": 9.5,
     "packages/core/src/Button/__tests__/ButtonPressRelease.interaction.browser.spec.ts": 18,
