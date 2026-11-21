@@ -117,3 +117,22 @@ describe('devPropError', () => {
     );
   });
 });
+
+describe('devMissingCallback', () => {
+  it('throws devPropError when called', () => {
+    const callback = diagnostics.devMissingCallback(
+      'Dialog',
+      'onOpenChange',
+      'is required.',
+    );
+    expect(() => callback(false)).toThrow(
+      'Dialog: `onOpenChange` is required.',
+    );
+  });
+  it('returns the same function for the same component and prop', () => {
+    const first = diagnostics.devMissingCallback('Drawer', 'onOpenChange', 'x');
+    expect(diagnostics.devMissingCallback('Drawer', 'onOpenChange', 'x')).toBe(
+      first,
+    );
+  });
+});
