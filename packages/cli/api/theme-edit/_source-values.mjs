@@ -121,6 +121,20 @@ function editsFor(text, object, tree, edits, where) {
     }
     const node = unwrapExpression(prop.value);
     if (value !== true && typeof value === 'object' && !Array.isArray(value)) {
+      // A style written as a name (`base: floating`): this part takes it
+      // spread into an object of its own, so the name's other users keep it.
+      if (node?.type === 'Identifier' || node?.type === 'MemberExpression') {
+        const indentOf = lineIndent(text, prop.start);
+        edits.push({
+          start: prop.value.start,
+          end: prop.value.end,
+          text: valueText(
+            {[`...${text.slice(node.start, node.end)}`]: true, ...value},
+            indentOf,
+          ),
+        });
+        continue;
+      }
       if (node?.type !== 'ObjectExpression')
         throw new Error(
           `${where ? `${where}.` : ''}${key} is not written as an object`,
