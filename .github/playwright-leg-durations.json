@@ -117,6 +117,7 @@
     "packages/core/src/motion/__tests__/animator.interaction.browser.spec.ts": 30.5,
     "packages/core/src/motion/__tests__/themeTempo.interaction.browser.spec.ts": 2.8,
     "packages/core/src/motion/__tests__/themeTiming.interaction.browser.spec.ts": 0.4,
+    "packages/core/src/reorderable/__tests__/ReorderableAttachMode.interaction.browser.spec.ts": 2.9,
     "packages/core/src/utils/__tests__/hitArea.interaction.browser.spec.ts": 1.6,
     "packages/lab/src/Chart/__tests__/ChartZoomWheel.interaction.browser.spec.ts": 2.2,
     "packages/lab/src/Chat/__tests__/ChatVirtualizerPageScroller.interaction.browser.spec.ts": 2.4,
