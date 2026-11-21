@@ -478,3 +478,88 @@ test('a list the cap holds above the keyboard grows downward in place when the r
   ).toBeLessThanOrEqual(0.5);
   expect(after.bottom, detail).toBeGreaterThan(held.bottom + 40);
 });
+
+test('a list flipped above its trigger by an option that grows shrinks to the room above the keyboard', async ({
+  page,
+}) => {
+  await installKeyboard(page);
+  await page.setViewportSize(LANDSCAPE);
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-selector--pre-selected&viewMode=story`,
+    {waitUntil: 'load'},
+  );
+  const trigger = page.getByRole('combobox');
+  await expect(trigger).toBeVisible();
+  await pinFieldNearEnd(page);
+  await trigger.click();
+  const listbox = page.getByRole('listbox');
+  await expect(listbox).toBeVisible();
+
+  // Wait for open animations to finish
+  await openEnded(page);
+
+  // Make the first option grow: list grows past 180 px and flips above trigger
+  await page.evaluate(() => {
+    const opt = document.querySelector<HTMLElement>('[role="option"]');
+    if (opt != null) {
+      opt.style.minHeight = '96px';
+    }
+  });
+
+  let naturalHeight = 0;
+  await expect(async () => {
+    const box = await listbox.evaluate(el => el.getBoundingClientRect());
+    expect(box.height).toBeGreaterThanOrEqual(200);
+    naturalHeight = box.height;
+  }).toPass({timeout: 3_000});
+
+  // Raise 200 px software keyboard
+  await raiseKeyboard(page, LANDSCAPE_COVER);
+
+  // Assert after keyboard rises:
+  // - list bottom <= 180 px and top >= 16 px
+  // - scrollHeight > clientHeight
+  // - the last option can be scrolled into view and activated
+  await expect(async () => {
+    const facts = await listbox.evaluate(list => {
+      const box = list.getBoundingClientRect();
+      return {
+        top: box.top,
+        bottom: box.bottom,
+        scrolls: list.scrollHeight > list.clientHeight,
+      };
+    });
+    const detail = JSON.stringify({...facts, limit: LANDSCAPE_LIMIT});
+    expect(facts.top, detail).toBeGreaterThanOrEqual(15.5);
+    expect(facts.bottom, detail).toBeLessThanOrEqual(LANDSCAPE_LIMIT + 0.5);
+    expect(facts.scrolls, detail).toBe(true);
+  }).toPass({timeout: 3_000});
+
+  // The last option can be scrolled into view and activated
+  const lastOption = page.getByRole('option').last();
+  await lastOption.scrollIntoViewIfNeeded();
+  await lastOption.click();
+  await expect(listbox).toBeHidden();
+  await expect(trigger).toHaveText('Mango');
+
+  // Re-open and verify list returns to natural height with no cap variables when keyboard closes
+  await trigger.click();
+  await expect(listbox).toBeVisible();
+  await openEnded(page);
+  await raiseKeyboard(page, 0);
+
+  await expect(async () => {
+    const facts = await listbox.evaluate(list => {
+      const layer = list.closest<HTMLElement>('[popover]');
+      const box = list.getBoundingClientRect();
+      const capVar =
+        layer?.style.getPropertyValue('--_layer-keyboard-max-block-size') ?? '';
+      return {
+        height: box.height,
+        capVar,
+      };
+    });
+    expect(facts.height).toBeCloseTo(naturalHeight, 0);
+    expect(facts.capVar).toBe('');
+  }).toPass({timeout: 3_000});
+});
