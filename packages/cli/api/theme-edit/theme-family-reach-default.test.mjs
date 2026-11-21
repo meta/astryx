@@ -511,6 +511,25 @@ describe('family reach by default', () => {
         /background-image: revert-layer/,
       );
       expect(disabledRules(`${slug}d`)).not.toMatch(/background: revert-layer/);
+      // (A disabled fill set for one mode leaves the other mode the whole
+      // copy, so its fill shows.)
+      await themeEditNew(`${slug}m`, {cwd, like: 'neutral'});
+      await themeEditSet(`${slug}m`, 'background', GRADIENT, {
+        cwd,
+        on: 'button',
+      });
+      await themeEditSet(`${slug}m`, 'background-color', '#222222', {
+        cwd,
+        on: 'button',
+        state: 'disabled',
+        mode: 'dark',
+      });
+      expect(disabledRules(`${slug}m`)).toMatch(
+        /data-theme="light"[^{]*\{\s*background-color: revert-layer/,
+      );
+      expect(disabledRules(`${slug}m`)).toMatch(
+        /background-image: revert-layer/,
+      );
       // (The other variants keep Core's disabled look: the copy stays.)
       expect(cssOf(slug)).toMatch(
         /\.astryx-button[^{\s]*:is\(:disabled[^{]*\{[^}]*background(?:-image)?: revert-layer/,
