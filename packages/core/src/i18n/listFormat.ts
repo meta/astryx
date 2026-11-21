@@ -34,7 +34,10 @@ export function createListFormatter(
 }
 
 /** One piece of a formatted list: an item, or a separator the locale adds. */
-export type ListPart = {readonly type: 'element' | 'literal'; readonly value: string};
+export type ListPart = {
+  readonly type: 'element' | 'literal';
+  readonly value: string;
+};
 
 /**
  * The same list as `createListFormatter`, as its items and separators in

@@ -15,7 +15,7 @@
  *   MultiSelector's labels trigger puts each label in isolatedText.
  */
 
-import {createElement, type ReactNode} from 'react';
+import {createElement, type ReactElement, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {hasStrongRightToLeft} from '../i18n/firstStrongDirection';
 
@@ -69,7 +69,10 @@ export function withTextDirection(content: ReactNode): ReactNode {
  * never join a neighbour's run. The text content, and so the accessible name,
  * stays the same, which bidi control characters would change.
  */
-export function isolatedText(text: string, key?: string | number): ReactNode {
+export function isolatedText(
+  text: string,
+  key?: string | number,
+): ReactElement {
   return createElement(
     'span',
     {key, dir: 'auto', ...stylex.props(styles.isolate)},

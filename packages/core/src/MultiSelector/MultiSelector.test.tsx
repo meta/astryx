@@ -155,6 +155,12 @@ beforeAll(async () => {
   await import('../BottomSheet/BottomSheet');
 });
 
+// The labels trigger isolates each item in its own element, so its text
+// spans several text nodes. The match reads the whole text content.
+const textContentIs = (text: string) => (_: string, element: Element | null) =>
+  element?.textContent === text &&
+  [...(element?.children ?? [])].every(child => child.textContent !== text);
+
 describe('MultiSelector', () => {
   const defaultOptions = ['Apple', 'Banana', 'Orange'];
 
@@ -510,7 +516,9 @@ describe('MultiSelector', () => {
         />
       </InternationalizationProvider>,
     );
-    expect(screen.getByText('Apple, Banana und Orange')).toBeInTheDocument();
+    expect(
+      screen.getByText(textContentIs('Apple, Banana und Orange')),
+    ).toBeInTheDocument();
   });
 
   it('writes the labels overflow through one catalog message', () => {
@@ -532,7 +540,7 @@ describe('MultiSelector', () => {
       </InternationalizationProvider>,
     );
     expect(
-      screen.getByText('Apple, Banana, Orange und 2 weitere'),
+      screen.getByText(textContentIs('Apple, Banana, Orange und 2 weitere')),
     ).toBeInTheDocument();
   });
 
@@ -613,7 +621,9 @@ describe('MultiSelector', () => {
         triggerDisplay="labels"
       />,
     );
-    expect(screen.getByText('Apple, Banana')).toBeInTheDocument();
+    expect(
+      screen.getByText(textContentIs('Apple, Banana')),
+    ).toBeInTheDocument();
   });
 
   it('isolates each label and the overflow count, keeping the trigger text', () => {
@@ -626,11 +636,18 @@ describe('MultiSelector', () => {
         triggerDisplay="labels"
       />,
     );
-    expect(screen.getByText('Design, עיצוב, שיווק, +2')).toBeInTheDocument();
+    expect(
+      screen.getByText(textContentIs('Design, עיצוב, שיווק, +2')),
+    ).toBeInTheDocument();
     const isolated = [...container.querySelectorAll('span[dir="auto"]')].map(
       span => span.textContent,
     );
     expect(isolated).toEqual(['Design', 'עיצוב', 'שיווק', '+2']);
+    // A screen reader reads the same name and text: no bidi control characters.
+    const trigger = screen.getByRole('combobox');
+    expect(trigger).toHaveAccessibleName('Team');
+    expect(trigger).toHaveTextContent('Design, עיצוב, שיווק, +2');
+    expect(trigger.textContent).not.toMatch(/[\u2066-\u2069\u200e\u200f]/);
   });
 
   it('shows labels display with overflow', () => {
@@ -643,7 +660,9 @@ describe('MultiSelector', () => {
         triggerDisplay="labels"
       />,
     );
-    expect(screen.getByText('Apple, Banana, Orange, +2')).toBeInTheDocument();
+    expect(
+      screen.getByText(textContentIs('Apple, Banana, Orange, +2')),
+    ).toBeInTheDocument();
   });
 
   it('opens dropdown on click', async () => {
