@@ -121,14 +121,7 @@ export type ComponentIconStaticMap = Partial<
 >;
 
 export {Icon, renderIconSlot} from './Icon';
-export {useIcon, useComponentIcon} from './useIcon';
-export {ComponentIcon} from './ComponentIcon';
-export {resolveComponentIcon} from './globalIconRegistry';
-export type {
-  ComponentIconFallback,
-  ComponentIconSlotState,
-  ResolvedComponentIcon,
-} from './globalIconRegistry';
+export {useIcon} from './useIcon';
 export type {IconProps, IconColor, IconSize, IconType} from './Icon';
 
 // Global registry (RSC-compatible, no 'use client')

@@ -256,13 +256,13 @@ theme-authoring architecture owns `DefineThemeInput`, normalization, and
 
 - **Comments icons.** Current `Comments` in `@astryxdesign/lab` resolves nine
   glyphs through `comment:*` keys, exported as `COMMENT_ICON_KEYS`.
-  - **Owner:** `component:Comments`.
+  - **Owner:** `@astryxdesign/lab` package owner (no `component:Comments` record yet).
   - **Exit condition:** the same as the NumberInput stepper icon.
 
 - **MediaPlayer icons.** Current `VideoPlayer` and `AudioPlayer` in
   `@astryxdesign/lab` resolve their control glyphs through `media:*` keys,
   exported as `MEDIA_ICON_KEYS`.
-  - **Owner:** `component:VideoPlayer` and `component:AudioPlayer`.
+  - **Owner:** `component:MediaPlayer` (lab package).
   - **Exit condition:** the same as the NumberInput stepper icon.
 
 These three package-owned families draw bundled React nodes as their default

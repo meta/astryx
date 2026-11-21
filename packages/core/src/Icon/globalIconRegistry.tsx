@@ -439,17 +439,12 @@ export type ComponentIconSlotState<Slot extends ComponentIconSlotName> =
  */
 export type ComponentIconFallback =
   | IconName
-  | NamespacedIconName
   | null
-  | Readonly<{
-      icon: IconName | NamespacedIconName | null;
-      variant?: IconVariant;
-      size?: IconSize;
-    }>;
+  | Readonly<{icon: IconName | null; variant?: IconVariant; size?: IconSize}>;
 
 /** A slot resolved to what the component renders through `Icon`. */
 export type ResolvedComponentIcon = Readonly<{
-  icon: IconName | NamespacedIconName | null;
+  icon: IconName | null;
   variant?: string;
   size?: IconSize;
 }>;
@@ -549,32 +544,6 @@ function applyComponentIconRequest(
 }
 
 /**
- * Warn once per slot and key when a theme still overrides a slot's glyph
- * through the namespaced key the slot replaces. The override keeps rendering;
- * the warning names the slot to move it to.
- */
-function warnLegacySlotKey(
-  slot: string,
-  key: string,
-  theme: DefinedTheme | null,
-): void {
-  if (process.env.NODE_ENV === 'production' || theme == null) {
-    return;
-  }
-  const overridden =
-    getThemeIconEntries(theme)?.[key] !== undefined ||
-    registry.entries[key] !== undefined;
-  if (!overridden) {
-    return;
-  }
-  warnOnce(
-    `component-icons:${slot}:legacy-key:${key}`,
-    'Icon',
-    `The active theme overrides the namespaced icon key "${key}", which the "${slot}" component icon slot now replaces. Set componentIcons["${slot}"] instead; the key stops rendering when the migration completes.`,
-  );
-}
-
-/**
  * Resolve a component's icon slot. The component passes its slot state and
  * its own fallback; the active theme's `componentIcons[slot]` adjusts that
  * fallback. A shared icon name replaces the fallback icon, `null` hides the
@@ -605,11 +574,6 @@ export function resolveComponentIcon<Slot extends ComponentIconSlotName>(
   const theme = getTheme(source);
   const value = getThemeComponentIcons(theme)?.[slot];
   if (value === undefined) {
-    // No theme mapping, so the fallback renders. When that fallback is the
-    // slot's own key, a theme overriding the key still reaches the glyph.
-    if (own.icon != null && isNamespacedKey(own.icon)) {
-      warnLegacySlotKey(slot, own.icon, theme);
-    }
     return own;
   }
   if (typeof value === 'function') {

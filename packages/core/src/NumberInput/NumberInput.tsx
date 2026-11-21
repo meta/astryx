@@ -1529,7 +1529,7 @@ export function NumberInput({
             <ComponentIcon
               slot="number-input-stepper"
               state={{direction: 'increment'}}
-              fallback={{icon: 'numberInput:stepperDown', size: 'xsm'}}
+              fallback={{icon: 'chevronDown', size: 'xsm'}}
               color="inherit"
               xstyle={styles.incrementGlyph}
             />
@@ -1582,7 +1582,7 @@ export function NumberInput({
             <ComponentIcon
               slot="number-input-stepper"
               state={{direction: 'decrement'}}
-              fallback={{icon: 'numberInput:stepperDown', size: 'xsm'}}
+              fallback={{icon: 'chevronDown', size: 'xsm'}}
               color="inherit"
             />
           </button>
