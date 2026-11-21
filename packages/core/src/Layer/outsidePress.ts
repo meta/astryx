@@ -42,6 +42,12 @@ export interface OutsidePressOptions {
    */
   readonly onPan?: () => void;
   /**
+   * A touch or pen press outside that pans past the shared pan distance is a
+   * gesture, not a press: its lift calls no `onOutside`. Ignored with
+   * `closesOnPan` or `onPan`.
+   */
+  readonly ignoresPans?: boolean;
+  /**
    * Called as each press the watch follows begins, with whether it is
    * inside. The watch then judges no lift: a press that starts and ends
    * outside calls no `onOutside` and counts no dismissal. Each shadow root
@@ -94,12 +100,14 @@ export function watchOutsidePress(
     closesOnPan = false,
     onPan,
     onPress,
+    ignoresPans = false,
     root = null,
   }: OutsidePressOptions = {},
 ): () => void {
   const doc = owner.ownerDocument;
   const reportPan = closesOnPan ? undefined : onPan;
-  const followsPans = closesOnPan || reportPan != null;
+  const skipsPans = ignoresPans && !closesOnPan && reportPan == null;
+  const followsPans = closesOnPan || reportPan != null || skipsPans;
   const shadows = root == null ? [] : shadowRootsOutward(root);
   let startedOutside = false;
   let panStart: {id: number; x: number; y: number} | null = null;
@@ -130,9 +138,10 @@ export function watchOutsidePress(
     startedOutside = !isInside(event.composedPath());
     onPress?.(!startedOutside);
     if (followsPans) {
-      panStart = startedOutside
-        ? {id: event.pointerId, x: event.clientX, y: event.clientY}
-        : null;
+      panStart =
+        startedOutside && !(skipsPans && event.pointerType === 'mouse')
+          ? {id: event.pointerId, x: event.clientX, y: event.clientY}
+          : null;
     }
   };
   const handleMove = (event: PointerEvent) => {
@@ -155,6 +164,11 @@ export function watchOutsidePress(
         if (isElement(target) && touchActionAllowsPan(target, axis)) {
           reportPan();
         }
+        return;
+      }
+      if (skipsPans) {
+        startedOutside = false;
+        panStart = null;
         return;
       }
       close();

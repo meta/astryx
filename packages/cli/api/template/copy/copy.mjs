@@ -143,9 +143,11 @@ export function templateCopy(
         `Invalid template target path "${given}": it is outside the project root (${path.resolve(cwd)}). ` +
           (scratchPath
             ? `A scratch copy in the system temp folder takes its absolute path, ${scratchPath}.`
-            : scratchFolder
-              ? `The template is written only inside the project, or as a scratch copy in the system temp folder (${scratchFolder}). Give a path inside one, or print the source.`
-              : 'The template is written only inside the project. Give a path inside it, or print the source.'),
+            : there
+              ? `The template is written only inside the folder the command runs in${scratchFolder ? `, or as a scratch copy in the system temp folder (${scratchFolder})` : ''}. Give a path inside the project, run the command from the destination's folder, or print the source.`
+              : scratchFolder
+                ? `The template is written only inside the project, or as a scratch copy in the system temp folder (${scratchFolder}). Give a path inside one, or print the source.`
+                : 'The template is written only inside the project. Give a path inside it, or print the source.'),
         [
           {
             name: `${command} ${quoteCommandArgument(folder)}`,

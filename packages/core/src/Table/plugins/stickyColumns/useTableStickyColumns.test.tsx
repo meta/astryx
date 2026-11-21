@@ -19,8 +19,17 @@ import {Table} from '../../Table';
 import {useTableStickyColumns} from './useTableStickyColumns';
 import {useTableColumnResize} from '../columnResize/useTableColumnResize';
 import {useTableRowIndex} from '../rowIndex/useTableRowIndex';
-import {pixel, proportional} from '../../columnUtils';
+import {pixel, proportional, resolveColumnFloorWidths} from '../../columnUtils';
 import type {TableColumn} from '../../types';
+import type * as ColumnUtils from '../../columnUtils';
+
+vi.mock('../../columnUtils', async importOriginal => {
+  const actual = await importOriginal<typeof ColumnUtils>();
+  return {
+    ...actual,
+    resolveColumnFloorWidths: vi.fn(actual.resolveColumnFloorWidths),
+  };
+});
 
 // =============================================================================
 // Test Data
@@ -55,6 +64,34 @@ function getHeader(name: string): HTMLElement {
 // =============================================================================
 
 describe('useTableStickyColumns', () => {
+  it('resolves the column widths for the pinned offsets once per render, not once per cell', () => {
+    function Harness({rows}: {rows: Row[]}) {
+      const sticky = useTableStickyColumns<Row>({startKeys: ['name']});
+      return (
+        <Table
+          data={rows}
+          columns={columns}
+          idKey="id"
+          plugins={{stickyColumns: sticky}}
+        />
+      );
+    }
+    const many = Array.from({length: 20}, (_, index) => ({
+      ...data[index % 2],
+      id: String(index + 1),
+    }));
+    const resolve = vi.mocked(resolveColumnFloorWidths);
+    resolve.mockClear();
+    const {unmount} = render(<Harness rows={data} />);
+    const forTwoRows = resolve.mock.calls.length;
+    unmount();
+    resolve.mockClear();
+    render(<Harness rows={many} />);
+    // Twenty rows resolve the widths as often as two rows do.
+    expect(resolve.mock.calls.length).toBe(forTwoRows);
+    expect(getHeader('Name').style.insetInlineStart).toBe('0px');
+  });
+
   it('pins a start column at inset-inline-start: 0', () => {
     function Harness() {
       const sticky = useTableStickyColumns<Row>({startKeys: ['name']});

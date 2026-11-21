@@ -2,10 +2,10 @@
 
 /**
  * @file A theme whose palette.config.json names a palette recipe this CLI
- * does not know is refused plainly, and the file's bytes stay exactly as
- * they were. A newer CLI's recipe gets the refusal `theme palette generate`
- * gives, with the update step that fits where the CLI runs; any other name
- * is named as no recipe Astryx makes.
+ * does not know, and no Astryx CLI makes, is refused plainly, and the file's
+ * bytes stay exactly as they were. A newer CLI's recipe opens with its saved
+ * colors; a color change is refused with what still works, and no update
+ * step, as a CLI that makes that recipe may not be released.
  */
 
 import * as fs from 'node:fs';
@@ -101,7 +101,7 @@ describe('a palette recipe this CLI does not know', () => {
   );
 
   it(
-    "a newer CLI's recipe gets the refusal palette generate gives, with its update step",
+    "a newer CLI's recipe opens with its saved colors; a color change is refused with no update step",
     async () => {
       const data = JSON.parse(fs.readFileSync(config, 'utf8'));
       const newer = `astryx-oklch-v${PALETTE_RECIPES.length + 1}`;
@@ -110,24 +110,24 @@ describe('a palette recipe this CLI does not know', () => {
         `${JSON.stringify({...data, recipe: newer}, null, 2)}\n`,
       );
       const before = fs.readFileSync(config);
-      const e = await refusal(() => themeEditShow('n', {cwd}));
+      const shown = /** @type {any} */ (await themeEditShow('n', {cwd}));
+      expect(
+        [...(shown.data.notes ?? []), ...(shown.data.colorNotes ?? [])].join(
+          '\n',
+        ),
+      ).toContain(`colors use the ${newer} recipe`);
+      expect(fs.readFileSync(config).equals(before)).toBe(true);
+      const e = await refusal(() =>
+        themeEditSet('n', 'accent', '#e11d48', {cwd}),
+      );
       expect(e.message).toContain(
-        `was made with a newer Astryx CLI: its colors use the ${newer} recipe`,
+        `colors use the ${newer} recipe, which this Astryx CLI (${cliVersion()}) does not make yet; its palette is kept as saved`,
       );
       expect(e.code).toBe(
         newerRecipeRefusal({recipe: newer, file: 'x', cwd}).code,
       );
-      // In a project, the install of its CLI and Core, then the codemod run.
-      expect(
-        (e.suggestions ?? []).map((/** @type {any} */ s) => s.name),
-      ).toContainEqual(expect.stringMatching(/@astryxdesign\/cli@/));
-      // None of its steps is an editor command, which would meet this
-      // refusal again.
-      expect(
-        (e.suggestions ?? []).filter((/** @type {any} */ s) =>
-          String(s.name).startsWith(P),
-        ),
-      ).toEqual([]);
+      // No update step: a CLI that makes that recipe may not be released.
+      expect(e.suggestions ?? []).toEqual([]);
       expect(fs.readFileSync(config).equals(before)).toBe(true);
     },
     T,
