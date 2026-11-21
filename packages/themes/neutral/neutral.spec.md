@@ -12,6 +12,7 @@ verified_by:
   [
     scripts/check-badge-contrast.test.mjs,
     scripts/check-segmented-control-label-contrast.test.mjs,
+    scripts/check-text-contrast-by-role.test.mjs,
     packages/core/src/SegmentedControl/__tests__/SegmentedControlLabelContrast.a11y.chromium.spec.ts,
     packages/themes/neutral/src/neutralTheme.test.ts,
   ]
@@ -24,6 +25,7 @@ references:
     architecture:theme-compilation,
     architecture:component-theming-surface,
     spec:AST-006,
+    spec:AST-020,
   ]
 ---
 
@@ -110,7 +112,13 @@ CheckboxListItem row reflects `selected` on its `item` target), on a
 `citation` with `variant:number`, on a `file-input` with `mode:dropzone`,
 whose drag-over fill has no state target, and on every `segmented-control-item`,
 whose unselected label sits on the translucent track over the page surface, so
-that text clears 4.5:1 at rest and under the hover overlay. Neutral's syntax `comment`, `operator` and
+that text clears 4.5:1 at rest and under the hover overlay. In dark mode
+Neutral sets `--color-text-secondary` on every `top-nav-item` to
+`neutral.dark[70]` (`#ababab`): it reads at 4.79:1 on the pressed fill over a
+surface top bar and 5.56:1 over the body, and at 5.66:1 or more at rest and
+hovered, so it meets the 4.5:1 of WCAG 2.2 SC 1.4.3 for normal text, the baseline
+`spec:AST-020` FR1 sets.
+Neutral's syntax `comment`, `operator` and
 `punctuation` colours are `neutral.light[35]` / `neutral.dark[75]`, so they
 read on a highlighted code line.
 
