@@ -3,7 +3,8 @@
 // @a11y-isolated
 /**
  * @file TableVirtualization.release.a11y.chromium.spec.ts
- * @input Production row fixture, isolated Chromium and synthetic 1k/10k/100k corpora
+ * @input Production row fixture, isolated Chromium, synthetic 1k/10k/100k row
+ *   corpora and a 1,000-column by 20-row column corpus
  * @output Raw samples, percentile/count/heap receipts and strict budget assertions
  * @position Release evidence on the actual public Table path, not unit timing
  */
@@ -101,6 +102,142 @@ async function heap(cdp: CDPSession) {
   const dom = await cdp.send('Memory.getDOMCounters');
   return {bytes: memory.usedSize, ...dom};
 }
+
+const COLUMN_PITCH = 120;
+
+test('records column-windowing range-plus-commit and no-op scroll timing at 1,000 columns by 20 rows', async ({
+  browser,
+}, info) => {
+  test.setTimeout(180000);
+  const context = await browser.newContext({
+    viewport: {width: 1280, height: 800},
+  });
+  try {
+    const page = await context.newPage();
+    await page.goto(`${fixture.origin}/TableVirtualization.release.html`);
+    await page.waitForFunction(() => !!window.__rowRelease);
+    await page.evaluate(() => window.__rowRelease.prepareColumns(1000, 20));
+    const coldMountMs = await page.evaluate(() =>
+      window.__rowRelease.mountColumns(),
+    );
+    await page.evaluate(async () => document.fonts.ready);
+    await frames(page, 3);
+    const region = page.getByRole('group', {name: 'Release columns'});
+    await expect(region).toHaveCount(1);
+    const table = page.getByRole('table', {name: 'Release columns'});
+    // The header row's mounted cells, by full-table position.
+    async function mountedColumns() {
+      return table.evaluate(node =>
+        Array.from((node as HTMLTableElement).rows[0].cells)
+          .filter(cell => cell.getAttribute('aria-hidden') !== 'true')
+          .map(cell => Number(cell.getAttribute('aria-colindex'))),
+      );
+    }
+    async function scrollColumns(left: number) {
+      await region.evaluate((node, left) => {
+        node.scrollLeft = left;
+      }, left);
+      await frames(page, 3);
+    }
+    // The proof times a column-windowed Table: all 1,001 columns are counted,
+    // and only a bounded run of them mounts (module PR1: the pinned column and
+    // at most ceil(740 / 120) + 1 + 4 + 1 windowed columns).
+    await expect(table).toHaveAttribute('aria-colcount', '1001');
+    const mountedAtStart = await mountedColumns();
+    expect(mountedAtStart.length).toBeGreaterThan(1);
+    expect(mountedAtStart.length).toBeLessThanOrEqual(14);
+    // Each range step moves one column pitch, so one column enters and one
+    // leaves. The first step starts one pitch before the first sample.
+    await scrollColumns(9 * COLUMN_PITCH);
+    const firstWindowed: number[] = [];
+    await page.evaluate(() => window.__rowRelease.startRangeProbe());
+    for (let sample = 0; sample < SAMPLES; sample++) {
+      await scrollColumns((10 + sample) * COLUMN_PITCH);
+      firstWindowed.push(
+        Math.min(...(await mountedColumns()).filter(index => index > 1)),
+      );
+    }
+    const rangeCommit = await page.evaluate(() =>
+      window.__rowRelease.stopRangeProbe(),
+    );
+    // Each no-op step moves 10px inside the mounted columns.
+    const rest = (10 + SAMPLES) * COLUMN_PITCH;
+    await scrollColumns(rest);
+    await page.evaluate(() => window.__rowRelease.startRangeProbe());
+    for (let sample = 0; sample < SAMPLES; sample++) {
+      await scrollColumns(rest + 10 + (sample % 2) * 10);
+    }
+    const noopScroll = await page.evaluate(() =>
+      window.__rowRelease.stopRangeProbe(),
+    );
+    const receipt = {
+      environment: {
+        platform: os.platform(),
+        arch: os.arch(),
+        cpu: os.cpus()[0]?.model,
+        node: process.version,
+        browser: browser.version(),
+        commit: readHeadCommit(),
+        viewport: {width: 1280, height: 800},
+        tableViewportWidth: 900,
+        corpus:
+          'One pinned 160px name column, 1,000 metric columns of 120px, 20 rows',
+      },
+      timingGate: {
+        gates: GATES_TIMING,
+        runner: GATES_TIMING ? '4-core-ubuntu' : 'reported only',
+        budgets: {
+          rangeCommitP95Ms: TIMING_BUDGETS.rangeCommitP95Ms,
+          noopScrollP95Ms: TIMING_BUDGETS.noopP95Ms,
+        },
+      },
+      limitations: [
+        'Range-plus-commit spans run from the viewport scroll event to the end of the React commit that it causes, including layout effects; they exclude style, layout and paint after the commit.',
+        'A no-op step scrolls 10px inside the mounted columns; its span ends after the Table scroll listeners, with or without a commit.',
+      ],
+      coldMountMs,
+      rangeCommitMs: distribution(rangeCommit),
+      noopScrollMs: distribution(noopScroll),
+      rangeCommit,
+      noopScroll,
+    };
+    fs.writeFileSync(
+      info.outputPath('table-column-release.json'),
+      JSON.stringify(receipt, null, 2),
+    );
+    await info.attach('table-column-release.json', {
+      body: JSON.stringify(receipt, null, 2),
+      contentType: 'application/json',
+    });
+    expect
+      .soft(rangeCommit.length, 'column range-plus-commit samples')
+      .toBeGreaterThanOrEqual(SAMPLES);
+    // Every range step moved the window by exactly one column.
+    expect
+      .soft(
+        firstWindowed
+          .slice(1)
+          .map((index, step) => index - firstWindowed[step]),
+        'first windowed column per range step',
+      )
+      .toEqual(Array.from({length: SAMPLES - 1}, () => 1));
+    expect
+      .soft(noopScroll.length, 'column no-op scroll samples')
+      .toBeGreaterThanOrEqual(SAMPLES);
+    expectTiming(
+      receipt.rangeCommitMs.p95,
+      TIMING_BUDGETS.rangeCommitP95Ms,
+      'columns range-plus-commit',
+    );
+    expectTiming(
+      receipt.noopScrollMs.p95,
+      TIMING_BUDGETS.noopP95Ms,
+      'columns no-op scroll',
+    );
+  } finally {
+    await context.close();
+  }
+});
 
 test('records release timing, bounded work and controlled-GC lifetime without relaxing budgets', async ({
   browser,
