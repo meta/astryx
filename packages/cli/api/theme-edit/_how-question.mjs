@@ -4809,6 +4809,13 @@ export function draftAnswer(ctx, env, question) {
           ? m
           : ', light and dark modes',
     )
+    // ("headings that work in light and dark mode should be navy": a plural
+    // part said to work in both modes is that part in both modes, as "in
+    // both modes" says it; the clause is never cut at its "and".)
+    .replace(
+      /\b(?:that\s+|which\s+)?(?:work(?:\s+well)?|look\s+good|hold\s+up|are\s+usable)\s+in\s+(?:both\s+)?(?:light\s+(?:and|&)\s+dark|dark\s+(?:and|&)\s+light)\s+modes?\b/gi,
+      ' in both modes ',
+    )
     // ("a theme that works in dark mode": a theme with both modes, which it
     // has; never an ask scoped to dark.)
     .replace(
