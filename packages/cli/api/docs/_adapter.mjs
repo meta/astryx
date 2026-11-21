@@ -2529,10 +2529,14 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
       ...catalog.names().map(name => ({name, reason: 'available topic'})),
     ];
   }
+  // A child the route names stays first, ahead of another command's entry.
+  let namedChild = 0;
   if (typeof topic === 'string' && routeChildren) {
+    const byRoute = orderRouteSuggestions(topic, suggestions, {closest: false});
+    namedChild = namesRoute(topic, byRoute[0]?.name ?? '') ? 1 : 0;
     suggestions = namedFirst(
       topic,
-      orderRouteSuggestions(topic, suggestions, {closest: false}),
+      byRoute,
       orderDocPages(tree, topic, suggestions, false),
     );
   } else if (typeof topic === 'string') {
@@ -2596,6 +2600,7 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
       hint.withOtherCommand(suggestions, elsewhere, String(topic), {
         from: 'docs',
         alone: !sharesAWord,
+        pinned: namedChild,
       }) ?? [];
   } else if (byWords.length > 0) {
     suggestions = fewerWordMatches(String(topic), suggestions, byWords, 0);
@@ -2610,8 +2615,8 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
 /**
  * The names a typed last route segment may give a Core component or hook by,
  * or none when a stable doc or topic name, as typed or with its words
- * singular, is one of them (an experimental doc changes no stable answer): a doc wins (`icons` is a topic, so `foundations/icon` names no
- * component).
+ * singular, is one of them: a doc wins (`icons` is a topic, so `guides/icon`
+ * names no component), while an experimental doc changes no stable answer.
  * @param {string} topic
  * @param {(name: string) => string[]} formsOf other-command.mjs tailForms
  * @param {DocsTree} tree

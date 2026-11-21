@@ -294,6 +294,21 @@ describe('docs() for a name another command reads', () => {
   );
 
   it(
+    'keeps a child the route names ahead of the command',
+    async () => {
+      const error = await docs('cli/commands/component/Button', undefined, {
+        cwd: tmpDir,
+      }).catch(e => e);
+      expect(error.code).toBe('ERR_UNKNOWN_TOPIC');
+      expect(error.suggestions.slice(0, 2).map(s => s.name)).toEqual([
+        'cli/commands/component',
+        'astryx component Button',
+      ]);
+    },
+    SLOW,
+  );
+
+  it(
     'lets a doc keep a last segment that also names a component',
     async () => {
       // `icons` is a topic, though Core has an Icon component; a singular
