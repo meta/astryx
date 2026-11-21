@@ -25,6 +25,7 @@ import type {PanGestureRecognizerOptions} from '../gestures/PanGestureRecognizer
 import {createPan, type PanInput} from '../gestures/createPanGesture';
 import {
   createMotionEngine,
+  motionNow,
   type Animator,
   type AnimatorOptions,
   type MotionHandle,
@@ -39,9 +40,6 @@ import {
   type CompositorPart,
   type CompositorSettle,
 } from './compositorSettle';
-
-/** The document timeline's clock, which the animator runs on. */
-const now = (): number => performance.now();
 
 /** Runs `callback` in the next animation frame (a timer without one). */
 function requestFrame(callback: () => void): void {
@@ -505,7 +503,7 @@ export function createSnapDrag(
           void animator.animate(
             {[axis]: target.offset},
             {spring: target.spring},
-            {at: now()},
+            {at: motionNow(element.ownerDocument)},
           );
         }
         return;

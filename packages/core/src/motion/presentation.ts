@@ -47,7 +47,7 @@ export interface PresentedOffset {
 /** What an animator reports for an element it is moving. */
 export interface PresentedSource {
   /**
-   * The element's offset at `time` (ms on the `performance.now()` clock,
+   * The element's offset at `time` (ms on the `motionNow` clock,
    * now by default), read live (the motion keeps going): a past time says
    * where it was drawn then, against where the engine hit-tests it now.
    */
@@ -145,7 +145,7 @@ export function presentedElements(): ReadonlyArray<Element> {
  * How far `element` is drawn from where the engine hit-tests it: its own
  * offset plus those of its moving ancestors along the flat tree (through a
  * slot to the panel it is drawn in, and across shadow roots), now or at
- * `time` (ms on the `performance.now()` clock).
+ * `time` (ms on the `motionNow` clock).
  */
 export function presentedOffsetOf(
   element: Element,

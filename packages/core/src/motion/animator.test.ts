@@ -21,6 +21,7 @@ import {
   animatorFor,
   createMotionEngine,
   END_HOLD_MS,
+  motionNow,
   PROMOTION_LINGER_MS,
   type Animator,
   type AnimatorOptions,
@@ -2826,6 +2827,40 @@ describe('presentation values, retargeting, velocity (spec:AST-094 FR6)', () => 
       }
     });
 
+    it('retargets made in one callback on several animators on the default clock share one clock', async () => {
+      // Engines on their default clock, the motion clock of their document.
+      // jsdom gives it no timeline, so it reads performance.now().
+      const pages = new Set([performance, document.defaultView?.performance]);
+      const spies = [...pages]
+        .filter((page): page is Performance => page != null)
+        .map(page => vi.spyOn(page, 'now').mockImplementation(() => clock));
+      try {
+        const first = setup({now: undefined});
+        const second = setup({now: undefined});
+        for (const {animator} of [first, second]) {
+          animator.animate(
+            {x: 300},
+            {spring: springs.emphasis, velocity: {x: 800}},
+          );
+        }
+        await advance(120);
+        const call = clock;
+        first.animator.animate({x: -100}, {spring: springs.emphasis});
+        // The callback goes on to the next element's animator.
+        clock += 3;
+        second.animator.animate({x: -100}, {spring: springs.emphasis});
+        clock += 13;
+        await commitFrame(clock);
+        expect(live('translate').map(animation => animation.startTime)).toEqual(
+          [call, call],
+        );
+      } finally {
+        for (const spy of spies) {
+          spy.mockRestore();
+        }
+      }
+    });
+
     it('a call in the next callback, after a microtask checkpoint, starts its own clock', async () => {
       const now = () => clock;
       const first = setup({now});
@@ -5625,5 +5660,105 @@ describe('rebase towards a new rest', () => {
     toward.animator.rebase({x: -16}, {towards: {x: 0}});
     expect(toward.animator.get('x')).toBe(plainX);
     expect(live('translate')).not.toContain(toward.animation);
+  });
+});
+
+describe('motionNow', () => {
+  // A document whose timeline DevTools can slow, and a second timeline that
+  // runs at real speed, as a browser has. Both read the current frame.
+  const page = (frame: {timeline: number; reference: number}) => {
+    const reading = {...frame};
+    class Reference {
+      get currentTime() {
+        return reading.reference;
+      }
+    }
+    const doc = {
+      timeline: {
+        get currentTime() {
+          return reading.timeline;
+        },
+      },
+      defaultView: {
+        DocumentTimeline: Reference,
+        performance: {now: () => performance.now()},
+      },
+    } as unknown as Document;
+    return {doc, reading};
+  };
+  let clock = 0;
+
+  beforeEach(() => {
+    vi.spyOn(performance, 'now').mockImplementation(() => clock);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('reads performance.now() while the document timeline runs at real speed', () => {
+    const {doc} = page({timeline: 400, reference: 400});
+    clock = 410;
+    expect(motionNow(doc)).toBe(410);
+  });
+
+  it('reads the document timeline while DevTools slows it, at its speed', () => {
+    const {doc, reading} = page({timeline: 100, reference: 400});
+    clock = 400;
+    expect(motionNow(doc)).toBe(100);
+    // The next frame, 16 ms later at a quarter speed, is 4 ms later on the
+    // timeline. 4 ms after that frame, the timeline is 1 ms further on.
+    reading.timeline = 104;
+    reading.reference = 416;
+    clock = 420;
+    expect(motionNow(doc)).toBeCloseTo(105, 9);
+  });
+
+  it('reads the slowed timeline at its frame, with no earlier frame to give its speed', () => {
+    const {doc} = page({timeline: 100, reference: 400});
+    clock = 400;
+    expect(motionNow(doc)).toBe(100);
+  });
+
+  it('reads performance.now() where the browser has no second timeline', () => {
+    const doc = {
+      timeline: {currentTime: 100},
+      defaultView: {performance},
+    } as unknown as Document;
+    clock = 400;
+    expect(motionNow(doc)).toBe(400);
+  });
+
+  it("reads the clock of the document it is given, on that document's time origin", () => {
+    // An iframe made later than the page: its clock reads less.
+    class Reference {
+      get currentTime() {
+        return 600;
+      }
+    }
+    const doc = {
+      timeline: {currentTime: 600},
+      defaultView: {DocumentTimeline: Reference, performance: {now: () => 610}},
+    } as unknown as Document;
+    clock = 2100;
+    expect(motionNow(doc)).toBe(610);
+  });
+
+  it('reads its window clock for a document with no timeline', () => {
+    const doc = {
+      defaultView: {performance: {now: () => 420}},
+    } as unknown as Document;
+    clock = 400;
+    expect(motionNow(doc)).toBe(420);
+  });
+
+  it('reads performance.now() with no document, as on a server', () => {
+    vi.stubGlobal('document', undefined);
+    try {
+      clock = 400;
+      expect(motionNow()).toBe(400);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
