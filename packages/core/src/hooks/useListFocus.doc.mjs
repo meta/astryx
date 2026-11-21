@@ -42,7 +42,8 @@ export const docs = {
     {
       name: 'options.wrap',
       type: 'boolean',
-      description: 'Whether arrow navigation wraps around at the ends.',
+      description:
+        'Whether arrow navigation wraps around at the ends. A list in a role="toolbar"\'s row (not one in a popover or dialog the toolbar holds) does not wrap on the toolbar\'s arrow keys: at its first and last item it leaves the key unconsumed, so the toolbar moves focus to its next control.',
       default: 'true',
       required: false,
     },
