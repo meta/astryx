@@ -24459,9 +24459,10 @@ export function draftAnswer(ctx, env, question) {
           : c.lengths.find(l => !/%$/.test(l));
         const gap = /\b(gaps?|between)\b/.test(c.text);
         // ("list items more spacing between them": the room between the
-        // items is the gap of the part that holds them. A way with no
-        // amount is no step of the holder's whole room, which also pads
-        // it: its gap is named, for a value.)
+        // items is the gap of the part that holds them, never the items'
+        // padding. "More" with no amount steps that gap up from what it has
+        // now; with no gap to step, or another way, the gap is named, for a
+        // value.)
         const between = /** @type {{between?: string}} */ (
           c.parts.find(x => x.on === on) ?? {}
         ).between;
@@ -24477,11 +24478,12 @@ export function draftAnswer(ctx, env, question) {
           const more =
             !exactFactor(c.text) &&
             (c.dir === 'more' ||
-              new RegExp(`\\b(?:${densityWords('roomy', 'crowded')})\\b`).test(
-                c.text,
-              ));
+              new RegExp(`\\b(?:${densityWords('roomy')})\\b`).test(c.text));
+          // (A zero gap has no step up: 25% of 0 is still 0.)
           const stepped =
-            more && gapNow ? scaledBox(String(gapNow), 1.25) : null;
+            more && gapNow && !/^0(?:px|rem|em)?$/.test(String(gapNow).trim())
+              ? scaledBox(String(gapNow), 1.25)
+              : null;
           if (stepped)
             return {
               text: `the room between ${between}s is ${on}'s gap: ${stepped} (now ${gapNow}; a step up: give a value, such as gap 8px --on ${on}, for an exact one), not ${between}'s padding`,

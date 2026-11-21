@@ -117,6 +117,14 @@ describe('values and holders', () => {
     },
     240_000,
   );
+  // A gap of 0 has no step up: still asked for a value.
+  it('a zero gap is not stepped', async () => {
+    const t = await fresh('g0');
+    await follow([`set ${t} gap 0px --on list`]);
+    const rs = await how(t, 'a little more space between list items');
+    expect(writes(rs)).toEqual([]);
+    expect(texts(rs)).toMatch(/the room between list-items is list's gap/);
+  }, 240_000);
   // No way, another way, or an exact amount said: still asked for a value.
   it.each([
     'space between list items',
