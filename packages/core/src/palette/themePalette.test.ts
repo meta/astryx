@@ -28,6 +28,7 @@ import {
   type PaletteMappingContext,
 } from './mapping';
 import {parseColor} from '../utils/color';
+import * as editorLook from './editor-look';
 import {themePalette} from './themePalette';
 import type {ThemePaletteInput} from './types';
 
@@ -213,6 +214,8 @@ describe("themePalette's reading of Core's defaults", () => {
       components: theme.components ?? {},
     },
     has: token => Object.hasOwn(tokenDefaults, token),
+    defaults: tokenDefaults,
+    editor: editorLook,
     reader: {
       rgb: value => {
         const read = typeof value === 'string' ? parseColor(value) : null;
@@ -262,6 +265,11 @@ describe("themePalette's reading of Core's defaults", () => {
       if (!plan) {
         throw new Error('no plan');
       }
+      for (const family of editorLook.grownFamilies(dials, context)) {
+        if (!plan.config.families.some(f => f?.id === family.id)) {
+          plan.config.families.push(family);
+        }
+      }
       const mapping = mapPalette(
         generateTonalPalette(plan.config as never),
         dials,
@@ -307,11 +315,11 @@ describe('defineTheme({palette})', () => {
     expect(css).not.toMatch(/--color-text-secondary:\s*(\[|#[0-9a-f]{6},)/);
   });
 
-  it('lifts secondary text on each coloured card, as the official theme does', () => {
+  it("leaves a coloured card's secondary text to the card's own ink", () => {
     for (const color of ['blue', 'green', 'red', 'yellow']) {
-      const lift = palette.components.card?.[`variant:${color}`];
-      expect(lift?.['@light']['--color-text-secondary'], color).toMatch(/^#/);
-      expect(lift?.['@dark']['--color-text-secondary'], color).toMatch(/^#/);
+      expect(palette.components.card?.[`variant:${color}`], color).toBe(
+        undefined,
+      );
     }
   });
 

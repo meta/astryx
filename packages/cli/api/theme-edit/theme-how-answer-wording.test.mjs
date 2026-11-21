@@ -142,18 +142,19 @@ describe('a color said against the one it replaces', () => {
 
 describe('a near color off a pure one', () => {
   it(
-    "is tinted with the theme's neutral",
+    'is already there with a tinted neutral: its text carries the tint',
     async () => {
+      // A tinted gray draws primary text inside its ramp, never pure white,
+      // so the ask changes nothing and says so.
       await runCli([...ED, 'set', 't', 'neutral', '#7c6a9a'], cwd);
       const a = await how('never use pure white for text, it glares at night');
       await runCli([...ED, 'undo', 't', 'neutral'], cwd);
-      const line = a.commands.find(c => /--color-text-primary/.test(c)) ?? '';
-      const hex = /'#([0-9a-f]{6})'/.exec(line)?.[1] ?? '';
-      expect(hex).not.toBe('');
-      const [r, g, b] = [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16));
-      // Off white, and leaning to the purple: blue over green.
-      expect(Math.min(r, g, b)).toBeLessThan(250);
-      expect(b).toBeGreaterThan(g);
+      expect(a.texts.join(' ')).toMatch(
+        /--color-text-primary is not #ffffff in any mode, so nothing changes/,
+      );
+      expect(a.commands.filter(c => /--color-text-primary/.test(c))).toEqual(
+        [],
+      );
     },
     T,
   );
