@@ -403,13 +403,10 @@ const SHADED = wordTable(
 );
 
 /**
- * Right before a written color (a hex, a color function): a role word there
- * names that color, "our brand color #1e3a8a", never the role's token.
- */
-/**
- * A gloss of one fill: a gradient from the fill a palette step lighter at
- * the top to a palette step darker at the bottom, through the fill, in its
- * own hue and chroma (the tone scale the palette's stops are on).
+ * A gloss of one fill: a gradient from the fill ten tones lighter at the
+ * top to ten tones darker at the bottom, through the fill, in its own hue
+ * and chroma, on the tone scale the palette's stops are on (a white fill
+ * keeps white at the top, a black fill black at the bottom).
  * @param {string} fill an opaque hex color
  */
 function glossOf(fill) {
@@ -423,6 +420,10 @@ function glossOf(fill) {
   return `linear-gradient(${at(tone + 10)} 0%, ${fill} 45%, ${at(tone - 10)} 100%)`;
 }
 
+/**
+ * Right before a written color (a hex, a color function): a role word there
+ * names that color, "our brand color #1e3a8a", never the role's token.
+ */
 const BEFORE_WRITTEN_COLOR = String.raw`(?!\s*(?:,\s*)?(?:#[0-9a-f]{3,8}\b|(?:rgba?|hsla?|oklch|oklab|lab|lch|hwb)\())`;
 
 /** The color tokens a word for a color the theme uses names. */
@@ -27061,14 +27062,54 @@ export function draftAnswer(ctx, env, question) {
             };
         }
         // "glossy buttons": a gloss of the part's own fill in each mode, a
-        // lighter top and a darker bottom a palette step from it, written
-        // as its colors.
+        // lighter top and a darker bottom around it, written as its colors:
+        // a color said with it, else each variant's own fill, else the fill
+        // the theme gives the part.
         if (design === 'glossy') {
-          const said = colorFor(c, 'fill');
-          const token = on
-            ? restRead(C.partReads(one(on), 'background') ?? [], f.when)
-            : '--color-background-body';
+          const part = String(on);
+          // (A fill said in the same ask, "Top bar: dark (#222), glossy".)
+          const said =
+            colorFor(c, 'fill') ??
+            toneIn(c.text) ??
+            clauses
+              .filter(
+                o => o !== c && !o.state && o.parts.some(p => p.on === part),
+              )
+              .map(o => colorFor(o, 'fill') ?? toneIn(o.text))
+              .find(Boolean) ??
+            null;
+          /** @param {string} own */
+          const glossIn = own => {
+            const rgb = parseColor(own);
+            return rgb && alphaOf(own) >= 1 ? glossOf(hex(rgb)) : null;
+          };
           const saidMode = f.mode ?? modeOf(c).mode;
+          // (The fill the theme sets on the part itself comes first.)
+          const set0 = [
+            partValue(part, 'background-color'),
+            partValue(part, 'background'),
+          ].find(v => v != null && glossIn(String(v)) != null);
+          const perVariant =
+            said || set0 != null
+              ? null
+              : byVariant(
+                  part,
+                  'background',
+                  'background-color',
+                  'background-image',
+                  f,
+                  now => glossIn(now),
+                  c,
+                );
+          if (perVariant)
+            return {
+              text: `a glossy fill${where}: each variant's own fill, a lighter top and a darker bottom around it${saidMode ? ` in ${saidMode} mode` : ', in each mode'}; a variant with no fill of its own keeps its look`,
+              options: [perVariant],
+            };
+          const token = restRead(
+            C.partReads(one(part), 'background') ?? [],
+            f.when,
+          );
           const modes = /** @type {Array<'light' | 'dark'>} */ (
             saidMode
               ? [saidMode]
@@ -27079,36 +27120,37 @@ export function draftAnswer(ctx, env, question) {
                   : ['light', 'dark']
           );
           const owns = modes.map(
-            m => said ?? (token ? String(current(token, m) ?? '') : ''),
+            m =>
+              said ??
+              (set0 != null ? String(set0) : null) ??
+              (token
+                ? (tokenSetOn(part, token, m) ??
+                  String(current(token, m) ?? ''))
+                : ''),
           );
-          const glosses = owns.map(own => {
-            const rgb = parseColor(own);
-            return rgb && alphaOf(own) >= 1 ? glossOf(hex(rgb)) : null;
-          });
-          // (A part that draws no fill of its own shows what is behind it,
-          // the bar around a top nav: that keeps the gloss.)
+          // (A part that draws no fill of its own shows the part it sits
+          // in: a gloss on that part shows through it.)
           if (
-            on &&
-            !said &&
-            (!token ||
-              owns.every(
-                own =>
-                  /^(?:transparent|none)$/i.test(own.trim()) ||
-                  alphaOf(own) === 0,
-              ))
+            !token ||
+            owns.every(
+              own =>
+                /^(?:transparent|none)$/i.test(own.trim()) ||
+                alphaOf(own) === 0,
+            )
           )
             return {
-              text: `${on} draws no fill of its own here, so what is behind it shows, and its gloss with it; nothing is written on it`,
+              text: `${part} draws no fill of its own here, so nothing is written on it; a gloss on the part it sits in shows through it`,
               options: [],
             };
+          const glosses = owns.map(glossIn);
           if (glosses.some(x => x == null))
             return {
-              text: `a glossy fill${where} is drawn from the part's own fill color, and ${on ?? 'the page'} has no plain fill color here; name one ("glossy blue ${on ?? 'page'}")`,
+              text: `a glossy fill${where} is drawn from the part's own fill color, and ${part} has no plain fill color here; name one ("glossy blue ${part}")`,
               options: [],
             };
           const oneGloss = new Set(glosses).size === 1 && !saidMode;
           return {
-            text: `a glossy fill${where}: its own fill${said ? ` ${said}` : ''}, a lighter top and a darker bottom${oneGloss ? '' : saidMode ? ` in ${saidMode} mode` : ', in each mode'}`,
+            text: `a glossy fill${where}: ${said ? `the fill ${said}` : 'its own fill'}, a lighter top and a darker bottom around it${oneGloss ? '' : saidMode ? ` in ${saidMode} mode` : ', in each mode'}`,
             options: [
               oneGloss
                 ? [set('background', String(glosses[0]), f)]

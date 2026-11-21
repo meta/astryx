@@ -3,11 +3,13 @@
 /**
  * @file "Glossy" is a gloss of the part's own fill: a lighter top and a
  * darker bottom around that fill, in each mode, never one sample gradient
- * for every part. A part that draws no fill of its own writes nothing.
+ * for every part: a color said with it, else the fill the theme sets on the
+ * part, else each variant's own fill. A part that draws no fill of its own
+ * writes nothing.
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
-import {themeEditHow, themeEditNew} from './theme-edit.mjs';
+import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -59,23 +61,19 @@ const writes = rs =>
     .filter(c => /^(set|undo) /.test(c));
 
 /**
- * The gradients written on a part, by mode ('' for both).
- * @param {string[]} lines @param {string} on
+ * The glosses written: the part, the rest of the line (variant, mode) and
+ * the three stops.
+ * @param {string[]} lines
  */
-const glossesOn = (lines, on) =>
-  Object.fromEntries(
-    lines
-      .map(l =>
-        new RegExp(
-          String.raw`^set q0 background '(linear-gradient\([^']*\))' --on ${on}(?: --mode (light|dark))?$`,
-        ).exec(l),
-      )
-      .filter(m => m != null)
-      .map(m => [m[2] ?? '', m[1]]),
-  );
-
-/** The three stops of a gloss. @param {string} g */
-const stopsOf = g => [...g.matchAll(/#[0-9a-f]{6}/g)].map(m => m[0]);
+const glosses = lines =>
+  lines
+    .map(l =>
+      /^set q\d? (?:background|background-image) 'linear-gradient\((#[0-9a-f]{6}) 0%, (#[0-9a-f]{6}) 45%, (#[0-9a-f]{6}) 100%\)' --on (\S+)(.*)$/.exec(
+        l,
+      ),
+    )
+    .filter(m => m != null)
+    .map(m => ({on: m[4], rest: m[5], stops: [m[1], m[2], m[3]]}));
 
 describe("glossy is a gloss of the part's own fill", () => {
   it("a brief's glossy buttons and top bar each take their own fill in each mode", async () => {
@@ -86,11 +84,16 @@ describe("glossy is a gloss of the part's own fill", () => {
       ),
     );
     expect(lines.join('\n')).not.toMatch(/#c7d2fe|#6366f1/);
+    const all = glosses(lines);
     for (const on of ['button', 'app-shell-header']) {
-      const g = glossesOn(lines, on);
-      expect(Object.keys(g).sort(), on).toEqual(['dark', 'light']);
-      for (const value of Object.values(g)) {
-        const [top, fill, bottom] = stopsOf(value);
+      const mine = all.filter(g => g.on === on);
+      // (Each mode has its own gloss.)
+      expect(
+        [...new Set(mine.map(g => /--mode (\w+)/.exec(g.rest)?.[1]))].sort(),
+        on,
+      ).toEqual(['dark', 'light']);
+      for (const {stops} of mine) {
+        const [top, fill, bottom] = stops;
         // (A lighter top and a darker bottom around the part's own fill.)
         expect(luma(top), on).toBeGreaterThanOrEqual(luma(fill));
         expect(luma(bottom), on).toBeLessThan(luma(fill));
@@ -101,23 +104,30 @@ describe("glossy is a gloss of the part's own fill", () => {
     expect(lines).toContain('set q0 box-shadow none --on card');
   }, 240_000);
 
-  it("a glossy ask in dark mode writes the dark fill's gloss alone", async () => {
+  it("a glossy ask in dark mode writes the dark fills' glosses alone", async () => {
     const lines = writes(await how('q0', 'glossy buttons in dark mode'));
-    expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/ --on button --mode dark$/);
-    const light = glossesOn(
-      writes(await how('q0', 'glossy buttons')),
-      'button',
-    );
-    expect(lines[0]).toContain(light.dark);
+    expect(lines.length).toBeGreaterThan(0);
+    for (const l of lines) expect(l).toMatch(/ --mode dark$/);
   }, 240_000);
 
-  it('a color said with it is the fill the gloss is made from', async () => {
-    const lines = writes(await how('q0', 'glossy blue buttons'));
-    expect(lines).toHaveLength(1);
-    expect(stopsOf(String(glossesOn(lines, 'button')[''] ?? ''))[1]).toBe(
-      '#2563eb',
+  it('a color said with it, in the same item or the ask, is the fill', async () => {
+    const blue = glosses(writes(await how('q0', 'glossy blue buttons')));
+    expect(blue.map(g => g.stops[1])).toEqual(['#2563eb']);
+    const bar = glosses(
+      writes(await how('q0', 'Top bar: dark (#222), glossy, white links')),
     );
+    // (The whole ask's answer and the item's own both carry it.)
+    expect([...new Set(bar.map(g => g.stops[1]))]).toEqual(['#222222']);
+  }, 240_000);
+
+  it('the fill the theme sets on the part is the fill', async () => {
+    await themeEditNew('q1', {cwd, like: 'neutral'});
+    await themeEditSet('q1', 'background-color', '#e11d48', {
+      cwd,
+      on: 'button',
+    });
+    const lines = writes(await how('q1', 'glossy buttons'));
+    expect(glosses(lines).map(g => g.stops[1])).toEqual(['#e11d48']);
   }, 240_000);
 });
 
