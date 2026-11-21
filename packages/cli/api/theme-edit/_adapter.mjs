@@ -2247,12 +2247,16 @@ function withLocalTokens(theme, mode, tokens) {
  * @param {import('./theme-edit.type.mjs').ThemeEditCheckProblem} p
  * @param {string} file the theme file, as shown
  * @param {Array<{file: string}>} kept the app files protection kept back
+ * @param {string | null} shared the map of themes every `<Theme>` picks from, when it holds several
  * @returns {string}
  */
-function checkNextEdit(p, file, kept) {
+function checkNextEdit(p, file, kept, shared) {
   const app = kept[0]?.file ?? "the app's file that renders <Theme>";
+  const pin = /mode="(light|dark)"/.exec(p.message)?.[1] ?? 'dark';
+  if (p.kind === 'one-look' && shared)
+    return `in ${shared}, set this theme's mode to "${pin}": its <Theme> serves every theme there`;
   if (p.kind === 'one-look')
-    return `in ${app}, add mode="${/mode="(light|dark)"/.exec(p.message)?.[1] ?? 'dark'}" to the <Theme> that wears the theme`;
+    return `in ${app}, add mode="${pin}" to the <Theme> that wears the theme`;
   if (p.kind === 'page')
     return `in a stylesheet ${app === "the app's file that renders <Theme>" ? 'the app loads' : `${app} loads`}, add body { background: var(--color-background-body); }`;
   const at = `in ${file}, `;
@@ -2266,10 +2270,17 @@ function checkNextEdit(p, file, kept) {
       ? `in ${edit}`
       : `${at}give ${p.part}'s style a shadow or a border`;
   }
+  if (p.kind === 'bar-fill')
+    return `${at}change ${p.token} in ${p.part}'s own style so the text of ${(p.parts ?? []).slice(0, 3).join(', ')} reads on it`;
+  if (p.kind === 'half-painted' && p.part)
+    return `${at}give ${p.part}'s backgroundColor a value for each mode`;
+  if (p.kind === 'chart-ground')
+    return `${at}set ${(p.parts ?? [p.token]).slice(0, 3).join(', ')} to colors that show on ${p.on} in ${p.mode}`;
+  if (p.kind === 'page-image' || p.kind === 'font-unloaded') return p.message;
   if (p.token && p.needs != null)
     return `${at}set ${p.token} to a color that reads at ${p.needs}:1${p.on ? ` on ${p.on}` : ''} in ${p.mode}${p.kind === 'text' || p.kind === 'part-text' ? ", or, for a color you set, keep it as designed with a record in the theme's .accepted.json" : ''}`;
   if (p.part) return `${at}change ${p.part}'s own style: ${p.message}`;
-  return p.message;
+  return `${at}${p.message}`;
 }
 
 /**
@@ -2402,7 +2413,17 @@ export async function themeEditCheck(target, options = {}) {
   const next = !problems.length
     ? null
     : options.fix
-      ? checkNextEdit(problems[0], shown(file), kept)
+      ? checkNextEdit(
+          problems[0],
+          shown(file),
+          kept,
+          app?.elements.length && app.elements.every(e => e.shared)
+            ? path.relative(
+                root,
+                /** @type {string} */ (app.elements[0].shared),
+              )
+            : null,
+        )
       : 'run the check again with --fix';
   return {
     type: 'themeEdit.check',

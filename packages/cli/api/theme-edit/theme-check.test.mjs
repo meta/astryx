@@ -1064,6 +1064,80 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
   );
 
   it(
+    'keeps what a named or spread style holds below the key it writes',
+    async () => {
+      const file = themeFile('deep', READABLE, {
+        'app-shell-header': {
+          base: {'--color-text-primary': '#ffffff', backgroundColor: '#101010'},
+        },
+      });
+      const abs = path.join(cwd, file);
+      fs.writeFileSync(
+        abs,
+        fs
+          .readFileSync(abs, 'utf8')
+          .replace(
+            'export const deepTheme',
+            "const menuSurface = {base: {borderRadius: '2px'}};\n\nexport const deepTheme",
+          )
+          .replace(
+            '  components: {',
+            "  components: {\n    'dropdown-menu': menuSurface,\n    popover: {...menuSurface},",
+          ),
+      );
+      const d = await check(file, {fix: true});
+      expect(d.problems.some(p => p.kind === 'bar-text')).toBe(false);
+      const text = fs.readFileSync(abs, 'utf8');
+      // The menu's own base comes first, then the repair.
+      expect(text).toMatch(
+        /\.\.\.menuSurface\?\.base,\n\s+\.\.\.appShellHeaderInsideText,/,
+      );
+      expect(text.match(/\.\.\.menuSurface\?\.base,/g)).toHaveLength(2);
+    },
+    T,
+  );
+
+  it(
+    "measures text on a part's own hover fill and on a gradient a cell paints, and says when a part paints an image",
+    async () => {
+      const d = await check(
+        themeFile('states', READABLE, {
+          button: {
+            'variant:secondary': {
+              backgroundColor: 'var(--color-background-surface)',
+              ':hover': {backgroundColor: '#e4e8ec'},
+            },
+          },
+          'table-header-cell': {
+            base: {backgroundImage: 'linear-gradient(#f2f2f2, #d2d2d2)'},
+          },
+          layout: {
+            base: {backgroundImage: 'url("data:image/svg+xml,%3Csvg/%3E")'},
+          },
+        }),
+      );
+      const has = (/** @type {(p: any) => boolean} */ f) => d.problems.some(f);
+      // White text in dark on the light hover fill.
+      expect(
+        has(
+          p =>
+            p.part === 'button' &&
+            /hover fill/.test(p.message) &&
+            p.mode === 'dark',
+        ),
+      ).toBe(true);
+      // The header cell's light gradient under light text in dark.
+      expect(
+        has(p => p.part === 'table-header-cell' && p.mode === 'dark'),
+      ).toBe(true);
+      expect(has(p => p.kind === 'page-image' && p.part === 'layout')).toBe(
+        true,
+      );
+    },
+    T,
+  );
+
+  it(
     'refuses what it cannot check, with the documented codes, and changes nothing',
     async () => {
       /** @param {Promise<unknown>} p */

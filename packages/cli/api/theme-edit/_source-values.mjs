@@ -75,6 +75,42 @@ function lineIndent(text, at) {
 }
 
 /**
+ * The expression for a key of a value that may be absent: `name?.key`.
+ * @param {string} name @param {string} key
+ */
+function memberOf(name, key) {
+  return /^[A-Za-z_$][\w$]*$/.test(key)
+    ? `${name}?.${key}`
+    : `${name}?.[${JSON.stringify(key)}]`;
+}
+
+/**
+ * A tree written over values it spreads: each spread first, then at each
+ * nested object the spreads' own value at that key, so nothing the
+ * spreads hold below is lost.
+ * @param {string[]} names the expressions spread
+ * @param {ValueTree} tree
+ * @returns {ValueTree}
+ */
+function spreadInto(names, tree) {
+  /** @type {ValueTree} */
+  const out = {};
+  for (const n of names) out[`...${n}`] = true;
+  for (const [k, v] of Object.entries(tree))
+    out[k] =
+      !k.startsWith('...') &&
+      v !== true &&
+      typeof v === 'object' &&
+      !Array.isArray(v)
+        ? spreadInto(
+            names.map(n => memberOf(n, k)),
+            v,
+          )
+        : v;
+  return out;
+}
+
+/**
  * The edits that write a tree into an object literal.
  * @param {string} text
  * @param {any} object an ObjectExpression
@@ -116,7 +152,24 @@ function editsFor(text, object, tree, edits, where) {
     // The last property of a name wins in JavaScript: that one is changed.
     const prop = [...object.properties].reverse().find(p => nameOf(p) === key);
     if (!prop) {
-      added.push(`${inner}${keyText(key)}: ${valueText(value, inner)},`);
+      // Beside a spread, a new object takes the spread's own value at that
+      // key first, so a nested style the spread holds is kept.
+      const names = object.properties
+        .filter((/** @type {any} */ p) => p.type === 'SpreadElement')
+        .map((/** @type {any} */ p) =>
+          text.slice(p.argument.start, p.argument.end),
+        );
+      const written =
+        names.length &&
+        value !== true &&
+        typeof value === 'object' &&
+        !Array.isArray(value)
+          ? spreadInto(
+              names.map((/** @type {string} */ n) => memberOf(n, key)),
+              value,
+            )
+          : value;
+      added.push(`${inner}${keyText(key)}: ${valueText(written, inner)},`);
       continue;
     }
     const node = unwrapExpression(prop.value);
@@ -129,7 +182,7 @@ function editsFor(text, object, tree, edits, where) {
           start: prop.value.start,
           end: prop.value.end,
           text: valueText(
-            {[`...${text.slice(node.start, node.end)}`]: true, ...value},
+            spreadInto([text.slice(node.start, node.end)], value),
             indentOf,
           ),
         });

@@ -25,6 +25,7 @@ import {listProjectSourceFiles} from '../../foundation/fs/project-source-files.m
 import {postcss} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {
   fontKey,
+  fontServiceFamilies,
   importedFontFamilies,
 } from '../../foundation/fonts/font-stylesheet.mjs';
 
@@ -91,7 +92,11 @@ function pageImageOf(css) {
         if (!rule.selectors.some(s => /^(html|body|:root)$/.test(s.trim())))
           return;
         rule.walkDecls(/^background(-image)?$/, decl => {
-          if (/url\(|gradient\(/.test(decl.value)) found ??= decl.value.trim();
+          if (
+            /url\(|gradient\(|var\(--/.test(decl.value) &&
+            !/^var\(--color-background-body\b/.test(decl.value.trim())
+          )
+            found ??= decl.value.trim();
         });
       });
   } catch {
@@ -303,17 +308,20 @@ async function appLoadedFonts(app, files) {
   /** @type {Set<string>} */
   const loaded = new Set(pageFontLinks(app).families);
   // A stylesheet from elsewhere that names no family (a font kit's link)
-  // may load any font: then what the app loads is not known.
-  const external = (/** @type {string} */ text) =>
-    [
-      ...text.matchAll(
-        /(?:@import\s+(?:url\()?|href=)\s*['"]?((?:https?:)?\/\/[^'")\s]+)/g,
-      ),
-    ].some(
-      ([, url]) => !/fonts\.(googleapis|bunny)\.|fonts\.bunny\.net/.test(url),
-    );
+  // may load any font: then what the app loads is not known. Only links
+  // and imports of stylesheets count.
+  const {stylesheetLinkHrefs} = await import('../doctor/built-checks.mjs');
+  /** @param {string} url */
+  const unread = url =>
+    /^(?:https?:)?\/\//.test(url) && !fontServiceFamilies(url).size;
   for (const name of ['index.html', 'public/index.html'])
-    if (external(readIfThere(path.join(app, name)))) return null;
+    if (stylesheetLinkHrefs(readIfThere(path.join(app, name))).some(unread))
+      return null;
+  /** @param {string} css */
+  const importsUnread = css =>
+    [...css.matchAll(/@import\s+(?:url\()?\s*['"]?([^'")\s;]+)/g)].some(
+      ([, url]) => unread(url),
+    );
   for (const file of files) {
     if (!isWithin(app, file)) continue;
     const dir = path.dirname(file);
@@ -322,7 +330,7 @@ async function appLoadedFonts(app, files) {
       for (const f of importedFontFamilies(spec, dir)) loaded.add(f);
     };
     if (file.endsWith('.css')) {
-      if (external(fs.readFileSync(file, 'utf8'))) return null;
+      if (importsUnread(fs.readFileSync(file, 'utf8'))) return null;
       add(`./${path.basename(file)}`);
       continue;
     }
