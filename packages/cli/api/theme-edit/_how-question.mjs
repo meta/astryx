@@ -14870,9 +14870,9 @@ export function draftAnswer(ctx, env, question) {
         ),
     );
     if (!unknown.length) return null;
-    // (A subject is a thing on the page: a plural noun, a word of a part's
-    // own name, or a name in capitals, "FAB"; a brand or a mood said
-    // before a look, "IBM Carbon:", "design feedback:", is not one.)
+    // (A subject is a thing on the page: a plural noun or a word of a
+    // part's own name; a brand or a mood said before a look, "IBM Carbon:",
+    // "design feedback:", is not one.)
     const thing =
       unknown.some(w => /[a-z]{2}[^su']s$/.test(w)) ||
       near(unknown.join(' ')) !== '' ||
@@ -14891,9 +14891,7 @@ export function draftAnswer(ctx, env, question) {
           a =>
             !THEME_ASPECTS.includes(a) &&
             !['colors', 'mode', 'contrast', 'spacing', 'corners'].includes(a),
-        )) ||
-      (words.length === 1 &&
-        new RegExp(`\\b${words[0].toUpperCase()}\\b`).test(raw0));
+        ));
     return thing ? phrase : null;
   };
   // ("filled blue with white text on hover": a state said at the end of

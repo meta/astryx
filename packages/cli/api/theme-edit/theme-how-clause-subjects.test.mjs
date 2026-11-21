@@ -78,7 +78,17 @@ const ROWS = [
     'unknown subject said as a sentence',
     {q: 'the command palette should have 8px corners', none: true},
   ],
-  ['unknown acronym', {q: 'FAB 16px corners', none: true, says: /"fab"/}],
+  [
+    'a name in capitals that no part has is no subject',
+    {q: 'FAB 16px corners', has: ['corners 16px']},
+  ],
+  [
+    'a look said after a name in capitals is written',
+    {
+      q: 'FAB 16px corners, bold text',
+      has: ['corners 16px', '--text-body-weight 700'],
+    },
+  ],
   [
     'a font name before "font" is no subject',
     {q: 'Inter font', has: ['font inter']},
