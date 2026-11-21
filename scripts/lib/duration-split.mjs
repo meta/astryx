@@ -154,12 +154,19 @@ export const SWIZZLE_PROOF = /(^|\/)swizzle-proof\.\d+\.test\.mjs$/;
  * The record after a run. The run's times replace those files' times; files
  * the run did not reach keep their earlier times; a swizzle-proof slice keeps
  * the largest time seen; a file `exists` no longer finds leaves the record.
+ * The files are sorted by `compare` (by default `localeCompare`).
  * @param {Record<string, number>} current
  * @param {Record<string, number>} recorded
  * @param {(file: string) => boolean} exists
+ * @param {{compare?: (a: string, b: string) => number}} [options]
  * @returns {Record<string, number>}
  */
-export function mergeRecord(current, recorded, exists) {
+export function mergeRecord(
+  current,
+  recorded,
+  exists,
+  {compare = (a, b) => a.localeCompare(b)} = {},
+) {
   const merged = {...current};
   for (const [file, seconds] of Object.entries(recorded)) {
     merged[file] =
@@ -170,6 +177,6 @@ export function mergeRecord(current, recorded, exists) {
   return Object.fromEntries(
     Object.entries(merged)
       .filter(([file]) => exists(file))
-      .sort(([a], [b]) => a.localeCompare(b)),
+      .sort(([a], [b]) => compare(a, b)),
   );
 }
