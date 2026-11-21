@@ -314,15 +314,20 @@ const styles = stylex.create({
 // - `primary` — the row-wrapper path: the wrapper keeps its base padding and
 //   the steps go on the primary link or button, so the whole indent is part
 //   of the click target rather than dead space that still shows feedback.
+// The indent is capped so the row's content box keeps at least 4em, which
+// matters only at a large text size in a narrow rail; past the cap, deeper
+// levels add no indent. A percentage padding resolves against the list's
+// width, since every row spans its list.
+const MIN_CONTENT = '4em';
 const indentStyles = stylex.create({
   sm: (depth: number) => ({
-    paddingInlineStart: `calc(${spacingVars['--spacing-1']} + ${depth} * ${spacingVars['--spacing-6']})`,
+    paddingInlineStart: `max(${spacingVars['--spacing-1']}, min(calc(${spacingVars['--spacing-1']} + ${depth} * ${spacingVars['--spacing-6']}), calc(100% - ${spacingVars['--spacing-1']} - ${MIN_CONTENT})))`,
   }),
   md: (depth: number) => ({
-    paddingInlineStart: `calc(${spacingVars['--spacing-2']} + ${depth} * ${spacingVars['--spacing-6']})`,
+    paddingInlineStart: `max(${spacingVars['--spacing-2']}, min(calc(${spacingVars['--spacing-2']} + ${depth} * ${spacingVars['--spacing-6']}), calc(100% - ${spacingVars['--spacing-2']} - ${MIN_CONTENT})))`,
   }),
   primary: (depth: number) => ({
-    paddingInlineStart: `calc(${depth} * ${spacingVars['--spacing-6']})`,
+    paddingInlineStart: `max(0px, min(calc(${depth} * ${spacingVars['--spacing-6']}), calc(100% - ${MIN_CONTENT})))`,
   }),
 });
 

@@ -9,11 +9,11 @@
  *   wrapping it instead of cutting it, and that a row's end content sits
  *   beside the label's first line while the label's longest word and the
  *   end content fit on one line, and otherwise on its own line at the row's
- *   end
- * @position Browser proof of AST-020 FR1 (WCAG 1.4.4) for SideNavItem labels.
- *   Known gap: at 200% text in matcha and y2k, the depth-3 indent leaves a
- *   content box narrower than the end content alone, so it cannot sit
- *   inside the row; the next change caps the indent.
+ *   end; and that the nesting indent is one --spacing-6 step per level
+ *   where the row fits, capped so the row's content box keeps 4em, and
+ *   never smaller at a deeper level
+ * @position Browser proof of AST-020 FR1 (WCAG 1.4.4) for SideNavItem labels
+ *   and of component:SideNav FR3's indent cap
  */
 
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
@@ -120,6 +120,57 @@ async function measure(page: Page) {
     );
 }
 
+/**
+ * One row per depth, in order: where its content starts (the end of its
+ * inline-start padding, from the row's inline start), its content box's
+ * width, and 4em and --spacing-6 in its own font.
+ */
+async function measureIndents(page: Page) {
+  return page
+    .getByRole('navigation')
+    .first()
+    .evaluate(nav => {
+      const byDepth: {
+        start: number;
+        contentWidth: number;
+        fourEm: number;
+        spacing6: number;
+      }[] = [];
+      for (const row of nav.querySelectorAll<HTMLElement>(
+        'a.astryx-side-nav-item, button.astryx-side-nav-item',
+      )) {
+        let depth = 0;
+        for (
+          let element = row.parentElement;
+          element != null && element !== nav;
+          element = element.parentElement
+        ) {
+          if (element.id.endsWith('-children')) {
+            depth++;
+          }
+        }
+        if (byDepth[depth] != null) {
+          continue;
+        }
+        const style = getComputedStyle(row);
+        const probe = document.createElement('span');
+        probe.style.cssText = 'position:absolute;inline-size:var(--spacing-6)';
+        row.append(probe);
+        const spacing6 = probe.getBoundingClientRect().width;
+        probe.remove();
+        const start = parseFloat(style.paddingInlineStart);
+        byDepth[depth] = {
+          start,
+          contentWidth:
+            row.clientWidth - start - parseFloat(style.paddingInlineEnd),
+          fourEm: 4 * parseFloat(style.fontSize),
+          spacing6,
+        };
+      }
+      return byDepth;
+    });
+}
+
 for (const textPx of [16, 32]) {
   for (const direction of ['ltr', 'rtl']) {
     for (const theme of THEMES) {
@@ -129,19 +180,30 @@ for (const textPx of [16, 32]) {
         await open(page, {theme, direction, textPx});
         const rows = await measure(page);
         expect(rows.length).toBeGreaterThan(0);
-        const isIndentGap = textPx === 32 && ['matcha', 'y2k'].includes(theme);
         for (const row of rows) {
           expect(row.isLabelWhole, row.text).toBe(true);
           expect(row.isOnFirstLine, row.text).toBe(row.fits);
-          // The known gap is the only place the end content outgrows the box.
-          const isGapRow = isIndentGap && row.text.startsWith('Regional');
-          expect(row.isEndWiderThanBox, row.text).toBe(isGapRow);
-          if (!isGapRow) {
-            expect(row.isAtEnd, row.text).toBe(true);
+          expect(row.isEndWiderThanBox, row.text).toBe(false);
+          expect(row.isAtEnd, row.text).toBe(true);
+        }
+        const indents = await measureIndents(page);
+        for (let depth = 1; depth < indents.length; depth++) {
+          const step = indents[depth].start - indents[depth - 1].start;
+          // Deeper never indents less.
+          expect(step).toBeGreaterThanOrEqual(-0.5);
+          if (textPx === 16) {
+            // At the default size every row fits, so each level adds one step.
+            expect(
+              Math.abs(step - indents[depth].spacing6),
+            ).toBeLessThanOrEqual(0.5);
           }
+          // The content box keeps at least 4em.
+          expect(indents[depth].contentWidth).toBeGreaterThanOrEqual(
+            indents[depth].fourEm - 0.5,
+          );
         }
         if (textPx === 32) {
-          // At 200% the depth-3 row cannot fit both on one line.
+          // At 200% the deepest row cannot fit both on one line.
           const deep = rows.find(row => row.text.startsWith('Regional'));
           expect(deep?.isOnFirstLine).toBe(false);
         }
