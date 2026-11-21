@@ -133,9 +133,10 @@ it('a length in a file name is no value left unused', async () => {
 }, 240_000);
 
 it('a second url() layer left unwritten is named as not used', async () => {
-  const {texts} = await answer(
+  const {texts, commands} = await answer(
     'cards background-image: url(a.png), url(b.png)',
   );
+  expect(commands).toContain("set pu background-image 'url(a.png)' --on card");
   expect(texts.some(t => /^not used/.test(t) && t.includes('url(b.png)'))).toBe(
     true,
   );
