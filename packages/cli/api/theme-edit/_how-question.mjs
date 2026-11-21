@@ -10851,23 +10851,30 @@ export function draftAnswer(ctx, env, question) {
         .find(Boolean);
       const plural = !said || /s$/i.test(said);
       const colon = joinOf.get(c)?.list !== 'with';
-      // ("popover, tooltip and hover card: dark": a part said before its
-      // sentence's first colon, as asked, is one of the list's subjects,
-      // never an item of the first. Read from the words as asked, so a
-      // reader's rewrite of the colon does not change it; a part said after
-      // that colon, "cards: white background, header: navy", stays an
-      // item.)
+      // ("popover, tooltip and hover card: dark": a part named as a whole
+      // item before the first colon of the clause's own sentence, as
+      // asked, is one of the list's subjects, never an item of the first.
+      // Read from the words as asked, so a reader's rewrite of the colon
+      // does not change it; a part said after that colon, "cards: white
+      // background, header: navy", or inside a longer name, "icon
+      // buttons: … blue icon", stays an item.)
+      const clauseWords = c.text.toLowerCase().trim();
       const subjectOfColon =
         !!said &&
-        asked0.split(/[.;!?\n]/).some(sentence => {
-          const colon = sentence.search(/:(?!\d)/);
-          const at = sentence.search(
-            new RegExp(
-              String.raw`\b${said.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\b`,
-            ),
-          );
-          return colon > 0 && at >= 0 && at < colon;
-        });
+        asked0
+          .split(/[;!?\n]|\.(?!\d)/)
+          .filter(sentence => sentence.includes(clauseWords))
+          .some(sentence => {
+            const colon = sentence.search(/:(?!\d)/);
+            if (colon < 0) return false;
+            return sentence
+              .slice(0, colon)
+              .split(/,|&|\band\b/)
+              .map(item =>
+                item.trim().replace(/^(?:the|all|every|each)\s+/, ''),
+              )
+              .includes(said.toLowerCase());
+          });
       if (
         holder &&
         head !== c &&

@@ -407,6 +407,29 @@ const ROWS = [
     {q: 'dialogs: no border, title: bold', never: /^headings /},
   ],
   [
+    "a decimal in the list's first item keeps its items, never the app's part",
+    {
+      q: 'cards: 0.5rem corners, header: navy',
+      never: /--on app-shell-header/,
+    },
+  ],
+  [
+    "a part named before another sentence's colon stays an item of this list",
+    {
+      q: 'Header: navy with white text. Cards: white background, header: gray.',
+      has: ["background-color '#1e3a8a' --on app-shell-header"],
+      never: /contradict/,
+    },
+  ],
+  [
+    'a part inside a longer name before the colon stays an item',
+    {
+      q: 'icon buttons: round, blue icon',
+      // (The icon color stays on the button, never theme-wide.)
+      never: /^--color-icon-[a-z-]+ '[^']*'$/,
+    },
+  ],
+  [
     'a head with its own colon keeps a button item, never every button',
     {
       q: 'toasts: dark, close button: white',
