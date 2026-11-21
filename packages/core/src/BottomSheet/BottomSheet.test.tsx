@@ -4742,6 +4742,48 @@ describe('BottomSheet', () => {
       );
     });
 
+    it('keeps the content inert during showModal(), so its focusing steps scroll nothing into view', () => {
+      const isPanelInert: boolean[] = [];
+      HTMLDialogElement.prototype.showModal = vi.fn(function (
+        this: HTMLDialogElement,
+      ) {
+        isPanelInert.push(
+          this.querySelector('.astryx-bottom-sheet')?.closest('[inert]') !=
+            null,
+        );
+        this.setAttribute('open', '');
+      });
+      render(
+        <BottomSheet isOpen onOpenChange={() => {}} label="Filters">
+          <button type="button">First action</button>
+        </BottomSheet>,
+      );
+      expect(isPanelInert).toEqual([true]);
+      expect(getSheet().closest('[inert]')).toBeNull();
+      expect(document.activeElement).toBe(getSheet());
+    });
+
+    it('focuses the first control on open where the engine’s focusing steps skip the panel', () => {
+      // Firefox's dialog focusing steps skip a container with tabindex -1 and
+      // land on the first control that is not inert.
+      HTMLDialogElement.prototype.showModal = vi.fn(function (
+        this: HTMLDialogElement,
+      ) {
+        this.setAttribute('open', '');
+        [...this.querySelectorAll<HTMLElement>('button')]
+          .find(button => button.closest('[inert]') == null)
+          ?.focus();
+      });
+      render(
+        <BottomSheet isOpen onOpenChange={() => {}} label="Filters">
+          <button type="button">First action</button>
+        </BottomSheet>,
+      );
+      expect(document.activeElement).toBe(
+        screen.getByRole('button', {name: 'First action'}),
+      );
+    });
+
     it('honors a descendant with data-autofocus', () => {
       render(
         <BottomSheet isOpen onOpenChange={() => {}} label="Filters">

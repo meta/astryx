@@ -117,6 +117,7 @@ import {
   reportClosedTogether,
   sealBottomSheetBatch,
   setBottomSheetOpen,
+  showSheetHostModal,
   showSheetHostNonModal,
   writeScrimOpacity,
   type BottomSheetScrimWrite,
@@ -635,7 +636,7 @@ function StandaloneBottomSheet({
             '--_sheet-scrim-opacity',
             scrimOpacityForView(stackViewRef.current),
           );
-          dialog.showModal();
+          showSheetHostModal(dialog, panelRef.current);
         },
         hide: () => closeDialogKeepingFocus(dialogRef.current),
         focus: reason => focusSheetPanel(panelRef.current, reason, hasScrim),
