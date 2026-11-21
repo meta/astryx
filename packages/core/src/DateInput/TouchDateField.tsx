@@ -752,6 +752,7 @@ export function TouchDateField({
       ? null
       : clampIndex(anchoredMonthIndex, minMonthIndex, maxMonthIndex),
   );
+  const [anchoredValue, setAnchoredValue] = useState(value);
   const monthIndex =
     chosenMonthIndex ??
     clampIndex(anchorMonthIndex, minMonthIndex, maxMonthIndex);
@@ -810,6 +811,15 @@ export function TouchDateField({
 
   const openSheet = useCallback(() => {
     if (!isEffectivelyDisabled) {
+      // A value that arrives while the sheet is closed sets the month it opens
+      // on. The open sheet keeps its month.
+      if (value !== anchoredValue) {
+        setAnchoredValue(value);
+        if (value != null && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+          setAnchoredMonthIndex(monthModel.indexOf(plainDateFromISO(value)));
+          setMonthIndex(null);
+        }
+      }
       // Always onto the calendar, whatever was showing last time. The wheels
       // are a detour taken to reach a far month, not a mode to be left in:
       // reopening into them would answer a question the user has not asked
@@ -817,7 +827,7 @@ export function TouchDateField({
       setIsWheelOpen(false);
       setIsSheetOpen(true);
     }
-  }, [isEffectivelyDisabled]);
+  }, [isEffectivelyDisabled, value, anchoredValue, monthModel]);
 
   const handleClear = useCallback(() => {
     fireChange(undefined);
@@ -1228,7 +1238,7 @@ export function TouchDateField({
             isWheelOpen && styles.panelBeneathHidden,
           )}>
           <MonthScroller
-            key={`${minMonthIndex}:${maxMonthIndex}`}
+            key={`${minMonthIndex}:${maxMonthIndex}:${anchorMonthIndex}:${anchoredValue}`}
             handleRef={scrollerHandleRef}
             monthModel={monthModel}
             minMonthIndex={minMonthIndex}

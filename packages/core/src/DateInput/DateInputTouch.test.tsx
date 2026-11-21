@@ -847,6 +847,114 @@ describe('DateInput — calendar surface', () => {
     expect(pane('March 2026')).toBeInTheDocument();
   });
 
+  it('opens on the month of a value set after mount while closed', () => {
+    withLayout(() => {
+      const {rerender} = render(
+        <DateInput
+          nativePicker="never"
+          label="Ship date"
+          presentation="bottom-sheet"
+          onChange={() => {}}
+        />,
+      );
+      rerender(
+        <DateInput
+          nativePicker="never"
+          label="Ship date"
+          presentation="bottom-sheet"
+          value="2026-06-14"
+          onChange={() => {}}
+        />,
+      );
+      expect(field()).toHaveValue('June 14, 2026');
+      fireEvent.click(field());
+    });
+    expect(
+      document.querySelector('[data-title="month-year"]'),
+    ).toHaveTextContent('June 2026');
+    const june = within(pane('June 2026'));
+    expect(
+      june
+        .getByRole('button', {name: /June 14, 2026/})
+        .closest('[role="gridcell"]'),
+    ).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('opens on the month of a value set after mount while closed when min and max are set', () => {
+    withLayout(() => {
+      const {rerender} = render(
+        <DateInput
+          nativePicker="never"
+          label="Ship date"
+          presentation="bottom-sheet"
+          min="2026-01-01"
+          max="2026-12-31"
+          onChange={() => {}}
+        />,
+      );
+      rerender(
+        <DateInput
+          nativePicker="never"
+          label="Ship date"
+          presentation="bottom-sheet"
+          min="2026-01-01"
+          max="2026-12-31"
+          value="2026-08-14"
+          onChange={() => {}}
+        />,
+      );
+      fireEvent.click(field());
+    });
+    expect(
+      document.querySelector('[data-title="month-year"]'),
+    ).toHaveTextContent('August 2026');
+    const scroller = document.querySelector<HTMLElement>(
+      '[data-scroller="months"]',
+    );
+    expect(scroller?.scrollLeft).toBe(7 * SCROLLPORT_WIDTH);
+    const august = within(pane('August 2026'));
+    expect(
+      august
+        .getByRole('button', {name: /August 14, 2026/})
+        .closest('[role="gridcell"]'),
+    ).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('repositions the grid when the selected day changes after browsing away', () => {
+    withLayout(() => {
+      const props = {
+        nativePicker: 'never' as const,
+        label: 'Ship date',
+        presentation: 'bottom-sheet' as const,
+        min: '2026-01-01' as ISODateString,
+        max: '2026-12-31' as ISODateString,
+        onChange: () => {},
+      };
+      const {rerender} = render(<DateInput {...props} value="2026-06-14" />);
+      fireEvent.click(field());
+      const scroller = document.querySelector<HTMLElement>(
+        '[data-scroller="months"]',
+      )!;
+      scroller.scrollLeft = 7 * SCROLLPORT_WIDTH;
+      expect(scroller.scrollLeft).toBe(7 * SCROLLPORT_WIDTH);
+      fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape'});
+      rerender(<DateInput {...props} value="2026-06-20" />);
+      fireEvent.click(field());
+      expect(
+        document.querySelector('[data-title="month-year"]'),
+      ).toHaveTextContent('June 2026');
+      expect(
+        document.querySelector<HTMLElement>('[data-scroller="months"]')
+          ?.scrollLeft,
+      ).toBe(5 * SCROLLPORT_WIDTH);
+      expect(
+        within(pane('June 2026'))
+          .getByRole('button', {name: /June 20, 2026/})
+          .closest('[role="gridcell"]'),
+      ).toHaveAttribute('aria-selected', 'true');
+    });
+  });
+
   it('mounts a window of months around the visible one, not the whole century', () => {
     // The one test that wants the full default reach.
     renderAndOpen(
