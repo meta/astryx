@@ -282,8 +282,8 @@ app to turn on.
   support, the keyboard height is 0 and nothing changes. During server render it
   renders nothing and reads no viewport.
 - Unsupported behavior: on iPhone Safari with the keyboard up, a control inside
-  the roughly 30 pt band just above the address bar receives no touch; Safari
-  takes it. A tap there reaches the page as no event, so no component can
+  the band of about 17 pt directly above the address bar receives no touch;
+  Safari takes it. A tap there reaches the page as no event, so no component can
   answer it. Measured in a top-level document on an iPhone 14 with iOS 26.2,
   Predictive Text off.
 - Browser evidence: Safari on iOS, in the iOS Simulator or on a device and in a
