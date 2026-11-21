@@ -4607,6 +4607,42 @@ export {GROUP_ROLES};
 const EFFECT_THINGS = /^(?:text-shadow|box-shadow|filter|backdrop-filter)$/;
 
 /**
+ * Whether a box shadow layer is an inset ring: `inset`, then offsets and
+ * blur of zero and a spread, in either order, with or without a color
+ * (`inset 0 0 0 1px <color>`, `0 0 0 1px <color> inset`).
+ * @param {string} layer
+ */
+function isInsetRing(layer) {
+  const words = splitTop(layer.trim(), ' ').filter(Boolean);
+  if (!words.some(w => w.toLowerCase() === 'inset')) return false;
+  const lengths = words.filter(w => /^-?[\d.]+(?:[a-z%]*)$/i.test(w));
+  const rest = words.filter(
+    w => w.toLowerCase() !== 'inset' && !lengths.includes(w),
+  );
+  return (
+    lengths.length === 4 &&
+    lengths.slice(0, 3).every(w => /^-?0(?:\.0*)?(?:[a-z%]*)$/i.test(w)) &&
+    !/^-?0(?:\.0*)?(?:[a-z%]*)$/i.test(lengths[3]) &&
+    rest.length <= 1
+  );
+}
+
+/**
+ * Whether a setting is an effect on one part: a shadow or a filter, never
+ * a box shadow made only of inset rings, which is how a border for one
+ * mode is written (an edge, which reaches as a border does). The color may
+ * hold commas: light-dark(), rgba(). A ring followed by another shadow
+ * carries that shadow, an effect.
+ * @param {Pick<Setting, 'thing'> & {value?: unknown}} s
+ */
+function isEffect(s) {
+  const thing = kebab(String(s.thing ?? ''));
+  if (!EFFECT_THINGS.test(thing)) return false;
+  if (thing !== 'box-shadow') return true;
+  return !splitTop(String(s.value ?? ''), ',').every(isInsetRing);
+}
+
+/**
  * The family roles a setting on one of their members reaches by default,
  * the most particular first: a look set on a button reaches every part
  * drawn as a button, a menu row's every row a list highlights. accent-fills
@@ -4646,15 +4682,7 @@ export function reachGroupOf(ctx, s) {
   // how a border for one mode is written: an edge, which reaches as a
   // border does. The color may hold commas: light-dark(), rgba(). A ring
   // followed by another shadow carries that shadow, an effect: it stays.)
-  const ring = splitTop(String(/** @type {any} */ (s).value ?? ''), ',').every(
-    layer =>
-      /^inset\s+0(?:px)?\s+0(?:px)?\s+0(?:px)?\s+[\d.]+[a-z%]*\s+\S/i.test(
-        layer.trim(),
-      ),
-  );
-  const effect =
-    EFFECT_THINGS.test(kebab(String(s.thing ?? ''))) &&
-    !(kebab(String(s.thing ?? '')) === 'box-shadow' && ring);
+  const effect = isEffect(s);
   // (A token set on a part is what that part reads inside: a family's
   // members read their own, so no drawing tells which take it alike.)
   if (String(s.thing ?? '').startsWith('--')) return null;
@@ -4712,8 +4740,16 @@ export function groupReachesByDefault(name) {
  * @param {Pick<Setting, 'on' | 'thing' | 'only'> & {state?: string | null}} s
  */
 export function spreads(ctx, s) {
+  // (A setting whose record reaches past its own part spreads as it did
+  // when it was made, an effect saved with a family record included.)
+  const reached = /** @type {any} */ (s).reached;
   return Boolean(
-    s.on && (groupsOf(ctx)[s.on] || (!s.only && reachGroupOf(ctx, s))),
+    s.on &&
+    (groupsOf(ctx)[s.on] ||
+      (!s.only &&
+        (reachGroupOf(ctx, s) ||
+          (Array.isArray(reached) &&
+            reached.some(t => String(t) !== String(s.on)))))),
   );
 }
 
@@ -5078,7 +5114,7 @@ export function holdCopies(ctx, data, s) {
         only: true,
         hold: undefined,
         keep: undefined,
-          note: undefined,
+        note: undefined,
       });
   }
   return out;
@@ -5583,9 +5619,19 @@ export function partsOf(ctx, s) {
   const pin =
     /** @type {any} */ (s).reached ??
     (UNRECORDED.has(s) ? savedReach(ctx, /** @type {any} */ (s)) : null);
-  const all = reachedPartsOf(ctx, s).filter(
-    t => !Array.isArray(pin) || t === s.on || pin.includes(t),
-  );
+  const reached = reachedPartsOf(ctx, s);
+  // (An effect stays on its part, but one saved with a family record keeps
+  // the parts it reached when it was made.)
+  const all = Array.isArray(pin)
+    ? [
+        ...new Set([
+          ...reached.filter(t => t === s.on || pin.includes(t)),
+          ...(isEffect(s)
+            ? pin.map(String).filter(t => ctx.project?.target?.has(t))
+            : []),
+        ]),
+      ]
+    : reached;
   // (Members the setting keeps out, where it would make text unreadable.)
   const keep = /** @type {any} */ (s).keep;
   return Array.isArray(keep) && keep.length

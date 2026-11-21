@@ -192,4 +192,61 @@ describe('an effect set on one part', () => {
     });
     expect(partsWith('c', 'font-weight: 700').size).toBeGreaterThan(1);
   }, 240_000);
+  it('a ring written inset last, or with no color, is an edge too', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('rl', {cwd, like: 'neutral'});
+    const r = /** @type {any} */ (
+      await themeEditSet('rl', 'box-shadow', '0 0 0 1px #111111 inset', {
+        cwd,
+        on: 'button',
+      })
+    );
+    expect(r.data.parts.length).toBeGreaterThan(1);
+    await themeEditNew('rn', {cwd, like: 'neutral'});
+    const n = /** @type {any} */ (
+      await themeEditSet('rn', 'box-shadow', 'inset 0 0 0 1px', {
+        cwd,
+        on: 'button',
+      })
+    );
+    expect(n.data.parts.length).toBeGreaterThan(1);
+  }, 240_000);
+
+  it('an effect saved with a family record keeps the parts it reached', async ctx => {
+    if (needBases(ctx)) return;
+    // (A member of a menu row's family that the build writes on its own.)
+    await themeEditNew('pf', {cwd, like: 'neutral'});
+    await themeEditSet('pf', 'background-color', '#123456', {
+      cwd,
+      on: 'dropdown-menu-item',
+    });
+    const member = [...partsWith('pf', '#123456')].find(
+      p => p !== 'dropdown-menu-item',
+    );
+    expect(member).toBeTruthy();
+    await themeEditNew('pe', {cwd, like: 'neutral'});
+    await themeEditSet('pe', 'text-shadow', SHADOW, {
+      cwd,
+      on: 'dropdown-menu-item',
+    });
+    const file = path.join(cwd, 'themes', 'pe', 'pe.settings.json');
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const x = data.settings.find(
+      (/** @type {any} */ y) => y.thing === 'text-shadow',
+    );
+    x.reached = ['dropdown-menu-item', String(member)];
+    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+    await themeEditSet('pe', 'corners', '4px', {cwd});
+    expect(partsWith('pe', SHADOW).has(String(member))).toBe(true);
+    // (A member's own effect still wins over the restored family one.)
+    const OWN = '0 2px 0 rgba(255,0,0,.5)';
+    await themeEditSet('pe', 'text-shadow', OWN, {
+      cwd,
+      on: String(member),
+      only: true,
+    });
+    await themeEditSet('pe', 'corners', '8px', {cwd});
+    expect(partsWith('pe', OWN).has(String(member))).toBe(true);
+    expect(partsWith('pe', SHADOW).has(String(member))).toBe(false);
+  }, 240_000);
 });
