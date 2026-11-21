@@ -790,6 +790,10 @@ const styles = stylex.create({
     display: 'inline-flex',
     flexShrink: 0,
     color: colorVars['--color-icon-secondary'],
+  },
+  // On the chevron's Icon: the glyph is the element that rotates and the
+  // element a theme targets, so one selector reaches both.
+  chevronIcon: {
     transitionProperty: 'transform',
     transitionDuration: {
       default: durationVars['--duration-fast'],
@@ -2025,14 +2029,20 @@ export function DiffViewer({
             aria-controls={bodyId}
             onClick={toggleCollapsed}
             {...focusOutlineProps.focusVisible(styles.toggle)}>
-            <span
-              {...stylex.props(
-                styles.chevron,
-                !isCollapsed && styles.chevronExpanded,
-              )}>
-              <span {...stylex.props(isCollapsed && rtlStyles.mirror)}>
-                <Icon icon="chevronRight" size="xsm" color="inherit" />
-              </span>
+            {/* The collapsed chevron points toward the inline end, so it
+                mirrors in RTL. The glyph's own transform holds the rotation,
+                so the mirror sits on this box. Rotated down, the mirrored
+                glyph still points down. */}
+            <span {...stylex.props(styles.chevron, rtlStyles.mirror)}>
+              <Icon
+                icon="chevronRight"
+                size="xsm"
+                color="inherit"
+                xstyle={[
+                  styles.chevronIcon,
+                  !isCollapsed && styles.chevronExpanded,
+                ]}
+              />
             </span>
             {pathEl}
           </button>

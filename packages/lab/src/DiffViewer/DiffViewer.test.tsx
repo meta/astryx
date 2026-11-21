@@ -4,6 +4,8 @@ import {describe, it, expect, vi} from 'vitest';
 import {act, fireEvent, render, screen, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {createRef} from 'react';
+import * as stylex from '@stylexjs/stylex';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import {DiffViewer} from './DiffViewer';
 import {parseUnifiedDiff} from './parseUnifiedDiff';
 import type {DiffViewerFile, DiffViewerLineRef} from './diffTypes';
@@ -214,6 +216,33 @@ describe('DiffViewer', () => {
     await user.click(toggle);
     expect(onCollapsedChange).toHaveBeenLastCalledWith(false);
     expect(container.querySelector('table')).not.toBeNull();
+  });
+
+  it('rotates the chevron glyph itself, inside one mirroring box', async () => {
+    const user = userEvent.setup();
+    render(<DiffViewer file={FILE} />);
+    const toggle = screen.getByRole('button', {name: 'src/greet.ts'});
+    const box = toggle.firstElementChild as HTMLElement;
+    const glyph = box.firstElementChild as Element;
+    expect(box.children).toHaveLength(1);
+    const mirror = (stylex.props(rtlStyles.mirror).className ?? '')
+      .split(' ')
+      .filter(Boolean);
+    expect(mirror.length).toBeGreaterThan(0);
+    const mirrorsOnBoxOnly = () => {
+      for (const className of mirror) {
+        expect(box).toHaveClass(className);
+        expect(glyph).not.toHaveClass(className);
+      }
+    };
+    mirrorsOnBoxOnly();
+    const expanded = {box: box.className, glyph: glyph.getAttribute('class')};
+
+    await user.click(toggle);
+    // The glyph turns. The box mirrors in RTL, in either state.
+    mirrorsOnBoxOnly();
+    expect(box.className).toBe(expanded.box);
+    expect(glyph.getAttribute('class')).not.toBe(expanded.glyph);
   });
 
   it('follows a controlled collapsed state', async () => {
