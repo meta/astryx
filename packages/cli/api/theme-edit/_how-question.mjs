@@ -69,7 +69,7 @@ import {
   borderParts,
   cornerParts,
   rowFrameOf,
-  givesEdgeAtRest,
+  givesEdge,
   focusStateOf,
   paddedParts,
   innerTextTokens,
@@ -12546,7 +12546,7 @@ export function draftAnswer(ctx, env, question) {
     (env.data?.settings ?? []).some(
       (/** @type {any} */ x) =>
         x.source === 'property' &&
-        givesEdgeAtRest(x) &&
+        givesEdge(x) &&
         (x.on === frame || rowFrameOf(ctx, x.on) === frame),
     );
   for (const c of clauses)
@@ -29138,8 +29138,7 @@ export function draftAnswer(ctx, env, question) {
       if (!st.on || !cornerStep(st) || C.showsCorners(one(st.on))) continue;
       let edge = -1;
       for (let j = i + 1; j < all.length; j++)
-        if (all[j].on === st.on && !all[j].state && givesEdgeAtRest(all[j]))
-          edge = j;
+        if (all[j].on === st.on && !all[j].state && givesEdge(all[j])) edge = j;
       if (edge < 0) continue;
       all.splice(i, 1);
       all.splice(edge, 0, st);

@@ -126,7 +126,7 @@ import {
   cornerParts,
   boxFrameOf,
   rowFrameOf,
-  givesEdgeAtRest,
+  givesEdge,
   focusStateOf,
   valueProblem,
   partComponentDocs,
@@ -8752,11 +8752,12 @@ function refuseInvisibleCorners(ctx, slug, s, data) {
     parts.some(t => cornerParts(ctx, t).some(x => x !== t))
   )
     return;
-  // An edge the theme gives the part itself shows its corners too.
+  // An edge the theme gives the part itself, in any state, shows its
+  // corners too.
   const edged = data.settings.some(
     x =>
       x.source === 'property' &&
-      givesEdgeAtRest(x) &&
+      givesEdge(x, true) &&
       partsOf(ctx, x).some(t => parts.includes(t)),
   );
   if (edged) return;

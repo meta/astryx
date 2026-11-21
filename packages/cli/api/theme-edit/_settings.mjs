@@ -14297,14 +14297,17 @@ export function cornerParts(ctx, part) {
 }
 
 /**
- * Whether a setting gives its part an edge at rest that shows its corners:
- * a fill, border, shadow or outline that is not none, zero or transparent,
- * with no state.
+ * Whether a setting gives its part an edge that shows its corners: a fill,
+ * border, shadow or outline that is not none, zero or transparent, at rest
+ * or in the state the corners are for ("hovered checkboxes: a fill and
+ * 12px corners"), or in any state when `state` is true (corners show
+ * whenever that edge does).
  * @param {{thing?: unknown, value?: unknown, state?: unknown}} x
+ * @param {unknown} [state] the corners' own state, or true for any
  */
-export function givesEdgeAtRest(x) {
+export function givesEdge(x, state) {
   return (
-    !x.state &&
+    (!x.state || state === true || x.state === state) &&
     /^(?:background|border(?!.*radius)|box-shadow|outline)/.test(
       kebab(String(x.thing ?? '')),
     ) &&

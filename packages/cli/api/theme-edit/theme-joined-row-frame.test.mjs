@@ -159,4 +159,22 @@ describe('a border, radius, shadow or corners on a row of joined controls', () =
     expect(sets).toContain('border-radius 6px --on pagination-item');
     expect(sets.join('\n')).not.toMatch(/--on pagination-list\b/);
   }, 240_000);
+
+  it('counts a fill the same ask gives in a state as the edge its corners show on', async test => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      test.skip();
+    }
+    await themeEditNew('h', {cwd, like: 'neutral'});
+    const {data} = await themeEditHow(
+      'hovered checkboxes: a #0069d6 fill and 12px corners',
+      {cwd, theme: 'h'},
+    );
+    const whole = (data.results ?? []).find(r =>
+      /^all of it, in order/.test(r.text),
+    );
+    const sets = (whole?.commands ?? []).join('\n');
+    expect(sets).toMatch(/#0069d6/);
+    expect(sets).toMatch(/12px/);
+  }, 240_000);
 });

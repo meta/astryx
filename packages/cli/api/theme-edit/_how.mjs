@@ -47,7 +47,7 @@ import {
   selfSizedBoxLines,
   selfSizedWhy,
   sizesItsOwnBox,
-  givesEdgeAtRest,
+  givesEdge,
 } from './_settings.mjs';
 import {missedSteps} from './_missed.mjs';
 import {ASPECTS, settableStates} from './_check.mjs';
@@ -2397,8 +2397,7 @@ function afterAskedEdge(env, d, drafts) {
     .filter(x => x !== d && x.sequence)
     .flatMap(x => x.options[0] ?? [])
     .find(
-      (/** @type {any} */ x) =>
-        x.verb === 'set' && x.on === on && givesEdgeAtRest(x),
+      (/** @type {any} */ x) => x.verb === 'set' && x.on === on && givesEdge(x),
     );
   if (!edge || d.options.some((/** @type {any[]} */ o) => env.check(o).ok))
     return;
