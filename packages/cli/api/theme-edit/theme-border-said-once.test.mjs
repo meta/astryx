@@ -107,6 +107,18 @@ describe('a whole-theme border said once', () => {
           /border '1px solid .* --on card$/.test(x),
         ),
     ).toBe(true);
+    // A selectable card draws its box only when selected, in the accent:
+    // it keeps that.
+    expect(
+      (
+        await themeEditHow(
+          'Surface: flat. Edges: 6px corners, 1px #d0d7de borders.',
+          {cwd, theme: 'br'},
+        )
+      ).data.results
+        .flatMap((/** @type {{commands: string[]}} */ r) => r.commands)
+        .some((/** @type {string} */ x) => / --on selectable-card$/.test(x)),
+    ).toBe(false);
     // A role word leading the ask narrows it: overlays get no button border.
     const overlays = await commands('overlays: a 1px #4d4d4d border', 'br');
     expect(overlays.some(x => / --on popover$/.test(x))).toBe(true);

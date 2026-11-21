@@ -23784,9 +23784,17 @@ export function draftAnswer(ctx, env, question) {
             const edged = everywhere
               ? []
               : [
+                  // (Only a panel that draws its box at rest: one that draws
+                  // it only when selected, a selectable card, keeps its
+                  // accent selection border.)
                   ...(flatToo
                     ? (FAMILIES.containers ?? []).filter(
-                        pt => C.MAP[pt] && !borderless.includes(pt),
+                        pt =>
+                          C.MAP[pt] &&
+                          !borderless.includes(pt) &&
+                          Object.keys(
+                            C.MAP[pt]?.at?.['border-width'] ?? {},
+                          ).some(sel => !/:|selected/.test(sel)),
                       )
                     : []),
                   ...borderless.filter(pt =>
