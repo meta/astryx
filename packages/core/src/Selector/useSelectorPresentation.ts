@@ -44,7 +44,7 @@ import {
 interface UseSelectorPresentationOptions {
   presentation: AdaptivePresentation;
   onHide: () => void;
-  onShow: () => void;
+  onShow: (presentation: ResolvedAdaptivePresentation) => void;
   popoverOptions: Omit<InternalPopoverOptions, 'onHide' | 'onShow'>;
   triggerRef: RefObject<HTMLElement | null>;
   /**
@@ -194,7 +194,7 @@ export function useSelectorPresentation({
         },
       );
     }
-    onShowRef.current();
+    onShowRef.current('popover');
   }, [onShowRef, pressWatch, resetFocusReturn, triggerRef]);
   const popover = usePopoverInternal({
     ...popoverOptions,
@@ -208,7 +208,7 @@ export function useSelectorPresentation({
     activePresentationHold.take(resolvedPresentation);
     if (resolvedPresentation === 'bottom-sheet') {
       resetFocusReturn();
-      onShowRef.current();
+      onShowRef.current('bottom-sheet');
       isSheetOpenRef.current = true;
       setIsSheetOpen(true);
       return true;
