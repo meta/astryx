@@ -9,5 +9,5 @@ export const doc = {
   description: 'Markdown with citation chips linked to external sources',
   isReady: true,
   aspectRatio: 4 / 3,
-  componentsUsed: ['Markdown'],
+  componentsUsed: ['Icon', 'Markdown'],
 };

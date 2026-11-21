@@ -127,7 +127,7 @@ export const docs = {
       name: 'startIcon',
       type: 'ReactNode | IconType',
       description:
-        'Icon displayed at the start of the input; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
+        'Icon displayed at the start of the input; pass a built-in meaning such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'status',
@@ -377,7 +377,7 @@ export const docsZh = {
       name: 'startIcon',
       type: 'ReactNode | IconType',
       description:
-        '显示在输入框起始位置的图标；可传语义图标名称（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
+        '显示在输入框起始位置的图标；可传内置含义（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
     },
     {
       name: 'status',
@@ -562,7 +562,7 @@ export const docsDense = {
     isLoading: 'Loading state w/ spinner+aria-busy.',
     placeholder: 'Placeholder when input empty.',
     labelTooltip: 'Tooltip in info icon at label end.',
-    startIcon: 'Icon at input start; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
+    startIcon: 'Icon at input start; built-in meaning OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     status: 'Validation status; colored border+icon. Message floats below. Error sets aria-invalid.',
     statusVariant: 'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip hides the box and shows it on the status icon.',
     hasClear: 'Shows clear button when input has value. Clears value on click.',

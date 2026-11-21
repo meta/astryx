@@ -735,4 +735,30 @@ describe('swizzle.copy — a name the package exports only as a type (spec:AST-1
     },
     SLOW,
   );
+
+  it(
+    'reads the package surface again after an edit to a module it exports',
+    async () => {
+      await swizzle('Button', {cwd: project});
+      // The package root now exports `shape` as a value too.
+      const index = path.join(
+        project,
+        'node_modules/@astryxdesign/core/src/index.ts',
+      );
+      fs.writeFileSync(
+        index,
+        fs
+          .readFileSync(index, 'utf-8')
+          .replace('export type {shape}', 'export {shape}'),
+      );
+      const r = await swizzle('Button', {cwd: project, overwrite: true});
+      const source = fs.readFileSync(
+        path.join(project, 'components/astryx/Button/Button.tsx'),
+        'utf-8',
+      );
+      expect(source).toContain("import {shape} from '@astryxdesign/core';");
+      expect(r.data.files).not.toContain('../utils/shape.ts');
+    },
+    SLOW,
+  );
 });
