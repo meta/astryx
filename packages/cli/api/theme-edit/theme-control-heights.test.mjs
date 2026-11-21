@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
+  themeEditHow,
   themeEditNew,
   themeEditSet,
   themeEditShow,
@@ -1022,4 +1023,15 @@ describe('one control height per size', () => {
     expect(missed.length).toBe(1);
     expect(JSON.stringify(missed[0])).toMatch(/height 28px --on button\b/);
   }, 240_000);
+
+  it('a compact select offers no block padding line, as its padding never sets its height', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('cmpsel', {cwd, like: 'neutral'});
+    const {data} = /** @type {any} */ (
+      await themeEditHow('selects compact', {cwd, theme: 'cmpsel'})
+    );
+    const [first] = data.results;
+    expect(first.commands.join(' ;; ')).not.toMatch(/padding-block/);
+    expect(first.text).not.toMatch(/second line/);
+  }, 120_000);
 });
