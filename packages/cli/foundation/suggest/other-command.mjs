@@ -139,9 +139,10 @@ const HOOK_SHAPED = /^use[A-Z0-9]/;
  * @param {LookupCommand} command
  * @param {string} name
  * @param {string} typed
+ * @param {string[]} [tail] the folded names the typed last segment may mean
  * @returns {number}
  */
-function nameTier(command, name, typed) {
+function nameTier(command, name, typed, tail = []) {
   const lower = typed.toLowerCase();
   const wanted = foldEntryName(typed);
   /** @param {string} spelling */
@@ -158,6 +159,7 @@ function nameTier(command, name, typed) {
     const last = name.slice(at + 1);
     if (last.toLowerCase() === lower || folds(last)) return MATCH_TIER.segment;
   }
+  if (tail.includes(foldEntryName(name))) return MATCH_TIER.segment;
   return MATCH_TIER.none;
 }
 
@@ -186,17 +188,31 @@ function beats(command, match, best) {
  * @param {LookupCommand} command
  * @param {string[] | undefined} names
  * @param {string} typed
+ * @param {string[]} [tail]
  * @returns {{name: string, tier: number} | null}
  */
-function bestMatch(command, names, typed) {
+function bestMatch(command, names, typed, tail = []) {
   /** @type {{name: string, tier: number} | null} */
   let best = null;
   for (const name of names ?? []) {
-    const match = {name, tier: nameTier(command, name, typed)};
+    const match = {name, tier: nameTier(command, name, typed, tail)};
     if (beats(command, match, best)) best = match;
     if (match.tier === MATCH_TIER.exact) break;
   }
   return best;
+}
+
+/**
+ * The folded names a typed name's last path segment may mean: as typed, and
+ * with its words singular (`components/Tabs` may mean Tab).
+ * @param {string} typed
+ * @returns {string[]}
+ */
+export function tailForms(typed) {
+  const last = typed.slice(typed.lastIndexOf('/') + 1);
+  return [...new Set([foldEntryName(last), nameWords(last).join('')])].filter(
+    Boolean,
+  );
 }
 
 /**
@@ -337,11 +353,13 @@ export function withOtherCommand(
  *   coreDir?: string | null,
  *   integrations?: import('../integrations/integrations.mjs').LoadedIntegration[],
  *   docsRoutes?: import('./name-index.mjs').DocsRoutes,
+ *   tail?: string[],
  * }} context `from` is the lookup command that did not find the name; without
  *   it, every lookup command is asked. `coreDir` and `integrations` are the
  *   ones the lookup found, if any. `docsRoutes` works out every route
  *   `astryx docs` reads in the project with these integrations; without it,
- *   no docs route is a hint
+ *   no docs route is a hint. `tail` holds the folded names a component or
+ *   hook may have for the typed last path segment to name it ({@link tailForms})
  * @returns {Promise<Found | null>}
  */
 export async function findOtherCommand(
@@ -352,6 +370,7 @@ export async function findOtherCommand(
     coreDir: knownCoreDir,
     integrations: known,
     docsRoutes,
+    tail = [],
   },
 ) {
   if (typeof typed !== 'string') return null;
@@ -365,10 +384,11 @@ export async function findOtherCommand(
   const integrationsOnce = async () =>
     (loaded ??= await projectIntegrations(cwd));
   /** @param {string} name */
-  const isWanted = name => foldEntryName(name) === wanted;
+  const isWanted = name =>
+    foldEntryName(name) === wanted || tail.includes(foldEntryName(name));
   /** @param {string} name */
   const isWantedHook = name =>
-    foldEntryName(name) === wanted || foldEntryName(name) === `use${wanted}`;
+    isWanted(name) || foldEntryName(name) === `use${wanted}`;
 
   /** @type {string | null} */
   let coreDir = null;
@@ -380,11 +400,15 @@ export async function findOtherCommand(
   let inCore = {component: false, hook: false};
   try {
     coreDir = knownCoreDir ?? findCoreDir(cwd);
-    if (coreDir && !isPath) {
-      inCore = coreFilesNaming(
-        /** @type {string | string[]} */ ((await indexOnce()).core),
-        wanted,
-      );
+    if (coreDir && (!isPath || tail.length > 0)) {
+      const core = /** @type {string | string[]} */ ((await indexOnce()).core);
+      const named = [wanted, ...tail].map(name => coreFilesNaming(core, name));
+      inCore = {
+        component: named.some(one => one.component),
+        hook: named.some(one => one.hook),
+        componentTops: new Set(named.flatMap(one => [...one.componentTops])),
+        hookTops: new Set(named.flatMap(one => [...one.hookTops])),
+      };
     }
   } catch {
     inCore = {component: true, hook: true};
@@ -478,7 +502,10 @@ export async function findOtherCommand(
   for (const [command, load] of catalogs) {
     if (
       command === from ||
-      (isPath && command !== 'template' && command !== 'docs')
+      (isPath &&
+        tail.length === 0 &&
+        command !== 'template' &&
+        command !== 'docs')
     ) {
       continue;
     }
@@ -488,7 +515,7 @@ export async function findOtherCommand(
     } catch {
       continue;
     }
-    const match = bestMatch(command, entries[LISTED[command]], typed);
+    const match = bestMatch(command, entries[LISTED[command]], typed, tail);
     if (match && match.tier < (best?.tier ?? MATCH_TIER.words)) {
       best = hintFor(command, match.name, from, match.tier);
       if (match.tier === MATCH_TIER.exact) break;
