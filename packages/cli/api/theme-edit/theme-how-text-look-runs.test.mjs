@@ -510,7 +510,21 @@ it(
       'tabs with bold 13px #3b5998 text and selected tabs with bold 13px #ffffff text',
     );
     expect(two.sets).toContain("color '#3b5998' --on tab");
-    expect(two.texts.some(t => /but not "#3b5998"/.test(t))).toBe(false);
+    // (A state said after the run reads as on main: the copy of the run the
+    // reader gives it is answered "but not", and the state's own looks
+    // are written.)
+    const hover = await answer(
+      'tabs with bold 13px #3b5998 text and hovered tabs with bold 14px #3b5998 text',
+    );
+    expect(hover.texts.some(t => /contradict/.test(t))).toBe(false);
+    expect(hover.sets).toEqual(
+      expect.arrayContaining([
+        'font-weight 700 --on tab',
+        'font-size 13px --on tab',
+        'font-weight 700 --on tab --state hover',
+        'font-size 14px --on tab --state hover',
+      ]),
+    );
   },
   T,
 );
@@ -543,9 +557,20 @@ it(
     expect(texts.some(t => t.includes('but not "#3b5998"'))).toBe(false);
     // (A list of parts said with one run reads as before: no part takes the
     // color while another loses it.)
-    const list = await answer('cards, buttons with bold 13px #3b5998 text');
-    expect(list.sets.some(c => /#3b5998/.test(c))).toBe(false);
-    expect(list.texts.some(t => t.includes('but not "#3b5998"'))).toBe(true);
+    for (const q of [
+      'cards, buttons with bold 13px #3b5998 text',
+      'cards, tabs and buttons with bold 13px #3b5998 text',
+    ]) {
+      const list = await answer(q);
+      expect(
+        list.sets.some(c => /#3b5998/.test(c)),
+        q,
+      ).toBe(false);
+      expect(
+        list.texts.some(t => t.includes('but not "#3b5998"')),
+        q,
+      ).toBe(true);
+    }
   },
   T,
 );

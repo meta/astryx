@@ -44,7 +44,9 @@ const lookRuns = new Map();
  * least one a weight or a size, with the noun phrase ending there: "white
  * bold 11px links", "bold 13px #3b5998 text" (which the question reader
  * writes "bold 13px text #3b5998"), "#3b5998 bold 13px text". A noun after
- * it ("a 2px black text stroke") makes no run. Group 1 is the noun.
+ * it ("a 2px black text stroke") makes no run. A run the question reader
+ * splits ("13px #3b5998 bold text", "italic 13px #3b5998 text") is found
+ * in no one clause, so it reads as before. Group 1 is the noun.
  * @param {string[]} hues the hue words a question can say
  */
 function lookRun(hues) {
@@ -153,20 +155,32 @@ export function addRunLooks(clauses, hues) {
     while (clauses[end + 1]?.text === c.text) end++;
     const group = clauses.slice(i, end + 1);
     const asks = group.flatMap(x => x.aspects);
-    // ("cards, buttons with bold 13px #3b5998 text": the reader gives the
-    // run's color to the last part of a list alone; the list reads as
-    // before.)
-    let prev = i - 1;
-    while (prev >= 0 && !clauses[prev].text) prev--;
-    const sibling = clauses[prev];
-    const listed =
-      sibling &&
-      sibling.text !== c.text &&
-      sibling.aspects.every(a => RUN_ASKS.has(a)) &&
-      c.parts.length > 0 &&
-      c.parts.every(p => sibling.parts.some(q => q.on === p.on)) &&
-      sibling.parts.length > c.parts.length;
-    if (listed) continue;
+    // ("cards, tabs and buttons with bold 13px #3b5998 text": the reader
+    // gives the run's color to only some parts of a list. Unless every
+    // part said with the run's other looks has the color too, the list
+    // reads as before.)
+    if (/#[0-9a-f]{3,8}\b/i.test(c.text)) {
+      const own = new Set(String(c.text).toLowerCase().split(/\s+/));
+      const looks = (/** @type {string} */ t) =>
+        t
+          .toLowerCase()
+          .split(/\s+/)
+          .filter(w => w && !/^\d+(?:\.\d+)?(?:px|rem|pt)$/.test(w));
+      const sameState = (/** @type {(typeof clauses)[number]} */ x) =>
+        (x.state ?? null) === (c.state ?? null);
+      /** @type {Set<string>} */
+      const withLooks = new Set();
+      /** @type {Set<string>} */
+      const withColor = new Set();
+      for (const x of clauses) {
+        if (!x.text || !sameState(x)) continue;
+        const ws = looks(String(x.text));
+        if (!ws.every(w => own.has(w))) continue;
+        const into = /#[0-9a-f]{3,8}\b/i.test(x.text) ? withColor : withLooks;
+        for (const p of x.parts) into.add(p.on);
+      }
+      if ([...withLooks].some(on => !withColor.has(on))) continue;
+    }
     const run = ownRun(c, hues);
     // ("top bar #3b5998 with 11px white links": the links' color stays the
     // bar's link color, and their size is the nav items'.)
@@ -210,31 +224,6 @@ export function addRunLooks(clauses, hues) {
     );
     for (const x of [...group, ...copies]) RUN_READ.add(x);
     clauses.splice(end + 1, 0, ...copies);
-  }
-  // ("… and selected tabs with …": a clause the reader gives a run's words
-  // it read elsewhere holds no color it failed to read.)
-  const hex = /#[0-9a-f]{3,8}\b/gi;
-  // (Keyed by the part as well: another part's state run with the same
-  // color is its own, and reads as before.)
-  const key = (
-    /** @type {{parts: Array<{on: string}>}} */ x,
-    /** @type {string} */ h,
-  ) => `${x.parts.map(p => p.on).join(',')} ${h}`;
-  const read = new Set(
-    clauses
-      .filter(x => RUN_READ.has(x))
-      .flatMap(x =>
-        ((ownRun(x, hues) ?? '').toLowerCase().match(hex) ?? []).map(h =>
-          key(x, h),
-        ),
-      ),
-  );
-  for (const x of clauses) {
-    if (RUN_READ.has(x)) continue;
-    const said = lookRun(hues).exec(String(x.text ?? ''))?.[0] ?? '';
-    const hexes = said.toLowerCase().match(hex) ?? [];
-    if (x.state && hexes.length && hexes.every(h => read.has(key(x, h))))
-      RUN_READ.add(x);
   }
 }
 
