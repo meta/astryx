@@ -3,7 +3,7 @@
 import type {Meta, StoryObj} from '@storybook/react';
 import * as stylex from '@stylexjs/stylex';
 import {Section} from '@astryxdesign/core/Section';
-import {VStack, HStack} from '@astryxdesign/core/Layout';
+import {VStack, HStack, StackItem} from '@astryxdesign/core/Layout';
 import {
   Layout,
   LayoutHeader,
@@ -73,6 +73,10 @@ const meta: Meta<typeof Section> = {
     height: {
       control: {type: 'range', min: 100, max: 600, step: 10},
       description: 'Height in pixels',
+    },
+    isScrollable: {
+      control: 'boolean',
+      description: 'Makes the section scroll its own content (overflow: auto)',
     },
   },
 };
@@ -343,6 +347,85 @@ export const AsymmetricPadding: Story = {
           </p>
         </Section>
       </div>
+    </div>
+  ),
+};
+
+// ============================================================================
+// Scrollable — isScrollable / overflow (issue #2623)
+// ============================================================================
+
+export const Scrollable: Story = {
+  name: 'Scrollable',
+  render: () => (
+    <div {...stylex.props(styles.pageWrapper)}>
+      <h4 {...stylex.props(styles.heading)}>
+        isScrollable — the section scrolls its own content
+      </h4>
+      <Section variant="section" width={320} height={200} dividers={['end']}>
+        <Section variant="transparent" height="100%" isScrollable>
+          <VStack gap={2}>
+            {Array.from({length: 14}, (_, i) => (
+              <p key={i} {...stylex.props(styles.text)}>
+                Row {i + 1}
+              </p>
+            ))}
+          </VStack>
+        </Section>
+      </Section>
+      <p {...stylex.props(styles.text, styles.textSecondary)}>
+        Overflow is applied to the padded surface, so the background, the
+        dividers and the section&apos;s own padding stay put while the content
+        scrolls.
+      </p>
+    </div>
+  ),
+};
+
+// ============================================================================
+// MultiPane — StackItem sizing + Section isScrollable (issue #2623)
+// ============================================================================
+
+export const MultiPane: Story = {
+  name: 'Multi-pane (StackItem + isScrollable)',
+  render: () => (
+    <div {...stylex.props(styles.pageWrapper)}>
+      <h4 {...stylex.props(styles.heading)}>
+        Fixed sidebar + detail column that takes the rest
+      </h4>
+      <HStack height={220} isScrollable>
+        <StackItem size="static">
+          <Section
+            variant="muted"
+            width={180}
+            height="100%"
+            isScrollable
+            dividers={['end']}>
+            <VStack gap={2}>
+              {Array.from({length: 12}, (_, i) => (
+                <p key={i} {...stylex.props(styles.text)}>
+                  Item {i + 1}
+                </p>
+              ))}
+            </VStack>
+          </Section>
+        </StackItem>
+        <StackItem size="fill" minWidth={320}>
+          <Section variant="section" height="100%" isScrollable>
+            <VStack gap={2}>
+              <p {...stylex.props(styles.text)}>
+                This column grows into the leftover space and never shrinks
+                below 320px — the strip scrolls horizontally instead.
+              </p>
+              {Array.from({length: 10}, (_, i) => (
+                <p key={i} {...stylex.props(styles.text, styles.textSecondary)}>
+                  Detail line {i + 1}
+                </p>
+              ))}
+            </VStack>
+          </Section>
+        </StackItem>
+      </HStack>
     </div>
   ),
 };
