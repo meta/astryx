@@ -676,9 +676,10 @@ function barTextProblems(look) {
           if (had) {
             if (!had.parts?.includes(q)) had.parts?.push(q);
             if (r < /** @type {number} */ (had.ratio)) had.ratio = fixed(r);
+            BAR_BLOCKS.get(had)?.add(`${q}|${block ?? 'base'}`);
             continue;
           }
-          out.set(key, {
+          const problem = /** @type {LookProblem} */ ({
             kind: 'bar-fill',
             mode: m,
             message: '',
@@ -688,6 +689,8 @@ function barTextProblems(look) {
             ratio: fixed(r),
             needs: TEXT,
           });
+          out.set(key, problem);
+          BAR_BLOCKS.set(problem, new Set([`${q}|${block ?? 'base'}`]));
         }
       }
     }
@@ -754,7 +757,7 @@ function barTextProblems(look) {
     }
     p.message =
       p.kind === 'bar-fill'
-        ? `${p.part} sets ${p.token}, so ${(p.parts ?? []).slice(0, 3).join(', ')} inside it draw their text on that fill: ${p.ratio}:1 in ${p.mode}. Change ${p.token} in ${p.part}'s style, or the text those parts draw there`
+        ? `${p.part} sets ${p.token}, so ${(p.parts ?? []).slice(0, 3).join(', ')} inside it draw their text on that fill: ${p.ratio}:1 in ${p.mode}. The fix sets the theme's own ${p.token} again on ${groups.join(', ')}`
         : `${p.part} sets ${p.token}, so ${(p.parts ?? []).slice(0, 3).join(', ')} inside it draw that text on their own fill: ${p.ratio}:1 in ${p.mode}. The fix sets the theme's own ${p.token} again on ${groups.join(', ')}`;
   }
   return [...out.values()];
@@ -1934,7 +1937,10 @@ export function lookRepair(look, problems) {
   /** @type {LookRepair['shared']} */
   const shared = {};
   for (const p of now) {
-    if (p.kind !== 'bar-text' || !p.token || !p.part) continue;
+    // (A fill the bar sets for its own parts goes back to the theme's on
+    // the parts inside it that draw their text on it, the same way.)
+    if ((p.kind !== 'bar-text' && p.kind !== 'bar-fill') || !p.token || !p.part)
+      continue;
     const l = colorIn(`var(${p.token})`, res.light, 'light');
     const d = colorIn(`var(${p.token})`, res.dark, 'dark');
     const value = l && d && l !== d ? `light-dark(${l}, ${d})` : (l ?? d);
