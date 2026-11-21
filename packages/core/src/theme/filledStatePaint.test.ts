@@ -72,23 +72,7 @@ describe('filledStatePaint', () => {
     }
   });
 
-  it('keeps the shared overlay on a fill it keeps readable', () => {
-    // A near-black fill under white text reads at well over 4.5:1 under a
-    // lightening overlay, so the button keeps the page's overlay.
-    const paints = Object.fromEntries(
-      deriveFilledStatePaints({
-        '--color-accent': '#111111',
-        '--color-on-accent': '#ffffff',
-        '--color-overlay-hover': '#FFFFFF26',
-        '--color-overlay-pressed': '#FFFFFF40',
-      }),
-    );
-    expect(paints['--_button-primary-hover']).toBe(
-      'light-dark(#FFFFFF26, #FFFFFF26)',
-    );
-  });
-
-  it('replaces the shared overlay where it drops the label under 4.5:1', () => {
+  it('paints its own tint where the shared overlay drops the label under 4.5:1', () => {
     // White text on #767676 reads at 4.54:1; a lightening overlay drops it.
     const paints = Object.fromEntries(
       deriveFilledStatePaints({
@@ -164,21 +148,32 @@ describe('filledStatePaint', () => {
     }
   });
 
-  it('replaces only the state the shared overlay drops under 4.5:1', () => {
-    // White text on #767676 (4.54:1) under a darkening hover and a lightening
-    // press: the hover reads, so only the press is replaced.
+  it('shows hover and press on a near-black fill under a faint black overlay', () => {
+    // A 5% black overlay on #1b1b1b keeps white text readable but moves the
+    // fill by almost nothing: hover would look like rest, and a press would
+    // show only as a scale, which reduced motion turns off.
+    const fill = rgb('#1b1b1b');
     const paints = Object.fromEntries(
       deriveFilledStatePaints({
-        '--color-accent': '#767676',
+        '--color-accent': '#1b1b1b',
         '--color-on-accent': '#ffffff',
-        '--color-overlay-hover': '#00000026',
-        '--color-overlay-pressed': '#FFFFFF40',
+        '--color-overlay-hover': '#0000000D',
+        '--color-overlay-pressed': '#0000001A',
       }),
     );
-    expect(paints['--_button-primary-hover']).toBe(
-      'light-dark(#00000026, #00000026)',
-    );
-    expect(paints['--_button-primary-pressed']).not.toContain('#FFFFFF40');
+    for (const [state, need] of [
+      ['hover', VISIBLE_STEP],
+      ['pressed', 2 * VISIBLE_STEP],
+    ] as const) {
+      const value = paints[`--_button-primary-${state}`];
+      const light = /light-dark\((#[0-9A-Fa-f]{8})/.exec(value)?.[1];
+      expect(light, state).toBeDefined();
+      const over = composite(rgb(light!), fill);
+      expect(colorStep(over, fill), state).toBeGreaterThan(need);
+      expect(contrastRatio(rgb('#ffffff'), over), state).toBeGreaterThanOrEqual(
+        4.5,
+      );
+    }
   });
 
   it('keeps the shared overlay for a fill it cannot measure', () => {

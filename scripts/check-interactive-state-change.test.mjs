@@ -1,18 +1,17 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Filled buttons keep their label readable on hover and on press, with
- *   no theme and in every official theme
+ * @file Filled buttons keep their label readable and change visibly on hover
+ *   and on press, with no theme and in every official theme
  * @input Core's built theme compilation (filledStatePaint) and the official
  *   themes' token maps and button rules
  * @output A failure for each theme (or Core alone), mode and filled variant
- *   whose label reads under 4.5:1 at rest, hovered or pressed, or whose
- *   replaced hover or press paint does not visibly change the fill
+ *   whose label reads under 4.5:1 at rest, hovered or pressed, or whose hover
+ *   or press does not visibly change the fill
  * @position Theme guard beside the text contrast checks
  *
- * A filled variant keeps the shared overlay where it keeps the label at
- * 4.5:1, else paints the tint Core derives for its own fill and label; a
- * theme's button rule for the overlay tokens wins. A change is visible when the fill's red, green and blue move by more
+ * A filled variant paints the tint Core derives for its own fill and label;
+ * a theme's button rule for the overlay tokens wins. A change is visible when the fill's red, green and blue move by more
  * than 24 in total; a press must move twice as far.
  */
 
@@ -127,14 +126,6 @@ function measurements() {
           const paint = raw.startsWith('var(')
             ? at(raw.slice(4, -1))
             : parseConcreteColor(raw);
-          // The shared overlay is main's paint, kept where it reads.
-          const overlay = at(token);
-          const shared =
-            paint !== null &&
-            overlay !== null &&
-            ['r', 'g', 'b', 'a'].every(
-              c => Math.abs(paint[c] - overlay[c]) < 1e-3,
-            );
           // A mouse press is also a hover; a touch press is not.
           const hovered = composite(at('--zz-hover-fill'), fill);
           const unders =
@@ -144,12 +135,28 @@ function measurements() {
                   ['', fill],
                   [' with the mouse', hovered],
                 ];
+          // A mouse press is hovered, so it must also move beyond the hover.
+          const hoverValue =
+            rule['--color-overlay-hover'] ??
+            paints[`--_button-${variant}-hover`];
+          const hoverRaw = half(hoverValue, mode);
+          const hoverPaint = hoverRaw.startsWith('var(')
+            ? at(hoverRaw.slice(4, -1))
+            : parseConcreteColor(hoverRaw);
           for (const [how, under] of unders) {
             const over = composite(paint, under);
+            if (state === 'pressed' && how && hoverPaint !== null) {
+              rows.push({
+                where: `${where} pressed against hovered`,
+                ratio: contrastRatio(label, over),
+                step: colorStep(over, composite(hoverPaint, under)),
+                need: VISIBLE_STEP,
+              });
+            }
             rows.push({
               where: `${where} ${state}${how}`,
               ratio: contrastRatio(label, over),
-              step: shared ? undefined : colorStep(over, fill),
+              step: colorStep(over, fill),
               need: state === 'hover' ? VISIBLE_STEP : 2 * VISIBLE_STEP,
             });
           }
@@ -184,11 +191,37 @@ describe('filled button states', () => {
     ).toEqual([]);
   });
 
-  it('change the fill visibly on hover and on press where they replace the shared overlay', () => {
+  it('change the fill visibly on hover and on press', () => {
     expect(
       rows
         .filter(row => row.step !== undefined && !(row.step > row.need))
         .map(row => `${row.where}: moves ${row.step.toFixed(0)}`),
     ).toEqual([]);
+  });
+
+  it('show hover and press on the near-black primary fills of neutral, stone and gothic', () => {
+    for (const theme of ['neutral', 'stone', 'gothic'])
+      for (const state of ['hover', 'pressed'])
+        for (const how of state === 'hover' ? [''] : ['', ' with the mouse']) {
+          const where = `${theme} light primary button ${state}${how}`;
+          const row = rows.find(r => r.where === where);
+          expect(row, where).toBeDefined();
+          expect(row.step, where).toBeGreaterThan(row.need);
+          expect(row.ratio, where).toBeGreaterThanOrEqual(4.5);
+        }
+  });
+
+  it('keep the press paint under reduced motion: only the scale stops', () => {
+    // A reduced-motion rule in Button.tsx sets only the transform or the
+    // transition time, never the overlay paint or the fill, so the measured
+    // press paint still shows a press with no scale.
+    const source = fs.readFileSync(BUTTON_SOURCE, 'utf8');
+    const rules = [
+      ...source.matchAll(
+        /'@media \(prefers-reduced-motion: reduce\)[^']*':\s*'([^']+)'/g,
+      ),
+    ].map(m => m[1]);
+    expect(rules.length).toBeGreaterThan(0);
+    expect(rules.every(v => v === 'scale(1)' || v === '0s')).toBe(true);
   });
 });

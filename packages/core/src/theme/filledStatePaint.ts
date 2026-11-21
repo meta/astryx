@@ -5,8 +5,8 @@
  * @input A theme's portable and local token maps, its generated status roles,
  *   and its `button` rules
  * @output The hover and pressed paint of each filled Button variant, per mode,
- *   as private `--_button-<variant>-<state>` values. A state keeps the shared
- *   overlay where it reads. Else it takes a readable tint.
+ *   as private `--_button-<variant>-<state>` values: a tint that shows and
+ *   keeps the label readable
  * @position Theme generation step beside statusRoleDerivation, called by
  *   generateThemeRules; Core's own values are precomputed in
  *   filledStatePaint.stylex.ts
@@ -47,7 +47,12 @@ const TEXT_RATIO = 4.5;
  * by more than this in total. A press moves the fill at least twice as far.
  */
 export const VISIBLE_STEP = 24;
-const STEPS = {hover: VISIBLE_STEP + 2, pressed: 2 * VISIBLE_STEP + 2};
+/**
+ * The steps the derivation aims for. They keep a margin over VISIBLE_STEP,
+ * because a translucent fill renders over whatever surface is behind it. A
+ * press also moves visibly beyond the hover, since a mouse press is hovered.
+ */
+const STEPS = {hover: VISIBLE_STEP * 1.5, pressed: VISIBLE_STEP * 3};
 const MAX_ALPHA = 0.5;
 
 /** How far a colour moves, red, green and blue together, 0 to 765. */
@@ -82,11 +87,18 @@ function tintToward(
   label: RGBA,
   floor: number,
   state: 'hover' | 'pressed',
+  hovered: RGBA | null = null,
 ): RGBA | null {
   for (let alpha = 0.02; alpha <= MAX_ALPHA + 1e-9; alpha += 0.01) {
     const paint = {...target, a: Math.round(alpha * 100) / 100};
     const overs = unders.map(under => composite(paint, under));
     if (overs.some(over => colorStep(over, fill) <= STEPS[state])) {
+      continue;
+    }
+    if (
+      hovered !== null &&
+      overs.some(over => colorStep(over, hovered) <= STEPS.hover)
+    ) {
       continue;
     }
     if (overs.some(over => contrastRatio(label, over) + 1e-9 < floor)) {
@@ -98,9 +110,39 @@ function tintToward(
 }
 
 /**
+ * The tint, toward any of the targets, that keeps the label at its floor over
+ * every fill it is painted on and moves the fill furthest from rest.
+ */
+function mostVisibleReadable(
+  targets: RGBA[],
+  unders: RGBA[],
+  fill: RGBA,
+  label: RGBA,
+  floor: number,
+): RGBA {
+  let best: RGBA = {...targets[0], a: 0};
+  let bestStep = 0;
+  for (const target of targets) {
+    for (let alpha = 0.02; alpha <= MAX_ALPHA + 1e-9; alpha += 0.01) {
+      const paint = {...target, a: Math.round(alpha * 100) / 100};
+      const overs = unders.map(under => composite(paint, under));
+      if (overs.some(over => contrastRatio(label, over) + 1e-9 < floor)) {
+        break;
+      }
+      const step = Math.min(...overs.map(over => colorStep(over, fill)));
+      if (step > bestStep) {
+        best = paint;
+        bestStep = step;
+      }
+    }
+  }
+  return best;
+}
+
+/**
  * Hover and press go the same way where they can: away from the label when
- * both show that way, else toward it. A state neither way serves takes a
- * strong tint away from the label, which keeps it readable.
+ * both show that way, else toward it. A state neither way serves takes the
+ * readable tint that moves the fill furthest.
  */
 function paintsAlong(
   fill: RGBA,
@@ -113,51 +155,35 @@ function paintsAlong(
   const away =
     relativeLuminance(label) > relativeLuminance(fill) ? BLACK : WHITE;
   const toward = {...label, a: 1};
-  const ways = [away, toward].map(target => ({
-    hover: tintToward(target, [hoverFill], fill, label, floor, 'hover'),
-    pressed: tintToward(
+  const ways = [away, toward].map(target => {
+    const hover = tintToward(target, [hoverFill], fill, label, floor, 'hover');
+    const pressed = tintToward(
       target,
       hoverFill === fill ? [fill] : [fill, hoverFill],
       fill,
       label,
       floor,
       'pressed',
-    ),
-  }));
+      hover === null ? null : composite(hover, hoverFill),
+    );
+    return {hover, pressed};
+  });
   const both = ways.find(w => w.hover !== null && w.pressed !== null);
   if (both) {
     return both;
   }
-  // Where no tint both shows and keeps the floor, readability wins: the tint
-  // away from the label only raises its contrast.
+  // Where no tint both shows and keeps the floor, readability wins: the
+  // state takes the readable tint, either way, that moves the fill furthest.
+  const unders = hoverFill === fill ? [fill] : [fill, hoverFill];
   return {
-    hover: ways[0].hover ?? ways[1].hover ?? {...away, a: MAX_ALPHA / 2},
-    pressed: ways[0].pressed ?? ways[1].pressed ?? {...away, a: MAX_ALPHA},
-  };
-}
-
-/**
- * Whether the shared overlay keeps the label at its floor, per state. It is
- * measured over the fill and over a theme's own hover fill, since a mouse
- * press is also a hover.
- */
-function sharedOverlayReads(
-  resolved: Record<string, string>,
-  fill: RGBA,
-  label: RGBA,
-  hoverFill: RGBA,
-): Record<'hover' | 'pressed', boolean> {
-  const floor = Math.min(TEXT_RATIO, contrastRatio(label, fill));
-  const hover = parseConcreteColor(resolved['--color-overlay-hover']);
-  const pressed = parseConcreteColor(resolved['--color-overlay-pressed']);
-  const readsOver = (paint: RGBA | null, unders: RGBA[]) =>
-    paint === null ||
-    unders.every(
-      under => contrastRatio(label, composite(paint, under)) + 1e-9 >= floor,
-    );
-  return {
-    hover: readsOver(hover, [hoverFill]),
-    pressed: readsOver(pressed, [fill, hoverFill]),
+    hover:
+      ways[0].hover ??
+      ways[1].hover ??
+      mostVisibleReadable([away, toward], [hoverFill], fill, label, floor),
+    pressed:
+      ways[0].pressed ??
+      ways[1].pressed ??
+      mostVisibleReadable([away, toward], unders, fill, label, floor),
   };
 }
 
@@ -205,13 +231,9 @@ function paintsFor(
     }
     const hover = parseConcreteColor(resolved[RULE_HOVER_FILL(variant)]);
     const hoverFill = hover ? composite(hover, f) : f;
-    const reads = sharedOverlayReads(resolved, f, l, hoverFill);
-    const paints =
-      reads.hover && reads.pressed ? null : paintsAlong(f, l, hoverFill);
+    const paints = paintsAlong(f, l, hoverFill);
     for (const state of states) {
-      out[filledStatePaintVar(variant as FilledVariant, state)] = reads[state]
-        ? null
-        : (paints?.[state] ?? null);
+      out[filledStatePaintVar(variant as FilledVariant, state)] = paints[state];
     }
   }
   return out;
