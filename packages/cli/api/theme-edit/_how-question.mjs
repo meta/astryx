@@ -3366,7 +3366,7 @@ function clausesOf(q, partWords, words = null) {
       const prev = pieces.at(-1)?.text ?? '';
       if (
         /^\s*,\s*$/.test(joint) &&
-        /^(?:eg|ie)\b/i.test(text) &&
+        /^(?:eg|ie|for example|such as)\b/i.test(text) &&
         !partWords.some(([re]) => re.test(` ${text} `)) &&
         colorsIn(text).length &&
         colorsIn(prev).length
@@ -4571,16 +4571,15 @@ export function draftAnswer(ctx, env, question) {
   });
   // An abbreviation's period never ends a sentence, before any reader
   // reads the words. (An example of the part named before a colon,
-  // "Header, eg the top bar: navy", restates that part: the list's
-  // subject stays the one part.)
+  // "Header, eg the top bar: navy" or "Header (eg the top bar): navy",
+  // restates that part: the list's subject stays the one part.)
   // (The words as asked, for the readers that hold the whole question and
   // the notes that quote it; their case too, which carries tone: an
   // emphatic "SO" in a lowercase line.)
   const raw0 = String(question);
-  question = dropAbbreviationDots(question).replace(
-    /,\s*(?:eg|ie)\s+[^,:;.!?\n]*(?=:)/gi,
-    '',
-  );
+  question = dropAbbreviationDots(question)
+    .replace(/,\s*(?:eg|ie)\s+[^,:;.!?\n]*(?=:)/gi, '')
+    .replace(/\s*\(\s*(?:eg|ie)\s+[^()]*\)(?=\s*:)/gi, '');
   const asked0 = raw0.toLowerCase();
   /** Text with each file set aside put back as typed. @param {string} s */
   const withUrls = s =>
@@ -32769,9 +32768,7 @@ export function draftAnswer(ctx, env, question) {
     // (A file named in url() is a value as typed, never a typed length.)
     const typedSegments = raw0
       .replace(/url\([^()]*\)/gi, ' ')
-      .split(
-        /[,;\n]|(?<!\b(?:e\.g|i\.e|etc|vs|cf))\.(?=\s|$)|\band\b|\bthen\b/i,
-      )
+      .split(/[,;\n]|(?<!\b(?:e\.g|i\.e|vs|cf))\.(?=\s|$)|\band\b|\bthen\b/i)
       .map(seg => seg.trim())
       .filter(Boolean);
     for (const words of typedSegments) {

@@ -486,6 +486,22 @@ const ROWS = [
     },
   ],
   [
+    'a bracketed example of the subject keeps the subject',
+    {
+      q: 'Header (e.g. the top bar): navy',
+      has: ["background-color '#1e3a8a' --on app-shell-header"],
+      never: /border-top/,
+    },
+  ],
+  [
+    'an example said as "for example" restates the color',
+    {
+      q: 'Header: navy, for example a dark blue. Cards: white background, gray header.',
+      has: ["background-color '#1e3a8a' --on app-shell-header"],
+      never: /#1e40af/,
+    },
+  ],
+  [
     'an example-led ask on its own line is an ask',
     {
       q: 'Header: navy\nFor example buttons red',
