@@ -27349,10 +27349,19 @@ export function draftAnswer(ctx, env, question) {
               .map(fillSaid)
               .find(Boolean) ??
             null;
+          // (A see-through fill, a secondary button's tint, glosses at its
+          // own alpha; a cleared one, alpha 0, draws nothing to gloss.)
           /** @param {string} own */
           const glossIn = own => {
             const rgb = parseColor(own);
-            return rgb && alphaOf(own) >= 1 ? glossOf(hex(rgb)) : null;
+            const a = alphaOf(own);
+            if (!rgb || !(a > 0)) return null;
+            const g = glossOf(hex(rgb));
+            if (a >= 1) return g;
+            const aa = Math.round(a * 255)
+              .toString(16)
+              .padStart(2, '0');
+            return g.replace(/#([0-9a-f]{6})\b/g, '#$1' + aa);
           };
           const saidMode = modeOf(c).mode;
           const modes = /** @type {Array<'light' | 'dark'>} */ (
@@ -27390,22 +27399,23 @@ export function draftAnswer(ctx, env, question) {
           /**
            * The fill a variant (or the part) shows in a mode: one said in
            * the ask, else the theme's own, else the base theme's rule for
-           * the variant, else the token the part reads.
-           * @param {string | null} when @param {'light' | 'dark'} m
+           * the variant, else the token the part reads, as written.
+           * @param {string | null} full @param {'light' | 'dark'} m
            */
-          const fillFor = (when, m) => {
-            // (A theme word or a gray said, "accent", "grey", is read in
-            // the mode.)
-            if (said) return inMode(said, m);
+          const rawFill = (full, m) => {
+            if (said) return said;
+            // (A look scoped by another condition too, "variant:primary+
+            // size:sm", shows its look's own fill.)
+            const when = full ? full.split('+')[0] : null;
             const own =
-              themeFill(when, m) ?? (when ? themeFill(null, m) : null);
-            // (A token or a light-dark() pair the theme set is read in the
-            // mode.)
-            if (own != null) return inMode(String(own), m);
+              (full && full !== when ? themeFill(full, m) : null) ??
+              themeFill(when, m) ??
+              (when ? themeFill(null, m) : null);
+            if (own != null) return String(own);
             const look = when
               ? baseOwnLook(part, 'background-color', when)
               : null;
-            if (look) return inMode(look, m);
+            if (look) return look;
             const reads = C.partReads(one(part), 'background') ?? [];
             // (A variant shows a token only where the part reads one for it:
             // a ghost button's see-through fill is none.)
@@ -27420,12 +27430,32 @@ export function draftAnswer(ctx, env, question) {
                 )?.token ?? null)
               : restRead(reads, undefined);
             return token
-              ? inMode(
-                  tokenSetOn(part, token, m) ?? String(current(token, m) ?? ''),
-                  m,
-                )
+              ? (tokenSetOn(part, token, m) ?? `var(${token})`)
               : null;
           };
+          // (A token, a light-dark() pair or a theme word is read in the
+          // mode.)
+          /** @param {string | null} when @param {'light' | 'dark'} m */
+          const fillFor = (when, m) => {
+            const raw = rawFill(when, m);
+            return raw == null ? null : inMode(raw, m);
+          };
+          /**
+           * The theme token a look's fill is in every mode, or null: its gloss
+           * is then live over the token, so it follows whatever the theme or
+           * the same answer sets it to.
+           * @param {string | null} when
+           */
+          const tokenFill = when => {
+            const raws = modes.map(m => rawFill(when, m));
+            const t = /^var\(\s*(--[a-z0-9-]+)\s*\)$/.exec(
+              String(raws[0] ?? '').trim(),
+            )?.[1];
+            return t && raws.every(r => r === raws[0]) ? t : null;
+          };
+          /** @param {string} t */
+          const liveGloss = t =>
+            `linear-gradient(color-mix(in oklab, var(${t}), white 20%) 0%, var(${t}) 45%, color-mix(in oklab, var(${t}), black 20%) 100%)`;
           // (Each look from its own fill, unless the ask names one or says
           // the fill: the axis the part's fills vary by, a button's variant,
           // a banner's status, a toast's type; a part with none is one.)
@@ -27434,18 +27464,20 @@ export function draftAnswer(ctx, env, question) {
           const axis = (() => {
             /** @type {Map<string, number>} */
             const seen = new Map();
+            const vals = /** @type {Record<string, string[]>} */ (
+              C.variantValues(one(part))
+            );
+            // (Only a look axis counts: a state the fills vary by, a
+            // switch's checked, is glossed as that state below.)
             for (const r of C.partReads(one(part), 'background') ?? [])
               for (const w of r.when ?? []) {
                 const a = /^([a-z]+)=/.exec(w.trim())?.[1];
-                if (a) seen.set(a, (seen.get(a) ?? 0) + 1);
+                if (a && vals[a]?.length) seen.set(a, (seen.get(a) ?? 0) + 1);
               }
             const known = [...seen].sort((x, y) => y[1] - x[1])[0]?.[0];
             if (known) return known;
             // (A look axis whose fills the part data does not give, a
             // banner's status: each look draws its own color, unread here.)
-            const vals = /** @type {Record<string, string[]>} */ (
-              C.variantValues(one(part))
-            );
             unread =
               ['status', 'type', 'tone', 'kind', 'intent', 'color'].find(
                 k => (vals[k]?.length ?? 0) > 1,
@@ -27455,8 +27487,8 @@ export function draftAnswer(ctx, env, question) {
           if (
             unread &&
             !said &&
-            !f.when &&
-            !modes.some(m => themeFill(null, m) != null)
+            (!f.when || String(f.when).startsWith(`${unread}:`)) &&
+            !modes.some(m => themeFill(f.when ?? null, m) != null)
           )
             return {
               text: `each ${unread} of ${part} draws a color of its own, which the editor does not read here, so nothing is written; name one and its color ("glossy blue ${part}")`,
@@ -27464,12 +27496,18 @@ export function draftAnswer(ctx, env, question) {
             };
           /** @type {Record<string, string[]>} */
           const looks = C.variantValues(one(part));
+          // (A condition on another axis, "glossy small buttons", scopes
+          // each look: every look's own fill under both conditions.)
+          const otherAxis =
+            f.when && !String(f.when).startsWith(`${axis}:`) ? f.when : null;
           const variants = /** @type {Array<string | null>} */ (
-            f.when
+            f.when && !otherAxis
               ? [f.when]
               : said
-                ? [null]
-                : (looks[axis] ?? []).map(v => `${axis}:${v}`)
+                ? [f.when ?? null]
+                : (looks[axis] ?? []).map(v =>
+                    otherAxis ? `${axis}:${v}+${otherAxis}` : `${axis}:${v}`,
+                  )
           );
           let whens = variants.length ? variants : [null];
           // (Every variant with the same fill in each mode, the theme's one
@@ -27486,9 +27524,13 @@ export function draftAnswer(ctx, env, question) {
           /** @type {string[]} */
           const flat = [];
           for (const when of whens) {
+            const tok = tokenFill(when);
             const gs = modes.map(m => {
               const own = fillFor(when, m);
-              return own == null ? null : glossIn(own);
+              const g = own == null ? null : glossIn(own);
+              // (A token fill glosses live over the token wherever it shows
+              // a color.)
+              return g != null && tok ? liveGloss(tok) : g;
             });
             const name = when ? when.replace(/^[a-z]+:/, '') : part;
             if (gs.every(g => g == null)) {
@@ -27499,16 +27541,63 @@ export function draftAnswer(ctx, env, question) {
               if (gs[i] == null) flat.push(`${name} in ${m} mode`);
             });
             const scoped = when && when !== f.when ? {...f, when} : f;
-            const thing =
-              when && when !== f.when ? 'background-image' : 'background';
+            // (The gloss is an image over the look's own fill, so a part's
+            // hover and pressed washes, images too, are layered over it in
+            // those states, never lost.)
+            const washes = /** @type {Array<[string, string]>} */ (
+              [
+                ['hover', '--color-overlay-hover'],
+                ['active', '--color-overlay-pressed'],
+              ].filter(
+                ([st, tok]) =>
+                  !f.state &&
+                  statesOf(part).includes(st) &&
+                  // (Only a part that draws that wash itself.)
+                  (C.partReads(one(part), 'background') ?? []).some(
+                    r => r.token === tok,
+                  ),
+              )
+            );
+            /** @param {string} g @param {Record<string, string>} at */
+            const glossSteps = (g, at) => [
+              set('background-image', g, at),
+              ...washes.map(([st, tok]) =>
+                set(
+                  'background-image',
+                  `linear-gradient(var(${tok}), var(${tok})), ${g}`,
+                  {...at, state: st},
+                ),
+              ),
+            ];
             if (!saidMode && gs.every(g => g === gs[0]))
-              steps.push(set(thing, String(gs[0]), scoped));
+              steps.push(...glossSteps(String(gs[0]), scoped));
             else
               modes.forEach((m, i) => {
                 if (gs[i] != null)
-                  steps.push(set(thing, String(gs[i]), {...scoped, mode: m}));
+                  steps.push(
+                    ...glossSteps(String(gs[i]), {...scoped, mode: m}),
+                  );
               });
           }
+          // (A state the part fills on its own, a switch's checked track,
+          // takes a gloss of that state's own fill, so the gloss never
+          // hides it.)
+          if (steps.length && !said && !f.state)
+            for (const st of statesOf(part)) {
+              const r = (C.partReads(one(part), 'background') ?? []).find(
+                x =>
+                  /^--color-/.test(x.token) &&
+                  !/overlay|tint/.test(x.token) &&
+                  (x.when ?? []).some(w => w.trim() === `${st}=${st}`),
+              );
+              if (r)
+                steps.push(
+                  set('background-image', liveGloss(r.token), {
+                    ...f,
+                    state: st,
+                  }),
+                );
+            }
           // (A part that draws no fill of its own, and is given none, shows
           // the part it sits in: a gloss on that part shows through it.)
           if (!steps.length) {

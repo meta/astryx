@@ -67,16 +67,20 @@ const writes = rs =>
  */
 const glosses = lines =>
   lines
+    .filter(l => !/ --state /.test(l))
     .map(l =>
-      /^set q\d? (?:background|background-image) 'linear-gradient\((#[0-9a-f]{6}) 0%, (#[0-9a-f]{6}) 45%, (#[0-9a-f]{6}) 100%\)' --on (\S+)(.*)$/.exec(
+      /^set q\d? (?:background|background-image) 'linear-gradient\((.+) 0%, (#[0-9a-f]{6,8}|var\(--[a-z0-9-]+\)) 45%, (.+) 100%\)' --on (\S+)(.*)$/.exec(
         l,
       ),
     )
     .filter(m => m != null)
     .map(m => ({on: m[4], rest: m[5], stops: [m[1], m[2], m[3]]}));
 
+/** A live gloss over a token: its middle stop is the token. @param {{stops: string[]}} g */
+const live = g => /^var\(--/.test(g.stops[1]);
+
 describe("glossy is a gloss of the part's own fill", () => {
-  it("a brief's glossy buttons and top bar each take their own fill in each mode", async () => {
+  it("a brief's glossy buttons and top bar each gloss their own fill, live over its token", async () => {
     const lines = writes(
       await how(
         'q0',
@@ -87,18 +91,36 @@ describe("glossy is a gloss of the part's own fill", () => {
     const all = glosses(lines);
     for (const on of ['button', 'app-shell-header']) {
       const mine = all.filter(g => g.on === on);
-      // (Each mode has its own gloss.)
-      expect(
-        [...new Set(mine.map(g => /--mode (\w+)/.exec(g.rest)?.[1]))].sort(),
-        on,
-      ).toEqual(['dark', 'light']);
-      for (const {stops} of mine) {
-        const [top, fill, bottom] = stops;
-        // (A lighter top and a darker bottom around the part's own fill.)
-        expect(luma(top), on).toBeGreaterThanOrEqual(luma(fill));
-        expect(luma(bottom), on).toBeLessThan(luma(fill));
+      expect(mine.length, on).toBeGreaterThan(0);
+      // (Each a gloss over the look's own token: lighter at the top, darker
+      // at the bottom, in every mode at once.)
+      for (const g of mine) {
+        expect(live(g), on).toBe(true);
+        expect(g.stops[0], on).toMatch(
+          /^color-mix\(in oklab, var\(--[a-z0-9-]+\), white/,
+        );
+        expect(g.stops[2], on).toMatch(
+          /^color-mix\(in oklab, var\(--[a-z0-9-]+\), black/,
+        );
+        expect(g.rest, on).not.toMatch(/--mode/);
       }
     }
+    expect(
+      all.find(g => g.on === 'button' && / --when variant:primary/.test(g.rest))
+        ?.stops[1],
+    ).toBe('var(--color-accent)');
+    // (A button keeps its hover wash, layered over the gloss.)
+    expect(
+      lines.some(l =>
+        /^set q0 background-image 'linear-gradient\(var\(--color-overlay-hover\), var\(--color-overlay-hover\)\), linear-gradient\(.*' --on button --when variant:primary --state hover$/.test(
+          l,
+        ),
+      ),
+    ).toBe(true);
+    // (The header draws no hover wash: it takes none.)
+    expect(lines.some(l => / --on app-shell-header.* --state /.test(l))).toBe(
+      false,
+    );
     // (The top nav draws no fill of its own: the bar's gloss shows.)
     expect(lines.some(l => / --on top-nav\b/.test(l))).toBe(false);
     expect(lines).toContain('set q0 box-shadow none --on card');
@@ -110,10 +132,10 @@ describe("glossy is a gloss of the part's own fill", () => {
     const all = glosses(lines);
     expect(all.length).toBeGreaterThan(0);
     for (const g of all) expect(g.rest).toMatch(/ --mode dark$/);
-    // (The primary button's own dark fill, never the sample's indigo.)
+    // (The primary button's own fill token, never the sample's indigo.)
     expect(
       all.find(g => / --when variant:primary/.test(g.rest))?.stops[1],
-    ).toBe('#f1f1f1');
+    ).toBe('var(--color-accent)');
   }, 240_000);
 
   it('a color or tone said of the text is no fill', async () => {
@@ -122,17 +144,18 @@ describe("glossy is a gloss of the part's own fill", () => {
       'glossy buttons with dark text',
     ]) {
       const primary = glosses(writes(await how('q0', ask))).find(g =>
-        / --when variant:primary --mode light/.test(g.rest),
+        / --when variant:primary/.test(g.rest),
       );
-      // (The primary's own light fill, never the text's color.)
-      expect(primary?.stops[1], ask).toBe('#1b1b1b');
+      // (The primary's own fill, never the text's color.)
+      expect(primary?.stops[1], ask).toBe('var(--color-accent)');
     }
   }, 240_000);
 
   it("a variant named glosses that variant's own fill", async () => {
     const lines = writes(await how('q0', 'glossy destructive buttons'));
-    const light = glosses(lines).find(g => / --mode light/.test(g.rest));
-    expect(light?.stops[1]).toBe('#ffc4be');
+    expect(glosses(lines).map(g => g.stops[1])).toEqual([
+      'var(--color-error-muted)',
+    ]);
   }, 240_000);
 
   it('a color said for a part with no fill of its own is glossed', async () => {
@@ -165,12 +188,12 @@ describe("glossy is a gloss of the part's own fill", () => {
 
   it('a theme word or a gray said is read as its color', async () => {
     for (const [ask, on, light] of [
-      ['glossy accent buttons', 'button', '#1b1b1b'],
+      ['glossy accent buttons', 'button', 'var(--color-accent)'],
       ['glossy grey top bar', 'app-shell-header', '#9e9e9e'],
     ]) {
       const rs = await how('q0', ask);
       const mine = glosses(writes(rs)).filter(
-        g => g.on === on && / --mode light/.test(g.rest),
+        g => g.on === on && !/ --mode dark/.test(g.rest),
       );
       // (The color the word names in light mode, never the sample.)
       expect([...new Set(mine.map(g => g.stops[1]))], ask).toEqual([light]);
@@ -197,12 +220,9 @@ describe("glossy is a gloss of the part's own fill", () => {
     ).toEqual({light: '#ffffff', dark: '#111111'});
   }, 240_000);
 
-  it('a variant with a see-through fill keeps its look, and the answer names it', async () => {
-    const rs = await how('q0', 'glossy secondary buttons');
-    expect(writes(rs)).toEqual([]);
-    expect(rs.map(r => r.text).join('\n')).toMatch(
-      /secondary button has no plain fill of its own here/,
-    );
+  it('a variant with a see-through fill glosses it at its own alpha', async () => {
+    const g = glosses(writes(await how('q0', 'glossy secondary buttons')));
+    expect(g.map(x => x.stops[1])).toEqual(['var(--color-neutral)']);
   }, 240_000);
 
   it('a banner, whose statuses draw colors the editor does not read, writes nothing and says why', async () => {
@@ -249,6 +269,28 @@ describe("glossy is a gloss of the part's own fill", () => {
     expect(rs.map(r => r.text).join('\n')).toMatch(
       /has a gradient fill the theme sets, which stays/,
     );
+  }, 240_000);
+
+  it("a switch's checked track takes a gloss of its own fill too", async () => {
+    const lines = writes(await how('q0', 'glossy toggles'));
+    expect(lines).toContain(
+      "set q0 background-image 'linear-gradient(color-mix(in oklab, var(--color-accent), white 20%) 0%, var(--color-accent) 45%, color-mix(in oklab, var(--color-accent), black 20%) 100%)' --on switch --state checked",
+    );
+  }, 240_000);
+
+  it('a named banner status says its color is not read here', async () => {
+    const rs = await how('q0', 'glossy error banner');
+    expect(writes(rs)).toEqual([]);
+    expect(rs.map(r => r.text).join('\n')).toMatch(
+      /each status of banner draws a color of its own/,
+    );
+  }, 240_000);
+
+  it('a size named glosses each variant at that size', async () => {
+    const g = glosses(writes(await how('q0', 'glossy small buttons')));
+    expect(
+      g.find(x => / --when variant:primary\+size:sm/.test(x.rest))?.stops[1],
+    ).toBe('var(--color-accent)');
   }, 240_000);
 
   it('a fill the theme cleared keeps its look', async () => {
