@@ -214,12 +214,17 @@ export function lowContrastText() {
               r => r === 'repeat' || r === 'round',
             );
     const pos = [nth(cs.backgroundPositionX), nth(cs.backgroundPositionY)];
+    // (Only a plain length or percentage is read: a size or a place the
+    // browser keeps as calc(), or an edge keyword with an offset, is taken
+    // as covering part of the box.)
+    const plain = /^-?[\d.]+(px|%)?$/;
     let part = false;
     for (const [i, whole] of [box.width, box.height].entries()) {
       const s =
         size[0] === 'cover' || size[0] === 'contain'
           ? 'auto'
           : (size[i] ?? 'auto');
+      if (s !== 'auto' && !plain.test(s)) return 'part';
       const len =
         s === 'auto'
           ? whole
@@ -228,18 +233,20 @@ export function lowContrastText() {
             : parseFloat(s);
       if (!(len > 0)) return 'none';
       if (repeats[i]) continue;
-      const at = pos[i] ?? '0%';
+      const at = pos[i] || '0%';
+      if (!plain.test(at)) return 'part';
       const offset = at.endsWith('%')
         ? (parseFloat(at) / 100) * (whole - len)
         : parseFloat(at) || 0;
-      if (len < whole - 0.5 || Math.abs(offset) > 0.5) part = true;
+      // (It covers the box when it holds it whole, wherever it is placed.)
+      if (offset > 0.5 || offset + len < whole - 0.5) part = true;
     }
     return part ? 'part' : 'all';
   };
   /**
-   * The page's images, pictures and gradients between colors with their
-   * boxes, read once when first asked: a page has many texts and few of
-   * them fail.
+   * The page's images, pictures and boxes with a background image (a
+   * gradient or a tint), with their boxes, read once when first asked: a
+   * page has many texts and few of them fail.
    * @type {Array<[Element, DOMRect]> | null}
    */
   let media = null;
