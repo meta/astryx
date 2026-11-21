@@ -14,6 +14,8 @@ import {
   recordGapFindings,
   sharedOwnerFindings,
   sizeAdvice,
+  PROVENANCE_BASELINE_FIX,
+  provenanceBaselineCheck,
 } from './pre-review-findings.mjs';
 import {readDiff} from './review-diff.mjs';
 
@@ -673,5 +675,75 @@ describe('mergeFindings', () => {
       },
     ]);
     expect(mergeFindings([], 'origin/main')).toEqual([]);
+  });
+});
+
+describe('provenanceBaselineCheck (item f)', () => {
+  const baseline = {
+    'packages/core/src/Selector/useSelectorPresentation.ts': ['AST-042'],
+  };
+  const passing = () => ({ok: true, output: ''});
+
+  it('skips the check when the change touches nothing the baseline depends on', () => {
+    let ran = false;
+    const result = provenanceBaselineCheck({
+      changed: ['packages/core/src/Button/Button.tsx'],
+      baseline,
+      runCheck: () => {
+        ran = true;
+        return passing();
+      },
+    });
+    expect(result).toEqual({status: 'skipped', findings: []});
+    expect(ran).toBe(false);
+  });
+
+  it('runs the check for a file the baseline lists, the rule, or an ignore file', () => {
+    for (const changed of [
+      ['packages/core/src/Selector/useSelectorPresentation.ts'],
+      ['internal/eslint-plugin-astryx/no-comment-provenance.js'],
+      ['packages/core/.gitignore'],
+      [],
+    ]) {
+      let ran = false;
+      const result = provenanceBaselineCheck({
+        changed,
+        baseline,
+        runCheck: () => {
+          ran = true;
+          return passing();
+        },
+      });
+      expect(ran, changed.join(',')).toBe(true);
+      expect(result).toEqual({status: 'passed', findings: []});
+    }
+  });
+
+  it('reports a stale baseline as a finding that names the fix command', () => {
+    const result = provenanceBaselineCheck({
+      changed: ['packages/core/src/Selector/useSelectorPresentation.ts'],
+      baseline,
+      runCheck: () => ({
+        ok: false,
+        output: 'comment provenance sites baseline is out of date',
+      }),
+    });
+    expect(result.status).toBe('failed');
+    expect(result.findings).toEqual([
+      expect.objectContaining({
+        item: 'f',
+        file: 'internal/eslint-plugin-astryx/no-comment-provenance.baseline.json',
+      }),
+    ]);
+    expect(result.findings[0].fix).toContain(PROVENANCE_BASELINE_FIX);
+  });
+
+  it('reports a check that cannot run here without a finding', () => {
+    const result = provenanceBaselineCheck({
+      changed: ['packages/core/src/Selector/useSelectorPresentation.ts'],
+      baseline,
+      runCheck: () => null,
+    });
+    expect(result).toEqual({status: 'not-run', findings: []});
   });
 });
