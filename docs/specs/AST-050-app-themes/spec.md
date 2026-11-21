@@ -55,7 +55,8 @@ described.
   a separate component decision.
 - Loading theme stylesheets lazily.
 - Finding themes that are not installed.
-- Changing how a theme is authored, compiled, or applied at runtime.
+- Changing how a theme is authored, compiled, or applied at runtime, except the
+  theme editor's own settings file and results (DEC-11, DEC-18).
 - Merging or renaming the first-party theme packages.
 - Making theme source CLI-owned. The generated module only imports and lists the
   app's themes; every theme's source stays with its author.
@@ -783,6 +784,36 @@ Rejected: applying a saved setting's grown reach and naming it once, which
 changes a theme past what a command names.
 Rejected: dropping `only` from a setting's identity, which makes a theme
 saved with both versions refuse every command.
+
+### DEC-19 — A part setting reaches its family drawn alike
+
+**Reference:** `spec:AST-050/DEC-19`
+**Decider:** maintainers under `josephfarina`'s delegation, `2026-11-18`
+
+A person who styles one part of a family the census reads from Core's
+structure (the button-like parts, the selected items, the overlays) means the
+family. So `set … --on <part>` reaches the members of the part's family that
+draw the property alike: a color reaches only members that draw that same
+color, a shape, an edge or a layered fill reaches every member drawn alike,
+and a look for a moment or a state lands in each member's own state for it.
+The always-alike
+groups (inputs, checks, menus) take every change as one. `--only` keeps a
+setting on its part. A part's own setting wins over its family's, whatever
+their order; a later setting on another member that the family already
+carries is a drill-in, kept to that member. A member the change would make
+unreadable keeps its look (`keep`), and a placement on another ground where
+the color fails (a top nav link in the phone menu) keeps Core's look there
+(`hold`), decided again at each build. A one-line height leaves multi-line
+members their own. Parts drawn as the part inside other components are
+named with the line that keeps each as Core draws it; under a look set for
+a variant they are named with no line, as a rule on them never outranks the
+variant's. Menus' floating boxes are overlays. Each such member and line is
+named in the change's result (`group`, `embedded`, `notes`).
+
+Rejected: reaching only the part named, which makes a person repeat a look
+on every member of a family drawn alike.
+Rejected: reaching every member whatever it draws, which turns a toast's
+fill into a banner's.
 
 ## Open questions
 
