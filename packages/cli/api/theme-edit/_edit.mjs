@@ -8750,7 +8750,10 @@ export async function themeEditShow(theme, options = {}) {
             n === path.basename(f.settingsTs) ||
             (n.startsWith(`${theme}.`) &&
               /\.(css|js|d\.ts|css\.d\.ts|variants\.d\.ts)$/.test(n)) ||
-            /^(sheet-[a-z-]+\.html|(sheet|preview)(-[a-z-]+)?\.png)$/.test(n),
+            // (A picture cut from a tall one, sheet-inputs-2.png, too.)
+            /^(sheet-[a-z-]+\.html|(sheet|preview)(-[a-z-]+)?(-\d+)?\.png)$/.test(
+              n,
+            ),
         )
         .map(n => [path.join(f.dir, n), fs.readFileSync(path.join(f.dir, n))]),
     );
