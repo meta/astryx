@@ -73,33 +73,46 @@ function oddPath(/** @type {string} */ dir, /** @type {boolean} */ broken) {
   return [odd, good].join(path.delimiter);
 }
 
+/**
+ * A Chrome or Chromium installed where the browser search looks before PATH
+ * (the macOS app folders). The search takes it first, so a case about the
+ * order on PATH cannot run on that machine.
+ */
+const installedBrowserBeforePath = [
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/Applications/Chromium.app/Contents/MacOS/Chromium',
+].some(file => fs.existsSync(file));
+
 describe('the browser run', () => {
   const savedPath = process.env.PATH;
   afterAll(() => {
     process.env.PATH = savedPath;
   });
 
-  it('a folder or a file that does not run is passed over for a browser later on PATH', async () => {
-    const {dir, html} = pwProject('');
-    fs.rmSync(path.join(dir, 'node_modules'), {recursive: true, force: true});
-    // The browser later on PATH is the one tried: its own failure is named.
-    process.env.PATH = oddPath(dir, true);
-    try {
-      const r = /** @type {any} */ (
-        await screenshot(
-          {cwd: dir, req: createRequire(path.join(dir, 'package.json'))},
-          html,
-          path.join(dir, 'p.png'),
-          'light',
-        )
-      );
-      expect(r.reason).toContain(path.join(dir, 'good', 'chromium-browser'));
-      expect(r.reason).not.toContain(path.join(dir, 'odd'));
-    } finally {
-      process.env.PATH = savedPath;
-      fs.rmSync(dir, {recursive: true, force: true});
-    }
-  });
+  it.skipIf(installedBrowserBeforePath)(
+    'a folder or a file that does not run is passed over for a browser later on PATH',
+    async () => {
+      const {dir, html} = pwProject('');
+      fs.rmSync(path.join(dir, 'node_modules'), {recursive: true, force: true});
+      // The browser later on PATH is the one tried: its own failure is named.
+      process.env.PATH = oddPath(dir, true);
+      try {
+        const r = /** @type {any} */ (
+          await screenshot(
+            {cwd: dir, req: createRequire(path.join(dir, 'package.json'))},
+            html,
+            path.join(dir, 'p.png'),
+            'light',
+          )
+        );
+        expect(r.reason).toContain(path.join(dir, 'good', 'chromium-browser'));
+        expect(r.reason).not.toContain(path.join(dir, 'odd'));
+      } finally {
+        process.env.PATH = savedPath;
+        fs.rmSync(dir, {recursive: true, force: true});
+      }
+    },
+  );
 
   it("Playwright's own browser is tried before a broken system Chrome", async () => {
     const {dir, html, project} = pwProject(

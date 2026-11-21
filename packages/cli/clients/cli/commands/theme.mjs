@@ -40,6 +40,7 @@ import {spawn} from 'node:child_process';
 import {
   getCliInvocation,
   commandInFolder,
+  formatCliCommand,
   quoteCommandArgument,
 } from '../../../foundation/env/package-manager.mjs';
 import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
@@ -804,6 +805,67 @@ function printThemeList(
 function printThemeApp(result) {
   const {themes, default: defaultSlug, modulePath, change} = result.data;
   if (result.package !== undefined) emit(record({package: result.package}));
+  // A shared theme added from a folder or an archive: where its copy went,
+  // what was installed for it, and that it is now the default.
+  const copy = result.data.copy;
+  if (copy) {
+    emit(
+      text(
+        `[ok] Copied the ${change.slug} theme from ${copy.from}${copy.folder === '.' ? '' : ` (${copy.folder})`} into ${copy.outputDir}: ${copy.files.length} files.`,
+      ),
+    );
+    if (copy.installed.length > 0)
+      emit(
+        text(
+          `[ok] Installed ${copy.installed.join(', ')}, which the theme imports.`,
+        ),
+      );
+    if (copy.installError)
+      emit(
+        text(
+          `[!] Not installed: ${copy.installError}.${copy.installRetryCommand ? ` Install it with: ${copy.installRetryCommand}` : ''}`,
+        ),
+      );
+    if (copy.installGuidance ?? copy.installCommand)
+      emit(
+        text(
+          `The theme also imports packages the app lacks, which theme add does not install for it; check them, then install them: ${copy.installGuidance ?? copy.installCommand}`,
+        ),
+      );
+    emit(
+      text(
+        `[ok] ${change.slug} is the app's default theme: an app wired to the generated module shows it now.`,
+      ),
+      text(`Wrote: ${copy.written.join(', ')}.`),
+      text(
+        `Changed: ${copy.config.module} (default ${copy.config.default})${copy.config.dependencies.length > 0 ? `; package.json dependencies ${copy.config.dependencies.join(', ')}` : ''}. ${copy.previousDefault ? `\`${formatCliCommand(`theme use ${copy.previousDefault}`, process.cwd())}\` then ` : ''}\`${formatCliCommand(`theme remove ${change.slug}`, process.cwd())}\` undoes this add.`,
+      ),
+    );
+  }
+  // A shared theme's add, undone by its remove.
+  const undo = result.data.undo;
+  if (undo) {
+    if (undo.removed.length > 0)
+      emit(
+        text(
+          `[ok] Deleted the files theme add wrote for ${change.slug}: ${undo.removed.join(', ')}.`,
+        ),
+      );
+    if (undo.kept.length > 0)
+      emit(
+        text(
+          `[note] Kept ${undo.kept.join(', ')}: changed since theme add wrote them.`,
+        ),
+      );
+    if (undo.uninstalled.length > 0)
+      emit(
+        text(
+          `[ok] Uninstalled ${undo.uninstalled.join(', ')}, which theme add installed for it.`,
+        ),
+      );
+    if (undo.uninstallError)
+      emit(text(`[!] Not uninstalled: ${undo.uninstallError}.`));
+  }
   // A command that chooses the default says what it did, before the state
   // it shares with every other receipt.
   if (change.action === 'use')
@@ -978,8 +1040,8 @@ function printThemeEject(result, words = THEME_WORDS, like = 'neutral') {
     ...(data.missingPackages.length > 0
       ? [
           text(
-            data.installCommand
-              ? `The fork imports packages this app lacks. Install them first: ${data.installCommand}`
+            (data.installGuidance ?? data.installCommand)
+              ? `The fork imports packages this app lacks. Install them first: ${data.installGuidance ?? data.installCommand}`
               : `The fork imports packages this app lacks: ${data.missingPackages.join(', ')}. Install them first.`,
           ),
         ]
@@ -1089,9 +1151,18 @@ export function registerTheme(program) {
   // Help leaves out a line whose command the run's base does not serve, or
   // whose value names an item only Core has (the theme topic).
   const overrides = [
-    ['theme targets', `  ${getCliInvocation()} theme targets            Every themeable class, with its props and states\n`],
-    ['component <Name>', `  ${getCliInvocation()} component <Name>         One component's theming table\n`],
-    ['docs theme', `  ${getCliInvocation()} docs theme               How component overrides work\n`],
+    [
+      'theme targets',
+      `  ${getCliInvocation()} theme targets            Every themeable class, with its props and states\n`,
+    ],
+    [
+      'component <Name>',
+      `  ${getCliInvocation()} component <Name>         One component's theming table\n`,
+    ],
+    [
+      'docs theme',
+      `  ${getCliInvocation()} docs theme               How component overrides work\n`,
+    ],
   ];
   theme.addHelpText(
     'after',

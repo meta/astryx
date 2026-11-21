@@ -47,6 +47,8 @@ import {
   userCacheDir,
 } from './cache.mjs';
 import {relativeWithin, samePath} from '../fs/path-compare.mjs';
+import {folderScope} from '../agent-docs/folder-scope.mjs';
+import {resolveAgentDocsRoot} from '../agent-docs/agent-docs-target.mjs';
 
 /**
  * The copy that is running.
@@ -621,18 +623,21 @@ const OUTSIDE = Object.freeze({
 });
 
 /** Options that take a value, so their value is not the command or topic. */
-const VALUE_OPTIONS = new Set(['--lang', '--detail', '--depth']);
+const VALUE_OPTIONS = new Set(['--lang', '--detail', '--depth', '--to', '--features']);
 
 /**
  * Is this run a command that acts on the computer rather than the folder it
- * runs in? `astryx init --user`, which writes the computer-level agent text,
+ * runs in? `astryx init --user`, or `init --to` naming only computer places
+ * (`user`, or folders outside the project `cwd` belongs to), which write the
+ * computer-level agent text,
  * and `astryx docs global[/…]`, the docs of global mode itself, which the copy
  * that started the run answers, so they are readable inside a project whose
  * release predates them (spec AST-081 FR8, FR9).
  * @param {string[]} argv arguments after `astryx`
+ * @param {string} [cwd] the folder the run starts in
  * @returns {boolean}
  */
-export function isComputerLevel(argv) {
+export function isComputerLevel(argv, cwd = process.cwd()) {
   const words = [];
   for (let i = 0; i < argv.length && words.length < 2; i++) {
     const arg = argv[i];
@@ -643,11 +648,56 @@ export function isComputerLevel(argv) {
     if (!arg.startsWith('-')) words.push(arg);
   }
   const [command, topic] = words;
-  if (command === 'init') return argv.includes('--user');
+  if (command === 'init') return argv.includes('--user') || onlyComputerPlaces(argv, cwd);
   return (
     command === 'docs' &&
     typeof topic === 'string' &&
     (topic === 'global' || topic.startsWith('global/'))
+  );
+}
+
+/**
+ * Whether `init`'s `--to` names only computer places: `user` (the `--user`
+ * spelling), or folders outside the project `cwd` belongs to, which init
+ * saves for the computer. The copy that started the run answers such a run,
+ * as it answers `--user`; a run naming a project place goes to the project's
+ * CLI, and so does one with a feature beyond the agent docs (`--all`, or
+ * `--features` naming more than `agents`), which writes into the project. A
+ * folder's scope follows init's rule: inside the project root, it is a
+ * project place.
+ * @param {string[]} argv arguments after `astryx`
+ * @param {string} cwd
+ * @returns {boolean}
+ */
+function onlyComputerPlaces(argv, cwd) {
+  /** @type {string[]} */
+  const names = [];
+  for (let i = 0; i < argv.length; i++) {
+    const arg = /** @type {string} */ (argv[i]);
+    const value =
+      arg === '--to' ? argv[++i] : arg.startsWith('--to=') ? arg.slice(5) : null;
+    if (value != null) names.push(...value.split(',').map(each => each.trim()));
+  }
+  const named = names.filter(Boolean);
+  if (named.length === 0) return false;
+  // A feature beyond the agent docs (the theme template, a page) writes into
+  // the project, so the project's release answers it.
+  if (argv.includes('--all')) return false;
+  for (let i = 0; i < argv.length; i++) {
+    const arg = /** @type {string} */ (argv[i]);
+    const value =
+      arg === '--features' ? argv[++i] : arg.startsWith('--features=') ? arg.slice(11) : null;
+    if (value == null) continue;
+    const features = value.split(',').map(each => each.trim()).filter(Boolean);
+    if (features.some(feature => feature !== 'agents')) return false;
+  }
+  // init's own scope rule (folder-scope.mjs, which parsePlaces applies)
+  // decides each folder: hand off unless every place is `user` or a folder
+  // outside the project. A keyword or an unknown name is the project's.
+  const projectRoot = resolveAgentDocsRoot(cwd);
+  const home = os.homedir();
+  return named.every(
+    name => name === 'user' || folderScope(name, {cwd, projectRoot, home})?.scope === 'computer',
   );
 }
 

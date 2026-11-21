@@ -87,12 +87,18 @@ describe('the shared text-input pattern, jsdom lane', () => {
     }
     const report = summarize(TEXT_INPUT_PATTERN, results);
     expect(report.counts.pass).toBeGreaterThan(0);
-    expect(report.counts.knownFailure).toBe(2);
+    // The recorded known failures are real-browser ones, unrun here.
+    expect(report.counts.knownFailure).toBe(0);
     expect(report.unrunLayers).toEqual(['accessibility-tree', 'real-browser']);
     expect(report.counts.unexpectedPass).toBe(0);
-    expect(unmatchedKnownFailures(TEXT_INPUT_KNOWN_FAILURES, results)).toEqual(
-      [],
-    );
+    expect(
+      unmatchedKnownFailures(
+        TEXT_INPUT_KNOWN_FAILURES.filter(
+          failure => failure.evidenceLayer === 'dom',
+        ),
+        results,
+      ),
+    ).toEqual([]);
   });
 });
 

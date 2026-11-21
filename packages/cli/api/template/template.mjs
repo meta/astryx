@@ -35,7 +35,12 @@ import {templateShow} from './show/show.mjs';
 import {templateSkeleton} from './skeleton/skeleton.mjs';
 import {templateCopy} from './copy/copy.mjs';
 import {templateCdn} from './cdn/cdn.mjs';
-import {loadTemplateIconSets, withOtherCommandHint} from './_adapter.mjs';
+import {
+  linkTemplateDescriptions,
+  loadComponentLookup,
+  loadTemplateIconSets,
+  withOtherCommandHint,
+} from './_adapter.mjs';
 
 // Re-export the shared discovery/IO + cross-command helpers so this module
 // stays the single import surface for the template family (same exports as
@@ -119,9 +124,11 @@ function eachAlone(mode, name, targetPath, packageFilter) {
 export async function template(name, options = {}) {
   // Doc `{@pm}` steps in a description render for the project the call
   // names, as search's do.
+  const dir = options.cwd ?? process.cwd();
   return runWithDocPackageManager(
-    docPackageManager(options.cwd ?? process.cwd()),
+    docPackageManager(dir),
     () => templateRead(name, options),
+    dir,
   );
 }
 
@@ -206,7 +213,10 @@ async function templateRead(name, options = {}) {
         : await discoverAll(cwd);
 
   if (list || (!name && !skeleton)) {
-    return templateList(templates, {type, package: packageFilter});
+    return linkTemplateDescriptions(
+      templateList(templates, {type, package: packageFilter}),
+      cwd,
+    );
   }
 
   // Resolve `name` to a single template. Without an explicit package, an active
@@ -277,14 +287,22 @@ async function templateRead(name, options = {}) {
   const match = candidates[0];
 
   if (skeleton) {
-    return templateSkeleton(match, templates);
+    return linkTemplateDescriptions(templateSkeleton(match, templates), cwd);
   }
 
   // The project's icon set decides how the template's icons are written
   // (AST-084 FR9): both the printed source and the copied file follow it.
-  const iconSets = await loadTemplateIconSets(cwd);
+  // The components it names for one `astryx component` read are the ones
+  // that command answers in this project.
+  const [iconSets, components] = await Promise.all([
+    loadTemplateIconSets(cwd),
+    loadComponentLookup(cwd),
+  ]);
   if (show || !targetPath) {
-    return templateShow(match, {iconSets});
+    return linkTemplateDescriptions(
+      templateShow(match, {iconSets, components}),
+      cwd,
+    );
   }
 
   // The command as typed selects the same template again, an integration
@@ -294,5 +312,17 @@ async function templateRead(name, options = {}) {
     type ? ` --type ${type}` : '',
     packageFilter ? ` --package ${packageFilter}` : '',
   ].join('');
-  return templateCopy(match, {targetPath, cwd, overwrite, iconSets, command});
+  return templateCopy(match, {
+    targetPath,
+    cwd,
+    overwrite,
+    iconSets,
+    components,
+    command,
+    // An integration that replaces this id, even when the Core original is
+    // asked for by package.
+    replaced: templates.some(
+      t => t.replaces === match.dirName && !t.replacementRejected,
+    ),
+  });
 }

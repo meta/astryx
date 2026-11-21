@@ -16,6 +16,13 @@
         "message": "<text>"
       },
       {
+        "id": "core-stylesheets",
+        "label": "<text>",
+        "status": "warn",
+        "message": "<text>",
+        "fix": "<text>"
+      },
+      {
         "id": "version-alignment",
         "label": "<text>",
         "status": "pass",
@@ -74,6 +81,18 @@
         "fix": "<text>"
       },
       {
+        "id": "button-actions",
+        "label": "<text>",
+        "status": "pass",
+        "message": "<text> 1"
+      },
+      {
+        "id": "core-props",
+        "label": "<text>",
+        "status": "pass",
+        "message": "<text> 0"
+      },
+      {
         "id": "agent-docs",
         "label": "<text>",
         "status": "info",
@@ -123,18 +142,18 @@
         "id": "docs-tree",
         "label": "<text>",
         "status": "pass",
-        "message": "<text> 203 32 13"
+        "message": "<text> 204 32 13"
       },
       {
         "id": "docs-progressive-disclosure",
         "label": "<text>",
         "status": "pass",
-        "message": "<text> 119 32"
+        "message": "<text> 120 32"
       }
     ],
     "summary": {
-      "pass": 11,
-      "warn": 3,
+      "pass": 13,
+      "warn": 4,
       "fail": 0,
       "info": 5
     }

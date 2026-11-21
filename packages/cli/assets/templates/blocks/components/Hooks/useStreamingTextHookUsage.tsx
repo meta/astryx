@@ -69,7 +69,7 @@ export default function UseStreamingTextHookUsage() {
   const displayedText = useStreamingText(target, isStreaming, {speed: 'fast'});
 
   return (
-    <Card width={420} padding={4}>
+    <Card width={420} maxWidth="100%" padding={4}>
       <VStack gap={3}>
         <Text type="body" weight="bold">
           Assistant response

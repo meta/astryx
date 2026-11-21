@@ -42,7 +42,7 @@ export const doc = {
       type: 'boolean',
       default: 'false',
       description:
-        'Also fail on any warning and on any check that did not run, not only on errors. A malformed `cliCommand` is reported as a note (`invalid_cli_command`) in `data.notes` of the validate check, which fails nothing until a minor release names it.',
+        'Also fail on any warning and on any check that did not run, not only on errors. A malformed `cliCommand` or `installGuidance` is reported as a note (`invalid_cli_command`, `invalid_install_guidance`) in `data.notes` of the validate check, which fails nothing until a minor release names it.',
     },
     {
       name: 'options.next',

@@ -145,20 +145,20 @@ import * as stylex from '@stylexjs/stylex';
  * stroke weights, sitting side by side in the same toolbar.
  */
 import {
-  BookOpen,
-  ChartColumn,
-  Code,
-  Eye,
-  File,
-  Folder,
-  GitBranch,
-  GitFork,
-  Scale,
-  Search,
-  ShieldCheck,
-  Star,
-  Tag,
-} from 'lucide-react';
+  BookIcon,
+  ChartIcon,
+  CodeIcon,
+  EyeIcon,
+  FileIcon,
+  FolderIcon,
+  GitBranchIcon,
+  GitForkIcon,
+  ScaleIcon,
+  SearchIcon,
+  ShieldIcon,
+  StarIcon,
+  TagIcon,
+} from '@astryxdesign/template-icons/lucide';
 
 // ============= DATA =============
 
@@ -190,12 +190,12 @@ const KIND_ICON: Record<
   EntryKind,
   React.ComponentType<React.SVGProps<SVGSVGElement>>
 > = {
-  folder: Folder,
-  typescript: File,
-  json: File,
-  yaml: File,
-  markdown: File,
-  text: File,
+  folder: FolderIcon,
+  typescript: FileIcon,
+  json: FileIcon,
+  yaml: FileIcon,
+  markdown: FileIcon,
+  text: FileIcon,
 };
 
 /**
@@ -925,11 +925,11 @@ const TOPICS = [
 ];
 
 const ABOUT_LINKS = [
-  {label: 'Readme', icon: BookOpen},
-  {label: 'MIT license', icon: Scale},
-  {label: 'Code of conduct', icon: ShieldCheck},
-  {label: 'Security policy', icon: ShieldCheck},
-  {label: 'Activity', icon: ChartColumn},
+  {label: 'Readme', icon: BookIcon},
+  {label: 'MIT license', icon: ScaleIcon},
+  {label: 'Code of conduct', icon: ShieldIcon},
+  {label: 'Security policy', icon: ShieldIcon},
+  {label: 'Activity', icon: ChartIcon},
 ];
 
 // Demo only: what each social count's button would do in a real app.
@@ -952,14 +952,14 @@ const STAT_ACTION: Record<string, string> = {
  * that is already busy.
  */
 const REF_COUNTS = [
-  {label: '171 Branches', icon: GitBranch},
-  {label: '56 Tags', icon: Tag},
+  {label: '171 Branches', icon: GitBranchIcon},
+  {label: '56 Tags', icon: TagIcon},
 ];
 
 const REPO_STATS = [
-  {label: 'stars', value: '12.6k', icon: Star},
-  {label: 'watching', value: '97', icon: Eye},
-  {label: 'forks', value: '1.3k', icon: GitFork},
+  {label: 'stars', value: '12.6k', icon: StarIcon},
+  {label: 'watching', value: '97', icon: EyeIcon},
+  {label: 'forks', value: '1.3k', icon: GitForkIcon},
 ];
 
 const CONTRIBUTORS = [
@@ -1050,7 +1050,7 @@ function AboutPanel() {
           Releases
         </Heading>
         <HStack gap={2} vAlign="center">
-          <Icon icon={Tag} size="sm" color="success" />
+          <Icon icon={TagIcon} size="sm" color="success" />
           <Text weight="bold">v2.4.0</Text>
           <Badge label="Latest" variant="success" />
         </HStack>
@@ -1121,7 +1121,7 @@ function BranchBar({
           button={{
             label: 'main',
             size: 'sm',
-            icon: <Icon icon={GitBranch} size="sm" />,
+            icon: <Icon icon={GitBranchIcon} size="sm" />,
           }}
           hasChevron
           items={[
@@ -1199,7 +1199,7 @@ function BranchBar({
               <IconButton
                 variant="ghost"
                 size="sm"
-                icon={<Icon icon={Search} size="sm" />}
+                icon={<Icon icon={SearchIcon} size="sm" />}
                 label="Go to file"
                 onClick={onSearchOpen}
               />
@@ -1208,7 +1208,7 @@ function BranchBar({
                 label="Go to file"
                 isLabelHidden
                 placeholder="Go to file"
-                startIcon={Search}
+                startIcon={SearchIcon}
                 value={query}
                 onChange={onQueryChange}
                 hasClear
@@ -1237,7 +1237,7 @@ function BranchBar({
             <Button
               label="Code"
               variant="primary"
-              icon={<Icon icon={Code} size="sm" />}
+              icon={<Icon icon={CodeIcon} size="sm" />}
               onClick={() =>
                 demo('Demo: clone and download options would open here', 'code')
               }

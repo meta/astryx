@@ -394,10 +394,36 @@ jobs:
             }
 
 
-            // --- Changed files. ---
-            const allFiles = await github.paginate(github.rest.pulls.listFiles, {
-              owner, repo, pull_number: pr.number, per_page: 100,
-            });
+            // --- Changed files, at the event's head. ---
+            // The status and its diff always describe the event's head: the
+            // compare of the event's base and head SHAs names that head's
+            // files, while the pull request's own lists can already show a
+            // newer push. A compare names at most COMPARE_FILES files, so a
+            // larger pull request reads its file list and then confirms that
+            // the pull request still points at the event's head.
+            const COMPARE_FILES = 300;
+            const basehead = `${pr.base.sha}...${pr.head.sha}`;
+            let allFiles;
+            if (pr.changed_files <= COMPARE_FILES) {
+              const { data: compared } =
+                await github.rest.repos.compareCommitsWithBasehead({
+                  owner, repo, basehead,
+                });
+              allFiles = compared.files ?? [];
+            } else {
+              allFiles = await github.paginate(github.rest.pulls.listFiles, {
+                owner, repo, pull_number: pr.number, per_page: 100,
+              });
+              const { data: current } = await github.rest.pulls.get({
+                owner, repo, pull_number: pr.number,
+              });
+              if (current.head.sha !== pr.head.sha) {
+                core.info(
+                  `PR #${pr.number} moved from ${pr.head.sha} to ${current.head.sha} while its files were read; the run for the newer head decides.`,
+                );
+                return;
+              }
+            }
             if (allFiles.length !== pr.changed_files) {
               throw new Error(
                 `GitHub returned ${allFiles.length} of ${pr.changed_files} changed files; refusing to classify an incomplete PR.`,
@@ -498,8 +524,13 @@ jobs:
             // It and the diff both come from the API: trusted BASE-ref source,
             // inert PR diff text. Any fetch or parse failure keeps the exception
             // false, so Core runtime changes continue to require engineering.
+            // A diff of more files than a compare names is never classified,
+            // so the exception stays false.
             let visualClassification = null;
-            if (coreChange || designReasons.length === 0) {
+            if (
+              (coreChange || designReasons.length === 0) &&
+              pr.changed_files <= COMPARE_FILES
+            ) {
               try {
                 const { data: libFile } = await github.rest.repos.getContent({
                   owner, repo, ref: pr.base.sha,
@@ -512,8 +543,8 @@ jobs:
                   () => { throw new Error('classify-visual.js must stay dependency-free'); },
                 );
                 const { data: diff } = await github.request(
-                  'GET /repos/{owner}/{repo}/pulls/{pull_number}',
-                  { owner, repo, pull_number: pr.number,
+                  'GET /repos/{owner}/{repo}/compare/{basehead}',
+                  { owner, repo, basehead,
                     headers: { accept: 'application/vnd.github.diff' } },
                 );
                 const sources = {};

@@ -29,6 +29,18 @@ describe('parseIconDefinition', () => {
     expect(() => parseIconDefinition({...DOC, stability: 'stable'})).toThrow();
   });
 
+  it('accepts an optional camelCase group, and refuses a blank or other group', () => {
+    expect(parseIconDefinition({...DOC, group: 'files'}).group).toBe('files');
+    expect(parseIconDefinition({...DOC, group: 'textFormat'}).group).toBe(
+      'textFormat',
+    );
+    expect(() => parseIconDefinition({...DOC, group: ' '})).toThrow(/blank/);
+    expect(() => parseIconDefinition({...DOC, group: 'Text-Format'})).toThrow(
+      /group must be camelCase/,
+    );
+    expect(() => parseIconDefinition({...DOC, group: ['files']})).toThrow();
+  });
+
   it('rejects a name that is not camelCase, a blank description, no words, and an unknown field', () => {
     expect(() => parseIconDefinition({...DOC, name: 'Delete'})).toThrow(
       /camelCase/,
@@ -74,5 +86,21 @@ describe("Astryx's definitions", () => {
         .map(d => d.name)
         .sort(),
     ).toEqual([...ICON_NAMES].sort());
+  });
+
+  it('every group has two or more members, and no group shares a name with a definition outside it', () => {
+    /** @type {Map<string, string[]>} */
+    const groups = new Map();
+    for (const doc of docs) {
+      if (doc.group == null) continue;
+      groups.set(doc.group, [...(groups.get(doc.group) ?? []), doc.name]);
+    }
+    expect(groups.size).toBeGreaterThan(0);
+    const byName = new Map(docs.map(d => [d.name, d]));
+    for (const [group, members] of groups) {
+      expect(members.length, group).toBeGreaterThanOrEqual(2);
+      const named = byName.get(group);
+      if (named) expect(named.group, group).toBe(group);
+    }
   });
 });

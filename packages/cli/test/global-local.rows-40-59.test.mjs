@@ -15,7 +15,7 @@ import {describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {spawn} from 'node:child_process';
+import {spawn, spawnSync} from 'node:child_process';
 import {
   globalCli,
   placeCli,
@@ -207,6 +207,94 @@ describe.skipIf(!POSIX)(
         message:
           '@acme/widgets@1.0.0 is not used here: this folder loads its own copy of @acme/widgets.',
       });
+      // An issue in that source: the everyday commands name the check of the
+      // package, since doctor checks the computer here and names nothing for
+      // it; a template replacement, which that check does not resolve, is
+      // printed in full.
+      fs.writeFileSync(
+        path.join(source, 'astryx.integration.mjs'),
+        "export default {components: './components', templates: './templates'};\n",
+      );
+      fs.mkdirSync(path.join(source, 'components'), {recursive: true});
+      fs.writeFileSync(
+        path.join(source, 'components', 'Odd.tsx'),
+        'export function Odd() {\n  return null;\n}\n',
+      );
+      fs.mkdirSync(path.join(source, 'templates'), {recursive: true});
+      fs.writeFileSync(
+        path.join(source, 'templates', 'acme-shell.doc.mjs'),
+        "export default {type: 'page', name: 'Acme shell', description: 'Acme app shell.', replaces: 'no-such-template'};\n",
+      );
+      fs.writeFileSync(
+        path.join(source, 'templates', 'acme-shell.tsx'),
+        'export default function AcmeShell() {\n  return null;\n}\n',
+      );
+      const nudged = run(g.bin, ['discover'], {cwd: source, pc}).stderr;
+      expect(nudged).toMatch(
+        /Warning: @acme\/widgets has 1 integration issue\(s\)\. Run: \S*astryx\S* doctor integration validate @acme\/widgets/,
+      );
+      expect(nudged).toMatch(
+        /Warning: @acme\/widgets: .*which is not a Core template id\./,
+      );
+      expect(nudged).not.toMatch(/Run: \S*astryx\S* doctor\n/);
+      // The command runs as printed, from the folder, with the global copy
+      // on the search path, and names the issue.
+      const printed =
+        /Run: (.+ doctor integration validate @acme\/widgets)$/m.exec(
+          nudged,
+        )?.[1];
+      expect(printed).toBeDefined();
+      const named = spawnSync(String(printed), {
+        cwd: source,
+        shell: true,
+        encoding: 'utf8',
+        timeout: 60_000,
+        env: envOf({...pc, path: [g.binDir, ...pc.path]}),
+      });
+      expect(named.status).toBe(0);
+      expect(named.stdout + named.stderr).toContain('Odd.tsx');
+      // A local integration whose package.json has no name: the line names
+      // the check without a package, and that command runs as printed.
+      const nameless = tempDir('nameless');
+      writeJson(path.join(nameless, 'package.json'), {version: '1.0.0'});
+      fs.writeFileSync(
+        path.join(nameless, 'astryx.integration.mjs'),
+        "export default {components: './components'};\n",
+      );
+      fs.mkdirSync(path.join(nameless, 'components'), {recursive: true});
+      fs.writeFileSync(
+        path.join(nameless, 'components', 'Odd.tsx'),
+        'export function Odd() {\n  return null;\n}\n',
+      );
+      const namelessLine = run(g.bin, ['discover'], {
+        cwd: nameless,
+        pc,
+      }).stderr;
+      const bare = /Run: (.+ doctor integration validate)$/m.exec(
+        namelessLine,
+      )?.[1];
+      expect(bare).toBeDefined();
+      const checked = spawnSync(String(bare), {
+        cwd: nameless,
+        shell: true,
+        encoding: 'utf8',
+        timeout: 60_000,
+        env: envOf({...pc, path: [g.binDir, ...pc.path]}),
+      });
+      expect(checked.stdout + checked.stderr).toContain('Odd.tsx');
+      // validate checks the copy the folder uses, its own, not the one
+      // installed for the computer; so does a folder inside that source.
+      fs.mkdirSync(path.join(source, 'docs'), {recursive: true});
+      for (const cwd of [source, path.join(source, 'docs')]) {
+        const validated = run(
+          g.bin,
+          ['doctor', 'integration', 'validate', '@acme/widgets'],
+          {cwd, pc},
+        );
+        expect(validated.stdout + validated.stderr).toContain(
+          'Validating integration: @acme/widgets@2.0.0',
+        );
+      }
     });
 
     it('G42 inside a project, an integration installed for the computer is offered only when its peer range admits the project release and it loads', () => {
@@ -494,7 +582,7 @@ describe.skipIf(!POSIX)(
               expect(installs(again)).toBe(0);
               expect(again.lines).toEqual([
                 expect.stringMatching(
-                  /^astryx: could not get Astryx 9\.0\.3 to match this project's Core \(.+; last tried 1 minute ago, tried again after 2 minutes\); answering with CLI 9\.0\.[01] instead$/u,
+                  /^astryx: could not get Astryx 9\.0\.3 to match this project's Core \(.+; last tried 1 minute ago, tried again after 2 minutes or at once when npm's registry changes\); answering with CLI 9\.0\.[01] instead$/u,
                 ),
               ]);
             }
@@ -512,7 +600,7 @@ describe.skipIf(!POSIX)(
             age(3);
             const waiting = await version();
             expect(installs(waiting)).toBe(0);
-            expect(waiting.lines[0]).toMatch(/tried again after 10 minutes\)/u);
+            expect(waiting.lines[0]).toMatch(/tried again after 10 minutes or at once when npm's registry changes\)/u);
           }),
         );
 
