@@ -124,10 +124,14 @@ describe('a rendered file describes itself', () => {
     expect(note.slice(4, -3)).not.toMatch(/-->|<!--/);
   });
 
-  it('tells an offline reader to install the CLI first, since npx cannot fetch it without a network', () => {
+  it('tells a reader to install the CLI globally while online, since npx cannot fetch it offline', () => {
     const note = html.slice(html.indexOf('<!--'), html.indexOf('-->') + 3);
     expect(note).toContain(
-      `Offline, npx cannot fetch the CLI: install it first with npm install --save-dev @astryxdesign/cli@${cliVersion()}, then run the same commands with npx astryx.`,
+      'To work offline later, install the CLI for your computer while online (astryx docs global/install-once):',
+    );
+    expect(note).toContain(`npm install --global @astryxdesign/cli@${cliVersion()}`);
+    expect(note).toContain(
+      'Offline, run the same commands as astryx: npx cannot fetch the CLI without a network.',
     );
   });
 
