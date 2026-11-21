@@ -112,6 +112,7 @@ import {
   inheritedReach,
   settableStates,
   stateSynonym,
+  pillDrawnRadios,
 } from './_check.mjs';
 import {coreKeyframes} from './_parts.mjs';
 import {FONTSOURCE_FAMILIES} from '../../foundation/fonts/fontsource-families.generated.mjs';
@@ -19639,22 +19640,32 @@ export function draftAnswer(ctx, env, question) {
           .filter(p => circles.includes(p)),
       ),
     ];
-    if (!(
-      named.length ||
+    // ("no rounding anywhere", "… badges and switches too": the corners dial
+    // leaves the parts drawn with --radius-full round, so that token goes
+    // square too, as before; a radio's mark keeps its circle.)
+    const everywhere =
       /\b(?:anywhere|everywhere|everything|at all|pills?|too|as well)\b/.test(
         question.toLowerCase(),
       ) ||
       clauses.some(
         o => !o.except && o.parts.some(p => pills.includes(one(p.on))),
-      )
-    ))
-      return null;
-    const kept = circles.filter(p => !named.includes(p));
+      );
+    if (!named.length && !everywhere) return null;
+    const radios = everywhere ? pillDrawnRadios(C) : [];
+    const round = String(TOKENS['--radius-full'] ?? '9999px');
     return {
-      steps: named.map(m => set('corners', 'square', {on: m})),
-      said: `which squares the pills too (${pills.slice(0, 6).join(', ')}${pills.length > 6 ? ` and ${pills.length - 6} more` : ''})${named.length ? `, and ${named.join(', ')} square on ${named.length > 1 ? 'their' : 'its'} own` : ''}${kept.length ? `; the parts drawn as circles keep their shape (${kept.slice(0, 6).join(', ')}${kept.length > 6 ? ` and ${kept.length - 6} more` : ''})` : ''}`,
+      steps: everywhere
+        ? [
+            set('--radius-full', '0px'),
+            ...radios.map(m => set('--radius-full', round, {on: m})),
+          ]
+        : named.map(m => set('corners', 'square', {on: m})),
+      said: everywhere
+        ? `and --radius-full 0px for the parts drawn as pills and circles (${[...pills, ...circles].slice(0, 6).join(', ')}${pills.length + circles.length > 6 ? ` and ${pills.length + circles.length - 6} more` : ''})${radios.length ? `; the radio marks keep their circle (${radios.join(', ')})` : ''}`
+        : `and ${named.join(', ')} square on ${named.length > 1 ? 'their' : 'its'} own`,
     };
   }
+
   /**
    * Whether a part reads a token in any of its rules.
    * @param {string} part
