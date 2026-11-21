@@ -7,8 +7,8 @@
  * @output Proof that a layout glide from rest starts at its old place, with
  *   the first frame drawn after its task. A later click listener holds that
  *   task. A glide retargeted mid-motion keeps the motion it carries through
- *   the same block. Chromium only: Linux WebKit hands the glide to its
- *   compositor late
+ *   the same block. Chromium only: on CI's WebKit, a cold shader cache can
+ *   delay the first draw past the 3-frame check
  * @position Browser proof for animatedLayout.ts, run by `pnpm test:interaction`;
  *   the compositor proof is animatedLayoutBusy.interaction.browser.spec.ts
  */
@@ -27,7 +27,7 @@ import {
 
 test.skip(
   ({browserName}) => browserName === 'webkit',
-  'Linux WebKit starts the glide on its compositor 30\u2013100 ms late; Apple\u2019s WebKit does not',
+  'A cold shader cache in CI\u2019s WebKit container can delay the first draw past the 3-frame check. Until a warm-up frame or a relaxed check lands, animatedLayout.firstFrame.test.ts guards WebKit\u2019s start path.',
 );
 
 let storybook: StaticServer | undefined;
