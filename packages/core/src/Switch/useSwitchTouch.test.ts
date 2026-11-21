@@ -89,6 +89,9 @@ const {SwitchTouchController} = await import('./useSwitchTouch');
 const {switchTouchGeometry} = await import('./switchTouch');
 const {trackStateOf} = await import('./switchFill');
 
+/** Every controller a test attaches. The top-level afterEach detaches them. */
+const controllers: InstanceType<typeof SwitchTouchController>[] = [];
+
 function mount() {
   // The theme's two fills, as the track's classes paint them.
   const style = document.createElement('style');
@@ -108,6 +111,7 @@ function mount() {
     false,
     switchTouchGeometry(40, 24),
   );
+  controllers.push(controller);
   controller.setOtherTrack(trackStateOf({className: 'on'}));
   controller.attach({surface, input, thumb, track}, 'touch');
   const fade = animators.find(
@@ -146,6 +150,12 @@ const flush = async () => {
 };
 
 afterEach(() => {
+  // A lift starts a 300 ms wait for the browser's click. Detach ends the
+  // wait, so its timer cannot fire after the test environment removes the
+  // window.
+  for (const controller of controllers.splice(0)) {
+    controller.detach();
+  }
   animators.length = 0;
   document.body.innerHTML = '';
   document.head.innerHTML = '';
@@ -430,6 +440,93 @@ describe('the first value change before any measurement', () => {
     );
   });
 
+  /** The thumb animator, after a theme sizes the thumb it attached with. */
+  function themedMount(attached: string | null) {
+    const {controller, track} = mountWith(attached);
+    const thumbElement = track.firstElementChild as HTMLElement;
+    const thumb = animators.find(
+      animator =>
+        animator.element === thumbElement && animator.pseudoElement == null,
+    );
+    if (thumb == null) {
+      throw new Error('no thumb animator');
+    }
+    thumb.values.scaleX = 1;
+    thumb.values.scaleY = 1;
+    return {controller, track, thumb};
+  }
+
+  function mountWith(attached: string | null) {
+    // The theme's size for the state the switch attaches in, as its
+    // compiled CSS sets it on the thumb.
+    const style = document.createElement('style');
+    if (attached != null) {
+      style.textContent = `div div { --_switch-thumb-width: ${attached}; }`;
+    }
+    document.head.append(style);
+    return mount();
+  }
+
+  const scaleFrom = (thumb: (typeof animators)[number]) =>
+    thumb.calls.filter(
+      call =>
+        call.name === 'play' &&
+        (call.args[0] as Record<string, unknown>).scaleX != null,
+    );
+
+  function boxes(track: HTMLElement, width: number, height: number) {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+      function (this: HTMLElement) {
+        return this === track
+          ? DOMRect.fromRect({x: 0, y: 0, width, height})
+          : DOMRect.fromRect();
+      },
+    );
+  }
+
+  it('keeps a theme-sized circle on the first change: no shrink to the default and back', () => {
+    const {controller, track, thumb} = themedMount('27px');
+    boxes(track, 51, 31);
+    controller.setDefaultThumb({off: 16, on: 20});
+    layOut(track, 27);
+    render(controller, track, true);
+    // The circle was 27px before the change and is after: nothing to scale.
+    expect(
+      scaleFrom(thumb).filter(
+        call => (call.args[0] as {scaleX: number}).scaleX !== 1,
+      ),
+    ).toEqual([]);
+    const rebase = thumb.calls.find(call => call.name === 'rebase');
+    expect((rebase?.args[0] as {x: number}).x).toBeCloseTo(
+      -switchTouchGeometry(51, 31, {width: 27, height: 27}).travel,
+      6,
+    );
+  });
+
+  it('keeps a theme circle the size of a shipped one: a uniform 20px thumb does not shrink first', () => {
+    const {controller, track, thumb} = themedMount('20px');
+    boxes(track, 40, 24);
+    controller.setDefaultThumb({off: 16, on: 20});
+    layOut(track, 20);
+    render(controller, track, true);
+    expect(
+      scaleFrom(thumb).filter(
+        call => (call.args[0] as {scaleX: number}).scaleX !== 1,
+      ),
+    ).toEqual([]);
+  });
+
+  it('grows a thumb a theme sizes only when on from the default off circle', () => {
+    // No theme size for the off state it attached in.
+    const {controller, track, thumb} = themedMount(null);
+    boxes(track, 51, 31);
+    controller.setDefaultThumb({off: 16, on: 20});
+    layOut(track, 27);
+    render(controller, track, true);
+    // The 16px default grows into the 27px circle the theme draws on.
+    expect(scaleFrom(thumb)).toHaveLength(1);
+  });
+
   it('flips a mouse drag after a toggle at the current circle, not the mounted one', () => {
     const surface = document.createElement('div');
     const input = document.createElement('input');
@@ -445,6 +542,7 @@ describe('the first value change before any measurement', () => {
       false,
       switchTouchGeometry(40, 24),
     );
+    controllers.push(controller);
     controller.attach({surface, input, thumb: thumbElement, track}, 'pointer');
 
     layOut(track, 20);

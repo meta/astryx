@@ -25,7 +25,15 @@ const restoreHere = d =>
     ? ` --out ${shellArg(`${path.relative(process.cwd(), freeRestoreFolder(process.cwd(), path.basename(d.output)))}/${d.files[0]}`)}`
     : '';
 
-/** The text answer names this many files at most. The JSON answer keeps every file. */
+/**
+ * A written file's path and size, and where it is when that path is relative.
+ * @param {string} output
+ * @param {number} bytes
+ */
+const shownAt = (output, bytes) =>
+  path.isAbsolute(output) ? `${output} (${kb(bytes)})` : `${output} (${kb(bytes)}), at ${path.resolve(output)}`;
+
+/** The text answer names this many files, or remote images, at most. The JSON answer keeps every one. */
 const LISTED_FILES = 10;
 
 /**
@@ -38,6 +46,15 @@ function fileList(files) {
   const rest = files.slice(LISTED_FILES);
   const folder = sharedFolder(rest);
   return `${files.slice(0, LISTED_FILES).join(', ')}, ... and ${rest.length} more${folder ? ` in ${folder}/` : ''}`;
+}
+
+/**
+ * Names the first addresses, then counts the rest.
+ * @param {string[]} urls
+ */
+function addressList(urls) {
+  if (urls.length <= LISTED_FILES) return urls.join(', ');
+  return `${urls.slice(0, LISTED_FILES).join(', ')}, ... and ${urls.length - LISTED_FILES} more`;
 }
 
 /**
@@ -71,19 +88,48 @@ export function printRendered(d, run) {
     record({
       input: d.input,
       output: d.output,
-      bytes: kb(d.bytes),
+      bytes: `${kb(d.bytes)}${d.scriptBytes > d.bytes / 2 ? ' (most is the script: the page as a live app, with React and the packages it imports)' : ''}`,
+      scriptBytes: kb(d.scriptBytes),
       cssBytes: kb(d.cssBytes),
+      markupBytes: kb(d.markupBytes),
+      sourceBytes: kb(d.sourceBytes),
       classes: d.classes,
       images: d.images,
       files: fileList(d.files),
       ...(d.notCarried?.length ? {notCarried: fileList(d.notCarried)} : {}),
       stylesheets: d.stylesheets.join(', ') || 'none',
-      scriptBytes: kb(d.scriptBytes),
       scriptModules: d.scriptModules,
     }),
+    // Each image not fetched prints its own `url` and `reason`, as the
+    // JSON's `remoteImages.failed` lists them, for the first ten; the JSON
+    // lists every one.
+    ...(d.remoteImages
+      ? [
+          section('Remote images'),
+          ...(d.remoteImages.fetched.length > 0 ? [record({fetched: addressList(d.remoteImages.fetched)})] : []),
+          ...d.remoteImages.failed.slice(0, LISTED_FILES).map(f => record({url: f.url, reason: f.reason})),
+          ...(d.remoteImages.failed.length > LISTED_FILES
+            ? [record({failed: `... and ${d.remoteImages.failed.length - LISTED_FILES} more`})]
+            : []),
+        ]
+      : []),
     ...(d.warnings.length > 0
       ? [section('Warnings'), list(d.warnings.map(w => w.message))]
       : []),
+    section('Checks'),
+    ...(d.checks.outside.length === 0
+      ? [text("The file's markup and stylesheets load nothing from outside the file.")]
+      : [record({outside: fileList(d.checks.outside)})]),
+    record({
+      exact: d.checks.roundTrip.exact
+        ? `yes: experimental import gives back ${d.checks.roundTrip.files === 1 ? 'its 1 carried file' : `all ${d.checks.roundTrip.files} carried files`} byte for byte`
+        : `no: ${d.checks.roundTrip.differs.join(', ')} differ${d.checks.roundTrip.differs.length === 1 ? 's' : ''} from the files on disk`,
+    }),
+    text(
+      d.checks.outside.length === 0
+        ? `Share this one file: ${shownAt(d.output, d.bytes)}. Nothing else needs to go with it.`
+        : `${shownAt(d.output, d.bytes)} loads ${d.checks.outside.length} reference${d.checks.outside.length === 1 ? '' : 's'} from outside the file when it opens (outside, above), so it does not stand alone.`,
+    ),
     text(
       `Give it back: ${run} experimental import ${shellArg(d.output)}${restoreHere(d)}`,
     ),

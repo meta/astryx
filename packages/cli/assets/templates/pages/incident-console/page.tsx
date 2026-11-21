@@ -54,7 +54,7 @@ import {Token} from '@astryxdesign/core/Token';
 import {useMediaQuery} from '@astryxdesign/core/hooks';
 import {BottomSheet} from '@astryxdesign/core/BottomSheet';
 import {useToast} from '@astryxdesign/core/Toast';
-import {BellAlertIcon, PlusIcon} from '@heroicons/react/24/outline';
+import {NotificationActiveIcon, AddIcon} from '@astryxdesign/template-icons';
 
 const styles: Record<string, CSSProperties> = {
   contentFill: {
@@ -345,7 +345,7 @@ function IncidentRows({
       <EmptyState
         title="No matching incidents"
         description="Adjust the status filter or clear search filters."
-        icon={<Icon icon={BellAlertIcon} size="lg" />}
+        icon={<Icon icon={NotificationActiveIcon} size="lg" />}
       />
     );
   }
@@ -599,7 +599,7 @@ export default function IncidentConsolePage() {
             </SegmentedControl>
             <Button
               label="Declare incident"
-              icon={<Icon icon={PlusIcon} size="sm" />}
+              icon={<Icon icon={AddIcon} size="sm" />}
               size="sm"
               onClick={() =>
                 // Demo only: replace this toast with the call that performs the action.
@@ -667,7 +667,7 @@ export default function IncidentConsolePage() {
                 <EmptyState
                   title="No incident selected"
                   description="Select an incident to see details and timeline."
-                  icon={<Icon icon={BellAlertIcon} size="lg" />}
+                  icon={<Icon icon={NotificationActiveIcon} size="lg" />}
                   isCompact
                 />
               )}

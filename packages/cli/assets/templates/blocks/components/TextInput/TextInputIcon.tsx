@@ -5,11 +5,7 @@
 import {useState} from 'react';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Stack} from '@astryxdesign/core/Layout';
-import {
-  EnvelopeIcon,
-  LockClosedIcon,
-  UserIcon,
-} from '@heroicons/react/24/outline';
+import {MailIcon, LockIcon, UserIcon} from '@astryxdesign/template-icons';
 
 export default function TextInputIcon() {
   const [name, setName] = useState('');
@@ -32,7 +28,7 @@ export default function TextInputIcon() {
           value={email}
           onChange={setEmail}
           placeholder="sarah@company.com"
-          startIcon={EnvelopeIcon}
+          startIcon={MailIcon}
         />
         <TextInput
           type="password"
@@ -40,7 +36,7 @@ export default function TextInputIcon() {
           value={password}
           onChange={setPassword}
           placeholder="Enter your password"
-          startIcon={LockClosedIcon}
+          startIcon={LockIcon}
         />
       </Stack>
     </div>

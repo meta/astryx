@@ -68,9 +68,13 @@ import {
   type LayoutChange,
   type LayoutSwap,
 } from '../motion/animatedLayout';
-import {TopNavRenderContext} from '../TopNav/TopNavRenderContext';
+import {
+  TopNavRenderContext,
+  TopNavUnreadRegionContext,
+} from '../TopNav/TopNavRenderContext';
 import {TopNavMobileContentContext} from '../TopNav/TopNavMobileContentContext';
 import {AppShellMobileContext} from './AppShellMobileContext';
+import {UNREAD_STYLES, unreadWidthPoint} from './unreadWidthPoint';
 import {AppShellNestingContext, useAppShellMainId} from './useAppShellMainId';
 import type {AppShellMobileContextValue} from './AppShellMobileContext';
 import type {SpacingStep} from '../utils/types';
@@ -200,8 +204,9 @@ export interface MobileNavConfig {
    * Seeds the breakpoint state so the server-rendered HTML is the phone
    * layout, menu toggle included. Without it, when the theme keeps the
    * standard width points, the server-rendered wide layout still paints
-   * without its inline side nav below the breakpoint, and the toggle
-   * arrives when the page's script runs. Ignored when `breakpoint` is
+   * without its inline side nav, and with only the top nav's heading and end
+   * content, below the breakpoint, and the toggle arrives when the page's
+   * script runs. Ignored when `breakpoint` is
    * `none`, which is always non-mobile.
    *
    * Derive from the User-Agent header or a device-detection cookie
@@ -396,6 +401,7 @@ const styles = stylex.create({
     textDecoration: 'none',
     fontWeight: fontWeightVars['--font-weight-semibold'],
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
   },
   // Programmatic focus target for the skip link. While main fits, it is only
   // focusable via tabIndex={-1} (never tabbable), so a focus ring around the
@@ -534,78 +540,6 @@ const styles = stylex.create({
     overflow: 'auto',
   },
 });
-
-// Styles for a shell that has not read the window yet. StyleX compiles media
-// queries ahead of time, so there is one rule per standard width point
-// (`DEFAULT_WIDTH_BREAKPOINTS`). Below the point, the inline side nav does
-// not paint and the elevated backdrop loses its corner, as in the phone
-// layout. The queries use `not all and (min-width)`: StyleX lowers
-// `(width < N)` to `(max-width: N - 0.01)`, which Chromium rounds up to N, so
-// the rule would also apply at the point itself.
-const unreadSideNavStyles = stylex.create({
-  sm: {
-    display: {default: null, '@media not all and (min-width: 640px)': 'none'},
-  },
-  md: {
-    display: {default: null, '@media not all and (min-width: 768px)': 'none'},
-  },
-  lg: {
-    display: {default: null, '@media not all and (min-width: 1024px)': 'none'},
-  },
-  xl: {
-    display: {default: null, '@media not all and (min-width: 1280px)': 'none'},
-  },
-  '2xl': {
-    display: {default: null, '@media not all and (min-width: 1536px)': 'none'},
-  },
-});
-const unreadCornerStyles = stylex.create({
-  sm: {
-    borderStartStartRadius: {
-      default: radiusVars['--radius-page'],
-      '@media not all and (min-width: 640px)': 0,
-    },
-  },
-  md: {
-    borderStartStartRadius: {
-      default: radiusVars['--radius-page'],
-      '@media not all and (min-width: 768px)': 0,
-    },
-  },
-  lg: {
-    borderStartStartRadius: {
-      default: radiusVars['--radius-page'],
-      '@media not all and (min-width: 1024px)': 0,
-    },
-  },
-  xl: {
-    borderStartStartRadius: {
-      default: radiusVars['--radius-page'],
-      '@media not all and (min-width: 1280px)': 0,
-    },
-  },
-  '2xl': {
-    borderStartStartRadius: {
-      default: radiusVars['--radius-page'],
-      '@media not all and (min-width: 1536px)': 0,
-    },
-  },
-});
-const UNREAD_STYLES: Readonly<
-  Record<
-    WidthBreakpointName,
-    {sideNav: stylex.StyleXStyles; corner: stylex.StyleXStyles}
-  >
-> = {
-  sm: {sideNav: unreadSideNavStyles.sm, corner: unreadCornerStyles.sm},
-  md: {sideNav: unreadSideNavStyles.md, corner: unreadCornerStyles.md},
-  lg: {sideNav: unreadSideNavStyles.lg, corner: unreadCornerStyles.lg},
-  xl: {sideNav: unreadSideNavStyles.xl, corner: unreadCornerStyles.xl},
-  '2xl': {
-    sideNav: unreadSideNavStyles['2xl'],
-    corner: unreadCornerStyles['2xl'],
-  },
-};
 
 // =============================================================================
 // Component
@@ -935,12 +869,14 @@ export function AppShell({
   // layout. CSS then hides the inline side nav and flattens the elevated
   // corner below the breakpoint. A theme that moves the point has no compiled
   // rule, so its shell keeps the server's layout until it reads the window.
+  const unreadPoint = unreadWidthPoint(
+    layoutWidth === 'unread',
+    sideNavBreakpoint,
+    breakpointWidth,
+  );
   const unreadStyles =
-    layoutWidth === 'unread' &&
-    showSideNavInline &&
-    sideNavBreakpoint !== 'none' &&
-    breakpointWidth === DEFAULT_WIDTH_BREAKPOINTS[sideNavBreakpoint]
-      ? UNREAD_STYLES[sideNavBreakpoint]
+    showSideNavInline && unreadPoint != null
+      ? UNREAD_STYLES[unreadPoint]
       : undefined;
 
   // Mobile nav rendering modes:
@@ -1003,13 +939,27 @@ export function AppShell({
     </SideNavRenderContext>
   ) : null;
 
+  const topNavTakesMobileBar = !mobileNavDisabled && mobileNavReactNode == null;
+  // Until the shell reads the window, the server's full bar can be showing on
+  // a phone. The full bar then hides its start and center content below the
+  // breakpoint, as the mobile bar does. The toggle arrives when the shell
+  // reads the window. A theme that moves the point has no compiled rule, so
+  // its bar keeps the server's layout until then.
+  const unreadTopNavRegion =
+    !isBelowBreakpoint && topNavTakesMobileBar && unreadPoint != null
+      ? UNREAD_STYLES[unreadPoint].topNavRegion
+      : null;
   const topNavContent = hasTopNav ? (
-    isBelowBreakpoint && !mobileNavDisabled && mobileNavReactNode == null ? (
+    isBelowBreakpoint && topNavTakesMobileBar ? (
       <TopNavMobileContentContext value={mobileContentValue}>
         <TopNavRenderContext value="mobile-bar">{topNav}</TopNavRenderContext>
       </TopNavMobileContentContext>
     ) : (
-      topNav
+      // Always present on this branch, so reading the window keeps the bar
+      // mounted.
+      <TopNavUnreadRegionContext value={unreadTopNavRegion}>
+        {topNav}
+      </TopNavUnreadRegionContext>
     )
   ) : null;
 

@@ -69,7 +69,7 @@ export const doc = {
     {
       type: 'icon.search',
       description:
-        "The query, how many icons matched, and the ranked matches, each with its set, id, package, module, export, import line, words, filled names, variants, reason, and score. No match is an empty list. When the project picks a look (`experimental.iconVariant`), a match from a set in the project's list has the module, export, and import of that look; one whose icon lacks the look keeps its own and names both looks in `look` ({asked, used}). With no icon set installed, `reason` says so, `definitions` lists the Astryx icon definitions that match ({name, builtIn, description}), built-in ones first, since Core draws those by name, and `next` says how to get a set.",
+        "The query, how many icons matched, and the ranked matches, each with its set, id, package, module, export, import line, words, filled names, variants, reason, and score, plus `relatives` (the other definitions in the groups of the ones it draws) when there are any. A replaced definition's old name answers like its successor's name. A match that a definition names also has `meaningImport`: the import line that names the icon by that meaning (`import {TrashIcon as DeleteIcon} from '…'`), so app code keeps the name when another set draws it. No match is an empty list. When the project picks a look (`experimental.iconVariant`), a match from a set in the project's list has the module, export, and import of that look; one whose icon lacks the look keeps its own and names both looks in `look` ({asked, used}). With no icon set installed, `reason` says so, `definitions` lists the Astryx icon definitions that match ({name, builtIn, description}, plus `group` and `relatives` for a definition in a group), built-in ones first, since Core draws those by name; a matching definition that Core does not draw brings the built-in that draws in its place (`help` brings `info`) unless a match ranked above it has none, and `next` says how to get a set.",
     },
     {
       type: 'icon.detail',
@@ -79,7 +79,7 @@ export const doc = {
     {
       type: 'icon.definitions',
       description:
-        "With definitions: every Astryx icon definition, with whether it is built in, its description, its words, how many bundled templates use it (`templates`), and, when `set` names the set checked, whether that set's `map` names it (`mapped`).",
+        "With definitions: every Astryx icon definition, with whether it is built in, its description, its words, its `group` and the definition it `replaces` when it has them, how many bundled templates use it (`templates`), and, when `set` names the set checked, whether that set's `map` names it (`mapped`).",
     },
     {
       type: 'icon.setIcons',

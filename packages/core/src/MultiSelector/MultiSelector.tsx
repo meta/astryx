@@ -121,6 +121,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/MultiSelector/MultiSelector.generated';
+import {useListFormatter} from '../i18n/useListFormatter';
 
 // Bundlers replace this value at build time. The declaration lets a product
 // without Node's types type-check this file.
@@ -223,6 +224,7 @@ const styles = stylex.create({
   triggerOverflow: {
     flexShrink: 0,
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     color: colorVars['--color-text-secondary'],
     fontWeight: fontWeightVars['--font-weight-medium'],
   },
@@ -433,6 +435,7 @@ const styles = stylex.create({
     // Matches Selector, whose option row owns its typography the same way.
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     fontWeight: fontWeightVars['--font-weight-medium'],
     color: colorVars['--color-text-primary'],
     backgroundColor: 'transparent',
@@ -517,6 +520,7 @@ const styles = stylex.create({
     color: colorVars['--color-text-secondary'],
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
   },
 });
 
@@ -1207,6 +1211,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         controlStyle != null),
   );
   const t = useComponentTranslator();
+  const formatList = useListFormatter();
   const pressable = usePressFeedback();
   const {
     isRequired: isEffectivelyRequired,
@@ -1987,10 +1992,16 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       case 'labels': {
         const displayed = selectedLabels.slice(0, 3);
         const remaining = selectedLabels.length - displayed.length;
-        const text =
+        // The count is the list's last item, so the locale's conjunction goes
+        // before it and not between the shown labels.
+        const text = formatList(
           remaining > 0
-            ? `${displayed.join(', ')}, +${remaining}`
-            : displayed.join(', ');
+            ? [
+                ...displayed,
+                t('@astryx.multiSelector.overflowCount', {count: remaining}),
+              ]
+            : displayed,
+        );
         return (
           <span {...stylex.props(styles.triggerText)}>
             {formatValue?.(selectedItems) ?? text}
@@ -2008,7 +2019,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
             ))}
             {remaining > 0 && (
               <span {...stylex.props(styles.triggerOverflow)}>
-                +{remaining}
+                {t('@astryx.multiSelector.overflowCount', {count: remaining})}
               </span>
             )}
           </span>
@@ -2024,6 +2035,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     formatValue,
     maxBadges,
     t,
+    formatList,
   ]);
 
   // Render search input

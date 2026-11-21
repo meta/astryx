@@ -134,8 +134,9 @@ export interface CircularProgressProps extends BaseProps<HTMLDivElement> {
    */
   isIndeterminate?: boolean;
   /**
-   * When true, the circular progress is visually disabled — the ring and
-   * text use disabled colors. Use for canceled or inactive operations.
+   * When true, the circular progress is visually disabled: the ring takes the
+   * neutral fill and the whole ring, center content included, draws at half
+   * opacity. Use for canceled or inactive operations.
    * @default false
    */
   isDisabled?: boolean;
@@ -168,9 +169,12 @@ const styles = stylex.create({
   svgIndeterminate: {
     display: 'block',
   },
+  // One muted track for every variant: the base track ProgressBar uses. A
+  // theme's status muted roles can be opaque tints of the status color, so a
+  // status-tinted track reads at about 1:1 against its own fill in some themes.
   track: {
     fill: 'none',
-    stroke: colorVars['--color-track'],
+    stroke: colorVars['--color-background-muted'],
   },
   // The determinate fill moves on the compositor so a value change keeps
   // moving while a script runs (a `stroke-dashoffset` transition repaints on
@@ -286,6 +290,10 @@ const styles = stylex.create({
     position: 'relative',
     display: 'inline-flex',
   },
+  // A disabled ring dims as a whole, as Slider and Switch dim a disabled track.
+  ringWrapperDisabled: {
+    opacity: 0.5,
+  },
 });
 
 const variantStyles = stylex.create({
@@ -301,29 +309,14 @@ const variantStyles = stylex.create({
   error: {
     stroke: colorVars['--color-text-error'],
   },
+  // The secondary text role reaches 3:1 on the track in every bundled theme
+  // and mode; the disabled text role is close to the track's own color.
+  // A disabled ring takes the same fill and dims as a whole.
   neutral: {
-    stroke: colorVars['--color-text-disabled'],
+    stroke: colorVars['--color-text-secondary'],
   },
   disabled: {
-    stroke: colorVars['--color-text-disabled'],
-  },
-});
-
-const trackVariantStyles = stylex.create({
-  accent: {
-    stroke: colorVars['--color-accent-muted'],
-  },
-  success: {
-    stroke: colorVars['--color-success-muted'],
-  },
-  warning: {
-    stroke: colorVars['--color-warning-muted'],
-  },
-  error: {
-    stroke: colorVars['--color-error-muted'],
-  },
-  neutral: {
-    stroke: colorVars['--color-track'],
+    stroke: colorVars['--color-text-secondary'],
   },
 });
 
@@ -517,7 +510,6 @@ export function CircularProgress({
     children != null ? children : showValueLabel ? valueText : null;
 
   const fillVariant = isDisabled ? 'disabled' : variant;
-  const trackVariant = isDisabled ? 'neutral' : variant;
 
   // A value change turns the fill's layers with Web Animations on the
   // compositor, from wherever the arc is drawn now (mid-change, the running
@@ -643,7 +635,11 @@ export function CircularProgress({
         {label}
       </span>
 
-      <div {...stylex.props(styles.ringWrapper)}>
+      <div
+        {...stylex.props(
+          styles.ringWrapper,
+          isDisabled && styles.ringWrapperDisabled,
+        )}>
         <svg
           role="progressbar"
           aria-labelledby={labelId}
@@ -662,7 +658,7 @@ export function CircularProgress({
           <circle
             {...mergeProps(
               themeProps('circular-progress-track'),
-              stylex.props(styles.track, trackVariantStyles[trackVariant]),
+              stylex.props(styles.track),
             )}
             cx={center}
             cy={center}

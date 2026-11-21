@@ -1,0 +1,7 @@
+---
+'@astryxdesign/cli': patch
+---
+
+[feat] `astryx doctor` warns about a prop the app gives a Core component that the component does not take (`core-props`), such as `selectedID` on `TabList` or `labelHidden` on `CheckboxInput`. Such a prop does nothing, and unless the build type-checks, no build step reports it. The warning names up to eight props, each with its file, line and component and a documented prop with the same words when there is one, and counts the rest: "src/App.tsx:6 CheckboxInput has no `labelHidden` (did you mean `isLabelHidden`?)". A prop is reported only when Core's docs for the component leave it out and Core's own types, read with the project's TypeScript as its pages see them, do not take it either. The name of an HTML, SVG, DOM or ARIA attribute, which a component can pass on to what it renders, is never reported, and neither is a name with a hyphen (such as `data-` or `hx-` attributes), which JSX never checks against a props type, a prop that JSX gives every component (such as a `css` prop the project's own types declare), a prop of a component from outside Core or of a generic component, or a prop in a module compiled with another JSX runtime. Doctor reads the app's own source as syntax trees and leaves out test, story and fixture files. Without TypeScript, or in a project whose TypeScript or build config compiles JSX with another runtime, the check says it did not run. The check never fails `doctor`.
+
+@josephfarina

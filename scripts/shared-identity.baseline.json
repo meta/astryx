@@ -141,15 +141,15 @@
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
     },
-    "packages/core/src/Resizable/useResizable.ts:collapseControls": {
+    "packages/core/src/Resizable/resizableModel.ts:collapseControls": {
       "status": "open",
       "group": "F9 Resizable"
     },
-    "packages/core/src/Resizable/useResizable.ts:effectiveMaxima": {
+    "packages/core/src/Resizable/resizableModel.ts:effectiveMaxima": {
       "status": "open",
       "group": "F9 Resizable"
     },
-    "packages/core/src/Resizable/useResizable.ts:releaseEnds": {
+    "packages/core/src/Resizable/resizableModel.ts:releaseEnds": {
       "status": "open",
       "group": "F9 Resizable"
     },
@@ -409,6 +409,10 @@
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
     },
+    "packages/core/src/utils/devWarning.ts:missingCallbacks": {
+      "status": "allowed",
+      "reason": "A memo cache that keeps one stand-in callback per component, prop and message; a component renders with one copy, so a second cache per copy changes no result."
+    },
     "packages/core/src/utils/devWarning.ts:warnedKeys": {
       "status": "allowed",
       "reason": "Deduplicates development warnings; a copy can at most repeat a warning once."
@@ -550,6 +554,14 @@
       "reason": "Each copy observes for its own subscribers; a second observer changes no result."
     },
     "packages/core/src/utils/timeFormat.ts:symbolsByLocale": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/utils/timeFormat.ts:unitFormats": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/utils/timeFormat.ts:unitLists": {
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
     },

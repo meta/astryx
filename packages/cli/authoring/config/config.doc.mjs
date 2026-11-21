@@ -74,7 +74,7 @@ export const doc = {
       name: 'skills',
       type: '{ to?: string | string[] }',
       description:
-        "Where the Astryx skill goes in this project. `skills.to` is one place or a list: `'agents-md'`, the managed block in AGENTS.md and the agent files beside it; `'skills'`, the project skills folders `.agents/skills/astryx-project` and `.claude/skills/astryx-project`; or a folder in the project written as `'./<path>'`, such as `'./team-skills'`, which gets `<folder>/astryx-project/SKILL.md`. Leaving it out means `'agents-md'`. `{@command init} --to` writes it, and `{@command init}` writes the places it names.",
+        "Where the Astryx skill goes in this project. `skills.to` is one place or a list: `'agents-md'`, the managed block in AGENTS.md and the agent files beside it; `'skills'`, the project skills folders `.agents/skills/astryx-project` and `.claude/skills/astryx-project`; or a folder in the project written as `'./<path>'`, such as `'./team-skills'`, which gets `<folder>/astryx-project/SKILL.md`. Leaving it out means `'agents-md'`. `{@command init} --to` writes it, `{@command init}` writes the places it names, and `{@command upgrade} --apply` refreshes them.",
       example: "{ to: 'skills' }",
     },
     {

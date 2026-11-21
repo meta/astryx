@@ -12,9 +12,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import {
+  BUNDLERS,
   UNUSED_FEATURE_LIMIT_BYTES,
   chunkGraphStats,
   keptModuleCount,
+  measurePageRolldown,
   moduleGraphStats,
   pageSource,
   comparePages,
@@ -22,6 +24,7 @@ import {
   USAGE,
   parseArgs,
   parseReferencePages,
+  rolldownPageStats,
 } from './measure-reference-pages.mjs';
 
 // Fixture trees live under the repository's `node_modules/.cache`, as the
@@ -133,6 +136,101 @@ describe('moduleGraphStats', () => {
       moduleDepth: 0,
     });
   });
+});
+
+describe('rolldownPageStats', () => {
+  // Rolldown output: the entry chunk imports a shared chunk statically and a
+  // lazy chunk through import(); an asset is not a chunk.
+  const output = [
+    {
+      type: 'chunk',
+      fileName: 'index.js',
+      isEntry: true,
+      imports: ['shared.js', 'react'],
+      dynamicImports: ['lazy.js'],
+      code: 'export{a}from"./shared.js";',
+      modules: {
+        '/page.mjs': {renderedLength: 0},
+        '/a.js': {renderedLength: 30},
+      },
+    },
+    {
+      type: 'chunk',
+      fileName: 'shared.js',
+      isEntry: false,
+      imports: [],
+      dynamicImports: [],
+      code: 'export const b=1;',
+      modules: {
+        '/b.js': {renderedLength: 17},
+        '/barrel.js': {renderedLength: 0},
+        '\0vite/preload-helper.js': {renderedLength: 300},
+      },
+    },
+    {
+      type: 'chunk',
+      fileName: 'lazy.js',
+      isEntry: false,
+      imports: ['shared.js'],
+      dynamicImports: [],
+      code: 'export const big="x";',
+      modules: {'/big.js': {renderedLength: 20}},
+    },
+    {type: 'asset', fileName: 'style.css', source: '.a{}'},
+  ];
+
+  it('measures the entry chunk and its static imports, not import() targets', () => {
+    const stats = rolldownPageStats(output, '/page.mjs');
+    expect(stats).toMatchObject({keptModules: 2, chunks: 2, depth: 2});
+    expect(stats.min).toBe(
+      Buffer.byteLength('export{a}from"./shared.js";export const b=1;'),
+    );
+    expect(stats.gzip).toBeGreaterThan(0);
+  });
+
+  it('fails without an entry chunk', () => {
+    expect(() => rolldownPageStats([output[1]], '/page.mjs')).toThrow(
+      /no entry chunk/,
+    );
+  });
+});
+
+describe('measurePageRolldown', () => {
+  it('builds a page with Vite and keeps the lazy part out of the first load', async () => {
+    const root = fs.mkdtempSync(path.join(FIXTURES, 'rolldown-'));
+    try {
+      const dist = path.join(root, 'dist');
+      const write = (file, text) => {
+        fs.mkdirSync(path.dirname(path.join(dist, file)), {recursive: true});
+        fs.writeFileSync(path.join(dist, file), text);
+      };
+      write('Widget/index.js', "export {Widget} from './Widget.js';\n");
+      write(
+        'Widget/Widget.js',
+        [
+          "import {label} from '../shared/label.js';",
+          "export function Widget() { return label('widget'); }",
+          "export function openDetails() { return import('../shared/details.js'); }",
+        ].join('\n'),
+      );
+      write('shared/label.js', 'export const label = text => `[${text}]`;\n');
+      write(
+        'shared/details.js',
+        `export const details = ${JSON.stringify('d'.repeat(2000))};\n`,
+      );
+      const stats = await measurePageRolldown(dist, ['Widget']);
+      expect(stats.chunks).toBe(1);
+      expect(stats.keptModules).toBe(2);
+      // One named export from a folder: the label helper alone.
+      write('shared/index.js', "export {label} from './label.js';\n");
+      const helper = await measurePageRolldown(dist, ['shared:label']);
+      expect(helper.keptModules).toBe(1);
+      // The lazy module's 2,000 characters stay out of the first load.
+      expect(stats.min).toBeLessThan(2000);
+    } finally {
+      fs.rmSync(root, {recursive: true, force: true});
+    }
+  }, 60_000);
 });
 
 describe('keptModuleCount', () => {
@@ -292,6 +390,35 @@ describe('comparePages', () => {
     ).toEqual([{page: 'table', gzipDelta: 308, limit: 307, pass: false}]);
   });
 
+  it('gates on the chosen build and keeps the esbuild sizes beside it', () => {
+    const withEsbuild = (gzip, esbuildGzip) => ({
+      ...sizes(5000, gzip),
+      esbuild: {
+        min: 6000,
+        gzip: esbuildGzip,
+        keptModules: 9,
+        chunks: 2,
+        depth: 2,
+      },
+    });
+    const {pages, verdicts} = comparePages(
+      {table: withEsbuild(2000, 2200)},
+      {table: withEsbuild(2100, 2600)},
+      {unusedOn: ['table']},
+    );
+    expect(pages[0].delta.gzip).toBe(100);
+    expect(pages[0].delta.esbuild).toEqual({min: 0, gzip: 400});
+    expect(verdicts[0]).toMatchObject({gzipDelta: 100, pass: true});
+    const report = formatComparison(
+      {pages, verdicts},
+      {base: 'main', head: 'head', bundler: 'rolldown'},
+    );
+    expect(report).toContain('built by Vite with Rolldown');
+    expect(report).toContain(
+      '| table | 6,000 / 2,200 | 6,000 / 2,600 | +0 / +400 |',
+    );
+  });
+
   it('fails on a page the comparison does not have', () => {
     expect(() => comparePages(base, head, {unusedOn: ['form']})).toThrow(
       /No reference page named "form"/,
@@ -381,8 +508,20 @@ describe('parseArgs', () => {
       unusedOn: ['table', 'menu'],
       extraPages: {shell: ['AppShell', 'Text']},
       json: true,
+      bundler: 'esbuild',
       help: false,
     });
+  });
+
+  it('builds with esbuild unless --bundler names Rolldown', () => {
+    expect(BUNDLERS).toEqual(['esbuild', 'rolldown']);
+    expect(parseArgs(['--base', 'main']).bundler).toBe('esbuild');
+    expect(parseArgs(['--base', 'main', '--bundler', 'rolldown']).bundler).toBe(
+      'rolldown',
+    );
+    expect(() => parseArgs(['--base', 'main', '--bundler', 'webpack'])).toThrow(
+      /--bundler must be one of esbuild, rolldown/,
+    );
   });
 
   it('asks for help with --help or -h, before any other check', () => {
@@ -399,6 +538,7 @@ describe('parseArgs', () => {
       '--head',
       '--unused-on',
       '--page',
+      '--bundler',
       '--json',
       '--help',
       `0.3 KB gzip (${UNUSED_FEATURE_LIMIT_BYTES} B)`,

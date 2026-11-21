@@ -5,9 +5,9 @@
  * @output Area series — fill under line with stacking + gradient support
  *
  * Missing / non-finite values (including gaps in a stacked baseline) become
- * holes via d3's `.defined()` rather than collapsing to zero. The gradient id is
- * salted with the series' collision-free `_uid` so overlapping areas over the
- * same dataKey never share (and steal) each other's fill.
+ * holes via d3's `.defined()` rather than collapsing to zero. Each gradient
+ * fill takes its id from `useId()`. The id is unique on the page, so an area
+ * never paints another area's gradient.
  */
 
 import {
@@ -18,9 +18,40 @@ import {
   curveStep,
 } from 'd3-shape';
 import {line as d3Line} from 'd3-shape';
+import {useId} from 'react';
 import type {SeriesDef, ResolvedPoint} from '../types';
 import {seriesFill} from '../markColor';
 import {xPixel} from '../utils';
+
+/** An area's fill, through a gradient whose id is unique on the page. */
+function GradientFill({
+  pathD,
+  color,
+  opacity,
+}: {
+  pathD: string;
+  color: string;
+  opacity: number;
+}) {
+  // useId() can contain ':', which an SVG url(#id) reference cannot hold.
+  const gradientId = `area-grad-${useId().replace(/:/g, '')}`;
+  return (
+    <>
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity={opacity} />
+          <stop offset="100%" stopColor={color} stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      <path
+        d={pathD}
+        fill={`url(#${gradientId})`}
+        fillOpacity={1}
+        stroke="none"
+      />
+    </>
+  );
+}
 
 const CURVES = {
   linear: curveLinear,
@@ -107,30 +138,20 @@ export function area(dataKey: string, options: AreaOptions = {}): SeriesDef {
         .curve(curveFactory);
       const strokeD = lineGen(resolved) ?? '';
 
-      // Unique per series instance so two areas over the same dataKey don't
-      // share a gradient id (which would make one steal the other's fill).
-      const gradientId = `area-grad-${(seriesDef._uid ?? dataKey).replace(
-        /[^a-zA-Z0-9_-]/g,
-        '-',
-      )}`;
       const fillColor = seriesFill(seriesDef, color);
 
       return (
         <g>
-          {gradient && (
-            <defs>
-              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={fillColor} stopOpacity={opacity} />
-                <stop offset="100%" stopColor={fillColor} stopOpacity={0} />
-              </linearGradient>
-            </defs>
+          {gradient ? (
+            <GradientFill pathD={pathD} color={fillColor} opacity={opacity} />
+          ) : (
+            <path
+              d={pathD}
+              fill={fillColor}
+              fillOpacity={opacity}
+              stroke="none"
+            />
           )}
-          <path
-            d={pathD}
-            fill={gradient ? `url(#${gradientId})` : fillColor}
-            fillOpacity={gradient ? 1 : opacity}
-            stroke="none"
-          />
           {stroke && (
             <path d={strokeD} fill="none" stroke={fillColor} strokeWidth={2} />
           )}

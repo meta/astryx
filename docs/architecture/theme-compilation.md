@@ -289,16 +289,20 @@ Platform-specific details stay inside that compiler.
   theme root, such as a span that measures a label, uses the font that the
   token names at the page root. A page where no stylesheet defines the token
   keeps the browser's default font. An app's own `html` or `body` font wins.
-- **INV20 — Text inside a Theme that only inherits its size takes the body
-  size token.** Each `Theme` wrapper carries `font-size:
-var(--text-body-size)` for its own theme (`component:Theme` FR1), so text
-  inside it that sets no size of its own (plain text in a card, a quote) draws
-  at the theme's body size and follows a theme that changes it. Core's reset
-  sets no font size on `html` or `body`, so installing Astryx leaves a host's
-  own text outside a Theme at its own size. Text inside a Theme keeps another
-  size through a font-size on the app's own container inside the Theme, or
-  through the theme's `--text-body-size`, which also sizes Core's own body
-  text.
+- **INV20 — Text inside a Theme that only inherits its size and line height
+  takes the body size and body leading tokens.** Each `Theme` wrapper carries
+  `font-size: var(--text-body-size)` and `line-height:
+var(--text-body-leading)` for its own theme (`component:Theme` FR1), so text
+  inside it that sets neither of its own (plain text in a card, a quote, a
+  host's own table cell) draws at the theme's body size on the theme's body lines and
+  follows a theme that changes them. The leading is a multiple of the text's
+  own size, so text that sets only a size keeps the theme's proportion. Core's
+  reset sets no font size on `html` or `body`, so installing Astryx leaves a
+  host's own text outside a Theme at its own size; its line height outside a
+  Theme stays the reset's. Text inside a Theme keeps another size or line
+  height through a font-size or line-height on the app's own container inside
+  the Theme, or through the theme's `--text-body-size` and
+  `--text-body-leading`, which also set Core's own body text.
 - **INV21 — A surface whose side depends on the page's mode is right at the
   first paint.** A component whose media surface takes one side on a light
   page and the other on a dark one, by a fill the theme sets, cannot know
@@ -393,7 +397,11 @@ This record does not own:
   including portable and theme-local declarations in the same scoped block.
 - `Theme.tsx` mounts compiled CSS for themes that were not built ahead of time.
 - `derivedVarRegistry.ts` owns checked mappings from guaranteed public properties
-  to private component variables.
+  to private component variables. A style key's pseudo-class blocks (`:hover`)
+  lower like its resting rule (derived variables, `replaces`, container
+  padding) at the root, in adaptations and on media surfaces, after the
+  boundary check (INV13) reads their declarations as authored; a
+  pseudo-element block (`::before`) is another box and is written as authored.
 - Component `.doc.mjs` `theming.derived[]` mirrors those mappings;
   `theming.vars[]` distinguishes reviewed public semantic variables from private
   implementation variables.
@@ -433,7 +441,7 @@ tiers.
 | INV12            | `themeAdaptations.test.ts` and CLI adaptation build fixtures                                                                                                                                                                                                                                                                                                                                                                                           | Rule blocks merge/reorder/drop, surfaces lose precedence, or runtime/static CSS diverges                                                                                                                                                                                                          |
 | INV18            | `colorModeBlocks.test.ts` output tests, `build-theme.color-mode-blocks.test.mjs` (CLI-built CSS), and `colorModeBlocks.a11y.chromium.spec.ts` (the ColorModeBlocks story: the Theme's mode, system preference, a mode that is neither, nested Theme, media surfaces one and more deep, explicit Text and Heading props alike at the root and on a surface, a press, Pagination's current page and a text field's status border kept in the other mode) | A mode block applies in the other mode, overrides a base-layer rule there, or changes CSS for a theme without blocks beyond INV21's dark-page rules                                                                                                                                               |
 | INV19            | `generateThemeRules.test.ts` (the scope-root font rule), `reset.test.ts` (the `html` font rule, no font on `body`), and `reset.font.a11y.chromium.spec.ts` (a label measured in a span in `body` has its drawn width in the theme root; a page with no token keeps its font)                                                                                                                                                                           | Text measured or drawn in `body` uses a different font from the token at the page root, or a page with no token changes font                                                                                                                                                                      |
-| INV20            | `Theme.test.tsx` (the wrapper's body size) and `reset.test.ts` (no font size on `html` or `body`)                                                                                                                                                                                                                                                                                                                                                      | Text inside a Theme with no size of its own                                                                                                                                                                                                                                                       |
+| INV20            | `Theme.test.tsx` (the wrapper's body size and body leading) and `reset.test.ts` (no font size on `html` or `body`)                                                                                                                                                                                                                                                                                                                                     | Text inside a Theme with no size or line height of its own                                                                                                                                                                                                                                        |
 | INV21            | `generateThemeRules.test.ts` ("a media surface that flips with the page") and `Toast.mediaFallback.test.tsx` (server markup under a system, a forced and a non-flipping theme)                                                                                                                                                                                                                                                                         | A system-mode page's first paint draws a flipping surface on the wrong side, or a theme whose surfaces keep their side gains dark-page rules                                                                                                                                                      |
 | INV13, INV14     | Declaration scanner, generator, Theme mounting, CLI receipt tests, and the existing theme-family Chromium guard                                                                                                                                                                                                                                                                                                                                        | One unsafe declaration corrupts neighbors, valid CSS changes, legacy token generation crashes, or reporting changes CSS                                                                                                                                                                           |
 | Built themes     | Theme and CLI build tests                                                                                                                                                                                                                                                                                                                                                                                                                              | Runtime recompiles a built theme, or built output omits canonical rules                                                                                                                                                                                                                           |
@@ -471,13 +479,6 @@ shipped behavior does not yet conform and must not be treated as enforcement:
   it. Runtime `defineTheme` has no equivalent validation and accepts them. The
   follow-up must reject direct private variables recursively before CSS
   generation across both paths and prove runtime/static parity.
-- **Nested pseudo component declarations bypass derived expansion.** Top-level
-  component declarations at the root, in adaptations, and under
-  `onDark.components` / `onLight.components` use `derivedVarRegistry`, including
-  `replaces` and container expansion. Nested pseudo declarations on those
-  surfaces still serialize properties directly. The follow-up must route nested
-  pseudos through the same component-declaration lowering path, with parity
-  fixtures for a normal mapping, `replaces`, and container padding.
 - **Guaranteed-property coverage is not machine-complete.** The shared catalog is
   normative, but the component-doc schema has no per-target
   `guaranteedProperties` declarations. CI therefore cannot prove that a target

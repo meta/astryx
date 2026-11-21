@@ -75,7 +75,10 @@
  */
 
 import {ICON_EXPORT_NAME_RE, definitionsByIcon} from './icon-set-discovery.mjs';
-import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
+import {
+  astryxDefinitionsByName,
+  replacedNamesOf,
+} from './icon-definition-discovery.mjs';
 import {iconIdOf} from '../text/icon-id.mjs';
 
 /** @typedef {import('./icon-set-discovery.mjs').DiscoveredIconSet} DiscoveredIconSet */
@@ -84,12 +87,16 @@ import {iconIdOf} from '../text/icon-id.mjs';
 /** @typedef {import('../../api/icon/icon.type.mjs').IconMatchEntry} IconMatchEntry */
 
 /**
- * The import line for one export.
+ * The import line for one export, under `local` when that name differs from
+ * the export's.
  * @param {string} exportName
  * @param {string} module
+ * @param {string} [local]
  */
-export function importLine(exportName, module) {
-  return `import {${exportName}} from '${module}';`;
+export function importLine(exportName, module, local = exportName) {
+  const binding =
+    local === exportName ? exportName : `${exportName} as ${local}`;
+  return `import {${binding}} from '${module}';`;
 }
 
 /**
@@ -184,6 +191,8 @@ function readyQuery(query) {
  * @property {IconSetIcon} icon
  * @property {string[]} definitions the definitions the set maps it to
  * @property {string[]} lowerDefinitions those names in lower case
+ * @property {Array<{name: string, definition: string, lower: string}>} replaced
+ *   the old names of those definitions: each answers with this icon
  * @property {Set<string>} parts its id parts
  * @property {string[]} tags its words that are neither its id nor an id part
  * @property {boolean[]} spacedWords for each word, whether it holds a space
@@ -195,14 +204,17 @@ function readyQuery(query) {
 /**
  * @param {IconSetIcon} icon
  * @param {string[]} definitions
+ * @param {Array<{name: string, definition: string}>} [replaced] the old
+ *   names of those definitions
  * @returns {ReadyIcon}
  */
-function readyIcon(icon, definitions) {
+function readyIcon(icon, definitions, replaced = []) {
   const parts = new Set(icon.id.split('-'));
   return {
     icon,
     definitions,
     lowerDefinitions: definitions.map(name => name.toLowerCase()),
+    replaced: replaced.map(each => ({...each, lower: each.name.toLowerCase()})),
     parts,
     tags: icon.words.filter(word => word !== icon.id && !parts.has(word)),
     spacedWords: icon.words.map(word => /\s/u.test(word)),
@@ -226,6 +238,18 @@ function matchReady(q, ready) {
       meaning: false,
       rank: 0,
       reason: `definition "${ready.definitions[at]}"`,
+    };
+  }
+  // The name of a definition another one replaced answers with the icon its
+  // successor draws.
+  const old = ready.replaced.find(each => each.lower === q.joined);
+  if (old) {
+    return {
+      tier: 'definition',
+      name: false,
+      meaning: false,
+      rank: 0,
+      reason: `definition "${old.definition}" (replaced "${old.name}")`,
     };
   }
   const tagAt = tags.indexOf(query);
@@ -719,7 +743,14 @@ function searchableIcons(set, kept) {
       definitions,
       name => astryx.get(name) ?? own.get(name),
     );
-    return {icon, definitions, ready: readyIcon(searchable, definitions)};
+    const replaced = definitions.flatMap(definition =>
+      replacedNamesOf(definition, set).map(name => ({name, definition})),
+    );
+    return {
+      icon,
+      definitions,
+      ready: readyIcon(searchable, definitions, replaced),
+    };
   });
   kept.set(set, list);
   return list;

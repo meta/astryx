@@ -135,6 +135,16 @@ export const doc = {
       description:
         "A namespace or typed doc in the docs tree, read by its route: {id, route, kind, package, title, summary, breadcrumb, slots, content}. A namespace lists each slot's children one level down, or as deep as depth asks, each child carrying its own slots, childCount where the read stops, and its text at compact or full detail; a typed doc carries its content.",
     },
+    {
+      type: 'docs.skills',
+      description:
+        "With topic 'skills' (when no doc holds that name): every Astryx skill, {name, description, package}[], the project skill in a project, the computer-level skill, then each integration skill.",
+    },
+    {
+      type: 'docs.skill',
+      description:
+        "With topic 'skills/<name>': one skill's {name, description, text}, the body agents read. An unknown name throws ERR_UNKNOWN_TOPIC with the skills as suggestions.",
+    },
   ],
   throws: [
     {

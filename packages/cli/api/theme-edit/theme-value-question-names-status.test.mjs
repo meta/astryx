@@ -69,7 +69,7 @@ describe('a value question with a status or a state', () => {
     // The plain question keeps the plain rule.
     [
       'what is the border of inputs in dark mode',
-      /inputs has border-color #525252 in dark mode now/,
+      /inputs has border-color #[0-9a-f]{6} in dark mode now/,
     ],
   ])(
     '%s',

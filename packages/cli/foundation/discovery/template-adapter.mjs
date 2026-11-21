@@ -23,6 +23,7 @@
  *   consumed by Project and by the api/template leaves.
  */
 
+import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -41,7 +42,7 @@ import {
   writtenNames,
   TEMPLATE_COMPONENTS_FILE,
 } from './template-source-tree.mjs';
-import {persistedGather} from '../fs/gather-cache.mjs';
+import {persistedGather, persistedValue} from '../fs/gather-cache.mjs';
 import {packageOf} from '../render/served-packages.mjs';
 import {keptTreeSummary} from '../fs/kept-tree.mjs';
 import {
@@ -53,7 +54,17 @@ import {
   matchedTemplateSuffix,
 } from './template-ids.mjs';
 import {EXACT_CODEC} from '../fs/exact-codec.mjs';
-import {babelParser} from '../runtime/lazy-dependencies.mjs';
+import {
+  babelParser,
+  babelParserRelease,
+} from '../runtime/lazy-dependencies.mjs';
+import {
+  PLACEHOLDER_MODULE,
+  placeholderLook,
+  placeholderMeaning,
+  placeholderSource,
+  placeholderTable,
+} from './template-placeholders.mjs';
 import {compareText} from '../text/compare-text.mjs';
 import {currentNonCoreBase} from '../bases/state.mjs';
 
@@ -2111,14 +2122,35 @@ function topLevelBindings(src) {
   }
   for (const statement of program.body) {
     if (statement.type === 'ImportDeclaration') {
-      if (!statement.source.value.startsWith(ASTRYX_PACKAGE_SCOPE)) continue;
+      if (!statement.source.value.startsWith(ASTRYX_PACKAGE_SCOPE)) {
+        // A filled placeholder (`TrashIcon as DeleteIcon`) reads as the
+        // library icon it imports, as the unfilled template does.
+        for (const specifier of statement.specifiers) {
+          if (specifier.type !== 'ImportSpecifier') continue;
+          const {imported} = specifier;
+          const name =
+            imported.type === 'Identifier' ? imported.name : imported.value;
+          if (drawsPlaceholder(specifier.local.name, name)) {
+            astryxImports.set(specifier.local.name, name);
+          }
+        }
+        continue;
+      }
+      // An icon placeholder names the library icon that draws it, as the
+      // template's copy renders it, so a placeholder never reads as a
+      // component name.
+      const look = placeholderLook(statement.source.value);
       for (const specifier of statement.specifiers) {
         if (specifier.type !== 'ImportSpecifier') continue;
         const {imported} = specifier;
-        astryxImports.set(
-          specifier.local.name,
-          imported.type === 'Identifier' ? imported.name : imported.value,
-        );
+        const name =
+          imported.type === 'Identifier' ? imported.name : imported.value;
+        const meaning = look == null ? null : placeholderMeaning(name);
+        const drawn =
+          meaning == null || look == null
+            ? null
+            : placeholderSource(meaning, look);
+        astryxImports.set(specifier.local.name, drawn?.export ?? name);
       }
       continue;
     }
@@ -2198,24 +2230,50 @@ export function answeredComponentsInSource(
     documents = (pkg, name) => ownersOf(name).includes(pkg),
   },
 ) {
-  let program;
-  try {
-    program = parseTemplateSource(src, {errorRecovery: true}).program;
-  } catch {
-    return [];
-  }
+  const syntax = keptTemplateSyntax(src);
+  if (syntax === null) return [];
   /** @type {Map<string, {module: string, imported: string}>} */
   const imports = new Map();
+  for (const [local, module, imported] of syntax.imports) {
+    imports.set(local, {module, imported});
+  }
+  /** @type {string[]} */
+  const found = [];
+  // One operation for every name: each lookup lists a folder and reads a
+  // doc once, not once per name.
+  withListingCache(() => {
+    for (const tag of syntax.tags) {
+      const binding = imports.get(tag);
+      if (!binding) continue;
+      const name = answeredName(binding, documents, qualified);
+      if (name !== null && !found.includes(name)) found.push(name);
+    }
+  });
+  return found;
+}
+
+/**
+ * What a template source names components from: its named imports, each as
+ * [local name, module, imported name] in source order, and the names of the
+ * tags it renders, in the order they open. Throws for a source that does not
+ * parse.
+ * @param {string} src
+ * @returns {{imports: Array<[string, string, string]>, tags: string[]}}
+ */
+function templateSyntax(src) {
+  const {program} = parseTemplateSource(src, {errorRecovery: true});
+  /** @type {Array<[string, string, string]>} */
+  const imports = [];
   for (const statement of program.body) {
     if (statement.type !== 'ImportDeclaration') continue;
     for (const specifier of statement.specifiers) {
       if (specifier.type !== 'ImportSpecifier') continue;
       const {imported} = specifier;
-      imports.set(specifier.local.name, {
-        module: statement.source.value,
-        imported:
-          imported.type === 'Identifier' ? imported.name : imported.value,
-      });
+      imports.push([
+        specifier.local.name,
+        statement.source.value,
+        imported.type === 'Identifier' ? imported.name : imported.value,
+      ]);
     }
   }
   /** @type {Array<{name: string, start: number}>} */
@@ -2229,19 +2287,39 @@ export function answeredComponentsInSource(
     }
   });
   tags.sort((a, b) => a.start - b.start);
-  /** @type {string[]} */
-  const found = [];
-  // One operation for every name: each lookup lists a folder and reads a
-  // doc once, not once per name.
-  withListingCache(() => {
-    for (const tag of tags) {
-      const binding = imports.get(tag.name);
-      if (!binding) continue;
-      const name = answeredName(binding, documents, qualified);
-      if (name !== null && !found.includes(name)) found.push(name);
-    }
-  });
-  return found;
+  return {imports, tags: tags.map(tag => tag.name)};
+}
+
+/** A template source's syntax, kept exactly, with the shape it needs. */
+const TEMPLATE_SYNTAX_CODEC = {
+  ...EXACT_CODEC,
+  valid: (/** @type {any} */ value) =>
+    value != null && Array.isArray(value.imports) && Array.isArray(value.tags),
+};
+
+/**
+ * {@link templateSyntax}, kept between runs by the source's text and the
+ * parser's release (persistedValue), so a warm run loads no parser; null for
+ * a source that does not parse, which is never kept.
+ * @param {string} src
+ * @returns {{imports: Array<[string, string, string]>, tags: string[]} | null}
+ */
+function keptTemplateSyntax(src) {
+  try {
+    const parser = babelParserRelease();
+    if (parser === null) return templateSyntax(src);
+    return persistedValue(
+      [
+        'template-syntax',
+        createHash('sha256').update(src).digest('hex'),
+        parser,
+      ],
+      () => templateSyntax(src),
+      TEMPLATE_SYNTAX_CODEC,
+    );
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -2333,6 +2411,33 @@ function catalogNames(names) {
 }
 
 /**
+ * Whether a placeholder name stands for a library export: the table draws
+ * the placeholder's meaning with that export in some variant.
+ * @param {string} placeholder
+ * @param {string} exportName
+ * @returns {boolean}
+ */
+function drawsPlaceholder(placeholder, exportName) {
+  return placeholderDrawnNames(placeholder).includes(exportName);
+}
+
+/**
+ * The library exports that may draw a placeholder name, over every variant.
+ * @param {string} placeholder
+ * @returns {string[]}
+ */
+function placeholderDrawnNames(placeholder) {
+  const meaning = placeholderMeaning(placeholder);
+  if (meaning == null) return [];
+  const names = [];
+  for (const look of Object.keys(placeholderTable().looks)) {
+    const drawn = placeholderSource(meaning, look);
+    if (drawn) names.push(drawn.export);
+  }
+  return names;
+}
+
+/**
  * Every name componentsInSource can return for `src`, read without parsing
  * it, or null when it cannot be bounded so. It keeps the tag names a parse
  * would drop as page-local. It adds each name an `imported as local` pair
@@ -2348,6 +2453,10 @@ export function componentNameBound(src) {
   }
   const tags = Array.from(src.matchAll(JSX_TAG), m => m[2]);
   const local = new Set(tags);
+  // A placeholder tag reads as the library icon that draws it.
+  const drawnIcons = src.includes(PLACEHOLDER_MODULE)
+    ? [...local].flatMap(placeholderDrawnNames)
+    : [];
   // A pair adds a name only when its local name is a tag. Most sources have
   // no `as` before a tag's name, so they skip the slower pair scan. Each
   // match restarts one character on: a `/*` in a comment can hide a pair.
@@ -2357,7 +2466,7 @@ export function componentNameBound(src) {
     asLocal.lastIndex = m.index + 1;
     pairs = local.has(m[1]);
   }
-  if (!pairs) return catalogNames(tags);
+  if (!pairs) return catalogNames([...tags, ...drawnIcons]);
   /** @type {string[]} */
   const imported = [];
   // Each match restarts one character on, so no pair hides inside another.
@@ -2372,5 +2481,10 @@ export function componentNameBound(src) {
     if (name.includes('\\')) return null;
     imported.push(name);
   }
-  return catalogNames([...tags, ...imported]);
+  return catalogNames([
+    ...tags,
+    ...imported,
+    ...drawnIcons,
+    ...imported.flatMap(placeholderDrawnNames),
+  ]);
 }

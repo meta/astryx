@@ -12,9 +12,13 @@ import * as path from 'node:path';
 import {
   extractImportedPackages,
   analyzeTemplateNeeds,
+  installCommandFor,
+  installStepFor,
   parsedSpecifiers,
 } from './template-needs.mjs';
 import {_resetHostedRun, activateHostedRun} from '../runtime/package-root.mjs';
+import {CLI_VERSION} from '../../test-utils/release-fixtures.mjs';
+import {recordDeclaredSettings} from '../env/cli-command.mjs';
 
 // ── extractImportedPackages ─────────────────────────────────────────────────
 
@@ -412,6 +416,114 @@ describe('analyzeTemplateNeeds', () => {
     const result = analyzeTemplateNeeds(source, dir);
     expect(result.notes).toEqual([]);
     expect(result.missingPackages).toEqual([]);
+  });
+});
+
+describe('installCommandFor names a package Astryx releases with Core at the project Core release', () => {
+  const theme = '@astryxdesign/theme-neutral';
+  let dir;
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tmpl-needs-core-'));
+  });
+  afterEach(() => {
+    fs.rmSync(dir, {recursive: true, force: true});
+  });
+  /** @param {Record<string, string>} dependencies @param {string} [lockfile] */
+  const app = (dependencies, lockfile = 'package-lock.json') => {
+    fs.writeFileSync(
+      path.join(dir, 'package.json'),
+      JSON.stringify({name: 'app', dependencies}),
+    );
+    fs.writeFileSync(path.join(dir, lockfile), '{}');
+    return dir;
+  };
+
+  it('adds it at the Core release a project pins, saved exactly, with its package manager', () => {
+    expect(
+      installCommandFor([theme], app({'@astryxdesign/core': '0.7.10'}))
+        .installCommand,
+    ).toBe(`npm install -E ${theme}@0.7.10`);
+    fs.rmSync(path.join(dir, 'package-lock.json'));
+    fs.writeFileSync(
+      path.join(dir, 'pnpm-lock.yaml'),
+      "lockfileVersion: '9.0'\n",
+    );
+    expect(installCommandFor([theme], dir).installCommand).toBe(
+      `pnpm add -E ${theme}@0.7.10`,
+    );
+  });
+
+  it('adds it at the Core range a project declares, quoted for the shell', () => {
+    expect(
+      installCommandFor([theme], app({'@astryxdesign/core': '^0.7.10'}))
+        .installCommand,
+    ).toBe(`npm install "${theme}@^0.7.10"`);
+  });
+
+  it('adds it at the release of the CLI that answers when the project has no Core', () => {
+    expect(installCommandFor([theme], app({})).installCommand).toBe(
+      `npm install ${theme}@${CLI_VERSION}`,
+    );
+  });
+
+  it('takes the release of the CLI that answers when the declared Core is not a plain version range', () => {
+    expect(
+      installCommandFor([theme], app({'@astryxdesign/core': 'workspace:*'}))
+        .installCommand,
+    ).toBe(`npm install ${theme}@${CLI_VERSION}`);
+    const crafted = installCommandFor(
+      [theme],
+      app({'@astryxdesign/core': '^0.7.0"; echo INJECTED; "'}),
+    ).installCommand;
+    expect(crafted).toBe(`npm install ${theme}@${CLI_VERSION}`);
+    expect(crafted).not.toContain('INJECTED');
+  });
+
+  it("quotes a declared Core range in an integration's install guidance", () => {
+    const ranged = app({'@astryxdesign/core': '>=0.7.0 <0.8.0'});
+    recordDeclaredSettings(ranged, [
+      {name: '@acme/a', installGuidance: 'acme add {packages}'},
+    ]);
+    try {
+      expect(installCommandFor([theme], ranged).installGuidance).toBe(
+        `acme add "${theme}@>=0.7.0 <0.8.0"`,
+      );
+    } finally {
+      recordDeclaredSettings(ranged, []);
+    }
+  });
+
+  it('adds Core itself at the same release as a package released with Core', () => {
+    expect(
+      installCommandFor(['@astryxdesign/core'], app({})).installCommand,
+    ).toBe(`npm install @astryxdesign/core@${CLI_VERSION}`);
+    expect(
+      installCommandFor(
+        ['@astryxdesign/core'],
+        app({'@astryxdesign/core': '0.7.10'}),
+      ).installCommand,
+    ).toBe('npm install -E @astryxdesign/core@0.7.10');
+  });
+
+  it('leaves any other package to the package manager, and saves nothing exactly beside it', () => {
+    const pinned = app({'@astryxdesign/core': '0.7.10'});
+    expect(installCommandFor(['left-pad'], pinned).installCommand).toBe(
+      'npm install left-pad',
+    );
+    expect(installCommandFor([theme, 'left-pad'], pinned).installCommand).toBe(
+      `npm install ${theme}@0.7.10 left-pad`,
+    );
+  });
+
+  it('names the release in the line it prints when the lockfiles disagree', () => {
+    const pinned = app({'@astryxdesign/core': '0.7.10'}, 'yarn.lock');
+    fs.writeFileSync(
+      path.join(pinned, 'pnpm-lock.yaml'),
+      "lockfileVersion: '9.0'\n",
+    );
+    expect(installStepFor([theme], pinned).line).toBe(
+      `npm install -E ${theme}@0.7.10`,
+    );
   });
 });
 

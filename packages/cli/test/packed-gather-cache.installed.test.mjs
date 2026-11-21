@@ -317,6 +317,42 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
   );
 
   it.skipIf(!hasModuleHooks)(
+    "reads back what a template's source names components from, and loads no parser",
+    () => {
+      const tmp = keptTmp('template-syntax');
+      // Each run's CommonJS modules, @babel/parser's among them, as it exits.
+      const log = path.join(work, 'template-syntax-loaded.jsonl');
+      fs.rmSync(log, {force: true});
+      const preload = path.join(work, 'template-syntax-loaded.cjs');
+      fs.writeFileSync(
+        preload,
+        `process.on('exit', () => require('node:fs').appendFileSync(process.env.LOADED_LOG, JSON.stringify(Object.keys(require.cache)) + '\\n'));\n`,
+      );
+      const env = {NODE_OPTIONS: `--require ${preload}`, LOADED_LOG: log};
+      const ask = ['template', 'dashboard'];
+      /** The @babel/parser code the last run loaded; its package.json names its release. */
+      const parserLoaded = () =>
+        JSON.parse(
+          fs.readFileSync(log, 'utf8').trim().split('\n').at(-1),
+        ).filter(
+          (/** @type {string} */ file) =>
+            file.includes(path.join('@babel', 'parser') + path.sep) &&
+            /\.c?js$/.test(file),
+        );
+      const first = run(ask, {tmp, env});
+      expect(first.status, first.stderr).toBe(0);
+      expect(
+        JSON.parse(first.stdout).data.componentsToRead.length,
+      ).toBeGreaterThan(0);
+      expect(parserLoaded().length).toBeGreaterThan(0);
+      const warm = run(ask, {tmp, env});
+      expect(warm).toEqual(first);
+      expect(parserLoaded()).toEqual([]);
+    },
+    180_000,
+  );
+
+  it.skipIf(!hasModuleHooks)(
     "keeps the CLI's own docs tree, which a reinstall or a copy in another folder gathers again",
     async () => {
       const tmp = keptTmp('docs-tree');

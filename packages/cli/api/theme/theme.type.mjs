@@ -36,8 +36,9 @@
  * from, a requirement of the outputs (null for a local base), and `export` the
  * name the root imports it by (null for a theme the root's file defines).
  * `settingIssues` lists each component setting of the page rules the browser
- * does not show as written (also among `warnings`), with the rule that wins
- * and the fix; onDark, onLight and adaptation rules are not read.
+ * does not show as written (also among `warnings`, except one a generated
+ * file writes: that file gets one entry in `notices`), with the rule that
+ * wins and the fix; onDark, onLight and adaptation rules are not read.
  * @property {{name: string, tokenCount: number, componentCount: number, sizeKB: number, outputs: {css: string, cssDts: string, js: string, dts: string, variantsDts?: string}, warnings: string[], notices: string[], settingIssues: Array<import('./build/setting-effects.mjs').SettingIssueEntry & {line: number | null, file?: string}>, base?: {theme: string, package: string | null, export: string | null}}} data
  */
 
@@ -46,8 +47,9 @@
  * @typedef {object} ThemeBuildCheckResponse
  * @property {'theme.build.check'} type
  * `settingIssues`, present when there are any, is the build receipt's
- * list of settings the browser does not show as written.
- * @property {{name: string, upToDate: boolean, stale: Array<{path: string, reason: 'missing' | 'outdated'}>, checked: string[], code?: 'ERR_THEME_STALE', settingIssues?: Array<import('./build/setting-effects.mjs').SettingIssueEntry & {line: number | null, file?: string}>}} data
+ * list of settings the browser does not show as written; `notices`, one per
+ * generated file whose settings do not show.
+ * @property {{name: string, upToDate: boolean, stale: Array<{path: string, reason: 'missing' | 'outdated'}>, checked: string[], code?: 'ERR_THEME_STALE', settingIssues?: Array<import('./build/setting-effects.mjs').SettingIssueEntry & {line: number | null, file?: string}>, notices?: string[]}} data
  *   `code` is set when the outputs are stale or missing (exit 1).
  */
 
