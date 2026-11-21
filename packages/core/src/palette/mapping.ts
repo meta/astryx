@@ -27,7 +27,6 @@ import {
   perceptualDelta,
 } from './generator';
 import type {TonalPaletteCandidate, TonalPaletteGenerationInput} from './types';
-import type {DerivedState} from './derive-look';
 import type {EditorLookResult, PaletteEditorRules} from './editor-look';
 
 export type PaletteMode = 'light' | 'dark';
@@ -117,6 +116,8 @@ export interface PaletteMappingContext {
   setExactly?: (token: string) => boolean;
   /** The line that sets a value, for a note that offers one; without it, the note offers none. */
   setLine?: (thing: string, value: string, mode?: PaletteMode) => string;
+  /** The modes the theme shows: the derived colors' notes name only these. */
+  shown?: ReadonlyArray<PaletteMode>;
 }
 
 /** One color setting: a palette family of the same id. */
@@ -197,17 +198,20 @@ export interface PaletteMapping {
   code: string[];
   /** The look's colors kept at the base theme's in a mode, because a text/fill pair the base theme draws with them would not read. */
   kept: {token: string; mode: PaletteMode; pair: BasePair; ratio: number}[];
-  /** The status roles the theme leaves unset, each derived from the look or kept at the base theme's, and why. */
+  /** The status roles the theme leaves unset, each derived from the look, what they gave up to stay written, and the roles that gave something up. */
   statuses: {
-    roles: Record<string, 'derived' | 'unreadable' | 'alike'>;
+    roles: Record<string, 'derived'>;
     why: string[];
+    short: string[];
   };
-  /** Whether the category colors (Badge, Token, Card tints) and the chart colors follow the look, and the hues a refused mapping would draw alike. */
+  /** Whether the category colors (Badge, Token, Card tints) and the chart colors follow the look, and what they gave up to stay written. */
   categories: {
-    badges: DerivedState;
-    chart: DerivedState;
-    merged: string[];
-    unreadable: string[];
+    badges: 'derived' | 'none';
+    chart: 'derived' | 'none';
+    limits: string[];
+    moved: string[];
+    alike: boolean;
+    unread: boolean;
   };
 }
 
@@ -1676,10 +1680,12 @@ export function mapPalette(
           categories: {
             badges: 'none',
             chart: 'none',
-            merged: [],
-            unreadable: [],
+            limits: [],
+            moved: [],
+            alike: false,
+            unread: false,
           },
-          statuses: {roles: {}, why: []},
+          statuses: {roles: {}, why: [], short: []},
           code: [],
           cvd: [],
           keptAtBase: [],

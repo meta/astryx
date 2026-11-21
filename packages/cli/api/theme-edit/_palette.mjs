@@ -333,11 +333,11 @@ export function tempFor(file) {
  * @property {Record<string, Partial<Record<Mode, string>>>} exact - Main tokens the theme sets exactly, the value per mode: the dial's fill gives way to them.
  * @property {Record<string, string>} [unread] - Main tokens the theme sets exactly to a value the editor cannot read as one color in some mode, as written: the text on them is not picked for that value.
  * @property {string[]} notes - What the config writer kept or replaced of a hand edit.
- * @property {{badges: 'derived' | 'merged' | 'unreadable' | 'none', chart: 'derived' | 'merged' | 'unreadable' | 'none', merged: string[], unreadable: string[]}} [categories] - Whether the category colors (Badge, Token, Card tints) and the chart colors follow the look, and the hues a refused mapping would draw alike.
+ * @property {{badges: 'derived' | 'none', chart: 'derived' | 'none', limits: string[], moved: string[], alike: boolean, unread: boolean}} [categories] - Whether the category colors (Badge, Token, Card tints) and the chart colors follow the look, and what they gave up to stay written.
  * @property {Array<{a: string, b: string, vision: 'red-weak' | 'green-weak', mode: Mode, colors: [string, string], page?: string, pages?: string[]}>} [cvd] - Status fills someone red-weak or green-weak may not tell apart.
  * @property {string[]} [code] - The code colors that keep the base theme's because none of their family's stops reads on the code background and the page.
  * @property {Array<{token: string, mode: Mode, pair: import('../theme/palette/generate/mapping.mjs').BasePair, ratio: number}>} [kept] - The look's colors kept at the base theme's in a mode, because a text/fill pair the base theme draws with them would not read.
- * @property {{roles: Record<string, 'derived' | 'unreadable' | 'alike'>, why: string[]}} [statuses] - The status roles the theme leaves unset, each derived from the look or kept at the base theme's, and why.
+ * @property {{roles: Record<string, 'derived'>, why: string[], short: string[]}} [statuses] - The status roles the theme leaves unset, each derived from the look, and what they gave up to stay written.
  * @property {Record<string, Partial<Record<Mode, StopRef>>> | null} lift - Lifted secondary text per background token of LIFT_PARTS (the accent tint, the neutral track), per mode, from the neutral color; null without one.
  */
 
@@ -533,11 +533,40 @@ function dialFamilies(data, own = {}) {
  * @param {{settings: Setting[]}} data
  */
 export function seedsInEffect(cwd, slug, data) {
+  return seedsOfSettings(data, ownSourceTokenValues(cwd, slug));
+}
+
+/**
+ * The seeds of a theme's color settings, its own source's values read:
+ * what seedsInEffect returns, for a caller that holds those values.
+ * @param {{settings: Setting[]}} data
+ * @param {Record<string, string>} own the theme source's own token values
+ */
+export function seedsOfSettings(data, own) {
   // (A color setting's families only: an accent set as a token keeps its
   // exact value, so it is not a seed a dial such as vibrancy moves.)
-  return dialFamilies(data, ownSourceTokenValues(cwd, slug)).filter(f =>
+  return dialFamilies(data, own).filter(f =>
     data.settings.some(x => x?.source === 'dial' && x.thing === f.dial),
   );
+}
+
+/**
+ * Whether `set <theme> vibrancy` changes anything: a color setting's seed
+ * that vibrancy moves, the check set runs.
+ * @param {{settings: Setting[]}} data
+ * @param {Record<string, string>} own the theme source's own token values
+ */
+export function vibrancyTakes(data, own) {
+  return vibrancyMovesAny(seedsOfSettings(data, own));
+}
+
+/**
+ * Whether vibrancy changes any of these seeds: the one test `set <theme>
+ * vibrancy`, `how` and the color notes share.
+ * @param {DialFamily[]} seeds
+ */
+export function vibrancyMovesAny(seeds) {
+  return seeds.some(f => vibrancyMoves(f.dial, f.seed, 0, 100));
 }
 
 /**
@@ -783,10 +812,10 @@ function usableStops(stops, slug) {
  * What the palette mapping reads of a theme: its base colors, the tokens it
  * has, its exact token settings (a page-wide token its own source sets wins,
  * as the build shows it), the fixed color a value gives in a mode, and the
- * command that sets a value.
+ * command that sets a value, and the modes the theme shows.
  * @param {string} cwd
  * @param {string} slug
- * @param {{settings: Setting[]}} data
+ * @param {{mode?: string, settings: Setting[]}} data
  * @param {{light: Record<string, string>, dark: Record<string, string>} | undefined} base
  * @param {Record<string, unknown>} [tokenDefaults]
  * @returns {import('../theme/palette/generate/mapping.mjs').PaletteMappingContext}
@@ -850,6 +879,7 @@ function paletteContext(cwd, slug, data, base, tokenDefaults = {}) {
     // The editor's own rules (Core's context.editor), which only the
     // editor loads.
     editor: editorLook,
+    shown: modesOf(data),
     defaults: tokenDefaults,
     reader: {
       rgb: value =>
@@ -2468,14 +2498,21 @@ function pairWords(pair) {
 }
 
 /**
- * What the look did to the category colors (Badge, Token, Card tints) and
- * the chart colors: one line with the accent's notes, and a refused mapping
- * with every dial's.
+ * What the look did to the category colors (Badge, Token, Card tints), the
+ * chart colors and the status roles: one line with the accent's notes, and
+ * what a set gave up to stay written with every dial's.
  * @param {PaletteMapping} pal
  * @param {string} dial
  * @param {string} [slug]
+ * @param {boolean} [vibrancyRuns] whether `set <theme> vibrancy` changes
+ *   anything (vibrancyTakes): only then is a higher vibrancy advised
  */
-export function categoryNotes(pal, dial, slug = '<theme>') {
+export function categoryNotes(
+  pal,
+  dial,
+  slug = '<theme>',
+  vibrancyRuns = false,
+) {
   const c = pal.categories;
   if (!c) return [];
   /** @type {string[]} */
@@ -2491,26 +2528,25 @@ export function categoryNotes(pal, dial, slug = '<theme>') {
   ].filter(Boolean);
   if (dial === 'accent' && derived.length)
     out.push(
-      `${derived.join(', ').replace(/, ([^,]*)$/, ' and $1')} grow from Core's hues at your accent's strength and the palette's vibrancy, so they match the look; card tints stay tints that the page's text reads on, code reads at 4.5:1 on its background, and an exact --color-<role>-<hue>, --color-data-* or --color-syntax-* setting wins`,
+      `${derived.join(', ').replace(/, ([^,]*)$/, ' and $1')} grow from Core's hues at your accent's strength and the palette's vibrancy, so they match the look; card tints stay tints that the page's text reads on where a shade allows, code reads at 4.5:1 on its background, and an exact --color-<role>-<hue>, --color-data-* or --color-syntax-* setting wins`,
     );
-  /** The first pairs drawn alike, and how many more. @param {boolean} chart */
-  const pairs = chart => {
-    const all = c.merged
-      .filter(x => x.startsWith('chart ') === chart)
-      .map(x => x.replace(/^chart /, ''));
-    return [
-      ...all.slice(0, 3),
-      ...(all.length > 3 ? [`${all.length - 3} more pairs`] : []),
-    ];
-  };
-  if (c.badges === 'merged')
+  // (Every limit no shade meets is said; the colors moved apart are
+  // counted after the first.)
+  if (c.limits.length || c.moved.length) {
+    // (Hues drawn alike come from a low vibrancy: a higher one is advised,
+    // with its command, only where set takes it.)
+    // (A theme at 100 already has no higher vibrancy.)
+    const apart =
+      c.alike && vibrancyRuns && pal.vibrancy < 100
+        ? `; a higher vibrancy draws the hues apart: ${P} set ${slug} vibrancy more`
+        : '';
+    const moves = c.moved.length
+      ? `${c.moved[0]}${c.moved.length > 1 ? `, and ${c.moved.length - 1} more moved apart` : ''}`
+      : '';
     out.push(
-      `category colors (badges, tokens and card tints) keep the base theme's: your look would draw ${pairs(false).join(', ')} alike, so the hues would not tell things apart; a stronger accent or a higher vibrancy keeps them apart`,
+      `category and chart colors follow your look: ${[...c.limits, ...(moves ? [moves] : [])].join('; ')}${apart}${c.unread ? '; an exact setting of a color that does not read chooses it' : ''}`,
     );
-  if (c.badges === 'unreadable' || c.chart === 'unreadable')
-    out.push(
-      `${[c.badges === 'unreadable' ? 'category colors (badges, tokens and card tints)' : '', c.chart === 'unreadable' ? 'chart colors' : ''].filter(Boolean).join(' and ')} keep the base theme's: grown from your look, ${c.unreadable.slice(0, 2).join('; ')}${c.unreadable.length > 2 ? `, and ${c.unreadable.length - 2} more` : ''}`,
-    );
+  }
   // Status fills someone red-weak or green-weak may not tell apart: one
   // note per pair, with a line that sets one of them apart in lightness.
   /** @type {Set<string>} */
@@ -2594,16 +2630,11 @@ export function categoryNotes(pal, dial, slug = '<theme>') {
   );
   if (dial === 'accent' && grown.length)
     out.push(
-      `${grown.join(', ')} ${grown.length > 1 ? 'grow' : 'grows'} from the base theme's ${grown.length > 1 ? 'hues' : 'hue'} at your accent's strength and the palette's vibrancy, kept apart from your accent (badges, banners, status dots, field status); an exact setting of ${grown.length > 1 ? 'one' : 'it'} chooses it`,
+      `${grown.join(', ')} ${grown.length > 1 ? 'grow' : 'grows'} from the base theme's ${grown.length > 1 ? 'hues' : 'hue'} at your accent's strength and the palette's vibrancy, kept apart from your accent where a shade allows (badges, banners, status dots, field status); an exact setting of ${grown.length > 1 ? 'one' : 'it'} chooses it`,
     );
-  for (const [role, how] of Object.entries(st?.roles ?? {}))
-    if (how !== 'derived')
-      out.push(
-        `${role} keeps the base theme's colors: ${how === 'alike' ? 'grown from your look it would be drawn like your accent' : (st?.why.find(w => w.includes(`-${STATUS_TOKEN[role]}`)) ?? 'grown from your look it would not read')}; ${P} set ${slug} ${role} <color> chooses it`,
-      );
-  if (c.chart === 'merged')
+  if (st?.why.length)
     out.push(
-      `chart colors keep Core's: your look would draw ${pairs(true).join(', ')} alike; a stronger accent or a higher vibrancy keeps them apart`,
+      `status colors follow your look: ${st.why.join('; ')}; to choose one: ${st.short.map(role => `${P} set ${slug} ${role} <color>`).join(', ')}`,
     );
   return out;
 }
@@ -2617,9 +2648,17 @@ export function categoryNotes(pal, dial, slug = '<theme>') {
  * @param {string} dial
  * @param {string} slug
  * @param {Mode[]} [modes] the modes the theme has
+ * @param {boolean} [vibrancyRuns] whether `set <theme> vibrancy` changes
+ *   anything (vibrancyTakes)
  * @returns {string[]}
  */
-export function paletteNotes(pal, dial, slug, modes = ['light', 'dark']) {
+export function paletteNotes(
+  pal,
+  dial,
+  slug,
+  modes = ['light', 'dark'],
+  vibrancyRuns = false,
+) {
   if (!pal) return [];
   const f = paletteFiles(slug);
   const token = paletteToken(dial);
@@ -2665,7 +2704,7 @@ export function paletteNotes(pal, dial, slug, modes = ['light', 'dark']) {
         `${c.token} uses shade ${shade(c.stop)} in ${c.mode}, not ${shade(c.preferred)}, so it reads at ${c.ratio}:1 on ${c.against}`,
       );
   }
-  notes.push(...categoryNotes(pal, dial, slug));
+  notes.push(...categoryNotes(pal, dial, slug, vibrancyRuns));
   notes.push(
     `the generated colors are in ${f.palette}, made from ${f.config} (receipt: ${f.receipt}); the theme imports only the shades it uses, from ${f.refs}`,
   );

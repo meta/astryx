@@ -23,10 +23,6 @@
 - "softer, larger card shadows" takes the card's large shared shadow.
 - Items after a comma leave a with-list ("dark sidebar with white text, rounder cards, and bigger headings").
 
-- `astryx experimental theme editor how`:
-
-- Every page-color answer now also paints the app shell's frame and the main panel, in the same mode. The whole page shows the color instead of only the area behind the panels.
-
 - `astryx experimental theme editor set` says the missed line only when the change left a new miss (`missedNew` in the JSON counts them), instead of repeating every standing miss after each unrelated change; `show` still lists each.
 
 - The pictures of `astryx experimental theme editor show --png` draw a dialog that has no background of its own (a lightbox) in its backdrop's colour, so its light close button shows as it does over the page, and they report text drawn over the text beside it (calendar weekday names wider than their columns), on the sheets too, as a note and an open problem.
@@ -39,6 +35,6 @@
 
 - `astryx experimental theme editor`: a text color set on a highlighted row (a command palette, typeahead or selector item) over its see-through tint gets the line that makes the highlight a solid fill that text reads on, not a line that turns the text dark; and a fill set on a toast names the `--when type:…` line for each type it covers.
 
-- `astryx experimental theme editor`: the status roles a theme leaves unset (info, success, warning, danger) now follow its look. Each grows from the base theme's color for the role, at the accent's strength and the palette's vibrancy. It keeps the base theme's hue (an error stays its red, info its blue), and a role whose fill would read as the accent takes the nearest shade of its own hue that stands apart from it (a red accent gives error a deeper red); it keeps the base theme's colors only when no shade does. Text on each fill, on its tint and on the page reads at 4.5:1; warning stays a bright, visible fill with near-black text, and each light tint is paler than its own fill. A role that cannot be drawn readable keeps the base theme's colors and says why. A role the theme sets, or a token set exactly, wins. Badges, banners, status dots and field status follow.
+- `astryx experimental theme editor`: the status roles a theme leaves unset (info, success, warning, danger) now follow its look. Each grows from the base theme's color for the role, at the accent's strength and the palette's vibrancy. It keeps the base theme's hue (an error stays its red, info its blue), and a role whose fill would read as the accent takes the nearest shade of its own hue that stands apart from it (a red accent gives error a deeper red); when no shade does, the role is still written and the result says it is drawn like the accent. Text on each fill, on its tint and on the page reads at 4.5:1; warning stays a bright, visible fill with near-black text, and each light tint is paler than its own fill. A role whose fill cannot meet every limit is still written, and the result says what it gave up; a role whose text or icon reads at no shade of its family keeps the base theme's colors, and the result names the command that sets it. A role the theme sets, or a token set exactly, wins. Badges, banners, status dots and field status follow.
 
 @josephfarina

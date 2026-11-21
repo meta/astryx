@@ -121,6 +121,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/MultiSelector/MultiSelector.generated';
+import {useListFormatter} from '../i18n/useListFormatter';
 
 // Bundlers replace this value at build time. The declaration lets a product
 // without Node's types type-check this file.
@@ -1210,6 +1211,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         controlStyle != null),
   );
   const t = useComponentTranslator();
+  const formatList = useListFormatter();
   const pressable = usePressFeedback();
   const {
     isRequired: isEffectivelyRequired,
@@ -1990,10 +1992,16 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       case 'labels': {
         const displayed = selectedLabels.slice(0, 3);
         const remaining = selectedLabels.length - displayed.length;
-        const text =
+        // The count is the list's last item, so the locale's conjunction goes
+        // before it and not between the shown labels.
+        const text = formatList(
           remaining > 0
-            ? `${displayed.join(', ')}, +${remaining}`
-            : displayed.join(', ');
+            ? [
+                ...displayed,
+                t('@astryx.multiSelector.overflowCount', {count: remaining}),
+              ]
+            : displayed,
+        );
         return (
           <span {...stylex.props(styles.triggerText)}>
             {formatValue?.(selectedItems) ?? text}
@@ -2011,7 +2019,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
             ))}
             {remaining > 0 && (
               <span {...stylex.props(styles.triggerOverflow)}>
-                +{remaining}
+                {t('@astryx.multiSelector.overflowCount', {count: remaining})}
               </span>
             )}
           </span>
@@ -2027,6 +2035,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     formatValue,
     maxBadges,
     t,
+    formatList,
   ]);
 
   // Render search input

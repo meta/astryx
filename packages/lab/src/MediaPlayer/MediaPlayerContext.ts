@@ -34,10 +34,18 @@ export const DEFAULT_PLAYBACK_RATES: readonly number[] = [
 export interface MediaPlayerContextValue {
   store: MediaStore;
   isControlsVisible: boolean;
+  /** Whether a menu or marker popover that the player opened is open. */
+  isLayerOpen: boolean;
   /** Shows the controls and restarts the idle timer. */
   wakeControls: () => void;
   /** Keeps the controls visible until the same hold is released. */
   holdControls: (hold: MediaControlsHold, isHeld: boolean) => void;
+  /**
+   * Reports a menu or marker popover the player opened, by its owner, as
+   * open or closed. While any is open the controls stay, and before playback
+   * the bar stays drawn.
+   */
+  holdLayer: (owner: string, isOpen: boolean) => void;
   /**
    * Shows hidden controls or hides visible ones, for a tap on the media.
    * Controls a tap shows stay until the next tap.
