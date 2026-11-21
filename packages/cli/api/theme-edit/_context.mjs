@@ -161,6 +161,12 @@ export async function context(cwd) {
      * @type {{sheet: string | null} | null}
      */
     takesPictures: null,
+    /**
+     * The settings of the theme the running command loaded, which a part's
+     * reach reads (on a pager the theme fills, its box stays on the pager).
+     * @type {import('./_settings.mjs').Setting[] | undefined}
+     */
+    themeSettings: undefined,
   };
 }
 
