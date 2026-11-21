@@ -18246,8 +18246,8 @@ function recordReach(ctx, slug, data, before) {
         parts: added,
         // A setting named on a group reaches the group's members: no line
         // keeps it on fewer, as `--only` is for one member. The check is
-        // the one `set --only` makes, with the part map.
-        keep: onlyFits(s, /** @type {any} */ (ctx.C?.MAP ?? {}))
+        // the one `set --only` makes.
+        keep: onlyFits(s)
           ? `${P} set ${slug} ${setArgs({...s, only: true}, String(s.value))}`
           : null,
       });
