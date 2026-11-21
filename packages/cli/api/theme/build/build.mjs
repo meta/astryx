@@ -89,7 +89,11 @@ import {
 } from '../../../foundation/fs/paths.mjs';
 import {isGlobalCopy} from '../../../foundation/release/choose.mjs';
 import {isInReleaseCache} from '../../../foundation/release/cache.mjs';
-import {fetchCarriedThemeCoreDir, localModuleFiles} from '../_adapter.mjs';
+import {
+  fetchCarriedThemeCoreDir,
+  localModuleFiles,
+  tokenContrastWarnings,
+} from '../_adapter.mjs';
 import {
   assertWithin,
   sanitizeName,
@@ -6207,12 +6211,12 @@ async function themeBuildInternal(
   }
   // The text contrast the theme's color tokens give, measured as the theme
   // editor's check measures a setting: a warning only, so the build's exit
-  // status stays the same.
-  for (const p of (await (
-    await import('../../theme-edit/_theme-contrast.mjs')
-  ).tokenContrastWarnings(cwd, resolvedTheme)) ?? []) {
+  // status stays the same. The receipt carries them as `contrast`.
+  /** @type {string[]} */
+  const contrastWarnings = [];
+  for (const p of (await tokenContrastWarnings(cwd, resolvedTheme)) ?? []) {
     const w = `${p.text}${p.fix ? `; fix: ${p.fix}` : ''}`;
-    warningMessages.push(w);
+    contrastWarnings.push(w);
     logger.warn(`Warning: ${w}`);
   }
 
@@ -6402,6 +6406,7 @@ async function themeBuildInternal(
       warnings: warningMessages,
       notices: noticeMessages,
       settingIssues,
+      ...(contrastWarnings.length ? {contrast: contrastWarnings} : {}),
     },
   };
 }

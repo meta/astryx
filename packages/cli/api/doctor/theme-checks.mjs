@@ -51,6 +51,7 @@ import {
   themeBuild,
   themeRecordOwner,
   themeShippedImportFindings,
+  tokenContrastWarnings,
   validateThemePrivateInputs,
 } from './_adapter.mjs';
 import {
@@ -1994,8 +1995,6 @@ export async function checkAppThemes(cwd) {
   // The text contrast each local theme's color tokens give, measured as the
   // theme editor's check measures a setting: a warning, never a failure.
   if (localThemes.length > 0 && !incompleteResolution) {
-    const {tokenContrastWarnings} =
-      await import('../theme-edit/_theme-contrast.mjs');
     /** @type {string[]} */
     const lines = [];
     /** @type {Set<string>} */

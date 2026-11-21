@@ -118,6 +118,7 @@ import {
   splitSpecifier,
 } from '../../foundation/discovery/icon-set-discovery.mjs';
 export {placeholderFixes} from '../../foundation/discovery/template-icons.mjs';
+export {tokenContrastWarnings} from '../theme-edit/_theme-contrast.mjs';
 export {iconFeatureGate} from '../../foundation/integrations/icon-features.mjs';
 export {
   iconUseCommand,

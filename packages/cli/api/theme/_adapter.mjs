@@ -16,6 +16,7 @@ import {
 } from '../../foundation/discovery/template-needs.mjs';
 import {stageSharedTheme} from './_shared-source.mjs';
 export {isSharedThemeSource} from './_shared-source.mjs';
+export {tokenContrastWarnings} from '../theme-edit/_theme-contrast.mjs';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';

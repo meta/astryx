@@ -117,12 +117,12 @@ export const luxTheme = defineTheme({extends: neutralTheme, name: 'lux', tokens:
       /^text in segmented-control-item \("Week"\) is 1\.47:1 in dark .*; fix: set --color-text-secondary to #[0-9a-f]{6} /;
     // (In the receipt, for --json, and printed in every report.)
     expect(
-      r.data.warnings.some((/** @type {string} */ w) => line.test(w)),
+      r.data.contrast.some((/** @type {string} */ w) => line.test(w)),
     ).toBe(true);
     expect(warned.some(w => line.test(w.replace(/^Warning: /, '')))).toBe(true);
     // (One line per fix: the texts it reads again are counted on it.)
-    const fixes = r.data.warnings
-      .filter((/** @type {string} */ w) => /^text in .*; fix: /.test(w))
+    const fixes = r.data.contrast
+      .filter((/** @type {string} */ w) => /; fix: /.test(w))
       .map((/** @type {string} */ w) => w.slice(w.indexOf('; fix: ')));
     expect(new Set(fixes).size).toBe(fixes.length);
   }, 300_000);
