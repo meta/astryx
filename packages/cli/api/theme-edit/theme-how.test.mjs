@@ -1001,6 +1001,10 @@ describe('stripe answers keep to the stripe', () => {
     'odd rows #f9f9f9 on striped tables and on every table',
     'odd rows #f9f9f9 on striped tables and on non-striped tables',
     'odd rows #f9f9f9 on striped tables and plain tables',
+    'odd rows #f9f9f9 on striped tables but also on plain tables',
+    'odd rows #f9f9f9 on striped tables plus plain tables',
+    'odd rows #f9f9f9 on striped tables along with plain tables',
+    'odd rows #f9f9f9 on striped tables (and plain tables)',
   ])('stays on every table for %s', async question => {
     const {data} = await themeEditHow(question, {cwd, theme: 'q'});
     expect(

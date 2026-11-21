@@ -26917,13 +26917,14 @@ export function draftAnswer(ctx, env, question) {
           // it stays on every table.)
           // (Words tied to striped tables, "striped tables too", "even on
           // striped tables", "plain and on striped tables", "striped tables
-          // and on plain tables", are read from the question, the last only
+          // and on plain tables" (or "but also", "plus", "along with", "as
+          // well as", "(and plain tables)"), are read from the question, the last only
           // where its clause ends with the tables (a mode, "in dark mode",
           // may follow them): "…and every table header bold" asks about the
           // headers. A loose "every table" or "plain
           // tables" counts only in the stripe's own clause.)
           const widens =
-            /\bstriped\s+tables?\s+(?:too|as\s+well)\b|\bstriped\s+tables?\s*,?\s*(?:and\s+(?:also\s+)?|also\s+)(?:(?:on|in|for)\s+)?(?:the\s+)?(?:every|all|plain|other|non-striped|unstriped)(?:\s+other)?\s+tables?\b(?:\s+(?:in|for)\s+(?:the\s+)?(?:dark|light)\s+mode(?:\s+only)?\b)?(?=\s*(?:$|[,;.!?)]|and\b|but\b|too\b|as\s+well\b))|\b(?:also|even|including)\s+(?:on|in|for)\s+(?:the\s+)?striped\s+tables?\b|\b(?:every|all|plain|other|non-striped|unstriped)\s+(?:tables?\s+)?and\s+(?:on\s+|in\s+|for\s+)?(?:the\s+)?striped\s+tables?\b/.test(
+            /\bstriped\s+tables?\s+(?:too|as\s+well)\b|\bstriped\s+tables?\s*,?\s*(?:and\s+(?:also\s+)?|(?:but\s+)?also\s+|plus\s+|(?:along|together)\s+with\s+|as\s+well\s+as\s+|\(\s*(?:and\s+|also\s+|plus\s+)?)(?:(?:on|in|for)\s+)?(?:the\s+)?(?:every|all|plain|other|non-striped|unstriped)(?:\s+other)?\s+tables?\b(?:\s+(?:in|for)\s+(?:the\s+)?(?:dark|light)\s+mode(?:\s+only)?\b)?(?=\s*(?:$|[,;.!?)]|and\b|but\b|too\b|as\s+well\b))|\b(?:also|even|including)\s+(?:on|in|for)\s+(?:the\s+)?striped\s+tables?\b|\b(?:every|all|plain|other|non-striped|unstriped)\s+(?:tables?\s+)?and\s+(?:on\s+|in\s+|for\s+)?(?:the\s+)?striped\s+tables?\b/.test(
               q,
             ) ||
             /(?<!\b(?:not|except|without|but|leave|leaving)\s+(?:(?:on|in|for)\s+)?(?:the\s+)?)\b(?:every|all|plain|other|non-striped|unstriped)\s+tables?\b/.test(
