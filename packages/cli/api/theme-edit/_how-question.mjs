@@ -5500,12 +5500,11 @@ export function draftAnswer(ctx, env, question) {
   // before the page reading writes any: a head for such a mode is the
   // person's, whatever later rewrites make of its color.)
   const typedHeadModes = new Set(
-    [
-      ...question.matchAll(
-        /(?:^|[,.;!\n])\s*(?:[-*•]\s+)?(light|dark)[- ]mode\s*:\s*page\b/gi,
-      ),
-    ].map(m => m[1].toLowerCase()),
+    [...question.matchAll(/\b(light|dark)[- ]mode\s*:\s*page\b/gi)].map(m =>
+      m[1].toLowerCase(),
+    ),
   );
+
   /**
    * Whether a clause's words are a mode page head the page reading wrote,
    * never one the person typed.
