@@ -8,7 +8,7 @@
  *   `ICON_FEATURES_RELEASED`: the release switch.
  * @position Read by foundation/config/project.mjs (`iconSets()`, the
  *   integration checks, and the docs catalog), and by discover, doctor,
- *   integration validate, and upgrade. While the switch is off, a
+ *   integration validate, upgrade, and search's icons block. While the switch is off, a
  *   project with no icon-set package and no `experimental.iconSet` reads no
  *   icon feature, so its output stays as it is without them.
  */

@@ -152,8 +152,30 @@ function splitBuild(input, workingDir) {
   return {outputs: result.metafile.outputs, byPath};
 }
 
+// Each node `start` reaches in a metafile graph (`outputs` or `inputs`),
+// following only the given import kinds and skipping external imports, with
+// its breadth-first level: the fewest edges from `start`, which is level 0.
+function importLevels(graph, start, kinds) {
+  const levels = new Map();
+  if (start === undefined || !(start in graph)) return levels;
+  levels.set(start, 0);
+  const pending = [start];
+  for (let index = 0; index < pending.length; index += 1) {
+    const key = pending[index];
+    for (const imported of graph[key].imports || []) {
+      if (!kinds.includes(imported.kind) || imported.external) continue;
+      if (levels.has(imported.path) || !(imported.path in graph)) continue;
+      levels.set(imported.path, levels.get(key) + 1);
+      pending.push(imported.path);
+    }
+  }
+  return levels;
+}
+
 // Chunks an entry chunk reaches in a build's metafile outputs, following only
-// the given import kinds.
+// the given import kinds. The set's order is the order `eagerText`
+// concatenates before gzip, so a change of order changes every gzip figure.
+// It holds the same chunks as `importLevels` over the same kinds.
 function reachableChunks(outputs, entryOutput, kinds) {
   const seen = new Set();
   const pending = [entryOutput];
@@ -454,6 +476,7 @@ module.exports = {
   APP_EXTERNALS,
   extractAtRef,
   gzipBytes,
+  importLevels,
   sizeBuildOptions,
   reachableChunks,
   eagerText,

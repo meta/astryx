@@ -77,6 +77,9 @@ describe('discover icon sets', () => {
     const text = await runCli(['discover', '@acme/glyphs/glyphs'], cwd);
     expect(text.code).toBe(0);
     expect(text.stdout).toMatch(/kind: +icon-set/);
+    // The default look reads as its variant name, never a raw object.
+    expect(text.stdout).toMatch(/^default: +outline$/m);
+    expect(text.stdout).not.toContain('[object Object]');
     expect(text.stdout).toContain(
       'astryx experimental icon <words> --set @acme/glyphs/glyphs',
     );

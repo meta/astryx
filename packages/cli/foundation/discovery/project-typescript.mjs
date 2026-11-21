@@ -83,7 +83,13 @@ export const TYPESCRIPT_FIX =
  * installed has no JavaScript compiler API, and what to do.
  * @param {string} version
  * @param {string} outcome what was not done, such as `docs were not checked`
+ * @param {{here?: boolean}} [options] `here`: a folder outside any package,
+ *   where no project install step applies, so none is named
  */
-export function unusableTypeScriptReason(version, outcome) {
-  return `TypeScript ${version} is installed in this project, but it has no JavaScript compiler API (\`createProgram\`) to read types with (TypeScript 7 ships none), so ${outcome}. ${TYPESCRIPT_FIX}`;
+export function unusableTypeScriptReason(
+  version,
+  outcome,
+  {here = false} = {},
+) {
+  return `TypeScript ${version} is installed ${here ? 'here' : 'in this project'}, but it has no JavaScript compiler API (\`createProgram\`) to read types with (TypeScript 7 ships none), so ${outcome}.${here ? '' : ` ${TYPESCRIPT_FIX}`}`;
 }

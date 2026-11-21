@@ -4,7 +4,7 @@
 
 import {Breadcrumbs, BreadcrumbItem} from '@astryxdesign/core/Breadcrumbs';
 import {Icon} from '@astryxdesign/core/Icon';
-import {HomeIcon, Cog6ToothIcon} from '@heroicons/react/24/outline';
+import {HomeIcon, SettingsIcon} from '@astryxdesign/template-icons';
 
 export default function BreadcrumbsWithIcons() {
   return (
@@ -14,7 +14,7 @@ export default function BreadcrumbsWithIcons() {
       </BreadcrumbItem>
       <BreadcrumbItem
         href="/settings"
-        startIcon={<Icon icon={Cog6ToothIcon} size="sm" />}>
+        startIcon={<Icon icon={SettingsIcon} size="sm" />}>
         Settings
       </BreadcrumbItem>
       <BreadcrumbItem isCurrent>Profile</BreadcrumbItem>

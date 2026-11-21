@@ -9,7 +9,7 @@
  * @position api/theme-edit — imported by _edit.mjs and _how.mjs
  */
 
-import {COMMON_STATES} from './_tables.mjs';
+import {COMMON_STATES, P} from './_tables.mjs';
 import {
   autoMediaSide,
   baseComponent,
@@ -17,14 +17,17 @@ import {
   modesOf,
   partsOf,
   roleReach,
+  cornersPlain,
+  pillShapes,
 } from './_settings.mjs';
-import {borderlessSurfaces, pillParts} from './_check.mjs';
-import {parseColor, ratio, splitTop} from './_color.mjs';
+import {borderlessSurfaces} from './_check.mjs';
+import {hex, parseColor, ratio, splitTop} from './_color.mjs';
+import {hexToOklch} from '../theme/palette/generate/color.mjs';
 import {blurScaled} from './_how-question.mjs';
 
 /**
  * @typedef {{thing: string, value: string, on?: string, when?: string, state?: string, mode?: string}} MissedStep
- * @typedef {{kind: number, part: string, state?: string, why: string, steps: MissedStep[], aspect: string}} Missed
+ * @typedef {{kind: number, part: string, state?: string, when?: string, why: string, steps: MissedStep[], aspect: string}} Missed
  */
 
 /**
@@ -45,6 +48,40 @@ export function missedSteps(ctx, data, res, base) {
   // The modes the theme draws (a dark-only theme's dark), each one res
   // holds.
   const modes = modesOf(data).filter(m => res[m]);
+  /**
+   * What the accent tint a selected look takes draws in dark, said with
+   * the line: a dark tint can be a strong block of the accent (a soft
+   * coral's is a deep red). A strong one (OKLCH chroma 0.1 or more) the
+   * theme does not set itself comes with the line for a softer one: the
+   * tint halfway to the dark page.
+   */
+  const darkTintWords = () => {
+    if (!modes.includes('dark')) return '';
+    const tint = parseColor(String(res.dark?.['--color-accent-muted'] ?? ''));
+    const page = parseColor(
+      String(res.dark?.['--color-background-body'] ?? ''),
+    );
+    if (!tint || !page) return '';
+    const set = data.settings.some(
+      x =>
+        x.source === 'token' &&
+        x.thing === '--color-accent-muted' &&
+        !x.on &&
+        !x.state &&
+        !x.when,
+    );
+    const strong = !set && hexToOklch(hex(tint)).C >= 0.1;
+    const soft = hex(
+      /** @type {[number, number, number]} */ (
+        tint.map((v, i) => Math.round((v + page[i]) / 2))
+      ),
+    );
+    return `; in dark the accent tint draws ${hex(tint)}${
+      strong
+        ? `, a strong block of the accent; for a softer one first: ${P} set ${data.name} --color-accent-muted '${soft}' --mode dark`
+        : ''
+    }`;
+  };
   /** @param {string} token */
   const changed = token =>
     modes.some(m => String(res[m]?.[token]) !== String(base[m]?.[token]));
@@ -369,6 +406,7 @@ export function missedSteps(ctx, data, res, base) {
         found.push({
           kind: 3,
           part: p,
+          ...(when ? {when} : {}),
           why: `${when ? `${when.replace(':', ' ')}, ` : ''}its fill is still the base's ${st} color (${r.token}), which the theme's ${STATUS[st][0]} color does not reach`,
           aspect: 'background',
           // (A media part's text picks its side from the new fill: where
@@ -408,7 +446,7 @@ export function missedSteps(ctx, data, res, base) {
     // the base points the role token at another one there (stone's and
     // gothic's info banner reads the categorical blue), or a variant named
     // for the role draws a color of the base's palette written out (stone's
-    // accent progress fill in its pale blue). Listed once the theme moved
+    // accent progress fill in its blue). Listed once the theme moved
     // that role, in each mode where it looks different, with a line that
     // gives the part the theme's role color there.
     for (const [key, look] of Object.entries(
@@ -463,6 +501,7 @@ export function missedSteps(ctx, data, res, base) {
         found.push({
           kind: 8,
           part: p,
+          ...(when ? {when} : {}),
           why: `${when ? `${when.replace(':', ' ')}, ` : ''}the base theme points ${names.join(' and ')} there, so the theme's own color does not reach it`,
           aspect: 'background',
           steps: pointed,
@@ -500,6 +539,7 @@ export function missedSteps(ctx, data, res, base) {
         found.push({
           kind: 8,
           part: p,
+          ...(when ? {when} : {}),
           why: `${String(when).replace(':', ' ')}, its ${side === 'text' ? 'text' : 'fill'} is a color of the base theme's palette written out (${v}), which the theme's ${named} color does not reach`,
           aspect: side === 'text' ? 'text' : 'background',
           steps: [{thing, value: `var(${token})`, on: p, when}],
@@ -562,6 +602,7 @@ export function missedSteps(ctx, data, res, base) {
         found.push({
           kind: 8,
           part: p,
+          ...(when ? {when} : {}),
           why: `${when ? `${when.replace(':', ' ')}, ` : ''}its ${thing === 'color' ? 'text' : thing.replace('-color', '')} is the base theme's own accent (${String(v)}), written as a color, which the accent leaves as it is`,
           aspect:
             thing === 'color'
@@ -610,10 +651,25 @@ export function missedSteps(ctx, data, res, base) {
             ),
         )
       : [];
+    // (The looks the status fill is drawn in, when none is at rest.)
+    const statusLooks = statusReads.some((/** @type {any} */ r) =>
+      r.when.includes(''),
+    )
+      ? []
+      : [
+          ...new Set(
+            statusReads.flatMap((/** @type {any} */ r) =>
+              r.when
+                .filter((/** @type {string} */ w) => /^variant=[\w-]+$/.test(w))
+                .map((/** @type {string} */ w) => w.replace('=', ':')),
+            ),
+          ),
+        ];
     if (statuses.length && !covers(p, FILL))
       found.push({
         kind: 3,
         part: p,
+        ...(statusLooks.length ? {when: statusLooks.join(', ')} : {}),
         why: `still the base's ${statuses.join(', ')} color${statuses.length > 1 ? 's' : ''} (${statusReads[0].token}): not generated at the theme's vibrancy`,
         aspect: 'background',
         steps: statuses.map(st => ({
@@ -720,7 +776,7 @@ export function missedSteps(ctx, data, res, base) {
           kind: 2,
           part: p,
           state: st,
-          why: `${st}, it keeps the base's fill (${inState[0].token})`,
+          why: `${st}, it keeps the base's fill (${inState[0].token})${darkTintWords()}`,
           aspect: 'background',
           steps: [
             {
@@ -740,9 +796,21 @@ export function missedSteps(ctx, data, res, base) {
   const squareCorners = modes.every(
     m => Number.parseFloat(String(res[m]?.['--radius-element'] ?? '')) === 0,
   );
+  // (The corners dial at square squares them itself.)
+  const squaresPills = data.settings.some(
+    x =>
+      x.source === 'dial' &&
+      x.thing === 'corners' &&
+      !x.on &&
+      /^(?:square|0px)$/.test(cornersPlain(String(x.value)) ?? ''),
+  );
+  // (Only a pill that is a styling choice: a circle keeps its shape.)
   if (corners && squareCorners)
-    for (const p of pillParts(C).filter(
-      x => has(x) && !covers(x, /^(border-radius|corners|--radius-[\w-]+)$/),
+    for (const p of pillShapes(C).pills.filter(
+      x =>
+        has(x) &&
+        !covers(x, /^(border-radius|corners|--radius-[\w-]+)$/) &&
+        !squaresPills,
     ))
       found.push({
         kind: 4,

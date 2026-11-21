@@ -256,6 +256,42 @@ describe('Button', () => {
     expect(screen.getByRole('button')).toBe(button);
   });
 
+  it.each([
+    ['primary', 'accent'],
+    ['destructive', 'error'],
+  ] as const)(
+    'gives a neutral Badge in a %s Button its fill pair inverted',
+    (variant, fill) => {
+      render(
+        <Button
+          label="Checkout"
+          variant={variant}
+          endContent={<Badge data-testid="count" label={3} />}
+        />,
+      );
+      const button = getComputedStyle(screen.getByRole('button'));
+      expect(button.getPropertyValue('--_button-fill')).toBe(
+        `var(--color-${fill})`,
+      );
+      expect(button.getPropertyValue('--_button-on-fill')).toBe(
+        `var(--color-on-${fill})`,
+      );
+      const badge = getComputedStyle(screen.getByTestId('count'));
+      expect(badge.backgroundColor).toContain('--_button-on-fill');
+      expect(badge.color).toContain('--_button-fill');
+    },
+  );
+
+  it.each(['secondary', 'ghost'] as const)(
+    'leaves a neutral Badge in a %s Button on its page colours',
+    variant => {
+      render(<Button label="Inbox" variant={variant} />);
+      const button = getComputedStyle(screen.getByRole('button'));
+      expect(button.getPropertyValue('--_button-fill')).toBe('');
+      expect(button.getPropertyValue('--_button-on-fill')).toBe('');
+    },
+  );
+
   // endContent tests
   it('renders endContent after label', () => {
     render(

@@ -210,6 +210,26 @@ function installCoreStylesheetOnly(arm: string) {
 }
 
 /**
+ * Core's stylesheet and a built theme stylesheet, without reset.css: the
+ * install of an app that keeps its own preflight and loads a stock theme's
+ * CSS.
+ */
+function installThemeStylesheetWithoutReset(arm: string) {
+  edit(path.join(arm, 'src', 'index.css'), source =>
+    source.replace(
+      "@import 'tailwindcss';",
+      [
+        '@layer reset, theme, base, astryx-base, astryx-theme, components, utilities;',
+        '',
+        "@import 'tailwindcss';",
+        "@import '@astryxdesign/core/astryx.css';",
+        "@import '@astryxdesign/theme-neutral/theme.css';",
+      ].join('\n'),
+    ),
+  );
+}
+
+/**
  * Canonical `host-aligned` strategy install.
  *
  * The established host stays authoritative: the app owns a theme that extends
@@ -2113,6 +2133,49 @@ describeCanonical('canonical established-app strategies', () => {
 
     // Host damage is still detected at full strength.
     assertStyleMutationFails(baseline, result, 'primary-action');
+  }, 180_000);
+
+  it("leaves a host's color scheme alone when it loads a built theme stylesheet without reset.css", () => {
+    // The host names no scheme of its own, and loads Core's stylesheet and
+    // the neutral theme's stylesheet without reset.css. A built theme follows
+    // the page's scheme, so the root's scheme stays the host's in both
+    // reader runs: a light host page with an Astryx button stays light for a
+    // dark reader, its native controls and canvas included.
+    const {
+      root,
+      baseline: baselineApp,
+      arm,
+    } = preparePair('tailwind-v4-control');
+    applyButtonAddition(arm, installThemeStylesheetWithoutReset);
+    const baseline = measure(
+      baselineApp,
+      'tailwind-v4-control',
+      path.join(root, 'theme-css-no-reset-baseline.json'),
+    );
+    const provenance = provenanceFor(arm, 'tailwind-v4-control', 's1');
+    const result = measure(
+      arm,
+      'tailwind-v4-control',
+      path.join(root, 'theme-css-no-reset-arm.json'),
+      provenance,
+    );
+    expect(
+      result.build.ok,
+      `${result.build.stdout}\n${result.build.stderr}`,
+    ).toBe(true);
+    const css = fs.readFileSync(path.join(arm, 'src', 'index.css'), 'utf8');
+    expect(css).not.toContain('@astryxdesign/core/reset.css');
+    expect(css).toContain('@astryxdesign/theme-neutral/theme.css');
+    for (const scheme of ['light', 'dark'] as const) {
+      expect(baseline.schemes[scheme].colorScheme).toBe('normal');
+      expect(result.schemes[scheme].colorScheme, scheme).toBe(
+        baseline.schemes[scheme].colorScheme,
+      );
+    }
+    const score = scoreArm(baseline, result);
+    expect(score.regressionDetails, JSON.stringify(score, null, 2)).toEqual([]);
+    expect(verdict(score)).toBe('clean');
+    expect(passesAcceptance(score)).toBe(true);
   }, 180_000);
 
   it('builds an app-owned theme deterministically and imports no stock theme', () => {

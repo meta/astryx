@@ -4,7 +4,7 @@
 
 /**
  * @file usePointerDragScroll.ts
- * @input A scroll container ref
+ * @input A scroll container ref, and the Reduced Motion setting
  * @output Lets a mouse drag the container's contents the way a finger does,
  *   and reports while a drag holds it (`isDraggingRef`)
  * @position Internal behavior hook; consumed by Wheel.tsx
@@ -53,6 +53,7 @@
  */
 
 import {useEffect, useRef} from 'react';
+import {reducedMotionFade} from '../motion/reducedMotion';
 
 /**
  * Movement below this stays a click. A mouse shifts a pixel or two under the
@@ -186,10 +187,13 @@ export function usePointerDragScroll(
       // The release lands mid-row. Glide to the nearest one and only then let
       // snapping back on — restoring it here instead would jump the distance
       // rather than travel it, and a jump is what this hook exists to avoid.
+      // Under Reduced Motion it lands on the row at once instead.
       const rowHeight = firstRowHeight(element);
       if (rowHeight > 0) {
         const nearest = Math.round(element.scrollTop / rowHeight) * rowHeight;
-        element.scrollTo({top: nearest, behavior: 'smooth'});
+        const behavior: ScrollBehavior =
+          reducedMotionFade(element) == null ? 'smooth' : 'instant';
+        element.scrollTo({top: nearest, behavior});
       }
       // `scrollend` is the honest signal; the timer covers browsers that do
       // not fire it, and the case where the glide had nowhere to go.

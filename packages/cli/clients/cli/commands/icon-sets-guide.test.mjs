@@ -95,6 +95,22 @@ describe('icon-set guide', () => {
     }
   });
 
+  it('shows how to make a set inside an app, with no other package', async () => {
+    const {status, stdout} = await runCli(['docs', GUIDE, 'in-your-app']);
+    expect(status).toBe(0);
+    for (const phrase of [
+      'Make a set inside your app',
+      formatCliCommand(
+        'experimental icon new-set heroicons --from @heroicons/react/24/outline',
+      ),
+      formatCliCommand('experimental icon use heroicons'),
+      '"private": true',
+      "import {themeIcons} from 'app';",
+    ]) {
+      expect(stdout).toContain(phrase);
+    }
+  });
+
   it('tells authors no version range promises icon sets, and what a CLI without them says', async () => {
     const {stdout} = await runCli(['docs', GUIDE, 'publish']);
     expect(stdout).toContain('no version range promises them');

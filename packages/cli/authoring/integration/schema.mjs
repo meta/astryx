@@ -83,10 +83,12 @@ function readThemeProvider(value) {
 }
 
 /**
+ * Why `value` cannot be one line of the managed agent-docs block, or null.
  * @param {string} value
+ * @param {number} [maxCodePoints] the longest line it may be
  * @returns {string|null}
  */
-function invalidAgentDocLine(value) {
+export function invalidAgentDocLine(value, maxCodePoints = MAX_AGENT_DOC_LINE_CODE_POINTS) {
   if (value.length === 0 || value.trim().length === 0)
     return 'must not be blank';
   if (value !== value.trim()) return 'must not have surrounding whitespace';
@@ -103,8 +105,8 @@ function invalidAgentDocLine(value) {
   if (MANAGED_MARKER_TEXT.test(value))
     return 'must not contain managed marker text';
   const codePoints = [...value].length;
-  if (codePoints > MAX_AGENT_DOC_LINE_CODE_POINTS) {
-    return `must contain at most ${MAX_AGENT_DOC_LINE_CODE_POINTS} Unicode code points (received ${codePoints})`;
+  if (codePoints > maxCodePoints) {
+    return `must contain at most ${maxCodePoints} Unicode code points (received ${codePoints})`;
   }
   return null;
 }
@@ -128,6 +130,9 @@ const agentDocLineSchema = z.string().superRefine((value, ctx) => {
   const message = invalidAgentDocLine(value);
   if (message) ctx.addIssue({code: 'custom', message});
 });
+
+// Install guidance is one line under the same rules as an agent-docs line.
+export const installGuidanceSchema = agentDocLineSchema;
 
 export const agentDocsSchema = z.object({
   append: z
@@ -191,14 +196,15 @@ export const integrationBaseSchema = z.object({
 export const integrationSchema = integrationBaseSchema.extend({
   agentDocs: agentDocsSchema.optional(),
   cliCommand: cliCommandSchema.optional(),
+  installGuidance: installGuidanceSchema.optional(),
 });
 
 /**
  * Parse every default-manifest field except the independently isolated
- * `agentDocs` and `cliCommand` fields.
+ * `agentDocs`, `cliCommand` and `installGuidance` fields.
  * @param {unknown} input
  * @param {string} label
- * @returns {Omit<AstryxIntegration, 'agentDocs' | 'cliCommand'>}
+ * @returns {Omit<AstryxIntegration, 'agentDocs' | 'cliCommand' | 'installGuidance'>}
  */
 export function parseIntegrationBase(input, label) {
   const result = integrationBaseSchema.safeParse(input);
@@ -228,6 +234,20 @@ export function parseAgentDocsField(input, label) {
  */
 export function parseCliCommandField(input, label) {
   const result = cliCommandSchema.safeParse(input);
+  if (!result.success) throw new Error(formatZodError(label, result.error));
+  return result.data;
+}
+
+/**
+ * Parse only the optional `installGuidance` field. Isolated like
+ * `cliCommand`: an invalid value is ignored with a warning, and the rest of
+ * the manifest still contributes.
+ * @param {unknown} input
+ * @param {string} label
+ * @returns {string}
+ */
+export function parseInstallGuidanceField(input, label) {
+  const result = installGuidanceSchema.safeParse(input);
   if (!result.success) throw new Error(formatZodError(label, result.error));
   return result.data;
 }

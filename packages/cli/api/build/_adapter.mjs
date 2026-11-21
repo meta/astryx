@@ -24,7 +24,7 @@
  */
 
 import fs from 'node:fs';
-import {renderTokens} from '../../foundation/doc-compiler/links.mjs';
+import {linkOwnedTexts} from '../docs/_adapter.mjs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
@@ -51,6 +51,7 @@ import {
   readThemeState,
 } from '../../foundation/config/theme-state.mjs';
 import {STARTER_THEME} from '../../foundation/discovery/theme-discovery.mjs';
+import {fillTemplatePlaceholders} from '../../foundation/discovery/template-placeholders.mjs';
 import {AstryxError} from '../error.mjs';
 
 /**
@@ -128,6 +129,13 @@ export async function loadTemplates(cwd) {
   } catch {
     return {pages: [], blocks: [], notReadyPages: []};
   }
+  // Each description as `astryx docs` shows a doc's text: links and doc
+  // tokens rendered, so the kit and its JSON carry the bare command.
+  const described = await linkOwnedTexts(
+    templates.map(t => ({text: t.description || '', package: t.package})),
+    cwd,
+  );
+  const descriptions = new Map(templates.map((t, i) => [t, described[i]]));
   const notReadyPages = templates
     .filter(t => t.type === 'page' && t.isReady === false)
     .map(t => ({
@@ -135,7 +143,7 @@ export async function loadTemplates(cwd) {
       displayName: t.displayName || t.name,
       category: t.category || '',
       keywords: t.keywords ?? [],
-      description: renderTokens(t.description || ''),
+      description: descriptions.get(t) ?? '',
     }));
   const pages = templates
     .filter(t => t.type === 'page' && t.isReady !== false)
@@ -144,7 +152,7 @@ export async function loadTemplates(cwd) {
         {
           name: t.dirName,
           displayName: t.displayName || t.name,
-          description: renderTokens(t.description || ''),
+          description: descriptions.get(t) ?? '',
           package: t.package ?? '@astryxdesign/core',
           category: t.category || '',
           keywords: t.keywords ?? [],
@@ -164,7 +172,7 @@ export async function loadTemplates(cwd) {
       name: t.dirName,
       package: t.package ?? '@astryxdesign/core',
       displayName: t.name,
-      description: renderTokens(t.description || ''),
+      description: descriptions.get(t) ?? '',
       command: `astryx template ${t.replaces ?? t.dirName} --type block`,
       isReady: t.isReady !== false,
     }));
@@ -371,7 +379,9 @@ function isBlockPickerWeights(w) {
  */
 export function templateSetupNotes(template, cwd) {
   try {
-    const source = fs.readFileSync(template.filePath, 'utf-8');
+    const {source} = fillTemplatePlaceholders(
+      fs.readFileSync(template.filePath, 'utf-8'),
+    );
     return analyzeTemplateNeeds(source, cwd).notes;
   } catch {
     // Best-effort: a read failure does not break the recommendation.
