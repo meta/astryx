@@ -30,7 +30,7 @@ type Direction = 'ltr' | 'rtl';
 type Viewport = {width: number; height: number};
 type Check = (condition: boolean, message: string) => void;
 type FrameSink = (state: string, observed: unknown) => Promise<void>;
-type Pointer = 'fine' | 'coarse';
+type Pointer = 'fine';
 
 type AuditCase = {
   key: string;
@@ -56,7 +56,7 @@ let storybookSha: string;
 
 /**
  * Waits for fonts, images and two frames. `holdMotionStill` pins every
- * transition to 0s and re-emulates media, so motion and touch cases skip it.
+ * transition to 0s and re-emulates media, so motion cases skip it.
  */
 async function settle(page: Page, still = true) {
   if (still) {
@@ -271,7 +271,25 @@ addCase({
   reducedMotion: 'reduce',
   run: async (page, check, frame) => {
     const all = await radios(page);
-    check(all.length >= 2, `themed radios ${all.length}`);
+    const unchecked = all.find(r => r.checked == null);
+    const checked = all.find(r => r.checked === 'checked');
+    check(unchecked != null && checked != null, 'both themed radio states');
+    for (const r of all) {
+      check(r.radius === '50%', `themed radius ${r.radius}`);
+    }
+    check(unchecked?.dot == null, 'a themed unchecked radio draws a dot');
+    check(
+      checked?.dot != null &&
+        Math.abs(checked.dot.dx) <= 0.5 &&
+        Math.abs(checked.dot.dy) <= 0.5,
+      `themed dot off center ${checked?.dot?.dx},${checked?.dot?.dy}`,
+    );
+    check(
+      unchecked != null && checked != null && unchecked.fill !== checked.fill,
+      `themed checked fill ${checked?.fill} equals unchecked ${unchecked?.fill}`,
+    );
+    const violations = await axe(page);
+    check(violations.length === 0, `axe: ${violations.join(' | ')}`);
     await frame('rest', {radios: all});
   },
 });
@@ -297,13 +315,18 @@ addCase({
     // The pointer moves to the circle's center; the host row takes the
     // hover, since the circle itself is decorative.
     const pointAt = async (index: number) => {
-      const box = await page
+      const radio = page
         .locator('#storybook-root .astryx-radio-indicator')
-        .nth(index)
-        .boundingBox();
-      if (box != null) {
-        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        .nth(index);
+      const box = await radio.boundingBox();
+      check(box != null, `radio ${index} has no box`);
+      if (box == null) {
+        return false;
       }
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      const hovered = await radio.evaluate(el => el.matches(':hover'));
+      check(hovered, `radio ${index} is not under the pointer`);
+      return hovered;
     };
     await pointAt(enabledIndex);
     await settle(page);
@@ -423,23 +446,6 @@ async function runCase(page: Page, item: AuditCase) {
     colorScheme: item.mode,
     reducedMotion: item.reducedMotion,
   });
-  if (item.pointer === 'coarse') {
-    // Playwright has no hover or pointer media option; Chromium takes them over CDP.
-    const cdp = await page.context().newCDPSession(page);
-    await cdp.send('Emulation.setEmulatedMedia', {
-      features: [
-        {name: 'hover', value: 'none'},
-        {name: 'any-hover', value: 'none'},
-        {name: 'pointer', value: 'coarse'},
-        {name: 'any-pointer', value: 'coarse'},
-        {
-          name: 'prefers-reduced-motion',
-          value: item.reducedMotion === 'reduce' ? 'reduce' : '',
-        },
-        {name: 'prefers-color-scheme', value: item.mode},
-      ],
-    });
-  }
   const pageErrors: string[] = [];
   const onError = (error: Error) => pageErrors.push(String(error));
   page.on('pageerror', onError);
@@ -530,7 +536,6 @@ for (const group of [...new Set(cases.map(item => item.group))]) {
   test(group, async ({browser}) => {
     const context = await browser.newContext({
       deviceScaleFactor: 2,
-      hasTouch: group.endsWith('-coarse'),
     });
     try {
       const page = await context.newPage();

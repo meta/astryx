@@ -341,7 +341,12 @@ function rulesFor(el: Element): string[] {
   for (const sheet of Array.from(document.styleSheets)) {
     for (const rule of Array.from(sheet.cssRules)) {
       const text = rule.cssText;
-      if (Array.from(el.classList).some(name => text.includes(`.${name}`))) {
+      const names = Array.from(el.classList);
+      if (
+        names.some(name =>
+          new RegExp(`\\.${CSS.escape(name)}(?![\\w-])`).test(text),
+        )
+      ) {
         rules.push(text);
       }
     }
