@@ -5,7 +5,7 @@
 /**
  * @file useTheme.ts
  * @input ThemeContext provided by Theme
- * @output Exports useTheme, useThemeName, and internal theme-object access
+ * @output Exports useTheme, useThemeName, and internal theme-input access
  * @position Theme hook; used by data viz, canvas, and non-CSS consumers
  *
  * Provides synchronous access to theme token values resolved for the
@@ -460,10 +460,11 @@ export function useRootScheme(watch: boolean): 'light' | 'dark' | null {
 function useResolvedScheme(
   mode: ThemeMode,
   watchRoot: boolean,
+  enabled = true,
 ): 'light' | 'dark' {
   const prefersDark = useMediaQuery('(prefers-color-scheme: dark)');
   const forced = mode === 'light' || mode === 'dark';
-  const rootScheme = useRootScheme(!forced && watchRoot);
+  const rootScheme = useRootScheme(enabled && !forced && watchRoot);
   return forced ? mode : (rootScheme ?? (prefersDark ? 'dark' : 'light'));
 }
 
@@ -527,6 +528,43 @@ export function useThemeDefinition(enabled = true): DefinedTheme | undefined {
 }
 
 /**
+ * Resolve the theme and effective mode without building tokens. With
+ * `enabled` false, only the shared OS preference subscription stays active.
+ * @internal
+ */
+export function useThemeInputs(enabled = true) {
+  const ctx = enabled ? use(ThemeContext) : null;
+  const nearest = enabled ? use(ThemeModeContext) : null;
+  const nearestMode = nearest?.mode;
+  const systemScheme = enabled ? use(SystemSchemeContext) : null;
+
+  // Falls back to the root Theme's mode via <html data-theme> when there's
+  // no Theme above (e.g. useToast's detached fallback viewport). Resolves to
+  // null when a Theme is above, so it has no effect there.
+  const hasCtx = ctx != null;
+  const rootAttrMode = useRootModeAttr(
+    !enabled || hasCtx || nearestMode != null,
+  );
+  const rootThemeName = useRootThemeNameAttr(
+    !enabled || hasCtx || nearest?.themeless === true,
+  );
+  const mode = ctx?.mode ?? nearestMode ?? rootAttrMode ?? 'system';
+  const theme = enabled
+    ? (ctx?.theme ?? getRegisteredTheme(rootThemeName))
+    : null;
+  // Anything outside light|dark (a stale persisted preference cast to
+  // ThemeMode, say) resolves like 'system', the way the root Theme's <html>
+  // sync already treats it, so the declared return type holds.
+  const effectiveMode = useResolvedScheme(
+    mode,
+    systemScheme === 'root',
+    enabled,
+  );
+
+  return {theme, effectiveMode};
+}
+
+/**
  * Access the current Astryx theme's token values, resolved for the active color mode.
  *
  * Returns raw CSS values (hex colors, px values, etc.) suitable for
@@ -554,27 +592,7 @@ export function useThemeDefinition(enabled = true): DefinedTheme | undefined {
  * ```
  */
 export function useTheme(): UseThemeReturn {
-  const ctx = use(ThemeContext);
-  const nearest = use(ThemeModeContext);
-  const nearestMode = nearest?.mode;
-  const systemScheme = use(SystemSchemeContext);
-
-  // Falls back to the root Theme's mode via <html data-theme> when there's
-  // no Theme above (e.g. useToast's detached fallback viewport). Resolves to
-  // null when a Theme is above, so it has no effect there.
-  const hasCtx = ctx != null;
-  const rootAttrMode = useRootModeAttr(hasCtx || nearestMode != null);
-  const rootThemeName = useRootThemeNameAttr(
-    hasCtx || nearest?.themeless === true,
-  );
-
-  const mode = ctx?.mode ?? nearestMode ?? rootAttrMode ?? 'system';
-  const theme = ctx?.theme ?? getRegisteredTheme(rootThemeName);
-
-  // Anything outside light|dark (a stale persisted preference cast to
-  // ThemeMode, say) resolves like 'system', the way the root Theme's <html>
-  // sync already treats it, so the declared return type holds.
-  const effectiveMode = useResolvedScheme(mode, systemScheme === 'root');
+  const {theme, effectiveMode} = useThemeInputs();
 
   // Build the full resolved map, memoized on theme + effective mode
   const tokens = useMemo(
