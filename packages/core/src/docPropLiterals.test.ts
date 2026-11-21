@@ -939,11 +939,12 @@ describe('doc prop types surface their literal values (#1645)', () => {
 
     it('Lightbox.media keeps naming its type (spelling it out yields a string control)', () => {
       const media = realProp('Lightbox', 'media');
-      expect(media.type).toBe('LightboxMedia | LightboxMedia[]');
+      expect(media.type).toBe('LightboxItem | LightboxItem[]');
       // Same bargain as IconName: named is allowed only while the prose
       // carries the values a consumer must write.
       expect(media.description).toContain("'image'");
       expect(media.description).toContain("'video'");
+      expect(media.description).toContain("'custom'");
     });
 
     it('Grid.gap cannot quietly lose the step 1, masked by 1.5 and 10', () => {
