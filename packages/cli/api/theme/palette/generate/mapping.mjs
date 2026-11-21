@@ -382,6 +382,17 @@ export const NEUTRAL_STOPS = ownTable({
   ),
 });
 /**
+ * Neutral tokens a tinted gray draws inside its ramp too: its inks.
+ * @type {ReadonlyArray<string>}
+ */
+const TINTED_INK = Object.freeze([
+  '--color-text-primary',
+  '--color-icon-primary',
+  // Text on a dark surface (a toast, a card over the scrim): tinted with
+  // the surface it sits on.
+  '--color-on-dark',
+]);
+/**
  * Neutral tokens whose shade stays inside the ramp, off its white and black ends.
  * @type {ReadonlyArray<string>}
  */
@@ -1300,7 +1311,13 @@ export function mapPalette(candidate, dials, fills, context) {
       ) {
         continue;
       }
-      const shadeAt = NEUTRAL_INSIDE.includes(token) ? atInside : at;
+      // Primary text and icons of a tinted gray carry its tint: the shade
+      // inside the ramp's black and white ends, which always reads.
+      const shadeAt =
+        NEUTRAL_INSIDE.includes(token) ||
+        (TINTED_INK.includes(token) && !isGray(neutral.seed))
+          ? atInside
+          : at;
       put(
         token,
         'neutral',
