@@ -4,9 +4,12 @@ import type {Meta, StoryObj} from '@storybook/react';
 import {expect, userEvent, waitFor, within} from 'storybook/test';
 import {useState} from 'react';
 import {Button} from '@astryxdesign/core/Button';
+import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {InputGroup, InputGroupText} from '@astryxdesign/core/InputGroup';
 import {MultiSelector} from '@astryxdesign/core/MultiSelector';
+import {VStack} from '@astryxdesign/core/Layout';
+import {TextInput} from '@astryxdesign/core/TextInput';
 import {Theme, defineTheme} from '@astryxdesign/core/theme';
 
 const meta: Meta<typeof MultiSelector> = {
@@ -883,7 +886,7 @@ export const RowActions: Story = {
     const action = (label: string) => (
       <IconButton
         label={`Edit ${label}`}
-        icon="moreHorizontal"
+        icon={<Icon icon="moreHorizontal" />}
         variant="ghost"
         size="sm"
         tooltip={`Edit ${label}`}
@@ -946,7 +949,7 @@ export const RowActionsRtl: Story = {
               action: (
                 <IconButton
                   label="Edit Bug"
-                  icon="moreHorizontal"
+                  icon={<Icon icon="moreHorizontal" />}
                   variant="ghost"
                   size="sm"
                 />
@@ -961,4 +964,52 @@ export const RowActionsRtl: Story = {
       </div>
     );
   },
+};
+
+/**
+ * A Notes field, a button that is no Tab stop, as an unselected tab in a
+ * roving group is, and a MultiSelector, inside a container that takes focus.
+ */
+function MultiSelectorInContainer({tabIndex}: {tabIndex: number}) {
+  const [value, setValue] = useState<string[]>([]);
+  const [notes, setNotes] = useState('');
+  return (
+    <div
+      tabIndex={tabIndex}
+      data-testid="focusable-container"
+      style={{padding: 32}}>
+      <VStack gap={4}>
+        <TextInput label="Notes" value={notes} onChange={setNotes} />
+        <button type="button" tabIndex={-1}>
+          Next tab
+        </button>
+        <MultiSelector
+          label="Fruits"
+          options={['Apple', 'Banana', 'Cherry']}
+          value={value}
+          onChange={setValue}
+        />
+      </VStack>
+    </div>
+  );
+}
+
+/**
+ * A MultiSelector inside a container that takes focus but is no control,
+ * such as a dialog's content box with `tabIndex={-1}`, below another field.
+ * A press inside the open list, or on the container, moves the browser's
+ * focus to that container.
+ */
+export const InsideFocusableContainer: Story = {
+  tags: ['!autodocs'],
+  render: () => <MultiSelectorInContainer tabIndex={-1} />,
+};
+
+/**
+ * A MultiSelector inside a container that is a Tab stop, such as a card with
+ * `tabIndex={0}`. A press on the container's padding focuses the container.
+ */
+export const InsideTabStopContainer: Story = {
+  tags: ['!autodocs'],
+  render: () => <MultiSelectorInContainer tabIndex={0} />,
 };

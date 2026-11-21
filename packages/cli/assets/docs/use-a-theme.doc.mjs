@@ -6,7 +6,23 @@ export const docs = {
   name: 'use-a-theme',
   title: 'Use a theme',
   category: 'guide',
-  keywords: ['theme', 'Theme', 'dark mode', 'light', 'nested', 'provider', 'SSR', 'built', 'runtime', 'neutralTheme', 'available themes', 'theme add', 'import', 'astryx-themes', 'eject'],
+  keywords: [
+    'theme',
+    'Theme',
+    'dark mode',
+    'light',
+    'nested',
+    'provider',
+    'SSR',
+    'built',
+    'runtime',
+    'neutralTheme',
+    'available themes',
+    'theme add',
+    'import',
+    'astryx-themes',
+    'eject',
+  ],
   description:
     'Apply a theme to your app: install, import with the CLI, wire the generated module, switch dark mode, nest themes, and choose runtime or built for production.',
 
@@ -35,11 +51,15 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: '`theme add` records an installed package theme and regenerates `src/astryx-themes.ts` or `.js` with its built module, production CSS, and optional font CSS. In a project without `src`, the module is at the project root. The first imported theme becomes the default. `theme use <slug>` changes that default, and `theme remove <slug>` removes a non-default theme.',
+          text: '`theme add` records an installed package theme and regenerates `src/astryx-themes.ts` or `.js` with its built module, production CSS, and optional font CSS. In a project without `src`, the module is at the project root. The first imported theme becomes the default. `theme use <slug>` changes that default, and `theme remove <slug>` removes a theme other than the default. Removing the only added theme removes the module file and prints the lines the app root must drop.',
         },
         {
           type: 'prose',
-          text: 'Customize a package theme with `defineTheme({extends: importedTheme, ...})`, then build and add that local theme. Use `theme eject` only when you want an independent source fork that no longer receives the package owner\'s updates. For the full authoring guide, see {@link generic:author-a-theme}.',
+          text: "Your theme's page color, `--color-background-body`, shows inside `AppShell`; `Theme` sets the tokens but paints no page of its own. Wrap the page in `AppShell`; if you can't, add `body { background: var(--color-background-body) }` to global CSS (doctor's purity check flags any stylesheet, so prefer `AppShell`). An Astryx area embedded in a page another app owns adds no body rule: that page is not its own. A theme with one mode draws its text for its own page, so the page needs that color in every OS mode.",
+        },
+        {
+          type: 'prose',
+          text: "Customize a package theme with `defineTheme({extends: importedTheme, ...})`, then build and add that local theme. Use `theme eject` only when you want an independent source fork that no longer receives the package owner's updates. For the full authoring guide, see {@link generic:author-a-theme}.",
         },
       ],
     },
@@ -71,19 +91,47 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Install the theme package you want with `{@pm install @astryxdesign/theme-<name>}`, then import its slug with `theme add <slug>`. The CLI imports the package\'s built outputs for you.',
+          text: "Install the theme package you want with `{@pm install @astryxdesign/theme-<name>}`, then import its slug with `theme add <slug>`. The CLI imports the package's built outputs for you.",
         },
         {
           type: 'table',
           headers: ['Theme', 'Add command', 'Description'],
           rows: [
-            ['Neutral', '{@command theme add neutral}', 'Muted, minimal aesthetic with Figtree typography. A good starting point.'],
-            ['Butter', 'astryx theme add butter', 'Golden, buttery surfaces with blue accents; Sarina + Outfit type.'],
-            ['Chocolate', 'astryx theme add chocolate', 'Warm brown tones and cozy beige; Fraunces + Albert Sans type.'],
-            ['Gothic', 'astryx theme add gothic', 'Dark-only atmospheric theme; deep blue-gray surfaces, distressed display type.'],
-            ['Matcha', 'astryx theme add matcha', 'Earthy greens; DM Sans + Playwrite US Trad type.'],
-            ['Stone', 'astryx theme add stone', 'Warm stone and slate tones; Montserrat + Figtree type.'],
-            ['Y2K', 'astryx theme add y2k', 'Playful Y2K pop; periwinkle body, holographic accents, Poppins + Crimson Text.'],
+            [
+              'Neutral',
+              '{@command theme add neutral}',
+              'Muted, minimal aesthetic with Figtree typography. A good starting point.',
+            ],
+            [
+              'Butter',
+              'astryx theme add butter',
+              'Golden, buttery surfaces with blue accents; Sarina + Outfit type.',
+            ],
+            [
+              'Chocolate',
+              'astryx theme add chocolate',
+              'Warm brown tones and cozy beige; Fraunces + Albert Sans type.',
+            ],
+            [
+              'Gothic',
+              'astryx theme add gothic',
+              'Dark-only atmospheric theme; deep blue-gray surfaces, distressed display type.',
+            ],
+            [
+              'Matcha',
+              'astryx theme add matcha',
+              'Earthy greens; DM Sans + Playwrite US Trad type.',
+            ],
+            [
+              'Stone',
+              'astryx theme add stone',
+              'Warm stone and slate tones; Montserrat + Figtree type.',
+            ],
+            [
+              'Y2K',
+              'astryx theme add y2k',
+              'Playful Y2K pop; periwinkle body, holographic accents, Poppins + Crimson Text.',
+            ],
           ],
         },
         {
@@ -145,6 +193,10 @@ export const docs = {
           type: 'prose',
           text: 'To create a theme with custom dark mode colors, see {@link generic:author-a-theme}.',
         },
+        {
+          type: 'prose',
+          text: 'To make dark mode the default, pass `mode="dark"` to the root `Theme`. A server-rendered app also sets `<html data-theme="dark">` in its root layout, so the first paint is dark before the app runs.',
+        },
       ],
     },
     {
@@ -159,7 +211,7 @@ export const docs = {
           type: 'code',
           lang: 'tsx',
           label: 'Dark sidebar with light content',
-          code: "<Theme theme={lightTheme} mode=\"light\">\n  <Layout\n    header={<LayoutHeader>...</LayoutHeader>}\n    start={\n      <Theme theme={darkTheme} mode=\"dark\">\n        <LayoutPanel>{/* Dark sidebar */}</LayoutPanel>\n      </Theme>\n    }\n    content={<LayoutContent>{/* Light content */}</LayoutContent>}\n  />\n</Theme>",
+          code: '<Theme theme={lightTheme} mode="light">\n  <Layout\n    header={<LayoutHeader>...</LayoutHeader>}\n    start={\n      <Theme theme={darkTheme} mode="dark">\n        <LayoutPanel>{/* Dark sidebar */}</LayoutPanel>\n      </Theme>\n    }\n    content={<LayoutContent>{/* Light content */}</LayoutContent>}\n  />\n</Theme>',
         },
       ],
     },
@@ -174,12 +226,36 @@ export const docs = {
           type: 'table',
           headers: ['', 'Runtime (source)', 'Built'],
           rows: [
-            ['Import (published theme)', '@astryxdesign/theme-{name}', '@astryxdesign/theme-{name}/built + theme.css'],
-            ['Import (custom theme)', 'defineTheme() directly', 'Built .js + .css from `{@command theme build}`'],
-            ['How it works', 'useInsertionEffect injects <style> at hydration', 'Pre-compiled .css file loaded with the page'],
-            ['Component overrides', 'Injected client-only', 'In static CSS: present during SSR'],
-            ['SSR safe', 'Tokens yes, component overrides flash on hydration', 'Fully SSR safe: no flash'],
-            ['Best for', 'Authoring input for `{@command theme build}`', 'App wiring, in development and production'],
+            [
+              'Import (published theme)',
+              '@astryxdesign/theme-{name}',
+              '@astryxdesign/theme-{name}/built + theme.css',
+            ],
+            [
+              'Import (custom theme)',
+              'defineTheme() directly',
+              'Built .js + .css from `{@command theme build}`',
+            ],
+            [
+              'How it works',
+              'useInsertionEffect injects <style> at hydration',
+              'Pre-compiled .css file loaded with the page',
+            ],
+            [
+              'Component overrides',
+              'Injected client-only',
+              'In static CSS: present during SSR',
+            ],
+            [
+              'SSR safe',
+              'Tokens yes, component overrides flash on hydration',
+              'Fully SSR safe: no flash',
+            ],
+            [
+              'Best for',
+              'Authoring input for `{@command theme build}`',
+              'App wiring, in development and production',
+            ],
           ],
         },
         {

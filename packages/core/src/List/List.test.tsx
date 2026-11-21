@@ -787,7 +787,29 @@ describe('List', () => {
     );
     const item = container.querySelector('.astryx-item');
     expect(item).not.toHaveAttribute('aria-selected');
-    expect(item).toHaveAttribute('aria-current', 'true');
+    // The marker sits on the row's button, the element that takes focus.
+    expect(item).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('button', {current: true})).toHaveTextContent(
+      'Selected',
+    );
+  });
+
+  it("moves a caller's aria-current to the row's focusable element", () => {
+    const {container} = render(
+      <List>
+        <ListItem label="Inbox" aria-current="page" href="/inbox" />
+        <ListItem label="Drafts" aria-current="page" onClick={() => {}} />
+      </List>,
+    );
+    for (const item of container.querySelectorAll('.astryx-item')) {
+      expect(item).not.toHaveAttribute('aria-current');
+    }
+    expect(screen.getByRole('link', {current: 'page'})).toHaveTextContent(
+      'Inbox',
+    );
+    expect(screen.getByRole('button', {current: 'page'})).toHaveTextContent(
+      'Drafts',
+    );
   });
 
   it('applies neither aria-selected nor aria-current when not selected', () => {

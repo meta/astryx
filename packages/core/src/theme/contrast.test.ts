@@ -2,8 +2,9 @@
 
 import {describe, it, expect} from 'vitest';
 import {relativeLuminance, compositeOver, contrastRatio} from './contrast';
-import {parseColor} from '../utils/color';
+import {formatColor, parseColor} from '../utils/color';
 import {resolveThemeToken} from './tokens';
+import {colorDefaults} from './tokens.stylex';
 
 describe('relativeLuminance', () => {
   it('is 0 for black and 1 for white', () => {
@@ -102,4 +103,70 @@ describe('the stock accent pair', () => {
     const onAccent = resolveThemeToken(null, '--color-on-accent', {mode});
     expect(contrastRatio(onAccent, accent)).toBeGreaterThanOrEqual(4.5);
   });
+});
+
+describe('secondary text on the neutral fill', () => {
+  // An unselected SegmentedControl label and AvatarGroup's overflow count are
+  // secondary text on a translucent --color-neutral fill. The fill lifts the
+  // page under it, so Core's defaults are measured on the composited fill.
+  const pages = [
+    '--color-background-surface',
+    '--color-background-card',
+    '--color-background-body',
+  ] as const;
+  const cases = (['light', 'dark'] as const).flatMap(mode =>
+    pages.map(page => [mode, page] as const),
+  );
+  it.each(cases)('meets 4.5:1 in the %s theme over %s', (mode, page) => {
+    const fill = parseColor(resolveThemeToken(null, '--color-neutral', {mode}));
+    const backdrop = parseColor(resolveThemeToken(null, page, {mode}));
+    if (fill === null || backdrop === null) {
+      throw new Error('Core default colors must parse');
+    }
+    const text = resolveThemeToken(null, '--color-text-secondary', {mode});
+    expect(
+      contrastRatio(text, formatColor(compositeOver(fill, backdrop))),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe('secondary text on the stock palette tints', () => {
+  // A palette tint (Card's `gray` variant, for one) is translucent and sits
+  // on the surface or the page body. Secondary text is body-size text there
+  // (WCAG 1.4.3: 4.5:1).
+  const tints = Object.keys(colorDefaults).filter(name =>
+    /^--color-background-(blue|cyan|gray|green|orange|pink|purple|red|teal|yellow)$/.test(
+      name,
+    ),
+  );
+
+  it('covers every palette hue', () => {
+    expect(tints).toHaveLength(10);
+  });
+
+  it.each(['light', 'dark'] as const)(
+    'meets 4.5:1 over the surface and the body in the %s theme',
+    mode => {
+      const text = resolveThemeToken(null, '--color-text-secondary', {mode});
+      for (const backdropName of [
+        '--color-background-surface',
+        '--color-background-body',
+      ] as const) {
+        const backdrop = parseColor(
+          resolveThemeToken(null, backdropName, {mode}),
+        );
+        for (const tint of tints) {
+          const fill = parseColor(resolveThemeToken(null, tint, {mode}));
+          if (fill === null || backdrop === null) {
+            throw new Error(`${tint} or ${backdropName} must parse`);
+          }
+          const painted = formatColor(compositeOver(fill, backdrop));
+          expect(
+            contrastRatio(text, painted),
+            `${tint} over ${backdropName}`,
+          ).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+    },
+  );
 });

@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'moon',
+  group: 'colorMode',
   description: 'Dark mode or night.',
   words: ['dark mode', 'night'],
 };

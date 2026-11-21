@@ -112,7 +112,7 @@ describe('--json shim: an option given without its value', () => {
     expect(parsed.code).toBe('ERR_MISSING_ARGUMENT');
     expect(parsed.error).toMatch(/--package <package>' argument missing/);
     expect(parsed.suggestions).toEqual([
-      {name: 'astryx theme add [options] [slug]', reason: 'usage'},
+      {name: 'astryx theme add --package <package> [options] [slug]', reason: 'usage'},
     ]);
   });
 
@@ -123,7 +123,7 @@ describe('--json shim: an option given without its value', () => {
       /^Error: option '-o, --out <path>' argument missing\n/,
     );
     expect(stderr).toMatch(
-      /Usage: astryx theme build \[options\] <files\.\.\.>/,
+      /Usage: astryx theme build --out <path> \[options\] <files\.\.\.>/,
     );
   });
 });
@@ -180,10 +180,10 @@ describe('--json shim: unknown subcommand emits error envelope', () => {
     expect(parsed.apiVersion).toBe(1);
     expect(parsed.error).toMatch(/unknown command/i);
     expect(parsed.error).toMatch(/bogus-cmd/);
-    // Suggestions should list known commands
-    expect(Array.isArray(parsed.suggestions)).toBe(true);
-    const names = parsed.suggestions.map((s) => s.name);
-    expect(names).toContain('component');
+    // A word that names nothing gets the help, which lists every command.
+    expect(parsed.suggestions).toEqual([
+      {name: 'astryx help --json', reason: 'every command, with what it does'},
+    ]);
   });
 });
 

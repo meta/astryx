@@ -9,28 +9,25 @@
 import type {BaseSequencer} from 'vitest/node';
 
 export declare const DURATIONS: string;
-export declare const PER_FILE_SECONDS: number;
-export declare const LEG_PARALLELISM: number;
+export declare function durationsFile(): string;
 export declare function partitionByDuration(
   files: string[],
   count: number,
   seconds: Record<string, number>,
-  options?: {legOneSeconds?: number; idle?: Set<string>},
+  options?: {idle?: Set<string>},
 ): string[][];
 export declare function idleSwizzleSlices(
   files: string[],
 ): Promise<Set<string>>;
-export declare function readLegOneSeconds(file?: string): number;
-export declare function recordLegOneSteps(
-  text: string,
-  names: string[],
-): Record<string, number>;
 export declare function mergeRecord(
   current: Record<string, number>,
   recorded: Record<string, number>,
   exists?: (file: string) => boolean,
 ): Record<string, number>;
 export declare function readDurations(file?: string): Record<string, number>;
+export declare function plainLog(text: string): string;
+export declare function nodeLegLogs(text: string): Map<string, string>;
+export declare function countedTestFiles(text: string): number | null;
 export declare function recordDurations(text: string): Record<string, number>;
 declare const DurationShardSequencer: typeof BaseSequencer;
 export default DurationShardSequencer;

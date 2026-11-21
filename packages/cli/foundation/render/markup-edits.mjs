@@ -2,7 +2,7 @@
 
 /**
  * @file What changed in a rendered file's markup after the render, for
- * `astryx experimental render --reverse`. A render records the text of its
+ * `astryx experimental export --reverse`. A render records the text of its
  * markup, in order; a reverse reads the text the file holds now and names
  * each run of text that differs, with where the old text sits in the restored
  * source when it appears there once. The restored source never takes these
@@ -162,7 +162,7 @@ function collapsedOf(module) {
  * across lines (JSX joins them with one space), so the run is found in each
  * module's text collapsed the same way.
  * @param {string} text a whole run of text
- * @param {{file: string, text: string}[]} files the restored modules
+ * @param {{file: string, text: string}[]} files the restored modules and JSON files
  * @returns {{file: string, line: number} | null}
  */
 export function locate(text, files) {

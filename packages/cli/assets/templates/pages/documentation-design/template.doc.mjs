@@ -15,12 +15,12 @@ export const doc = {
     'usage',
     'api',
     'entry',
+    'component documentation',
+    'usage guidelines',
+    'best practices',
+    'examples',
+    'table of contents',
   ],
   isReady: true,
   category: 'Content - Documentation Design',
-  icons: {
-    ArrowTopRightOnSquareIcon: 'externalLink',
-    ArrowsPointingOutIcon: 'expand',
-    PlusIcon: 'add',
-  },
 };

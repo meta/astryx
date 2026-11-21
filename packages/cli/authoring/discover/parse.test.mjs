@@ -57,6 +57,7 @@ describe('parseDiscoverCatalog', () => {
       name: 'outline',
       title: 'Outline',
       iconCount: 120,
+      license: 'MIT',
       definitions: ['close', 'search'],
     };
     value.packages[0].contributions.push(/** @type {any} */ (set));

@@ -161,12 +161,14 @@ const styles = stylex.create({
     padding: spacingVars['--spacing-3'],
     textAlign: 'center' as const,
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
     color: colorVars['--color-text-secondary'],
   },
   loadingState: {
     padding: spacingVars['--spacing-3'],
     textAlign: 'center' as const,
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
     color: colorVars['--color-text-secondary'],
   },
   groupHeading: {
@@ -928,7 +930,8 @@ export function useTriggerMenu(
       return null;
     }
 
-    const emptyText = activeTrigger.emptySearchText ?? 'No results';
+    const emptyText =
+      activeTrigger.emptySearchText ?? t('@astryx.chatTriggerMenu.noResults');
 
     let listContent: ReactNode;
     if (state.isLoading) {

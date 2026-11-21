@@ -14,6 +14,7 @@
  * CLI keeps its exact output while a programmatic caller stays quiet.
  */
 
+import {renderProjectAgentDocsBlock} from '../docs/_adapter.mjs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {execFile} from 'node:child_process';
@@ -32,10 +33,10 @@ import {
 import {runIntegrationCodemods} from '../../assets/codemods/integration-runner.mjs';
 import {
   AgentDocsHomeError,
+  agentDocsVersion,
   assertAgentDocsTarget,
   installAgentDocs,
   inspectAgentDocs,
-  renderAgentDocsBlock,
 } from '../../foundation/agent-docs/agent-docs.mjs';
 import {
   CLI_PACKAGE,
@@ -52,9 +53,28 @@ import {
 } from '../../foundation/fs/paths.mjs';
 import {Project, providerLedgerOf} from '../../foundation/config/project.mjs';
 import {loadIntegrations} from '../../foundation/integrations/integrations.mjs';
+import {iconFeatureGate} from '../../foundation/integrations/icon-features.mjs';
 import {resolveProviders} from '../../foundation/integrations/provider-resolution.mjs';
 import {warnOnIntegrationIssues} from '../../foundation/integrations/integration-warnings.mjs';
 import {logger} from '../logger.mjs';
+import {
+  isBaseIntegration,
+  runBase,
+  splitForBase,
+} from '../../foundation/bases/resolve.mjs';
+
+import {CORE_PROVIDER_ID} from '../../foundation/identity/providers.mjs';
+import {renderProjectSkill, savedName} from '../../foundation/agent-docs/skill-places.mjs';
+import {
+  planSkillPlace,
+  leftoverIntegrationSkills,
+  readProjectPlaces,
+  keptText,
+  removeIntegrationSkillFiles,
+  skillPlaceEscape,
+  writeSkillPlace,
+} from '../../foundation/agent-docs/skill-place-files.mjs';
+import {integrationSkillFiles} from '../docs/skills/skills.mjs';
 
 /** The package that owns Core's components, hooks, and codemods. */
 export {CORE_PROVIDER_ID as CORE_PACKAGE} from '../../foundation/identity/providers.mjs';
@@ -191,18 +211,28 @@ function rebaseDeclaration(rebase) {
 }
 
 /**
+ * Earlier names a base's package was published under.
+ * @type {Record<string, string[]>}
+ */
+const LEGACY_NAMES = {[CORE_PROVIDER_ID]: ['@xds/core']};
+
+/**
  * Detect the installed target version: the Core the Astryx project of `cwd`
  * installed, in its own node_modules or, for a member its workspace lists, in
  * a folder up to the workspace root. The nearest folder wins, the current
  * name before the legacy one, then Yarn Plug'n'Play. A Core above a project
  * no workspace lists does not count, so a nested project that has not
  * installed its own reports nothing installed. With no Astryx project, only
- * the node_modules of `cwd` itself is read, as released versions did.
+ * the node_modules of `cwd` itself is read, as released versions did. The
+ * package read is the run's base: Core, or the base a project or `--base`
+ * names.
  * @param {string} cwd
+ * @param {import('../../foundation/bases/resolve.mjs').BaseResolution} [base]
+ *   the base of the upgrade in `cwd` ({@link upgradeBase})
  * @returns {{version: string, packageName: string}|null}
  */
-export function detectInstalledTargetVersion(cwd) {
-  const found = findProjectPackageOf(cwd, ['@astryxdesign/core', '@xds/core']);
+export function detectInstalledTargetVersion(cwd, base = runBase(cwd)) {
+  const found = findProjectPackageOf(cwd, targetPackages(base));
   if (!found) return null;
   try {
     const pkg = JSON.parse(
@@ -213,6 +243,68 @@ export function detectInstalledTargetVersion(cwd) {
     // Unreadable package.json: no version to target.
     return null;
   }
+}
+
+/**
+ * The base an upgrade in `cwd` reads, resolved from the project in that
+ * folder, so a caller of the package API gets the base the CLI reads there.
+ * @param {string} cwd
+ * @returns {Promise<import('../../foundation/bases/resolve.mjs').BaseResolution>}
+ */
+export async function upgradeBase(cwd) {
+  try {
+    return (await Project.load(cwd, {core: 'project'})).base;
+  } catch {
+    // A config that does not load yet, which a config codemod may fix,
+    // leaves the base the CLI resolves without it.
+    return runBase(cwd);
+  }
+}
+
+/**
+ * The packages that hold an upgrade's target version: the base's package,
+ * then the earlier names it was published under.
+ * @param {import('../../foundation/bases/resolve.mjs').BaseResolution} base
+ * @returns {string[]}
+ */
+function targetPackages(base) {
+  const name = base.ok ? base.base.name : CORE_PROVIDER_ID;
+  return [name, ...(LEGACY_NAMES[name] ?? [])];
+}
+
+/**
+ * The target package as a message names it, such as
+ * `@astryxdesign/core (or legacy @xds/core)`.
+ * @param {import('../../foundation/bases/resolve.mjs').BaseResolution} base
+ * @returns {string}
+ */
+export function upgradeTargetLabel(base) {
+  const [name, ...legacy] = targetPackages(base);
+  return legacy.length > 0 ? `${name} (or legacy ${legacy.join(', ')})` : name;
+}
+
+/**
+ * Does an upgrade on `base` read Core? Core's codemods, its copied
+ * compositions, and the Core version the agent-docs block names belong to a
+ * run on Core. A run on another base reads none of them.
+ * @param {import('../../foundation/bases/resolve.mjs').BaseResolution} base
+ * @returns {boolean}
+ */
+export function upgradeReadsCore(base) {
+  return !base.ok || base.base.core;
+}
+
+/**
+ * The version the agent-docs block names after an upgrade: the target Core's
+ * in a run on Core, else the version `init` writes, so an upgrade and a later
+ * `init` agree.
+ * @param {string} cwd
+ * @param {string} targetVersion
+ * @param {import('../../foundation/bases/resolve.mjs').BaseResolution} base
+ * @returns {string}
+ */
+export function upgradeAgentDocsVersion(cwd, targetVersion, base) {
+  return upgradeReadsCore(base) ? targetVersion : agentDocsVersion(cwd);
 }
 
 /**
@@ -397,6 +489,16 @@ export async function runPostCodemodHooks(hooks, context) {
  *   runs at a project root above it
  * @property {string|null} renderedBlock
  * @property {import('./upgrade.type.mjs').AgentDocsSummary} summary
+ * @property {string} [blockAction] what the AGENTS.md block alone needs,
+ *   before the skill places add to `summary.action`
+ * @property {boolean} [skillsRefused] the saved skill places cannot be
+ *   refreshed (a place linked out of the project, or a project at the home
+ *   folder), so the result is `error` whatever the block refresh does
+ * @property {boolean} [noBlock] the project saves no `agents-md` place and
+ *   has no block, so its skill files give the status
+ * @property {{text: string, writes: SkillWrite[]} | null} [skills]
+ *   the project skill, and each skill whose copies in a saved skill place it
+ *   would write or remove
  */
 
 /**
@@ -443,6 +545,179 @@ export async function prepareAgentDocsRefresh({
   fresh = false,
   origin,
 }) {
+  const places = await readProjectPlaces(cwd);
+  const skillPlaces = places.filter(
+    place => place.kind === 'skills' || place.kind === 'folder',
+  );
+  // An Astryx block is refreshed wherever it is, saved or not (INV31); only
+  // the advice to add one is for a project that saves `agents-md`.
+  const plan = await prepareBlockRefresh({
+    cwd,
+    installedVersion,
+    apply,
+    fresh,
+    origin,
+    nudge: places.some(place => place.kind === 'agents-md'),
+  });
+  plan.blockAction = plan.summary.action;
+  plan.summary.skills = [];
+  if (skillPlaces.length > 0) {
+    await prepareSkillRefresh(plan, skillPlaces, {installedVersion, apply, fresh});
+  }
+  return plan;
+}
+
+/**
+ * Record that the saved skill places cannot be refreshed: the result says
+ * `error` however the block refresh goes (applyAgentDocsRefresh), and a
+ * project that keeps its guidance as a skill reads as `stale`.
+ * @param {AgentDocsRefreshPlan} plan
+ * @param {string} reason the line that says why
+ */
+function refuseSkillRefresh(plan, reason) {
+  plan.skillsRefused = true;
+  plan.summary.action = 'error';
+  if (plan.noBlock) plan.summary.status = 'stale';
+  logger.warn(reason);
+}
+
+/**
+ * The copies of one skill in one saved place that upgrade writes together:
+ * the project skill, an integration's skill (`skill`), or a skill Astryx
+ * wrote for an integration the project no longer has (`remove`).
+ * @typedef {{place: import('../../foundation/agent-docs/skill-places.mjs').SkillPlace, rows: Map<string, import('./upgrade.type.mjs').UpgradeSkillFile>, skill?: {name: string, text: string}, remove?: boolean}} SkillWrite
+ */
+
+/**
+ * Plan the refresh of the saved skill places: each file this release's
+ * project skill would create or update, and each it keeps (edited, or not
+ * Astryx's). A file is written only by `--apply`.
+ * @param {AgentDocsRefreshPlan} plan
+ * @param {import('../../foundation/agent-docs/skill-places.mjs').SkillPlace[]} skillPlaces
+ * @param {{installedVersion: string, apply: boolean, fresh: boolean}} options
+ */
+async function prepareSkillRefresh(plan, skillPlaces, {installedVersion, apply, fresh}) {
+  const {cwd, origin, summary} = plan;
+  let block = plan.renderedBlock;
+  try {
+    block ??= await renderProjectAgentDocsBlock(cwd, {installedVersion, fresh});
+  } catch {
+    summary.action = 'error';
+    logger.warn(
+      `Could not render the Astryx skill. Run ${initAdvice(cwd, origin)} to update it manually.`,
+    );
+    return;
+  }
+  // Upgrade writes a project place only where init would: not in a project
+  // at the home folder or a settings folder (INV31), and only inside the
+  // project (spec AST-081 FR7).
+  try {
+    assertAgentDocsTarget(cwd);
+  } catch (err) {
+    if (!(err instanceof AgentDocsHomeError)) throw err;
+    refuseSkillRefresh(plan, homeRefusalLine(err, 'stale'));
+    return;
+  }
+  for (const place of skillPlaces) {
+    const escape = skillPlaceEscape(place, cwd);
+    if (escape) {
+      refuseSkillRefresh(plan, `Did not refresh the Astryx skill: ${escape}`);
+      return;
+    }
+  }
+  const text = renderProjectSkill(block);
+  const declared = await integrationSkillFiles(cwd);
+  for (const problem of declared.problems) {
+    logger.warn(`Note: ${problem.package}: ${problem.message}`);
+  }
+  const keep = declared.keep;
+  const shownFrom = origin ?? cwd;
+  /** @type {SkillWrite[]} */
+  const writes = [];
+  let created = 0;
+  let total = 0;
+  /**
+   * Report the plan for one skill in one place, as init writes it: one
+   * person's file keeps every copy as it is.
+   * @param {import('../../foundation/agent-docs/skill-places.mjs').SkillPlace} place
+   * @param {string} skillText
+   * @param {{name: string, text: string}} [skill] an integration's skill; the project skill without it
+   */
+  const planCopies = (place, skillText, skill) => {
+    /** @type {Map<string, import('./upgrade.type.mjs').UpgradeSkillFile>} */
+    const rows = new Map();
+    for (const {file, state, plan: planned, reason} of planSkillPlace(place, cwd, skillText, skill?.name)) {
+      /** @type {import('./upgrade.type.mjs').UpgradeSkillFile} */
+      const row = {
+        path: path.relative(shownFrom, file).split(path.sep).join('/'),
+        place: savedName(place),
+        ...(skill ? {skill: skill.name} : {}),
+        action: planned === 'create' ? 'would-create' : planned === 'update' ? 'would-update' : planned,
+      };
+      if (reason) row.reason = reason;
+      if (!skill) {
+        total += 1;
+        if (state === 'absent') created += 1;
+      }
+      summary.skills?.push(row);
+      rows.set(file, row);
+    }
+    if ([...rows.values()].some(row => row.action.startsWith('would-'))) {
+      writes.push({place, rows, skill});
+    }
+  };
+  for (const place of skillPlaces) {
+    planCopies(place, text);
+    for (const each of declared.skills) planCopies(place, each.text, each);
+    // A skill Astryx wrote for an integration the project no longer has.
+    for (const file of declared.complete ? leftoverIntegrationSkills(place, cwd, keep) : []) {
+      /** @type {import('./upgrade.type.mjs').UpgradeSkillFile} */
+      const row = {
+        path: path.relative(shownFrom, file).split(path.sep).join('/'),
+        place: savedName(place),
+        skill: path.basename(path.dirname(file)),
+        action: 'would-remove',
+      };
+      summary.skills?.push(row);
+      writes.push({place, rows: new Map([[file, row]]), remove: true});
+    }
+  }
+  // A kept file stays on its old text: say so, as init does.
+  for (const row of summary.skills ?? []) {
+    if (row.action === 'kept') {
+      logger.log(`[skip] Astryx skill: ${row.path} ${keptText(row.reason, 'delete it, then run init, to get the current text', cwd)}`);
+    }
+  }
+  if (plan.noBlock && total > 0) {
+    // A skills-only project: its skill files give the status.
+    summary.status = created === total ? 'missing' : writes.length > 0 ? 'stale' : 'current';
+  }
+  plan.skills = {text, writes};
+  if (writes.length === 0) return;
+  if (summary.status === 'current') summary.status = 'stale';
+  if (summary.action === 'none') summary.action = 'would-refresh';
+  if (!apply) {
+    logger.warn(
+      `The Astryx skill differs from the installed Astryx and integration configuration. Re-run with --apply to refresh (${writes.flatMap(each => [...each.rows.values()].filter(row => row.action.startsWith('would-')).map(row => row.path)).join(', ')}).`,
+    );
+  }
+}
+
+/**
+ * Plan the refresh of the AGENTS.md block, the default place.
+ * @param {{cwd: string, installedVersion: string, apply: boolean, fresh?: boolean, origin?: string, nudge?: boolean}} ctx
+ *   `nudge`: whether a missing block is advice to run init (the project
+ *   saves `agents-md`)
+ * @returns {Promise<AgentDocsRefreshPlan>}
+ */
+async function prepareBlockRefresh({
+  cwd,
+  installedVersion,
+  apply,
+  fresh = false,
+  origin,
+  nudge = true,
+}) {
   const initial = inspectAgentDocs(cwd, installedVersion);
   /** @type {import('./upgrade.type.mjs').AgentDocsSummary} */
   const summary = {
@@ -452,8 +727,15 @@ export async function prepareAgentDocsRefresh({
     files: [],
     refreshed: false,
     action: 'none',
+    skills: [],
   };
 
+  if (initial.status === 'missing' && !nudge) {
+    // A project that keeps its guidance as a skill has no block to add; its
+    // skill files give the status (prepareSkillRefresh).
+    summary.status = 'current';
+    return {cwd, origin, renderedBlock: null, summary, noBlock: true};
+  }
   if (initial.status === 'missing') {
     // init writes nothing in a project at the home folder or the top of a
     // settings folder, so it is not the remedy there (INV31).
@@ -474,7 +756,7 @@ export async function prepareAgentDocsRefresh({
 
   let renderedBlock;
   try {
-    renderedBlock = await renderAgentDocsBlock(cwd, {
+    renderedBlock = await renderProjectAgentDocsBlock(cwd, {
       installedVersion,
       fresh,
     });
@@ -522,8 +804,78 @@ export async function prepareAgentDocsRefresh({
  * @returns {import('./upgrade.type.mjs').AgentDocsSummary}
  */
 export function applyAgentDocsRefresh(plan) {
+  const summary = applyBlockRefresh(plan);
+  applySkillRefresh(plan);
+  if (plan.skillsRefused) summary.action = 'error';
+  return summary;
+}
+
+/**
+ * Write the files of the saved skill places the plan names. A file a person
+ * edited since the plan was made is kept.
+ * @param {AgentDocsRefreshPlan} plan
+ */
+function applySkillRefresh(plan) {
+  const {summary, skills} = plan;
+  if (!skills || skills.writes.length === 0) return;
+  for (const {place, rows, skill, remove} of skills.writes) {
+    /** @type {Array<{file: string, action: string, reason?: 'edited' | 'not-astryx' | 'pair-kept' | 'computer-skill'}>} */
+    let results;
+    try {
+      results = remove
+        ? removeIntegrationSkillFiles([...rows.keys()])
+        : skill
+          ? writeSkillPlace(place, plan.cwd, skill.text, skill.name)
+          : writeSkillPlace(place, plan.cwd, skills.text);
+    } catch (err) {
+      // Nothing of the skill's copies was written (each write checks every
+      // copy first), so they stay on one text.
+      plan.skillsRefused = true;
+      summary.action = 'error';
+      logger.warn(
+        `Could not refresh the Astryx skill in ${savedName(place)}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      // Nothing of the place was written: its rows, and a line for each, say so.
+      for (const row of rows.values()) {
+        if (row.action.startsWith('would-')) {
+          row.action = 'kept';
+          row.reason = 'not-written';
+          logger.log(`[skip] Astryx skill: ${row.path} ${keptText(row.reason, '', plan.cwd)}`);
+        }
+      }
+      continue;
+    }
+    for (const result of results) {
+      const row = rows.get(result.file);
+      if (!row) continue;
+      if (result.action === 'kept') {
+        row.action = 'kept';
+        if (result.reason) row.reason = result.reason;
+        continue;
+      }
+      row.action =
+        result.action === 'created' || result.action === 'updated' || result.action === 'removed'
+          ? result.action
+          : 'current';
+      if (row.action !== 'current') {
+        summary.refreshed = true;
+        logger.log(`[ok] Astryx skill ${row.action === 'removed' ? 'removed' : 'refreshed'} -> ${row.path}`);
+      }
+    }
+  }
+  if (summary.refreshed && (summary.action === 'would-refresh' || summary.action === 'none')) {
+    summary.action = 'refreshed';
+  }
+}
+
+/**
+ * Commit a prepared refresh of the AGENTS.md block.
+ * @param {AgentDocsRefreshPlan} plan
+ * @returns {import('./upgrade.type.mjs').AgentDocsSummary}
+ */
+function applyBlockRefresh(plan) {
   const {cwd, origin, renderedBlock, summary} = plan;
-  if (summary.action !== 'would-refresh' || renderedBlock == null)
+  if ((plan.blockAction ?? summary.action) !== 'would-refresh' || renderedBlock == null)
     return summary;
 
   try {
@@ -561,6 +913,17 @@ export function applyAgentDocsRefresh(plan) {
 }
 
 /**
+ * Core's codemods for the (from, to] range. They ship in the CLI for Core, so
+ * a run whose base is not Core has none.
+ * @param {string} from
+ * @param {string} to
+ * @param {import('../../foundation/bases/resolve.mjs').BaseResolution} base
+ */
+async function coreTransformsBetween(from, to, base) {
+  return upgradeReadsCore(base) ? getTransformsBetween(from, to) : [];
+}
+
+/**
  * Every registered codemod (oldest→newest) for `upgrade --list`. Registry walk
  * + flatten; nothing is run.
  * @returns {Promise<Array<{name: string, title: string, version: string, pr?: string, optional: boolean}>>}
@@ -568,7 +931,7 @@ export function applyAgentDocsRefresh(plan) {
 export async function collectAllCodemods() {
   const codemods = [];
   const manifests = /** @type {CoreVersionManifest[]} */ (
-    await getTransformsBetween('0.0.0', latestVersion)
+    await coreTransformsBetween('0.0.0', latestVersion, runBase())
   );
   for (const {version, transforms} of manifests) {
     for (const {name, meta, optional} of transforms) {
@@ -588,11 +951,13 @@ export async function collectAllCodemods() {
  * Core version manifests for the (from, to] range.
  * @param {string} from
  * @param {string} to
+ * @param {import('../../foundation/bases/resolve.mjs').BaseResolution} [base]
+ *   the upgrade's base ({@link upgradeBase})
  * @returns {Promise<CoreVersionManifest[]>}
  */
-export async function getCoreVersionManifests(from, to) {
+export async function getCoreVersionManifests(from, to, base = runBase()) {
   return /** @type {CoreVersionManifest[]} */ ([
-    ...(await getTransformsBetween(from, to)),
+    ...(await coreTransformsBetween(from, to, base)),
   ]);
 }
 
@@ -699,7 +1064,8 @@ export async function runCoreCodemods(
  * @param {string} cwd
  * @param {string[]} [extraIntegrationSpecs] explicit `--integration` specs
  * @returns {Promise<{postCodemodHooks: import('../../authoring/config/type').PostCodemodHook[], integrations: import('../../foundation/integrations/integrations.mjs').LoadedIntegration[], ledger: import('../../foundation/integrations/provider-resolution.mjs').ProviderLedger, iconSets: boolean}>}
- *   `iconSets`: the project sets `experimental.iconSet`
+ *   `iconSets`: icon features are on (an installed icon-set package or
+ *   `experimental.iconSet`)
  */
 export async function loadProjectContext(cwd, extraIntegrationSpecs = []) {
   // The CLI debug preflight may already have imported this config before core
@@ -752,7 +1118,7 @@ export async function loadProjectContext(cwd, extraIntegrationSpecs = []) {
       : // Resolved from the project, as --integration names a package it
         // installed, not from whichever folder the process started in.
         await loadIntegrations(extraSpecs, {cwd, resolveProviders: false});
-  const {integrations, ledger} = resolveProviders(
+  const resolved = resolveProviders(
     [
       ...candidates,
       ...installed.map(integration => ({
@@ -768,11 +1134,22 @@ export async function loadProjectContext(cwd, extraIntegrationSpecs = []) {
     ],
     {codemods: true, prior: providerLedgerOf(project)},
   );
+  const {ledger} = resolved;
+  // Only integrations that are the run's base or build on it run codemods,
+  // the --integration packages included. Every base the project load found
+  // counts, whether or not the config lists it.
+  const bases = [
+    ...project.loadedIntegrations,
+    ...project.integrationsLeftOut.map(({integration}) => integration),
+  ].filter(isBaseIntegration);
+  const integrations = project.base.ok
+    ? splitForBase(resolved.integrations, project.base.base, bases).kept
+    : resolved.integrations;
   return {
     postCodemodHooks,
     integrations,
     ledger,
-    iconSets: Boolean(project.config.experimental?.iconSet),
+    iconSets: iconFeatureGate(project).on,
   };
 }
 
@@ -781,9 +1158,9 @@ export async function loadProjectContext(cwd, extraIntegrationSpecs = []) {
  * nudge must not fail the upgrade) and is suppressed for --json/programmatic
  * callers (the silent logger).
  * @param {Array<import('../../foundation/integrations/integrations.mjs').LoadedIntegration>} integrations
- * @param {{iconSets?: boolean}} [options] `iconSets`: the project sets
- *   `experimental.iconSet`. Without it a package's experimental icon-set root
- *   is not checked (spec:AST-017 FR27, spec:AST-084 FR0), as in the project's
+ * @param {{iconSets?: boolean}} [options] `iconSets`: icon features are on
+ *   in the project (the icon feature gate). Without them a package's
+ *   experimental icon-set root is not checked (spec:AST-017 FR27, spec:AST-084 FR0), as in the project's
  *   own issues.
  * @returns {Promise<void>}
  */

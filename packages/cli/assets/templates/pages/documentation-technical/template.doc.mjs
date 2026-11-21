@@ -15,12 +15,12 @@ export const doc = {
     'quickstart',
     'onboarding',
     'guide',
+    'documentation',
+    'article',
+    'walkthrough',
+    'developer guide',
+    'table of contents',
   ],
   isReady: true,
   category: 'Content - Documentation Technical',
-  icons: {
-    ChevronDownIcon: 'chevronDown',
-    ClipboardDocumentIcon: 'clipboard',
-    SparklesIcon: 'sparkles',
-  },
 };
