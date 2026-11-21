@@ -812,6 +812,45 @@ control whose content is taller than that keeps its content's height.
 Rejected: a fixed height on one control, which keeps it apart from the others at every size.
 Rejected: the size tokens for the whole theme, which parts that are not controls (a dialog header) read too.
 
+### DEC-17 — A badge style sets the status and category badges together, in the theme's colors
+
+**Reference:** `spec:AST-050/DEC-17`
+**Decider:** maintainers under `josephfarina`'s delegation, `2026-11-19`
+
+A theme the editor makes styles its status and category badges with one
+whole-theme setting, `badges`, in the theme's own status and category colors,
+so they change together and their text still reads on them. `solid` fills
+each status badge with its status color, with text in the status's on-color,
+and fills each category badge with a strong color of its hue, with text in
+the page color or the primary text color. `soft` draws each status badge as a
+light tint of its color, with text in that tint's on-color; the category
+badges keep their look. `outline` draws each status and category badge as a
+thin line in its text color, with that text, on the surface it sits on. Each
+variant takes the first of its colors that reads at 4.5:1 in every mode of
+the theme's base. A variant none of whose own colors read falls back to a
+pair that reads, where one exists, and the `set` result names it: in `solid`
+it keeps its tint; in `outline` it draws the primary text inside a line of
+its color. `show` names a variant
+that still does not read, with the line that fixes it. A badge `soft` or
+`outline` draws (the status badges under `soft`, every badge under
+`outline`) takes, inside a primary or destructive button, that button's public
+color pair, inverted (the button's on-color as the fill, its color as the
+text), as Core's neutral badge does there. Inside a secondary button, such a
+badge draws on the page color, its tint over it, where its pair reads. The neutral badge keeps Core's look. A property the theme
+sets on the badge itself, for every variant or for one, stays in each mode it
+is set for: the style writes only what the theme leaves.
+
+`how` reads a badge style said alone (soft, outlined or filled badges, tags
+or chips) as this setting. A badge is a small box, so its corners follow the
+element corners at any corners but pill, as a button's do, unless the base
+theme rounds its badges itself: the corners dial gives them, and `show` lists
+a badge that keeps its pill shape when the element corners change. A badge
+the base theme rounds itself keeps that shape at every corners but square,
+which squares every pill, and a badge given corners of its own keeps them.
+
+Rejected: a color set on each badge variant by hand, which drifts from the theme's colors when they change.
+Rejected: small corners on every pill below pill corners, which switches and progress tracks keep as pills until the corners go square.
+
 ### DEC-20 — A heading the theme editor gives the heading font keeps it when only the body font changes
 
 **Reference:** `spec:AST-050/DEC-20`

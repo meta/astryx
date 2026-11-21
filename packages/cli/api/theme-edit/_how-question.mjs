@@ -138,6 +138,15 @@ const OVERRIDE_RES = new Set(OVERRIDES.map(([re]) => re));
  * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent, smallest?: boolean, modeInValue?: boolean, unmet?: string, offer?: boolean, already?: boolean}} Draft
  */
 
+/** The words a badge style ask is made of when the style is all it asks. */
+const BADGE_STYLE_WORDS = new Set(
+  (
+    'soft tint tinted outline outlined solid filled badge badges tag tags ' +
+    'chip chips the a all every my our their its make made ' +
+    'use with in be to look style styled color colors colour colours'
+  ).split(' '),
+);
+
 /**
  * Words a near miss is corrected to (one or two letters off), besides the
  * one-word target names Core's catalog gives (partLexicon): design words,
@@ -15155,6 +15164,54 @@ export function draftAnswer(ctx, env, question) {
         lookup: `${HOW} ${c.container ?? c.parts[0]?.on ?? ''}`.trim(),
       });
       continue;
+    }
+    // "soft badges", "outlined tags": the badges dial, the status and
+    // category badges together in the theme's colors. (A style for some
+    // badges only, "solid status badges", is not this dial.)
+    {
+      // (The style word said next to the badge noun: in "solid buttons and
+      // soft badges" the buttons' word is not the badges'.)
+      const STYLE = '(soft|tint(?:ed)?|outlined?|solid|filled)';
+      const NOUN = '(?:badges?|tags?|chips?)';
+      const style = (new RegExp(`\\b${STYLE}\\s+${NOUN}\\b`, 'i').exec(
+        c.text,
+      ) ??
+        new RegExp(
+          `\\b${NOUN}\\s+(?:(?:are|be|look|made|in|with)\\s+){0,2}${STYLE}\\b`,
+          'i',
+        ).exec(c.text))?.[1]?.toLowerCase();
+      // (Only when the style is the whole ask: "soft shadows on badges",
+      // "solid red error badges" or "filled pill badges" ask for more, and
+      // the rest of the answer reads them.)
+      const onlyStyle = (c.text.toLowerCase().match(/[a-z]+/g) ?? []).every(w =>
+        BADGE_STYLE_WORDS.has(w),
+      );
+      if (
+        style &&
+        onlyStyle &&
+        !c.except &&
+        !c.neg &&
+        !c.lengths.length &&
+        /\b(?:badges?|tags?|chips?)\b/.test(c.text) &&
+        c.parts.every(p => p.on === 'badge')
+      ) {
+        const value = /^(?:soft|tint)/.test(style)
+          ? 'soft'
+          : /^outline/.test(style)
+            ? 'outline'
+            : 'solid';
+        const d = {
+          text: `${value} badges: the badges dial (${
+            String(DIALS.badges?.help ?? '')
+              .split('. ')
+              .find(x => x.startsWith(value)) ?? value
+          })`,
+          options: [[set('badges', value)]],
+        };
+        push(d);
+        recordTop(c, d.options[0]);
+        continue;
+      }
     }
     // "the controls 40px tall", "all controls taller by 4px": the control
     // heights every button, input and selector reads, each size moved by
