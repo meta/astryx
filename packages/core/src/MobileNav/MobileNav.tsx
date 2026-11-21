@@ -72,7 +72,10 @@ import {
   type AppShellDrawerFocus,
 } from '../AppShell/appShellDrawerFocus';
 import {useCommittedRef} from '../hooks/useCommittedRef';
-import {canTakeReturnedFocus, focusForLastInputTemporarily} from '../utils/focusReturn';
+import {
+  canTakeReturnedFocus,
+  focusForLastInputTemporarily,
+} from '../utils/focusReturn';
 import {holdEntranceInput} from '../Layer/holdEntranceInput';
 import {mergeProps, composeEventHandlers} from '../utils';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
