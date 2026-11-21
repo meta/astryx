@@ -95,6 +95,7 @@ import {
   edgeCopies,
   heldVariantsOf,
   placementHolds,
+  holdCopies,
   ownsPlacement,
   failingModes,
   borderFrames,
@@ -7388,13 +7389,21 @@ async function changeOnce(
           : []),
         ...placementHolds(ctx, data, s),
       ]),
-    ].filter(
-      v =>
-        // (A placement the theme colors itself keeps that color: no hold
-        // is saved or named there; holdCopies skips it in the build too.)
-        !ownsPlacement(data, s, v) ||
-        failingModes(ctx, data, s, v).some(m => !ownsPlacement(data, s, v, m)),
-    );
+    ]
+      .filter(
+        v =>
+          // (A placement the theme colors itself keeps that color: no hold
+          // is saved or named there; holdCopies skips it in the build too.)
+          !ownsPlacement(data, s, v) ||
+          failingModes(ctx, data, s, v).some(
+            m => !ownsPlacement(data, s, v, m),
+          ),
+      )
+      .filter(
+        // (Only a hold the build applies is saved and named: a placement on
+        // another part's ground, never a heading level or a text variant.)
+        v => holdCopies(ctx, data, {...s, hold: [v]}).some(c => c.when === v),
+      );
     if (heldVariants.length) {
       const entry =
         data.settings.find(x => x === s) ??
