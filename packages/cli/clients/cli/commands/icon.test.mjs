@@ -165,7 +165,7 @@ describe('astryx experimental icon with no icon set installed', () => {
     });
     const text = await runCli(['experimental', 'icon', 'delete'], bare);
     expect(text.stdout).toContain(
-      'Icon definitions that match; an icon set draws them once one is installed:',
+      'Icon meanings that match; an icon set draws them once one is installed:',
     );
     expect(text.stdout).not.toContain('Core draws these names');
   });

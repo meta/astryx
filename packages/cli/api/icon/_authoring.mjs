@@ -594,7 +594,7 @@ export async function addIconSet(name, options) {
       ...(missingNotice ? [missingNotice.note] : []),
       ...mappedNotes(map, name),
       ...suggestionNotes(suggestions, name),
-      'Run `astryx integration check` to see the icon definitions still to map.',
+      'Run `astryx integration check` to see the icon meanings still to map.',
       ...(isPrivate
         ? [
             `When \`integration check\` passes, turn the set on in the app: \`astryx experimental icon use ${name}\`. Run it in the app's folder; when this package is not the app, install it in the app first.`,
@@ -873,7 +873,7 @@ function exactDefinitionMap(icons, map) {
 /**
  * The icons each still-unmapped Astryx definition might map to
  * ({@link suggestedIcons}). Never written; the author chooses with
- * `astryx experimental icon map <definition> <icon>`.
+ * `astryx experimental icon map <meaning> <icon>`.
  * @param {Array<{id: string, words: string[]}>} icons
  * @param {Record<string, string>} map
  * @returns {Array<{definition: string, icon: string, word: string}>}
@@ -900,7 +900,7 @@ function suggestionNotes(suggestions, name) {
   if (suggestions.length === 0) return [];
   const count = new Set(suggestions.map(each => each.definition)).size;
   return [
-    `${count} unmapped icon definitions have possible icons (listed under Suggestions; nothing was written for them). Check each meaning, then map the ones that fit: \`astryx experimental icon map <definition> <icon> --set ${name}\`.`,
+    `${count} unmapped icon meanings have possible icons (listed under Suggestions; nothing was written for them). Check each meaning, then map the ones that fit: \`astryx experimental icon map <meaning> <icon> --set ${name}\`.`,
   ];
 }
 
@@ -913,7 +913,7 @@ function mappedNotes(map, name) {
   const count = Object.keys(map).length;
   if (count === 0) return [];
   return [
-    `${count} icon definitions were mapped because an icon has their exact name (listed under Mapped by name). A library can draw another meaning under the same name, such as a backspace key named delete: check each, and remap with \`astryx experimental icon map <definition> <icon> --set ${name}\`.`,
+    `${count} icon meanings were mapped because an icon has their exact name (listed under Mapped by name). A library can draw another meaning under the same name, such as a backspace key named delete: check each, and remap with \`astryx experimental icon map <meaning> <icon> --set ${name}\`.`,
   ];
 }
 
@@ -1562,8 +1562,8 @@ async function refreshIconSet(
           ]
         : []),
       astryxIconDefinitions().definitions.every(({doc}) => map[doc.name])
-        ? 'Every Astryx icon definition is mapped.'
-        : 'Run `astryx integration check` to see the icon definitions still to map.',
+        ? 'Every Astryx icon meaning is mapped.'
+        : 'Run `astryx integration check` to see the icon meanings still to map.',
     ];
     return result;
   });
