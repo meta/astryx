@@ -193,6 +193,99 @@ describe('a top nav link colored for a dark bar', () => {
     expect(drawer).toMatch(/#333333/);
   }, 240_000);
 
+  it('keeps the color in a state the theme paints a fill for, in the phone menu too', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('sel', {cwd, like: 'neutral'});
+    await themeEditSet('sel', 'mode', 'light-only', {cwd});
+    await themeEditSet('sel', 'background-color', '#222222', {
+      cwd,
+      on: 'app-shell-header',
+    });
+    await themeEditSet('sel', 'background-color', '#000000', {
+      cwd,
+      on: 'top-nav-item',
+      state: 'selected',
+      only: true,
+    });
+    const sr = /** @type {any} */ (
+      await themeEditSet('sel', 'color', '#bfbfbf', {cwd, on: 'top-nav-item'})
+    );
+    // (Measured on the theme's black block: no problem named for it.)
+    expect(JSON.stringify(sr.data.newProblems ?? [])).not.toMatch(/selected/);
+    const rules = (cssOf('sel').match(/[^{}]+\{[^}]*\}/g) ?? []).filter(
+      r => /top-nav-item/.test(r) && /drawer/.test(r),
+    );
+    // (The selected link keeps the light color on its black block.)
+    expect(
+      rules.some(r => /selected|aria-current/.test(r) && /#bfbfbf/.test(r)),
+    ).toBe(true);
+  }, 240_000);
+
+  it("keeps the theme's own selected color in the phone menu", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('pown', {cwd, like: 'neutral'});
+    await themeEditSet('pown', 'mode', 'light-only', {cwd});
+    await themeEditSet('pown', 'background-color', '#222222', {
+      cwd,
+      on: 'app-shell-header',
+    });
+    await themeEditSet('pown', 'background-color', '#000000', {
+      cwd,
+      on: 'top-nav-item',
+      state: 'selected',
+      only: true,
+    });
+    await themeEditSet('pown', 'color', '#ffffff', {
+      cwd,
+      on: 'top-nav-item',
+      state: 'selected',
+      only: true,
+    });
+    await themeEditSet('pown', 'color', '#bfbfbf', {cwd, on: 'top-nav-item'});
+    const rules = (cssOf('pown').match(/[^{}]+\{[^}]*\}/g) ?? []).filter(
+      r =>
+        /top-nav-item/.test(r) &&
+        /drawer/.test(r) &&
+        /selected|aria-current/.test(r),
+    );
+    expect(rules.some(r => /#ffffff|#fff\b/i.test(r))).toBe(true);
+    expect(rules.some(r => /#bfbfbf/.test(r))).toBe(false);
+  }, 240_000);
+
+  it('keeps a one-mode selected fill to its mode in the phone menu', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('pdk', {cwd, like: 'neutral'});
+    await themeEditSet('pdk', 'background-color', '#222222', {
+      cwd,
+      on: 'app-shell-header',
+    });
+    await themeEditSet('pdk', 'background-color', '#000000', {
+      cwd,
+      on: 'top-nav-item',
+      state: 'selected',
+      mode: 'dark',
+      only: true,
+    });
+    const r = /** @type {any} */ (
+      await themeEditSet('pdk', 'color', '#bfbfbf', {cwd, on: 'top-nav-item'})
+    );
+    // (The light phone menu keeps Core's readable selected color: no
+    // problem is named there.)
+    expect(JSON.stringify(r.data.newProblems ?? [])).not.toMatch(
+      /drawer|phone menu/,
+    );
+  }, 240_000);
+
+  it('holds nothing for a text variant or a heading level', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('tx', {cwd, like: 'neutral'});
+    const r = /** @type {any} */ (
+      await themeEditSet('tx', 'color', '#555555', {cwd, on: 'text'})
+    );
+    expect(r.data.setting.hold).toBeUndefined();
+    expect(r.data.notes.join('\n')).not.toMatch(/phone menu/);
+  }, 240_000);
+
   it('holds nothing where the color reads in the menu too', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('ok', {cwd, like: 'neutral'});
