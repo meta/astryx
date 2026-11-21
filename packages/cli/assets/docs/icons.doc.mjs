@@ -11,7 +11,7 @@ export const docs = {
   category: 'foundations',
   keywords: ['semantic icon', 'semantic icon name', 'semantic icon names', 'icon registry'],
   description:
-    "Built-in meanings available in the design system. These adapt to the active theme icons.",
+    "Built-in meanings available in the design system. These adapt to the active theme's icons.",
 
   sections: [
     {
@@ -191,7 +191,7 @@ brandTheme.iconVariants; // ['outline', 'filled']`,
       content: [
         {
           type: 'prose',
-          text: 'A glyph that belongs to one component or library gets a namespaced key (`numberInput:stepperDown`, `richtext:bold`) instead of a new built-in meaning. It resolves through the same registry and a theme overrides it the same way, but the shared IconName list stays reserved for glyphs the whole system uses, so adding one does not make every downstream icon registry grow a key.',
+          text: 'A glyph that belongs to one component or library gets a namespaced key (`numberInput:stepperDown`, `richtext:bold`) instead of a new built-in meaning. It resolves through the same registry and a theme overrides it the same way, but the shared IconName list stays reserved for glyphs the whole system uses, so adding one does not make every downstream theme\'s icons grow a key.',
         },
         {
           type: 'code',
