@@ -629,7 +629,9 @@ describe('generated files a formatter rewrote', () => {
         'trash',
       ]);
       expect(mapped.code, JSON.stringify(mapped.body)).toBe(0);
-      expect(generatedOf('brand')).toContain('close: /* @__PURE__ */ createElement(TrashIcon');
+      expect(generatedOf('brand')).toContain(
+        'close: /* @__PURE__ */ createElement(TrashIcon',
+      );
       const added = await json([
         'experimental',
         'icon',
@@ -2060,5 +2062,77 @@ describe('a refresh after the library drops a glyph it drew in several looks', (
     await json([...NEW_SET, '--variants', 'outline,filled']);
     await json(ADD_FILLED);
     expect([generatedOf('brand'), declarationsOf('brand')]).toEqual(before);
+  });
+});
+
+describe('a refresh of a set the library ships itself, whose root re-exports the set', () => {
+  it('reads only the library’s own icons, never the set’s names in the root, and changes nothing', async () => {
+    // The integration package is the library: its root exports one file
+    // per look and, once the set exists, the set's generated module too.
+    fs.mkdirSync(path.join(pkg, 'icons'), {recursive: true});
+    /** @type {string[]} */
+    const names = [];
+    for (const glyph of ['X', 'Star', 'ArrowDown', 'Search', 'Trash']) {
+      for (const style of STYLES) {
+        for (const weight of WEIGHTS) {
+          names.push(`${glyph}${style}24WGHT${weight}Icon`);
+        }
+      }
+    }
+    for (const name of names) {
+      fs.writeFileSync(
+        path.join(pkg, 'icons', `${name}.js`),
+        'export default function h(props) { return null; }\n',
+      );
+    }
+    const rootLines = names.map(
+      name => `export {default as ${name}} from './icons/${name}.js';`,
+    );
+    const writeRoot = (/** @type {string[]} */ extra) =>
+      fs.writeFileSync(
+        path.join(pkg, 'index.js'),
+        [...rootLines, ...extra, ''].join('\n'),
+      );
+    writeRoot([]);
+    const SELF = [
+      'experimental',
+      'icon',
+      'new-set',
+      'own',
+      '--from',
+      '@acme/icons',
+      '--variants',
+      'outline,filled',
+    ];
+    const ADD = [
+      'experimental',
+      'icon',
+      'add',
+      '--variant',
+      'filled',
+      '--from',
+      '@acme/icons',
+      '--all',
+      '--set',
+      'own',
+    ];
+    const created = await json(SELF);
+    expect(created.code, JSON.stringify(created.body)).toBe(0);
+    const added = await json(ADD);
+    expect(added.code, JSON.stringify(added.body)).toBe(0);
+    const before = generatedOf('own');
+    expect(before).toContain(
+      "export {XOutline24WGHT400Icon as XIcon} from '@acme/icons';",
+    );
+
+    writeRoot(["export * from './icon-sets/own/own.generated.js';"]);
+    const refreshed = await json(SELF);
+    expect(refreshed.code, JSON.stringify(refreshed.body)).toBe(0);
+    const addedAgain = await json(ADD);
+    expect(addedAgain.code, JSON.stringify(addedAgain.body)).toBe(0);
+    expect(generatedOf('own')).toEqual(before);
+    expect(
+      dataOf('own').icons.map((/** @type {{id: string}} */ icon) => icon.id),
+    ).toEqual(['arrow-down', 'search', 'star', 'trash', 'x']);
   });
 });

@@ -1130,6 +1130,7 @@ async function refreshIconSet(
     const everyIcon = everyLibraryIcon(source.file, {
       adapter: Boolean(set.data.adapter),
       exclude: excluded,
+      own: path.resolve(packageDir, generatedModulePath(set, packageDir)),
       module: source.module,
       progress: line => logger.warn(line),
     });

@@ -627,6 +627,7 @@ async function addVariantForAll({cwd, from, selector, variant}) {
   let positions = [];
   const found = libraryIcons(source.file, {
     adapter: Boolean(set.data.adapter),
+    own: path.resolve(packageDir, generatedModulePath(set, packageDir)),
     prefer: [variant],
     module: source.module,
     progress: line => logger.warn(line),
