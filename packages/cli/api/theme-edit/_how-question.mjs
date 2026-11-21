@@ -11891,6 +11891,14 @@ export function draftAnswer(ctx, env, question) {
       if (!nearest || c.parts.length) return true;
       if (listOwner(c)) return true;
       if (prev === nearest && ownsPart(prev)) return true;
+      // (A brief's labelled line, "Surface: filled fields. Feel: 8% tint on
+      // hover.": a state look led by a label that names no part is a look
+      // of the part the brief named before it, as main reads it.)
+      const ledByLabel = new RegExp(
+        String.raw`(?:^|[.;!?\n]\s*)[a-z][a-z ]{1,20}:\s*${c.text.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+        'i',
+      ).test(asked0);
+      if (ledByLabel && c.state && ownsPart(nearest)) return true;
       // (After an except, its own run reads it: "… taller except the large
       // ones and bolder".)
       if (prev?.except) return true;
