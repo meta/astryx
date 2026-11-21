@@ -1999,8 +1999,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         // The count is the list's last item, so the locale's conjunction goes
         // before it and not between the shown labels. Each item is isolated,
         // so labels in another direction do not reorder their neighbours. A
-        // label takes its own direction. The count has no letter, so it takes
-        // the locale's direction and keeps its catalog form.
+        // label takes its own direction; the count takes the locale's
+        // direction, so it keeps its catalog form.
         const countIndex = remaining > 0 ? displayed.length : -1;
         let elementIndex = -1;
         const parts = formatListParts(
@@ -2022,7 +2022,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
                 return isolatedText(
                   part.value,
                   index,
-                  elementIndex === countIndex ? localeDirection : 'auto',
+                  elementIndex === countIndex ? localeDirection : undefined,
                 );
               })}
           </span>

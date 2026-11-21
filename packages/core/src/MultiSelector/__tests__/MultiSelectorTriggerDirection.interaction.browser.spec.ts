@@ -18,7 +18,10 @@ import {withStorybook} from '@astryxdesign/interaction-harness';
 const storybook = withStorybook(test);
 
 async function readTrigger(page: Page) {
-  const items = page.getByRole('combobox').locator('span[dir]');
+  // The trigger text is one span holding an isolated span for each item.
+  const items = page
+    .getByRole('combobox')
+    .locator('xpath=.//span[span and contains(., ", ")]/span');
   await expect(items).toHaveText(['Design', 'עיצוב', 'שיווק', '+2']);
   return items.evaluateAll(spans =>
     spans.map(span => {

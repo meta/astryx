@@ -626,6 +626,26 @@ describe('MultiSelector', () => {
     ).toBeInTheDocument();
   });
 
+  it('keeps a right-to-left label that starts with a Latin word in the page direction', () => {
+    const {container} = render(
+      <div dir="rtl">
+        <MultiSelector
+          label="Team"
+          options={['iPhone חדש', 'Design']}
+          value={['iPhone חדש', 'Design']}
+          onChange={() => {}}
+          triggerDisplay="labels"
+        />
+      </div>,
+    );
+    const label = [...container.querySelectorAll('span')].find(
+      span => span.textContent === 'iPhone חדש',
+    );
+    // No `dir="auto"`: the first strong letter is Latin, which would lay the
+    // Hebrew label out left to right.
+    expect(label).not.toHaveAttribute('dir');
+  });
+
   it('gives the overflow count the locale direction, so a right-to-left locale keeps its form', () => {
     const {container} = render(
       <InternationalizationProvider locale="he-IL">
@@ -638,13 +658,13 @@ describe('MultiSelector', () => {
         />
       </InternationalizationProvider>,
     );
-    const spans = [...container.querySelectorAll('span[dir]')].filter(span =>
+    const spans = [...container.querySelectorAll('span')].filter(span =>
       ['Design', 'עיצוב', 'שיווק', '+2'].includes(span.textContent ?? ''),
     );
     expect(spans.map(span => span.getAttribute('dir'))).toEqual([
-      'auto',
-      'auto',
-      'auto',
+      'ltr',
+      null,
+      null,
       'rtl',
     ]);
   });
@@ -662,15 +682,15 @@ describe('MultiSelector', () => {
     expect(
       screen.getByText(textContentIs('Design, עיצוב, שיווק, +2')),
     ).toBeInTheDocument();
-    const isolated = [...container.querySelectorAll('span[dir]')]
+    const isolated = [...container.querySelectorAll('span')]
       .filter(span =>
         ['Design', 'עיצוב', 'שיווק', '+2'].includes(span.textContent ?? ''),
       )
       .map(span => [span.textContent, span.getAttribute('dir')]);
     expect(isolated).toEqual([
-      ['Design', 'auto'],
-      ['עיצוב', 'auto'],
-      ['שיווק', 'auto'],
+      ['Design', 'ltr'],
+      ['עיצוב', null],
+      ['שיווק', null],
       ['+2', 'ltr'],
     ]);
     // A screen reader reads the same name and text: no bidi control characters.

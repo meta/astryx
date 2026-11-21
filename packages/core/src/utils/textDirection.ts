@@ -63,22 +63,28 @@ export function withTextDirection(content: ReactNode): ReactNode {
 }
 
 /**
- * The text in a span that is isolated from the text around it. By default
- * the span takes the direction of the text's first strong letter. Text with
- * no strong letter, such as a localized count, takes `dir` instead, for
- * example the locale's direction. Use it for each item of a list that mixes
- * directions, so one item's neutral characters (a comma, a digit) never join
- * a neighbour's run. The text content, and so the accessible name, stays the
- * same, which bidi control characters would change.
+ * The text in a span that is isolated from the text around it, so one item's
+ * neutral characters (a comma, a digit) never join a neighbour's run. Use it
+ * for each item of a list that mixes directions. Without `dir`, the span takes
+ * `textDirectionProps`: `ltr` for text with no right-to-left letter, else the
+ * surrounding direction, so a right-to-left label that starts with a Latin
+ * word still reads right to left. `dir` sets the direction instead, for
+ * example the locale's direction for a localized count. The text content, and
+ * so the accessible name, stays the same, which bidi control characters would
+ * change.
  */
 export function isolatedText(
   text: string,
   key?: string | number,
-  dir: 'ltr' | 'rtl' | 'auto' = 'auto',
+  dir?: 'ltr' | 'rtl',
 ): ReactElement {
   return createElement(
     'span',
-    {key, dir, ...stylex.props(styles.isolate)},
+    {
+      key,
+      dir: dir ?? textDirectionProps(text).dir,
+      ...stylex.props(styles.isolate),
+    },
     text,
   );
 }
