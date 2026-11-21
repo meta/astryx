@@ -11891,6 +11891,14 @@ export function draftAnswer(ctx, env, question) {
       if (!nearest || c.parts.length) return true;
       if (listOwner(c)) return true;
       if (prev === nearest && ownsPart(prev)) return true;
+      // (A brief's labelled line, "Surface: filled fields. Feel: 8% tint on
+      // hover.": a state look led by a label that names no part is a look
+      // of the part the brief named before it, as main reads it.)
+      const ledByLabel = new RegExp(
+        String.raw`(?:^|[.;!?\n]\s*)[a-z][a-z ]{1,20}:\s*${c.text.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+        'i',
+      ).test(asked0);
+      if (ledByLabel && c.state && ownsPart(nearest)) return true;
       // (After an except, its own run reads it: "… taller except the large
       // ones and bolder".)
       if (prev?.except) return true;
@@ -21343,7 +21351,6 @@ export function draftAnswer(ctx, env, question) {
       }
       const pageMode = pageModeOf(c, String(color));
       const pm = pageMode ? {mode: pageMode} : {};
-      // (The frame and main panel follow, below, for every page answer.)
       // ("green text on a black page"": the text color said with the page
       // is the theme's text, in the page's mode, with it.)
       const ink = /\btext\b/.test(c.text) ? colorFor(c, 'text') : null;
@@ -21372,9 +21379,25 @@ export function draftAnswer(ctx, env, question) {
           ],
           sequence: true,
         };
+      // (The main panel, drawn over the page with a fill of its own, shows
+      // that fill: the second line paints it with the frame, so the page
+      // looks the color asked.)
+      const panelRead = C.MAP['layout-content']
+        ? restRead(C.partReads('layout-content', 'background') ?? [], '')
+        : null;
+      const panel =
+        panelRead && panelRead !== '--color-background-body' ? panelRead : null;
       return {
-        text: `the page background: --color-background-body${pageModeSaid(c, pageMode)}`,
-        options: [[set('--color-background-body', color, pm)]],
+        text: `the page background: --color-background-body${pageModeSaid(c, pageMode)}${panel ? `; the main panel (layout-content) draws ${panel} over it, so the second line paints the frame and the main panel too` : ''}`,
+        options: [
+          [set('--color-background-body', color, pm)],
+          [
+            set('background', color, {on: 'app-shell', ...pm}),
+            ...(panel
+              ? [set('background-color', color, {on: 'layout-content', ...pm})]
+              : []),
+          ],
+        ],
       };
     }
     if (on === 'icons') {
@@ -31840,56 +31863,11 @@ export function draftAnswer(ctx, env, question) {
       : `${d.text}: nothing is written: ${[...new Set(why)].join('; ')}`;
     if (!kept.length) delete d.sequence;
   }
-  // A page color reaches the whole page: the body token, and the frame
-  // and main panel the app shell draws over it (each with its own fill,
-  // the main panel the surface), in the same mode, so no part of the
-  // page keeps the old color.
+  // A page color is the body token. The frame and the main panel keep
+  // their own fills (the main panel the surface, which the cards and other
+  // surfaces step from), as main reads it: a page answer offers painting
+  // them as its own line.
   {
-    const panelRead = C.MAP['layout-content']
-      ? restRead(C.partReads('layout-content', 'background') ?? [], '')
-      : null;
-    const panel =
-      panelRead && panelRead !== '--color-background-body' ? panelRead : null;
-    if (TARGET.has('app-shell'))
-      for (const d of result) {
-        let grew = false;
-        d.options = d.options.map(o => {
-          const out = [];
-          for (const st of o) {
-            out.push(st);
-            if (
-              st.thing !== '--color-background-body' ||
-              st.on ||
-              st.verb !== 'set'
-            )
-              continue;
-            const same = (/** @type {Step} */ x, /** @type {string} */ on) =>
-              x.on === on && (x.mode ?? '') === (st.mode ?? '');
-            const m = st.mode ? {mode: st.mode} : {};
-            if (!o.some(x => same(x, 'app-shell'))) {
-              out.push(
-                set('background', String(st.value), {on: 'app-shell', ...m}),
-              );
-              grew = true;
-            }
-            if (panel && !o.some(x => same(x, 'layout-content'))) {
-              out.push(
-                set('background-color', String(st.value), {
-                  on: 'layout-content',
-                  ...m,
-                }),
-              );
-              grew = true;
-            }
-          }
-          return out;
-        });
-        if (grew) {
-          d.sequence = true;
-          if (!/the frame and the main panel/.test(d.text))
-            d.text = `${d.text}; the app shell's frame${panel ? ` and the main panel (layout-content, which draws ${panel})` : ''} take it too, so the whole page shows it`;
-        }
-      }
     // (Where the page color shows: only a part that draws the token at
     // rest paints it, as the part data reads. A page built from none of
     // them, a stack or layout set straight inside the theme, keeps the
@@ -32268,7 +32246,16 @@ export function draftAnswer(ctx, env, question) {
   // color that does, in its own line: primary text white or black,
   // secondary text the farthest shade toward the page that still reads.
   for (const [di, d] of [...result.entries()].reverse()) {
-    if (d.options.length !== 1) continue;
+    // (A page answer's own second line, the frame and the main panel, is
+    // part of the same answer.)
+    const frameLine =
+      d.options.length === 2 &&
+      d.options[1].every(
+        x =>
+          (x.on === 'app-shell' || x.on === 'layout-content') &&
+          /^background(?:-color)?$/.test(x.thing),
+      );
+    if (d.options.length !== 1 && !frameLine) continue;
     const pages = d.options[0].filter(
       x =>
         !x.on &&
