@@ -6924,6 +6924,12 @@ export function compileTheme(ctx, data, base) {
             delete mb[k];
       mb[prop] = v;
     } else b[prop] = v;
+    if (
+      kebab(prop) === 'background' &&
+      !s.state &&
+      !/gradient\(|url\(/i.test(String(v))
+    )
+      withOverlayStates(s, target);
     if (kebab(prop) === 'box-shadow' && !s.state) withRingStates(s, target, v);
     // A hover or press shadow on a ringed part: Core draws its hover ring
     // only while the part is not focused, so a focused part keeps its
@@ -6983,12 +6989,58 @@ export function compileTheme(ctx, data, base) {
     }
   };
   /**
+   * A resting background shorthand on a part whose hover and press Core
+   * draws as a background image (a layer over the fill): the shorthand
+   * resets that image too, so the part would show nothing under the
+   * pointer. Each such state gets Core's image back, for each variant that
+   * draws its own, unless the theme sets that state's background itself.
+   * @param {Setting} s @param {string} target
+   */
+  const withOverlayStates = (s, target) => {
+    const at = ctx.C.MAP[target]?.at?.['background-image'] ?? {};
+    const asked = /^variant:(.+)$/.exec(String(s.when ?? ''))?.[1];
+    for (const state of ['hover', 'active']) {
+      if (
+        data.settings.some(
+          y =>
+            y.source === 'property' &&
+            /^background(-image)?$/.test(kebab(y.thing)) &&
+            y.state === state &&
+            (y.when == null || y.when === s.when) &&
+            partsOf(ctx, y).includes(target),
+        )
+      )
+        continue;
+      /** @type {Map<string, string>} */
+      const byVariant = new Map();
+      for (const [k, val] of Object.entries(at)) {
+        const [attrs, ...rest] = k.split(' ');
+        if (!new RegExp(`^:${state}(?![\\w-])`).test(rest.join(' '))) continue;
+        if (/^\s*none\s*$/i.test(String(val))) continue;
+        const variant =
+          attrs
+            .split(',')
+            .map(a => a.split('='))
+            .find(([key]) => key === 'variant')?.[1] ?? '';
+        if (!byVariant.has(variant)) byVariant.set(variant, String(val));
+      }
+      for (const [variant, image] of byVariant) {
+        if (asked && variant && variant !== asked) continue;
+        const when = asked
+          ? s.when
+          : variant
+            ? `variant:${variant}`
+            : undefined;
+        block({...s, state, when}, target).backgroundImage = image;
+      }
+    }
+  };
+  /**
    * A resting shadow on a part that draws rings in its box-shadow in some
    * states (an input's hover and focus rings): for each set of the part's
    * renders Core styles apart (a variant, each status), in each state Core
-   * rings any of them in, the theme's shadow with what Core draws for that
-   * set in that state after it (`<shadow>, <ring>`), so every ring still
-   * shows and a set that draws none there (a focused status input) gets the
+   * rings any of them in, what Core draws for that set in that state over
+   * the theme's shadow (`<ring>, <shadow>`), so every ring still shows and a set that draws none there (a focused status input) gets the
    * shadow alone. A shadow of none puts the rings back in their states and
    * keeps a set's own none where the ring of the set it refines would
    * reach it. A write for one set (`--when status:error`) composes that set
