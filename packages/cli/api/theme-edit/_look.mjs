@@ -19,6 +19,7 @@
 import {
   LOOKS_ALIKE,
   alphaOf,
+  colorsIn,
   compositeOver,
   hex,
   nearestReadingLightness,
@@ -208,11 +209,10 @@ function ownFill(components, part, m, block = null) {
 const opaqueGradient = image =>
   /^(linear|radial)-gradient\(/.test(image.trim()) &&
   (image.match(/gradient\(/g) ?? []).length === 1 &&
-  (image.match(GRADIENT_STOP_COLORS) ?? []).every(c => alphaOf(c) >= 1);
-
-/** The colors a gradient's stops name. */
-const GRADIENT_STOP_COLORS =
-  /(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\([^)]*\)|#[0-9a-f]{3,8}\b|\btransparent\b/gi;
+  !/\btransparent\b/i.test(image) &&
+  // (A stop the check cannot read, such as one built from a variable,
+  // may be see-through: then the gradient is not a fill.)
+  colorsIn(image).every(c => parseColor(c) != null && alphaOf(c) >= 1);
 
 /**
  * The opaque color a value shows over the page, or null.
@@ -1989,15 +1989,31 @@ export function lookRepair(look, problems) {
         block === 'base' ? q : `${q} (${block})`,
       ]);
     }
+    // What the bar sets that the parts inside it take back: its text, or
+    // a fill or pointer tint it sets for what it holds.
+    const part = p.part;
+    const barValue = (/** @type {string} */ t) => {
+      const bl = partValue(look.components, part, [t], 'light');
+      const bd = partValue(look.components, part, [t], 'dark');
+      return bl != null && bd != null && bl !== bd
+        ? `light-dark(${bl}, ${bd})`
+        : (bl ?? bd ?? undefined);
+    };
     for (const [group, members] of groups)
-      if (!lines.some(x => x.group === group && x.token === p.token))
-        lines.push({
-          group,
-          parts: members,
-          token: p.token,
-          value,
-          why: `inside ${p.part}: the theme's own text on their own fill, from ${name}`,
-        });
+      for (const [t, v] of Object.entries(shared[name]))
+        if (!lines.some(x => x.group === group && x.token === t)) {
+          const from = barValue(t);
+          lines.push({
+            group,
+            parts: members,
+            token: t,
+            value: /** @type {string} */ (v),
+            why: TEXT_TOKEN.test(t)
+              ? `inside ${p.part}: the theme's own text on their own fill, from ${name}`
+              : `inside ${p.part}: the theme's own ${t} on them, not the one ${p.part} sets for its own parts, from ${name}`,
+            ...(from ? {from} : {}),
+          });
+        }
   }
   const one = problems.find(p => p.kind === 'one-look');
   const darkPage = shown(colorIn(`var(${PAGE})`, res.dark, 'dark'), null);

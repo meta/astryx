@@ -2279,6 +2279,8 @@ function checkNextEdit(p, file, kept, shared) {
   if (p.kind === 'chart-ground')
     return `${at}set ${(p.parts ?? [p.token]).slice(0, 3).join(', ')} to colors that show on ${p.on} in ${p.mode}`;
   if (p.kind === 'page-image' || p.kind === 'font-unloaded') return p.message;
+  if (p.kind === 'part-text' && p.part && p.token && p.needs != null)
+    return `${at}set ${p.token} in ${p.part}'s own style to a color that reads at ${p.needs}:1 on its fill in ${p.mode}, or, for a color you set, keep it as designed with a record in the theme's .accepted.json`;
   if (p.token && p.needs != null)
     return `${at}set ${p.token} to a color that reads at ${p.needs}:1${p.on ? ` on ${p.on}` : ''} in ${p.mode}${p.kind === 'text' || p.kind === 'part-text' ? ", or, for a color you set, keep it as designed with a record in the theme's .accepted.json" : ''}`;
   if (p.part) return `${at}change ${p.part}'s own style: ${p.message}`;

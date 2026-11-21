@@ -1216,6 +1216,10 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
       ).toBe(true);
       const fixed = await check(track, {fix: true});
       expect(fixed.problems.some(p => p.kind === 'bar-fill')).toBe(false);
+      // The bar's track is named as a fill, with the value the bar sets.
+      const line = fixed.fixed.find(f => f.token === '--color-neutral');
+      expect(line?.from).toBe('#ffffff2e');
+      expect(line?.why).toMatch(/the theme's own --color-neutral on them/);
     },
     T,
   );
@@ -1272,6 +1276,20 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
       expect(
         g.problems.some(p => p.kind === 'page-image' && p.part === 'card'),
       ).toBe(false);
+      // A stop built from a variable may be see-through: not a fill.
+      const v = await check(
+        themeFile('varstop', READABLE, {
+          card: {
+            base: {
+              backgroundImage:
+                'linear-gradient(rgb(var(--brand) / 0.4), rgb(var(--brand) / 0))',
+            },
+          },
+        }),
+      );
+      expect(
+        v.problems.some(p => p.kind === 'page-image' && p.part === 'card'),
+      ).toBe(true);
     },
     T,
   );
