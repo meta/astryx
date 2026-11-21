@@ -867,6 +867,66 @@
     "defaultMessage": "搜索……",
     "description": "Grey placeholder text inside the empty PowerSearch input. Imperative verb; trailing `…` is one character."
   },
+  "@astryx.powersearch.sheet.filtersTitle": {
+    "defaultMessage": "筛选条件",
+    "description": "Heading and accessible name of the PowerSearch touch sheet that lists the active filters (experimental bottom-sheet presentation). Plural noun."
+  },
+  "@astryx.powersearch.sheet.addFilter": {
+    "defaultMessage": "添加筛选条件",
+    "description": "Button label in the PowerSearch touch flow: in the Filters sheet header it opens the field list; in the value step it confirms a new filter. Imperative verb; no leading plus sign."
+  },
+  "@astryx.powersearch.sheet.noFilters": {
+    "defaultMessage": "未应用任何筛选条件",
+    "description": "Heading of the PowerSearch Filters sheet empty state when no filter is active (experimental bottom-sheet presentation). Neutral tone."
+  },
+  "@astryx.powersearch.sheet.noFiltersInDraft": {
+    "defaultMessage": "暂无筛选条件",
+    "description": "Heading of the PowerSearch Filters sheet empty state while the sheet's draft is empty but the field still has applied filters, which Done replaces. Must not say the filters are applied or removed yet. Neutral tone."
+  },
+  "@astryx.powersearch.sheet.noFiltersDescription": {
+    "defaultMessage": "添加筛选条件，缩小结果范围，更快找到所需内容。",
+    "description": "Guidance line under the PowerSearch Filters sheet empty state, above its Add filter action. One short sentence."
+  },
+  "@astryx.powersearch.sheet.clearAll": {
+    "defaultMessage": "全部清除",
+    "description": "Button label in the PowerSearch Filters sheet footer that asks to remove every editable filter. Imperative verb + determiner."
+  },
+  "@astryx.powersearch.sheet.clearAllTitle": {
+    "defaultMessage": "清除所有筛选条件？",
+    "description": "Title and accessible name of the confirmation dialog that Clear all opens in the PowerSearch touch flow. A short question."
+  },
+  "@astryx.powersearch.sheet.clearAllDescription": {
+    "defaultMessage": "这将清除此搜索中的所有可编辑筛选条件。",
+    "description": "Body text of the PowerSearch Clear all confirmation dialog. Read-only filters stay, so it names editable filters."
+  },
+  "@astryx.powersearch.sheet.clearAllConfirm": {
+    "defaultMessage": "清除筛选条件",
+    "description": "Destructive action of the PowerSearch Clear all confirmation dialog: removes the editable filters. Imperative verb + plural noun."
+  },
+  "@astryx.powersearch.sheet.clearAllCancel": {
+    "defaultMessage": "保留筛选条件",
+    "description": "Safe action of the PowerSearch Clear all confirmation dialog: closes it and changes nothing. Imperative verb + plural noun."
+  },
+  "@astryx.powersearch.sheet.done": {
+    "defaultMessage": "完成",
+    "description": "Primary button label in the PowerSearch Filters sheet footer that commits the sheet's filter draft and closes the sheet. Short; marks the end of the filtering task."
+  },
+  "@astryx.powersearch.sheet.discardTitle": {
+    "defaultMessage": "放弃更改？",
+    "description": "Title of the confirmation dialog shown when someone tries to dismiss the PowerSearch filter sheet after changing its filter draft. A question."
+  },
+  "@astryx.powersearch.sheet.discardDescription": {
+    "defaultMessage": "你对筛选条件所做的更改尚未应用。",
+    "description": "Body of the dirty-dismiss confirmation inside the PowerSearch filter sheet. Done applies the draft; a dismissal would drop it."
+  },
+  "@astryx.powersearch.sheet.keepEditing": {
+    "defaultMessage": "继续编辑",
+    "description": "Label of the safe cancel action in the PowerSearch dirty-dismiss confirmation. It closes the confirmation and returns to the unchanged draft."
+  },
+  "@astryx.powersearch.sheet.discardConfirm": {
+    "defaultMessage": "放弃更改",
+    "description": "Label of the destructive action in the PowerSearch dirty-dismiss confirmation. It closes the sheet without applying its filter draft."
+  },
   "@astryx.resizable.collapsed": {
     "defaultMessage": "已折叠",
     "description": "aria-valuetext for the Resizable drag handle (role=separator) while its panel is collapsed to zero size. Replaces the numeric value announcement, since the numeric value is clamped to the minimum while collapsed. Adjective describing the panel state, not a verb/command."
