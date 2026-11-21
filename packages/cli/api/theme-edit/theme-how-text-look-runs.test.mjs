@@ -530,3 +530,22 @@ it(
   },
   T,
 );
+
+it(
+  'reads one run said in the same words for two parts as two runs',
+  async test => {
+    needsBases(test);
+    const {sets, texts} = await answer(
+      'cards with bold 13px #3b5998 text, buttons with bold 13px #3b5998 text',
+    );
+    expect(sets.some(c => /'#3b5998' --on card\b/.test(c))).toBe(true);
+    expect(sets.some(c => /'#3b5998' --on button\b/.test(c))).toBe(true);
+    expect(texts.some(t => t.includes('but not "#3b5998"'))).toBe(false);
+    // (A list of parts said with one run reads as before: no part takes the
+    // color while another loses it.)
+    const list = await answer('cards, buttons with bold 13px #3b5998 text');
+    expect(list.sets.some(c => /#3b5998/.test(c))).toBe(false);
+    expect(list.texts.some(t => t.includes('but not "#3b5998"'))).toBe(true);
+  },
+  T,
+);

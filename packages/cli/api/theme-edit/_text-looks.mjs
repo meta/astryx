@@ -126,17 +126,24 @@ export function addRunLooks(clauses, hues) {
   const color = new RegExp(
     `#[0-9a-f]{3,8}|\\b(?:white|black|gr[ae]y|${hues.join('|')})\\b`,
   );
-  // (A clause the reader gives another clause's words says no run of its
-  // own.)
+  // (A clause is keyed by its words, its parts and its state: two parts
+  // said with the same words, "cards with bold 13px #3b5998 text, buttons
+  // with bold 13px #3b5998 text", are two runs. Asks the reader split from
+  // one clause sit side by side with its words.)
+  const id = (/** @type {(typeof clauses)[number]} */ x) =>
+    `${x.text}\u0000${x.parts.map(p => p.on).join(',')}\u0000${x.state ?? ''}`;
+  // (A clause the reader gives another clause's words and part says no
+  // run of its own.)
   /** @type {Map<string, number>} */
   const first = new Map();
-  clauses.forEach((x, k) => first.has(x.text) || first.set(x.text, k));
+  clauses.forEach((x, k) => first.has(id(x)) || first.set(id(x), k));
   for (let i = clauses.length - 1; i >= 0; i--) {
     const c = clauses[i];
-    // (Asks split from one clause share its words: read them once.)
+    // (Asks split from one clause share its words and part: read them
+    // once.)
     if (
       clauses[i - 1]?.text === c.text ||
-      (first.get(c.text) ?? i) < i ||
+      (first.get(id(c)) ?? i) < i ||
       // (A run said for a state, "selected tabs with …", reads as before:
       // the reader can give it another clause's words.)
       c.state
@@ -146,6 +153,20 @@ export function addRunLooks(clauses, hues) {
     while (clauses[end + 1]?.text === c.text) end++;
     const group = clauses.slice(i, end + 1);
     const asks = group.flatMap(x => x.aspects);
+    // ("cards, buttons with bold 13px #3b5998 text": the reader gives the
+    // run's color to the last part of a list alone; the list reads as
+    // before.)
+    let prev = i - 1;
+    while (prev >= 0 && !clauses[prev].text) prev--;
+    const sibling = clauses[prev];
+    const listed =
+      sibling &&
+      sibling.text !== c.text &&
+      sibling.aspects.every(a => RUN_ASKS.has(a)) &&
+      c.parts.length > 0 &&
+      c.parts.every(p => sibling.parts.some(q => q.on === p.on)) &&
+      sibling.parts.length > c.parts.length;
+    if (listed) continue;
     const run = ownRun(c, hues);
     // ("top bar #3b5998 with 11px white links": the links' color stays the
     // bar's link color, and their size is the nav items'.)
