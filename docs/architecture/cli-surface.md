@@ -87,13 +87,19 @@ rather than left to the command author.
    command tree, the answer reads other command lines' word orders (`add
 theme matcha` is `theme add matcha`) and the table of their words in
    `clients/cli/lib/other-cli-words.mjs`, where each word names a tool that
-   uses it and no word is a command or a command's plural. The answer only
+   uses it and no word is a command or a command's plural. A word that points
+   at nothing names the commands it is a typo of (one edit in a word of up to
+   four letters, two in a longer one, two swapped letters counting as one),
+   else `help`, which lists every command with what it does. A word that
+   names a script in the project's package.json names that script's run
+   first, with the project's package manager. The answer only
    suggests: it runs nothing and names no experimental command, except that a
    share word (`export`, `render`, `share`, `bundle`, `snapshot`,
    `standalone`) names `experimental export` under `spec:AST-017` FR27's
-   shareable-page exception, and a way-back word (`import`, `back`,
-   `restore`, `unrender`, `reverse`) names `experimental import` under the
-   same exception.
+   shareable-page exception, a way-back word (`import`, `back`, `restore`,
+   `unrender`, `reverse`) names `experimental import` under the same
+   exception, and where icon features are on, an icon word (`icon`, `icons`)
+   names `experimental icon` (`spec:AST-084` FR0).
 4. **Work.** The command parses its arguments and calls a function in `api/`.
    The command is a thin wrapper: parse, call, render. The API function is the
    unit that is scriptable and typed, and it is the source of truth for the
