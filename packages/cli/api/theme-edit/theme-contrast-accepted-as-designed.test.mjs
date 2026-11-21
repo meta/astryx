@@ -491,12 +491,24 @@ describe('a kept problem, read against what is drawn now', () => {
     ratio: 3,
     reason: 'r s t',
   });
-  it('is not called passing while one failure across several variants names its part', () => {
+  it('is not called passing while one failure across its variants still names it', () => {
+    // (The shape the editor reports: its key names the text part, the
+    // ground and the mode; its text names the variants.)
     const grouped = /** @type {any} */ ({
-      key: 'text-variants|heading|card',
-      text: 'text in heading (variants blue, green, purple) ("Title") is 1.17:1 in light (#1e293b on card\'s #1e293b); text needs 4.5:1',
+      key: 'variants|--color-text-primary|#1e293b|heading|card|This week|light|lines',
+      text: 'text ("This week") in heading on 3 card variants (blue, green, purple) is 1.17:1 in light (#1e293b on each variant\'s fill); text needs 4.5:1',
     });
     expect(keptNow(kept, [grouped])).toEqual({inEffect: false, ratioNow: 1.17});
+  });
+  it('takes no failure on another ground for its own place', () => {
+    const elsewhere = /** @type {any} */ ({
+      key: 'text|heading|heading|--color-text-primary|page|||Title|light',
+      text: 'text in heading ("Title") is 2.10:1 in light (#1e293b on the page\'s #333333); text needs 4.5:1',
+    });
+    expect(keptNow(kept, [elsewhere])).toEqual({
+      inEffect: false,
+      ratioNow: null,
+    });
   });
   it('is no longer needed where nothing at its place fails', () => {
     expect(keptNow(kept, [])).toEqual({inEffect: false, ratioNow: null});
