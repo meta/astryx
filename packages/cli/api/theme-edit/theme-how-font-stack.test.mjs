@@ -65,7 +65,12 @@ describe('a family said as like another', () => {
     );
     expect(said).toContain(`font 'MS Sans Serif'`);
     expect(said).not.toMatch(/ font system(\s|$)/);
-    // (A generic word alone stays the system stack.)
+    expect(await commandsFor('MS Sans Serif-like type')).toContain(
+      `font 'MS Sans Serif'`,
+    );
+    // (A generic word alone, or one look word before "type", stays as it
+    // was.)
+    expect(await commandsFor('Large type')).not.toMatch(/ font 'Large'/);
     expect(await commandsFor('a sans font')).toMatch(/ font system(\s|$)/);
   }, 240_000);
 });

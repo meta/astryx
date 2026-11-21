@@ -33250,10 +33250,15 @@ function fontIn(cl, question) {
     // ("MS Sans Serif-like pixel sans", "a Helvetica-style font"): the
     // family a font is said to be like is the family.
     new RegExp(`(?:^|[\\s,;:])${NAME}-(?:like|style|esque)\\b`, 'g'),
+    // ("MS Sans Serif type", what "MS Sans Serif-like type" reads as): a
+    // name of two words or more before "type" is a family; one word
+    // ("Large type") is a look.
+    new RegExp(`(?:^|[\\s,;:])${NAME}\\s+type\\b`, 'g'),
   ]) {
     for (const m of question.matchAll(re)) {
       const name = m[1].replace(/ (Font|Typeface)$/, '');
       if (GENERIC.test(name.split(' ')[0]) || OS_FONT.test(name)) continue;
+      if (/\stype\b/.test(m[0]) && !/\s/.test(name)) continue;
       // ("titles in All Caps", "body text in Sentence Case": a casing said
       // in words is the text's case, never a family.)
       if (
