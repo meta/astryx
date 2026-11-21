@@ -5,22 +5,26 @@
 import {Citation} from '@astryxdesign/core/Citation';
 import {Stack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
+import {Icon} from '@astryxdesign/core/Icon';
+import {BookIcon} from '@astryxdesign/template-icons';
+import {CodeIcon} from '@astryxdesign/template-icons';
+import {GlobeIcon} from '@astryxdesign/template-icons';
 
 const sources = [
   {
     title: 'React Documentation',
     url: 'https://react.dev',
-    icon: 'https://react.dev/favicon-32x32.png',
+    icon: <Icon icon={CodeIcon} size="xsm" />,
   },
   {
     title: 'TypeScript Handbook',
     url: 'https://www.typescriptlang.org/docs/handbook/',
-    icon: 'https://www.typescriptlang.org/favicon-32x32.png',
+    icon: <Icon icon={BookIcon} size="xsm" />,
   },
   {
     title: 'MDN Web Docs',
     url: 'https://developer.mozilla.org',
-    icon: 'https://developer.mozilla.org/favicon-48x48.cbbd161b.png',
+    icon: <Icon icon={GlobeIcon} size="xsm" />,
   },
   {
     title: 'W3C WAI-ARIA Specification',

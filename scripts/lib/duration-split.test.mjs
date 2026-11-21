@@ -9,6 +9,7 @@ import {
   costOf,
   fitLegsToBudget,
   medianOf,
+  mergeRecord,
   percentileOf,
   slowestFirst,
   splitByDuration,
@@ -166,5 +167,23 @@ describe('fitting legs to a budget', () => {
       expect(plan.count, names.join('')).toBe(3);
       expect(plan.shares.flat().sort()).toEqual(names);
     }
+  });
+});
+
+describe('mergeRecord', () => {
+  it('sorts with localeCompare unless given another order', () => {
+    const record = {b: 1, B: 2};
+    expect(Object.keys(mergeRecord(record, {a: 3}, () => true))).toEqual([
+      'a',
+      'b',
+      'B',
+    ]);
+    expect(
+      Object.keys(
+        mergeRecord(record, {a: 3}, () => true, {
+          compare: (x, y) => (x < y ? -1 : x > y ? 1 : 0),
+        }),
+      ),
+    ).toEqual(['B', 'a', 'b']);
   });
 });

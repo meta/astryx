@@ -362,7 +362,7 @@ export function useFocusRegionContainment(
           // The trap contains focus that is inside it; it does not pull in a
           // Tab pressed elsewhere on the page. A layer can be open while focus
           // legitimately sits outside it — a listbox popup anchored to its own
-          // input, a non-modal popover beside the content it annotates — and
+          // input, a popover beside the content it annotates — and
           // capturing that Tab would take the rest of the page away from
           // keyboard users.
           return;
@@ -535,6 +535,18 @@ interface InternalFocusTrapOptions extends UseFocusTrapOptions {
   getAnchor?: () => Element | null;
   /** The id the trigger's `aria-controls` names. */
   layerId?: string;
+  /**
+   * Whether Tab and Shift+Tab cycle inside the container while it is active.
+   * An overlay that does not contain leaves Tab to the page's own order.
+   * @default true
+   */
+  isContaining?: boolean;
+  /**
+   * Whether the overlay takes an Escape press now, asked at press time with
+   * the container. An overlay that does not contain takes Escape only while
+   * it holds focus; otherwise the press passes to the layer or page beneath.
+   */
+  isEscapeInScope?: (container: Element | null) => boolean;
 }
 
 export interface InternalFocusTrapReturn<
@@ -564,6 +576,8 @@ export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
     getTrigger,
     getAnchor,
     layerId,
+    isContaining = true,
+    isEscapeInScope,
   } = options;
   const getRestoreTargetRef = useRef(getRestoreTarget);
   getRestoreTargetRef.current = getRestoreTarget;
@@ -577,8 +591,9 @@ export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
 
   const containerRef = useRef<T | null>(null);
 
-  // Tab and Shift+Tab wrap inside the container while the trap is active.
-  useFocusRegionContainment(containerRef, isActive);
+  // Tab and Shift+Tab wrap inside the container while the trap is active and
+  // containing.
+  useFocusRegionContainment(containerRef, isActive && isContaining);
 
   // Join the shared layer dismissal stack. The trap no longer listens for
   // Escape itself: the stack owns one listener and routes each press to the
@@ -600,9 +615,17 @@ export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
     // content; hand the stack the container instead so two DOM-nested traps
     // still resolve in the right order.
     getContainer: () => containerRef.current,
+    isPresent:
+      isEscapeInScope == null
+        ? undefined
+        : () => isEscapeInScope(containerRef.current),
   });
 
-  useFocusTrapEscapeCompatibilitySignal(isEscapeTrap);
+  // A trap that takes Escape only within a scope is not counted. A handler
+  // that stands down for it would drop each press the trap passes.
+  useFocusTrapEscapeCompatibilitySignal(
+    isEscapeTrap && isEscapeInScope == null,
+  );
 
   /**
    * Focus the first focusable element.
