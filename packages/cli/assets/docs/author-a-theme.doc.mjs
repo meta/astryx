@@ -129,7 +129,7 @@ export const docs = {
           ['ocean.d.ts', 'TypeScript declarations for the theme and icon registry exports'],
           ['ocean.css.d.ts', 'TypeScript declarations so a side-effect import of ocean.css typechecks'],
           ['ocean.variants.d.ts', "(Optional) Module augmentations for custom component prop values"],
-          ['ocean.modules/', '(Only when the icon registry or a slot function\'s module is TypeScript or JSX) That module, and the TypeScript or JSX helpers it imports, compiled to JavaScript. ocean.js imports them from here, so copy and publish this folder with ocean.js. A plain JavaScript file they import is not copied: the compiled copy imports it from its source file, so ship that file where it is, or write it in TypeScript.'],
+          ['ocean.modules/', '(Only when the icon registry or a slot module is TypeScript or JSX) Those modules and their TypeScript or JSX helpers, compiled to JavaScript. Ship this folder with ocean.js. A plain JavaScript file they import is not copied; ship it where it is.'],
         ]},
         {type: 'prose', text: 'The `__built: true` flag tells Theme to skip runtime `<style>` injection; the CSS file handles it. Load the generated CSS wherever you load the module.'},
         {type: 'code', lang: 'tsx', label: 'Using a custom built theme', code: "import {Theme} from '@astryxdesign/core/theme';\nimport {oceanTheme} from './themes/ocean';\nimport './themes/ocean.css';\n\n<Theme theme={oceanTheme}>\n  <App />\n</Theme>"},
@@ -155,7 +155,7 @@ export const docs = {
     {
       title: 'Building a Theme Family',
       content: [
-        {type: 'prose', text: 'Use family mode when an app switches among one base theme and its selected descendants. The build writes one keyed CSS file containing every member, plus one keyed JavaScript module and one declaration file, beside the root source. When a member\'s icon registry or slot module is TypeScript or JSX, it also writes a `<family-key>.modules/` folder beside them, which ships with the module, as for a single build.'},
+        {type: 'prose', text: 'Use family mode when an app switches among one base theme and its selected descendants. The build writes one keyed CSS file containing every member, plus one keyed JavaScript module and one declaration file, beside the root source. When a member\'s icon registry or slot module is a `.ts` file, it also writes a `<family-key>.modules/` folder beside them, which ships with the module. A family build cannot load a `.tsx` or `.jsx` registry and stops, so write a member\'s registry as `.ts`.'},
         {type: 'code', lang: 'bash', label: 'Build one family', code: "{@command theme build} --family \\\n  ./src/themes/ocean.mjs \\\n  ./src/themes/ocean-calm.mjs \\\n  ./src/themes/ocean-calm-deep.mjs \\\n  --family-key ocean-family"},
         {type: 'prose', text: 'The family stylesheet eagerly downloads every selected member so first paint is complete. Switching members changes only the theme identity; it does not add, remove, or reorder stylesheets.'},
       ],
