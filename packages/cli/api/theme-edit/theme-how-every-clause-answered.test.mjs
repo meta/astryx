@@ -106,6 +106,14 @@ const ROWS = [
     },
   ],
   [
+    'a leading typed in pixels beside a text size is used',
+    {q: '13px text, 18px leading', saysNot: /not used/},
+  ],
+  [
+    'a leading typed in pixels alone is used',
+    {q: '18px leading', saysNot: /not used/},
+  ],
+  [
     'a typed value no line writes is still named',
     {q: 'bigger buttons, #123456', says: /not used: "#123456"/},
   ],

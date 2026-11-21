@@ -12677,7 +12677,7 @@ export function draftAnswer(ctx, env, question) {
    */
   const saidTextPx = c => {
     const re =
-      /\b(\d+(?:\.\d+)?)\s?px\s+(?:(?:body|base|main)\s+)?(?:text|font|type)\b|\b(?:text|font)(?:[- ]size)?\s*:?\s*(\d+(?:\.\d+)?)\s?px\b/i;
+      /\b(\d+(?:\.\d+)?)\s?px\s+(?:(?:body|base|main)\s+)?(?:text|font|type)\b|\b(?:text|font)(?:[- ]size)?\s*:?\s*(\d+(?:\.\d+)?)\s?px\b(?!\s*(?:of\s+)?(?:line[- ]?height|leading)\b)/i;
     for (const o of [c, ...clauses.filter(x => x !== c)]) {
       const m = re.exec(o.text);
       if (m) return Number(m[1] ?? m[2]);
@@ -22250,24 +22250,27 @@ export function draftAnswer(ctx, env, question) {
             c.text,
           );
         const leadPx = pxLeading ? Number(pxLeading[1] ?? pxLeading[2]) : null;
-        const textPxSaid = leadPx == null ? null : saidTextPx(c);
+        // (On a part, the pixels as typed: its text size is its own.)
+        const leadOnBody = !on || on === 'body' || p?.role === 'body';
+        const textPxSaid = leadPx == null || !leadOnBody ? null : saidTextPx(c);
         const textPx =
           textPxSaid ??
-          (leadPx == null
+          (leadPx == null || !leadOnBody
             ? null
             : lengthPx(
                 String(
-                  (on && on !== 'body' && p?.role !== 'body'
-                    ? nowIn(on, 'font-size')
-                    : null) ||
-                    resolvedValue('--text-body-size') ||
+                  resolvedValue('--text-body-size') ||
                     current('--text-body-size'),
                 ),
               ));
         const pxRatio =
-          leadPx != null && textPx
-            ? String(Number((leadPx / textPx).toFixed(3)))
-            : null;
+          leadPx == null
+            ? null
+            : !leadOnBody
+              ? `${leadPx}px`
+              : textPx
+                ? String(Number((leadPx / textPx).toFixed(3)))
+                : null;
         // An amount ("1.5x", "half") or a percent ("150%": of the line
         // height there now) is a factor, never a typed number.
         const pctLeading = /\b(\d{1,3}(?:\.\d+)?)(?:px)?\s?%/.exec(c.text);
@@ -22314,7 +22317,9 @@ export function draftAnswer(ctx, env, question) {
               : '1.6');
         if (tok)
           return {
-            text: `body line height: --text-body-leading${now ? ` (now ${now})` : ''}`,
+            // (A leading typed in pixels names its reading, so the answer
+            // says what it read.)
+            text: `body line height: --text-body-leading${pxRatio != null && textPx ? `, ${leadPx}px over ${textPx}px text: ${pxRatio}` : ''}${now ? ` (now ${now})` : ''}`,
             options: [[set(tok, value)]],
           };
         return {
