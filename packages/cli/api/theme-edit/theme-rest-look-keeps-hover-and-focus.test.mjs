@@ -305,6 +305,36 @@ describe('a resting outline', () => {
     expect(rules).toMatch(/outline-style: solid/);
   }, 240_000);
 
+  it("copies a wider outline of two variables as written beside the scope's own offset", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('v2', {cwd, like: 'neutral'});
+    await themeEditSet(
+      'v2',
+      'outline',
+      'var(--focus-outline-width) solid var(--color-accent)',
+      {cwd, on: 'button', state: 'focus-visible', when: 'variant:ghost'},
+    );
+    await themeEditSet('v2', 'outline-offset', '4px', {
+      cwd,
+      on: 'button',
+      state: 'focus-visible',
+      when: 'variant:ghost+size:sm',
+    });
+    await themeEditSet('v2', 'outline', 'none', {
+      cwd,
+      on: 'button',
+      when: 'variant:ghost+size:sm',
+    });
+    const rules = scoped(cssOf('v2'), ':focus-visible', [
+      'data-variant="ghost"',
+      'data-size="sm"',
+    ]);
+    expect(rules).toMatch(
+      /outline: var\(--focus-outline-width\) solid var\(--color-accent\)/,
+    );
+    expect(rules).toMatch(/outline-offset: 4px/);
+  }, 240_000);
+
   it('copies a wider color set for the plain focus state to a narrower resting scope', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('cf', {cwd, like: 'neutral'});

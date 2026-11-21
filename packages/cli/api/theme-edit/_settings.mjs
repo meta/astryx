@@ -7238,7 +7238,8 @@ export function compileTheme(ctx, data, base) {
           else if (/^(?:var|env)\(/i.test(w)) open.push(w);
           else got['outline-color'] = w;
         // (A variable is the one part still unsaid; with more than one
-        // unsaid part, the shorthand is copied as written.)
+        // unsaid part, the shorthand is copied as written, as before, so
+        // the ring still shows.)
         const unsaid = [
           'outline-style',
           'outline-width',
@@ -7263,9 +7264,7 @@ export function compileTheme(ctx, data, base) {
               z =>
                 sameScope(z) &&
                 (z.mode == null || z.mode === y.mode) &&
-                (long === 'outline'
-                  ? kebab(z.thing).startsWith('outline')
-                  : kebab(z.thing) === 'outline' || kebab(z.thing) === long),
+                (kebab(z.thing) === 'outline' || kebab(z.thing) === long),
             )
           )
             putComp({...y, thing: long, when: s.when, state}, target, long, v);
