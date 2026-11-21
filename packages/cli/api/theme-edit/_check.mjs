@@ -888,6 +888,7 @@ export function storedProblems(ctx, slug, data, skip = '') {
   // variant of this Core, as `set` checks them.
   const WHOLE_ONLY = [
     'surfaces',
+    'focus',
     'buttons',
     'base',
     'mode',
@@ -6151,7 +6152,7 @@ function checkOne(
     );
   if (DIALS[thing]) {
     s.source = 'dial';
-    if (['surfaces', 'buttons', 'type'].includes(thing)) {
+    if (['surfaces', 'buttons', 'type', 'focus'].includes(thing)) {
       if (s.on)
         refuse(
           E.ERR_THEME_BAD_VALUE,
