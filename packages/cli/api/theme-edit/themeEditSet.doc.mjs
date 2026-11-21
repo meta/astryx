@@ -143,7 +143,7 @@ export const doc = {
     },
     {
       code: 'ERR_INVALID_ARGUMENT',
-      when: '--only on a part that is not a member of an always-alike group',
+      when: '--only on a part that is not a member of an always-alike group; --ground with any thing but contrast-accepted; --state, --only or --png with contrast-accepted',
     },
     {
       code: 'ERR_UNKNOWN_THEME',

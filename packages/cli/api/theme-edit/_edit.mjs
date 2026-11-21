@@ -2212,8 +2212,24 @@ async function labelRead(scope, cwd) {
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditChangeResponse>}
  */
 export async function themeEditSet(theme, thing, value, options = {}) {
-  if (thing === 'contrast-accepted')
+  // (Each option either composes with the thing or is refused: none is
+  // dropped without a word.)
+  if (thing === 'contrast-accepted') {
+    const extra = /** @type {const} */ (['state', 'only', 'png']).filter(
+      k => options[k] != null && options[k] !== false,
+    );
+    if (extra.length)
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `contrast-accepted keeps one contrast problem by its part (--on), variant (--when), the part under it (--ground) and mode (--mode): ${extra.map(k => `--${k}`).join(' and ')} ${extra.length > 1 ? 'do' : 'does'} not apply to it.`,
+      );
     return acceptContrast(theme, String(value ?? ''), options);
+  }
+  if (/** @type {any} */ (options).ground != null)
+    refuse(
+      E.ERR_INVALID_ARGUMENT,
+      `--ground names the part under the text for contrast-accepted only; ${thing} takes no --ground.`,
+    );
   try {
     return await change('set', theme, thing, value, options);
   } catch (e) {
