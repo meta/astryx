@@ -1046,6 +1046,24 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
   );
 
   it(
+    'moves unset chart colors and control edges until they show on every surface, so a grey look comes out clean',
+    async () => {
+      const file = themeFile('grey', {
+        '--color-background-body': '#c0c0c0',
+        '--color-background-surface': '#d4d0c8',
+        '--color-text-primary': '#000000',
+        '--color-accent': '#000080',
+      });
+      expect(
+        (await check(file)).problems.some(p => p.kind === 'chart-ground'),
+      ).toBe(true);
+      const d = await check(file, {fix: true});
+      expect(d.problems).toEqual([]);
+    },
+    T,
+  );
+
+  it(
     'refuses what it cannot check, with the documented codes, and changes nothing',
     async () => {
       /** @param {Promise<unknown>} p */
