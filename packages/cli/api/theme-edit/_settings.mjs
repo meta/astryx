@@ -7080,6 +7080,23 @@ export function compileTheme(ctx, data, base) {
           piecesOf(y.when).every(p => scope.includes(p)) &&
           partsOf(ctx, y).includes(target),
       );
+      // (One set for this very scope is the theme's own rule here.)
+      const sameScope = (/** @type {Setting} */ y) =>
+        piecesOf(y.when).length === scope.length;
+      if (setByTheme.some(y => sameScope(y) && !y.mode)) continue;
+      // (One set for a wider scope loses here to the resting rule, which
+      // is written later at the same weight: it is written again at the
+      // resting scope, the widest first so the nearest wins.)
+      for (const y of setByTheme
+        .filter(z => !sameScope(z))
+        .sort((a, b) => piecesOf(a.when).length - piecesOf(b.when).length))
+        if (!setByTheme.some(z => sameScope(z) && z.mode === y.mode))
+          putComp(
+            {...y, when: s.when, state},
+            target,
+            y.thing,
+            String(y.value),
+          );
       if (setByTheme.some(y => !y.mode)) continue;
       // (A state background the theme sets for one mode keeps that mode:
       // the other mode alone takes Core's back.)
@@ -7132,6 +7149,7 @@ export function compileTheme(ctx, data, base) {
               .split('+')
               .every(piece => held.includes(piece))),
       );
+      // (A wider one is written at the resting scope before this runs.)
       if (own.some(y => !y.mode)) return;
       const ownModes = new Set(own.map(y => y.mode));
       if (!ownModes.size) {
@@ -7178,6 +7196,40 @@ export function compileTheme(ctx, data, base) {
         x => !/^(none|0(px)?|hidden)$/i.test(x),
       ),
     );
+    // (A focus outline value the theme sets for a wider scope loses, at
+    // the same weight, to the resting rule written later: it is written
+    // again at the resting scope, once for every outline property, the
+    // widest first so the nearest one wins.)
+    if (s.when) {
+      /** @param {unknown} w */
+      const pieces = w =>
+        String(w ?? '')
+          .split('+')
+          .filter(Boolean);
+      const held = pieces(s.when);
+      const sameScope = (/** @type {Setting} */ y) =>
+        String(y.when ?? '') === String(s.when);
+      for (const y of ownFocus
+        .filter(
+          z => !sameScope(z) && pieces(z.when).every(p => held.includes(p)),
+        )
+        .sort((a, b) => pieces(a.when).length - pieces(b.when).length))
+        if (
+          !ownFocus.some(
+            z =>
+              sameScope(z) &&
+              z.mode === y.mode &&
+              (kebab(z.thing) === 'outline' ||
+                kebab(z.thing) === kebab(y.thing)),
+          )
+        )
+          putComp(
+            {...y, when: s.when, state},
+            target,
+            y.thing,
+            String(y.value),
+          );
+    }
     if (!drawn) return;
     for (const p of [
       'outline-style',
