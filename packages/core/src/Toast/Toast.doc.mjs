@@ -19,9 +19,9 @@ export const docs = {
   ],
 
   playground: {
-    // The card stays shown: the docs playground and the theme editor's live
-    // preview page render it, and a toast that hides itself would leave
-    // them empty. autoHideDuration is the show function's 5000.
+    // Keep the card's timer off: the theme editor's preview page passes no
+    // onDismiss, so a timer that fires throws. autoHideDuration is the show
+    // function's 5000.
     defaults: {
       body: 'Changes saved',
       isAutoHide: false,
