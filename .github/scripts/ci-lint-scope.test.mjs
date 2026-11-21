@@ -379,3 +379,95 @@ describe('required lint routing', () => {
     ).not.toBe(0);
   });
 });
+
+describe('formatting of changed files', () => {
+  const format = steps.find(
+    step => step.name === 'Check formatting of changed files',
+  );
+  // The repository's own Prettier package folder, which the stand-in npm
+  // links where the step installs Prettier.
+  const prettierPackage = fs.realpathSync(
+    path.join(root, 'node_modules/prettier'),
+  );
+  const lockedPrettier = fs
+    .readFileSync(path.join(root, 'pnpm-lock.yaml'), 'utf8')
+    .match(
+      /^ {2}\.:\n[\s\S]*?^ {6}prettier:\n {8}specifier: .*\n {8}version: ([^\s(]+)/m,
+    )[1];
+
+  /**
+   * Runs the step on a spec-only change, in a checkout with no installed
+   * dependencies, as the spec lane has. A stand-in `npm` records what the step
+   * installs and links the repository's own Prettier in its place.
+   * @param {string} spec the changed record's text
+   */
+  function checkSpecOnly(spec) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lint-format-'));
+    scratch.push(dir);
+    const workspace = path.join(dir, 'ws');
+    for (const file of [
+      '.prettierrc.json',
+      '.prettierignore',
+      'pnpm-lock.yaml',
+    ])
+      write(workspace, file, fs.readFileSync(path.join(root, file), 'utf8'));
+    git(workspace, 'init', '-q');
+    git(workspace, 'add', '-A');
+    git(workspace, 'commit', '-q', '-m', 'base');
+    write(workspace, 'docs/specs/AST-999-example/spec.md', spec);
+    git(workspace, 'add', '-A');
+    git(workspace, 'commit', '-q', '-m', 'the pull request');
+    const bin = path.join(dir, 'bin');
+    write(
+      bin,
+      'npm',
+      [
+        '#!/bin/bash',
+        `echo "$*" > ${JSON.stringify(path.join(dir, 'npm-args'))}`,
+        'while [ $# -gt 0 ]; do [ "$1" = --prefix ] && prefix=$2; shift; done',
+        'mkdir -p "$prefix/node_modules/.bin"',
+        `ln -s ${JSON.stringify(prettierPackage)} "$prefix/node_modules/prettier"`,
+        'ln -s ../prettier/bin/prettier.cjs "$prefix/node_modules/.bin/prettier"',
+      ].join('\n'),
+    );
+    fs.chmodSync(path.join(bin, 'npm'), 0o755);
+    const result = spawnSync(
+      'bash',
+      ['--noprofile', '--norc', '-eo', 'pipefail', '-c', format.run],
+      {
+        cwd: workspace,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PATH: `${bin}:${process.env.PATH}`,
+          MERGE_SHA: git(workspace, 'rev-parse', 'HEAD'),
+          RUNNER_TEMP: dir,
+        },
+      },
+    );
+    const npmArgs = fs.existsSync(path.join(dir, 'npm-args'))
+      ? fs.readFileSync(path.join(dir, 'npm-args'), 'utf8').trim()
+      : '';
+    return {...result, npmArgs};
+  }
+
+  it('runs for a spec-only pull request, and still skips the docs lane', () => {
+    expect(format.if).toContain("steps.scope.outputs.docsite_only != 'true'");
+    expect(format.if).not.toContain('spec_only');
+  });
+
+  it('fails a spec-only pull request whose record Prettier would reformat', () => {
+    const result = checkSpecOnly(
+      '# Example\n\n| a | b |\n|---|---|\n| a longer cell | x |\n',
+    );
+    expect(result.status, result.stdout + result.stderr).toBe(1);
+    expect(result.stdout).toContain('docs/specs/AST-999-example/spec.md');
+    expect(result.npmArgs).toContain(`prettier@${lockedPrettier}`);
+  });
+
+  it('passes a spec-only pull request whose record is formatted', () => {
+    const result = checkSpecOnly('# Example\n\nA formatted record.\n');
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+    expect(result.stdout).toContain('Every changed file is formatted.');
+  });
+});
