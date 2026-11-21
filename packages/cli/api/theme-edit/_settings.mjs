@@ -13688,7 +13688,30 @@ export async function contrastProblems(ctx, data, res) {
         ]
       : []),
   ]);
-  return withAccepted(data, said, res);
+  const listed = withAccepted(data, said, res);
+  // (An official theme, a package Astryx ships, keeps no contrast problem
+  // as designed, so it is offered no line that keeps one.)
+  return officialProject(ctx.project.cwd)
+    ? listed.map(({accept: _accept, ...p}) => p)
+    : listed;
+}
+
+/**
+ * Whether the project is an official Astryx theme (a package named
+ * `@astryxdesign/theme-*`).
+ * @param {string} cwd
+ */
+export function officialProject(cwd) {
+  try {
+    return /^@astryxdesign\/theme-/.test(
+      String(
+        JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8'))
+          .name ?? '',
+      ),
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**
