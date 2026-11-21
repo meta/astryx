@@ -20,13 +20,12 @@
 - A tone said of body text ("lighter body text") is its color, not its size.
 - "all of it" keeps a heading ask: where its first line changes nothing here, the next line that passes takes its place.
 - A look word after a part ("destructive buttons solid red", "table rows highlight … on hover") is no longer read as a part name.
-- "softer, larger card shadows" is a bigger shadow, stepped from the one the card paints.
+- "softer, larger card shadows" takes the card's large shared shadow.
 - Items after a comma leave a with-list ("dark sidebar with white text, rounder cards, and bigger headings").
 
 - `astryx experimental theme editor how`:
 
 - Every page-color answer now also paints the app shell's frame and the main panel, in the same mode. The whole page shows the color instead of only the area behind the panels.
-- A text color written for dark mode only on a part that also sits on a dark surface in a light page, such as a toast, says that the color shows there in light mode too.
 
 - `astryx experimental theme editor set` says the missed line only when the change left a new miss (`missedNew` in the JSON counts them), instead of repeating every standing miss after each unrelated change; `show` still lists each.
 
