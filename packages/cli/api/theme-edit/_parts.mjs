@@ -103,12 +103,11 @@ const LIFECYCLE_FLAGS = new Set([
  * @property {Record<string, string[]>} [innerSets] - inherited text properties a visible unnamed element inside the part that holds text sets to values of its own -> those values (a code block's lines: white-space pre or pre-wrap)
  * @property {Record<string, string[]>} attrs - data attributes seen on the part
  * @property {string[]} contains - parts rendered inside it
- * @property {string[]} [drawnAs] - the other parts drawn on the same element (a select's option is drawn as an Item)
+ * @property {string[]} [drawnAs] - the other parts drawn on the same element (a select's option is drawn as an Item; a calendar's nav arrow is a `button` too): a rule on one of them reaches this part
  * @property {string[]} [repeats] - parts it holds more than one of side by side, as the nearest part around them (a shortcut's keys, a button group's buttons)
  * @property {string[]} [listed] - the parts inside it drawn more than once in one of its elements (a menu's items), unlike a part drawn there once (a header's nav)
  * @property {Record<string, string[]>} [holdsVariants] - for a part rendered inside it, the variants it is drawn in there (a toast's close button: ghost)
  * @property {string[]} [tags] - the elements it is rendered as (`tr` for a table row)
- * @property {string[]} [drawnAs] - the other targets its element carries where the census drew it (a calendar's nav arrow is a `button` too): a rule on one of them reaches this part
  * @property {boolean} [alone] - the census drew it on an element carrying no other target too (a Button); a part never drawn alone rides on the parts it is drawn as
  * @property {string} [underInput] - drawn under an invisible native input
  *   laid over it (a checkbox's box), which takes its pointer and focus: the
@@ -1566,11 +1565,6 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         innerCorners: new Set(),
         media: false,
       });
-      // (The other targets the same element carries: a calendar's nav arrow
-      // is a Button too, so a button rule reaches it.)
-      if (ownsTarget && named.length > 1)
-        for (const c of named)
-          if (c.slice(7) !== t) (T.drawnAs ??= new Set()).add(c.slice(7));
       // A data attribute another target on the element declares is this
       // part's only when the part rides on that one: a part always drawn
       // together with another (a list item on its Item) takes that one's
@@ -1862,7 +1856,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
       contains: [...v.contains],
       ...(v.repeats?.size ? {repeats: [...v.repeats]} : {}),
       ...(v.listed?.size ? {listed: [...v.listed]} : {}),
-      ...(v.drawnAs?.size ? {drawnAs: [...v.drawnAs]} : {}),
+      ...(v.drawnAs?.size ? {drawnAs: [...v.drawnAs].sort()} : {}),
       ...(v.holdsVariants
         ? {
             holdsVariants: Object.fromEntries(
@@ -1871,7 +1865,6 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
           }
         : {}),
       tags: [...v.tags],
-      ...(v.drawnAs?.size ? {drawnAs: [...v.drawnAs].sort()} : {}),
       ...(v.alone ? {alone: true} : {}),
       ...(v.underInput != null ? {underInput: v.underInput} : {}),
       innerCorners: [...v.innerCorners],
