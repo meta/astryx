@@ -31698,9 +31698,7 @@ export function draftAnswer(ctx, env, question) {
   // with a navy header": the cards, never the header). A color said with
   // its own shade word ("a light blue tint") names its shade already and
   // is written as said.
-  /** The look a fill is on: its part, variant and state. @param {Step} st */
-  const lookKey = st => [st.on, st.when ?? '', st.state ?? ''].join('\0');
-  /** @type {Array<{parts: Set<string>, colors: number[][], others: Set<string>, modeSaid: boolean}>} */
+  /** @type {Array<{parts: Set<string>, colors: number[][]}>} */
   const tints = [];
   for (const d of result) {
     const c = draftClause.get(d);
@@ -31723,38 +31721,30 @@ export function draftAnswer(ctx, env, question) {
         ? c.parts.map(x => x.on)
         : d.options.flat().map(st => st.on))
         if (p) parts.add(p);
-    // (A look another clause fills on the same part keeps that clause's
-    // fill: "muted cards tinted blue, default cards blue" tints the muted
-    // card alone.)
-    const others = new Set(
-      result
-        .filter(x => {
-          const xc = draftClause.get(x);
-          return xc && xc !== c;
-        })
-        .flatMap(x => x.options.flat())
-        .filter(
-          st =>
-            st.on &&
-            parts.has(st.on) &&
-            /^background(?:-color)?$/.test(st.thing),
-        )
-        .map(lookKey),
-    );
-    const looks = new Set(
-      d.options
-        .flat()
-        .filter(
-          st =>
-            st.on &&
-            parts.has(st.on) &&
-            /^background(?:-color)?$/.test(st.thing),
-        )
-        .map(lookKey),
-    );
-    for (const k of looks) others.delete(k);
-    if (colors.length && parts.size)
-      tints.push({parts, colors, others, modeSaid: Boolean(c.mode)});
+    // (A part another clause of the ask also fills, "muted cards tinted
+    // blue, default cards navy", is written as said: a tint on one of its
+    // looks is not shown yet.)
+    const split = result.some(x => {
+      const xc = draftClause.get(x);
+      return (
+        xc &&
+        xc !== c &&
+        x.options
+          .flat()
+          .some(
+            st =>
+              st.on &&
+              parts.has(st.on) &&
+              /^background(?:-color)?$/.test(st.thing),
+          )
+      );
+    });
+    if (split) {
+      if (colors.length && !/is not shown yet/.test(d.text))
+        d.text += ` (a tint on ${[...parts].join(', ')}, which another part of the ask also fills, is not shown yet: the color is written as said)`;
+      continue;
+    }
+    if (colors.length && parts.size) tints.push({parts, colors});
   }
   /** The tint fills written, by part, state and variant: the text check below measures text on them. @type {Map<string, {light: string, dark: string}>} */
   const tintFills = new Map();
@@ -31782,26 +31772,17 @@ export function draftAnswer(ctx, env, question) {
           !tints.some(
             t =>
               t.parts.has(String(st.on)) &&
-              !t.others.has(lookKey(st)) &&
               t.colors.some(c => c.every((n, x) => Math.abs(n - v[x]) < 1)),
           )
         )
           continue;
-        const tint = tints.find(
-          t =>
-            t.parts.has(String(st.on)) &&
-            !t.others.has(lookKey(st)) &&
-            t.colors.some(c => c.every((n, x) => Math.abs(n - v[x]) < 1)),
-        );
         const shades = tintShades(hex(v.slice(0, 3)));
         // (A color already as pale as its tint, "a cream tint", is written
         // as said: its tint would be darker than it.)
         if (!shades || luminance(hex(v.slice(0, 3))) >= luminance(shades.light))
           continue;
-        // (A mode the clause says is kept; one the light/dark rule gave a
-        // pale color is not: its tint has a deep dark half.)
         const modes = /** @type {Array<'light' | 'dark'>} */ (
-          st.mode && tint?.modeSaid ? [st.mode] : drawn
+          st.mode ? [st.mode] : drawn
         );
         o.splice(
           k,
