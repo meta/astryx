@@ -373,12 +373,23 @@ describe('round 3', () => {
     expect(show.data.resolved['--radius-element']).toMatch(/px$/);
   }, 120_000);
 
-  it('says which colors keep the base theme at any vibrancy, with the commands', async () => {
+  it('says what the status colors gave up at any vibrancy, with the command', async () => {
     const r = await themeEditSet('s', 'vibrancy', '0', {cwd});
     const note = r.data.notes.join(' ');
-    expect(note).toContain('keep the base theme');
-    expect(note).toContain('colored cards');
-    expect(note).toMatch(/set s info '#[0-9a-fA-F]{6}'/);
+    // The status roles grow from the look at the new vibrancy; what a role
+    // gave up to stay written is said, with the command that sets it. A
+    // role keeps the base theme's colors only when no shade of it reads.
+    for (const kept of note.match(
+      /\b\w+ keeps the base theme's colors[^;]*/g,
+    ) ?? [])
+      expect(kept).toMatch(
+        /^(?:info|success|warning|danger) keeps the base theme's colors: no shade of its family reads$/,
+      );
+    if (/status colors follow your look/.test(note))
+      expect(note).toMatch(
+        /to choose one: \S.* set s (?:info|success|warning|danger) <color>/,
+      );
+    expect(note).not.toContain('colored cards');
     await themeEditUndo('s', {cwd, thing: 'vibrancy'});
     await themeEditUndo('s', {cwd, thing: 'accent'});
   }, 120_000);
@@ -722,8 +733,18 @@ describe('review fixes', () => {
     () =>
       withRealRenders(async () => {
         await themeEditNew('cc', {cwd, like: 'neutral'});
+        // (The show draws one section of the sheet: two commands still run
+        // at once, each drawing its pages.)
         const [a, b] = await Promise.all([
-          cli(['experimental', 'theme', 'editor', 'show', 's']),
+          cli([
+            'experimental',
+            'theme',
+            'editor',
+            'show',
+            's',
+            '--section',
+            'actions',
+          ]),
           cli([
             'experimental',
             'theme',

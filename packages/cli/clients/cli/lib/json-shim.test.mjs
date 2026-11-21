@@ -180,10 +180,10 @@ describe('--json shim: unknown subcommand emits error envelope', () => {
     expect(parsed.apiVersion).toBe(1);
     expect(parsed.error).toMatch(/unknown command/i);
     expect(parsed.error).toMatch(/bogus-cmd/);
-    // Suggestions should list known commands
-    expect(Array.isArray(parsed.suggestions)).toBe(true);
-    const names = parsed.suggestions.map((s) => s.name);
-    expect(names).toContain('component');
+    // A word that names nothing gets the help, which lists every command.
+    expect(parsed.suggestions).toEqual([
+      {name: 'astryx help', reason: 'every command, with what it does'},
+    ]);
   });
 });
 

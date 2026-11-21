@@ -191,7 +191,7 @@ describe('borders', () => {
 
 describe('pills and corners', () => {
   it(
-    'stay off the misses under rounded corners, and are listed under square ones',
+    'stay off the misses under rounded corners, and under square ones, which square them',
     async () => {
       await themeEditNew('p', {cwd, like: 'neutral'});
       const small = /** @type {any} */ (
@@ -204,13 +204,14 @@ describe('pills and corners', () => {
         ),
       ).toEqual([]);
       expect(small.missed ?? 0).toBeLessThan(16);
+      // (Square corners square the pills themselves: none is missed.)
       await themeEditSet('p', 'corners', 'square', {cwd});
       const sq = /** @type {any} */ (await themeEditShow('p', looked())).data;
       expect(
         (sq.missed ?? []).some((/** @type {any} */ x) =>
           /full pill/.test(x.why),
         ),
-      ).toBe(true);
+      ).toBe(false);
     },
     T,
   );
