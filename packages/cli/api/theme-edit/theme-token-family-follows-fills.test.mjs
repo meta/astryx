@@ -20,6 +20,8 @@ import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
 import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
 import {oklabCoordinates} from '../theme/palette/generate/color.mjs';
 
+import {parseColor, ratio} from './_color.mjs';
+
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
     await importOriginal(),
@@ -160,12 +162,19 @@ describe('the fills made from the surface', () => {
 });
 
 describe('the emphasized border', () => {
-  it('follows an opaque border where that is stronger', () => {
-    // Black is stronger than the emphasized border on the light surface,
-    // fainter on the dark one, where the emphasized border keeps its own.
+  it('follows an opaque border where it reads, else its nearest shade that does', () => {
+    // Black reads on the light surface; on the dark one the fields take the
+    // nearest shade of it that keeps 3:1.
     const [light, dark] = valueOf('b', '--color-border-emphasized');
     expect(light).toBe('#000000');
-    expect(dark).toBe(valueOf('base', '--color-border-emphasized')[1]);
+    expect(dark).not.toBe('#000000');
+    const ground = valueOf('base', '--color-background-surface')[1];
+    expect(
+      ratio(
+        /** @type {any} */ (parseColor(dark)),
+        /** @type {any} */ (parseColor(ground)),
+      ),
+    ).toBeGreaterThanOrEqual(3);
   });
 
   it('keeps its own color beside a translucent border, or when pinned', () => {

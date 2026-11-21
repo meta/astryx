@@ -103,6 +103,7 @@ const LIFECYCLE_FLAGS = new Set([
  * @property {Record<string, string[]>} [innerSets] - inherited text properties a visible unnamed element inside the part that holds text sets to values of its own -> those values (a code block's lines: white-space pre or pre-wrap)
  * @property {Record<string, string[]>} attrs - data attributes seen on the part
  * @property {string[]} contains - parts rendered inside it
+ * @property {string[]} [drawnAs] - the other parts drawn on the same element (a select's option is drawn as an Item)
  * @property {string[]} [repeats] - parts it holds more than one of side by side, as the nearest part around them (a shortcut's keys, a button group's buttons)
  * @property {string[]} [listed] - the parts inside it drawn more than once in one of its elements (a menu's items), unlike a part drawn there once (a header's nav)
  * @property {Record<string, string[]>} [holdsVariants] - for a part rendered inside it, the variants it is drawn in there (a toast's close button: ghost)
@@ -854,6 +855,7 @@ const STATE_NAMES = new WeakMap();
  * @returns {Promise<PartData>}
  */
 export async function partData(project) {
+  if (!project.cacheDir) return buildPartData(project);
   const file = path.join(project.cacheDir, 'parts.json');
   try {
     // The file is read again only when it changed: every command reads it,
@@ -1401,7 +1403,7 @@ function resolvePrivate(v, env, tokens, depth = 0) {
  * @returns {{map: Record<string, PartRecord>, pairs: TextPair[]}}
  */
 export function walkMarkup(html, decls, tokens, targets = new Map()) {
-  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, repeats: Set<string>, holdsVariants?: Record<string, Set<string>>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>, alone?: boolean, borrowed?: Record<string, Set<string>>, listed?: Set<string>, innerSets?: Record<string, Set<string>>, underInput?: string}>} */
+  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, repeats: Set<string>, holdsVariants?: Record<string, Set<string>>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>, alone?: boolean, borrowed?: Record<string, Set<string>>, listed?: Set<string>, drawnAs?: Set<string>, innerSets?: Record<string, Set<string>>, underInput?: string}>} */
   const map = {};
   /** @type {Array<{env: Record<string, string>, target: string | null, all?: string[], fg: PaintSide | null, bg: PaintSide | null, cond: string, kids?: string[], input?: boolean, owns?: boolean, seenParts?: Record<string, number>, seen?: Map<string, number>}>} */
   const stack = [{env: {}, target: null, fg: null, bg: null, cond: ''}];
@@ -1571,6 +1573,8 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
       if (ownsTarget) {
         const mine = targets.get(t);
         if (named.length === 1) T.alone = true;
+        for (const o of named)
+          if (o.slice(7) !== t) (T.drawnAs ??= new Set()).add(o.slice(7));
         for (const [k, v] of Object.entries(dataAttrs))
           if (!mine || mine.props.includes(k) || mine.states.includes(k))
             (T.attrs[k] ??= new Set()).add(v);
@@ -1851,6 +1855,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
       contains: [...v.contains],
       ...(v.repeats?.size ? {repeats: [...v.repeats]} : {}),
       ...(v.listed?.size ? {listed: [...v.listed]} : {}),
+      ...(v.drawnAs?.size ? {drawnAs: [...v.drawnAs]} : {}),
       ...(v.holdsVariants
         ? {
             holdsVariants: Object.fromEntries(
@@ -1897,12 +1902,16 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
  *   whose fill follows a prop whose values name the theme's status roles
  *   (info, success, warning, error);
  * - `overlay-headers`: an Overlay component's part, not its surface, that
- *   holds a heading and a control (its title and its close button).
+ *   holds a heading and a control (its title and its close button);
+ * - `controls`: the parts that take their height from the control size
+ *   tokens (`--size-element-sm`, `-md`, `-lg`) and are a button, an input,
+ *   or a form control's own part (an input group): at each size they share
+ *   one height.
  * @param {{MAP: Record<string, any>}} C
  * @param {{target: Map<string, any>, components: Record<string, any>}} project
  * @param {string[]} inputs the inputs group's members
  * @param {string[]} statusWords the theme's status role words
- * @returns {Record<'button-like' | 'overlays' | 'option-rows' | 'selected-items' | 'accent-fills' | 'inset-fields' | 'status-surfaces' | 'overlay-headers', string[]>}
+ * @returns {Record<'button-like' | 'overlays' | 'option-rows' | 'selected-items' | 'accent-fills' | 'inset-fields' | 'status-surfaces' | 'overlay-headers' | 'controls', string[]>}
  */
 export function familyRoles(
   C,
@@ -1920,6 +1929,7 @@ export function familyRoles(
     'inset-fields': [],
     'status-surfaces': [],
     'overlay-headers': [],
+    controls: [],
   };
   /** @param {string} key @param {string} prop @param {(cond: string) => boolean} keep */
   const values = (key, prop, keep) =>
@@ -2033,9 +2043,41 @@ export function familyRoles(
       (rec.contains ?? []).includes('button')
     )
       out['overlay-headers'].push(key);
+    /** Whether a part's own height reads a control size token. @param {string} part */
+    const sizedOwn = part =>
+      Object.entries(C.MAP?.[part]?.own ?? {}).some(
+        ([prop, v]) =>
+          CONTROL_HEIGHT_PROPS.test(prop) &&
+          Object.keys(/** @type {any} */ (v)?.tokens ?? {}).some(t =>
+            CONTROL_SIZE_TOKEN.test(t),
+          ),
+      );
+    // (A field whose boxes are its parts, a date and time input's two
+    // segments, is sized through them: the token set on the field reaches
+    // them.)
+    const sizedByControlSize =
+      sizedOwn(key) ||
+      (own &&
+        inputs.includes(key) &&
+        [...project.target].some(
+          ([k, t]) => k !== key && t.component === tg.component && sizedOwn(k),
+        ));
+    if (
+      sizedByControlSize &&
+      (inputs.includes(key) ||
+        out['button-like'].includes(key) ||
+        (comp?.category === 'Form Controls' && own))
+    )
+      out.controls.push(key);
   }
   return /** @type {any} */ (out);
 }
+
+/** The properties a control's height is set by. */
+export const CONTROL_HEIGHT_PROPS = /^(height|min-height|block-size)$/;
+
+/** The tokens that hold a control's height at each size. */
+export const CONTROL_SIZE_TOKEN = /^--size-element-(sm|md|lg)$/;
 
 /**
  * The properties that size a part in the block direction: a part that sets

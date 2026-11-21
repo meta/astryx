@@ -19,6 +19,8 @@ const t: TranslatorFn = (key, values) => {
       return `${count} ${count === 1 ? 'filter' : 'filters'}`;
     case '@astryx.powersearch.valueEditor.dateRange':
       return 'date range';
+    case '@astryx.powersearch.sheet.relativeDaysAgo':
+      return `${count} ${count === 1 ? 'day' : 'days'} ago`;
     default:
       return key;
   }
@@ -178,6 +180,19 @@ describe('formatFilterValue', () => {
     });
   });
 
+  it('joins list items with the locale list format', () => {
+    expect(
+      formatFilterValue(
+        {} as never,
+        {type: 'string_list'},
+        {type: 'string_list', value: ['a', 'b', 'c']},
+        40,
+        t,
+        'de-DE',
+      ),
+    ).toBe('a, b und c');
+  });
+
   describe('enum_list', () => {
     const enumOp: OperatorValue = {
       type: 'enum_list',
@@ -254,7 +269,12 @@ describe('formatFilterValue', () => {
     it('returns a time value verbatim', () => {
       expect(fmt({type: 'time'}, {type: 'time', value: '14:30'})).toBe('14:30');
     });
-    it('returns a relative date value verbatim', () => {
+    it('reads a relative date as the choice that offers it', () => {
+      expect(
+        fmt({type: 'date_relative'}, {type: 'date_relative', value: '3d_ago'}),
+      ).toBe('3 days ago');
+    });
+    it('returns a relative date value no choice offers verbatim', () => {
       expect(
         fmt({type: 'date_relative'}, {type: 'date_relative', value: '7d'}),
       ).toBe('7d');

@@ -99,10 +99,11 @@ function watchAtRest(
   const watch = (): void => {
     stopWatch = watchHitArea(
       element,
-      insets => {
+      // A call without a pass's shared read reads at once.
+      (insets, readSettling = settlingAnimations) => {
         // The finite animations in the element's parent, the element
         // included: a row's own motion and its neighbors'.
-        const moving = settlingAnimations(element.parentElement ?? element);
+        const moving = readSettling(element.parentElement ?? element);
         if (moving.length === 0) {
           hasWritten = true;
           writeHitInsets(element, insets);

@@ -5,16 +5,19 @@
  * @input A component's text content (a string, a number, or a rich node)
  * @output textDirectionProps: `dir="ltr"` for plain text that holds no
  *   right-to-left letter, otherwise nothing, so the text keeps the page's
- *   direction. localeTextStyles: `isolate` for inline text a locale formats
- *   and `pageAlign` for a field that shows it
- * @position Core-internal helper, not exported from the package. Badge,
- *   Token and InputGroupText put textDirectionProps on the element that holds
- *   caller text, beside `unicode-bidi: isolate`. TimeInput and DateTimeInput
- *   put localeTextStyles, with `getLocaleDirection` as `dir`, on the elements
- *   that show their formatted time and date text.
+ *   direction. withTextDirection: the same text, inside a `dir="ltr"` span
+ *   when it needs one. localeTextStyles: `isolate` for inline text a locale
+ *   formats and `pageAlign` for a field that shows it
+ * @position Core-internal helper, not exported from the package. Badge and
+ *   Token put textDirectionProps on the element that holds caller text,
+ *   beside `unicode-bidi: isolate`. InputGroupText, Field's label and
+ *   description, FieldStatus and the status tooltip use withTextDirection.
+ *   TimeInput and DateTimeInput put localeTextStyles, with
+ *   `getLocaleDirection` as `dir`, on the elements that show their formatted
+ *   time and date text.
  */
 
-import type {ReactNode} from 'react';
+import {createElement, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {hasStrongRightToLeft} from '../i18n/firstStrongDirection';
 
@@ -44,3 +47,28 @@ export const localeTextStyles = stylex.create({
     textAlign: stylex.firstThatWorks('match-parent', '-webkit-match-parent'),
   },
 });
+
+// A flex parent, such as Field's label, makes the span a block. Its own `ltr`
+// direction would then align wrapped lines to the left on a right-to-left
+// page. `match-parent` takes the parent's alignment and resolves `start` and
+// `end` in the parent's direction, so a centred label stays centred. Chromium
+// supports only the prefixed keyword.
+const styles = stylex.create({
+  span: {
+    textAlign: stylex.firstThatWorks('match-parent', '-webkit-match-parent'),
+  },
+});
+
+/**
+ * The content, inside a `dir="ltr"` span when `textDirectionProps` gives it
+ * one. Use it where the direction cannot go on the element that holds the
+ * text, because that element's alignment, glyph or corners follow the page.
+ * The span changes the text's order only, not its alignment. An empty string
+ * gets no span, so it keeps no text line.
+ */
+export function withTextDirection(content: ReactNode): ReactNode {
+  const {dir} = textDirectionProps(content);
+  return dir == null || content === ''
+    ? content
+    : createElement('span', {dir, ...stylex.props(styles.span)}, content);
+}

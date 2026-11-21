@@ -216,6 +216,66 @@ describe('MultiSelector', () => {
     expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
   });
 
+  it.each([false, true])(
+    'names a bottom-sheet listbox from label (hasSearch=%s)',
+    async hasSearch => {
+      const user = userEvent.setup();
+      render(
+        <MultiSelector
+          label="Fruit"
+          options={defaultOptions}
+          value={[]}
+          onChange={() => {}}
+          hasSearch={hasSearch}
+          presentation="bottom-sheet"
+        />,
+      );
+
+      // With search, the trigger is a button and the search input is the
+      // combobox.
+      await user.click(
+        hasSearch
+          ? screen.getByRole('button', {name: 'Fruit'})
+          : screen.getByRole('combobox'),
+      );
+      await screen.findByRole('dialog', {name: 'Fruit'});
+      expect(screen.getByRole('listbox', h)).toHaveAttribute(
+        'aria-label',
+        'Fruit',
+      );
+    },
+  );
+
+  it.each([false, true])(
+    'keeps the required state on the trigger, not in the listbox name (hasSearch=%s)',
+    async hasSearch => {
+      const user = userEvent.setup();
+      render(
+        <MultiSelector
+          label="Fruit"
+          options={defaultOptions}
+          value={[]}
+          onChange={() => {}}
+          hasSearch={hasSearch}
+          isRequired
+          presentation="bottom-sheet"
+        />,
+      );
+
+      const trigger = hasSearch
+        ? screen.getByRole('button', {name: /Fruit/})
+        : screen.getByRole('combobox');
+      if (hasSearch) {
+        expect(trigger).toHaveAccessibleName(/Required/);
+      } else {
+        expect(trigger).toHaveAttribute('aria-required', 'true');
+      }
+      await user.click(trigger);
+      await screen.findByRole('dialog', {name: 'Fruit'});
+      expect(screen.getByRole('listbox')).toHaveAccessibleName('Fruit');
+    },
+  );
+
   it('moves keyboard focus into a bottom-sheet listbox', async () => {
     const user = userEvent.setup();
     render(
@@ -436,6 +496,64 @@ describe('MultiSelector', () => {
       {value: 'b', label: 'Banana'},
     ]);
     expect(screen.getByText('Apple and 1 more')).toBeInTheDocument();
+  });
+
+  it('joins the labels display in the provider locale', () => {
+    render(
+      <InternationalizationProvider locale="de">
+        <MultiSelector
+          label="Obst"
+          options={defaultOptions}
+          value={['Apple', 'Banana', 'Orange']}
+          onChange={() => {}}
+          triggerDisplay="labels"
+        />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByText('Apple, Banana und Orange')).toBeInTheDocument();
+  });
+
+  it('writes the labels overflow through one catalog message', () => {
+    render(
+      <InternationalizationProvider
+        locale="de"
+        overrides={{
+          de: {
+            '@astryx.multiSelector.overflowCount': '{count} weitere',
+          },
+        }}>
+        <MultiSelector
+          label="Obst"
+          options={['Apple', 'Banana', 'Orange', 'Pear', 'Plum']}
+          value={['Apple', 'Banana', 'Orange', 'Pear', 'Plum']}
+          onChange={() => {}}
+          triggerDisplay="labels"
+        />
+      </InternationalizationProvider>,
+    );
+    expect(
+      screen.getByText('Apple, Banana, Orange und 2 weitere'),
+    ).toBeInTheDocument();
+  });
+
+  it('writes the badges overflow through one catalog message', () => {
+    render(
+      <InternationalizationProvider
+        locale="de"
+        overrides={{
+          de: {'@astryx.multiSelector.overflowCount': '{count} weitere'},
+        }}>
+        <MultiSelector
+          label="Obst"
+          options={['Apple', 'Banana', 'Orange', 'Pear', 'Plum']}
+          value={['Apple', 'Banana', 'Orange', 'Pear', 'Plum']}
+          onChange={() => {}}
+          triggerDisplay="badges"
+          maxBadges={2}
+        />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByText('3 weitere')).toBeInTheDocument();
   });
 
   it('formats the labels display with formatValue', () => {
@@ -2995,6 +3113,27 @@ describe('MultiSelector statusVariant forwarding', () => {
     expect(
       screen.getByRole('combobox').getAttribute('aria-describedby'),
     ).toContain(tooltip.id);
+  });
+
+  it('keeps the written order of the status tooltip message under right-to-left', () => {
+    render(
+      <div dir="rtl">
+        <MultiSelector
+          label="Fruit"
+          options={['Apple', 'Banana']}
+          value={[]}
+          onChange={() => {}}
+          variant="ghost"
+          status={{type: 'warning', message: '-42 items'}}
+          statusVariant="tooltip"
+        />
+      </div>,
+    );
+    const tooltip = screen.getByRole('tooltip', h);
+    expect(within(tooltip).getByText('-42 items')).toHaveAttribute(
+      'dir',
+      'ltr',
+    );
   });
 });
 
