@@ -7,9 +7,9 @@
  * @input The reorder's options, and List's reorder machinery
  *   (List/listReorderEngine.ts: the session, its handle and its touch layer)
  * @output `createReorderable`, which makes the object a collection's
- *   `reorderable` prop takes, whose one public method, `start(key)`, enters
- *   reorder mode from the app's own UI. And its types: `Reorderable`,
- *   `ReorderableOptions`, `ReorderMove`
+ *   `reorderable` prop takes. Its `start(key)` enters reorder mode from the
+ *   app's own UI, and its `attach` reorders plain elements
+ *   (reorderable/attachReorderable.ts). And its types
  * @position Public Core API, exported from the package root.
  *   The machinery ships here, on the object: a collection imports only the
  *   object's type, so one without `reorderable` loads no reorder code
@@ -24,6 +24,10 @@ import {
   type ReorderableInternals,
 } from '../List/listReorderContext';
 import {listReorderEngine} from '../List/listReorderEngine';
+import {
+  attachReorderable,
+  type ReorderableAttachOptions,
+} from './attachReorderable';
 
 /** A committed move: the item that moved and where it went. */
 export interface ReorderMove<
@@ -86,6 +90,30 @@ export interface Reorderable<
    * in the one mounted last.
    */
   start(key: TKey): void;
+  /**
+   * Makes the items of `container`, plain elements the app renders, reorder
+   * without a collection component. `items()` returns each item's key,
+   * element and handle, in order; it is read again after each move. Each
+   * handle becomes a reorder mode toggle in the Tab order, named for its
+   * item. A move commits when `items()` reports the new order by the end of
+   * the task that ran `onReorder`; otherwise it is refused and announced.
+   * `start` reaches attached items. Returns `detach`, which removes
+   * everything `attach` added.
+   */
+  attach(
+    container: HTMLElement,
+    options: {
+      /** The container's items, in order: each one's key, element and handle. */
+      items: () => ReadonlyArray<{
+        readonly key: TKey;
+        readonly element: HTMLElement;
+        readonly handle: HTMLElement;
+      }>;
+    },
+  ): {
+    /** Ends any reorder mode and removes everything `attach` added. */
+    detach(): void;
+  };
 }
 
 /**
@@ -118,6 +146,12 @@ export function createReorderable<
     options: options as unknown as ListReorderOptions,
     [REORDER_ENGINE]: listReorderEngine,
     start: key => listReorderEngine.start(internals.options, key),
+    attach: (container, attachOptions) =>
+      attachReorderable(
+        internals.options,
+        container,
+        attachOptions as ReorderableAttachOptions,
+      ),
   };
   return internals as unknown as Reorderable<TKey, TTo>;
 }
