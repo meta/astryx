@@ -473,7 +473,12 @@ for (const item of cases) {
       });
 
       const firstLink = observed.links[0];
-      const restUnderline = item.story === 'with-underline';
+      // A Link in running text underlines at rest, as `hasUnderline` does.
+      const restUnderline = [
+        'with-underline',
+        'inline-with-text',
+        'clamped-by-ancestor-text',
+      ].includes(item.story);
       if (item.state === 'rest' && firstLink != null) {
         check(
           firstLink.decoration === (restUnderline ? 'underline' : 'none'),

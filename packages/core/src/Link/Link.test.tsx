@@ -13,7 +13,9 @@ import {describe, it, expect, vi} from 'vitest';
 import {fireEvent, render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {hasPressedArm} from '../__tests__/pressState';
+import {declaredValue} from '../__tests__/stylexDeclarations';
 import type {ReactNode} from 'react';
+import {Item} from '../Item/Item';
 import {InteractiveRoleContext} from '../InteractiveRoleContext/InteractiveRoleContext';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
 import {Text} from '../Text/Text';
@@ -837,5 +839,151 @@ describe('Link names and native attributes', () => {
     const tooltip = screen.getByRole('tooltip', {hidden: true});
     expect(tooltip).toHaveTextContent('Configure settings');
     expect(link.getAttribute('aria-describedby')).toBe(tooltip.id);
+  });
+});
+
+// =============================================================================
+// Running text: a Link inside body copy underlines at rest, so readers can find
+// it without color alone. Text decides what is running text; Link never reads
+// its children (Link AV1).
+// =============================================================================
+
+function restingDecoration(el: Element): string | null {
+  return declaredValue(el, 'text-decoration');
+}
+
+describe('Link in running text', () => {
+  it('underlines at rest inside a body Text paragraph', () => {
+    const {container} = render(
+      <Text as="p">
+        Read the <Link href="/docs">documentation</Link> first.
+      </Text>,
+    );
+    expect(restingDecoration(container.querySelector('a')!)).toBe('underline');
+  });
+
+  it('underlines at rest inside body, large, and supporting Text', () => {
+    for (const type of ['body', 'large', 'supporting'] as const) {
+      const {container, unmount} = render(
+        <Text type={type}>
+          Read the <Link href="/docs">documentation</Link> first.
+        </Text>,
+      );
+      expect(restingDecoration(container.querySelector('a')!)).toBe(
+        'underline',
+      );
+      unmount();
+    }
+  });
+
+  it('keeps the running text through a Text that inherits its type', () => {
+    const {container} = render(
+      <Text type="large">
+        Read the{' '}
+        <Text type="inherit" weight="bold">
+          <Link href="/docs" type="inherit">
+            documentation
+          </Link>
+        </Text>{' '}
+        first.
+      </Text>,
+    );
+    expect(restingDecoration(container.querySelector('a')!)).toBe('underline');
+  });
+
+  it('underlines the button form and the disabled form inside running text', () => {
+    const {container} = render(
+      <Text>
+        <Link onClick={() => {}}>Retry</Link> or{' '}
+        <Link href="/billing" isDisabled>
+          billing
+        </Link>
+      </Text>,
+    );
+    expect(restingDecoration(container.querySelector('button')!)).toBe(
+      'underline',
+    );
+    expect(restingDecoration(container.querySelector('a')!)).toBe('underline');
+  });
+
+  it('does not underline a Link outside any Text', () => {
+    const {container} = render(<Link href="/docs">Documentation</Link>);
+    expect(restingDecoration(container.querySelector('a')!)).toBe('none');
+  });
+
+  it('does not underline a standalone Link inside running text', () => {
+    const {container} = render(
+      <Text>
+        <Link href="/all" isStandalone>
+          See all
+        </Link>
+      </Text>,
+    );
+    expect(restingDecoration(container.querySelector('a')!)).toBe('none');
+  });
+
+  it('does not underline a Link in label, heading, display, or code Text', () => {
+    const cases = [
+      <Text key="label" type="label">
+        <Link href="/home">Home</Link>
+      </Text>,
+      <Text key="label-element" as="label">
+        <Link href="/home">Home</Link>
+      </Text>,
+      <Text key="heading" as="h2">
+        <Link href="/home">Home</Link>
+      </Text>,
+      <Text key="display" type="display-3">
+        <Link href="/home">Home</Link>
+      </Text>,
+      <Text key="code" type="code">
+        <Link href="/home">Home</Link>
+      </Text>,
+    ];
+    for (const element of cases) {
+      const {container, unmount} = render(element);
+      expect(restingDecoration(container.querySelector('a')!)).toBe('none');
+      unmount();
+    }
+  });
+
+  it('does not underline a Link in a navigation item', () => {
+    const {container} = render(
+      <Item label={<Link href="/home">Home</Link>} description="Start page" />,
+    );
+    expect(restingDecoration(container.querySelector('a')!)).toBe('none');
+  });
+
+  it('does not carry running text into a layer', () => {
+    const {container} = render(
+      <Text>
+        Lead text{' '}
+        <LayerContentBoundary>
+          <Link href="/docs">Documentation</Link>
+        </LayerContentBoundary>
+      </Text>,
+    );
+    expect(restingDecoration(container.querySelector('a')!)).toBe('none');
+  });
+
+  it('lets an explicit hasUnderline={false} remove the resting underline', () => {
+    const {container} = render(
+      <Text>
+        Read the{' '}
+        <Link href="/docs" hasUnderline={false}>
+          documentation
+        </Link>
+      </Text>,
+    );
+    expect(restingDecoration(container.querySelector('a')!)).toBe('none');
+  });
+
+  it('keeps hasUnderline underlining outside running text', () => {
+    const {container} = render(
+      <Link href="/docs" hasUnderline>
+        Documentation
+      </Link>,
+    );
+    expect(restingDecoration(container.querySelector('a')!)).toBe('underline');
   });
 });

@@ -58,6 +58,7 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {TextClampContext} from './textClampContext';
+import {RunningTextContext} from './runningTextContext';
 
 export type {TextType, TextSize};
 
@@ -177,6 +178,21 @@ const defaultColorByType: Record<string, TextColor> = {
   inherit: 'inherit',
 };
 
+// Running text is body copy that a reader reads through, not a label, a
+// heading, display text, or code. An `inherit` type keeps the enclosing value.
+// Theme-added types are not running text.
+const runningTextTypes: ReadonlySet<TextType> = new Set([
+  'body',
+  'large',
+  'supporting',
+]);
+const labelAndHeadingElements: ReadonlySet<TextProps['as']> = new Set([
+  'label',
+  'h1',
+  'h2',
+  'h3',
+]);
+
 /**
  * Resolve the StyleX style key for a text type.
  * Custom (theme-defined) types fall back to 'body' for baseline StyleX styles;
@@ -283,6 +299,10 @@ export function Text({
   // Keep the merged ref stable across rerenders.
   const mergedRef = useMergedRefs(ref, truncation.ref, textRef);
   const isInClampedText = use(TextClampContext);
+  const isInRunningText = use(RunningTextContext);
+  const isRunningText =
+    !labelAndHeadingElements.has(Component) &&
+    (type === 'inherit' ? isInRunningText : runningTextTypes.has(type));
   // A capsize block removes a multi-line clamp.
   const isClamped = maxLines === 1 || (maxLines > 1 && !hasCapsize);
 
@@ -341,7 +361,9 @@ export function Text({
         onBlur={composeEventHandlers(tooltipInterest.onBlur, props.onBlur)}>
         {/* Always mounted, so a change of maxLines keeps every child mounted. */}
         <TextClampContext value={isClamped || isInClampedText}>
-          {children}
+          <RunningTextContext value={isRunningText}>
+            {children}
+          </RunningTextContext>
         </TextClampContext>
       </Component>
       {tooltipEnabled && tooltipInterest.isWanted && (
