@@ -74,6 +74,7 @@ import {
   keyOf,
   sharedControlHeight,
   setsControlHeight,
+  narrowedGroupHeight,
   CONTROL_SIZES,
   partHasWhen,
   isControlHeight,
@@ -6218,7 +6219,12 @@ async function changeOnce(
   if (
     sharedHeight &&
     rawIdx >= 0 &&
-    setsControlHeight(ctx, data.settings[rawIdx], sharedHeight.size)
+    setsControlHeight(
+      ctx,
+      data.settings[rawIdx],
+      sharedHeight.size,
+      data.settings,
+    )
   )
     rawIdx = -1;
   let prevIdx =
@@ -6798,7 +6804,7 @@ async function changeOnce(
             // (A height on a group that mixes controls with other parts
             // reaches its controls too: it gives way there, and stays on
             // the other parts.)
-            setsControlHeight(ctx, x, sharedHeight.size),
+            setsControlHeight(ctx, x, sharedHeight.size, data.settings),
         )
       : [];
   // A replaced height set for every size stays every control's height at
@@ -6901,7 +6907,7 @@ async function changeOnce(
               y =>
                 y !== x &&
                 !heightsReplaced.includes(y) &&
-                setsControlHeight(ctx, y, size),
+                setsControlHeight(ctx, y, size, data.settings),
             ) &&
             carried(String(x.value)) != null,
         ).map(size => {
@@ -6934,6 +6940,7 @@ async function changeOnce(
               x.when == null) ||
               (x.source === 'property' &&
                 x.only === true &&
+                !narrowedGroupHeight(ctx, x, data.settings) &&
                 isControlHeight(ctx, x) &&
                 (x.when == null || x.when === `size:${sharedHeight.size}`))),
         )

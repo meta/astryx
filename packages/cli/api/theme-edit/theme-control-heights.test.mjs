@@ -893,6 +893,49 @@ describe('one control height per size', () => {
     expect(partsSetting('ownnarrow', '--size-element-md', '40px')).toEqual([
       'text-input',
     ]);
+    // The other inputs still draw 31px beside the buttons: show lists them.
+    expect((await heightMisses('ownnarrow')).map(m => m.part)).toContain(
+      'selector',
+    );
+    // A later shared height joins them, never as their own size tokens.
+    await themeEditSet('ownnarrow', 'height', '32px', {cwd, on: 'button'});
+    expect(
+      saved('ownnarrow').settings.some(
+        (/** @type {any} */ x) =>
+          x.on === 'selector' && /^--size-element-/.test(x.thing),
+      ),
+    ).toBe(false);
+  }, 240_000);
+
+  it('a height an older editor saved on one input with --only stays its own at the other sizes', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('oldonly', {cwd, like: 'neutral'});
+    const data = saved('oldonly');
+    data.settings.push({
+      thing: 'height',
+      value: '40px',
+      source: 'property',
+      on: 'text-input',
+      only: true,
+    });
+    save('oldonly', data);
+    await themeEditSet('oldonly', 'height', '32px', {cwd, on: 'button'});
+    const settings = saved('oldonly').settings;
+    const own = Object.fromEntries(
+      settings
+        .filter((/** @type {any} */ x) => x.on === 'text-input')
+        .map((/** @type {any} */ x) => [x.thing, x.value]),
+    );
+    expect(own).toEqual({
+      '--size-element-sm': '40px',
+      '--size-element-lg': '40px',
+    });
+    // (Never carried to every control at the other sizes.)
+    expect(
+      settings.some(
+        (/** @type {any} */ x) => x.on === 'controls' && x.value === '40px',
+      ),
+    ).toBe(false);
   }, 240_000);
 
   it('a saved word height is not carried as a size token', async ctx => {

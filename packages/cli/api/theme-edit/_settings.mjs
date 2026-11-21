@@ -5034,6 +5034,64 @@ export function namesControls(ctx, on) {
 }
 
 /**
+ * Whether a height saved with --only on one control of a group is the
+ * group's plain height, narrowed off a control kept apart: the same height,
+ * with --only, sits on every other control of the group that takes its
+ * condition, where a control of the group keeps a size token of its own. A
+ * height kept on one control alone has no such copies beside it.
+ * @param {Ctx} ctx
+ * @param {Setting} x
+ * @param {Setting[]} settings
+ */
+export function narrowedGroupHeight(ctx, x, settings) {
+  if (
+    x.source !== 'property' ||
+    !x.only ||
+    !x.on ||
+    x.state ||
+    onlyMeans(x.on) !== 'member'
+  )
+    return false;
+  const controls = new Set(groupsOf(ctx).controls ?? []);
+  /** @param {string} t */
+  const copied = t =>
+    settings.some(
+      y =>
+        y.source === 'property' &&
+        y.only === true &&
+        y.on === t &&
+        !y.state &&
+        y.thing === x.thing &&
+        String(y.value) === String(x.value) &&
+        (y.when ?? null) === (x.when ?? null) &&
+        (y.mode ?? null) === (x.mode ?? null),
+    );
+  /** @param {string} t */
+  const ownToken = t =>
+    settings.some(
+      y =>
+        y.source === 'token' &&
+        y.on === t &&
+        !y.state &&
+        y.when == null &&
+        /^--size-element-/.test(y.thing),
+    );
+  return Object.keys(groupsOf(ctx)).some(g => {
+    if (g === 'controls') return false;
+    const members = membersOf(ctx, g).filter(
+      t => controls.has(t) && partHasWhen(ctx, t, x.when),
+    );
+    if (!members.includes(String(x.on))) return false;
+    const others = members.filter(t => t !== x.on);
+    return (
+      others.some(ownToken) &&
+      others.some(t => !ownToken(t)) &&
+      others.every(t => ownToken(t) || copied(t))
+    );
+  });
+}
+
+/**
  * Whether a saved setting sets the height of some controls at a size:
  * a height (not `--only`, not in a state) that reaches a control, for that
  * size or for every size, or that size's token on controls. A height on
@@ -5042,9 +5100,14 @@ export function namesControls(ctx, on) {
  * @param {Ctx} ctx
  * @param {Setting} x
  * @param {'sm' | 'md' | 'lg'} size
+ * @param {Setting[]} [settings] the theme's saved settings: they tell a
+ *   group's narrowed height from a height kept on one control
  */
-export function setsControlHeight(ctx, x, size) {
-  if (x.state || x.only || !x.on) return false;
+export function setsControlHeight(ctx, x, size, settings = []) {
+  if (x.state || !x.on) return false;
+  // (A height kept on one control with --only is its own; one the
+  // narrowing left on a group's other controls is still the group's.)
+  if (x.only && !narrowedGroupHeight(ctx, x, settings)) return false;
   // (A size token on one control is that control's own height, as --only
   // gives it; on a group it is the height of the controls in it, also on a
   // group that mixes controls with other parts, such as the button-like
@@ -5091,7 +5154,9 @@ export function controlHeightSplits(ctx, data, resolved) {
   const heightOf = (part, size) => {
     const last = data.settings
       .filter(
-        x => setsControlHeight(ctx, x, size) && partsOf(ctx, x).includes(part),
+        x =>
+          setsControlHeight(ctx, x, size, data.settings) &&
+          partsOf(ctx, x).includes(part),
       )
       .at(-1);
     return {
