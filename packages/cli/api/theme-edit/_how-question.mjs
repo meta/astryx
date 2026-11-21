@@ -32275,13 +32275,14 @@ export function draftAnswer(ctx, env, question) {
     const rgb = parseColor(raw);
     return rgb && alphaOf(raw) >= 1 ? rgb : null;
   };
-  // (The parts whose text the ask itself colors, before any line here adds
-  // a text color.)
+  // (Each part and look whose text the ask itself colors, before any line
+  // here adds a text color: a text color said for the part's other look,
+  // "secondary buttons white text", leaves this look's clash alone.)
   const saidText = new Set(
     result
       .flatMap(x => x.options.flat())
       .filter(y => y.thing === 'color' && y.on)
-      .map(y => String(y.on)),
+      .map(y => `${y.on}|${y.when ?? ''}`),
   );
   for (const [di, d] of [...result.entries()].reverse()) {
     // (The one fill asked, in one line or in a line for each variant it
@@ -32312,17 +32313,30 @@ export function draftAnswer(ctx, env, question) {
       d.options.every(o => o.length === 1) &&
       d.options[0].length === 1 &&
       fillSteps.includes(d.options[0][0]);
-    // (A clash: the choice's fills differ, "a #0069d6 fill and a #eeeeee
-    // fill", and no clause of the ask says the part's text itself.)
+    // (A clash: one fill each on the same part and look, the fills differ,
+    // "a #0069d6 fill and a #eeeeee fill", and the ask says no text for that
+    // look or the whole part. A see-through fill stays in the choice with no
+    // text line.)
     const clash =
-      choice &&
-      d.options.every(o => isFill(o[0]) && o[0].on === first?.on) &&
+      d.options.length > 1 &&
+      d.options.every(
+        o =>
+          o.length === 1 &&
+          /^background(?:-color)?$/.test(o[0].thing) &&
+          Boolean(o[0].on) &&
+          o[0].on === first?.on &&
+          (o[0].when ?? '') === (first?.when ?? ''),
+      ) &&
+      d.options.some(o => isFill(o[0])) &&
       new Set(d.options.map(o => String(o[0].value))).size ===
         d.options.length &&
-      !saidText.has(String(first?.on));
+      !saidText.has(`${first?.on}|`) &&
+      !saidText.has(`${first?.on}|${first?.when ?? ''}`);
     if (
-      !fillSteps.length ||
-      (!choice && d.options.some(o => o.some(x => !fillSteps.includes(x))))
+      (!clash && !fillSteps.length) ||
+      (!choice &&
+        !clash &&
+        d.options.some(o => o.some(x => !fillSteps.includes(x))))
     )
       continue;
     // (A clash: each fill is measured, and its text goes with it. Any
@@ -32331,6 +32345,7 @@ export function draftAnswer(ctx, env, question) {
     const picks = clash ? d.options.map((_, k) => k) : [-1];
     const allFills = fillSteps;
     for (const pick of picks) {
+      if (pick >= 0 && !isFill(d.options[pick][0])) continue;
       const fillSteps = pick >= 0 ? [d.options[pick][0]] : allFills;
       // (An offer, "to change the … variants too", is measured as main
       // measures it: its first line only.)

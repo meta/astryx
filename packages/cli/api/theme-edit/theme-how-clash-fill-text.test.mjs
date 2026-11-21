@@ -56,6 +56,46 @@ const choiceFor = async q => {
   };
 };
 
+describe("a clash with a see-through fill or another look's text", () => {
+  for (const q of [
+    'pressed checkboxes: a #0069d6 fill and a #0069d61a fill',
+    'pressed checkboxes: a #0069d61a fill and a #0069d6 fill',
+  ])
+    it(q, async ({skip}) => {
+      if (unbuilt) skip(unbuilt);
+      const {choice, results} = await choiceFor(q);
+      const blue = choice?.commands.find(c => /'#0069d6'/.test(c)) ?? '';
+      expect(blue, q).toMatch(/ && .* color '#ffffff' /);
+      const clear = choice?.commands.find(c => /'#0069d61a'/.test(c)) ?? '';
+      expect(clear, q).not.toMatch(/&&/);
+      expect(
+        results.some(r => /^readable text on that fill/.test(r.text)),
+      ).toBe(false);
+    });
+  it('a text color said for another look leaves the clash joined', async ({
+    skip,
+  }) => {
+    if (unbuilt) skip(unbuilt);
+    const {data} = await themeEditHow(
+      'primary buttons #0000ff, primary buttons #ffff00, secondary buttons white text',
+      {cwd, theme: 'n'},
+    );
+    const results = /** @type {Array<{text: string, commands: string[]}>} */ (
+      data.results ?? []
+    );
+    expect(results.some(r => /^readable text on that fill/.test(r.text))).toBe(
+      false,
+    );
+    const commands = results.flatMap(r => r.commands).join('\n');
+    expect(commands).toMatch(
+      /background-color '#0000ff' --on button --when variant:primary && .* color '#ffffff' /,
+    );
+    expect(commands).toMatch(
+      /background-color '#ffff00' --on button --when variant:primary && .* color '#000000' /,
+    );
+  });
+});
+
 describe('a clashing fill keeps its text in its own choice', () => {
   for (const q of [
     'pressed checkboxes: a #0069d6 fill and a #eeeeee fill',
