@@ -496,6 +496,14 @@ function buildDocSchemas() {
       replaces: nonEmptyString.optional(),
       extends: nonEmptyString.optional(),
       tokenCategory: z.string().optional(),
+      // The skill's own rules are checked where skills are gathered
+      // (authoring/doctypes/reference/skill.mjs), so a skill that breaks one
+      // is left out while the doc still loads; any value is accepted here,
+      // and skillProblem reports a wrong shape.
+      skill: /** @type {z.ZodType<{name: string, description: string}>} */ (
+        z.custom(() => true)
+      ).optional(),
+      searchable: z.literal(true).optional(),
     })
     .passthrough()
     .superRefine((doc, context) => {
@@ -653,6 +661,19 @@ function buildDocSchemas() {
               requires: z.array(BaseStepSchema).optional(),
               names: z
                 .enum(['component', 'hook', 'topic', 'template', 'theme'])
+                .optional(),
+              pointers: z
+                .array(
+                  z.union([
+                    z.string().min(1),
+                    z
+                      .object({
+                        commands: z.array(z.string().min(1)).min(1),
+                        text: z.string().min(1),
+                      })
+                      .strict(),
+                  ]),
+                )
                 .optional(),
             })
             .passthrough(),
@@ -855,6 +876,14 @@ function buildDocSchemas() {
     replaces: nonEmptyString.optional(),
     extends: nonEmptyString.optional(),
     tokenCategory: z.string().optional(),
+    // The skill's own rules are checked where skills are gathered
+    // (authoring/doctypes/reference/skill.mjs), so a skill that breaks one
+    // is left out while the doc still loads; any value is accepted here,
+    // and skillProblem reports a wrong shape.
+    skill: /** @type {z.ZodType<{name: string, description: string}>} */ (
+      z.custom(() => true)
+    ).optional(),
+    searchable: z.literal(true).optional(),
   })
     .passthrough()
     .superRefine((doc, context) => {

@@ -325,15 +325,34 @@ jobs:
         if: inputs.recheck
         run: npx playwright install chromium
 
-      - run: pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+      # The legs draw the theme editor's pages as a pull request's tests do
+      # (stand-ins, and real drawing where a file asks for it): the recorded
+      # times the legs are planned from are measured that way. The shard
+      # watchdog (scripts/vitest-shard-watchdog.mjs) lists the test files
+      # still running a minute before the job's 15-minute limit, counted from
+      # the job's start, as a warning: it does not end the leg, so the limit
+      # still cancels it and the unit run stays incomplete for the scheduler,
+      # which runs it again (spec:AST-030 FR21).
+      - name: Run this shard of the Node tests
         env:
           # A release re-check proves every swizzle target, in Chromium too
           # (spec:AST-110 FR7).
           SWIZZLE_PROOF_ALL: ${{ inputs.recheck && '1' || '' }}
           SWIZZLE_PROOF_BROWSER: ${{ inputs.recheck && '1' || '' }}
-          # The full run draws the theme editor's pages for real in every
-          # test (a pull request's tests stand in for the drawing).
-          THEME_EDIT_REAL_RENDERS: '1'
+          VITEST_SHARD_WATCHDOG_NAME_ONLY: '1'
+        run: |
+          started=$(ps -o etimes= -C Runner.Worker 2>/dev/null | sort -n | tail -1 | tr -d ' ')
+          VITEST_SHARD_WATCHDOG_SECONDS=$(( 14 * 60 - ${started:-180} ))
+          export VITEST_SHARD_WATCHDOG_SECONDS
+          pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }} --reporter=default --reporter=github-actions --reporter=./scripts/vitest-shard-watchdog.mjs
+
+      # An early warning, never a failure: past one Node test file in twenty
+      # without a recorded time, the run's summary says so and names the
+      # count. The record refresh (node-record-refresh.yml) corrects it.
+      - name: Warn when the Node test record misses more than one file in twenty
+        if: ${{ always() && matrix.shard == 1 }}
+        continue-on-error: true
+        run: node .github/scripts/node-record-refresh.mjs warn
 
   # The typecheck mirroring the PR `build` job in ci.yml. ci.yml only runs
   # on pull_request/merge_group, so a typecheck error can land on main (its

@@ -7,7 +7,7 @@
  *   false zero baseline.
  */
 
-import {area as d3Area, curveMonotoneX} from 'd3-shape';
+import {area as d3Area, curveLinear} from 'd3-shape';
 import {
   DEFAULT_SERIES_COLOR,
   type SeriesDef,
@@ -73,7 +73,7 @@ export function band(options: BandOptions): SeriesDef {
         .x(d => d.px)
         .y0(d => d.py0)
         .y1(d => d.py)
-        .curve(curveMonotoneX);
+        .curve(curveLinear);
       const pathD = areaGen(resolved) ?? '';
       if (!pathD) {
         return null;

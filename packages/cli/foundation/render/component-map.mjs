@@ -3,7 +3,7 @@
 /**
  * @file Which installed component draws each Astryx theme target (the
  * `astryx-<name>` class), read from a package's built modules and
- * declarations, for `astryx experimental render --reverse`.
+ * declarations, for `astryx experimental export --reverse`.
  *
  * @position foundation/render — used by rebuild.mjs
  */

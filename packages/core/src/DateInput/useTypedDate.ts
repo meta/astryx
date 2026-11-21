@@ -501,13 +501,20 @@ export function useTypedDateField({
   const [prevValue, setPrevValue] = useState(value);
   if (value !== prevValue) {
     setPrevValue(value);
-    if (value !== lastFiredDate) {
+    const valueRetiresLastFiredDate = value !== lastFiredDate;
+    if (valueRetiresLastFiredDate) {
       setFiredEpoch(epoch => epoch + 1);
-      if (pendingInput !== null && isEntryReplaced) {
-        setPendingInput(null);
-        setIsRejectionCommitted(false);
-        setKeptText(null);
-      }
+    }
+    // Typing never reports `undefined` while text is held, so a clear to
+    // `undefined` always comes from outside.
+    if (
+      pendingInput !== null &&
+      isEntryReplaced &&
+      (valueRetiresLastFiredDate || value === undefined)
+    ) {
+      setPendingInput(null);
+      setIsRejectionCommitted(false);
+      setKeptText(null);
     }
   }
 

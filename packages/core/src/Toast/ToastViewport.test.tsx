@@ -200,9 +200,7 @@ describe('Toast responsive layout', () => {
 
     const viewport = screen.getByRole('region', {name: 'Notifications'});
     const body = within(viewport).getByText(LONG_TOAST_BODY);
-    const toast = body.closest('[data-type]') as HTMLElement;
-    const mediaWrapper = toast.firstElementChild as HTMLElement;
-    const layoutRow = mediaWrapper.firstElementChild as HTMLElement;
+    const layoutRow = body.parentElement as HTMLElement;
     const endArea = body.nextElementSibling as HTMLElement;
     const actionControl = endArea.firstElementChild as HTMLElement;
     const dismissControl = within(endArea).getByRole('button', {
@@ -284,6 +282,59 @@ describe('Toast responsive layout', () => {
     expect(viewport.style.insetInlineStart).toBe('24px');
     expect(viewport.style.insetInlineEnd).toBe('40px');
     expect(getComputedStyle(viewport).width).not.toBe('100%');
+  });
+  it('lets an inset edge of 0 replace the provider value on that edge, in LTR and RTL', () => {
+    const edges = [
+      ['top', 'top', 'topEnd'],
+      ['bottom', 'bottom', 'bottomEnd'],
+      ['start', 'insetInlineStart', 'bottomEnd'],
+      ['end', 'insetInlineEnd', 'bottomEnd'],
+    ] as const;
+    for (const direction of ['ltr', 'rtl'] as const) {
+      for (const [edge, property, position] of edges) {
+        render(
+          <div dir={direction}>
+            <ToastViewport
+              isTopLayer={false}
+              position={position}
+              inset={{[edge]: 0}}>
+              <ShowToastButton options={INFO_A} />
+            </ToastViewport>
+          </div>,
+        );
+        act(() => {
+          fireEvent.click(screen.getByText('Trigger'));
+        });
+        const viewport = screen.getByRole('region', {name: 'Notifications'});
+        // React writes a zero without a unit; jsdom adds `px` only to `top` and `bottom`.
+        expect(viewport.style[property], `${direction} ${edge}`).toMatch(
+          /^0(px)?$/,
+        );
+        cleanup();
+      }
+    }
+  });
+
+  it('writes nothing for a zero on the block edge opposite the position', () => {
+    for (const [position, edge] of [
+      ['bottomEnd', 'top'],
+      ['topStart', 'bottom'],
+    ] as const) {
+      render(
+        <ToastViewport
+          isTopLayer={false}
+          position={position}
+          inset={{top: 0, bottom: 0}}>
+          <ShowToastButton options={INFO_A} />
+        </ToastViewport>,
+      );
+      act(() => {
+        fireEvent.click(screen.getByText('Trigger'));
+      });
+      const viewport = screen.getByRole('region', {name: 'Notifications'});
+      expect(viewport.style[edge], `${position} ${edge}`).toBe('');
+      cleanup();
+    }
   });
 });
 

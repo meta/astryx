@@ -24,7 +24,9 @@
  *   warnings `icon_export_name` (an export not named `<Name>Icon`);
  *            `icon_definition_unused` and `icon_definition_shadowed` (a
  *            definition the set declares that `map` leaves out, or that has
- *            an Astryx definition's name); `icon_source_version_drift`;
+ *            an Astryx definition's name); `icon_definition_replaced` (a
+ *            `map` key that names a replaced definition);
+ *            `icon_source_version_drift`;
  *            `icon_license_notice_missing`.
  * An optional (not built-in) Astryx definition the set leaves unmapped is no
  * issue: {@link iconSetCoverage} lists it, never counted, never failing.
@@ -46,6 +48,7 @@ import * as path from 'node:path';
 import {findInstalledPackage} from '../fs/paths.mjs';
 import {satisfiesRange} from '../env/semver.mjs';
 import {
+  ICON_EXPORT_NAME_RE,
   discoverIconSetDirectory,
   hasLicenseNotice,
   licenseNoticeFix,
@@ -107,6 +110,8 @@ export const ICON_NOT_COMPONENT = 'icon_not_component';
 export const ICON_DEFINITION_SHADOWED = 'icon_definition_shadowed';
 /** A definition the set declares that is missing from its `map`. */
 export const ICON_DEFINITION_UNUSED = 'icon_definition_unused';
+/** A `map` key that names a definition another definition replaced. */
+export const ICON_DEFINITION_REPLACED = 'icon_definition_replaced';
 /** Data generated from another upstream version than the package uses. */
 export const ICON_SOURCE_VERSION_DRIFT = 'icon_source_version_drift';
 /** A set with an upstream and no license notice. */
@@ -241,7 +246,7 @@ function checkContract(set, packageName, pkg, unchecked) {
   };
   /** @param {string} name @param {string} what */
   const checkName = (name, what) => {
-    if (!/^[A-Z][A-Za-z0-9]*Icon$/u.test(name)) {
+    if (!ICON_EXPORT_NAME_RE.test(name)) {
       issues.push(
         issueWarning(
           ICON_EXPORT_NAME,
@@ -375,6 +380,15 @@ function checkDefinitions(set) {
       issueError(
         ICON_BUILTIN_DEFINITION_MISSING,
         `${label} maps no icon to the built-in icon definition "${doc.name}" (${doc.description} Words: ${doc.words.join(', ')}.). Every set maps every built-in definition: run \`astryx experimental icon map ${doc.name} <icon id> --set ${set.name}\` with the icon that draws it${findHint(set, doc)}.${hint}`,
+      ),
+    );
+  }
+  for (const {key, definition} of set.replacedKeys ?? []) {
+    const id = set.data.map?.[definition];
+    issues.push(
+      issueWarning(
+        ICON_DEFINITION_REPLACED,
+        `${label} maps "${key}", an icon definition that "${definition}" replaced, so the entry maps "${definition}". Rename the key in ${set.name}.icons.json to "${definition}": \`astryx experimental icon map ${definition} ${id} --set ${set.name}\` writes the data file with it.`,
       ),
     );
   }
