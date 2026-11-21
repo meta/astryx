@@ -1165,3 +1165,44 @@ export function sidesOf(prop, v) {
     named.map((p, i) => [/** @type {string} */ (p), vals[i]]),
   );
 }
+
+/**
+ * The color stops of a background made of gradients, or null when any
+ * layer is an image or any stop has no color the editor can name.
+ * @param {string} v
+ * @returns {string[] | null}
+ */
+export function gradientStops(v) {
+  /** The parts between commas outside parentheses. @param {string} x */
+  const top = x =>
+    splitTop(x, ',')
+      .map(part => part.trim())
+      .filter(Boolean);
+  /** @type {string[]} */
+  const stops = [];
+  for (const layer of top(v)) {
+    const m = /^(?:repeating-)?(?:linear|radial|conic)-gradient\((.*)\)$/s.exec(
+      layer,
+    );
+    if (!m) {
+      // A layer that is one color (the shorthand's last) is a stop too.
+      if (/url\(|gradient\(/.test(layer)) return null;
+      stops.push(layer);
+      continue;
+    }
+    for (const arg of top(m[1])) {
+      // The direction, shape or position comes first, with no color.
+      if (
+        /^(to\b|at\b|from\b|-?[\d.]+(deg|turn|rad|grad)\b|circle\b|ellipse\b|closest|farthest)/.test(
+          arg,
+        )
+      )
+        continue;
+      // A stop is its color and up to two positions after it.
+      const color = arg.replace(/(\s+-?[\d.]+(%|px|rem|em)?)+$/, '').trim();
+      if (!color || /^-?[\d.]+(%|px|rem|em)?$/.test(color)) continue;
+      stops.push(color);
+    }
+  }
+  return stops.length ? stops : null;
+}

@@ -19,7 +19,6 @@
 import {
   LOOKS_ALIKE,
   alphaOf,
-  colorsIn,
   compositeOver,
   hex,
   nearestReadingLightness,
@@ -30,6 +29,7 @@ import {
   splitTop,
   nearestLightness,
 } from './_color.mjs';
+import {gradientStops} from './_css.mjs';
 import * as editorLook from '../theme/palette/generate/editor-look.mjs';
 import {acceptCovers} from './_accepted.mjs';
 import {familyOf} from './_tables.mjs';
@@ -199,12 +199,12 @@ function ownFill(components, part, m, block = null, tokens = null) {
   );
   const image = partValue(components, part, ['backgroundImage'], m, block);
   // One opaque gradient paints over the color under it: text sits on it.
-  const read = typeof image === 'string' ? withTokens(image, tokens) : null;
+  const read = typeof image === 'string' ? withTokens(image, tokens, m) : null;
   if (read && opaqueGradient(read)) return read;
   // A gradient written in the shorthand is read the same way: one opaque
   // gradient is the fill; any other is not a fill the check can measure.
   if (typeof color === 'string' && /gradient\(/.test(color)) {
-    const shorthand = withTokens(color, tokens);
+    const shorthand = withTokens(color, tokens, m);
     return opaqueGradient(shorthand) ? shorthand : null;
   }
   return color;
@@ -215,28 +215,78 @@ function ownFill(components, part, m, block = null, tokens = null) {
  * stops: the contrast measure reads it where text sits.
  * @param {string} image
  */
-const opaqueGradient = image =>
-  /^(linear|radial)-gradient\(/.test(image.trim()) &&
-  (image.match(/gradient\(/g) ?? []).length === 1 &&
-  // (A stop still written as a variable, or one the check cannot read,
-  // may be see-through: then the gradient is not a fill.)
-  !/\btransparent\b|var\(/i.test(image) &&
-  colorsIn(image).every(c => parseColor(c) != null && alphaOf(c) >= 1);
+const opaqueGradient = image => fillStops(image) != null;
+
+/**
+ * The stops of a value that is exactly one linear or radial gradient of
+ * opaque colors the check can read, the shared stop reader's way; null for
+ * anything else (a position or size after it, a second layer, a stop it
+ * cannot read or that is see-through), which is then no fill.
+ * @param {string} image
+ * @returns {string[] | null}
+ */
+function fillStops(image) {
+  const v = image.trim();
+  if (
+    !/^(linear|radial)-gradient\(.*\)$/s.test(v) ||
+    splitTop(v, ' ').length !== 1 ||
+    splitTop(v, ',').length !== 1
+  )
+    return null;
+  const stops = gradientStops(v);
+  return stops?.every(c => parseColor(c) != null && alphaOf(c) >= 1)
+    ? stops
+    : null;
+}
 
 /**
  * A value with each `var()` read from the tokens (the theme's own local
  * ones included), its fallback when the token is not there.
  * @param {string} v @param {Record<string, string> | null} tokens
+ * @param {string} [mode] the mode a `light-dark()` value is read for
  */
-function withTokens(v, tokens) {
+function withTokens(v, tokens, mode = 'light') {
   if (!tokens) return v;
   let value = v;
-  for (let i = 0; i < 8 && /var\(--/.test(value); i++)
-    value = value.replace(
-      /var\(\s*(--[\w-]+)\s*(?:,\s*([^()]*))?\)/g,
-      (whole, name, fallback) => tokens[name] ?? fallback ?? whole,
+  for (let i = 0; i < 8 && /var\(--|light-dark\(/.test(value); i++)
+    value = sideIn(
+      value.replace(
+        /var\(\s*(--[\w-]+)\s*(?:,\s*([^()]*))?\)/g,
+        (whole, name, fallback) => tokens[name] ?? fallback ?? whole,
+      ),
+      mode,
     );
   return value;
+}
+
+/**
+ * A value with each `light-dark(a, b)` taken as the mode draws it.
+ * @param {string} v @param {string} mode
+ */
+function sideIn(v, mode) {
+  let out = v;
+  for (
+    let at = out.indexOf('light-dark(');
+    at >= 0;
+    at = out.indexOf('light-dark(')
+  ) {
+    let depth = 0;
+    let end = -1;
+    for (let k = at + 'light-dark'.length; k < out.length; k++) {
+      if (out[k] === '(') depth++;
+      else if (out[k] === ')' && --depth === 0) {
+        end = k;
+        break;
+      }
+    }
+    if (end < 0) break;
+    const [light, dark] = splitTop(
+      out.slice(at + 'light-dark('.length, end),
+      ',',
+    );
+    out = `${out.slice(0, at)}${(mode === 'dark' ? dark : light)?.trim() ?? ''}${out.slice(end + 1)}`;
+  }
+  return out;
 }
 
 /**
@@ -735,7 +785,7 @@ function barTextProblems(look) {
       // stops: text crosses all of them.
       const bars = (
         barValue != null && /gradient\(/.test(barValue)
-          ? colorsIn(barValue)
+          ? (fillStops(barValue) ?? [])
           : barValue != null
             ? [barValue]
             : []

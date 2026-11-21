@@ -1302,6 +1302,20 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
       expect(
         short.problems.some(p => p.part === 'card' && p.kind === 'page-image'),
       ).toBe(true);
+      // A positioned shorthand gradient is not a fill: it is said.
+      const placed = await check(
+        themeFile('placed', READABLE, {
+          card: {
+            base: {
+              background:
+                'linear-gradient(135deg, #1e3a8a, #7c3aed) center / cover no-repeat',
+            },
+          },
+        }),
+      );
+      expect(
+        placed.problems.some(p => p.part === 'card' && p.kind === 'page-image'),
+      ).toBe(true);
       // A bar painted with an opaque gradient is measured at its stops.
       const gbar = await check(
         themeFile('gradbar', READABLE, {
@@ -1312,6 +1326,19 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
       );
       expect(
         gbar.problems.some(
+          p => p.kind === 'bar-ground' && p.part === 'app-shell-header',
+        ),
+      ).toBe(true);
+      // Named stops are read too.
+      const nbar = await check(
+        themeFile('namedbar', READABLE, {
+          'app-shell-header': {
+            base: {backgroundImage: 'linear-gradient(black, black)'},
+          },
+        }),
+      );
+      expect(
+        nbar.problems.some(
           p => p.kind === 'bar-ground' && p.part === 'app-shell-header',
         ),
       ).toBe(true);

@@ -2251,7 +2251,10 @@ function withLocalTokens(theme, mode, tokens) {
  * @returns {string}
  */
 function checkNextEdit(p, file, kept, shared) {
-  const app = kept[0]?.file ?? "the app's file that renders <Theme>";
+  // (The page sheet check declined is not where the page rule goes.)
+  const app =
+    kept.find(k => path.basename(k.file) !== 'astryx-page.css')?.file ??
+    "the app's file that renders <Theme>";
   const pin = /mode="(light|dark)"/.exec(p.message)?.[1] ?? 'dark';
   if (p.kind === 'one-look' && shared)
     return `in ${shared}, set this theme's mode to "${pin}": its <Theme> serves every theme there`;
