@@ -779,6 +779,190 @@ describe('DropdownMenu', () => {
     expect(screen.getByRole('button', {name: /^Bump/})).toHaveFocus();
   });
 
+  it('shows an open sub-menu of the sheet with the current items after a re-render', async () => {
+    const user = userEvent.setup();
+    function Counter() {
+      const [count, setCount] = useState(0);
+      return (
+        <DropdownMenu
+          button={{label: 'Options'}}
+          presentation="bottom-sheet"
+          items={[
+            {label: 'First'},
+            {
+              label: 'More',
+              items: [
+                {
+                  label: `Bump (${count})`,
+                  hasCloseOnSelect: false,
+                  onClick: () => setCount(value => value + 1),
+                },
+              ],
+            },
+          ]}
+        />
+      );
+    }
+    render(<Counter />);
+
+    await user.click(screen.getByRole('button', {name: /Options/}));
+    await user.click(await screen.findByRole('button', {name: 'More'}));
+    await user.click(await screen.findByRole('button', {name: 'Bump (0)'}));
+
+    expect(
+      await screen.findByRole('button', {name: 'Bump (1)'}),
+    ).toBeInTheDocument();
+  });
+
+  it('closes an open sub-menu of the sheet back to its parent when its row leaves the items', async () => {
+    const user = userEvent.setup();
+    function Removable() {
+      const [hasMore, setHasMore] = useState(true);
+      return (
+        <DropdownMenu
+          button={{label: 'Options'}}
+          presentation="bottom-sheet"
+          items={[
+            {label: 'First'},
+            ...(hasMore
+              ? [
+                  {
+                    label: 'More',
+                    items: [
+                      {
+                        label: 'Remove this menu',
+                        hasCloseOnSelect: false,
+                        onClick: () => setHasMore(false),
+                      },
+                    ],
+                  },
+                ]
+              : []),
+          ]}
+        />
+      );
+    }
+    render(<Removable />);
+
+    await user.click(screen.getByRole('button', {name: /Options/}));
+    await user.click(await screen.findByRole('button', {name: 'More'}));
+    await user.click(
+      await screen.findByRole('button', {name: 'Remove this menu'}),
+    );
+
+    expect(
+      await screen.findByRole('button', {name: 'First'}),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: 'Back'})).toBeNull();
+  });
+
+  it('keeps an open sub-menu of the sheet closed when its removed row comes back', async () => {
+    const user = userEvent.setup();
+    let setHasMore: (value: boolean) => void = () => {};
+    function Returning() {
+      const [hasMore, setHasMoreState] = useState(true);
+      setHasMore = setHasMoreState;
+      return (
+        <DropdownMenu
+          button={{label: 'Options'}}
+          presentation="bottom-sheet"
+          items={[
+            {label: 'First'},
+            ...(hasMore ? [{label: 'More', items: [{label: 'Inner'}]}] : []),
+          ]}
+        />
+      );
+    }
+    render(<Returning />);
+
+    await user.click(screen.getByRole('button', {name: /Options/}));
+    await user.click(await screen.findByRole('button', {name: 'More'}));
+    expect(
+      await screen.findByRole('button', {name: 'Inner'}),
+    ).toBeInTheDocument();
+    act(() => setHasMore(false));
+    expect(
+      await screen.findByRole('button', {name: 'First'}),
+    ).toBeInTheDocument();
+    act(() => setHasMore(true));
+
+    expect(
+      await screen.findByRole('button', {name: 'More'}),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: 'Inner'})).toBeNull();
+    expect(screen.queryByRole('button', {name: 'Back'})).toBeNull();
+  });
+
+  it('closes an open sub-menu of the sheet back to its parent when its last row leaves', async () => {
+    const user = userEvent.setup();
+    function Emptying() {
+      const [inner, setInner] = useState(['Clear this menu']);
+      return (
+        <DropdownMenu
+          button={{label: 'Options'}}
+          presentation="bottom-sheet"
+          items={[
+            {label: 'First'},
+            {
+              label: 'More',
+              items: inner.map(label => ({
+                label,
+                hasCloseOnSelect: false,
+                onClick: () => setInner([]),
+              })),
+            },
+          ]}
+        />
+      );
+    }
+    render(<Emptying />);
+
+    await user.click(screen.getByRole('button', {name: /Options/}));
+    await user.click(await screen.findByRole('button', {name: 'More'}));
+    await user.click(
+      await screen.findByRole('button', {name: 'Clear this menu'}),
+    );
+
+    expect(
+      await screen.findByRole('button', {name: 'First'}),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: 'Back'})).toBeNull();
+  });
+
+  it('keeps an open sub-menu of the sheet by its id when a row is inserted above it', async () => {
+    const user = userEvent.setup();
+    let insert: () => void = () => {};
+    function Growing() {
+      const [hasArchive, setHasArchive] = useState(false);
+      insert = () => setHasArchive(true);
+      return (
+        <DropdownMenu
+          button={{label: 'Options'}}
+          presentation="bottom-sheet"
+          items={[
+            ...(hasArchive
+              ? [{id: 'archive', label: 'Archive', items: [{label: 'Old'}]}]
+              : []),
+            {id: 'projects', label: 'Projects', items: [{label: 'Docs'}]},
+          ]}
+        />
+      );
+    }
+    render(<Growing />);
+
+    await user.click(screen.getByRole('button', {name: /Options/}));
+    await user.click(await screen.findByRole('button', {name: 'Projects'}));
+    expect(
+      await screen.findByRole('button', {name: 'Docs'}),
+    ).toBeInTheDocument();
+    act(() => insert());
+
+    expect(
+      await screen.findByRole('button', {name: 'Docs'}),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: 'Old'})).toBeNull();
+  });
+
   it('restores touch focus without painting a trigger focus ring', async () => {
     render(
       <DropdownMenu
