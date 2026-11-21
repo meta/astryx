@@ -487,6 +487,36 @@ describe('show --on: what one part of a theme shows', () => {
     expect(valueOf(own, 'background-color').value).toBe('#0a0b0c');
   }, 120_000);
 
+  it('credits a token and a part rule added by hand below the settings to the token and the part, beside a dial', async () => {
+    await themeEditNew('handy', {cwd, like: 'neutral'});
+    await themeEditSet('handy', 'corners', 'pill', {cwd});
+    const file = path.join(cwd, 'themes', 'handy', 'handy.theme.ts');
+    fs.writeFileSync(
+      file,
+      fs
+        .readFileSync(file, 'utf8')
+        .replace(
+          "name: 'handy',",
+          "name: 'handy',\n  tokens: {'--color-background-card': '#0a0b0c'},\n  components: {card: {base: {borderColor: '#0d0e0f'}}},",
+        ),
+    );
+    const r = /** @type {any} */ (
+      await themeEditShow('handy', {cwd, on: 'card'})
+    );
+    expect(valueOf(r, 'background-color')).toMatchObject({
+      value: '#0a0b0c',
+      source: 'theme',
+      via: 'token',
+    });
+    expect(valueOf(r, 'border-color')).toMatchObject({
+      value: '#0d0e0f',
+      source: 'theme',
+      via: 'part',
+    });
+    // The corners dial still reads as the dial.
+    expect(valueOf(r, 'border-radius')).toMatchObject({via: 'dial'});
+  }, 120_000);
+
   it('gives a button’s corner radius once, not once per corner', async () => {
     const r = /** @type {any} */ (
       await themeEditShow('neutral', {cwd, on: 'button'})

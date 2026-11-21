@@ -59,6 +59,7 @@ import {condition} from './_how.mjs';
  *   for an editor theme: what writes a token, from its saved settings (an
  *   exact token setting, a dial, or a rule on the part); `onPart` when the
  *   part's own rule sets it
+ * @property {Record<string, any> | null} [settingsComponents] - An editor theme's part rules from its settings alone, before what its theme file adds by hand.
  * @property {(property: string, part: string, when: string, state: string) => {when: string | null, state: string | null, exact: boolean} | null} [settingAt] - The property setting that wrote the theme's rule on the part under a rule key (`when|state` as the build writes them), as `set` took it.
  * @property {(property: string, part: string, when: string, state: string) => 'dial' | 'part'} [propertyVia] -
  *   for an editor theme: what writes a CSS property the theme's own rule on
@@ -281,6 +282,10 @@ async function loadNamedTheme(ctx, cwd, name) {
     // what is added below the settings in it; the editor's own compile when
     // the file does not load.
     let tokens = ownTokens(compiled, base, core);
+    /** @type {Set<string>} */
+    const handTokens = new Set();
+    /** @type {Record<string, any> | null} */
+    let settingsComponents = null;
     let components = mergeComponents(
       base.components,
       compiled.components ?? {},
@@ -295,6 +300,19 @@ async function loadNamedTheme(ctx, cwd, name) {
           dark: core.resolveThemeTokens(loaded.theme, {mode: 'dark'}),
         };
         components = loaded.theme.components ?? {};
+        // What the file adds below the settings: each token and part
+        // rule that differs from the settings theme it extends, made the
+        // same way. A person set those by hand, not a setting.
+        const settingsInput = loaded.chain?.[0];
+        if (settingsInput) {
+          const settings = core.defineTheme(settingsInput);
+          for (const mode of /** @type {const} */ (['light', 'dark'])) {
+            const was = core.resolveThemeTokens(settings, {mode});
+            for (const [t, v] of Object.entries(tokens[mode]))
+              if (was[t] !== v) handTokens.add(t);
+          }
+          settingsComponents = settings.components ?? {};
+        }
       }
     }
     return {
@@ -304,7 +322,9 @@ async function loadNamedTheme(ctx, cwd, name) {
       parentTokens: {light: base.light, dark: base.dark},
       parentComponents: base.components ?? {},
       coreTokens: {light: coreDefaults.light, dark: coreDefaults.dark},
+      settingsComponents,
       tokenVia: (token, part, onPart) => {
+        if (handTokens.has(token)) return 'token';
         const mine = data.settings.filter(st =>
           onPart ? reaches(st, part) : st.on == null,
         );
@@ -442,6 +462,15 @@ export async function themePartValues(cwd, name, part) {
     key,
   );
   const own = partValues(folded.rules);
+  // The rules the theme file adds by hand below an editor theme's
+  // settings: a rule there that the settings theme does not write.
+  const fromSettings = theme.settingsComponents
+    ? foldModes(theme.settingsComponents[key])
+    : null;
+  const settingsOwn = fromSettings ? partValues(fromSettings.rules) : null;
+  /** @param {string} k */
+  const byHand = k =>
+    settingsOwn != null && own.has(k) && settingsOwn.get(k) !== own.get(k);
   const inherited = partValues(parentFolded.rules);
   const themeRules = mergeRules(folded.rules);
   const parentRules = mergeRules(parentFolded.rules);
@@ -640,13 +669,15 @@ export async function themePartValues(cwd, name, part) {
           // A token the part's rule sets, as the setting that wrote it.
           property.startsWith('--') && theme.tokenVia
             ? theme.tokenVia(property, key, true)
-            : theme.propertyVia
-              ? // A variant row with no rule of its own shows the rest rule:
-                // ask with the condition of the rule the value comes from.
-                ruleKey === k
-                ? theme.propertyVia(property, key, when, state)
-                : theme.propertyVia(property, key, 'base', '')
-              : 'part',
+            : byHand(ruleKey)
+              ? 'part'
+              : theme.propertyVia
+                ? // A variant row with no rule of its own shows the rest rule:
+                  // ask with the condition of the rule the value comes from.
+                  ruleKey === k
+                  ? theme.propertyVia(property, key, when, state)
+                  : theme.propertyVia(property, key, 'base', '')
+                : 'part',
         ];
       else if (mine.length) [source, via] = ['theme', tokenVia];
       else [source, via] = ['base', 'part'];
@@ -771,8 +802,26 @@ export async function themePartValues(cwd, name, part) {
     // (A block the theme takes as it is from the theme it extends is the
     // base's.)
     const inherited = !ownBlock(m);
+    // (A block the theme file adds by hand, which the settings theme does
+    // not write: the part's, or the token's.)
+    const blockByHand =
+      fromSettings != null &&
+      !fromSettings.modeSets.some(
+        p =>
+          p.mode === m.mode &&
+          p.property === m.property &&
+          p.state === m.state &&
+          p.value === m.value &&
+          sameWhen(p.when, m.when),
+      );
     target.source = inherited ? 'base' : 'theme';
-    target.via = inherited ? 'part' : via;
+    target.via = inherited
+      ? 'part'
+      : blockByHand
+        ? m.property.startsWith('--')
+          ? 'token'
+          : 'part'
+        : via;
   }
   // At rest first, then each variant, in the order the part reads them.
   values.sort((a, b) => Number(a.when != null) - Number(b.when != null));
