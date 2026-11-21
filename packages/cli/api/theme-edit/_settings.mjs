@@ -12452,6 +12452,7 @@ export async function contrastProblems(ctx, data, res) {
     ),
     ...borderContrastProblems(ctx, data, res, base),
     ...trackContrastProblems(ctx, data, res, base),
+    ...scopedFillPairProblems(ctx, data, res),
     ...floatingEdgeProblems(ctx, data, res, base),
     ...scoped.problems,
     ...buttonStyleProblems(ctx, data, res),
@@ -12673,6 +12674,120 @@ function nearestReading(from, grounds, need) {
     if (grounds.every(g => ratio(c, g) >= need)) return hex(c);
   }
   return to;
+}
+
+/**
+ * A fill color and the text drawn on it, set inside a part (a white accent
+ * on the top bar): whatever that part holds filled with the color (a
+ * primary button, a badge) draws the on-color on it there. The pair is
+ * measured as that part's scope resolves it, in each mode it is set for:
+ * the theme's setting on the part, else the theme's color. Below 4.5:1 is
+ * a problem, fixed with the nearest on-color that reads, set on the same
+ * part. Only a part that holds a part reading the on-color is measured: a
+ * part that reads it itself is the text pairs' to measure, and one that
+ * holds no reader draws no such text. A see-through fill is left out: what
+ * shows under it is the part, not one known color.
+ * @param {Ctx} ctx
+ * @param {ThemeData} data
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} res
+ * @returns {ThemeProblem[]}
+ */
+function scopedFillPairProblems(ctx, data, res) {
+  const defaults = ctx.project.core.tokenDefaults ?? {};
+  /** The fill a token pairs with its on-color: --color-accent and --color-on-accent. @param {string} tok */
+  const pairOf = tok => {
+    const on = /^--color-on-([\w-]+)$/.exec(tok);
+    if (on && Object.hasOwn(defaults, `--color-${on[1]}`))
+      return {fill: `--color-${on[1]}`, on: tok};
+    const fill = /^--color-([\w-]+)$/.exec(tok);
+    if (fill && Object.hasOwn(defaults, `--color-on-${fill[1]}`))
+      return {fill: tok, on: `--color-on-${fill[1]}`};
+    return null;
+  };
+  const modes = modesOf(data);
+  const modeFlag = (/** @type {string} */ m) =>
+    modes.length > 1 ? ` --mode ${m}` : '';
+  /** A value as one color in a mode. @param {unknown} v @param {'light' | 'dark'} m */
+  const inMode = (v, m) => {
+    let x = String(v ?? '').trim();
+    for (let i = 0; i < 4; i++) {
+      const lightDark = /^light-dark\((.*)\)$/is.exec(x);
+      if (lightDark) {
+        const halves = splitTop(lightDark[1], ',');
+        if (halves.length === 2) x = halves[m === 'light' ? 0 : 1].trim();
+      }
+      const ref = /^var\(\s*(--[\w-]+)\s*(?:,[^)]*)?\)$/.exec(x);
+      if (!ref) break;
+      x = String(res[m][ref[1]] ?? '');
+    }
+    return x;
+  };
+  /** @type {ThemeProblem[]} */
+  const out = [];
+  /** @type {Set<string>} */
+  const done = new Set();
+  const map = /** @type {Record<string, any>} */ (ctx.C.MAP);
+  /** Whether a part's own rules, or its elements', read a token. @param {string} t @param {string} tok */
+  const readsItself = (t, tok) =>
+    Object.values(map[t]?.own ?? {}).some(
+      (/** @type {any} */ v) => tok in (v?.tokens ?? {}),
+    ) || tok in (map[t]?.inside ?? {});
+  for (const x of data.settings) {
+    if (x.source !== 'token' || !x.on || x.state || x.when) continue;
+    const pair = pairOf(x.thing);
+    if (!pair) continue;
+    if (
+      readsItself(x.on, pair.on) ||
+      !(map[x.on]?.contains ?? []).some((/** @type {string} */ c) =>
+        readsItself(c, pair.on),
+      )
+    )
+      continue;
+    for (const m0 of modes) {
+      const m = /** @type {'light' | 'dark'} */ (m0);
+      if (x.mode && x.mode !== m) continue;
+      const key = `scoped-fill|${x.on}|${pair.fill}|${m}`;
+      if (done.has(key)) continue;
+      done.add(key);
+      /** The token as the part's scope draws it. @param {string} tok */
+      const inScope = tok => {
+        const set = [...data.settings]
+          .reverse()
+          .find(
+            y =>
+              y.source === 'token' &&
+              y.thing === tok &&
+              y.on === x.on &&
+              !y.state &&
+              !y.when &&
+              (!y.mode || y.mode === m),
+          );
+        return inMode(set ? set.value : `var(${tok})`, m);
+      };
+      const fillValue = inScope(pair.fill);
+      const onValue = inScope(pair.on);
+      const page =
+        parseColor(inMode('var(--color-background-body)', m)) ??
+        (m === 'dark' ? [0, 0, 0] : [255, 255, 255]);
+      const fillRgb = parseColor(fillValue);
+      const onRgb = parseColor(onValue);
+      if (!fillRgb || !onRgb || alphaOf(fillValue) < 1) continue;
+      const fill = compositeOver(
+        fillRgb,
+        alphaOf(fillValue),
+        /** @type {[number, number, number]} */ (page),
+      );
+      const text = compositeOver(onRgb, alphaOf(onValue), fill);
+      const r = ratio(text, fill);
+      if (r >= 4.5) continue;
+      out.push({
+        key,
+        text: `inside ${x.on}, ${pair.on} (${hex(text)}) on ${pair.fill} (${hex(fill)}) is ${ratioWords(r)}:1 in ${m}: what it holds filled with ${pair.fill} (a primary button, a badge) draws its text at that; text needs 4.5:1`,
+        fix: `${P} set ${data.name} ${pair.on} '${nearestReading(text, [fill], 4.5)}' --on ${x.on}${modeFlag(m)}`,
+      });
+    }
+  }
+  return out;
 }
 
 /**
