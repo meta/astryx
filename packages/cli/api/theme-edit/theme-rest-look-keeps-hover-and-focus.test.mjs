@@ -230,6 +230,71 @@ describe('a resting outline', () => {
     );
   }, 240_000);
 
+  it("keeps the resting scope's own focus color over a wider outline the theme sets", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('ss', {cwd, like: 'neutral'});
+    await themeEditSet('ss', 'outline', '2px solid #000000', {
+      cwd,
+      on: 'button',
+      state: 'focus-visible',
+      when: 'variant:ghost',
+    });
+    await themeEditSet('ss', 'outline-color', '#00aa00', {
+      cwd,
+      on: 'button',
+      state: 'focus-visible',
+      when: 'variant:ghost+size:sm',
+    });
+    await themeEditSet('ss', 'outline-color', '#ff0000', {
+      cwd,
+      on: 'button',
+      state: 'focus-visible',
+      mode: 'dark',
+    });
+    await themeEditSet('ss', 'outline', 'none', {
+      cwd,
+      on: 'button',
+      when: 'variant:ghost+size:sm',
+    });
+    const rules = scoped(cssOf('ss'), ':focus-visible', [
+      'data-variant="ghost"',
+      'data-size="sm"',
+    ]);
+    // (The small ghost's own green stays: neither the ghost's black outline
+    // nor the dark-only red is copied over it.)
+    expect(rules).toMatch(/outline-color: #00aa00/);
+    expect(rules).not.toMatch(/outline: 2px solid #000000/);
+    expect(cssOf('ss')).not.toMatch(
+      /data-size="sm"\][^{]*:focus-visible[^{]*\{[^}]*outline-color: #ff0000/,
+    );
+  }, 240_000);
+
+  it('copies no combined focus state to the plain focus of a narrower resting scope', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('cf', {cwd, like: 'neutral'});
+    await themeEditSet('cf', 'outline-color', '#ff00ff', {
+      cwd,
+      on: 'button',
+      state: 'focus-visible+active',
+      when: 'variant:ghost',
+    });
+    await themeEditSet('cf', 'outline', 'none', {
+      cwd,
+      on: 'button',
+      when: 'variant:ghost+size:sm',
+    });
+    const plain = (cssOf('cf').match(/[^{}]*\{[^}]*\}/g) ?? []).filter(r => {
+      const sel = r.split('{')[0];
+      return (
+        /data-size="sm"/.test(sel) &&
+        /data-variant="ghost"/.test(sel) &&
+        /:focus-visible/.test(sel) &&
+        !/:active|data-astryx-press/.test(sel)
+      );
+    });
+    expect(plain.join('\n')).not.toMatch(/#ff00ff/);
+  }, 240_000);
+
   it('keeps a whole-part focus color under a resting outline for one variant', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('wf', {cwd, like: 'neutral'});
