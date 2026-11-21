@@ -67,7 +67,7 @@ const answer = async q => {
 };
 
 /**
- * @typedef {{q: string, has?: string[], never?: RegExp, says?: RegExp, noWide?: boolean}} Row
+ * @typedef {{q: string, has?: string[], never?: RegExp, says?: RegExp, saysNot?: RegExp, noWide?: boolean}} Row
  * @type {Array<[string, Row]>}
  */
 const ROWS = [
@@ -343,6 +343,22 @@ const ROWS = [
       q: 'Make the headings bigger. Make the headings bold. Undo the heading size change.',
       has: ['headings bold'],
       never: /--text-heading-\d-size/,
+    },
+  ],
+  [
+    'an undo reads each change it names for its own part: a color for the card, every look for the heading',
+    {
+      q: 'Make the cards blue. Make the headings bold. Undo the card color change and the heading change.',
+      never: /^headings |--on heading|--on card/,
+      says: /the card and heading changes said earlier in this ask are taken back/,
+    },
+  ],
+  [
+    'an undo of a size names nothing as missing for a part whose change was another look',
+    {
+      q: 'Make the cards rounder. Make the headings bigger. Undo the card size change and the heading size change.',
+      has: ['corners more --on card'],
+      saysNot: /no card change was said earlier/,
     },
   ],
   [
@@ -695,6 +711,7 @@ describe('long asks bind each clause to its own part', () => {
       if (row.never)
         for (const line of r.lines) expect(line, row.q).not.toMatch(row.never);
       if (row.says) expect(r.text, row.q).toMatch(row.says);
+      if (row.saysNot) expect(r.text, row.q).not.toMatch(row.saysNot);
       if (row.noWide)
         for (const line of r.lines) expect(line, row.q).toMatch(/ --on /);
     },

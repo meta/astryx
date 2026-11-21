@@ -4704,14 +4704,37 @@ export function draftAnswer(ctx, env, question) {
         // (A part said before "but", "the cards look fine but the border
         // is ugly", is not this look's.)
         (kept && joinWord === 'and' && partIn(kept));
+      const rest = said.slice(at + look.length);
+      // ("the shadows on cards and buttons are too strong, remove them":
+      // parts listed after on, before the verb, each lose the look.)
+      const listed =
+        /^\s*(?:on|of|in|around)\s+(.+?)\s+(?:is|are|looks?|seems?|feels?|was|were)\b/i.exec(
+          rest,
+        );
+      const items =
+        !(before && partIn(before, true)) &&
+        listed &&
+        /\band\b|,/.test(listed[1])
+          ? listed[1]
+              .split(/\s*(?:,|\band\b)\s*/)
+              .filter(Boolean)
+              .map(w => partIn(w))
+          : null;
+      const many =
+        items && items.length > 1 && items.every(Boolean)
+          ? /** @type {string[]} */ (items)
+          : null;
       // (An ask joined after the look, "the shadow on the cards is too
       // strong and the headings should be bold", stays its own clause.)
-      const rest = said.slice(at + look.length);
-      const next = /\b(?:and|but|then)\s+(?=\S)/i.exec(rest);
-      const tail = next ? rest.slice(next.index + next[0].length).trim() : '';
-      return part
-        ? `${lead}${kept}no ${word} on ${part}${tail ? `, ${tail}` : ''}`
-        : m;
+      const after = many && listed ? rest.slice(listed[0].length) : rest;
+      const next = /\b(?:and|but|then)\s+(?=\S)/i.exec(after);
+      const tail = next ? after.slice(next.index + next[0].length).trim() : '';
+      const taken = many
+        ? many.map(on => `no ${word} on ${on}`).join(', ')
+        : part
+          ? `no ${word} on ${part}`
+          : '';
+      return taken ? `${lead}${kept}${taken}${tail ? `, ${tail}` : ''}` : m;
     },
   );
   question = String(question)
@@ -29204,8 +29227,10 @@ export function draftAnswer(ctx, env, question) {
       /^\W*(?:and\s+)?the\s+(?:[\w-]+\s+){0,3}changes?\b/i.test(
         String(next.text ?? ''),
       );
+    // (The clause after it, when it is part of the undo, is its own
+    // phrase: a comma keeps the two apart.)
     const said =
-      `${String(uc?.text ?? '')} ${alsoNamed ? String(next.text) : ''}`.toLowerCase();
+      `${String(uc?.text ?? '')}${alsoNamed ? `, ${String(next.text)}` : ''}`.toLowerCase();
     const lookOf = (/** @type {any} */ d) =>
       /** @type {string[]} */ (
         /** @type {any} */ (draftClause.get(d))?.aspects ?? []
@@ -29289,13 +29314,51 @@ export function draftAnswer(ctx, env, question) {
           : []),
       ]),
     ];
+    // (Each "… change" said names its look for its own part: "the card
+    // color change and the heading change" takes back the card's color and
+    // the heading's change, whatever look it had.)
+    /** @type {Array<[number, number]>} */
+    const phrases = [];
+    {
+      let from = 0;
+      for (const m of said.matchAll(/\band\b|,/g)) {
+        phrases.push([from, /** @type {number} */ (m.index)]);
+        from = /** @type {number} */ (m.index) + m[0].length;
+      }
+      phrases.push([from, said.length]);
+    }
+    /**
+     * The looks the phrase naming a part says, when the undo names its
+     * changes one phrase each; null when it is one phrase.
+     * @param {string} n
+     * @returns {string[] | null}
+     */
+    const phraseLooks = n => {
+      const at = spanOf(n);
+      const seg =
+        phrases.length > 1 && at
+          ? phrases.find(([a, b]) => at[0] >= a && at[0] < b)
+          : null;
+      if (!seg) return null;
+      const text = said.slice(seg[0], seg[1]);
+      return [
+        ...LOOK_WORDS.filter(([re]) => re.test(text)).flatMap(([, a]) => a),
+        ...(/\bcolou?rs?\b/.test(text) ? ['text', 'background'] : []),
+      ];
+    };
+    /** @param {string} n @param {string} on */
+    const isPart = (n, on) => on === n || (FAMILIES[n] ?? []).includes(on);
     const undone = before.filter(d => {
       // (Of the parts the undo names; with no part, of the whole theme.)
-      const onPart = named.length
-        ? partsOf(d).some(on =>
-            named.some(n => on === n || (FAMILIES[n] ?? []).includes(on)),
-          )
-        : !partsOf(d).length;
+      const hits = named.filter(n => partsOf(d).some(on => isPart(n, on)));
+      const onPart = named.length ? hits.length > 0 : !partsOf(d).length;
+      const own = hits.map(phraseLooks);
+      if (onPart && own.length && own.every(l => l != null))
+        return own.some(
+          l =>
+            !(/** @type {string[]} */ (l).length) ||
+            /** @type {string[]} */ (l).some(a => lookOf(d).includes(a)),
+        );
       return (
         onPart &&
         (!looksSaid.length ||
@@ -29358,7 +29421,9 @@ export function draftAnswer(ctx, env, question) {
         /^(?:color|background|background-color|--color-(?:text|background)-[a-z0-9-]+)$/;
       const onIt = (/** @type {Step} */ st) =>
         named.some(
-          n => st.on === n || (FAMILIES[n] ?? []).includes(String(st.on)),
+          n =>
+            isPart(n, String(st.on)) &&
+            (phraseLooks(n)?.includes('text') ?? true),
         ) && COLOR_THINGS.test(String(st.thing));
       for (const d of result)
         if (d.options.length)
@@ -29386,11 +29451,11 @@ export function draftAnswer(ctx, env, question) {
     // a part the undo names with no change said earlier, "the card change"
     // when no card change was asked, is said to have nothing to take back.)
     const takenOn = named.filter(n =>
-      undone.some(d =>
-        partsOf(d).some(on => on === n || (FAMILIES[n] ?? []).includes(on)),
-      ),
+      undone.some(d => partsOf(d).some(on => isPart(n, on))),
     );
-    const nothingOn = named.filter(n => !takenOn.includes(n));
+    const nothingOn = named.filter(
+      n => !before.some(d => partsOf(d).some(on => isPart(n, on))),
+    );
     result.push({
       text: `the ${takenOn.length ? `${takenOn.join(' and ')} ` : ''}change${takenOn.length > 1 ? 's' : ''} said earlier in this ask ${takenOn.length > 1 ? 'are' : 'is'} taken back by its undo, so ${takenOn.length > 1 ? 'they are' : 'it is'} not written${nothingOn.length ? `; no ${nothingOn.join(' or ')} change was said earlier, so there is nothing to take back there` : ''}`,
       options: [],
