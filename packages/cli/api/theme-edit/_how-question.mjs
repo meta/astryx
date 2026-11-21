@@ -29722,10 +29722,18 @@ export function draftAnswer(ctx, env, question) {
             return left;
           })
           .filter(o => o.length);
+    // (A whole answer left with no line, every change taken back, goes.)
     result.splice(
       0,
       result.length,
-      ...result.filter(d => d !== unmet && !undone.includes(d)),
+      ...result.filter(
+        d =>
+          d !== unmet &&
+          !undone.includes(d) &&
+          (draftClause.get(d) ||
+            d.options.length ||
+            !d.text.startsWith('all of it, in order')),
+      ),
     );
     // (A color taken back leaves no line of it anywhere: the fill, its text
     // and the readable text the fill brought.)
