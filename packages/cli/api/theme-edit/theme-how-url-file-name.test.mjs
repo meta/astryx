@@ -131,3 +131,12 @@ it('a length in a file name is no value left unused', async () => {
   );
   expect(texts.some(t => /^not used/.test(t))).toBe(false);
 }, 240_000);
+
+it('a second url() layer left unwritten is named as not used', async () => {
+  const {texts} = await answer(
+    'cards background-image: url(a.png), url(b.png)',
+  );
+  expect(texts.some(t => /^not used/.test(t) && t.includes('url(b.png)'))).toBe(
+    true,
+  );
+}, 240_000);
