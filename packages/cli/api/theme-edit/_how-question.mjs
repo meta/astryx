@@ -121,6 +121,7 @@ import {
   settableStates,
   stateSynonym,
   pillDrawnRadios,
+  coveredPaints,
 } from './_check.mjs';
 import {coreKeyframes} from './_parts.mjs';
 import {FONTSOURCE_FAMILIES} from '../../foundation/fonts/fontsource-families.generated.mjs';
@@ -27364,6 +27365,9 @@ export function draftAnswer(ctx, env, question) {
             return g.replace(/#([0-9a-f]{6})\b/g, '#$1' + aa);
           };
           const saidMode = modeOf(c).mode;
+          // (The paints Core gives the part's looks and states at rest, the
+          // shared reader a plain-part fill is checked against.)
+          const paints = coveredPaints(ctx, one(part), 'background-color');
           const modes = /** @type {Array<'light' | 'dark'>} */ (
             saidMode
               ? [saidMode]
@@ -27416,19 +27420,16 @@ export function draftAnswer(ctx, env, question) {
               ? baseOwnLook(part, 'background-color', when)
               : null;
             if (look) return look;
-            const reads = C.partReads(one(part), 'background') ?? [];
-            // (A variant shows a token only where the part reads one for it:
-            // a ghost button's see-through fill is none.)
+            // (A look shows a token only where Core paints one for it: a
+            // ghost button's see-through fill is none.)
             const token = when
-              ? (reads.find(
-                  r =>
-                    /^--color-/.test(r.token) &&
-                    !/overlay|tint/.test(r.token) &&
-                    (r.when ?? []).some(
-                      w => w.trim() === when.replace(':', '='),
-                    ),
-                )?.token ?? null)
-              : restRead(reads, undefined);
+              ? (paints.covered.find(x => x.flags === `--when ${when}`)
+                  ?.token ?? null)
+              : (paints.rest ??
+                restRead(
+                  C.partReads(one(part), 'background') ?? [],
+                  undefined,
+                ));
             return token
               ? (tokenSetOn(part, token, m) ?? `var(${token})`)
               : null;
@@ -27494,6 +27495,19 @@ export function draftAnswer(ctx, env, question) {
               text: `each ${unread} of ${part} draws a color of its own, which the editor does not read here, so nothing is written; name one and its color ("glossy blue ${part}")`,
               options: [],
             };
+          // (A part whose hover and press tint its own fill, a switch's
+          // track, would lose them under a gloss image, and no state line
+          // can bring them back: nothing is written.)
+          if (
+            !said &&
+            (C.partReads(one(part), 'background') ?? []).some(r =>
+              /^--color-tint-/.test(r.token),
+            )
+          )
+            return {
+              text: `${part} shows its hover and press by tinting its own fill, which a gloss over it would hide, so nothing is written; set a background color to change its fill`,
+              options: [],
+            };
           /** @type {Record<string, string[]>} */
           const looks = C.variantValues(one(part));
           // (A condition on another axis, "glossy small buttons", scopes
@@ -27525,12 +27539,16 @@ export function draftAnswer(ctx, env, question) {
           const flat = [];
           for (const when of whens) {
             const tok = tokenFill(when);
+            const opaque = modes.every(m => {
+              const own = fillFor(when, m);
+              return own != null && alphaOf(own) >= 1;
+            });
             const gs = modes.map(m => {
               const own = fillFor(when, m);
               const g = own == null ? null : glossIn(own);
-              // (A token fill glosses live over the token wherever it shows
-              // a color.)
-              return g != null && tok ? liveGloss(tok) : g;
+              // (An opaque token fill glosses live over the token; a
+              // see-through one keeps its own alpha in each mode.)
+              return g != null && tok && opaque ? liveGloss(tok) : g;
             });
             const name = when ? when.replace(/^[a-z]+:/, '') : part;
             if (gs.every(g => g == null)) {
@@ -27579,25 +27597,6 @@ export function draftAnswer(ctx, env, question) {
                   );
               });
           }
-          // (A state the part fills on its own, a switch's checked track,
-          // takes a gloss of that state's own fill, so the gloss never
-          // hides it.)
-          if (steps.length && !said && !f.state)
-            for (const st of statesOf(part)) {
-              const r = (C.partReads(one(part), 'background') ?? []).find(
-                x =>
-                  /^--color-/.test(x.token) &&
-                  !/overlay|tint/.test(x.token) &&
-                  (x.when ?? []).some(w => w.trim() === `${st}=${st}`),
-              );
-              if (r)
-                steps.push(
-                  set('background-image', liveGloss(r.token), {
-                    ...f,
-                    state: st,
-                  }),
-                );
-            }
           // (A part that draws no fill of its own, and is given none, shows
           // the part it sits in: a gloss on that part shows through it.)
           if (!steps.length) {

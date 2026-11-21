@@ -94,8 +94,10 @@ describe("glossy is a gloss of the part's own fill", () => {
       expect(mine.length, on).toBeGreaterThan(0);
       // (Each a gloss over the look's own token: lighter at the top, darker
       // at the bottom, in every mode at once.)
-      for (const g of mine) {
-        expect(live(g), on).toBe(true);
+      // (An opaque token fill is glossed live over its token in every mode
+      // at once; a see-through one, a secondary button's, per mode.)
+      expect(mine.some(live), on).toBe(true);
+      for (const g of mine.filter(live)) {
         expect(g.stops[0], on).toMatch(
           /^color-mix\(in oklab, var\(--[a-z0-9-]+\), white/,
         );
@@ -153,9 +155,10 @@ describe("glossy is a gloss of the part's own fill", () => {
 
   it("a variant named glosses that variant's own fill", async () => {
     const lines = writes(await how('q0', 'glossy destructive buttons'));
-    expect(glosses(lines).map(g => g.stops[1])).toEqual([
-      'var(--color-error-muted)',
-    ]);
+    // (Its light fill is opaque, its dark one see-through: each mode
+    // glossed as its own colors.)
+    const light = glosses(lines).find(g => / --mode light/.test(g.rest));
+    expect(light?.stops[1]).toBe('#ffc4be');
   }, 240_000);
 
   it('a color said for a part with no fill of its own is glossed', async () => {
@@ -209,10 +212,12 @@ describe("glossy is a gloss of the part's own fill", () => {
       'light-dark(#ffffff, #111111)',
       {
         cwd,
-        on: 'switch',
+        on: 'app-shell-header',
       },
     );
-    const g = glosses(writes(await how('q4', 'glossy toggles')));
+    const g = glosses(writes(await how('q4', 'glossy top bar'))).filter(
+      x => x.on === 'app-shell-header',
+    );
     expect(
       Object.fromEntries(
         g.map(x => [/--mode (\w+)/.exec(x.rest)?.[1] ?? '', x.stops[1]]),
@@ -222,7 +227,14 @@ describe("glossy is a gloss of the part's own fill", () => {
 
   it('a variant with a see-through fill glosses it at its own alpha', async () => {
     const g = glosses(writes(await how('q0', 'glossy secondary buttons')));
-    expect(g.map(x => x.stops[1])).toEqual(['var(--color-neutral)']);
+    // (Each mode's own tint, every stop at the fill's alpha.)
+    expect(g.length).toBeGreaterThan(0);
+    for (const x of g) {
+      expect(x.rest).toMatch(/ --mode (?:light|dark)$/);
+      const alphas = new Set(x.stops.map(s => s.slice(7)));
+      expect(alphas.size, x.rest).toBe(1);
+      expect([...alphas][0], x.rest).toMatch(/^[0-9a-f]{2}$/);
+    }
   }, 240_000);
 
   it('a banner, whose statuses draw colors the editor does not read, writes nothing and says why', async () => {
@@ -261,20 +273,21 @@ describe("glossy is a gloss of the part's own fill", () => {
       'linear-gradient(#ffffff, #000000)',
       {
         cwd,
-        on: 'switch',
+        on: 'app-shell-header',
       },
     );
-    const rs = await how('q5', 'glossy toggles');
+    const rs = await how('q5', 'glossy top bar');
     expect(writes(rs)).toEqual([]);
     expect(rs.map(r => r.text).join('\n')).toMatch(
       /has a gradient fill the theme sets, which stays/,
     );
   }, 240_000);
 
-  it("a switch's checked track takes a gloss of its own fill too", async () => {
-    const lines = writes(await how('q0', 'glossy toggles'));
-    expect(lines).toContain(
-      "set q0 background-image 'linear-gradient(color-mix(in oklab, var(--color-accent), white 20%) 0%, var(--color-accent) 45%, color-mix(in oklab, var(--color-accent), black 20%) 100%)' --on switch --state checked",
+  it('a switch, whose hover and press tint its own fill, writes nothing and says why', async () => {
+    const rs = await how('q0', 'glossy toggles');
+    expect(writes(rs)).toEqual([]);
+    expect(rs.map(r => r.text).join('\n')).toMatch(
+      /switch shows its hover and press by tinting its own fill/,
     );
   }, 240_000);
 
@@ -313,9 +326,3 @@ describe("glossy is a gloss of the part's own fill", () => {
     expect(glosses(lines).map(g => g.stops[1])).toEqual(['#e11d48']);
   }, 240_000);
 });
-
-/** Relative lightness, enough to order shades. @param {string} h */
-function luma(h) {
-  const [r, g, b] = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
