@@ -1212,6 +1212,10 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
         // The row a glide measures from, found again after the commit.
         const keyAttribute: Record<string, string> = {
           'data-expansion-key': key,
+          // A row that renders open carries the panel's mark in its own
+          // markup too, so a server render draws the divider on the panel
+          // before hydration. After that, the panel sets and removes it.
+          ...(store.get().has(key) ? {'data-expansion-panel-open': ''} : {}),
         };
         const keyed = {
           ...props,

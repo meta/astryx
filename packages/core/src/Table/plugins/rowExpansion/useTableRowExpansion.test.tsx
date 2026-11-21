@@ -2,6 +2,7 @@
 
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {render, screen, fireEvent, act} from '@testing-library/react';
+import {renderToString} from 'react-dom/server';
 import {useState} from 'react';
 import {Table} from '../../Table';
 import type {TableColumn} from '../../types';
@@ -360,6 +361,50 @@ describe('useTableRowExpansion (detail panel)', () => {
     expect(screen.getByText('Detail for Row 3, 2 open')).toBeInTheDocument();
     expect(screen.getByText('Detail for Row 5, 2 open')).toBeInTheDocument();
     expect(cellRenders).toBe(0);
+  });
+
+  it('marks a row that renders open in the server markup, and only that row', () => {
+    type Row = {id: string; name: string};
+    const rows: Row[] = [
+      {id: 'a', name: 'Ada'},
+      {id: 'b', name: 'Bo'},
+    ];
+    const cols: TableColumn<Row>[] = [
+      {key: 'name', header: 'Name', renderCell: item => item.name},
+    ];
+    function Server() {
+      const expansion = useTableRowExpansion<Row>({
+        expandedKeys: new Set(['a']),
+        onToggle: () => {},
+        getRowKey: item => item.id,
+        renderExpanded: item => <div>Detail for {item.name}</div>,
+      });
+      return (
+        <Table data={rows} columns={cols} idKey="id" plugins={{expansion}} />
+      );
+    }
+    const html = renderToString(<Server />);
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    const row = (key: string) =>
+      container.querySelector(`tr[data-expansion-key="${key}"]`);
+    expect(row('a')).toHaveAttribute('data-expansion-panel-open');
+    expect(row('a')?.nextElementSibling).toHaveAttribute(
+      'data-expansion-panel',
+    );
+    expect(row('b')).not.toHaveAttribute('data-expansion-panel-open');
+  });
+
+  it('keeps the open mark on the row above an open panel across toggles', () => {
+    render(<Harness />);
+    const chevron = () =>
+      screen.getAllByRole('button', {name: /expand|collapse/i})[0];
+    const row = chevron().closest('tr') as HTMLTableRowElement;
+    expect(row).not.toHaveAttribute('data-expansion-panel-open');
+    fireEvent.click(chevron());
+    expect(row).toHaveAttribute('data-expansion-panel-open');
+    fireEvent.click(chevron());
+    expect(row).not.toHaveAttribute('data-expansion-panel-open');
   });
 
   it('does not render the detail panel while collapsed', () => {
