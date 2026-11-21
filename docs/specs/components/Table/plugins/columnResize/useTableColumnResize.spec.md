@@ -127,6 +127,7 @@ remain in `useTableColumnResize.doc.mjs`.
 | FR8  | Resizing stays available without hover. A boundary remains in tab order with its accessible name and values, keyboard resize is unchanged, and the reveal adds discovery only — it is never a precondition for use. This holds on every device whose input can operate the control, including a coarse-primary device with a keyboard.                                | Current source, WAI-ARIA splitter pattern, DEC-3 | Keyboard path verified on hover-capable pointers; coarse-primary parity pending. |
 | FR9  | A boundary with a visible focus indicator is `emphasized` alone. Focus MUST NOT raise the row-level hint, so focusing one boundary never draws its neighbors. Only a hover-capable pointer inside the header row does that.                                                                                                                                           | Owner direction, 2026-09-21 (DEC-5)              | Owner-directed; focused coverage pending.                                        |
 | FR10 | While the Table's scroll region is scrolling, header hover resolves no new disclosure: a boundary the pointer reaches only because content moved under it stays `hidden`, and boundaries already `hinted` when the scroll began settle back to `hidden`. Disclosure resumes when scrolling stops. A drag in progress and a visible focus indicator are unaffected.    | Owner direction, 2026-09-21 (DEC-6)              | Owner-directed; implementation and coverage pending.                             |
+| FR11 | Every resizable column, including the last, keeps the width a person sets, and the width callbacks report every column's key. Space the columns do not fill goes to an empty filler track after the last column, not into the last column; when the columns are wider than the table, the Scroll region scrolls inline (DEC-8).                                       | Proposed, pending                                | Proposed, pending                                                                |
 
 ### Transformation and precedence order
 
@@ -264,6 +265,7 @@ without a target of its own.
 | PR1, PR2           | Render-count assertion around header pointer enter/leave and during a scroll; listener and observer inspection                                                                                                                                                                                                                                                                                                            | Pointer enters and leaves the header repeatedly; the region scrolls under a resting pointer                      | Disclosure rerenders the Table, the scroll gate sets React state, more than one scroll listener or any timer is added, or the extent measurement observes what it resizes.                |
 | Plugin composition | Test mounting the resize and sticky-columns plugins together in both insertion orders                                                                                                                                                                                                                                                                                                                                     | Pinned start column with resize enabled, before and after a drag                                                 | A pinned column loses `position: sticky` in either order, or the composition depends on caller insertion order.                                                                           |
 | Record shape       | `scripts/check-knowledge.mjs`                                                                                                                                                                                                                                                                                                                                                                                             | Colocated module record, canonical id and filename, parent backlink                                              | A missing, misnamed, mis-parented, or unlinked record passes validation.                                                                                                                  |
+| FR11               | `useTableColumnResize.test.tsx` last-column cases plus a browser width check                                                                                                                                                                                                                                                                                                                                              | Resize the last column, then resize the table narrower and wider                                                 | A last column that snaps to the remainder, a callback without its key, or leftover space not in the filler track                                                                          |
 
 Browser, render-count, and assistive-technology evidence are pending. Passing this
 specification pull request proves record integrity only.
@@ -377,6 +379,31 @@ Rejected: publishing a target now and revising it when the width contract lands,
 which puts a stable public surface in front of an undecided one.
 
 Revisit if a consumer needs the hint weight to differ from their own border token.
+
+### DEC-8 — Every column keeps the width a person sets
+
+**Decider:** pending
+
+A person who resizes the last column of a table, such as Actions or Assignee,
+sees it snap back, because the last column always absorbs the table's leftover
+width and its key is left out of the callbacks. Every column now keeps its own
+width, and leftover space goes to an empty track at the end.
+
+Rejected: keeping the last column as the remainder and documenting it, which
+leaves a column people cannot resize. Rejected: an opt-in prop for
+independent widths, which makes the expected behavior the exception.
+
+- **OQ1 — Forced colors.** How do `hinted` and `emphasized` resolve under forced-colors
+  and high-contrast modes? (`checkable`)
+- **OQ4 — Draft design record.** `design:user-states` is draft. When it is promoted,
+  its conditional-hover requirement should be cited here instead of restated.
+- **OQ5 — Sticky offset reconciliation.** After a drag writes rendered pixel widths,
+  sticky pin offsets computed from declared widths are stale. Which record owns the
+  reconciliation, and does it belong to the width contract or to sticky columns?
+  (`checkable`)
+
+OQ2 (theme selection) is closed by DEC-7 and OQ3 (coarse pointers) by DEC-3 and
+DEC-4. Their numbers are retained rather than reused.
 
 ## Open questions
 
