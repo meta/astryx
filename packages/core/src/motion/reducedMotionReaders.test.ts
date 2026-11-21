@@ -6,9 +6,10 @@
  * @output Verifies that script code decides Reduce Motion through the
  *   reduced-motion mark's owner module (reducesMotion or useReducesMotion),
  *   which counts a theme's reducedMotion: 'always' beside the person's
- *   setting: no other file spells the setting's query in script beyond its
- *   listed count, and no file outside the animator calls the animator's
- *   setting-only read
+ *   setting: no other file spells the setting's query in script (in any quote
+ *   style) beyond its listed count, no file but its owner uses an exported
+ *   pointer-split query constant, and no file outside the motion foundation
+ *   calls the animator's setting-only read
  * @position Guard for spec:AST-108 FR6's script readers
  */
 
@@ -24,10 +25,6 @@ const SRC = path.resolve(__dirname, '..');
  */
 const ALLOWED: Readonly<Record<string, readonly [number, string]>> = {
   'privateAttributes/reducedMotion.stylex.ts': [1, 'the readers themselves'],
-  'motion/animator.ts': [
-    1,
-    'defaultPrefersReducedMotion, ORed with the mark where the animator decides',
-  ],
   'motion/animatedLayout.ts': [1, 'ORs the setting with themeReducesMotion'],
   'motion/reducedMotion.ts': [
     2,
@@ -46,6 +43,16 @@ const ALLOWED: Readonly<Record<string, readonly [number, string]>> = {
     'writes CSS media queries, not a script read',
   ],
 };
+
+/** Exported pointer-split queries, each usable only in the file that owns it. */
+const QUERY_CONSTANTS: Readonly<Record<string, string>> = {
+  REDUCED_MOTION_FADE_QUERY: 'motion/reducedMotion.ts',
+  REDUCED_MOTION_INSTANT_QUERY: 'motion/reducedMotion.ts',
+  REDUCED_MOTION_COARSE_QUERY: 'BottomSheet/BottomSheetPanel.tsx',
+};
+
+/** A quoted (any quote style) script spelling of the setting's query. */
+const SETTING_QUERY = /[`'"]\(prefers-reduced-motion/;
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap(name => {
@@ -76,14 +83,25 @@ describe('reduced-motion script readers', () => {
     const over = files.flatMap(({name, lines}) => {
       const count = lines.filter(
         line =>
-          isCode(line) &&
-          line.includes("'(prefers-reduced-motion") &&
-          !line.includes('@media'),
+          isCode(line) && SETTING_QUERY.test(line) && !line.includes('@media'),
       ).length;
       const allowed = ALLOWED[name]?.[0] ?? 0;
       return count > allowed ? [`${name}: ${count} (allowed ${allowed})`] : [];
     });
     expect(over).toEqual([]);
+  });
+
+  it('use an exported pointer-split query constant only in the file that owns it', () => {
+    const users = files.flatMap(({name, lines}) =>
+      Object.entries(QUERY_CONSTANTS)
+        .filter(
+          ([constant, owner]) =>
+            name !== owner &&
+            lines.some(line => isCode(line) && line.includes(constant)),
+        )
+        .map(([constant]) => `${name}: ${constant}`),
+    );
+    expect(users).toEqual([]);
   });
 
   it("call the animator's setting-only read only inside the motion foundation", () => {
