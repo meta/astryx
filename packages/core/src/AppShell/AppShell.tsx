@@ -1748,31 +1748,34 @@ export function AppShell({
                 {/* Mobile nav — always mounted below breakpoint via Activity so DOM
             presence detection works. Hidden until the drawer opens. */}
                 <AppShellDrawerFocusContext value={drawerFocus}>
-                {shouldRenderMobileNavReactNode && mobileNavReactNode}
-                {shouldRenderConfigContent && mobileNavConfigContent}
-                {isBelowBreakpoint &&
-                  !mobileNavDisabled &&
-                  mobileNavReactNode == null &&
-                  !mobileNavConfigContent && (
-                    <ActivityWrapper
-                      mode={isMobileNavActivityVisible ? 'visible' : 'hidden'}>
-                      {/* SideNav drawer — always mounted so presence detection works.
+                  {shouldRenderMobileNavReactNode && mobileNavReactNode}
+                  {shouldRenderConfigContent && mobileNavConfigContent}
+                  {isBelowBreakpoint &&
+                    !mobileNavDisabled &&
+                    mobileNavReactNode == null &&
+                    !mobileNavConfigContent && (
+                      <ActivityWrapper
+                        mode={
+                          isMobileNavActivityVisible ? 'visible' : 'hidden'
+                        }>
+                        {/* SideNav drawer — always mounted so presence detection works.
                 Hidden when TopNav owns the drawer (combined mode passes
                 sideNav via TopNav's mobile content context instead). */}
-                      {hasSideNav && !hasTopNav && (
-                        <SideNavRenderContext value="drawer">
-                          {sideNav}
-                        </SideNavRenderContext>
-                      )}
-                      {hasTopNav && (
-                        <TopNavMobileContentContext value={drawerMobileContent}>
-                          <TopNavRenderContext value="drawer">
-                            {topNav}
-                          </TopNavRenderContext>
-                        </TopNavMobileContentContext>
-                      )}
-                    </ActivityWrapper>
-                  )}
+                        {hasSideNav && !hasTopNav && (
+                          <SideNavRenderContext value="drawer">
+                            {sideNav}
+                          </SideNavRenderContext>
+                        )}
+                        {hasTopNav && (
+                          <TopNavMobileContentContext
+                            value={drawerMobileContent}>
+                            <TopNavRenderContext value="drawer">
+                              {topNav}
+                            </TopNavRenderContext>
+                          </TopNavMobileContentContext>
+                        )}
+                      </ActivityWrapper>
+                    )}
                 </AppShellDrawerFocusContext>
               </LayoutContainerContext>
             </LayoutDividerContext>
