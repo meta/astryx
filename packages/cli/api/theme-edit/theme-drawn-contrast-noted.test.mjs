@@ -3,9 +3,11 @@
 /**
  * @file The text a picture draws too faint to read, as the browser that
  * takes the picture measures it: faint text in a part is found with its
- * part, ratio and colors, over a flat tint drawn as an image too (a pressed
- * state's); the theme's disabled text color, text over a picture or a
- * gradient between colors beside it, and text in no part are left out. show
+ * part, ratio and colors, over a flat tint drawn as an image over the whole
+ * box too (a pressed state's); the theme's disabled text color, text over a
+ * picture, a gradient between colors or a layer over part of its box (an
+ * underline), and text in no part are left out; a layer sized 0 draws
+ * nothing. show
  * notes each part and mode no contrast check names, with its picture.
  */
 
@@ -47,6 +49,8 @@ const PAGE = `<html><body style="margin:0;background:#ffffff">
   <div style="color:#eeeeee">No part</div>
   <div class="astryx-text" style="color:#111111">Readable</div>
   <div class="astryx-button" style="color:#225bff;background-color:rgba(34,91,255,0.08);background-image:linear-gradient(rgba(29,28,17,0.1),rgba(29,28,17,0.1));padding:8px">Pressed</div>
+  <a class="astryx-link" style="color:#111111;background:linear-gradient(#111111,#111111) bottom / 100% 2px no-repeat;padding-bottom:2px">Underlined</a>
+  <div class="astryx-button" style="color:#5a5a5a;background-color:#ffffff;background-image:linear-gradient(#000000,#000000);background-size:0 0;padding:8px">Unsized layer</div>
 </div></body></html>`;
 
 describe('text a picture draws too faint to read', () => {
@@ -85,6 +89,14 @@ describe('text a picture draws too faint to read', () => {
           },
         ]);
         expect(r.lowContrast[1].ratio).toBeLessThan(4.5);
+        // (A flat layer over part of its box, an underline, leaves no one
+        // color behind the text; a layer sized 0 draws nothing.)
+        expect(
+          r.lowContrast.filter(
+            (/** @type {{text: string}} */ x) =>
+              x.text === 'Underlined' || x.text === 'Unsized layer',
+          ),
+        ).toEqual([]);
       } finally {
         fs.rmSync(dir, {recursive: true, force: true});
       }
