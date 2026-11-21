@@ -4,7 +4,7 @@
 
 /**
  * @file useFocusAcrossSwap.ts
- * @input An optional forwarded ref
+ * @input An optional forwarded ref and focus-target options
  * @output A callback ref that carries focus to a replacement element
  * @position Internal hook for a component whose element type changes with a
  *   prop (a link row that renders a plain anchor while disabled). React
@@ -19,13 +19,49 @@
  * elsewhere.
  */
 
-import {useCallback, useRef, type Ref} from 'react';
+import {useCallback, useEffect, useRef, type Ref} from 'react';
 import {mergeRefs} from './mergeRefs';
+import {deepActiveElement} from './flatTree';
+
+// An iframe keeps its last active element after focus moves to its parent.
+function hasFocusedFrameChain(document: Document): boolean {
+  const view = document.defaultView;
+  const frame = view?.frameElement;
+  if (frame == null) {
+    return view == null || view.parent === view || document.hasFocus();
+  }
+  return (
+    deepActiveElement(frame.ownerDocument) === frame &&
+    hasFocusedFrameChain(frame.ownerDocument)
+  );
+}
 
 export function useFocusAcrossSwap<T extends HTMLElement>(
   ref?: Ref<T>,
+  {
+    resolveFocusTarget,
+    restoreFocus = true,
+    isDisabled,
+  }: {
+    resolveFocusTarget?: (node: T) => HTMLElement | null;
+    restoreFocus?: boolean;
+    isDisabled?: boolean;
+  } = {},
 ): (node: T | null) => (() => void) | undefined {
-  const focusedNodeRef = useRef<T | null>(null);
+  const focusedNodeRef = useRef<{
+    node: HTMLElement;
+    isDisabled: boolean | undefined;
+  } | null>(null);
+
+  // Activity disconnects DOM focus ownership before a hidden update can replace its control.
+  useEffect(() => {
+    return () => {
+      if (resolveFocusTarget) {
+        focusedNodeRef.current = null;
+      }
+    };
+  }, [resolveFocusTarget]);
+
   return useCallback(
     (node: T | null) => {
       if (node === null) {
@@ -33,23 +69,33 @@ export function useFocusAcrossSwap<T extends HTMLElement>(
       }
       const outgoing = focusedNodeRef.current;
       focusedNodeRef.current = null;
-      const focusFell =
-        document.activeElement === null ||
-        document.activeElement === document.body;
+      const target = resolveFocusTarget ? resolveFocusTarget(node) : node;
+      const document = node.ownerDocument;
+      const active = deepActiveElement(document);
+      const focusFell = active === null || active === document.body;
       if (
+        restoreFocus &&
+        target?.isConnected &&
         outgoing !== null &&
-        outgoing !== node &&
-        !outgoing.isConnected &&
-        focusFell
+        outgoing.node !== target &&
+        !outgoing.node.isConnected &&
+        (isDisabled === undefined || outgoing.isDisabled !== isDisabled) &&
+        focusFell &&
+        hasFocusedFrameChain(document)
       ) {
-        node.focus();
+        target.focus({preventScroll: true});
       }
       const release = mergeRefs<T>(ref)(node);
       return () => {
-        focusedNodeRef.current = document.activeElement === node ? node : null;
+        focusedNodeRef.current =
+          target !== null &&
+          deepActiveElement(document) === target &&
+          hasFocusedFrameChain(document)
+            ? {node: target, isDisabled}
+            : null;
         release?.();
       };
     },
-    [ref],
+    [ref, resolveFocusTarget, restoreFocus, isDisabled],
   );
 }
