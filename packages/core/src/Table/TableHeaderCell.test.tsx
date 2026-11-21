@@ -11,10 +11,14 @@
  */
 
 import {describe, it, expect, vi} from 'vitest';
-import {render, screen} from '@testing-library/react';
+import {cleanup, render, screen} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
 import {Table} from './Table';
 import {TableHeaderCell} from './TableHeaderCell';
+import {TableHeader} from './TableHeader';
+import {TableBody} from './TableBody';
+import {TableRow} from './TableRow';
+import {TableCell} from './TableCell';
 import type {TableColumn} from './types';
 
 // =============================================================================
@@ -93,6 +97,24 @@ function headerCellDeclarations(container: HTMLElement): string[] {
   const th = container.querySelector('thead th');
   expect(th).not.toBeNull();
   return cssDeclarationsOf(th as Element);
+}
+
+/** A children-mode Table with one header cell and one body cell. */
+function renderChildrenMode(textOverflow?: 'wrap' | 'truncate') {
+  return render(
+    <Table textOverflow={textOverflow}>
+      <TableHeader>
+        <TableRow>
+          <TableHeaderCell>Jobs</TableHeaderCell>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        <TableRow>
+          <TableCell>9,804</TableCell>
+        </TableRow>
+      </TableBody>
+    </Table>,
+  );
 }
 
 // =============================================================================
@@ -175,6 +197,65 @@ describe('TableHeaderCell', () => {
     expect(declarations).toContain(
       '--_table-header-end-room: var(--_table-edge-inline-end,var(--_table-header-inline))',
     );
+  });
+
+  it('wraps its heading under the default textOverflow, like the body cells', () => {
+    const {container} = render(<Table data={users} columns={columns} />);
+    const declarations = headerCellDeclarations(container);
+    expect(declarations).not.toContain('white-space: nowrap');
+    expect(declarations).toContain(
+      'white-space: var(--_table-header-white-space,normal)',
+    );
+    expect(declarations).toContain('overflow-wrap: break-word');
+    expect(
+      cssDeclarationsOf(container.querySelector('table') as Element),
+    ).toContain('--_table-header-white-space: normal');
+  });
+
+  it('keeps a children-mode heading on one line under wrap and truncates it under truncate', () => {
+    const composed = (textOverflow?: 'wrap' | 'truncate') => (
+      <Table textOverflow={textOverflow}>
+        <TableHeader>
+          <TableRow>
+            <TableHeaderCell>Name</TableHeaderCell>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow>
+            <TableCell>Alice</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    );
+    // Under wrap, a children-mode table keeps each heading on one line and
+    // grows the column to fit it; a data-driven table lets the heading wrap.
+    const wrapped = render(composed());
+    const childrenTable = cssDeclarationsOf(
+      wrapped.container.querySelector('table') as Element,
+    );
+    expect(childrenTable).toContain('--_table-header-white-space: nowrap');
+    expect(headerCellDeclarations(wrapped.container)).toContain(
+      'white-space: var(--_table-header-white-space,normal)',
+    );
+    wrapped.unmount();
+    const data = render(<Table data={users} columns={columns} />);
+    expect(
+      cssDeclarationsOf(data.container.querySelector('table') as Element),
+    ).toContain('--_table-header-white-space: normal');
+    data.unmount();
+    const truncated = render(composed('truncate'));
+    expect(headerCellDeclarations(truncated.container)).toContain(
+      'white-space: nowrap',
+    );
+  });
+
+  it('truncates its heading when the table truncates', () => {
+    const {container} = render(
+      <Table data={users} columns={columns} textOverflow="truncate" />,
+    );
+    const declarations = headerCellDeclarations(container);
+    expect(declarations).toContain('white-space: nowrap');
+    expect(declarations).toContain('text-overflow: ellipsis');
   });
 
   it('applies the header font weight and color inside a table', () => {
@@ -311,5 +392,49 @@ describe('TableHeaderCell', () => {
     expect(th).toHaveClass('astryx-table-header-cell');
     expect(th).toHaveClass('custom-header');
     expect(th.style.width).toBe('10px');
+  });
+
+  it('caps a header cell at zero width only when the table truncates', () => {
+    // Under truncate, header and body cells share the zero cap, so the
+    // columns keep to the table's box. Under wrap, the header has no cap, so a
+    // children-mode table takes the width its content needs and scrolls.
+    const truncating = renderChildrenMode('truncate').container;
+    expect(headerCellDeclarations(truncating)).toContain('max-width: 0');
+    expect(
+      cssDeclarationsOf(truncating.querySelector('tbody td') as Element),
+    ).toContain('max-width: 0');
+    cleanup();
+
+    const wrapping = renderChildrenMode().container;
+    expect(headerCellDeclarations(wrapping)).not.toContain('max-width: 0');
+    expect(headerCellDeclarations(wrapping)).toContain(
+      'text-overflow: ellipsis',
+    );
+    expect(
+      cssDeclarationsOf(wrapping.querySelector('tbody td') as Element),
+    ).not.toContain('max-width: 0');
+  });
+
+  it('gives each table layout its own word-break for wrap cells', () => {
+    // A children-mode table resets an inherited word-break so a column keeps
+    // its longest word. A data-mode table lets its wrap cells break long
+    // tokens, and sets no word-break that panel or empty rows would inherit.
+    const children = renderChildrenMode().container;
+    const childrenTable = cssDeclarationsOf(
+      children.querySelector('table') as Element,
+    );
+    expect(childrenTable).toContain('word-break: normal');
+    expect(childrenTable).toContain('--_table-cell-word-break: normal');
+    cleanup();
+
+    const data = render(<Table data={users} columns={columns} />).container;
+    const dataTable = cssDeclarationsOf(data.querySelector('table') as Element);
+    expect(dataTable).toContain('--_table-cell-word-break: break-word');
+    expect(dataTable.some(d => d.startsWith('word-break:'))).toBe(false);
+    expect(
+      cssDeclarationsOf(data.querySelector('tbody td') as Element).some(d =>
+        d.startsWith('word-break: var(--_table-cell-word-break'),
+      ),
+    ).toBe(true);
   });
 });

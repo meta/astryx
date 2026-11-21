@@ -407,3 +407,126 @@ describe('discover lists icon packs before a project opts in', () => {
     TIMEOUT,
   );
 });
+
+describe('experimental icon with no icon set names discover only where it lists a pack', () => {
+  const FIND = 'astryx discover "icon set"';
+  const INSTALL =
+    'Install a package that ships an icon set, then run `astryx experimental icon use <set>`. To make your own set, read `astryx docs cli/experimental/icon-sets`.';
+
+  /** @param {string} cwd */
+  const nextOf = async cwd =>
+    JSON.parse(await run(cwd, ['experimental', 'icon', 'close', '--json'])).data
+      .next;
+
+  it(
+    'names the discover search once a saved catalog lists a pack the project could add',
+    async () => {
+      const cwd = project('app', [PACK, CHARTS]);
+      // A discover run saves the catalog the finder reads; no source is
+      // called on the finder path.
+      const found = JSON.parse(
+        await run(cwd, ['discover', 'icon set', '--json']),
+      );
+      expect(found.data.matches).toContainEqual(
+        expect.objectContaining({
+          package: '@acme/glyph-pack',
+          kind: 'icon-set',
+          experimental: true,
+        }),
+      );
+      expect(await nextOf(cwd)).toBe(
+        `Find an icon pack with \`${FIND}\`, install it, then run \`astryx experimental icon use <set>\`. To make your own set, read \`astryx docs cli/experimental/icon-sets\`.`,
+      );
+      expect(await run(cwd, ['experimental', 'icon', '--list'])).toMatch(
+        /^\[next\] Find an icon pack with `.*discover "icon set"`, install it, then run `.*experimental icon use <set>`\. To make your own set, read `.*docs cli\/experimental\/icon-sets`\.$/m,
+      );
+      expect(
+        JSON.parse(await run(cwd, ['experimental', 'icon', '--list', '--json']))
+          .data.next,
+      ).toContain(FIND);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'gives the install step where the discover search does not list the pack',
+    async () => {
+      const glyphs = {
+        ...PACK,
+        description: 'Drawings for apps',
+        contributions: [
+          {
+            kind: 'icon-set',
+            name: 'glyphs',
+            title: 'Glyphs',
+            summary: 'Acme glyphs',
+          },
+        ],
+      };
+      const cwd = project('unfound', [glyphs, CHARTS]);
+      expect((await runCli(['discover', '--json'], {cwd})).status).toBe(0);
+      const found = await runCli(['discover', 'icon set', '--json'], {cwd});
+      expect(found.stdout).not.toMatch(/"kind": "icon-set"/);
+      expect(
+        JSON.parse(await run(cwd, ['discover', 'glyphs', '--json'])).data
+          .matches,
+      ).toContainEqual(expect.objectContaining({kind: 'icon-set'}));
+      expect(await nextOf(cwd)).toBe(INSTALL);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'gives the install step before any discover run has saved a catalog',
+    async () => {
+      const cwd = project('cold', [PACK]);
+      expect(await nextOf(cwd)).toBe(INSTALL);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'gives the install step where no catalog lists a pack: no source of its own, or a catalog with no icon set',
+    async () => {
+      const noSource = path.join(tmpDir, 'no-source');
+      fs.mkdirSync(noSource, {recursive: true});
+      fs.writeFileSync(
+        path.join(noSource, 'package.json'),
+        JSON.stringify({name: 'no-source', version: '1.0.0'}),
+      );
+      expect(
+        await run(noSource, ['discover', 'icon set', '--json']),
+      ).not.toMatch(/icon-set|iconSets/);
+      expect(await nextOf(noSource)).toBe(INSTALL);
+      const text = await run(noSource, ['experimental', 'icon', 'close']);
+      expect(text).toMatch(
+        /^\[next\] Install a package that ships an icon set, /m,
+      );
+      expect(text).not.toContain('discover');
+
+      const charts = project('charts', [CHARTS]);
+      expect((await runCli(['discover', '--json'], {cwd: charts})).status).toBe(
+        0,
+      );
+      expect(await nextOf(charts)).toBe(INSTALL);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'gives the install step where the project already has the pack under an alias',
+    async () => {
+      const cwd = project('alias-next', [
+        {...PACK, aliases: ['@acme/glyphs-lite']},
+      ]);
+      const pkg = JSON.parse(
+        fs.readFileSync(path.join(cwd, 'package.json'), 'utf8'),
+      );
+      pkg.dependencies['@acme/glyphs-lite'] = '^1.0.0';
+      fs.writeFileSync(path.join(cwd, 'package.json'), JSON.stringify(pkg));
+      expect((await runCli(['discover', '--json'], {cwd})).status).toBe(0);
+      expect(await nextOf(cwd)).toBe(INSTALL);
+    },
+    TIMEOUT,
+  );
+});

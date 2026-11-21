@@ -14,7 +14,7 @@
 import {cliVersion} from '../../../foundation/release/run-context.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {AstryxError} from '../../error.mjs';
-import {loadIconSets} from '../_adapter.mjs';
+import {loadIconSets, ownReplacedDefinitions} from '../_adapter.mjs';
 import {
   REFERENCE_RE,
   checkIconLimit,
@@ -39,6 +39,9 @@ function portableSet(set, look) {
       package: set.package,
       data: set.data,
       definitions: (set.definitions ?? []).map(each => ({doc: each.doc})),
+      ...(set.definitionAliases?.size
+        ? {replacedDefinitions: ownReplacedDefinitions(set)}
+        : {}),
       ...(look ? {look} : {}),
     }),
   );

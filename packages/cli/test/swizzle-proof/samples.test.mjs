@@ -96,5 +96,8 @@ describe('swizzle proof samples', () => {
 
   it('keep a mark only for a target that has no sample', () => {
     expect(Object.keys(needsNoSample).filter(key => samples[key])).toEqual([]);
+    // Every target with a required prop renders with it, but one whose
+    // sample cannot reach its copy's own subcomponent.
+    expect(Object.keys(needsNoSample)).toEqual(['lab__TabBarMoreList']);
   });
 });

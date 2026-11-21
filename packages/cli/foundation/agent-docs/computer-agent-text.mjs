@@ -50,7 +50,7 @@ import {
   keptReason,
   managedFileState,
   removeManagedFile,
-  withHash,
+  renderSkillFile,
   writeNoFollow,
 } from './managed-skill-file.mjs';
 import {
@@ -207,7 +207,7 @@ export const STABLE_COMMANDS = Object.freeze([
  * When an agent should load the skill; the frontmatter `description`. One
  * sentence.
  */
-const SKILL_DESCRIPTION =
+export const COMPUTER_SKILL_DESCRIPTION =
   'Astryx, a design system and UI library, is available on this computer through the astryx command; use it when building or changing UI, choosing components, layout, styling or theming, working with a design system, or in any project that depends on @astryxdesign packages or mentions Astryx.';
 
 /**
@@ -266,6 +266,9 @@ export function computerAgentCommand() {
 function bodyLines(run, install) {
   return [
     'Astryx, a design system and UI library, is available on this computer.',
+    // A vague question inside a project otherwise loads this generic text and
+    // misses the project's own facts.
+    "Inside a project that has its own Astryx text (an `astryx-project` skill, or an Astryx block in AGENTS.md or CLAUDE.md), follow that text: it knows the project's version and setup.",
     'Use it when you build or change UI, pick components, or style or theme an app.',
     `Its docs, components, templates, and themes are all reachable through \`${run}\`. To make a page, run \`${run} build "<what the page is for>"\` first, as the WORKFLOW below says. Start with \`${run} search '<what you need>'\` for anything else.`,
     `Then read \`${run} component <Name>\` or \`${run} docs <topic>\`, not the package's files.`,
@@ -275,10 +278,10 @@ function bodyLines(run, install) {
     // own workflow lines.
     // A project that already installs Core gets the CLI at that version, as
     // the CLI's own hint for that state says, never a newer CLI beside it.
-    `To build UI, work in a project folder (create one if there is none). Add \`@astryxdesign/core\` and \`@astryxdesign/cli\` to a new project or one without \`@astryxdesign/core\`; to a project that already has \`@astryxdesign/core\`, add \`@astryxdesign/cli\` at the same version, pinned exactly when Core is (no \`^\` or \`~\`). Run \`${run} init\` there and follow the agent docs it writes.`,
+    `To build UI, work in a project folder (create one if there is none). In a new project, add \`@astryxdesign/core\` and \`@astryxdesign/cli\`; in an existing app that doesn't use Astryx, keep its current UI stack unless the user asks for Astryx, and then add both. To a project that already has \`@astryxdesign/core\`, add \`@astryxdesign/cli\` at the same version, pinned exactly when Core is (no \`^\` or \`~\`). In a project that has or adds Astryx, run \`${run} init\` and follow the agent docs it writes; the WORKFLOW below is for that project.`,
     WORKFLOW_TITLE,
     ...WORKFLOW_STEPS.map(step => step.replaceAll('`astryx ', `\`${run} `)),
-    `Before you deliver, re-read each file; ${SELF_CHECK_CSS}. Then build the project and deliver that build, not a description of it.`,
+    `Before you deliver an Astryx page, re-read each file; ${SELF_CHECK_CSS}. Then build the project and deliver that build, not a description of it.`,
     // A host's door is the host's to restore; only the global command has an
     // install step to name.
     ...(run === COMPUTER_COMMAND ? [computerRestoreLine(install)] : []),
@@ -296,6 +299,19 @@ export function skillCommandOf(content) {
 }
 
 /**
+ * The skill's text without its frontmatter and markers, as `astryx docs
+ * skills/astryx` prints it.
+ * @param {{command?: string, install?: string}} [options]
+ * @returns {string}
+ */
+export function renderComputerSkillBody({
+  command = computerAgentCommand(),
+  install = computerInstallStep(),
+} = {}) {
+  return bodyLines(command, install).join('\n');
+}
+
+/**
  * The full skill file.
  * @param {{command?: string, install?: string}} [options]
  * @returns {string}
@@ -304,21 +320,13 @@ export function renderComputerAgentText({
   command = computerAgentCommand(),
   install = COMPUTER_INSTALL_STEP,
 } = {}) {
-  return withHash(
-    [
-      '---',
-      'name: astryx',
-      // Quoted: the description holds `: ` and `;`, which strict YAML parsers
-      // can misread, and an agent tool that fails to parse drops the skill.
-      `description: ${JSON.stringify(SKILL_DESCRIPTION)}`,
-      '---',
-      '',
-      MARKER_START,
-      ...bodyLines(command, install),
-      MARKER_END,
-      '',
-    ].join('\n'),
-  );
+  return renderSkillFile({
+    name: 'astryx',
+    description: COMPUTER_SKILL_DESCRIPTION,
+    block: [MARKER_START, ...bodyLines(command, install), MARKER_END].join(
+      '\n',
+    ),
+  });
 }
 
 /**
@@ -368,7 +376,7 @@ function linkStateOf(at, folder) {
  * @param {string} expected
  * @returns {ComputerAgentTextState}
  */
-function copyStateOf(at, expected) {
+export function copyStateOf(at, expected) {
   /** @type {fs.Stats} */
   let stat;
   try {

@@ -1745,6 +1745,27 @@ describe('TreeList', () => {
     expect(document.activeElement).toBe(screen.getByText('Łódź').closest('li'));
   });
 
+  it('typeahead reaches a stroked label from a letter typed with AltGr (INV17)', async () => {
+    render(
+      <TreeList
+        items={[
+          {id: 'krakow', label: 'Kraków'},
+          {id: 'lublin', label: 'Lublin'},
+          {id: 'lodz', label: 'Łódź'},
+        ]}
+      />,
+    );
+    const krakow = screen.getByText('Kraków').closest('li')!;
+    krakow.focus();
+    fireEvent.keyDown(krakow, {
+      key: 'ł',
+      ctrlKey: true,
+      altKey: true,
+      modifierAltGraph: true,
+    });
+    expect(document.activeElement).toBe(screen.getByText('Łódź').closest('li'));
+  });
+
   it('typeahead puts the exact match first for a typed mark (INV17)', async () => {
     const user = userEvent.setup();
     render(

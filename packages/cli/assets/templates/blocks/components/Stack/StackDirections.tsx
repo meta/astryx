@@ -7,7 +7,7 @@ import {Token} from '@astryxdesign/core/Token';
 
 export default function StackDirections() {
   return (
-    <HStack gap={10} hAlign="center">
+    <HStack gap={10} hAlign="center" wrap="wrap">
       <HStack gap={2} vAlign="center">
         <Token label="Horizontal" />
         <Token label="Horizontal" />

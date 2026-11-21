@@ -21,6 +21,7 @@
  * @position packages/cli/foundation/integrations — shared contribution validators
  */
 
+import {discoverIntegrationSkills} from '../discovery/integration-skills.mjs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {createRequire} from 'node:module';
@@ -115,6 +116,8 @@ function sourceTree(file) {
 
 /** Stable issue code for an invalid optional agent-doc contribution. */
 export const INVALID_AGENT_DOCS = 'invalid_agent_docs';
+/** A doc's `skill` that breaks a skill rule: left out where apps write skills. */
+export const INVALID_SKILL = 'invalid_skill';
 
 /** Stable issue code for a `cliCommand` that was ignored as invalid. */
 export const INVALID_CLI_COMMAND = 'invalid_cli_command';
@@ -2282,6 +2285,16 @@ async function allLoadedIntegrationIssues(loaded) {
     loaded.__packageDir,
   );
   await runContributionChecks(loaded, issues);
+  // A skill a doc declares that breaks a skill rule is left out where apps
+  // write skills; the author sees why here, before publishing.
+  const {problems: skillProblems} = await discoverIntegrationSkills([loaded]);
+  for (const problem of skillProblems) {
+    // A doc or folder that cannot be read is the docs checks' to report.
+    if (problem.unread) continue;
+    // A note now: a new way to fail `integration check --strict` joins only
+    // in a minor release, so it is marked for the next one.
+    issues.push(issueNote(INVALID_SKILL, problem.message, {next: true}));
+  }
   return issues;
 }
 

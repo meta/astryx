@@ -11,7 +11,6 @@
 import * as fs from 'node:fs';
 import {AstryxError} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
-import {renderTokens} from '../../../foundation/doc-compiler/links.mjs';
 import {
   answeredComponentsInSource,
   componentsInSource,
@@ -26,7 +25,7 @@ import {
 /**
  * Build the `template.show` envelope for an already-resolved template.
  * @param {import('../../../foundation/discovery/template-adapter.mjs').DiscoveredTemplate} match
- * @param {{iconSets?: Parameters<typeof mapTemplateIcons>[1], components?: {ownersOf: (name: string) => readonly string[], qualified: boolean}}} [options]
+ * @param {{iconSets?: Parameters<typeof mapTemplateIcons>[1], components?: {ownersOf: (name: string) => readonly string[], qualified: boolean, documents?: (pkg: string, name: string) => boolean}}} [options]
  *   `iconSets`: the project's icon sets; without them the template's icons
  *   are unchanged. `components`: how `astryx component` reads the
  *   project's components; without it `componentsToRead` is empty.
@@ -64,9 +63,11 @@ export function templateShow(
     package: pkgOf(match),
     data: {
       template: match.dirName,
-      description: renderTokens(match.description),
+      description: match.description,
       type: match.type,
-      components: componentsInSource(source),
+      // With no set, the copy is the filled template: its components are the
+      // template's own, read with each placeholder as the icon it draws.
+      components: componentsInSource(icons ? source : withMedia),
       componentsToRead: answeredComponentsInSource(source, components),
       source,
       demoMediaReplaced,

@@ -30,7 +30,8 @@ const READER_WIDTHS = [390, 800, 1280];
  */
 const MOST_SCALE = 2 ** 0.25;
 
-const PAGE = `import {ResponsiveContainer, LineChart, Line, XAxis, YAxis, Legend, BarChart, Bar, AreaChart, Area} from 'recharts';
+const PAGE = `import '@astryxdesign/core/astryx.css';
+import {ResponsiveContainer, LineChart, Line, XAxis, YAxis, Legend, BarChart, Bar, AreaChart, Area} from 'recharts';
 const data = [
   {m: 'Jan', a: 40, b: 24, c: 10}, {m: 'Feb', a: 30, b: 13, c: 22}, {m: 'Mar', a: 20, b: 58, c: 29},
   {m: 'Apr', a: 27, b: 39, c: 20}, {m: 'May', a: 18, b: 48, c: 21}, {m: 'Jun', a: 23, b: 38, c: 25},
@@ -77,7 +78,7 @@ describe.runIf(BROWSER_STEP)('a rendered chart at a reader’s width', () => {
   let browser;
 
   beforeAll(async () => {
-    dir = makeLinkedFixture('astryx-render-charts-browser-', ['react', 'react-dom', 'recharts']);
+    dir = makeLinkedFixture('astryx-render-charts-browser-', ['@astryxdesign', 'react', 'react-dom', 'recharts']);
     fs.writeFileSync(path.join(dir, 'charts.tsx'), PAGE);
     await render('charts.tsx', {cwd: dir});
     const executablePath = chromium.executablePath();

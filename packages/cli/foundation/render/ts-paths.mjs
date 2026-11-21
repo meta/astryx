@@ -17,7 +17,8 @@
  *
  * @position foundation/render — used by page-worker.mjs, embedded-imports.mjs,
  *   the theme build's module loader (api/theme/build/build.mjs), and Doctor's
- *   icon-imports scan (api/doctor/_adapter.mjs)
+ *   icon-imports scan (api/doctor/_adapter.mjs), and the Core prop check of
+ *   doctor and export (discovery/unknown-core-props.mjs)
  */
 
 import * as fs from 'node:fs';
@@ -142,6 +143,7 @@ function extendedFile(spec, fromDir) {
  * @property {Record<string, unknown>} options - Compiler options, the extending config's winning key by key.
  * @property {string} baseUrlDir - The folder of the config that writes `baseUrl`.
  * @property {string} pathsDir - The folder of the config that writes `paths`.
+ * @property {string} typeRootsDir - The folder of the config that writes `typeRoots`.
  * @property {string | null} pathsFile - The config that writes `paths`, if any does.
  * @property {{list: unknown[], dir: string} | null} files - `files`, from the nearest config that writes it, with that config's folder.
  * @property {{list: unknown[], dir: string} | null} include - `include`, likewise.
@@ -165,7 +167,7 @@ function readConfig(file, seen = new Set()) {
   /** @type {Record<string, unknown>} */
   const options = path.basename(file) === 'jsconfig.json' ? {allowJs: true} : {};
   /** @type {ReadConfig} */
-  const config = {options, baseUrlDir: dir, pathsDir: dir, pathsFile: null, files: null, include: null, exclude: null, references: []};
+  const config = {options, baseUrlDir: dir, pathsDir: dir, typeRootsDir: dir, pathsFile: null, files: null, include: null, exclude: null, references: []};
   const bases = Array.isArray(json.extends) ? json.extends : json.extends === undefined ? [] : [json.extends];
   for (const spec of bases) {
     const baseFile = extendedFile(spec, dir);
@@ -173,6 +175,7 @@ function readConfig(file, seen = new Set()) {
     if (!base) continue;
     Object.assign(config.options, base.options);
     if ('baseUrl' in base.options) config.baseUrlDir = base.baseUrlDir;
+    if ('typeRoots' in base.options) config.typeRootsDir = base.typeRootsDir;
     if ('paths' in base.options) {
       config.pathsDir = base.pathsDir;
       config.pathsFile = base.pathsFile;
@@ -183,6 +186,7 @@ function readConfig(file, seen = new Set()) {
   for (const [key, value] of Object.entries(own)) {
     config.options[key] = value;
     if (key === 'baseUrl') config.baseUrlDir = dir;
+    if (key === 'typeRoots') config.typeRootsDir = dir;
     if (key === 'paths') {
       config.pathsDir = dir;
       config.pathsFile = file;
@@ -335,6 +339,62 @@ function configFor(file) {
 }
 
 /**
+ * The folders and files a file's TypeScript program reads besides what it
+ * imports, from the config TypeScript reads for the file (see configFor):
+ * each `files` entry, each `include` pattern up to its first wildcard part
+ * (the config's folder when it writes neither), and each
+ * `compilerOptions.typeRoots` folder. Null when no config applies.
+ * @param {string} file absolute
+ * @returns {string[] | null}
+ */
+export function programRootsFor(file) {
+  const found = configFor(file);
+  if (!found) return null;
+  const {config} = found;
+  const configDir = path.dirname(found.file);
+  /** @type {string[]} */
+  const roots = [];
+  const files = config.files;
+  for (const entry of files?.list ?? []) {
+    if (typeof entry === 'string') roots.push(configPath(entry, files?.dir ?? configDir, configDir));
+  }
+  const include = config.include ?? (files ? null : {list: ['**/*'], dir: configDir});
+  for (const spec of include?.list ?? []) {
+    if (typeof spec !== 'string') continue;
+    const parts = configPath(spec, include?.dir ?? configDir, configDir).split(path.sep);
+    const wild = parts.findIndex(part => /[*?]/.test(part));
+    roots.push(wild === -1 ? parts.join(path.sep) : parts.slice(0, wild).join(path.sep) || path.sep);
+  }
+  const {typeRoots} = config.options;
+  for (const root of Array.isArray(typeRoots) ? typeRoots : []) {
+    if (typeof root === 'string') roots.push(configPath(root, config.typeRootsDir, configDir));
+  }
+  return roots;
+}
+
+/**
+ * The compiler options of the config TypeScript reads for a file (see
+ * configFor), through its `extends`, with `typeRoots` resolved to absolute
+ * folders, and that config's path, so files that share a config can share
+ * one program. Null when no config applies.
+ * @param {string} file absolute
+ * @returns {{file: string, options: Record<string, unknown>} | null}
+ */
+export function compilerOptionsFor(file) {
+  const found = configFor(file);
+  if (!found) return null;
+  const {config} = found;
+  const configDir = path.dirname(found.file);
+  const options = {...config.options};
+  if (Array.isArray(options.typeRoots)) {
+    options.typeRoots = options.typeRoots
+      .filter(root => typeof root === 'string')
+      .map(root => configPath(root, config.typeRootsDir, configDir));
+  }
+  return {file: found.file, options};
+}
+
+/**
  * The path patterns that apply to a file, which need not exist yet: those of
  * the config TypeScript reads for it (see configFor).
  * @param {string} file absolute
@@ -399,6 +459,19 @@ export function matchPath(patterns, spec) {
 export const candidatesOf = match => match.pattern.targets.map(t => t.replace('*', match.capture));
 
 /**
+ * The TypeScript sources a path with a JavaScript extension stands for, in
+ * TypeScript's order (`helper.js` for helper.ts, then helper.tsx); none for
+ * any other path. Works on platform and `/`-separated paths alike.
+ * @param {string} file
+ * @returns {string[]}
+ */
+export function typeScriptSourcesOf(file) {
+  const ext = path.posix.extname(file);
+  const stem = file.slice(0, file.length - ext.length);
+  return (TS_SOURCES[ext] ?? []).map(x => stem + x);
+}
+
+/**
  * The file a candidate path stands for: itself, the TypeScript source its
  * JavaScript extension names (TS_SOURCES), itself with an extension, or its
  * folder's index; null when none exists.
@@ -415,11 +488,7 @@ export function existingFile(candidate, extensions = EXTENSIONS) {
     }
   };
   if (isFile(candidate)) return candidate;
-  // As TypeScript does, a JavaScript name stands for its TypeScript source:
-  // `./helper.js` for helper.ts or helper.tsx.
-  const jsExt = path.extname(candidate);
-  const stem = candidate.slice(0, candidate.length - jsExt.length);
-  for (const ext of TS_SOURCES[jsExt] ?? []) if (isFile(stem + ext)) return stem + ext;
+  for (const source of typeScriptSourcesOf(candidate)) if (isFile(source)) return source;
   for (const ext of extensions) if (isFile(candidate + ext)) return candidate + ext;
   for (const ext of extensions) if (isFile(path.join(candidate, `index${ext}`))) return path.join(candidate, `index${ext}`);
   return null;
