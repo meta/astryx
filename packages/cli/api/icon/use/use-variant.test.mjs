@@ -236,7 +236,7 @@ describe('the project variant in astryx.config and icon --list', () => {
   it('refuses a variant without the sets it is the look of', async () => {
     const dir = project({config: {experimental: {iconVariant: 'solid'}}});
     await expect(Project.load(dir)).rejects.toThrow(
-      /experimental\.iconVariant.*iconVariant is the look of the icon sets experimental\.iconSet names/su,
+      /experimental\.iconVariant.*iconVariant is the variant of the icon sets experimental\.iconSet names/su,
     );
   });
 
