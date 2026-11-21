@@ -192,6 +192,51 @@ describe('the command the words point at', () => {
     expect(far?.suggestions.map(s => s.name)).toEqual(['astryx help']);
   });
 
+  it("keeps what the word gets without a script after the project's own script", async () => {
+    // `doc` is a typo of `docs`: a project's `doc` script comes first, and
+    // the typo's command still follows it.
+    /** @param {string} word */
+    const projectScript = async word => (word === 'doc' ? 'npm run doc' : null);
+    const a = await unknownCommandAnswer(program(), ['doc'], {
+      findEntry: entries,
+      projectScript,
+    });
+    expect(a?.suggestions.map(s => s.name)).toEqual(['npm run doc', 'docs']);
+  });
+
+  it('keeps the program options the reader typed in the help it falls back to', async () => {
+    expect(await names(['frobnicate', '--json'])).toEqual([
+      'astryx help --json',
+    ]);
+    expect(await names(['--json', 'frobnicate'])).toEqual([
+      'astryx --json help',
+    ]);
+    // An option the program does not take is left out.
+    expect(await names(['frobnicate', '--bogus'])).toEqual(['astryx help']);
+    // After `--`, every word is a word: none is kept as an option, whether
+    // the `--` comes after the word or before it.
+    expect(await names(['frobnicate', '--', '--json'])).toEqual([
+      'astryx help',
+    ]);
+    expect(await names(['--', 'frobnicate', '--json'])).toEqual([
+      'astryx help',
+    ]);
+  });
+
+  it("keeps the program options the reader typed in a command's help", async () => {
+    // A group with no list: its help.
+    expect(await names(['integrations', 'list', '--json'])).toEqual([
+      'astryx integration --help --json',
+    ]);
+    expect(await names(['--', 'integrations', 'list', '--json'])).toEqual([
+      'astryx integration --help',
+    ]);
+    // A run of the command itself reads the words after `--` as it did.
+    expect(await names(['migrate', '--', '--from', '0.6.0'])).toEqual([
+      'astryx upgrade --from 0.6.0',
+    ]);
+  });
+
   it('falls back to the names a typo of the word could be, else the help', async () => {
     expect(await names(['componet'])).toEqual(['component']);
     const far = await unknownCommandAnswer(program(), ['frobnicate'], {
@@ -320,13 +365,19 @@ describe('an icon word', () => {
       'astryx docs icons',
     ]);
     expect(await names(['icon', '--json', 'add', 'trash'], on)).toEqual([
-      'astryx experimental icon add --help',
+      'astryx experimental icon add --help --json',
       'astryx docs icons --json',
     ]);
     // With no words to look for, the guide comes first, then the finder's help.
     expect(await names(['icon'], on)).toEqual([
       'astryx docs icons',
       'astryx experimental icon --help',
+    ]);
+    // A help run keeps the program options the reader typed, as the guide
+    // does.
+    expect(await names(['icons', '--json'], on)).toEqual([
+      'astryx docs icons --json',
+      'astryx experimental icon --help --json',
     ]);
   });
 });
@@ -608,11 +659,37 @@ describe('the CLI', () => {
     }
   });
 
+  it('keeps the program options the reader typed in the help of a command that needs words', async () => {
+    // `theme eject` needs a slug, so `eject` is named by its help.
+    const after = JSON.parse((await runCli(['eject', '--json'])).stdout);
+    expect(
+      after.suggestions.map((/** @type {{name: string}} */ s) => s.name),
+    ).toEqual(['astryx theme eject --help --json']);
+    const before = JSON.parse((await runCli(['--json', 'eject'])).stdout);
+    expect(
+      before.suggestions.map((/** @type {{name: string}} */ s) => s.name),
+    ).toEqual(['astryx --json theme eject --help']);
+  });
+
+  it("keeps the program options the reader typed in the help named in place of a typo's command, beside an option the program does not take", async () => {
+    /** @param {string[]} words */
+    const suggested = async words =>
+      JSON.parse((await runCli(words)).stdout).suggestions.map(
+        (/** @type {{name: string}} */ s) => s.name,
+      );
+    const after = await suggested(['compnent', '--bogus', '--json']);
+    expect(after).toHaveLength(1);
+    expect(after[0]).toMatch(/ help --json$/);
+    const before = await suggested(['--json', 'compnent', '--bogus']);
+    expect(before).toHaveLength(1);
+    expect(before[0]).toMatch(/ --json help$/);
+  });
+
   it('names the help, not a command that writes files, when nothing fits', async () => {
     const {status, stdout} = await runCli(['--json', 'frobnicate']);
     expect(status).toBe(1);
     expect(JSON.parse(stdout).suggestions).toEqual([
-      {name: 'astryx help', reason: 'every command, with what it does'},
+      {name: 'astryx --json help', reason: 'every command, with what it does'},
     ]);
   });
 
@@ -624,7 +701,7 @@ describe('the CLI', () => {
         JSON.stringify({
           name: 'app',
           private: true,
-          scripts: {test: 'vitest', dev: 'vite'},
+          scripts: {test: 'vitest', dev: 'vite', doc: 'typedoc'},
           dependencies: {'@astryxdesign/core': '*'},
         }),
       );
@@ -636,7 +713,10 @@ describe('the CLI', () => {
       expect(test.status).toBe(1);
       expect(JSON.parse(test.stdout).suggestions).toEqual([
         {name: 'pnpm run test', reason: "the project's own test script"},
-        {name: 'astryx help', reason: 'every command, with what it does'},
+        {
+          name: 'astryx --json help',
+          reason: 'every command, with what it does',
+        },
       ]);
       const dev = await runCli(['dev', '--port', '3000'], tmp);
       expect(dev.status).toBe(1);
@@ -644,7 +724,26 @@ describe('the CLI', () => {
       const lint = JSON.parse((await runCli(['--json', 'lint'], tmp)).stdout);
       expect(
         lint.suggestions.map((/** @type {{name: string}} */ s) => s.name),
-      ).toEqual(['astryx help']);
+      ).toEqual(['astryx --json help']);
+      // A script whose name is a typo of a command keeps that command after
+      // it; the stray-option answer prints the runs, then the help.
+      const doc = JSON.parse((await runCli(['--json', 'doc'], tmp)).stdout);
+      expect(
+        doc.suggestions.map((/** @type {{name: string}} */ s) => s.name),
+      ).toEqual(['pnpm run doc', 'docs']);
+      const stray = await runCli(['doc', '--bogus'], tmp);
+      expect(stray.stderr).toMatch(/^Run: pnpm run doc$/m);
+      expect(stray.stderr).toMatch(/^Run: .* help$/m);
+      // The help in place of the typo's names keeps the options typed.
+      const strayJson = JSON.parse(
+        (await runCli(['--json', 'doc', '--bogus'], tmp)).stdout,
+      );
+      const strayNames = strayJson.suggestions.map(
+        (/** @type {{name: string}} */ s) => s.name,
+      );
+      expect(strayNames[0]).toBe('pnpm run doc');
+      expect(strayNames[1]).toMatch(/ --json help$/);
+      expect(strayNames).toHaveLength(2);
     } finally {
       fs.rmSync(tmp, {recursive: true, force: true});
     }
