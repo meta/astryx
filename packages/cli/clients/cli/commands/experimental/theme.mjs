@@ -2516,16 +2516,20 @@ export function registerExperimentalTheme(group, program) {
           ? cliError(
               `--section limits the sheet to one section, and was given ${flagValues('section').length} (${flagValues('section').join(', ')}); give one, or none for the whole sheet.`,
               {
-                suggestions: [
-                  {
-                    // The first section given that `show` takes, else the
-                    // whole sheet.
-                    name: cmd(
-                      `${EDITOR} show ${name}${(sec => (sec ? ` --section ${sec}` : ''))(flagValues('section').find(v => showSections().includes(v)))}`,
-                    ),
-                    reason: 'do this instead',
-                  },
-                ],
+                // (Beside --on no other show is offered: a show without
+                // --on writes the pages.)
+                suggestions: o.on
+                  ? []
+                  : [
+                      {
+                        // The first section given that `show` takes, else the
+                        // whole sheet.
+                        name: cmd(
+                          `${EDITOR} show ${name}${(sec => (sec ? ` --section ${sec}` : ''))(flagValues('section').find(v => showSections().includes(v)))}`,
+                        ),
+                        reason: 'do this instead',
+                      },
+                    ],
                 code: ERROR_CODES.ERR_INVALID_ARGUMENT,
               },
             )

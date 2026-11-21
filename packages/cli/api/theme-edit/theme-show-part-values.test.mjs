@@ -211,11 +211,11 @@ describe('show --on: what one part of a theme shows', () => {
     const plain = valueOf(base, 'padding-top') ?? valueOf(base, 'padding');
     expect(plain).toBeDefined();
     expect(pad.value).not.toBe(plain.value);
-    // A dial that writes a property on the part (corners writes the card's
-    // border-radius) is named as the dial too.
+    // A rule a dial on the part writes (corners writes the card's
+    // border-radius) reads as the part's: which dial is not shown yet.
     expect(valueOf(r, 'border-radius')).toMatchObject({
       source: 'theme',
-      via: 'dial',
+      via: 'part',
     });
     // A token the dials leave alone stays the base's.
     expect(valueOf(r, 'background-color')).toMatchObject({
@@ -480,6 +480,16 @@ describe('show --on: what one part of a theme shows', () => {
     for (const args of [
       ['show', '--theme', 'neutral', '--on', 'card'],
       ['show', 'neutral', '--on', 'card', '--zz'],
+      [
+        'show',
+        'neutral',
+        '--on',
+        'card',
+        '--section',
+        'pages',
+        '--section',
+        'inputs',
+      ],
     ]) {
       const out = await runCli(
         ['--json', 'experimental', 'theme', 'editor', ...args],

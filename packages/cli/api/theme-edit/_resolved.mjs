@@ -228,8 +228,7 @@ async function loadNamedTheme(ctx, cwd, name) {
         : st.on === part || (FAMILIES[st.on] ?? []).includes(part);
     // A rule the theme writes on a part comes from a property setting on
     // it, matched by the rule key the build writes for that setting (its
-    // `--when` and `--state` placed the way the build places them), else
-    // from a dial on the part.
+    // `--when` and `--state` placed the way the build places them).
     /** @type {NonNullable<LoadedTheme['settingAt']>} */
     const settingAt = (property, part, when, state) => {
       const t = ctx.project.target.get(part);
@@ -298,21 +297,11 @@ async function loadNamedTheme(ctx, cwd, name) {
         if (mine.some(st => st.source === 'dial')) return 'dial';
         return onPart ? 'part' : 'token';
       },
-      // A rule the theme writes on a part comes from a property setting
-      // on it, else from a dial on the part.
       settingAt,
-      // (A whole-theme dial is not credited with a part rule: telling the
-      // rules a dial writes from the ones another setting copies there is
-      // not shown yet, so such a rule reads `part`.)
-      propertyVia: (property, part, when, state) =>
-        settingAt(property, part, when, state)
-          ? 'part'
-          : data.settings.some(
-                st =>
-                  st.source === 'dial' && st.on != null && reaches(st, part),
-              )
-            ? 'dial'
-            : 'part',
+      // (A part rule no property setting on the part wrote reads `part`:
+      // which dial, or which other setting, wrote it there is not shown
+      // yet.)
+      propertyVia: () => 'part',
     };
   }
   const found = await findProjectTheme(cwd, name);
