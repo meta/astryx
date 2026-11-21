@@ -105,8 +105,10 @@ function Filters({
   hasLightDismiss,
   hasEscapeDismiss,
   hasCloseButton,
+  isModal,
 }: {
   presentation?: PopoverPresentation;
+  isModal?: boolean;
   onOpenChange?: (isOpen: boolean) => void;
   hasLightDismiss?: boolean;
   hasEscapeDismiss?: boolean;
@@ -120,6 +122,7 @@ function Filters({
       hasLightDismiss={hasLightDismiss}
       hasEscapeDismiss={hasEscapeDismiss}
       hasCloseButton={hasCloseButton}
+      isModal={isModal}
       content={<button type="button">Apply</button>}>
       <Button label="Filter">Filter</Button>
     </Popover>
@@ -208,6 +211,18 @@ describe('Popover presentation', () => {
       expect(observed.length).toBeGreaterThan(0);
     });
   });
+
+  it.each([[true], [false]])(
+    'presents the modal sheet when isModal is %s',
+    async isModal => {
+      render(<Filters presentation="bottom-sheet" isModal={isModal} />);
+      await tapTrigger();
+      await vi.waitFor(() => {
+        expect(sheetDialog()).toHaveAttribute('open');
+      });
+      expect(HTMLDialogElement.prototype.showModal).toHaveBeenCalled();
+    },
+  );
 
   it('reads the compact-touch query only for an adaptive popover', async () => {
     const {unmount} = render(<Filters />);

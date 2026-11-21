@@ -3,7 +3,9 @@
 /**
  * @file The colors a palette derives beyond its own families: the hue seeds
  * and start stops match the official neutral theme, the seeds follow the
- * accent's strength, and a set that draws two hues alike is refused.
+ * accent's strength, and every derived set is written: a color drawn like
+ * an earlier one moves to the nearest shade apart, and a limit no shade
+ * meets is a note.
  */
 
 import fs from 'node:fs';
@@ -13,6 +15,7 @@ import {describe, expect, it} from 'vitest';
 import {
   CATEGORY_HUES,
   CATEGORY_STOPS,
+  CHART_SERIES,
   HUE_SEEDS,
   cvdClashes,
   deriveLookColors,
@@ -125,15 +128,20 @@ describe('derived look colors', () => {
     });
     expect(r.badges).toBe('derived');
     expect(r.chart).toBe('derived');
-    expect(r.unreadable).toEqual([]);
     for (const h of CATEGORY_HUES)
       for (const role of ['background', 'border', 'icon', 'text'])
         expect(r.tokens[`--color-${role}-${h}`], `${role} ${h}`).toBeDefined();
     expect(r.tokens['--color-data-categorical-indigo']).toBeDefined();
     expect(r.tokens['--color-data-gray-5']?.family).toBe('neutral');
+    // A set whose colors already stand apart and read moves none of them.
+    expect(r.limits).toEqual([]);
+    expect(r.moved).toEqual([]);
+    expect(r.alike).toBe(false);
+    expect(r.unread).toBe(false);
   });
 
-  it('refuses a set that draws two hues alike, and writes none of it', () => {
+  it('writes every category color of a look that draws hues alike, moving each to the nearest tint apart', () => {
+    // Vibrancy 0 draws every hue gray.
     const {palette, stops} = grow(lookSeeds('#7c3aed'), 0);
     const r = deriveLookColors({
       palette,
@@ -142,11 +150,129 @@ describe('derived look colors', () => {
       text: m => ink[m],
       grounds: m => page[m],
     });
-    expect(r.badges).toBe('merged');
-    expect(r.merged.length).toBeGreaterThan(0);
+    expect(r.badges).toBe('derived');
+    for (const h of CATEGORY_HUES)
+      for (const role of ['background', 'border', 'icon', 'text'])
+        expect(r.tokens[`--color-${role}-${h}`], `${role} ${h}`).toBeDefined();
     expect(
-      Object.keys(r.tokens).some(k => k.startsWith('--color-background-')),
-    ).toBe(false);
+      r.moved.some(n =>
+        /^--color-background-\w+ takes a (?:deeper|paler) tint in (?:light|dark), apart from \w+$/.test(
+          n,
+        ),
+      ),
+    ).toBe(true);
+    // Each pair is apart, or a note names it.
+    for (const m of /** @type {const} */ (['light', 'dark']))
+      for (const [i, a] of CATEGORY_HUES.entries())
+        for (const b of CATEGORY_HUES.slice(i + 1)) {
+          const fill = (/** @type {string} */ h) =>
+            r.tokens[`--color-background-${h}`][m].color;
+          const text = (/** @type {string} */ h) =>
+            r.tokens[`--color-text-${h}`][m].color;
+          // A card tint stands apart at ΔE 1.5; a badge, by its fill or its text
+          // at ΔE 2.
+          const tint = perceptualDelta(fill(a), fill(b));
+          const apart =
+            tint >= 1.5 &&
+            (tint >= 2 || perceptualDelta(text(a), text(b)) >= 2);
+          const noted = r.limits.some(
+            n =>
+              n.startsWith(`--color-background-${b} is drawn like `) &&
+              n.includes(` in ${m}:`),
+          );
+          expect(apart || noted, `${a} and ${b} (${m})`).toBe(true);
+        }
+  });
+
+  it('writes every chart series, moving one drawn like an earlier one to the nearest shade apart', () => {
+    // A quiet brown look: at vibrancy 40 its orange and brown series come
+    // out alike in dark.
+    const set = generatePaletteSet({
+      recipe: 'astryx-oklch-v2',
+      vibrancy: 40,
+      families: [
+        {id: 'neutral', seed: '#7a5c3e', kind: 'neutral'},
+        ...Object.entries(lookSeeds('#c4a073', '#7a5c3e')).map(
+          ([id, seed]) => ({id, seed}),
+        ),
+      ],
+    });
+    const stops = Object.keys(set.families[0].light.colors).map(Number);
+    const palette = Object.fromEntries(
+      set.families.map(f => [
+        f.id,
+        {light: f.light.colors, dark: f.dark.colors},
+      ]),
+    );
+    const r = deriveLookColors({
+      palette,
+      stops,
+      modes: ['light', 'dark'],
+      text: m => ink[m],
+      grounds: m => page[m],
+      accent: '#c4a073',
+    });
+    expect(r.chart).toBe('derived');
+    expect(r.moved.some(n => / shade in dark, apart from /.test(n))).toBe(true);
+    for (const m of /** @type {const} */ (['light', 'dark'])) {
+      const series = CHART_SERIES.map(
+        h => r.tokens[`--color-data-categorical-${h}`]?.[m].color,
+      );
+      for (const c of series) expect(c, m).toBeDefined();
+      for (let a = 0; a < series.length; a++)
+        for (let b = a + 1; b < series.length; b++)
+          expect(
+            perceptualDelta(String(series[a]), String(series[b])),
+            `${CHART_SERIES[a]} and ${CHART_SERIES[b]} (${m})`,
+          ).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('writes a chart series it cannot set apart or make readable, and notes it', () => {
+    // Two stops; brown's ramp is orange's single shade, and teal's is too
+    // pale to read.
+    const stops = [40, 50];
+    /** @param {string} a @param {string} b */
+    const ramp = (a, b) => ({light: {40: a, 50: b}, dark: {40: a, 50: b}});
+    const shades = {
+      blue: ['#1f4fb0', '#2a5cc4'],
+      orange: ['#a8551a', '#a8551a'],
+      purple: ['#6a2aa0', '#7634ae'],
+      green: ['#2c6e2f', '#357a38'],
+      pink: ['#a0255e', '#ad2f69'],
+      cyan: ['#0e6274', '#156c7f'],
+      red: ['#a8242b', '#b42d34'],
+      teal: ['#e6eeec', '#f0f4f3'],
+      brown: ['#a8551a', '#a8551a'],
+      indigo: ['#3d43b8', '#4850c4'],
+    };
+    const palette = Object.fromEntries(
+      Object.entries(shades).map(([h, [a, b]]) => [h, ramp(a, b)]),
+    );
+    const r = deriveLookColors({
+      palette,
+      stops,
+      modes: ['light'],
+      text: m => ink[m],
+      grounds: m => page[m],
+    });
+    expect(r.chart).toBe('derived');
+    expect(r.alike).toBe(true);
+    expect(r.unread).toBe(true);
+    for (const h of CHART_SERIES)
+      expect(r.tokens[`--color-data-categorical-${h}`], h).toBeDefined();
+    expect(
+      r.limits.some(n =>
+        /^--color-data-categorical-brown is drawn like orange in light/.test(n),
+      ),
+    ).toBe(true);
+    expect(
+      r.limits.filter(n =>
+        /^--color-data-categorical-teal reads at only [\d.]+:1 in light/.test(
+          n,
+        ),
+      ),
+    ).toHaveLength(1);
   });
 
   it('leaves a token the theme sets by hand', () => {
@@ -222,6 +348,122 @@ describe('derived look colors', () => {
     expect(
       perceptualDelta(apart.tokens['--color-info'].light.color, taken),
     ).toBeGreaterThanOrEqual(10);
+  });
+
+  it('never leaves a card tint on the page unnoted', () => {
+    const grounds = {
+      light: ['#f1f1f1', '#ffffff'],
+      dark: ['#1b1b1b', '#242424'],
+    };
+    for (const accent of ['#8a8f94', '#7c3aed'])
+      for (const vibrancy of [0, 5]) {
+        const {palette, stops} = grow(lookSeeds(accent), vibrancy);
+        const r = deriveLookColors({
+          palette,
+          stops,
+          modes: ['light', 'dark'],
+          text: m => ink[m],
+          grounds: m => grounds[m],
+        });
+        for (const m of /** @type {const} */ (['light', 'dark']))
+          for (const h of CATEGORY_HUES) {
+            const fill = r.tokens[`--color-background-${h}`][m].color;
+            const onPage = grounds[m].some(g => perceptualDelta(g, fill) < 1.5);
+            const noted = r.limits.some(
+              n =>
+                n.startsWith(`--color-background-${h} is drawn like `) &&
+                n.includes(` in ${m}:`),
+            );
+            expect(
+              !onPage || noted,
+              `${h} (${m}, ${accent} at ${vibrancy})`,
+            ).toBe(true);
+          }
+      }
+  });
+
+  it('keeps the badge fills of a very quiet look apart, or names the ones it cannot', () => {
+    for (const vibrancy of [5, 10]) {
+      const {palette, stops} = grow(lookSeeds('#7c3aed'), vibrancy);
+      const r = deriveLookColors({
+        palette,
+        stops,
+        modes: ['light', 'dark'],
+        text: m => ink[m],
+        grounds: m => page[m],
+      });
+      for (const m of /** @type {const} */ (['light', 'dark']))
+        for (const [i, a] of CATEGORY_HUES.entries())
+          for (const b of CATEGORY_HUES.slice(i + 1)) {
+            const fill = (/** @type {string} */ h) =>
+              r.tokens[`--color-background-${h}`][m].color;
+            const text = (/** @type {string} */ h) =>
+              r.tokens[`--color-text-${h}`][m].color;
+            // A card tint stands apart at ΔE 1.5; a badge, by its fill or its text
+            // at ΔE 2.
+            const tint = perceptualDelta(fill(a), fill(b));
+            const apart =
+              tint >= 1.5 &&
+              (tint >= 2 || perceptualDelta(text(a), text(b)) >= 2);
+            const noted = r.limits.some(
+              n =>
+                n.startsWith(`--color-background-${b} is drawn like `) &&
+                n.includes(` in ${m}:`),
+            );
+            expect(apart || noted, `${a} and ${b} (${m}, ${vibrancy})`).toBe(
+              true,
+            );
+          }
+    }
+  });
+
+  it('keeps the base colors of a status role whose text reads at no shade, with a note', () => {
+    // A pale family: no fill stands out from the page, and no text reads.
+    const stops = [10, 30, 50, 70, 90];
+    const pale = Object.fromEntries(stops.map(s => [s, '#d0d0d0']));
+    const white = {stop: 100, color: '#ffffff', family: 'white'};
+    const black = {stop: 0, color: '#000000', family: 'black'};
+    const r = deriveStatusColors({
+      palette: {info: {light: pale, dark: pale}},
+      stops,
+      modes: ['light'],
+      roles: ['info'],
+      grounds: m => page[m],
+      inks: () => [white, black],
+      accent: () => null,
+    });
+    expect(r.roles).toEqual({});
+    expect(Object.keys(r.tokens)).toEqual([]);
+    expect(r.short).toEqual(['info']);
+    expect(r.why).toEqual([
+      "info keeps the base theme's colors: no shade of its family reads",
+    ]);
+  });
+
+  it('writes a status role whose fill gives up a limit, and notes it', () => {
+    // A mid family: its fill reads with white text, but sits on the accent.
+    const stops = [10, 30, 50, 70, 90];
+    const mid = {
+      10: '#0b1f4d',
+      30: '#1d3f8f',
+      50: '#2f5fd0',
+      70: '#8fb0f0',
+      90: '#e3ecfc',
+    };
+    const white = {stop: 100, color: '#ffffff', family: 'white'};
+    const black = {stop: 0, color: '#000000', family: 'black'};
+    const r = deriveStatusColors({
+      palette: {info: {light: mid, dark: mid}},
+      stops,
+      modes: ['light'],
+      roles: ['info'],
+      grounds: m => page[m],
+      inks: () => [white, black],
+      accent: () => '#2f5fd0',
+    });
+    expect(r.roles).toEqual({info: 'derived'});
+    expect(r.tokens['--color-info']).toBeDefined();
+    expect(r.why.join(' ')).not.toMatch(/keeps the base theme's colors/);
   });
 
   it("keys the hues to the look's accent and neutral, not only its strength", () => {

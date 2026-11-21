@@ -1507,9 +1507,28 @@ export function apply(ctx, slug, d, st) {
     d,
     st.thing,
     st.value,
-    {on: st.on, when: st.when, state: st.state, mode: st.mode, only: st.only},
+    {
+      on: st.on,
+      when: st.when,
+      state: st.state,
+      mode: st.mode,
+      only: st.only,
+      // A box shorthand `set` writes as its sides is checked the same way.
+      ...(unset ? {} : {sides: true}),
+    },
     unset,
   );
+  // The sides replace the typed shorthand and each its own earlier entry,
+  // as set writes them.
+  if (!unset && s.sides?.length) {
+    const typed = keyOf(s);
+    d.settings = d.settings.filter(x => keyOf(x) !== typed);
+    for (const side of s.sides) {
+      d.settings = d.settings.filter(x => keyOf(x) !== keyOf(side));
+      d.settings.push(side);
+    }
+    return;
+  }
   if (!unset && s.thing === 'mode') {
     d.mode = /** @type {'both' | 'light-only' | 'dark-only'} */ (s.value);
     return;
