@@ -103,8 +103,31 @@ describe('ProgressBar', () => {
 
   it('forwards ref to outer container', () => {
     const ref = {current: null as HTMLDivElement | null};
-    render(<ProgressBar ref={ref} value={50} label="Test" />);
+    const {container} = render(
+      <ProgressBar ref={ref} value={50} label="Test" />,
+    );
     expect(ref.current).toBeInstanceOf(HTMLDivElement);
+    expect(ref.current).toBe(container.firstElementChild);
+  });
+
+  it('puts className, style, and DOM props on the root after its own classes', () => {
+    const onClick = vi.fn();
+    const {container} = render(
+      <ProgressBar
+        value={50}
+        label="Test"
+        className="caller-class"
+        style={{marginBlockStart: '12px'}}
+        id="upload-progress"
+        onClick={onClick}
+      />,
+    );
+    const root = container.firstElementChild as HTMLElement;
+    expect(root).toHaveClass('astryx-progress-bar', 'caller-class');
+    expect(root.style.marginBlockStart).toBe('12px');
+    expect(root).toHaveAttribute('id', 'upload-progress');
+    root.click();
+    expect(onClick).toHaveBeenCalledTimes(1);
   });
 
   it('keeps its reflected variant when a caller passes its own data-variant', () => {
@@ -147,7 +170,9 @@ describe('ProgressBar', () => {
 
   it('renders at fixed 8px track height', () => {
     render(<ProgressBar value={50} label="Progress" />);
-    expect(screen.getByRole('progressbar')).toBeInTheDocument();
+    expect(getComputedStyle(screen.getByRole('progressbar')).height).toBe(
+      '8px',
+    );
   });
 
   it('shows value label with hidden label', () => {

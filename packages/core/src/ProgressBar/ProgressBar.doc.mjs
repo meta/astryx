@@ -183,6 +183,11 @@ export const docs = {
           "Always provide a label, even if hidden; screen readers need it to announce what's loading.",
       },
       {
+        guidance: true,
+        description:
+          'Screen readers announce the track as a progressbar: the label is its name and the value text is what they read. Pass formatValueLabel when a percentage would mislead, such as "3 of 5 files".',
+      },
+      {
         guidance: false,
         description:
           'Place icons or labels inside the bar; compose them alongside it using layout components.',
@@ -329,6 +334,11 @@ export const docsZh = {
           "Always provide a label, even if hidden; screen readers need it to announce what's loading.",
       },
       {
+        guidance: true,
+        description:
+          'Screen readers announce the track as a progressbar: the label is its name and the value text is what they read. Pass formatValueLabel when a percentage would mislead, such as "3 of 5 files".',
+      },
+      {
         guidance: false,
         description:
           'Place icons or labels inside the bar; compose them alongside it using layout components.',
@@ -370,6 +380,11 @@ export const docsDense = {
         guidance: true,
         description:
           "Always provide a label, even if hidden; screen readers need it to announce what's loading.",
+      },
+      {
+        guidance: true,
+        description:
+          'Screen readers announce the track as a progressbar: the label is its name and the value text is what they read. Pass formatValueLabel when a percentage would mislead, such as "3 of 5 files".',
       },
       {
         guidance: false,
