@@ -1979,26 +1979,20 @@ export function typoNear(typed, word) {
 
 /**
  * Words besides the color reader's shade words that a color said by itself
- * may carry beside its hue ("a deep dark plum", "near-black", "warm
- * brown-black", "chocolate brown").
+ * may carry beside its hue ("a deep dark plum", "near-black", "chocolate
+ * brown"): only words the page reader reads with the hue. A word it does
+ * not read ("cool navy", "midnight navy") leaves the ask as said, and a
+ * warm or cool look stays the neutral's grays.
  */
 const TONE_WORDS = new Set([
   'a',
   'an',
-  'warm',
-  'cool',
-  'dusty',
   'muted',
   'very',
   'near',
-  'almost',
   'off',
-  'bright',
   'chocolate',
   'charcoal',
-  'inky',
-  'midnight',
-  'smoky',
   'black',
   'white',
   'gray',
@@ -2011,10 +2005,12 @@ const TONE_WORDS = new Set([
 /**
  * A hue said for one mode's page, or for everything, as the page it
  * means: "dark mode should be a deep dark plum" and "light mode is pale
- * blush" are that mode's page ("page … in dark mode"), whose answer takes
+ * blush" are that mode's page ("dark mode: page …"), whose answer takes
  * the color at the page's own lightness there; "dark mode goes near-black
  * with a purple tint" is the tint's hue; "blush pink everything" is the
- * page. Never a theme of one mode, or an accent. Only a color said by
+ * page. Never a theme of one mode, or an accent. The mode stays said
+ * first, so a clause after it keeps that mode ("dark mode is plum, gold
+ * buttons"). Only a color said by
  * itself, said at the start of its clause (or of a line or a list item)
  * and ending it, is read so: a
  * phrase with a part, role or token word ("a red accent", "blue links", "red for errors"), one a
@@ -2050,17 +2046,13 @@ export function colorsSaidForPages(question, isHue, isShade) {
             )
           : colorAlone(String(phrase));
         return said
-          ? `${lead}page ${String(tint ?? phrase).trim()} in ${mode} mode`
+          ? `${lead}${mode} mode: page ${String(tint ?? phrase).trim()}`
           : m;
       },
     )
     .replace(
       /(^\s*(?:[-*•]\s+)?|[,.;!\n]\s*(?:[-*•]\s+)?)((?:[a-z]+\s+)?[a-z]+(?:\s+[a-z]+)?)\s+everything\b/gi,
-      // (A warm or cool look said for everything is the neutral's grays,
-      // as the reader already takes it: "warm beige everything".)
       (m, lead, color) =>
-        colorAlone(String(color)) && !/\b(?:warm|cool)\b/i.test(String(color))
-          ? `${lead}${color} page`
-          : m,
+        colorAlone(String(color)) ? `${lead}${color} page` : m,
     );
 }
