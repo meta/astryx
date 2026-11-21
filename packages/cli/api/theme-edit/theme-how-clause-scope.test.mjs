@@ -342,7 +342,8 @@ const COLOR_RULE = [
       q: 'body text should be #1a1f36; borders #e3e8ee',
       first: [
         "--color-text-primary '#1a1f36' --mode light",
-        "--color-border '#e3e8ee' --mode light",
+        // (A light gray said once for the whole theme covers both modes.)
+        "--color-border 'light-dark(#e3e8ee, #262626)'",
       ],
     },
   ],

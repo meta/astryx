@@ -81,5 +81,9 @@ describe('a whole-theme border said once', () => {
       expect(bordered(part), part).toBe(true);
     for (const part of ['badge', 'layout-header', 'avatar', 'collapsible'])
       expect(bordered(part), part).toBe(false);
+    // A role word leading the ask narrows it: overlays get no button border.
+    const overlays = await commands('overlays: a 1px #4d4d4d border', 'br');
+    expect(overlays.some(x => / --on popover$/.test(x))).toBe(true);
+    expect(overlays.some(x => / --on button$/.test(x))).toBe(false);
   }, 240_000);
 });
