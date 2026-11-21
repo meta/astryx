@@ -123,7 +123,7 @@ export const docs = {
       name: 'statusVariant',
       type: "'attached' | 'detached' | 'tooltip'",
       description:
-        'How the status message is placed relative to the input. attached overlaps directly below the input (bordered treatment); detached floats below as a separate element with spacing; tooltip hides the message box and surfaces it in a tooltip on the status icon. Dropzone mode does not support attached, so a dropzone defaults to detached; an explicit attached keeps its released rendering until the next minor release, which resolves it to detached.',
+        'How the status message is placed relative to the input. attached overlaps directly below the input (bordered treatment); detached floats below as a separate element with spacing; tooltip hides the message box and surfaces it in a tooltip on the status icon. Dropzone mode does not support attached: a dropzone defaults to detached and resolves attached to detached.',
       default: "'attached' in input mode; 'detached' in dropzone mode",
     },
     {
@@ -296,7 +296,7 @@ export const docsZh = {
       name: 'statusVariant',
       type: "'attached' | 'detached' | 'tooltip'",
       description:
-        '状态消息相对于输入框的放置方式。attached 直接叠加在输入框下方（带边框处理）；detached 作为独立元素浮于下方并留有间距；tooltip 隐藏消息框，并在状态图标上以提示气泡形式显示。dropzone 模式不支持 attached，因此 dropzone 默认使用 detached；显式传入的 attached 在下一个次版本之前保持原有渲染，届时会解析为 detached。',
+        '状态消息相对于输入框的放置方式。attached 直接叠加在输入框下方（带边框处理）；detached 作为独立元素浮于下方并留有间距；tooltip 隐藏消息框，并在状态图标上以提示气泡形式显示。dropzone 模式不支持 attached：dropzone 默认使用 detached，并将 attached 解析为 detached。',
       default: "输入模式为 'attached'；dropzone 模式为 'detached'",
     },
     {
@@ -408,7 +408,7 @@ export const docsDense = {
     placeholder: 'Placeholder when no files selected.',
     mode: "Visual mode: 'input' (compact) or 'dropzone' (drag-and-drop).",
     status: 'Validation status; colored border. Message floats below.',
-    statusVariant: 'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip hides the box and shows it on the status icon. Dropzone: attached unsupported; defaults to detached (explicit attached kept until next minor).',
+    statusVariant: 'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip hides the box and shows it on the status icon. Dropzone: attached unsupported; defaults to detached and resolves attached to detached.',
     labelTooltip: 'Tooltip in info icon at label end.',
   },
 };

@@ -1589,9 +1589,11 @@ describe('FileInput statusVariant forwarding', () => {
     );
   });
 
-  // component:FileInput FR6: a dropzone's tall surface cannot carry an
-  // attached message, so its unset placement is detached.
-  it('defaults a dropzone status to detached', () => {
+  // component:FileInput FR6: a dropzone cannot carry an attached message.
+  it.each([
+    ['by default', undefined],
+    ['when attached is passed', 'attached' as const],
+  ])('renders a dropzone status detached %s', (_name, statusVariant) => {
     const {container} = render(
       <FileInput
         label="Upload"
@@ -1599,6 +1601,7 @@ describe('FileInput statusVariant forwarding', () => {
         value={null}
         onChange={() => {}}
         status={{type: 'error', message: 'Something went wrong'}}
+        statusVariant={statusVariant}
       />,
     );
     expect(container.querySelector('.astryx-field-status')).toHaveAttribute(
@@ -1607,11 +1610,11 @@ describe('FileInput statusVariant forwarding', () => {
     );
   });
 
-  it('keeps an explicit attached on a dropzone until the next minor release', () => {
+  it('keeps attached for an input-mode status passed attached', () => {
     const {container} = render(
       <FileInput
         label="Upload"
-        mode="dropzone"
+        mode="input"
         value={null}
         onChange={() => {}}
         status={{type: 'error', message: 'Something went wrong'}}
