@@ -83,13 +83,8 @@ describe('a whole-theme border said once', () => {
       expect(bordered(part), part).toBe(false);
     // A muted card (a neutral look Core draws borderless) takes it; a hue's
     // look keeps its own.
-    expect(
-      cmds.some(x =>
-        /^set br border '1px solid .*#ccc.*' --on card --when variant:muted$/.test(
-          x,
-        ),
-      ),
-    ).toBe(true);
+    // (A muted card draws its selection in its border too, with no color
+    // of its own at rest, so it is left; a muted clickable card is not.)
     expect(
       cmds.some(x => / --on clickable-card --when variant:muted$/.test(x)),
     ).toBe(true);
@@ -104,7 +99,7 @@ describe('a whole-theme border said once', () => {
       ).data.results
         .flatMap((/** @type {{commands: string[]}} */ r) => r.commands)
         .some((/** @type {string} */ x) =>
-          /border '1px solid .* --on card$/.test(x),
+          /border-width 1px --on card$/.test(x),
         ),
     ).toBe(true);
     // A selectable card draws its box only when selected, in the accent:
@@ -118,6 +113,26 @@ describe('a whole-theme border said once', () => {
       ).data.results
         .flatMap((/** @type {{commands: string[]}} */ r) => r.commands)
         .some((/** @type {string} */ x) => / --on selectable-card$/.test(x)),
+    ).toBe(false);
+    // A card draws its selection in its border: it takes the width and
+    // style alone, so the accent stays when selected.
+    const flat = (
+      await themeEditHow(
+        'Surface: flat. Edges: 6px corners, 1px #d0d7de borders.',
+        {cwd, theme: 'br'},
+      )
+    ).data.results.flatMap(
+      (/** @type {{commands: string[]}} */ r) => r.commands,
+    );
+    expect(
+      flat.some((/** @type {string} */ x) =>
+        /border-width 1px --on card$/.test(x),
+      ),
+    ).toBe(true);
+    expect(
+      flat.some((/** @type {string} */ x) =>
+        /set br border '.*--on card$/.test(x),
+      ),
     ).toBe(false);
     // A role word leading the ask narrows it: overlays get no button border.
     const overlays = await commands('overlays: a 1px #4d4d4d border', 'br');

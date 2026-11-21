@@ -23842,23 +23842,66 @@ export function draftAnswer(ctx, env, question) {
                           .map(v => ({on: pt, when: `variant:${v}`})),
                       ),
                   );
+            /**
+             * Whether a part (or one look of it) draws its selection in its
+             * border color (a card under a selectable card): a border
+             * written on it at rest would also paint over that, and the
+             * editor cannot address the selected look.
+             * @param {string} pt @param {string} [v] the variant
+             */
+            const selectsInBorder = (pt, v) =>
+              (C.partReads(pt, 'border') ?? []).some(
+                (/** @type {{props?: string[], when: string[]}} */ r) =>
+                  (r.props ?? []).includes('border-color') &&
+                  r.when.some(
+                    w =>
+                      /selected=(?:true|selected)/.test(w) &&
+                      (v
+                        ? w.split(/[\s,]+/).includes(`variant=${v}`)
+                        : /variant=default\b/.test(w) || !/variant=/.test(w)),
+                  ),
+              );
+            /**
+             * The border a part takes: the whole shorthand, or, on a part
+             * that draws its selection in its border, its width and style
+             * alone, so its own colors (the shared border color at rest, the
+             * accent when selected) stay.
+             * @param {{on: string, when?: string}} x
+             * @returns {Step[]}
+             */
+            const borderOn = x =>
+              selectsInBorder(x.on, x.when?.replace(/^variant:/, ''))
+                ? [
+                    set('border-width', wide ?? bwNow0, x),
+                    set('border-style', 'solid', x),
+                  ]
+                : [
+                    set('border', `${wide ?? bwNow0} solid ${color}`, {
+                      ...x,
+                      ...modeOf(c),
+                    }),
+                  ];
             /** @type {Step[]} */
             const steps = [
               ...(wide ? [set('--border-width', wide)] : []),
               set('--color-border', color, modeOf(c)),
               set('--color-border-emphasized', color, modeOf(c)),
-              ...neutralLooks.map(x =>
-                set('border', `${wide ?? bwNow0} solid ${color}`, {
-                  ...x,
-                  ...modeOf(c),
-                }),
-              ),
-              ...(everywhere ? borderless : edged).map(pt =>
-                set('border', `${wide ?? bwNow0} solid ${color}`, {
-                  on: pt,
-                  ...modeOf(c),
-                }),
-              ),
+              // (A neutral look with no border color of its own at rest
+              // that draws its selection in its border is left: a color
+              // written there would paint over the selection.)
+              ...neutralLooks
+                .filter(
+                  x => !selectsInBorder(x.on, x.when?.replace(/^variant:/, '')),
+                )
+                .flatMap(borderOn),
+              ...(everywhere
+                ? borderless.map(pt =>
+                    set('border', `${wide ?? bwNow0} solid ${color}`, {
+                      on: pt,
+                      ...modeOf(c),
+                    }),
+                  )
+                : edged.flatMap(pt => borderOn({on: pt}))),
               ...selectedOnly.map(pt =>
                 set('border', `${wide ?? bwNow0} solid ${color}`, {
                   on: pt,
