@@ -414,7 +414,11 @@ describe('solveAnimatedPageScroll: setContentOffset(_:animated:)', () => {
       expect(curve.duration).toBe(0.3);
       expect(curve.at(0.3)).toBe(distance);
       expect(curve.velocity(0.3)).toBe(0);
-      expect(curve.velocity(0)).toBe(0);
+      // From rest it starts on its curve's own slope.
+      expect(curve.velocity(0)).toBeCloseTo(
+        (curve.at(1e-6) - curve.at(0)) / 1e-6,
+        2,
+      );
     }
   });
 
@@ -429,6 +433,39 @@ describe('solveAnimatedPageScroll: setContentOffset(_:animated:)', () => {
       expect(curve.at(0.3)).toBe(804);
       expect(curve.velocity(0.3)).toBe(0);
       expect(curve.velocity(0.2999)).toBeCloseTo(0, -1);
+    }
+  });
+
+  it('a retarget at the first instant goes on at the speed the move starts with', () => {
+    const linear = [0, 0, 1, 1] as const;
+    const move = solveAnimatedPageScroll({from: 0, to: 300, curve: linear});
+    // 300 px in 0.3 s on a straight line: 1000 px/s from the first instant.
+    expect(move.velocity(0)).toBeCloseTo(1000, 1);
+    const retarget = solveAnimatedPageScroll({
+      from: move.at(0),
+      to: 600,
+      curve: linear,
+      velocity: move.velocity(0),
+    });
+    expect(retarget.at(0)).toBe(move.at(0));
+    expect(retarget.velocity(0)).toBeCloseTo(1000, 1);
+    const h = 1e-4;
+    expect((retarget.at(h) - retarget.at(0)) / h).toBeCloseTo(1000, -1);
+  });
+
+  it('a 0 ms move is on its target at once, at rest', () => {
+    for (const velocity of [undefined, 900]) {
+      const move = solveAnimatedPageScroll({
+        from: 100,
+        to: 804,
+        durationMs: 0,
+        velocity,
+      });
+      expect(move.duration).toBe(0);
+      for (const t of [-0.01, 0, 0.01]) {
+        expect(move.at(t), `${t} s`).toBe(804);
+        expect(move.velocity(t), `${t} s`).toBe(0);
+      }
     }
   });
 
