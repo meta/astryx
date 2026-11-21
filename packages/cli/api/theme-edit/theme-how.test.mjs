@@ -551,7 +551,7 @@ const QUESTIONS = [
     'square corners everywhere',
     {
       // (The dial squares the pills that are a styling choice itself.)
-      top: /^set q corners square$/,
+      top: /^set q corners square && set q --radius-full '?0px'?$/,
       adds: /--radius-element=0px/,
     },
   ],
@@ -3570,7 +3570,7 @@ const QUESTIONS_J = [
   [
     'zero radius everywhere',
     {
-      top: /^set q corners square$/,
+      top: /^set q corners square && set q --radius-full '?0px'?$/,
       adds: /--radius-element=0px/,
     },
   ],
