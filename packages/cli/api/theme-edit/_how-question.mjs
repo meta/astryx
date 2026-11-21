@@ -2794,10 +2794,11 @@ const REMOVABLE =
 /**
  * "Clear" that leads a clause, before a determiner and a removable thing
  * later in that clause, with no word that asks for a reset (changes,
- * edits, overrides, settings, a color, what the person added).
+ * edits, overrides, settings, tweaks and the like, a color, what someone
+ * added).
  */
 const CLEAR_TAKES_AWAY = new RegExp(
-  `(?<=(?:^|[.;!?,]|\\b(?:please|and|then))\\s*)clear(?=\\s+(?:all\\s+the|the|my|its|their|our|all|any|this|that|these|those)\\b(?![^,;.!?]*\\b(?:changes?|edits?|overrides?|settings?|colou?rs?|i\\s+(?:added|set|made|changed|gave))\\b)[^,;.!?]*\\b${REMOVABLE}\\b)`,
+  `(?<=(?:^|[.;!?,]|\\b(?:please|and|then))\\s*)clear(?=\\s+(?:all\\s+the|the|my|its|their|our|all|any|this|that|these|those)\\b(?![^,;.!?]*\\b(?:changes?|edits?|overrides?|settings?|tweaks?|adjustments?|modifications?|customi[sz]ations?|colou?rs?|(?:i|we|you|they|someone)\\s+(?:added|set|put|made|changed|gave)|(?:was|were)\\s+(?:added|set|put|made))\\b)[^,;.!?]*\\b${REMOVABLE}\\b)`,
   'gi',
 );
 /**

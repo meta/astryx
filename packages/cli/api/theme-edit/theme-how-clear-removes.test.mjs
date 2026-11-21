@@ -77,6 +77,11 @@ describe('clear said of a removable thing', () => {
       'clear my background and border changes',
       'clear the card border color',
       'clear the border I added to cards',
+      'clear my card border tweaks',
+      'clear my modifications to the card border',
+      'clear my customizations to the card shadow',
+      'clear the border we added to cards',
+      'clear the shadow I put on cards',
     ]) {
       const rs = await how(ask);
       expect(
