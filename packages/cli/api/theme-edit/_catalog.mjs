@@ -746,9 +746,10 @@ export const SHEET_CSS = [
   // whole row of the grid, so its text is never cut or wrapped mid-word.
   '.cs-sheet>.cs-cell:has(table,pre,.astryx-app-shell){grid-column:1/-1}',
   // A part that needs a row's width draws each variant on a row of its own,
-  // and an app shell at a height that shows its frame, not a window's.
+  // and an app shell on the sheet at a height that shows its frame, not a
+  // window's (the pages section draws the sample app whole).
   '.cs-sheet>.cs-cell:has(table,pre,.astryx-app-shell)>.cs-row>.cs-item{flex-basis:100%}',
-  '.cs-item .astryx-app-shell{height:360px!important;min-height:0!important}',
+  '.cs-sheet .cs-item .astryx-app-shell{height:360px!important;min-height:0!important}',
   // A frame that draws nothing of its own (an aspect ratio) shows its box.
   '.cs-item .astryx-aspect-ratio{outline:1px dashed #8888}',
   // A part as tall as its container (a vertical divider) is drawn at a

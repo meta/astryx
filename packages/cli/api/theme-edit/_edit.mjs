@@ -8395,15 +8395,15 @@ export async function themeEditShow(theme, options = {}) {
               png: out,
               most: FAMILY_PICTURE_HEIGHT,
             })),
-            // A section is photographed from its own sheet, a family cut
-            // as above. The full sheet, every component, is too tall to
+            // A section is photographed from its own sheet, a family or the
+            // pages cut as above. The full sheet, every component, is too tall to
             // read whole and slow to take: it is not photographed.
             ...(section
               ? [
                   {
                     html: path.join(f.dir, `sheet-${section}.html`),
                     png: path.join(f.dir, `sheet-${section}.png`),
-                    ...(FAMILY_SECTIONS.includes(section)
+                    ...(section !== OPEN_SECTION
                       ? {most: FAMILY_PICTURE_HEIGHT}
                       : {}),
                   },
