@@ -719,11 +719,53 @@ function readCandidates(doc: Document): Candidate[] {
   }));
 }
 
+/**
+ * Whether a tap can reach `element`. A touch nearer a neighbour that no tap
+ * reaches is still the control's. Only the touch check asks. The measuring
+ * pass reads no style, so such a neighbour still stops a hit area halfway.
+ * That strip takes no tap from anyone. Opacity does not count: a control
+ * drawn at opacity 0, such as a native input over its own drawn box, takes
+ * the tap.
+ */
+function takesTaps(element: Element): boolean {
+  if (element.matches(':disabled') || element.closest('[inert]') != null) {
+    return false;
+  }
+  const view = element.ownerDocument.defaultView;
+  if (view == null) {
+    return true;
+  }
+  const style = view.getComputedStyle(element);
+  if (style.pointerEvents === 'none') {
+    return false;
+  }
+  if (typeof element.checkVisibility === 'function') {
+    return element.checkVisibility({checkVisibilityCSS: true});
+  }
+  // Without `checkVisibility`, its two checks are read from the styles.
+  if (style.visibility === 'hidden' || style.visibility === 'collapse') {
+    return false;
+  }
+  for (
+    let node = element.parentElement;
+    node != null;
+    node = node.parentElement
+  ) {
+    if (
+      view.getComputedStyle(node).getPropertyValue('content-visibility') ===
+      'hidden'
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /** A control's rect and clamped insets, from candidates already read. */
 function measureOne(
   watch: Watch,
   candidates: ReadonlyArray<Candidate>,
-): {target: HitRect; insets: HitInsets; neighbours: HitRect[]} {
+): {target: HitRect; insets: HitInsets; neighbours: Candidate[]} {
   const target = plainRect(watch.element);
   const scale = screenScale(watch.element, target, HIT_AREA_TOLERANCE);
   // Two targets each growing up to half the minimum reach each other from a
@@ -735,15 +777,13 @@ function measureOne(
     bottom: reach * scale.y,
     left: reach * scale.x,
   });
-  const neighbours = candidates
-    .filter(
-      ({element, rect}) =>
-        rect.right > rect.left &&
-        rect.bottom > rect.top &&
-        intersects(band, rect) &&
-        !isOwn(watch, element),
-    )
-    .map(({rect}) => rect);
+  const neighbours = candidates.filter(
+    ({element, rect}) =>
+      rect.right > rect.left &&
+      rect.bottom > rect.top &&
+      intersects(band, rect) &&
+      !isOwn(watch, element),
+  );
   return {
     target,
     // The insets are in the control's layout px. The returned rects stay in
@@ -753,7 +793,7 @@ function measureOne(
     // still counts that neighbour.
     insets: clampedHitInsets(
       inLayout(target, target, scale),
-      neighbours.map(rect => inLayout(rect, target, scale)),
+      neighbours.map(({rect}) => inLayout(rect, target, scale)),
       watch.minSize,
       watch.growth?.(inLayout(target, target, scale), rect =>
         inLayout(rect, target, scale),
@@ -1133,7 +1173,8 @@ function isNearerNeighbour(
       press.y,
     );
     isNearer ||= neighbours.some(
-      rect => distanceTo(rect, press.x, press.y) < own,
+      ({element: neighbour, rect}) =>
+        distanceTo(rect, press.x, press.y) < own && takesTaps(neighbour),
     );
     // The press still scales the control, so these insets read a scaled box.
     // A pass after the press's motion ends takes the insets instead.

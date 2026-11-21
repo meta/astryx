@@ -103,6 +103,21 @@ describe('Slider', () => {
     expect(sliders[1]).toHaveAccessibleName('Valeur maximale');
   });
 
+  it('writes a range text value through one catalog message', () => {
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        overrides={{fr: {'@astryx.slider.rangeValue': 'de {start} à {end}'}}}>
+        <Slider
+          label="Prix"
+          value={[20, 80] as [number, number]}
+          valueDisplay="text"
+        />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByText('de 20 à 80')).toBeInTheDocument();
+  });
+
   it('sets aria-valuetext with formatValue', () => {
     render(
       <Slider label="Temperature" value={72} formatValue={v => `${v}°F`} />,
