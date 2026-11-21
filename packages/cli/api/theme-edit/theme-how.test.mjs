@@ -1011,6 +1011,20 @@ describe('stripe answers keep to the stripe', () => {
       /^set q background-color '#f9f9f9' --on table-row --when parity:odd --mode light && set q background-color transparent --on table-row --when parity:even --state striped --mode light$/,
     );
   });
+  // (A mode said after the tables ends their clause too.)
+  it.each([
+    'odd rows #f9f9f9 on striped tables and on plain tables in dark mode',
+    'odd rows #f9f9f9 on striped tables and on plain tables in light mode',
+    'odd rows #f9f9f9 on striped tables and on plain tables in dark mode only',
+    'odd rows #f9f9f9 on striped tables and on unstriped tables in dark mode',
+  ])('stays on every table for %s', async question => {
+    const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+    const odd = (data.results ?? [])
+      .flatMap((/** @type {{commands: string[]}} */ r) => r.commands)
+      .find(c => /'#f9f9f9' --on table-row --when parity:odd/.test(c));
+    expect(odd).toBeDefined();
+    expect(odd).not.toMatch(/--state striped/);
+  });
   // Striped tables named only for themselves, or beside another clause's
   // "every" or "all", keep the striped scope.
   it.each([
