@@ -20740,11 +20740,21 @@ export function draftAnswer(ctx, env, question) {
    * The text color tokens a clause asks of: the secondary text alone when
    * it names it ("the secondary text on cards fainter"; the secondary token
    * even where the part's own text reads none), else every one.
-   * @param {Clause} c @param {string[]} toks
+   * @param {Clause} c @param {string[]} toks @param {string} part
    * @returns {string[]}
    */
-  function textOfRole(c, toks) {
+  function textOfRole(c, toks, part) {
     const secondary = toks.filter(t => t === '--color-text-secondary');
+    /** Whether the part, or one it holds, draws its placeholder in it (on its own element, or on an element inside it, a text input's field). */
+    const placeholderReads = [part, ...(C.MAP[part]?.contains ?? [])].some(
+      t =>
+        /** @type {string[]} */ (
+          C.MAP[t]?.own?.color?.tokens?.['--color-text-secondary'] ?? []
+        ).some(w => /::placeholder/.test(w)) ||
+        [...(C.MAP[t]?.inside?.['--color-text-secondary'] ?? [])].some(
+          (/** @type {string} */ x) => /placeholder/.test(x),
+        ),
+    );
     // (The fainter, muted or subtle text is the secondary text.)
     return /\b(?:secondary|muted|faint|fainter|subtle|subdued)\s+(?:text|labels?|copy|writing)\b/.test(
       c.text,
@@ -20754,8 +20764,10 @@ export function draftAnswer(ctx, env, question) {
         ? secondary
         : // (A part whose own text reads no secondary color still may for
           // its placeholder, a text area's: the ask is the secondary token
-          // there, and `set` refuses it on a part that reads none.)
-          ['--color-text-secondary']
+          // there, and nowhere else.)
+          placeholderReads
+          ? ['--color-text-secondary']
+          : toks
       : toks;
   }
   /**
@@ -25531,7 +25543,11 @@ export function draftAnswer(ctx, env, question) {
           if (relSubject === 'text') {
             // The text color tokens the part's own text reads (a card's
             // text is the parts inside it), else its own text color.
-            const inner = textOfRole(c, innerTextTokens(C, one(on), true));
+            const inner = textOfRole(
+              c,
+              innerTextTokens(C, one(on), true),
+              one(on),
+            );
             const own = restRead(C.partReads(one(on), 'text'), f.when);
             const steps = (
               own || !inner.length
@@ -26615,7 +26631,11 @@ export function draftAnswer(ctx, env, question) {
           // the parts inside it read, stepped and set on it, never the main
           // text nor the whole theme.
           {
-            const roleToks = textOfRole(c, innerTextTokens(C, one(on), true));
+            const roleToks = textOfRole(
+              c,
+              innerTextTokens(C, one(on), true),
+              one(on),
+            );
             if (
               /\bsecondary\b/.test(c.text) &&
               roleToks.length === 1 &&
@@ -26747,7 +26767,7 @@ export function draftAnswer(ctx, env, question) {
         // A part holding parts whose text reads the text color tokens
         // itself (a top nav's heading and items), where a color property
         // never reaches that text: those tokens, on the part.
-        const inner = textOfRole(c, innerTextTokens(C, one(on), true));
+        const inner = textOfRole(c, innerTextTokens(C, one(on), true), one(on));
         if (
           inner.length &&
           !innerTextTokens(C, one(on)).length &&
