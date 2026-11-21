@@ -16,13 +16,13 @@
  *   alike (`spec:AST-094` FR43, FR19). Where the primary pointer is coarse
  *   the host listens while something enabled could take a touch. Where it
  *   is fine, each element with an enabled recognizer or consumer keeps one
- *   passive `pointerdown` listener, and the page keeps only one passive
- *   `selectionchange` listener, so a mouse or pen press reads the selection
- *   only when one may exist (selectionState); a press on it (a
- *   mouse's primary button, a pen, or a finger, whose `pointerdown` comes
- *   before its `touchstart`) installs the host's page listeners, which go
- *   once that press's contacts end and the arena has decided them, a tap
- *   that waits on a double tap included (FR24). After the last detach the
+ *   passive `pointerdown` listener. A press on such an element (a mouse's
+ *   primary button, a pen, or a finger, whose `pointerdown` comes before its
+ *   `touchstart`) installs the host's page listeners, which go once that
+ *   press's contacts end and the arena has decided them, a tap that waits on
+ *   a double tap included (FR24). Between presses the page keeps only one
+ *   passive `selectionchange` listener, so a mouse or pen press reads the
+ *   selection only when one may exist (selectionState). After the last detach the
  *   host holds nothing: no listener, note, frame or timer (releaseWhenIdle).
  *   Under every pointer, an element whose recognizer claims a moving finger
  *   also keeps its blocking `touchmove`, a listener FR24 counts apart from
