@@ -2774,5 +2774,13 @@
   "@astryx.searchField.cancel": {
     "defaultMessage": "Cancel",
     "description": "Accessible name of a lab SearchField's close button, which ends the search: it clears the query, ends editing and deactivates the field."
+  },
+  "@astryx.copyToClipboard.copy": {
+    "defaultMessage": "Copy to clipboard",
+    "description": "Aria label AND tooltip on a CopyToClipboard control in its default state. Pairs with `copyToClipboard.copied` (post-click state)."
+  },
+  "@astryx.copyToClipboard.copied": {
+    "defaultMessage": "Copied",
+    "description": "Screen-reader-only announcement and label on a CopyToClipboard control for ~2s after a successful copy. Past-participle (\"has been copied\"); pairs with `copyToClipboard.copy`."
   }
 }
