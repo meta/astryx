@@ -156,12 +156,24 @@ describe('plain looks', () => {
         ).toBe(true);
     }
   });
-  it("a status's text writes no banner line when its text tokens are its buttons' too", async () => {
-    for (const ask of ['success text bold', 'warning text 10px']) {
-      const w = writes(await how('q0', ask)).join('\n');
-      expect(w, ask).toMatch(/--on badge --when variant:/);
-      expect(w, ask).not.toMatch(/--on banner\b/);
+  it("a status's text on a banner reaches its title and description, never its buttons or icon", async () => {
+    for (const [ask, re] of [
+      ['success text bold', /--font-weight-normal 700 --on banner --when status:success/],
+      ['warning text 10px', /--text-supporting-size 0\.625rem --on banner --when status:warning/],
+    ]) {
+      const w = writes(await how('q0', String(ask))).join('\n');
+      expect(w, String(ask)).toMatch(re);
+      // (A banner's close and action buttons read the medium weight and
+      // the label size of a button; its icon reads the large size.)
+      expect(w, String(ask)).not.toMatch(/--font-weight-medium [^\n]*--on banner/);
+      expect(w, String(ask)).not.toMatch(/--text-large-size [^\n]*--on banner/);
+      // (Nor a token its buttons read too: the title's label size is the
+      // buttons' label size, so it is left, and said.)
+      expect(w, String(ask)).not.toMatch(/--text-label-size [^\n]*--on banner/);
     }
+    expect(
+      JSON.stringify(await how('q0', 'warning text 10px')),
+    ).toMatch(/left as it is: banner's --text-label-size, which its buttons read too/);
   });
   it("a status's alerts keep their status for size and weight", async () => {
     for (const [ask, status] of [
@@ -199,15 +211,13 @@ describe('plain looks', () => {
       ).toBe(true);
     }
     // (The parts that show the warning's text are offered, each in its
-    // warning look: a badge and a field's status message. A banner, whose
-    // title's size token is its buttons' too, gets no line.)
+    // warning look: the banner and a field's status message.)
     const offered = (await how('q0', 'warning text bigger'))
       .filter(r => /no part draws only/.test(r.text))
       .flatMap(r => r.commands);
     expect(
-      offered.some(l => /--on badge --when variant:warning$/.test(l)),
+      offered.some(l => /--on banner --when status:warning$/.test(l)),
     ).toBe(true);
-    expect(offered.some(l => /--on banner\b/.test(l))).toBe(false);
     expect(
       offered.some(l => /--on field-status --when type:warning$/.test(l)),
     ).toBe(true);
@@ -328,10 +338,10 @@ describe('plain looks', () => {
       `set q0 --color-text-primary '#333333' --mode light`,
       `set q0 --color-text-primary '#cccccc' --mode dark`,
     ]);
-    expect(top(await how('q0', 'gentle dark mode'))).toEqual([
-      `set q0 --color-text-primary '#cccccc' --mode dark`,
-      `set q0 --color-background-body '#292929' --mode dark`,
-    ]);
+    // (A mood word for the dark mode names no page color: the page and the
+    // surfaces keep their steps.)
+    expect(writes(await how('q0', 'gentle dark mode'))).toEqual([]);
+    expect(writes(await how('q0', 'softer dark mode please'))).toEqual([]);
     expect(writes(await how('q0', 'big readable text'))).toEqual([
       'set q0 text-size more',
     ]);
