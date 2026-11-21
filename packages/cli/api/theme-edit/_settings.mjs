@@ -5447,10 +5447,23 @@ export function fontOf(value) {
  * @returns {string[]}
  */
 function aloneFallbacks(family) {
-  if (/\b(mono|code)\b/i.test(family)) return ['ui-monospace', 'monospace'];
-  if (/serif/i.test(family) && !/sans/i.test(family))
-    return ['Georgia', 'serif'];
+  const kind = familyKind(family);
+  if (kind === 'mono') return ['ui-monospace', 'monospace'];
+  if (kind === 'serif') return ['Georgia', 'serif'];
   return ['system-ui', 'sans-serif'];
+}
+
+/**
+ * The kind of font a family's name says: monospace for a Mono, Monospace or
+ * Code name, serif for a serif name with no sans, sans-serif for any other.
+ * The fallbacks a family typed alone gets follow it.
+ * @param {string} family
+ * @returns {'mono' | 'serif' | 'sans'}
+ */
+export function familyKind(family) {
+  if (/\b(?:mono(?:space|spaced)?|code)\b/i.test(family)) return 'mono';
+  if (/serif/i.test(family) && !/sans/i.test(family)) return 'serif';
+  return 'sans';
 }
 
 /** A family name without its quotes. @param {string} family */

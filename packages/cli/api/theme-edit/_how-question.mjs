@@ -104,6 +104,7 @@ import {
   growsWithContent,
   fontsourceSuggestion,
   partComponentDocs,
+  familyKind,
 } from './_settings.mjs';
 import {
   borderlessSurfaces,
@@ -33268,16 +33269,13 @@ function fontIn(cl, question) {
       // before "type", whose own kind is not the kind the clause names is
       // a look, never the family: the kind said wins.
       if (/-(?:like|style|esque)\b|\stype\b/.test(m[0])) {
-        const kindOf = (/** @type {string} */ t) =>
-          /\b(?:mono(?:space|spaced)?|code)\b/i.test(t)
-            ? 'mono'
-            : /\bserif\b/i.test(t) && !/\bsans\b/i.test(t)
-              ? 'serif'
-              : /\bsans\b/i.test(t)
-                ? 'sans'
-                : null;
-        const said = kindOf(c.replace(name.toLowerCase(), ''));
-        if (said && said !== (kindOf(name) ?? 'sans')) continue;
+        // (The kind the rest of the clause names, read as a family's name
+        // is: the same reader picks the family's fallbacks.)
+        const rest = c.replace(name.toLowerCase(), '');
+        const said = /\b(?:mono\w*|code|serif|sans)\b/.test(rest)
+          ? familyKind(rest)
+          : null;
+        if (said && said !== familyKind(name)) continue;
         // ("Comic Sans type"): a shipped font whose family the name begins
         // is that font, with its own fallbacks.
         const shippedFamily = known
