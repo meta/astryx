@@ -8208,14 +8208,22 @@ async function changeOnce(
   // popup drawn on that popover: their rules meet on that element, and the
   // build's order alone decides which shows. Named, with the line that
   // gives the other part this look too.)
-  if (sub === 'set' && s.on) {
+  // (A keep line's value, Core's look back, and the host of the part named
+  // itself, whose look that part keeps beside its own, meet nothing to
+  // name.)
+  if (
+    sub === 'set' &&
+    s.on &&
+    !/^(?:revert|revert-layer|initial)$/i.test(String(s.value).trim())
+  ) {
     const MAPE = /** @type {Record<string, any>} */ (ctx.C?.MAP ?? {});
     const prop = kebab(String(s.thing));
     /** @type {Map<import('./_settings.mjs').Setting, Set<string>>} */
     const meets = new Map();
     for (const t of parts)
       for (const q of /** @type {string[]} */ (MAPE[t]?.drawnAs ?? [])) {
-        if (parts.includes(q)) continue;
+        if (parts.includes(q) || (t === s.on && hostsOf(ctx, t).includes(q)))
+          continue;
         const rival = [...data.settings]
           .reverse()
           .find(
