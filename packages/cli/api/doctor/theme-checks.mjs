@@ -28,6 +28,8 @@ import {
   isLocalThemeOwner,
   listDoctorThemePackages,
   listProjectSourceFiles,
+  projectImportsModule,
+  specifierTargets,
   planThemeAppWrite,
   readPackageJson,
   readTextFile,
@@ -36,7 +38,6 @@ import {
   resolveDoctorThemeImports,
   resolveRecordedTheme,
   resolveThemeModule,
-  SOURCE_EXTENSIONS,
   doctorStylesheetImportFile,
   fileMark,
   generatedSourceCommand,
@@ -251,42 +252,6 @@ export function moduleSpecifiers(source, options = {}) {
     }
   });
   return values;
-}
-
-/** @param {string} specifier @param {string} fromFile @param {string} target */
-function specifierTargets(specifier, fromFile, target) {
-  if (!specifier.startsWith('.')) return false;
-  const base = path.resolve(path.dirname(fromFile), specifier);
-  const candidates = [
-    base,
-    ...[...SOURCE_EXTENSIONS].map(extension => `${base}${extension}`),
-    ...[...SOURCE_EXTENSIONS].map(extension =>
-      path.join(base, `index${extension}`),
-    ),
-  ];
-  return candidates.some(
-    candidate => path.resolve(candidate) === path.resolve(target),
-  );
-}
-
-/** @param {string} root @param {string} generatedModule */
-function sourceImportEvidence(root, generatedModule) {
-  let parseFailures = 0;
-  for (const file of listProjectSourceFiles(root, generatedModule)) {
-    try {
-      const source = readTextFile(file);
-      if (
-        [...moduleSpecifiers(source)].some(specifier =>
-          specifierTargets(specifier, file, generatedModule),
-        )
-      ) {
-        return {found: true, parseFailures};
-      }
-    } catch {
-      parseFailures += 1;
-    }
-  }
-  return {found: false, parseFailures};
 }
 
 /**
@@ -620,7 +585,8 @@ function namedThemeFonts(files) {
  * local `@import`s (a relative file, or a package's stylesheet such as
  * `@fontsource/inter/index.css`), and the families the `family` parameters
  * of a font service URL it imports name; `external` when it imports a URL
- * (http, https, `//`), which may load families doctor cannot read.
+ * (http, https, `//`) that names no families doctor can read; `serviced`
+ * when it imports a font service URL that names its families.
  * @param {string} css
  * @param {string} [file] the stylesheet's path, to resolve local imports
  * @param {Set<string>} [seen]
@@ -629,17 +595,21 @@ function fontStylesheetEvidence(css, file, seen = new Set()) {
   const loaded = new Set();
   let external = false;
   let unread = false;
+  let serviced = false;
   const root = postcss().parse(css);
   root.walkAtRules(atRule => {
     if (atRule.name.toLowerCase() === 'import') {
       const spec = [...doctorStylesheetImports(`@import ${atRule.params};`)][0];
       if (!spec || /^(?:https?:)?\/\//i.test(spec)) {
         // A family the request names counts as loaded, as an @font-face rule
-        // does: the stylesheet asks the service for it.
-        for (const family of fontServiceFamilies(spec ?? '')) {
-          loaded.add(family);
-        }
-        external = true;
+        // does: the stylesheet asks the service for it. A font service URL
+        // that names its families loads only those, so a family it does not
+        // name has no loader there; any other URL may load families doctor
+        // cannot read.
+        const named = fontServiceFamilies(spec ?? '');
+        for (const family of named) loaded.add(family);
+        if (named.size === 0) external = true;
+        else serviced = true;
         return;
       }
       const target = file ? doctorStylesheetImportFile(spec, file) : null;
@@ -664,6 +634,7 @@ function fontStylesheetEvidence(css, file, seen = new Set()) {
         );
         for (const name of inner.loaded) loaded.add(name);
         external ||= inner.external;
+        serviced ||= inner.serviced;
         unread ||= inner.unread;
       } catch {
         unread = true;
@@ -675,7 +646,7 @@ function fontStylesheetEvidence(css, file, seen = new Set()) {
       loaded.add(normalizeFontName(declaration.value).toLowerCase());
     });
   });
-  return {loaded, external, unread};
+  return {loaded, external, unread, serviced};
 }
 
 /** @param {import('postcss').Rule} rule @param {string} slug */
@@ -1678,7 +1649,7 @@ export async function checkAppThemes(cwd) {
     });
   }
 
-  const importEvidence = sourceImportEvidence(
+  const importEvidence = projectImportsModule(
     state.projectDir,
     state.module.file,
   );
@@ -2178,6 +2149,10 @@ export async function checkAppThemes(cwd) {
 
   const fontFailures = [];
   const externalFontWarnings = [];
+  /** @type {string[]} */
+  const unnamedFontWarnings = [];
+  /** @type {string[]} */
+  const unnamedFamilies = [];
   /** Families behind a local font import doctor could not follow. */
   const unreadFontWarnings = [];
   const missingFontWarnings = [];
@@ -2267,6 +2242,11 @@ export async function checkAppThemes(cwd) {
     if (missing.length === 0) continue;
     if (evidence.external) {
       externalFontWarnings.push(`${theme.slug}: ${missing.join(', ')}`);
+    } else if (evidence.serviced) {
+      // (AST-050 FR11 item 9: a font service URL that does not name the
+      // family is a warning that names it, never a failure.)
+      unnamedFontWarnings.push(`${theme.slug}: ${missing.join(', ')}`);
+      unnamedFamilies.push(...missing);
     } else if (evidence.unread) {
       unreadFontWarnings.push(`${theme.slug}: ${missing.join(', ')}`);
     } else {
@@ -2303,6 +2283,18 @@ export async function checkAppThemes(cwd) {
   if (unreadFontWarnings.length > 0) {
     fontWarningMessages.push(
       `Font imports doctor could not follow prevent proof for ${unreadFontWarnings.join('; ')}.`,
+    );
+  }
+  if (unnamedFontWarnings.length > 0) {
+    fontWarningMessages.push(
+      `The font service stylesheet each theme imports does not name ${unnamedFontWarnings.join('; ')}.`,
+    );
+    const install = await fontPackagesInstallLine(
+      state.projectDir,
+      unnamedFamilies,
+    );
+    fontWarningFixes.push(
+      `Add each named family to the font service URL${install.line ? `, or install the packages that load them (${install.line})` : ''}, or load it another way.`,
     );
   }
   if (externalFontWarnings.length > 0) {
