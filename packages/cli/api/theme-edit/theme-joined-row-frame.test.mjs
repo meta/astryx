@@ -116,5 +116,16 @@ describe('a border, corners, shadow, fill or outline on a row of joined controls
     expect(sets.join('\n')).not.toMatch(
       /(?:corners|radius) \S+ --on (?:pagination-item|button)\b/,
     );
+    // The corners' own answer keeps them too: it runs them after the border
+    // the same ask gives the row, never refuses them for a row with no edge.
+    const corners = (data.results ?? []).find(r =>
+      /^corners on pagination-list\b/.test(r.text),
+    );
+    const own = (corners?.commands ?? []).map(c =>
+      c.replace(/^.* editor set \S+ /, ''),
+    );
+    expect(own.at(-1)).toBe('border-radius 6px --on pagination-list');
+    expect(own[0]).toMatch(/^border '1px solid .*' --on pagination-list$/);
+    expect(corners?.text).toMatch(/after the border this ask gives it/);
   }, 240_000);
 });
