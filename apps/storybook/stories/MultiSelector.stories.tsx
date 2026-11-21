@@ -310,6 +310,28 @@ export const TriggerModes: Story = {
   decorators: [Story => <Story />],
 };
 
+// Labels in two directions: each label and the overflow count keep their own order.
+export const MixedDirectionLabels: Story = {
+  render: () => {
+    const [value, setValue] = useState<string[]>([
+      'Design',
+      'עיצוב',
+      'שיווק',
+      'Sales',
+      'Support',
+    ]);
+    return (
+      <MultiSelector
+        label="Team"
+        options={['Design', 'עיצוב', 'שיווק', 'Sales', 'Support']}
+        value={value}
+        onChange={setValue}
+        triggerDisplay="labels"
+      />
+    );
+  },
+};
+
 // Disabled items
 export const DisabledItems: Story = {
   render: () => {

@@ -616,6 +616,23 @@ describe('MultiSelector', () => {
     expect(screen.getByText('Apple, Banana')).toBeInTheDocument();
   });
 
+  it('isolates each label and the overflow count, keeping the trigger text', () => {
+    const {container} = render(
+      <MultiSelector
+        label="Team"
+        options={['Design', 'עיצוב', 'שיווק', 'Sales', 'Support']}
+        value={['Design', 'עיצוב', 'שיווק', 'Sales', 'Support']}
+        onChange={() => {}}
+        triggerDisplay="labels"
+      />,
+    );
+    expect(screen.getByText('Design, עיצוב, שיווק, +2')).toBeInTheDocument();
+    const isolated = [...container.querySelectorAll('span[dir="auto"]')].map(
+      span => span.textContent,
+    );
+    expect(isolated).toEqual(['Design', 'עיצוב', 'שיווק', '+2']);
+  });
+
   it('shows labels display with overflow', () => {
     render(
       <MultiSelector

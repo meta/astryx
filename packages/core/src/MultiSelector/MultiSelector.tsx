@@ -31,7 +31,7 @@ import React, {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {withTextDirection} from '../utils/textDirection';
+import {isolatedText, withTextDirection} from '../utils/textDirection';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useTooltip} from '../Tooltip';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
@@ -122,7 +122,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/MultiSelector/MultiSelector.generated';
-import {useListFormatter} from '../i18n/useListFormatter';
+import {useListPartsFormatter} from '../i18n/useListFormatter';
 
 // Bundlers replace this value at build time. The declaration lets a product
 // without Node's types type-check this file.
@@ -1212,7 +1212,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         controlStyle != null),
   );
   const t = useComponentTranslator();
-  const formatList = useListFormatter();
+  const formatListParts = useListPartsFormatter();
   const pressable = usePressFeedback();
   const {
     isRequired: isEffectivelyRequired,
@@ -1994,8 +1994,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         const displayed = selectedLabels.slice(0, 3);
         const remaining = selectedLabels.length - displayed.length;
         // The count is the list's last item, so the locale's conjunction goes
-        // before it and not between the shown labels.
-        const text = formatList(
+        // before it and not between the shown labels. Each item is isolated,
+        // so labels in another direction do not reorder their neighbours.
+        const parts = formatListParts(
           remaining > 0
             ? [
                 ...displayed,
@@ -2005,7 +2006,12 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         );
         return (
           <span {...stylex.props(styles.triggerText)}>
-            {formatValue?.(selectedItems) ?? text}
+            {formatValue?.(selectedItems) ??
+              parts.map((part, index) =>
+                part.type === 'element'
+                  ? isolatedText(part.value, index)
+                  : part.value,
+              )}
           </span>
         );
       }
@@ -2036,7 +2042,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     formatValue,
     maxBadges,
     t,
-    formatList,
+    formatListParts,
   ]);
 
   // Render search input

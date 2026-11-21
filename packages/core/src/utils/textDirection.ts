@@ -6,11 +6,13 @@
  * @output textDirectionProps: `dir="ltr"` for plain text that holds no
  *   right-to-left letter, otherwise nothing, so the text keeps the page's
  *   direction. withTextDirection: the same text, inside a `dir="ltr"` span
- *   when it needs one
+ *   when it needs one. isolatedText: text in its own isolated span, for one
+ *   item among others
  * @position Core-internal helper, not exported from the package. Badge and
  *   Token put textDirectionProps on the element that holds caller text,
  *   beside `unicode-bidi: isolate`. InputGroupText, Field's label and
  *   description, FieldStatus and the status tooltip use withTextDirection.
+ *   MultiSelector's labels trigger puts each label in isolatedText.
  */
 
 import {createElement, type ReactNode} from 'react';
@@ -41,6 +43,9 @@ const styles = stylex.create({
   span: {
     textAlign: stylex.firstThatWorks('match-parent', '-webkit-match-parent'),
   },
+  isolate: {
+    unicodeBidi: 'isolate',
+  },
 });
 
 /**
@@ -55,4 +60,19 @@ export function withTextDirection(content: ReactNode): ReactNode {
   return dir == null || content === ''
     ? content
     : createElement('span', {dir, ...stylex.props(styles.span)}, content);
+}
+
+/**
+ * The text in a span that takes the direction of its own first strong letter
+ * and is isolated from the text around it. Use it for each item of a list
+ * that mixes directions, so one item's neutral characters (`+2`, a comma)
+ * never join a neighbour's run. The text content, and so the accessible name,
+ * stays the same, which bidi control characters would change.
+ */
+export function isolatedText(text: string, key?: string | number): ReactNode {
+  return createElement(
+    'span',
+    {key, dir: 'auto', ...stylex.props(styles.isolate)},
+    text,
+  );
 }
