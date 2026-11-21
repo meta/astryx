@@ -276,6 +276,23 @@ describe('the line a refusal prints', () => {
     expect(all).toMatch(/contrast-accepted '<why the original draws it so>'/);
     expect(all).not.toMatch(/\[--when/);
   }, 240_000);
+
+  it("keeps the caller's place, variant included, when only the reason is short", async () => {
+    if (unbuilt) return;
+    const e = /** @type {any} */ (
+      await themeEditSet('ul', 'contrast-accepted', 'same', {
+        cwd,
+        on: 'badge',
+        when: 'variant:info',
+        ground: 'badge',
+        mode: 'light',
+      }).catch(x => x)
+    );
+    expect(e.message).toMatch(/said specifically/);
+    expect(JSON.stringify(e)).toMatch(
+      /contrast-accepted '<why the original draws it so>' --on badge --when variant:info --ground badge --mode light/,
+    );
+  }, 240_000);
 });
 
 describe('the accept line', () => {
