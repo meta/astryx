@@ -10,6 +10,7 @@
  *   BottomSheetDetent.interaction.browser.spec.ts, on the same harness.
  */
 
+import {writeFile} from 'node:fs/promises';
 import {
   expect,
   test,
@@ -27,6 +28,11 @@ import {
 } from '@astryxdesign/interaction-harness';
 
 const storybook = withStorybook(test);
+
+// The proof fails on CI runners only, with every other move restyling the
+// sheet's content. On a failure CI keeps the Playwright trace, a screenshot
+// and the rendering events of the drag, so the next failure shows the cause.
+test.use({trace: 'retain-on-failure', screenshot: 'only-on-failure'});
 
 // The most elements one style recalculation may restyle between two moves.
 // A move restyles the dialog, its backdrop, the panel and the edge tint. The
@@ -103,6 +109,14 @@ test("a move of a drag restyles the dialog and the panel, not the sheet's conten
         event.t <= steady.to,
     )
     .map(event => event.elements ?? 0);
+  if (Math.max(...restyled) > RESTYLED_PER_MOVE) {
+    const path = test.info().outputPath('rendering-events.json');
+    await writeFile(path, JSON.stringify({steady, events: trace.events}));
+    await test.info().attach('rendering-events', {
+      path,
+      contentType: 'application/json',
+    });
+  }
   // The drag wrote the scrim: a move's recalculation restyles the dialog too.
   expect(Math.max(...restyled), JSON.stringify(restyled)).toBeGreaterThan(1);
   expect(Math.max(...restyled), JSON.stringify(restyled)).toBeLessThanOrEqual(

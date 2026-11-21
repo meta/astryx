@@ -4688,6 +4688,20 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      # A proof that keeps its failure output (BottomSheetDragRestyle: its
+      # Playwright trace, screenshot and rendering events) uploads it here.
+      - name: Upload failure traces
+        if: failure() && steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: interaction-failure-traces-${{ matrix.leg }}-${{ github.run_attempt }}
+          path: |
+            interaction-proof-output/**/trace.zip
+            interaction-proof-output/**/test-failed-*.png
+            interaction-proof-output/**/rendering-events.json
+          if-no-files-found: ignore
+          retention-days: 7
+
   # The gesture, motion and harness interaction proofs in WebKit, the engine
   # of every iOS browser, for the code where WebKit and Chromium differ on
   # touch: the gesture host and recognizers, the motion runtime, the touch and
