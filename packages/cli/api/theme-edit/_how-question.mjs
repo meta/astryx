@@ -69,6 +69,7 @@ import {
   borderParts,
   cornerParts,
   rowFrameOf,
+  roundedPartsInside,
   focusStateOf,
   paddedParts,
   innerTextTokens,
@@ -12529,6 +12530,23 @@ export function draftAnswer(ctx, env, question) {
   // A border or corners on a part that draws no edge of its own, whose
   // edges are parts of its own inside it (a date-time input's date and time
   // boxes): those parts (for a border, only pieces that draw one).
+  const EDGE_ASPECTS = ['border', 'shadow', 'background', 'outline'];
+  /** Whether this ask or the theme gives a row frame an edge. @param {string} frame */
+  const framedEdge = frame =>
+    clauses.some(
+      o =>
+        o.aspects.some(a => EDGE_ASPECTS.includes(a)) &&
+        o.parts.some(q => q.on === frame || rowFrameOf(ctx, q.on) === frame),
+    ) ||
+    (env.data?.settings ?? []).some(
+      (/** @type {any} */ x) =>
+        x.source === 'property' &&
+        /^(?:background|border(?!.*radius)|box-shadow|outline)/.test(
+          String(x.thing),
+        ) &&
+        !/^(?:none|0(?:px)?|transparent)$/.test(String(x.value).trim()) &&
+        (x.on === frame || rowFrameOf(ctx, x.on) === frame),
+    );
   for (const c of clauses)
     if (
       c.aspects.some(a =>
@@ -12538,14 +12556,23 @@ export function draftAnswer(ctx, env, question) {
       c.parts = c.parts.flatMap(p => {
         if (FAMILIES[p.on]) return [p];
         // (A row that frames the part's controls as one strip takes its
-        // border, corners, shadow, fill and outline: one strip together.)
+        // border, corners, shadow, fill and outline: one strip together.
+        // Corners alone go there only once the row has an edge, from this
+        // ask or the theme; else each control rounds, as the part's own
+        // corners do.)
         const frame = rowFrameOf(ctx, p.on);
-        if (frame) return [{...p, on: frame}];
+        const cornersOnly = c.aspects.every(
+          a => a === 'corners' || !EDGE_ASPECTS.includes(a),
+        );
+        if (frame && !(cornersOnly && !framedEdge(frame)))
+          return [{...p, on: frame}];
         if (!c.aspects.some(a => a === 'border' || a === 'corners')) return [p];
         const own = C.MAP[p.on]?.own ?? {};
         const inner = (
           c.aspects.includes('corners')
-            ? cornerParts(ctx, p.on)
+            ? frame
+              ? roundedPartsInside(ctx, p.on)
+              : cornerParts(ctx, p.on)
             : borderParts(ctx, p.on)
         ).filter(t => t !== p.on);
         return inner.length && !Object.keys(own).some(k => /^border/.test(k))

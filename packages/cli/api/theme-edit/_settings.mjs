@@ -14309,7 +14309,7 @@ export function cornerParts(ctx, part) {
  * @param {string} part
  * @returns {string[]}
  */
-function roundedPartsInside(ctx, part) {
+export function roundedPartsInside(ctx, part) {
   const rec = ctx.C.MAP[part];
   if (!rec || rec.own?.['border-radius']) return [];
   return (rec.contains ?? []).filter(

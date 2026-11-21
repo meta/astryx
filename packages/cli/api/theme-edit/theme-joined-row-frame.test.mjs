@@ -128,4 +128,21 @@ describe('a border, corners, shadow, fill or outline on a row of joined controls
     expect(own[0]).toMatch(/^border '1px solid .*' --on pagination-list$/);
     expect(corners?.text).toMatch(/after the border this ask gives it/);
   }, 240_000);
+
+  it('rounds each page when an ask gives the row no edge', async test => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      test.skip();
+    }
+    await themeEditNew('c', {cwd, like: 'neutral'});
+    const {data} = await themeEditHow('pagination 6px radius', {
+      cwd,
+      theme: 'c',
+    });
+    const sets = (data.results ?? [])
+      .flatMap(r => r.commands)
+      .map(c => c.replace(/^.* editor set \S+ /, ''));
+    expect(sets).toContain('border-radius 6px --on pagination-item');
+    expect(sets.join('\n')).not.toMatch(/--on pagination-list\b/);
+  }, 240_000);
 });
