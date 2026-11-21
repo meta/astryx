@@ -2614,7 +2614,12 @@ function chromeBinary() {
 
 /** The first line of every file the editor writes into a theme's app copy. */
 export {APP_COPY_MARK} from './_marks.mjs';
-import {APP_COPY_MARK, appCopyDescriptor, appCopyHead} from './_marks.mjs';
+import {
+  appCopyDescriptor,
+  appCopyHead,
+  appCopyMarkedNames,
+  carriesAppCopyMark,
+} from './_marks.mjs';
 import {readThemeDescriptorValue} from '../../foundation/discovery/theme-discovery.mjs';
 import {builtColorMode} from '../../foundation/discovery/theme-imports.mjs';
 
@@ -2977,7 +2982,7 @@ export function appCopyBlocker(cwd, slug) {
     } catch {
       text = '';
     }
-    if (!text.includes(APP_COPY_MARK))
+    if (!carriesAppCopyMark(text))
       return `${rel}/${r} is a file the editor did not write, at a name the copy carries themes/${slug}/${r} to; move it, then any set or show writes the copy`;
   }
   // Nothing is written through a link on the way from the app to the copy
@@ -3013,7 +3018,7 @@ export function appCopyBlocker(cwd, slug) {
   /** @param {string} n */
   const marked = n => {
     try {
-      return fs.readFileSync(path.join(dir, n), 'utf8').includes(APP_COPY_MARK);
+      return carriesAppCopyMark(fs.readFileSync(path.join(dir, n), 'utf8'));
     } catch {
       return false;
     }
@@ -3034,7 +3039,7 @@ export function appCopyBlocker(cwd, slug) {
   // The copy is the editor's when any of its marked files carries the
   // mark (one of them deleted is written back); then only a marked name
   // without the mark is yours.
-  const markedNames = [`${name}.doc.mjs`, `${name}.ts`, `${slug}.fonts.css`];
+  const markedNames = appCopyMarkedNames(name, slug);
   // A build output of the copy's source carries the build's own header.
   const generated = (/** @type {string} */ n) => {
     try {

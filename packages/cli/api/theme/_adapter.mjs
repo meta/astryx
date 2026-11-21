@@ -15,7 +15,11 @@ import {
   installCommandFor,
 } from '../../foundation/discovery/template-needs.mjs';
 import {stageSharedTheme} from './_shared-source.mjs';
-import {appCopyDescriptor} from '../theme-edit/_marks.mjs';
+import {
+  appCopyDescriptor,
+  appCopyMarkedNames,
+  carriesAppCopyMark,
+} from '../theme-edit/_marks.mjs';
 import {PALETTE_RECIPES} from './palette/generate/generator.mjs';
 import {newerRecipe} from './palette/generate/newer-recipe.mjs';
 export {isSharedThemeSource} from './_shared-source.mjs';
@@ -1873,10 +1877,31 @@ function sharedFileIn(dir, name) {
 const EDITOR_SETTINGS_MAX_BYTES = 1024 * 1024;
 
 /**
+ * Why a shared copy cannot stay the editor's, or null when it can: the
+ * editor rewrites only files under its own mark, so a copy file at a name it
+ * writes that lacks the mark (a copy the editor did not write) would stop
+ * its builds from updating the copy.
+ * @param {string} dir the staged theme folder
+ * @param {string} exportName the theme's export ("<camel>Theme")
+ * @param {string} slug
+ * @returns {string | null}
+ */
+function sharedCopyUnmarked(dir, exportName, slug) {
+  // (The descriptor is written by the add itself, under the mark.)
+  for (const n of appCopyMarkedNames(exportName, slug).slice(1)) {
+    const at = path.join(dir, n);
+    if (fs.existsSync(at) && !carriesAppCopyMark(fs.readFileSync(at, 'utf-8')))
+      return `its copy's ${n} is not the one those working files build, so they would not keep the copy current; the theme's own build is added`;
+  }
+  return null;
+}
+
+/**
  * Why a shared theme's editor state is not copied, or null. Its files are
- * read as data and never run: the settings file must parse as the editor's
- * settings and pass the checks the editor gives a saved file, and a palette
- * made with a recipe this CLI does not know is named with the CLI it needs.
+ * read as data and none of them runs: the settings file must parse as the
+ * editor's settings and pass the checks the editor gives a saved file; a
+ * palette made with a recipe this CLI does not make, or a theme source with
+ * edits of its own, is code, which the add does not copy.
  * @param {string} dir the staged editor folder
  * @param {string} slug
  * @returns {Promise<string | null>}
@@ -1884,7 +1909,7 @@ const EDITOR_SETTINGS_MAX_BYTES = 1024 * 1024;
 async function sharedEditorProblem(dir, slug) {
   const file = path.join(dir, `${slug}.settings.json`);
   if (fs.statSync(file).size > EDITOR_SETTINGS_MAX_BYTES)
-    return `its ${slug}.settings.json is larger than ${EDITOR_SETTINGS_MAX_BYTES / 1024} KB, more than editor settings hold`;
+    return `its ${slug}.settings.json is larger than ${EDITOR_SETTINGS_MAX_BYTES / 1024} KB, more than a settings file holds`;
   // (Loaded here, through the editor's adapter, which finds the built-in
   // themes its settings reader checks against: the editor's settings module
   // builds on this adapter.)
@@ -1894,8 +1919,10 @@ async function sharedEditorProblem(dir, slug) {
   const data = settingsJson(fs.readFileSync(file, 'utf-8'));
   if (data === undefined) return `its ${slug}.settings.json is not JSON`;
   const problem = settingsProblem(data);
+  // (The check's own words name experimental commands: the add says it in
+  // its own.)
   if (problem)
-    return `its ${slug}.settings.json is not settings this CLI reads (${problem})`;
+    return `its ${slug}.settings.json does not pass the settings checks`;
   const paletteFile = path.join(dir, 'palette.config.json');
   if (fs.existsSync(paletteFile)) {
     /** @type {any} */
@@ -2086,7 +2113,11 @@ export async function addSharedThemeToApp(source, options) {
       ? null
       : staged.editor.dir == null
         ? staged.editor.notCopied
-        : await sharedEditorProblem(staged.editor.dir, name);
+        : (sharedCopyUnmarked(
+            path.join(staged.root, name),
+            theme.exportName,
+            name,
+          ) ?? (await sharedEditorProblem(staged.editor.dir, name)));
     if (staged.editor && editorRefusal) editorNote = editorRefusal;
     else if (staged.editor) {
       // (Read before anything is moved, so a folder it cannot read leaves
@@ -2476,20 +2507,20 @@ function scriptsOff(pm, action, projectDir) {
  * @param {string} projectDir
  * @param {string} slug
  * @param {Record<string, string>} remaining the record's other themes, slug to owner
- * @returns {{removed: string[], kept: string[], uninstalled: string[], uninstallError?: string} | null}
+ * @returns {{removed: string[], kept: string[], keptWorkingFiles?: string[], uninstalled: string[], uninstallError?: string} | null}
  */
 function undoSharedTheme(projectDir, slug, remaining) {
   const dir = path.join(projectDir, LOCAL_THEME_ROOT, slug);
   const receipt = readSharedReceipt(dir);
   if (!receipt) return null;
-  const changed = changedSharedFiles(dir, receipt);
-  // (Kept and removed files are named by their path in the project.)
-  const kept = changed.map(file => relFrom(projectDir, path.join(dir, file)));
+  // (The copy's kept files are named inside the copy, as on main.)
+  const kept = changedSharedFiles(dir, receipt);
   /** @type {string[]} */
   const removed = [];
+  /** @type {string[]} */
+  const keptWorkingFiles = [];
   for (const file of Object.keys(receipt.files)) {
-    if (changed.includes(file) || !fs.existsSync(path.join(dir, file)))
-      continue;
+    if (kept.includes(file) || !fs.existsSync(path.join(dir, file))) continue;
     fs.rmSync(path.join(dir, file), {force: true});
     removed.push(relFrom(projectDir, path.join(dir, file)));
   }
@@ -2497,16 +2528,23 @@ function undoSharedTheme(projectDir, slug, remaining) {
   removeEmptyFolder(dir, {deep: true});
   const root = path.join(projectDir, LOCAL_THEME_ROOT);
   if (receipt.madeRoot) removeEmptyFolder(root);
-  // The editor state the add kept: its unchanged files go; what the editor
-  // wrote there since, or a file changed, stays.
+  // The working files the add kept: its unchanged files go. When the folder
+  // holds files the add did not write (what the editor built there since),
+  // the theme is still edited there, so every copied file stays, named.
   const editorDir = path.join(projectDir, 'themes', slug);
   const editorFiles = sharedEditorFiles(receipt, editorDir);
   if (editorFiles) {
     const changedEditor = changedSharedFiles(editorDir, {files: editorFiles});
+    const builtSince =
+      fs.existsSync(editorDir) &&
+      filesUnder(editorDir).some(
+        file => !(file in editorFiles) && !FOLDER_JUNK.has(path.basename(file)),
+      );
     for (const file of Object.keys(editorFiles)) {
       const at = path.join(editorDir, file);
       if (!fs.existsSync(at)) continue;
-      if (changedEditor.includes(file)) kept.push(relFrom(projectDir, at));
+      if (builtSince || changedEditor.includes(file))
+        keptWorkingFiles.push(relFrom(projectDir, at));
       else {
         fs.rmSync(at, {force: true});
         removed.push(relFrom(projectDir, at));
@@ -2550,12 +2588,14 @@ function undoSharedTheme(projectDir, slug, remaining) {
   }
   for (const file of themeModuleCandidates(projectDir)) importsOf(file);
   const uninstall = receipt.installed.filter(name => !stillUsed.has(name));
-  if (uninstall.length === 0) return {removed, kept, uninstalled: []};
+  const more = keptWorkingFiles.length ? {keptWorkingFiles} : {};
+  if (uninstall.length === 0) return {removed, kept, ...more, uninstalled: []};
   const run = runPackageManager(projectDir, 'remove', uninstall);
-  if (run.ok) return {removed, kept, uninstalled: uninstall};
+  if (run.ok) return {removed, kept, ...more, uninstalled: uninstall};
   return {
     removed,
     kept,
+    ...more,
     uninstalled: [],
     uninstallError: `${run.command} failed: ${run.why}`,
   };

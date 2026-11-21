@@ -119,7 +119,7 @@ it('the stable add names no experimental surface when it leaves editor state out
   fs.cpSync(bundle, broken, {recursive: true});
   fs.writeFileSync(
     path.join(broken, 'editor', 'sunset.settings.json'),
-    'not json',
+    JSON.stringify({name: 'sunset', settings: 'all of them'}),
   );
   const fresh = makeLinkedFixture(
     'astryx-theme-add-editor-bad-',
@@ -134,5 +134,9 @@ it('the stable add names no experimental surface when it leaves editor state out
   fs.rmSync(broken, {recursive: true, force: true});
   expect(status, stdout + stderr).toBe(0);
   expect(stdout).toMatch(/notCopied/);
-  expect(stdout).not.toMatch(/experimental|theme editor/);
+  // (The reason, in the add's own words: the bundle's own folder names
+  // aside, nothing names the editor or its commands.)
+  const why = JSON.parse(stdout).data.copy.workingFiles.notCopied;
+  expect(why).toMatch(/does not pass the settings checks/);
+  expect(why).not.toMatch(/experimental|editor|--mode|\bset\b/);
 }, 300_000);

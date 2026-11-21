@@ -866,6 +866,12 @@ function printThemeApp(result) {
           `[note] Kept ${undo.kept.join(', ')}: changed since theme add wrote them.`,
         ),
       );
+    if (undo.keptWorkingFiles?.length)
+      emit(
+        text(
+          `[note] Kept ${undo.keptWorkingFiles.join(', ')}: changed since theme add wrote them, or the theme has been built there since.`,
+        ),
+      );
     if (undo.uninstalled.length > 0)
       emit(
         text(

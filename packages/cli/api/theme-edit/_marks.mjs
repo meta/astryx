@@ -37,6 +37,25 @@ export const appCopyHead = (slug, open, close) =>
   `${open} ${appCopyMark(slug)} after every build of themes/${slug}/; do not edit it here. Change the theme with the editor. ${close}\n`;
 
 /**
+ * The app copy's files the editor marks (its descriptor, its entry and its
+ * font stylesheet): a copy is the editor's while they carry its mark. One
+ * list for the editor and for `theme add` of a shared theme.
+ * @param {string} exportName the theme's export ("<camel>Theme")
+ * @param {string} slug
+ */
+export const appCopyMarkedNames = (exportName, slug) => [
+  `${exportName}.doc.mjs`,
+  `${exportName}.ts`,
+  `${slug}.fonts.css`,
+];
+
+/**
+ * Whether a file's text carries the editor's app copy mark.
+ * @param {string} text
+ */
+export const carriesAppCopyMark = text => text.includes(APP_COPY_MARK);
+
+/**
  * An app copy's descriptor, as the editor writes it: one text for the editor
  * and for `theme add` of a shared theme with its editor state. A display
  * name and description already given (a shared theme's own) are kept.
