@@ -7,7 +7,8 @@
  * @input Uses React refs, state, callbacks, useMediaQuery, the page-scroller
  *   rules, and the input stream's document scroll events when the page itself
  *   scrolls
- * @output Exports useChatStreamScroll hook for AI chat scroll behavior
+ * @output Exports useChatStreamScroll hook for AI chat scroll behavior; its
+ *   follow mark, shift and positions reach other Chat modules through a channel
  * @position Utility hook — used by ChatLayout, also usable standalone
  *
  * Spring-based scroll-to-bottom with lock/unlock:
@@ -35,13 +36,13 @@
 
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {useMediaQuery} from '../hooks/useMediaQuery';
-import {setScrollAnchoringOff} from '../privateAttributes/scrollAnchoring.stylex';
 import {subscribeInput} from '../utils/inputStream';
 import {
   scrollEventTarget,
   scrollportTop,
   scrollsPage,
 } from '../utils/pageScroller';
+import {channelOf, markFollowing} from './chatStreamScrollChannel';
 
 // =============================================================================
 // Types
@@ -136,29 +137,6 @@ export interface UseChatStreamScrollReturn {
 // =============================================================================
 
 const SIXTY_FPS_MS = 1000 / 60;
-
-// The scrollers whose hook follows the newest message now, kept in step with
-// each hook's lock.
-const following = new WeakSet<Element>();
-
-/**
- * Whether the stream scroll on `scroller` follows its newest message now, as
- * its lock says. Internal to Chat.
- */
-export function isFollowingNewest(scroller: Element): boolean {
-  return following.has(scroller);
-}
-
-// The lock's marks on the scroller: anchoring off while the hook follows, and
-// the state `isFollowingNewest` reads.
-function markFollowing(el: Element, locked: boolean): void {
-  setScrollAnchoringOff(el, locked);
-  if (locked) {
-    following.add(el);
-  } else {
-    following.delete(el);
-  }
-}
 
 export function useChatStreamScroll({
   scrollRef,
@@ -370,8 +348,8 @@ export function useChatStreamScroll({
 
   // --- Event listeners ---
 
-  // Syncs the scroll and scrollend listeners with `enabled`: the stream
-  // container's own, or the document's when the container scrolls the page.
+  // Syncs the scroll listeners and the channel's shift with `enabled`: the
+  // container's own listeners, or the document's when it scrolls the page.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || !enabled) {
@@ -380,6 +358,13 @@ export function useChatStreamScroll({
 
     lastScrollTopRef.current = el.scrollTop;
     markFollowing(el, lockedRef.current);
+    const channel = channelOf(el);
+    Object.assign(channel, {
+      last: lastScrollTopRef,
+      spring: springPositionRef,
+      animating: animatingRef,
+      unlock,
+    });
     const doc = el.ownerDocument;
     const isPage = scrollsPage(el);
     // The root's offsetHeight is the page's height. Its clientHeight is the
@@ -406,6 +391,9 @@ export function useChatStreamScroll({
         setLocked(false);
         animatingRef.current = false;
       }
+      channel.positions?.forEach(listener =>
+        listener(scrollTop, landedAtBottom),
+      );
     };
 
     const onScrollEnd = () => {
@@ -450,8 +438,10 @@ export function useChatStreamScroll({
       el.removeEventListener('scroll', onScroll);
       el.removeEventListener('scrollend', onScrollEnd);
       markFollowing(el, false);
+      channel.last = undefined;
+      channel.unlock = undefined;
     };
-  }, [scrollRef, enabled, lockThreshold, buttonThreshold, setLocked]);
+  }, [scrollRef, enabled, lockThreshold, buttonThreshold, setLocked, unlock]);
 
   return {
     isScrolledUp,

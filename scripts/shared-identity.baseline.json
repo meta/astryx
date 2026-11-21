@@ -21,10 +21,6 @@
       "status": "allowed",
       "reason": "One audio context per copy for dictation level metering; a second context costs memory and changes no result."
     },
-    "packages/core/src/Chat/useChatStreamScroll.ts:following": {
-      "status": "open",
-      "group": "triage"
-    },
     "packages/core/src/Chat/useSpeechRecognition.ts:_sharedAudioCtx": {
       "status": "allowed",
       "reason": "One audio context per copy for dictation level metering; a second context costs memory and changes no result."
