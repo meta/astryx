@@ -10,7 +10,6 @@
 - "menus and popovers look like Slack's: white, rounded, …" applies each item to every part in the head.
 - A fill said with its own text ("navy #0f172a with white text") stays a fill. "The top bar" in a sentence after a table stays the app's top bar; only a header said with the table is the table's header row.
 - "soft glows and shadows" is one ask, not two that clash.
-- The answer that runs a whole ask in order carries a tint ("blue-tinted glass") as the tint, never the solid color.
 - "selected tab #171717 with a 2px underline, other tabs #666666": the selected label keeps its color, the underline its state, and the other tabs their text color.
 - "active item #0d6efd with white text": the text token stays in the item's state.
 - "make headings semibold and make the text a bit larger": "the text" is the app's text size, never the headings'.
