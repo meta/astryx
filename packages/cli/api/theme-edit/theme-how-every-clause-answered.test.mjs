@@ -110,6 +110,14 @@ const ROWS = [
     {q: '13px text, 18px leading', saysNot: /not used/},
   ],
   [
+    'a text size said after a px leading in one clause is used',
+    {
+      q: 'line height 18px font size 13px',
+      has: ['text-size 13', '--text-body-leading 1.385'],
+      saysNot: /not used/,
+    },
+  ],
+  [
     'a leading typed in pixels alone is used',
     {q: '18px leading', saysNot: /not used/},
   ],

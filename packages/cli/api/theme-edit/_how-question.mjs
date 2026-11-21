@@ -25084,7 +25084,20 @@ export function draftAnswer(ctx, env, question) {
             text: 'a font size of 0 hides the text; give a size above 0',
             options: [],
           };
-        const px = c.lengths[0];
+        // (Never the pixels said as the line height beside it: "line height
+        // 18px font size 13px" is a 13px text size.)
+        const leadSaid = (
+          /\b(?:line[- ]?height|leading)\s*(?:of\s+)?:?\s*(\d+(?:\.\d+)?\s?px)\b/i.exec(
+            c.text,
+          )?.[1] ??
+          /\b(\d+(?:\.\d+)?\s?px)\b(?=\s*(?:of\s+)?(?:line[- ]?height|leading)\b)/i.exec(
+            c.text,
+          )?.[1]
+        )?.replace(/\s/g, '');
+        const px =
+          (leadSaid
+            ? c.lengths.find(l => l.replace(/\s/g, '') !== leadSaid)
+            : null) ?? c.lengths[0];
         const f2 = /\bmuch\b/.test(c.text) ? 1.5 : 1.25;
         // An exact amount ("double", "half") of the size there now.
         // (A size said as a look, "small labels", "tiny captions", is the
