@@ -404,17 +404,20 @@ function featureIconWord(words, at) {
  * The words of a query that say where its icon goes, not what it shows: the
  * words after its last icon word that spell out a component's name, its last
  * word plural or not (`information icon popover links`: `popover`, `links`;
- * `settings icon code block`: `code`, `block`). There are none unless a word
- * that names something stands before that icon word and no `of` or `for`
- * follows it (`an icon of a table` asks for a table), and a word also written
- * before the icon word is never one.
+ * `settings icon code block`: `code`, `block`), and a component's name
+ * written as one word with the words its export name reads as
+ * (`settings icon CodeBlock`: `codeblock`, `code`, `block`). There are none
+ * unless a word that names something stands before that icon word and no
+ * `of` or `for` follows it (`an icon of a table` asks for a table), and a
+ * word also written before the icon word is never one.
  * @param {string} query
  * @param {() => Iterable<string>} componentNames read only when the query
  *   has words after its icon word to check
  * @returns {Set<string>}
  */
 function placeWords(query, componentNames) {
-  const words = typedQuery(query).split(' ');
+  const typed = query.trim().split(/\s+/u).filter(Boolean);
+  const words = typed.map(word => word.toLowerCase());
   let at = words.length - 1;
   while (at >= 0 && !ICON_WORDS.has(words[at])) at--;
   const before = words.slice(0, Math.max(at, 0));
@@ -430,6 +433,10 @@ function placeWords(query, componentNames) {
   const names = [...componentNames()].map(name => spokenName(name).split(' '));
   /** @type {Set<string>} */
   const places = new Set();
+  /** @param {string} word */
+  const place = word => {
+    if (!before.includes(word) && !FILLER_WORDS.has(word)) places.add(word);
+  };
   for (let start = at + 1; start < words.length; start++) {
     for (const parts of names) {
       const spelled = parts.every((part, k) => {
@@ -439,9 +446,14 @@ function placeWords(query, componentNames) {
           (word === part || (k === parts.length - 1 && sameWord(part, word)))
         );
       });
-      if (!spelled) continue;
-      for (const word of words.slice(start, start + parts.length)) {
-        if (after.includes(word)) places.add(word);
+      if (spelled) {
+        words.slice(start, start + parts.length).forEach(place);
+        continue;
+      }
+      const joined = parts.join('');
+      if (words[start] === joined || sameWord(joined, words[start])) {
+        place(words[start]);
+        exportNameWords(typed[start]).split(' ').forEach(place);
       }
     }
   }

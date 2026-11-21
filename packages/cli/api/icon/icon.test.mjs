@@ -814,6 +814,32 @@ describe('a word matches whole words (FR6)', () => {
       )[0]?.id;
     expect(firstChart('table chart icon table')).toBe('table');
     expect(firstChart('chart icon table')).toBe('chart');
+    // A component's name written as its export name counts as a place, with
+    // the words it reads as.
+    const exported = setOf([
+      {id: 'chevron-down'},
+      {id: 'chevron-up'},
+      {id: 'mobile-button'},
+      {id: 'settings'},
+      {id: 'gear', words: ['gear', 'settings']},
+      {id: 'block'},
+    ]);
+    /** @param {string} query @param {string[]} names */
+    const firstExported = (query, names) =>
+      answeringMatches(
+        rankIcons([exported], query, {
+          words: true,
+          componentNames: () => names,
+        }),
+      )[0]?.id;
+    expect(firstExported('chevron icon IconButton', [])).toBe('mobile-button');
+    expect(firstExported('chevron icon IconButton', ['IconButton'])).toBe(
+      'chevron-down',
+    );
+    expect(firstExported('settings icon CodeBlock', [])).toBe('block');
+    expect(
+      firstExported('settings icon CodeBlock', ['Code', 'CodeBlock']),
+    ).toBe('settings');
   });
 
   it('names the meaning import by the definition the query ranks first, with its place words', async () => {
