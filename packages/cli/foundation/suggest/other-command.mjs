@@ -416,11 +416,9 @@ export async function findOtherCommand(
     if (coreDir && (!isPath || tail.length > 0)) {
       const core = /** @type {string | string[]} */ ((await indexOnce()).core);
       const named = [wanted, ...tail].map(name => coreFilesNaming(core, name));
-      // A last path segment names a hook only by its full `use…` name.
-      const hookNamed = [true, ...tail.map(name => name.startsWith('use'))];
       inCore = {
         component: named.some(one => one.component),
-        hook: named.some((one, at) => hookNamed[at] && one.hook),
+        hook: named.some(one => one.hook),
         componentTops: new Set(named.flatMap(one => [...one.componentTops])),
         hookTops: new Set(named.flatMap(one => [...one.hookTops])),
       };

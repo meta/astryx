@@ -281,6 +281,8 @@ describe('docs() for a name another command reads', () => {
         ['Buttons', 'astryx component Button'],
         // Only experimental docs are named `table`; they never win.
         ['widgets/Tables', 'astryx component Table'],
+        // A Core hook not named `use…` matches by its full name too.
+        ['widgets/createSwipe', 'astryx hook createSwipe'],
         ['widgets/use-collapsible', 'astryx hook useCollapsible'],
       ]) {
         const error = await docs(typed, undefined, {cwd: tmpDir}).catch(e => e);
