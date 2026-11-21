@@ -43,9 +43,10 @@
  * set's own statement of what the icon means. Word matches share one
  * score, so they keep set order first, as every equal score does; within a
  * set they rank by the weight of the words they carry, then the icon whose
- * id holds fewer parts that no query word names, then id order. A word after
- * the query's last icon word that names a component says where the icon
- * goes (`information icon popover links`), so it counts only to break a tie.
+ * id holds fewer parts that no query word names, then id order. The words
+ * after the query's last icon word that spell out a component's name say
+ * where the icon goes (`information icon popover links`), so they count only
+ * to break a tie.
  *
  * An exact match is a NAME match when the query is the icon's id, or one of
  * its words that is also a part of its id (`trash` for `trash-2`); it is a
@@ -401,11 +402,12 @@ function featureIconWord(words, at) {
 
 /**
  * The words of a query that say where its icon goes, not what it shows: the
- * words after its last icon word that are a component's name or its plural
- * (`information icon popover links`: `popover`, `links`). There are none
- * unless a word that names something stands before that icon word and no
- * `of` or `for` follows it (`an icon of a table` asks for a table), and a
- * word also written before the icon word is never one.
+ * words after its last icon word that spell out a component's name, its last
+ * word plural or not (`information icon popover links`: `popover`, `links`;
+ * `settings icon code block`: `code`, `block`). There are none unless a word
+ * that names something stands before that icon word and no `of` or `for`
+ * follows it (`an icon of a table` asks for a table), and a word also written
+ * before the icon word is never one.
  * @param {string} query
  * @param {() => Iterable<string>} componentNames read only when the query
  *   has words after its icon word to check
@@ -425,12 +427,25 @@ function placeWords(query, componentNames) {
   ) {
     return new Set();
   }
-  const names = [...componentNames()].map(name => name.toLowerCase());
-  return new Set(
-    after.filter(word =>
-      names.some(name => name === word || sameWord(name, word)),
-    ),
-  );
+  const names = [...componentNames()].map(name => spokenName(name).split(' '));
+  /** @type {Set<string>} */
+  const places = new Set();
+  for (let start = at + 1; start < words.length; start++) {
+    for (const parts of names) {
+      const spelled = parts.every((part, k) => {
+        const word = words[start + k];
+        return (
+          word !== undefined &&
+          (word === part || (k === parts.length - 1 && sameWord(part, word)))
+        );
+      });
+      if (!spelled) continue;
+      for (const word of words.slice(start, start + parts.length)) {
+        if (after.includes(word)) places.add(word);
+      }
+    }
+  }
+  return places;
 }
 
 /**

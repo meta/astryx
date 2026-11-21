@@ -791,6 +791,17 @@ describe('a word matches whole words (FR6)', () => {
     expect(first('information icon of popover links')).toBe('link');
     // Only the words after the last icon word count as places.
     expect(first('information icon links icon')).toBe('link');
+    // A name of several words counts as places only spelled out in full.
+    const blocks = setOf([{id: 'settings'}, {id: 'code'}, {id: 'block'}]);
+    const blockNames = () => ['Code', 'CodeBlock'];
+    /** @param {string} query */
+    const firstBlock = query =>
+      answeringMatches(
+        rankIcons([blocks], query, {words: true, componentNames: blockNames}),
+      )[0]?.id;
+    expect(firstBlock('settings icon code block')).toBe('settings');
+    expect(firstBlock('settings icon code blocks')).toBe('settings');
+    expect(firstBlock('settings icon block')).toBe('block');
   });
 
   it("reads the names of the project's Core components for the words after the icon word", async () => {
