@@ -344,12 +344,31 @@ function grayStop(family, stop) {
 }
 
 /**
- * A plural part said to work in both modes, "headings that work in light
- * and dark mode"; never after a modal ("must", "should", "could", "needs
- * to").
+ * A part said to work in both modes, "headings that work in light and dark
+ * mode".
  */
 const PLURAL_BOTH_MODES =
-  /\b(?:that\s+|which\s+)?(?<!\b(?:must|should|shall|will|would|could|can|may|might|to|needs?\s+to|has\s+to|have\s+to)\s+)(?:work(?:\s+well)?|look\s+good|hold\s+up|are\s+usable)\s+in\s+(?:both\s+)?(?:light\s+(?:and|&)\s+dark|dark\s+(?:and|&)\s+light)\s+modes?\b/i;
+  /\b(?:that\s+|which\s+)?(?:work(?:\s+well)?|look\s+good|hold\s+up|are\s+usable)\s+in\s+(?:both\s+)?(?:light\s+(?:and|&)\s+dark|dark\s+(?:and|&)\s+light)\s+modes?\b/gi;
+/**
+ * A plural part said to work in both modes, read as "in both modes".
+ * After a modal ("must", "could", "needs to") the verb says nothing of
+ * number, so only a plural part before it ("headings that could work") is
+ * read so; "text that must work …" is left as said.
+ * @param {string} m @param {number} at @param {string} whole
+ */
+const pluralBothModesAt = (m, at, whole) => {
+  const before = whole.slice(0, at);
+  if (
+    !/\b(?:must|should|shall|will|would|could|can|may|to|needs?\s+to|has\s+to|have\s+to)\s+$/i.test(
+      before,
+    )
+  )
+    return ' in both modes ';
+  const part = /\b([a-z]+)\s+(?:that|which)\s+(?:[a-z]+\s+){1,2}$/i.exec(
+    before,
+  )?.[1];
+  return part && /[^s]s$/i.test(part) ? ' in both modes ' : m;
+};
 /**
  * The palette names among the hues (terracotta, sage, slate…): read when
  * said whole, never a word a typo is corrected to ("state" is no slate).
@@ -5001,11 +5020,8 @@ export function draftAnswer(ctx, env, question) {
     )
     // ("headings that work in light and dark mode should be navy": a plural
     // part said to work in both modes is that part in both modes, as "in
-    // both modes" says it; the clause is never cut at its "and". Never
-    // after "must", "should" or "needs to": "text that must work in light
-    // and dark mode" asks for text that reads in both, as the rule below
-    // reads it.)
-    .replace(new RegExp(PLURAL_BOTH_MODES.source, 'gi'), ' in both modes ')
+    // both modes" says it; the clause is never cut at its "and".)
+    .replace(PLURAL_BOTH_MODES, pluralBothModesAt)
     // ("a theme that works in dark mode": a theme with both modes, which it
     // has; never an ask scoped to dark.)
     .replace(
@@ -33150,7 +33166,7 @@ export function draftAnswer(ctx, env, question) {
   // so, with that mode, the ratio and the way to keep it readable there.
   // Only text on the page: a part that draws its own fill, a button,
   // puts its text on that fill, never on the page.)
-  if (modal && PLURAL_BOTH_MODES.test(asked0))
+  if (modal && asked0.replace(PLURAL_BOTH_MODES, pluralBothModesAt) !== asked0)
     for (const r of result) {
       /** @type {string[]} */
       const notes = [];

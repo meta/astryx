@@ -231,6 +231,23 @@ describe('light and dark said as what the theme must work in', () => {
     expect(links.map(r => r.text).join('\n')).toMatch(
       /#1e3a8a reads \d+\.\d\d:1 on the dark page \(under 4\.5:1\); for dark mode, set a lighter color with --mode dark/,
     );
+    // (A modal before the verb leaves the number to the part: a plural
+    // part, "headings that could work …", is still both modes.)
+    const could = (
+      await results(
+        'fresh',
+        'headings that could work in light and dark mode should be navy',
+      )
+    ).flatMap(r => r.commands);
+    expect(could.join('\n')).toMatch(/color '#1e3a8a' --on heading/);
+    expect(could.join('\n')).not.toMatch(/headings bold/);
+    const modes = (
+      await results(
+        'fresh',
+        'headings that work in light and dark modes should be navy',
+      )
+    ).flatMap(r => r.commands);
+    expect(modes.join('\n')).toMatch(/color '#1e3a8a' --on heading/);
     // (Text on a part's own fill, a button's, is not measured against the
     // page.)
     const buttons = await results(
