@@ -22,6 +22,7 @@ import {
   globalCli,
   placeCli,
   recyclePlacedCopies,
+  runFolder,
   seedPackedRelease,
 } from '../test-utils/global-local-fixtures.mjs';
 import {
@@ -56,7 +57,9 @@ let project;
 let core;
 
 beforeAll(() => {
-  work = fs.mkdtempSync(path.join(os.tmpdir(), 'packed-search-catalog-'));
+  work = fs.mkdtempSync(
+    path.join(runFolder() ?? os.tmpdir(), 'packed-search-catalog-'),
+  );
   // Every file the package publishes, as an install holds them.
   packed = placeCli(path.join(work, 'cli'), VERSION, {coreStep: true}).dir;
   // A placed copy shares its templates folder with every other copy: this
@@ -81,12 +84,12 @@ beforeAll(() => {
   );
 }, 180_000);
 
-// Removing the placed and installed copies takes longer than the default hook
-// time on a loaded machine.
 afterAll(() => {
   recyclePlacedCopies();
-  if (work) fs.rmSync(work, {recursive: true, force: true});
-}, 120_000);
+  // The node project's global teardown removes the run's folder, with this
+  // file's placed and installed copies inside it, outside the hook's time.
+  if (work && !runFolder()) fs.rmSync(work, {recursive: true, force: true});
+});
 
 /**
  * Run a CLI in the project.
