@@ -333,6 +333,11 @@ const DIR_TO_REGISTRY_KEY: Record<string, string | string[]> = {
  * by the record that requires it.
  */
 const PRIVATE_SYSTEM_VARS = new Set([
+  // InputClearButton's 24 px fine-pointer target (WCAG 2.2 SC 2.5.8): the
+  // button holds the media condition and the hole's direction, which its
+  // `::after` reads. They are not a theme surface.
+  '--_input-clear-target',
+  '--_input-clear-target-hole',
   // Text and Heading FR3: a container that wraps with `overflow-wrap:
   // anywhere` passes it to the Text inside it; Text reads it with a
   // `break-word` fallback. scripts/text-overflow-wrap-anywhere.test.mjs
