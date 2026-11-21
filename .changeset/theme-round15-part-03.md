@@ -41,7 +41,7 @@ Other readings fixed:
 - "status colors green #x, amber #y, red #z" sets the success, warning and danger colors. "amber #y for warnings" keeps the typed value.
 - A color name before a typed value ("light gray fill #F1F2F4") uses the typed value. "blue-gray" for the theme's gray reaches the neutral color again.
 - "clear error messages" no longer resets the danger color.
-- "less contrast" softens the main text. "a gentle dark mode" softens the dark text and lightens the dark page. "big type" and "big readable text" mean larger text. "thin borders" means thinner borders, and "lots of white space" means more spacing.
+- "less contrast" softens the main text. "big type" and "big readable text" mean larger text. "thin borders" means thinner borders, and "lots of white space" means more spacing.
 - "deep teal" is a deep teal.
 
 - `astryx experimental theme editor how`:
