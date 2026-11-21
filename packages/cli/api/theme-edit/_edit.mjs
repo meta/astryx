@@ -2534,6 +2534,16 @@ function aloneFlag(ctx, part, thing, state = null) {
 }
 
 /**
+ * Whether two lists name the same parts, whatever their order.
+ * @param {string[]} a @param {string[]} b
+ */
+function sameParts(a, b) {
+  const x = new Set(a);
+  const y = new Set(b);
+  return x.size === y.size && [...x].every(p => y.has(p));
+}
+
+/**
  * The parts a setting reaches because their element is drawn as one of the
  * parts it writes (the census saw both targets on one element: a calendar's
  * nav arrow is a button), and which keep no setting of the same thing of
@@ -6797,8 +6807,18 @@ async function changeOnce(
       JSON.stringify(
         savedSetting({...s, keep: undefined, reached: undefined}),
       ) &&
-    partsOf(ctx, {...prev, keep: undefined}).length ===
-      partsOf(ctx, {...s, keep: undefined, reached: undefined}).length &&
+    // (The saved setting itself, so a reach pinned by its record, or by
+    // the editor that saved it with none, counts; a member it keeps out
+    // counts as reached while the new reach still holds it.)
+    sameParts(
+      [
+        ...partsOf(ctx, prev),
+        ...(Array.isArray(prev.keep) ? prev.keep : []).filter(m =>
+          partsOf(ctx, {...s, keep: undefined, reached: undefined}).includes(m),
+        ),
+      ],
+      partsOf(ctx, {...s, keep: undefined, reached: undefined}),
+    ) &&
     // A later setting that covers the same parts hides it: set again, it
     // moves last and wins.
     !data.settings

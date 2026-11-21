@@ -876,11 +876,11 @@ the JSON result) with the parts it would also reach and the command that
 sets it again at its whole reach, and `show` lists them in its notes. The
 build records what it has offered (`offered`, a build-owned field like
 `lifted`). A setting saved with no record keeps the reach the editor that
-saved it gave it (its own part, or the whole group for a setting named on a
-group or on a member of inputs or checks), is recorded at its next
-build, and the rest of its group is offered. `set … --only` on a setting
-the theme holds replaces the group version, so the look leaves the rest of
-the group, and a set without
+saved it gave it (its own part; the group, for a setting named on a group;
+the members that drew the same value, for one on a member of inputs or
+checks), is recorded at its next build, and the rest of its family is
+offered. `set … --only` on a setting the theme holds replaces the group
+version, so the look leaves the rest of the group, and a set without
 `--only` replaces the `--only` version. `only` stays part of a setting's
 identity, so a theme saved with both versions still opens and builds as it
 did.
