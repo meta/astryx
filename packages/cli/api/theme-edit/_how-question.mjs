@@ -2235,7 +2235,8 @@ const CLEAR_LEAD = String.raw`\bclear\s+(?:all\s+(?:of\s+)?the|the|my|our|their|
 
 /**
  * The ask that starts at a word of the question, as asked: up to the end of
- * its sentence or line, or an "and", "then", "but" or comma that starts
+ * its sentence or line, or an "and", "then", "but", comma or semicolon that
+ * starts
  * another ask with a verb of its own (another clear too) and a part of its
  * own ("… and undo my heading edits"), or a look of its own that it does
  * not send back ("… and make the text white"). A next ask that names
@@ -2253,7 +2254,7 @@ function askFrom(asked, at, isVerb, partWords) {
   const end = ask.search(/[.!?\n](?=\s|$)|\n/);
   if (end >= 0) ask = ask.slice(0, end);
   for (const m of ask.matchAll(
-    /(?:,\s*(?:(?:and|then|but)\s+)?|\s(?:and|then|but)\s+)([a-z']+)/g,
+    /(?:[,;]\s*(?:(?:and|but)\s+)?(?:then\s+)?|\s(?:and|but)\s+(?:then\s+)?|\sthen\s+)([a-z']+)/g,
   )) {
     if (m[1] !== 'clear' && !isVerb(m[1])) continue;
     const next = ` ${ask.slice((m.index ?? 0) + m[0].length)} `;
@@ -2261,7 +2262,11 @@ function askFrom(asked, at, isVerb, partWords) {
     const ownPart = partWords.some(
       ([re]) => mayMatch(re, next) && re.test(next),
     );
-    const ownLook = aspectsOf(next).length > 0 && !GOING_BACK.test(next);
+    // (A look the clear already names is the same ask's: "… and restore
+    // the background", "… and use a softer shadow".)
+    const said = aspectsOf(ask.slice(0, m.index));
+    const ownLook =
+      aspectsOf(next).some(a => !said.includes(a)) && !GOING_BACK.test(next);
     if (!pointsBack && (ownPart || ownLook)) return ask.slice(0, m.index);
   }
   return ask;
