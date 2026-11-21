@@ -1,0 +1,7 @@
+---
+'@astryxdesign/cli': patch
+---
+
+[experimental] `astryx experimental theme editor how`: a bare "neutral grays" clause is now also read on a theme that sets part colors or a page, surface or card color of its own, or whose base keeps tinted grays in its part rules (such as one made like Stone or Butter). The answer names what keeps its tint whatever the seed is: the gray tokens part rules set (Stone's secondary text on a muted card), a one-mode part color included, a Neutral ground the theme sets (page, surface, card, popover or muted background, or the skeleton fill), whole-theme or on a part, and a fill, text, border (any side) or outline color it sets on a part ("cream cards"), written as an opaque hex or color-function color (alone, in a shorthand, or inside `color-mix()`, where the colors written in it are read) or as a lone color word. A see-through color is not named, so a theme whose only tint is see-through may hear that its grays are already neutral. It never says the grays are already neutral while one of these, written that way, stays tinted. A value counts as tinted by its color, by one limit everywhere: a ground or fill up to an OKLab chroma of 0.1, any other gray up to 0.05. Past that it is a color of its own and is not named (red text on a card, a blue button fill, a blue page), and so is a variant ground such as `--color-background-blue`, wherever it is set.
+
+@josephfarina

@@ -2,8 +2,7 @@
 
 /**
  * @file A bare neutral-grays clause ("neutral grays", "use neutral grays",
- * "untinted grays"), on a theme that sets no part colors, reads as grays
- * with no hue of their own. On a theme whose grays already have none, how
+ * "untinted grays") reads as grays with no hue of their own. On a theme whose grays already have none, how
  * says so and writes nothing; on a tinted one (a warm gray), it gives the
  * neutral color as Neutral's mid gray, and the page, surfaces and
  * secondary text lose their tint in every mode. Every other ask keeps
@@ -135,14 +134,12 @@ describe('neutral grays', () => {
   );
 
   it(
-    'a theme that sets a part color inside a shorthand keeps the base answer',
+    'a theme that sets a part color inside a shorthand names it, never already neutral',
     async test => {
       needsBases(test);
-      const results = await answer('neutral grays', 'rgbedge');
-      expect(results.flatMap(r => r.lines)).toEqual([]);
-      expect(
-        results.some(r => /already neutral|grays without a tint/.test(r.text)),
-      ).toBe(false);
+      const [top] = await answer('neutral grays', 'rgbedge');
+      expect(top.text).toMatch(/card border/);
+      expect(top.text).not.toMatch(/already neutral/);
     },
     T,
   );
@@ -316,7 +313,7 @@ describe('neutral grays', () => {
   );
 
   it(
-    "keeps main's reading for every ask but a bare neutral-grays clause on a theme that sets no part colors",
+    "keeps main's reading for every ask but a bare neutral-grays clause",
     async test => {
       needsBases(test);
       // (Main's answers for these asks: the start of each result's text
@@ -455,7 +452,7 @@ describe('neutral grays', () => {
     },
     T,
   );
-  it('reads a tint in every color syntax a part rule may use', () => {
+  it('reads a tint in every color syntax a value may use', () => {
     // (A value's hex and color-function colors are read, lch(), lab(),
     // hwb() and color() included, in a shorthand too.)
     for (const v of [
