@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import React, {useMemo, useRef, useState} from 'react';
+import React, {useCallback, useMemo, useRef, useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {
   Table,
@@ -209,6 +209,9 @@ export const NotAllRowsExpandable: Story = {
   },
 };
 
+const getOrderKey = (order: Order) => order.id;
+const renderOrderItems = (order: Order) => <OrderItems order={order} />;
+
 const manyOrders: Order[] = Array.from({length: 2000}, (_, index) => ({
   ...orders[index % orders.length],
   id: `ord-${String(index + 1).padStart(4, '0')}`,
@@ -313,11 +316,17 @@ export const GlidingRowsLongTable: StoryObj<{glide?: boolean}> = {
     const [expandedKeys, setExpandedKeys] = useState<Set<string>>(
       () => new Set(),
     );
+    // Stable callbacks, so the story's own renders do not re-render every row
+    // and a measurement shows only Table's work.
+    const toggleOrder = useCallback(
+      (key: string) => setExpandedKeys(prev => toggleKey(prev, key)),
+      [],
+    );
     const expansion = useTableRowExpansion<Order>({
       expandedKeys,
-      onToggle: key => setExpandedKeys(prev => toggleKey(prev, key)),
-      getRowKey: item => item.id,
-      renderExpanded: item => <OrderItems order={item} />,
+      onToggle: toggleOrder,
+      getRowKey: getOrderKey,
+      renderExpanded: renderOrderItems,
       animatedLayout: glide === false ? undefined : animatedLayout,
     });
     return (

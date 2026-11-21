@@ -25,8 +25,10 @@ export const LOW_CONTRAST_PREFIX = 'astryx-low-contrast:';
  * Text that is not drawn (no box, hidden), text in a disabled control or
  * under a box drawn see-through (a disabled look), text in the theme's
  * disabled or placeholder color (which needs no 4.5:1), and text over an
- * image, a picture or a gradient (no one color behind it) are left out. `part` is the
- * nearest Astryx part the text sits in (its `astryx-<part>` class); text in
+ * image, a picture, a gradient between colors or a layer that covers only
+ * part of its box (no one color behind it) are left out. A flat tint over
+ * the whole box (a pressed state's one-color gradient) is a fill. `part` is
+ * the nearest Astryx part the text sits in (its `astryx-<part>` class); text in
  * no part (a sheet's own labels) is left out. One entry for each part,
  * text and pair of colors.
  * Runs in the page: it uses nothing from outside its own body.
@@ -97,8 +99,8 @@ export function lowContrastText() {
     q.top < p.bottom;
   /**
    * What is drawn behind an element's text, as one color, or null: a box
-   * around it see-through or hidden, disabled, or drawn with an image, or
-   * an image or picture under the text before an opaque fill.
+   * around it see-through or hidden, disabled, or drawn with an image that
+   * is not one flat color over the whole box, before an opaque fill.
    * @param {Element} el
    */
   const behind = el => {
@@ -117,34 +119,150 @@ export function lowContrastText() {
         if (r.width < 2 || r.height < 2 || cs.visibility !== 'visible')
           return null;
       }
-      if (cs.backgroundImage && cs.backgroundImage !== 'none') return null;
+      // (A flat tint drawn as an image, a hover or pressed state's
+      // one-color gradient, is a fill like any other, drawn over the
+      // box's color; any other image leaves no one color behind.)
+      const tints = flatLayers(cs, a.getBoundingClientRect());
+      if (!tints) return null;
       const f = rgba(cs.backgroundColor);
-      if (f && f[3] > 0) fills.push(f);
-      if (f && f[3] >= 1) break;
+      // (Drawn bottom first: the box's color, then its layers, the last
+      // listed lowest; fills are gathered top first.)
+      const own = [...(f && f[3] > 0 ? [f] : []), ...[...tints].reverse()];
+      fills.push(...own.reverse());
+      if (own.some(x => x[3] >= 1)) break;
     }
     let under = [255, 255, 255];
     for (const f of fills.reverse()) under = over(f, under);
     return under;
   };
   /**
-   * Whether an image, a picture or a gradient is drawn under an element's
-   * text from a box beside it (media under an overlay's scrim): then no one
-   * color is behind the text.
-   * @param {Element} el
+   * A box's image layers when each is one flat color (a gradient whose
+   * stops are all the same color) that covers the whole box, top layer
+   * first; [] for none. A layer that draws nothing (a size of 0) is left
+   * out. null for any other image: a picture, a gradient between colors, or
+   * a flat layer that covers only part of the box (an underline).
+   * @param {CSSStyleDeclaration} cs the box's computed style
+   * @param {DOMRect} box the box
+   * @returns {Array<[number, number, number, number]> | null}
    */
+  const flatLayers = (cs, box) => {
+    const bgi = cs.backgroundImage;
+    if (!bgi || bgi === 'none') return [];
+    /** @type {string[]} */
+    const layers = [];
+    let depth = 0;
+    let start = 0;
+    for (let i = 0; i < bgi.length; i++) {
+      if (bgi[i] === '(') depth++;
+      else if (bgi[i] === ')') depth--;
+      else if (bgi[i] === ',' && depth === 0) {
+        layers.push(bgi.slice(start, i));
+        start = i + 1;
+      }
+    }
+    layers.push(bgi.slice(start));
+    /** @type {Array<[number, number, number, number]>} */
+    const out = [];
+    for (const [n, layer] of layers.entries()) {
+      if (!/^\s*(?:linear|radial)-gradient\(/.test(layer)) return null;
+      const covers = coverage(cs, n, box);
+      if (covers === 'none') continue;
+      if (covers === 'part') return null;
+      const colors = (
+        layer.match(
+          /(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\([^()]*\)/g,
+        ) ?? []
+      ).map(rgba);
+      if (!colors.length || colors.some(c => c == null)) return null;
+      const [first] = /** @type {Array<[number, number, number, number]>} */ (
+        colors
+      );
+      if (
+        colors.some(c =>
+          /** @type {number[]} */ (c).some(
+            (v, i) => Math.abs(v - first[i]) > 0.5 / (i === 3 ? 255 : 1),
+          ),
+        )
+      )
+        return null;
+      out.push(first);
+    }
+    return out;
+  };
   /**
-   * The page's images, pictures and gradients with their boxes, read once
-   * when first asked: a page has many texts and few of them fail.
+   * How much of a box one of its image layers covers: 'all', 'part' or
+   * 'none'. A gradient has no size of its own: it fills its size (the whole
+   * box by default) once, or tiles it where it repeats.
+   * @param {CSSStyleDeclaration} cs @param {number} n the layer, top first
+   * @param {DOMRect} box
+   * @returns {'all' | 'part' | 'none'}
+   */
+  const coverage = (cs, n, box) => {
+    /** @param {string} list */
+    const nth = list => {
+      const items = list.split(',').map(x => x.trim());
+      return items[n % items.length] ?? '';
+    };
+    const size = nth(cs.backgroundSize).split(/\s+/);
+    const rep = nth(cs.backgroundRepeat).split(/\s+/);
+    const repeats =
+      rep[0] === 'repeat-x'
+        ? [true, false]
+        : rep[0] === 'repeat-y'
+          ? [false, true]
+          : [rep[0], rep[1] ?? rep[0]].map(
+              r => r === 'repeat' || r === 'round',
+            );
+    const pos = [nth(cs.backgroundPositionX), nth(cs.backgroundPositionY)];
+    // (Only a plain length or percentage is read: a size or a place the
+    // browser keeps as calc(), or an edge keyword with an offset, is taken
+    // as covering part of the box.)
+    const plain = /^-?[\d.]+(px|%)?$/;
+    let part = false;
+    for (const [i, whole] of [box.width, box.height].entries()) {
+      const s =
+        size[0] === 'cover' || size[0] === 'contain'
+          ? 'auto'
+          : (size[i] ?? 'auto');
+      if (s !== 'auto' && !plain.test(s)) return 'part';
+      const len =
+        s === 'auto'
+          ? whole
+          : s.endsWith('%')
+            ? (parseFloat(s) / 100) * whole
+            : parseFloat(s);
+      if (!(len > 0)) return 'none';
+      if (repeats[i]) continue;
+      const at = pos[i] || '0%';
+      if (!plain.test(at)) return 'part';
+      const offset = at.endsWith('%')
+        ? (parseFloat(at) / 100) * (whole - len)
+        : parseFloat(at) || 0;
+      // (It covers the box when it holds it whole, wherever it is placed.)
+      if (offset > 0.5 || offset + len < whole - 0.5) part = true;
+    }
+    return part ? 'part' : 'all';
+  };
+  /**
+   * The page's images, pictures and boxes with a background image (a
+   * gradient or a tint), with their boxes, read once when first asked: a
+   * page has many texts and few of them fail.
    * @type {Array<[Element, DOMRect]> | null}
    */
   let media = null;
-  /** @param {Element} el */
+  /**
+   * Whether an image, a picture, a gradient or a tint is drawn over or under
+   * an element's text from a box beside it (media under an overlay's
+   * scrim): then no one color is behind the text.
+   * @param {Element} el
+   */
   const overImage = el => {
     media ??= [...document.querySelectorAll('body *')]
       .filter(m => {
         if (m.matches('img, picture, video, canvas, svg image')) return true;
-        const bgi = getComputedStyle(m).backgroundImage;
-        return Boolean(bgi) && bgi !== 'none';
+        // (A box beside the text draws over or under it whatever its
+        // image, a flat tint too: no one color is known behind the text.)
+        return getComputedStyle(m).backgroundImage !== 'none';
       })
       .map(
         m => /** @type {[Element, DOMRect]} */ ([m, m.getBoundingClientRect()]),

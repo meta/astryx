@@ -17,6 +17,9 @@ export const docs = {
   category: 'Content',
   keywords: [
     'icon',
+    'semantic icon',
+    'semantic icon name',
+    'semantic icon names',
     'svg',
     'glyph',
     'symbol',
@@ -152,13 +155,13 @@ export const docs = {
   },
   usage: {
     description:
-      'Icons are small visual symbols that represent actions, objects, or concepts. They improve scannability and reinforce meaning alongside text. Supports both direct SVG components and semantic icon names that adapt to the active theme.',
+      'Icons are small visual symbols that represent actions, objects, or concepts. They improve scannability and reinforce meaning alongside text. Supports both direct SVG components and built-in meanings that adapt to the active theme.',
     anatomy,
     bestPractices: [
       {
         guidance: true,
         description:
-          'Use semantic icon names when available; they adapt to theme changes automatically.',
+          'Use built-in meanings when available; they adapt to theme changes automatically.',
       },
       {
         guidance: true,
@@ -304,12 +307,12 @@ export const docsZh = {
   },
   usage: {
     description:
-      'Icons are small visual symbols that represent actions, objects, or concepts. They improve scannability and reinforce meaning alongside text. Supports both direct SVG components and semantic icon names that adapt to the active theme.',
+      'Icons are small visual symbols that represent actions, objects, or concepts. They improve scannability and reinforce meaning alongside text. Supports both direct SVG components and built-in meanings that adapt to the active theme.',
     bestPractices: [
       {
         guidance: true,
         description:
-          'Use semantic icon names when available; they adapt to theme changes automatically.',
+          'Use built-in meanings when available; they adapt to theme changes automatically.',
       },
       {
         guidance: true,
@@ -358,16 +361,16 @@ export const docsZh = {
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
 export const docsDense = {
   description:
-    'Renders icons w/ Astryx design system colors + sizes. Supports direct SVG icon components + semantic icon names that adapt to active theme.',
+    'Renders icons w/ Astryx design system colors + sizes. Supports direct SVG icon components + built-in meanings that adapt to active theme.',
   usage: {
     description:
-      'Icons are small visual symbols that represent actions, objects, or concepts. They improve scannability and reinforce meaning alongside text. Supports both direct SVG components and semantic icon names that adapt to the active theme.',
+      'Icons are small visual symbols that represent actions, objects, or concepts. They improve scannability and reinforce meaning alongside text. Supports both direct SVG components and built-in meanings that adapt to the active theme.',
     anatomy,
     bestPractices: [
       {
         guidance: true,
         description:
-          'Use semantic icon names when available; they adapt to theme changes automatically.',
+          'Use built-in meanings when available; they adapt to theme changes automatically.',
       },
       {
         guidance: true,

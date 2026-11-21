@@ -447,6 +447,7 @@
  *   are the ranker's input, not a contract: they may change in any release,
  *   which is why `version` must match.
  * @property {Array<{name: string, package: string, reason: string}>} withdrawn - The sets read but withdrawn, and why, so a `set` that names one gives the same error as `icon()`.
+ * @property {string[]} [components] - The names of the folder's Core components, so a query's words that name one say where the icon goes, as with `icon()`.
  */
 
 export {};
