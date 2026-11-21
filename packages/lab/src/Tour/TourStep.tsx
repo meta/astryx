@@ -4,29 +4,13 @@
 
 /**
  * @file TourStep.tsx
- * @input Uses React, Popover/Button/Text/Heading/Stack from @astryxdesign/core, TourContext
+ * @input Uses React, useLayer/useLayerDismissal and Button/IconButton/Text/Heading/Stack from @astryxdesign/core, TourContext
  * @output Exports TourStep component and TourStepProps
- * @position Lab experiment (meta/astryx#4239); a single spotlight step in a Tour
- *
- * A TourStep highlights a target element and renders a callout anchored to it,
- * with a heading, body, optional step progress ("2 of 5"), and back / next /
- * close controls. It registers with the parent `<Tour>` on mount (so step
- * order follows the children) and only renders its callout while it is the
- * active step. Anchoring + the callout surface reuse the core `Popover`
- * (`anchorRef` → the step's target), so positioning, top-layer rendering, and
- * dismiss semantics come from the existing layer system rather than a bespoke
- * implementation.
- *
- * The highlight is drawn as a separate overlay tracking the target's box — the
- * consumer's element is never restyled, so there is no cascade fight with the
- * target's own styles. That overlay is promoted into the browser TOP LAYER
- * (via the popover API, like the rest of the layer system) so it sits above
- * page content without any hardcoded z-index; the callout is promoted after
- * it, so the callout stays above the highlight. Because it is promoted in
- * place (not portaled out of the tree), it stays inside the consumer's Theme
- * subtree and inherits theme tokens — including a scoped/nested theme's accent
- * for the ring. Dimming is an opt-in spotlight cutout (dims around the target,
- * not over it) rather than a flat scrim.
+ * @position Lab; one step of a Tour. It draws a highlight ring over its
+ *   target and a non-modal callout anchored to that ring. The target gets no
+ *   trigger wiring, and its own styles are never changed. Escape ends the
+ *   tour through the shared layer dismissal stack. The ring and the callout
+ *   open in the top layer in place, so they keep the consumer's theme tokens.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/lab/src/Tour/Tour.tsx
@@ -37,6 +21,7 @@
  */
 
 import {
+  useCallback,
   useContext,
   useEffect,
   useId,
@@ -46,10 +31,22 @@ import {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {Popover} from '@astryxdesign/core/Popover';
-import type {LayerAlignment, LayerPlacement} from '@astryxdesign/core/Layer';
+import {
+  LayerDepthProvider,
+  useLayer,
+  useLayerDismissal,
+  type LayerAlignment,
+  type LayerPlacement,
+} from '@astryxdesign/core/Layer';
 import {Button} from '@astryxdesign/core/Button';
+import {IconButton} from '@astryxdesign/core/IconButton';
+import {Icon} from '@astryxdesign/core/Icon';
+import {
+  prepareFocusReturnOnRemoval,
+  useInteractionModalityTracking,
+} from '@astryxdesign/core/internal/touch';
 import {Text} from '@astryxdesign/core/Text';
+import {focusOutlineStyles} from '@astryxdesign/core/utils';
 import {Heading} from '@astryxdesign/core/Heading';
 import {VStack, HStack} from '@astryxdesign/core/Layout';
 import {
@@ -57,6 +54,8 @@ import {
   spacingVars,
   durationVars,
   easeVars,
+  radiusVars,
+  shadowVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
 import {TourContext} from './TourContext';
 
@@ -77,12 +76,23 @@ interface TargetRect {
 }
 
 const styles = stylex.create({
+  // The callout surface: the same paint as a Popover surface.
+  surface: {
+    backgroundColor: colorVars['--color-background-popover'],
+    borderRadius: radiusVars['--radius-container'],
+    boxShadow: shadowVars['--shadow-low'],
+    padding: spacingVars['--spacing-3'],
+  },
   content: {
     display: 'flex',
     flexDirection: 'column',
     gap: spacingVars['--spacing-3'],
     // Keep the callout from growing arbitrarily wide with long body copy.
     maxWidth: '320px',
+  },
+  header: {
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
   },
   footer: {
     alignItems: 'center',
@@ -91,7 +101,7 @@ const styles = stylex.create({
   // Extra clearance between the target and the callout, so the highlight ring
   // (which extends a few px past the target) is never covered by the callout.
   // Placement-aware: the margin goes on the side of the callout that faces the
-  // target. Adds to Popover's own small anchor gap.
+  // target. Adds to the layer's own small anchor offset.
   calloutGapBelow: {marginBlockStart: spacingVars['--spacing-2']},
   calloutGapAbove: {marginBlockEnd: spacingVars['--spacing-2']},
   calloutGapStart: {marginInlineEnd: spacingVars['--spacing-2']},
@@ -103,6 +113,10 @@ const styles = stylex.create({
   overlayRoot: {
     position: 'fixed',
     inset: 0,
+    // A popover is sized to fit its content by default; the overlay fills
+    // the viewport so a dimmed step catches presses on the page.
+    width: '100%',
+    height: '100%',
     margin: 0,
     padding: 0,
     borderWidth: 0,
@@ -156,10 +170,12 @@ function TourHighlight({
   rect,
   hasBackdrop,
   onBackdropClick,
+  highlightRef,
 }: {
   rect: TargetRect | null;
   hasBackdrop: boolean;
   onBackdropClick: () => void;
+  highlightRef: (node: HTMLDivElement | null) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -188,6 +204,7 @@ function TourHighlight({
         hasBackdrop && styles.overlayInteractive,
       )}>
       <div
+        ref={highlightRef}
         data-testid="tour-highlight"
         {...stylex.props(
           styles.highlight,
@@ -212,10 +229,12 @@ function TourHighlight({
 
 export interface TourStepProps {
   /**
-   * Ref to the element this step points at. The callout anchors to it (like a
-   * Popover trigger); it must be a `<button>` or `[role="button"]` element,
-   * matching Popover's `anchorRef` contract. Accepts a ref to any HTMLElement
-   * subtype (e.g. `useRef<HTMLButtonElement>(null)`).
+   * Ref to the element this step points at: any element, such as a button, a
+   * card, a table cell or a chart region. The callout sits beside it. The
+   * target keeps its own behavior: without a backdrop, pressing it does not
+   * end the tour, and keyboard focus can reach it while the step shows.
+   * Accepts a ref to any HTMLElement subtype (e.g.
+   * `useRef<HTMLDivElement>(null)`).
    */
   targetRef: React.RefObject<HTMLElement | null>;
   /** Step heading. */
@@ -258,7 +277,49 @@ export function TourStep({
 }: TourStepProps) {
   const tour = useContext(TourContext);
   const id = useId();
+  const headingId = useId();
   const isActiveStep = tour != null && tour.activeStepId === id;
+  const regionRef = useRef<HTMLElement | null>(null);
+  // Focus return reads the last input from shared modality tracking.
+  const {ref: trackModality} = useInteractionModalityTracking();
+  // Prepared when the callout mounts, since the layer mounts its content
+  // after the step's first commit. Kept on unmount: the cleanup that returns
+  // focus runs after the callout leaves the DOM.
+  const returnFocusOnRemovalRef = useRef<
+    ((opener: Element | null) => void) | null
+  >(null);
+  const setRegion = useCallback(
+    (node: HTMLElement | null) => {
+      regionRef.current = node;
+      if (node != null) {
+        returnFocusOnRemovalRef.current = prepareFocusReturnOnRemoval(node);
+      }
+      return trackModality(node);
+    },
+    [trackModality],
+  );
+
+  // A non-modal anchored layer with no light dismiss. Without a backdrop, a
+  // press on the page or the target leaves the tour running. The backdrop owns
+  // the press that ends a dimmed tour.
+  const layer = useLayer({mode: 'context'});
+  const {ref: anchorLayerTo, show: showLayer, hide: hideLayer} = layer;
+  const layerId = layer.id;
+
+  // Whether any step of the tour is active after the latest commit. The
+  // passive cleanup below runs after this layout effect, so it can tell a
+  // step change from the end of the tour.
+  const isTourRunningRef = useRef(false);
+  const getOpener = tour?.getOpener;
+  const isTourRunning = tour?.activeStepId != null;
+  // An unmounted tour is not running: an app that removes Tour from
+  // onDismiss still gets the focus return.
+  useClientLayoutEffect(() => {
+    isTourRunningRef.current = isTourRunning;
+    return () => {
+      isTourRunningRef.current = false;
+    };
+  }, [isTourRunning]);
 
   // The active target's viewport box, tracked so the highlight overlay can sit
   // exactly over it. null until measured (or when inactive).
@@ -301,8 +362,58 @@ export function TourStep({
     };
   }, [targetRef, isActiveStep]);
 
+  // The callout anchors to the highlight box, not to the target. The box is
+  // placed from the target's measured rect, so a press that scales the
+  // target does not move the callout. The target gets no anchor name, no
+  // trigger ARIA and no press handler.
+  const setHighlight = useCallback(
+    (node: HTMLDivElement | null) => {
+      anchorLayerTo(node);
+    },
+    [anchorLayerTo],
+  );
+
+  // Shows the callout after the highlight overlay promotes itself, so the
+  // callout stays above the highlight in the top layer.
+  useEffect(() => {
+    if (!isActiveStep) {
+      return;
+    }
+    showLayer();
+    // Focus moves to the step region, so assistive technology reads the new
+    // step. The popover opens through the layer's own scheduling, so focus
+    // waits one frame.
+    const frame = requestAnimationFrame(() => {
+      regionRef.current?.focus({preventScroll: true});
+    });
+    const target = targetRef.current;
+    return () => {
+      cancelAnimationFrame(frame);
+      hideLayer();
+      if (isTourRunningRef.current) {
+        return;
+      }
+      // Focus returns only when the callout's removal lost it. It goes to
+      // the target when the target is in the tab order. Otherwise it goes to
+      // the element that had focus when the tour started.
+      returnFocusOnRemovalRef.current?.(
+        target != null && target.tabIndex >= 0
+          ? target
+          : (getOpener?.() ?? null),
+      );
+    };
+  }, [isActiveStep, targetRef, showLayer, hideLayer, getOpener]);
+
+  const onDismiss = tour?.onDismiss;
+  useLayerDismissal({
+    isActive: isActiveStep,
+    onDismiss: () => onDismiss?.('escape'),
+    getContainer: () =>
+      regionRef.current?.ownerDocument.getElementById(layerId) ?? null,
+  });
+
   // Outside a <Tour>, or when this isn't the active step, render nothing.
-  if (tour == null || !isActiveStep) {
+  if (tour == null || !isActiveStep || onDismiss == null) {
     return null;
   }
 
@@ -313,44 +424,61 @@ export function TourStep({
     hasBackdrop,
     onNext,
     onPrevious,
-    onDismiss,
   } = tour;
 
   const isFirstStep = activeStepIndex <= 0;
   const isLastStep = stepCount > 0 && activeStepIndex === stepCount - 1;
 
   const content = (
-    <div {...stylex.props(styles.content)} data-testid={testId}>
-      <VStack gap={1}>
-        <Heading level={4}>{heading}</Heading>
-        {children != null && <Text type="body">{children}</Text>}
-      </VStack>
-      <HStack gap={2} xstyle={styles.footer}>
-        {isStepCountShown && stepCount > 0 ? (
-          <Text type="supporting" color="secondary">
-            {`${activeStepIndex + 1} of ${stepCount}`}
-          </Text>
-        ) : (
-          <span />
-        )}
-        <HStack gap={2}>
-          {!isFirstStep && (
-            <Button
+    <section
+      ref={setRegion}
+      aria-labelledby={headingId}
+      tabIndex={-1}
+      {...stylex.props(styles.surface, focusOutlineStyles.focusVisible)}
+      data-testid={testId}>
+      <div {...stylex.props(styles.content)}>
+        <VStack gap={1}>
+          <HStack gap={2} xstyle={styles.header}>
+            <Heading level={4} id={headingId}>
+              {heading}
+            </Heading>
+            <IconButton
               variant="ghost"
               size="sm"
-              label="Back"
-              onClick={onPrevious}
+              label="Close tour"
+              icon={<Icon icon="close" size="sm" />}
+              onClick={() => onDismiss('close')}
             />
+          </HStack>
+          {children != null && <Text type="body">{children}</Text>}
+        </VStack>
+        <HStack gap={2} xstyle={styles.footer}>
+          {isStepCountShown && stepCount > 0 ? (
+            <Text type="supporting" color="secondary">
+              {`${activeStepIndex + 1} of ${stepCount}`}
+            </Text>
+          ) : (
+            <span />
           )}
-          <Button
-            variant="primary"
-            size="sm"
-            label={isLastStep ? 'Done' : 'Next'}
-            onClick={onNext}
-          />
+          <HStack gap={2}>
+            {!isFirstStep && (
+              <Button
+                variant="ghost"
+                size="sm"
+                label="Back"
+                onClick={onPrevious}
+              />
+            )}
+            <Button
+              variant="primary"
+              size="sm"
+              label={isLastStep ? 'Done' : 'Next'}
+              onClick={onNext}
+            />
+          </HStack>
         </HStack>
-      </HStack>
-    </div>
+      </div>
+    </section>
   );
 
   return (
@@ -361,36 +489,16 @@ export function TourStep({
         rect={rect}
         hasBackdrop={hasBackdrop}
         onBackdropClick={() => onDismiss('backdrop')}
+        highlightRef={setHighlight}
       />
-      <Popover
-        // Popover types anchorRef as RefObject<HTMLElement>; TourStep accepts a
-        // nullable ref for ergonomics (useRef<HTMLButtonElement>(null)). Popover
-        // guards a null `.current` internally, so this widening is safe.
-        anchorRef={targetRef as React.RefObject<HTMLElement>}
-        isOpen
-        onOpenChange={open => {
-          // Popover reports close from light-dismiss (backdrop) or Escape.
-          // Route it to the tour as a dismissal so the whole tour ends, not
-          // just this step's popover. Escape and outside-click both surface
-          // here.
-          if (!open) {
-            onDismiss('close');
-          }
-        }}
-        placement={placement}
-        alignment={alignment}
-        // Size the callout to its content instead of matching the target's
-        // width (Popover's default minWidth: anchor-size(width) makes it span a
-        // wide target); the content's own maxWidth caps it.
-        width="fit-content"
+      {layer.render(<LayerDepthProvider>{content}</LayerDepthProvider>, {
+        placement,
+        alignment,
+        offset: spacingVars['--spacing-1'],
         // Push the callout clear of the highlight ring so the ring is never
-        // covered (placement-aware; adds to Popover's own anchor gap).
-        xstyle={calloutGapStyles[placement]}
-        label={typeof heading === 'string' ? heading : 'Tour step'}
-        hasCloseButton
-        closeButtonLabel="Close tour"
-        content={content}
-      />
+        // covered (placement-aware; adds to the layer's anchor offset).
+        xstyle: calloutGapStyles[placement],
+      })}
     </>
   );
 }

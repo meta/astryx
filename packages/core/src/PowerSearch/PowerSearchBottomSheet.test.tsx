@@ -839,6 +839,27 @@ describe('PowerSearch sheet trigger (FR11)', () => {
     expect(isSheetOpen()).toBe(true);
   });
 
+  it('passes data-* attributes to the trigger, the primary control', () => {
+    const props = {'data-tag': 'ps', filters: [openFilter]};
+    setup(props);
+    expect(document.querySelectorAll('[data-tag="ps"]')).toHaveLength(1);
+    expect(trigger()).toHaveAttribute('data-tag', 'ps');
+  });
+
+  it('passes data-* attributes to the combobox input in the popover presentation', () => {
+    render(
+      <PowerSearch
+        config={config}
+        filters={[]}
+        onChange={vi.fn()}
+        presentation="popover"
+        data-tag="ps"
+      />,
+    );
+    expect(document.querySelectorAll('[data-tag="ps"]')).toHaveLength(1);
+    expect(screen.getByRole('combobox')).toHaveAttribute('data-tag', 'ps');
+  });
+
   it('keeps data-testid on the combobox input in the popover presentation', () => {
     render(
       <PowerSearch
@@ -2833,8 +2854,10 @@ describe('PowerSearch Add filter (FR13)', () => {
         isReadOnly
       />,
     );
+    // A disabled Item action stays focusable: it is aria-disabled, and a
+    // click does nothing.
     const status = within(sheet()).getByRole('button', {name: 'Status'});
-    expect(status).toBeDisabled();
+    expect(status).toHaveAttribute('aria-disabled', 'true');
     fireEvent.click(status);
     expect(
       within(sheet()).getByRole('heading', {name: 'Add filter'}),
@@ -5084,8 +5107,8 @@ describe('PowerSearch sheet value text', () => {
         );
       }
       render(<Harness />);
-      // The trigger shows the popover token as it is: the stored key.
-      expect(within(field()).getByText('3d_ago')).toBeTruthy();
+      // The trigger's token reads the value as the choice row does.
+      expect(within(field()).getByText('3 days ago')).toBeTruthy();
       openSheet();
       const row = within(sheet()).getByRole('button', {
         name: 'Age is newer than 3 days ago',
@@ -5204,7 +5227,7 @@ describe('PowerSearch sheet value text', () => {
     },
   );
 
-  it("reads a number with the locale's digits and decimal mark where they differ from the token's, differing only in notation (FR12)", () => {
+  it("reads a number with the locale's digits and decimal mark, unrounded, on the row and the trigger's token (FR12)", () => {
     render(
       <InternationalizationProvider locale="de">
         <PowerSearch
@@ -5244,9 +5267,9 @@ describe('PowerSearch sheet value text', () => {
         name: 'Cost > 0,000000000000000000001',
       }),
     ).toBeTruthy();
-    // The token keeps its own text.
-    expect(within(field()).getByText('1e-7')).toBeTruthy();
-    expect(within(field()).getByText('0')).toBeTruthy();
+    // The trigger's tokens read the same numbers.
+    expect(within(field()).getByText('0,0000001')).toBeTruthy();
+    expect(within(field()).getByText('-0')).toBeTruthy();
   });
 
   it('formats a list and a number on the Filters row and in Removed in the provider locale (INV1a, INV8)', async () => {
@@ -5282,7 +5305,7 @@ describe('PowerSearch sheet value text', () => {
       render(<Harness />);
       openSheet();
       // German list separators and digit grouping, not a literal ", " and
-      // `String()`; the popover token keeps its own literals (known gap).
+      // `String()`, on the row and on the trigger's token.
       const list = within(sheet()).getByRole('button', {
         name: 'ID is any of a, b und c',
       });
@@ -5293,13 +5316,13 @@ describe('PowerSearch sheet value text', () => {
           name: 'Lines is greater than 1234567',
         }),
       ).toBeTruthy();
-      expect(within(field()).getByText('a, b, c')).toBeTruthy();
+      expect(within(field()).getByText('a, b und c')).toBeTruthy();
       expect(within(field()).getByText('1234567')).toBeTruthy();
       // A float: the locale's decimal mark, no rounding.
       expect(
         within(sheet()).getByRole('button', {name: 'Cost > 2,3456'}),
       ).toBeTruthy();
-      expect(within(field()).getByText('2.3456')).toBeTruthy();
+      expect(within(field()).getByText('2,3456')).toBeTruthy();
       fireEvent.click(
         within(list.closest('li')!).getByRole('button', {
           name: 'Remove ID filter',
@@ -5344,8 +5367,8 @@ describe('PowerSearch sheet value text', () => {
       expect(
         within(sheet()).getByRole('button', {name: `ID is any of ${text}`}),
       ).toBeTruthy();
-      // The token keeps its literal join (known gap).
-      expect(within(field()).getByText('Bug, Feature, Docs')).toBeTruthy();
+      // The trigger's token joins the list the same way.
+      expect(within(field()).getByText(text)).toBeTruthy();
     },
   );
 

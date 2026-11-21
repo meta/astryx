@@ -3,21 +3,17 @@
 'use client';
 
 import {MoreMenu} from '@astryxdesign/core/MoreMenu';
-import {
-  PencilIcon,
-  DocumentDuplicateIcon,
-  TrashIcon,
-} from '@heroicons/react/24/outline';
+import {EditIcon, CopyIcon, DeleteIcon} from '@astryxdesign/template-icons';
 
 export default function MoreMenuWithDividers() {
   return (
     <MoreMenu
       variant="secondary"
       items={[
-        {label: 'Edit', icon: PencilIcon, onClick: () => {}},
-        {label: 'Duplicate', icon: DocumentDuplicateIcon, onClick: () => {}},
+        {label: 'Edit', icon: EditIcon, onClick: () => {}},
+        {label: 'Duplicate', icon: CopyIcon, onClick: () => {}},
         {type: 'divider'},
-        {label: 'Delete', icon: TrashIcon, onClick: () => {}},
+        {label: 'Delete', icon: DeleteIcon, onClick: () => {}},
       ]}
     />
   );

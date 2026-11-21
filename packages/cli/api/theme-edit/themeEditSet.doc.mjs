@@ -13,7 +13,7 @@ export const doc = {
   summary:
     'Change one thing in a theme: checked against what the components read, built, previewed.',
   description:
-    "Changes one thing. The thing is a dial (corners, spacing, accent, neutral, success, warning, danger, info, vibrancy, font, headings, surfaces, buttons, type, text-size, base, mode: big moves with named rungs; `more`/`less` step a rung), a design token by name (--color-background-body; `how --list tokens`), or a CSS property on a part (background --on card; needs --on). Every change is CHECKED first against the installed Core: the part, the --when variant and value, the --state, the token's type (color, size, number, font, shadow; only colors and shadows may differ by mode), and whether the part, or a part inside it, actually reads the token for what you mean. A change that cannot take effect is REFUSED: exit 1, an error code, nothing written, and the suggestions lead with the command that works (the token the part really reads, or the property that sets it directly). Groups: --on <group> (inputs, checks, containers, menus) styles every member; styling one member of an always-alike group (inputs, checks) styles the whole group unless --only. A setting on a part beats a whole-theme dial, and a dial never overwrites one. After building, a plain part setting that a more specific base-theme rule would beat (such as a heading level) is repeated on those variant keys, and the result says so. The result lists resolved token changes, part styles written, contrast problems this theme caused versus its base (text below 4.5:1), notes (the shade a color's main token uses, any shade moved so text reads, and the generated color files; font loading: the exact install line when the font package is missing), and writes themes/<theme>/preview.html. Values with spaces go in quotes: gradients, several shadows, font stacks. Dials: corners square|small|medium|large|round|pill|more|less|<size>; spacing tight|compact|medium|roomy|spacious|more|less; accent, neutral, success, warning, danger, info <color> (a color: the editor generates its light and dark shades from the one color, with the same generator as `theme palette generate`, and points the color tokens at them; a token moves to a nearby shade when it must read: text at 4.5:1, the focus ring at 3:1; the whole theme only, no --on or --mode; `how colors` explains it and the Colors preview page shows every shade); vibrancy 0-100|more|less (how saturated the generated colors are; 50 is the default; needs a color); font <preset, open font, family or stack>; headings light|regular|medium|semibold|bold|heavy or tight|tighter|normal|wide; surfaces flat|outlined|raised|glass; buttons solid|outline|soft|caps; type compact|standard|editorial|display; text-size small|medium|large|larger|more|less|<number>; base <built-in theme>|none; mode both|light-only|dark-only. `astryx experimental theme editor how --list dials` explains each. An exact token always wins over the generated colors: `set <theme> --color-accent <color>` (with --on or --mode if you need them) is the escape hatch, whatever order the settings were made in. Experimental: it may change or be removed in a patch release.",
+    "Changes one thing. The thing is a dial (corners, spacing, accent, neutral, success, warning, danger, info, vibrancy, font, headings, surfaces, buttons, type, text-size, base, mode: big moves with named rungs; `more`/`less` step a rung), a design token by name (--color-background-body; `how --list tokens`), or a CSS property on a part (background --on card; needs --on). Every change is CHECKED first against the installed Core: the part, the --when variant and value, the --state, the token's type (color, size, number, font, shadow; only colors may differ by mode; a shadow is one value for both), and whether the part, or a part inside it, actually reads the token for what you mean. A change that cannot take effect is REFUSED: exit 1, an error code, nothing written, and the suggestions lead with the command that works (the token the part really reads, or the property that sets it directly). Groups: --on <group> (inputs, checks, containers, menus) styles every member; styling one member of an always-alike group (inputs, checks) styles the whole group unless --only. A height or vertical padding on a bar (the app's header) reaches the one row of items drawn once across it (the top nav; never a menu's or side nav's items, a divider, a trigger or an avatar): the row fills the bar and gives up its own vertical padding, so its items sit in the middle; a value set on the row stays, and a part in the row taller than the bar is a problem with its fixing line. A row that sits in more than one bar takes the reach in every bar that holds it, and none when those bars leave it different heights (different heights, or the same height padded differently, as the app's header pads a safe area). A setting on a part beats a whole-theme dial, and a dial never overwrites one. After building, a plain part setting that a more specific base-theme rule would beat (such as a heading level) is repeated on those variant keys, and the result says so. The result lists resolved token changes, part styles written, contrast problems this theme caused versus its base (text below 4.5:1), notes (the shade a color's main token uses, any shade moved so text reads, and the generated color files; font loading: the exact install line when the font package is missing), and writes themes/<theme>/preview.html; when sheet.html (made by `show`) now shows the theme as it was, it says so at its top and the result's sheetStale says so. Values with spaces go in quotes: gradients, several shadows, font stacks. Dials: corners square|small|medium|large|round|pill|more|less|<size>; spacing tight|compact|medium|roomy|spacious|more|less; accent, neutral, success, warning, danger, info <color> (a color: the editor generates its light and dark shades from the one color, with the same generator as `theme palette generate`, and points the color tokens at them; a token moves to a nearby shade when it must read: text at 4.5:1, the focus ring at 3:1; the whole theme only, no --on or --mode; `how colors` explains it and the Colors preview page shows every shade); vibrancy 0-100|more|less (how saturated the generated colors are; 50 is the default; needs a color); font <preset, open font, family or stack>; headings light|regular|medium|semibold|bold|heavy or tight|tighter|normal|wide; surfaces flat|outlined|raised|glass; buttons solid|outline|soft|caps; type compact|standard|editorial|display; text-size small|medium|large|larger|more|less|<number of pixels, 10 to 32>; base <built-in theme>|none; mode both|light-only|dark-only. `astryx experimental theme editor how --list dials` explains each. An exact token always wins over the generated colors: `set <theme> --color-accent <color>` (with --on or --mode if you need them) is the escape hatch, whatever order the settings were made in. Experimental: it may change or be removed in a patch release.",
   importPath: '@astryxdesign/cli/api/experimental',
   signature:
     'themeEditSet(theme: string, thing: string, value: string, options?: object): Promise<object>',
@@ -62,7 +62,8 @@ export const doc = {
     {
       name: 'options.mode',
       type: 'string',
-      description: '`light` or `dark`: only that color mode.',
+      description:
+        '`light` or `dark`: only that color mode (colors only; a shadow is one value for both modes).',
     },
     {
       name: 'options.only',
@@ -78,7 +79,8 @@ export const doc = {
     {
       name: 'options.cwd',
       type: 'string',
-      description: 'The app folder (default: the current directory).',
+      description:
+        'The folder to start from (default: the current directory): commands act on the Astryx project at or above it, so a subfolder of an app works.',
     },
   ],
   returns: [
@@ -103,7 +105,7 @@ export const doc = {
     },
     {
       code: 'ERR_THEME_UNKNOWN_STATE',
-      when: '--state is not a state of the part',
+      when: '--state is not a state of the part (a word for exactly one of its states is read as that state)',
     },
     {
       code: 'ERR_THEME_UNKNOWN_TOKEN',
@@ -146,8 +148,16 @@ export const doc = {
       when: '@astryxdesign/core is not installed in the folder',
     },
     {
+      code: 'ERR_THEME_BUSY',
+      when: 'another command is changing the same theme and did not finish within 30 seconds; nothing was changed',
+    },
+    {
       code: 'ERR_THEME_INVALID',
       when: 'the theme does not build (the change is undone)',
+    },
+    {
+      code: 'ERR_DEP_MISSING',
+      when: "a package the build loads is broken in node_modules (it needs a package it declares, and that package is missing); the suggestion is the app's install command, or, when the run uses a CLI copy of its own (global, one-off or cached) and the app's install does not hold the package that needs it, the message names that copy (a release-cache copy: the folder to remove); nothing was changed",
     },
     {
       code: 'ERR_RENDER_FAILED',

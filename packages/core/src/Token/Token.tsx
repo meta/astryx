@@ -37,9 +37,13 @@ import {TokenLink} from './TokenLink';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {
+  focusOwnerProps,
+  focusWithinOwner,
+} from '../privateAttributes/focusOwner.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {cancelNestedTouchPress} from '../hooks/useClickableContainer';
+import {cancelNestedPress} from '../hooks/useClickableContainer';
 import type {TokenColorMap} from './index';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
 import {TokenNamingContext} from './TokenNamingContext';
@@ -49,6 +53,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Token/Token.generated';
+import {tokenRemoveProps} from '../privateAttributes/tokenRemove.stylex';
 
 registerEnglishFallback(english);
 
@@ -212,6 +217,7 @@ const sizeStyles = stylex.create({
   sm: {
     height: `calc(${sizeVars['--size-element-sm']} - 8px)`,
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
     paddingInline: spacingVars['--spacing-2'],
   },
   md: {
@@ -315,6 +321,7 @@ export function Token({
   'aria-describedby': ariaDescribedBy,
   'aria-haspopup': ariaHasPopup,
   'aria-expanded': ariaExpanded,
+  'aria-pressed': ariaPressed,
   ref,
   ...rest
 }: TokenProps) {
@@ -337,6 +344,7 @@ export function Token({
       aria-label={t('@astryx.token.remove', {
         label: naming?.removeName ?? label,
       })}
+      {...tokenRemoveProps}
       onClick={e => {
         e.stopPropagation();
         onRemove(e);
@@ -362,7 +370,8 @@ export function Token({
     </>
   );
 
-  // Naming and popup inputs reach the element that owns the token's action:
+  // Naming, popup and pressed inputs reach the element that owns the token's
+  // action:
   // the inner button of a clickable token, otherwise the root
   // (architecture:public-component-api INV5).
   const labellingProps = {
@@ -370,6 +379,7 @@ export function Token({
     'aria-describedby': ariaDescribedBy,
     'aria-haspopup': ariaHasPopup,
     'aria-expanded': ariaExpanded,
+    'aria-pressed': ariaPressed,
   };
 
   const sharedProps = {
@@ -470,7 +480,10 @@ export function Token({
         icon={icon}
         endContent={endContent}
         removeButton={removeButton}
-        linkStyleProps={stylex.props(styles.invisibleButton)}
+        linkStyleProps={{
+          ...stylex.props(styles.invisibleButton),
+          ...focusOwnerProps,
+        }}
         {...pressable}
         labelContent={
           <span
@@ -488,7 +501,10 @@ export function Token({
             size,
             disabled: isDisabled ? 'disabled' : null,
           }),
-          focusOutlineProps.focusWithin(
+          // Rings for the token's own button or link only; the remove button
+          // rings itself.
+          stylex.props(
+            focusWithinOwner,
             styles.base,
             sizeStyles[size],
             colorStyles[color],
@@ -522,7 +538,7 @@ export function Token({
       e: React.PointerEvent<HTMLSpanElement>,
     ) => {
       rest.onPointerDown?.(e);
-      cancelNestedTouchPress(
+      cancelNestedPress(
         e,
         e.currentTarget,
         e.currentTarget.querySelector(':scope > button'),
@@ -540,7 +556,10 @@ export function Token({
             size,
             disabled: isDisabled ? 'disabled' : null,
           }),
-          focusOutlineProps.focusWithin(
+          // Rings for the token's own button or link only; the remove button
+          // rings itself.
+          stylex.props(
+            focusWithinOwner,
             styles.base,
             sizeStyles[size],
             colorStyles[color],
@@ -565,6 +584,7 @@ export function Token({
           {...labellingProps}
           aria-disabled={isDisabled || undefined}
           {...(isDisabled ? disabledInteractionProps() : null)}
+          {...focusOwnerProps}
           {...stylex.props(styles.invisibleButton)}>
           <span
             {...textDirectionProps(label)}

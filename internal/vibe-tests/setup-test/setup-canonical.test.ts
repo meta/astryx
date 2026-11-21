@@ -192,6 +192,44 @@ function installAstryxCss(arm: string) {
 }
 
 /**
+ * Core's stylesheet alone, as an app that keeps its own preflight installs it:
+ * no reset.css and no theme stylesheet.
+ */
+function installCoreStylesheetOnly(arm: string) {
+  edit(path.join(arm, 'src', 'index.css'), source =>
+    source.replace(
+      "@import 'tailwindcss';",
+      [
+        '@layer reset, theme, base, astryx-base, astryx-theme, components, utilities;',
+        '',
+        "@import 'tailwindcss';",
+        "@import '@astryxdesign/core/astryx.css';",
+      ].join('\n'),
+    ),
+  );
+}
+
+/**
+ * Core's stylesheet and a built theme stylesheet, without reset.css: the
+ * install of an app that keeps its own preflight and loads a stock theme's
+ * CSS.
+ */
+function installThemeStylesheetWithoutReset(arm: string) {
+  edit(path.join(arm, 'src', 'index.css'), source =>
+    source.replace(
+      "@import 'tailwindcss';",
+      [
+        '@layer reset, theme, base, astryx-base, astryx-theme, components, utilities;',
+        '',
+        "@import 'tailwindcss';",
+        "@import '@astryxdesign/core/astryx.css';",
+        "@import '@astryxdesign/theme-neutral/theme.css';",
+      ].join('\n'),
+    ),
+  );
+}
+
+/**
  * Canonical `host-aligned` strategy install.
  *
  * The established host stays authoritative: the app owns a theme that extends
@@ -353,8 +391,8 @@ export function GuestRegion({
   );
 }
 
-function applyButtonAddition(arm: string) {
-  installAstryxCss(arm);
+function applyButtonAddition(arm: string, install = installAstryxCss) {
+  install(arm);
   edit(path.join(arm, 'src', 'App.tsx'), source =>
     source
       .replace(
@@ -1254,6 +1292,107 @@ describeCanonical('canonical intended changes', () => {
     expect(passesAcceptance(scoreArm(baseline, geometryMutation))).toBe(false);
   }, 120_000);
 
+  it("leaves a host's color scheme alone when it loads Core's stylesheet without reset.css", () => {
+    // The host names no scheme of its own, so the root's scheme is what
+    // Core's stylesheet makes it. It must stay the host's in both modes: a
+    // light host page with an Astryx button stays light for a dark reader.
+    const {
+      root,
+      baseline: baselineApp,
+      arm,
+    } = preparePair('tailwind-v4-control');
+    applyButtonAddition(arm, installCoreStylesheetOnly);
+    const baseline = measure(
+      baselineApp,
+      'tailwind-v4-control',
+      path.join(root, 'core-only-baseline.json'),
+    );
+    const provenance = provenanceFor(arm, 'tailwind-v4-control', 's1');
+    const result = measure(
+      arm,
+      'tailwind-v4-control',
+      path.join(root, 'core-only-arm.json'),
+      provenance,
+    );
+    expect(
+      result.build.ok,
+      `${result.build.stdout}\n${result.build.stderr}`,
+    ).toBe(true);
+    const css = fs.readFileSync(path.join(arm, 'src', 'index.css'), 'utf8');
+    expect(css).not.toContain('@astryxdesign/core/reset.css');
+    for (const scheme of ['light', 'dark'] as const) {
+      expect(baseline.schemes[scheme].colorScheme).toBe('normal');
+      expect(result.schemes[scheme].colorScheme, scheme).toBe(
+        baseline.schemes[scheme].colorScheme,
+      );
+    }
+    const score = scoreArm(baseline, result);
+    expect(score.regressionDetails, JSON.stringify(score, null, 2)).toEqual([]);
+    expect(verdict(score)).toBe('clean');
+    expect(passesAcceptance(score)).toBe(true);
+  }, 120_000);
+
+  it("keeps a theme's dark component styles off a light host that loads no reset.css, for a dark reader", () => {
+    // The host names no scheme and loads Core's stylesheet alone. A root
+    // Theme in system mode around the Astryx button carries a theme whose
+    // button has a dark block. The page draws light, so once the root Theme
+    // names that scheme on <html>, the dark block applies for no reader.
+    const {root, arm} = preparePair('tailwind-v4-control');
+    applyButtonAddition(arm, installCoreStylesheetOnly);
+    fs.writeFileSync(
+      path.join(arm, 'src', 'probeTheme.ts'),
+      `// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+import {defineTheme} from '@astryxdesign/core/theme';
+import {neutralTheme} from '@astryxdesign/theme-neutral';
+
+export const probeTheme = defineTheme({
+  name: 'probe',
+  extends: neutralTheme,
+  components: {button: {base: {'@dark': {backgroundColor: 'rgb(1, 2, 3)'}}}},
+});
+`,
+    );
+    edit(path.join(arm, 'src', 'App.tsx'), source =>
+      source
+        .replace(
+          "import {Button} from '@astryxdesign/core/Button';",
+          "import {Button} from '@astryxdesign/core/Button';\nimport {Theme} from '@astryxdesign/core/theme';\nimport {probeTheme} from './probeTheme';",
+        )
+        .replace(
+          '              <Button\n                data-vibe-result="astryx-button"',
+          '              <Theme theme={probeTheme}>\n              <Button\n                data-vibe-result="astryx-button"',
+        )
+        .replace(
+          '                variant="secondary"\n              />',
+          '                variant="secondary"\n              />\n              </Theme>',
+        ),
+    );
+    const app = fs.readFileSync(path.join(arm, 'src', 'App.tsx'), 'utf8');
+    expect(app).toContain('<Theme theme={probeTheme}>');
+    expect(app).toContain('</Theme>');
+    const provenance = provenanceFor(arm, 'tailwind-v4-control', 's1');
+    const result = measure(
+      arm,
+      'tailwind-v4-control',
+      path.join(root, 'scheme-blocks-arm.json'),
+      provenance,
+    );
+    expect(
+      result.build.ok,
+      `${result.build.stdout}\n${result.build.stderr}`,
+    ).toBe(true);
+    const button = (scheme: 'light' | 'dark') =>
+      result.schemes[scheme].taskResults?.['astryx-button'];
+    expect(button('dark')).toMatchObject({count: 1, visible: true});
+    expect(result.schemes.dark.colorScheme).toBe('normal');
+    // The dark reader sees the light page's button, not the dark block.
+    expect(button('dark')?.style.backgroundColor).not.toBe('rgb(1, 2, 3)');
+    expect(button('dark')?.style.backgroundColor).toBe(
+      button('light')?.style.backgroundColor,
+    );
+  }, 180_000);
+
   it.each([
     'tailwind-v4-control',
     'shadcn-tailwind-v4-established',
@@ -1994,6 +2133,49 @@ describeCanonical('canonical established-app strategies', () => {
 
     // Host damage is still detected at full strength.
     assertStyleMutationFails(baseline, result, 'primary-action');
+  }, 180_000);
+
+  it("leaves a host's color scheme alone when it loads a built theme stylesheet without reset.css", () => {
+    // The host names no scheme of its own, and loads Core's stylesheet and
+    // the neutral theme's stylesheet without reset.css. A built theme follows
+    // the page's scheme, so the root's scheme stays the host's in both
+    // reader runs: a light host page with an Astryx button stays light for a
+    // dark reader, its native controls and canvas included.
+    const {
+      root,
+      baseline: baselineApp,
+      arm,
+    } = preparePair('tailwind-v4-control');
+    applyButtonAddition(arm, installThemeStylesheetWithoutReset);
+    const baseline = measure(
+      baselineApp,
+      'tailwind-v4-control',
+      path.join(root, 'theme-css-no-reset-baseline.json'),
+    );
+    const provenance = provenanceFor(arm, 'tailwind-v4-control', 's1');
+    const result = measure(
+      arm,
+      'tailwind-v4-control',
+      path.join(root, 'theme-css-no-reset-arm.json'),
+      provenance,
+    );
+    expect(
+      result.build.ok,
+      `${result.build.stdout}\n${result.build.stderr}`,
+    ).toBe(true);
+    const css = fs.readFileSync(path.join(arm, 'src', 'index.css'), 'utf8');
+    expect(css).not.toContain('@astryxdesign/core/reset.css');
+    expect(css).toContain('@astryxdesign/theme-neutral/theme.css');
+    for (const scheme of ['light', 'dark'] as const) {
+      expect(baseline.schemes[scheme].colorScheme).toBe('normal');
+      expect(result.schemes[scheme].colorScheme, scheme).toBe(
+        baseline.schemes[scheme].colorScheme,
+      );
+    }
+    const score = scoreArm(baseline, result);
+    expect(score.regressionDetails, JSON.stringify(score, null, 2)).toEqual([]);
+    expect(verdict(score)).toBe('clean');
+    expect(passesAcceptance(score)).toBe(true);
   }, 180_000);
 
   it('builds an app-owned theme deterministically and imports no stock theme', () => {

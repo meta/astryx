@@ -10,7 +10,7 @@
  */
 
 import {InternationalizationProvider} from '../i18n';
-import {useState} from 'react';
+import {Suspense, startTransition, use, useState, type ReactNode} from 'react';
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {render, screen, act, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -101,6 +101,21 @@ describe('Slider', () => {
     const sliders = screen.getAllByRole('slider');
     expect(sliders[0]).toHaveAccessibleName('Valeur minimale');
     expect(sliders[1]).toHaveAccessibleName('Valeur maximale');
+  });
+
+  it('writes a range text value through one catalog message', () => {
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        overrides={{fr: {'@astryx.slider.rangeValue': 'de {start} à {end}'}}}>
+        <Slider
+          label="Prix"
+          value={[20, 80] as [number, number]}
+          valueDisplay="text"
+        />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByText('de 20 à 80')).toBeInTheDocument();
   });
 
   it('sets aria-valuetext with formatValue', () => {
@@ -329,6 +344,19 @@ describe('Slider', () => {
   });
 
   // --- Required state ---
+
+  it('describes required state with the provider catalog', () => {
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        overrides={{fr: {'@astryx.slider.required': 'Obligatoire'}}}>
+        <Slider label="Volume" value={50} isRequired />
+      </InternationalizationProvider>,
+    );
+    const slider = screen.getByRole('slider');
+    expect(slider).toHaveAccessibleDescription(/Obligatoire/);
+    expect(slider).not.toHaveAccessibleDescription(/Required/);
+  });
 
   it('conveys required state through the accessible description', () => {
     render(<Slider label="Volume" value={50} isRequired />);
@@ -2202,5 +2230,105 @@ describe('coincident range thumbs', () => {
     fireEvent.pointerMove(end, mouse(120));
 
     expect(onChange).toHaveBeenLastCalledWith([0, 50]);
+  });
+});
+
+describe('Slider after a render React discards', () => {
+  // A transition that suspends for good: React renders it, then keeps the
+  // committed tree and never commits that render.
+  const forever = new Promise<never>(() => {});
+  function Forever(): null {
+    use(forever);
+    return null;
+  }
+  function Discardable({
+    children,
+    isPending = false,
+  }: {
+    children: ReactNode;
+    isPending?: boolean;
+  }) {
+    return (
+      <Suspense fallback={null}>
+        {children}
+        {isPending ? <Forever /> : null}
+      </Suspense>
+    );
+  }
+  function pressTrackAtMiddle() {
+    const trackContainer = controlOf(screen.getByRole('slider'));
+    trackContainer.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      right: 200,
+      bottom: 20,
+      width: 200,
+      height: 20,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    });
+    fireEvent.pointerDown(trackContainer, {
+      clientX: 100,
+      clientY: 10,
+      pointerId: 1,
+    });
+    fireEvent.pointerUp(trackContainer, {
+      clientX: 100,
+      clientY: 10,
+      pointerId: 1,
+    });
+  }
+
+  it('reports the change end to the committed callback', async () => {
+    const onChangeEnd = vi.fn();
+    const discardedOnChangeEnd = vi.fn();
+    const slider = (onEnd: (value: number) => void) => (
+      <Slider
+        label="Volume"
+        value={50}
+        min={0}
+        max={100}
+        onChange={() => {}}
+        onChangeEnd={onEnd}
+      />
+    );
+    const {rerender} = render(<Discardable>{slider(onChangeEnd)}</Discardable>);
+    await act(async () => {
+      startTransition(() => {
+        rerender(
+          <Discardable isPending>{slider(discardedOnChangeEnd)}</Discardable>,
+        );
+      });
+    });
+
+    pressTrackAtMiddle();
+
+    expect(onChangeEnd).toHaveBeenCalledOnce();
+    expect(discardedOnChangeEnd).not.toHaveBeenCalled();
+  });
+
+  it('reports the committed value at the change end', async () => {
+    const onChangeEnd = vi.fn();
+    const slider = (value: number) => (
+      <Slider
+        label="Volume"
+        value={value}
+        min={0}
+        max={100}
+        onChange={() => {}}
+        onChangeEnd={onChangeEnd}
+      />
+    );
+    const {rerender} = render(<Discardable>{slider(50)}</Discardable>);
+    await act(async () => {
+      startTransition(() => {
+        rerender(<Discardable isPending>{slider(80)}</Discardable>);
+      });
+    });
+
+    pressTrackAtMiddle();
+
+    expect(onChangeEnd).toHaveBeenLastCalledWith(50);
   });
 });

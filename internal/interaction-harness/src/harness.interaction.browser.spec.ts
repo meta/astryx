@@ -193,25 +193,44 @@ const DOUBLE_TAP = [
 
 /**
  * Holds the page's main thread for `holdMs`, from 50 ms after the first lift,
- * as a page's own long task does. Records when each touch reached the page.
+ * as a page's own long task does. Records each touch's stamp and when it
+ * reached the page, each frame, and when the task ran, on the page's clock.
  */
 async function holdAfterFirstLift(page: Page, holdMs: number): Promise<void> {
   await page.evaluate(ms => {
-    const seen: {type: string; at: number}[] = [];
-    (window as unknown as {__tapsSeen: typeof seen}).__tapsSeen = seen;
+    const record = {
+      seen: [] as {type: string; at: number; stamp: number}[],
+      frames: [] as number[],
+      hold: {start: Number.NaN, end: Number.NaN},
+    };
+    (window as unknown as {__tapRecord: typeof record}).__tapRecord = record;
+    const frame = () => {
+      record.frames.push(performance.now());
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
     for (const type of ['touchstart', 'touchend']) {
-      addEventListener(type, () => seen.push({type, at: performance.now()}), {
-        capture: true,
-      });
+      addEventListener(
+        type,
+        event =>
+          record.seen.push({
+            type,
+            at: performance.now(),
+            stamp: event.timeStamp,
+          }),
+        {capture: true},
+      );
     }
     addEventListener(
       'touchend',
       () => {
         setTimeout(() => {
-          const end = performance.now() + ms;
+          record.hold.start = performance.now();
+          const end = record.hold.start + ms;
           while (performance.now() < end) {
             // The page's own task holds the main thread.
           }
+          record.hold.end = performance.now();
         }, 50);
       },
       {capture: true, once: true},
@@ -219,12 +238,58 @@ async function holdAfterFirstLift(page: Page, holdMs: number): Promise<void> {
   }, holdMs);
 }
 
+/** The page's record of a held double tap, from `holdAfterFirstLift`. */
+interface HeldTapRecord {
+  /** The first lift's stamp. */
+  readonly liftStamp: number;
+  /** The next touch-down's stamp. */
+  readonly downStamp: number;
+  /** When the next touch-down reached the page's listeners. */
+  readonly downReceivedAt: number;
+  /** When the page drew each frame. */
+  readonly frames: readonly number[];
+  /** When the page's own task began and ended. */
+  readonly holdStart: number;
+  readonly holdEnd: number;
+}
+
+async function heldTapRecord(page: Page): Promise<HeldTapRecord> {
+  return page.evaluate(() => {
+    const {seen, frames, hold} = (
+      window as unknown as {
+        __tapRecord: {
+          seen: {type: string; at: number; stamp: number}[];
+          frames: number[];
+          hold: {start: number; end: number};
+        };
+      }
+    ).__tapRecord;
+    const lift = seen.findIndex(entry => entry.type === 'touchend');
+    const down = seen.findIndex(
+      (entry, index) => index > lift && entry.type === 'touchstart',
+    );
+    if (lift < 0 || down < 0) {
+      throw new Error(`no second touch-down: ${JSON.stringify(seen)}`);
+    }
+    return {
+      liftStamp: seen[lift].stamp,
+      downStamp: seen[down].stamp,
+      downReceivedAt: seen[down].at,
+      frames: frames.slice(),
+      holdStart: hold.start,
+      holdEnd: hold.end,
+    };
+  });
+}
+
 /** How long after the first lift the next touch-down reached the page, ms. */
 async function secondTouchGapMs(page: Page): Promise<number> {
   return page.evaluate(() => {
-    const seen = (
-      window as unknown as {__tapsSeen: {type: string; at: number}[]}
-    ).__tapsSeen;
+    const {seen} = (
+      window as unknown as {
+        __tapRecord: {seen: {type: string; at: number}[]};
+      }
+    ).__tapRecord;
     const lift = seen.findIndex(entry => entry.type === 'touchend');
     const down = seen.findIndex(
       (entry, index) => index > lift && entry.type === 'touchstart',
@@ -688,7 +753,6 @@ test.describe('touch input', () => {
 
   test("a page task that holds the main thread across the tap interval's close never names the runner", async ({
     page,
-    browserName,
   }) => {
     // The driver comes first, so its mark does too.
     const driver = await touchDriver(page);
@@ -704,20 +768,38 @@ test.describe('touch input', () => {
       );
     // The page read separate taps, but its own task held the touch-down.
     expect(await secondTouchGapMs(page)).toBeGreaterThan(350);
-    // Chromium draws a frame after the task, before the touch-down it held.
-    // So the play names the held main thread. WebKit draws no frame between
-    // them, so the component decides (touch.taps.test.ts covers that case).
+    const record = await heldTapRecord(page);
+    const closesAt = record.liftStamp + 350;
+    expect(record.holdStart).toBeLessThan(closesAt);
+    expect(record.holdEnd).toBeGreaterThan(closesAt);
+    // Whether the engine draws a frame between the task's end and the
+    // touch-down it held is its own scheduling. The verdict follows the
+    // page's frames, by the play's rule: a frame after the close and before
+    // the touch-down arrived. A page that stamps touches on arrival gives
+    // the stamp; otherwise its listeners give the receipt.
+    const arrivedAt = driver.scriptedTimestamps
+      ? record.downReceivedAt
+      : record.downStamp;
+    const drewBetween = record.frames.some(
+      time => time > closesAt && time < arrivedAt,
+    );
+    test.info().annotations.push({
+      type: 'frame between the close and the touch-down',
+      description: drewBetween ? 'yes' : 'no',
+    });
+    // A play that fails names the held main thread, with a frame gap at
+    // least as long as the task, and never the runner.
+    const fault =
+      outcome instanceof Error && outcome.name === 'TouchTapIntervalError'
+        ? (outcome as Error & {fault: TapIntervalFault}).fault
+        : null;
     const named =
-      outcome instanceof Error &&
-      outcome.name === 'TouchTapIntervalError' &&
-      (outcome as Error & {fault: TapIntervalFault}).fault.closeFrameGapMs >
-        FRAME_STARVATION_MS &&
-      !outcome.message.includes('runner')
+      fault != null &&
+      fault.closeFrameGapMs >= record.holdEnd - record.holdStart &&
+      !(outcome as Error).message.includes('runner')
         ? 'a held main thread'
         : outcome;
-    expect(named).toBe(
-      browserName === 'webkit' ? 'resolved' : 'a held main thread',
-    );
+    expect(named).toBe(drewBetween ? 'a held main thread' : 'resolved');
   });
 
   test('a page task that ends before the tap interval closes leaves the double tap on time', async ({
@@ -7945,10 +8027,21 @@ async function freezeFixture(page: Page) {
   await page.goto('http://freeze.test/');
 }
 
+/**
+ * The box's run. It lasts long enough that a freeze a busy runner makes
+ * late still leaves it playing at the reads after the thaw. It moves at
+ * the 0.2 px per ms that the position checks expect.
+ */
+const RUN = {ms: 10_000, px: 2_000};
+
 /** The box's run as the page reads it, and the page's clocks. */
 const readScene = (page: Page) =>
   page.locator('#box').evaluate(el => {
-    const animation = el.getAnimations()[0];
+    // The run `startRun` keeps: a run that ended leaves `getAnimations()`,
+    // but its own state still reads `finished`.
+    const animation =
+      (window as unknown as {__freezeRun?: Animation}).__freezeRun ??
+      el.getAnimations()[0];
     return {
       x: new DOMMatrix(getComputedStyle(el).transform).m41,
       now: performance.now(),
@@ -7959,14 +8052,36 @@ const readScene = (page: Page) =>
     };
   });
 
-/** Starts a 2 s linear run of the box over 400 px. */
+type Scene = Awaited<ReturnType<typeof readScene>>;
+
+/** Starts the box's linear run and keeps it for the reads. */
 const startRun = (page: Page) =>
-  page.locator('#box').evaluate(el => {
-    el.animate(
-      [{transform: 'translateX(0px)'}, {transform: 'translateX(400px)'}],
-      {duration: 2_000, easing: 'linear'},
+  page.locator('#box').evaluate((el, {ms, px}) => {
+    (window as unknown as {__freezeRun?: Animation}).__freezeRun = el.animate(
+      [{transform: 'translateX(0px)'}, {transform: `translateX(${px}px)`}],
+      {duration: ms, easing: 'linear'},
     );
-  });
+  }, RUN);
+
+/**
+ * Fails by name when the run no longer plays at `scene`. A freeze that
+ * landed too late measures nothing, and a read of it must not count as
+ * time 0.
+ */
+function expectPlaying(
+  scene: Scene,
+  frozen: Scene,
+): asserts scene is Scene & {current: number; state: 'running'} {
+  if (scene.state !== 'running' || scene.current == null) {
+    const landed =
+      frozen.current == null
+        ? 'after the run ended'
+        : `at ${Math.round(frozen.current)} ms of the ${RUN.ms} ms run`;
+    throw new Error(
+      `inconclusive: the freeze landed ${landed}, and the run was ${scene.state ?? 'gone'} at this read`,
+    );
+  }
+}
 
 test.describe('page freeze', () => {
   test('a frozen scene stands still and reads no time passing; thawed, it plays on from where it stood, and the frozen span counts for neither its clock nor its animation', async ({
@@ -7979,24 +8094,28 @@ test.describe('page freeze', () => {
     await waitForAnimation(page.locator('#box'), {minProgressMs: 100});
     await freezePage(page);
     const frozen = await readScene(page);
+    expectPlaying(frozen, frozen);
     const frozenAt = Date.now();
     await page.waitForTimeout(300);
     const still = await readScene(page);
     expect(still).toEqual(frozen);
     expect(still.state).toBe('running');
     // Read in the thaw's own task: the run resumes exactly where it stood.
-    const atThaw = await page.locator('#box').evaluate(el => {
-      (
-        window as unknown as {__harnessFreeze: {thaw(): void}}
-      ).__harnessFreeze.thaw();
-      return Number(el.getAnimations()[0].currentTime);
+    const atThaw = await page.evaluate(() => {
+      const w = window as unknown as {
+        __harnessFreeze: {thaw(): void};
+        __freezeRun: Animation;
+      };
+      w.__harnessFreeze.thaw();
+      return Number(w.__freezeRun.currentTime);
     });
-    expect(atThaw).toBeCloseTo(frozen.current ?? NaN, 3);
+    expect(atThaw).toBeCloseTo(frozen.current, 3);
     await thawPage(page);
     await page.waitForTimeout(200);
     const thawed = await readScene(page);
     const elapsed = Date.now() - frozenAt;
-    const moved = (thawed.current ?? 0) - (frozen.current ?? 0);
+    expectPlaying(thawed, frozen);
+    const moved = thawed.current - frozen.current;
     expect(moved).toBeGreaterThan(100);
     expect(thawed.x).toBeGreaterThan(frozen.x);
     // The 300 ms frozen span counts for neither the run nor the page's clock.
@@ -8276,11 +8395,13 @@ test.describe('page freeze', () => {
       }, 10);
     });
     const before = await readScene(page);
+    expectPlaying(before, before);
     await advanceFrozenPage(page, 120);
     const after = await readScene(page);
+    expectPlaying(after, before);
     expect(after.now - before.now).toBeCloseTo(120, 6);
     expect(after.timeline - before.timeline).toBeCloseTo(120, 6);
-    expect((after.current ?? 0) - (before.current ?? 0)).toBeCloseTo(120, 6);
+    expect(after.current - before.current).toBeCloseTo(120, 6);
     expect(after.x - before.x).toBeCloseTo(24, 1);
     expect(
       await page.evaluate(
@@ -8315,6 +8436,7 @@ test.describe('page freeze', () => {
     await startRun(page);
     await reached;
     const frozen = await readScene(page);
+    expectPlaying(frozen, frozen);
     expect(frozen.x).toBeGreaterThanOrEqual(100);
     expect(frozen.x).toBeLessThan(400);
     await page.waitForTimeout(200);

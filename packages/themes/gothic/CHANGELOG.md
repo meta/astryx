@@ -1,5 +1,50 @@
 # @xds/theme-gothic
 
+# 0.7.17
+
+#### New Features
+
+- Chat surfaces now default to the container radius: `--radius-chat` defaults to `var(--radius-container)` instead of `28px`, a theme that sets `--radius-container` but not `--radius-chat` declares the alias at its root, and a radius scale no longer sets `--radius-chat` (it set the page step), so chat follows the theme's container, also where the theme sets its container over the scale. This changes the corners of ChatComposer, its drawer and status bar, and ChatMessageBubble, and the buttons inside the composer take their normal corners. The send button stays circular inside a composer, as it is outside one: a theme whose composer corner made the send button a rounded square (controls taller than 32px, or a chat corner under 28px) now draws a circle, unless it sets the `chat-send-button` radius. Butter, Chocolate, Gothic, Matcha, Neutral and Stone set `--radius-chat: 28px`, and Butter keeps its 16px send-button corner, so they look the same; Y2K sets `--radius-chat: 0px` and stays square. A theme that extends one of them keeps that chat radius. To keep the 28px chat corners in another theme, add `--radius-chat: 28px` to its tokens. Set the token in the theme rather than on an ancestor such as `:root`: a theme scope that declares it now replaces an inherited value.
+- The gothic theme exports `colorModes` (`['dark']`), from the package and from its built module, so tools judge it in the one mode it draws instead of guessing from the page.
+
+#### Fixes
+
+- Each built-in theme ships its open-licensed fonts. `fonts.css` loads every face from a woff2 file in the package (licenses in `fonts/`), with `font-display: fallback` (served from the same machine or a fast connection, a face arrives before the text first draws, so there is no fallback flash; a face that takes more than about 3 s leaves that page in the fallback font), instead of a Google Fonts `@import` that held the page until the request answered (chocolate's Fraunces as its variable face, keeping its optical size), so an app or screenshot offline (a sandbox, CI) draws at once and shows the theme's real fonts.
+- Links on coloured cards take the card's own category ink. Inside a coloured card, a nested card, a field, inline code, an open menu, a selected segment, an input group addon, a step number, a banner and a striped table row draw the theme's own text again, and a transparent card keeps the card's ink, so card text and links meet WCAG AA (4.5:1). Secondary text on default and muted cards takes the next stop, so it reads on the accent tint of a selected row or a numbered citation there.
+- The error toast keeps one deep red in both modes, so its text reads at 4.97:1 in dark mode, where it read at 4.11:1.
+- A plain table's rows keep the text colour around them in Butter, Y2K and Gothic; only a striped table's even rows take the stripe's text. Inside a coloured card in dark mode, every second row of a plain table read white on the pastel card, at 1.15:1 to 2.12:1. Those themes' striped-row rule now reads the row's `striped` state, in their packages and in the copies the CLI bundles.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @josephfarina
+- @kentonquatman
+
+---
+
+# 0.7.16
+
+#### Documentation
+
+- Fix the theme README usage examples to import `Theme` from `@astryxdesign/core/theme` instead of the removed `XDSTheme` alias, and refresh the bundled theme lists in the package index and contributor guide. ([#11016](https://github.com/meta/astryx/pull/11016))
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @karlmoriaty
+
+---
+
+# 0.7.15
+
+---
+
+# 0.7.14
+
+---
+
 # 0.7.13
 
 #### Fixes

@@ -18,13 +18,16 @@
  */
 
 import {
+  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from 'react';
+import {useCommittedRefInto} from '../hooks/useCommittedRef';
 import type {ReactNode} from 'react';
 import {createPortal} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
@@ -41,6 +44,7 @@ import {
   announceInModal,
   enclosingModalDialog,
   useAnnounce,
+  type AnnounceFn,
   type AnnouncePoliteness,
 } from '../hooks/useAnnounce';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
@@ -63,6 +67,8 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Toast/ToastViewport.generated';
+import {Theme} from '../theme/Theme';
+import type {ThemeSource} from '../theme/useTheme';
 
 registerEnglishFallback(english);
 
@@ -121,6 +127,9 @@ const styles = stylex.create({
     borderWidth: 0,
     borderStyle: 'none',
     backgroundColor: 'transparent',
+    // The popover default is CanvasText, which follows the color scheme and
+    // not the theme. A card that keeps the page's text must get the page's.
+    color: 'inherit',
     overflow: 'visible',
   },
   // iOS Safari colors its toolbar from a fixed element at the bottom edge. A
@@ -258,8 +267,36 @@ interface ToastRowProps {
   isReversed: boolean;
   onExited: (id: string) => void;
   onDismiss: (id: string, reason: ToastDismissReason) => void;
-  /** Whether the card carries its own live region (see ToastViewport). */
-  isLiveRegion: boolean;
+  announce: AnnounceFn;
+}
+
+const noCallerTheme = () => () => {};
+
+/**
+ * Draws a toast shown into the fallback viewport under the caller's current
+ * Theme, so the caller's theme CSS reaches it and the page's `<html>` does
+ * not.
+ */
+function CallerTheme({
+  source,
+  children,
+}: {
+  source: ThemeSource | undefined;
+  children: ReactNode;
+}): ReactNode {
+  const caller = useSyncExternalStore(
+    source?.subscribe ?? noCallerTheme,
+    () => source?.get() ?? null,
+    () => source?.get() ?? null,
+  );
+  if (caller == null) {
+    return children;
+  }
+  return (
+    <Theme theme={caller.theme} mode={caller.mode}>
+      {children}
+    </Theme>
+  );
 }
 
 /**
@@ -282,7 +319,7 @@ function ToastRow({
   isReversed,
   onExited,
   onDismiss,
-  isLiveRegion,
+  announce,
 }: ToastRowProps) {
   const o = entry.options;
   const type = o.type ?? 'info';
@@ -352,25 +389,45 @@ function ToastRow({
           styles.toastWrapperInner,
           isSettled && !isExiting && styles.toastWrapperInnerSettled,
         )}>
-        <ToastSurface
-          type={type}
-          body={o.body}
-          endContent={o.endContent}
-          isAutoHide={isAutoHide}
-          autoHideDuration={dur}
-          isExiting={isExiting}
-          gestureDirection={isReversed ? -1 : 1}
-          onDismiss={reason => onDismiss(entry.id, reason)}
-          renderContent={o.renderContent}
-          timerKey={entry.id}
-          isLiveRegion={isLiveRegion}
-          hasEntryStarted={hasEntryStarted}
-        />
+        <CallerTheme source={entry.callerTheme}>
+          <ToastSurface
+            type={type}
+            body={o.body}
+            endContent={o.endContent}
+            isAutoHide={isAutoHide}
+            autoHideDuration={dur}
+            isExiting={isExiting}
+            gestureDirection={isReversed ? -1 : 1}
+            onDismiss={reason => onDismiss(entry.id, reason)}
+            renderContent={o.renderContent}
+            timerKey={entry.id}
+            announce={announce}
+            isRenderedBodyAnnouncement={
+              o.renderContent == null && getNodeText(o.body) === ''
+            }
+            hasEntryStarted={hasEntryStarted}
+          />
+        </CallerTheme>
       </div>
     </div>
   );
 }
 ToastRow.displayName = 'ToastRow';
+
+/**
+ * ToastViewport renders ToastRefSync, which writes through useCommittedRefInto,
+ * before its children, so a child's layout cleanup reads the committed list.
+ */
+function ToastRefSync<T>({
+  targetRef,
+  value,
+}: {
+  targetRef: {current: T};
+  value: T;
+}): null {
+  useCommittedRefInto(targetRef, value);
+  return null;
+}
 
 /**
  * Container that renders and manages toast notifications. Place at the root
@@ -395,13 +452,20 @@ export function ToastViewport({
   const t = useComponentTranslator();
   const [toasts, setToasts] = useState<ToastEntry[]>([]);
   const [exitingIds, setExitingIds] = useState<Set<string>>(new Set());
+  // The handlers' list. addToast and removeToast move it ahead of the
+  // committed toasts within a batch, and each render resets it. It stays
+  // written during render on purpose. A reset at commit would drop a toast a
+  // handler raised while that render was in progress, as concurrent rendering
+  // allows.
   const toastsRef = useRef(toasts);
   toastsRef.current = toasts;
-  // The list as last rendered: addToast moves toastsRef ahead of it within
-  // a batch, so this tells a rendered toast from one raised since.
+  // The list as last committed, so a handler tells a rendered toast from one
+  // raised since. `ToastRefSync` writes it.
   const renderedToastsRef = useRef(toasts);
-  renderedToastsRef.current = toasts;
-  // Read by removeToast, which keeps one identity across renders.
+  // Read by removeToast, which keeps one identity across renders. It stays
+  // written during render on purpose. A dismissal reads the limit of the
+  // latest render. A toast that a pending lower limit hides leaves at once, so
+  // that commit cannot cut its exit.
   const maxVisibleRef = useRef(maxVisible);
   maxVisibleRef.current = maxVisible;
   // Rendered entries a repeat has replaced in this batch: still found by a
@@ -470,13 +534,10 @@ export function ToastViewport({
 
   // Announce toasts through the persistent singleton live regions. They are
   // mounted empty and only mutated afterwards, which screen readers announce
-  // (see useAnnounce.ts). The announcement happens in addToast — the imperative
-  // dispatch path invoked once per useToast() call from an event handler,
-  // never from render — so each toast is announced exactly once by
-  // construction, independent of the React render lifecycle (StrictMode
-  // double-render/double-effect, viewport remounts, and unrelated list
-  // re-renders never re-announce). It is client-only (addToast never runs
-  // during SSR), so it is SSR-safe.
+  // (see useAnnounce.ts). Plain React text is announced in addToast — the
+  // event-driven dispatch path. ToastSurface reads a component body or a
+  // custom layout after commit. getNodeText cannot see what a component
+  // renders. Both paths use this modal-aware writer.
   // The viewport is each toast's only announcement owner; the card carries no
   // live role. A top-layer viewport's host moves into the latest open native
   // modal, where the page's shared channel is not exposed, so it writes
@@ -487,7 +548,7 @@ export function ToastViewport({
   // The top-layer host (below), read at write time for the modal it sits in.
   const hostRef = useRef<HTMLDivElement | null>(null);
   const announce = useCallback(
-    (text: string, politeness: AnnouncePoliteness) => {
+    (text: string, politeness: AnnouncePoliteness = 'polite') => {
       const modal = isTopLayer ? enclosingModalDialog(hostRef.current) : null;
       if (modal != null) {
         announceInModal(modal, text, politeness);
@@ -517,7 +578,7 @@ export function ToastViewport({
       }
       // Only text is announced; interactive endContent is reachable via F6.
       const text = getNodeText(entry.options.body);
-      if (text) {
+      if (text && entry.options.renderContent == null) {
         // Error toasts map to the assertive region (role="alert"); everything
         // else to the polite region (role="status") — mirrors Toast.tsx.
         announce(text, entry.options.type === 'error' ? 'assertive' : 'polite');
@@ -536,7 +597,17 @@ export function ToastViewport({
       const keepsRow =
         overwritten != null && !exitingIdsRef.current.has(overwritten.id);
       const placed: ToastEntry = keepsRow
-        ? {...entry, rowKey: overwritten.rowKey ?? overwritten.id}
+        ? {
+            ...entry,
+            rowKey: overwritten.rowKey ?? overwritten.id,
+            // Adding or removing a Theme changes the row's tree, which
+            // remounts the card and loses focus. So between a toast with a
+            // Theme and one without, the card keeps its first Theme, or none.
+            callerTheme:
+              entry.callerTheme != null && overwritten.callerTheme != null
+                ? entry.callerTheme
+                : overwritten.callerTheme,
+          }
         : entry;
       if (keepsRow) {
         // If the update removes the focused control, the commit hands focus
@@ -785,16 +856,21 @@ export function ToastViewport({
   const insetStyle: React.CSSProperties = {
     ...layerInsetProperties(layerInset),
   };
-  if (inset?.top) {
-    insetStyle.top = inset.top;
+  // A zero on the stack's own block edge replaces the provider's value. On
+  // the opposite edge a zero writes nothing, so it cannot move the stack.
+  const isTopStack = position === 'topEnd' || position === 'topStart';
+  const insetTop = inset?.top;
+  if (insetTop != null && (isTopStack || insetTop !== 0)) {
+    insetStyle.top = insetTop;
   }
-  if (inset?.bottom) {
-    insetStyle.bottom = inset.bottom;
+  const insetBottom = inset?.bottom;
+  if (insetBottom != null && (!isTopStack || insetBottom !== 0)) {
+    insetStyle.bottom = insetBottom;
   }
-  if (inset?.start) {
+  if (inset?.start != null) {
     insetStyle.insetInlineStart = inset.start;
   }
-  if (inset?.end) {
+  if (inset?.end != null) {
     insetStyle.insetInlineEnd = inset.end;
   }
 
@@ -988,7 +1064,7 @@ export function ToastViewport({
             isReversed={isReversed}
             onExited={handleExited}
             onDismiss={removeToast}
-            isLiveRegion={false}
+            announce={announce}
           />
         ))}
       </LayerContentBoundary>
@@ -997,7 +1073,9 @@ export function ToastViewport({
 
   return (
     <ToastContext value={contextValue}>
-      {children}
+      <ToastRefSync targetRef={renderedToastsRef} value={toasts} />
+      {/* Its own fiber, so a child it unmounts is unmounted after the sync. */}
+      <Fragment>{children}</Fragment>
       {isTopLayer ? (
         <>
           <div ref={rootOutletRef} {...stylex.props(styles.rootOutlet)} />

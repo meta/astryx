@@ -60,29 +60,31 @@ surface.
   remain inoperable and MUST NOT gain a pressed visual treatment.
 - **DR3 — Persistent selection wins.** A selected SegmentedControl item MUST
   keep its raised selected surface during pointer hold; only an unselected item
-  receives the pressed overlay. Under every pointer the item keeps that surface, and its press timing follows
-  `spec:AST-094` FR11.
+  receives the pressed overlay. Under the touch presentation that surface lifts,
+  as UISegmentedControl's does (`component:SegmentedControl` FR14); under a fine
+  primary pointer it stays unchanged. Its press timing follows `spec:AST-094`
+  FR11.
 
 ## Anatomy and hierarchy
 
-| Role                        | Purpose                                  | Required relationship                                                         |
-| --------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------- |
-| interaction target          | Receives the pointer hold or drag        | Owns or controls the paint surface named in the matrix                        |
-| pressed overlay             | Confirms the active manipulation         | Composes over the existing fill without replacing content or persistent state |
-| persistent selected surface | Communicates an already-selected segment | Remains visually unchanged during pointer hold                                |
+| Role                        | Purpose                                  | Required relationship                                                            |
+| --------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------- |
+| interaction target          | Receives the pointer hold or drag        | Owns or controls the paint surface named in the matrix                           |
+| pressed overlay             | Confirms the active manipulation         | Composes over the existing fill without replacing content or persistent state    |
+| persistent selected surface | Communicates an already-selected segment | Takes no pressed overlay during pointer hold; lifts under the touch presentation |
 
 ## State representation
 
-| Component        | Enabled pointer hold or drag                                                                              | Disabled pointer hold                                          |
-| ---------------- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| CheckboxInput    | Indicator paints `--color-overlay-pressed`                                                                | Indicator remains unchanged                                    |
-| Collapsible      | Trigger row paints `--color-overlay-pressed`                                                              | Trigger row remains unchanged and does not expand or collapse  |
-| Link             | Text surface paints `--color-overlay-pressed`                                                             | Text surface remains unchanged and does not activate           |
-| Slider           | Only the dragged thumb paints `--color-overlay-pressed`                                                   | Thumb remains unchanged and the value does not change          |
-| Switch           | Track and thumb both paint `--color-overlay-pressed`                                                      | Track and thumb remain unchanged and the value does not change |
-| TabList Tab      | Tab surface paints `--color-overlay-pressed`                                                              | Tab surface remains unchanged and selection does not change    |
-| RadioList        | Indicator paints `--color-overlay-pressed`                                                                | Indicator remains unchanged and selection does not change      |
-| SegmentedControl | An unselected item paints `--color-overlay-pressed`; the selected item keeps its raised surface unchanged | Item surface remains unchanged and selection does not change   |
+| Component        | Enabled pointer hold or drag                                                                                                         | Disabled pointer hold                                          |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| CheckboxInput    | Indicator paints `--color-overlay-pressed`                                                                                           | Indicator remains unchanged                                    |
+| Collapsible      | Trigger row paints `--color-overlay-pressed`                                                                                         | Trigger row remains unchanged and does not expand or collapse  |
+| Link             | Text surface paints `--color-overlay-pressed`                                                                                        | Text surface remains unchanged and does not activate           |
+| Slider           | Only the dragged thumb paints `--color-overlay-pressed`                                                                              | Thumb remains unchanged and the value does not change          |
+| Switch           | Track and thumb both paint `--color-overlay-pressed`                                                                                 | Track and thumb remain unchanged and the value does not change |
+| TabList Tab      | Tab surface paints `--color-overlay-pressed`                                                                                         | Tab surface remains unchanged and selection does not change    |
+| RadioList        | Indicator paints `--color-overlay-pressed`                                                                                           | Indicator remains unchanged and selection does not change      |
+| SegmentedControl | An unselected item paints `--color-overlay-pressed`; the selected item keeps its raised surface, lifted under the touch presentation | Item surface remains unchanged and selection does not change   |
 
 This table is the complete current claim. It does not approve pressed treatment
 for other components or settle their state design.
@@ -109,8 +111,9 @@ to explain why it is unavailable.
 - Holding an enabled CheckboxInput row darkens its indicator; releasing outside
   without activation restores the original indicator pixels.
 - Dragging a range Slider paints only the thumb currently being moved.
-- Holding the selected SegmentedControl item leaves its raised surface unchanged;
-  holding an unselected item paints the pressed overlay.
+- Holding the selected SegmentedControl item paints no pressed overlay on its
+  raised surface, which lifts under the touch presentation; holding an
+  unselected item paints the pressed overlay.
 
 ## Visual references
 
