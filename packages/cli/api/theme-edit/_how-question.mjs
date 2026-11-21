@@ -2753,6 +2753,66 @@ const GOING_BACK =
 const REMOVABLE =
   '(?:shadows?|borders?|outlines?|padding|gaps?|backgrounds?|corners|radius|rounding|underlines?|gradients?|blur|margins?|spacing|focus rings?)';
 /**
+ * Reads a "clear" that leads a clause as "remove" when its object is a
+ * removable thing ("clear the dark mode card background"), and leaves it a
+ * reset when the object is the person's edits or names a way back. The
+ * reading takes its scope from the clause and the object, never from words
+ * elsewhere in the ask.
+ * - A clause ends at a punctuation mark, a line break, a list marker, or an
+ *   "and" or "then" that does not go on with the object.
+ * - The object starts with a determiner ("the", "my", "all the" ...). Its
+ *   head is a removable thing that no property word follows ("the border",
+ *   not "the border color").
+ * - A purpose or reason ("so the page shows through") is not part of it.
+ * - It stays a reset when it names edits (changes, tweaks, overrides ...),
+ *   when what follows its head says someone made it (added, put on, set,
+ *   applied ...), or when it names a way back (back, to the default).
+ * @param {string} text
+ * @returns {string}
+ */
+function clearTakesAway(text) {
+  const det =
+    /^\s+(?:all\s+(?:of\s+)?the|the|my|our|their|its|this|that|these|those|all|any|every)\b/i;
+  const goesOn = new RegExp(
+    String.raw`^\s*(?:the|my|our|their|its|this|that|these|those|all|any|${REMOVABLE}|${EDIT_NOUNS})\b`,
+    'i',
+  );
+  const head = new RegExp(
+    String.raw`\b${REMOVABLE}\b(?!\s+(?:colou?rs?|widths?|styles?|thickness|opacity|sizes?|tints?|shades?|values?)\b)`,
+    'i',
+  );
+  const editNoun = new RegExp(String.raw`\b${EDIT_NOUNS}\b`, 'i');
+  const madeOrBack =
+    /\b(?:added|applied|put|set|gave|given|made|tweaked|changed|chose|chosen|picked|customi[sz]ed|modified|adjusted|edited|styled|back|original|base\s+value|to\s+(?:the\s+)?(?:base|default|original)|the\s+way\s+(?:it|they)\s+(?:was|were)|as\s+before)\b/i;
+  const lead =
+    /(^|[.;:!?,\n]\s*|^[ \t]*(?:[-*\u2022]|\d+[.)])[ \t]+|\b(?:please|and|then|also|now)\s+)(clear)\b/gim;
+  return text.replace(lead, (m, before, word, at) => {
+    let rest = text.slice(at + m.length);
+    const hard = rest.search(/[.;:!?,\n]/);
+    if (hard >= 0) rest = rest.slice(0, hard);
+    // (An "and" or "then" that does not go on with the object starts
+    // another ask.)
+    const joins = [...rest.matchAll(/\s(?:and|then)\b/gi)];
+    for (const j of joins)
+      if (!goesOn.test(rest.slice(Number(j.index) + j[0].length))) {
+        rest = rest.slice(0, j.index);
+        break;
+      }
+    const why = rest.search(
+      /\s(?:so|so\s+that|to\s+let|to\s+show|letting|because|since|while)\b/i,
+    );
+    if (why >= 0) rest = rest.slice(0, why);
+    if (!det.test(rest)) return m;
+    const h = head.exec(rest);
+    if (!h || editNoun.test(rest)) return m;
+    if (madeOrBack.test(rest.slice(h.index + h[0].length))) return m;
+    return `${before}${word === 'Clear' ? 'Remove' : word === 'CLEAR' ? 'REMOVE' : 'remove'}`;
+  });
+}
+/** Nouns for the person's own edits: "clear my border changes" is a reset. */
+const EDIT_NOUNS =
+  '(?:changes?|edits?|tweaks?|adjustments?|modifications?|customi[sz]ations?|overrides?|settings?)';
+/**
  * A removal lead and a list of two or more removable items ("the card's
  * border and shadow", "border, shadow and background"), with the part the
  * list is on after it ("from cards"), when there is one. An item with a
@@ -5684,7 +5744,11 @@ export function draftAnswer(ctx, env, question) {
     .replace(
       /\bclear\s+(?=(?:error|errors|feedback|labels?|focus|messages?|states?|text|hierarchy|headings?|instructions?)\b)/gi,
       '',
-    )
+    );
+  // ("clear the dark mode card background": a clear that leads a clause and
+  // takes a removable thing away is a removal.)
+  question = clearTakesAway(question);
+  question = question
     // ("magenta for highlights": the color that marks what stands out is
     // the accent. A color ON a part, "white on the CTA", is that part's
     // text, read as said.)
