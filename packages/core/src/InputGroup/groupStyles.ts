@@ -24,7 +24,7 @@ const MEMBER = '[data-astryx-input-group-item]';
 // Anything a caller places after a member (a wrapped Button, a custom element)
 // still counts as following it, so the trailing edge keeps today's rule over
 // any sibling; only context-layer infrastructure (popovers, inert markers,
-// native dialog surfaces) is skipped. Followers are not always members, so
+// native dialog surfaces) and a tooltip's hidden description are skipped. Followers are not always members, so
 // this rule cannot name them by the marker.
 //
 // `:nth-last-child(1 of S)`, not `:not(:has(~ S))`: the stylesheet is global,
@@ -33,7 +33,7 @@ const MEMBER = '[data-astryx-input-group-item]';
 // (ButtonGroup FR3). A member always matches S, so being the last of S is the
 // same as having no following S.
 const IS_LAST_ITEM =
-  ':nth-last-child(1 of :not([popover]):not(template):not(dialog))';
+  ':nth-last-child(1 of :not([popover]):not(template):not(dialog):not(span[hidden][id$=-description]))';
 const FOLLOWED = `:not(${IS_LAST_ITEM})`;
 
 // Button consumes InputGroup context anywhere below the group, including buttons

@@ -82,7 +82,9 @@ describe('Toolbar', () => {
     // keyboard-hint layer infrastructure, excluded as an implementation detail)
     const toolbar = screen.getByRole('toolbar');
     expect(
-      toolbar.querySelectorAll(':scope > :not([popover]):not(template)'),
+      toolbar.querySelectorAll(
+        ':scope > :not([popover]):not(template):not(span[hidden][id$="-description"])',
+      ),
     ).toHaveLength(3);
   });
 
@@ -101,7 +103,9 @@ describe('Toolbar', () => {
     // keyboard-hint layer infrastructure, excluded here)
     const toolbar = screen.getByRole('toolbar');
     expect(
-      toolbar.querySelectorAll(':scope > :not([popover]):not(template)'),
+      toolbar.querySelectorAll(
+        ':scope > :not([popover]):not(template):not(span[hidden][id$="-description"])',
+      ),
     ).toHaveLength(2);
   });
 
@@ -115,7 +119,9 @@ describe('Toolbar', () => {
     expect(screen.getByTestId('start')).toBeInTheDocument();
     const toolbar = screen.getByRole('toolbar');
     expect(
-      toolbar.querySelectorAll(':scope > :not([popover]):not(template)'),
+      toolbar.querySelectorAll(
+        ':scope > :not([popover]):not(template):not(span[hidden][id$="-description"])',
+      ),
     ).toHaveLength(1);
   });
 
@@ -129,7 +135,9 @@ describe('Toolbar', () => {
     expect(screen.getByTestId('end')).toBeInTheDocument();
     const toolbar = screen.getByRole('toolbar');
     expect(
-      toolbar.querySelectorAll(':scope > :not([popover]):not(template)'),
+      toolbar.querySelectorAll(
+        ':scope > :not([popover]):not(template):not(span[hidden][id$="-description"])',
+      ),
     ).toHaveLength(1);
   });
 

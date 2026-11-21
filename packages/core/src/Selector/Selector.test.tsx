@@ -49,6 +49,7 @@ import {colorVars, spacingVars} from '../theme/tokens.stylex';
 import {selectorPresentationStyles} from './selectorPresentation.stylex';
 import {groupStyles} from '../InputGroup/groupStyles';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 /**
  * Enters a search query as one change. Typing it key by key can land several
@@ -2997,7 +2998,7 @@ describe('Selector', () => {
       const trigger = screen.getByRole('combobox', {
         name: 'Destination Channel',
       });
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
 
       expect(trigger).not.toBeDisabled();
       expect(trigger).toHaveAttribute('aria-disabled', 'true');
@@ -3022,17 +3023,19 @@ describe('Selector', () => {
       const container = screen
         .getByTestId('fruit-selector')
         .closest('.astryx-selector') as HTMLElement;
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(tooltip).toHaveTextContent('You need the Editor role');
 
       fireEvent.mouseEnter(container);
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
       });
 
       fireEvent.mouseLeave(container);
       await waitFor(() => {
-        expect(tooltip).not.toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).not.toHaveAttribute(
+          'popover-open',
+        );
       });
     });
 
@@ -3047,11 +3050,10 @@ describe('Selector', () => {
         />,
       );
 
-      const tooltip = screen.getByRole('tooltip', h);
       await user.tab();
       expect(screen.getByRole('combobox')).toHaveFocus();
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
       });
     });
 
@@ -3096,7 +3098,7 @@ describe('Selector', () => {
         />,
       );
       const trigger = screen.getByRole('combobox');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(trigger.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 
@@ -3724,7 +3726,7 @@ describe('Selector statusVariant forwarding', () => {
     const statusButton = screen.getByRole('button', {
       name: /warning details/i,
     });
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = getTooltip();
     expect(tooltip).toHaveTextContent('Visible to all users');
     expect(statusButton.getAttribute('aria-describedby')).toContain(tooltip.id);
     expect(

@@ -41,6 +41,7 @@ import {generateThemeCSS} from '../theme/generateThemeRules';
 import {InternationalizationProvider} from '../i18n';
 import type {ISODateString} from '../utils';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
   const {prose, component} = generateThemeCSS(theme);
@@ -1463,7 +1464,7 @@ describe('DateInput', () => {
       );
 
       const input = screen.getByRole('combobox', {name: 'Availability Date'});
-      const tooltip = screen.getByRole('tooltip', {hidden: true});
+      const tooltip = getTooltip();
 
       expect(input).not.toBeDisabled();
       expect(input).toHaveAttribute('aria-disabled', 'true');
@@ -1504,17 +1505,19 @@ describe('DateInput', () => {
 
       const container = screen.getByRole('combobox')
         .parentElement as HTMLElement;
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(tooltip).toHaveTextContent('You need the Editor role');
 
       fireEvent.mouseEnter(container);
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
       });
 
       fireEvent.mouseLeave(container);
       await waitFor(() => {
-        expect(tooltip).not.toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).not.toHaveAttribute(
+          'popover-open',
+        );
       });
     });
 
@@ -1528,7 +1531,6 @@ describe('DateInput', () => {
         />,
       );
 
-      const tooltip = screen.getByRole('tooltip', h);
       // The calendar button keeps its enabled tab stop (spec:AST-085 FR1),
       // so the input is the second stop.
       await user.tab();
@@ -1536,7 +1538,7 @@ describe('DateInput', () => {
       await user.tab();
       expect(screen.getByRole('combobox')).toHaveFocus();
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
       });
     });
 
@@ -1581,7 +1583,7 @@ describe('DateInput', () => {
           disabledMessage="You need the Editor role"
         />,
       );
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(
         getButton('Open calendar').getAttribute('aria-describedby'),
       ).toContain(tooltip.id);
@@ -1620,7 +1622,7 @@ describe('DateInput', () => {
         />,
       );
       const input = screen.getByRole('combobox');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(input.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 

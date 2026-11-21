@@ -49,26 +49,33 @@ for (const direction of ['ltr', 'rtl']) {
       await expect(smaller).toBeVisible();
       await smaller.hover();
       await expect(
-        page.getByRole('tooltip', {name: 'Narrow it'}),
+        page.getByRole('tooltip', {name: 'Narrow it', includeHidden: true}),
       ).toBeVisible();
       await text.click();
       await expect(smaller).toHaveCount(0);
-      await expect(page.getByRole('tooltip', {name: 'Narrow it'})).toHaveCount(
-        0,
-      );
+      await expect(
+        page.getByRole('tooltip', {name: 'Narrow it', includeHidden: true}),
+      ).toHaveCount(0);
       await expect(image).toBeVisible();
       expect(errors).toEqual([]);
     }
 
     await image.click();
     await smaller.hover();
-    await expect(page.getByRole('tooltip', {name: 'Narrow it'})).toBeVisible();
+    await expect(
+      page.getByRole('tooltip', {name: 'Narrow it', includeHidden: true}),
+    ).toBeVisible();
     await page.getByRole('button', {name: 'Toggle editor'}).click();
     await expect(image).toHaveCount(0);
-    await expect(page.getByRole('tooltip', {name: 'Narrow it'})).toHaveCount(0);
+    await expect(
+      page.getByRole('tooltip', {name: 'Narrow it', includeHidden: true}),
+    ).toHaveCount(0);
     await page.getByRole('button', {name: 'Outside control'}).hover();
     await expect(
-      page.getByRole('tooltip', {name: 'Outside the editor'}),
+      page.getByRole('tooltip', {
+        name: 'Outside the editor',
+        includeHidden: true,
+      }),
     ).toBeVisible();
     expect(errors).toEqual([]);
   });
@@ -92,11 +99,15 @@ test('read-only editor controls keep their tooltip and release it on unmount', a
   ).toHaveAttribute('contenteditable', 'false');
   await page.getByRole('img', {name: 'Selectable landscape'}).click();
   await page.getByRole('button', {name: 'Smaller', exact: true}).hover();
-  await expect(page.getByRole('tooltip', {name: 'Narrow it'})).toBeVisible();
+  await expect(
+    page.getByRole('tooltip', {name: 'Narrow it', includeHidden: true}),
+  ).toBeVisible();
   await page.getByRole('button', {name: 'Toggle editor'}).click();
   await expect(page.getByRole('textbox', {name: 'Image editor'})).toHaveCount(
     0,
   );
-  await expect(page.getByRole('tooltip', {name: 'Narrow it'})).toHaveCount(0);
+  await expect(
+    page.getByRole('tooltip', {name: 'Narrow it', includeHidden: true}),
+  ).toHaveCount(0);
   expect(errors).toEqual([]);
 });

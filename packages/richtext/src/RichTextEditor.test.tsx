@@ -561,7 +561,11 @@ describe('RichTextEditor', () => {
     const statusButton = screen.getByRole('button', {
       name: /error details/i,
     });
-    const tooltip = screen.getByRole('tooltip', h);
+    // The status tooltip's layer mounts at its first show; until then a
+    // hidden copy of its text describes the field.
+    const tooltip = document.getElementById(
+      statusButton.getAttribute('aria-describedby') ?? '',
+    ) as HTMLElement;
     const textbox = screen.getByRole('textbox');
     expect(statusButton).toHaveAttribute('type', 'button');
     expect(statusButton.getAttribute('aria-describedby')).toContain(tooltip.id);

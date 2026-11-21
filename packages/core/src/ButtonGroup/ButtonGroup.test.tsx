@@ -232,7 +232,7 @@ describe('ButtonGroup', () => {
     const items = (group: HTMLElement): Element[] =>
       Array.from(
         group.querySelectorAll(
-          ':scope > *:not([popover]):not(template):not(dialog)',
+          ':scope > *:not([popover]):not(template):not(dialog):not(span[hidden][id$="-description"])',
         ),
       );
 
@@ -403,6 +403,8 @@ describe('ButtonGroup', () => {
           expect(selector).toContain('[popover]');
           expect(selector).toContain('template');
           expect(selector).toContain('dialog');
+          // A tooltip's hidden description follows its trigger and is skipped.
+          expect(selector).toContain('span[hidden][id$=-description]');
         }
       },
     );
@@ -450,9 +452,12 @@ describe('ButtonGroup', () => {
         const save = screen.getByRole('button', {name: 'Save'});
         const more = screen.getByRole('button', {name: 'More'});
 
-        // Precondition: the tooltip layer really is an inline DOM sibling that
-        // follows the button — this is exactly what broke `:last-child`.
+        // Precondition: the tooltip's hidden description and layer placeholder
+        // really are inline DOM siblings that follow the button — this is
+        // exactly what broke `:last-child`.
         expect(more).not.toBe(group.lastElementChild);
+        expect(more.nextElementSibling).toHaveAttribute('hidden');
+        expect(more).toHaveAccessibleDescription('More options');
         expect(items(group).at(-1)).toBe(more);
 
         expect(carriesTrailingRule(more, orientation)).toBe(true);

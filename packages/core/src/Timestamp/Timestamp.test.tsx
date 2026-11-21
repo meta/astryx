@@ -1625,9 +1625,15 @@ describe('Timestamp', () => {
         />,
       );
       const card = await openTimestampHoverCard();
-      const [rowValue] = Array.from(card.querySelectorAll('dd')).map(
-        el => el.textContent ?? '',
-      );
+      // The row's visible text: the copy button's tooltip description, a
+      // hidden sibling, is not part of the value.
+      const [rowValue] = Array.from(card.querySelectorAll('dd')).map(el => {
+        const visible = el.cloneNode(true) as HTMLElement;
+        visible
+          .querySelectorAll('span[hidden][id$="-description"]')
+          .forEach(piece => piece.remove());
+        return visible.textContent ?? '';
+      });
       const copyButton = card.querySelectorAll('button')[0];
 
       fireEvent.click(copyButton);

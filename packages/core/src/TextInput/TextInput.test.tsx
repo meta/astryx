@@ -19,6 +19,7 @@ import {TestIcon} from '../__tests__/TestIcon';
 import {declaredValue} from '../__tests__/stylexDeclarations';
 import {InputGroup} from '../InputGroup';
 import {TextInput} from './TextInput';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 // jsdom cannot match `:focus-visible`: compare the ring's StyleX class hash.
 const RING = stylex
@@ -1203,17 +1204,19 @@ describe('TextInput', () => {
 
       const input = screen.getByRole('textbox');
       const container = input.parentElement as HTMLElement;
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(tooltip).toHaveTextContent('You need the Editor role');
 
       fireEvent.mouseEnter(container);
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
       });
 
       fireEvent.mouseLeave(container);
       await waitFor(() => {
-        expect(tooltip).not.toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).not.toHaveAttribute(
+          'popover-open',
+        );
       });
     });
 
@@ -1229,11 +1232,10 @@ describe('TextInput', () => {
         />,
       );
 
-      const tooltip = screen.getByRole('tooltip', h);
       await user.tab();
       expect(screen.getByRole('textbox')).toHaveFocus();
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
       });
     });
 
@@ -1283,7 +1285,7 @@ describe('TextInput', () => {
         />,
       );
       const input = screen.getByRole('textbox');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(input.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 
@@ -1375,7 +1377,7 @@ describe('TextInput statusVariant forwarding', () => {
         statusVariant="tooltip"
       />,
     );
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = getTooltip();
     expect(tooltip).toHaveTextContent('Invalid email');
   });
 
@@ -1390,7 +1392,7 @@ describe('TextInput statusVariant forwarding', () => {
       />,
     );
     const input = screen.getByRole('textbox');
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = getTooltip();
     expect(input.getAttribute('aria-describedby')).toContain(tooltip.id);
   });
 
@@ -1422,12 +1424,11 @@ describe('TextInput statusVariant forwarding', () => {
         statusVariant="tooltip"
       />,
     );
-    const tooltip = screen.getByRole('tooltip', h);
     // Tab from the input to the status button; keyboard focus reveals the tip.
     await user.tab();
     await user.tab();
     await waitFor(() => {
-      expect(tooltip).toHaveAttribute('popover-open');
+      expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
     });
   });
 
@@ -1442,7 +1443,7 @@ describe('TextInput statusVariant forwarding', () => {
       />,
     );
     const statusButton = screen.getByRole('button', {name: /error details/i});
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = getTooltip();
     expect(statusButton.getAttribute('aria-describedby')).toContain(tooltip.id);
   });
 });

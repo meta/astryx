@@ -135,13 +135,17 @@ describe('InfoTip press-to-pin (component:InfoTip FR2)', () => {
     const trigger = screen.getByRole('button', {name: 'About billing'});
     const [first, ...rest] = Array.from(container.children);
     expect(first).toBe(trigger);
-    // The layer renders its surface and a placeholder template, and nothing
-    // wraps the button.
+    // The trigger's hidden description, then the layer's placeholder
+    // template until its first show; nothing wraps the button.
     expect(
       rest.map(node =>
-        node.hasAttribute('popover') ? 'layer' : node.tagName.toLowerCase(),
+        node.hasAttribute('popover')
+          ? 'layer'
+          : node.hasAttribute('hidden')
+            ? 'description'
+            : node.tagName.toLowerCase(),
       ),
-    ).toEqual(['template', 'layer']);
+    ).toEqual(['description', 'template']);
   });
 
   it('a pen tap pins it, and the next pen tap closes it', () => {

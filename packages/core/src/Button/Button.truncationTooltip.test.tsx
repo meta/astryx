@@ -150,8 +150,16 @@ describe('Button label truncation tooltip', () => {
     restore = withOverflow(true);
     render(<Button label={LABEL} />);
     const button = screen.getByRole('button', {name: LABEL});
+    expect(
+      document.querySelector('span[hidden][id$="-description"]'),
+    ).toBeNull();
     await showByFocus(button);
     expect(button).not.toHaveAttribute('aria-describedby');
+    // The cut-label tooltip renders no hidden copy, so the label is read once.
+    expect(
+      document.querySelector('span[hidden][id$="-description"]'),
+    ).toBeNull();
+    expect(button).toHaveAccessibleDescription('');
   });
 
   it('shows no tooltip when the label fits', async () => {
@@ -207,6 +215,57 @@ describe('Button label truncation tooltip', () => {
       expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(
         'Saves your draft',
       );
+    });
+    expect(
+      screen
+        .queryAllByRole('tooltip', {hidden: true})
+        .filter(el => el.textContent === LABEL),
+    ).toHaveLength(0);
+  });
+
+  it("lets a caller's Tooltip that has already mounted take precedence", async () => {
+    restore = withOverflow(true);
+    const realMatches = Element.prototype.matches;
+    vi.spyOn(Element.prototype, 'matches').mockImplementation(function (
+      this: Element,
+      selector: string,
+    ) {
+      return selector === ':focus-visible'
+        ? true
+        : realMatches.call(this, selector);
+    });
+    render(
+      <Tooltip content="Saves your draft" delay={0}>
+        <Button label={LABEL} />
+      </Tooltip>,
+    );
+    const button = screen.getByRole('button');
+    // A mouse hover mounts the caller's tooltip, so the Button's description
+    // is now the content inside that layer, not the hidden copy.
+    act(() => {
+      fireEvent.pointerOver(button, {pointerType: 'mouse'});
+      fireEvent.pointerEnter(button, {pointerType: 'mouse'});
+      fireEvent.mouseOver(button);
+      fireEvent.mouseEnter(button);
+    });
+    await waitFor(() => {
+      expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(
+        'Saves your draft',
+      );
+    });
+    const describedBy = button.getAttribute('aria-describedby') ?? '';
+    expect(
+      document.getElementById(describedBy)?.closest('[role="tooltip"]'),
+    ).not.toBeNull();
+    act(() => {
+      fireEvent.pointerLeave(button, {pointerType: 'mouse'});
+      fireEvent.mouseLeave(button);
+    });
+    act(() => {
+      button.focus();
+    });
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
     });
     expect(
       screen

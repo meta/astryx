@@ -25,6 +25,10 @@ import * as stylex from '@stylexjs/stylex';
 import {focusVars} from '../theme/tokens.stylex';
 import {ComplexSelector, type ComplexSelectorHandle} from './ComplexSelector';
 import {readAnchorNames} from '../Layer/anchorName';
+import {
+  getTooltipDescription,
+  getTooltip,
+} from '../__tests__/tooltipDescription';
 
 const originalMatches = HTMLElement.prototype.matches;
 
@@ -1272,9 +1276,8 @@ describe('ComplexSelector onOpenChange', () => {
       );
       const trigger = screen.getByRole('combobox', {name: 'Filter'});
       const tip = screen.getByRole('button', {name: 'Error details'});
-      act(() => {
-        tip.focus();
-      });
+      // The bubble's layer mounts at its first show.
+      await user.hover(tip);
       const bubble = await screen.findByRole('tooltip', {hidden: true});
       await user.click(bubble);
       expect(trigger).toHaveAttribute('aria-expanded', 'false');
@@ -1363,17 +1366,17 @@ describe('ComplexSelector disabledMessage', () => {
     );
 
     const container = controlBox(screen.getByTestId('view-options'));
-    const tooltip = screen.getByRole('tooltip', h);
-    expect(tooltip).toHaveTextContent('You need the Editor role');
+    const tooltip = () => getTooltip();
+    expect(tooltip()).toHaveTextContent('You need the Editor role');
 
     fireEvent.mouseEnter(within(container).getByRole('combobox'));
     await waitFor(() => {
-      expect(tooltip).toHaveAttribute('popover-open');
+      expect(tooltip()).toHaveAttribute('popover-open');
     });
 
     fireEvent.mouseLeave(within(container).getByRole('combobox'));
     await waitFor(() => {
-      expect(tooltip).not.toHaveAttribute('popover-open');
+      expect(tooltip()).not.toHaveAttribute('popover-open');
     });
   });
 
@@ -1389,11 +1392,11 @@ describe('ComplexSelector disabledMessage', () => {
       </ComplexSelector>,
     );
 
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = () => getTooltip();
     await user.tab();
     expect(screen.getByRole('combobox', {name: 'View options'})).toHaveFocus();
     await waitFor(() => {
-      expect(tooltip).toHaveAttribute('popover-open');
+      expect(tooltip()).toHaveAttribute('popover-open');
     });
   });
 
@@ -1444,7 +1447,7 @@ describe('ComplexSelector disabledMessage', () => {
       </ComplexSelector>,
     );
     const trigger = screen.getByRole('combobox', {name: 'View options'});
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = getTooltip();
     expect(trigger.getAttribute('aria-describedby')).toContain(tooltip.id);
   });
 
@@ -1536,7 +1539,7 @@ describe('ComplexSelector disabledMessage', () => {
     expect(trigger()).toHaveAttribute('aria-disabled', 'true');
     expect(trigger()).toHaveAttribute(
       'aria-describedby',
-      screen.getByRole('tooltip', h).id,
+      getTooltipDescription().id,
     );
   });
 
@@ -1553,7 +1556,7 @@ describe('ComplexSelector disabledMessage', () => {
       </ComplexSelector>,
     );
     const trigger = screen.getByRole('combobox', {name: 'View options'});
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = getTooltip();
 
     const ids = (trigger.getAttribute('aria-describedby') ?? '').split(/\s+/);
     expect(ids).toHaveLength(3);
@@ -1612,7 +1615,7 @@ describe('ComplexSelector disabledMessage', () => {
     );
     const {rerender} = render(tree(true));
     const trigger = screen.getByRole('combobox', {name: 'View options'});
-    const tooltipId = screen.getByRole('tooltip', h).id;
+    const tooltipId = getTooltipDescription().id;
 
     await user.tab();
     expect(trigger).toHaveFocus();
@@ -1644,8 +1647,8 @@ describe('ComplexSelector disabledMessage', () => {
     expect(trigger).toHaveFocus();
     expect(trigger).not.toBeDisabled();
     expect(trigger).toHaveAttribute('aria-disabled', 'true');
-    const restored = screen.getByRole('tooltip', h);
-    expect(trigger.getAttribute('aria-describedby')).toContain(restored.id);
+    const restored = () => getTooltip();
+    expect(trigger.getAttribute('aria-describedby')).toContain(restored().id);
   });
 
   it('dismisses only the reason tooltip on Escape, keeping focus on the trigger and the popup closed', async () => {
@@ -1662,23 +1665,23 @@ describe('ComplexSelector disabledMessage', () => {
       </ComplexSelector>,
     );
     const trigger = screen.getByRole('combobox', {name: 'View options'});
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = () => getTooltip();
 
     await user.tab();
     await waitFor(() => {
-      expect(tooltip).toHaveAttribute('popover-open');
+      expect(tooltip()).toHaveAttribute('popover-open');
     });
 
     await user.keyboard('{Escape}');
     await waitFor(() => {
-      expect(tooltip).not.toHaveAttribute('popover-open');
+      expect(tooltip()).not.toHaveAttribute('popover-open');
     });
     expect(trigger).toHaveFocus();
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByRole('dialog', h)).not.toBeInTheDocument();
     expect(onOpenChange).not.toHaveBeenCalled();
     // Dismissing the tip does not strip the description.
-    expect(trigger.getAttribute('aria-describedby')).toContain(tooltip.id);
+    expect(trigger.getAttribute('aria-describedby')).toContain(tooltip().id);
 
     // A second Escape has nothing left to dismiss and touches nothing.
     await user.keyboard('{Escape}');
@@ -1701,12 +1704,12 @@ describe('ComplexSelector disabledMessage', () => {
       </>,
     );
     const trigger = screen.getByRole('combobox', {name: 'View options'});
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = () => getTooltip();
 
     await user.tab();
     expect(trigger).toHaveFocus();
     await waitFor(() => {
-      expect(tooltip).toHaveAttribute('popover-open');
+      expect(tooltip()).toHaveAttribute('popover-open');
     });
 
     // The tooltip listens on the trigger button, so leaving it hides the
@@ -1714,7 +1717,7 @@ describe('ComplexSelector disabledMessage', () => {
     await user.tab();
     expect(trigger).not.toHaveFocus();
     await waitFor(() => {
-      expect(tooltip).not.toHaveAttribute('popover-open');
+      expect(tooltip()).not.toHaveAttribute('popover-open');
     });
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
   });
@@ -1765,11 +1768,11 @@ describe('ComplexSelector disabledMessage', () => {
     expect(trigger).toHaveAttribute('aria-busy', 'true');
     expect(trigger).toHaveAttribute('aria-disabled', 'true');
     expect(trigger).not.toBeDisabled();
-    const tooltip = screen.getByRole('tooltip', h);
-    expect(trigger.getAttribute('aria-describedby')).toContain(tooltip.id);
+    const tooltip = () => getTooltip();
+    expect(trigger.getAttribute('aria-describedby')).toContain(tooltip().id);
     fireEvent.mouseEnter(within(container).getByRole('combobox'));
     await waitFor(() => {
-      expect(tooltip).toHaveAttribute('popover-open');
+      expect(tooltip()).toHaveAttribute('popover-open');
     });
 
     await act(async () => {
@@ -1780,7 +1783,7 @@ describe('ComplexSelector disabledMessage', () => {
     });
     expect(trigger).toHaveAttribute('aria-disabled', 'true');
     expect(trigger).not.toBeDisabled();
-    expect(trigger.getAttribute('aria-describedby')).toContain(tooltip.id);
+    expect(trigger.getAttribute('aria-describedby')).toContain(tooltip().id);
   });
 
   it('anchors the reason tooltip to the control box and keeps it, with the open tip, across a rerender', async () => {
@@ -1797,7 +1800,7 @@ describe('ComplexSelector disabledMessage', () => {
     );
     const {rerender} = render(tree('A'));
     const container = controlBox(screen.getByTestId('view-options'));
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = () => getTooltip();
     const anchorOf = (el: Element | null) =>
       /position-anchor:\s*([^;]+)/
         .exec(el?.getAttribute('style') ?? '')?.[1]
@@ -1805,30 +1808,30 @@ describe('ComplexSelector disabledMessage', () => {
 
     fireEvent.mouseEnter(within(container).getByRole('combobox'));
     await waitFor(() => {
-      expect(tooltip).toHaveAttribute('popover-open');
+      expect(tooltip()).toHaveAttribute('popover-open');
     });
 
     // The closed popup is not mounted while disabled; the open tooltip
     // anchors to the control box.
     const names = [...readAnchorNames(container)].sort();
-    expect(anchorOf(tooltip)).toBeDefined();
-    expect(names).toContain(anchorOf(tooltip));
+    expect(anchorOf(tooltip())).toBeDefined();
+    expect(names).toContain(anchorOf(tooltip()));
 
     // The inline composed ref is recreated every render, so React detaches and
     // re-attaches both hooks. That churn must not close the tip, drop an
     // anchor, or lose the hover listeners.
     rerender(tree('B'));
-    expect(screen.getByRole('tooltip', h)).toBe(tooltip);
-    expect(tooltip).toHaveAttribute('popover-open');
+    expect(screen.getByRole('tooltip', h)).toBe(tooltip());
+    expect(tooltip()).toHaveAttribute('popover-open');
     expect([...readAnchorNames(container)].sort()).toEqual(names);
 
     fireEvent.mouseLeave(within(container).getByRole('combobox'));
     await waitFor(() => {
-      expect(tooltip).not.toHaveAttribute('popover-open');
+      expect(tooltip()).not.toHaveAttribute('popover-open');
     });
     fireEvent.mouseEnter(within(container).getByRole('combobox'));
     await waitFor(() => {
-      expect(tooltip).toHaveAttribute('popover-open');
+      expect(tooltip()).toHaveAttribute('popover-open');
     });
   });
 
@@ -1891,7 +1894,7 @@ describe('ComplexSelector disabledMessage', () => {
     );
     const trigger = screen.getByRole('combobox', {name: 'View options'});
     const container = controlBox(screen.getByTestId('view-options'));
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = () => getTooltip();
 
     // A finger's arrival lands on the container (pointerenter does not
     // bubble); the press and the click it produces land on the button and
@@ -1903,7 +1906,7 @@ describe('ComplexSelector disabledMessage', () => {
     fireEvent.click(trigger);
 
     // Touch skips the hover delay: the reason is visible synchronously.
-    expect(tooltip).toHaveAttribute('popover-open');
+    expect(tooltip()).toHaveAttribute('popover-open');
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByRole('dialog', h)).not.toBeInTheDocument();
 
@@ -1911,7 +1914,7 @@ describe('ComplexSelector disabledMessage', () => {
     fireEvent.pointerDown(trigger, {pointerType: 'touch'});
     fireEvent.pointerUp(trigger, {pointerType: 'touch'});
     fireEvent.click(trigger);
-    expect(tooltip).not.toHaveAttribute('popover-open');
+    expect(tooltip()).not.toHaveAttribute('popover-open');
     expect(screen.queryByRole('dialog', h)).not.toBeInTheDocument();
   });
 
@@ -1952,10 +1955,17 @@ describe('ComplexSelector disabledMessage', () => {
         {() => <button type="button">Apply</button>}
       </ComplexSelector>,
     );
-    const reason = screen
-      .getByText('You need the Editor role')
-      .closest<HTMLElement>('[role="tooltip"]');
-    expect(reason).not.toBeNull();
+    // The reason's tooltip mounts at its first show; its hidden description
+    // holds the text from the start.
+    const reason = () =>
+      screen
+        .queryByText('You need the Editor role')
+        ?.closest<HTMLElement>('[role="tooltip"]') ??
+      Array.from(
+        document.querySelectorAll<HTMLElement>('[id$="-description"]'),
+      ).find(element => element.textContent === 'You need the Editor role') ??
+      null;
+    expect(reason()).not.toBeNull();
     const tip = screen.getByRole('button', {name: 'Error details'});
 
     await user.hover(tip);
@@ -1965,12 +1975,12 @@ describe('ComplexSelector disabledMessage', () => {
     await act(async () => {
       await new Promise(resolve => setTimeout(resolve, 300));
     });
-    expect(reason).not.toHaveAttribute('popover-open');
+    expect(reason()).not.toHaveAttribute('popover-open');
 
     // The trigger still shows the reason.
     await user.hover(screen.getByRole('combobox', {name: 'View options'}));
     await waitFor(() => {
-      expect(reason).toHaveAttribute('popover-open');
+      expect(reason()).toHaveAttribute('popover-open');
     });
   });
 
@@ -1996,10 +2006,10 @@ describe('ComplexSelector disabledMessage', () => {
     expect(trigger).not.toBeDisabled();
     expect(trigger).toHaveAttribute('aria-disabled', 'true');
 
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = () => getTooltip();
     fireEvent.mouseEnter(screen.getByTestId('view-options'));
     await waitFor(() => {
-      expect(tooltip).toHaveAttribute('popover-open');
+      expect(tooltip()).toHaveAttribute('popover-open');
     });
   });
 
@@ -2023,34 +2033,34 @@ describe('ComplexSelector disabledMessage', () => {
 
     it('reveals the reason on hover of the caller control', async () => {
       renderCallerTrigger();
-      const tooltip = screen.getByRole('tooltip', h);
-      expect(tooltip).toHaveTextContent('You need the Editor role');
+      const tooltip = () => getTooltip();
+      expect(tooltip()).toHaveTextContent('You need the Editor role');
       fireEvent.mouseEnter(screen.getByRole('combobox', {name: 'Assign'}));
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(tooltip()).toHaveAttribute('popover-open');
       });
     });
 
     it('reveals the reason on keyboard focus of the caller control', async () => {
       const user = userEvent.setup();
       renderCallerTrigger();
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = () => getTooltip();
       await user.tab();
       expect(screen.getByRole('combobox', {name: 'Assign'})).toHaveFocus();
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(tooltip()).toHaveAttribute('popover-open');
       });
     });
 
     it('reveals the reason on a touch tap without opening the popup', () => {
       renderCallerTrigger();
       const trigger = screen.getByRole('combobox', {name: 'Assign'});
-      const tooltip = screen.getByRole('tooltip', h);
       fireEvent.pointerEnter(trigger, {pointerType: 'touch'});
       fireEvent.pointerDown(trigger, {pointerType: 'touch'});
       fireEvent.pointerUp(trigger, {pointerType: 'touch'});
       fireEvent.click(trigger);
-      expect(tooltip).toHaveAttribute('popover-open');
+      // The tooltip's layer mounts at this first show.
+      expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
       expect(trigger).toHaveAttribute('aria-expanded', 'false');
       expect(screen.queryByRole('dialog', h)).not.toBeInTheDocument();
     });
