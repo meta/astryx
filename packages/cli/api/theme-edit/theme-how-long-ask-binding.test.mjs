@@ -324,6 +324,7 @@ const ROWS = [
     {
       q: 'Make the headings bold. Undo the card change and the heading change.',
       never: /^headings |--on heading/,
+      says: /the heading change said earlier in this ask is taken back[\s\S]*no card change was said earlier/,
     },
   ],
   [

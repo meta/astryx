@@ -29382,8 +29382,17 @@ export function draftAnswer(ctx, env, question) {
       const c = draftClause.get(/** @type {any} */ (d));
       if (c) answeredByUndo.add(c);
     }
+    // (Only the parts a change was taken back on are named as taken back;
+    // a part the undo names with no change said earlier, "the card change"
+    // when no card change was asked, is said to have nothing to take back.)
+    const takenOn = named.filter(n =>
+      undone.some(d =>
+        partsOf(d).some(on => on === n || (FAMILIES[n] ?? []).includes(on)),
+      ),
+    );
+    const nothingOn = named.filter(n => !takenOn.includes(n));
     result.push({
-      text: `the ${named.length ? `${named.join(' and ')} ` : ''}change${named.length > 1 ? 's' : ''} said earlier in this ask ${named.length > 1 ? 'are' : 'is'} taken back by its undo, so ${named.length > 1 ? 'they are' : 'it is'} not written`,
+      text: `the ${takenOn.length ? `${takenOn.join(' and ')} ` : ''}change${takenOn.length > 1 ? 's' : ''} said earlier in this ask ${takenOn.length > 1 ? 'are' : 'is'} taken back by its undo, so ${takenOn.length > 1 ? 'they are' : 'it is'} not written${nothingOn.length ? `; no ${nothingOn.join(' or ')} change was said earlier, so there is nothing to take back there` : ''}`,
       options: [],
     });
   }
