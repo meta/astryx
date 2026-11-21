@@ -157,6 +157,14 @@ export function parseDateInput(
 
   const parsed = new Date(trimmed);
   if (!isNaN(parsed.getTime())) {
+    // V8 sets the year to 2001 when the text has no year.
+    if (
+      parsed.getFullYear() === 2001 &&
+      !/\d{4}/.test(trimmed) &&
+      !/(^|\D)0?1(\D|$)/.test(trimmed)
+    ) {
+      return null;
+    }
     const fromDate = plainDateFromDate(parsed);
     // Validate the result so we never return an out-of-range date (e.g. a
     // year of 0), which would throw when later re-parsed.
