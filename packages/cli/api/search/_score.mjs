@@ -53,9 +53,10 @@ export function bestForToken(tok, candidate, opts = {}, direct = undefined) {
   let own = best ? (best.used ? (best.own ?? 0) : best.score) : 0;
   const syns = SYNONYM_INDEX.get(tok);
   if (syns) {
+    // A synonym of a family's name names no family: its members stay put.
+    const synonymOpts = {...opts, synonym: true};
     for (const s of syns) {
-      // A synonym of a family's name names no family: its members stay put.
-      const h = scoreCandidate(s, candidate, {...opts, synonym: true});
+      const h = scoreCandidate(s, candidate, synonymOpts);
       if (h) {
         const score = Math.round(h.score * 0.85);
         const hOwn = Math.round((h.used ? (h.own ?? 0) : h.score) * 0.85);

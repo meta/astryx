@@ -508,6 +508,7 @@ const styles = stylex.create({
   textValue: {
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     color: colorVars['--color-text-primary'],
     whiteSpace: 'nowrap',
     flexShrink: 0,
@@ -1916,7 +1917,9 @@ export function Slider({ref, ...props}: SliderProps) {
         {textDisplay}
       </div>
       {conveysRequired && (
-        <VisuallyHidden id={requiredID}>Required</VisuallyHidden>
+        <VisuallyHidden id={requiredID}>
+          {t('@astryx.slider.required')}
+        </VisuallyHidden>
       )}
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}

@@ -120,7 +120,8 @@ function resolveValue(
 
 const CORE_TOKENS: Record<string, unknown> = {};
 
-function resolveModes(
+/** Tokens resolved for each mode, over Core's colour defaults. */
+export function resolveModes(
   tokens: Record<string, unknown>,
 ): Record<ResolvedThemeMode, Record<string, string>> {
   const names = new Set([

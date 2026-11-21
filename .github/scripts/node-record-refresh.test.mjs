@@ -15,11 +15,16 @@ import yaml from 'yaml';
 import {
   BRANCH,
   DRIFT_MARGIN_S,
+  HEAVIEST_SHOWN,
   MIN_RECORDED_SHARE,
+  RETIME_MIN_S,
   TITLE,
   coverage,
   driftedEntries,
+  earlyWarning,
+  heaviestUnrecorded,
   incompleteLegs,
+  normalizedTimes,
   openOrRefresh,
   prBody,
   refreshReasons,
@@ -212,7 +217,7 @@ describe('the Node record refresh workflow', () => {
     const regenerate = step('Regenerate the record from that run');
     expect(regenerate.if).toBe("steps.check.outputs.refresh == 'true'");
     expect(regenerate.run).toContain(
-      'node scripts/vitest-shard-sequencer.mjs record "$RUNNER_TEMP/main-run.log"',
+      'node .github/scripts/node-record-refresh.mjs regenerate --log "$RUNNER_TEMP/main-run.log"',
     );
   });
 
@@ -243,21 +248,24 @@ describe('the Node record refresh workflow', () => {
 });
 
 describe('the coverage check', () => {
-  it('keeps nine in ten as the bar', () => {
-    expect(MIN_RECORDED_SHARE).toBe(0.9);
+  it('keeps nineteen in twenty as the bar: past one file in twenty without a time, it warns', () => {
+    expect(MIN_RECORDED_SHARE).toBe(0.95);
   });
 
-  it('is fresh at exactly nine in ten, and stale below it', () => {
-    const files = Array.from({length: 10}, (_, i) => `f${i}.test.mjs`);
-    const nine = Object.fromEntries(files.slice(0, 9).map(file => [file, 1]));
-    expect(coverage(files, nine)).toMatchObject({
-      total: 10,
-      recorded: 9,
+  it('is fresh at exactly nineteen in twenty, and stale below it', () => {
+    const files = Array.from({length: 20}, (_, i) => `f${i}.test.mjs`);
+    const timed = count =>
+      Object.fromEntries(files.slice(0, count).map(file => [file, 1]));
+    expect(coverage(files, timed(19))).toMatchObject({
+      total: 20,
+      recorded: 19,
       fresh: true,
-      missing: ['f9.test.mjs'],
+      missing: ['f19.test.mjs'],
     });
-    const eight = Object.fromEntries(files.slice(0, 8).map(file => [file, 1]));
-    expect(coverage(files, eight)).toMatchObject({recorded: 8, fresh: false});
+    expect(coverage(files, timed(18))).toMatchObject({
+      recorded: 18,
+      fresh: false,
+    });
   });
 
   it('counts a file recorded at 0 s as recorded', () => {
@@ -266,7 +274,7 @@ describe('the coverage check', () => {
 });
 
 describe('regenerating the record from a run log', () => {
-  it("records the Node legs' files from a Main run log and lifts the share over the bar", () => {
+  it("records the Node legs' files from a Main run log, each leg's slowdown taken out, and lifts the share over the bar", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'node-record-refresh-'));
     try {
       const record = path.join(dir, 'durations.json');
@@ -292,7 +300,12 @@ describe('regenerating the record from a run log', () => {
       fs.writeFileSync(logFile, log);
       execFileSync(
         process.execPath,
-        ['scripts/vitest-shard-sequencer.mjs', 'record', logFile],
+        [
+          '.github/scripts/node-record-refresh.mjs',
+          'regenerate',
+          '--log',
+          logFile,
+        ],
         {
           cwd: ROOT,
           env: {...process.env, VITEST_DURATIONS_FILE: record},
@@ -301,7 +314,10 @@ describe('regenerating the record from a run log', () => {
       );
       const after = JSON.parse(fs.readFileSync(record, 'utf8'));
       expect(after.$comment).toBe('kept');
-      expect(after.seconds[nodeFiles[1]]).toBe(2.5);
+      // Every leg measured its recorded files at 2.5 times their 1 s entry,
+      // so a new file's 2.5 s is booked at 1 s and the kept entries stay.
+      expect(after.seconds[nodeFiles[1]]).toBe(1);
+      expect(after.seconds[kept[0]]).toBe(1);
       expect(coverage(nodeFiles, after.seconds)).toMatchObject({
         fresh: true,
         missing: [],
@@ -309,6 +325,237 @@ describe('regenerating the record from a run log', () => {
     } finally {
       fs.rmSync(dir, {recursive: true, force: true});
     }
+  });
+});
+
+describe('the early warning', () => {
+  // Six files in a hundred have no recorded time: past the line.
+  const stale = nodeFiles.slice(0, Math.ceil(nodeFiles.length * 0.06));
+  const recorded = Object.fromEntries(
+    nodeFiles.slice(stale.length).map(file => [file, 20]),
+  );
+  // The first few missing files take distinct, larger times; the build job's
+  // own line for one of them books no leg time.
+  const missing = stale.slice(0, HEAVIEST_SHOWN + 2);
+  const log = [
+    ...nodeFiles.map((file, i) =>
+      legLine(file, i, missing.includes(file) ? 100 - i : 5),
+    ),
+    `build\tRun tests\t2026-01-01T00:00:00.0000000Z  ✓  node  ${missing[11]} (3 tests) 999.0s`,
+  ].join('\n');
+
+  it('says nothing while the record times enough files', () => {
+    const files = Array.from({length: 20}, (_, i) => `f${i}.test.mjs`);
+    const timed = Object.fromEntries(files.slice(0, 19).map(file => [file, 1]));
+    expect(earlyWarning(coverage(files, timed))).toBe('');
+  });
+
+  it('names how many files have no time, and the heaviest of them by their time in the Node legs', () => {
+    const heaviest = heaviestUnrecorded(log, stale);
+    expect(heaviest).toHaveLength(HEAVIEST_SHOWN);
+    expect(heaviest.map(({file}) => file)).toEqual(
+      missing.slice(0, HEAVIEST_SHOWN),
+    );
+    expect(heaviest[0]).toEqual({file: missing[0], measured: 100});
+    const files = Array.from({length: 20}, (_, i) => `f${i}.test.mjs`);
+    const timed = Object.fromEntries(files.slice(0, 18).map(file => [file, 1]));
+    const warning = earlyWarning(coverage(files, timed), heaviest);
+    expect(warning).toContain(
+      'Early warning: 2 of 20 Node test files (10%) have no recorded time, past the 5% line.',
+    );
+    expect(warning).toContain('nothing fails on it');
+    expect(warning).toContain(`- \`${missing[0]}\`: 100 s`);
+  });
+
+  it('opens the refresh with the warning in its pull request', () => {
+    const reasons = refreshReasons({nodeFiles, recorded, log});
+    expect(reasons.refresh).toBe(true);
+    expect(reasons.unrecorded).toHaveLength(HEAVIEST_SHOWN);
+    const body = prBody({
+      reasons,
+      after: coverage(nodeFiles, recorded),
+      runUrl: 'https://example.test/run/1',
+    });
+    expect(body).toContain('Early warning:');
+    expect(body).toContain(`- \`${missing[0]}\`: 100 s`);
+  });
+
+  it('lists drifted files under their own heading, apart from the heaviest unrecorded files', () => {
+    const reasons = {
+      ...refreshReasons({nodeFiles, recorded, log}),
+      drifted: [{file: 'late.test.mjs', recorded: 20, measured: 200}],
+    };
+    const body = prBody({
+      reasons,
+      after: coverage(nodeFiles, recorded),
+      runUrl: 'https://example.test/run/1',
+    });
+    const list = body.indexOf(`- \`${missing[0]}\`: 100 s`);
+    const heading = body.indexOf(
+      "Recorded files that ran far past their entry in main's run:\n\n- `late.test.mjs` ran 200 s",
+    );
+    expect(list).toBeGreaterThan(0);
+    expect(heading).toBeGreaterThan(list);
+  });
+
+  it('reads a run log longer than a call can take as arguments', () => {
+    const line = `test-node (1)\tRun tests\t2026-01-01T00:00:00.0000000Z  ✓  node  ${missing[0]} (1 test) 7ms`;
+    const longLog = Array.from({length: 160_000}, () => line).join('\n');
+    expect(heaviestUnrecorded(longLog, [missing[0]])).toEqual([
+      {file: missing[0], measured: 0},
+    ]);
+  });
+
+  function warn(seconds) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'node-record-warn-'));
+    try {
+      const record = path.join(dir, 'durations.json');
+      const summary = path.join(dir, 'summary.md');
+      fs.writeFileSync(record, JSON.stringify({seconds}));
+      fs.writeFileSync(summary, '');
+      const stdout = execFileSync(
+        process.execPath,
+        ['.github/scripts/node-record-refresh.mjs', 'warn'],
+        {
+          cwd: ROOT,
+          env: {
+            ...process.env,
+            VITEST_DURATIONS_FILE: record,
+            GITHUB_STEP_SUMMARY: summary,
+          },
+          encoding: 'utf8',
+        },
+      );
+      return {stdout, summary: fs.readFileSync(summary, 'utf8')};
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  }
+
+  it("warns on main's run past the line and exits 0, so it never fails", () => {
+    // execFileSync throws on a non-zero exit.
+    const {stdout, summary} = warn(recorded);
+    expect(stdout).toContain(
+      '::warning title=Node test record::Early warning:',
+    );
+    expect(summary).toContain('Early warning:');
+  });
+
+  it('writes nothing to the summary when the record times enough files', () => {
+    const all = Object.fromEntries(nodeFiles.map(file => [file, 1]));
+    const {stdout, summary} = warn(all);
+    expect(stdout).toContain('times enough files');
+    expect(summary).toBe('');
+  });
+
+  it('runs once per full unit run of main, in its first Node leg, and can never fail that run', () => {
+    const main = yaml.parse(
+      fs.readFileSync(path.join(ROOT, '.github/workflows/deploy.yml'), 'utf8'),
+    );
+    const warnStep = main.jobs['test-node'].steps.find(
+      each => each.run === 'node .github/scripts/node-record-refresh.mjs warn',
+    );
+    expect(warnStep).toBeDefined();
+    expect(warnStep['continue-on-error']).toBe(true);
+    expect(warnStep.if).toBe('${{ always() && matrix.shard == 1 }}');
+  });
+});
+
+describe('regenerating from a log with no Node leg time', () => {
+  it('fails, as the recorder does, and leaves the record as it was', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'node-record-empty-'));
+    try {
+      const record = path.join(dir, 'durations.json');
+      const before = JSON.stringify({$comment: 'kept', seconds: {}});
+      fs.writeFileSync(record, before);
+      const logFile = path.join(dir, 'main-run.log');
+      fs.writeFileSync(
+        logFile,
+        `build\tRun tests\t2026-01-01T00:00:00.0000000Z  ✓  node  ${nodeFiles[0]} (3 tests) 9.0s`,
+      );
+      let failure;
+      try {
+        execFileSync(
+          process.execPath,
+          [
+            '.github/scripts/node-record-refresh.mjs',
+            'regenerate',
+            '--log',
+            logFile,
+          ],
+          {
+            cwd: ROOT,
+            env: {...process.env, VITEST_DURATIONS_FILE: record},
+            stdio: 'pipe',
+          },
+        );
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure?.status).toBe(1);
+      expect(String(failure?.stderr)).toContain(
+        'No Node test file times found in that log.',
+      );
+      expect(fs.readFileSync(record, 'utf8')).toBe(before);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+});
+
+describe("each leg's slowdown taken out of the regenerated times", () => {
+  // Leg 1 holds files 0, 6, 12, …; leg 2 holds files 1, 7, 13, ….
+  const inLeg = leg => nodeFiles.filter((_, i) => i % 6 === leg - 1);
+  const recorded = Object.fromEntries(nodeFiles.map(file => [file, 20]));
+  const logOf = time =>
+    nodeFiles.map((file, i) => legLine(file, i, time(file, i))).join('\n');
+
+  it('books a slow leg at its own pace, and keeps entries that only ran slow with it', () => {
+    const [first, second] = inLeg(2);
+    const unrecorded = {...recorded};
+    delete unrecorded[first];
+    // Leg 2 ran everything twice as slow; the unrecorded file took 40 s there.
+    const log = logOf((file, i) => (i % 6 === 1 ? 40 : 20));
+    const {seconds, legs} = normalizedTimes(log, unrecorded);
+    expect(seconds).toEqual({[first]: 20});
+    expect(legs.find(({factor}) => factor > 1)?.factor).toBe(2);
+    expect(seconds[second]).toBeUndefined();
+  });
+
+  it('re-times a file that is RATIO times off its entry either way, never a small move', () => {
+    const [up, down, small] = inLeg(1);
+    const log = logOf(file =>
+      file === up ? 20 * RATIO + 1 : file === down ? 20 / RATIO - 1 : 20,
+    );
+    expect(normalizedTimes(log, recorded).seconds).toEqual({
+      [up]: 20 * RATIO + 1,
+      [down]: Math.round((20 / RATIO - 1) * 10) / 10,
+    });
+    // A file recorded at 2 s that ran 6 s is three times off but under
+    // RETIME_MIN_S away, so it keeps its entry.
+    const tiny = {...recorded, [small]: 2};
+    const tinyLog = logOf(file => (file === small ? 2 + RETIME_MIN_S - 1 : 20));
+    expect(normalizedTimes(tinyLog, tiny).seconds).toEqual({});
+  });
+
+  it('takes a lower time from a slow leg only after its slowdown is taken out', () => {
+    const [heavy] = inLeg(3);
+    // Leg 3 ran twice as slow, but its heavy file measured only 30 s against
+    // a 40 s entry: at that leg's pace it took 15 s.
+    const withHeavy = {...recorded, [heavy]: 40};
+    const log = logOf((file, i) =>
+      file === heavy ? 30 : i % 6 === 2 ? 40 : 20,
+    );
+    expect(normalizedTimes(log, withHeavy).seconds).toEqual({[heavy]: 15});
+  });
+
+  it("never divides by less than 1, so a fast leg's times are taken as measured", () => {
+    const log = logOf((file, i) => (i % 6 === 3 ? 10 : 20));
+    const fast = normalizedTimes(log, recorded);
+    // Leg 4 ran at half its entries. Its factor stays 1, so each file there
+    // is booked at the 10 s it took: RATIO times under and 10 s away.
+    expect(fast.legs.every(({factor}) => factor >= 1)).toBe(true);
+    expect(Object.values(fast.seconds).every(time => time === 10)).toBe(true);
   });
 });
 
@@ -424,7 +671,8 @@ describe('the one refresh pull request', () => {
   });
 
   it('describes a durations-only change with the shares before and after', () => {
-    expect(body).toContain('8 of 10 Node test files (80%), below the 90% bar');
+    expect(body).toContain('8 of 10 Node test files (80%), below the 95% bar');
+    expect(body).toContain('Early warning: 2 of 10 Node test files (20%)');
     expect(body).toContain('1 of 1 Node test files recorded (100%)');
     expect(body).toContain('Durations only.');
     expect(body).toContain('- CI impact (for a change to workflows');

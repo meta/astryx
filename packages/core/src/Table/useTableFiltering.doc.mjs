@@ -8,7 +8,7 @@ export const docs = {
   displayName: 'useTableFiltering',
   isHiddenFromOverview: true,
   description:
-    'Table plugin that adds inline column filters with popover or inline controls. Pairs with useTableFilterState for managed state. Supports text, select, multi-select, date, and number filter types via PowerSearch field definitions. The plugin renders the filter controls only; it does not remove rows. Filter the data yourself (toSearchFilters with applyFilters from usePowerSearchConfig) and pass the result to Table. When no row matches, Table shows its emptyState prop.',
+    'Table plugin that adds inline column filters with popover or inline controls. T is the row type; TypeScript cannot infer it from the config, so it defaults to Record<string, unknown>, which a Table with typed rows rejects: pass it, as in `useTableFiltering<Walk>(…)` for `<Table<Walk>>`. Pairs with useTableFilterState for managed state. Supports text, select, multi-select, date, and number filter types via PowerSearch field definitions. The plugin renders the filter controls only; it does not remove rows. Filter the data yourself (toSearchFilters with applyFilters from usePowerSearchConfig) and pass the result to Table. When no row matches, Table shows its emptyState prop.',
   props: [
     {
       name: 'filters',
@@ -48,15 +48,21 @@ export const docs = {
   ]},
 ] as const;
 
-const columns = [
+interface User extends Record<string, unknown> {
+  id: string;
+  name: string;
+  status: 'active' | 'inactive';
+}
+
+const columns: TableColumn<User>[] = [
   {key: 'name', header: 'Name', filter: 'name'},
   {key: 'status', header: 'Status', filter: 'status'},
 ];
 
-function UsersTable({users}) {
+function UsersTable({users}: {users: User[]}) {
   const {config, applyFilters} = usePowerSearchConfig(fields);
   const {filters, onFilterChange, clearAll} = useTableFilterState();
-  const filterPlugin = useTableFiltering({filters, onFilterChange, searchConfig: config});
+  const filterPlugin = useTableFiltering<User>({filters, onFilterChange, searchConfig: config});
   // The plugin draws the controls. You remove the rows that do not match.
   const visibleUsers = applyFilters(toSearchFilters(filters, columns, config), users);
 
@@ -85,7 +91,7 @@ export const docsZh = {
   isHiddenFromOverview: true,
   displayName: 'useTableFiltering',
   description:
-    '表格筛选插件，添加内联列过滤器（弹出式或内联控件）。与 useTableFilterState 配合使用管理状态。插件只渲染筛选控件，不会移除行：请自行筛选数据（toSearchFilters 配合 usePowerSearchConfig 的 applyFilters），再把结果传给 Table。没有匹配的行时，Table 显示其 emptyState 属性。',
+    '表格筛选插件，添加内联列过滤器（弹出式或内联控件）。T 是行类型；TypeScript 无法从配置推断它，因此默认为 Record<string, unknown>，带类型行的 Table 不接受：请传入，例如 `useTableFiltering<Walk>(…)` 对应 `<Table<Walk>>`。与 useTableFilterState 配合使用管理状态。插件只渲染筛选控件，不会移除行：请自行筛选数据（toSearchFilters 配合 usePowerSearchConfig 的 applyFilters），再把结果传给 Table。没有匹配的行时，Table 显示其 emptyState 属性。',
   props: [
     {
       name: 'filters',
@@ -120,7 +126,7 @@ export const docsDense = {
   isHiddenFromOverview: true,
   displayName: 'useTableFiltering',
   description:
-    'Table filtering plugin: inline column filters (popover/inline). Pairs w/ useTableFilterState. Renders controls only, does not remove rows: filter data yourself (applyFilters(toSearchFilters(filters, columns, config), data)) + pass result to Table; no match => Table emptyState.',
+    'Table filtering plugin: inline column filters (popover/inline). T = row type, not inferred from config (defaults to Record<string, unknown>, rejected by typed Table): pass it, e.g. `useTableFiltering<Walk>(…)`. Pairs w/ useTableFilterState. Renders controls only, does not remove rows: filter data yourself (applyFilters(toSearchFilters(filters, columns, config), data)) + pass result to Table; no match => Table emptyState.',
   propDescriptions: {
     filters: 'Current filter state map (columnKey → value).',
     onFilterChange: 'Called on filter change. null clears.',

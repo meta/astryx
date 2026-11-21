@@ -52,7 +52,7 @@ export const docs = {
   theming: {
     targets: [
       {className: 'astryx-layout', visualProps: ['height']},
-      {className: 'astryx-layout-content'},
+      {className: 'astryx-layout-content', visualProps: ['container']},
       {className: 'astryx-layout-footer', visualProps: ['container']},
       {className: 'astryx-layout-header', visualProps: ['container']},
       {className: 'astryx-layout-panel'},

@@ -21,10 +21,13 @@ import {useEffect, useRef, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import type {Locale} from '../i18n/types';
+import {useLocale} from '../i18n/useLocale';
 import {Text} from '../Text';
 import type {TextColor, TextSize, TextType, TextWeight} from '../theme/types';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
+import {formatElapsedDuration} from '../utils/timeFormat';
 
 const ONE_SECOND_MS = 1000;
 const ONE_MINUTE_MS = 60 * ONE_SECOND_MS;
@@ -66,6 +69,7 @@ function getElapsedMilliseconds(now: number, startTime: number): number {
 function getPresentation(
   elapsedMilliseconds: number,
   format: TimerFormat,
+  locale: Locale,
 ): TimerPresentation {
   const elapsedSeconds = Math.floor(elapsedMilliseconds / ONE_SECOND_MS);
 
@@ -85,7 +89,7 @@ function getPresentation(
   if (elapsedSeconds < 60) {
     return {
       dateTime: `PT${elapsedSeconds}S`,
-      text: `${String(elapsedSeconds)}s`,
+      text: formatElapsedDuration(locale, [['second', elapsedSeconds]]),
     };
   }
 
@@ -93,14 +97,20 @@ function getPresentation(
   if (totalMinutes < 60) {
     return {
       dateTime: `PT${elapsedSeconds}S`,
-      text: `${String(totalMinutes)}m ${pad(elapsedSeconds % 60)}s`,
+      text: formatElapsedDuration(locale, [
+        ['minute', totalMinutes],
+        ['second', elapsedSeconds % 60],
+      ]),
     };
   }
 
   const representedSeconds = totalMinutes * 60;
   return {
     dateTime: `PT${representedSeconds}S`,
-    text: `${String(Math.floor(totalMinutes / 60))}h ${pad(totalMinutes % 60)}m`,
+    text: formatElapsedDuration(locale, [
+      ['hour', Math.floor(totalMinutes / 60)],
+      ['minute', totalMinutes % 60],
+    ]),
   };
 }
 
@@ -184,7 +194,8 @@ export function Timer({
   const timerRef = useRef<HTMLTimeElement>(null);
   const mergedRef = useMergedRefs(ref, timerRef);
   const resolvedFormat = resolveFormat(format);
-  const initialPresentation = getPresentation(0, resolvedFormat);
+  const locale = useLocale();
+  const initialPresentation = getPresentation(0, resolvedFormat, locale);
 
   // Syncs the elapsed-time text with a timer.
   useEffect(() => {
@@ -202,7 +213,11 @@ export function Timer({
         now,
         resolvedStartTime,
       );
-      const presentation = getPresentation(elapsedMilliseconds, resolvedFormat);
+      const presentation = getPresentation(
+        elapsedMilliseconds,
+        resolvedFormat,
+        locale,
+      );
       const node = timerRef.current;
 
       if (node != null) {
@@ -233,7 +248,7 @@ export function Timer({
         clearTimeout(timeoutID);
       }
     };
-  }, [mountTime, resolvedFormat, startTime]);
+  }, [mountTime, resolvedFormat, startTime, locale]);
 
   const timerProps = mergeProps(themeProps('timer'), {className, style});
 

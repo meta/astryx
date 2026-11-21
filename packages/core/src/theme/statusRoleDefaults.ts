@@ -21,10 +21,10 @@ import {
 
 /**
  * Public tokens whose canonical default references another public token: the
- * status roles and `--duration-exit`. StyleX owns the document defaults. A
- * theme that authors a source repeats its omitted token at the theme root so
- * nested Theme regions bind the alias locally without changing authored-token
- * metadata.
+ * status roles, `--duration-exit` and `--radius-chat`. StyleX owns the
+ * document defaults. A theme that authors a source repeats its omitted token
+ * at the theme root so nested Theme regions bind the alias locally without
+ * changing authored-token metadata.
  *
  * Conditional scopes repeat an omitted alias only when the source changes on
  * that scope. Explicit adaptation role writes are replayed after generated
@@ -52,6 +52,7 @@ export const SCOPED_REFERENCE_DEFAULTS: ReadonlyArray<
   ['--color-border-warning', '--color-text-warning'],
   ['--color-border-error', '--color-text-error'],
   ['--duration-exit', '--duration-fast'],
+  ['--radius-chat', '--radius-container'],
 ];
 
 const STATUS_ROLE_ORDER = new Map(

@@ -121,11 +121,12 @@ const APPROVED_IMPLEMENTATION_FILES = [
   // committed text, and the calendar's display name.
   'packages/core/src/utils/calendarDateParser.ts',
   // TimeInput/DateTimeInput time text: the locale's hour cycle, digits,
-  // separator and day-period words, read off Intl and parsed back.
+  // separator and day-period words, read off Intl and parsed back; and
+  // Timer's compact elapsed durations in the locale's narrow units.
   'packages/core/src/utils/timeFormat.ts',
   'packages/core/src/i18n/useCollator.ts',
   // Joins several catalog messages into one locale-correct list (INV8).
-  'packages/core/src/i18n/useListFormatter.ts',
+  'packages/core/src/i18n/listFormat.ts',
   'packages/charts/src/formatters.ts',
 ];
 

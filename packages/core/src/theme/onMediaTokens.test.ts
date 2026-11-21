@@ -9,6 +9,15 @@ import {
   resolveOnMedia,
 } from './onMediaTokens';
 
+/**
+ * Inverted surfaces that keep one side in both page modes, so a test about
+ * other rules sees no dark-page scoping (INV21 has its own tests).
+ */
+const KEEPS_SIDE = {
+  '--color-background-inverted': '#0a1317',
+  '--color-background-error-inverted': '#a8071e',
+};
+
 describe('onMediaTokens', () => {
   describe('defaultOnDarkTokens', () => {
     it('sets color-scheme to dark', () => {
@@ -274,6 +283,7 @@ describe('generateOnMediaCSS', () => {
   it('avoids a descendant-local cycle while replaying an adaptation role', () => {
     const theme = defineTheme({
       name: 'status-role-media-replay-cycle',
+      tokens: KEEPS_SIDE,
       adaptations: {
         rules: [
           {
@@ -345,6 +355,7 @@ describe('generateOnMediaCSS', () => {
   it('emits component override rules', () => {
     const theme = defineTheme({
       name: 'test',
+      tokens: KEEPS_SIDE,
       onDark: {
         components: {
           button: {
@@ -367,6 +378,7 @@ describe('generateOnMediaCSS', () => {
   it('emits pseudo-class rules for on-media components', () => {
     const theme = defineTheme({
       name: 'test',
+      tokens: KEEPS_SIDE,
       onDark: {
         components: {
           button: {

@@ -238,6 +238,11 @@ export const docs = {
       {
         guidance: true,
         description:
+          'Pass an option description that is longer than one line as a node: description={<Text type="supporting">…</Text>}. A string description shows on one line, and the row cuts the remaining text with an ellipsis.',
+      },
+      {
+        guidance: true,
+        description:
           'Write a group label that says what the choices represent: "Export formats" tells users more than "Options".',
       },
       {
@@ -296,6 +301,11 @@ export const docsZh = {
       {
         guidance: true,
         description:
+          'Pass an option description that is longer than one line as a node: description={<Text type="supporting">…</Text>}. A string description shows on one line, and the row cuts the remaining text with an ellipsis.',
+      },
+      {
+        guidance: true,
+        description:
           'Write a group label that says what the choices represent: "Export formats" tells users more than "Options".',
       },
       {
@@ -334,6 +344,11 @@ export const docsDense = {
         guidance: true,
         description:
           'Turn on dividers (hasDividers) when items have helper text underneath; without them the labels and descriptions blur together.',
+      },
+      {
+        guidance: true,
+        description:
+          'Pass an option description that is longer than one line as a node: description={<Text type="supporting">…</Text>}. A string description shows on one line, and the row cuts the remaining text with an ellipsis.',
       },
       {
         guidance: true,

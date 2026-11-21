@@ -15,6 +15,7 @@ import {unusableTypeScriptReason} from './project-typescript.mjs';
 import {iconDefinitionSource} from './icon-set-writer.mjs';
 import {
   checkDocTypes,
+  DOC_TYPES_TYPESCRIPT_MISSING_HERE,
   DOC_TYPES_TYPESCRIPT_MISSING_REASON,
 } from './doc-types.mjs';
 
@@ -124,6 +125,70 @@ describe('checkDocTypes', () => {
       findings: [],
       unchecked: [],
     });
+  });
+
+  it('names no install step outside any package, where nothing can install TypeScript', async () => {
+    write(
+      'components/Badge.doc.mjs',
+      `export default ${JSON.stringify(COMPONENT)};\n`,
+    );
+
+    const report = await check([['components/Badge.doc.mjs', 'components']], {
+      outsideAnyPackage: true,
+    });
+
+    expect(report.reason).toBe(DOC_TYPES_TYPESCRIPT_MISSING_HERE);
+    expect(report.status).toBe('skipped');
+  });
+
+  it('names an unusable TypeScript with no install step outside any package', async () => {
+    write(
+      'components/Badge.doc.mjs',
+      `export default ${JSON.stringify(COMPONENT)};\n`,
+    );
+    const dir = path.join(pkg, 'node_modules', 'typescript');
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(
+      path.join(dir, 'package.json'),
+      JSON.stringify({name: 'typescript', version: '7.0.0', main: 'index.js'}),
+    );
+    fs.writeFileSync(
+      path.join(dir, 'index.js'),
+      "module.exports = {version: '7.0.0'};\n",
+    );
+
+    const report = await check([['components/Badge.doc.mjs', 'components']], {
+      outsideAnyPackage: true,
+    });
+
+    expect(report.reason).toBe(
+      unusableTypeScriptReason('7.0.0', 'docs were not checked', {here: true}),
+    );
+    expect(report.reason).not.toContain('npm install');
+  });
+
+  it('names a TypeScript too old to check with no install step outside any package', async () => {
+    write(
+      'components/Badge.doc.mjs',
+      `export default ${JSON.stringify(COMPONENT)};\n`,
+    );
+    const dir = path.join(pkg, 'node_modules', 'typescript');
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(
+      path.join(dir, 'package.json'),
+      JSON.stringify({name: 'typescript', version: '4.8.4', main: 'index.js'}),
+    );
+    fs.writeFileSync(
+      path.join(dir, 'index.js'),
+      "module.exports = {version: '4.8.4', versionMajorMinor: '4.8', createProgram() {}};\n",
+    );
+
+    const report = await check([['components/Badge.doc.mjs', 'components']], {
+      outsideAnyPackage: true,
+    });
+
+    expect(report.reason).toContain('TypeScript 4.8.4 cannot check');
+    expect(report.reason).not.toContain('npm install');
   });
 
   it('names an installed TypeScript it cannot use, rather than asking to install one', async () => {

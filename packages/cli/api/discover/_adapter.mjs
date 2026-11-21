@@ -17,6 +17,7 @@
  *   foundation/integrations, the discovery loaders, and discover sources.
  */
 
+import {projectIntegrationSkills} from '../docs/_adapter.mjs';
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -120,6 +121,7 @@ const DEPENDENCY_FIELDS = [
  *   docSections?: Record<string, string[]>,
  *   themes?: string[],
  *   codemods?: string[],
+ *   skills?: string[],
  *   iconSets?: string[],
  *   iconSetDetails?: IconSetSummary[],
  *   withdrawnIconSets?: Array<{name: string, reason: string}>,
@@ -298,6 +300,14 @@ export async function describeInstalled(project, scanned) {
 async function describeInstalledFresh(project, scanned) {
   const byName = new Map(scanned.map(pkg => [pkg.name, pkg]));
   const docs = await projectDocs(project);
+  // The skills its docs declare, as the docs tree and the skill places keep
+  // them.
+  let declaredSkills = /** @type {Array<{name: string, package: string}>} */ ([]);
+  try {
+    declaredSkills = (await projectIntegrationSkills(project.cwd)).skills;
+  } catch {
+    // A docs tree that cannot be read lists no skills.
+  }
   /** @type {InstalledPackage[]} */
   const installed = [];
   for (const integration of project.loadedIntegrations) {
@@ -347,6 +357,9 @@ async function describeInstalledFresh(project, scanned) {
       ),
       themes: identities.themes.map(t => t.slug),
       codemods: identities.codemods.map(c => `${c.version}/${c.id}`),
+      skills: declaredSkills
+        .filter(each => each.package === integration.name)
+        .map(each => each.name),
       iconSets: sets.map(set => set.name),
       iconSetDetails: sets.map(set => ({
         name: set.name,
@@ -1335,6 +1348,7 @@ export function toEntry(pkg) {
     if (Array.isArray(values) && values.length > 0) entry[field] = values;
   }
   if (pkg.docSections) entry.docSections = pkg.docSections;
+  if (pkg.skills?.length) entry.skills = pkg.skills;
   if (pkg.latest) entry.latest = pkg.latest;
   return /** @type {import('./discover.type.mjs').DiscoverListEntry} */ (entry);
 }

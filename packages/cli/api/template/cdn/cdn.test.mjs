@@ -48,7 +48,9 @@ describe('templateCdn()', () => {
     const html = written();
 
     expect(html).not.toContain(CDN_VERSION_PLACEHOLDER);
-    const urls = html.match(/https:\/\/(?:cdn\.jsdelivr\.net\/npm|esm\.sh)\/@astryxdesign\/[^"?]+/g);
+    const urls = html.match(
+      /https:\/\/(?:cdn\.jsdelivr\.net\/npm|esm\.sh)\/@astryxdesign\/[^"?]+/g,
+    );
     expect(urls?.length).toBeGreaterThan(0);
     for (const url of urls ?? []) {
       expect(url).toContain(`@${data.version}`);
@@ -99,10 +101,20 @@ describe('templateCdn()', () => {
     expect(fs.existsSync(path.join(tmpDir, 'public/demo.html'))).toBe(true);
   });
 
-  it('refuses a path that escapes the project', () => {
-    expect(() => templateCdn({cwd: tmpDir, targetPath: '../escaped.html'})).toThrow(
-      /cdn template path/,
+  it('reads `~/` as the home folder, never a folder named `~` in the project', () => {
+    const given = `~/astryx-no-such-folder-${path.basename(tmpDir)}/cdn.html`;
+    expect(() => templateCdn({cwd: tmpDir, targetPath: given})).toThrow(
+      `Invalid cdn template path "${given}": it is outside the project root`,
     );
-    expect(fs.existsSync(path.join(path.dirname(tmpDir), 'escaped.html'))).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, '~'))).toBe(false);
+  });
+
+  it('refuses a path that escapes the project', () => {
+    expect(() =>
+      templateCdn({cwd: tmpDir, targetPath: '../escaped.html'}),
+    ).toThrow(/cdn template path/);
+    expect(fs.existsSync(path.join(path.dirname(tmpDir), 'escaped.html'))).toBe(
+      false,
+    );
   });
 });

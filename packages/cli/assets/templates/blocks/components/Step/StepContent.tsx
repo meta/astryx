@@ -2,11 +2,14 @@
 
 'use client';
 
+import {VStack} from '@astryxdesign/core/Layout';
 import {Stepper, Step} from '@astryxdesign/core/Stepper';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Button} from '@astryxdesign/core/Button';
+import {useToast} from '@astryxdesign/core/Toast';
 
 export default function StepContent() {
+  const showToast = useToast();
   // Anything passed as children renders below the description, indented to line
   // up with the label rather than the indicator. In a full flow you would gate
   // this on the step being active; here it is a single Step so the slot is
@@ -18,13 +21,19 @@ export default function StepContent() {
           step={1}
           label="Billing address"
           description="Used for invoices and tax calculation">
-          <div style={{display: 'flex', flexDirection: 'column', gap: 12}}>
+          <VStack gap={3}>
             <TextInput label="Street" placeholder="1 Hacker Way" value="" />
             <TextInput label="City" placeholder="Menlo Park" value="" />
             <div>
-              <Button label="Save address" variant="primary" />
+              <Button
+                label="Save address"
+                variant="primary"
+                onClick={() =>
+                  showToast({body: 'Demo: the billing address would save here'})
+                }
+              />
             </div>
-          </div>
+          </VStack>
         </Step>
       </Stepper>
     </div>
