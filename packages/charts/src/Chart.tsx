@@ -51,6 +51,7 @@ import {ChartTooltip, type ChartTooltipProps} from './ChartTooltip';
 import {useChartColors} from './useChartColors';
 import {formatList} from './formatters';
 import {isUtilityMarkType} from './types';
+import {resolveValueText} from './valueText';
 
 export interface ChartProps extends BaseProps<HTMLDivElement> {
   /** Ref forwarded to the root chart container. */
@@ -100,11 +101,6 @@ const DEFAULT_MARGIN: ChartMargin = {top: 24, right: 24, bottom: 32, left: 48};
  * than signal for screen reader users, so larger charts are name-only.
  */
 const MAX_TABLE_POINTS = 100;
-
-/** Stringify a cell value for the hidden data table. */
-function tableCell(value: unknown): string {
-  return value == null ? '' : String(value);
-}
 
 const styles = stylex.create({
   container: {
@@ -478,6 +474,7 @@ export function Chart({
     if (!showDataTable) {
       return null;
     }
+    const noDataText = t('@astryx.chart.noData');
     return (
       <VisuallyHidden as="div">
         <table>
@@ -497,9 +494,9 @@ export function Chart({
           <tbody>
             {data.map((d, i) => (
               <tr key={i}>
-                <th scope="row">{tableCell(d[xKey])}</th>
+                <th scope="row">{resolveValueText(d[xKey], noDataText)}</th>
                 {tableKeys.map(key => (
-                  <td key={key}>{tableCell(d[key])}</td>
+                  <td key={key}>{resolveValueText(d[key], noDataText)}</td>
                 ))}
               </tr>
             ))}
