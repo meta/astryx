@@ -27,6 +27,7 @@ export const PACKAGE_MANAGER_HOMES = [
   'COREPACK_HOME',
   'BUN_INSTALL',
   'YARN_GLOBAL_FOLDER',
+  'npm_config_global_folder',
 ];
 
 /** The environment variable that names the run's home folder to workers. */
@@ -87,11 +88,12 @@ export function gitGlobalConfig(env = process.env, home = os.homedir()) {
 
 /**
  * Points the home folder and every per-user folder setting at `home`, and
- * the temp folder at `tmp`. npm, pnpm and corepack keep their caches there
- * too, so they read none of the developer's. Playwright still finds the
- * browsers the developer installed, and git its global configuration:
- * each reads them in place and writes nothing there. The temp folder must not hold `home`: the CLI takes no
- * scratch copy in a temp folder that holds the home folder.
+ * the temp folder at `tmp`, and unsets the package managers' own folder
+ * settings, so npm, pnpm, corepack, Yarn and Bun use folders in `home`.
+ * Playwright still finds the browsers the developer installed, and git its
+ * global configuration: each reads them in place and writes nothing there.
+ * The temp folder must not hold `home`: the CLI takes no scratch copy in a
+ * temp folder that holds the home folder.
  * @param {string} home
  * @param {string} tmp
  * @param {Record<string, string | undefined>} [env]
