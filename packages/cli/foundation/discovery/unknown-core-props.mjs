@@ -28,6 +28,47 @@ import {
 import {compilerOptionsFor, projectMapsImport} from '../render/ts-paths.mjs';
 import {nameWords, orderByAffinity} from '../text/suggest-order.mjs';
 import {compareText} from '../text/compare-text.mjs';
+import {
+  resolveProjectTypeScript,
+  TYPESCRIPT_FIX,
+  unusableTypeScriptReason,
+} from './project-typescript.mjs';
+
+/** What to do when Core's types cannot be read without Core installed. */
+const CORE_FIX =
+  'Install `@astryxdesign/core` in the project that holds the pages.';
+
+/**
+ * The project's own TypeScript, found from the first of `dirs` that has one,
+ * or why the props cannot be checked without it and what to install. Doctor
+ * and the export say the same thing.
+ * @param {string[]} dirs
+ * @returns {{ts: any} | {skipped: string, reason: string}} `reason` is the
+ *   same reason worded for a folder outside a project, with no install step
+ */
+export function projectTypeScript(dirs) {
+  const compiler = resolveProjectTypeScript(dirs);
+  if (compiler === null) {
+    return {
+      skipped: `TypeScript is not installed in this project, so the props were not checked. ${TYPESCRIPT_FIX}`,
+      reason:
+        'TypeScript is not installed here, so the props were not checked.',
+    };
+  }
+  if (compiler.ts === null)
+    return {
+      skipped: unusableTypeScriptReason(
+        compiler.version,
+        'the props were not checked',
+      ),
+      reason: unusableTypeScriptReason(
+        compiler.version,
+        'the props were not checked',
+        {here: true},
+      ),
+    };
+  return {ts: compiler.ts};
+}
 
 /**
  * A TypeScript module that may widen what JSX gives every component: one
@@ -333,15 +374,20 @@ export function widensJsx(file, text) {
  * @param {(names: string[], cwd: string) => Promise<Map<string, any[]>>} input.readDocs
  *   for each component the docs describe, its documented props (`readCoreDocs`),
  *   read from the Core of the folder `cwd`
- * @param {() => {ts: any} | {skipped: string}} input.typescript the
- *   compiler to read Core's types with, or why there is none
+ * @param {() => {ts: any} | {skipped: string, reason?: string}} input.typescript
+ *   the compiler to read Core's types with, or why there is none (`reason`
+ *   worded for a folder outside a project)
  * @param {() => string[] | null} [input.jsxDeclarations] the files that may
  *   widen what JSX gives every component (`jsxDeclarationFiles` by default)
- * @param {boolean} [input.runtimeFirst] check the pages' JSX runtime
- *   (`jsxRuntimeCheck`) before the docs, so a project on another runtime is
- *   reported as not checked whatever its props are; by default it is checked
- *   for candidates alone
- * @returns {Promise<{found: UnknownCoreProp[], skipped: string | null}>}
+ * @param {boolean} [input.runtimeFirst] doctor's order: report pages that
+ *   find no installed Core, and a project on another JSX runtime
+ *   (`jsxRuntimeCheck`), before the docs, whatever the props are. By default
+ *   both are reported for candidates alone, and a page that finds no
+ *   installed Core still reads the docs of the Core it renders with
+ * @returns {Promise<{found: UnknownCoreProp[], skipped: string | null, reason?: string}>}
+ *   `skipped` ends with what to install when an install fixes it; `reason`,
+ *   when given, is the same reason without that step, for a folder outside
+ *   a project, where a project install step does not apply
  */
 export async function judgeCoreProps({
   projectDir,
@@ -352,9 +398,10 @@ export async function judgeCoreProps({
   jsxDeclarations,
   runtimeFirst = false,
 }) {
-  const notChecked = (/** @type {string} */ reason) => ({
+  const notChecked = (/** @type {string} */ reason, fix = '') => ({
     found: [],
-    skipped: `${reason}, so the props were not checked.`,
+    skipped: `${reason}, so the props were not checked.${fix ? ` ${fix}` : ''}`,
+    reason: `${reason}, so the props were not checked.`,
   });
   // Each page is read as TypeScript reads it, with Core and React found from
   // the page's own folder.
@@ -373,14 +420,20 @@ export async function judgeCoreProps({
     }
     return coreFrom.get(dir) ?? null;
   };
-  // Pages that import Core and find no installed Core have no types to read.
+  // Pages that import Core and find no installed Core have no types to
+  // read. Doctor says so whatever the pages hold; the export says so only
+  // for props the docs leave out.
+  const noCore = () =>
+    notChecked(
+      'Core is not installed where the pages that import it can find it',
+      CORE_FIX,
+    );
   if (
+    runtimeFirst &&
     pages.length > 0 &&
     pages.every(page => !coreDirFrom(path.dirname(page)))
   ) {
-    return notChecked(
-      'Core is not installed where the pages that import it can find it',
-    );
+    return noCore();
   }
   const early = runtimeFirst ? jsxRuntimeCheck(pages, projectDir) : null;
   if (early && 'skipped' in early) return notChecked(early.skipped);
@@ -392,10 +445,13 @@ export async function judgeCoreProps({
   for (const use of uses) {
     const from = path.dirname(use.path);
     const coreDir = coreDirFrom(from);
-    if (!coreDir) continue;
+    if (!coreDir && runtimeFirst) continue;
+    // A page without installed Core reads the docs of the Core it renders
+    // with, found from its folder.
+    const key = coreDir ?? '';
     const group =
-      byCore.get(coreDir) ??
-      /** @type {any} */ (byCore.set(coreDir, {from, uses: []}).get(coreDir));
+      byCore.get(key) ??
+      /** @type {any} */ (byCore.set(key, {from, uses: []}).get(key));
     group.uses.push(use);
   }
   /** @type {Map<string, Map<string, string[]>>} */
@@ -420,15 +476,24 @@ export async function judgeCoreProps({
   }
   // A page whose config maps a Core module path elsewhere (`paths`) reads
   // another module, so it is not judged.
-  const judged = candidates.filter(
+  let judged = candidates.filter(
     use => !projectMapsImport(use.source, use.path),
   );
   if (judged.length === 0) return {found: [], skipped: null};
+  // A candidate in a file that finds no installed Core is not judged; the
+  // line says Core is missing only when no page finds it, as doctor says.
+  judged = judged.filter(use => coreDirFrom(path.dirname(use.path)));
+  if (judged.length === 0) {
+    return pages.some(page => coreDirFrom(path.dirname(page)))
+      ? {found: [], skipped: null}
+      : noCore();
+  }
   const config = early ?? jsxRuntimeCheck(pages, projectDir);
   if ('skipped' in config) return notChecked(config.skipped);
   const {configs, configOf} = config;
   const compiler = typescript();
-  if (!('ts' in compiler)) return {found: [], skipped: compiler.skipped};
+  if (!('ts' in compiler))
+    return {found: [], skipped: compiler.skipped, reason: compiler.reason};
   const declarations = (
     jsxDeclarations ?? (() => jsxDeclarationFiles(projectDir))
   )();
@@ -487,7 +552,7 @@ export async function judgeCoreProps({
       sources,
       configFile: group.configFile || undefined,
     });
-    if (types.unread) return notChecked(types.unread);
+    if (types.unread) return notChecked(types.unread, types.unreadFix);
     for (const use of group.uses) {
       if (
         types.attributes.has(use.prop) ||

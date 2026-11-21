@@ -14,7 +14,8 @@
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
-import {blurScaled, exactFactor, shiftKeepAlpha} from './_how-question.mjs';
+import {exactFactor} from './_how-question.mjs';
+import {blurScaled, shiftKeepAlpha} from './_how-steps.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,

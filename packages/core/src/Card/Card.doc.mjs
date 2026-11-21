@@ -53,7 +53,7 @@ export const docs = {
     {
       name: 'children',
       type: 'ReactNode',
-      description: 'Content to render inside the card.',
+      description: 'Content to render inside the card: one discrete item; a page\u2019s people, principles or contacts are page content, so set them under headings with Dividers or in one List, not a Card each, on a phone too.',
     },
     {
       name: 'padding',
@@ -176,7 +176,7 @@ export const docsZh = {
     {name: 'height', type: 'SizeValue', description: '卡片高度（数字 = 像素，字符串 = 按原样使用）。'},
     {name: 'maxWidth', type: 'SizeValue', description: '卡片最大宽度。'},
     {name: 'minHeight', type: 'SizeValue', description: '卡片最小高度。'},
-    {name: 'children', type: 'ReactNode', description: '在卡片内部渲染的内容。'},
+    {name: 'children', type: 'ReactNode', description: '在卡片内部渲染的内容：一个独立的项目；页面上的人员、原则或联系方式是页面内容，应放在标题下用 Divider 分隔或放进一个 List，而不是每项一个 Card，手机上也一样。'},
     {name: 'padding', type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10', description: '使用间距比例的内边距。省略时，卡片采用主题的卡片内边距，而不是某个步进值；传入步进值意味着覆盖主题，而不是复述默认值。', default: "the theme's card padding (spacing step 4 with no theme)"},
     {name: 'variant', type: "'default' | 'transparent' | 'muted' | 'blue' | 'cyan' | 'gray' | 'green' | 'orange' | 'pink' | 'purple' | 'red' | 'teal' | 'yellow'", description: '背景颜色变体。`default` 使用标准卡片背景；`transparent` 完全去掉背景；`muted` 使用弱化卡片的柔和背景。非语义变体使用对应的 `--color-background-<name>` 令牌。', default: "'default'"},
     {name: 'elevation', type: "'none' | 'low' | 'med' | 'high'", description: '静止阴影深度。`none` 为扁平；`low`/`med`/`high` 对应阴影令牌比例。', default: "'none'"},
@@ -223,7 +223,7 @@ export const docsDense = {
     height: 'card height (number=px, string=as-is)',
     maxWidth: 'max card width',
     minHeight: 'min card height',
-    children: 'content inside card',
+    children: 'content inside card: ONE discrete item; a page\u2019s people/principles/contacts = page content → headings + Dividers or one List, not a Card each (phone too)',
     padding: "internal padding via spacing scale; omitted = the theme's card padding, NOT a fixed step. Passing a step overrides the theme.",
     variant: 'background color variant; `default` = standard card bg, `transparent` = no background at all, `muted` = muted bg for de-emphasised cards; non-semantic variants use the corresponding `--color-background-<name>` token',
     elevation: 'resting shadow depth: none (flat) | low | med | high (shadow token scale). Raise only to float above content.',

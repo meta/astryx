@@ -2,6 +2,7 @@
 
 import type {Meta, StoryObj} from '@storybook/react';
 import {NavHeadingMenu, NavHeadingMenuItem} from '@astryxdesign/core/NavMenu';
+import {SideNavHeading} from '@astryxdesign/core/SideNav';
 import {
   Cog6ToothIcon,
   UserIcon,
@@ -51,7 +52,13 @@ export const Default: Story = {
   },
 };
 
+// A NavHeadingMenu is a heading's popup menu, and its items are not Tab
+// stops. This story opens it from a SideNavHeading, as an app does, so the
+// keyboard reaches it: Tab to the heading, then Enter.
 export const WithIcons: Story = {
+  render: args => (
+    <SideNavHeading heading="Workspace" menu={<NavHeadingMenu {...args} />} />
+  ),
   args: {
     size: 'md',
     children: (
@@ -63,11 +70,7 @@ export const WithIcons: Story = {
           href="#"
         />
         <NavHeadingMenuItem label="Analytics" icon={ChartBarIcon} href="#" />
-        <NavHeadingMenuItem
-          label="Security"
-          icon={ShieldCheckIcon}
-          href="#"
-        />
+        <NavHeadingMenuItem label="Security" icon={ShieldCheckIcon} href="#" />
         <NavHeadingMenuItem label="Settings" icon={Cog6ToothIcon} href="#" />
       </>
     ),

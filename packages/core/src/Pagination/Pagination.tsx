@@ -37,8 +37,10 @@ import {Text} from '../Text';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {useListFocus} from '../hooks/useListFocus';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {focusForLastInput} from '../utils/focusReturn';
 import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
+import {useTouchHitArea} from '../utils/touchHitArea';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {mergeProps, rtlStyles} from '../utils';
 import type {BaseProps} from '../BaseProps';
@@ -107,12 +109,13 @@ export interface PaginationProps extends Omit<
 
   // --- Data shape (provide one) ---
   /**
-   * Total number of items. Used to calculate page count.
-   * Takes precedence over totalPages if both provided.
+   * Total number of items. Used to calculate the page count when totalPages
+   * is not given.
    */
   totalItems?: number;
   /**
    * Total number of pages. Use when you know page count but not item count.
+   * Takes precedence over totalItems if both are given.
    */
   totalPages?: number;
   /**
@@ -254,6 +257,7 @@ const styles = stylex.create({
     gap: spacingVars['--spacing-1'],
   },
   dot: {
+    position: 'relative',
     width: spacingVars['--spacing-2'],
     height: spacingVars['--spacing-2'],
     borderWidth: 0,
@@ -266,7 +270,10 @@ const styles = stylex.create({
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
     transitionProperty: 'background-color',
-    transitionDuration: durationVars['--duration-fast'],
+    transitionDuration: {
+      default: durationVars['--duration-fast'],
+      '@media (prefers-reduced-motion: reduce)': '0s',
+    },
     transitionTimingFunction: easeVars['--ease-standard'],
   },
   dotSm: {
@@ -562,6 +569,9 @@ export function Pagination({
   // The click's focus takes the ring of the dots' own document's last input.
   const {ref: modalityRef} = useInteractionModalityTracking();
   const dotsRef = useMergedRefs(dotsListRef, modalityRef);
+  // Under a coarse pointer each dot's target grows toward 44 px, clamped to
+  // half the gap to its neighbours. One ref watches every dot.
+  const dotHitAreaRef = useTouchHitArea(variant === 'dots' && !isDisabled);
 
   const computedTotalPages =
     totalPagesProp ??
@@ -807,6 +817,7 @@ export function Pagination({
               return (
                 <button
                   key={i + 1}
+                  ref={dotHitAreaRef}
                   type="button"
                   role="radio"
                   data-page={i + 1}
@@ -835,6 +846,7 @@ export function Pagination({
                     }),
                     focusOutlineProps.focusVisible(
                       styles.dot,
+                      !isDisabled && touchHitAreaStyles.layer,
                       isSm && styles.dotSm,
                       isActive && styles.dotActive,
                       isDisabled && styles.dotDisabled,
