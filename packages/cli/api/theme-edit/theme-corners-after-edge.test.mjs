@@ -1,10 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Corners said in the same ask as the edge it gives a part that shows
- * no corners yet (a fill, border or shadow) run after that edge, so they
- * show and are kept: "the header with a blue to purple gradient and 12px
- * corners" writes the gradient, then the corners.
+ * @file Corners said before the edge the same ask gives a part that shows
+ * no corners yet (a fill, border, shadow or outline) run after that edge,
+ * so the whole answer keeps both: "focused links: 12px corners and a
+ * shadow" writes the shadow, then the corners.
  *
  * @position api/theme-edit — tests
  */
@@ -117,4 +117,24 @@ describe('corners said with an edge the same ask gives the part', () => {
       expect(edge, sets.join('\n')).toBeGreaterThan(-1);
       expect(corners, sets.join('\n')).toBeGreaterThan(edge);
     }, 240_000);
+
+  it('keeps the said order of two corners steps moved past one edge', async test => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      test.skip();
+    }
+    const sets = await whole(
+      'focused links: 12px corners, a 4px top left radius and a shadow',
+    );
+    const shadow = sets.findIndex(x => /^box-shadow .*--on link\b/.test(x));
+    const all = sets.findIndex(x => /^border-radius 12px --on link\b/.test(x));
+    const tl = sets.findIndex(x =>
+      /^border-top-left-radius 4px --on link\b/.test(x),
+    );
+    expect(shadow, sets.join('\n')).toBeGreaterThan(-1);
+    if (all >= 0 && tl >= 0) {
+      expect(all, sets.join('\n')).toBeGreaterThan(shadow);
+      expect(tl, sets.join('\n')).toBeGreaterThan(all);
+    }
+  }, 240_000);
 });

@@ -29093,29 +29093,32 @@ export function draftAnswer(ctx, env, question) {
       );
       if (first >= 0) all.splice(first, 0, ...all.splice(i, 1));
     }
-    // Corners on a part that shows none yet, said with the edge the same
-    // ask gives it ("the header with a blue to purple gradient and 12px
-    // corners"): they show only once the edge is there, so they run after
-    // it, whichever came first. An edge counts at rest or in the corners'
-    // own state, and never as a removal.
+    // Corners on a part that shows none yet, said before the edge the same
+    // ask gives it ("focused links: 12px corners and a shadow"): they show
+    // only once the edge is there, so they run after it, in the order they
+    // were said. An edge is a set, at rest or in the corners' own state,
+    // never a removal.
     const roundsCorners = (/** @type {Step} */ t) =>
       t.thing === 'corners' || /^border(?:-\w+)*-radius$/.test(String(t.thing));
     const edgeFor = (/** @type {Step} */ t, /** @type {Step} */ corner) =>
+      t.verb === 'set' &&
       (!t.state || t.state === corner.state) &&
       /^(?:background|border(?!.*radius)|box-shadow|outline)/.test(
         String(t.thing),
       ) &&
       !/^(?:none|hidden|0(?:px)?|transparent)$/.test(String(t.value).trim());
-    for (let i = 0; i < all.length; i++) {
+    // (From the last step back, so corners moved past the same edge keep
+    // the order they were said in.)
+    for (let i = all.length - 1; i >= 0; i--) {
       const st = all[i];
-      if (!st.on || !roundsCorners(st) || C.showsCorners(one(st.on))) continue;
+      if (st.verb !== 'set' || !st.on || !roundsCorners(st)) continue;
+      if (C.showsCorners(one(st.on))) continue;
       let edge = -1;
       for (let j = i + 1; j < all.length; j++)
         if (all[j].on === st.on && edgeFor(all[j], st)) edge = j;
       if (edge < 0) continue;
       all.splice(i, 1);
       all.splice(edge, 0, st);
-      i--;
     }
     // At most MAX_STEPS in one sequence, cut only between clauses: a
     // clause's steps (its write and the keeps it needs, a status's border
