@@ -264,8 +264,9 @@ async function runNow(args, cwd, allCommands, run) {
   // removed `cwd`.
   if (run.finished) return NOT_STARTED;
   // Commander's own exits (parse errors, --help, --version, unknown option)
-  // throw a CommanderError instead of calling process.exit.
-  program.exitOverride();
+  // throw a CommanderError instead of calling process.exit: the JSON shim
+  // installs that override on every command, the program included, and tags
+  // the error with the command that refused it, as in a run of the bin.
 
   /** @type {string[]} */
   const out = [];
@@ -373,7 +374,9 @@ async function runNow(args, cwd, allCommands, run) {
       // and non-JSON callers get the Astryx `Error: …` line. handleCommanderError
       // calls process.exit, which our trap re-raises as an ExitSignal.
       try {
-        handleCommanderError(e);
+        // A theme command's reader checks its suggestions before the
+        // answer is written: awaited, as the CLI's process waits for it.
+        await handleCommanderError(e);
         status = /** @type {any} */ (e).exitCode ?? 1;
       } catch (e2) {
         if (e2 instanceof ExitSignal) status = e2.code;

@@ -382,7 +382,11 @@ describe('TextInput', () => {
           status={{type: 'error'}}
         />,
       );
-      expect(screen.queryByText(/invalid/i)).not.toBeInTheDocument();
+      // No message box renders; only the hidden fallback text describes the
+      // error.
+      expect(
+        document.querySelector('.astryx-field-status'),
+      ).not.toBeInTheDocument();
     });
 
     it('sets aria-invalid when status type is error', () => {
@@ -437,7 +441,7 @@ describe('TextInput', () => {
       const describedBy = input.getAttribute('aria-describedby');
       expect(describedBy).toBeTruthy();
       // The status message should be reachable via the described-by ID
-      const messageElement = screen.getByText('Invalid email');
+      const messageElement = screen.getByText('Invalid email').parentElement!;
       expect(messageElement).toHaveAttribute('id');
       expect(describedBy).toContain(messageElement.id);
     });
@@ -1562,5 +1566,105 @@ describe('TextInput in a narrow row', () => {
     );
     const root = container.querySelector('.astryx-field')!;
     expect(getComputedStyle(root).minWidth).toBe('0');
+  });
+
+  it('keeps the written order of a tooltip-placement status message under right-to-left', () => {
+    render(
+      <div dir="rtl">
+        <TextInput
+          label="Website"
+          value=""
+          onChange={() => {}}
+          status={{type: 'error', message: 'Prefix https://'}}
+          statusVariant="tooltip"
+        />
+      </div>,
+    );
+    expect(screen.getByText('Prefix https://')).toHaveAttribute('dir', 'ltr');
+    expect(
+      screen.getByRole('textbox', {name: 'Website'}),
+    ).toHaveAccessibleDescription('Prefix https://');
+  });
+});
+
+describe('TextInput error without a message', () => {
+  const messagelessWarnings = (warn: {mock: {calls: unknown[][]}}) =>
+    warn.mock.calls.filter(call =>
+      String(call[0]).includes('an error status has no message'),
+    );
+
+  it('describes the field by hidden translated fallback text and warns once', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const {rerender} = render(
+      <TextInput
+        label="Email"
+        value=""
+        onChange={() => {}}
+        status={{type: 'error'}}
+      />,
+    );
+    const field = screen.getByRole('textbox', {name: 'Email'});
+    expect(field).toHaveAttribute('aria-invalid', 'true');
+    expect(field).toHaveAccessibleDescription('Invalid value');
+    rerender(
+      <TextInput
+        label="Email"
+        value="x"
+        onChange={() => {}}
+        status={{type: 'error'}}
+      />,
+    );
+    expect(messagelessWarnings(warn)).toHaveLength(1);
+    warn.mockRestore();
+  });
+
+  it('uses the caller message and no fallback when a message is given', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(
+      <TextInput
+        label="Email"
+        value=""
+        onChange={() => {}}
+        status={{type: 'error', message: 'Enter an email address'}}
+      />,
+    );
+    expect(
+      screen.getByRole('textbox', {name: 'Email'}),
+    ).toHaveAccessibleDescription('Enter an email address');
+    expect(screen.queryByText('Invalid value')).toBeNull();
+    expect(messagelessWarnings(warn)).toHaveLength(0);
+    warn.mockRestore();
+  });
+
+  it('adds no fallback for a warning without a message', () => {
+    render(
+      <TextInput
+        label="Email"
+        value=""
+        onChange={() => {}}
+        status={{type: 'warning'}}
+      />,
+    );
+    expect(screen.queryByText('Invalid value')).toBeNull();
+  });
+
+  it('leaves an error inside an InputGroup to the group status', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(
+      <InputGroup
+        label="Contact"
+        status={{type: 'error', message: 'Fix the contact'}}>
+        <TextInput
+          label="Email"
+          isLabelHidden
+          value=""
+          onChange={() => {}}
+          status={{type: 'error'}}
+        />
+      </InputGroup>,
+    );
+    expect(screen.queryByText('Invalid value')).toBeNull();
+    expect(messagelessWarnings(warn)).toHaveLength(0);
+    warn.mockRestore();
   });
 });

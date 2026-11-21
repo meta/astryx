@@ -105,11 +105,11 @@ import {useToast} from '@astryxdesign/core/Toast';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {
-  BeakerIcon,
+  ExperimentIcon,
   BoltIcon,
-  CpuChipIcon,
-  CubeIcon,
-} from '@heroicons/react/24/outline';
+  CpuIcon,
+  PackageIcon,
+} from '@astryxdesign/template-icons';
 
 // ── Data ──────────────────────────────────────────────────────────────────────
 
@@ -626,7 +626,7 @@ export default function FormWizardInlinePage() {
         </LayoutHeader>
       }
       content={
-        <LayoutContent>
+        <LayoutContent role="main">
           <VStack gap={6}>
             {/* The automatic steps advance on a timer, which is a change of
                 context nobody asked for. Focus deliberately stays where it is;
@@ -789,8 +789,10 @@ export default function FormWizardInlinePage() {
                                 <CheckboxListItem
                                   key={t.id}
                                   value={t.id}
-                                  label={t.label}
-                                  description={t.description}
+                                  // Node labels and descriptions wrap on a narrow screen;
+                                  // strings truncate to one line.
+                                  label={<>{t.label}</>}
+                                  description={<>{t.description}</>}
                                 />
                               ))}
                             </CheckboxList>
@@ -818,8 +820,8 @@ export default function FormWizardInlinePage() {
                                 <CheckboxListItem
                                   key={job.id}
                                   value={job.id}
-                                  label={job.label}
-                                  description={job.description}
+                                  label={<>{job.label}</>}
+                                  description={<>{job.description}</>}
                                 />
                               ))}
                             </CheckboxList>
@@ -876,7 +878,7 @@ export default function FormWizardInlinePage() {
                               <MetadataList orientation="vertical">
                                 <MetadataListItem
                                   label="Repository"
-                                  icon={<Icon icon={CubeIcon} size="sm" />}>
+                                  icon={<Icon icon={PackageIcon} size="sm" />}>
                                   {repo.name}
                                 </MetadataListItem>
                                 <MetadataListItem
@@ -886,12 +888,14 @@ export default function FormWizardInlinePage() {
                                 </MetadataListItem>
                                 <MetadataListItem
                                   label="Runner"
-                                  icon={<Icon icon={CpuChipIcon} size="sm" />}>
+                                  icon={<Icon icon={CpuIcon} size="sm" />}>
                                   {`${runner.label}, ${runner.memoryGB} GB · Node ${nodeVersion}`}
                                 </MetadataListItem>
                                 <MetadataListItem
                                   label="Toolchain"
-                                  icon={<Icon icon={BeakerIcon} size="sm" />}>
+                                  icon={
+                                    <Icon icon={ExperimentIcon} size="sm" />
+                                  }>
                                   {`${repo.packageManager} · ${repo.testRunner}, ${repo.testCount.toLocaleString()} tests`}
                                 </MetadataListItem>
                               </MetadataList>

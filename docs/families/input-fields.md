@@ -112,8 +112,8 @@ another implementation helper.
 - `FormLayout` owns outer arrangement, spacing, direction, form-level
   optionality, and the form-level entry error behavior default (FR14). It does
   not redefine a member's internal control geometry.
-- `InputGroup` owns the row height (fixed today; it grows with a set text size
-  under `spec:AST-102` FR4, and the fixed height is a gap), connected outer surface, edge alignment,
+- `InputGroup` owns the row height (it grows with a set text size under
+  `spec:AST-102` FR4), connected outer surface, edge alignment,
   and group-level focus presentation for admitted children. Admission follows the
   capability contract in FR3, not a permanent component allowlist; input-family
   membership alone does not imply support.
@@ -461,9 +461,10 @@ DEC-6 does not require unrelated components to add a new floor.
   styling passed through a product wrapper's own props or spread; FR10's type
   error surfaces those callsites.
 
-- **On-screen keyboard (FR13):** no member meets FR13 on current main. No
-  member has keyboard handling, and the keyboard module does not exist
-  yet; `spec:AST-099` lists each gap.
+- **On-screen keyboard (FR13):** TextInput, TextArea, and NumberInput meet FR13
+  through `spec:AST-099` FR9, apart from the missing scroll range (its Gap 11),
+  a modal BottomSheet shorter than `tall` (its Gap 19), and Back in Firefox for
+  Android (its Gap 21). For the other members, `spec:AST-099` lists each gap.
 - **Rejected entries (FR15):** Inside an InputGroup, a member's own rejection
   shows no visible message. `spec:AST-118` lists each gap.
 - **Verification coverage:** current unit tests prove composition, semantics, and

@@ -26,8 +26,11 @@ import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {TooltipPresentInterestContext} from './tooltipPresentInterest';
 import {createTriggerFocusGate, isFocusOnTrigger} from '../utils/triggerFocus';
+import {getInteractionModality} from '../utils/interactionModality';
+import {NON_TEXT_INPUT_TYPES} from '../keyboard/keyboardHeight';
 import * as stylex from '@stylexjs/stylex';
 import {
+  noInvoker,
   useLayerInternal,
   type ContextRenderProps,
   type LayerAlignment,
@@ -51,6 +54,22 @@ import {
   typographyVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
+
+/**
+ * Whether `element` is a text field in any state: a text-like `<input>`, a
+ * `<textarea>` or an editable element, also when it is read-only, disabled
+ * or brings up no keyboard.
+ */
+function isTextField(element: HTMLElement): boolean {
+  if (element.localName === 'input') {
+    return !NON_TEXT_INPUT_TYPES.has(
+      (element.getAttribute('type') ?? 'text').toLowerCase(),
+    );
+  }
+  return element.matches(
+    'textarea, [contenteditable]:not([contenteditable="false"])',
+  );
+}
 
 /**
  * Grace period (ms) before hiding on pointer-leave when no explicit `hideDelay`
@@ -275,7 +294,6 @@ export interface TooltipReturn {
  * {tooltip.renderTooltip('Helpful tooltip text')}
  * ```
  */
-
 export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const {
     placement = 'above',
@@ -300,6 +318,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     onShow,
     onHide,
     keepsAnchorClear: true,
+    getInvoker: noInvoker,
   });
   const {
     ref: layerRef,
@@ -582,6 +601,14 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const opensOnFocus = useCallback(
     (target: HTMLElement, trigger: HTMLElement | null): boolean => {
       if (trigger != null && !isFocusOnTrigger(target, trigger, focusTrigger)) {
+        return false;
+      }
+      // Browsers mark a pointer's focus on a text field focus-visible, so
+      // after a pointer press only a text field opens the tooltip.
+      if (
+        !isTextField(target) &&
+        getInteractionModality(target) === 'pointer'
+      ) {
         return false;
       }
       return !isTouchInteraction() && target.matches(':focus-visible');

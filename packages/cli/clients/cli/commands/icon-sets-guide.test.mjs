@@ -95,6 +95,22 @@ describe('icon-set guide', () => {
     }
   });
 
+  it('shows how to make a set inside an app, with no other package', async () => {
+    const {status, stdout} = await runCli(['docs', GUIDE, 'in-your-app']);
+    expect(status).toBe(0);
+    for (const phrase of [
+      'Make a set inside your app',
+      formatCliCommand(
+        'experimental icon new-set heroicons --from @heroicons/react/24/outline',
+      ),
+      formatCliCommand('experimental icon use heroicons'),
+      '"private": true',
+      "import {themeIcons} from 'app';",
+    ]) {
+      expect(stdout).toContain(phrase);
+    }
+  });
+
   it('tells authors no version range promises icon sets, and what a CLI without them says', async () => {
     const {stdout} = await runCli(['docs', GUIDE, 'publish']);
     expect(stdout).toContain('no version range promises them');
@@ -144,9 +160,10 @@ describe('icon-set guide', () => {
     ).toEqual(types);
   });
 
-  // A set's own definitions join the namespace only in a project that opts
-  // in, as FR4 says; Astryx's are always there.
-  it("lists a set's own icon definitions only with experimental.iconSet", async () => {
+  // A set's own definitions join the namespace once its package is
+  // installed, with or without `experimental.iconSet`, as FR4 says;
+  // Astryx's are always there.
+  it("lists a set's own icon definitions once its package is installed, with or without experimental.iconSet", async () => {
     const definition = `/** @type {import('@astryxdesign/cli/authoring').IconDefinitionDoc} */
 export default {type: 'icon-definition', name: 'rocketLaunch', description: 'Launch something.', words: ['launch', 'liftoff']};
 `;
@@ -179,8 +196,7 @@ export default {type: 'icon-definition', name: 'rocketLaunch', description: 'Lau
     const withOptIn = await routes(optedIn);
     const without = await routes(notOptedIn);
     expect(withOptIn).toContain('rocket-launch');
-    expect(without).not.toContain('rocket-launch');
-    expect(without).toContain('close');
-    expect(withOptIn.filter(name => name !== 'rocket-launch')).toEqual(without);
+    expect(withOptIn).toContain('close');
+    expect(without).toEqual(withOptIn);
   });
 });

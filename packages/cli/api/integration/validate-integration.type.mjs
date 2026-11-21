@@ -20,6 +20,7 @@
  * @property {string} [issuesUrl]
  * @property {string[]} [__declaredKeys]
  * @property {string[]} [__unknownKeys]
+ * @property {Array<{field: string, why: string}>} [__ignoredFields]
  * @property {string} __spec
  * @property {string} __packageDir
  * @property {string} __manifestFile
@@ -45,8 +46,11 @@
  *   `notes`: information beside the issues. A note fails nothing by default;
  *   one with `next: true` counts as a warning under `integration check
  *   --next`, fails `integration check --strict --next`, and fails `--strict`
- *   from the next minor release. Notes include `invalid_cli_command`, a
- *   `cliCommand` that was ignored as malformed;
+ *   from the next minor release. Notes include `unknown_manifest_key`, a
+ *   manifest key the running CLI does not know (marked `next` only when it
+ *   is one letter from a known key); `invalid_cli_command`, a
+ *   `cliCommand` that was ignored as malformed; `invalid_install_guidance`,
+ *   an `installGuidance` that was ignored as malformed;
  *   `component_without_example`, `template_category`,
  *   `showcase_not_standalone` and `template_asset_not_packed`, what a
  *   package's examples need (next minor; a block's `alsoShowcaseFor` names
@@ -57,7 +61,10 @@
  *   renderer, and an import the template does not use as an icon are listed
  *   in `templateIcons` as not checked instead);
  *   `cli_peer_version`, the running CLI outside the package's
- *   `@astryxdesign/cli` peer range; and
+ *   `@astryxdesign/cli` peer range;
+ *   `core_peer_version`, outside a project, only the `@astryxdesign/core`
+ *   peer range of a package installed for the computer excluding the running
+ *   CLI's release (the other commands skip that package); and
  *   the package layout findings added after the last minor release, each with
  *   its fix in the message: two docs for one component
  *   (`duplicate_component_doc`), a root reached through a symlink
@@ -142,8 +149,9 @@
  *   (`entry`).
  * @property {{unmapped: Array<{definition: string, templates: number}>}} [templateMeanings]
  *   The icon definitions the bundled templates use that the set's `map`
- *   does not name, each with how many templates use it, most used first,
- *   then by name. A copied template renders a placeholder for each in a
+ *   does not name, leaving out one whose fallback (AST-084 FR23) it maps,
+ *   each with how many templates use it, most used first, then by name. A
+ *   copied template renders a placeholder for each in a
  *   project that uses only this set. Built-in ones are also error issues.
  */
 

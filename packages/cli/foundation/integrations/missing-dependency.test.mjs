@@ -12,7 +12,10 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {afterAll, describe, expect, it} from 'vitest';
-import {missingDeclaredDependency} from './missing-dependency.mjs';
+import {
+  brokenInstall,
+  missingDeclaredDependency,
+} from './missing-dependency.mjs';
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'missing-dependency-'));
 afterAll(() => fs.rmSync(dir, {recursive: true, force: true}));
@@ -97,5 +100,16 @@ describe('missingDeclaredDependency', () => {
       ),
     ).toBeNull();
     expect(missingDeclaredDependency('boom')).toBeNull();
+  });
+
+  it('names the package that needs the missing one, and the importing file', () => {
+    expect(
+      brokenInstall(
+        `Cannot find module 'recast'\nRequire stack:\n- ${declares}`,
+      ),
+    ).toEqual({name: 'recast', requiredBy: 'declares', importer: declares});
+    expect(
+      brokenInstall(`Cannot find package 'recast' imported from ${lacks}`),
+    ).toBeNull();
   });
 });

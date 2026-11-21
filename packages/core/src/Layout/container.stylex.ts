@@ -42,6 +42,7 @@
 
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
+import {containerBlockBleedStyles} from './containerBlockBleed.stylex';
 
 /**
  * Spacing token keys for padding props.
@@ -614,6 +615,7 @@ export function container({
       defaults.layoutPaddingInnerX,
       defaults.layoutPaddingInnerY,
       maxHeightStyle,
+      containerBlockBleedStyles.publish,
     ] as const;
   }
 
@@ -628,5 +630,6 @@ export function container({
     paddingInnerXStyles[innerX],
     paddingInnerYStyles[innerY],
     maxHeightStyle,
+    containerBlockBleedStyles.publish,
   ] as const;
 }

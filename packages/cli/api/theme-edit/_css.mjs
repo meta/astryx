@@ -10,8 +10,23 @@
 
 import {createRequire} from 'node:module';
 import {wordTable} from './_tables.mjs';
+import {
+  coversProperty,
+  cssTree,
+  longhandsOf,
+  mdnCssProperties,
+} from '../../foundation/runtime/css-tree.mjs';
+
+export {coversProperty, longhandsOf};
+export {cssNumber, splitTop} from '../../foundation/color/css-color.mjs';
+import {splitTop} from '../../foundation/color/css-color.mjs';
 
 const require = createRequire(import.meta.url);
+
+// Resolved when this module loads, before a command stats any file, as
+// css-tree is (foundation/runtime/css-tree.mjs).
+const SYNTAX_PATCHES =
+  require.resolve('@csstools/css-syntax-patches-for-csstree');
 
 /**
  * Properties browsers ship that MDN does not list yet (Chrome experiments).
@@ -35,18 +50,11 @@ const NOT_IN_MDN_YET = [
   'window-drag',
 ];
 
-/** @type {any} */
-let tree = null;
 /** css-tree, loaded once. */
-const csstree = () => (tree ??= require('css-tree'));
+const csstree = cssTree;
 
 /** The MDN property data css-tree reads, at the version css-tree pins. */
-const mdnProperties = () =>
-  /** @type {Record<string, {status?: string, initial?: string | string[]}>} */ (
-    createRequire(require.resolve('css-tree/package.json'))(
-      'mdn-data/css/properties.json',
-    )
-  );
+const mdnProperties = mdnCssProperties;
 
 /** @type {ReadonlySet<string> | null} */
 let names = null;
@@ -75,59 +83,31 @@ export function cssProperties() {
   return names;
 }
 
+/** @type {ReadonlySet<string> | null} */
+let vendorNames = null;
+/**
+ * The vendor-prefixed property names css-tree's data lists
+ * (`-webkit-line-clamp`, `-moz-appearance`).
+ * @returns {ReadonlySet<string>}
+ */
+export function vendorProperties() {
+  vendorNames ??= new Set(
+    Object.keys(csstree().lexer.properties).filter(k => /^-[a-z]+-/.test(k)),
+  );
+  return vendorNames;
+}
+
 /**
  * The current specifications' grammar, as patches to css-tree's: the
  * ranges MDN's data leaves out (`line-height` takes `<number [0,∞]>`).
  * @returns {{properties: Record<string, string>, types: Record<string, string>, atrules: Record<string, unknown>}}
  */
-const syntaxPatches = () =>
-  require('@csstools/css-syntax-patches-for-csstree').next;
+const syntaxPatches = () => require(SYNTAX_PATCHES).next;
 
 /** @type {any} */
 let patched = null;
 /** css-tree's lexer with the current specifications' grammar. */
 const currentLexer = () => (patched ??= csstree().fork(syntaxPatches()).lexer);
-
-/** @type {Map<string, Set<string>>} */
-const longhandCache = new Map();
-
-/**
- * Every longhand a shorthand sets, through shorthands inside it (border
- * sets border-color, so border-top-color), as MDN's data lists them; empty
- * for a property that is no shorthand.
- * @param {string} prop
- * @returns {Set<string>}
- */
-export function longhandsOf(prop) {
-  const cached = longhandCache.get(prop);
-  if (cached) return cached;
-  /** @type {Set<string>} */
-  const out = new Set();
-  longhandCache.set(prop, out);
-  const computed = /** @type {any} */ (mdnProperties()[prop])?.computed;
-  if (Array.isArray(computed))
-    for (const p of computed) {
-      if (typeof p !== 'string' || p === prop) continue;
-      out.add(p);
-      for (const q of longhandsOf(p)) out.add(q);
-    }
-  return out;
-}
-
-/**
- * Whether setting `a` sets `b` too: `b` is one of `a`'s longhands, or a
- * shorthand whose every longhand `a` sets (border covers border-top).
- * overflow-wrap is no part of overflow, nor transform-origin of transform.
- * @param {string} a
- * @param {string} b
- */
-export function coversProperty(a, b) {
-  if (a === b) return false;
-  const of = longhandsOf(a);
-  if (of.has(b)) return true;
-  const sub = longhandsOf(b);
-  return sub.size > 0 && [...sub].every(x => of.has(x));
-}
 
 /** What a var() or env() may stand for while the rest of a value is matched. */
 const VAR_STANDS_FOR = ['0', '1px', '1ms', 'red', 'ease', 'serif', '0 0 red'];
@@ -235,6 +215,10 @@ export function matchType(type, value) {
  */
 function matchWith(value, match) {
   const {lexer, parse} = csstree();
+  // css-tree's lexer forgives a last word ending in an old browser hack's
+  // escape (`8px\9`, `none\0`); a browser reads the escape as part of the
+  // word (a unit `px` and a tab), so it drops the value.
+  if (/\\[09]\s*$/.test(value)) return null;
   // A color function holding a variable (color-mix(…, var(--x))) is a
   // color whatever the variable holds: it is matched as one, so a value
   // with many of them is read like the same value with plain colors.
@@ -246,8 +230,23 @@ function matchWith(value, match) {
     if (next === value) break;
     value = next;
   }
-  const vars =
-    value.match(/(?:var|env)\([^()]*(?:\([^()]*\)[^()]*)*\)/gi) ?? [];
+  const refs = varReferences(value);
+  const vars = refs.map(r => r.text);
+  /**
+   * The value with each reference replaced by its stand-in, each set apart
+   * by spaces: a reference is its tokens, so the text glued to it
+   * (`var(--x)px`) stays a token of its own, as the browser reads it.
+   * @param {string[]} stands
+   */
+  const standIn = stands => {
+    let out = '';
+    let last = 0;
+    refs.forEach((r, i) => {
+      out += `${value.slice(last, r.at)} ${stands[i]} `;
+      last = r.at + r.text.length;
+    });
+    return out + value.slice(last);
+  };
   /** @param {string} v */
   const tryOne = v => {
     try {
@@ -277,23 +276,37 @@ function matchWith(value, match) {
   // Many variables: each stands for the same kind of value at once.
   if (vars.length > 3) {
     for (const stand of VAR_STANDS_FOR) {
-      let v = value;
-      for (const x of vars) v = v.replace(x, stand);
-      const ast = tryOne(v);
+      const ast = tryOne(standIn(vars.map(() => stand)));
       if (ast) return ast;
     }
     return null;
   }
-  /** @param {string} v @param {number} i @returns {any | null} */
-  const fill = (v, i) => {
-    if (i === vars.length) return tryOne(v);
+  /** @param {string[]} stands @returns {any | null} */
+  const fill = stands => {
+    if (stands.length === vars.length) return tryOne(standIn(stands));
     for (const stand of VAR_STANDS_FOR) {
-      const ast = fill(v.replace(vars[i], stand), i + 1);
+      const ast = fill([...stands, stand]);
       if (ast) return ast;
     }
     return null;
   };
-  return fill(value, 0);
+  return fill([]);
+}
+
+/**
+ * Each var() or env() reference in a value, with where it starts, as CSS
+ * reads one: a function token, so `var(` glued after a letter, a digit, a
+ * dot or a dash (`2var(--x)`, `8pxvar(--x)`) is no reference (CSS reads a
+ * dimension or a name there).
+ * @param {string} value
+ * @returns {Array<{at: number, text: string}>}
+ */
+export function varReferences(value) {
+  return [
+    ...String(value).matchAll(
+      /(?<![\w.-])(?:var|env)\([^()]*(?:\([^()]*\)[^()]*)*\)/gi,
+    ),
+  ].map(m => ({at: /** @type {number} */ (m.index), text: m[0]}));
 }
 
 /**
@@ -433,6 +446,20 @@ const UNIT_TYPES = /** @type {Record<string, string>} */ (
     }).flatMap(([type, units]) => units.map(u => [u, type])),
   )
 );
+/**
+ * A value with each unit split off its number by a space joined to it
+ * (`50 %`, `200 ms`, `8 PX`), for every unit CSS reads (the table above, and
+ * `%`); two numbers (`12 16px`) and a word that is no unit stay apart.
+ * @param {string} value
+ */
+export function unitsJoined(value) {
+  return String(value).replace(
+    /(\d)\s+(%|[a-z]+)(?=$|[\s,/)])/gi,
+    (all, digit, unit) =>
+      unit === '%' || UNIT_TYPES[unit.toLowerCase()] ? `${digit}${unit}` : all,
+  );
+}
+
 /** A value of each type, to match where a math function stands. */
 const TYPE_SAMPLES = wordTable(
   /** @type {Record<string, string>} */ ({
@@ -757,55 +784,6 @@ export function initialOf(prop) {
     matchValue(prop, initial)
     ? initial
     : null;
-}
-
-/**
- * One CSS number, percentage or dimension, read by css-tree's tokenizer as
- * the browser reads it (`1.5e0`, `+1.5`, `15E-1`, `1.5EM`; never `50.%`),
- * or null for anything else.
- * @param {string} value
- * @returns {{value: number, unit: string} | null}
- */
-export function cssNumber(value) {
-  /** @type {any} */
-  let ast;
-  try {
-    ast = csstree().parse(value.trim(), {context: 'value'});
-  } catch {
-    return null;
-  }
-  const nodes = ast.children?.toArray?.() ?? [];
-  if (nodes.length !== 1) return null;
-  const [n] = nodes;
-  if (n.type === 'Number') return {value: Number(n.value), unit: ''};
-  if (n.type === 'Percentage') return {value: Number(n.value), unit: '%'};
-  if (n.type === 'Dimension')
-    return {value: Number(n.value), unit: String(n.unit).toLowerCase()};
-  return null;
-}
-
-/**
- * A value split at `sep` outside brackets: `a(b, c), d` by `,` is
- * [`a(b, c)`, ` d`]. A space separator also splits runs of spaces.
- * @param {string} v
- * @param {',' | ' ' | '/'} sep
- * @returns {string[]}
- */
-export function splitTop(v, sep) {
-  /** @type {string[]} */
-  const out = [];
-  let depth = 0;
-  let cur = '';
-  for (const c of v) {
-    if (c === '(') depth++;
-    if (c === ')') depth--;
-    if (depth === 0 && (sep === ' ' ? /\s/.test(c) : c === sep)) {
-      if (cur.trim() || sep === ',') out.push(cur);
-      cur = '';
-    } else cur += c;
-  }
-  if (cur.trim() || sep === ',') out.push(cur);
-  return out.filter(x => sep === ',' || x.trim());
 }
 
 /**
@@ -1146,4 +1124,44 @@ export function familyListMeant(value) {
   // A family that would hold a quote (escaped) is never a suggestion.
   if (!changed || families.some(f => f.includes('\\'))) return null;
   return families.join(', ');
+}
+
+/** A side word in a longhand's name, in the order a box value lists sides. */
+export const BOX_SIDES = /** @type {const} */ ([
+  'top',
+  'right',
+  'bottom',
+  'left',
+]);
+
+/**
+ * A two-sided (start/end) or four-sided (top/right/bottom/left) longhand's
+ * value, as each side's property and value by the shorthand rules; null for
+ * any other property.
+ * @param {string} prop kebab-case
+ * @param {string} v
+ * @returns {Record<string, string> | null}
+ */
+export function sidesOf(prop, v) {
+  // (A logical pair the property data lists no longhands for,
+  // `border-block-width`: its start and its end.)
+  const pair = /^(border-(?:block|inline))-(width|style|color)$/.exec(prop);
+  const direct = pair
+    ? [`${pair[1]}-start-${pair[2]}`, `${pair[1]}-end-${pair[2]}`]
+    : [...longhandsOf(prop)].filter(p => longhandsOf(p).size === 0);
+  const w = splitTop(v.trim(), ' ').map(x => x.trim());
+  if (!w.length || /!important/i.test(v)) return null;
+  const start = direct.find(p => /-start(-|$)/.test(p));
+  const end = direct.find(p => /-end(-|$)/.test(p));
+  if (direct.length === 2 && start && end && w.length <= 2)
+    return {[start]: w[0], [end]: w[1] ?? w[0]};
+  const named = BOX_SIDES.map(side =>
+    direct.find(p => new RegExp(`-${side}(-|$)`).test(p)),
+  );
+  if (direct.length !== 4 || named.some(x => !x) || w.length > 4) return null;
+  const [t, r = t, bo = t, l = r] = w;
+  const vals = [t, r, bo, l];
+  return Object.fromEntries(
+    named.map((p, i) => [/** @type {string} */ (p), vals[i]]),
+  );
 }

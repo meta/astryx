@@ -423,7 +423,7 @@ describe('theme build adaptations', () => {
       path.join(themesDir, 'rule-tuple.css'),
       'utf-8',
     );
-    expect(css).toContain(':root { color-scheme: light dark; }');
+    expect(css).not.toContain(':root { color-scheme: light dark; }');
     expect(css).toContain('html[data-theme="light"] { color-scheme: light; }');
     expect(css).toContain('html[data-theme="dark"] { color-scheme: dark; }');
   });
@@ -530,7 +530,10 @@ describe('theme build adaptations', () => {
       '--_scaled-font-size-lg: min(calc(1.25rem * var(--_dynamic-type-title3, 1)), var(--_scaled-font-size-xl))',
     );
     expect(rebuiltCss).toContain('light-dark(#111111, #eeeeee)');
-    expect(rebuiltCss).toContain(':root { color-scheme: light dark; }');
+    expect(rebuiltCss).toContain(
+      'html[data-theme="light"] { color-scheme: light; }',
+    );
+    expect(rebuiltCss).not.toContain(':root { color-scheme: light dark; }');
     expect(`${rebuilt.stdout}${rebuilt.stderr}`).toContain(
       '[note] Fonts named but not loaded: "Revision Webfont".',
     );
@@ -557,7 +560,9 @@ describe('theme build adaptations', () => {
       'utf-8',
     );
     const js = fs.readFileSync(path.join(themesDir, 'points-only.js'), 'utf-8');
-    expect(css).not.toContain('@media');
+    // No width rule; a flipped toast surface's dark-page rules may read the
+    // reader's color scheme.
+    expect(css).not.toMatch(/@media \(width/);
     expect(js).toMatch(/"xl": 1400/);
     expect(js).toContain('__adaptations');
   });

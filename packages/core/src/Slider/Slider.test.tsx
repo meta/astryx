@@ -103,6 +103,21 @@ describe('Slider', () => {
     expect(sliders[1]).toHaveAccessibleName('Valeur maximale');
   });
 
+  it('writes a range text value through one catalog message', () => {
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        overrides={{fr: {'@astryx.slider.rangeValue': 'de {start} à {end}'}}}>
+        <Slider
+          label="Prix"
+          value={[20, 80] as [number, number]}
+          valueDisplay="text"
+        />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByText('de 20 à 80')).toBeInTheDocument();
+  });
+
   it('sets aria-valuetext with formatValue', () => {
     render(
       <Slider label="Temperature" value={72} formatValue={v => `${v}°F`} />,
@@ -329,6 +344,19 @@ describe('Slider', () => {
   });
 
   // --- Required state ---
+
+  it('describes required state with the provider catalog', () => {
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        overrides={{fr: {'@astryx.slider.required': 'Obligatoire'}}}>
+        <Slider label="Volume" value={50} isRequired />
+      </InternationalizationProvider>,
+    );
+    const slider = screen.getByRole('slider');
+    expect(slider).toHaveAccessibleDescription(/Obligatoire/);
+    expect(slider).not.toHaveAccessibleDescription(/Required/);
+  });
 
   it('conveys required state through the accessible description', () => {
     render(<Slider label="Volume" value={50} isRequired />);

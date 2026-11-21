@@ -610,9 +610,9 @@ describe('neutral theme component overrides', () => {
           neutralPalettes.neutral.dark[80],
         ),
       },
-      'size:sm': {height: 'calc(var(--size-element-sm) - 8px)'},
-      'size:md': {height: 'calc(var(--size-element-md) - 8px)'},
-      'size:lg': {height: 'calc(var(--size-element-lg) - 8px)'},
+      'size:sm': {height: 'max(calc(var(--size-element-sm) - 8px), 1lh)'},
+      'size:md': {height: 'max(calc(var(--size-element-md) - 8px), 1lh)'},
+      'size:lg': {height: 'max(calc(var(--size-element-lg) - 8px), 1lh)'},
       selected: {boxShadow: 'none'},
     });
   });
@@ -635,5 +635,41 @@ describe('neutral touch + narrow type pin', () => {
     expect(generateThemeCSS(neutralTheme).component).toContain(
       '@media (width < 1024px) and (pointer: coarse)',
     );
+  });
+});
+
+describe('neutral progress fill', () => {
+  // The track follows the emphasized border. A neutral or disabled bar fills
+  // with secondary text in light mode and with stop 75 in dark mode, where
+  // secondary text (stop 65) reads under 3:1 on that track.
+  const {light, dark} = neutralPalettes.neutral;
+  it('keeps the track on the emphasized border', () => {
+    expect(neutralTheme.components?.['progress-bar']?.base).toMatchObject({
+      '--color-background-muted': 'var(--color-border-emphasized)',
+    });
+    expect(neutralTheme.tokens['--color-border-emphasized']).toBe(
+      lightDark(light[85], dark[35]),
+    );
+  });
+
+  it.each(['neutral', 'disabled'])('maps a %s fill', variant => {
+    expect(
+      neutralTheme.components?.['progress-bar-fill']?.[`variant:${variant}`],
+    ).toMatchObject({
+      backgroundColor: `light-dark(var(--color-text-secondary), ${dark[75]})`,
+    });
+  });
+
+  it('reads secondary text at stop 30 in light mode', () => {
+    expect(neutralTheme.tokens['--color-text-secondary']).toBe(
+      lightDark(light[30], dark[65]),
+    );
+  });
+
+  it.each([
+    {name: 'light', track: light[85], fill: light[30]},
+    {name: 'dark', track: dark[35], fill: dark[75]},
+  ])('keeps the fill at 3:1 on the track in $name mode', ({track, fill}) => {
+    expect(contrastRatio(fill, track)).toBeGreaterThanOrEqual(3);
   });
 });

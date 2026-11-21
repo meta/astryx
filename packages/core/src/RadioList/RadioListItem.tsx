@@ -25,7 +25,6 @@ import type {BaseProps} from '../BaseProps';
 import {RadioListContext} from './RadioList';
 import {RadioListReasonContext} from './RadioListReasonContext';
 import {joinAriaIDs} from '../utils/inputAria';
-import {radiusVars} from '../theme/tokens.stylex';
 import {isRenderable} from '../utils/isRenderable';
 import {mergeProps} from '../utils/mergeProps';
 import {rtlStyles} from '../utils/rtlStyles';
@@ -56,6 +55,10 @@ registerBoxHold();
 const ROW_PRESS = '--_radio-row-press';
 
 const styles = stylex.create({
+  // The slot is as big as the indicator it holds. So a circle a theme sizes,
+  // or a replacement indicator, sets the row's spacing, and the pressed layer
+  // fits it. The hidden input keeps the full size for its hit area
+  // (wrapperSizeStyles), centered on the circle.
   radioWrapper: {
     position: 'relative',
     display: 'flex',
@@ -82,7 +85,8 @@ const styles = stylex.create({
       content: '""',
       position: 'absolute',
       inset: 0,
-      borderRadius: radiusVars['--radius-full'],
+      // The radio's circle, as the indicator draws it.
+      borderRadius: '50%',
       pointerEvents: 'none',
       backgroundColor: `var(${ROW_PRESS}, transparent)`,
     },
@@ -298,7 +302,6 @@ export function RadioListItem({
       {...(isDisabled ? undefined : pressBoxProps)}
       {...stylex.props(
         styles.radioWrapper,
-        wrapperSizeStyles[size],
         !isDisabled && styles.indicatorPressOverlay,
         !isDisabled && indicatorPressPaintStyles.image,
       )}

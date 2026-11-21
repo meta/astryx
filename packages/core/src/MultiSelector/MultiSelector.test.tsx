@@ -216,6 +216,66 @@ describe('MultiSelector', () => {
     expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
   });
 
+  it.each([false, true])(
+    'names a bottom-sheet listbox from label (hasSearch=%s)',
+    async hasSearch => {
+      const user = userEvent.setup();
+      render(
+        <MultiSelector
+          label="Fruit"
+          options={defaultOptions}
+          value={[]}
+          onChange={() => {}}
+          hasSearch={hasSearch}
+          presentation="bottom-sheet"
+        />,
+      );
+
+      // With search, the trigger is a button and the search input is the
+      // combobox.
+      await user.click(
+        hasSearch
+          ? screen.getByRole('button', {name: 'Fruit'})
+          : screen.getByRole('combobox'),
+      );
+      await screen.findByRole('dialog', {name: 'Fruit'});
+      expect(screen.getByRole('listbox', h)).toHaveAttribute(
+        'aria-label',
+        'Fruit',
+      );
+    },
+  );
+
+  it.each([false, true])(
+    'keeps the required state on the trigger, not in the listbox name (hasSearch=%s)',
+    async hasSearch => {
+      const user = userEvent.setup();
+      render(
+        <MultiSelector
+          label="Fruit"
+          options={defaultOptions}
+          value={[]}
+          onChange={() => {}}
+          hasSearch={hasSearch}
+          isRequired
+          presentation="bottom-sheet"
+        />,
+      );
+
+      const trigger = hasSearch
+        ? screen.getByRole('button', {name: /Fruit/})
+        : screen.getByRole('combobox');
+      if (hasSearch) {
+        expect(trigger).toHaveAccessibleName(/Required/);
+      } else {
+        expect(trigger).toHaveAttribute('aria-required', 'true');
+      }
+      await user.click(trigger);
+      await screen.findByRole('dialog', {name: 'Fruit'});
+      expect(screen.getByRole('listbox')).toHaveAccessibleName('Fruit');
+    },
+  );
+
   it('moves keyboard focus into a bottom-sheet listbox', async () => {
     const user = userEvent.setup();
     render(
@@ -436,6 +496,64 @@ describe('MultiSelector', () => {
       {value: 'b', label: 'Banana'},
     ]);
     expect(screen.getByText('Apple and 1 more')).toBeInTheDocument();
+  });
+
+  it('joins the labels display in the provider locale', () => {
+    render(
+      <InternationalizationProvider locale="de">
+        <MultiSelector
+          label="Obst"
+          options={defaultOptions}
+          value={['Apple', 'Banana', 'Orange']}
+          onChange={() => {}}
+          triggerDisplay="labels"
+        />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByText('Apple, Banana und Orange')).toBeInTheDocument();
+  });
+
+  it('writes the labels overflow through one catalog message', () => {
+    render(
+      <InternationalizationProvider
+        locale="de"
+        overrides={{
+          de: {
+            '@astryx.multiSelector.overflowCount': '{count} weitere',
+          },
+        }}>
+        <MultiSelector
+          label="Obst"
+          options={['Apple', 'Banana', 'Orange', 'Pear', 'Plum']}
+          value={['Apple', 'Banana', 'Orange', 'Pear', 'Plum']}
+          onChange={() => {}}
+          triggerDisplay="labels"
+        />
+      </InternationalizationProvider>,
+    );
+    expect(
+      screen.getByText('Apple, Banana, Orange und 2 weitere'),
+    ).toBeInTheDocument();
+  });
+
+  it('writes the badges overflow through one catalog message', () => {
+    render(
+      <InternationalizationProvider
+        locale="de"
+        overrides={{
+          de: {'@astryx.multiSelector.overflowCount': '{count} weitere'},
+        }}>
+        <MultiSelector
+          label="Obst"
+          options={['Apple', 'Banana', 'Orange', 'Pear', 'Plum']}
+          value={['Apple', 'Banana', 'Orange', 'Pear', 'Plum']}
+          onChange={() => {}}
+          triggerDisplay="badges"
+          maxBadges={2}
+        />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByText('3 weitere')).toBeInTheDocument();
   });
 
   it('formats the labels display with formatValue', () => {
@@ -2997,6 +3115,27 @@ describe('MultiSelector statusVariant forwarding', () => {
       screen.getByRole('combobox').getAttribute('aria-describedby'),
     ).toContain(tooltip.id);
   });
+
+  it('keeps the written order of the status tooltip message under right-to-left', () => {
+    render(
+      <div dir="rtl">
+        <MultiSelector
+          label="Fruit"
+          options={['Apple', 'Banana']}
+          value={[]}
+          onChange={() => {}}
+          variant="ghost"
+          status={{type: 'warning', message: '-42 items'}}
+          statusVariant="tooltip"
+        />
+      </div>,
+    );
+    const tooltip = screen.getByRole('tooltip', h);
+    expect(within(tooltip).getByText('-42 items')).toHaveAttribute(
+      'dir',
+      'ltr',
+    );
+  });
 });
 
 describe('MultiSelector empty-state theme target', () => {
@@ -3829,6 +3968,266 @@ describe('MultiSelector built-in trigger focus on close', () => {
     });
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     expect(notes).toHaveFocus();
+  });
+});
+
+describe('MultiSelector light dismiss focus', () => {
+  const OPTIONS = ['Apple', 'Banana', 'Cherry'];
+
+  it('returns focus to the trigger after a press on a focusable container around the list', async () => {
+    const user = userEvent.setup();
+    render(
+      <div tabIndex={-1} data-testid="container">
+        <MultiSelector
+          label="Fruits"
+          options={OPTIONS}
+          value={[]}
+          onChange={() => {}}
+        />
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+    act(() => {
+      screen.getByTestId('container').focus();
+    });
+    const popover = document.querySelector('[popover]') as HTMLElement;
+    act(() => {
+      popover.dispatchEvent(
+        Object.assign(new Event('toggle'), {
+          oldState: 'open',
+          newState: 'closed',
+        }),
+      );
+    });
+
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveFocus();
+  });
+
+  it('returns focus to the trigger when the list closes after a pick moved focus to a focusable container around it', async () => {
+    const user = userEvent.setup();
+    render(
+      <div tabIndex={-1} data-testid="container">
+        <MultiSelector
+          label="Fruits"
+          options={OPTIONS}
+          value={[]}
+          onChange={() => {}}
+        />
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    await user.click(
+      screen.getByRole('option', {name: 'Banana', hidden: true}),
+    );
+    // The press on the option moved focus to the container, and the list
+    // stays open.
+    expect(screen.getByTestId('container')).toHaveFocus();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+    const popover = document.querySelector('[popover]') as HTMLElement;
+    act(() => {
+      popover.dispatchEvent(
+        Object.assign(new Event('toggle'), {
+          oldState: 'open',
+          newState: 'closed',
+        }),
+      );
+    });
+
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveFocus();
+  });
+
+  it('leaves focus on a field a press moved it to inside the same focusable container', async () => {
+    const user = userEvent.setup();
+    render(
+      <div tabIndex={-1}>
+        <MultiSelector
+          label="Fruits"
+          options={OPTIONS}
+          value={[]}
+          onChange={() => {}}
+        />
+        <input aria-label="Notes" />
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    const notes = screen.getByRole('textbox', {name: 'Notes'});
+    act(() => {
+      notes.focus();
+    });
+    const popover = document.querySelector('[popover]') as HTMLElement;
+    act(() => {
+      popover.dispatchEvent(
+        Object.assign(new Event('toggle'), {
+          oldState: 'open',
+          newState: 'closed',
+        }),
+      );
+    });
+
+    expect(notes).toHaveFocus();
+  });
+
+  it('leaves focus on a Tab-stop container that a press outside the list moved it to', async () => {
+    const user = userEvent.setup();
+    render(
+      <div tabIndex={0} data-testid="container">
+        <MultiSelector
+          label="Fruits"
+          options={OPTIONS}
+          value={[]}
+          onChange={() => {}}
+        />
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    const container = screen.getByTestId('container');
+    await user.click(container);
+    const popover = document.querySelector('[popover]') as HTMLElement;
+    act(() => {
+      popover.dispatchEvent(
+        Object.assign(new Event('toggle'), {
+          oldState: 'open',
+          newState: 'closed',
+        }),
+      );
+    });
+
+    expect(container).toHaveFocus();
+  });
+
+  it('leaves focus on a control outside the list that is no Tab stop, as an unselected tab is', async () => {
+    const user = userEvent.setup();
+    render(
+      <div tabIndex={-1}>
+        <MultiSelector
+          label="Fruits"
+          options={OPTIONS}
+          value={[]}
+          onChange={() => {}}
+        />
+        <button type="button" tabIndex={-1}>
+          Next tab
+        </button>
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    const nextTab = screen.getByRole('button', {
+      name: 'Next tab',
+      hidden: true,
+    });
+    await user.click(nextTab);
+    const popover = document.querySelector('[popover]') as HTMLElement;
+    act(() => {
+      popover.dispatchEvent(
+        Object.assign(new Event('toggle'), {
+          oldState: 'open',
+          newState: 'closed',
+        }),
+      );
+    });
+
+    expect(nextTab).toHaveFocus();
+  });
+
+  it('returns focus to the trigger when the list closes after a pick inside a Tab-stop container', async () => {
+    const user = userEvent.setup();
+    render(
+      <div tabIndex={0} data-testid="container">
+        <MultiSelector
+          label="Fruits"
+          options={OPTIONS}
+          value={[]}
+          onChange={() => {}}
+        />
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    await user.click(
+      screen.getByRole('option', {name: 'Banana', hidden: true}),
+    );
+    expect(screen.getByTestId('container')).toHaveFocus();
+    const popover = document.querySelector('[popover]') as HTMLElement;
+    act(() => {
+      popover.dispatchEvent(
+        Object.assign(new Event('toggle'), {
+          oldState: 'open',
+          newState: 'closed',
+        }),
+      );
+    });
+
+    expect(trigger).toHaveFocus();
+  });
+
+  it('leaves focus on a field that a key moved it to after a pick, when the list then closes', async () => {
+    const user = userEvent.setup();
+    render(
+      <div tabIndex={-1} data-testid="container">
+        <input aria-label="Notes" />
+        <MultiSelector
+          label="Fruits"
+          options={OPTIONS}
+          value={[]}
+          onChange={() => {}}
+        />
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    await user.click(
+      screen.getByRole('option', {name: 'Banana', hidden: true}),
+    );
+    expect(screen.getByTestId('container')).toHaveFocus();
+    // The key moves focus from the container, so the list stays open.
+    await user.tab();
+    const notes = screen.getByRole('textbox', {name: 'Notes'});
+    expect(notes).toHaveFocus();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    const popover = document.querySelector('[popover]') as HTMLElement;
+    act(() => {
+      popover.dispatchEvent(
+        Object.assign(new Event('toggle'), {
+          oldState: 'open',
+          newState: 'closed',
+        }),
+      );
+    });
+
+    expect(notes).toHaveFocus();
+  });
+
+  it('returns focus to the trigger after a keyboard pick and Escape from the search field inside the list', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <MultiSelector
+        label="Fruits"
+        options={OPTIONS}
+        value={[]}
+        onChange={onChange}
+        hasSearch
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Fruits'});
+    await user.click(trigger);
+    const search = screen.getByRole('combobox', {hidden: true});
+    await waitFor(() => expect(search).toHaveFocus());
+    await user.keyboard('{ArrowDown}{Enter}');
+    expect(onChange).toHaveBeenCalled();
+    await user.keyboard('{Escape}');
+
+    expect(trigger).toHaveFocus();
   });
 });
 

@@ -3731,6 +3731,29 @@ describe('DateTimeInput date segment rejected entries', () => {
     observer.disconnect();
   });
 
+  it('clears rejected date text when the caller clears its value to undefined', () => {
+    const {container, rerender} = render(
+      <DateTimeInput
+        label="Starts"
+        value={'2026-01-25T10:00' as ISODateTimeString}
+        onChange={() => {}}
+      />,
+    );
+    const dateInput = screen.getByRole('combobox');
+    fireEvent.change(dateInput, {target: {value: 'tomorrowish'}});
+    fireEvent.blur(dateInput);
+    expect(dateInput).toHaveValue('tomorrowish');
+    expect(dateInput).toHaveAttribute('aria-invalid', 'true');
+
+    rerender(
+      <DateTimeInput label="Starts" value={undefined} onChange={() => {}} />,
+    );
+
+    expect(dateInput).toHaveValue('');
+    expect(dateInput).not.toHaveAttribute('aria-invalid');
+    expect(statusText(container)).toBe('');
+  });
+
   it('posts the committed date from a hidden input while Enter keeps unreadable text, and lets the next Enter submit', () => {
     render(
       <form aria-label="Form">

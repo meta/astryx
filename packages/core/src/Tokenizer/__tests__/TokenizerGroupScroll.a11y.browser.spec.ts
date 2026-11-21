@@ -42,11 +42,24 @@ function tabKey(browserName: string, reverse = false): string {
   return `${browserName === 'webkit' && process.platform === 'darwin' ? 'Alt+' : ''}${reverse ? 'Shift+' : ''}Tab`;
 }
 
+/** The part of Storybook's preview this spec reads: the story render's phase. */
+interface StorybookPreviewWindow extends Window {
+  __STORYBOOK_PREVIEW__?: {currentRender?: {phase?: string}};
+}
+
 async function mount(page: Page, story: string) {
   await page.setViewportSize({width: 600, height: 400});
   await page.goto(`${storybook.origin}/iframe.html?id=${story}&viewMode=story`);
   await expect(page.locator('.astryx-token').first()).toBeVisible();
   await page.evaluate(async () => document.fonts.ready);
+  // A story's play function can scroll the strip, to its end and back to
+  // rest. Wait until Storybook has finished the render, play included, so
+  // none of its scrolls land inside a case.
+  await page.waitForFunction(
+    () =>
+      (window as StorybookPreviewWindow).__STORYBOOK_PREVIEW__?.currentRender
+        ?.phase === 'finished',
+  );
 }
 
 // The strip is the row's child that holds the tokens; the end controls are its
@@ -95,8 +108,15 @@ async function fadedSides(strip: Locator): Promise<Sides> {
     }
     const isClear = (stop: string) =>
       /^(transparent|rgba\(0, 0, 0, 0\))/.test(stop);
-    const first = isClear(stops[0]);
-    const last = isClear(stops[stops.length - 1]);
+    // A stop's position follows its colour. An edge fades only when its clear
+    // stop and the stop beside it sit apart; at one position the clear stop
+    // paints nothing.
+    const position = (stop: string) =>
+      stop.replace(/^(transparent|rgba?\([^)]*\))\s*/, '');
+    const fades = (clear: string, next: string) =>
+      isClear(clear) && position(clear) !== position(next);
+    const first = fades(stops[0], stops[1]);
+    const last = fades(stops[stops.length - 1], stops[stops.length - 2]);
     return leftward ? {left: last, right: first} : {left: first, right: last};
   });
 }

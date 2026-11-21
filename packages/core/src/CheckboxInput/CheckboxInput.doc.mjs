@@ -129,7 +129,7 @@ export const docs = {
       name: 'labelIcon',
       type: 'ReactNode | IconType',
       description:
-        'Semantic icon name or custom content displayed before the label text. See `astryx docs icons` for valid semantic names.',
+        'Built-in meaning or custom content displayed before the label text. See `astryx docs icons` for the built-in meanings.',
     },
     {
       name: 'status',
@@ -169,6 +169,16 @@ export const docs = {
         default: 'var(--color-overlay-pressed)',
         private: true,
       },
+      {
+        name: '--_checkbox-input-gap',
+        description:
+          'Room between the box and its label; set by gap on the checkbox-input target',
+        default: 'var(--spacing-2)',
+        private: true,
+      },
+    ],
+    derived: [
+      {property: 'gap', vars: ['--_checkbox-input-gap'], replaces: true},
     ],
   },
   usage: {
@@ -388,7 +398,7 @@ export const docsZh = {
     {
       name: 'labelIcon',
       type: 'ReactNode | IconType',
-      description: '标签文本前显示的语义图标名称或自定义内容。',
+      description: '标签文本前显示的内置含义或自定义内容。',
     },
     {
       name: 'status',
@@ -425,6 +435,16 @@ export const docsZh = {
         default: 'var(--color-overlay-pressed)',
         private: true,
       },
+      {
+        name: '--_checkbox-input-gap',
+        description:
+          '复选框与其标签之间的间距；由 checkbox-input 目标上的 gap 设置',
+        default: 'var(--spacing-2)',
+        private: true,
+      },
+    ],
+    derived: [
+      {property: 'gap', vars: ['--_checkbox-input-gap'], replaces: true},
     ],
   },
 };
@@ -485,7 +505,7 @@ export const docsDense = {
     size: 'sm (compact) or md (default)',
     onFocus: 'callback on focus',
     onBlur: 'callback on blur',
-    labelIcon: 'semantic icon name or custom content before label text',
+    labelIcon: 'built-in meaning or custom content before label text',
     status: 'error/warning/success with message; sets aria-invalid on error',
   },
 };
