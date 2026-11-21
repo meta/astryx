@@ -1184,7 +1184,10 @@ async function answerStrayOption(err, rejected, message, exitCode) {
       !rejected.commands.some((/** @type {any} */ c) => c.name() === first.word)
     ) {
       /** @param {Awaited<ReturnType<typeof unknownCommandAnswer>>} a */
-      const withRun = a => (a && !a.fallback && !a.near ? a : null);
+      const withRun = a =>
+        a && !a.fallback && a.suggestions.some(s => !a.near?.includes(s.name))
+          ? a
+          : null;
       // The whole run first: a command the words point at can take the
       // option (`migrate --from 0.6.0` is `upgrade --from 0.6.0`). Without a
       // run, the run without the option.
@@ -1204,16 +1207,26 @@ async function answerStrayOption(err, rejected, message, exitCode) {
         answer && {
           message: answer.message,
           // Only runs: a near command name is no run to print after `Run:`,
-          // so the program's help stands in for those. A run of the
-          // project's own script keeps its package manager.
-          suggestions: answer.near
-            ? [{name: formatCliCommand('--help'), reason: 'every command'}]
-            : answer.suggestions.map(s => ({
+          // so the help run, with the options typed, stands in for those. A
+          // run of the project's own script keeps its package manager.
+          suggestions: [
+            ...answer.suggestions
+              .filter(s => !answer.near?.includes(s.name))
+              .map(s => ({
                 name: s.name.startsWith('astryx ')
                   ? formatCliCommand(s.name)
                   : s.name,
                 reason: s.reason,
               })),
+            ...(answer.near
+              ? [
+                  {
+                    name: formatCliCommand(answer.help.name),
+                    reason: answer.help.reason,
+                  },
+                ]
+              : []),
+          ],
         },
         ERROR_CODES.ERR_UNKNOWN_COMMAND,
       );

@@ -12,7 +12,10 @@
  *   tracks. `pr --run-url <url>...`: the regenerated record and `gh`.
  * @output `median` writes each spec's median over those runs under the key,
  *   and the median mean time a test, so one slow or fast run does not move a
- *   time alone. `coverage` prints how many spec files the record times and, below
+ *   time alone; a tracked spec no run timed keeps its recorded time, and an
+ *   untracked file leaves the record. It also writes the interaction spec
+ *   files git tracks (`interaction-specs-at-record`), the ones the coverage
+ *   floor counts. `coverage` prints how many spec files the record times and, below
  *   nine in ten, an early warning (a workflow warning and a step summary
  *   line); it always exits 0. `pr` opens the refresh pull request, or edits
  *   the open one, so at most one is ever open.
@@ -26,8 +29,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
+import {mergeRecord} from '../../scripts/lib/duration-split.mjs';
 import {coverage, openOrRefresh, percent} from './node-record-refresh.mjs';
-import {DURATIONS, isInteractionSpec} from './playwright-legs.mjs';
+import {
+  DURATIONS,
+  RECORDED_SPECS,
+  isInteractionSpec,
+} from './playwright-legs.mjs';
 
 export const BRANCH = 'ci/interaction-durations-refresh';
 export const TITLE = 'ci: refresh the recorded interaction test times';
@@ -66,6 +74,41 @@ export function medianTimes(runs) {
       .sort(([a], [b]) => (a < b ? -1 : 1))
       .map(([file, values]) => [file, Math.round(medianOf(values) * 10) / 10]),
   );
+}
+
+/**
+ * The record after a refresh: each spec's median over the runs replaces its
+ * time, a spec git still tracks that no run timed keeps its recorded time, and
+ * a file git no longer tracks leaves the record (mergeRecord). Daily full runs
+ * normally time every spec, so the kept times are those no recent full run
+ * measured: one recorded after the latest full run, or every time while the
+ * daily runs fail. The files keep the record's byte order.
+ * @param {Record<string, number>} previous the record before this refresh
+ * @param {Record<string, number>[]} runs each run's times
+ * @param {string[]} tracked the interaction spec files git tracks
+ * @returns {Record<string, number>}
+ */
+export function refreshTimes(previous, runs, tracked) {
+  const known = new Set(tracked);
+  return mergeRecord(previous, medianTimes(runs), file => known.has(file), {
+    compare: (a, b) => (a < b ? -1 : a > b ? 1 : 0),
+  });
+}
+
+/**
+ * The record's changed keys after a refresh of one times key: that key's
+ * times (refreshTimes) and the interaction spec files git tracks, which the
+ * timing-coverage floor counts (playwright-legs.mjs `floorSpecs`).
+ * @param {Record<string, any>} durations the record before this refresh
+ * @param {string} key the times key
+ * @param {Record<string, number>[]} runs each run's times
+ * @param {string[]} tracked the interaction spec files git tracks
+ */
+export function refreshRecord(durations, key, runs, tracked) {
+  return {
+    [key]: refreshTimes(durations[key] ?? {}, runs, tracked),
+    [RECORDED_SPECS]: [...tracked].sort(),
+  };
 }
 
 /** @param {number[]} values */
@@ -139,7 +182,15 @@ function main(args) {
     if (files.length === 0)
       throw new Error('median needs one times file per run');
     const runs = files.map(file => JSON.parse(fs.readFileSync(file, 'utf8')));
-    durations[key] = medianTimes(runs.map(run => run.times));
+    Object.assign(
+      durations,
+      refreshRecord(
+        durations,
+        key,
+        runs.map(run => run.times),
+        trackedSpecs(),
+      ),
+    );
     // The mean time a test, for a spec with no recorded time: its median too.
     const perTest = runs
       .map(run => run.perTest)
