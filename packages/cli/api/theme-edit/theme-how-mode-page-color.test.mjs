@@ -166,10 +166,9 @@ describe('a color said for one mode is its page', () => {
       'use the same blue for everything',
       'blue on everything',
       'navy across everything',
-      'light mode should be cream with blue buttons',
-      'dark mode should be slate with rounder buttons',
-      'dark mode is navy and light mode is cream',
+      'dark mode should be navy and white',
       'dark mode is gray',
+      'headings that work in light and dark mode should be navy',
       'header navy, gray everything else',
       'buttons in dark mode should be blue',
       'the accent in dark mode should be purple',
@@ -201,6 +200,26 @@ describe('a color said for one mode is its page', () => {
         isShade,
       ),
     ).toBe('calm and minimal\n- dark mode: page deep dark plum');
+    // (A "with", "and" or "but" that says more is a clause of its own.)
+    for (const [ask, read] of [
+      [
+        'light mode should be cream with blue buttons',
+        'light mode: page cream, with blue buttons',
+      ],
+      [
+        'dark mode should be slate with rounder buttons',
+        'dark mode: page slate, with rounder buttons',
+      ],
+      [
+        'dark mode is navy and light mode is cream',
+        'dark mode: page navy, and light mode: page cream',
+      ],
+      [
+        'make the buttons rounder, and dark mode should be a deep dark plum',
+        'make the buttons rounder, and dark mode: page deep dark plum',
+      ],
+    ])
+      expect(colorsSaidForPages(ask, isHue, isShade), ask).toBe(read);
     // (The color reader's shade words count as tone words too.)
     expect(
       colorsSaidForPages('light mode is pastel pink', isHue, isShade),
@@ -271,6 +290,19 @@ describe('a color said for one mode is its page', () => {
       const accent = links.filter(l => /--color-text-accent/.test(l));
       expect(accent.length).toBeGreaterThan(0);
       for (const l of accent) expect(l).toMatch(/--mode dark$/);
+    },
+    T,
+  );
+
+  it(
+    'cream with blue buttons in light mode: the light page, and the buttons for light mode only',
+    async test => {
+      needsBases(test);
+      const lines = await first('light mode should be cream with blue buttons');
+      expect(pageIn(lines, 'light')).not.toBeNull();
+      const buttons = lines.filter(l => /--on button\b/.test(l));
+      expect(buttons.length).toBeGreaterThan(0);
+      for (const l of buttons) expect(l).toMatch(/--mode light$/);
     },
     T,
   );
