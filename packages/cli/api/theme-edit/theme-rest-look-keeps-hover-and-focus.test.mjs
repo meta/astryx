@@ -2,10 +2,12 @@
 
 /**
  * @file A setting that changes a part's resting look keeps the part's hover
- * visible. A resting background shorthand also resets the background
- * image, where Core draws the hover and press answers: those states get
- * Core's image back. A state the theme sets itself keeps what it set.
- * Against real bundled base themes.
+ * and keyboard focus visible. A resting background shorthand also resets the
+ * background image, where Core draws the hover and press answers: those
+ * states get Core's image back. A resting
+ * outline (none, or the theme's own) gives the part's focus state Core's
+ * focus outline back, for each variant that draws one. A state the theme
+ * sets itself keeps what it set. Against real bundled base themes.
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
@@ -57,6 +59,40 @@ const ruleOf = (css, sel) =>
   new RegExp(
     `(?:^|\\n)\\s*${sel.replace(/[.[\]="()]/g, m => `\\${m}`)}\\s*\\{([^}]*)\\}`,
   ).exec(css)?.[1] ?? '';
+
+describe('a resting outline', () => {
+  it('gives the focus state Core draws its focus outline back', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('o', {cwd, like: 'neutral'});
+    await themeEditSet('o', 'outline', 'none', {cwd, on: 'button', only: true});
+    const css = cssOf('o');
+    expect(ruleOf(css, '.astryx-button')).toMatch(/outline: none;/);
+    const focus = ruleOf(css, '.astryx-button:focus-visible');
+    expect(focus).toMatch(/outline-style: var\(--focus-outline-style\);/);
+    expect(focus).toMatch(/outline-width: var\(--focus-outline-width\);/);
+    // A variant whose focus has its own color keeps it.
+    expect(
+      ruleOf(css, '.astryx-button[data-variant="destructive"]:focus-visible'),
+    ).toMatch(/outline-color: var\(--color-error\);/);
+  }, 240_000);
+
+  it('leaves a focus outline the theme sets itself', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('f', {cwd, like: 'neutral'});
+    await themeEditSet('f', 'outline', '2px dotted #000000', {
+      cwd,
+      on: 'tab',
+      state: 'focus-visible',
+    });
+    await themeEditSet('f', 'outline', 'none', {cwd, on: 'tab'});
+    expect(ruleOf(cssOf('f'), '.astryx-tab:focus-visible')).toMatch(
+      /outline: 2px dotted #000000;/,
+    );
+    expect(ruleOf(cssOf('f'), '.astryx-tab:focus-visible')).not.toMatch(
+      /outline-style:/,
+    );
+  }, 240_000);
+});
 
 describe('a resting background shorthand', () => {
   it("gives a ghost button's hover and press Core's layer back", async ctx => {

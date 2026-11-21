@@ -6924,6 +6924,8 @@ export function compileTheme(ctx, data, base) {
             delete mb[k];
       mb[prop] = v;
     } else b[prop] = v;
+    if (/^outline(-style|-width)?$/.test(kebab(prop)) && !s.state)
+      withFocusOutline(s, target);
     if (
       kebab(prop) === 'background' &&
       !s.state &&
@@ -7033,6 +7035,92 @@ export function compileTheme(ctx, data, base) {
             : undefined;
         block({...s, state, when}, target).backgroundImage = image;
       }
+    }
+  };
+  /**
+   * A resting outline on a part that draws its keyboard focus as an
+   * outline would hide that focus (an outline of none, or one of the
+   * theme's that replaces Core's): the part's focus state gets Core's focus
+   * outline back, for each variant that draws its own, unless the theme
+   * sets an outline for that state itself.
+   * @param {Setting} s @param {string} target
+   */
+  const withFocusOutline = (s, target) => {
+    const at = ctx.C.MAP[target]?.at ?? {};
+    const state = focusStateOf(ctx, target) ?? 'focus-visible';
+    // The theme's own outline for the part's focus keeps it as set.
+    if (
+      data.settings.some(
+        y =>
+          y.source === 'property' &&
+          /^outline/.test(kebab(y.thing)) &&
+          /^focus/.test(String(y.state ?? '')) &&
+          partsOf(ctx, y).includes(target),
+      )
+    )
+      return;
+    /** Core's focus values of a property, by the variant each is for ('' for all). @param {string} p */
+    const focusValues = p => {
+      /** @type {Map<string, string>} */
+      const out = new Map();
+      for (const [k, val] of Object.entries(at[p] ?? {})) {
+        const [attrs, ...rest] = k.split(' ');
+        if (!/:focus/.test(rest.join(' '))) continue;
+        const variant =
+          attrs
+            .split(',')
+            .map(a => a.split('='))
+            .find(([key]) => key === 'variant')?.[1] ?? '';
+        if (!out.has(variant)) out.set(variant, String(val));
+      }
+      return out;
+    };
+    // The variants Core draws at all, and whether each draws its focus as an
+    // outline: one that shows focus another way (an input-like selector's
+    // ring) gets no outline.
+    const variants = new Set(
+      Object.values(at)
+        .flatMap(m => Object.keys(m ?? {}))
+        .map(
+          k =>
+            k
+              .split(' ')[0]
+              .split(',')
+              .map(a => a.split('='))
+              .find(([key]) => key === 'variant')?.[1] ?? '',
+        ),
+    );
+    const drawn = ['outline-style', 'outline-width'].some(p =>
+      [...focusValues(p).values()].some(
+        x => !/^(none|0(px)?|hidden)$/i.test(x),
+      ),
+    );
+    if (!drawn) return;
+    for (const p of [
+      'outline-style',
+      'outline-width',
+      'outline-color',
+      'outline-offset',
+    ]) {
+      const vals = focusValues(p);
+      if (!vals.size) continue;
+      const asked = /^variant:(.+)$/.exec(String(s.when ?? ''))?.[1];
+      const counts = new Map();
+      for (const x of vals.values()) counts.set(x, (counts.get(x) ?? 0) + 1);
+      const common = [...counts].sort((a, b) => b[1] - a[1])[0][0];
+      if (asked) {
+        const x = vals.get(asked) ?? vals.get('');
+        if (x != null) block({...s, state}, target)[camel(p)] = x;
+        continue;
+      }
+      const everyVariant =
+        vals.has('') || [...variants].every(x => !x || vals.has(x));
+      if (everyVariant)
+        block({...s, state, when: undefined}, target)[camel(p)] = common;
+      for (const [variant, x] of vals)
+        if (variant && (!everyVariant || x !== common))
+          block({...s, state, when: `variant:${variant}`}, target)[camel(p)] =
+            x;
     }
   };
   /**
