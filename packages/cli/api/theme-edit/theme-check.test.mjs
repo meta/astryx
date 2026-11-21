@@ -1200,6 +1200,22 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
             (p.parts ?? []).includes('segmented-control-item'),
         ),
       ).toBe(true);
+      // A dark bar's own track (its --color-neutral) under a filter in it:
+      // the repair gives the filter the theme's own track back.
+      const track = themeFile('track', READABLE, {
+        'app-shell-header': {
+          base: {
+            '--color-text-primary': '#ffffff',
+            '--color-neutral': '#ffffff2e',
+            backgroundColor: '#1e3a8a',
+          },
+        },
+      });
+      expect(
+        (await check(track)).problems.some(p => p.kind === 'bar-fill'),
+      ).toBe(true);
+      const fixed = await check(track, {fix: true});
+      expect(fixed.problems.some(p => p.kind === 'bar-fill')).toBe(false);
     },
     T,
   );
