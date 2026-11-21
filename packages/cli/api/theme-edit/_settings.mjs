@@ -5532,8 +5532,10 @@ function onOtherGround(pairs, placementsOf, v) {
  * @returns {Array<'light' | 'dark'>}
  */
 export function failingModes(ctx, data, s, variant) {
+  // (A setting saved with no mode is measured in the modes the theme draws:
+  // a one-mode theme holds nothing for the mode it never shows.)
   const modes = /** @type {Array<'light' | 'dark'>} */ (
-    s.mode ? [s.mode] : ['light', 'dark']
+    s.mode ? [s.mode] : modesOf(data)
   );
   const C = /** @type {any} */ (ctx).C;
   const part = String(s.on);
