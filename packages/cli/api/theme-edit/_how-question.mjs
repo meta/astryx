@@ -10858,12 +10858,23 @@ export function draftAnswer(ctx, env, question) {
       // does not change it; a part said after that colon, "cards: white
       // background, header: navy", or inside a longer name, "icon
       // buttons: … blue icon", stays an item.)
-      const clauseWords = c.text.toLowerCase().trim();
+      // (The sentence is found by words a reader's rewrite keeps: the look
+      // after the clause's own colon, else the clause from the part on.)
+      const lowered = c.text.toLowerCase();
+      const ownColon = lowered.search(/:(?!\d)/);
+      const keptWords = (
+        ownColon >= 0
+          ? lowered.slice(ownColon + 1)
+          : said
+            ? lowered.slice(Math.max(0, lowered.indexOf(said.toLowerCase())))
+            : lowered
+      ).trim();
       const subjectOfColon =
         !!said &&
+        !!keptWords &&
         asked0
           .split(/[;!?\n]|\.(?!\d)/)
-          .filter(sentence => sentence.includes(clauseWords))
+          .filter(sentence => sentence.includes(keptWords))
           .some(sentence => {
             const colon = sentence.search(/:(?!\d)/);
             if (colon < 0) return false;
@@ -10871,7 +10882,9 @@ export function draftAnswer(ctx, env, question) {
               .slice(0, colon)
               .split(/,|&|\band\b/)
               .map(item =>
-                item.trim().replace(/^(?:the|all|every|each)\s+/, ''),
+                item
+                  .trim()
+                  .replace(/^(?:the|all|every|each|our|my|your|any)\s+/, ''),
               )
               .includes(said.toLowerCase());
           });

@@ -430,6 +430,20 @@ const ROWS = [
     },
   ],
   [
+    'the middle part of a three-part list is a subject',
+    {
+      q: 'sidebar, header and footer: navy',
+      has: ["background-color '#1e3a8a' --on app-shell-header"],
+    },
+  ],
+  [
+    'a word before the first subject keeps the list',
+    {
+      q: 'the popover and hover card: dark',
+      has: ["background-color '#1f2937' --on hover-card"],
+    },
+  ],
+  [
     'a head with its own colon keeps a button item, never every button',
     {
       q: 'toasts: dark, close button: white',
