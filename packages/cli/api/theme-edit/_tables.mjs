@@ -889,6 +889,7 @@ export const THING_HINTS = wordTable({
 export const DESIGN = wordTable(
   /** @type {Record<string, string>} */ ({
     gradient: '"linear-gradient(#ffffff, #d1d5db)"',
+    glossy: '"linear-gradient(#ffffff 0%, #c7d2fe 45%, #6366f1 100%)"',
     bevel: '"inset 1px 1px 0 #ffffff, inset -1px -1px 0 #9ca3af"',
     'sunken bevel': '"inset 1px 1px 0 #9ca3af, inset -1px -1px 0 #ffffff"',
     raised: '"0 1px 2px rgb(0 0 0 / 0.3)"',

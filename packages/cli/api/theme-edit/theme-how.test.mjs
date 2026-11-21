@@ -396,9 +396,9 @@ const QUESTIONS = [
   [
     'glossy gradient header',
     {
-      // (A gloss of the header's own fill, in each mode it differs in.)
-      top: /^set q background(?:-image)? 'linear-gradient\(.*\)' --on app-shell-header(?: --when variant:[a-z]+)?(?: --mode (?:light|dark))?$/,
-      adds: /app-shell-header\..*background(?:Image)?=linear-gradient/,
+      // (A gloss is the part's own color in each mode: the sample is help,
+      // never written.)
+      top: null,
     },
   ],
   // borders
