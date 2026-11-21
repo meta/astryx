@@ -675,10 +675,16 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   shrink plays on the theme's exit duration and easing (FR7). The shrink plays in full after the surface has
   closed. This is its exit under FR7 (`family:overlay-dismissal` AV6); under
   reduced motion FR8 applies. A menu or popover presented as a bottom sheet
-  follows the sheet instead.
+  follows the sheet instead. Tap-opened layers (Popover, DropdownMenu,
+  MoreMenu) grow on Popover's surface motion. A menu opened without an
+  accepted press uses the layer's own entrance. That covers a keyboard or
+  programmatic open and a press the menu's press model ignores, such as a
+  second finger.
 - **FR32 — A pan outside dismisses.** Under a finger, an open anchored menu MUST close as a touch outside it
-  begins to pan, and at the lift of a tap or hold outside it. A Popover's
-  dismissal is unchanged. A pinch stays available over it: its surface
+  begins to pan, and at the lift of a tap or hold outside it. A tap outside
+  closes the menu and reaches nothing beneath it, under a finger or pen. The
+  dismissing touch, like UIKit's, reaches nothing beneath; native scrolling
+  continues. A Popover's dismissal is unchanged. A pinch stays available over it: its surface
   never takes `touch-action: none`, so the page keeps zooming unless the
   author's own `touch-action` leaves out `pinch-zoom` (FR10, FR18;
   WCAG 2.2 SC 1.4.4). Listening for that outside touch costs nothing once it ends (FR24). A menu

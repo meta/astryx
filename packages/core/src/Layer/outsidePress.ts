@@ -9,7 +9,8 @@
  * @output watchOutsidePress, and useOutsidePress, one watch per component.
  *   noteOutsideDismissal and outsideDismissalCount keep a per-document count
  *   of layers that an outside press or focus move closed. The inside tests
- *   are isPressInsideOwnedLayer and isFocusInsideOwnedLayer
+ *   are isPressInsideOwnedLayer and isFocusInsideOwnedLayer. hasPanBegun is
+ *   the pan test that the watch and an anchored menu's outside hold share
  * @position Internal to Layer: the outside-press dismissal for a manual
  *   popover whose owner decides what counts as inside. Not exported.
  */
@@ -21,6 +22,19 @@ import {subscribeInput} from '../utils/inputStream';
 import {isElement, isNode} from '../utils/nodeType';
 import {touchActionAllowsPan} from '../utils/scrollView';
 import {sharedWeakMap} from '../utils/sharedRealm';
+
+/** Whether a press that went down at `start` has begun to pan at `point`. */
+export function hasPanBegun(
+  start: {readonly x: number; readonly y: number},
+  point: {readonly clientX: number; readonly clientY: number},
+): boolean {
+  return (
+    Math.max(
+      Math.abs(point.clientX - start.x),
+      Math.abs(point.clientY - start.y),
+    ) >= UIKIT_PAN.hysteresis.value
+  );
+}
 
 export interface OutsidePressOptions {
   /** The pointer types the watch follows; every type when omitted. */
@@ -145,13 +159,7 @@ export function watchOutsidePress(
     }
   };
   const handleMove = (event: PointerEvent) => {
-    if (
-      panStart?.id === event.pointerId &&
-      Math.max(
-        Math.abs(event.clientX - panStart.x),
-        Math.abs(event.clientY - panStart.y),
-      ) >= UIKIT_PAN.hysteresis.value
-    ) {
+    if (panStart?.id === event.pointerId && hasPanBegun(panStart, event)) {
       if (reportPan != null) {
         const axis =
           Math.abs(event.clientX - panStart.x) >=

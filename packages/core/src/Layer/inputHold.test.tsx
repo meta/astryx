@@ -21,6 +21,7 @@ import {
   type InputHoldScope,
 } from './inputHold';
 import {subscribeModalOutlets, type ModalOutletChange} from './modalOutlet';
+import {hasPanBegun} from './outsidePress';
 
 function deferred() {
   let resolve: () => void = () => {};
@@ -997,6 +998,124 @@ describe("holdInput decides by each event's pointer (spec:AST-094 FR35)", () => 
     const {button, reached} = recorder();
     tap(button, 'touch');
     expect(reached).toEqual(['pointerdown', 'pointerup', 'click']);
+  });
+
+  /** An `'outside'` hold on `layer`, released after the case. */
+  const holdOutside = (layer: Element, owner: Element | null = null) => {
+    const onOutside = vi.fn();
+    const release = holdInput(layer, {
+      scope: 'outside',
+      owner,
+      onOutside,
+      hasPanBegun,
+    });
+    releases.push(release);
+    return {onOutside, release};
+  };
+
+  /** A finger's pointer event at a height on the page. */
+  function fingerAt(
+    element: Element,
+    type: string,
+    pointerId: number,
+    y: number,
+  ) {
+    const event = new PointerEvent(type, {
+      ...INIT,
+      pointerId,
+      pointerType: 'touch',
+      clientX: 10,
+      clientY: y,
+    });
+    element.dispatchEvent(event);
+    return event;
+  }
+
+  it("under an 'outside' scope, holds a finger's tap outside the layer to its end and closes the layer at its lift (spec:AST-094 FR32)", () => {
+    const {layer} = mountLayer();
+    const {button, reached} = recorder();
+    const {onOutside} = holdOutside(layer);
+    const down = pointer(button, 'pointerdown', 'touch', 3);
+    const start = touch(button, 'touchstart', [3]);
+    expect(onOutside).not.toHaveBeenCalled();
+    pointer(button, 'pointerup', 'touch', 3);
+    expect(onOutside).toHaveBeenCalledTimes(1);
+    const end = touch(button, 'touchend', [3], 0);
+    // In a Home Screen web app, WebKit's late click after a tap names the
+    // mouse.
+    click(button, 'mouse');
+    expect(down.defaultPrevented).toBe(true);
+    expect(start.defaultPrevented).toBe(false);
+    expect(end.defaultPrevented).toBe(true);
+    expect(reached).toEqual([]);
+  });
+
+  it("under an 'outside' scope, leaves a press on the layer or on its owner alone", () => {
+    const {layer} = mountLayer();
+    const onLayer = recorder(layer);
+    const owner = recorder();
+    const {onOutside} = holdOutside(layer, owner.button);
+    tap(onLayer.button, 'touch', 4);
+    tap(owner.button, 'touch', 5);
+    expect(onLayer.reached).toEqual(['pointerdown', 'pointerup', 'click']);
+    expect(owner.reached).toEqual(['pointerdown', 'pointerup', 'click']);
+    expect(onOutside).not.toHaveBeenCalled();
+  });
+
+  it("under an 'outside' scope, closes the layer as an outside press begins to pan and cancels none of its moves, so the page still scrolls", () => {
+    const {layer} = mountLayer();
+    const {button, reached} = recorder();
+    const {onOutside} = holdOutside(layer);
+    fingerAt(button, 'pointerdown', 6, 100);
+    const start = touch(button, 'touchstart', [6]);
+    fingerAt(button, 'pointermove', 6, 95);
+    expect(onOutside).not.toHaveBeenCalled();
+    fingerAt(button, 'pointermove', 6, 85);
+    expect(onOutside).toHaveBeenCalledTimes(1);
+    const move = touch(button, 'touchmove', [6]);
+    // The browser takes the pan.
+    fingerAt(button, 'pointercancel', 6, 85);
+    touch(button, 'touchend', [6], 0);
+    expect(start.defaultPrevented).toBe(false);
+    expect(move.defaultPrevented).toBe(false);
+    expect(onOutside).toHaveBeenCalledTimes(1);
+    expect(reached).toEqual([]);
+  });
+
+  it("the newest 'outside' scope decides, and after it ends the one below it holds again", () => {
+    const outer = mountLayer();
+    const inner = mountLayer();
+    const {button, reached} = recorder();
+    const outerHold = holdOutside(outer.layer);
+    const innerHold = holdOutside(inner.layer);
+    tap(button, 'touch', 7);
+    expect(innerHold.onOutside).toHaveBeenCalledTimes(1);
+    expect(outerHold.onOutside).not.toHaveBeenCalled();
+    innerHold.release();
+    tap(button, 'touch', 8);
+    expect(outerHold.onOutside).toHaveBeenCalledTimes(1);
+    expect(reached).toEqual([]);
+  });
+
+  it("an 'outside' press ends with its gesture: after its layer's release, the next tap reaches the page", () => {
+    const {layer} = mountLayer();
+    const {button, reached} = recorder();
+    const {release} = holdOutside(layer);
+    tap(button, 'touch', 9);
+    release();
+    tap(button, 'touch', 10);
+    expect(reached).toEqual(['pointerdown', 'pointerup', 'click']);
+  });
+
+  it("an 'outside' scope never holds a mouse's press", () => {
+    const {layer} = mountLayer();
+    const {button, reached} = recorder();
+    const {onOutside} = holdOutside(layer);
+    pointer(button, 'pointerdown', 'mouse');
+    pointer(button, 'pointerup', 'mouse');
+    click(button, 'mouse');
+    expect(reached).toEqual(['pointerdown', 'pointerup', 'click']);
+    expect(onOutside).not.toHaveBeenCalled();
   });
 });
 
