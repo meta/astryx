@@ -5036,9 +5036,10 @@ export function namesControls(ctx, on) {
 /**
  * Whether a height saved with --only on one control of a group is the
  * group's plain height, narrowed off a control kept apart: the same height,
- * with --only, sits on every other control of the group that takes its
- * condition, where a control of the group keeps a size token of its own. A
- * height kept on one control alone has no such copies beside it.
+ * with --only, sits on another control of the group that takes its
+ * condition, and a control of the group keeps a size token of its own. A
+ * height kept on one control alone has no such copy beside it; copies stay
+ * the group's height when one of them is undone.
  * @param {Ctx} ctx
  * @param {Setting} x
  * @param {Setting[]} settings
@@ -5083,17 +5084,14 @@ export function narrowedGroupHeight(ctx, x, settings) {
     );
     if (!members.includes(String(x.on))) return false;
     const others = members.filter(t => t !== x.on);
-    return (
-      others.some(ownToken) &&
-      others.some(t => !ownToken(t)) &&
-      others.every(t => ownToken(t) || copied(t))
-    );
+    return others.some(ownToken) && others.some(copied);
   });
 }
 
 /**
  * Whether a saved setting sets the height of some controls at a size:
- * a height (not `--only`, not in a state) that reaches a control, for that
+ * a height (not in a state, and with `--only` only as a group's narrowed
+ * height) that reaches a control, for that
  * size or for every size, or that size's token on controls. A height on
  * another part reaches controls when it spreads to them (a text area's
  * height reaches the inputs drawn alike).

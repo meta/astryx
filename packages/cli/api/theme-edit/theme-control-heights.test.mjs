@@ -894,17 +894,74 @@ describe('one control height per size', () => {
       'text-input',
     ]);
     // The other inputs still draw 31px beside the buttons: show lists them.
-    expect((await heightMisses('ownnarrow')).map(m => m.part)).toContain(
-      'selector',
-    );
+    // (Only the copies on controls count: a text area keeps the height
+    // as its own.)
+    const listed = (await heightMisses('ownnarrow')).map(m => m.part);
+    const copied = settings
+      .filter(
+        (/** @type {any} */ x) =>
+          x.thing === 'height' &&
+          x.value === '31px' &&
+          x.only === true &&
+          listed.includes(String(x.on)),
+      )
+      .map((/** @type {any} */ x) => String(x.on));
+    expect(copied).toContain('selector');
     // A later shared height joins them, never as their own size tokens.
     await themeEditSet('ownnarrow', 'height', '32px', {cwd, on: 'button'});
+    const after = saved('ownnarrow').settings;
+    for (const on of copied)
+      expect(
+        after.some(
+          (/** @type {any} */ x) =>
+            x.on === on && /^--size-element-|^height$/.test(x.thing),
+        ),
+        on,
+      ).toBe(false);
     expect(
-      saved('ownnarrow').settings.some(
+      (await heightMisses('ownnarrow'))
+        .map(m => m.part)
+        .filter(p => copied.includes(p)),
+    ).toEqual([]);
+  }, 240_000);
+
+  it('the narrowed copies stay the group height when one of them is undone', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('narrowundo', {cwd, like: 'neutral'});
+    const data = saved('narrowundo');
+    data.settings.push({
+      thing: 'height',
+      value: '31px',
+      source: 'property',
+      on: 'inputs',
+    });
+    save('narrowundo', data);
+    await themeEditSet('narrowundo', 'height', '40px', {
+      cwd,
+      on: 'text-input',
+      only: true,
+    });
+    const before = (await heightMisses('narrowundo')).map(m => m.part);
+    await themeEditUndo('narrowundo', {
+      cwd,
+      thing: 'height',
+      on: 'selector',
+      only: true,
+    });
+    const left = saved('narrowundo')
+      .settings.filter(
         (/** @type {any} */ x) =>
-          x.on === 'selector' && /^--size-element-/.test(x.thing),
-      ),
-    ).toBe(false);
+          x.thing === 'height' &&
+          x.value === '31px' &&
+          x.only === true &&
+          before.includes(String(x.on)),
+      )
+      .map((/** @type {any} */ x) => String(x.on));
+    expect(before).toContain('selector');
+    expect(left).not.toContain('selector');
+    expect(left.length).toBeGreaterThan(0);
+    const listed = (await heightMisses('narrowundo')).map(m => m.part);
+    for (const on of left) expect(listed, on).toContain(on);
   }, 240_000);
 
   it('a height an older editor saved on one input with --only stays its own at the other sizes', async ctx => {
