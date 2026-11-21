@@ -23,7 +23,15 @@ import {
   ratioWords,
 } from './_color.mjs';
 import {luminance} from '../theme/palette/generate/color.mjs';
-import {OVERRIDES} from './_part-words.mjs';
+import {
+  EDGE_PLACE,
+  FULL_WIDTH,
+  OVERRIDES,
+  edgePlace,
+  ownReaders,
+  ownSubParts,
+  piecesNotOwners,
+} from './_part-words.mjs';
 import {
   DESIGN,
   DENSITY,
@@ -2719,7 +2727,7 @@ const singular = w =>
       ? w.slice(0, -1)
       : w;
 
-/** @type {WeakMap<object, {parts: Array<[RegExp, PartRef]>, vocab: string[]}>} */
+/** @type {WeakMap<object, {parts: Array<[RegExp, PartRef]>, vocab: string[], ownWord: RegExp, ownAgain: RegExp, bodyIs: RegExp, pieceAt: RegExp}>} */
 const lexicons = new WeakMap();
 
 /**
@@ -2855,36 +2863,7 @@ export function partLexicon(ctx) {
   // one of its words. A sub-part Core does not have ("card header") is the
   // whole part, said in the answer.
   const keys = new Set(project.target.keys());
-  /** @type {Array<[RegExp, PartRef]>} */
-  const subParts = [];
-  for (const key of keys) {
-    if (key.includes('-')) continue;
-    // "dialog close icon / button", "drawer header title": those parts.
-    for (const [phrase, part] of [
-      ['close (?:icon|button|x)', `${key}-header-close-icon`],
-      ['header title', `${key}-header-title-block`],
-    ])
-      if (keys.has(part))
-        subParts.push([
-          needing(`\\b${key}s?(?:'s)?\\s+${phrase}s?\\b`, key),
-          {on: part},
-        ]);
-    for (const sub of ['header', 'footer', 'title']) {
-      const real =
-        sub === 'title' && keys.has(`${key}-header-title-block`)
-          ? `${key}-header-title-block`
-          : keys.has(`${key}-${sub}`)
-            ? `${key}-${sub}`
-            : null;
-      // A phrase an override reads whole ("table header") keeps it.
-      const phrase = `${key} ${sub}`;
-      if (OVERRIDES.some(([re]) => re.exec(phrase)?.[0] === phrase)) continue;
-      subParts.push([
-        needing(`\\b${key}s?[\\s-]${sub}s?\\b`, key),
-        real ? {on: real} : {on: key, missing: `${key} ${sub}`},
-      ]);
-    }
-  }
+  const subParts = ownSubParts(keys, needing);
   // A part's own piece said after a name of the part ("the empty state
   // icon", "the popover arrow", "sheet titles", "the alert title", "the
   // select chevron"): the catalog part for it, else the part with the piece
@@ -3090,6 +3069,7 @@ export function partLexicon(ctx) {
   const lex = {
     parts: [...subParts, ...pieceEntries, ...phrases],
     vocab,
+    ...ownReaders(keys),
   };
   lexicons.set(project, lex);
   return lex;
@@ -6279,7 +6259,8 @@ export function draftAnswer(ctx, env, question) {
     (_m, sep, at) => (at > 0 ? ", don't change " : `${sep}don't change `),
   );
   // Every list names each of its items, before any reader splits at a
-  // comma.
+  // comma, and a container's body is the container.
+  question = question.replace(lex.bodyIs, '$1');
   question = namedLists(question, lex.parts, (word, on) =>
     (FAMILIES[on] ?? [on]).some(m =>
       (C.variantValues(m)?.variant ?? []).includes(word),
@@ -7671,6 +7652,10 @@ export function draftAnswer(ctx, env, question) {
         return kind && kind === bKind ? 'use ' : m;
       },
     )
+    .replace(lex.ownWord, (m, owner, part) => `${owner} ${part}`)
+    .replace(lex.ownAgain, (m, o, part) => `the ${o} ${part}`)
+    .replace(lex.pieceAt, (m, piece, owner) => `${owner} ${piece}`)
+    .replace(EDGE_PLACE, (m, at, all) => edgePlace(m, at, all, lex.parts))
     // "bg #fff text #000": a new color after a color starts a new ask.
     .replace(
       /(#[0-9a-f]{3,8}|\))\s+(?!(?:to|into|and|or|vs|than|then)\b)(?=[a-z][\w-]*\s*:?\s*(?:#[0-9a-f]{3,8}\b|(?:rgba?|hsla?|oklch)\())/g,
@@ -15442,6 +15427,7 @@ export function draftAnswer(ctx, env, question) {
     drafts.splice(from, 0, d);
     draftClause.set(d, gc);
   };
+  piecesNotOwners(clauses);
   for (const c of clauses) {
     clauseNow = c;
     settleSubject();
@@ -25880,6 +25866,19 @@ export function draftAnswer(ctx, env, question) {
                     : 'min-inline-size',
               ) ??
               null;
+            // "full width" fills what holds the part: no cap of its own.
+            if (FULL_WIDTH.test(c.text))
+              return {
+                text: `the width${where}: the full width of what holds it`,
+                options: [
+                  [
+                    set('width', '100%', f),
+                    ...(widthNow('max-width') == null
+                      ? []
+                      : [set('max-width', 'none', f)]),
+                  ],
+                ],
+              };
             const wProp = ['width', 'max-width', 'min-width'].find(
               k =>
                 widthNow(k) != null &&
