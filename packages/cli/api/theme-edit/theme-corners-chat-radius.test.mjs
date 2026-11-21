@@ -12,7 +12,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
-import {themeEditNew, themeEditSet} from './theme-edit.mjs';
+import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -160,7 +160,7 @@ describe('the corners dial and chat surfaces', () => {
       },
     };
     for (const v of ['round', 'pill', '24px'])
-      expect(radiusAt(base, v, '--radius-chat'), v).toBeLessThanOrEqual(42);
+      expect(radiusAt(base, v, '--radius-chat'), v).toBe(42);
   });
 
   it(
@@ -172,11 +172,23 @@ describe('the corners dial and chat surfaces', () => {
         return;
       }
       await themeEditNew('b', {cwd, like: 'butter'});
+      // (The bound's own answer, run as it is given.)
+      const {data} = /** @type {any} */ (
+        await themeEditHow('make corners never more than 8px', {
+          cwd,
+          theme: 'b',
+        })
+      );
+      const steps = /** @type {string[]} */ (
+        data.results.flatMap((/** @type {any} */ r) => r.commands)
+      );
+      const chat = steps.find(c => / --radius-chat /.test(c));
+      expect(chat).toBeTruthy();
       await themeEditSet('b', 'corners', '8px', {cwd});
       await themeEditSet(
         'b',
         '--radius-chat',
-        'min(calc(var(--radius-container) * 28 / 12), 8px)',
+        String(/ --radius-chat '?([^']+)'?$/.exec(String(chat))?.[1]),
         {cwd},
       );
       await themeEditSet('b', '--radius-container', '2px', {cwd});
