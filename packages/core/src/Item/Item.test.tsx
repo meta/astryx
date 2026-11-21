@@ -766,6 +766,64 @@ describe('Item', () => {
       expect(clicks).toHaveLength(0);
     });
 
+    it('a press that starts or ends on a nested control does not follow the link', () => {
+      const {clicks} = renderLinkRow();
+      // Present first: a press that starts and ends on the row follows it.
+      fireEvent.pointerDown(screen.getByText('Yesterday'), {
+        pointerType: 'mouse',
+      });
+      fireEvent.click(screen.getByText('Yesterday'));
+      expect(clicks).toHaveLength(1);
+      fireEvent.pointerDown(screen.getByRole('button', {name: 'Star'}), {
+        pointerType: 'mouse',
+      });
+      fireEvent.click(screen.getByText('Yesterday'));
+      expect(clicks).toHaveLength(1);
+      // A press that starts on the row and ends on the control: the browser
+      // sends the click to the element that holds both points.
+      fireEvent.pointerDown(screen.getByText('Yesterday'), {
+        pointerType: 'mouse',
+      });
+      fireEvent.pointerUp(screen.getByRole('button', {name: 'Star'}), {
+        pointerType: 'mouse',
+      });
+      fireEvent.click(
+        screen.getByText('Yesterday').parentElement as HTMLElement,
+      );
+      expect(clicks).toHaveLength(1);
+    });
+
+    it('a middle press that starts on a nested control does not open the link', () => {
+      const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+      try {
+        renderLinkRow();
+        fireEvent.pointerDown(screen.getByRole('button', {name: 'Star'}), {
+          pointerType: 'mouse',
+          button: 1,
+        });
+        fireEvent.mouseUp(screen.getByText('Yesterday'), {button: 1});
+        expect(open).not.toHaveBeenCalled();
+      } finally {
+        open.mockRestore();
+      }
+    });
+
+    it('marks a link row as a pressable container from its first render', () => {
+      const {root} = renderLinkRow();
+      expect(root).toHaveAttribute('data-pressable-container', 'true');
+    });
+
+    it('marks a row that becomes a link row after it mounts', () => {
+      const {container, rerender} = render(<Item label="Ada Lovelace" />);
+      const row = container.firstElementChild as HTMLElement;
+      expect(row).not.toHaveAttribute('data-pressable-container');
+      rerender(<Item label="Ada Lovelace" href="/candidates/1" />);
+      expect(container.firstElementChild).toHaveAttribute(
+        'data-pressable-container',
+        'true',
+      );
+    });
+
     it('a press that ends a text selection does not follow the link', () => {
       const {clicks} = renderLinkRow();
       const start = screen.getByText('AL');
@@ -861,6 +919,36 @@ describe('Item', () => {
       );
       fireEvent.click(screen.getByText('AL'));
       expect(navigate).toHaveBeenCalledWith('/candidates/1');
+    });
+
+    it('a middle press on the row opens the address the link component renders', () => {
+      const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+      function BasePathLink({
+        ref,
+        href,
+        ...props
+      }: React.ComponentPropsWithRef<'a'>) {
+        return <a ref={ref} href={`/base${href ?? ''}`} {...props} />;
+      }
+      try {
+        render(
+          <LinkProvider component={BasePathLink}>
+            <Item
+              label="Ada Lovelace"
+              href="/candidates/1"
+              startContent={<span>AL</span>}
+            />
+          </LinkProvider>,
+        );
+        fireEvent.mouseUp(screen.getByText('AL'), {button: 1});
+        expect(open).toHaveBeenCalledWith(
+          '/base/candidates/1',
+          '_blank',
+          'noopener',
+        );
+      } finally {
+        open.mockRestore();
+      }
     });
 
     it('a disabled link row does not follow its link', () => {

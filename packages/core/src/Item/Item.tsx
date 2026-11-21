@@ -66,10 +66,11 @@ import {useLinkComponent} from '../Link/useLinkComponent';
 import {
   cancelNestedPress,
   hasInteractiveAncestor,
+  hasTextSelection,
   PRESSABLE_CONTAINER_ATTRIBUTE,
-  useClickableContainer,
   useClickableContainerProxy,
 } from '../hooks/useClickableContainer';
+import {isSafeUrl} from '../utils/safeUrl';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
@@ -241,9 +242,9 @@ export interface ItemProps extends BaseProps<HTMLElement> {
   /**
    * Link URL. Makes the item a link via an invisible anchor element. A row
    * whose root is already a link component (see `as`) carries the address on
-   * that root instead, and no invisible anchor is rendered. A press anywhere
-   * on the row that is not a nested control or a text selection follows the
-   * link, as a press on the label does.
+   * that root instead, and no invisible anchor is rendered. In a row with no
+   * `onClick`, a press anywhere on the row that is not on a nested control or
+   * a text selection follows the link, as a press on the label does.
    */
   href?: string;
 
@@ -679,9 +680,9 @@ export function Item({
   // control is the row's only tab stop; the row proxies surface clicks to it.
   const isDelegate = interactiveRef != null;
   const containerRef = useRef<HTMLElement | null>(null);
-  // Only onClick is needed: onMouseUp handles middle-click href navigation,
-  // which delegation mode never has (href is ignored here). A List link row's
-  // surface click goes to its anchor through the same hook and its guards.
+  // A delegate row's and a link row's surface clicks go to their own action
+  // through this one call and its guards. A link row handles its middle press
+  // itself, below.
   const {onClick: containerOnClick, onPointerDown: delegatedOnPointerDown} =
     useClickableContainerProxy({
       containerRef,
@@ -689,20 +690,15 @@ export function Item({
       disabled: isDisabled,
     });
   // A link row is the enlarged target of its own anchor. A press on the row
-  // outside a nested control goes to the anchor with its modifier keys, so
-  // the anchor decides where it goes. A middle press fires no click, so the
-  // row opens the destination in a new tab on mouse up.
+  // outside a nested control goes to the anchor with its modifier keys, so the
+  // anchor decides where it goes. A middle press fires no click event, so the
+  // row opens the link on mouse up.
   const isLinkRow =
     !isDelegate &&
     role == null &&
     onClick == null &&
     href != null &&
     typeof Component === 'string';
-  const {onMouseUp: linkRowOnMouseUp} = useClickableContainer({
-    containerRef,
-    href: isLinkRow ? href : undefined,
-    disabled: isDisabled,
-  });
 
   useDevWarning(
     'Item',
@@ -729,12 +725,52 @@ export function Item({
   // card still treats it as part of its own surface.
   const hasOwnAction =
     (onClick != null || href != null) && !hasParentRole && !isLinkRoot;
-  const pressOnRow = (event: React.PointerEvent<HTMLElement>) =>
+  // Whether the link row's current press started or ended on a nested
+  // control. The click that ends such a press can land outside the control.
+  const linkPressOnControlRef = useRef(false);
+  const pressOnRow = (event: React.PointerEvent<HTMLElement>) => {
+    if (isLinkRow) {
+      linkPressOnControlRef.current = isOnNestedControl(
+        event,
+        actionLinkRef.current,
+      );
+    }
     cancelNestedPress(
       event,
       event.currentTarget,
       href != null ? actionLinkRef.current : actionButtonRef.current,
     );
+  };
+  const handleLinkRowPointerUp = (event: React.PointerEvent<HTMLElement>) => {
+    if (isOnNestedControl(event, actionLinkRef.current)) {
+      linkPressOnControlRef.current = true;
+    }
+  };
+  const handleLinkRowClick = (event: React.MouseEvent<HTMLElement>) => {
+    const pressedOnControl = linkPressOnControlRef.current;
+    linkPressOnControlRef.current = false;
+    if (!pressedOnControl && isEventInsideRow(event)) {
+      containerOnClick(event);
+    }
+  };
+  const handleLinkRowMouseUp = (event: React.MouseEvent<HTMLElement>) => {
+    const anchorHref = actionLinkRef.current?.getAttribute('href');
+    if (
+      event.button !== 1 ||
+      isDisabled ||
+      anchorHref == null ||
+      linkPressOnControlRef.current ||
+      !isEventInsideRow(event) ||
+      isOnNestedControl(event, null) ||
+      hasTextSelection(event.currentTarget) ||
+      !isSafeUrl(anchorHref)
+    ) {
+      return;
+    }
+    // The anchor's own address, so a link component that rewrites `href`
+    // opens the same page as a middle press on the label.
+    window.open(anchorHref, '_blank', 'noopener');
+  };
 
   // The bridge the swipe layer fills, on a row given `swipe` and on the
   // deprecated path. It is empty until the layer has mounted, when the
@@ -1012,12 +1048,6 @@ export function Item({
   const mergedRef = useMergedRefs(ref, containerRef);
   const rootRef = isDelegate || isLinkRow ? mergedRef : ref;
 
-  const handleLinkRowClick = (event: React.MouseEvent<HTMLElement>) => {
-    if (isEventInsideRow(event)) {
-      containerOnClick(event);
-    }
-  };
-
   // The row's own primary. The click the browser synthesizes after a swipe
   // never reaches it: the gesture system swallows it.
   const primaryOnClick = isDelegate
@@ -1059,11 +1089,21 @@ export function Item({
                 restProps.onPointerDown,
                 pressOnRow,
               ),
+              ...(isLinkRow
+                ? {
+                    onPointerUp: chainEventHandlers(
+                      restProps.onPointerUp,
+                      handleLinkRowPointerUp,
+                    ),
+                  }
+                : null),
             }
           : null)}
-      // Only a delegate row is a pressable container. So a mouse click in a
-      // link row's padding still reaches a clickable container around it.
-      {...(isDelegate ? {[PRESSABLE_CONTAINER_ATTRIBUTE]: 'true'} : undefined)}
+      // A delegate row and a link row are pressable containers: a press in one
+      // runs its own action, not that of a clickable container around it.
+      {...(isDelegate || isLinkRow
+        ? {[PRESSABLE_CONTAINER_ATTRIBUTE]: 'true'}
+        : undefined)}
       aria-selected={(allowsAriaSelected && isSelected) || undefined}
       // aria-selected is invalid on roles that don't permit it (listitem, a
       // bare div, etc.). For those, convey selection via aria-current — valid
@@ -1122,12 +1162,7 @@ export function Item({
       onClick={primaryOnClick}
       onMouseUp={
         isLinkRow
-          ? (event: React.MouseEvent<HTMLElement>) => {
-              restProps.onMouseUp?.(event);
-              if (isEventInsideRow(event)) {
-                linkRowOnMouseUp(event);
-              }
-            }
+          ? chainEventHandlers(restProps.onMouseUp, handleLinkRowMouseUp)
           : restProps.onMouseUp
       }>
       <ItemTrailingContext value={null}>
@@ -1178,4 +1213,19 @@ Item.displayName = 'Item';
 // but its target is not in the row, so it is not a press on the row.
 function isEventInsideRow(event: React.MouseEvent<HTMLElement>): boolean {
   return event.currentTarget.contains(event.target as Node);
+}
+
+// Whether a pointer event is on a nested interactive element other than the
+// row's own action.
+function isOnNestedControl(
+  event: React.MouseEvent<HTMLElement>,
+  ownAction: Element | null,
+): boolean {
+  const target = event.target;
+  return (
+    target instanceof Element &&
+    target !== event.currentTarget &&
+    hasInteractiveAncestor(target, event.currentTarget) &&
+    ownAction?.contains(target) !== true
+  );
 }
