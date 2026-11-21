@@ -32287,6 +32287,13 @@ export function draftAnswer(ctx, env, question) {
       .join(', ');
     // (A one-mode theme's line names no mode: nothing to put in brackets.)
     const at = where ? ` (${where})` : '';
+    // (In a choice between fills, the text goes with the fill it reads on:
+    // that choice writes both, and the other choice writes no text line.)
+    if (choice) {
+      d.options[0] = [...d.options[0], ...fixes];
+      d.text = `${d.text}; ${st.value}'s choice also sets ${[...new Set(fixes.map(x => x.value))].join(' or ')} text on ${st.on}${at}, since its text would not read on that fill`;
+      continue;
+    }
     d.text = `${d.text}; its text would not read on that fill${at}: the next line keeps it readable`;
     result.splice(di + 1, 0, {
       text: `readable text on that fill: ${st.on}'s text measures under 4.5:1 on ${st.value}${at}, so ${[...new Set(fixes.map(x => x.value))].join(' or ')}`,
