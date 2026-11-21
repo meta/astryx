@@ -157,6 +157,14 @@ describe('a fine primary pointer', () => {
     expect(subscriptions.get('selectionchange')).toBe(0);
   });
 
+  it('keeps no selectionchange subscription for a page whose only gesture is disabled', () => {
+    const {box} = mount('<div id="box"></div>');
+    detachers.push(
+      host.attach(box, new TapGestureRecognizer({isEnabled: false})),
+    );
+    expect(subscriptions.get('selectionchange') ?? 0).toBe(0);
+  });
+
   it('reads the selection at a mouse press only when one may exist: the first press after attach, and the first after a selectionchange', () => {
     const {box} = mount('<div id="box"></div>');
     detachers.push(host.attach(box, new TapGestureRecognizer()));

@@ -922,7 +922,7 @@ export class GestureHost {
    * no range makes it `none`.
    */
   private selectionState: 'unknown' | 'maybe' | 'none' = 'unknown';
-  /** The one passive `selectionchange` subscription, while anything is attached. */
+  /** The one passive `selectionchange` subscription, while anything enabled is attached. */
   private stopWatchingSelection: (() => void) | null = null;
   /**
    * Whether the installed listeners include the cancelable ones (the
@@ -1903,14 +1903,22 @@ export class GestureHost {
   }
 
   /**
-   * One passive `selectionchange` subscription for the page while anything is
-   * attached, part of the one shared press controller, whatever the number
-   * of elements. The listener reads nothing: it only marks that a selection
+   * One passive `selectionchange` subscription for the page while an enabled
+   * recognizer or consumer is attached, whatever the number of elements. The listener reads nothing: it only marks that a selection
    * may exist.
    */
   private syncSelectionWatch(): void {
     const view = this.doc.defaultView;
-    const wanted = this.registry.size > 0 && view != null;
+    // Only an enabled recognizer or consumer takes a press: a disabled
+    // control pays nothing.
+    const wanted =
+      view != null &&
+      [...this.registry.values()].some(
+        registration =>
+          registration.recognizers.some(recognizer => recognizer.isEnabled) ||
+          (registration.consumer != null &&
+            registration.consumer.isEnabled?.() !== false),
+      );
     if (wanted && this.stopWatchingSelection == null && view != null) {
       this.selectionState = 'unknown';
       this.stopWatchingSelection = subscribeInput(

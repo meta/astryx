@@ -291,7 +291,10 @@ export function selectionRangesOf(
   }
   const ranges: Range[] = [];
   for (let index = 0; index < selection.rangeCount; index++) {
-    ranges.push(selection.getRangeAt(index).cloneRange());
+    const range = selection.getRangeAt(index);
+    if (!range.collapsed) {
+      ranges.push(range.cloneRange());
+    }
   }
   return ranges;
 }
