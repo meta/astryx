@@ -6366,6 +6366,19 @@ async function changeOnce(
               ]
             : []),
           ...otherModeNotes(data),
+          // (A theme made one-mode draws its page in that mode only: the
+          // page note, once, when the theme has said no page color yet,
+          // since that note would have come with it.)
+          ...(s.thing === 'mode' &&
+          (data.mode === 'light-only' || data.mode === 'dark-only') &&
+          before !== data.mode &&
+          before !== 'light-only' &&
+          before !== 'dark-only' &&
+          !data.settings.some(
+            x => x.thing === '--color-background-body' && !x.on,
+          )
+            ? [pageColorNote(data.mode)]
+            : []),
           // A theme the app lists takes its mode from the app's theme
           // module: `theme add` writes it again.
           ...(s.thing === 'mode' && before !== data.mode
