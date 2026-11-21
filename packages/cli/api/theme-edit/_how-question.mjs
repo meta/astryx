@@ -5529,17 +5529,21 @@ export function draftAnswer(ctx, env, question) {
    * @type {WeakSet<Step>}
    */
   const untintedSeeds = new WeakSet();
+  /** Whether words name a part or a dial. @param {string} text */
+  const namesPart = text => {
+    const t = ` ${text.toLowerCase()} `;
+    return (
+      partLexicon(ctx).parts.some(([re]) => re.test(t)) ||
+      Object.keys(DIALS).some(d => new RegExp(`\\b${d}s?\\b`).test(t))
+    );
+  };
   const untintedAsk =
     !setsColors &&
-    bareNeutralGrays(question, text => {
-      const t = ` ${text.toLowerCase()} `;
-      return (
-        !graysLook(text) &&
-        (/[\d#]/.test(text) ||
-          partLexicon(ctx).parts.some(([re]) => re.test(t)) ||
-          Object.keys(DIALS).some(d => new RegExp(`\\b${d}s?\\b`).test(t)))
-      );
-    });
+    bareNeutralGrays(
+      question,
+      text => !graysLook(text) && (/[\d#]/.test(text) || namesPart(text)),
+      text => !graysLook(text) && namesPart(text),
+    );
   question = question
     // ("mint green for positive numbers", "red for destructive actions"):
     // a color for a thing a status role names, in the words its own dial

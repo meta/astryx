@@ -1,33 +1,5 @@
 [
   [
-    "neutral grays with blue accents",
-    "warm",
-    [
-      [
-        "accent: the editor makes its light and dark shades from #256",
-        ["set warm accent '#2563eb'", "set warm --color-accent '#2563eb'"]
-      ],
-      [
-        "The gray of the theme: surfaces (cards, panels, popovers, mu",
-        ["how neutral"]
-      ]
-    ]
-  ],
-  [
-    "neutral grays with blue accents",
-    "plain",
-    [
-      [
-        "accent: the editor makes its light and dark shades from #256",
-        ["set plain accent '#2563eb'", "set plain --color-accent '#2563eb'"]
-      ],
-      [
-        "The gray of the theme: surfaces (cards, panels, popovers, mu",
-        ["how neutral"]
-      ]
-    ]
-  ],
-  [
     "neutral grays, but darker",
     "warm",
     [

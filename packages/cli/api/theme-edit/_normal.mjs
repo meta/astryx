@@ -1964,30 +1964,42 @@ export const typoLimit = typed => {
 /** A bare ask for grays without a hue of their own, and nothing else. */
 const BARE_GRAYS = /^(?:neutral gr[ae]ys|untinted gr[ae]ys)$/;
 
+/** The grays with another part's color after them ("… with blue buttons"). */
+const GRAYS_WITH = /^(?:neutral gr[ae]ys|untinted gr[ae]ys) with (.+)$/;
+
+/** A clause without its lead verb, lowercased. @param {string} c */
+const bareClause = c =>
+  String(c)
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/^(?:i'?d like|i want|want|use|make|give|with) /, '');
+
 /**
  * Whether a question holds a bare ask for neutral grays ("neutral grays",
  * "neutral greys", "untinted grays", after a lead verb such as "use") as a
  * clause of its own, beside clauses that each name a part, a dial or a
- * value. The words are never rewritten: the caller flags that clause, so
+ * value. So does the clause when a "with" phrase after the grays names a
+ * part or a dial ("neutral grays with blue accents"): that color is said
+ * beside them. The words are never rewritten: the caller flags that clause, so
  * an ask typed in other words keeps its own reading. A word before or after
  * the grays in their clause, or another clause that names no part, dial or
  * value ("warm, neutral grays", "neutral grays, but darker"), is no bare
  * ask.
  * @param {string} question
  * @param {(text: string) => boolean} [namesThing] - Whether a clause names a part, a dial or a value ("red buttons", "6px corners").
+ * @param {(text: string) => boolean} [namesPart] - Whether words name a part or a dial, never a value alone ("blue accents", not "10% blue").
  * @returns {boolean}
  */
-export function bareNeutralGrays(question, namesThing = () => false) {
+export function bareNeutralGrays(
+  question,
+  namesThing = () => false,
+  namesPart = namesThing,
+) {
   const clauses = question
     .split(/[,;.!?\n]|\band\b/i)
     .map(c => c.trim())
     .filter(Boolean);
-  /** @param {string} c */
-  const bare = c =>
-    c
-      .toLowerCase()
-      .replace(/\s+/g, ' ')
-      .replace(/^(?:i'?d like|i want|want|use|make|give|with) /, '');
   // (An ask that turns something away, "avoid rounded corners and neutral
   // grays", is no bare ask: what it turns away is not read here.)
   if (
@@ -1996,19 +2008,26 @@ export function bareNeutralGrays(question, namesThing = () => false) {
     )
   )
     return false;
-  const at = clauses.findIndex(c => BARE_GRAYS.test(bare(c)));
+  // ("neutral grays with blue accents"): a "with" phrase that names a part
+  // or a dial is another part's color, said beside the grays; an amount or
+  // a hue alone, "with 10% blue", is said of the grays themselves.
+  const withThing = (/** @type {string} */ c) => {
+    const rest = GRAYS_WITH.exec(bareClause(c))?.[1];
+    return rest != null && namesPart(rest);
+  };
+  const at = clauses.findIndex(
+    c => BARE_GRAYS.test(bareClause(c)) || withThing(c),
+  );
   return at >= 0 && clauses.every((c, i) => i === at || namesThing(c));
 }
 
-/** Whether a clause is the bare neutral-grays ask, as `bareNeutralGrays` reads it. @param {string} text */
+/**
+ * Whether a clause is the neutral-grays ask `bareNeutralGrays` reads: the
+ * grays alone, or with another part's color after them.
+ * @param {string} text
+ */
 export const isBareGraysClause = text =>
-  BARE_GRAYS.test(
-    String(text)
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, ' ')
-      .replace(/^(?:i'?d like|i want|want|use|make|give|with) /, ''),
-  );
+  BARE_GRAYS.test(bareClause(text)) || GRAYS_WITH.test(bareClause(text));
 
 /**
  * Whether `word` is within the typo limit of `typed` (two letters swapped
