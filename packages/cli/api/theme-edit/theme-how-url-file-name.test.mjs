@@ -155,3 +155,27 @@ it("a word in a file's path changes no other ask", async () => {
     "set pu background-image 'url(/img/frosted.png)' --on card",
   );
 }, 240_000);
+
+it.each([
+  'cards background url(a.png), url(b.png)',
+  'on cards background-image: url(a.png), url(b.png)',
+  'cards background-image: url(a.png), url(b.png); 12px radius on buttons',
+])(
+  '%s: the unwritten second layer is named as not used',
+  async ask => {
+    const {texts} = await answer(ask);
+    expect(
+      texts.some(t => /^not used/.test(t) && t.includes('"url(b.png)"')),
+    ).toBe(true);
+  },
+  240_000,
+);
+
+it('a part said after the value still leaves the second layer unnamed', async () => {
+  const {texts} = await answer(
+    'background-image: url(a.png), url(b.png) on cards',
+  );
+  expect(
+    texts.some(t => /^not used/.test(t) && t.includes('"url(b.png)"')),
+  ).toBe(false);
+}, 240_000);
