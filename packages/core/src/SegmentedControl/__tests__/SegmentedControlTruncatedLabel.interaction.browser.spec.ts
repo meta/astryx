@@ -1,9 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file TruncatedLabelDirection.interaction.browser.spec.ts
- * @input Text's "Truncated Mixed Direction" story and SegmentedControl's
- *   "Truncated Labels" story on a left-to-right and a right-to-left page
+ * @file SegmentedControlTruncatedLabel.interaction.browser.spec.ts
+ * @input SegmentedControl's "Truncated Labels" story on a left-to-right and a
+ *   right-to-left page
  * @output Proves a cut label keeps its start and loses its end: on a
  *   right-to-left page every label (a Latin label reads "Mon…"), on a
  *   left-to-right page every label with no right-to-left letter
@@ -52,11 +52,6 @@ async function readCutLabels(page: Page, selector: string) {
 }
 
 const stories = [
-  {
-    id: 'core-text--truncated-mixed-direction',
-    selector: '[data-testid="cut-labels"] > *',
-    count: {ltr: 3, rtl: 5},
-  },
   {
     id: 'core-segmentedcontrol--truncated-labels',
     selector: '[data-testid="cut-labels"] [role="radio"] > span',

@@ -58,7 +58,6 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {TextClampContext} from './textClampContext';
-import {cutTextDirection, truncatedTextStyles} from '../utils/textDirection';
 
 export type {TextType, TextSize};
 
@@ -289,7 +288,6 @@ export function Text({
 
   // Build inline style for -webkit-line-clamp (dynamic value)
   const inlineStyle = maxLines > 1 ? {WebkitLineClamp: maxLines} : undefined;
-  const cutDirection = cutTextDirection(children, maxLines, justify);
 
   return (
     <>
@@ -315,7 +313,6 @@ export function Text({
             textWrap && textWrapStyles[textWrap],
             // Justify (text alignment)
             justify !== 'start' && justifyStyles[justify],
-            cutDirection != null && truncatedTextStyles.pageAlign,
             // Capsize
             hasCapsize && capsizeStyles.enabled,
             // Decorations
@@ -327,7 +324,6 @@ export function Text({
           className,
           {...style, ...inlineStyle},
         )}
-        dir={cutDirection}
         {...props}
         onPointerEnter={composeEventHandlers(
           tooltipInterest.onPointerEnter,

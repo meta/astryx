@@ -91,45 +91,6 @@ describe('Text', () => {
     });
   });
 
-  describe('cut label direction', () => {
-    it.each([
-      ['Monthly revenue', 'ltr'],
-      ['2026 annual report', 'ltr'],
-      ['📅 Week overview', 'ltr'],
-      ['iPhone جديد', null],
-      ['דוח חודשי', null],
-    ])('gives the truncating label %s the direction %s', (label, dir) => {
-      render(
-        <Text type="body" maxLines={1}>
-          {label}
-        </Text>,
-      );
-      const element = screen.getByText(label);
-      if (dir == null) {
-        expect(element).not.toHaveAttribute('dir');
-      } else {
-        expect(element).toHaveAttribute('dir', dir);
-      }
-    });
-
-    it('leaves text that does not truncate, rich children and a caller dir alone', () => {
-      render(
-        <>
-          <Text type="body">Not cut</Text>
-          <Text type="body" maxLines={1}>
-            <b>Rich</b> label
-          </Text>
-          <Text type="body" maxLines={1} dir="rtl">
-            Caller
-          </Text>
-        </>,
-      );
-      expect(screen.getByText('Not cut')).not.toHaveAttribute('dir');
-      expect(screen.getByText('Rich').parentElement).not.toHaveAttribute('dir');
-      expect(screen.getByText('Caller')).toHaveAttribute('dir', 'rtl');
-    });
-  });
-
   describe('types', () => {
     it('renders body type', () => {
       render(<Text type="body">Body text</Text>);

@@ -12,10 +12,9 @@
  *   Token put textDirectionProps on the element that holds caller text,
  *   beside `unicode-bidi: isolate`. InputGroupText, Field's label and
  *   description, FieldStatus and the status tooltip use withTextDirection.
- *   MultiSelector's labels trigger puts each label in isolatedText. Text,
- *   Heading, Button, SegmentedControl and TableHeaderCell put
- *   textDirectionProps and truncatedTextStyles on the element that cuts its
- *   label.
+ *   MultiSelector's labels trigger puts each label in isolatedText. Button,
+ *   SegmentedControl and TableHeaderCell put textDirectionProps and
+ *   truncatedTextStyles on the element that cuts its label.
  */
 
 import {createElement, type ReactElement, type ReactNode} from 'react';
@@ -97,20 +96,9 @@ export function isolatedText(
  * decides which end the cut takes, so under a right-to-left page a Latin
  * label lost its start ("…onth"). With `textDirectionProps` the label keeps
  * its start ("Mon…"); a label with a right-to-left letter keeps the page's
- * direction and is cut at its own end. Text and Heading take it when
- * `maxLines` cuts their text and they align to the start.
+ * direction and is cut at its own end. Put `pageAlign` beside the `dir` so
+ * the element keeps the page's alignment.
  */
-export function cutTextDirection(
-  content: ReactNode,
-  maxLines: number,
-  justify: string,
-): 'ltr' | undefined {
-  return maxLines > 0 && justify === 'start'
-    ? textDirectionProps(content).dir
-    : undefined;
-}
-
-// Beside a cut label's `dir`, keeps the page's alignment.
 export const truncatedTextStyles = stylex.create({
   pageAlign: {
     textAlign: stylex.firstThatWorks('match-parent', '-webkit-match-parent'),

@@ -57,10 +57,6 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useDevWarning} from '../hooks/useDevWarning';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
-import {
-  cutTextDirection,
-  truncatedTextStyles,
-} from '../utils/textDirection';
 import type {HeadingTypeMap} from './index';
 
 /**
@@ -306,7 +302,6 @@ export function Heading({
 
   // Build inline style for -webkit-line-clamp (dynamic value)
   const inlineStyle = maxLines > 1 ? {WebkitLineClamp: maxLines} : undefined;
-  const cutDirection = cutTextDirection(children, maxLines, justify);
 
   return (
     <>
@@ -338,7 +333,6 @@ export function Heading({
             textWrap && textWrapStyles[textWrap],
             // Justify (text alignment)
             justify !== 'start' && justifyStyles[justify],
-            cutDirection != null && truncatedTextStyles.pageAlign,
             // Capsize
             hasCapsize && capsizeStyles.enabled,
             // Decorations
@@ -349,7 +343,6 @@ export function Heading({
           className,
           {...style, ...inlineStyle},
         )}
-        dir={cutDirection}
         {...ariaProps}
         {...props}
         onPointerEnter={composeEventHandlers(

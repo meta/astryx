@@ -26,21 +26,6 @@ declare module './index' {
 }
 
 describe('Heading', () => {
-  it('gives a truncating Latin heading its own direction, so it keeps its start, and leaves a right-to-left heading alone', () => {
-    render(
-      <>
-        <Heading level={2} maxLines={1}>
-          Monthly revenue
-        </Heading>
-        <Heading level={2} maxLines={1}>
-          דוח חודשי
-        </Heading>
-      </>,
-    );
-    expect(screen.getByText('Monthly revenue')).toHaveAttribute('dir', 'ltr');
-    expect(screen.getByText('דוח חודשי')).not.toHaveAttribute('dir');
-  });
-
   describe('rendering', () => {
     it('renders children correctly', () => {
       render(<Heading level={1}>Page Title</Heading>);

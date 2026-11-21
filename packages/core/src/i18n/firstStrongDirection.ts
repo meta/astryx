@@ -18,8 +18,6 @@
 // Each expression with a Unicode property escape is built at runtime: a
 // source build may rewrite a regular expression literal with one, and the
 // Babel copy that Next.js bundles has no Unicode data to do that.
-// Each is marked pure, so a bundle that uses only one function drops the
-// others' expressions.
 
 /**
  * The strongly right-to-left characters of the Unicode Bidirectional
@@ -37,7 +35,7 @@
  * with one as left-to-right. The Arabic letter mark is beside them for the
  * same reason.
  */
-const STRONG_RTL = /* @__PURE__ */ new RegExp(
+const STRONG_RTL = new RegExp(
   String.raw`[\p{Script=Adlam}\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Mandaic}\p{Script=Nko}\p{Script=Samaritan}\p{Script=Syriac}\p{Script=Thaana}\u061B\u061C\u061F\u0640\u200F\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]`,
   'u',
 );
@@ -78,14 +76,14 @@ const WEAK_NUMBER_OR_NEUTRAL =
  * are `R`, matched as their own scripts. Punctuation and symbols are not
  * here, so the scan passes over them.
  */
-const STRONG_LTR = /* @__PURE__ */ new RegExp(String.raw`[\p{Letter}\p{Nl}\p{Nd}\u200E]`, 'u');
+const STRONG_LTR = new RegExp(String.raw`[\p{Letter}\p{Nl}\p{Nd}\u200E]`, 'u');
 
 /**
  * Bidi_Class `NSM`: a combining mark takes the direction of its base
  * character. A mark has its base letter's script, so without this check a
  * leading Hebrew point would read as right-to-left.
  */
-const COMBINING_MARK = /* @__PURE__ */ new RegExp(String.raw`\p{Mark}`, 'u');
+const COMBINING_MARK = new RegExp(String.raw`\p{Mark}`, 'u');
 
 /** Whether the text holds a strongly right-to-left character anywhere. */
 export function hasStrongRightToLeft(text: string): boolean {

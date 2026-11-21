@@ -244,31 +244,6 @@ export const SingleLineTruncation: Story = {
   ),
 };
 
-/**
- * Truncated labels in two directions. On a right-to-left page a Latin label
- * keeps its start ("Mon…"), and a label with a right-to-left letter is cut at
- * its own end.
- */
-export const TruncatedMixedDirection: Story = {
-  render: () => (
-    <div
-      data-testid="cut-labels"
-      style={{width: '90px', display: 'grid', gap: '8px'}}>
-      {[
-        'Monthly revenue',
-        'דוח חודשי מפורט',
-        'iPhone جديد ومميز جدا',
-        '2026 annual report',
-        '📅 Week overview',
-      ].map(label => (
-        <Text key={label} type="body" maxLines={1}>
-          {label}
-        </Text>
-      ))}
-    </div>
-  ),
-};
-
 const MANY_ROWS = Array.from(
   {length: 500},
   (_, index) =>
