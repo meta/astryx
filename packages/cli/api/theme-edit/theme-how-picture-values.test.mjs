@@ -52,6 +52,10 @@ it.each([
     'header background linear-gradient(#0001 1px, transparent 1px), linear-gradient(90deg, #0001 1px, transparent 1px) 0 0 / 24px 24px',
     "set pv background 'linear-gradient(#0001 1px, transparent 1px), linear-gradient(90deg, #0001 1px, transparent 1px) 0 0 / 24px 24px' --on app-shell-header",
   ],
+  [
+    'cards background linear-gradient(#ffffff, #eeeeee), linear-gradient(#000000, #111111), linear-gradient(#222222, #333333)',
+    "set pv background 'linear-gradient(#ffffff, #eeeeee), linear-gradient(#000000, #111111), linear-gradient(#222222, #333333)' --on card",
+  ],
 ])(
   '%s: one value',
   async (ask, line) => {
@@ -79,7 +83,15 @@ it.each([
   ],
   ['cards linear-gradient(#ffffff, #eeeeee), #f8fafc', null],
   [
+    'header background linear-gradient(#ffffff, #f8fafc), linear-gradient(#ffffff, #eeeeee) 0 0 / 1.5rem 1.5rem on cards',
+    null,
+  ],
+  [
     'cards background linear-gradient(#0001 1px, transparent 1px), #f8fafc',
+    null,
+  ],
+  [
+    'cards background linear-gradient(#ffffff, #eeeeee), hover linear-gradient(#000000, #111111)',
     null,
   ],
   ['page background linear-gradient(#ffffff, #f8fafc), #eeeeee', null],
@@ -95,3 +107,17 @@ it.each([
   },
   240_000,
 );
+
+it("a table body's gradient layers are a part's, one value", async () => {
+  expect(
+    (
+      await commands(
+        'table body background linear-gradient(#ffffff, #eeeeee), linear-gradient(#000000, #111111)',
+      )
+    ).some(l =>
+      /background 'linear-gradient\(#ffffff, #eeeeee\), linear-gradient\(#000000, #111111\)'/.test(
+        l,
+      ),
+    ),
+  ).toBe(true);
+}, 240_000);

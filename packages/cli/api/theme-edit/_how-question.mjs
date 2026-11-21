@@ -7280,6 +7280,10 @@ export function draftAnswer(ctx, env, question) {
   }
   /** Family names written in quotes, kept as typed: qq<n>qq in the text. */
   const quoted = /** @type {string[]} */ ([]);
+  // (A gradient layer right after a joined one is in the same ask: its
+  // look-back is that ask's.)
+  let joinedEnd = -1;
+  let joinedLead = '';
   let q = question
     .normalize('NFKC')
     // The possessive reader: a part's possessive before a thing it has, or
@@ -7669,11 +7673,12 @@ export function draftAnswer(ctx, env, question) {
             break;
           }
         }
-        const lead = text.slice(start, at);
+        const lead = at === joinedEnd ? joinedLead : text.slice(start, at);
         const next =
           text
             .slice(at + m.length)
-            .match(/^(?:[^(),;.]|\((?:[^()]|\([^()]*\))*\))*/)?.[0] ?? '';
+            .match(/^(?:[^(),;.]|\.(?=\S)|\((?:[^()]|\([^()]*\))*\))*/)?.[0] ??
+          '';
         // (A gradient layer after it belongs to the same value; a layer
         // said with a part of its own is that part's ask; the page keeps its
         // own reading.)
@@ -7684,12 +7689,15 @@ export function draftAnswer(ctx, env, question) {
           lex.parts.some(([re]) =>
             re.test(` ${next.replace(GRADIENT_LAYER, ' ')} `),
           );
-        return /\bbackground(?:-image)?\b/.test(lead) &&
-          !/\b(?:page|body)\b/.test(lead) &&
+        const join =
+          /\bbackground(?:-image)?\b/.test(lead) &&
+          !/\bpage\b|(?<!\btable\s)\bbody\b/.test(lead) &&
           !ownPart &&
-          GRADIENT_START.test(next)
-          ? `${layer}\u2e34 `
-          : m;
+          new RegExp(`^\\s*${GRADIENT_START.source}`).test(next);
+        if (!join) return m;
+        joinedEnd = at + m.length;
+        joinedLead = lead;
+        return `${layer}\u2e34 `;
       },
     )
     // "font-family: Georgia, serif": the font list is one value.
