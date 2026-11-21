@@ -21,7 +21,7 @@ export const docs = {
       name: 'name',
       type: 'IconName | NamespacedIconName',
       description:
-        "Semantic icon name, such as 'success', 'warning' or 'close', or a namespaced extension key such as 'richtext:bold'. Both resolve through the same registry.",
+        "A built-in meaning, such as 'success', 'warning' or 'close', or a namespaced extension key such as 'richtext:bold'. Both resolve through the theme icons, else a registered or built-in drawing.",
       required: true,
     },
   ],
@@ -40,7 +40,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Use it in a custom component that places a semantic icon itself, so a Theme that overrides the icon changes the component too.',
+          'Use it in a custom component that places a built-in meaning itself, so a Theme that overrides the icon changes the component too.',
       },
       {
         guidance: true,
@@ -50,7 +50,7 @@ export const docs = {
       {
         guidance: false,
         description:
-          'Import a specific icon library glyph for a semantic purpose that a theme should control, such as a success or error state.',
+          'Import a specific icon library glyph for a meaning that a theme should control, such as a success or error state.',
       },
     ],
   },
@@ -65,7 +65,7 @@ export const docsDense = {
   description:
     "Resolves a semantic icon name to a React node via the nearest Theme, so custom components draw the same icons as Astryx components and follow theme overrides. Fallback: nearest Theme icons (outside any Theme, the root's registered theme), registerIcons() overrides, built-in default. Node returned as is (built-ins are 1em, currentColor). Function entries read at {size: 'md'}. Use <Icon icon={name} /> for another size, a color or a label.",
   paramDescriptions: {
-    name: "semantic icon name ('success', 'close') or namespaced key ('richtext:bold'); same registry.",
+    name: "built-in meaning ('success', 'close') or namespaced key ('richtext:bold'); same theme icons.",
   },
   returnDescriptions: {
     icon: "icon node from nearest Theme (outside any Theme, the root's registered theme), else registerIcons() overrides, else built-in default; function entries read at {size: 'md'}.",
@@ -77,7 +77,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Use in custom components that place a semantic icon, so Theme overrides reach them.',
+          'Use in custom components that place a built-in meaning, so Theme overrides reach them.',
       },
       {
         guidance: true,
@@ -87,7 +87,7 @@ export const docsDense = {
       {
         guidance: false,
         description:
-          'Import a library glyph for a semantic purpose a theme should control (success, error).',
+          'Import a library glyph for a meaning a theme should control (success, error).',
       },
     ],
   },

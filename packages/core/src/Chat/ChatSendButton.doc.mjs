@@ -32,7 +32,7 @@ export const docs = {
     {
       name: 'sendIcon',
       type: 'ReactNode',
-      description: 'Custom icon for the send state. Defaults to arrowUp from icon registry.',
+      description: 'Custom icon for the send state. Defaults to the theme icons\' arrowUp.',
       slotElements: [
         {
           __element: 'Icon',
@@ -46,7 +46,7 @@ export const docs = {
     {
       name: 'stopIcon',
       type: 'ReactNode',
-      description: 'Custom icon for the stop state. Defaults to stop from icon registry.',
+      description: 'Custom icon for the stop state. Defaults to the theme icons\' stop.',
       slotElements: [
         {
           __element: 'Icon',
@@ -113,8 +113,8 @@ export const docsZh = {
     isDisabled: '发送按钮是否禁用。默认使用上下文的 !canSend。',
     onSend: '用户点击发送时调用。默认使用上下文的 onSubmit。',
     onStop: '流式响应期间用户点击停止时调用。默认使用上下文的 onStop。',
-    sendIcon: '发送状态的自定义图标。默认使用图标注册表的 arrowUp。',
-    stopIcon: '停止状态的自定义图标。默认使用图标注册表的 stop。',
+    sendIcon: '发送状态的自定义图标。默认使用主题图标中的 arrowUp。',
+    stopIcon: '停止状态的自定义图标。默认使用主题图标中的 stop。',
     size: '按钮大小。',
     xstyle: '额外的 StyleX 样式。',
   },
@@ -130,8 +130,8 @@ export const docsDense = {
     isDisabled: 'disabled; defaults to !canSend from context',
     onSend: 'send click handler; defaults to context onSubmit',
     onStop: 'stop click handler; defaults to context onStop',
-    sendIcon: 'custom send icon; default arrowUp from registry',
-    stopIcon: 'custom stop icon; default stop from registry',
+    sendIcon: 'custom send icon; default: theme icons\' arrowUp',
+    stopIcon: 'custom stop icon; default: theme icons\' stop',
     size: 'btn size',
     xstyle: 'additional StyleX styles',
   },
