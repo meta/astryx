@@ -392,7 +392,10 @@ export interface PowerSearchProps extends Omit<
    * @default 'attached'
    */
   statusVariant?: FieldStatusPlacement;
-  /** Max width for dropdown menu. */
+  /**
+   * Width in pixels of the main field/search menu. It never shrinks below the
+   * input width. It does not affect the field value editors.
+   */
   menuWidth?: number;
   /** Max display length for filter token values. @default 40 */
   maxTokenLength?: number;

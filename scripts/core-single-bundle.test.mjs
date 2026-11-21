@@ -159,10 +159,12 @@ describe('Core in esbuild bundles', () => {
         metafile: true,
       });
       const {outputs} = result.metafile;
-      // Core's lazy modules are entry points too, so pick the app's own.
-      const entry = Object.keys(outputs).find(file =>
-        outputs[file].entryPoint?.endsWith('main.jsx'),
+      // A dynamic import is an entry point of its own, so the walk starts
+      // at the app's entry, not at the first output with an entry point.
+      const entry = Object.keys(outputs).find(
+        file => outputs[file].entryPoint?.endsWith('main.jsx') === true,
       );
+      expect(entry).toBeDefined();
       const startup = new Set([entry]);
       const queue = [entry];
       while (queue.length > 0) {
