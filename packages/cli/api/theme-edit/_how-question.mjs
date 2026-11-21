@@ -137,7 +137,7 @@ const OVERRIDE_RES = new Set(OVERRIDES.map(([re]) => re));
  * steps run in order; most options are one step. `smallest`: the options
  * are one change in growing amounts, and the answer is the first the
  * measured check keeps.
- * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent, smallest?: boolean, modeInValue?: boolean, unmet?: string, offer?: boolean, already?: boolean}} Draft
+ * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent, smallest?: boolean, modeInValue?: boolean, unmet?: string, offer?: boolean, already?: boolean, joined?: boolean}} Draft
  */
 
 /** The words a badge style ask is made of when the style is all it asks. */
@@ -32275,6 +32275,14 @@ export function draftAnswer(ctx, env, question) {
     const rgb = parseColor(raw);
     return rgb && alphaOf(raw) >= 1 ? rgb : null;
   };
+  // (The parts whose text the ask itself colors, before any line here adds
+  // a text color.)
+  const saidText = new Set(
+    result
+      .flatMap(x => x.options.flat())
+      .filter(y => y.thing === 'color' && y.on)
+      .map(y => String(y.on)),
+  );
   for (const [di, d] of [...result.entries()].reverse()) {
     // (The one fill asked, in one line or in a line for each variant it
     // goes to: each line's look is measured, never only a lone line's.)
@@ -32304,144 +32312,169 @@ export function draftAnswer(ctx, env, question) {
       d.options.every(o => o.length === 1) &&
       d.options[0].length === 1 &&
       fillSteps.includes(d.options[0][0]);
+    // (A clash: the choice's fills differ, "a #0069d6 fill and a #eeeeee
+    // fill", and no clause of the ask says the part's text itself.)
+    const clash =
+      choice &&
+      d.options.every(o => isFill(o[0]) && o[0].on === first?.on) &&
+      new Set(d.options.map(o => String(o[0].value))).size ===
+        d.options.length &&
+      !saidText.has(String(first?.on));
     if (
       !fillSteps.length ||
       (!choice && d.options.some(o => o.some(x => !fillSteps.includes(x))))
     )
       continue;
-    if (choice) fillSteps.splice(1);
-    // (An offer, "to change the … variants too", is measured as main
-    // measures it: its first line only.)
-    if (d.offer) fillSteps.splice(1);
-    const st = fillSteps[0];
-    if (
-      !st.on ||
-      !C.MAP[one(st.on)] ||
-      textOnlyPart(one(st.on)) ||
-      FAMILIES[st.on]
-    )
-      continue;
-    const textReads = C.partReads(one(st.on), 'text') ?? [];
-    // (Each look the fill reaches: the ones named, else each variant.)
-    const named = fillSteps.filter(x => x.when).map(x => String(x.when));
-    const variants =
-      named.length === fillSteps.length
-        ? named
-        : (C.variantValues(one(st.on))?.variant ?? []).map(v => `variant:${v}`);
-    const looks = variants.length ? variants : [''];
-    const modes = /** @type {Array<'light' | 'dark'>} */ (
-      st.mode
-        ? [st.mode]
-        : modal
-          ? ['light', 'dark']
-          : [env.data.mode === 'dark-only' ? 'dark' : 'light']
-    );
-    /** @type {Step[]} */
-    const fixes = [];
-    for (const look of looks) {
-      const tok = restRead(textReads, look);
-      if (!tok) continue;
-      for (const m of modes) {
-        const ink = parseColor(String(current(tok, m) ?? ''));
-        if (!ink || alphaOf(String(current(tok, m))) < 1) continue;
-        const fill = fillIn(st.value, m);
-        if (!fill || ratio(ink, fill) >= 4.5) continue;
-        const white = ratio([255, 255, 255], fill);
-        const black = ratio([0, 0, 0], fill);
-        // (A theme color's own text color, --color-on-accent for the
-        // accent, where it reads on that color in the mode: it follows
-        // the color when the theme changes it.)
-        const ref = /^var\(\s*--color-([a-z0-9-]+)\s*\)$/i.exec(
-          String(st.value ?? '').trim(),
-        )?.[1];
-        const onTok = ref ? `--color-on-${ref}` : null;
-        const onInk =
-          onTok && Object.hasOwn(TOKENS, onTok)
-            ? fillIn(`var(${onTok})`, m)
-            : null;
-        fixes.push(
-          set(
-            'color',
-            onInk && ratio(onInk, fill) >= 4.5
-              ? `var(${onTok})`
-              : white >= black
-                ? '#ffffff'
-                : '#000000',
-            {
-              on: st.on,
-              ...(look ? {when: look} : {}),
-              ...(st.state ? {state: st.state} : {}),
-              ...(modes.length > 1 || st.mode ? {mode: m} : {}),
-            },
-          ),
-        );
-      }
-    }
-    // (One token line for every mode it reaches, never a line a mode.)
-    for (let k = fixes.length - 1; k >= 0; k--) {
-      const f = fixes[k];
-      if (!/^var\(/.test(String(f.value)) || !f.mode) continue;
-      const twin = fixes.findIndex(
-        (g, gi) =>
-          gi !== k &&
-          g.value === f.value &&
-          g.when === f.when &&
-          g.state === f.state &&
-          g.mode &&
-          g.mode !== f.mode,
-      );
-      if (twin < 0) continue;
-      delete fixes[twin].mode;
-      fixes.splice(k, 1);
-    }
-    if (!fixes.length || !env.check([...fillSteps, ...fixes]).ok) continue;
-    // (Its own line beside the fill's, so the fill reads as asked and the
-    // text as measured.)
-    const where = fixes
-      .map(x =>
-        `${x.when ? `${x.when.replace(':', ' ')} ` : ''}${x.mode ? `in ${x.mode} mode` : ''}`.trim(),
+    // (A clash: each fill is measured, and its text goes with it. Any
+    // other choice between fills is measured on its first line, as main.)
+    if (choice && !clash) fillSteps.splice(1);
+    const picks = clash ? d.options.map((_, k) => k) : [-1];
+    const allFills = fillSteps;
+    for (const pick of picks) {
+      const fillSteps = pick >= 0 ? [d.options[pick][0]] : allFills;
+      // (An offer, "to change the … variants too", is measured as main
+      // measures it: its first line only.)
+      if (d.offer) fillSteps.splice(1);
+      const st = fillSteps[0];
+      if (
+        !st.on ||
+        !C.MAP[one(st.on)] ||
+        textOnlyPart(one(st.on)) ||
+        FAMILIES[st.on]
       )
-      .filter(Boolean)
-      .join(', ');
-    // (A one-mode theme's line names no mode: nothing to put in brackets.)
-    const at = where ? ` (${where})` : '';
-    d.text = `${d.text}; its text would not read on that fill${at}: the next line keeps it readable`;
-    result.splice(di + 1, 0, {
-      text: `readable text on that fill: ${st.on}'s text measures under 4.5:1 on ${st.value}${at}, so ${[...new Set(fixes.map(x => x.value))].join(' or ')}`,
-      options: [fixes],
-      ...(fixes.length > 1 ? {sequence: true} : {}),
-    });
-    // (A theme color's fill, "selected tab accent", in a whole ask: the
-    // answer that runs it in order carries that text line right after the
-    // fill, so running it never leaves the text unreadable.)
-    if (/^var\(/.test(String(st.value ?? '').trim()))
-      for (const seq of result) {
-        if (seq === d || !seq.sequence || seq.options.length !== 1) continue;
-        const steps = seq.options[0];
-        const at = steps.findIndex(x =>
-          fillSteps.some(
-            f =>
-              f.thing === x.thing &&
-              f.on === x.on &&
-              String(f.value) === String(x.value) &&
-              (f.when ?? '') === (x.when ?? '') &&
-              (f.state ?? '') === (x.state ?? '') &&
-              (f.mode ?? '') === (x.mode ?? ''),
-          ),
-        );
-        if (at < 0) continue;
-        const missing = fixes.filter(
-          f =>
-            !steps.some(
-              x =>
-                x.thing === f.thing &&
-                x.on === f.on &&
-                (x.state ?? '') === (f.state ?? '') &&
-                (x.when ?? '') === (f.when ?? ''),
+        continue;
+      const textReads = C.partReads(one(st.on), 'text') ?? [];
+      // (Each look the fill reaches: the ones named, else each variant.)
+      const named = fillSteps.filter(x => x.when).map(x => String(x.when));
+      const variants =
+        named.length === fillSteps.length
+          ? named
+          : (C.variantValues(one(st.on))?.variant ?? []).map(
+              v => `variant:${v}`,
+            );
+      const looks = variants.length ? variants : [''];
+      const modes = /** @type {Array<'light' | 'dark'>} */ (
+        st.mode
+          ? [st.mode]
+          : modal
+            ? ['light', 'dark']
+            : [env.data.mode === 'dark-only' ? 'dark' : 'light']
+      );
+      /** @type {Step[]} */
+      const fixes = [];
+      for (const look of looks) {
+        const tok = restRead(textReads, look);
+        if (!tok) continue;
+        for (const m of modes) {
+          const ink = parseColor(String(current(tok, m) ?? ''));
+          if (!ink || alphaOf(String(current(tok, m))) < 1) continue;
+          const fill = fillIn(st.value, m);
+          if (!fill || ratio(ink, fill) >= 4.5) continue;
+          const white = ratio([255, 255, 255], fill);
+          const black = ratio([0, 0, 0], fill);
+          // (A theme color's own text color, --color-on-accent for the
+          // accent, where it reads on that color in the mode: it follows
+          // the color when the theme changes it.)
+          const ref = /^var\(\s*--color-([a-z0-9-]+)\s*\)$/i.exec(
+            String(st.value ?? '').trim(),
+          )?.[1];
+          const onTok = ref ? `--color-on-${ref}` : null;
+          const onInk =
+            onTok && Object.hasOwn(TOKENS, onTok)
+              ? fillIn(`var(${onTok})`, m)
+              : null;
+          fixes.push(
+            set(
+              'color',
+              onInk && ratio(onInk, fill) >= 4.5
+                ? `var(${onTok})`
+                : white >= black
+                  ? '#ffffff'
+                  : '#000000',
+              {
+                on: st.on,
+                ...(look ? {when: look} : {}),
+                ...(st.state ? {state: st.state} : {}),
+                ...(modes.length > 1 || st.mode ? {mode: m} : {}),
+              },
             ),
-        );
-        steps.splice(at + 1, 0, ...missing);
+          );
+        }
       }
+      // (One token line for every mode it reaches, never a line a mode.)
+      for (let k = fixes.length - 1; k >= 0; k--) {
+        const f = fixes[k];
+        if (!/^var\(/.test(String(f.value)) || !f.mode) continue;
+        const twin = fixes.findIndex(
+          (g, gi) =>
+            gi !== k &&
+            g.value === f.value &&
+            g.when === f.when &&
+            g.state === f.state &&
+            g.mode &&
+            g.mode !== f.mode,
+        );
+        if (twin < 0) continue;
+        delete fixes[twin].mode;
+        fixes.splice(k, 1);
+      }
+      if (!fixes.length || !env.check([...fillSteps, ...fixes]).ok) continue;
+      // (Its own line beside the fill's, so the fill reads as asked and the
+      // text as measured.)
+      const where = fixes
+        .map(x =>
+          `${x.when ? `${x.when.replace(':', ' ')} ` : ''}${x.mode ? `in ${x.mode} mode` : ''}`.trim(),
+        )
+        .filter(Boolean)
+        .join(', ');
+      // (A one-mode theme's line names no mode: nothing to put in brackets.)
+      const at = where ? ` (${where})` : '';
+      // (In a choice between fills, the text goes with the fill it reads on:
+      // that choice writes both, and the other choice writes no text line.)
+      if (clash) {
+        d.options[pick] = [...d.options[pick], ...fixes];
+        d.joined = true;
+        d.text = `${d.text}; ${st.value}'s choice also sets ${[...new Set(fixes.map(x => x.value))].join(' or ')} text on ${st.on}${at}, since its text would not read on that fill`;
+        continue;
+      }
+      d.text = `${d.text}; its text would not read on that fill${at}: the next line keeps it readable`;
+      result.splice(di + 1, 0, {
+        text: `readable text on that fill: ${st.on}'s text measures under 4.5:1 on ${st.value}${at}, so ${[...new Set(fixes.map(x => x.value))].join(' or ')}`,
+        options: [fixes],
+        ...(fixes.length > 1 ? {sequence: true} : {}),
+      });
+      // (A theme color's fill, "selected tab accent", in a whole ask: the
+      // answer that runs it in order carries that text line right after the
+      // fill, so running it never leaves the text unreadable.)
+      if (/^var\(/.test(String(st.value ?? '').trim()))
+        for (const seq of result) {
+          if (seq === d || !seq.sequence || seq.options.length !== 1) continue;
+          const steps = seq.options[0];
+          const at = steps.findIndex(x =>
+            fillSteps.some(
+              f =>
+                f.thing === x.thing &&
+                f.on === x.on &&
+                String(f.value) === String(x.value) &&
+                (f.when ?? '') === (x.when ?? '') &&
+                (f.state ?? '') === (x.state ?? '') &&
+                (f.mode ?? '') === (x.mode ?? ''),
+            ),
+          );
+          if (at < 0) continue;
+          const missing = fixes.filter(
+            f =>
+              !steps.some(
+                x =>
+                  x.thing === f.thing &&
+                  x.on === f.on &&
+                  (x.state ?? '') === (f.state ?? '') &&
+                  (x.when ?? '') === (f.when ?? ''),
+              ),
+          );
+          steps.splice(at + 1, 0, ...missing);
+        }
+    }
   }
   // "dark mode should be chocolate brown": a page color typed for a mode
   // is measured against the theme's text in that mode, as the fill of a
