@@ -2534,7 +2534,7 @@ export function onlyFits(s, ctx) {
 export function onlyHeightShape(s) {
   return (
     typeof s?.on === 'string' &&
-    /^(?:height|block-size|min-height)$/.test(kebab(String(s.thing ?? ''))) &&
+    CONTROL_HEIGHT_PROPS.test(kebab(String(s.thing ?? ''))) &&
     // (Only where it is written as that control's own size token: a height
     // in a state or under a variant that is not a size stays a plain
     // height, which keeps to its part anyway.)
@@ -4581,7 +4581,7 @@ const groupTables = new WeakMap();
  * Every group `--on` takes, by name: the editor's own groups (inputs,
  * menus, …) and the family roles the census shows (button-like, overlays,
  * option-rows, selected-items, accent-fills, inset-fields, status-surfaces,
- * overlay-headers), each read from the parts' structure.
+ * overlay-headers, controls), each read from the parts' structure.
  * Without a census (no context), the editor's own groups alone.
  * @param {{project?: any, C?: any} | null | undefined} ctx
  * @returns {Record<string, string[]>}
@@ -4920,11 +4920,12 @@ export function controlHeightSplits(ctx, data, resolved) {
  * @param {Ctx} ctx
  * @param {string} part
  * @param {string | null | undefined} when
+ * @param {RegExp} [sep] what joins the terms (a comma list or + by default)
  */
-export function partHasWhen(ctx, part, when) {
+export function partHasWhen(ctx, part, when, sep = /[+,]/) {
   if (!when) return true;
   return String(when)
-    .split(/[+,]/)
+    .split(sep)
     .every(term => {
       const [axis, value] = term.split(':');
       const vals = /** @type {any} */ (ctx).C?.variantValues?.(part)?.[axis];
@@ -4957,8 +4958,10 @@ export function partsOf(ctx, s) {
   // (Set on one member under a condition of its own, "--on selector
   // --when variant:secondary": only the members that have that value
   // take it; the others have no such variant to show it in.)
+  // (A setting under conditions joined with + keeps to its own part, as
+  // before: only a comma list reaches the others that have each value.)
   const takesWhen = (/** @type {string} */ m) =>
-    m === s.on || partHasWhen(ctx, m, s.when);
+    m === s.on || partHasWhen(ctx, m, s.when, /,/);
   // A height set on a member that is not a control (a text area, which
   // sizes itself by its rows) never reaches the controls: they take their
   // height from the size tokens they share.
