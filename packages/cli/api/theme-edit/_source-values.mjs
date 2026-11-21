@@ -229,14 +229,18 @@ function editsFor(text, object, tree, edits, where, consts) {
     if (!prop) {
       // Beside a spread, a new object takes the spread's own value at that
       // key first, so a nested style the spread holds is kept.
-      const sources = object.properties
-        .filter((/** @type {any} */ p) => p.type === 'SpreadElement')
-        .map((/** @type {any} */ p) => sourceOf(text, p.argument, consts));
       const isTree =
         value !== true && typeof value === 'object' && !Array.isArray(value);
+      // (Only a nested object needs what a spread holds: a plain value
+      // written after a spread wins over it, whatever it holds.)
+      const sources = isTree
+        ? object.properties
+            .filter((/** @type {any} */ p) => p.type === 'SpreadElement')
+            .map((/** @type {any} */ p) => sourceOf(text, p.argument, consts))
+        : [];
       /** @type {ValueTree[string]} */
       let written = value;
-      if (sources.length && isTree) {
+      if (sources.length) {
         /** @type {Array<{text: string, node: any}>} */
         const below = [];
         for (const src of sources) {

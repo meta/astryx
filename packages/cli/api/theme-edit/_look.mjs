@@ -208,10 +208,11 @@ function ownFill(components, part, m, block = null) {
 const opaqueGradient = image =>
   /^(linear|radial)-gradient\(/.test(image.trim()) &&
   (image.match(/gradient\(/g) ?? []).length === 1 &&
-  // (Any alpha below 1, in any syntax, is a see-through stop.)
-  !/\/\s*[\d.]+%?\s*\)|rgba?\([^)]*,\s*(0?\.\d|0\s*\))|hsla\(|transparent|#[0-9a-f]{8}\b|#[0-9a-f]{4}\b/i.test(
-    image,
-  );
+  (image.match(GRADIENT_STOP_COLORS) ?? []).every(c => alphaOf(c) >= 1);
+
+/** The colors a gradient's stops name. */
+const GRADIENT_STOP_COLORS =
+  /(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\([^)]*\)|#[0-9a-f]{3,8}\b|\btransparent\b/gi;
 
 /**
  * The opaque color a value shows over the page, or null.
@@ -710,12 +711,24 @@ function barTextProblems(look) {
       if (!bar) continue;
       for (const p of pairs) {
         const q = p.bg.target;
-        if (!q || q === part || !within.has(q)) continue;
+        // The text sits in the bar: its part is one the bar holds, or the
+        // census drew it inside the bar.
+        const sits =
+          within.has(String(p.fg.target)) ||
+          /** @type {any} */ (p.within ?? []).includes(part);
+        // (Text on the bar's own fill is measured with the bar's fill.)
+        if (!q || q === part || !sits) continue;
         const block = pairBlock(map, p);
-        if (ownFill(components, q, m, block) != null) continue;
-        const fillValue = p.bg.tokens[0] ? `var(${p.bg.tokens[0]})` : p.bg.raw;
-        const c = colorIn(fillValue, res[m], m);
-        if (c != null && alphaOf(c) > 0) continue;
+        // A ground inside the bar that paints its own fill is the text's;
+        // a ground outside it (the page the census drew) is under the bar.
+        if (within.has(q)) {
+          if (ownFill(components, q, m, block) != null) continue;
+          const fillValue = p.bg.tokens[0]
+            ? `var(${p.bg.tokens[0]})`
+            : p.bg.raw;
+          const c = colorIn(fillValue, res[m], m);
+          if (c != null && alphaOf(c) > 0) continue;
+        }
         const tok = p.fg.tokens[0];
         const text =
           partValue(components, p.fg.target, ['color'], m, block) ??

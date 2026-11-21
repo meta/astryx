@@ -1221,6 +1221,62 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
   );
 
   it(
+    'measures text in a dark bar that sets no text, writes beside an imported spread, and reads an opaque gradient as a fill',
+    async () => {
+      const dark = await check(
+        themeFile('darkbar', READABLE, {
+          'app-shell-header': {base: {backgroundColor: '#101010'}},
+        }),
+      );
+      expect(
+        dark.problems.some(
+          p => p.kind === 'bar-ground' && p.part === 'app-shell-header',
+        ),
+      ).toBe(true);
+      // Tokens that spread an imported object: a plain line goes after it.
+      const file = themeFile('imported', {
+        '--color-background-body': '#ffffff',
+        '--color-text-secondary': '#dddddd',
+      });
+      const abs = path.join(cwd, file);
+      fs.writeFileSync(
+        path.join(cwd, 'imported', 'base.ts'),
+        "export const baseTokens = {'--color-border': '#e5e5e5'};\n",
+      );
+      fs.writeFileSync(
+        abs,
+        fs
+          .readFileSync(abs, 'utf8')
+          .replace(
+            "import {defineTheme} from '@astryxdesign/core/theme';",
+            "import {defineTheme} from '@astryxdesign/core/theme';\nimport {baseTokens} from './base';",
+          )
+          .replace('  tokens: {', '  tokens: {\n    ...baseTokens,'),
+      );
+      expect(
+        await themeEditCheck(file, {cwd, fix: true}).then(
+          () => 'ok',
+          (/** @type {any} */ e) => e.code,
+        ),
+      ).toBe('ok');
+      // An opaque gradient that ends in black is a fill, not an image.
+      const g = await check(
+        themeFile('blackstop', READABLE, {
+          card: {
+            base: {
+              backgroundImage: 'linear-gradient(rgb(40, 40, 40), rgb(0, 0, 0))',
+            },
+          },
+        }),
+      );
+      expect(
+        g.problems.some(p => p.kind === 'page-image' && p.part === 'card'),
+      ).toBe(false);
+    },
+    T,
+  );
+
+  it(
     'refuses what it cannot check, with the documented codes, and changes nothing',
     async () => {
       /** @param {Promise<unknown>} p */
