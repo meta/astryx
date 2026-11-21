@@ -1,9 +1,14 @@
-Results for "close" (20 of 52)
+Results for "close" (20 of 53)
 name:        AlertDialog
 domain:      component
 package:     @astryxdesign/core
 import:      @astryxdesign/core/AlertDialog
 command:     pnpm exec astryx component AlertDialog
+name:        Drawer
+domain:      component
+package:     @astryxdesign/core
+import:      @astryxdesign/core/Drawer
+command:     pnpm exec astryx component Drawer
 name:        DrawerHeader
 domain:      component
 package:     @astryxdesign/core
@@ -24,16 +29,21 @@ domain:      component
 package:     @astryxdesign/core
 import:      @astryxdesign/core/Dialog
 command:     pnpm exec astryx component DialogHeader
-name:        Drawer
-domain:      component
-package:     @astryxdesign/core
-import:      @astryxdesign/core/Drawer
-command:     pnpm exec astryx component Drawer
 name:        DropdownMenuSubMenu
 domain:      component
 package:     @astryxdesign/core
 import:      @astryxdesign/core/DropdownMenu
 command:     pnpm exec astryx component DropdownMenuSubMenu
+name:        Icon
+domain:      component
+package:     @astryxdesign/core
+import:      @astryxdesign/core/Icon
+command:     pnpm exec astryx component Icon
+name:        IconButton
+domain:      component
+package:     @astryxdesign/core
+import:      @astryxdesign/core/IconButton
+command:     pnpm exec astryx component IconButton
 name:        Toast
 domain:      component
 package:     @astryxdesign/core
@@ -92,15 +102,3 @@ domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs cli/api/functions/build
 parent:      pnpm exec astryx docs cli/api/functions
-name:        icons
-section:     available-names
-domain:      doc
-package:     @astryxdesign/cli
-command:     pnpm exec astryx docs icons available-names
-parent:      pnpm exec astryx docs icons --index
-name:        icons
-section:     theme-overrides
-domain:      doc
-package:     @astryxdesign/cli
-command:     pnpm exec astryx docs icons theme-overrides
-parent:      pnpm exec astryx docs icons --index

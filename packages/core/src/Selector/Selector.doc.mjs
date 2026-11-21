@@ -18,7 +18,7 @@ const anatomy = [
     name: 'Icon-rendered start icon',
     required: false,
     description:
-      'Optional leading semantic icon or icon component rendered through Icon.',
+      'Optional leading built-in meaning or icon component rendered through Icon.',
   },
   {
     name: 'Caller-rendered start content',
@@ -373,7 +373,7 @@ export const docs = {
     {
       name: 'startIcon',
       type: 'ReactNode | IconType',
-      description: 'Icon displayed at the start of the selector trigger; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
+      description: 'Icon displayed at the start of the selector trigger; pass a built-in meaning such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'isLoading',

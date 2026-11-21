@@ -18,6 +18,10 @@ export const docs = {
   keywords: [
     'icon',
     'svg',
+    'built-in meaning',
+    'semantic icon',
+    'semantic icon name',
+    'theme icons',
     'glyph',
     'symbol',
     'pictogram',
@@ -73,7 +77,7 @@ export const docs = {
       name: 'icon',
       type: 'IconName | NamespacedIconName | ComponentType<SVGProps>',
       description:
-        'Semantic icon name or SVG component. Valid semantic names: close, chevronDown, chevronLeft, chevronRight, chevronsLeft, chevronsRight, check, success, error, warning, info, calendar, clock, externalLink, menu, moreHorizontal, search, upload, arrowUp, arrowDown, arrowsUpDown, funnel, eyeSlash, viewColumns, copy, checkDouble, wrench, stop, microphone. A namespaced key such as `richtext:bold` names a glyph that one component or library registers, and a theme can replace it by key; a namespaced key that nothing registers renders nothing. For any icon not in this list, pass an SVG component directly (e.g. import from lucide-react or @heroicons/react). Note: this prop is called `icon`, not `name`; a call with only `name` renders that glyph and warns in development.',
+        'Built-in meaning or SVG component. Built-in meanings: close, chevronDown, chevronLeft, chevronRight, chevronsLeft, chevronsRight, check, success, error, warning, info, calendar, clock, externalLink, menu, moreHorizontal, search, upload, arrowUp, arrowDown, arrowsUpDown, funnel, eyeSlash, viewColumns, copy, checkDouble, wrench, stop, microphone. A namespaced key such as `richtext:bold` names a glyph that one component or library registers, and a theme can replace it by key; a namespaced key that nothing registers renders nothing. For any icon not in this list, pass an SVG component directly (e.g. import from lucide-react or @heroicons/react). Note: this prop is called `icon`, not `name`; a call with only `name` renders that glyph and warns in development.',
       required: true,
     },
     {
@@ -94,7 +98,7 @@ export const docs = {
       name: 'variant',
       type: 'IconVariant',
       description:
-        "Requests the active theme's alternate artwork for a semantic icon name, such as 'filled'. Names come from IconVariantMap, which an application augments from @astryxdesign/core/Icon; Astryx defines none. The theme's icon entry receives the variant only when the active theme lists it in iconVariants (and, for an entry the theme inherited, the theme that defined the entry lists it too); otherwise it draws its normal artwork. Ignored by an icon component passed directly. Selects artwork only: it is not written to the DOM and has no theming selector.",
+        "Requests the active theme's alternate artwork for a built-in meaning, such as 'filled'. Names come from IconVariantMap, which an application augments from @astryxdesign/core/Icon; Astryx defines none. The theme's icon entry receives the variant only when the active theme lists it in iconVariants (and, for an entry the theme inherited, the theme that defined the entry lists it too); otherwise it draws its normal artwork. Ignored by an icon component passed directly. Selects artwork only: it is not written to the DOM and has no theming selector.",
     },
     {
       name: 'label',
@@ -124,7 +128,7 @@ export const docs = {
       name: 'ref',
       type: 'Ref<SVGSVGElement>',
       description:
-        'Ref to the rendered SVG element, for an icon component and for a semantic or namespaced name. For a name, it is the <svg> inside the wrapper, or null when the resolved glyph has no <svg>.',
+        'Ref to the rendered SVG element, for an icon component and for a built-in meaning or namespaced key. For a name, it is the <svg> inside the wrapper, or null when the resolved glyph has no <svg>.',
     },
   ],
   theming: {
@@ -152,18 +156,18 @@ export const docs = {
   },
   usage: {
     description:
-      'Icons are small visual symbols that represent actions, objects, or concepts. They improve scannability and reinforce meaning alongside text. Supports both direct SVG components and semantic icon names that adapt to the active theme.',
+      "Draws an icon: a built-in meaning by name (`icon=\"close\"`, `\"check\"`, `\"search\"`; the full list: `astryx component Icon --props`), drawn by the active theme's icons, or any SVG component you pass. For any other icon, such as a trash can, import its drawing from your icon library and pass the component: `import {TrashIcon} from '@heroicons/react/24/outline'`, then `<Icon icon={TrashIcon} />`.",
     anatomy,
     bestPractices: [
       {
         guidance: true,
         description:
-          'Use semantic icon names when available; they adapt to theme changes automatically.',
+          'Use a built-in meaning when one fits; the theme icons draw it, so it follows theme changes.',
       },
       {
         guidance: true,
         description:
-          "Override icons through the theme, not globally: defineTheme({icons: {close: <XMarkIcon />}}) scopes the swap to the active <Theme>, and extends shallow-merges it into derived themes. registerIcons() mutates a process-wide registry and warns in dev, so keep it for app bootstrap rather than making it a library's theming seam.",
+          "Override icons through the theme, not globally: defineTheme({icons: {close: <XMarkIcon />}}) scopes the swap to the active <Theme>, and extends shallow-merges it into derived themes. registerIcons() changes the icons for the whole process and warns in dev, so keep it for app bootstrap rather than making it a library's theming seam.",
       },
       {
         guidance: true,
@@ -228,7 +232,7 @@ export const docsZh = {
       name: 'icon',
       type: 'IconName | NamespacedIconName | ComponentType<SVGProps>',
       description:
-        '语义图标名称或 SVG 组件。有效语义名称：close, chevronDown, chevronLeft, chevronRight, chevronsLeft, chevronsRight, check, success, error, warning, info, calendar, clock, externalLink, menu, moreHorizontal, search, upload, arrowUp, arrowDown, arrowsUpDown, funnel, eyeSlash, viewColumns, copy, checkDouble, wrench, stop, microphone。命名空间键（如 `richtext:bold`）指向某个组件或库注册的图标，主题可以按键替换它；没有注册的命名空间键不渲染任何内容。列表之外的图标请直接传入 SVG 组件。',
+        '内置含义或 SVG 组件。内置含义：close, chevronDown, chevronLeft, chevronRight, chevronsLeft, chevronsRight, check, success, error, warning, info, calendar, clock, externalLink, menu, moreHorizontal, search, upload, arrowUp, arrowDown, arrowsUpDown, funnel, eyeSlash, viewColumns, copy, checkDouble, wrench, stop, microphone。命名空间键（如 `richtext:bold`）指向某个组件或库注册的图标，主题可以按键替换它；没有注册的命名空间键不渲染任何内容。列表之外的图标请直接传入 SVG 组件。',
       required: true,
     },
     {
@@ -249,7 +253,7 @@ export const docsZh = {
       name: 'variant',
       type: 'IconVariant',
       description:
-        "为语义图标名称请求当前主题的替代图稿，例如 'filled'。名称来自 IconVariantMap，由应用从 @astryxdesign/core/Icon 扩充；Astryx 本身不定义任何名称。只有当前主题在 iconVariants 中列出该变体时（对于主题继承来的条目，还需定义该条目的主题也列出它），主题的图标条目才会收到它；否则绘制常规图稿。直接传入的图标组件会忽略它。它只选择图稿：不会写入 DOM，也没有主题样式选择器。",
+        "为内置含义请求当前主题的替代图稿，例如 'filled'。名称来自 IconVariantMap，由应用从 @astryxdesign/core/Icon 扩充；Astryx 本身不定义任何名称。只有当前主题在 iconVariants 中列出该变体时（对于主题继承来的条目，还需定义该条目的主题也列出它），主题的图标条目才会收到它；否则绘制常规图稿。直接传入的图标组件会忽略它。它只选择图稿：不会写入 DOM，也没有主题样式选择器。",
     },
     {
       name: 'label',
@@ -278,7 +282,7 @@ export const docsZh = {
       name: 'ref',
       type: 'Ref<SVGSVGElement>',
       description:
-        '指向渲染的 SVG 元素的 ref，适用于图标组件以及语义名称或命名空间名称。对于名称，它指向包装元素内的 <svg>；若解析出的图形没有 <svg>，则为 null。',
+        '指向渲染的 SVG 元素的 ref，适用于图标组件以及内置含义或命名空间键。对于名称，它指向包装元素内的 <svg>；若解析出的图形没有 <svg>，则为 null。',
     },
   ],
   theming: {
@@ -304,12 +308,12 @@ export const docsZh = {
   },
   usage: {
     description:
-      'Icons are small visual symbols that represent actions, objects, or concepts. They improve scannability and reinforce meaning alongside text. Supports both direct SVG components and semantic icon names that adapt to the active theme.',
+      "Draws an icon: a built-in meaning by name (`icon=\"close\"`, `\"check\"`, `\"search\"`; the full list: `astryx component Icon --props`), drawn by the active theme's icons, or any SVG component you pass. For any other icon, such as a trash can, import its drawing from your icon library and pass the component: `import {TrashIcon} from '@heroicons/react/24/outline'`, then `<Icon icon={TrashIcon} />`.",
     bestPractices: [
       {
         guidance: true,
         description:
-          'Use semantic icon names when available; they adapt to theme changes automatically.',
+          'Use a built-in meaning when one fits; the theme icons draw it, so it follows theme changes.',
       },
       {
         guidance: true,
@@ -358,21 +362,21 @@ export const docsZh = {
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
 export const docsDense = {
   description:
-    'Renders icons w/ Astryx design system colors + sizes. Supports direct SVG icon components + semantic icon names that adapt to active theme.',
+    "Draws a built-in meaning by name (theme icons) or any SVG component. Other icons (e.g. trash): import from your icon library, pass the component: `import {TrashIcon} from '@heroicons/react/24/outline'` → `<Icon icon={TrashIcon} />`.",
   usage: {
     description:
-      'Icons are small visual symbols that represent actions, objects, or concepts. They improve scannability and reinforce meaning alongside text. Supports both direct SVG components and semantic icon names that adapt to the active theme.',
+      "Draws an icon: a built-in meaning by name (`icon=\"close\"`, `\"check\"`, `\"search\"`; the full list: `astryx component Icon --props`), drawn by the active theme's icons, or any SVG component you pass. For any other icon, such as a trash can, import its drawing from your icon library and pass the component: `import {TrashIcon} from '@heroicons/react/24/outline'`, then `<Icon icon={TrashIcon} />`.",
     anatomy,
     bestPractices: [
       {
         guidance: true,
         description:
-          'Use semantic icon names when available; they adapt to theme changes automatically.',
+          'Use a built-in meaning when one fits; the theme icons draw it, so it follows theme changes.',
       },
       {
         guidance: true,
         description:
-          'Override icons via theme, not globally: defineTheme({icons: {close: <XMarkIcon />}}) scopes the swap to the active <Theme>; extends shallow-merges into derived themes. registerIcons() mutates a global registry and warns in dev: app bootstrap only, not a library theming seam.',
+          'Override icons via theme, not globally: defineTheme({icons: {close: <XMarkIcon />}}) scopes the swap to the active <Theme>; extends shallow-merges into derived themes. registerIcons() changes the icons for the whole process and warns in dev: app bootstrap only, not a library theming seam.',
       },
       {
         guidance: true,
@@ -427,7 +431,7 @@ export const docsDense = {
     ],
   },
   propDescriptions: {
-    icon: 'Semantic icon name or SVG component. Valid names: close, chevronDown, chevronLeft, chevronRight, chevronsLeft, chevronsRight, check, success, error, warning, info, calendar, clock, externalLink, menu, moreHorizontal, search, upload, arrowUp, arrowDown, arrowsUpDown, funnel, eyeSlash, viewColumns, copy, checkDouble, wrench, stop, microphone. A namespaced key (`richtext:bold`) names a glyph a component or library registers; an unregistered one renders nothing. For others, pass an SVG component.',
+    icon: 'Built-in meaning or SVG component. Built-in meanings: close, chevronDown, chevronLeft, chevronRight, chevronsLeft, chevronsRight, check, success, error, warning, info, calendar, clock, externalLink, menu, moreHorizontal, search, upload, arrowUp, arrowDown, arrowsUpDown, funnel, eyeSlash, viewColumns, copy, checkDouble, wrench, stop, microphone. A namespaced key (`richtext:bold`) names a glyph a component or library registers; an unregistered one renders nothing. For others, pass an SVG component.',
     color:
       'Color variant mapped to Astryx icon color tokens; inherit = surrounding text color. Web also accepts the non-semantic palette: blue, red, green, gray, cyan, teal, yellow, orange, pink, purple.',
     size: "xsm/sm/md/lg = 12/16/20/24px at a 16px root, scale w/ root font size; theme sets a size's glyph dimension via width + height (px or rem) on components.icon['size:sm'] etc. Explicit Icon size; otherwise nearest owning-component default, then 'md' when no contextual default exists",

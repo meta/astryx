@@ -21,7 +21,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Use this hook for theme identity, such as picking a semantic icon for the active theme.',
+          'Use this hook for theme identity, such as picking which icon to show for the active theme.',
       },
       {
         guidance: true,
