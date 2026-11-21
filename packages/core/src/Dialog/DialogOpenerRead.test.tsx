@@ -6,21 +6,46 @@ import {act} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {Dialog} from './Dialog';
 
+const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
+
+/** The reduced-motion preference the stubbed window reports, and its watchers. */
+const reducedMotion = {matches: false, listeners: new Set<() => void>()};
+
 /** Reports `prefers-reduced-motion: reduce` as `reduced`, and no other match. */
 function stubReducedMotion(reduced: boolean) {
+  reducedMotion.matches = reduced;
   vi.stubGlobal(
     'matchMedia',
-    vi.fn((query: string) => ({
-      matches: reduced && query === '(prefers-reduced-motion: reduce)',
-      media: query,
-      onchange: null,
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      addListener: () => {},
-      removeListener: () => {},
-      dispatchEvent: () => false,
-    })),
+    vi.fn((query: string) => {
+      const isReducedMotion = query === REDUCED_MOTION;
+      return {
+        get matches() {
+          return isReducedMotion && reducedMotion.matches;
+        },
+        media: query,
+        onchange: null,
+        addEventListener: (_type: string, listener: () => void) => {
+          if (isReducedMotion) {
+            reducedMotion.listeners.add(listener);
+          }
+        },
+        removeEventListener: (_type: string, listener: () => void) => {
+          reducedMotion.listeners.delete(listener);
+        },
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      };
+    }),
   );
+}
+
+/** Changes the preference and tells its watchers, as the browser does. */
+function changeReducedMotion(reduced: boolean) {
+  reducedMotion.matches = reduced;
+  for (const listener of [...reducedMotion.listeners]) {
+    listener();
+  }
 }
 
 beforeEach(() => {
@@ -35,6 +60,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  reducedMotion.listeners.clear();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -111,5 +137,40 @@ describe("Dialog reads its opener's box only for an entrance that uses it (archi
       opener.click();
     });
     expect(read).toHaveBeenCalledTimes(1);
+  });
+  it("aims an open full-screen dialog's entrance at its opener when it becomes standard", () => {
+    stubReducedMotion(false);
+    const {rerender} = render(<Opener variant="fullscreen" />);
+    const opener = screen.getByRole('button', {name: 'Open'});
+    const read = vi.spyOn(opener, 'getBoundingClientRect');
+    opener.focus();
+    act(() => {
+      opener.click();
+    });
+    expect(read).not.toHaveBeenCalled();
+
+    rerender(<Opener />);
+    expect(read).toHaveBeenCalledTimes(1);
+    const dialog = screen.getByRole('dialog', {hidden: true});
+    expect(dialog.style.getPropertyValue('--dialog-dir-x')).not.toBe('0px');
+  });
+
+  it('aims the entrance at its opener when reduced motion ends while the dialog is open', () => {
+    stubReducedMotion(true);
+    render(<Opener />);
+    const opener = screen.getByRole('button', {name: 'Open'});
+    const read = vi.spyOn(opener, 'getBoundingClientRect');
+    opener.focus();
+    act(() => {
+      opener.click();
+    });
+    expect(read).not.toHaveBeenCalled();
+
+    act(() => {
+      changeReducedMotion(false);
+    });
+    expect(read).toHaveBeenCalledTimes(1);
+    const dialog = screen.getByRole('dialog', {hidden: true});
+    expect(dialog.style.getPropertyValue('--dialog-dir-x')).not.toBe('0px');
   });
 });
