@@ -11,9 +11,9 @@
  *   its text in (font-probe.mjs), the text it draws cut short
  *   (cut-short.mjs), and PICTURE_TAKEN once it is whole; on failure, the
  *   browser's reason on stderr and exit code 1
- * @position run by `screenshot` in api/theme-edit/_preview.mjs through
- *   `runBrowser`, which gives it a temp folder of its own (the browser's
- *   profile goes there), its time bound and its stop
+ * @position run by `takePictures` in foundation/pictures/pictures.mjs
+ *   through `runBrowser`, which gives it a temp folder of its own (the
+ *   browser's profile goes there), its time bound and its stop
  */
 
 import {spawn} from 'node:child_process';

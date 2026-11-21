@@ -11,8 +11,9 @@
  *   job's place and a tab: the fonts it drew its text in (font-probe.mjs),
  *   the text it draws cut short (cut-short.mjs), and PICTURE_TAKEN once it
  *   is whole; on failure, Playwright's error on stderr and exit code 1
- * @position run by `screenshot` in api/theme-edit/_preview.mjs through
- *   `runBrowser`, which gives it a temp folder of its own, its time bound and its stop
+ * @position run by `takePictures` in foundation/pictures/pictures.mjs
+ *   through `runBrowser`, which gives it a temp folder of its own, its time
+ *   bound and its stop
  */
 
 import {pathToFileURL} from 'node:url';
