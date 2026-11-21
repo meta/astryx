@@ -5527,10 +5527,29 @@ export function draftAnswer(ctx, env, question) {
       Object.keys(DIALS).some(d => new RegExp(`\\b${d}s?\\b`).test(t))
     );
   };
+  // (A "with" phrase after the grays names another part's color only when
+  // it names a part, or a dial that takes that color: "blue accents" does;
+  // "blue type" or "a blue base" names a dial that takes no color, so the
+  // color is said of the grays.)
+  const COLOR_DIALS = PALETTE_DIALS.filter(d => d !== 'neutral');
+  /** @param {string} text */
+  const withNamesPart = text => {
+    const t = ` ${text.toLowerCase()} `;
+    const hasColor =
+      colorsIn(text.toLowerCase()).length > 0 || /#[0-9a-f]{3,8}\b/i.test(text);
+    return (
+      partLexicon(ctx).parts.some(([re]) => re.test(t)) ||
+      Object.keys(DIALS).some(
+        d =>
+          (!hasColor || COLOR_DIALS.includes(d)) &&
+          new RegExp(`\\b${d}s?\\b`).test(t),
+      )
+    );
+  };
   const untintedAsk = bareNeutralGrays(
     question,
     text => !graysLook(text) && (/[\d#]/.test(text) || namesPart(text)),
-    text => !graysLook(text) && namesPart(text),
+    text => !graysLook(text) && withNamesPart(text),
     // (A removal, a prohibition or a dislike that leads the clause the grays
     // sit in turns them away with the rest of its list: "remove rounded
     // corners and neutral grays". The lead words are the clause readers'

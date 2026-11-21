@@ -86,6 +86,9 @@ describe('a hue said of the grays', () => {
         'coolish neutral grays',
         // (An amount of a hue said with the grays is said of them.)
         'neutral grays with 10% blue',
+        // (A dial that takes no color: the color is said of the grays.)
+        'neutral grays with blue type',
+        'neutral grays with a blue base',
       ]) {
         const warm = await answer(q, 'warm');
         expect(
