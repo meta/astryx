@@ -105,6 +105,11 @@ describe('a text token on a bar, in the menus opened from it', () => {
     ]);
     expect(po.lines).toEqual([]);
 
+    // (Disabled text is exempt from 4.5:1.)
+    const ds = await build('ds', [
+      ['--color-text-disabled', '#5a5a5a', {on: 'app-shell-header'}],
+    ]);
+    expect(ds.lines).toEqual([]);
     // (A text token on a part that is no bar, and a dark one, are left out.)
     const nb = await build('nb', [
       ['--color-text-primary', '#ffffff', {on: 'card'}],

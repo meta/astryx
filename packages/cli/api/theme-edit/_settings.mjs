@@ -13817,11 +13817,16 @@ function layerTextProblems(ctx, data, res) {
       );
     return inMode(set ? set.value : `var(${tok})`, m);
   };
-  /** @type {Map<string, {tok: string, m: 'light' | 'dark', parts: string[], text: number[], fill: number[], r: number}>} */
+  /** @type {Map<string, {tok: string, m: 'light' | 'dark', parts: string[], text: [number, number, number], fill: [number, number, number], r: number}>} */
   const found = new Map();
   for (const x of data.settings) {
     if (x.source !== 'token' || !x.on || x.state || x.when || x.only) continue;
-    if (!/^--color-(?:text|icon)-[\w-]+$/.test(x.thing)) continue;
+    // (Disabled text is exempt from 4.5:1, as in the text pairs' check.)
+    if (
+      !/^--color-(?:text|icon)-[\w-]+$/.test(x.thing) ||
+      /^--color-(?:text|icon)-disabled$/.test(x.thing)
+    )
+      continue;
     const own = partsOf(ctx, x);
     if (own.includes('popover') || !bars.has(x.on)) continue;
     for (const m0 of modes) {
