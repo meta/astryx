@@ -104,6 +104,21 @@ export function makeProject() {
 /** This file's own user config folder (settings and state), in its work folder. */
 export const userConfig = () => path.join(work, 'config');
 
+/**
+ * npm settings that leave every run's background release check offline: a
+ * registry no request can reach, asked once with a short limit. Once a
+ * release is published, a check that reaches the registry fills the kept
+ * temp folder's release cache and not the fresh one's, so a kept run and a
+ * fresh run of the same query would name different versions in
+ * `meta.answeredBy`.
+ */
+const OFFLINE_REGISTRY = {
+  npm_config_registry: 'http://127.0.0.1:9/',
+  'npm_config_@astryxdesign:registry': 'http://127.0.0.1:9/',
+  npm_config_fetch_retries: '0',
+  npm_config_fetch_timeout: '2000',
+};
+
 /** This file's compiled-module cache, in its work folder (see run()). */
 const compileCache = () => path.join(work, 'compile-cache');
 
@@ -135,6 +150,7 @@ export function run(
         TMP: tmp,
         TEMP: tmp,
         NO_UPDATE_NOTIFIER: '1',
+        ...OFFLINE_REGISTRY,
         // The compiled modules stay warm across this file's runs, as a user's
         // do across their commands. The cache changes how a module compiles,
         // never what it loads or prints, and it lives outside every temp
@@ -181,6 +197,7 @@ export function runAsync(args, {tmp, cwd = project, env = {}, json = true}) {
           TMP: tmp,
           TEMP: tmp,
           NO_UPDATE_NOTIFIER: '1',
+          ...OFFLINE_REGISTRY,
           NODE_COMPILE_CACHE: compileCache(),
           XDG_CACHE_HOME: tmp,
           XDG_CONFIG_HOME: userConfig(),
