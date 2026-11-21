@@ -6,11 +6,12 @@
  * as one word, another command line's word order (a verb before its group),
  * a word from the table in other-cli-words.mjs, a command's plural, an option
  * some commands take, a command deeper in the tree, or a name another command
- * reads; an icon word (`icon`, `icons`) points at the icons guide. A word
- * that names one of the project's own package.json scripts names that
- * script's run first, with the project's package manager. Otherwise it names
- * the commands a typo of the word could be, else the help, never a list of
- * every command. It only suggests: it runs nothing, and it names no
+ * reads; an icon word (`icon`, `icons`) points at the icons guide. With no
+ * such run, it names the commands a typo of the word could be, else the
+ * help, never a list of every command. A word that names one of the
+ * project's own package.json scripts names that script's run first, with the
+ * project's package manager. Every help run it names keeps the program
+ * options typed (`--json`). It only suggests: it runs nothing, and it names no
  * experimental command except the ones spec:AST-017 FR27's shareable-page
  * exception lets a share word or a way-back word name, and the icon finder
  * for an icon word where icon features are on (spec:AST-084).
@@ -18,7 +19,7 @@
  * @input the program and the words of the run after the program name
  * @output the message and the suggestions the unknown-command error prints
  * @position packages/cli/clients/cli/lib — read by the program's own action
- *   in index.mjs and by stray-option.mjs
+ *   in index.mjs and by json-shim.mjs
  */
 
 import * as path from 'node:path';

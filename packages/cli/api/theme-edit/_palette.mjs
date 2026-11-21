@@ -932,7 +932,7 @@ export function paletteRecipeUnknown(cwd, slug) {
  * @param {unknown} recipe
  */
 const keptPaletteWords = (slug, recipe) =>
-  `${slug}'s colors use the ${String(recipe)} recipe, which this Astryx CLI (${cliVersion()}) does not make yet; its palette is kept as saved. Color changes come once that recipe ships; other changes save as usual.`;
+  `${slug}'s colors use the ${String(recipe)} recipe, which this Astryx CLI (${cliVersion()}) does not make; its palette is kept as saved. Changes to what the palette is made from (the accent, neutral and status colors, the vibrancy) need a CLI that makes that recipe; other changes, including exact color tokens, a part's colors, the mode and the base, save as usual.`;
 
 /**
  * The refusal of a color change to a palette kept as saved (a recipe a
@@ -996,6 +996,11 @@ export function settingsBeforeChange(cwd, slug) {
  * @param {{settings?: Setting[]} | null} d
  */
 export function paletteMadeFromKey(d) {
+  // (Beside an accent dial, a whole-theme accent token is an exact value
+  // the palette never reads, as dialFamilies reads it.)
+  const accentDial = (d?.settings ?? []).some(
+    x => x?.source === 'dial' && x.thing === 'accent' && !x.on && !x.mode,
+  );
   return d
     ? JSON.stringify(
         (d.settings ?? [])
@@ -1004,7 +1009,8 @@ export function paletteMadeFromKey(d) {
               (x?.source === 'dial' &&
                 !x.on &&
                 (PALETTE_DIALS.includes(x.thing) || x.thing === 'vibrancy')) ||
-              (x?.source === 'token' &&
+              (!accentDial &&
+                x?.source === 'token' &&
                 x.thing === '--color-accent' &&
                 !x.on &&
                 !x.when &&
@@ -1162,7 +1168,32 @@ function planPalette(cwd, slug, data, base) {
         return Boolean(was) && !sameColor(String(was), f.seed);
       }) ?? null;
     const madeFrom = !differing(fams);
-    if (stored && madeFrom && paletteMadeFromKey(data) === savedKey)
+    // Settings that already disagree with the saved palette as read (a
+    // color changed or added in the file by hand).
+    const loaded = LOADED_SETTINGS.has(dir)
+      ? LOADED_SETTINGS.get(dir)
+      : savedTheme(cwd, slug);
+    const hand =
+      stored && Array.isArray(loaded?.settings)
+        ? differing(dialFamilies(loaded, ownSourceTokenValues(cwd, slug)))
+        : null;
+    // (From such a file, any change that brings every color back to the
+    // seeds the saved palette was made from is the way back, an undo or a
+    // `set` of the saved seed alike, as long as the vibrancy is the saved
+    // one.)
+    const back =
+      hand != null &&
+      // (Every color the file names still named, so none falls back to the
+      // base theme's.)
+      // (A color the saved palette has no shades for may go.)
+      dialFamilies(loaded, ownSourceTokenValues(cwd, slug)).every(
+        l =>
+          !(/** @type {any} */ (stored?.palette)?.[l.id]) ||
+          fams.some(f => f.id === l.id),
+      ) &&
+      (dialVibrancy(data.settings) ?? VIBRANCY_DEFAULT) ===
+        (existing.vibrancy ?? VIBRANCY_DEFAULT);
+    if (stored && madeFrom && (paletteMadeFromKey(data) === savedKey || back))
       return {
         config: existing,
         // Each accent or status color at the stop its saved palette holds
@@ -1207,20 +1238,13 @@ function planPalette(cwd, slug, data, base) {
     // command needs it back, or a CLI that can make the colors again.)
     if (!stored)
       throw new AstryxError(
-        `${file}: ${slug}'s colors use the ${String(existing.recipe)} recipe, which this Astryx CLI (${cliVersion()}) does not make yet, and its palette file (${paletteFiles(slug).palette}) is missing or does not read, so the theme cannot be built until that file is back. Nothing was changed.`,
+        `${file}: ${slug}'s colors use the ${String(existing.recipe)} recipe, which this Astryx CLI (${cliVersion()}) does not make, and its palette file (${paletteFiles(slug).palette}) is missing or does not read, so the theme cannot be built until that file is back. Nothing was changed.`,
         [],
         ERROR_CODES.ERR_PALETTE_GENERATION,
       );
-    // Settings that already disagree with the saved palette as read (a
-    // color changed or added in the file by hand) refuse every command,
-    // so the refusal names that setting and the way back.
-    const loaded = LOADED_SETTINGS.has(dir)
-      ? LOADED_SETTINGS.get(dir)
-      : savedTheme(cwd, slug);
-    const hand =
-      stored && Array.isArray(loaded?.settings)
-        ? differing(dialFamilies(loaded, ownSourceTokenValues(cwd, slug)))
-        : null;
+    // Settings that already disagree with the saved palette as read refuse
+    // every other command, so the refusal names that setting and the way
+    // back.
     if (hand) {
       const name =
         hand.source ??
@@ -1230,11 +1254,51 @@ function planPalette(cwd, slug, data, base) {
         )
           ? hand.dial
           : '--color-accent');
-      const was = /** @type {any} */ (stored?.palette)?.[hand.id]
-        ? `the saved palette was made from ${String(seedOfSaved(hand.id))}`
+      const seed = /** @type {any} */ (stored?.palette)?.[hand.id]
+        ? String(seedOfSaved(hand.id))
+        : null;
+      const was = seed
+        ? `the saved palette was made from ${seed}`
         : `the saved palette has no shades for ${hand.dial}`;
+      // (The way back named is the one that opens the theme: `set` of the
+      // saved seed when that setting is the only difference, else each
+      // difference to put back by hand.)
+      const own = ownSourceTokenValues(cwd, slug);
+      const diffs = dialFamilies(loaded, own).filter(f => differing([f]));
+      const vibrancyOff =
+        (dialVibrancy(loaded.settings) ?? VIBRANCY_DEFAULT) !==
+        (existing.vibrancy ?? VIBRANCY_DEFAULT);
+      const nameOf = (/** @type {DialFamily} */ f) =>
+        f.source ??
+        (loaded.settings.some(
+          (/** @type {any} */ x) => x?.source === 'dial' && x.thing === f.dial,
+        )
+          ? f.dial
+          : '--color-accent');
+      // (A color the theme's own source sets wins over the settings: it is
+      // put back in that file, never with set.)
+      const sourceFile = `themes/${slug}/${slug}.theme.ts`;
+      const backOf = (/** @type {DialFamily} */ f) =>
+        /** @type {any} */ (stored?.palette)?.[f.id]
+          ? `${nameOf(f)} back to ${String(seedOfSaved(f.id))}${f.source ? ` in ${sourceFile}` : ''}`
+          : `${nameOf(f)} out${f.source ? ` of ${sourceFile}` : ''}`;
+      const way =
+        diffs.length === 1 && !vibrancyOff
+          ? hand.source
+            ? `Change it back in ${sourceFile} to open the theme.`
+            : seed
+              ? `Put it back by hand, or with set ${slug} ${name} ${seed}, to open the theme.`
+              : `Take it out of the file by hand to open the theme.`
+          : `Put every one back by hand to open the theme: ${[
+              ...diffs.map(backOf),
+              ...(vibrancyOff
+                ? [
+                    `vibrancy back to ${String(existing.vibrancy ?? VIBRANCY_DEFAULT)}`,
+                  ]
+                : []),
+            ].join(', ')}.`;
       throw new AstryxError(
-        `${slug}'s colors use the ${String(existing.recipe)} recipe, which this Astryx CLI (${cliVersion()}) does not make yet; its palette is kept as saved. themes/${slug}/${slug}.settings.json sets ${name} to ${hand.value}, but ${was}. Put that setting back to open the theme. Nothing was changed.`,
+        `${slug}'s colors use the ${String(existing.recipe)} recipe, which this Astryx CLI (${cliVersion()}) does not make; its palette is kept as saved. ${hand.source ? sourceFile : `themes/${slug}/${slug}.settings.json`} sets ${name} to ${hand.source ? hand.seed : hand.value}, but ${was}. ${way} Nothing was changed.`,
         [],
         ERROR_CODES.ERR_PALETTE_GENERATION,
       );
