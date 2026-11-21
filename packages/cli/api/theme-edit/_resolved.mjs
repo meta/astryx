@@ -32,6 +32,7 @@ import {
   scopedTokens,
 } from './_how-commands.mjs';
 import {FAMILIES, P} from './_tables.mjs';
+import {condition} from './_how.mjs';
 
 /** @typedef {{light: Record<string, string>, dark: Record<string, string>}} ModeTokens */
 
@@ -414,10 +415,32 @@ export async function themePartValues(cwd, name, part) {
       source = 'base';
       if (onPart) via = 'part';
     }
+    // The row's condition as the flags `set` takes, the way `how` gives
+    // it; a condition no flag reaches keeps Core's words and says why.
+    // (A theme's own rule names a variant `variant:ghost`; Core writes
+    // `variant=ghost`: one spelling for both.)
+    const coreCond = [when === 'base' ? '' : when, state]
+      .filter(Boolean)
+      .join(' ')
+      .split(' ')
+      .map(w => (/^[a-z][\w-]*:[^\s:]+$/i.test(w) ? w.replace(':', '=') : w))
+      .join(' ');
+    const flags = condition(ctx, key, coreCond);
+    const unsettable = /\(not settable: (.*)\)$/.exec(flags);
     values.push({
       property,
-      when: setWhen,
-      state: state || null,
+      // (Core's attribute words in one order, so one condition is one row.)
+      when: unsettable
+        ? [
+            ...coreCond
+              .split(' ')
+              .filter(w => /^[a-z][\w-]*=/i.test(w))
+              .sort(),
+            ...coreCond.split(' ').filter(w => !/^[a-z][\w-]*=/i.test(w)),
+          ].join(' ')
+        : (/--when (\S+)/.exec(flags)?.[1] ?? null),
+      state: unsettable ? null : (/--state (\S+)/.exec(flags)?.[1] ?? null),
+      ...(unsettable ? {notSettable: unsettable[1]} : {}),
       value:
         v.light === v.dark
           ? orNull(v.light)
@@ -432,9 +455,23 @@ export async function themePartValues(cwd, name, part) {
   values.sort((a, b) => Number(a.when != null) - Number(b.when != null));
   // A longhand Core writes beside its own shorthand, with the same value,
   // says nothing more (a button's four corner radii beside its radius).
-  const said = values.filter(
+  // One condition Core writes in two word orders reads as one row.
+  const seenRows = new Set();
+  const unique = values.filter(v => {
+    const id = JSON.stringify([
+      v.property,
+      v.when,
+      v.state,
+      v.value,
+      v.expression,
+    ]);
+    if (seenRows.has(id)) return false;
+    seenRows.add(id);
+    return true;
+  });
+  const said = unique.filter(
     v =>
-      !values.some(
+      !unique.some(
         o =>
           o !== v &&
           o.when === v.when &&

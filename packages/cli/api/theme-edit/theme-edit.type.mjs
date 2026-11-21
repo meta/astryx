@@ -187,8 +187,9 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditPartValue
  * @property {string} property - The CSS property.
- * @property {string | null} when - The variant, as `set` takes `--when` (`variant:outlined`); null at rest.
- * @property {string | null} state - The state, as `set` takes `--state`; null for none.
+ * @property {string | null} when - The variant, as `set` takes `--when` (`variant:outlined`); null at rest. For a condition no flag of `set` reaches, the condition as Core writes it, with `notSettable`.
+ * @property {string | null} state - The state, as `set` takes `--state`; null for none (and for a condition no flag reaches).
+ * @property {string} [notSettable] - Only for a condition no flag of `set` reaches (a CSS selector such as `:first-child`): why, as `how <part>` says it.
  * @property {string | {light: string | null, dark: string | null} | null} value - The final value, every token written out; per mode when the modes differ; null when a token it reads has no value.
  * @property {string} expression - The declaration that gives it, as written: Core's, or the rule on the part.
  * @property {string[] | {light: string[], dark: string[]}} tokens - The tokens it reads, and the tokens those read in turn, in order; per mode when the modes read different ones.

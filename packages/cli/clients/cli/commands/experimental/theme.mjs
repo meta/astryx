@@ -771,20 +771,30 @@ function partValueBlocks(d) {
       v => `${v.when}|${v.state}|${v.property}|${valueText(v.value)}`,
     ),
   );
+  // A condition set cannot name (two variants at once) that draws what
+  // one of its variants draws alone says nothing more either.
+  const wordsOf = (/** @type {any} */ v) =>
+    v.notSettable
+      ? (v.when ?? '')
+          .split(' ')
+          .map((/** @type {string} */ w) => w.replace('=', ':'))
+      : (v.when ?? '').split('+');
   const shown = variants.filter(
     v =>
-      !(v.when ?? '')
-        .split('+')
-        .some(
-          w =>
-            w !== v.when &&
-            alone.has(`${w}|${v.state}|${v.property}|${valueText(v.value)}`),
-        ),
+      !wordsOf(v).some(
+        w =>
+          w !== v.when &&
+          alone.has(`${w}|${v.state}|${v.property}|${valueText(v.value)}`),
+      ),
   );
   /** @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditPartValue} v */
   const row = v => ({
     ...(v.when != null || v.state != null
-      ? {when: [v.when, v.state].filter(Boolean).join(' ')}
+      ? {
+          when:
+            [v.when, v.state].filter(Boolean).join(' ') +
+            (v.notSettable ? ' (not settable)' : ''),
+        }
       : {}),
     property: v.property,
     value: valueText(v.value),

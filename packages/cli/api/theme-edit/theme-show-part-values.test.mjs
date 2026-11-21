@@ -271,6 +271,56 @@ describe('show --on: what one part of a theme shows', () => {
       expect(v).toMatchObject({source: 'theme', via: 'part'});
   }, 120_000);
 
+  it('writes each variant row’s condition the way set takes it, and marks a condition set cannot name', async () => {
+    await themeEditNew('feedback', {cwd, like: 'neutral'});
+    const r = /** @type {any} */ (
+      await themeEditShow('feedback', {cwd, on: 'button'})
+    );
+    const rows = r.data.values.filter(
+      (/** @type {any} */ v) => v.when != null || v.state != null,
+    );
+    // A CSS-selector condition Core writes (a grouped button's first
+    // child) is kept as Core's words and says why set cannot name it.
+    const css = rows.find((/** @type {any} */ v) => v.notSettable);
+    expect(css).toBeDefined();
+    expect(css.state).toBeNull();
+    expect(css.notSettable).toMatch(/cannot name|no .* prop or state/);
+    // Every other condition goes back to set as it is.
+    const settable = rows.find(
+      (/** @type {any} */ v) =>
+        !v.notSettable &&
+        v.when != null &&
+        v.state != null &&
+        v.property === 'background-color',
+    );
+    expect(settable).toBeDefined();
+    const back = /** @type {any} */ (
+      await themeEditSet('feedback', settable.property, '#123456', {
+        cwd,
+        on: 'button',
+        when: settable.when,
+        state: settable.state,
+      })
+    );
+    expect(back.type).not.toBe('error');
+    const again = /** @type {any} */ (
+      await themeEditShow('feedback', {cwd, on: 'button'})
+    );
+    expect(
+      again.data.values.find(
+        (/** @type {any} */ v) =>
+          v.property === settable.property &&
+          v.when === settable.when &&
+          v.state === settable.state,
+      ),
+    ).toMatchObject({value: '#123456', source: 'theme', via: 'part'});
+    // One condition reads as one row, whatever order Core writes it in.
+    const ids = rows.map((/** @type {any} */ v) =>
+      JSON.stringify([v.property, v.when, v.state, v.value, v.expression]),
+    );
+    expect(new Set(ids).size).toBe(ids.length);
+  }, 120_000);
+
   it('gives a button’s corner radius once, not once per corner', async () => {
     const r = /** @type {any} */ (
       await themeEditShow('neutral', {cwd, on: 'button'})
