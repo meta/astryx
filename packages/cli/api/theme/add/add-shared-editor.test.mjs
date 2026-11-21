@@ -172,6 +172,64 @@ it('a re-add replaces the copy files the editor rebuilt from unchanged working f
   fs.rmSync(shared, {recursive: true, force: true});
 }, 300_000);
 
+it('a re-add replaces nothing while a working file is gone, or the build is not the one made from the working files now', async () => {
+  /** A fresh app with the shared theme added and rebuilt by the editor. */
+  const setUp = async (
+    /** @type {(shared: string) => void} */ more = () => {},
+  ) => {
+    const app = makeLinkedFixture(
+      'astryx-theme-add-editor-gate-',
+      FIXTURE_PACKAGES,
+    );
+    writeFixtureBaseTheme(app, 'neutral');
+    const shared = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-gate-'));
+    fs.cpSync(bundle, shared, {recursive: true});
+    fs.appendFileSync(
+      path.join(shared, 'app-copy/sunset.css'),
+      '/* shared */\n',
+    );
+    more(shared);
+    await themeAdd(shared, {cwd: app});
+    return {app, shared};
+  };
+  const done = (/** @type {{app: string, shared: string}} */ x) => {
+    removeLinkedFixture(x.app);
+    fs.rmSync(x.shared, {recursive: true, force: true});
+  };
+  // (A deleted working file is a change.)
+  const a = await setUp();
+  await themeEditShow('sunset', {cwd: a.app});
+  fs.rmSync(path.join(a.app, 'themes/sunset/sunset.settings.json'));
+  await themeRemove('sunset', {cwd: a.app});
+  await expect(themeAdd(a.shared, {cwd: a.app})).rejects.toThrow(
+    /sunset\.css.*changed since/s,
+  );
+  done(a);
+  // (Nor a deleted palette file the add copied, with no color dial set.)
+  const p = await setUp(shared =>
+    fs.writeFileSync(path.join(shared, 'editor/palette.config.json'), '{}\n'),
+  );
+  await themeEditShow('sunset', {cwd: p.app});
+  fs.rmSync(path.join(p.app, 'themes/sunset/palette.config.json'));
+  await themeRemove('sunset', {cwd: p.app});
+  await expect(themeAdd(p.shared, {cwd: p.app})).rejects.toThrow(
+    /changed since/,
+  );
+  done(p);
+  // (Settings put back after an editor change, without a build: the copy
+  // is the build of the other settings.)
+  const b = await setUp();
+  const settings = path.join(b.app, 'themes/sunset/sunset.settings.json');
+  const saved = fs.readFileSync(settings, 'utf8');
+  await themeEditSet('sunset', 'corners', 'pill', {cwd: b.app});
+  fs.writeFileSync(settings, saved);
+  await themeRemove('sunset', {cwd: b.app});
+  await expect(themeAdd(b.shared, {cwd: b.app})).rejects.toThrow(
+    /changed since/,
+  );
+  done(b);
+}, 300_000);
+
 it('the stable add names no experimental command when it keeps editor state', async () => {
   // (spec:AST-017 FR27: stable output names no experimental surface.)
   const fresh = makeLinkedFixture(
