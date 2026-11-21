@@ -8358,10 +8358,12 @@ export function compileTheme(ctx, data, base) {
                 ? {backgroundImage: `linear-gradient(${tint}, ${tint})`}
                 : {}),
             });
-            for (const [inside, colors] of [
+            /** @type {Array<[string, Record<string, string>]>} */
+            const inButtons = [
               ...Object.entries(BADGE_IN_BUTTON),
               [BADGE_IN_SECONDARY_BUTTON, onPage],
-            ]) {
+            ];
+            for (const [inside, colors] of inButtons) {
               const left = owned.map(own =>
                 Object.fromEntries(
                   Object.entries(colors).filter(
