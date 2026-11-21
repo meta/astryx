@@ -798,36 +798,6 @@ const JOINING_WORD =
   /^(?:keep|keeps|leave|leaves|stay|stays|remain|remains|and|or|nor|but|so|yet|with|without|in|on|of|for|to|at|by|from|into|onto|over|under|below|above|between|inside|outside|within|around|near|after|before|across|like|than|then|as|if|when|while|the|a|an|is|are|was|were|be|been|being|should|must|can|could|would|will|shall|may|might|do|did|look|looks|feel|feels|have|had|get|gets|need|needs|use|uses|stand|stands|appear|appears|seem|seems|that|which|who|only|also|too|all|not|no|just|please|pls|now|still|again|instead|both|either|neither|here|there)$/;
 
 /**
- * The colors a tint word modifies in a clause: the color right after
- * "tinted", "tint" or "washed" ("cards tinted blue"), or right before
- * "tint" ("a green tint"), as RGB.
- * @param {string} c a clause, lower-case
- * @returns {number[][]}
- */
-function tintedColors(c) {
-  const found = colorsFound(c);
-  /** @type {number[][]} */
-  const out = [];
-  for (const m of c.matchAll(/\b(?:tint(?:ed|s)?|wash(?:ed)?)\b/g)) {
-    const at = m.index ?? 0;
-    const end = at + m[0].length;
-    const after = found.find(
-      ([i]) => i >= end && !/[,;.]|\bwith\b|\band\b/.test(c.slice(end, i)),
-    );
-    // (The color word, with a shade word before it, then the tint word,
-    // apart or joined by a hyphen: "blue-tinted".)
-    const before = [...found]
-      .reverse()
-      .find(([i]) => i < at && /^\S+?(?:\s+\S+?)?[\s-]+$/.test(c.slice(i, at)));
-    const pick =
-      /^tints?$/.test(m[0]) && before && !after ? before : (after ?? before);
-    const rgb = pick ? parseColor(pick[1]) : null;
-    if (rgb) out.push(rgb);
-  }
-  return out;
-}
-
-/**
  * The opposite of a look a word names, for the word said with "un-" or
  * "non-" ("un-rounded" buttons are square; "non-bold" headings regular).
  * @type {Record<string, string>}
@@ -31355,85 +31325,6 @@ export function draftAnswer(ctx, env, question) {
           d.text += ` (${partial.join(', ')}: only in the mode it reads in)`;
       }
     }
-  // ("selected nav items tinted forest green", "a green tint on hover"):
-  // a tint is the color at a low strength over what is beneath, never the
-  // solid color, as the accent's tint is.
-  // Only the color the tint word modifies is tinted, on the parts named
-  // before it ("cards tinted blue with a navy header": the cards' blue,
-  // never the header), on every line of the answer that writes it (the
-  // card variants' own lines too).
-  /** @type {Array<{parts: Set<string>, colors: number[][]}>} */
-  const tints = [];
-  /** The tinted steps, so the answer that runs the whole ask carries them too. @type {Array<[Step, Step]>} */
-  const tinted = [];
-  for (const d of result) {
-    const c = draftClause.get(d);
-    if (!c || !/\b(?:tint(?:ed|s)?|wash(?:ed)?)\b/.test(c.text)) continue;
-    const text = c.text.toLowerCase();
-    const colors = tintedColors(text);
-    const at = text.search(/\b(?:tint(?:ed|s)?|wash(?:ed)?)\b/);
-    // (A part is named before the tint word when its own word is: the
-    // last word of its name, "card" for card, "header" for
-    // app-shell-header.)
-    const parts = new Set(
-      c.parts
-        .map(p => p.on)
-        .filter(on => {
-          const word = on.split('-').pop() ?? on;
-          return new RegExp(`\\b${word}`).test(text.slice(0, at));
-        }),
-    );
-    // (A clause that names no part before the tint word, "secondary
-    // button hover, in dark mode only: a slightly blue tint", takes the
-    // part its own lines are on.)
-    if (parts.size === 0)
-      for (const p of c.parts.length
-        ? c.parts.map(x => x.on)
-        : d.options.flat().map(st => st.on))
-        if (p) parts.add(p);
-    if (colors.length && parts.size) tints.push({parts, colors});
-  }
-  for (const d of tints.length ? result : [])
-    for (const o of d.options)
-      for (const [k, st] of o.entries()) {
-        const v = parseColor(String(st.value ?? ''));
-        if (
-          !st.on ||
-          !/^background(?:-color)?$/.test(st.thing) ||
-          !v ||
-          alphaOf(String(st.value)) < 1 ||
-          !tints.some(
-            t =>
-              t.parts.has(String(st.on)) &&
-              t.colors.some(c => c.every((n, x) => Math.abs(n - v[x]) < 1)),
-          )
-        )
-          continue;
-        o[k] = {
-          ...st,
-          value: `color-mix(in srgb, ${st.value} 15%, transparent)`,
-        };
-        tinted.push([st, o[k]]);
-        if (!/a tint: /.test(d.text))
-          d.text += ` (a tint: ${st.value} at 15% over what is beneath)`;
-      }
-  // ("soft blue-tinted glass" in a whole ask: the line that runs it in
-  // order takes the tint, never the solid color.)
-  for (const d of result)
-    if (d.sequence)
-      for (const o of d.options)
-        for (const [k, st] of o.entries()) {
-          const t = tinted.find(
-            ([was]) =>
-              was.thing === st.thing &&
-              was.on === st.on &&
-              String(was.value) === String(st.value) &&
-              (was.state ?? '') === (st.state ?? '') &&
-              (was.when ?? '') === (st.when ?? '') &&
-              (was.mode ?? '') === (st.mode ?? ''),
-          );
-          if (t) o[k] = t[1];
-        }
   // A fill given to a part that holds others ("a navy header"): a part
   // inside it whose own resting fill would sit at nearly the same color
   // (a primary button navy on navy) is named, so the answer never hides
