@@ -47,7 +47,8 @@ const commands = async ask => {
     .join(' ;; ');
 };
 
-const REMOVAL = /\b(?:border|box-shadow) none --on|transparent --on/;
+const REMOVAL =
+  /\b(?:border|box-shadow|outline) none --on|\bpadding 0(?:px)? --on|transparent --on/;
 
 describe('an ask that starts with "clear the ..."', () => {
   it('takes away the removable looks it names', async () => {
@@ -69,8 +70,18 @@ describe('an ask that starts with "clear the ..."', () => {
       'clear the card shadow and make the text color white',
       'clear the card border and undo my heading edits',
       'make the text bigger\nclear the card shadow',
+      'clear the card padding',
+      'clear the card outline',
+      'clear the card shadow and clear the button border',
+      'clear the card shadow, clear the button border',
     ])
       expect(await commands(ask), ask).toMatch(REMOVAL);
+    // (A second clear starts an ask of its own.)
+    const both = await commands(
+      'clear the card shadow and clear the button border',
+    );
+    expect(both).toContain('set ne box-shadow none --on card');
+    expect(both).toContain('set ne border none --on button');
   }, 300_000);
 
   it('reads as before when the ask says anything else', async () => {
@@ -94,6 +105,9 @@ describe('an ask that starts with "clear the ..."', () => {
       'clear the card shadow and put it back',
       'clear the card shadow but keep it as the base theme has it',
       'clear the card shadow and restore the shadow',
+      'clear the card background and keep the base value',
+      'clear the card background and use the base value',
+      'clear the card shadow and use a softer one',
       'clear the card shadow, back to the default',
       'clear the card shadow; back to the base value',
       'clear the card shadow, as before',
@@ -138,6 +152,9 @@ describe('an ask that starts with "clear the ..."', () => {
     expect(await rs('clear the card background')).toContain(
       'set rs background-color transparent --on card',
     );
+    expect(
+      await rs('clear the card background and clear the button border'),
+    ).toContain('set rs background-color transparent --on card');
     expect(await rs('clear my card background changes')).toMatch(
       /\bundo rs background-color --on card\b/,
     );

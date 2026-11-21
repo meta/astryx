@@ -2235,9 +2235,12 @@ const CLEAR_LEAD = String.raw`\bclear\s+(?:all\s+(?:of\s+)?the|the|my|our|their|
 
 /**
  * The ask that starts at a word of the question, as asked: up to the end of
- * its sentence or line, or an "and", "then" or "but" that starts another
- * ask with a verb of its own. A next ask that points back ("and reset it")
- * or goes back without a part of its own ("and restore the shadow") stays
+ * its sentence or line, or an "and", "then", "but" or comma that starts
+ * another ask with a verb of its own (another clear too) and a part of its
+ * own ("… and undo my heading edits"), or a look of its own that it does
+ * not send back ("… and make the text white"). A next ask that names
+ * neither ("… and keep the base value"), sends its look back ("… and
+ * restore the shadow") or points back at the look ("… and reset it") stays
  * in the ask.
  * @param {string} asked the question as asked, lower case
  * @param {number} at
@@ -2249,15 +2252,15 @@ function askFrom(asked, at, isVerb, partWords) {
   let ask = asked.slice(at);
   const end = ask.search(/[.!?\n](?=\s|$)|\n/);
   if (end >= 0) ask = ask.slice(0, end);
-  for (const m of ask.matchAll(/\s(?:and|then|but)\s+([a-z']+)/g)) {
-    if (!isVerb(m[1])) continue;
+  for (const m of ask.matchAll(/(?:\s(?:and|then|but)|,)\s+([a-z']+)/g)) {
+    if (m[1] !== 'clear' && !isVerb(m[1])) continue;
     const next = ` ${ask.slice((m.index ?? 0) + m[0].length)} `;
     const pointsBack = /\b(?:it|them|that|those|this|these)\b/.test(next);
     const ownPart = partWords.some(
       ([re]) => mayMatch(re, next) && re.test(next),
     );
-    if (!pointsBack && (ownPart || !GOING_BACK.test(next)))
-      return ask.slice(0, m.index);
+    const ownLook = aspectsOf(next).length > 0 && !GOING_BACK.test(next);
+    if (!pointsBack && (ownPart || ownLook)) return ask.slice(0, m.index);
   }
   return ask;
 }
@@ -2300,10 +2303,13 @@ function clearTakesAway(c, ask, partWords) {
       /\b(?:in\s+)?(?:dark|light)(?:\s+(?:mode|theme))?\b/g,
       ' ',
     );
-  // (Only the looks this clause placed: a look the clause reader put in
-  // another clause, "and shadow", is a word this clause does not explain.)
-  for (const a of c.aspects)
-    rest = rest.replace(new RegExp(`\\b${a}s?\\b`, 'g'), ' ');
+  // (Only the words for looks this clause placed: a look the clause reader
+  // put in another clause, "and shadow", is a word this clause does not
+  // explain.)
+  rest = rest.replace(new RegExp(`\\b${REMOVABLE}\\b`, 'g'), w => {
+    const said = aspectsOf(w);
+    return said.length && said.every(a => c.aspects.includes(a)) ? ' ' : w;
+  });
   rest = rest
     .replace(/'s\b/g, ' ')
     .replace(
