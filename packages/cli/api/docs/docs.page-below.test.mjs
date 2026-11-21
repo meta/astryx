@@ -15,6 +15,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {docs} from './docs.mjs';
+import {withPageBelow} from './_adapter.mjs';
 import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const SLOW = 60_000;
@@ -108,4 +109,27 @@ describe('a route that skips a level', () => {
     },
     SLOW,
   );
+});
+
+describe('withPageBelow', () => {
+  const page = {name: 'kit/zorb/guide-zorb'};
+
+  it('puts the page first when the route-order lead is not named, even if a named child leads by title', () => {
+    const byRoute = [{name: 'kit/alpha'}, {name: 'kit/guide'}];
+    const ordered = [{name: 'kit/guide'}, {name: 'kit/alpha'}];
+    expect(
+      withPageBelow('kit/guide-zorb', byRoute, ordered, [page]).map(
+        e => e.name,
+      ),
+    ).toEqual(['kit/zorb/guide-zorb', 'kit/guide', 'kit/alpha']);
+  });
+
+  it('keeps a named route-order lead first, the page second', () => {
+    const byRoute = [{name: 'kit/guide'}, {name: 'kit/alpha'}];
+    expect(
+      withPageBelow('kit/guide-zorb', byRoute, byRoute, [page]).map(
+        e => e.name,
+      ),
+    ).toEqual(['kit/guide', 'kit/zorb/guide-zorb', 'kit/alpha']);
+  });
 });

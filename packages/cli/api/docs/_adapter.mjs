@@ -2484,6 +2484,30 @@ function pageBelow(tree, route, rest) {
 }
 
 /**
+ * A namespace's ordered children with the page further down placed as
+ * spec:AST-046 FR6 says: right after the child that route words alone put
+ * first, when the typed text names that child, and first otherwise. A page
+ * that is that child is listed once, first.
+ * @template {{name: string}} T
+ * @param {string} topic
+ * @param {T[]} byRoute the children as route words order them
+ * @param {T[]} ordered the children as {@link namedFirst} orders them
+ * @param {T[]} deeper the page further down ({@link pageBelow}), or none
+ * @returns {T[]}
+ */
+export function withPageBelow(topic, byRoute, ordered, deeper) {
+  const kept = namesRoute(topic, byRoute[0]?.name ?? '') ? 1 : 0;
+  const lead = ordered.slice(0, kept);
+  const below = deeper.filter(
+    page => !lead.some(entry => entry.name === page.name),
+  );
+  const rest = ordered
+    .slice(kept)
+    .filter(entry => !below.some(page => page.name === entry.name));
+  return [...lead, ...below, ...rest];
+}
+
+/**
  * The error for a docs argument that names nothing. For a route, it suggests
  * every child of the deepest namespace the route reaches, closest first by
  * each child's route, title and keywords, with a child the route names kept
@@ -2560,21 +2584,17 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
     ];
   }
   if (typeof topic === 'string' && routeChildren) {
-    suggestions = namedFirst(
+    const byRoute = orderRouteSuggestions(topic, suggestions, {closest: false});
+    suggestions = withPageBelow(
       topic,
-      orderRouteSuggestions(topic, suggestions, {closest: false}),
-      orderDocPages(tree, topic, suggestions, false),
+      byRoute,
+      namedFirst(
+        topic,
+        byRoute,
+        orderDocPages(tree, topic, suggestions, false),
+      ),
+      deeper,
     );
-    // The page below leads, after a child the route names (spec:AST-046 FR6).
-    const kept = namesRoute(topic, suggestions[0]?.name ?? '') ? 1 : 0;
-    const lead = suggestions.slice(0, kept);
-    const below = deeper.filter(
-      page => !lead.some(entry => entry.name === page.name),
-    );
-    const rest = suggestions
-      .slice(kept)
-      .filter(entry => !below.some(page => page.name === entry.name));
-    suggestions = [...lead, ...below, ...rest];
   } else if (typeof topic === 'string') {
     // Every topic and namespace is listed, so a near name (`tokns` for
     // tokens, `colr` for color) only moves to the front, from four letters.
