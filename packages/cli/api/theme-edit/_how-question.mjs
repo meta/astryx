@@ -4987,6 +4987,17 @@ export function draftAnswer(ctx, env, question) {
       '$1 $2 ',
     );
   // (A color said for a mode or for everything is the page.)
+  // (The ask before the page reading: a mode page head it does not hold
+  // is one the page reading wrote.)
+  const beforePages = question.toLowerCase();
+  /**
+   * Whether a clause's words are a mode page head the page reading wrote,
+   * never one the person typed (in any spelling the mode grammar reads).
+   * @param {string} text
+   */
+  const writtenHead = text =>
+    MODE_PAGE_HEAD.test(text) &&
+    !beforePages.includes(String(text).trim().toLowerCase());
   question = colorsSaidForPages(question, w => Object.hasOwn(HUES, w), w =>
     new RegExp(`^(?:${SHADE_WORDS})$`).test(w),
   );
@@ -11965,7 +11976,7 @@ export function draftAnswer(ctx, env, question) {
       prev?.mode &&
       (!c.parts.length ||
         (!prev.parts.length && !prev.aspects.length) ||
-        MODE_PAGE_HEAD.test(prev.text)) &&
+        writtenHead(prev.text)) &&
       !(
         c.aspects.length &&
         c.aspects.every(a =>
@@ -12087,17 +12098,11 @@ export function draftAnswer(ctx, env, question) {
       // (The next mode's head starts its own run, and a page head's run
       // ends at a clause that names the other mode: what follows takes
       // the nearer mode, as said.)
-      if (MODE_PAGE_HEAD.test(o.text)) break;
+      if (writtenHead(o.text)) break;
       // (Only a head the page reading wrote: one the person typed,
       // "dark mode: page #111111, …", scopes its whole sentence, as
       // before.)
-      if (
-        MODE_PAGE_HEAD.test(c.text) &&
-        !asked0.includes(String(c.text).trim().toLowerCase()) &&
-        o.mode &&
-        o.mode !== c.mode &&
-        !o.except
-      )
+      if (writtenHead(c.text) && o.mode && o.mode !== c.mode && !o.except)
         break;
       if (
         o.mode ||
