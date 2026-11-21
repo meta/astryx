@@ -68,6 +68,15 @@ describe('the every-word tier in search', () => {
     expect(scoreOf(view, 'Teeter')).toBeLessThan(FULL_COVERAGE_SCORE);
   });
 
+  it('counts a strong word said twice once', () => {
+    const view = rankLexical(
+      'quake stand quake',
+      {},
+      searchView(catalog(all)),
+    );
+    expect(scoreOf(view, 'Teeter')).toBeLessThan(FULL_COVERAGE_SCORE);
+  });
+
   it('lifts a component with a strong hit on both words', () => {
     const view = rankLexical('quake stand', {}, searchView(catalog(all)));
     expect(scoreOf(view, 'Pedestal')).toBeGreaterThanOrEqual(

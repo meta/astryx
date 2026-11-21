@@ -209,9 +209,11 @@ export function scoreQuery(
   // Multi-word natural language: score each content token, counting only
   // strong hits, then reward coverage so candidates matching more terms win.
   let strongest = 0;
-  // How many query words a hit of keyword strength answers, or a word of the
-  // candidate's own name (see ownName below).
-  let strongWords = 0;
+  // The distinct query words a hit of keyword strength answers, or a word of
+  // the candidate's own name (see ownName below). A word said twice counts
+  // once.
+  /** @type {Set<string>} */
+  const strongWords = new Set();
   // Words the candidate answers with its own text: not only through a
   // component a template uses (see STRONG_TOKEN_SCORE). A word of its own
   // name, display name or title, or the start of one, is its own answer,
@@ -263,7 +265,7 @@ export function scoreQuery(
       let inOwnName;
       const own = () => (inOwnName ??= ownName(tok));
       if (h.score >= STRONG_TOKEN_SCORE || (ownEvidence && own())) {
-        strongWords++;
+        strongWords.add(joined(tok));
       }
       if (
         !('used' in h && h.used) ||
@@ -312,7 +314,7 @@ export function scoreQuery(
     for (const tok of tokens) {
       if (!hitTerms.includes(tok) && inTitle(tok)) {
         if (STRONG_TOKEN_SCORE > strongest) strongest = STRONG_TOKEN_SCORE;
-        strongWords++;
+        strongWords.add(joined(tok));
         matched++;
         ownMatched++;
         hitTerms.push(tok);
@@ -347,7 +349,7 @@ export function scoreQuery(
     matched === tokens.length &&
     ownMatched === tokens.length &&
     strongest >= STRONG_TOKEN_SCORE &&
-    (!ownEvidence || candidate.domain === 'doc' || strongWords >= 2)
+    (!ownEvidence || candidate.domain === 'doc' || strongWords.size >= 2)
   ) {
     return {
       score:
