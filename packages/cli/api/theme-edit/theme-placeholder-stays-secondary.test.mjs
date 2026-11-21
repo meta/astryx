@@ -101,6 +101,21 @@ describe('a text color that reaches a text input', () => {
     expect(top).not.toMatch(/--color-text-primary/);
   }, 240_000);
 
+  it('never answers secondary text on a part with none with the secondary token', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('tb', {cwd, like: 'neutral'});
+    const {data} = await themeEditHow('red secondary text on buttons', {
+      cwd,
+      theme: 'tb',
+    });
+    const lines = (data.results ?? []).flatMap(
+      (/** @type {{commands: string[]}} */ r) => r.commands,
+    );
+    expect(
+      lines.filter(l => /--color-text-secondary .* --on button\b/.test(l)),
+    ).toEqual([]);
+  }, 240_000);
+
   it('is offered as the value text color alone', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('o', {cwd, like: 'neutral'});
