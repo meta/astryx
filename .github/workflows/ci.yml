@@ -754,6 +754,8 @@ jobs:
     runs-on: ubuntu-slim
     timeout-minutes: 6
     permissions:
+      # checks: read lets the review read when the head was pushed.
+      checks: read
       contents: read
       pull-requests: read
       statuses: read
