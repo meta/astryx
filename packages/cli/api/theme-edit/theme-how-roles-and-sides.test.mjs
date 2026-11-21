@@ -7,8 +7,8 @@
  * chart colors name the data tokens; "no border except the bottom one"
  * keeps that side; a named color before a typed one is that value; a
  * blue-gray is the tinted gray; "clear" before errors is plain; less
- * contrast, a gentle dark mode, big type; deep and soft shades. Every line
- * offered is run.
+ * contrast, a gentle dark mode, big type; deep and soft shades; a light
+ * neutral fills the surfaces in light mode. Every line offered is run.
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
@@ -107,6 +107,22 @@ describe('roles', () => {
   }, 240_000);
 });
 
+describe('a light neutral', () => {
+  it('fills the page, surfaces and cards in light mode; a darker one only grows the grays', async () => {
+    const silver = (await how('q0', 'silver #c0c0c0 everywhere'))[0];
+    expect(silver.commands).toEqual([
+      "set q0 neutral '#c0c0c0'",
+      "set q0 --color-background-body '#c0c0c0' --mode light",
+      "set q0 --color-background-surface '#c0c0c0' --mode light",
+      "set q0 --color-background-card '#c0c0c0' --mode light",
+    ]);
+    expect(silver.text).toMatch(/dark mode keeps the dark shades/);
+    const slate = (await how('q0', 'slate grays')).flatMap(r => r.commands);
+    expect(slate).toContain("set q0 neutral '#64748b'");
+    expect(slate.join('\n')).not.toMatch(/--color-background-/);
+  }, 240_000);
+});
+
 describe('sides', () => {
   it('no border except the bottom one keeps that side', async () => {
     const lines = top(
@@ -158,22 +174,30 @@ describe('plain looks', () => {
   });
   it("a status's text on a banner reaches its title and description, never its buttons or icon", async () => {
     for (const [ask, re] of [
-      ['success text bold', /--font-weight-normal 700 --on banner --when status:success/],
-      ['warning text 10px', /--text-supporting-size 0\.625rem --on banner --when status:warning/],
+      [
+        'success text bold',
+        /--font-weight-normal 700 --on banner --when status:success/,
+      ],
+      [
+        'warning text 10px',
+        /--text-supporting-size 0\.625rem --on banner --when status:warning/,
+      ],
     ]) {
       const w = writes(await how('q0', String(ask))).join('\n');
       expect(w, String(ask)).toMatch(re);
       // (A banner's close and action buttons read the medium weight and
       // the label size of a button; its icon reads the large size.)
-      expect(w, String(ask)).not.toMatch(/--font-weight-medium [^\n]*--on banner/);
+      expect(w, String(ask)).not.toMatch(
+        /--font-weight-medium [^\n]*--on banner/,
+      );
       expect(w, String(ask)).not.toMatch(/--text-large-size [^\n]*--on banner/);
       // (Nor a token its buttons read too: the title's label size is the
       // buttons' label size, so it is left, and said.)
       expect(w, String(ask)).not.toMatch(/--text-label-size [^\n]*--on banner/);
     }
-    expect(
-      JSON.stringify(await how('q0', 'warning text 10px')),
-    ).toMatch(/left as it is: banner's --text-label-size, which its buttons read too/);
+    expect(JSON.stringify(await how('q0', 'warning text 10px'))).toMatch(
+      /left as it is: banner's --text-label-size, which its buttons read too/,
+    );
   });
   it("a status's alerts keep their status for size and weight", async () => {
     for (const [ask, status] of [

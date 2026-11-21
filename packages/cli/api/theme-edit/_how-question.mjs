@@ -4342,6 +4342,13 @@ const RESET_THINGS = wordTable(
   }),
 );
 
+/** The page, surface and card backgrounds a light neutral fills. */
+const SURFACE_TOKENS = [
+  '--color-background-body',
+  '--color-background-surface',
+  '--color-background-card',
+];
+
 /** Words for a color the theme generates: the word, its dial, its token. */
 const ROLE_DIALS = /** @type {Array<[RegExp, string, string]>} */ ([
   [/\b(accent|brand|primary colou?r)\b/, 'accent', '--color-accent'],
@@ -28614,6 +28621,34 @@ export function draftAnswer(ctx, env, question) {
           nearDark = true;
         }
       }
+    }
+    // ("silver #c0c0c0 everywhere", "neutral #f5f5f4"): a light neutral is
+    // the surface color too, so the page, surface and card backgrounds take
+    // it in light mode; dark mode keeps the dark shades the editor makes,
+    // as the ask names no dark surface. A darker neutral ("slate grays")
+    // only grows the grays.
+    const seedRgb = dial === 'neutral' && color ? parseColor(color) : null;
+    const surfaces =
+      seedRgb &&
+      alphaOf(String(color)) >= 1 &&
+      !darkStep &&
+      env.data.mode !== 'dark-only' &&
+      ratio([0, 0, 0], seedRgb) >= ratio([255, 255, 255], seedRgb)
+        ? SURFACE_TOKENS.map(t =>
+            set(t, hex(seedRgb), modal ? {mode: 'light'} : {}),
+          )
+        : [];
+    if (surfaces.length) {
+      const rgb = /** @type {number[]} */ (seedRgb);
+      const ink = parseColor(
+        String(current('--color-text-primary', 'light') ?? ''),
+      );
+      const reads = !ink || ratio(ink, rgb) >= 4.5;
+      return {
+        text: `${dial}: the editor makes its light and dark shades from ${color}, and the page, surface and card backgrounds take ${hex(rgb)}${modal ? ' in light mode (dark mode keeps the dark shades)' : ''}${reads ? '' : ` (note: the theme's text measures ${ratioWords(ratio(/** @type {number[]} */ (ink), rgb))}:1 on it, under the 4.5:1 text needs; set --color-text-primary to ${ratio([0x11, 0x18, 0x27], rgb) >= 4.5 ? '#111827' : '#000000'} too)`}`,
+        options: [[set(dial, color), ...surfaces]],
+        sequence: true,
+      };
     }
     return {
       text: `${dial}: the editor makes its light and dark shades from ${color}${darkStep ? `, and the dark ${token} ${nearDark ? 'is the color nearest it that stands out on the dark page, so dark mode follows it instead of turning paler' : 'steps from its own value the same way'}` : `; or, the second line, only ${token} itself${tokenAlpha < 1 ? `, kept at its own ${Math.round(tokenAlpha * 100)}% strength (a wash)` : ''}, leaving the other ${dial} shades as they are`}`,
