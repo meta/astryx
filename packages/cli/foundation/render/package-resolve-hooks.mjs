@@ -75,6 +75,7 @@ export function linkedPackageOf(file, lookups) {
 /**
  * The `name` in the package.json of the folder nearest `dir` that has one,
  * with that folder; null when no folder up to the file system's root has one.
+ * A package.json that cannot be read still counts, with no name.
  * @param {string} dir
  * @param {PackageLookups} lookups
  * @returns {{dir: string, name: unknown} | null}

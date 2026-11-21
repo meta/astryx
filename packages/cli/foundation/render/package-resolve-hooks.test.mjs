@@ -321,7 +321,7 @@ const resolutionsIn = (specifiers, hook) => {
     'registerHooks({resolve(s, c, next) { const r = next(s, c); seen.push([s, c.parentURL ?? null, r.url, r.format ?? null]); return r; }});',
     `for (const s of ${JSON.stringify(specifiers)}) {`,
     '  try { const m = await import(s); seen.push([s, JSON.stringify(Object.entries(m).sort())]); }',
-    '  catch (e) { seen.push([s, e.code, String(e.message).replace(/\s+/g, " ")]); }',
+    '  catch (e) { seen.push([s, e.code, String(e.message).replace(/\\s+/g, " ")]); }',
     '}',
     'console.log(JSON.stringify({seen, linked: [...(globalThis.lookups?.linked ?? [])].length, typed: globalThis.lookups?.types.size ?? 0}));',
   ].join('\n');
