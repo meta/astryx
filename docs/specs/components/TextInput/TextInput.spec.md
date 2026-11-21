@@ -81,6 +81,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 - The control box and its `text-input` target.
 - Its grouped adaptation inside InputGroup.
 - The touch-keyboard attributes of the native input (FR16).
+- `maxLength` and `minLength` are native attributes passed to the input: typed, with no truncation, counter or validation of Astryx's own.
 
 **Does not own / non-goals**
 
@@ -92,7 +93,6 @@ Consumer migration instructions belong in consumer docs and release notes.
 - InputGroup row height, connected surface, edge alignment, and group focus —
   owned by InputGroup under `family:input-fields` (shared owner section).
 - Multiline text — owned by TextArea.
-- Length limits — uncontracted.
 
 ## Public concepts
 
