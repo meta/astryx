@@ -177,8 +177,8 @@
  * `undo` is present when `theme remove` removed a theme `theme add` copied
  * from a shared theme: `removed` the files of the copy it deleted, `kept`
  * those changed since the add (left as they are, named inside the copy),
- * `keptWorkingFiles` the working files it kept (changed, or beside files
- * built there since the add), `uninstalled` the packages
+ * `keptWorkingFiles` the working files it kept (changed, beside files built
+ * there since the add, or with a copy kept whole), `uninstalled` the packages
  * the add installed that no theme still in the record is owned by or
  * imports, and `uninstallError`
  * why that uninstall failed.
