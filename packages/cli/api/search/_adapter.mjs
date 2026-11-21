@@ -24,7 +24,6 @@ import {Project} from '../../foundation/config/project.mjs';
 import {iconFeatureGate} from '../../foundation/integrations/icon-features.mjs';
 import {iconSetDirectoryNames} from '../../foundation/discovery/icon-set-discovery.mjs';
 import {loadBlockPicker} from '../build/_adapter.mjs';
-import {coreComponentNames} from '../icon/_adapter.mjs';
 import {CORELESS_DOMAINS} from './_query.mjs';
 import {gatherComponents} from './_gather-components.mjs';
 import {gatherHooks} from './_gather-hooks.mjs';
@@ -69,6 +68,9 @@ export async function searchIconSection(
   if (!iconFeatureGate(project).on) return null;
   const loaded = /** @type {Project} */ (project);
   const {iconSection} = await import('./_icons.mjs');
+  const {coreComponentNames} = await import('../icon/_adapter.mjs');
+  /** @type {string[] | undefined} */
+  let names;
   return iconSection(
     query,
     {
@@ -88,7 +90,7 @@ export async function searchIconSection(
           };
         }
       },
-      componentNames: () => coreComponentNames(cwd),
+      componentNames: () => (names ??= coreComponentNames(cwd)),
     },
     {declaredNames, resultDomains, limit},
   );

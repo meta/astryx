@@ -79,12 +79,14 @@ export async function iconSetIcons({cwd, set}) {
 export async function iconSearch(query, {cwd, set, limit}) {
   const {sets, withdrawn, choice} = await loadIconSets(cwd);
   const noSet = sets.length === 0 && withdrawn.length === 0;
+  /** @type {string[] | undefined} */
+  let names;
   return rankIconSets(sets, withdrawn, query, {
     set,
     limit,
     looks: projectLooks(choice),
     discoverListsPacks: noSet && (await discoverListsIconSet(cwd)),
-    componentNames: () => coreComponentNames(cwd),
+    componentNames: () => (names ??= coreComponentNames(cwd)),
   });
 }
 
