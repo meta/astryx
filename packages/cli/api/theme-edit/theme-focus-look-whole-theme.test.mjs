@@ -80,8 +80,10 @@ describe('the focus dial', () => {
     await themeEditNew('gy', {cwd, like: 'neutral'});
     await themeEditSet('gy', 'accent', '#ffd400', {cwd});
     await themeEditSet('gy', 'focus', 'glow', {cwd});
-    expect(cssOf('gy')).not.toMatch(
-      /--focus-outline-color: [^;]*var\(--color-accent\) 100%/,
+    const css = cssOf('gy');
+    // (Light keeps the palette's readable ring shade, never the accent.)
+    expect(css).toMatch(
+      /--focus-outline-color: light-dark\(#(?!ffd400)[0-9a-f]{6}, color-mix/i,
     );
   }, 240_000);
 
