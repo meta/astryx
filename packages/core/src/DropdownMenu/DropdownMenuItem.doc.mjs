@@ -48,6 +48,7 @@ export const docs = {
     targets: [
       {
         className: 'astryx-dropdown-menu-item',
+        sitsOn: 'item',
         visualProps: ['size', 'variant'],
       },
     ],

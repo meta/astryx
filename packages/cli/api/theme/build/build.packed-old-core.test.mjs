@@ -156,16 +156,18 @@ const TSC_BIN = path.join(REPO_ROOT, 'node_modules/typescript/bin/tsc');
  *
  * The export list is 0.5.4's `./theme` surface. `generateOnMediaCSS` and
  * `dataTokenDefaults` are on it deliberately: they exist in 0.5.4, and
- * pretending otherwise would test a core that never shipped.
+ * pretending otherwise would test a core that never shipped. Its
+ * `generateThemeRulesSplit` takes 0.5.4's two arguments, so it returns no
+ * shared-element parts apart, as 0.5.4's did.
  */
-const OLD_CORE_THEME_MODULE = `import {defineTheme as resolveTheme} from ${JSON.stringify(
-  CORE_THEME_ENTRY,
-)};
+const OLD_CORE_THEME_MODULE = `import {
+  defineTheme as resolveTheme,
+  generateThemeRulesSplit as splitRules,
+} from ${JSON.stringify(CORE_THEME_ENTRY)};
 
 export {
   generateThemeCSS,
   generateThemeRules,
-  generateThemeRulesSplit,
   generateOnMediaCSS,
   isDefinedTheme,
   tokenDefaults,
@@ -182,6 +184,11 @@ function blind(value) {
 
 export function defineTheme(input) {
   return blind(resolveTheme(blind(input)));
+}
+
+/** 0.5.4's split takes no options, so it never returns shared-element parts apart. */
+export function generateThemeRulesSplit(theme, warnings) {
+  return splitRules(theme, warnings);
 }
 `;
 
@@ -616,6 +623,19 @@ export const plainTheme = defineTheme({
   name: 'plain',
   tokens: {'--color-background': '#fff'},
   components: {button: {base: {borderRadius: '4px'}}},
+});
+`,
+  );
+  theme(
+    'parted.ts',
+    `import {defineTheme} from '@astryxdesign/core/theme';
+export const partedTheme = defineTheme({
+  name: 'parted',
+  tokens: {'--color-background': '#fff'},
+  components: {
+    button: {'variant:secondary': {borderColor: 'rgb(200 200 200)'}},
+    'toggle-button': {base: {borderColor: 'rgb(255 0 0)'}},
+  },
 });
 `,
   );
@@ -1296,6 +1316,18 @@ describe('packed CLI against a core that predates adaptations', () => {
     expect(css).toContain(`Core: @astryxdesign/core@${OLD_CORE_VERSION}`);
   });
 
+  it("keeps one theme layer for a part's entry on a core that splits out no parts", () => {
+    const {status, envelope} = buildTheme('parted.ts');
+    expect({status, error: envelope.error}).toEqual({
+      status: 0,
+      error: undefined,
+    });
+    const css = fs.readFileSync(path.join(consumer, 'parted.css'), 'utf8');
+    expect(css).toContain('.astryx-toggle-button');
+    expect(css).not.toContain('@layer components, parts;');
+    expect(css).not.toContain('@layer parts');
+  });
+
   it('keeps the shipped template type-compatible with Core 0.5.4', () => {
     const template = fs.readFileSync(
       path.join(CLI_PKG, 'assets/theme.template.ts'),
@@ -1587,6 +1619,16 @@ describe('the same themes once core supports adaptations', () => {
     );
     expect(css).toContain('prefers-reduced-motion: reduce');
     expect(css).toContain('--motion-fast: 0ms;');
+  });
+
+  it("writes a part's entry in the later sub-layer once core splits out parts", () => {
+    const {status} = buildTheme('parted.ts');
+    expect(status).toBe(0);
+    const css = fs.readFileSync(path.join(consumer, 'parted.css'), 'utf8');
+    expect(css).toContain('@layer components, parts;');
+    expect(css.slice(css.indexOf('@layer parts {'))).toContain(
+      '.astryx-toggle-button',
+    );
   });
 
   it('emits the adaptation CSS the older core could not', () => {

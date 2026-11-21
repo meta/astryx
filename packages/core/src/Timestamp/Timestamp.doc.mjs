@@ -115,7 +115,7 @@ export const docs = {
   theming: {
     targets: [
       {className: 'astryx-timestamp', visualProps: ['type', 'color', 'format']},
-      {className: 'astryx-timestamp-copy-button'},
+      {className: 'astryx-timestamp-copy-button', sitsOn: 'button'},
     ],
     componentIcons: [
       {

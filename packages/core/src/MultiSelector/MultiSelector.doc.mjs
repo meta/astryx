@@ -152,6 +152,7 @@ export const docs = {
       {className: 'astryx-multi-selector-section-heading'},
       {
         className: 'astryx-multi-selector-indicator-icon',
+        sitsOn: 'icon',
         states: ['state'],
       },
       {
@@ -159,7 +160,7 @@ export const docs = {
         visualProps: ['size'],
         states: ['select-all', 'highlighted', 'selected', 'disabled'],
       },
-      {className: 'astryx-multi-selector-popup'},
+      {className: 'astryx-multi-selector-popup', sitsOn: 'popover'},
     ],
   },
   components: [
