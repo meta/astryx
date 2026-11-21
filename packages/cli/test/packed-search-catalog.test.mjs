@@ -81,10 +81,12 @@ beforeAll(() => {
   );
 }, 180_000);
 
+// Removing the placed and installed copies takes longer than the default hook
+// time on a loaded machine.
 afterAll(() => {
   recyclePlacedCopies();
   if (work) fs.rmSync(work, {recursive: true, force: true});
-});
+}, 120_000);
 
 /**
  * Run a CLI in the project.
