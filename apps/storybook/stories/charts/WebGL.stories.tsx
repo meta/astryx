@@ -1,6 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import type {Meta, StoryObj} from '@storybook/react';
+import {expect, waitFor} from 'storybook/test';
 import {
   useCallback,
   useEffect,
@@ -55,8 +56,15 @@ export const Scatter: StoryObj = {
 };
 
 /**
- * GPU scatter with color-picking hover (`dotGLInteractive`) — hover any point
- * for a highlight + tooltip. O(1) hit detection regardless of point count.
+ * GPU scatter with color-picking hover (`dotGLInteractive`). Point at a dot
+ * with a mouse or a pen: the dot gets a halo, and a card beside it shows that
+ * dot's rounded x and y. Hit detection is O(1) regardless of point count.
+ * Touch opens no card: as with every chart's tooltip, the browser takes a
+ * touch drag for scrolling.
+ *
+ * To check: hover a dot, then compare the card with the axes. Hover a dot near
+ * the right or top edge of the plot: the card stays whole, outside the plot
+ * and above the axes. Move off the dots and the card closes.
  */
 export const InteractiveScatter: StoryObj = {
   name: 'Interactive scatter — hover + tooltip',
@@ -81,6 +89,206 @@ export const InteractiveScatter: StoryObj = {
       height={400}
     />
   ),
+  play: async ({canvasElement}) => {
+    const doc = canvasElement.ownerDocument;
+    const view = doc.defaultView ?? window;
+    const getSvg = () => canvasElement.querySelector<SVGSVGElement>('svg');
+    // Chart's pointer layer is the transparent rect outside the clipped marks.
+    const getEventSurface = () =>
+      Array.from(
+        canvasElement.querySelectorAll<SVGRectElement>(
+          'svg rect[fill="transparent"]',
+        ),
+      ).find(rect => rect.closest('g[clip-path]') == null) ?? null;
+    const getTooltip = () =>
+      canvasElement.querySelector<HTMLElement>('[role="tooltip"]');
+    const isTooltipOpen = () =>
+      getTooltip()?.parentElement?.matches(':popover-open') ?? false;
+    const axisTicks = (side: 'bottom' | 'left') =>
+      Array.from(
+        canvasElement.querySelectorAll<SVGTextElement>(
+          `g[aria-label="${side} axis"] text`,
+        ),
+      )
+        .filter(tick => tick.textContent?.trim())
+        .map(tick => {
+          const rect = tick.getBoundingClientRect();
+          return {
+            value: Number(tick.textContent),
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2,
+          };
+        })
+        .filter(tick => Number.isFinite(tick.value));
+
+    await waitFor(() => {
+      expect(getSvg()?.querySelector('canvas')).not.toBeNull();
+      expect(getEventSurface()?.getBoundingClientRect().width).toBeGreaterThan(
+        0,
+      );
+      expect(axisTicks('bottom').length).toBeGreaterThanOrEqual(2);
+      expect(axisTicks('left').length).toBeGreaterThanOrEqual(2);
+    });
+    const svg = getSvg();
+    const eventSurface = getEventSurface();
+    if (!svg || !eventSurface) {
+      throw new Error('Chart or its pointer layer did not render');
+    }
+
+    // The oracle places each datum through the rendered axis ticks, not
+    // through the chart's scales.
+    const project = (
+      ticks: ReturnType<typeof axisTicks>,
+      axis: 'x' | 'y',
+      value: number,
+    ) => {
+      const first = ticks[0];
+      const last = ticks[ticks.length - 1];
+      return (
+        first[axis] +
+        ((value - first.value) * (last[axis] - first[axis])) /
+          (last.value - first.value)
+      );
+    };
+    const xTicks = axisTicks('bottom');
+    const yTicks = axisTicks('left');
+    const plot = eventSurface.getBoundingClientRect();
+    const points = scatterData.map((d, index) => ({
+      index,
+      x: project(xTicks, 'x', d.x),
+      y: project(yTicks, 'y', d.y),
+      text: `x: ${Math.round(d.x)}, y: ${Math.round(d.y)}`,
+    }));
+    // A pick returns the topmost dot whose pick disc (dot size plus hit
+    // padding: 22px wide) covers the pixel. Later data draws on top, so a dot
+    // is a clean target when no later dot is within that radius.
+    const clearRadius = 13;
+    const targets = points.filter(
+      p =>
+        p.x > plot.left + 2 &&
+        p.x < plot.right - 2 &&
+        p.y > plot.top + 2 &&
+        p.y < plot.bottom - 2 &&
+        points.every(
+          q =>
+            q.index <= p.index ||
+            Math.hypot(q.x - p.x, q.y - p.y) > clearRadius,
+        ),
+    );
+
+    // One target in each cell of a 5 x 4 grid over the plot.
+    const columns = 5;
+    const rows = 4;
+    const grid: (typeof targets)[number][] = [];
+    for (let row = 0; row < rows; row++) {
+      for (let column = 0; column < columns; column++) {
+        const left = plot.left + (plot.width * column) / columns;
+        const top = plot.top + (plot.height * row) / rows;
+        const width = plot.width / columns;
+        const height = plot.height / rows;
+        const centerX = left + width / 2;
+        const centerY = top + height / 2;
+        const inCell = targets.filter(
+          p =>
+            p.x >= left &&
+            p.x < left + width &&
+            p.y >= top &&
+            p.y < top + height,
+        );
+        inCell.sort(
+          (a, b) =>
+            Math.hypot(a.x - centerX, a.y - centerY) -
+            Math.hypot(b.x - centerX, b.y - centerY),
+        );
+        if (inCell.length === 0) {
+          throw new Error(`No clean target dot in grid cell ${row},${column}`);
+        }
+        grid.push(inCell[0]);
+      }
+    }
+
+    const pointerTypes = ['mouse', 'pen'];
+    const hover = async (
+      target: (typeof targets)[number],
+      pointerType: string,
+    ) => {
+      // A real pointer reaches Chart's pointer layer only if nothing painted
+      // above it takes the hit.
+      expect(doc.elementFromPoint(target.x, target.y)).toBe(eventSurface);
+      eventSurface.dispatchEvent(
+        new PointerEvent('pointermove', {
+          bubbles: true,
+          clientX: target.x,
+          clientY: target.y,
+          pointerType,
+        }),
+      );
+      await waitFor(
+        () => {
+          expect(isTooltipOpen()).toBe(true);
+          expect(getTooltip()?.textContent).toBe(target.text);
+        },
+        {timeout: 500},
+      );
+    };
+
+    const misses: string[] = [];
+    for (const [i, target] of grid.entries()) {
+      const pointerType = pointerTypes[i % pointerTypes.length];
+      try {
+        await hover(target, pointerType);
+      } catch {
+        misses.push(
+          `${pointerType} at datum ${target.index} (${target.text}) showed ` +
+            `"${isTooltipOpen() ? getTooltip()?.textContent : 'no card'}"`,
+        );
+      }
+    }
+    expect(`${grid.length - misses.length}/${grid.length} points picked`).toBe(
+      `${grid.length}/${grid.length} points picked`,
+    );
+    expect(misses).toEqual([]);
+
+    // Near the right and top edges of the plot the card is whole: it lives in
+    // the browser top layer, outside the svg and its plot clip.
+    const nearRight = targets.reduce((a, b) => (b.x > a.x ? b : a));
+    const nearTop = targets.reduce((a, b) => (b.y < a.y ? b : a));
+    const tooltip = getTooltip();
+    const layer = tooltip?.parentElement;
+    if (!tooltip || !layer) {
+      throw new Error('Point card or its Layer host did not render');
+    }
+    for (const target of [nearRight, nearTop]) {
+      await hover(target, 'mouse');
+      const card = layer.getBoundingClientRect();
+      expect(svg.contains(tooltip)).toBe(false);
+      expect(card.width).toBeGreaterThan(0);
+      expect(card.left).toBeGreaterThanOrEqual(0);
+      expect(card.top).toBeGreaterThanOrEqual(0);
+      expect(card.right).toBeLessThanOrEqual(view.innerWidth);
+      expect(card.bottom).toBeLessThanOrEqual(view.innerHeight);
+      // The card sits beside the dot and never covers it.
+      const coversDot =
+        target.x >= card.left &&
+        target.x <= card.right &&
+        target.y >= card.top &&
+        target.y <= card.bottom;
+      expect(coversDot).toBe(false);
+    }
+
+    // React derives onPointerLeave from pointerout and its relatedTarget.
+    eventSurface.dispatchEvent(
+      new PointerEvent('pointerout', {
+        bubbles: true,
+        relatedTarget: doc.body,
+        pointerType: 'mouse',
+      }),
+    );
+    await waitFor(() => {
+      expect(isTooltipOpen()).toBe(false);
+      expect(tooltip.textContent).toBe('');
+    });
+  },
 };
 
 /** GPU heatmap — a 2D grid of colored cells (traffic by hour x day). */

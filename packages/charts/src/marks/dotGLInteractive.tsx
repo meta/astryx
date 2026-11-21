@@ -2,25 +2,20 @@
 
 /**
  * @file marks/dotGLInteractive.tsx
- * @output WebGL scatter with GPU color-picking for O(1) nearest-point hover
+ * @input Chart's pointer events (useChart().onPointer) and the series data
+ * @output WebGL scatter with GPU color-picking hover and a point card in a Layer
  *
- * Each point gets a unique color encoding its index. On hover, readPixels
- * from an offscreen framebuffer decodes the hovered index — no JS iteration.
- *
- * Two GL contexts (visible + offscreen pick) plus their programs, buffers,
- * framebuffer, and pick texture are created once and reused. The pick texture
- * is re-allocated only when the drawing-buffer size changes, and everything is
- * released (both contexts eagerly lost) on unmount. Recovers from context loss.
+ * Each point gets a unique color encoding its index. On each chart pointer
+ * event, one readPixels from an offscreen framebuffer decodes the point under
+ * the cursor — no JS iteration. Two GL contexts (visible + offscreen pick) and
+ * their resources are created once, reused, released on unmount (both
+ * contexts eagerly lost), and rebuilt after context loss.
  */
 
-import {
-  useRef,
-  useEffect,
-  useCallback,
-  useState,
-  useMemo,
-  type ReactNode,
-} from 'react';
+import {useRef, useEffect, useState, useMemo, type ReactNode} from 'react';
+import {flushSync} from 'react-dom';
+import {useChart} from '../ChartContext';
+import {DefaultTooltipContent, useTooltipCard} from '../tooltipCard';
 import type {SeriesDef, ResolvedPoint} from '../types';
 import type {ScaleBand} from 'd3-scale';
 import {
@@ -34,7 +29,10 @@ export interface DotGLInteractiveOptions {
   color: string;
   size?: number;
   opacity?: number;
-  /** Custom tooltip renderer. Receives datum and index. */
+  /**
+   * Custom body for the hover card. Receives the hovered datum and its index.
+   * Without it, the card shows the x value, then the series value.
+   */
   renderTooltip?: (datum: Record<string, unknown>, index: number) => ReactNode;
 }
 
@@ -112,6 +110,43 @@ const FRAG_PICK = `
 `;
 
 /**
+ * Decodes the point index under plot coordinates (x, y) from one pixel of the
+ * pick framebuffer. Returns -1 for background or outside the plot.
+ */
+function readPickIndex(
+  pick: {
+    gl: WebGLRenderingContext;
+    fb: WebGLFramebuffer;
+    texW: number;
+    texH: number;
+    dpr: number;
+  } | null,
+  x: number,
+  y: number,
+): number {
+  if (!pick || pick.gl.isContextLost()) {
+    return -1;
+  }
+  // Use the DPR the pick framebuffer was built with so pixel math stays in
+  // sync even if devicePixelRatio changed since the last render.
+  const {gl, fb, dpr, texW, texH} = pick;
+  const px = Math.floor(x * dpr);
+  const py = Math.floor(y * dpr);
+  if (px < 0 || py < 0 || px >= texW || py >= texH) {
+    return -1;
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+  const pixel = new Uint8Array(4);
+  // Flip Y from top-origin CSS space to the framebuffer's bottom-left,
+  // 0-indexed origin. `texH - 1 - py` (not `texH - py`) keeps the read in
+  // [0, texH-1] — the bare `texH - py` reads one row too high and samples
+  // out of bounds at the very top edge.
+  gl.readPixels(px, texH - 1 - py, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return colorToIndex(pixel[0], pixel[1], pixel[2]);
+}
+
+/**
  * Inline component — manages visible + pick canvases and hover state.
  */
 function DotGLInteractiveCanvas({
@@ -122,6 +157,8 @@ function DotGLInteractiveCanvas({
   width,
   height,
   data,
+  xKey,
+  dataKey,
   renderTooltip,
 }: {
   resolved: ResolvedPoint[];
@@ -131,14 +168,17 @@ function DotGLInteractiveCanvas({
   width: number;
   height: number;
   data: Record<string, unknown>[];
+  xKey: string;
+  dataKey: string;
   renderTooltip?: (datum: Record<string, unknown>, index: number) => ReactNode;
 }) {
+  const {onPointer} = useChart();
+  const {show, hide, place, renderCard} = useTooltipCard();
   const visHostRef = useRef<HTMLDivElement>(null);
   const pickHostRef = useRef<HTMLDivElement>(null);
   const visCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const pickCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number>(-1);
-  const [mousePos, setMousePos] = useState<{x: number; y: number} | null>(null);
   // Bumped on context restore to force the render effect to rebuild + repaint.
   const [contextEpoch, setContextEpoch] = useState(0);
 
@@ -456,72 +496,81 @@ function DotGLInteractiveCanvas({
     };
   }, []);
 
-  const handleMouseMove = useCallback((e: React.MouseEvent<SVGRectElement>) => {
-    const pick = pickGLRef.current;
-    if (!pick || pick.gl.isContextLost()) {
-      return;
-    }
+  const haloRadius = size / 2 + 7;
+  const dataLength = data.length;
 
-    const svg = e.currentTarget.ownerSVGElement;
-    if (!svg) {
-      return;
-    }
-    const ctm = e.currentTarget.getScreenCTM();
-    if (!ctm) {
-      return;
-    }
-    const pt = svg.createSVGPoint();
-    pt.x = e.clientX;
-    pt.y = e.clientY;
-    const local = pt.matrixTransform(ctm.inverse());
+  // The point the last pointer event picked. Pointer events own it; it
+  // outlives a re-subscription, so the first miss after a re-layout still
+  // clears the hovered point.
+  const pickedIndexRef = useRef(-1);
+  // Whether the card's screen position can be out of date for the same point:
+  // the page scrolled, the window resized, or the points moved.
+  const placementStaleRef = useRef(false);
 
-    // Use the DPR the pick framebuffer was built with so pixel math stays in
-    // sync even if devicePixelRatio changed since the last render.
-    const {gl, fb, dpr, texW, texH} = pick;
-    const px = Math.floor(local.x * dpr);
-    const py = Math.floor(local.y * dpr);
-    if (px < 0 || py < 0 || px >= texW || py >= texH) {
-      setHoverIndex(-1);
-      setMousePos(null);
-      return;
-    }
-
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
-    const pixel = new Uint8Array(4);
-    // Flip Y from top-origin CSS space to the framebuffer's bottom-left,
-    // 0-indexed origin. `texH - 1 - py` (not `texH - py`) keeps the read in
-    // [0, texH-1] — the bare `texH - py` reads one row too high and samples
-    // out of bounds at the very top edge.
-    gl.readPixels(px, texH - 1 - py, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-    const idx = colorToIndex(pixel[0], pixel[1], pixel[2]);
-    setHoverIndex(idx);
-    setMousePos(idx >= 0 ? {x: local.x, y: local.y} : null);
+  // Effect: listens to page scroll and window resize. Either can move the
+  // chart on screen without a pointer event. The listener reads no layout; it
+  // only marks the position stale, and the next pointer move re-places the
+  // card once.
+  useEffect(() => {
+    const markStale = () => {
+      placementStaleRef.current = true;
+    };
+    window.addEventListener('scroll', markStale, {
+      capture: true,
+      passive: true,
+    });
+    window.addEventListener('resize', markStale, {passive: true});
+    return () => {
+      window.removeEventListener('scroll', markStale, {capture: true});
+      window.removeEventListener('resize', markStale);
+    };
   }, []);
 
-  const handleMouseLeave = useCallback(() => {
-    setHoverIndex(-1);
-    setMousePos(null);
-  }, []);
+  // Effect: subscribes to Chart's pointer events, and the cleanup
+  // unsubscribes. Chart's pointer layer is painted above the marks, so the
+  // pick, the hovered point and the card's open state all change in that
+  // event's handler.
+  useEffect(() => {
+    // A new subscription follows new point positions.
+    placementStaleRef.current = true;
+    return onPointer(e => {
+      const index = readPickIndex(pickGLRef.current, e.x, e.y);
+      const isNewPoint = index !== pickedIndexRef.current;
+      if (isNewPoint) {
+        pickedIndexRef.current = index;
+        // Commit the new card body now, so the card is measured with it.
+        flushSync(() => setHoverIndex(index));
+      }
+      if (index < 0 || index >= dataLength) {
+        hide();
+        return;
+      }
+      const placeBeside = () =>
+        place(
+          {px: positions[index * 2], py: positions[index * 2 + 1]},
+          {
+            placement: 'auto',
+            clearance: haloRadius + 1,
+            verticalAlign: 'center',
+          },
+        );
+      if (isNewPoint) {
+        show();
+        placementStaleRef.current = false;
+        // Commit the position before the browser paints, so the card never
+        // shows at its previous spot.
+        flushSync(placeBeside);
+      } else if (placementStaleRef.current) {
+        // Same point, but the chart moved on screen: re-place once from the
+        // current geometry.
+        placementStaleRef.current = false;
+        placeBeside();
+      }
+    });
+  }, [onPointer, positions, dataLength, haloRadius, show, hide, place]);
 
   const datum =
     hoverIndex >= 0 && hoverIndex < data.length ? data[hoverIndex] : null;
-
-  const defaultTooltip = (d: Record<string, unknown>, i: number) => (
-    <div
-      style={{display: 'flex', flexDirection: 'column', gap: 2, fontSize: 12}}>
-      <div style={{fontWeight: 600, color: 'var(--color-text-primary)'}}>
-        Point {i}
-      </div>
-      {Object.entries(d).map(([k, v]) => (
-        <div key={k}>
-          <span style={{color: 'var(--color-text-secondary)'}}>{k}:</span>{' '}
-          <span style={{fontWeight: 500}}>{String(v)}</span>
-        </div>
-      ))}
-    </div>
-  );
 
   return (
     <g>
@@ -543,23 +592,13 @@ function DotGLInteractiveCanvas({
         <div ref={pickHostRef} />
       </foreignObject>
 
-      <rect
-        x={0}
-        y={0}
-        width={width}
-        height={height}
-        fill="transparent"
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
-      />
-
       {datum && hoverIndex >= 0 && (
         <g pointerEvents="none">
           {/* Soft outer halo — reads on top of neighbouring points. */}
           <circle
             cx={positions[hoverIndex * 2]}
             cy={positions[hoverIndex * 2 + 1]}
-            r={size / 2 + 7}
+            r={haloRadius}
             fill="none"
             stroke={color}
             strokeWidth={2}
@@ -578,29 +617,25 @@ function DotGLInteractiveCanvas({
         </g>
       )}
 
-      {datum && mousePos && (
-        <foreignObject
-          x={mousePos.x + 12}
-          y={Math.max(0, mousePos.y - 40)}
-          width={200}
-          height={120}
-          pointerEvents="none"
-          style={{overflow: 'visible'}}>
-          <div
-            style={{
-              background: 'var(--color-background-popover)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 8,
-              padding: '8px 12px',
-              boxShadow: 'var(--shadow-med)',
-              whiteSpace: 'nowrap',
-              width: 'fit-content',
-            }}>
-            {renderTooltip
-              ? renderTooltip(datum, hoverIndex)
-              : defaultTooltip(datum, hoverIndex)}
-          </div>
-        </foreignObject>
+      {renderCard(
+        datum &&
+          (renderTooltip ? (
+            renderTooltip(datum, hoverIndex)
+          ) : (
+            <DefaultTooltipContent
+              xValue={datum[xKey]}
+              rows={[
+                {
+                  key: dataKey,
+                  label: dataKey,
+                  color,
+                  type: 'dotGLInteractive',
+                  value: datum[dataKey],
+                },
+              ]}
+            />
+          )),
+        datum == null,
       )}
     </g>
   );
@@ -608,7 +643,10 @@ function DotGLInteractiveCanvas({
 
 /**
  * WebGL scatter with GPU color-picking hover. O(1) hit detection via offscreen
- * framebuffer — no JS iteration regardless of point count.
+ * framebuffer — no JS iteration regardless of point count. It picks from the
+ * chart's pointer events (`useChart().onPointer`), so a mouse or a pen over
+ * the plot picks a point. The hovered point gets a halo and a card in the
+ * browser top layer. With Chart's `tooltip` also set, both cards open; use one.
  *
  * @example
  * ```
@@ -662,6 +700,8 @@ export function dotGLInteractive(
           width={ctx.width}
           height={ctx.height}
           data={ctx.data}
+          xKey={ctx.xKey}
+          dataKey={dataKey}
           renderTooltip={renderTooltip}
         />
       );

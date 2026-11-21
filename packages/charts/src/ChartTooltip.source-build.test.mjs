@@ -3,7 +3,8 @@
 /**
  * @file ChartTooltip.source-build.test.mjs
  * @input Uses Babel, the core and charts StyleX build configs, the Layer host
- *   source, and ChartTooltip source
+ *   source, and the chart tooltip card source (tooltipCard.tsx, which renders
+ *   ChartTooltip's card)
  * @output Verifies the tooltip card sets padding on every side the Layer host
  *   resets, so the shipped stylesheets keep the card padding
  * @position Regression test for the published charts stylesheet
@@ -54,7 +55,7 @@ describe('ChartTooltip card stylesheet', () => {
       compileRules(
         CHARTS_ROOT,
         'babel.config.cjs',
-        path.join(__dirname, 'ChartTooltip.tsx'),
+        path.join(__dirname, 'tooltipCard.tsx'),
       ),
     ]);
 

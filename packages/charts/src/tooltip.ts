@@ -5,7 +5,7 @@
  * @output Tooltip types + series-value derivation
  * @position Used by Chart to bridge series + hovered datum → tooltip rows.
  *           Mirrors the legend.ts split: data shaping lives here, presentation
- *           lives in ChartTooltip.tsx.
+ *           lives in ChartTooltip.tsx and its card in tooltipCard.tsx.
  */
 
 import {DEFAULT_SERIES_COLOR, isUtilityMarkType, type SeriesDef} from './types';
