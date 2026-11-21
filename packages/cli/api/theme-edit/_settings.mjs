@@ -4700,6 +4700,51 @@ export function baseTextPx(base) {
 export const textPx = v => TEXT_SIZE.find(([n]) => n === v)?.[1] ?? Number(v);
 
 /**
+ * The part styles a rung of the `surfaces` dial gives: each part the dial
+ * reaches with the rung (a panel floating over the page with the floating
+ * rung, where one differs, so it keeps an edge under flat). A frame that
+ * paints nothing (the banner's) gives its line and shadow to the part inside
+ * it that paints the rounded fill, so they follow its corners.
+ * @param {Record<string, any>} map the part census
+ * @param {(part: string) => boolean} has whether this Core has the part
+ * @param {string} value the rung
+ * @param {{floating?: Record<string, string>}} [opts] a floating style other
+ *   than the dial's own
+ * @returns {Array<{part: string, kind: 'surface' | 'floating' | 'edge' | 'rest', style: Record<string, string>}>}
+ */
+export function surfacePartStyles(map, has, value, opts = {}) {
+  const floating = opts.floating ?? FLOATING_SURFACES[value];
+  /** @type {ReturnType<typeof surfacePartStyles>} */
+  const out = [];
+  for (const t of SURFACE_PARTS.filter(has)) {
+    const floats = FLOATING_PANELS.includes(t) && Boolean(floating);
+    const look = floats ? floating : SURFACES[value];
+    const paintsNone =
+      !map[t]?.at?.['background-color'] && !map[t]?.at?.['border-radius'];
+    const fill = paintsNone
+      ? (map[t]?.contains ?? []).find(
+          (/** @type {string} */ k) =>
+            map[k]?.at?.['background-color'] && map[k]?.at?.['border-radius'],
+        )
+      : undefined;
+    if (!fill) {
+      out.push({part: t, kind: floats ? 'floating' : 'surface', style: look});
+      continue;
+    }
+    const edge = Object.fromEntries(
+      Object.entries(look).filter(([k]) => /^(border|boxShadow)/.test(k)),
+    );
+    const rest = Object.fromEntries(
+      Object.entries(look).filter(([k]) => !/^(border|boxShadow)/.test(k)),
+    );
+    out.push({part: fill, kind: 'edge', style: edge});
+    if (Object.keys(rest).length)
+      out.push({part: t, kind: 'rest', style: rest});
+  }
+  return out;
+}
+
+/**
  * The family and fallbacks a font value means: a preset, an open font, a
  * whole stack with commas, or one family name.
  * @param {string} value
@@ -7398,41 +7443,12 @@ export function compileTheme(ctx, data, base) {
                 : f.fallbacks,
           };
       } else if (s.thing === 'surfaces') {
-        for (const t of SURFACE_PARTS.filter(x => ctx.project.target.has(x))) {
-          // (A panel floating over the page keeps an edge under flat.)
-          const look =
-            FLOATING_PANELS.includes(t) && FLOATING_SURFACES[s.value]
-              ? FLOATING_SURFACES[s.value]
-              : SURFACES[s.value];
-          // A frame that paints nothing (the banner's): its line and shadow
-          // go on the part inside it that paints the rounded fill, so they
-          // follow its corners; a square ring around them otherwise.
-          const paintsNone =
-            !ctx.C.MAP[t]?.at?.['background-color'] &&
-            !ctx.C.MAP[t]?.at?.['border-radius'];
-          const fill = paintsNone
-            ? (ctx.C.MAP[t]?.contains ?? []).find(
-                k =>
-                  ctx.C.MAP[k]?.at?.['background-color'] &&
-                  ctx.C.MAP[k]?.at?.['border-radius'],
-              )
-            : undefined;
-          if (!fill) {
-            Object.assign(block({...s, mode: undefined}, t), look);
-            continue;
-          }
-          const edge = Object.fromEntries(
-            Object.entries(look).filter(([k]) => /^(border|boxShadow)/.test(k)),
-          );
-          const rest = Object.fromEntries(
-            Object.entries(look).filter(
-              ([k]) => !/^(border|boxShadow)/.test(k),
-            ),
-          );
-          Object.assign(block({...s, mode: undefined}, fill), edge);
-          if (Object.keys(rest).length)
-            Object.assign(block({...s, mode: undefined}, t), rest);
-        }
+        for (const {part, style} of surfacePartStyles(
+          ctx.C.MAP,
+          x => ctx.project.target.has(x),
+          s.value,
+        ))
+          Object.assign(block({...s, mode: undefined}, part), style);
       } else if (s.thing === 'buttons') {
         const primary = block(
           {...s, mode: undefined, when: 'variant:primary'},

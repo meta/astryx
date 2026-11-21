@@ -597,3 +597,15 @@ export async function baseResolved(project, like) {
   };
   return out;
 }
+
+/**
+ * The installed Core's palette entry (`@astryxdesign/core/palette`): its
+ * palette generator, `themePalette`, and the recipes it makes.
+ * @param {ThemeProject} project
+ * @returns {Promise<any>}
+ */
+export async function corePalette(project) {
+  return import(
+    pathToFileURL(project.req.resolve('@astryxdesign/core/palette')).href
+  );
+}
