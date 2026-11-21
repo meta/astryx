@@ -734,7 +734,10 @@ describe('MediaTimeSlider', () => {
     });
     await user.click(screen.getByRole('button', {name: 'Lin: hold on this'}));
     expect(playback.getCurrentTime()).toBe(20);
-    const reply = screen.getByRole('textbox', {name: 'Reply', hidden: true});
+    const reply = await screen.findByRole('textbox', {
+      name: 'Reply',
+      hidden: true,
+    });
     act(() => reply.focus());
     await user.keyboard('{ArrowRight}{PageUp}');
     expect(playback.getCurrentTime()).toBe(20);
@@ -763,7 +766,10 @@ describe('MediaTimeSlider', () => {
     const playback = fakePlayback(video, {duration: 60});
     await user.click(screen.getByRole('button', {name: 'Lin: hold on this'}));
     expect(playback.getCurrentTime()).toBe(20);
-    const reply = screen.getByRole('button', {name: 'Reply', hidden: true});
+    const reply = await screen.findByRole('button', {
+      name: 'Reply',
+      hidden: true,
+    });
     act(() => reply.focus());
     await user.keyboard('{ArrowRight}{ArrowLeft}jl5{ArrowUp}{ArrowDown}mk');
     expect(playback.getCurrentTime()).toBe(20);
