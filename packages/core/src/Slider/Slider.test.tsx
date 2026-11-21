@@ -103,6 +103,21 @@ describe('Slider', () => {
     expect(sliders[1]).toHaveAccessibleName('Valeur maximale');
   });
 
+  it('writes a range text value through one catalog message', () => {
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        overrides={{fr: {'@astryx.slider.rangeValue': 'de {start} à {end}'}}}>
+        <Slider
+          label="Prix"
+          value={[20, 80] as [number, number]}
+          valueDisplay="text"
+        />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByText('de 20 à 80')).toBeInTheDocument();
+  });
+
   it('sets aria-valuetext with formatValue', () => {
     render(
       <Slider label="Temperature" value={72} formatValue={v => `${v}°F`} />,
@@ -2333,6 +2348,23 @@ describe('Slider text value', () => {
     const text = screen.getByText('0');
     // "10.25" is the longest text: five characters plus one.
     expect(text.getAttribute('style') ?? '').toContain('6ch');
+  });
+
+  it("reserves a range's room through its catalog message", () => {
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        overrides={{fr: {'@astryx.slider.rangeValue': 'de {start} à {end}'}}}>
+        <Slider
+          label="Prix"
+          value={[20, 80] as [number, number]}
+          valueDisplay="text"
+        />
+      </InternationalizationProvider>,
+    );
+    const text = screen.getByText('de 20 à 80');
+    // "de 100 à 100" is the longest text: twelve characters plus one.
+    expect(text.getAttribute('style') ?? '').toContain('13ch');
   });
 
   it('renders without a duplicate-key warning when both ends format alike', () => {

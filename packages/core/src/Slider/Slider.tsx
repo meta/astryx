@@ -1701,17 +1701,26 @@ export function Slider({ref, ...props}: SliderProps) {
   // track then keeps one length while the value changes and while a thumb is
   // dragged, so the thumb stays under the pointer. Up to 200 steps, every
   // value is formatted to find the longest text; above that, the ends and the
-  // values one step in from them.
+  // values one step in from them. A range counts its catalog message with
+  // both values at that longest length.
   let textDisplay = null;
   if (valueDisplay === 'text') {
-    const texts = values.map(displayValue);
+    const longest = '0'.repeat(longestText);
+    const reservedText = isRange
+      ? t('@astryx.slider.rangeValue', {start: longest, end: longest})
+      : longest;
     textDisplay = (
       <span
         {...stylex.props(
           styles.textValue,
-          styles.textValueReserve(`${texts.length * (longestText + 3) - 2}ch`),
+          styles.textValueReserve(`${reservedText.length + 1}ch`),
         )}>
-        {texts.join(' – ')}
+        {isRange
+          ? t('@astryx.slider.rangeValue', {
+              start: displayValue(values[0]),
+              end: displayValue(values[1]),
+            })
+          : displayValue(values[0])}
       </span>
     );
   }
