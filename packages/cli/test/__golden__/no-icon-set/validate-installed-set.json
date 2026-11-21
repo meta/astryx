@@ -312,6 +312,15 @@
             ]
           },
           {
+            "name": "article",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
             "name": "attach",
             "description": "<text>",
             "words": [
@@ -1831,7 +1840,11 @@
             },
             {
               "definition": "<text>",
-              "templates": 8
+              "templates": 9
+            },
+            {
+              "definition": "<text>",
+              "templates": 9
             },
             {
               "definition": "<text>",
@@ -1843,11 +1856,11 @@
             },
             {
               "definition": "<text>",
-              "templates": 7
+              "templates": 8
             },
             {
               "definition": "<text>",
-              "templates": 7
+              "templates": 8
             },
             {
               "definition": "<text>",
@@ -1947,10 +1960,6 @@
             },
             {
               "definition": "<text>",
-              "templates": 5
-            },
-            {
-              "definition": "<text>",
               "templates": 4
             },
             {
@@ -1991,7 +2000,7 @@
             },
             {
               "definition": "<text>",
-              "templates": 3
+              "templates": 4
             },
             {
               "definition": "<text>",
@@ -2052,6 +2061,10 @@
             {
               "definition": "<text>",
               "templates": 3
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
             },
             {
               "definition": "<text>",
