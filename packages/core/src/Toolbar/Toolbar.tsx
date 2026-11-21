@@ -31,7 +31,7 @@ import {useKeyboardHint} from '../hooks/useKeyboardHint';
 import {SizeProvider} from '../SizeContext/SizeContext';
 import {edgeCompSlot} from '../Layout/edgeCompensation.stylex';
 import {themeProps} from '../utils/themeProps';
-import {observeResize} from '../utils/sharedResizeObserver';
+import {observeResizeAfterLayout} from '../utils/sharedResizeObserver';
 import {useAttachment} from '../hooks/useAttachment';
 
 /**
@@ -365,7 +365,7 @@ export function Toolbar({
   // A bottom divider drops a tab's indicator onto its rail through the block
   // padding. That is right only while the lanes share one line, so a wrapped
   // row keeps the indicator on its tab. The row reports a wrap after layout,
-  // in a resize observation.
+  // in a resize observation, so mounting the toolbar reads no lane box.
   const canWrap =
     hasCenterContent ||
     (hasStartContent && hasEndContent && orientation !== 'vertical');
@@ -373,10 +373,18 @@ export function Toolbar({
   const [isWrapped, setIsWrapped] = useState(false);
   useAttachment(
     listRef,
-    row =>
-      watchesWrap
-        ? observeResize(row, () => setIsWrapped(lanesHaveWrapped(row)))
-        : () => {},
+    row => {
+      if (!watchesWrap) {
+        return () => {};
+      }
+      const measure = () => setIsWrapped(lanesHaveWrapped(row));
+      const stop = observeResizeAfterLayout(row, measure);
+      if (stop == null) {
+        measure();
+        return () => {};
+      }
+      return stop;
+    },
     watchesWrap,
   );
   const dropsIndicatorOnRail = hasBottomDivider && !(watchesWrap && isWrapped);
