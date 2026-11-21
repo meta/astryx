@@ -30,6 +30,10 @@
           "name": "ChartTooltip"
         },
         {
+          "kind": "component",
+          "name": "LineChart"
+        },
+        {
           "kind": "template",
           "name": "ChartShowcase"
         },

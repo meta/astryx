@@ -387,6 +387,7 @@ describe('the canonical component predicate', () => {
       'ChartLegend',
       'ChartSwatch',
       'ChartTooltip',
+      'LineChart',
     ]);
     expect(byPackage.get('richtext')).toEqual([
       'RichTextEditor',

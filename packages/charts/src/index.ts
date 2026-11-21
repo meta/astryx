@@ -1,6 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 export {Chart, type ChartProps} from './Chart';
+export {LineChart, type LineChartProps} from './LineChart';
 export {ChartAxis, type ChartAxisProps} from './ChartAxis';
 export {ChartGrid, type ChartGridProps} from './ChartGrid';
 export {
