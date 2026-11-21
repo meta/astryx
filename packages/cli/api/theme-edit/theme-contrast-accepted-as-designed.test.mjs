@@ -248,11 +248,14 @@ describe('an official theme', () => {
           }),
         );
         await themeEditNew('of', {cwd: official, like: 'neutral'});
-        await themeEditSet('of', 'background-color', '#17a2b8', {
+        const filled = await themeEditSet('of', 'background-color', '#17a2b8', {
           cwd: official,
           on: 'button',
           when: 'variant:primary',
         });
+        // (No line that keeps the miss is offered, since none would run.)
+        expect(JSON.stringify(filled.data)).toMatch(/text in button/);
+        expect(JSON.stringify(filled.data)).not.toMatch(/contrast-accepted '/);
         await expect(
           themeEditSet(
             'of',
