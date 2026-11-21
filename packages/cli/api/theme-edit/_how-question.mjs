@@ -13430,9 +13430,21 @@ export function draftAnswer(ctx, env, question) {
         );
       return COLOR_PROPS.test(st.thing);
     };
+    // (One gradient layer said with its position and size, "0 0 / 24px
+    // 24px", stays the shorthand: background-image takes no size. Any other
+    // gradient moves to background-image.)
     /** @param {string | undefined} v */
     const gradientOnly = v =>
-      /gradient\(/i.test(v ?? '') && !/url\(|light-dark\(/i.test(v ?? '');
+      /gradient\(/i.test(v ?? '') &&
+      !/url\(|light-dark\(/i.test(v ?? '') &&
+      (matchValue('background-image', String(v)) ||
+        !/\)[^()]*\s\/\s/.test(String(v)) ||
+        /,/.test(String(v).replace(/\((?:[^()]|\([^()]*\))*\)/g, '')) ||
+        // (A layer the ask said more layers after is part of a value.)
+        new RegExp(
+          `${String(v).replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}\\s*,\\s*(?:repeating-)?(?:linear|radial|conic)-gradient\\(`,
+          'i',
+        ).test(q));
     const options = d.options
       .map(o =>
         o.map(st =>
