@@ -23,10 +23,6 @@
 - "softer, larger card shadows" takes the card's large shared shadow.
 - Items after a comma leave a with-list ("dark sidebar with white text, rounder cards, and bigger headings").
 
-- `astryx experimental theme editor how`:
-
-- Every page-color answer now also paints the app shell's frame and the main panel, in the same mode. The whole page shows the color instead of only the area behind the panels.
-
 - `astryx experimental theme editor set` says the missed line only when the change left a new miss (`missedNew` in the JSON counts them), instead of repeating every standing miss after each unrelated change; `show` still lists each.
 
 - The pictures of `astryx experimental theme editor show --png` draw a dialog that has no background of its own (a lightbox) in its backdrop's colour, so its light close button shows as it does over the page, and they report text drawn over the text beside it (calendar weekday names wider than their columns), on the sheets too, as a note and an open problem.

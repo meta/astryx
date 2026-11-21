@@ -137,11 +137,7 @@ describe('the page and its text', () => {
     );
     expect(lines).toEqual([
       `set ${t} --color-background-body '#191919' --mode dark`,
-      `set ${t} background-color '#191919' --on app-shell --mode dark`,
-      `set ${t} background-color '#191919' --on layout-content --mode dark`,
       `set ${t} --color-background-body '#ffffff' --mode light`,
-      `set ${t} background-color '#ffffff' --on app-shell --mode light`,
-      `set ${t} background-color '#ffffff' --on layout-content --mode light`,
     ]);
     await follow(lines);
   }, 240_000);
