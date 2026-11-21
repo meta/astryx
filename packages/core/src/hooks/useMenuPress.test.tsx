@@ -189,6 +189,23 @@ const touch = (pointerId = 1) => ({pointerType: 'touch', pointerId});
 const mouse = (pointerId = 1) => ({pointerType: 'mouse', pointerId, button: 0});
 const pen = (pointerId = 1) => ({pointerType: 'pen', pointerId, button: 0});
 
+/** jsdom has no `touch-action`, so a case sets the menu's through this stub; `afterEach` restores it. */
+let restoreTouchAction: (() => void) | null = null;
+function stubTouchAction(element: Element, touchAction: string) {
+  restoreTouchAction?.();
+  const original = window.getComputedStyle.bind(window);
+  const spy = vi
+    .spyOn(window, 'getComputedStyle')
+    .mockImplementation((node, pseudo) => {
+      const style = original(node, pseudo);
+      return node === element ? {...style, touchAction} : style;
+    });
+  restoreTouchAction = () => {
+    spy.mockRestore();
+    restoreTouchAction = null;
+  };
+}
+
 /** A cancelable `touchend` at `target`, as a browser fires it after the touch's `pointerup`. */
 function fireTouchEnd(target: Element): Event {
   const event = new Event('touchend', {bubbles: true, cancelable: true});
@@ -217,6 +234,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  restoreTouchAction?.();
 });
 
 describe('useMenuPress — an input hold over the menu', () => {
@@ -655,6 +673,48 @@ describe("useMenuPress — a finger's touchend (spec:AST-094 FR21)", () => {
     expect(fireTouchEnd(row('A')).defaultPrevented).toBe(true);
     expect(onSelect).toHaveBeenCalledTimes(1);
     expect(onSelect).toHaveBeenCalledWith('A');
+  });
+
+  it('a finger that begins on a row of a menu whose rows fit has its moves cancelled until it lifts, so its touchend stays cancelable (spec:AST-094 FR19, FR21)', () => {
+    const onSelect = vi.fn();
+    render(<Harness onSelect={onSelect} />);
+    stubTouchAction(screen.getByRole('menu'), 'pinch-zoom');
+    fireEvent.pointerDown(row('A'), touch());
+    const move = new Event('touchmove', {bubbles: true, cancelable: true});
+    row('A').dispatchEvent(move);
+    expect(move.defaultPrevented).toBe(true);
+    fireEvent.pointerMove(row('B'), touch());
+    fireEvent.pointerUp(row('B'), touch());
+    expect(fireTouchEnd(row('A')).defaultPrevented).toBe(true);
+    expect(onSelect).toHaveBeenCalledWith('B');
+    // The gesture ended, so the page's moves are its own again.
+    const after = new Event('touchmove', {bubbles: true, cancelable: true});
+    document.dispatchEvent(after);
+    expect(after.defaultPrevented).toBe(false);
+  });
+
+  it('a finger that begins on a row keeps its moves where the browser can pan: a menu that scrolls, or a list in a sheet that scrolls (module:DropdownMenu/useMenuPress FR4)', () => {
+    // A scrolling menu declares `pan-y pinch-zoom`; a list in a scrolling
+    // sheet body computes `auto`.
+    for (const touchAction of ['pan-y pinch-zoom', 'auto']) {
+      const {unmount} = render(<Harness />);
+      stubTouchAction(screen.getByRole('menu'), touchAction);
+      fireEvent.pointerDown(row('A'), touch());
+      const move = new Event('touchmove', {bubbles: true, cancelable: true});
+      row('A').dispatchEvent(move);
+      expect(move.defaultPrevented, touchAction).toBe(false);
+      fireEvent.pointerUp(row('A'), touch());
+      unmount();
+    }
+  });
+
+  it('a mouse press on a row cancels no touch moves', () => {
+    render(<Harness />);
+    fireEvent.pointerDown(row('A'), mouse());
+    const move = new Event('touchmove', {bubbles: true, cancelable: true});
+    document.dispatchEvent(move);
+    expect(move.defaultPrevented).toBe(false);
+    fireEvent.pointerUp(row('A'), mouse());
   });
 
   it('a finger that slides onto another row and lifts there cancels its touchend', () => {
