@@ -60,6 +60,10 @@ describe('themeProps', () => {
     });
   });
 
+  it('lowercases a name whose only capital is not ASCII', () => {
+    expect(themeDataAttributes({Ölstand: 'x'})).toEqual({'data-ölstand': 'x'});
+  });
+
   it('omits inherited properties', () => {
     const proto = {variant: 'ghost'};
     const inherited = Object.create(proto);
