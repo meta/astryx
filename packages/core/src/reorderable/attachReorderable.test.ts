@@ -146,8 +146,9 @@ describe('createReorderable attach (spec:AST-103 FR4b)', () => {
     const milk = handle('Milk');
     expect(milk).toHaveAttribute('aria-pressed', 'false');
     expect(milk).toHaveAccessibleName('Reorder Milk');
+    // Attached handles start no drag yet, so the description names none.
     expect(milk).toHaveAccessibleDescription(
-      'Drag to move this item, or press Space or Enter, then the arrow keys to move it one place at a time. Press Escape when you are done.',
+      'Press Space or Enter, then the arrow keys to move this item one place at a time. Press Escape when you are done.',
     );
     expect(milk).not.toHaveAttribute('role');
   });

@@ -623,6 +623,10 @@
     "defaultMessage": "Drag to move this item, or press Space or Enter, then the arrow keys to move it one place at a time. Press Escape when you are done.",
     "description": "Description read after the label of every reorder handle in a List: how to move a row by dragging, or in reorder mode, which the handle's Space or Enter turns on and Escape ends."
   },
+  "@astryx.list.reorderHintKeyboard": {
+    "defaultMessage": "Press Space or Enter, then the arrow keys to move this item one place at a time. Press Escape when you are done.",
+    "description": "Description read after the label of a reorder handle that `createReorderable`'s `attach` wires, while attached handles start no drag: how to move the item in reorder mode, which the handle's Space or Enter turns on and Escape ends."
+  },
   "@astryx.list.reorderPlace": {
     "defaultMessage": "{label}, position {position, number} of {total, number}, after {previous}, before {next}",
     "description": "Screen-reader announcement after each move of a List row in reorder mode. `{label}` is the row's text, `{position}` its new 1-based place, `{total}` the number of rows, and `{previous}` and `{next}` the texts of the rows now before and after it (e.g. \"Milk, position 3 of 5, after Eggs, before Bread\")."

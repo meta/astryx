@@ -17,7 +17,7 @@ import {openStory, withStorybook} from '@astryxdesign/interaction-harness';
 
 const storybook = withStorybook(test);
 
-const STORY = 'core-utilities-createreorderable--attach-plain-elements';
+const STORY = 'core-createreorderable--attach-plain-elements';
 
 const grip = (page: Page, card: string) =>
   page.getByRole('button', {name: `Reorder ${card}`, exact: true});

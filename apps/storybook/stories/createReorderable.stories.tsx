@@ -21,7 +21,7 @@ import {
 } from '@astryxdesign/core/theme/tokens.stylex';
 
 const meta: Meta = {
-  title: 'Core/Utilities/createReorderable',
+  title: 'Core/createReorderable',
   parameters: {layout: 'padded'},
 };
 export default meta;

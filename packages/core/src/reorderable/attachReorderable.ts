@@ -201,7 +201,7 @@ export function attachReorderable(
   const instructions = doc.createElement('span');
   instructions.id = hintId;
   instructions.hidden = true;
-  instructions.textContent = t('@astryx.list.reorderHint', {});
+  instructions.textContent = t('@astryx.list.reorderHintKeyboard', {});
   // The elements this module owns go in the nearest dialog or theme scope,
   // not in or beside the container: a list holds only its items, an editable
   // container would take them as content, and the container's parent keeps

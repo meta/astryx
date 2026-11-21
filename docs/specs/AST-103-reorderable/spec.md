@@ -259,7 +259,8 @@ const {detach} = reorderable.attach(listElement, {
   `attach(container, {items})`, where `items()` returns one
   `{key, element, handle}` per item in order, and it returns `{detach}`.
   Implementation gap: an attached handle starts no drag yet, so FR3's drag
-  and `positions` do not apply to attached containers; and an attached
+  and `positions` do not apply to attached containers, and its description
+  (`@astryx.list.reorderHintKeyboard`) names reorder mode only; and an attached
   container moves items along the vertical axis only, so Up and Down move
   an item and the hint offers those two moves. An
   attached container gets FR3's drag, FR4's reorder mode on each handle, and
