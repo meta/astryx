@@ -555,11 +555,20 @@
     [
       [
         "neutral: the editor makes its light and dark shades from #f5",
-        ["set warm neutral '#f5f5dc'", "set warm --color-neutral '#f5f5dc0f'"]
+        [
+          "set warm neutral '#f5f5dc'",
+          "set warm --color-background-body '#f5f5dc' --mode light",
+          "set warm --color-background-surface '#f5f5dc' --mode light",
+          "set warm --color-background-card '#f5f5dc' --mode light"
+        ]
       ],
       [
         "The gray of the theme: surfaces (cards, panels, popovers, mu",
         ["how neutral"]
+      ],
+      [
+        "Your theme's page color shows inside AppShell. Wrap the page",
+        ["how app-shell"]
       ]
     ]
   ],
@@ -569,11 +578,20 @@
     [
       [
         "neutral: the editor makes its light and dark shades from #f5",
-        ["set plain neutral '#f5f5dc'", "set plain --color-neutral '#f5f5dc0f'"]
+        [
+          "set plain neutral '#f5f5dc'",
+          "set plain --color-background-body '#f5f5dc' --mode light",
+          "set plain --color-background-surface '#f5f5dc' --mode light",
+          "set plain --color-background-card '#f5f5dc' --mode light"
+        ]
       ],
       [
         "The gray of the theme: surfaces (cards, panels, popovers, mu",
         ["how neutral"]
+      ],
+      [
+        "Your theme's page color shows inside AppShell. Wrap the page",
+        ["how app-shell"]
       ]
     ]
   ],
