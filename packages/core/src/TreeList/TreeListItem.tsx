@@ -39,6 +39,7 @@ import {Icon} from '../Icon';
 import {mergeProps} from '../utils/mergeProps';
 import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 import {useLinkComponent} from '../Link/useLinkComponent';
+import {computeTargetAndRel} from '../Link/computeTargetAndRel';
 import {TreeListBranches} from './TreeListBranches';
 import type {TreeListDensity, TreeListVariant} from './TreeListTypes';
 import {themeProps} from '../utils/themeProps';
@@ -437,6 +438,7 @@ export function TreeListItem({
   const labelId = useId();
   const descriptionId = useId();
   const LinkComponent = useLinkComponent();
+  const {rel: linkRel} = computeTargetAndRel(target, undefined);
   const linkRef = useRef<HTMLAnchorElement>(null);
   // Disabling the item swaps the router link for a plain anchor, so React
   // replaces it; focus on the inner link (after a pointer click) follows the
@@ -522,6 +524,7 @@ export function TreeListItem({
   };
   const {onMouseUp: openLinkOnMiddleClick} = useClickableContainer({
     containerRef: linkRowRef,
+    interactiveRef: linkRef,
     href,
     target,
     disabled: isDisabled || !forwardsToLink,
@@ -675,6 +678,7 @@ export function TreeListItem({
           ref={anchorRef}
           href={href}
           target={target}
+          rel={linkRel}
           aria-labelledby={labelId}
           aria-describedby={description != null ? descriptionId : undefined}
           // Roving tabindex lives on the treeitem row; inner action is not a

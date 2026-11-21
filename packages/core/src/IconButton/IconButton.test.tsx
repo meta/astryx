@@ -42,6 +42,21 @@ describe('IconButton', () => {
     expect(visibleText).not.toContain('Settings');
   });
 
+  it('adds safe rel tokens when a link opens in a new tab', () => {
+    render(
+      <IconButton
+        label="Open settings"
+        icon={<span>⚙</span>}
+        href="https://example.com/settings"
+        target="_blank"
+      />,
+    );
+    expect(screen.getByRole('link', {name: 'Open settings'})).toHaveAttribute(
+      'rel',
+      'noopener noreferrer',
+    );
+  });
+
   it('reflects each variant on the button target', () => {
     for (const variant of [
       'primary',
