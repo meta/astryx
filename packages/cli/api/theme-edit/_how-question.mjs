@@ -1113,7 +1113,6 @@ export function colorAmount(text, fallback) {
   if (pct) return Math.min(0.9, Number(pct[1]) / 100);
   if (/\b(a (little|bit|touch)|slightly|a tad)\b/.test(text))
     return fallback / 2;
-  if (/\b(much|a lot|way|far)\b/.test(text)) return Math.min(0.9, fallback * 2);
   return fallback;
 }
 
@@ -1255,7 +1254,6 @@ function scaledBox(v, f) {
   const sides = String(v ?? '')
     .trim()
     .split(/\s+/);
-  if (!sides.length || sides.length > 4) return null;
   const out = sides.map(x => (/^0(px|rem|em)?$/.test(x) ? x : scaled(x, f)));
   return out.every(Boolean) ? out.join(' ') : null;
 }
@@ -1342,8 +1340,6 @@ function sharedAsk(q, partWords) {
             const exceptAt = after.search(/\bexcept\b/);
             const tail = exceptAt >= 0 ? after.slice(0, exceptAt) : after;
             const exceptTail = exceptAt >= 0 ? ` ${after.slice(exceptAt)}` : '';
-            // Only when something is shared: an ask on one side.
-            if (!lead.trim() && !tail.trim()) return seg;
             // "the text bigger on buttons and cards red": the second part
             // has an ask of its own (a color, an aspect), so only the first
             // takes the ask before; nothing is shared.
@@ -1932,8 +1928,6 @@ export function visibilityAsk(text) {
         : null;
     return {stronger: less, by: factor};
   }
-  if (/\bmore opaque\b|\bopaquer\b/.test(t)) return {stronger: true, by};
-  if (/\bless opaque\b/.test(t)) return {stronger: false, by};
   if (
     new RegExp(
       `\\b${SHOW}\\b|\\binvisible\\b|\\bfaint(?:er)?\\b|\\bsubtler\\b|\\bweaker\\b`,
@@ -1980,9 +1974,6 @@ export function exactFactor(text) {
   // quarters", "a fifth", "1/3", "2/3".
   const SHARE = String.raw`(?:(?:a|an|one|two|three|four|five|six|seven|eight|nine)\s+(?:halves|half|thirds?|quarters?|fifths?|sixths?|eighths?|tenths?)|half|\d+\/\d+)`;
   const fraction = (/** @type {string} */ w) => {
-    const fig = /^(\d+)\/(\d+)$/.exec(w);
-    if (fig) return Number(fig[2]) > 0 ? Number(fig[1]) / Number(fig[2]) : null;
-    if (w === 'half') return 0.5;
     const m = /^(\w+)\s+(\w+)$/.exec(w);
     if (!m) return null;
     const n = /** @type {Record<string, number>} */ ({
@@ -2061,11 +2052,7 @@ export function exactFactor(text) {
   const pct = /\b(\d{1,3}(?:\.\d+)?)\s?%\s*(?:strength|of|as)\b/.exec(t);
   if (pct && Number(pct[1]) > 0) return Number(pct[1]) / 100;
   if (/\b(half|halve|halved|1\/2)\b/.test(t)) return 0.5;
-  // "½ the padding" (read as 0.5 the padding).
-  const lead = /(?:^|\s)(0?\.\d+)(?:px)?\s+(?:the|of)\b/.exec(t);
-  if (lead) return Number(lead[1]);
   if (/\b(double|doubled|twice)\b/.test(t)) return 2;
-  if (/\b(triple|tripled|three times)\b/.test(t)) return 3;
   if (/\b(quadruple|quadrupled|four times)\b/.test(t)) return 4;
   if (/\b(a third|1\/3)\b/.test(t)) return 1 / 3;
   if (/\b(a quarter|1\/4)\b/.test(t)) return 0.25;
@@ -2932,7 +2919,6 @@ function namedLists(q, partWords, isVariant) {
       if (own) break;
       tail += pieces[k] + next;
     }
-    if (!tail.trim()) continue;
     tailed +=
       onesNamed.slice(from, at) +
       items.map(w => `${w} ${noun}${tail}`).join(' and ');
@@ -2965,7 +2951,6 @@ function namedLists(q, partWords, isVariant) {
                 .replace(/^the\s+/, ''),
             )
             .filter(Boolean);
-          if (items.length < 2 || items.some(w => /\s/.test(w))) return m;
           const before = all.slice(0, at);
           const after = all.slice(at + m.length);
           const next =
@@ -3162,8 +3147,6 @@ function globalOf(re) {
  * @param {RegExp} re
  */
 function plainOf(re) {
-  // A sticky pattern reads its own lastIndex: it is made anew each time.
-  if (re.sticky) return lexCopy(re, re.flags.replace('g', ''));
   let copy = PLAIN_COPIES.get(re);
   if (!copy) {
     copy = lexCopy(re, re.flags.replace('g', ''));
@@ -4511,7 +4494,6 @@ export function draftAnswer(ctx, env, question) {
       if (FONTSOURCE_NAMES.has(name.toLowerCase().replace(/\s+/g, ' ')))
         return true;
       const s = fontsourceSuggestion(name);
-      if (s?.known) return true;
       return Boolean(
         s && ctx.project?.cwd && packageInstalled(ctx.project.cwd, s.pkg),
       );
@@ -15817,7 +15799,6 @@ export function draftAnswer(ctx, env, question) {
                 ...(st.when ? {when: st.when} : {}),
                 ...(st.state ? {state: st.state} : {}),
               });
-              if (!k || k === UNTOUCHED || k === BY_SCREEN) return [k];
               const pin = /** @type {Step} */ (k);
               return [
                 {
@@ -15901,7 +15882,6 @@ export function draftAnswer(ctx, env, question) {
                   list.includes(`${p.state}=${p.state}`)
                 );
               })?.[1];
-              if (both == null) return [null];
               return [
                 set(prop, String(both), {
                   on: p.on,
@@ -19872,7 +19852,6 @@ export function draftAnswer(ctx, env, question) {
       const width =
         partValue(p.on, 'border-width') ??
         (read ? resolvedValue(read.token) || current(read.token) : null);
-      if (!width) return null;
       const style = partValue(p.on, 'border-style') ?? 'solid';
       return set('border', `${width} ${style} ${color.value}`, {
         ...(color.on ? {on: color.on} : {}),
@@ -23054,7 +23033,6 @@ export function draftAnswer(ctx, env, question) {
                 groundTokens.map(g => current(g, m)),
                 target,
               );
-              if (!v) missed.push(m);
               return v;
             },
             c,
@@ -23181,7 +23159,6 @@ export function draftAnswer(ctx, env, question) {
                   GROUNDS.map(g => current(g, m)),
                   target,
                 );
-                if (!v) missed.push(m);
                 return v;
               },
               c,
@@ -25088,7 +25065,6 @@ export function draftAnswer(ctx, env, question) {
               .filter(t => t in TOKENS)
               .map(t => {
                 const now = current(t);
-                if (!now || now === 'none') return null;
                 const v = shadowAlphaScaled(now, k, c.mode ?? null);
                 return v !== now ? set(t, v) : null;
               })
@@ -26938,7 +26914,6 @@ export function draftAnswer(ctx, env, question) {
               {},
               (now, m) => {
                 const a = alphaOf(now);
-                if (!(a < 1)) return null;
                 return tone
                   ? shiftKeepAlpha(
                       now,
@@ -27786,10 +27761,6 @@ export function draftAnswer(ctx, env, question) {
       /\b(colou?rful|saturat\w*|desaturat\w*|vivid|vibran\w*|muted|dull|washed|pastel|intense|pop|punch\w*|gr[ae]yer)\b/.test(
         t,
       );
-    if (vib && c.colors.length && ROLE_WORDS.test(t)) {
-      const named = roleAnswer(c);
-      if (named) return named;
-    }
     if (vib) {
       seenAspect('colors');
       // "More" goes with the word after it: more washed out, more muted
@@ -28205,11 +28176,6 @@ export function draftAnswer(ctx, env, question) {
         return {
           text: `${dial} is a gray now (${now}), with no hue to move ${warm ? 'warmer' : 'cooler'}; give a color for it (for example "${dial} ${warm ? '#ea580c' : '#2563eb'}")`,
           options: [],
-        };
-      if (moved)
-        return {
-          text: `${dial}, ${warm ? 'warmer' : 'cooler'}: its hue moves toward ${warm ? 'orange' : 'blue'} (now ${now}); its lightness and strength stay, and the neutral grays are not changed`,
-          options: [[set(dial, moved)]],
         };
     }
     if (dial === 'neutral' && !color)
@@ -29020,7 +28986,6 @@ export function draftAnswer(ctx, env, question) {
     const oneList = (/** @type {Step} */ a, /** @type {Step} */ b) => {
       const from = clauses.indexOf(/** @type {any} */ (stepClause.get(a)));
       const to = clauses.indexOf(/** @type {any} */ (stepClause.get(b)));
-      if (from < 0 || to < 0) return false;
       return clauses
         .slice(from + 1, to + 1)
         .every(
@@ -29934,14 +29899,12 @@ export function draftAnswer(ctx, env, question) {
     // part whose value it is, which the change asked for then names.)
     let holder = named;
     const insideNow = () => {
-      if (!named || asked !== 'padding') return null;
       const inner = drawnInside(named, 'padding');
       if (!inner?.value) return null;
       holder = inner.parts[0];
       return `${inner.value} (on its ${inner.parts.join(' and ')} parts, which hold its content)`;
     };
     const anyRead = () => {
-      if (!named) return null;
       const all = Object.keys(GROUPS).flatMap(
         g => C.partReads(one(named), g) ?? [],
       );
@@ -30345,7 +30308,6 @@ export function draftAnswer(ctx, env, question) {
     // weight, one token per level): each token's value, as they differ,
     // never one of them for all.
     const perKeyNow = () => {
-      if (!named || vWord) return null;
       // (Tokens read under one same condition: a variant's own token is
       // the variant's, which the plain answer reads.)
       /** @type {Map<string, Set<string>>} */
@@ -30579,7 +30541,6 @@ export function draftAnswer(ctx, env, question) {
         partNow(tok, m) ?? null;
       const l = shown('light');
       const d = shown('dark');
-      if (!l && !d) return null;
       const said =
         qMode || readMode
           ? shown(/** @type {'light' | 'dark'} */ (qMode ?? readMode))
@@ -31460,7 +31421,6 @@ export function draftAnswer(ctx, env, question) {
    */
   const typedHere = st => {
     const v = String(st.value ?? '').toLowerCase();
-    if (!/^#[0-9a-f]{3,8}$/.test(v)) return false;
     return tops.some(
       t =>
         t.steps.some(
@@ -32206,7 +32166,6 @@ export function draftAnswer(ctx, env, question) {
                 break;
               }
             }
-          if (ratio(best, ground) < 4.5) continue;
           unread.add(String(st.value));
           fixes.push(
             set(tok, hex(to), {
@@ -32549,7 +32508,6 @@ export function draftAnswer(ctx, env, question) {
       .filter(k => k !== 'toast');
     const replaced = new Set(Object.keys(env.base.onDark ?? {}));
     for (const d of result) {
-      if (d.offer) continue;
       const toks = [
         ...new Set(
           d.options
@@ -32631,7 +32589,6 @@ export function draftAnswer(ctx, env, question) {
     const silent = clauses.filter(c => {
       const t = c.text.trim();
       if (!t || c.except || taken.has(c)) return false;
-      if (!/[a-z]{3,}|#[0-9a-f]{3}|\d/i.test(t)) return false;
       if (texts.includes(t.toLowerCase())) return false;
       const vals = steps.map(st => String(st.value ?? '').toLowerCase());
       // ("in dark mode, cards …": a mode the other lines carry is used.)
@@ -32642,20 +32599,6 @@ export function draftAnswer(ctx, env, question) {
         [...c.colors, ...c.lengths].some(v =>
           vals.some(x => x.includes(String(v).toLowerCase())),
         )
-      )
-        return false;
-      // (A length written in another unit, "14px" as 0.875rem, is used.)
-      if (
-        c.lengths.some(v => {
-          const want = lengthPx(String(v));
-          return (
-            want != null &&
-            vals.some(x => {
-              const got = lengthPx(x);
-              return got != null && Math.abs(got - want) < 0.01;
-            })
-          );
-        })
       )
         return false;
       // (Named already in the words as typed.)
@@ -32748,7 +32691,6 @@ export function draftAnswer(ctx, env, question) {
         };
     if (unsure || !result.some(r => r.options.some(o => o.length)))
       result.splice(0, result.length, answer);
-    else result.unshift(answer);
   }
   if (pictureLook) {
     const note = {
@@ -32872,13 +32814,6 @@ function fontIn(cl, question) {
     for (const m of question.matchAll(re)) {
       const name = m[1].replace(/ (Font|Typeface)$/, '');
       if (GENERIC.test(name.split(' ')[0]) || OS_FONT.test(name)) continue;
-      // ("titles in All Caps", "body text in Sentence Case": a casing said
-      // in words is the text's case, never a family.)
-      if (
-        aspectsOf(name.toLowerCase()).includes('case') ||
-        /\s(?:case|caps)$/i.test(name)
-      )
-        continue;
       // "Plus Jakarta Sans": a clause break word may start the name.
       const low = name.toLowerCase();
       if (
@@ -32901,9 +32836,6 @@ function fontIn(cl, question) {
   if (known) return known;
   // "the default Mac font": the system font.
   if (OS_FONT.test(c)) return 'system';
-  // A family every machine has, named with its capitals ("use Menlo").
-  const local = systemFamilyIn(c, question);
-  if (local) return local;
   if (/\bmono(space|spaced)?\b/.test(c)) return 'mono';
   if (/\bsans(-serif)?\b/.test(c)) return 'system';
   if (/\bserif\b/.test(c)) return 'serif';
