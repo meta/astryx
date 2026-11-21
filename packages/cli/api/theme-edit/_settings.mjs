@@ -15598,18 +15598,20 @@ export function innerTextTokens(C, part, deep = false) {
       add(r?.inside);
       // A part's own color counts where it reads the token always, or for
       // a look of its own (a heading or a text's color role, `color=primary`
-      // beside its level), never only in a state.
+      // beside its level), never only in a state, and never for its
+      // placeholder (a text area's own ::placeholder is a hint, not text).
       for (const [tok, conds] of Object.entries(r?.own?.color?.tokens ?? {}))
         if (
           TEXT_ROLES.includes(tok) &&
           /** @type {string[]} */ (conds).some(
             w =>
-              !w.trim() ||
-              w.trim() === 'always' ||
-              (!/\s/.test(w.trim()) &&
-                !/(?:^|,)(?:disabled|selected|checked|readonly|aria-[\w-]+|status)=/.test(
-                  w,
-                )),
+              !/::placeholder/.test(w) &&
+              (!w.trim() ||
+                w.trim() === 'always' ||
+                (!/\s/.test(w.trim()) &&
+                  !/(?:^|,)(?:disabled|selected|checked|readonly|aria-[\w-]+|status)=/.test(
+                    w,
+                  ))),
           )
         )
           out.add(tok);

@@ -20738,7 +20738,8 @@ export function draftAnswer(ctx, env, question) {
   }
   /**
    * The text color tokens a clause asks of: the secondary text alone when
-   * it names it ("the secondary text on cards fainter"), else every one.
+   * it names it ("the secondary text on cards fainter"; the secondary token
+   * even where the part's own text reads none), else every one.
    * @param {Clause} c @param {string[]} toks
    * @returns {string[]}
    */
@@ -20751,7 +20752,10 @@ export function draftAnswer(ctx, env, question) {
       (/\bsecondary\b/.test(c.text) && secondary.length)
       ? secondary.length
         ? secondary
-        : toks
+        : // (A part whose own text reads no secondary color still may for
+          // its placeholder, a text area's: the ask is the secondary token
+          // there, and `set` refuses it on a part that reads none.)
+          ['--color-text-secondary']
       : toks;
   }
   /**

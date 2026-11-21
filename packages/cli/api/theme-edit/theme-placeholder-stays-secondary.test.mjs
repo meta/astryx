@@ -2,16 +2,17 @@
 
 /**
  * @file A field's placeholder is not its text. A text color that reaches a
- * text input (set on it, or on a member of its family) goes into the text
- * token its value reads, never the secondary one its placeholder reads, so
- * an empty field's placeholder still reads as a hint, not a typed value.
+ * text input or a text area (set on it, or on a member of its family) goes
+ * into the text token its value reads, never the secondary one its
+ * placeholder reads, so an empty field's placeholder still reads as a
+ * hint, not a typed value.
  * Against real bundled base themes.
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {themeEditNew, themeEditSet} from './theme-edit.mjs';
+import {themeEditNew, themeEditSet, themeEditHow} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -46,12 +47,12 @@ const needBases = ctx => {
   return true;
 };
 
-/** Every declaration block written for text-input. @param {string} slug */
-const textInputBlocks = slug =>
+/** Every declaration block written for a part. @param {string} slug @param {string} [part] */
+const textInputBlocks = (slug, part = 'text-input') =>
   [
     ...fs
       .readFileSync(path.join(cwd, 'themes', slug, `${slug}.css`), 'utf8')
-      .matchAll(/\.astryx-text-input\)?[^{]*\{([^}]*)\}/g),
+      .matchAll(new RegExp(`\\.astryx-${part}\\)?[^{]*\\{([^}]*)\\}`, 'g')),
   ].map(m => m[1]);
 
 describe('a text color that reaches a text input', () => {
@@ -69,6 +70,35 @@ describe('a text color that reaches a text input', () => {
       true,
     );
     expect(blocks.some(b => /--color-text-secondary:/.test(b))).toBe(false);
+  }, 240_000);
+
+  it('leaves a text area its placeholder too, whose control is a part of its own', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('ta', {cwd, like: 'neutral'});
+    await themeEditSet('ta', 'color', '#000000', {
+      cwd,
+      on: 'text-area',
+      mode: 'light',
+    });
+    const blocks = textInputBlocks('ta', 'text-area');
+    expect(blocks.some(b => /--color-text-primary: #000000;/.test(b))).toBe(
+      true,
+    );
+    expect(blocks.some(b => /--color-text-secondary:/.test(b))).toBe(false);
+  }, 240_000);
+
+  it('leaves a text area its secondary text to ask for, its placeholder', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('th', {cwd, like: 'neutral'});
+    const {data} = await themeEditHow('red secondary text in the text area', {
+      cwd,
+      theme: 'th',
+    });
+    const top = (data.results ?? []).flatMap(
+      (/** @type {{commands: string[]}} */ r) => r.commands,
+    )[0];
+    expect(top).toMatch(/--color-text-secondary/);
+    expect(top).not.toMatch(/--color-text-primary/);
   }, 240_000);
 
   it('is offered as the value text color alone', async ctx => {
