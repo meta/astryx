@@ -1013,6 +1013,39 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
   );
 
   it(
+    'writes into a style the theme names (`base: floating`) by spreading it into an object of its own',
+    async () => {
+      const file = themeFile('named', READABLE, {
+        'app-shell-header': {
+          base: {'--color-text-primary': '#ffffff', backgroundColor: '#101010'},
+        },
+      });
+      const abs = path.join(cwd, file);
+      fs.writeFileSync(
+        abs,
+        fs
+          .readFileSync(abs, 'utf8')
+          .replace(
+            'export const namedTheme',
+            "const floating = {borderStyle: 'solid'};\n\nexport const namedTheme",
+          )
+          .replace(
+            '  components: {',
+            "  components: {\n    'dropdown-menu': {base: floating},\n    popover: {base: floating},",
+          ),
+      );
+      const d = await check(file, {fix: true});
+      expect(d.problems.some(p => p.kind === 'bar-text')).toBe(false);
+      const text = fs.readFileSync(abs, 'utf8');
+      expect(text).toMatch(
+        /'dropdown-menu': \{\s*base: \{\n\s+\.\.\.floating,\n\s+\.\.\.appShellHeaderInsideText,/,
+      );
+      expect(text).toContain("const floating = {borderStyle: 'solid'};");
+    },
+    T,
+  );
+
+  it(
     'refuses what it cannot check, with the documented codes, and changes nothing',
     async () => {
       /** @param {Promise<unknown>} p */
