@@ -31,6 +31,7 @@ export function packageNameAt(file) {
   } catch {
     // Absent, unreadable, or not JSON: no name.
   }
-  names.set(file, {stamp, name});
+  // A name read from a file that appeared after its stamp is not kept.
+  if (stamp !== '-' || name === undefined) names.set(file, {stamp, name});
   return name;
 }

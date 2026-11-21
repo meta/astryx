@@ -5,7 +5,7 @@
  * unchanged, and a kept name counts as a read of the file.
  */
 
-import {expect, it, vi} from 'vitest';
+import {afterAll, expect, it, vi} from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -15,6 +15,8 @@ import {recordReads} from './read-record.mjs';
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-package-name-'));
 const file = path.join(dir, 'package.json');
 const absent = path.join(dir, 'none', 'package.json');
+
+afterAll(() => fs.rmSync(dir, {recursive: true, force: true}));
 
 it('reads a name once while the file is unchanged, again after a change', () => {
   fs.writeFileSync(file, '{"name": "first"}');
